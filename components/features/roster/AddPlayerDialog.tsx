@@ -14,16 +14,7 @@ import {
 } from "@mui/material";
 import { addPlayer, updatePlayer } from "@/lib/actions/roster";
 import type { AddPlayerInput } from "@/lib/actions/roster";
-import { useRouter } from "next/navigation";
-
-type Player = {
-  id: string;
-  name: string;
-  email: string | null;
-  phone: string | null;
-  emergencyContact: string | null;
-  emergencyPhone: string | null;
-};
+import type { Player } from "@/types/roster";
 
 type AddPlayerDialogProps = {
   open: boolean;
@@ -38,7 +29,6 @@ export default function AddPlayerDialog({
   teamId,
   player,
 }: AddPlayerDialogProps) {
-  const router = useRouter();
   const isEditing = !!player;
 
   const [formData, setFormData] = useState<AddPlayerInput>({
@@ -65,25 +55,14 @@ export default function AddPlayerDialog({
   // Reset form when dialog opens/closes or player changes
   useEffect(() => {
     if (open) {
-      if (player) {
-        setFormData({
-          name: player.name,
-          email: player.email || "",
-          phone: player.phone || "",
-          emergencyContact: player.emergencyContact || "",
-          emergencyPhone: player.emergencyPhone || "",
-          teamId,
-        });
-      } else {
-        setFormData({
-          name: "",
-          email: "",
-          phone: "",
-          emergencyContact: "",
-          emergencyPhone: "",
-          teamId,
-        });
-      }
+      setFormData({
+        name: player?.name || "",
+        email: player?.email || "",
+        phone: player?.phone || "",
+        emergencyContact: player?.emergencyContact || "",
+        emergencyPhone: player?.emergencyPhone || "",
+        teamId,
+      });
       setErrors({});
     }
   }, [open, player, teamId]);
@@ -143,10 +122,11 @@ export default function AddPlayerDialog({
             : "Player added successfully",
           severity: "success",
         });
-        router.refresh();
+        // revalidatePath in server action handles the update
         onClose();
       }
-    } catch {
+    } catch (error) {
+      console.error("Error submitting player form:", error);
       setSnackbar({
         open: true,
         message: "An unexpected error occurred",

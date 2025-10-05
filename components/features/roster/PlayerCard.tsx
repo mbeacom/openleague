@@ -20,16 +20,7 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import EmailIcon from "@mui/icons-material/Email";
 import PhoneIcon from "@mui/icons-material/Phone";
 import { deletePlayer } from "@/lib/actions/roster";
-import { useRouter } from "next/navigation";
-
-type Player = {
-  id: string;
-  name: string;
-  email: string | null;
-  phone: string | null;
-  emergencyContact: string | null;
-  emergencyPhone: string | null;
-};
+import type { Player } from "@/types/roster";
 
 type PlayerCardProps = {
   player: Player;
@@ -44,7 +35,6 @@ export default function PlayerCard({
   teamId,
   onEdit,
 }: PlayerCardProps) {
-  const router = useRouter();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [snackbar, setSnackbar] = useState<{
     open: boolean;
@@ -75,7 +65,7 @@ export default function PlayerCard({
         message: "Player deleted successfully",
         severity: "success",
       });
-      router.refresh();
+      // revalidatePath in server action handles the update
     }
 
     setDeleteDialogOpen(false);

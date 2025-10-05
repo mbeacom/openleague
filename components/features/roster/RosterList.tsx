@@ -5,15 +5,7 @@ import { Box, Typography, Button, Grid } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import PlayerCard from "./PlayerCard";
 import AddPlayerDialog from "./AddPlayerDialog";
-
-type Player = {
-  id: string;
-  name: string;
-  email: string | null;
-  phone: string | null;
-  emergencyContact: string | null;
-  emergencyPhone: string | null;
-};
+import type { Player } from "@/types/roster";
 
 type RosterListProps = {
   players: Player[];
@@ -74,16 +66,6 @@ export default function RosterList({ players, teamId, isAdmin }: RosterListProps
           <Typography variant="body2" color="text.secondary">
             Contact your team admin to add players
           </Typography>
-        )}
-
-        {/* Add Player Dialog */}
-        {isAdmin && (
-          <AddPlayerDialog
-            open={dialogOpen}
-            onClose={handleDialogClose}
-            teamId={teamId}
-            player={editingPlayer}
-          />
         )}
       </Box>
     );

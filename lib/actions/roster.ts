@@ -5,24 +5,25 @@ import { prisma } from "@/lib/db/prisma";
 import { requireUserId } from "@/lib/auth/session";
 import { revalidatePath } from "next/cache";
 
+// Helper for optional string fields that allow empty string
+function optionalString(schema: z.ZodString) {
+  return schema.optional().or(z.literal(""));
+}
+
 // Validation schemas
 export const addPlayerSchema = z.object({
   name: z
     .string()
     .min(1, "Name is required")
     .max(100, "Name must be less than 100 characters"),
-  email: z.string().email("Invalid email address").optional().or(z.literal("")),
-  phone: z.string().max(20, "Phone must be less than 20 characters").optional().or(z.literal("")),
-  emergencyContact: z
-    .string()
-    .max(100, "Emergency contact must be less than 100 characters")
-    .optional()
-    .or(z.literal("")),
-  emergencyPhone: z
-    .string()
-    .max(20, "Emergency phone must be less than 20 characters")
-    .optional()
-    .or(z.literal("")),
+  email: optionalString(z.string().email("Invalid email address")),
+  phone: optionalString(z.string().max(20, "Phone must be less than 20 characters")),
+  emergencyContact: optionalString(
+    z.string().max(100, "Emergency contact must be less than 100 characters")
+  ),
+  emergencyPhone: optionalString(
+    z.string().max(20, "Emergency phone must be less than 20 characters")
+  ),
   teamId: z.string().min(1, "Team ID is required"),
 });
 
@@ -35,18 +36,18 @@ export type UpdatePlayerInput = z.infer<typeof updatePlayerSchema>;
 
 /**
  * Check if user is an admin of the team
+ * Uses count for efficiency - lets database handle the check
  */
 async function isTeamAdmin(userId: string, teamId: string): Promise<boolean> {
-  const teamMember = await prisma.teamMember.findUnique({
+  const count = await prisma.teamMember.count({
     where: {
-      userId_teamId: {
-        userId,
-        teamId,
-      },
+      userId,
+      teamId,
+      role: "ADMIN",
     },
   });
 
-  return teamMember?.role === "ADMIN";
+  return count > 0;
 }
 
 /**
@@ -229,53 +230,6 @@ export async function deletePlayer(playerId: string, teamId: string) {
     console.error("Error deleting player:", error);
     return {
       error: "Failed to delete player. Please try again.",
-    };
-  }
-}
-
-/**
- * Get all players for a team
- */
-export async function getTeamRoster(teamId: string) {
-  try {
-    // Check authentication
-    const userId = await requireUserId();
-
-    // Verify user is a member of the team
-    const teamMember = await prisma.teamMember.findUnique({
-      where: {
-        userId_teamId: {
-          userId,
-          teamId,
-        },
-      },
-    });
-
-    if (!teamMember) {
-      return {
-        error: "Unauthorized: You are not a member of this team",
-      };
-    }
-
-    // Fetch all players
-    const players = await prisma.player.findMany({
-      where: {
-        teamId,
-      },
-      orderBy: {
-        name: "asc",
-      },
-    });
-
-    return {
-      success: true,
-      data: players,
-      isAdmin: teamMember.role === "ADMIN",
-    };
-  } catch (error) {
-    console.error("Error fetching roster:", error);
-    return {
-      error: "Failed to fetch roster. Please try again.",
     };
   }
 }
