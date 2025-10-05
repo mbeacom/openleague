@@ -22,6 +22,7 @@
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
     "@mailchimp/mailchimp_transactional": "^1.0.59",
+    "@mui/icons-material": "^7.3.4",
     "@mui/material": "^7.3.4",
     "@mui/material-nextjs": "^7.3.3",
     "@prisma/client": "^6.16.3",
