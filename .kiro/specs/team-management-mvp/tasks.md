@@ -43,9 +43,9 @@
     - Implement redirect to dashboard after successful authentication
     - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.7_
 
-- [ ] 4. Create MUI theme and base UI components
+- [x] 4. Create MUI theme and base UI components
 
-  - [ ] 4.1 Configure MUI theme with mobile-first design
+  - [x] 4.1 Configure MUI theme with mobile-first design
 
     - Create `lib/theme.ts` with custom MUI theme using sports-professional color palette (Blue primary #1976D2, Green secondary #43A047)
     - Configure responsive breakpoints (xs: <600px, sm: 600-960px, md: >960px)
@@ -54,7 +54,7 @@
     - Ensure all colors meet WCAG AA contrast standards
     - _Requirements: 8.1, 8.2_
 
-  - [ ] 4.2 Build reusable UI components
+  - [x] 4.2 Build reusable UI components
     - Create `components/ui/Button.tsx` with MUI Button wrapper
     - Create `components/ui/Input.tsx` with MUI TextField wrapper
     - Create `components/ui/Card.tsx` with MUI Card wrapper

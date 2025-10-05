@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import {
@@ -11,11 +11,12 @@ import {
   Container,
   Alert,
   Link as MuiLink,
+  CircularProgress,
 } from "@mui/material";
 import Link from "next/link";
 import { loginSchema } from "@/lib/utils/validation";
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") || "/";
@@ -158,5 +159,21 @@ export default function LoginPage() {
         </Box>
       </Box>
     </Container>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <Container maxWidth="sm">
+          <Box sx={{ marginTop: 8, display: 'flex', justifyContent: 'center' }}>
+            <CircularProgress />
+          </Box>
+        </Container>
+      }
+    >
+      <LoginForm />
+    </Suspense>
   );
 }
