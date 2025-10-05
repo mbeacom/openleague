@@ -26,10 +26,14 @@ inclusion: always
 
 ### Database
 - **Database**: PostgreSQL
-- **Hosting**: Supabase or Neon (managed PostgreSQL)
+- **Hosting**: Neon (serverless PostgreSQL, may migrate to AWS RDS in future)
 
 ### Deployment
 - **Platform**: Vercel (optimized for Next.js)
+
+### Email
+- **Service**: Mailchimp Transactional Email (may migrate to AWS SES in future)
+- **Use Cases**: Invitations, event notifications, RSVP reminders
 
 ## Common Commands
 
@@ -47,10 +51,19 @@ bun run build
 bun run start
 
 # Type checking
-bun run type-check
+bun run type
 
 # Linting
 bun run lint
+
+# Testing
+bun run test              # Run tests with vitest
+bun run test:watch        # Run tests in watch mode
+bun run test:coverage     # Generate coverage report
+
+# Database
+bunx prisma studio        # Visual database browser
+bunx prisma migrate dev   # Create and apply migration
 ```
 
 ## Development Guidelines
@@ -60,3 +73,4 @@ bun run lint
 - Keep components clean and functional
 - Prioritize mobile responsiveness
 - Use MUI components for consistent UI
+- Ensure types pass, linting passes, and tests pass before committing
