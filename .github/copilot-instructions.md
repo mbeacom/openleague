@@ -59,6 +59,7 @@ Use Server Actions (not API routes) for mutations and form submissions:
 
 export async function createTeam(data: CreateTeamInput) {
   const session = await requireAuth(); // Always validate auth first
+  if (!session.user?.id) throw new Error('Unauthorized'); // Defensive check
   const validated = teamSchema.parse(data); // Zod validation
 
   return await prisma.team.create({
@@ -221,7 +222,7 @@ bunx prisma migrate dev  # Create and apply migration
 3. **Don't use Tailwind** - MUI with Emotion is the styling approach
 4. **Don't forget auth checks** - Every Server Action must validate session
 5. **Don't allow scope creep** - Reject features not in MVP scope
-6. **Don't use runtime Node.js** - Use Bun for all commands (`bun` not `npm`)
+6. **Don't use npm or yarn** - Use Bun for all package management and script execution (`bun` not `npm`/`yarn`)
 7. **Don't expose emergency contacts to members** - Admin-only field
 
 ## Priority Order for Implementation

@@ -158,9 +158,9 @@ The theme system is designed to support per-organization customization:
 See `lib/theme.ts` for the complete MUI theme configuration with these colors.
 
 ```typescript
-import { createTheme } from '@mui/material/styles';
+import { createTheme, responsiveFontSizes } from '@mui/material/styles';
 
-const theme = createTheme({
+let theme = createTheme({
   palette: {
     primary: {
       main: '#1976D2',
@@ -202,16 +202,10 @@ const theme = createTheme({
   typography: {
     fontFamily: 'Roboto, sans-serif',
   },
-  breakpoints: {
-    values: {
-      xs: 0,
-      sm: 600,
-      md: 960,
-      lg: 1280,
-      xl: 1920,
-    },
-  },
 });
+
+// Apply responsive font sizing
+theme = responsiveFontSizes(theme);
 
 export default theme;
 ```

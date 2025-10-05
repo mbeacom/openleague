@@ -12,60 +12,19 @@ The system is designed with a mobile-first approach, ensuring responsive layouts
 
 ### MVP Theme
 
-**Color Palette** (Sports-Professional Theme):
-```typescript
-// Primary: Deep Blue (trust, professionalism, sports)
-primary: {
-  main: '#1976D2',      // Material Blue 700
-  light: '#42A5F5',     // Material Blue 400
-  dark: '#1565C0',      // Material Blue 800
-  contrastText: '#FFFFFF'
-}
+## Theming & Branding
 
-// Secondary: Vibrant Green (energy, action, "go")
-secondary: {
-  main: '#43A047',      // Material Green 600
-  light: '#66BB6A',     // Material Green 400
-  dark: '#2E7D32',      // Material Green 800
-  contrastText: '#FFFFFF'
-}
+### MVP Theme
 
-// Error: Red (alerts, "not going")
-error: {
-  main: '#D32F2F',      // Material Red 700
-  light: '#EF5350',     // Material Red 400
-  dark: '#C62828',      // Material Red 800
-}
+**Color Palette**: See [COLOR_PALETTE.md](./COLOR_PALETTE.md) for complete color definitions, usage guidelines, and accessibility standards.
 
-// Warning: Amber (caution, "maybe")
-warning: {
-  main: '#F57C00',      // Material Orange 700
-  light: '#FF9800',     // Material Orange 500
-  dark: '#E65100',      // Material Orange 900
-}
+**Summary**:
+- **Primary**: Deep Blue (#1976D2) - trust, professionalism, sports
+- **Secondary**: Vibrant Green (#43A047) - energy, action, "go"
+- **Semantic Colors**: Red (error/"not going"), Amber (warning/"maybe"), Green (success)
+- **All colors meet WCAG AA accessibility standards**
 
-// Success: Green (confirmation, success states)
-success: {
-  main: '#388E3C',      // Material Green 700
-  light: '#4CAF50',     // Material Green 500
-  dark: '#2E7D32',      // Material Green 800
-}
-
-// Background
-background: {
-  default: '#F5F5F5',   // Light gray for main background
-  paper: '#FFFFFF',     // White for cards/surfaces
-}
-
-// Text
-text: {
-  primary: 'rgba(0, 0, 0, 0.87)',
-  secondary: 'rgba(0, 0, 0, 0.60)',
-  disabled: 'rgba(0, 0, 0, 0.38)',
-}
-```
-
-**Rationale:**
+**Rationale**:
 - **Blue Primary**: Conveys trust, professionalism, and is universally associated with sports (many team colors)
 - **Green Secondary**: Represents action, energy, and positive responses ("Going" RSVP)
 - **High Contrast**: All colors meet WCAG AA standards for accessibility
@@ -110,7 +69,7 @@ graph TB
     Prisma[Prisma ORM]
     DB[(PostgreSQL)]
     Email[Email Service]
-    
+
     Client -->|HTTP/HTTPS| NextJS
     NextJS --> ServerActions
     NextJS --> API
@@ -261,8 +220,8 @@ Note: For instant feedback, the form can use optimistic updates via useOptimisti
 ### Scheduling System
 
 **Event Creation Flow:**
-1. Admin fills event form (type, date, time, location, opponent, notes)
-2. Server Action validates and creates event
+1. Admin fills event form (type, start date/time, location, opponent, notes)
+2. Server Action validates and creates event (startAt stored as DateTime in UTC)
 3. Background job sends email notifications to all team members
 4. Calendar view updates with new event
 
@@ -313,7 +272,7 @@ model User {
   name          String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
-  
+
   teamMembers   TeamMember[]
   rsvps         RSVP[]
   invitations   Invitation[]
@@ -327,7 +286,7 @@ model Team {
   season      String
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
-  
+
   members     TeamMember[]
   events      Event[]
   invitations Invitation[]
@@ -338,13 +297,13 @@ model TeamMember {
   id        String   @id @default(cuid())
   role      Role     @default(MEMBER)
   joinedAt  DateTime @default(now())
-  
+
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+
   teamId    String
   team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  
+
   @@unique([userId, teamId])
 }
 
@@ -354,16 +313,23 @@ enum Role {
 }
 
 // Player model (roster information)
+// NOTE: Player represents roster entries for team members who may or may not have user accounts.
+// - Players can exist without User accounts (e.g., youth players whose parents manage RSVPs)
+// - When a Player accepts an invitation and creates an account, they become linked via TeamMember
+// - TeamMember connects authenticated Users to Teams with roles (ADMIN/MEMBER)
+// - A single person can exist as both a Player (roster entry) and have a User account (TeamMember)
+// - In MVP: Keep Player for roster display, use TeamMember.userId for RSVP and auth operations
 model Player {
   id                String   @id @default(cuid())
   name              String
   email             String?
   phone             String?
-  emergencyContact  String?
-  emergencyPhone    String?
+  emergencyContact  String?  // Admin-only field, not visible to regular members
+  emergencyPhone    String?  // Admin-only field, not visible to regular members
+  userId            String?  // Optional link to User account if player has registered
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
-  
+
   teamId            String
   team              Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
 }
@@ -373,17 +339,16 @@ model Event {
   id          String      @id @default(cuid())
   type        EventType
   title       String
-  date        DateTime
-  time        String
+  startAt     DateTime    // Combined date and time stored in UTC for proper timezone handling
   location    String
   opponent    String?
   notes       String?
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
-  
+
   teamId      String
   team        Team        @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  
+
   rsvps       RSVP[]
 }
 
@@ -398,13 +363,13 @@ model RSVP {
   status      RSVPStatus  @default(NO_RESPONSE)
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
-  
+
   userId      String
   user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+
   eventId     String
   event       Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  
+
   @@unique([userId, eventId])
 }
 
@@ -423,10 +388,10 @@ model Invitation {
   status      InvitationStatus @default(PENDING)
   expiresAt   DateTime
   createdAt   DateTime         @default(now())
-  
+
   teamId      String
   team        Team             @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  
+
   invitedById String
   invitedBy   User             @relation(fields: [invitedById], references: [id])
 }
@@ -474,21 +439,21 @@ export async function createEvent(data: EventInput) {
   try {
     // Validate input
     const validated = eventSchema.parse(data);
-    
+
     // Check authorization
     const session = await getSession();
     if (!session) {
       return { error: 'Unauthorized' };
     }
-    
+
     // Perform database operation
     const event = await prisma.event.create({
       data: validated
     });
-    
+
     // Send notifications
     await sendEventNotifications(event);
-    
+
     return { success: true, data: event };
   } catch (error) {
     if (error instanceof ZodError) {
@@ -539,18 +504,18 @@ describe('createEvent', () => {
       opponent: 'Rivals FC',
       teamId: 'team-123'
     });
-    
+
     expect(result.success).toBe(true);
     expect(result.data).toHaveProperty('id');
   });
-  
+
   it('should reject past dates', async () => {
     const result = await createEvent({
       type: 'GAME',
       date: new Date('2020-01-01'),
       // ... other fields
     });
-    
+
     expect(result.error).toBe('Invalid input');
   });
 });
@@ -574,25 +539,25 @@ test('admin can create event and member can RSVP', async ({ page }) => {
   await page.fill('[name="email"]', 'admin@test.com');
   await page.fill('[name="password"]', 'password123');
   await page.click('button[type="submit"]');
-  
+
   await page.goto('/events/new');
   await page.fill('[name="title"]', 'Practice');
   // ... fill other fields
   await page.click('button[type="submit"]');
-  
+
   await expect(page.locator('text=Practice')).toBeVisible();
-  
+
   // Member RSVPs
   await page.goto('/logout');
   await page.goto('/login');
   await page.fill('[name="email"]', 'member@test.com');
   await page.fill('[name="password"]', 'password123');
   await page.click('button[type="submit"]');
-  
+
   await page.goto('/calendar');
   await page.click('text=Practice');
   await page.click('button:has-text("Going")');
-  
+
   await expect(page.locator('button:has-text("Going")')).toHaveClass(/selected/);
 });
 ```

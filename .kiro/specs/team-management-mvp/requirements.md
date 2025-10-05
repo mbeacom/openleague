@@ -68,7 +68,7 @@ The MVP focuses on four core capabilities: user authentication and team foundati
 
 #### Acceptance Criteria
 
-1. WHEN an admin creates an event THEN the system SHALL capture event type (game/practice), date, time, location, opponent (for games), and notes
+1. WHEN an admin creates an event THEN the system SHALL capture event type (game/practice), startAt (date and time in UTC), location, opponent (for games), and notes
 2. WHEN an admin submits a valid event THEN the system SHALL save it and display it in the calendar view
 3. WHEN an admin edits an event THEN the system SHALL update the information and notify all team members via email
 4. WHEN an admin deletes an event THEN the system SHALL prompt for confirmation and remove it from the calendar

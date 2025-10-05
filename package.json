@@ -14,6 +14,9 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "type": "tsc --noEmit",
-    "clean": "rm -rf .next && rm -rf .cache && rm -rf node_modules/.cache"
+    "clean": "rimraf .next .cache node_modules/.cache"
+  },
+  "devDependencies": {
+    "rimraf": "^6.0.1"
   }
 }
