@@ -1,108 +1,121 @@
-# openleague
+# OpenLeague
 
-A free platform for managing sports teams, leagues, and clubs. Simplify your season with tools for rostering, scheduling, and communication.
+A free, open-source platform for managing sports teams. Simplify your season with tools for roster management, scheduling, and team communication.
 
-## High-Level Overview
+## Project Status
 
-### Stack
+🚧 **Pre-MVP Development** - Currently in initial setup phase.
 
-- React 19+
-- MUI v7+
+See [SETUP.md](./SETUP.md) for detailed setup progress and [.kiro/specs/team-management-mvp/](./kiro/specs/team-management-mvp/) for implementation plan.
+
+## Tech Stack
+
+- **Framework**: Next.js 15 with App Router
+- **Language**: TypeScript
+- **UI**: MUI v7 with Emotion styling
+- **Database**: PostgreSQL (Neon) via Prisma ORM
+- **Auth**: Auth.js (NextAuth.js) v5
+- **Email**: Mailchimp Transactional Email
+- **Deployment**: Vercel
+
+## Getting Started
+
+### Prerequisites
+
 - Node.js 22+
-- Bun
+- Bun (package manager)
+- PostgreSQL database (Neon recommended)
 
-### MVP Scope: The "Single Team, Single Source of Truth"
+### Installation
 
-The MVP's core mission is to replace the chaotic spreadsheet, group chat, and email chains that a typical team manager struggles with. It should be the one place they go to answer "Who, What, When, and Where?"
+```bash
+# Clone the repository
+git clone https://github.com/mbeacom/openleague.git
+cd openleague
 
-Core Features (The "Must-Haves"):
+# Install dependencies
+bun install
 
-1. User & Team Foundation
+# Copy environment template
+cp .env.example .env.local
 
-    User Authentication: Simple email/password registration and login.
+# Edit .env.local with your configuration
+# - DATABASE_URL: Your Neon PostgreSQL connection string
+# - NEXTAUTH_SECRET: Generate with: openssl rand -base64 32
+# - MAILCHIMP_API_KEY: Your Mailchimp Transactional API key
+```
 
-    Team Creation: An authenticated user (the "Admin") can create a team for a specific season (e.g., "U12 Wildcats 2025-2026").
+### Development
 
-    Simple Roles: Only two roles to start: Admin (can manage everything) and Member (can view and set their availability).
+```bash
+# Run development server with Turbopack
+bun run dev
 
-2. Roster Management
+# Open http://localhost:3000
+```
 
-    Invite Members: Admin can send email invitations to players/parents to join the team.
+### Available Scripts
 
-    Basic Roster: A simple list of team members (player name, jersey number, parent/guardian contact info). Admins can add/edit/remove members.
+```bash
+bun run dev          # Start development server
+bun run build        # Build for production
+bun run start        # Start production server
+bun run lint         # Run ESLint
+bun run type-check   # TypeScript type checking
 
-3. Scheduling & Calendar
+# Database commands (after Prisma setup)
+bun run db:studio    # Open Prisma Studio
+bun run db:push      # Push schema to database
+bun run db:migrate   # Create and run migrations
+bun run db:generate  # Generate Prisma Client
+```
 
-    Event Creation: Admin can create two types of events: Game or Practice.
+## MVP Features
 
-    Event Details: Events must include:
+- **User Authentication**: Email/password signup and login
+- **Team Management**: Create and manage a single team
+- **Roster Management**: Add players with contact information
+- **Invitation System**: Email invitations to join team
+- **Event Scheduling**: Create games and practices
+- **Calendar View**: Responsive calendar (grid on desktop, list on mobile)
+- **RSVP System**: Members respond Going/Not Going/Maybe
+- **Attendance Tracking**: Admins view attendance summaries
 
-        Event Type (Game/Practice)
+## Project Structure
 
-        Date & Time
+```plaintext
+app/                 # Next.js App Router
+├── (auth)/         # Authentication routes
+├── (dashboard)/    # Protected dashboard routes
+└── api/            # API routes (primarily Auth.js)
 
-        Location (simple text field, maybe a Google Maps link)
+components/
+├── ui/             # Base UI components
+└── features/       # Feature-specific components
 
-        Opponent (for games)
+lib/
+├── actions/        # Server Actions
+├── auth/           # Auth.js configuration
+├── db/             # Prisma client
+├── email/          # Email templates and client
+└── utils/          # Validation and utilities
 
-        Notes
+prisma/
+└── schema.prisma   # Database schema
+```
 
-    Team Calendar: A simple list or calendar view showing all upcoming events for the team.
+## Contributing
 
-4. Availability Tracking
+This is currently a personal project in early development. Contributions will be welcome once the MVP is complete.
 
-    RSVP System: For each event, invited Members can mark their availability: Going, Not Going, or Maybe.
+## License
 
-    Attendance View: The Admin can click on an event and see a simple list of who has responded and what their status is. This is the killer feature that solves a huge pain point.
+MIT License - see LICENSE file for details.
 
-Key Focus for MVP:
+## Links
 
-    Admin-First Experience: The entire MVP should be built from the perspective of making the team manager's life easier.
-
-    No Frills: The UI should be clean, fast, and functional. Avoid complex animations or visual clutter.
-
-    Responsive Web: The application must work seamlessly on a mobile browser, as most parents and coaches will use it on their phones.
-
-What to Exclude (Post-MVP Features):
-
-    Payments & Registration: This adds huge complexity. Avoid it for now.
-
-    Multi-Team/League-Level Views: Focus on making it perfect for a single team first.
-
-    Stats Tracking: No goals, assists, save percentages, etc. Just event scheduling.
-
-    Public-Facing Websites: The MVP is for logged-in users only.
-
-    In-App Chat/Messaging: Use email notifications for invites and announcements. Don't build a chat system.
-
-### Recommended MVP Tech Stack
-
-Your initial thoughts are excellent. This stack is modern, highly productive, and perfect for a solo developer or small team.
-
-Frontend
-
-    Framework: Next.js 14+ (with React 19) - The best choice. App Router, Server Actions, and built-in API routes make development incredibly fast.
-
-    Language: TypeScript - Non-negotiable for a project of this scale. It will save you countless hours of debugging.
-
-    UI Components: MUI (Material-UI) - Since you already know it, this is a great pick. It provides a professional-looking and comprehensive set of components out of the box, letting you build the UI quickly.
-
-    State Management & Data Fetching: TanStack Query (formerly React Query) - The industry standard for managing server state. It will handle caching, re-fetching, and loading states, dramatically simplifying your code.
-
-Backend
-
-    Framework: Next.js API Routes / Server Actions - For the MVP, keep your backend and frontend in the same project. It's vastly simpler to manage and deploy. Server Actions, in particular, will make your forms and data mutations very easy to write.
-
-    Authentication: Auth.js (formerly NextAuth.js) - The definitive solution for authentication in Next.js. It's secure, easy to set up, and handles everything from email/password to social logins (which you can add later).
-
-    Database ORM: Prisma - A modern database toolkit that pairs perfectly with TypeScript. It provides incredible type safety (your database schema generates TypeScript types) and makes database queries simple and safe.
-
-Database
-
-    Database: PostgreSQL - The most reliable, powerful, and scalable open-source relational database. It's a choice you will never regret.
-
-    Hosting: Supabase or Neon. Both offer fantastic, free-tier managed PostgreSQL hosting. Supabase also offers an entire backend-as-a-service suite (including auth) which could be an alternative to Auth.js if you prefer. For a pure database, Neon is excellent.
-
-Deployment
-
-    Platform: Vercel - Since you're using Next.js, Vercel is the path of least resistance. It's built by the same company. Deployment is as simple as git push. Their free tier is very generous and perfect for an MVP.
+- [Planning Documents](./.kiro/specs/team-management-mvp/)
+- [Setup Progress](./SETUP.md)
+- [Next.js Documentation](https://nextjs.org/docs)
+- [MUI Documentation](https://mui.com/material-ui/)
+- [Prisma Documentation](https://www.prisma.io/docs)
