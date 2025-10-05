@@ -80,14 +80,14 @@ export default async function DashboardPage() {
             mt: 3,
           }}
         >
-          {teams.map(({ team, role }) => (
-            <Card key={team.id} sx={{ cursor: "pointer" }}>
+          {teams.map((teamMember: typeof teams[0]) => (
+            <Card key={teamMember.team.id}>
               <CardContent>
                 <Typography variant="h6" component="h2" gutterBottom>
-                  {team.name}
+                  {teamMember.team.name}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  {team.sport} • {team.season}
+                  {teamMember.team.sport} • {teamMember.team.season}
                 </Typography>
                 <Typography
                   variant="caption"
@@ -97,11 +97,11 @@ export default async function DashboardPage() {
                     px: 1,
                     py: 0.5,
                     borderRadius: 1,
-                    bgcolor: role === "ADMIN" ? "primary.main" : "grey.300",
-                    color: role === "ADMIN" ? "white" : "text.primary",
+                    bgcolor: teamMember.role === "ADMIN" ? "primary.main" : "grey.300",
+                    color: teamMember.role === "ADMIN" ? "white" : "text.primary",
                   }}
                 >
-                  {role}
+                  {teamMember.role}
                 </Typography>
               </CardContent>
             </Card>

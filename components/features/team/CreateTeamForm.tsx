@@ -60,11 +60,11 @@ export default function CreateTeamForm() {
       if (result.success) {
         // Redirect to dashboard after successful creation
         router.push("/");
-        router.refresh();
       } else {
         setError(result.error);
       }
-    } catch {
+    } catch (err) {
+      console.error("An unexpected error occurred during team creation:", err);
       setError("An unexpected error occurred. Please try again.");
     } finally {
       setIsSubmitting(false);

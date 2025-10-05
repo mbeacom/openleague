@@ -67,17 +67,6 @@ export async function createTeam(
     // Log error for debugging but don't expose internals to client
     console.error("Error creating team:", error);
 
-    // Check for database constraints or common errors
-    if (error && typeof error === 'object' && 'code' in error) {
-      const dbError = error as { code?: string };
-      if (dbError.code === 'P2002') {
-        return {
-          success: false,
-          error: "A team with this name already exists.",
-        };
-      }
-    }
-
     return {
       success: false,
       error: "Failed to create team. Please try again.",
