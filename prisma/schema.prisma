@@ -1,0 +1,150 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User model
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  teamMembers TeamMember[]
+  rsvps       RSVP[]
+  invitations Invitation[]
+}
+
+// Team model
+model Team {
+  id        String   @id @default(cuid())
+  name      String
+  sport     String
+  season    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members     TeamMember[]
+  players     Player[]
+  events      Event[]
+  invitations Invitation[]
+}
+
+// TeamMember junction table with role
+model TeamMember {
+  id       String   @id @default(cuid())
+  role     Role     @default(MEMBER)
+  joinedAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  teamId String
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, teamId])
+}
+
+enum Role {
+  ADMIN
+  MEMBER
+}
+
+// Player model (roster information)
+// NOTE: Player represents roster entries for team members who may or may not have user accounts.
+// - Players can exist without User accounts (e.g., youth players whose parents manage RSVPs)
+// - When a Player accepts an invitation and creates an account, they become linked via TeamMember
+// - TeamMember connects authenticated Users to Teams with roles (ADMIN/MEMBER)
+// - A single person can exist as both a Player (roster entry) and have a User account (TeamMember)
+// - In MVP: Keep Player for roster display, use TeamMember.userId for RSVP and auth operations
+model Player {
+  id               String   @id @default(cuid())
+  name             String
+  email            String?
+  phone            String?
+  emergencyContact String? // Admin-only field, not visible to regular members
+  emergencyPhone   String? // Admin-only field, not visible to regular members
+  userId           String? // Optional link to User account if player has registered
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  teamId String
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+}
+
+// Event model
+model Event {
+  id        String    @id @default(cuid())
+  type      EventType
+  title     String
+  startAt   DateTime // Combined date and time stored in UTC for proper timezone handling
+  location  String
+  opponent  String?
+  notes     String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  teamId String
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  rsvps RSVP[]
+}
+
+enum EventType {
+  GAME
+  PRACTICE
+}
+
+// RSVP model
+model RSVP {
+  id        String     @id @default(cuid())
+  status    RSVPStatus @default(NO_RESPONSE)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, eventId])
+}
+
+enum RSVPStatus {
+  GOING
+  NOT_GOING
+  MAYBE
+  NO_RESPONSE
+}
+
+// Invitation model
+model Invitation {
+  id        String           @id @default(cuid())
+  email     String
+  token     String           @unique
+  status    InvitationStatus @default(PENDING)
+  expiresAt DateTime
+  createdAt DateTime         @default(now())
+
+  teamId String
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  invitedById String
+  invitedBy   User   @relation(fields: [invitedById], references: [id])
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+}
