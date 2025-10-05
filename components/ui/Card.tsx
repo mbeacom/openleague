@@ -2,9 +2,7 @@ import MuiCard, { CardProps as MuiCardProps } from '@mui/material/Card';
 import CardContent, { CardContentProps } from '@mui/material/CardContent';
 import CardActions, { CardActionsProps } from '@mui/material/CardActions';
 
-export interface CardProps extends MuiCardProps {
-  children: React.ReactNode;
-}
+export type CardProps = MuiCardProps;
 
 export function Card({ children, ...props }: CardProps) {
   return <MuiCard {...props}>{children}</MuiCard>;

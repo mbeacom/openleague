@@ -11,6 +11,7 @@ import {
   Container,
   Alert,
   Link as MuiLink,
+  CircularProgress,
 } from "@mui/material";
 import Link from "next/link";
 import { loginSchema } from "@/lib/utils/validation";
@@ -163,7 +164,15 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<Container maxWidth="sm"><Box sx={{ marginTop: 8, textAlign: 'center' }}>Loading...</Box></Container>}>
+    <Suspense
+      fallback={
+        <Container maxWidth="sm">
+          <Box sx={{ marginTop: 8, display: 'flex', justifyContent: 'center' }}>
+            <CircularProgress />
+          </Box>
+        </Container>
+      }
+    >
       <LoginForm />
     </Suspense>
   );

@@ -1,8 +1,14 @@
 import { createTheme, responsiveFontSizes } from '@mui/material/styles';
 
+// OpenLeague MVP Theme
+// Primary: Deep Blue (#1976D2 - Material Blue 700)
+// Secondary: Vibrant Green (#43A047 - Material Green 600)
+// WCAG AA contrast compliant
+
 // Create base theme with custom color palette
-let theme = createTheme({
+const baseTheme = createTheme({
   palette: {
+    mode: 'light',
     primary: {
       main: '#1976D2',
       light: '#42A5F5',
@@ -41,7 +47,7 @@ let theme = createTheme({
     },
   },
   typography: {
-    fontFamily: 'Roboto, sans-serif',
+    fontFamily: 'var(--font-roboto), Roboto, "Helvetica Neue", Arial, sans-serif',
   },
   breakpoints: {
     values: {
@@ -53,12 +59,44 @@ let theme = createTheme({
     },
   },
   components: {
+    MuiTextField: {
+      styleOverrides: {
+        root: {
+          '& .MuiOutlinedInput-root': {
+            backgroundColor: '#FFFFFF',
+            '& fieldset': {
+              borderColor: 'rgba(0, 0, 0, 0.23)',
+            },
+            '&:hover fieldset': {
+              borderColor: 'rgba(0, 0, 0, 0.87)',
+            },
+            '&.Mui-focused fieldset': {
+              borderColor: '#1976D2',
+            },
+          },
+          '& .MuiInputLabel-root': {
+            color: 'rgba(0, 0, 0, 0.6)',
+          },
+          '& .MuiInputBase-input': {
+            color: 'rgba(0, 0, 0, 0.87)',
+          },
+        },
+      },
+    },
     MuiButton: {
       styleOverrides: {
         root: {
           minHeight: 44,
           minWidth: 44,
           textTransform: 'none',
+          fontWeight: 500,
+          borderRadius: 8,
+        },
+        contained: {
+          boxShadow: 'none',
+          '&:hover': {
+            boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.15)',
+          },
         },
       },
     },
@@ -74,6 +112,6 @@ let theme = createTheme({
 });
 
 // Apply responsive font sizing
-theme = responsiveFontSizes(theme);
+const theme = responsiveFontSizes(baseTheme);
 
 export default theme;

@@ -3,9 +3,7 @@ import DialogTitle, { DialogTitleProps } from '@mui/material/DialogTitle';
 import DialogContent, { DialogContentProps } from '@mui/material/DialogContent';
 import DialogActions, { DialogActionsProps } from '@mui/material/DialogActions';
 
-export interface DialogProps extends MuiDialogProps {
-  children: React.ReactNode;
-}
+export type DialogProps = MuiDialogProps;
 
 export function Dialog({ children, ...props }: DialogProps) {
   return <MuiDialog {...props}>{children}</MuiDialog>;
