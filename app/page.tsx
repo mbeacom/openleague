@@ -1,95 +1,114 @@
-import Image from "next/image";
-import styles from "./page.module.css";
+"use client";
 
-export default function Home() {
+import { useSession } from "next-auth/react";
+import { Box, Typography, Container, Button, CircularProgress } from "@mui/material";
+import Link from "next/link";
+import { logout } from "@/lib/actions/logout";
+
+/**
+ * Home/Dashboard page
+ * - Shows landing page for unauthenticated users
+ * - Shows dashboard for authenticated users
+ * - Client Component to prevent hydration mismatches
+ */
+export default function HomePage() {
+  const { data: session, status } = useSession();
+
+  // Show loading state while checking session
+  if (status === "loading") {
+    return (
+      <Container maxWidth="md">
+        <Box
+          sx={{
+            marginTop: 12,
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+          }}
+        >
+          <CircularProgress />
+        </Box>
+      </Container>
+    );
+  }
+
+  // Authenticated user - show dashboard
+  if (session?.user) {
+    return (
+      <Container maxWidth="lg">
+        <Box
+          sx={{
+            marginTop: 8,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+          }}
+        >
+          <Typography component="h1" variant="h4" gutterBottom>
+            Welcome to OpenLeague
+          </Typography>
+          <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
+            Hello, {session.user.name || session.user.email}!
+          </Typography>
+          <Typography variant="body2" sx={{ mb: 4 }}>
+            Your team management dashboard will be available soon.
+          </Typography>
+
+          <form action={logout}>
+            <Button type="submit" variant="outlined" color="primary">
+              Log Out
+            </Button>
+          </form>
+        </Box>
+      </Container>
+    );
+  }
+
+  // Unauthenticated user - show landing page
   return (
-    <div className={styles.page}>
-      <main className={styles.main}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol>
-          <li>
-            Get started by editing <code>app/page.tsx</code>.
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+    <Container maxWidth="md">
+      <Box
+        sx={{
+          marginTop: 12,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          textAlign: "center",
+        }}
+      >
+        <Typography component="h1" variant="h2" gutterBottom>
+          OpenLeague
+        </Typography>
+        <Typography variant="h5" color="text.secondary" sx={{ mb: 4 }}>
+          Free sports team management platform
+        </Typography>
+        <Typography variant="body1" color="text.secondary" sx={{ mb: 6 }}>
+          Simplify rostering, scheduling, and communication for your team.
+          Replace chaotic spreadsheets and group chats with a single source of
+          truth.
+        </Typography>
 
-        <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+        <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
+          <Button
+            component={Link}
+            href="/signup"
+            variant="contained"
+            size="large"
+            sx={{ minWidth: 140 }}
           >
-            <Image
-              className={styles.logo}
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-            className={styles.secondary}
+            Get Started
+          </Button>
+          <Button
+            component={Link}
+            href="/login"
+            variant="outlined"
+            size="large"
+            sx={{ minWidth: 140 }}
           >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className={styles.footer}>
-        <a
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+            Log In
+          </Button>
+        </Box>
+      </Box>
+    </Container>
   );
 }

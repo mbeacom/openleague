@@ -18,9 +18,9 @@
   - Create `lib/db/prisma.ts` with singleton Prisma client instance
   - _Requirements: 10.1, 10.2_
 
-- [ ] 3. Implement authentication foundation with Auth.js
+- [x] 3. Implement authentication foundation with Auth.js
 
-  - [ ] 3.1 Configure Auth.js with credentials provider
+  - [x] 3.1 Configure Auth.js with credentials provider
 
     - Create `app/api/auth/[...nextauth]/route.ts` with Auth.js configuration
     - Implement credentials provider with email/password validation
@@ -28,14 +28,14 @@
     - Set up bcrypt password hashing (cost factor 12)
     - _Requirements: 1.1, 1.2, 1.3, 10.2_
 
-  - [ ] 3.2 Create authentication utilities and session helpers
+  - [x] 3.2 Create authentication utilities and session helpers
 
     - Create `lib/auth/config.ts` with Auth.js options
     - Create `lib/auth/session.ts` with `getSession()` and `requireAuth()` helpers
     - Implement server-side session validation for protected routes
     - _Requirements: 1.4, 1.6, 10.7_
 
-  - [ ] 3.3 Build signup and login pages
+  - [x] 3.3 Build signup and login pages
     - Create `app/(auth)/signup/page.tsx` with signup form
     - Create `app/(auth)/login/page.tsx` with login form
     - Implement form validation with Zod schemas
