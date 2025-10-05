@@ -62,9 +62,9 @@
     - Ensure all components have minimum 44x44px touch targets
     - _Requirements: 8.3_
 
-- [ ] 5. Implement team creation and management
+- [x] 5. Implement team creation and management
 
-  - [ ] 5.1 Create team creation Server Action
+  - [x] 5.1 Create team creation Server Action
 
     - Create `lib/actions/team.ts` with `createTeam` Server Action
     - Validate team name, sport, and season inputs with Zod
@@ -73,7 +73,7 @@
     - Return success/error response with created team data
     - _Requirements: 2.2, 2.3, 10.3_
 
-  - [ ] 5.2 Build team creation form and dashboard
+  - [x] 5.2 Build team creation form and dashboard
 
     - Create `app/(dashboard)/page.tsx` as team dashboard
     - Create `components/features/team/CreateTeamForm.tsx` with form fields
@@ -82,7 +82,7 @@
     - Display empty state if user has no teams
     - _Requirements: 2.1, 2.4_
 
-  - [ ] 5.3 Create dashboard layout with navigation
+  - [x] 5.3 Create dashboard layout with navigation
     - Create `app/(dashboard)/layout.tsx` with navigation structure
     - Implement responsive navigation (bottom nav on mobile, sidebar on desktop)
     - Add navigation links to Roster, Calendar, and Events
