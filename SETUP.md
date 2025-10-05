@@ -71,14 +71,60 @@ bun run db:migrate   # Create and run migrations
 bun run db:generate  # Generate Prisma Client
 ```
 
+### Task 2: Set up Prisma with Neon database
+
+**Completed Steps:**
+
+1. ✓ Initialized Prisma with `bunx prisma init`
+2. ✓ Created complete Prisma schema with all models:
+   - User (authentication and profile)
+   - Team (team information)
+   - TeamMember (user-team relationship with roles)
+   - Player (roster entries)
+   - Event (games and practices)
+   - RSVP (availability tracking)
+   - Invitation (email invitations)
+3. ✓ Created `lib/db/prisma.ts` with singleton Prisma client instance
+4. ✓ Updated documentation with setup instructions
+
+**Database Schema:**
+- 7 models with proper relationships and cascading deletes
+- 4 enums: Role (ADMIN/MEMBER), EventType (GAME/PRACTICE), RSVPStatus (GOING/NOT_GOING/MAYBE/NO_RESPONSE), InvitationStatus (PENDING/ACCEPTED/EXPIRED)
+- Unique constraints on email, invitation tokens, and user-team/user-event pairs
+- Indexes on foreign keys for query performance
+
+**To Complete Setup:**
+
+Before running the application, you need to:
+
+1. **Create a Neon Database:**
+   - Go to https://console.neon.tech
+   - Create a new project
+   - Copy the connection string
+
+2. **Update `.env.local`:**
+   - Replace the placeholder `DATABASE_URL` with your actual Neon connection string
+
+3. **Run Initial Migration:**
+   ```bash
+   bunx prisma migrate dev --name init
+   ```
+   This will create all database tables and generate the Prisma Client.
+
+4. **Verify Setup (Optional):**
+   ```bash
+   bunx prisma studio
+   ```
+   Opens a visual database browser to verify tables were created.
+
 ### Next Steps
 
 The project is now ready for:
-- Task 2: Set up Prisma with Neon database
 - Task 3: Implement authentication foundation with Auth.js
 - Task 4: Create MUI theme and base UI components
 
 ### Requirements Satisfied
 
-- ✓ Requirement 10.1: PostgreSQL database setup (Prisma configured)
+- ✓ Requirement 10.1: PostgreSQL database setup (Prisma configured with Neon)
+- ✓ Requirement 10.2: Data models for User, Team, Player, Event, RSVP, Invitation
 - ✓ Requirement 10.6: Environment configuration for secure data handling
