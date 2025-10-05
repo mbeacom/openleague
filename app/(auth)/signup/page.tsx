@@ -62,7 +62,6 @@ export default function SignupPage() {
         } else {
           setGeneralError(result.error);
         }
-        setIsLoading(false);
         return;
       }
 
@@ -75,7 +74,6 @@ export default function SignupPage() {
 
       if (signInResult?.error) {
         setGeneralError("Account created but login failed. Please try logging in.");
-        setIsLoading(false);
         return;
       }
 
@@ -85,6 +83,7 @@ export default function SignupPage() {
     } catch (error) {
       console.error("Signup error:", error);
       setGeneralError("An unexpected error occurred");
+    } finally {
       setIsLoading(false);
     }
   };

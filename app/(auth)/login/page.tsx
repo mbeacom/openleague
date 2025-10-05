@@ -13,6 +13,7 @@ import {
   Link as MuiLink,
 } from "@mui/material";
 import Link from "next/link";
+import { loginSchema } from "@/lib/utils/validation";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -46,17 +47,17 @@ export default function LoginPage() {
     setErrors({});
     setGeneralError("");
 
-    // Basic validation
-    const newErrors: Record<string, string> = {};
-    if (!formData.email) {
-      newErrors.email = "Email is required";
-    }
-    if (!formData.password) {
-      newErrors.password = "Password is required";
-    }
+    // Validate with Zod schema
+    const validationResult = loginSchema.safeParse(formData);
 
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
+    if (!validationResult.success) {
+      const fieldErrors: Record<string, string> = {};
+      validationResult.error.issues.forEach((issue) => {
+        if (issue.path.length > 0) {
+          fieldErrors[String(issue.path[0])] = issue.message;
+        }
+      });
+      setErrors(fieldErrors);
       setIsLoading(false);
       return;
     }
@@ -70,7 +71,6 @@ export default function LoginPage() {
 
       if (result?.error) {
         setGeneralError("Invalid email or password");
-        setIsLoading(false);
         return;
       }
 
@@ -80,6 +80,7 @@ export default function LoginPage() {
     } catch (error) {
       console.error("Login error:", error);
       setGeneralError("An unexpected error occurred");
+    } finally {
       setIsLoading(false);
     }
   };
