@@ -4,6 +4,8 @@ This directory contains Next.js Server Actions for handling data mutations and s
 
 ## Structure
 
+- `auth.ts` - Authentication actions (signup)
+- `logout.ts` - Logout action (session termination)
 - `team.ts` - Team creation and management actions
 - `roster.ts` - Player roster CRUD operations
 - `events.ts` - Event scheduling and management actions
@@ -14,7 +16,7 @@ This directory contains Next.js Server Actions for handling data mutations and s
 
 All Server Actions must:
 1. Include `'use server'` directive at the top
-2. Start with authentication check using `requireAuth()`
+2. Start with authentication check using `requireAuth()` (except auth.ts and logout.ts)
 3. Validate inputs using Zod schemas
 4. Check user authorization before mutations
 5. Use Prisma for database operations
