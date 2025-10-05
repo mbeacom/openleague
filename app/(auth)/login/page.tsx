@@ -98,7 +98,7 @@ export default function LoginPage() {
           Log In
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-          Welcome back to openleague
+          Welcome back to OpenLeague
         </Typography>
 
         {generalError && (
