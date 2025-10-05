@@ -89,9 +89,9 @@
     - Implement logout functionality
     - _Requirements: 2.5, 2.6, 8.4_
 
-- [ ] 6. Build roster management system
+- [x] 6. Build roster management system
 
-  - [ ] 6.1 Create roster Server Actions
+  - [x] 6.1 Create roster Server Actions
 
     - Create `lib/actions/roster.ts` with CRUD operations
     - Implement `addPlayer` Server Action with validation
@@ -101,7 +101,7 @@
     - Ensure only ADMIN role can modify roster
     - _Requirements: 3.2, 3.3, 3.4, 10.3, 10.4_
 
-  - [ ] 6.2 Build roster list and player cards
+  - [x] 6.2 Build roster list and player cards
 
     - Create `app/(dashboard)/roster/page.tsx` as roster page
     - Create `components/features/roster/RosterList.tsx` with responsive grid/list
@@ -111,7 +111,7 @@
     - Show empty state with "Add Player" prompt when roster is empty
     - _Requirements: 3.1, 3.5, 3.6, 3.7_
 
-  - [ ] 6.3 Create add/edit player dialog
+  - [x] 6.3 Create add/edit player dialog
     - Create `components/features/roster/AddPlayerDialog.tsx` with form
     - Add form fields: name, email, phone, emergency contact, emergency phone
     - Implement form validation with Zod schema
