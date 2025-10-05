@@ -4,5 +4,16 @@
     "@emotion/styled": "^11.14.1",
     "@mui/material": "^7.3.4",
     "next.js": "^1.0.3"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "type": "tsc --noEmit",
+    "clean": "rm -rf .next && rm -rf .cache && rm -rf node_modules/.cache"
   }
 }
