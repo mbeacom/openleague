@@ -1,6 +1,7 @@
 # Implementation Plan
 
-- [ ] 1. Initialize Next.js project and configure core dependencies
+- [x] 1. Initialize Next.js project and configure core dependencies
+
   - Run `bunx create-next-app@latest openleague --typescript --app --no-tailwind`
   - Install MUI v7, Emotion, Prisma, Auth.js packages
   - Install Mailchimp Transactional Email SDK (`@mailchimp/mailchimp_transactional`)
@@ -9,6 +10,7 @@
   - _Requirements: 10.1, 10.6_
 
 - [ ] 2. Set up Prisma with Neon database
+
   - Initialize Prisma with `bunx prisma init`
   - Configure `DATABASE_URL` in `.env.local` for Neon connection
   - Create complete Prisma schema with User, Team, TeamMember, Player, Event, RSVP, and Invitation models
@@ -17,7 +19,9 @@
   - _Requirements: 10.1, 10.2_
 
 - [ ] 3. Implement authentication foundation with Auth.js
+
   - [ ] 3.1 Configure Auth.js with credentials provider
+
     - Create `app/api/auth/[...nextauth]/route.ts` with Auth.js configuration
     - Implement credentials provider with email/password validation
     - Configure JWT session strategy with 7-day expiration
@@ -25,6 +29,7 @@
     - _Requirements: 1.1, 1.2, 1.3, 10.2_
 
   - [ ] 3.2 Create authentication utilities and session helpers
+
     - Create `lib/auth/config.ts` with Auth.js options
     - Create `lib/auth/session.ts` with `getSession()` and `requireAuth()` helpers
     - Implement server-side session validation for protected routes
@@ -39,7 +44,9 @@
     - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.7_
 
 - [ ] 4. Create MUI theme and base UI components
+
   - [ ] 4.1 Configure MUI theme with mobile-first design
+
     - Create `lib/theme.ts` with custom MUI theme using sports-professional color palette (Blue primary #1976D2, Green secondary #43A047)
     - Configure responsive breakpoints (xs: <600px, sm: 600-960px, md: >960px)
     - Set up Emotion cache for SSR in `app/layout.tsx`
@@ -56,7 +63,9 @@
     - _Requirements: 8.3_
 
 - [ ] 5. Implement team creation and management
+
   - [ ] 5.1 Create team creation Server Action
+
     - Create `lib/actions/team.ts` with `createTeam` Server Action
     - Validate team name, sport, and season inputs with Zod
     - Create team record and assign creator as ADMIN role
@@ -65,6 +74,7 @@
     - _Requirements: 2.2, 2.3, 10.3_
 
   - [ ] 5.2 Build team creation form and dashboard
+
     - Create `app/(dashboard)/page.tsx` as team dashboard
     - Create `components/features/team/CreateTeamForm.tsx` with form fields
     - Implement form submission calling `createTeam` Server Action
@@ -80,7 +90,9 @@
     - _Requirements: 2.5, 2.6, 8.4_
 
 - [ ] 6. Build roster management system
+
   - [ ] 6.1 Create roster Server Actions
+
     - Create `lib/actions/roster.ts` with CRUD operations
     - Implement `addPlayer` Server Action with validation
     - Implement `updatePlayer` Server Action with authorization check
@@ -90,6 +102,7 @@
     - _Requirements: 3.2, 3.3, 3.4, 10.3, 10.4_
 
   - [ ] 6.2 Build roster list and player cards
+
     - Create `app/(dashboard)/roster/page.tsx` as roster page
     - Create `components/features/roster/RosterList.tsx` with responsive grid/list
     - Create `components/features/roster/PlayerCard.tsx` displaying player info
@@ -107,7 +120,9 @@
     - _Requirements: 3.2, 3.3_
 
 - [ ] 7. Implement invitation system
+
   - [ ] 7.1 Create invitation Server Actions
+
     - Create `lib/actions/invitations.ts` with invitation logic
     - Implement `sendInvitation` Server Action generating unique token
     - Set invitation expiration to 7 days from creation
@@ -116,6 +131,7 @@
     - _Requirements: 4.1, 4.5, 4.6_
 
   - [ ] 7.2 Build email invitation system
+
     - Create `lib/email/client.ts` with Mailchimp Transactional client configuration
     - Create `lib/email/templates.ts` with invitation email template
     - Implement `sendInvitationEmail` function with unique link
@@ -123,6 +139,7 @@
     - _Requirements: 4.1, 9.4_
 
   - [ ] 7.3 Create invitation acceptance flow
+
     - Create `app/api/invitations/[token]/route.ts` API route
     - Validate invitation token and check expiration
     - Redirect to signup page with pre-filled team information
@@ -138,7 +155,9 @@
     - _Requirements: 4.4, 4.6_
 
 - [ ] 8. Create event scheduling system
+
   - [ ] 8.1 Implement event Server Actions
+
     - Create `lib/actions/events.ts` with event CRUD operations
     - Implement `createEvent` Server Action with validation
     - Validate date is not in the past
@@ -148,6 +167,7 @@
     - _Requirements: 5.1, 5.2, 5.5, 5.6, 5.7, 7.6_
 
   - [ ] 8.2 Build event creation form
+
     - Create `app/(dashboard)/events/new/page.tsx` with event form
     - Create `components/features/events/EventForm.tsx` with dynamic fields
     - Add fields: type (game/practice), startAt (DateTime picker), location, opponent, notes
@@ -157,6 +177,7 @@
     - _Requirements: 5.1, 5.2, 5.5, 5.6, 5.7_
 
   - [ ] 8.3 Create event detail page
+
     - Create `app/(dashboard)/events/[id]/page.tsx` for event details
     - Display all event information (type, startAt with timezone conversion, location, opponent, notes)
     - Show edit/delete buttons for ADMIN role only
@@ -173,7 +194,9 @@
     - _Requirements: 9.1, 9.2, 9.3, 9.6_
 
 - [ ] 9. Build calendar view and event display
+
   - [ ] 9.1 Create calendar page with responsive layouts
+
     - Create `app/(dashboard)/calendar/page.tsx` as calendar view
     - Fetch all team events sorted by date
     - Implement responsive layout: list view on mobile, grid on desktop
@@ -182,6 +205,7 @@
     - _Requirements: 6.1, 6.4, 6.5, 6.7_
 
   - [ ] 9.2 Build event card component
+
     - Create `components/features/calendar/EventCard.tsx`
     - Display event type badge (game vs practice) with distinct colors
     - Show startAt (converted to user's local timezone), location, and opponent
@@ -197,7 +221,9 @@
     - _Requirements: 6.4, 6.6_
 
 - [ ] 10. Implement RSVP and attendance tracking
+
   - [ ] 10.1 Create RSVP Server Actions
+
     - Create `lib/actions/rsvp.ts` with RSVP operations
     - Implement `updateRSVP` Server Action accepting userId, eventId, and status
     - Validate status is one of: GOING, NOT_GOING, MAYBE
@@ -206,6 +232,7 @@
     - _Requirements: 7.1, 7.2, 7.3_
 
   - [ ] 10.2 Build RSVP button component
+
     - Create `components/features/events/RSVPButtons.tsx` as Client Component
     - Display three buttons: Going, Not Going, Maybe
     - Highlight selected status with distinct styling
@@ -214,6 +241,7 @@
     - _Requirements: 7.1, 7.2_
 
   - [ ] 10.3 Create attendance view for admins
+
     - Create `components/features/events/AttendanceView.tsx`
     - Display summary counts: Going, Not Going, Maybe, No Response
     - Show list of members grouped by RSVP status
@@ -229,13 +257,16 @@
     - _Requirements: 7.7, 9.5_
 
 - [ ] 11. Add form validation and error handling
+
   - [ ] 11.1 Create validation schemas with Zod
+
     - Create `lib/utils/validation.ts` with all form schemas
     - Define schemas for: signup, login, team creation, player, event, RSVP
     - Export reusable validation functions
     - _Requirements: 1.2, 2.2, 3.2, 5.1_
 
   - [ ] 11.2 Implement client-side form validation
+
     - Add real-time validation to all forms using Zod schemas
     - Display inline error messages below form fields
     - Disable submit buttons until forms are valid
@@ -250,7 +281,9 @@
     - _Requirements: 10.5_
 
 - [ ] 12. Implement authorization and security
+
   - [ ] 12.1 Add authorization checks to all Server Actions
+
     - Verify user session exists before processing requests
     - Check user has ADMIN role for admin-only actions
     - Verify user belongs to team before accessing team data
@@ -258,6 +291,7 @@
     - _Requirements: 10.3, 10.4, 10.7_
 
   - [ ] 12.2 Implement HTTPS and secure headers
+
     - Configure `next.config.js` with security headers
     - Ensure HTTPS is enforced in production
     - Set up CSRF protection via Auth.js
@@ -271,7 +305,9 @@
     - _Requirements: 10.5_
 
 - [ ] 13. Optimize for mobile and responsive design
+
   - [ ] 13.1 Implement responsive navigation
+
     - Create bottom navigation bar for mobile (<600px)
     - Create sidebar navigation for desktop (>960px)
     - Add hamburger menu for secondary actions on mobile
@@ -279,6 +315,7 @@
     - _Requirements: 8.4_
 
   - [ ] 13.2 Optimize forms for mobile input
+
     - Use appropriate input types (email, tel, datetime-local for startAt)
     - Implement single-column layouts on mobile
     - Use floating labels to save vertical space
@@ -292,7 +329,9 @@
     - _Requirements: 8.1, 8.5_
 
 - [ ] 14. Set up deployment and environment configuration
+
   - [ ] 14.1 Configure Vercel deployment
+
     - Create `vercel.json` with build configuration
     - Set up environment variables in Vercel dashboard (DATABASE_URL, NEXTAUTH_SECRET, MAILCHIMP_API_KEY, etc.)
     - Configure Neon database connection string
@@ -300,6 +339,7 @@
     - _Requirements: 10.1, 10.6_
 
   - [ ] 14.2 Create database migration workflow
+
     - Document Prisma migration commands in README
     - Set up automatic migrations on deployment
     - Create seed script for development data (optional)
