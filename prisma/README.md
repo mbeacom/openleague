@@ -34,6 +34,7 @@ erDiagram
     User ||--o{ TeamMember : "has memberships"
     User ||--o{ RSVP : "creates"
     User ||--o{ Invitation : "sends"
+    User ||--o{ Player : "optionally links to"
 
     Team ||--o{ TeamMember : "has members"
     Team ||--o{ Player : "has roster"
@@ -75,7 +76,7 @@ erDiagram
         string phone
         string emergencyContact "Admin-only"
         string emergencyPhone "Admin-only"
-        string userId "Optional link"
+        string userId FK-nullable "Optional link to User"
         string teamId FK
         datetime createdAt
         datetime updatedAt
@@ -112,6 +113,7 @@ erDiagram
         string teamId FK
         string invitedById FK
         datetime createdAt
+        datetime updatedAt
     }
 ```
 
@@ -121,7 +123,11 @@ erDiagram
 - `FK` = Foreign Key
 - `UK` = Unique Key
 - `||--o{` = One-to-many relationship
-- All foreign key relationships have `ON DELETE CASCADE` except `Invitation.invitedById` which uses `RESTRICT`
+- `FK-nullable` = Optional foreign key
+- Foreign key cascade behaviors:
+  - Most relationships: `ON DELETE CASCADE` (deleting parent deletes children)
+  - `Player.userId`: `ON DELETE SET NULL` (preserves roster history when user deleted)
+  - `Invitation.invitedById`: `ON DELETE RESTRICT` (cannot delete user who sent invitations)
 
 ## Running Migrations
 

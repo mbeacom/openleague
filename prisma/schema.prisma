@@ -99,6 +99,9 @@ model Event {
   team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   rsvps RSVP[]
+
+  @@index([teamId, startAt]) // Optimize queries for team events sorted by date
+  @@index([startAt]) // Optimize queries for upcoming events across teams
 }
 
 enum EventType {
