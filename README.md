@@ -110,7 +110,7 @@ This is currently a personal project in early development. Contributions will be
 
 ## License
 
-MIT License - see LICENSE file for details.
+Business Source License 1.1 - see [LICENSE](./LICENSE) file for details.
 
 ## Links
 

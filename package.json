@@ -18,7 +18,7 @@
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
     "@mailchimp/mailchimp_transactional": "^1.0.59",
-    "@mui/material": "^7",
+    "@mui/material": "^7.3.4",
     "@prisma/client": "^6.16.3",
     "bcryptjs": "^3.0.2",
     "next": "15.5.4",
