@@ -1,14 +1,8 @@
+"use client";
+
 import { Box, Typography, useMediaQuery, useTheme } from "@mui/material";
 import EventCard from "./EventCard";
-
-interface Event {
-  id: string;
-  type: "GAME" | "PRACTICE";
-  title: string;
-  startAt: string; // ISO string from server component
-  location: string;
-  opponent: string | null;
-}
+import type { Event } from "@/types/events";
 
 interface EventListProps {
   events: Event[];

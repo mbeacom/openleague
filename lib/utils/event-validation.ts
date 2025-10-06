@@ -29,9 +29,10 @@ const baseEventSchema = z.object({
   teamId: z.string().min(1, "Team ID is required"),
 });
 
-export const createEventSchema = baseEventSchema
+// Create refined schema with shared validation logic (DRY principle)
+const refinedEventSchema = baseEventSchema
   .refine(
-    async (data) => {
+    (data) => {
       // Validate date is not in the past
       return data.startAt > new Date();
     },
@@ -41,7 +42,7 @@ export const createEventSchema = baseEventSchema
     }
   )
   .refine(
-    async (data) => {
+    (data) => {
       // Require opponent field for GAME type
       if (data.type === "GAME") {
         return data.opponent && data.opponent.trim().length > 0;
@@ -54,33 +55,11 @@ export const createEventSchema = baseEventSchema
     }
   );
 
-export const updateEventSchema = baseEventSchema
-  .extend({
-    id: z.string().min(1, "Event ID is required"),
-  })
-  .refine(
-    async (data) => {
-      // Validate date is not in the past
-      return data.startAt > new Date();
-    },
-    {
-      message: "Event date must be in the future",
-      path: ["startAt"],
-    }
-  )
-  .refine(
-    async (data) => {
-      // Require opponent field for GAME type
-      if (data.type === "GAME") {
-        return data.opponent && data.opponent.trim().length > 0;
-      }
-      return true;
-    },
-    {
-      message: "Opponent is required for games",
-      path: ["opponent"],
-    }
-  );
+export const createEventSchema = refinedEventSchema;
+
+export const updateEventSchema = refinedEventSchema.extend({
+  id: z.string().min(1, "Event ID is required"),
+});
 
 export type CreateEventInput = z.infer<typeof createEventSchema>;
 export type UpdateEventInput = z.infer<typeof updateEventSchema>;

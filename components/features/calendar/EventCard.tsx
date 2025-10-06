@@ -2,15 +2,7 @@
 
 import { Card, CardContent, Typography, Box, Chip } from "@mui/material";
 import { useRouter } from "next/navigation";
-
-interface EventCardProps {
-  id: string;
-  type: "GAME" | "PRACTICE";
-  title: string;
-  startAt: string; // ISO string from server component
-  location: string;
-  opponent: string | null;
-}
+import type { Event } from "@/types/events";
 
 export default function EventCard({
   id,
@@ -19,7 +11,7 @@ export default function EventCard({
   startAt,
   location,
   opponent,
-}: EventCardProps) {
+}: Event) {
   const router = useRouter();
 
   // Convert UTC date to local timezone
