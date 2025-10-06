@@ -139,9 +139,36 @@ export async function fetchWithRetry(
 
 /**
  * Get user-friendly error message
+ * Sanitizes error messages to prevent information leakage
  */
 export function getErrorMessage(error: unknown): string {
   if (error instanceof Error) {
+    // Don't expose internal error details in production
+    if (process.env.NODE_ENV === "production") {
+      // Check for known safe error messages
+      const safeMessages = [
+        "Invalid email or password",
+        "Unauthorized",
+        "Not found",
+        "Validation failed",
+        "Rate limit exceeded",
+        "Team name is required",
+        "Event not found",
+        "You are not a member of this team",
+        "Only team admins can perform this action",
+      ];
+      
+      const message = error.message;
+      const isSafeMessage = safeMessages.some(safe => message.includes(safe));
+      
+      if (isSafeMessage) {
+        return message;
+      }
+      
+      // Return generic message for unknown errors in production
+      return "An unexpected error occurred";
+    }
+    
     return error.message;
   }
   
@@ -154,6 +181,31 @@ export function getErrorMessage(error: unknown): string {
   }
   
   return 'An unexpected error occurred';
+}
+
+/**
+ * Sanitize error for logging
+ * Removes sensitive information before logging
+ */
+export function sanitizeErrorForLogging(error: unknown): unknown {
+  if (error instanceof Error) {
+    const sanitized = {
+      name: error.name,
+      message: error.message,
+      stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
+    };
+    
+    // Remove sensitive patterns from error messages
+    sanitized.message = sanitized.message
+      .replace(/password[=:]\s*[^\s]+/gi, "password=***")
+      .replace(/token[=:]\s*[^\s]+/gi, "token=***")
+      .replace(/key[=:]\s*[^\s]+/gi, "key=***")
+      .replace(/secret[=:]\s*[^\s]+/gi, "secret=***");
+    
+    return sanitized;
+  }
+  
+  return error;
 }
 
 /**

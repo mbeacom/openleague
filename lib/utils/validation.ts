@@ -1,56 +1,78 @@
 import { z } from "zod";
 
-// Helper for optional string fields that allow empty string
-function optionalString(schema: z.ZodString) {
-  return schema.optional().or(z.literal(""));
+// Helper to sanitize string input by trimming and removing dangerous characters
+function sanitizedString(maxLength: number = 255) {
+  return z
+    .string()
+    .trim()
+    .max(maxLength)
+    .transform((str) => {
+      // Remove null bytes and other control characters that could be dangerous
+      return str.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
+    });
+}
+
+// Helper for sanitized strings with minimum length
+function sanitizedStringWithMin(minLength: number, maxLength: number = 255) {
+  return z
+    .string()
+    .trim()
+    .min(minLength)
+    .max(maxLength)
+    .transform((str) => {
+      // Remove null bytes and other control characters that could be dangerous
+      return str.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
+    });
+}
+
+// Helper for sanitized optional strings
+function optionalSanitizedString(maxLength: number = 255) {
+  return sanitizedString(maxLength).optional().or(z.literal(""));
 }
 
 // Auth validation schemas
 export const signupSchema = z.object({
-  email: z.string().email("Invalid email address"),
+  email: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .email("Invalid email address")
+    .max(254, "Email must be less than 254 characters"), // RFC 5321 limit
   password: z
     .string()
     .min(8, "Password must be at least 8 characters")
-    .max(100, "Password must be less than 100 characters"),
-  name: z.string().max(100).optional(),
+    .max(128, "Password must be less than 128 characters"), // Reasonable limit for bcrypt
+  name: optionalSanitizedString(100),
 });
 
 export const loginSchema = z.object({
-  email: z.string().email("Invalid email address"),
-  password: z.string().min(1, "Password is required"),
+  email: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .email("Invalid email address")
+    .max(254, "Email must be less than 254 characters"),
+  password: z.string().min(1, "Password is required").max(128),
 });
 
 // Team validation schemas
 export const createTeamSchema = z.object({
-  name: z
-    .string()
-    .min(1, "Team name is required")
-    .max(100, "Team name must be less than 100 characters"),
-  sport: z
-    .string()
-    .min(1, "Sport is required")
-    .max(50, "Sport must be less than 50 characters"),
-  season: z
-    .string()
-    .min(1, "Season is required")
-    .max(50, "Season must be less than 50 characters"),
+  name: sanitizedStringWithMin(1, 100).refine(val => val.length > 0, "Team name is required"),
+  sport: sanitizedStringWithMin(1, 50).refine(val => val.length > 0, "Sport is required"),
+  season: sanitizedStringWithMin(1, 50).refine(val => val.length > 0, "Season is required"),
 });
 
 // Player validation schemas
 export const addPlayerSchema = z.object({
-  name: z
-    .string()
-    .min(1, "Name is required")
-    .max(100, "Name must be less than 100 characters"),
-  email: optionalString(z.string().email("Invalid email address")),
-  phone: optionalString(z.string().max(20, "Phone must be less than 20 characters")),
-  emergencyContact: optionalString(
-    z.string().max(100, "Emergency contact must be less than 100 characters")
-  ),
-  emergencyPhone: optionalString(
-    z.string().max(20, "Emergency phone must be less than 20 characters")
-  ),
-  teamId: z.string().min(1, "Team ID is required"),
+  name: sanitizedStringWithMin(1, 100).refine(val => val.length > 0, "Name is required"),
+  email: optionalSanitizedString(254)
+    .refine((val) => !val || z.string().email().safeParse(val).success, {
+      message: "Invalid email address",
+    }),
+  phone: optionalSanitizedString(20),
+  emergencyContact: optionalSanitizedString(100),
+  emergencyPhone: optionalSanitizedString(20),
+  teamId: z.string().cuid("Invalid team ID format"),
 });
 
 export const updatePlayerSchema = addPlayerSchema.extend({
@@ -62,28 +84,14 @@ const baseEventSchema = z.object({
   type: z.enum(["GAME", "PRACTICE"], {
     message: "Event type must be GAME or PRACTICE",
   }),
-  title: z
-    .string()
-    .min(1, "Title is required")
-    .max(100, "Title must be less than 100 characters"),
+  title: sanitizedStringWithMin(1, 100).refine(val => val.length > 0, "Title is required"),
   startAt: z.coerce.date({
     message: "Valid date and time is required",
   }),
-  location: z
-    .string()
-    .min(1, "Location is required")
-    .max(200, "Location must be less than 200 characters"),
-  opponent: z
-    .string()
-    .max(100, "Opponent must be less than 100 characters")
-    .optional()
-    .nullable(),
-  notes: z
-    .string()
-    .max(1000, "Notes must be less than 1000 characters")
-    .optional()
-    .nullable(),
-  teamId: z.string().min(1, "Team ID is required"),
+  location: sanitizedStringWithMin(1, 200).refine(val => val.length > 0, "Location is required"),
+  opponent: optionalSanitizedString(100),
+  notes: optionalSanitizedString(1000),
+  teamId: z.string().cuid("Invalid team ID format"),
 });
 
 export const createEventSchema = baseEventSchema
@@ -113,7 +121,7 @@ export const createEventSchema = baseEventSchema
 
 export const updateEventSchema = baseEventSchema
   .extend({
-    id: z.string().min(1, "Event ID is required"),
+    id: z.string().cuid("Invalid event ID format"),
   })
   .refine(
     (data) => {
@@ -141,7 +149,7 @@ export const updateEventSchema = baseEventSchema
 
 // RSVP validation schemas
 export const updateRSVPSchema = z.object({
-  eventId: z.string().min(1, "Event ID is required"),
+  eventId: z.string().cuid("Invalid event ID format"),
   status: z.enum(["GOING", "NOT_GOING", "MAYBE"], {
     message: "RSVP status must be GOING, NOT_GOING, or MAYBE",
   }),
@@ -149,8 +157,13 @@ export const updateRSVPSchema = z.object({
 
 // Invitation validation schemas
 export const sendInvitationSchema = z.object({
-  email: z.string().email("Invalid email address"),
-  teamId: z.string().min(1, "Team ID is required"),
+  email: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .email("Invalid email address")
+    .max(254, "Email must be less than 254 characters"),
+  teamId: z.string().cuid("Invalid team ID format"),
 });
 
 // Type exports

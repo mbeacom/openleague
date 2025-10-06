@@ -48,6 +48,35 @@ export const authOptions: NextAuthConfig = {
     strategy: "jwt",
     maxAge: 7 * 24 * 60 * 60, // 7 days in seconds
   },
+  cookies: {
+    sessionToken: {
+      name: `${process.env.NODE_ENV === "production" ? "__Secure-" : ""}next-auth.session-token`,
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: process.env.NODE_ENV === "production", // HTTPS only in production
+      },
+    },
+    callbackUrl: {
+      name: `${process.env.NODE_ENV === "production" ? "__Secure-" : ""}next-auth.callback-url`,
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: process.env.NODE_ENV === "production",
+      },
+    },
+    csrfToken: {
+      name: `${process.env.NODE_ENV === "production" ? "__Host-" : ""}next-auth.csrf-token`,
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: process.env.NODE_ENV === "production",
+      },
+    },
+  },
   pages: {
     signIn: "/login",
     signOut: "/login",
@@ -70,4 +99,8 @@ export const authOptions: NextAuthConfig = {
     },
   },
   secret: process.env.NEXTAUTH_SECRET,
+  // Enable CSRF protection (enabled by default, but explicit for clarity)
+  useSecureCookies: process.env.NODE_ENV === "production",
+  // Additional security settings
+  debug: process.env.NODE_ENV === "development",
 };
