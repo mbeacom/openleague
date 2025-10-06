@@ -193,9 +193,9 @@
     - Include event details and link to view full information
     - _Requirements: 9.1, 9.2, 9.3, 9.6_
 
-- [ ] 9. Build calendar view and event display
+- [x] 9. Build calendar view and event display
 
-  - [ ] 9.1 Create calendar page with responsive layouts
+  - [x] 9.1 Create calendar page with responsive layouts
 
     - Create `app/(dashboard)/calendar/page.tsx` as calendar view
     - Fetch all team events sorted by date
@@ -204,7 +204,7 @@
     - Separate upcoming and past events
     - _Requirements: 6.1, 6.4, 6.5, 6.7_
 
-  - [ ] 9.2 Build event card component
+  - [x] 9.2 Build event card component
 
     - Create `components/features/calendar/EventCard.tsx`
     - Display event type badge (game vs practice) with distinct colors
@@ -213,7 +213,7 @@
     - Optimize for mobile with touch-friendly sizing
     - _Requirements: 6.2, 6.3_
 
-  - [ ] 9.3 Implement calendar list view for mobile
+  - [x] 9.3 Implement calendar list view for mobile
     - Create `components/features/calendar/EventList.tsx`
     - Display events as vertical list with cards
     - Show empty state when no events exist
