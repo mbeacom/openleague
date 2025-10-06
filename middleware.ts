@@ -13,7 +13,7 @@ export function middleware(request: NextRequest) {
         return NextResponse.redirect(httpsUrl, 301);
     }
 
-    // Apply rate limiting to API routes
+    // Apply rate limiting to API routes (more permissive in development)
     if (request.nextUrl.pathname.startsWith("/api/")) {
         let rateLimitResult;
 
@@ -25,6 +25,13 @@ export function middleware(request: NextRequest) {
         }
 
         if (!rateLimitResult.allowed) {
+            const retryAfter = Math.ceil((rateLimitResult.resetTime - Date.now()) / 1000);
+
+            // Log rate limit hits in development for debugging
+            if (process.env.NODE_ENV !== "production") {
+                console.warn(`Rate limit hit for ${request.nextUrl.pathname} - Retry after ${retryAfter}s`);
+            }
+
             return new NextResponse(
                 JSON.stringify({
                     error: "Too many requests",
@@ -34,10 +41,10 @@ export function middleware(request: NextRequest) {
                     status: 429,
                     headers: {
                         "Content-Type": "application/json",
-                        "X-RateLimit-Limit": "100",
+                        "X-RateLimit-Limit": process.env.NODE_ENV === "production" ? "5" : "50",
                         "X-RateLimit-Remaining": "0",
                         "X-RateLimit-Reset": new Date(rateLimitResult.resetTime).toISOString(),
-                        "Retry-After": Math.ceil((rateLimitResult.resetTime - Date.now()) / 1000).toString(),
+                        "Retry-After": retryAfter.toString(),
                     },
                 }
             );
@@ -45,7 +52,8 @@ export function middleware(request: NextRequest) {
 
         // Add rate limit headers to successful responses
         const response = NextResponse.next();
-        response.headers.set("X-RateLimit-Limit", "100");
+        const maxLimit = process.env.NODE_ENV === "production" ? "5" : "50";
+        response.headers.set("X-RateLimit-Limit", maxLimit);
         response.headers.set("X-RateLimit-Remaining", rateLimitResult.remaining.toString());
         response.headers.set("X-RateLimit-Reset", new Date(rateLimitResult.resetTime).toISOString());
 
