@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import {
   Box,
@@ -17,10 +17,18 @@ import { signup } from "@/lib/actions/auth";
 
 export default function SignupPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Get invitation parameters from URL
+  const invitationEmail = searchParams.get("email");
+  const invitationToken = searchParams.get("invitationToken");
+  const teamName = searchParams.get("teamName");
+
   const [formData, setFormData] = useState({
-    email: "",
+    email: invitationEmail || "",
     password: "",
     name: "",
+    invitationToken: invitationToken || undefined,
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
@@ -102,7 +110,9 @@ export default function SignupPage() {
           Create Account
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-          Sign up to start managing your team
+          {teamName
+            ? `Join ${teamName} on openleague`
+            : "Sign up to start managing your team"}
         </Typography>
 
         {generalError && (
@@ -138,6 +148,7 @@ export default function SignupPage() {
             error={!!errors.email}
             helperText={errors.email}
             type="email"
+            disabled={!!invitationEmail}
           />
           <TextField
             margin="normal"
