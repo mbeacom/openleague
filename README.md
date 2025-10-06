@@ -1,4 +1,7 @@
 # OpenLeague
+[![Release](https://github.com/mbeacom/openleague/workflows/Release/badge.svg)](https://github.com/mbeacom/openleague/actions/workflows/release.yml)
+[![License](https://img.shields.io/badge/license-BUSL--1.1-blue.svg)](./LICENSE)
+[![Version](https://img.shields.io/github/package-json/v/mbeacom/openleague)](./package.json)
 
 A free, open-source platform for managing sports teams. Simplify your season with tools for roster management, scheduling, and team communication.
 
@@ -104,18 +107,139 @@ prisma/
 └── schema.prisma   # Database schema
 ```
 
+## CI/CD & Releases
+
+OpenLeague uses GitHub Actions for automated releases:
+
+- **Automatic Releases**: Push to `main` triggers semantic versioning and GitHub releases
+- **Version Management**: Based on conventional commit messages
+- **Quality Checks**: Automated type-checking, linting, and builds
+- **Changelog Generation**: Automatic categorized changelog from commits
+
+See [.github/AUTOMATION.md](./.github/AUTOMATION.md) for details.
+
+### Quick Release Guide
+
+```bash
+# Commits determine version bump:
+git commit -m "feat: new feature"  # Minor bump (0.X.0)
+git commit -m "fix: bug fix"       # Patch bump (0.0.X)
+git commit -m "feat!: breaking"    # Major bump (X.0.0)
+
+# Just merge to main - automation handles the rest!
+git push origin main
+```
+
 ## Contributing
 
-This is currently a personal project in early development. Contributions will be welcome once the MVP is complete.
+Contributions are welcome! Please see [CONTRIBUTING.md](./.github/CONTRIBUTING.md) for:
 
-## License
+- Development setup
+- Coding conventions
+- Commit message format
+- PR process
+- Release workflow
 
-Business Source License 1.1 - see [LICENSE](./LICENSE) file for details.
+This project follows [Conventional Commits](https://www.conventionalcommits.org/) and [Semantic Versioning](https://semver.org/).
 
-## Links
+## License & Usage
+
+### Business Source License 1.1
+
+OpenLeague is licensed under the **Business Source License 1.1** - see [LICENSE](./LICENSE) for full details.
+
+#### What This Means
+
+**✅ You CAN (No License Needed):**
+
+- Use OpenLeague for your league/organization's internal management
+- Self-host on your own infrastructure for your own use
+- Fork, modify, and customize for your organization
+- Share improvements back to the community
+- Study the code and learn from it
+
+**⚠️ You Need a Commercial License To:**
+
+- Offer OpenLeague as a SaaS to multiple third-party organizations
+- Sell OpenLeague-based hosting services commercially
+- Build a competing business using OpenLeague code
+- Provide OpenLeague as a managed service for profit
+
+**🔄 Future License Change:**
+
+- On **October 4, 2029**, this license automatically converts to **Apache 2.0**
+- After that date, all usage restrictions are removed
+- This ensures long-term openness while protecting early development
+
+### Deployment Options
+
+#### 1. **Hosted Service (Recommended for Most Users)**
+
+Coming soon - we'll offer a professionally hosted version at [openl.app](https://openl.app) with:
+
+- Zero setup or maintenance
+- Automatic updates and backups
+- Professional support
+- Free tier for small teams
+
+📚 **Developer Documentation:** [openleague.dev](https://openleague.dev)
+
+#### 2. **Self-Hosting (For Technical Teams)**
+
+Self-hosting is fully supported and encouraged for your own organization:
+
+```bash
+# Clone and deploy
+git clone https://github.com/mbeacom/openleague.git
+cd openleague
+bun install
+# Configure .env.local with your services
+bun run build
+bun run start
+```
+
+**Requirements for self-hosting:**
+
+- PostgreSQL database (Neon, Supabase, or self-hosted)
+- SMTP service for emails (Mailchimp Transactional, AWS SES, etc.)
+- Node.js 22+ hosting environment (Vercel, AWS, etc.)
+
+See [SETUP.md](./SETUP.md) for detailed deployment instructions.
+
+**Self-hosting is perfect for:**
+
+- Tech-savvy leagues who want full control
+- Organizations with existing infrastructure
+- Teams requiring custom modifications
+- Development and testing environments
+
+### Commercial Licensing
+
+Interested in offering OpenLeague as a commercial service to multiple organizations?
+
+We offer commercial licenses that allow you to:
+
+- Build and sell OpenLeague-based SaaS products
+- Offer managed hosting services commercially
+- White-label OpenLeague for your customers
+- Receive priority support and partnership opportunities
+
+**Contact:** [mark@openl.app](mailto:mark@openl.app) for commercial licensing inquiries.
+
+## Documentation
+
+### Project Documentation
 
 - [Planning Documents](./.kiro/specs/team-management-mvp/)
 - [Setup Progress](./SETUP.md)
+- [Contributing Guide](./.github/CONTRIBUTING.md)
+- [Release Process](./.github/RELEASE_TEMPLATE.md)
+- [CI/CD Automation](./.github/AUTOMATION.md)
+
+### External Documentation
+
 - [Next.js Documentation](https://nextjs.org/docs)
 - [MUI Documentation](https://mui.com/material-ui/)
 - [Prisma Documentation](https://www.prisma.io/docs)
+- [Conventional Commits](https://www.conventionalcommits.org/)
+- [Semantic Versioning](https://semver.org/)

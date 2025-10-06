@@ -1,0 +1,78 @@
+# GitHub Release configuration
+# This file customizes the automatically generated release notes
+
+changelog:
+  exclude:
+    labels:
+      - ignore-for-release
+      - dependencies
+      - skip-changelog
+    authors:
+      - dependabot
+      - github-actions[bot]
+
+  categories:
+    - title: 🚨 Breaking Changes
+      labels:
+        - breaking-change
+        - breaking
+
+    - title: ✨ New Features
+      labels:
+        - feature
+        - enhancement
+        - feat
+
+    - title: 🐛 Bug Fixes
+      labels:
+        - bug
+        - fix
+        - bugfix
+
+    - title: 📚 Documentation
+      labels:
+        - documentation
+        - docs
+
+    - title: 🏗️ Infrastructure
+      labels:
+        - infrastructure
+        - ci
+        - cd
+        - deployment
+
+    - title: 🔧 Configuration
+      labels:
+        - configuration
+        - config
+
+    - title: 🎨 Styling
+      labels:
+        - style
+        - styling
+        - ui
+        - ux
+
+    - title: ⚡ Performance
+      labels:
+        - performance
+        - optimization
+
+    - title: 🔒 Security
+      labels:
+        - security
+        - vulnerability
+
+    - title: 🧪 Testing
+      labels:
+        - test
+        - testing
+
+    - title: 📦 Dependencies
+      labels:
+        - dependencies
+        - deps
+
+    - title: 🔄 Other Changes
+      labels:
+        - "*"

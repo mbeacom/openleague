@@ -171,7 +171,7 @@ NEXTAUTH_SECRET="generate-with-openssl-rand-base64-32"
 
 # Email Service (Mailchimp Transactional)
 MAILCHIMP_API_KEY="your-mailchimp-transactional-api-key"
-EMAIL_FROM="noreply@openleague.app"
+EMAIL_FROM="noreply@openl.app"
 
 # Optional: For future AWS migration
 # AWS_REGION="us-east-1"

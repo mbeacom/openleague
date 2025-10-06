@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import {
@@ -15,7 +15,7 @@ import {
 import Link from "next/link";
 import { signup } from "@/lib/actions/auth";
 
-export default function SignupPage() {
+function SignupForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -184,5 +184,13 @@ export default function SignupPage() {
         </Box>
       </Box>
     </Container>
+  );
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense fallback={<Container maxWidth="sm"><Box sx={{ mt: 8, textAlign: "center" }}>Loading...</Box></Container>}>
+      <SignupForm />
+    </Suspense>
   );
 }
