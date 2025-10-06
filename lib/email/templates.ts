@@ -1,5 +1,6 @@
 import { mailchimpClient } from "./client";
 import { prisma } from "@/lib/db/prisma";
+import { formatDateTime } from "@/lib/utils/date";
 
 const EMAIL_FROM = process.env.EMAIL_FROM || "noreply@openleague.app";
 const BASE_URL = process.env.NEXTAUTH_URL || "http://localhost:3000";
@@ -502,8 +503,6 @@ This event is coming up in less than 48 hours.`,
  * This function should be called by a scheduled job/cron
  */
 export async function sendRSVPReminders(): Promise<void> {
-  const { formatDateTime } = await import("@/lib/utils/date");
-
   // Calculate the time window: 48 hours from now (with a 1-hour buffer)
   const now = new Date();
   const fortyEightHoursFromNow = new Date(now.getTime() + 48 * 60 * 60 * 1000);
@@ -573,8 +572,6 @@ export async function sendEventNotifications(
   eventId: string,
   type: "created" | "updated" | "cancelled"
 ): Promise<void> {
-  const { formatDateTime } = await import("@/lib/utils/date");
-
   // Fetch event with team members
   const event = await prisma.event.findUnique({
     where: { id: eventId },
