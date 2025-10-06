@@ -154,9 +154,9 @@
     - Show invitation status (pending/accepted/expired)
     - _Requirements: 4.4, 4.6_
 
-- [ ] 8. Create event scheduling system
+- [x] 8. Create event scheduling system
 
-  - [ ] 8.1 Implement event Server Actions
+  - [x] 8.1 Implement event Server Actions
 
     - Create `lib/actions/events.ts` with event CRUD operations
     - Implement `createEvent` Server Action with validation
@@ -166,7 +166,7 @@
     - Initialize all team members with NO_RESPONSE RSVP status on event creation
     - _Requirements: 5.1, 5.2, 5.5, 5.6, 5.7, 7.6_
 
-  - [ ] 8.2 Build event creation form
+  - [x] 8.2 Build event creation form
 
     - Create `app/(dashboard)/events/new/page.tsx` with event form
     - Create `components/features/events/EventForm.tsx` with dynamic fields
@@ -176,7 +176,7 @@
     - Call `createEvent` Server Action on submit
     - _Requirements: 5.1, 5.2, 5.5, 5.6, 5.7_
 
-  - [ ] 8.3 Create event detail page
+  - [x] 8.3 Create event detail page
 
     - Create `app/(dashboard)/events/[id]/page.tsx` for event details
     - Display all event information (type, startAt with timezone conversion, location, opponent, notes)
@@ -185,7 +185,7 @@
     - Display attendance summary for ADMIN
     - _Requirements: 5.3, 5.4_
 
-  - [ ] 8.4 Implement event notification emails
+  - [x] 8.4 Implement event notification emails
     - Create email templates for event created/updated/cancelled
     - Implement `sendEventNotifications` function in `lib/email/templates.ts`
     - Send emails to all team members when event is created
