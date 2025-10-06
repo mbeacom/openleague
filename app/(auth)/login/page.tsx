@@ -42,6 +42,33 @@ function LoginForm() {
     }
   };
 
+  const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    
+    // Validate individual field on blur
+    if (name === 'email' || name === 'password') {
+      const fieldSchema = loginSchema.pick({ [name]: true });
+      const validationResult = fieldSchema.safeParse({ [name]: value });
+      
+      if (validationResult.success) {
+        // Clear error if validation passes
+        if (errors[name]) {
+          setErrors((prev) => {
+            const newErrors = { ...prev };
+            delete newErrors[name];
+            return newErrors;
+          });
+        }
+      } else {
+        // Set error if validation fails
+        const fieldError = validationResult.error.issues[0]?.message;
+        if (fieldError) {
+          setErrors((prev) => ({ ...prev, [name]: fieldError }));
+        }
+      }
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -121,6 +148,7 @@ function LoginForm() {
             autoFocus
             value={formData.email}
             onChange={handleChange}
+            onBlur={handleBlur}
             error={!!errors.email}
             helperText={errors.email}
             type="email"
@@ -136,6 +164,7 @@ function LoginForm() {
             autoComplete="current-password"
             value={formData.password}
             onChange={handleChange}
+            onBlur={handleBlur}
             error={!!errors.password}
             helperText={errors.password}
           />
@@ -144,7 +173,7 @@ function LoginForm() {
             fullWidth
             variant="contained"
             sx={{ mt: 3, mb: 2 }}
-            disabled={isLoading}
+            disabled={isLoading || !formData.email || !formData.password || Object.keys(errors).some(key => errors[key])}
           >
             {isLoading ? "Logging in..." : "Log In"}
           </Button>

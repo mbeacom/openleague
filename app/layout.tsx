@@ -3,6 +3,8 @@ import { Roboto } from "next/font/google";
 import "./globals.css";
 import { SessionProvider } from "@/components/providers/SessionProvider";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
+import ErrorBoundary from "@/components/ui/ErrorBoundary";
+import { ToastProvider } from "@/components/ui/Toast";
 
 const roboto = Roboto({
   weight: ["300", "400", "500", "700"],
@@ -25,9 +27,13 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={roboto.variable}>
-        <ThemeProvider>
-          <SessionProvider>{children}</SessionProvider>
-        </ThemeProvider>
+        <ErrorBoundary>
+          <ThemeProvider>
+            <ToastProvider>
+              <SessionProvider>{children}</SessionProvider>
+            </ToastProvider>
+          </ThemeProvider>
+        </ErrorBoundary>
       </body>
     </html>
   );

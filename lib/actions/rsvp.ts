@@ -4,21 +4,14 @@ import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
 import { requireUserId } from "@/lib/auth/session";
 import { revalidatePath } from "next/cache";
+import { 
+  updateRSVPSchema,
+  type UpdateRSVPInput 
+} from "@/lib/utils/validation";
 
 export type ActionResult<T> =
   | { success: true; data: T }
   | { success: false; error: string; details?: unknown };
-
-// Validation schema for RSVP status
-const rsvpStatusSchema = z.enum(["GOING", "NOT_GOING", "MAYBE"]);
-
-// Input schema for updateRSVP
-const updateRSVPSchema = z.object({
-  eventId: z.string().min(1, "Event ID is required"),
-  status: rsvpStatusSchema,
-});
-
-export type UpdateRSVPInput = z.infer<typeof updateRSVPSchema>;
 
 /**
  * Update or create an RSVP for an event
@@ -108,7 +101,7 @@ export async function updateRSVP(
   } catch (error) {
     if (error instanceof z.ZodError) {
       const fieldErrors = error.issues
-        .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
+        .map((issue: z.ZodIssue) => `${issue.path.join(".")}: ${issue.message}`)
         .join(", ");
       return {
         success: false,

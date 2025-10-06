@@ -2,6 +2,7 @@ import { ReactNode } from "react";
 import { requireAuth } from "@/lib/auth/session";
 import { Box, AppBar, Toolbar, Typography } from "@mui/material";
 import DashboardNav from "@/components/features/dashboard/DashboardNav";
+import ErrorBoundary from "@/components/ui/ErrorBoundary";
 
 export default async function DashboardLayout({
   children,
@@ -58,7 +59,9 @@ export default async function DashboardLayout({
             bgcolor: "background.default",
           }}
         >
-          {children}
+          <ErrorBoundary>
+            {children}
+          </ErrorBoundary>
         </Box>
       </Box>
 

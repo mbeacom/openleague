@@ -14,6 +14,7 @@ import {
 } from "@mui/material";
 import Link from "next/link";
 import { signup } from "@/lib/actions/auth";
+import { signupSchema } from "@/lib/utils/validation";
 
 function SignupForm() {
   const router = useRouter();
@@ -47,11 +48,53 @@ function SignupForm() {
     }
   };
 
+  const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    
+    // Validate individual field on blur
+    if (name === 'email' || name === 'password' || name === 'name') {
+      const fieldSchema = signupSchema.pick({ [name]: true });
+      const validationResult = fieldSchema.safeParse({ [name]: value });
+      
+      if (validationResult.success) {
+        // Clear error if validation passes
+        if (errors[name]) {
+          setErrors((prev) => {
+            const newErrors = { ...prev };
+            delete newErrors[name];
+            return newErrors;
+          });
+        }
+      } else {
+        // Set error if validation fails
+        const fieldError = validationResult.error.issues[0]?.message;
+        if (fieldError) {
+          setErrors((prev) => ({ ...prev, [name]: fieldError }));
+        }
+      }
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setErrors({});
     setGeneralError("");
+
+    // Client-side validation with Zod schema
+    const validationResult = signupSchema.safeParse(formData);
+
+    if (!validationResult.success) {
+      const fieldErrors: Record<string, string> = {};
+      validationResult.error.issues.forEach((issue) => {
+        if (issue.path.length > 0) {
+          fieldErrors[String(issue.path[0])] = issue.message;
+        }
+      });
+      setErrors(fieldErrors);
+      setIsLoading(false);
+      return;
+    }
 
     try {
       // Call signup Server Action
@@ -131,6 +174,7 @@ function SignupForm() {
             autoComplete="name"
             value={formData.name}
             onChange={handleChange}
+            onBlur={handleBlur}
             error={!!errors.name}
             helperText={errors.name}
           />
@@ -145,6 +189,7 @@ function SignupForm() {
             autoFocus
             value={formData.email}
             onChange={handleChange}
+            onBlur={handleBlur}
             error={!!errors.email}
             helperText={errors.email}
             type="email"
@@ -161,6 +206,7 @@ function SignupForm() {
             autoComplete="new-password"
             value={formData.password}
             onChange={handleChange}
+            onBlur={handleBlur}
             error={!!errors.password}
             helperText={errors.password || "Minimum 8 characters"}
           />
@@ -169,7 +215,7 @@ function SignupForm() {
             fullWidth
             variant="contained"
             sx={{ mt: 3, mb: 2 }}
-            disabled={isLoading}
+            disabled={isLoading || !formData.email || !formData.password || Object.keys(errors).some(key => errors[key])}
           >
             {isLoading ? "Creating Account..." : "Sign Up"}
           </Button>
