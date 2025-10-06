@@ -3,10 +3,10 @@ import { prisma } from "@/lib/db/prisma";
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { token: string } }
+  { params }: { params: Promise<{ token: string }> }
 ) {
   try {
-    const { token } = params;
+    const { token } = await params;
 
     // Find the invitation by token
     const invitation = await prisma.invitation.findUnique({
