@@ -1,6 +1,7 @@
 "use client";
 
-import { Box, Typography, useMediaQuery, useTheme } from "@mui/material";
+import { Box, Typography, useMediaQuery } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
 import EventCard from "./EventCard";
 import type { Event } from "@/types/events";
 
