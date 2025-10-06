@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
-import { requireTeamAdmin, requireTeamMember } from "@/lib/auth/session";
+import { requireTeamAdmin, requireTeamMember, requireUserId } from "@/lib/auth/session";
 import { revalidatePath } from "next/cache";
 import { sendEventNotifications } from "@/lib/email/templates";
 import {
@@ -327,10 +327,8 @@ export async function getEvent(eventId: string) {
       return null;
     }
 
-    // Check authentication and authorization - user must be a team member
-    const userId = await requireTeamMember(event.teamId);
-
-    // Get user's role in the team
+    // Check authentication and authorization, and get user's role in one go.
+    const userId = await requireUserId();
     const teamMember = await prisma.teamMember.findUnique({
       where: {
         userId_teamId: {
@@ -343,9 +341,14 @@ export async function getEvent(eventId: string) {
       },
     });
 
+    // If user is not a member of the team, return null as before.
+    if (!teamMember) {
+      return null;
+    }
+
     return {
       ...event,
-      userRole: teamMember?.role || "MEMBER",
+      userRole: teamMember.role,
     };
   } catch (error) {
     console.error("Error fetching event:", error);

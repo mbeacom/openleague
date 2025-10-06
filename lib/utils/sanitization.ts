@@ -1,6 +1,18 @@
 /**
  * Additional input sanitization utilities
  * These complement the Zod validation schemas
+ * 
+ * NOTE: These functions are currently not actively used in the codebase because:
+ * - Prisma ORM provides comprehensive SQL injection protection through parameterized queries
+ * - Zod validation schemas handle input validation and sanitization (trimming, lowercasing, etc.)
+ * - React's JSX provides built-in XSS protection through automatic escaping
+ * 
+ * These utilities remain available for defense-in-depth scenarios where additional
+ * sanitization layers may be beneficial, such as:
+ * - User-generated content that may contain HTML
+ * - Legacy code integration
+ * - Additional security requirements
+ * - Third-party data processing
  */
 
 /**

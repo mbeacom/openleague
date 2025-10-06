@@ -322,7 +322,7 @@ function sanitizeSqlInput(input: string): string {
 }
 ```
 
-**Note**: While Prisma already prevents SQL injection, this provides defense in depth.
+**Note**: Additional sanitization functions are available in `lib/utils/sanitization.ts` (including `sanitizeHtml`, `sanitizeSqlInput`, `normalizeEmail`, `sanitizePhoneNumber`, `sanitizeForDatabase`, and `sanitizeRateLimitKey`) for defense-in-depth scenarios. However, since Prisma's parameterized queries and Zod's validation schemas provide comprehensive protection, these functions are currently not actively integrated into the codebase. They remain available for future use cases where additional sanitization layers may be beneficial.
 
 ### Rate Limiting (`lib/utils/rate-limit.ts`)
 
