@@ -1,12 +1,14 @@
 import Mailchimp from "@mailchimp/mailchimp_transactional";
 
-let mailchimpClient: ReturnType<typeof Mailchimp> | null = null;
+type MailchimpClient = ReturnType<typeof Mailchimp>;
+
+let mailchimpClient: MailchimpClient | null = null;
 
 /**
  * Get the Mailchimp Transactional client instance
  * Lazily initializes the client on first use to avoid build-time errors
  */
-function getMailchimpClient(): ReturnType<typeof Mailchimp> {
+function getMailchimpClient(): MailchimpClient {
   // Return existing client if already initialized
   if (mailchimpClient) {
     return mailchimpClient;
