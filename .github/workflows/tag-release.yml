@@ -1,0 +1,117 @@
+name: Tag Release
+
+# Triggers when a tag matching v*.*.* is pushed
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  validate-and-release:
+    name: Validate Tag and Create Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Extract version from tag
+        id: tag
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          VERSION=${TAG#v}
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Extracted version: $VERSION from tag: $TAG"
+
+      - name: Validate semantic version
+        run: |
+          VERSION=${{ steps.tag.outputs.version }}
+          if ! [[ $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?(\+[a-zA-Z0-9.]+)?$ ]]; then
+            echo "❌ Invalid semantic version: $VERSION"
+            exit 1
+          fi
+          echo "✅ Valid semantic version: $VERSION"
+
+      - name: Run type check
+        run: bun run type-check
+
+      - name: Run linter
+        run: bun run lint
+
+      - name: Run build
+        run: bun run build
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          TAG=${{ steps.tag.outputs.tag }}
+          VERSION=${{ steps.tag.outputs.version }}
+          PREV_TAG=$(git describe --tags --abbrev=0 ${TAG}^ 2>/dev/null || echo "")
+
+          if [ -z "$PREV_TAG" ]; then
+            COMMITS=$(git log --pretty=format:"- %s (%h)" --reverse)
+          else
+            COMMITS=$(git log ${PREV_TAG}..${TAG} --pretty=format:"- %s (%h)" --reverse)
+          fi
+
+          # Categorize commits
+          FEATURES=$(echo "$COMMITS" | grep -iE "^- (feat|feature)(\(.+\))?:" || echo "")
+          FIXES=$(echo "$COMMITS" | grep -iE "^- (fix|bugfix)(\(.+\))?:" || echo "")
+          BREAKING=$(echo "$COMMITS" | grep -iE "^- (feat|feature)(\(.+\))?!:|BREAKING CHANGE" || echo "")
+          OTHERS=$(echo "$COMMITS" | grep -viE "^- (feat|feature|fix|bugfix)(\(.+\))?:" || echo "")
+
+          NOTES="## Release v${VERSION}\n\n"
+
+          if [ -n "$BREAKING" ]; then
+            NOTES="${NOTES}### ⚠️ Breaking Changes\n\n${BREAKING}\n\n"
+          fi
+
+          if [ -n "$FEATURES" ]; then
+            NOTES="${NOTES}### ✨ Features\n\n${FEATURES}\n\n"
+          fi
+
+          if [ -n "$FIXES" ]; then
+            NOTES="${NOTES}### 🐛 Bug Fixes\n\n${FIXES}\n\n"
+          fi
+
+          if [ -n "$OTHERS" ]; then
+            NOTES="${NOTES}### 📦 Other Changes\n\n${OTHERS}\n\n"
+          fi
+
+          if [ -n "$PREV_TAG" ]; then
+            NOTES="${NOTES}**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG}...${TAG}"
+          fi
+
+          echo "$NOTES" > release_notes.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@62c96d0c4e8a889135c1f3a25910db8dbe0e85f7 # v2.3.4
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: Release ${{ steps.tag.outputs.tag }}
+          body_path: release_notes.txt
+          draft: false
+          prerelease: ${{ contains(steps.tag.outputs.version, '-') }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Notify success
+        if: success()
+        run: |
+          echo "✅ Release ${{ steps.tag.outputs.tag }} created successfully!"
+          echo "🔗 View release: https://github.com/${{ github.repository }}/releases/tag/${{ steps.tag.outputs.tag }}"

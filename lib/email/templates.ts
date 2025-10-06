@@ -2,7 +2,7 @@ import { mailchimpClient } from "./client";
 import { prisma } from "@/lib/db/prisma";
 import { formatDateTime } from "@/lib/utils/date";
 
-const EMAIL_FROM = process.env.EMAIL_FROM || "noreply@openleague.app";
+const EMAIL_FROM = process.env.EMAIL_FROM || "noreply@openl.app";
 const BASE_URL = process.env.NEXTAUTH_URL || "http://localhost:3000";
 
 interface InvitationEmailData {
