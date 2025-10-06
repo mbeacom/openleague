@@ -104,54 +104,6 @@ jobs:
           mv package.json.tmp package.json
           echo "Updated package.json to version $VERSION"
 
-      - name: Generate changelog
-        id: changelog
-        run: |
-          VERSION=${{ steps.version.outputs.version }}
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-
-          if [ -z "$LATEST_TAG" ]; then
-            COMMITS=$(git log --pretty=format:"- %s (%h)" --reverse)
-          else
-            COMMITS=$(git log ${LATEST_TAG}..HEAD --pretty=format:"- %s (%h)" --reverse)
-          fi
-
-          # Categorize commits
-          FEATURES=$(echo "$COMMITS" | grep -iE "^- (feat|feature)(\(.+\))?:" || echo "")
-          FIXES=$(echo "$COMMITS" | grep -iE "^- (fix|bugfix)(\(.+\))?:" || echo "")
-          BREAKING=$(echo "$COMMITS" | grep -iE "^- (feat|feature)(\(.+\))?!:|BREAKING CHANGE" || echo "")
-          OTHERS=$(echo "$COMMITS" | grep -viE "^- (feat|feature|fix|bugfix)(\(.+\))?:" || echo "")
-
-          # Build changelog
-          CHANGELOG="## What's Changed"
-          CHANGELOG="${CHANGELOG}\n"
-
-          if [ -n "$BREAKING" ]; then
-            CHANGELOG="${CHANGELOG}\n### ⚠️ Breaking Changes\n\n${BREAKING}\n"
-          fi
-
-          if [ -n "$FEATURES" ]; then
-            CHANGELOG="${CHANGELOG}\n### ✨ Features\n\n${FEATURES}\n"
-          fi
-
-          if [ -n "$FIXES" ]; then
-            CHANGELOG="${CHANGELOG}\n### 🐛 Bug Fixes\n\n${FIXES}\n"
-          fi
-
-          if [ -n "$OTHERS" ]; then
-            CHANGELOG="${CHANGELOG}\n### 📦 Other Changes\n\n${OTHERS}\n"
-          fi
-
-          if [ -n "$LATEST_TAG" ]; then
-            CHANGELOG="${CHANGELOG}\n**Full Changelog**: https://github.com/${{ github.repository }}/compare/${LATEST_TAG}...v${VERSION}"
-          else
-            CHANGELOG="${CHANGELOG}\n**Full Changelog**: https://github.com/${{ github.repository }}/commits/v${VERSION}"
-          fi
-
-          # Save to file for multi-line output with proper newline interpretation
-          echo -e "$CHANGELOG" > changelog.txt
-          echo "Generated changelog for version $VERSION"
-
       - name: Commit version bump
         run: |
           VERSION=${{ steps.version.outputs.version }}
@@ -172,7 +124,6 @@ jobs:
         with:
           tag_name: v${{ steps.version.outputs.version }}
           name: v${{ steps.version.outputs.version }}
-          body_path: changelog.txt
           draft: false
           prerelease: false
           generate_release_notes: true
