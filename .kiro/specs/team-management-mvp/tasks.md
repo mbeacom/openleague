@@ -328,9 +328,9 @@
     - Add swipe gestures for actions (future enhancement)
     - _Requirements: 8.1, 8.5_
 
-- [ ] 14. Set up deployment and environment configuration
+- [x] 14. Set up deployment and environment configuration
 
-  - [ ] 14.1 Configure Vercel deployment
+  - [x] 14.1 Configure Vercel deployment
 
     - Create `vercel.json` with build configuration
     - Set up environment variables in Vercel dashboard (DATABASE_URL, NEXTAUTH_SECRET, MAILCHIMP_API_KEY, etc.)
@@ -338,14 +338,14 @@
     - Set up Mailchimp Transactional API key for email sending
     - _Requirements: 10.1, 10.6_
 
-  - [ ] 14.2 Create database migration workflow
+  - [x] 14.2 Create database migration workflow
 
     - Document Prisma migration commands in README
     - Set up automatic migrations on deployment
     - Create seed script for development data (optional)
     - _Requirements: 10.1_
 
-  - [ ] 14.3 Add environment variable validation
+  - [x] 14.3 Add environment variable validation
     - Create `lib/env.ts` with environment variable schema
     - Validate required environment variables on startup
     - Provide clear error messages for missing variables

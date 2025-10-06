@@ -44,8 +44,6 @@ NEXTAUTH_SECRET           # Auth.js secret (generate with openssl)
 EMAIL_API_KEY             # Email provider API key
 EMAIL_FROM                # From address for emails
 AWS_REGION                # Optional: If using AWS services
-AWS_ACCESS_KEY_ID         # Optional: If using AWS services
-AWS_SECRET_ACCESS_KEY     # Optional: If using AWS services
 ```
 
 ### 4. Theming & Branding Strategy ✅

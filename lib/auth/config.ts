@@ -2,6 +2,7 @@ import type { NextAuthConfig } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { compare } from "bcryptjs";
 import { prisma } from "@/lib/db/prisma";
+import { env, isProduction, isDevelopment } from "@/lib/env";
 
 export const authOptions: NextAuthConfig = {
   providers: [
@@ -50,30 +51,30 @@ export const authOptions: NextAuthConfig = {
   },
   cookies: {
     sessionToken: {
-      name: `${process.env.NODE_ENV === "production" ? "__Secure-" : ""}next-auth.session-token`,
+      name: `${isProduction ? "__Secure-" : ""}next-auth.session-token`,
       options: {
         httpOnly: true,
         sameSite: "lax",
         path: "/",
-        secure: process.env.NODE_ENV === "production", // HTTPS only in production
+        secure: isProduction, // HTTPS only in production
       },
     },
     callbackUrl: {
-      name: `${process.env.NODE_ENV === "production" ? "__Secure-" : ""}next-auth.callback-url`,
+      name: `${isProduction ? "__Secure-" : ""}next-auth.callback-url`,
       options: {
         httpOnly: true,
         sameSite: "lax",
         path: "/",
-        secure: process.env.NODE_ENV === "production",
+        secure: isProduction,
       },
     },
     csrfToken: {
-      name: `${process.env.NODE_ENV === "production" ? "__Host-" : ""}next-auth.csrf-token`,
+      name: `${isProduction ? "__Host-" : ""}next-auth.csrf-token`,
       options: {
         httpOnly: true,
         sameSite: "lax",
         path: "/",
-        secure: process.env.NODE_ENV === "production",
+        secure: isProduction,
       },
     },
   },
@@ -98,9 +99,9 @@ export const authOptions: NextAuthConfig = {
       return session;
     },
   },
-  secret: process.env.NEXTAUTH_SECRET,
+  secret: env.NEXTAUTH_SECRET,
   // Enable CSRF protection (enabled by default, but explicit for clarity)
-  useSecureCookies: process.env.NODE_ENV === "production",
+  useSecureCookies: isProduction,
   // Additional security settings
-  debug: process.env.NODE_ENV === "development",
+  debug: isDevelopment,
 };

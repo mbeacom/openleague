@@ -12,10 +12,15 @@
     "test": "echo \"Tests not yet implemented\" && exit 0",
     "test:watch": "echo \"Tests not yet implemented\" && exit 0",
     "test:coverage": "echo \"Tests not yet implemented\" && exit 0",
+    "postinstall": "prisma generate && prisma migrate deploy",
     "db:studio": "prisma studio",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
-    "db:generate": "prisma generate"
+    "db:migrate:deploy": "prisma migrate deploy",
+    "db:migrate:reset": "prisma migrate reset",
+    "db:generate": "prisma generate",
+    "db:seed": "tsx prisma/seed.ts",
+    "validate-env": "tsx scripts/validate-env.js"
   },
   "dependencies": {
     "@emotion/cache": "^11.14.0",
@@ -42,6 +47,7 @@
     "eslint": "^9",
     "eslint-config-next": "15.5.4",
     "prisma": "^6.16.3",
+    "tsx": "^4.19.2",
     "typescript": "^5"
   }
 }
