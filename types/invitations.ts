@@ -8,8 +8,14 @@ export interface Invitation {
   createdAt: Date;
 }
 
-// Type for invitations returned from Server Components (dates are still Date objects)
+// Type for invitations as they exist on the server with Date objects
 export type InvitationWithDates = Invitation;
+
+// Type for invitations when passed to client components, where dates are serialized to strings
+export type InvitationForClient = Omit<Invitation, "expiresAt" | "createdAt"> & {
+  expiresAt: string;
+  createdAt: string;
+};
 
 // Type for invitation actions
 export interface SendInvitationInput {

@@ -15,10 +15,10 @@ import {
   TextField,
 } from "@mui/material";
 import { sendInvitation, resendInvitation } from "@/lib/actions/invitations";
-import type { InvitationWithDates } from "@/types/invitations";
+import type { InvitationForClient } from "@/types/invitations";
 
 interface InvitationManagerProps {
-  invitations: InvitationWithDates[];
+  invitations: InvitationForClient[];
   teamId: string;
 }
 
@@ -91,20 +91,21 @@ export default function InvitationManager({
     }
   };
 
-  const getStatusColor = (status: string, expiresAt: Date) => {
+  // Helper function to determine if an invitation is expired
+  const isInvitationExpired = (status: string, expiresAt: string | Date) => {
+    return status === "EXPIRED" || new Date(expiresAt) < new Date();
+  };
+
+  const getStatusColor = (status: string, expiresAt: string | Date) => {
     if (status === "ACCEPTED") return "success";
-    if (status === "EXPIRED" || new Date(expiresAt) < new Date()) return "error";
+    if (isInvitationExpired(status, expiresAt)) return "error";
     return "warning";
   };
 
-  const getStatusLabel = (status: string, expiresAt: Date) => {
+  const getStatusLabel = (status: string, expiresAt: string | Date) => {
     if (status === "ACCEPTED") return "Accepted";
-    if (status === "EXPIRED" || new Date(expiresAt) < new Date()) return "Expired";
+    if (isInvitationExpired(status, expiresAt)) return "Expired";
     return "Pending";
-  };
-
-  const isExpired = (status: string, expiresAt: Date) => {
-    return status === "EXPIRED" || new Date(expiresAt) < new Date();
   };
 
   return (
@@ -192,7 +193,7 @@ export default function InvitationManager({
                   color={getStatusColor(invitation.status, invitation.expiresAt)}
                   size="small"
                 />
-                {isExpired(invitation.status, invitation.expiresAt) && (
+                {isInvitationExpired(invitation.status, invitation.expiresAt) && (
                   <Button
                     size="small"
                     variant="outlined"

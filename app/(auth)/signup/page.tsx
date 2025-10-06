@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import {
@@ -18,12 +18,12 @@ import { signup } from "@/lib/actions/auth";
 export default function SignupPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  
+
   // Get invitation parameters from URL
   const invitationEmail = searchParams.get("email");
   const invitationToken = searchParams.get("invitationToken");
   const teamName = searchParams.get("teamName");
-  
+
   const [formData, setFormData] = useState({
     email: invitationEmail || "",
     password: "",
@@ -33,16 +33,6 @@ export default function SignupPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [generalError, setGeneralError] = useState("");
-
-  // Update form data when invitation parameters change
-  useEffect(() => {
-    if (invitationEmail) {
-      setFormData((prev) => ({ ...prev, email: invitationEmail }));
-    }
-    if (invitationToken) {
-      setFormData((prev) => ({ ...prev, invitationToken }));
-    }
-  }, [invitationEmail, invitationToken]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -120,8 +110,8 @@ export default function SignupPage() {
           Create Account
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-          {teamName 
-            ? `Join ${teamName} on openleague` 
+          {teamName
+            ? `Join ${teamName} on openleague`
             : "Sign up to start managing your team"}
         </Typography>
 

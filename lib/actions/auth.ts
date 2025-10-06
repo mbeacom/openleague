@@ -48,20 +48,22 @@ export async function signup(data: SignupWithInvitationInput) {
         });
 
         if (invitation && invitation.status === "PENDING" && invitation.expiresAt > new Date()) {
-          // Add user to team as MEMBER
-          await prisma.teamMember.create({
-            data: {
-              userId: user.id,
-              teamId: invitation.teamId,
-              role: "MEMBER",
-            },
-          });
-
-          // Update invitation status to ACCEPTED
-          await prisma.invitation.update({
-            where: { id: invitation.id },
-            data: { status: "ACCEPTED" },
-          });
+          // Use transaction to ensure atomicity
+          await prisma.$transaction([
+            // Add user to team as MEMBER
+            prisma.teamMember.create({
+              data: {
+                userId: user.id,
+                teamId: invitation.teamId,
+                role: "MEMBER",
+              },
+            }),
+            // Update invitation status to ACCEPTED
+            prisma.invitation.update({
+              where: { id: invitation.id },
+              data: { status: "ACCEPTED" },
+            }),
+          ]);
         }
       } catch (error) {
         console.error("Error processing invitation during signup:", error);

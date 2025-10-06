@@ -43,7 +43,7 @@ export default async function RosterPage() {
   });
 
   // Fetch invitations (only for admins)
-  const invitations = isAdmin
+  const rawInvitations = isAdmin
     ? await prisma.invitation.findMany({
         where: {
           teamId,
@@ -60,6 +60,13 @@ export default async function RosterPage() {
         },
       })
     : [];
+
+  // Serialize dates for client component
+  const invitations = rawInvitations.map((inv: typeof rawInvitations[number]) => ({
+    ...inv,
+    expiresAt: inv.expiresAt.toISOString(),
+    createdAt: inv.createdAt.toISOString(),
+  }));
 
   return (
     <Container maxWidth="lg">

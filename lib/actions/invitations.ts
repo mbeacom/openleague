@@ -16,7 +16,7 @@ export type ActionResult<T> =
  * Check if user is an admin of the team
  */
 async function isTeamAdmin(userId: string, teamId: string): Promise<boolean> {
-  const count = await prisma.teamMember.count({
+  const member = await prisma.teamMember.findFirst({
     where: {
       userId,
       teamId,
@@ -24,7 +24,7 @@ async function isTeamAdmin(userId: string, teamId: string): Promise<boolean> {
     },
   });
 
-  return count > 0;
+  return member !== null;
 }
 
 /**
@@ -55,6 +55,25 @@ export async function sendInvitation(
       return {
         success: false,
         error: "Unauthorized: Only team admins can send invitations",
+      };
+    }
+
+    // Fetch team and inviter information once (used in both flows)
+    const [team, inviter] = await Promise.all([
+      prisma.team.findUnique({
+        where: { id: validated.teamId },
+        select: { name: true },
+      }),
+      prisma.user.findUnique({
+        where: { id: userId },
+        select: { name: true, email: true },
+      }),
+    ]);
+
+    if (!team || !inviter) {
+      return {
+        success: false,
+        error: "Internal server error: Team or inviter not found.",
       };
     }
 
@@ -90,29 +109,16 @@ export async function sendInvitation(
         },
       });
 
-      // Get team and inviter information for email
-      const team = await prisma.team.findUnique({
-        where: { id: validated.teamId },
-        select: { name: true },
-      });
-
-      const inviter = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { name: true, email: true },
-      });
-
       // Send notification email to existing user
-      if (team && inviter) {
-        try {
-          await sendExistingUserNotification({
-            email: validated.email,
-            teamName: team.name,
-            inviterName: inviter.name || inviter.email,
-          });
-        } catch (error) {
-          console.error("Failed to send notification email:", error);
-          // Don't fail the entire operation if email fails
-        }
+      try {
+        await sendExistingUserNotification({
+          email: validated.email,
+          teamName: team.name,
+          inviterName: inviter.name || inviter.email,
+        });
+      } catch (error) {
+        console.error("Failed to send notification email:", error);
+        // Don't fail the entire operation if email fails
       }
 
       revalidatePath("/roster");
@@ -164,30 +170,17 @@ export async function sendInvitation(
       },
     });
 
-    // Get team and inviter information for email
-    const team = await prisma.team.findUnique({
-      where: { id: validated.teamId },
-      select: { name: true },
-    });
-
-    const inviter = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { name: true, email: true },
-    });
-
     // Send invitation email
-    if (team && inviter) {
-      try {
-        await sendInvitationEmail({
-          email: validated.email,
-          teamName: team.name,
-          inviterName: inviter.name || inviter.email,
-          token,
-        });
-      } catch (error) {
-        console.error("Failed to send invitation email:", error);
-        // Don't fail the entire operation if email fails
-      }
+    try {
+      await sendInvitationEmail({
+        email: validated.email,
+        teamName: team.name,
+        inviterName: inviter.name || inviter.email,
+        token,
+      });
+    } catch (error) {
+      console.error("Failed to send invitation email:", error);
+      // Don't fail the entire operation if email fails
     }
 
     revalidatePath("/roster");
@@ -212,50 +205,6 @@ export async function sendInvitation(
     return {
       success: false,
       error: "Failed to send invitation. Please try again.",
-    };
-  }
-}
-
-/**
- * Get all invitations for a team
- */
-export async function getTeamInvitations(teamId: string) {
-  try {
-    // Check authentication
-    const userId = await requireUserId();
-
-    // Check authorization - only ADMIN can view invitations
-    const isAdmin = await isTeamAdmin(userId, teamId);
-    if (!isAdmin) {
-      return {
-        error: "Unauthorized: Only team admins can view invitations",
-      };
-    }
-
-    const invitations = await prisma.invitation.findMany({
-      where: {
-        teamId,
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
-      select: {
-        id: true,
-        email: true,
-        status: true,
-        expiresAt: true,
-        createdAt: true,
-      },
-    });
-
-    return {
-      success: true,
-      data: invitations,
-    };
-  } catch (error) {
-    console.error("Error fetching invitations:", error);
-    return {
-      error: "Failed to fetch invitations. Please try again.",
     };
   }
 }
