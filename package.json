@@ -20,7 +20,7 @@
     "db:migrate:reset": "prisma migrate reset",
     "db:generate": "prisma generate",
     "db:seed": "tsx prisma/seed.ts",
-    "validate-env": "node scripts/validate-env.js"
+    "validate-env": "tsx scripts/validate-env.js"
   },
   "dependencies": {
     "@emotion/cache": "^11.14.0",

@@ -66,11 +66,6 @@ export const getBaseUrl = () => {
         return ''
     }
 
-    if (env.NEXTAUTH_URL) {
-        // Use configured URL
-        return env.NEXTAUTH_URL
-    }
-
-    // Fallback for development
-    return 'http://localhost:3000'
+    // On the server, NEXTAUTH_URL is guaranteed to be set by env validation.
+    return env.NEXTAUTH_URL
 }
