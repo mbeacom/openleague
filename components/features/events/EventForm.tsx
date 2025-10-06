@@ -20,7 +20,7 @@ import {
   updateEvent,
   type CreateEventInput,
 } from "@/lib/actions/events";
-import { createEventSchema, updateEventSchema } from "@/lib/actions/events";
+import { createEventSchema, updateEventSchema } from "@/lib/utils/event-validation";
 import { formatDateTimeLocal } from "@/lib/utils/date";
 
 interface EventFormProps {

@@ -5,70 +5,18 @@ import { prisma } from "@/lib/db/prisma";
 import { requireUserId } from "@/lib/auth/session";
 import { revalidatePath } from "next/cache";
 import { sendEventNotifications } from "@/lib/email/templates";
+import {
+  createEventSchema,
+  updateEventSchema,
+  type CreateEventInput,
+  type UpdateEventInput,
+} from "@/lib/utils/event-validation";
 
 export type ActionResult<T> =
   | { success: true; data: T }
   | { success: false; error: string; details?: unknown };
 
-// Event validation schemas
-export const createEventSchema = z
-  .object({
-    type: z.enum(["GAME", "PRACTICE"], {
-      message: "Event type must be GAME or PRACTICE",
-    }),
-    title: z
-      .string()
-      .min(1, "Title is required")
-      .max(100, "Title must be less than 100 characters"),
-    startAt: z.coerce.date({
-      message: "Valid date and time is required",
-    }),
-    location: z
-      .string()
-      .min(1, "Location is required")
-      .max(200, "Location must be less than 200 characters"),
-    opponent: z
-      .string()
-      .max(100, "Opponent must be less than 100 characters")
-      .optional()
-      .nullable(),
-    notes: z
-      .string()
-      .max(1000, "Notes must be less than 1000 characters")
-      .optional()
-      .nullable(),
-    teamId: z.string().min(1, "Team ID is required"),
-  })
-  .refine(
-    (data) => {
-      // Validate date is not in the past
-      return data.startAt > new Date();
-    },
-    {
-      message: "Event date must be in the future",
-      path: ["startAt"],
-    }
-  )
-  .refine(
-    (data) => {
-      // Require opponent field for GAME type
-      if (data.type === "GAME") {
-        return data.opponent && data.opponent.trim().length > 0;
-      }
-      return true;
-    },
-    {
-      message: "Opponent is required for games",
-      path: ["opponent"],
-    }
-  );
-
-export const updateEventSchema = createEventSchema.extend({
-  id: z.string().min(1, "Event ID is required"),
-});
-
-export type CreateEventInput = z.infer<typeof createEventSchema>;
-export type UpdateEventInput = z.infer<typeof updateEventSchema>;
+export type { CreateEventInput, UpdateEventInput };
 
 /**
  * Create a new event and initialize RSVPs for all team members
