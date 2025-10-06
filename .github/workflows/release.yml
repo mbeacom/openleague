@@ -19,6 +19,7 @@ permissions:
   contents: write
   pull-requests: write
   issues: write
+  discussions: write
 
 jobs:
   release:
@@ -174,6 +175,7 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: true
+          discussion_category_name: 'Announcements'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
