@@ -1,4 +1,4 @@
-import { mailchimpClient } from "./client";
+import { getMailchimpClient } from "./client";
 import { prisma } from "@/lib/db/prisma";
 import { formatDateTime } from "@/lib/utils/date";
 import { DEFAULT_EMAIL_FROM } from "@/lib/config/constants";
@@ -17,6 +17,7 @@ interface InvitationEmailData {
  * Send an invitation email to join a team
  */
 export async function sendInvitationEmail(data: InvitationEmailData): Promise<void> {
+  const mailchimp = getMailchimpClient();
   const invitationLink = `${BASE_URL}/api/invitations/${data.token}`;
 
   const message: {
@@ -88,7 +89,7 @@ If you didn't expect this invitation, you can safely ignore this email.`,
   };
 
   try {
-    await mailchimpClient.messages.send({ message });
+    await mailchimp.messages.send({ message });
   } catch (error) {
     console.error("Error sending invitation email:", error);
     throw new Error("Failed to send invitation email");
@@ -107,6 +108,7 @@ interface ExistingUserNotificationData {
 export async function sendExistingUserNotification(
   data: ExistingUserNotificationData
 ): Promise<void> {
+  const mailchimp = getMailchimpClient();
   const loginLink = `${BASE_URL}/login`;
 
   const message: {
@@ -157,7 +159,7 @@ Log in at: ${loginLink}`,
   };
 
   try {
-    await mailchimpClient.messages.send({ message });
+    await mailchimp.messages.send({ message });
   } catch (error) {
     console.error("Error sending existing user notification:", error);
     throw new Error("Failed to send notification email");
@@ -179,6 +181,7 @@ interface EventCreatedEmailData {
  * Send notification emails when a new event is created
  */
 export async function sendEventCreatedEmail(data: EventCreatedEmailData): Promise<void> {
+  const mailchimp = getMailchimpClient();
   const eventLink = `${BASE_URL}/events/${data.eventId}`;
   const eventTypeLabel = data.eventType === "GAME" ? "Game" : "Practice";
 
@@ -238,7 +241,7 @@ Please RSVP to let your team know if you can attend.`,
   };
 
   try {
-    await mailchimpClient.messages.send({ message });
+    await mailchimp.messages.send({ message });
   } catch (error) {
     console.error("Error sending event created email:", error);
     throw new Error("Failed to send event notification email");
@@ -260,6 +263,7 @@ interface EventUpdatedEmailData {
  * Send notification emails when an event is updated
  */
 export async function sendEventUpdatedEmail(data: EventUpdatedEmailData): Promise<void> {
+  const mailchimp = getMailchimpClient();
   const eventLink = `${BASE_URL}/events/${data.eventId}`;
   const eventTypeLabel = data.eventType === "GAME" ? "Game" : "Practice";
 
@@ -321,7 +325,7 @@ Please review the updated details and confirm your RSVP if needed.`,
   };
 
   try {
-    await mailchimpClient.messages.send({ message });
+    await mailchimp.messages.send({ message });
   } catch (error) {
     console.error("Error sending event updated email:", error);
     throw new Error("Failed to send event update notification email");
@@ -340,6 +344,7 @@ interface EventCancelledEmailData {
  * Send notification emails when an event is cancelled
  */
 export async function sendEventCancelledEmail(data: EventCancelledEmailData): Promise<void> {
+  const mailchimp = getMailchimpClient();
   const calendarLink = `${BASE_URL}/calendar`;
   const eventTypeLabel = data.eventType === "GAME" ? "Game" : "Practice";
 
@@ -394,7 +399,7 @@ ${calendarLink}`,
   };
 
   try {
-    await mailchimpClient.messages.send({ message });
+    await mailchimp.messages.send({ message });
   } catch (error) {
     console.error("Error sending event cancelled email:", error);
     throw new Error("Failed to send event cancellation notification email");
@@ -417,6 +422,7 @@ interface RSVPReminderEmailData {
  * Send RSVP reminder email to a member who hasn't responded
  */
 export async function sendRSVPReminderEmail(data: RSVPReminderEmailData): Promise<void> {
+  const mailchimp = getMailchimpClient();
   const eventLink = `${BASE_URL}/events/${data.eventId}`;
   const eventTypeLabel = data.eventType === "GAME" ? "Game" : "Practice";
   const greeting = data.userName ? `Hi ${data.userName}` : "Hi there";
@@ -492,7 +498,7 @@ This event is coming up in less than 48 hours.`,
   };
 
   try {
-    await mailchimpClient.messages.send({ message });
+    await mailchimp.messages.send({ message });
   } catch (error) {
     console.error("Error sending RSVP reminder email:", error);
     throw new Error("Failed to send RSVP reminder email");
