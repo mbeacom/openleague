@@ -351,7 +351,7 @@
     - Provide clear error messages for missing variables
     - _Requirements: 10.6_
 
-- [ ] 15. Create documentation and README
+- [x] 15. Create documentation and README
   - Update README.md with project overview and setup instructions
   - Document environment variables required (DATABASE_URL, NEXTAUTH_SECRET, MAILCHIMP_API_KEY, etc.)
   - Add development workflow (install, migrate, run, test)
