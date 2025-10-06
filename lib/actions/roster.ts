@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
-import { requireUserId } from "@/lib/auth/session";
+import { requireTeamAdmin } from "@/lib/auth/session";
 import { revalidatePath } from "next/cache";
 import { 
   addPlayerSchema, 
@@ -11,21 +11,7 @@ import {
   type UpdatePlayerInput 
 } from "@/lib/utils/validation";
 
-/**
- * Check if user is an admin of the team
- * Uses count for efficiency - lets database handle the check
- */
-async function isTeamAdmin(userId: string, teamId: string): Promise<boolean> {
-  const count = await prisma.teamMember.count({
-    where: {
-      userId,
-      teamId,
-      role: "ADMIN",
-    },
-  });
 
-  return count > 0;
-}
 
 /**
  * Add a player to the team roster
@@ -36,16 +22,8 @@ export async function addPlayer(input: AddPlayerInput) {
     // Validate input
     const validated = addPlayerSchema.parse(input);
 
-    // Check authentication
-    const userId = await requireUserId();
-
-    // Check authorization - only ADMIN can add players
-    const isAdmin = await isTeamAdmin(userId, validated.teamId);
-    if (!isAdmin) {
-      return {
-        error: "Unauthorized: Only team admins can add players",
-      };
-    }
+    // Check authentication and authorization - only ADMIN can add players
+    await requireTeamAdmin(validated.teamId);
 
     // Create player
     const player = await prisma.player.create({
@@ -90,16 +68,8 @@ export async function updatePlayer(input: UpdatePlayerInput) {
     // Validate input
     const validated = updatePlayerSchema.parse(input);
 
-    // Check authentication
-    const userId = await requireUserId();
-
-    // Check authorization - only ADMIN can update players
-    const isAdmin = await isTeamAdmin(userId, validated.teamId);
-    if (!isAdmin) {
-      return {
-        error: "Unauthorized: Only team admins can update players",
-      };
-    }
+    // Check authentication and authorization - only ADMIN can update players
+    await requireTeamAdmin(validated.teamId);
 
     // Verify player belongs to the team before updating
     const existingPlayer = await prisma.player.findUnique({
@@ -161,16 +131,8 @@ export async function updatePlayer(input: UpdatePlayerInput) {
  */
 export async function deletePlayer(playerId: string, teamId: string) {
   try {
-    // Check authentication
-    const userId = await requireUserId();
-
-    // Check authorization - only ADMIN can delete players
-    const isAdmin = await isTeamAdmin(userId, teamId);
-    if (!isAdmin) {
-      return {
-        error: "Unauthorized: Only team admins can delete players",
-      };
-    }
+    // Check authentication and authorization - only ADMIN can delete players
+    await requireTeamAdmin(teamId);
 
     // Verify player belongs to the team before deleting
     const existingPlayer = await prisma.player.findUnique({

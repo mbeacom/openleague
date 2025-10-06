@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
-import { requireUserId } from "@/lib/auth/session";
+import { requireTeamAdmin, requireTeamMember } from "@/lib/auth/session";
 import { revalidatePath } from "next/cache";
 import { sendEventNotifications } from "@/lib/email/templates";
 import {
@@ -35,35 +35,11 @@ export async function createEvent(
   }>
 > {
   try {
-    // Authorization check - user must be authenticated
-    const userId = await requireUserId();
-
     // Validate input
     const validated = createEventSchema.parse(input);
 
-    // Verify user is ADMIN of the team
-    const teamMember = await prisma.teamMember.findUnique({
-      where: {
-        userId_teamId: {
-          userId,
-          teamId: validated.teamId,
-        },
-      },
-    });
-
-    if (!teamMember) {
-      return {
-        success: false,
-        error: "You are not a member of this team",
-      };
-    }
-
-    if (teamMember.role !== "ADMIN") {
-      return {
-        success: false,
-        error: "Only team admins can create events",
-      };
-    }
+    // Check authentication and authorization - only ADMIN can create events
+    await requireTeamAdmin(validated.teamId);
 
     // Get all team members to initialize RSVPs
     const allTeamMembers = await prisma.teamMember.findMany({
@@ -154,13 +130,10 @@ export async function updateEvent(
   }>
 > {
   try {
-    // Authorization check - user must be authenticated
-    const userId = await requireUserId();
-
     // Validate input
     const validated = updateEventSchema.parse(input);
 
-    // Get the event to verify team ownership
+    // Get the event to verify it exists and get team ID
     const existingEvent = await prisma.event.findUnique({
       where: { id: validated.id },
       select: { teamId: true },
@@ -173,29 +146,8 @@ export async function updateEvent(
       };
     }
 
-    // Verify user is ADMIN of the team
-    const teamMember = await prisma.teamMember.findUnique({
-      where: {
-        userId_teamId: {
-          userId,
-          teamId: existingEvent.teamId,
-        },
-      },
-    });
-
-    if (!teamMember) {
-      return {
-        success: false,
-        error: "You are not a member of this team",
-      };
-    }
-
-    if (teamMember.role !== "ADMIN") {
-      return {
-        success: false,
-        error: "Only team admins can update events",
-      };
-    }
+    // Check authentication and authorization - only ADMIN can update events
+    await requireTeamAdmin(existingEvent.teamId);
 
     // Update the event
     const event = await prisma.event.update({
@@ -261,10 +213,7 @@ export async function deleteEvent(
   eventId: string
 ): Promise<ActionResult<{ id: string }>> {
   try {
-    // Authorization check - user must be authenticated
-    const userId = await requireUserId();
-
-    // Get the event to verify team ownership
+    // Get the event to verify it exists and get team ID
     const existingEvent = await prisma.event.findUnique({
       where: { id: eventId },
       select: { teamId: true },
@@ -277,29 +226,8 @@ export async function deleteEvent(
       };
     }
 
-    // Verify user is ADMIN of the team
-    const teamMember = await prisma.teamMember.findUnique({
-      where: {
-        userId_teamId: {
-          userId,
-          teamId: existingEvent.teamId,
-        },
-      },
-    });
-
-    if (!teamMember) {
-      return {
-        success: false,
-        error: "You are not a member of this team",
-      };
-    }
-
-    if (teamMember.role !== "ADMIN") {
-      return {
-        success: false,
-        error: "Only team admins can delete events",
-      };
-    }
+    // Check authentication and authorization - only ADMIN can delete events
+    await requireTeamAdmin(existingEvent.teamId);
 
     // Delete the event (RSVPs will be cascade deleted)
     await prisma.event.delete({
@@ -334,21 +262,8 @@ export async function deleteEvent(
  */
 export async function getTeamEvents(teamId: string) {
   try {
-    const userId = await requireUserId();
-
-    // Verify user is a member of the team
-    const teamMember = await prisma.teamMember.findUnique({
-      where: {
-        userId_teamId: {
-          userId,
-          teamId,
-        },
-      },
-    });
-
-    if (!teamMember) {
-      throw new Error("You are not a member of this team");
-    }
+    // Check authentication and authorization - user must be a team member
+    await requireTeamMember(teamId);
 
     const events = await prisma.event.findMany({
       where: {
@@ -385,8 +300,6 @@ export async function getTeamEvents(teamId: string) {
  */
 export async function getEvent(eventId: string) {
   try {
-    const userId = await requireUserId();
-
     const event = await prisma.event.findUnique({
       where: { id: eventId },
       include: {
@@ -414,7 +327,10 @@ export async function getEvent(eventId: string) {
       return null;
     }
 
-    // Verify user is a member of the team
+    // Check authentication and authorization - user must be a team member
+    const userId = await requireTeamMember(event.teamId);
+
+    // Get user's role in the team
     const teamMember = await prisma.teamMember.findUnique({
       where: {
         userId_teamId: {
@@ -422,15 +338,14 @@ export async function getEvent(eventId: string) {
           teamId: event.teamId,
         },
       },
+      select: {
+        role: true,
+      },
     });
-
-    if (!teamMember) {
-      return null;
-    }
 
     return {
       ...event,
-      userRole: teamMember.role,
+      userRole: teamMember?.role || "MEMBER",
     };
   } catch (error) {
     console.error("Error fetching event:", error);

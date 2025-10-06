@@ -2,11 +2,11 @@
 
 import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
-import { requireUserId } from "@/lib/auth/session";
+import { requireTeamMember } from "@/lib/auth/session";
 import { revalidatePath } from "next/cache";
-import { 
+import {
   updateRSVPSchema,
-  type UpdateRSVPInput 
+  type UpdateRSVPInput
 } from "@/lib/utils/validation";
 
 export type ActionResult<T> =
@@ -27,13 +27,10 @@ export async function updateRSVP(
   }>
 > {
   try {
-    // Authorization check - user must be authenticated
-    const userId = await requireUserId();
-
     // Validate input
     const validated = updateRSVPSchema.parse(input);
 
-    // Verify the event exists and user is a member of the team
+    // Verify the event exists and get team ID
     const event = await prisma.event.findUnique({
       where: { id: validated.eventId },
       select: {
@@ -49,22 +46,8 @@ export async function updateRSVP(
       };
     }
 
-    // Verify user is a member of the team
-    const teamMember = await prisma.teamMember.findUnique({
-      where: {
-        userId_teamId: {
-          userId,
-          teamId: event.teamId,
-        },
-      },
-    });
-
-    if (!teamMember) {
-      return {
-        success: false,
-        error: "You are not a member of this team",
-      };
-    }
+    // Check authentication and authorization - user must be a team member
+    const userId = await requireTeamMember(event.teamId);
 
     // Create or update RSVP
     const rsvp = await prisma.rSVP.upsert({

@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
-import { requireUserId } from "@/lib/auth/session";
+import { requireTeamAdmin } from "@/lib/auth/session";
 import { revalidatePath } from "next/cache";
 import { randomBytes } from "crypto";
 import { sendInvitationEmail, sendExistingUserNotification } from "@/lib/email/templates";
@@ -12,20 +12,7 @@ export type ActionResult<T> =
   | { success: true; data: T }
   | { success: false; error: string; details?: unknown };
 
-/**
- * Check if user is an admin of the team
- */
-async function isTeamAdmin(userId: string, teamId: string): Promise<boolean> {
-  const member = await prisma.teamMember.findFirst({
-    where: {
-      userId,
-      teamId,
-      role: "ADMIN",
-    },
-  });
 
-  return member !== null;
-}
 
 /**
  * Generate a cryptographically secure random token
@@ -46,17 +33,8 @@ export async function sendInvitation(
     // Validate input
     const validated = sendInvitationSchema.parse(input);
 
-    // Check authentication
-    const userId = await requireUserId();
-
-    // Check authorization - only ADMIN can send invitations
-    const isAdmin = await isTeamAdmin(userId, validated.teamId);
-    if (!isAdmin) {
-      return {
-        success: false,
-        error: "Unauthorized: Only team admins can send invitations",
-      };
-    }
+    // Check authentication and authorization - only ADMIN can send invitations
+    const userId = await requireTeamAdmin(validated.teamId);
 
     // Fetch team and inviter information once (used in both flows)
     const [team, inviter] = await Promise.all([
@@ -216,10 +194,7 @@ export async function resendInvitation(
   invitationId: string
 ): Promise<ActionResult<{ invited: boolean }>> {
   try {
-    // Check authentication
-    const userId = await requireUserId();
-
-    // Get the invitation
+    // Get the invitation first to get the teamId
     const invitation = await prisma.invitation.findUnique({
       where: { id: invitationId },
       select: {
@@ -241,14 +216,8 @@ export async function resendInvitation(
       };
     }
 
-    // Check authorization - only ADMIN can resend invitations
-    const isAdmin = await isTeamAdmin(userId, invitation.teamId);
-    if (!isAdmin) {
-      return {
-        success: false,
-        error: "Unauthorized: Only team admins can resend invitations",
-      };
-    }
+    // Check authentication and authorization - only ADMIN can resend invitations
+    const userId = await requireTeamAdmin(invitation.teamId);
 
     // Generate new token and expiration
     const token = generateInvitationToken();
