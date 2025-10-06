@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
+    "dev:wake": "tsx scripts/wake-db.ts && bun run dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
@@ -20,6 +21,7 @@
     "db:migrate:reset": "prisma migrate reset",
     "db:generate": "prisma generate",
     "db:seed": "tsx prisma/seed.ts",
+    "db:wake": "tsx scripts/wake-db.ts",
     "validate-env": "tsx scripts/validate-env.js"
   },
   "dependencies": {
