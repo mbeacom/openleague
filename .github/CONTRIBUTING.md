@@ -244,39 +244,19 @@ bunx prisma generate
 
 ## Release Process
 
-Releases are automated but you should understand the flow:
+Releases are fully automated! Just merge to `main` and the automation handles versioning, tagging, and changelog generation.
 
-### Version Bumping
-
-Based on your commits:
+**Quick summary:**
 
 - `feat:` commits → minor version (0.X.0)
 - `fix:` commits → patch version (0.0.X)
 - `feat!:` or `BREAKING CHANGE:` → major version (X.0.0)
 
-### Creating a Release
+For complete details on the release process, troubleshooting, and best practices, see:
 
-**Automatic** (recommended):
-
-```bash
-# Just merge to main
-git checkout main
-git merge feat/your-feature
-git push
-```
-
-**Manual** (if needed):
-
-```bash
-# Via GitHub CLI
-gh workflow run release.yml -f version=1.2.3
-
-# Via Git tag
-git tag -a v1.2.3 -m "Release v1.2.3"
-git push origin v1.2.3
-```
-
-See [Release Template](.github/RELEASE_TEMPLATE.md) for full checklist.
+- **[AUTOMATION.md](./AUTOMATION.md)** - Quick reference and examples
+- **[RELEASE_TEMPLATE.md](./RELEASE_TEMPLATE.md)** - Full release checklist
+- **[workflows/README.md](./workflows/README.md)** - Technical details
 
 ## MVP Scope
 

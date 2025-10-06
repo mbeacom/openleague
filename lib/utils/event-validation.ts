@@ -57,9 +57,34 @@ const refinedEventSchema = baseEventSchema
 
 export const createEventSchema = refinedEventSchema;
 
-export const updateEventSchema = refinedEventSchema.extend({
-  id: z.string().min(1, "Event ID is required"),
-});
+// For updates, add id to base schema first, then apply refinements
+export const updateEventSchema = baseEventSchema
+  .extend({
+    id: z.string().min(1, "Event ID is required"),
+  })
+  .refine(
+    (data) => {
+      // Validate date is not in the past
+      return data.startAt > new Date();
+    },
+    {
+      message: "Event date must be in the future",
+      path: ["startAt"],
+    }
+  )
+  .refine(
+    (data) => {
+      // Require opponent field for GAME type
+      if (data.type === "GAME") {
+        return data.opponent && data.opponent.trim().length > 0;
+      }
+      return true;
+    },
+    {
+      message: "Opponent is required for games",
+      path: ["opponent"],
+    }
+  );
 
 export type CreateEventInput = z.infer<typeof createEventSchema>;
 export type UpdateEventInput = z.infer<typeof updateEventSchema>;
