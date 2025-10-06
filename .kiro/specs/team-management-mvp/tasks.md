@@ -119,9 +119,9 @@
     - Display success/error feedback with toast notifications
     - _Requirements: 3.2, 3.3_
 
-- [ ] 7. Implement invitation system
+- [x] 7. Implement invitation system
 
-  - [ ] 7.1 Create invitation Server Actions
+  - [x] 7.1 Create invitation Server Actions
 
     - Create `lib/actions/invitations.ts` with invitation logic
     - Implement `sendInvitation` Server Action generating unique token
@@ -130,7 +130,7 @@
     - Store invitation in database with PENDING status
     - _Requirements: 4.1, 4.5, 4.6_
 
-  - [ ] 7.2 Build email invitation system
+  - [x] 7.2 Build email invitation system
 
     - Create `lib/email/client.ts` with Mailchimp Transactional client configuration
     - Create `lib/email/templates.ts` with invitation email template
@@ -138,7 +138,7 @@
     - Include team name and inviter information in email
     - _Requirements: 4.1, 9.4_
 
-  - [ ] 7.3 Create invitation acceptance flow
+  - [x] 7.3 Create invitation acceptance flow
 
     - Create `app/api/invitations/[token]/route.ts` API route
     - Validate invitation token and check expiration
@@ -147,7 +147,7 @@
     - Update invitation status to ACCEPTED
     - _Requirements: 4.2, 4.3_
 
-  - [ ] 7.4 Build invitation management UI
+  - [x] 7.4 Build invitation management UI
     - Create `components/features/roster/InvitationManager.tsx`
     - Display list of pending invitations with email and status
     - Add "Resend" button for expired invitations

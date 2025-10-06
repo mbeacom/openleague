@@ -1,8 +1,9 @@
 import { requireUserId } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
-import { Box, Container, Typography } from "@mui/material";
+import { Box, Container, Typography, Divider } from "@mui/material";
 import { redirect } from "next/navigation";
 import RosterList from "@/components/features/roster/RosterList";
+import InvitationManager from "@/components/features/roster/InvitationManager";
 
 export default async function RosterPage() {
   const userId = await requireUserId();
@@ -41,6 +42,25 @@ export default async function RosterPage() {
     },
   });
 
+  // Fetch invitations (only for admins)
+  const invitations = isAdmin
+    ? await prisma.invitation.findMany({
+        where: {
+          teamId,
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+        select: {
+          id: true,
+          email: true,
+          status: true,
+          expiresAt: true,
+          createdAt: true,
+        },
+      })
+    : [];
+
   return (
     <Container maxWidth="lg">
       <Box sx={{ py: 4 }}>
@@ -56,6 +76,13 @@ export default async function RosterPage() {
             Roster
           </Typography>
         </Box>
+
+        {isAdmin && (
+          <>
+            <InvitationManager invitations={invitations} teamId={teamId} />
+            <Divider sx={{ my: 4 }} />
+          </>
+        )}
 
         <RosterList
           players={players}

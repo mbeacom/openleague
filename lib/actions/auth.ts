@@ -5,7 +5,11 @@ import { prisma } from "@/lib/db/prisma";
 import { signupSchema, type SignupInput } from "@/lib/utils/validation";
 import { ZodError } from "zod";
 
-export async function signup(data: SignupInput) {
+export interface SignupWithInvitationInput extends SignupInput {
+  invitationToken?: string;
+}
+
+export async function signup(data: SignupWithInvitationInput) {
   try {
     // Validate input
     const validated = signupSchema.parse(data);
@@ -35,6 +39,35 @@ export async function signup(data: SignupInput) {
         name: true,
       },
     });
+
+    // If there's an invitation token, process it
+    if (data.invitationToken) {
+      try {
+        const invitation = await prisma.invitation.findUnique({
+          where: { token: data.invitationToken },
+        });
+
+        if (invitation && invitation.status === "PENDING" && invitation.expiresAt > new Date()) {
+          // Add user to team as MEMBER
+          await prisma.teamMember.create({
+            data: {
+              userId: user.id,
+              teamId: invitation.teamId,
+              role: "MEMBER",
+            },
+          });
+
+          // Update invitation status to ACCEPTED
+          await prisma.invitation.update({
+            where: { id: invitation.id },
+            data: { status: "ACCEPTED" },
+          });
+        }
+      } catch (error) {
+        console.error("Error processing invitation during signup:", error);
+        // Don't fail signup if invitation processing fails
+      }
+    }
 
     return { success: true, data: user };
   } catch (error) {
