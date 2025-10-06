@@ -19,6 +19,7 @@ permissions:
   contents: write
   pull-requests: write
   issues: write
+  discussions: write
 
 jobs:
   release:
@@ -57,17 +58,25 @@ jobs:
             echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
           else
             # Get the latest tag
-            LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
-            echo "Latest tag: $LATEST_TAG"
+            LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+            echo "Latest tag: ${LATEST_TAG:-none}"
 
-            # Remove 'v' prefix if present
-            LATEST_VERSION=${LATEST_TAG#v}
+            if [ -z "$LATEST_TAG" ]; then
+              # No tags exist, start from 0.0.0 and check all commits
+              MAJOR=0
+              MINOR=0
+              PATCH=0
+              COMMITS=$(git log --pretty=format:"%s")
+            else
+              # Remove 'v' prefix if present
+              LATEST_VERSION=${LATEST_TAG#v}
 
-            # Parse version components
-            IFS='.' read -r MAJOR MINOR PATCH <<< "$LATEST_VERSION"
+              # Parse version components
+              IFS='.' read -r MAJOR MINOR PATCH <<< "$LATEST_VERSION"
 
-            # Check commit messages for version bump type
-            COMMITS=$(git log ${LATEST_TAG}..HEAD --pretty=format:"%s")
+              # Check commit messages for version bump type
+              COMMITS=$(git log ${LATEST_TAG}..HEAD --pretty=format:"%s")
+            fi
 
             if echo "$COMMITS" | grep -qiE "^(feat|feature)(\(.+\))?!:|^BREAKING CHANGE:|breaking change"; then
               # Major version bump for breaking changes
@@ -132,7 +141,11 @@ jobs:
             CHANGELOG="${CHANGELOG}### 📦 Other Changes\n\n${OTHERS}\n\n"
           fi
 
-          CHANGELOG="${CHANGELOG}**Full Changelog**: https://github.com/${{ github.repository }}/compare/${LATEST_TAG}...v${VERSION}"
+          if [ -n "$LATEST_TAG" ]; then
+            CHANGELOG="${CHANGELOG}**Full Changelog**: https://github.com/${{ github.repository }}/compare/${LATEST_TAG}...v${VERSION}"
+          else
+            CHANGELOG="${CHANGELOG}**Full Changelog**: https://github.com/${{ github.repository }}/commits/v${VERSION}"
+          fi
 
           # Save to file for multi-line output
           echo "$CHANGELOG" > changelog.txt
@@ -162,6 +175,7 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: true
+          discussion_category_name: 'Announcements'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
