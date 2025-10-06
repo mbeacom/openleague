@@ -102,11 +102,11 @@ git push origin main
 
 #### Step 2: Connect to Vercel
 
-**Option A: Vercel CLI (Recommended)**
+##### Option A: Vercel CLI (Recommended)
 
 ```bash
 # Install Vercel CLI globally
-npm i -g vercel
+bun add -g vercel
 
 # Deploy from project directory
 vercel
@@ -114,7 +114,7 @@ vercel
 # Follow prompts to link repository and configure
 ```
 
-**Option B: Vercel Dashboard**
+##### Option B: Vercel Dashboard
 
 1. Go to [vercel.com](https://vercel.com) and sign in
 2. Click **"New Project"**
@@ -178,16 +178,13 @@ For self-hosting or other cloud providers:
 
 ```dockerfile
 # Dockerfile
-FROM node:22-alpine
+FROM oven/bun:1-alpine
 
 WORKDIR /app
 
-# Install Bun
-RUN npm install -g bun
-
-# Copy package files
+# Copy package files and install dependencies to leverage Docker cache
 COPY package.json bun.lockb ./
-RUN bun install
+RUN bun install --frozen-lockfile
 
 # Copy source code
 COPY . .
@@ -230,9 +227,10 @@ docker run -p 3000:3000 --env-file .env.production openleague
    ```
 
 3. **Process Management** (for VPS):
+
    ```bash
    # Using PM2
-   npm install -g pm2
+   bun add -g pm2
    pm2 start "bun run start" --name openleague
    pm2 startup
    pm2 save
@@ -351,7 +349,7 @@ bunx prisma db pull
 
 #### Build Failures
 
-**Error: "Environment variable validation failed"**
+##### Error: "Environment variable validation failed"
 
 ```bash
 # Solution: Set all required environment variables in Vercel dashboard
@@ -359,7 +357,7 @@ bunx prisma db pull
 # Ensure Production environment has all required variables
 ```
 
-**Error: "Database connection failed during build"**
+##### Error: "Database connection failed during build"
 
 ```bash
 # Solution: Database must be accessible during build for Prisma generation
@@ -367,7 +365,7 @@ bunx prisma db pull
 # Check Neon database status and connection limits
 ```
 
-**Error: "Prisma migration failed"**
+##### Error: "Prisma migration failed"
 
 ```bash
 # Solution: Ensure database schema is up to date
@@ -378,7 +376,7 @@ bunx prisma db pull
 
 #### Runtime Issues
 
-**Error: "NEXTAUTH_URL is not defined"**
+##### Error: "NEXTAUTH_URL is not defined"
 
 ```bash
 # Solution: Set NEXTAUTH_URL in Vercel environment variables
@@ -386,7 +384,7 @@ bunx prisma db pull
 # Custom domain: https://yourdomain.com
 ```
 
-**Error: "Email sending failed"**
+##### Error: "Email sending failed"
 
 ```bash
 # Check Mailchimp API key is valid
@@ -395,7 +393,7 @@ bunx prisma db pull
 # Review Mailchimp delivery reports for bounces/spam
 ```
 
-**Error: "Database connection pool exhausted"**
+##### Error: "Database connection pool exhausted"
 
 ```bash
 # Neon automatically manages connection pooling

@@ -21,38 +21,46 @@ This document tracks the setup and implementation progress for the OpenLeague MV
 ### Installed Dependencies
 
 **Core Framework:**
+
 - Next.js 15.5.4
 - React 19.1.0
 - TypeScript 5.9.3
 
 **UI & Styling:**
+
 - @mui/material ^7.3.4
 - @emotion/react ^11.14.0
 - @emotion/styled ^11.14.1
 - @emotion/cache ^11.14.0
 
 **Database:**
+
 - Prisma ^6.16.3
 - @prisma/client ^6.16.3
 
 **Authentication:**
+
 - next-auth ^5.0.0-beta.29
 - bcryptjs ^3.0.2
 - @types/bcryptjs ^3.0.0
 
 **Email:**
+
 - @mailchimp/mailchimp_transactional ^1.0.59
 
 **Validation:**
+
 - zod ^4.1.11
 
 ### Configuration Files
 
 **next.config.ts:**
+
 - Emotion compiler enabled
 - Modular imports for MUI components (tree-shaking)
 
 **Environment Variables (.env.local):**
+
 - DATABASE_URL (Neon PostgreSQL)
 - NEXTAUTH_URL
 - NEXTAUTH_SECRET
@@ -229,6 +237,7 @@ bun run db:generate  # Generate Prisma Client
 ## Quick Start for New Developers
 
 1. **Clone and Install**:
+
    ```bash
    git clone https://github.com/mbeacom/openleague.git
    cd openleague
@@ -236,6 +245,7 @@ bun run db:generate  # Generate Prisma Client
    ```
 
 2. **Environment Setup**:
+
    ```bash
    cp .env.example .env.local
    # Edit .env.local with your database and email credentials
@@ -243,11 +253,13 @@ bun run db:generate  # Generate Prisma Client
    ```
 
 3. **Database Setup**:
+
    ```bash
    bun run db:migrate  # Creates tables and applies migrations
    ```
 
 4. **Start Development**:
+
    ```bash
    bun run dev  # Starts on http://localhost:3000
    ```
@@ -267,7 +279,7 @@ The application is ready for production deployment on Vercel:
 All MVP requirements have been implemented:
 
 - ✅ **Requirement 1**: User Authentication and Account Management
-- ✅ **Requirement 2**: Team Creation and Season Management  
+- ✅ **Requirement 2**: Team Creation and Season Management
 - ✅ **Requirement 3**: Roster Management and Player Information
 - ✅ **Requirement 4**: Email Invitation System
 - ✅ **Requirement 5**: Game and Practice Scheduling

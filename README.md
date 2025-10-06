@@ -1,4 +1,5 @@
 # OpenLeague
+
 [![Release](https://github.com/mbeacom/openleague/workflows/Release/badge.svg)](https://github.com/mbeacom/openleague/actions/workflows/release.yml)
 [![License](https://img.shields.io/badge/license-BUSL--1.1-blue.svg)](./LICENSE)
 [![Version](https://img.shields.io/github/package-json/v/mbeacom/openleague)](./package.json)
@@ -80,6 +81,7 @@ AWS_REGION="us-east-1"
 ```
 
 **Required Environment Variables:**
+
 - `DATABASE_URL` - PostgreSQL connection string with SSL
 - `NEXTAUTH_URL` - Your application URL (localhost for dev, your domain for production)
 - `NEXTAUTH_SECRET` - Random 32+ character secret for JWT signing
@@ -145,7 +147,7 @@ bun run validate-env        # Validate environment variables
 
 ## Database Migration Workflow
 
-### Development Workflow
+### Migration Development Process
 
 ```bash
 # 1. Make changes to prisma/schema.prisma
@@ -191,7 +193,7 @@ bun run db:studio
 **Why Neon?** Serverless PostgreSQL with database branching, generous free tier, and optimized for Vercel deployments.
 
 1. **Create Account**: Sign up at [console.neon.tech](https://console.neon.tech)
-2. **Create Database**: 
+2. **Create Database**:
    - Click "Create Project"
    - Choose a name (e.g., "openleague-prod")
    - Select region closest to your users
@@ -202,15 +204,19 @@ bun run db:studio
    - Copy the connection string
    - **Important**: Add `?sslmode=require` to the end
 4. **Set Environment Variable**:
+
    ```bash
    DATABASE_URL="postgresql://user:password@ep-xxx.us-east-2.aws.neon.tech/dbname?sslmode=require"
    ```
+
 5. **Initialize Database**:
+
    ```bash
    bun run db:migrate  # Creates tables and applies migrations
    ```
 
 **Database Branching (Optional):**
+
 - Create separate branches for development/staging
 - Each branch gets its own connection string
 - Perfect for testing schema changes safely
@@ -221,7 +227,7 @@ bun run db:studio
 
 **Why Mailchimp Transactional?** Reliable delivery, good free tier, and simple API for transactional emails.
 
-1. **Create Account**: 
+1. **Create Account**:
    - Sign up at [mailchimp.com](https://mailchimp.com)
    - Navigate to Transactional Email (formerly Mandrill)
    - Or directly at [mandrillapp.com](https://mandrillapp.com)
@@ -238,18 +244,21 @@ bun run db:studio
    - This improves deliverability
 
 4. **Set Environment Variables**:
+
    ```bash
    MAILCHIMP_API_KEY="md-your-api-key-here"
    EMAIL_FROM="noreply@yourdomain.com"  # Must be verified domain
    ```
 
 5. **Test Email Setup**:
+
    ```bash
    bun run validate-env  # Validates API key format
    # Then test by creating a team and sending an invitation
    ```
 
 **Email Templates Included:**
+
 - Team invitations with signup links
 - Event notifications (created/updated/cancelled)
 - RSVP reminders (48 hours before events)
@@ -375,10 +384,11 @@ git push origin main
 
 #### 2. Deploy to Vercel
 
-**Option A: Vercel CLI (Recommended)**
+##### Option A: Vercel CLI (Recommended)
+
 ```bash
 # Install Vercel CLI
-npm i -g vercel
+bun add -g vercel
 
 # Deploy from your project directory
 vercel
@@ -389,14 +399,15 @@ vercel
 # - Deploy
 ```
 
-**Option B: Vercel Dashboard**
+##### Option B: Vercel Dashboard
+
 1. Go to [vercel.com](https://vercel.com) and sign in
 2. Click "New Project"
 3. Import your GitHub repository
 4. Configure environment variables (see below)
 5. Click "Deploy"
 
-#### 3. Configure Environment Variables
+#### 3. Configure Production Environment Variables
 
 In Vercel dashboard or CLI, set these environment variables:
 
@@ -444,16 +455,13 @@ This ensures your production database is always up-to-date with your schema.
 
 ```dockerfile
 # Dockerfile (create this file)
-FROM node:22-alpine
+FROM oven/bun:1-alpine
 
 WORKDIR /app
 
-# Install Bun
-RUN npm install -g bun
-
-# Copy package files
+# Copy package files and install dependencies to leverage Docker cache
 COPY package.json bun.lockb ./
-RUN bun install
+RUN bun install --frozen-lockfile
 
 # Copy source code
 COPY . .
@@ -496,12 +504,14 @@ docker run -p 3000:3000 --env-file .env.local openleague
 ### Monitoring & Maintenance
 
 **Built-in Monitoring:**
+
 - Vercel Analytics (performance metrics)
 - Vercel Logs (application logs)
 - Neon Dashboard (database metrics)
 - Mailchimp Reports (email delivery)
 
 **Recommended Additions:**
+
 - Error tracking (Sentry)
 - Uptime monitoring (UptimeRobot)
 - Performance monitoring (Vercel Speed Insights)
@@ -533,9 +543,10 @@ git push origin main
 
 ### Common Issues
 
-#### Environment Variables
+#### Environment Variable Issues
 
-**Error: "Environment variable validation failed"**
+##### Error: "Environment variable validation failed"
+
 ```bash
 # Check your .env.local file exists and has all required variables
 bun run validate-env
@@ -549,7 +560,8 @@ DATABASE_URL="postgresql://user:pass@host/db?sslmode=require"
 
 #### Database Issues
 
-**Error: "Can't reach database server"**
+##### Error: "Can't reach database server"
+
 ```bash
 # Test database connection
 bunx prisma db pull
@@ -560,7 +572,8 @@ echo $DATABASE_URL
 # Ensure Neon database is running (check Neon dashboard)
 ```
 
-**Error: "Migration failed"**
+##### Error: "Migration failed"
+
 ```bash
 # Reset database (development only - destructive!)
 bun run db:migrate:reset
@@ -574,7 +587,8 @@ bunx prisma migrate status
 
 #### Email Issues
 
-**Error: "Email sending failed"**
+##### Error: "Email sending failed"
+
 ```bash
 # Verify Mailchimp API key is correct
 # Check Mailchimp dashboard for API key status
@@ -585,7 +599,8 @@ bunx prisma migrate status
 
 #### Build Issues
 
-**Error: "Type errors during build"**
+##### Error: "Type errors during build"
+
 ```bash
 # Run type checking locally
 bun run type-check
@@ -600,7 +615,8 @@ bun run build
 
 #### Deployment Issues
 
-**Error: "Deployment failed on Vercel"**
+##### Error: "Deployment failed on Vercel"
+
 ```bash
 # Check Vercel logs for specific error
 # Ensure all environment variables are set in Vercel dashboard
@@ -614,11 +630,13 @@ bun run start
 ### Performance Issues
 
 **Slow page loads:**
+
 - Check database query performance in Neon dashboard
 - Verify images are optimized
 - Check Vercel Analytics for bottlenecks
 
 **Email delivery issues:**
+
 - Check Mailchimp delivery reports
 - Verify sender domain reputation
 - Ensure EMAIL_FROM domain is properly configured
