@@ -203,6 +203,9 @@ export default function AddPlayerDialog({
               error={!!errors.email}
               helperText={errors.email}
               fullWidth
+              inputProps={{
+                inputMode: 'email',
+              }}
             />
 
             {/* Phone */}
@@ -215,6 +218,9 @@ export default function AddPlayerDialog({
               error={!!errors.phone}
               helperText={errors.phone}
               fullWidth
+              inputProps={{
+                inputMode: 'tel',
+              }}
             />
 
             {/* Emergency Contact */}
@@ -238,6 +244,9 @@ export default function AddPlayerDialog({
               error={!!errors.emergencyPhone}
               helperText={errors.emergencyPhone}
               fullWidth
+              inputProps={{
+                inputMode: 'tel',
+              }}
             />
           </Box>
         </DialogContent>

@@ -62,6 +62,10 @@ const baseTheme = createTheme({
     MuiTextField: {
       styleOverrides: {
         root: {
+          // Ensure adequate touch targets on mobile (48px meets WCAG 2.1 AA)
+          '& .MuiInputBase-root': {
+            minHeight: 48,
+          },
           '& .MuiOutlinedInput-root': {
             backgroundColor: '#FFFFFF',
             '& fieldset': {
@@ -83,11 +87,30 @@ const baseTheme = createTheme({
         },
       },
     },
+    MuiSelect: {
+      styleOverrides: {
+        select: {
+          // Ensure adequate touch targets on mobile (48px meets WCAG 2.1 AA)
+          minHeight: 48,
+          display: 'flex',
+          alignItems: 'center',
+        },
+      },
+    },
+    MuiMenuItem: {
+      styleOverrides: {
+        root: {
+          // Ensure adequate touch targets on mobile (48px meets WCAG 2.1 AA)
+          minHeight: 48,
+        },
+      },
+    },
     MuiButton: {
       styleOverrides: {
         root: {
-          minHeight: 44,
-          minWidth: 44,
+          // Updated from 44px to 48px to match TextField touch targets
+          minHeight: 48,
+          minWidth: 48,
           textTransform: 'none',
           fontWeight: 500,
           borderRadius: 8,
@@ -103,8 +126,9 @@ const baseTheme = createTheme({
     MuiIconButton: {
       styleOverrides: {
         root: {
-          minHeight: 44,
-          minWidth: 44,
+          // Updated from 44px to 48px to match other touch targets
+          minHeight: 48,
+          minWidth: 48,
         },
       },
     },

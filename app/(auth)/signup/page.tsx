@@ -50,12 +50,12 @@ function SignupForm() {
 
   const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    
+
     // Validate individual field on blur
     if (name === 'email' || name === 'password' || name === 'name') {
       const fieldSchema = signupSchema.pick({ [name]: true });
       const validationResult = fieldSchema.safeParse({ [name]: value });
-      
+
       if (validationResult.success) {
         // Clear error if validation passes
         if (errors[name]) {
@@ -194,6 +194,9 @@ function SignupForm() {
             helperText={errors.email}
             type="email"
             disabled={!!invitationEmail}
+            inputProps={{
+              inputMode: 'email',
+            }}
           />
           <TextField
             margin="normal"
