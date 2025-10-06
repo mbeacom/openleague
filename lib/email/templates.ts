@@ -1,4 +1,4 @@
-import { mailchimpClient } from "./client";
+import { getMailchimpClient } from "./client";
 import { prisma } from "@/lib/db/prisma";
 import { formatDateTime } from "@/lib/utils/date";
 import { DEFAULT_EMAIL_FROM } from "@/lib/config/constants";
@@ -88,7 +88,7 @@ If you didn't expect this invitation, you can safely ignore this email.`,
   };
 
   try {
-    await mailchimpClient.messages.send({ message });
+    await getMailchimpClient().messages.send({ message });
   } catch (error) {
     console.error("Error sending invitation email:", error);
     throw new Error("Failed to send invitation email");
@@ -157,7 +157,7 @@ Log in at: ${loginLink}`,
   };
 
   try {
-    await mailchimpClient.messages.send({ message });
+    await getMailchimpClient().messages.send({ message });
   } catch (error) {
     console.error("Error sending existing user notification:", error);
     throw new Error("Failed to send notification email");
@@ -238,7 +238,7 @@ Please RSVP to let your team know if you can attend.`,
   };
 
   try {
-    await mailchimpClient.messages.send({ message });
+    await getMailchimpClient().messages.send({ message });
   } catch (error) {
     console.error("Error sending event created email:", error);
     throw new Error("Failed to send event notification email");
@@ -321,7 +321,7 @@ Please review the updated details and confirm your RSVP if needed.`,
   };
 
   try {
-    await mailchimpClient.messages.send({ message });
+    await getMailchimpClient().messages.send({ message });
   } catch (error) {
     console.error("Error sending event updated email:", error);
     throw new Error("Failed to send event update notification email");
@@ -394,7 +394,7 @@ ${calendarLink}`,
   };
 
   try {
-    await mailchimpClient.messages.send({ message });
+    await getMailchimpClient().messages.send({ message });
   } catch (error) {
     console.error("Error sending event cancelled email:", error);
     throw new Error("Failed to send event cancellation notification email");
@@ -492,7 +492,7 @@ This event is coming up in less than 48 hours.`,
   };
 
   try {
-    await mailchimpClient.messages.send({ message });
+    await getMailchimpClient().messages.send({ message });
   } catch (error) {
     console.error("Error sending RSVP reminder email:", error);
     throw new Error("Failed to send RSVP reminder email");
