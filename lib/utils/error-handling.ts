@@ -2,6 +2,16 @@
  * Utility functions for error handling and network retry logic
  */
 
+/**
+ * Custom HTTP error class with status code
+ */
+export class HttpError extends Error {
+  constructor(public status: number, message: string) {
+    super(message);
+    this.name = 'HttpError';
+  }
+}
+
 export interface RetryOptions {
   maxRetries?: number;
   delay?: number;
@@ -66,8 +76,8 @@ function isNonRetryableError(error: unknown): boolean {
   }
   
   // Check for HTTP status codes that shouldn't be retried
-  if (typeof error === 'object' && error !== null && 'status' in error) {
-    const status = (error as { status: number }).status;
+  if (error instanceof HttpError) {
+    const status = error.status;
     if (status >= 400 && status < 500 && status !== 408 && status !== 429) {
       return true; // Client errors (except timeout and rate limit)
     }
@@ -120,9 +130,7 @@ export async function fetchWithRetry(
     
     // Throw on HTTP errors to trigger retry
     if (!response.ok) {
-      const error = new Error(`HTTP ${response.status}: ${response.statusText}`) as Error & { status: number };
-      error.status = response.status;
-      throw error;
+      throw new HttpError(response.status, `HTTP ${response.status}: ${response.statusText}`);
     }
     
     return response;

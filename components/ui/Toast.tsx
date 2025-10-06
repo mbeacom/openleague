@@ -44,7 +44,7 @@ export function ToastProvider({ children }: ToastProviderProps) {
     severity: AlertColor = "info", 
     duration: number = 6000
   ) => {
-    const id = Math.random().toString(36).substr(2, 9);
+    const id = Math.random().toString(36).slice(2, 11);
     const toast: Toast = { id, message, severity, duration };
     
     setToasts((prev) => [...prev, toast]);
@@ -97,7 +97,7 @@ export function ToastProvider({ children }: ToastProviderProps) {
           anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
           sx={{
             // Stack multiple toasts
-            bottom: `${16 + index * 60}px !important`,
+            bottom: `${16 + index * 60}px`,
           }}
         >
           <Alert

@@ -50,14 +50,23 @@ function LoginForm() {
       const fieldSchema = loginSchema.pick({ [name]: true });
       const validationResult = fieldSchema.safeParse({ [name]: value });
       
-      if (!validationResult.success) {
+      if (validationResult.success) {
+        // Clear error if validation passes
+        if (errors[name]) {
+          setErrors((prev) => {
+            const newErrors = { ...prev };
+            delete newErrors[name];
+            return newErrors;
+          });
+        }
+      } else {
+        // Set error if validation fails
         const fieldError = validationResult.error.issues[0]?.message;
         if (fieldError) {
           setErrors((prev) => ({ ...prev, [name]: fieldError }));
         }
       }
     }
-
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -164,7 +173,7 @@ function LoginForm() {
             fullWidth
             variant="contained"
             sx={{ mt: 3, mb: 2 }}
-            disabled={isLoading || !formData.email || !formData.password || Object.keys(errors).length > 0}
+            disabled={isLoading || !formData.email || !formData.password || Object.keys(errors).some(key => errors[key])}
           >
             {isLoading ? "Logging in..." : "Log In"}
           </Button>

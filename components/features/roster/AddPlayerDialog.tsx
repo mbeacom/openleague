@@ -81,19 +81,28 @@ export default function AddPlayerDialog({
   ) => {
     const { value } = e.target;
 
-    // Validate individual field on blur - only validate specific known fields
-    if (field === 'name' || field === 'email' || field === 'phone' || field === 'emergencyContact' || field === 'emergencyPhone') {
+    // Validate individual field on blur
+    if (Object.prototype.hasOwnProperty.call(addPlayerSchema.shape, field)) {
       const fieldSchema = addPlayerSchema.pick({ [field]: true });
       const validationResult = fieldSchema.safeParse({ [field]: value });
 
-      if (!validationResult.success) {
+      if (validationResult.success) {
+        // Clear error if validation passes
+        if (errors[field]) {
+          setErrors((prev) => {
+            const newErrors = { ...prev };
+            delete newErrors[field];
+            return newErrors;
+          });
+        }
+      } else {
+        // Set error if validation fails
         const fieldError = validationResult.error.issues[0]?.message;
         if (fieldError) {
           setErrors((prev) => ({ ...prev, [field]: fieldError }));
         }
       }
     }
-
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

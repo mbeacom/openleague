@@ -40,14 +40,17 @@ export default function CreateTeamForm() {
       const fieldSchema = createTeamSchema.pick({ [name]: true });
       const validationResult = fieldSchema.safeParse({ [name]: value });
       
-      if (!validationResult.success) {
+      if (validationResult.success) {
+        // Clear error if validation passes
+        setFieldErrors((prev) => ({ ...prev, [name]: undefined }));
+      } else {
+        // Set error if validation fails
         const fieldError = validationResult.error.issues[0]?.message;
         if (fieldError) {
           setFieldErrors((prev) => ({ ...prev, [name]: fieldError }));
         }
       }
     }
-
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
