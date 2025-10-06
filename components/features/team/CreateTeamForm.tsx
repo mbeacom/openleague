@@ -126,6 +126,11 @@ export default function CreateTeamForm() {
         placeholder="e.g., Thunder FC"
         error={!!fieldErrors.name}
         helperText={fieldErrors.name}
+        sx={{
+          '& .MuiInputBase-root': {
+            minHeight: 48,
+          },
+        }}
       />
 
       <TextField
@@ -140,6 +145,11 @@ export default function CreateTeamForm() {
         placeholder="e.g., Soccer, Basketball, Baseball"
         error={!!fieldErrors.sport}
         helperText={fieldErrors.sport}
+        sx={{
+          '& .MuiInputBase-root': {
+            minHeight: 48,
+          },
+        }}
       />
 
       <TextField
@@ -154,6 +164,11 @@ export default function CreateTeamForm() {
         placeholder="e.g., Fall 2025, Spring 2026"
         error={!!fieldErrors.season}
         helperText={fieldErrors.season}
+        sx={{
+          '& .MuiInputBase-root': {
+            minHeight: 48,
+          },
+        }}
       />
 
       <Button

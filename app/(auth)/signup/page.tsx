@@ -177,6 +177,11 @@ function SignupForm() {
             onBlur={handleBlur}
             error={!!errors.name}
             helperText={errors.name}
+            sx={{
+              '& .MuiInputBase-root': {
+                minHeight: 48,
+              },
+            }}
           />
           <TextField
             margin="normal"
@@ -194,6 +199,14 @@ function SignupForm() {
             helperText={errors.email}
             type="email"
             disabled={!!invitationEmail}
+            inputProps={{
+              inputMode: 'email',
+            }}
+            sx={{
+              '& .MuiInputBase-root': {
+                minHeight: 48,
+              },
+            }}
           />
           <TextField
             margin="normal"
@@ -209,12 +222,21 @@ function SignupForm() {
             onBlur={handleBlur}
             error={!!errors.password}
             helperText={errors.password || "Minimum 8 characters"}
+            sx={{
+              '& .MuiInputBase-root': {
+                minHeight: 48,
+              },
+            }}
           />
           <Button
             type="submit"
             fullWidth
             variant="contained"
-            sx={{ mt: 3, mb: 2 }}
+            sx={{ 
+              mt: 3, 
+              mb: 2,
+              minHeight: 48, // Ensure 44x44px minimum touch target
+            }}
             disabled={isLoading || !formData.email || !formData.password || Object.keys(errors).some(key => errors[key])}
           >
             {isLoading ? "Creating Account..." : "Sign Up"}

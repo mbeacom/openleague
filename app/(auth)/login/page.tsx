@@ -152,6 +152,14 @@ function LoginForm() {
             error={!!errors.email}
             helperText={errors.email}
             type="email"
+            inputProps={{
+              inputMode: 'email',
+            }}
+            sx={{
+              '& .MuiInputBase-root': {
+                minHeight: 48,
+              },
+            }}
           />
           <TextField
             margin="normal"
@@ -167,12 +175,21 @@ function LoginForm() {
             onBlur={handleBlur}
             error={!!errors.password}
             helperText={errors.password}
+            sx={{
+              '& .MuiInputBase-root': {
+                minHeight: 48,
+              },
+            }}
           />
           <Button
             type="submit"
             fullWidth
             variant="contained"
-            sx={{ mt: 3, mb: 2 }}
+            sx={{ 
+              mt: 3, 
+              mb: 2,
+              minHeight: 48, // Ensure 44x44px minimum touch target
+            }}
             disabled={isLoading || !formData.email || !formData.password || Object.keys(errors).some(key => errors[key])}
           >
             {isLoading ? "Logging in..." : "Log In"}

@@ -191,6 +191,11 @@ export default function AddPlayerDialog({
               required
               fullWidth
               autoFocus
+              sx={{
+                '& .MuiInputBase-root': {
+                  minHeight: 48,
+                },
+              }}
             />
 
             {/* Email */}
@@ -203,6 +208,14 @@ export default function AddPlayerDialog({
               error={!!errors.email}
               helperText={errors.email}
               fullWidth
+              inputProps={{
+                inputMode: 'email',
+              }}
+              sx={{
+                '& .MuiInputBase-root': {
+                  minHeight: 48,
+                },
+              }}
             />
 
             {/* Phone */}
@@ -215,6 +228,14 @@ export default function AddPlayerDialog({
               error={!!errors.phone}
               helperText={errors.phone}
               fullWidth
+              inputProps={{
+                inputMode: 'tel',
+              }}
+              sx={{
+                '& .MuiInputBase-root': {
+                  minHeight: 48,
+                },
+              }}
             />
 
             {/* Emergency Contact */}
@@ -226,6 +247,11 @@ export default function AddPlayerDialog({
               error={!!errors.emergencyContact}
               helperText={errors.emergencyContact}
               fullWidth
+              sx={{
+                '& .MuiInputBase-root': {
+                  minHeight: 48,
+                },
+              }}
             />
 
             {/* Emergency Phone */}
@@ -238,6 +264,14 @@ export default function AddPlayerDialog({
               error={!!errors.emergencyPhone}
               helperText={errors.emergencyPhone}
               fullWidth
+              inputProps={{
+                inputMode: 'tel',
+              }}
+              sx={{
+                '& .MuiInputBase-root': {
+                  minHeight: 48,
+                },
+              }}
             />
           </Box>
         </DialogContent>

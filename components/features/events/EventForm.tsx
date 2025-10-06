@@ -162,9 +162,16 @@ export default function EventForm({
           onChange={handleSelectChange}
           label="Event Type"
           disabled={isSubmitting}
+          sx={{
+            '& .MuiSelect-select': {
+              minHeight: 48,
+              display: 'flex',
+              alignItems: 'center',
+            },
+          }}
         >
-          <MenuItem value="PRACTICE">Practice</MenuItem>
-          <MenuItem value="GAME">Game</MenuItem>
+          <MenuItem value="PRACTICE" sx={{ minHeight: 48 }}>Practice</MenuItem>
+          <MenuItem value="GAME" sx={{ minHeight: 48 }}>Game</MenuItem>
         </Select>
         {fieldErrors.type && (
           <Typography variant="caption" color="error" sx={{ mt: 0.5, ml: 1.75 }}>
@@ -184,6 +191,11 @@ export default function EventForm({
         placeholder="e.g., Weekly Practice, vs Thunder FC"
         error={!!fieldErrors.title}
         helperText={fieldErrors.title}
+        sx={{
+          '& .MuiInputBase-root': {
+            minHeight: 48,
+          },
+        }}
       />
 
       <TextField
@@ -200,6 +212,12 @@ export default function EventForm({
         InputLabelProps={{
           shrink: true,
         }}
+        sx={{
+          // Ensure proper touch targets on mobile
+          '& .MuiInputBase-root': {
+            minHeight: 48,
+          },
+        }}
       />
 
       <TextField
@@ -213,6 +231,11 @@ export default function EventForm({
         placeholder="e.g., Main Field, Community Center"
         error={!!fieldErrors.location}
         helperText={fieldErrors.location}
+        sx={{
+          '& .MuiInputBase-root': {
+            minHeight: 48,
+          },
+        }}
       />
 
       {formData.type === "GAME" && (
@@ -227,6 +250,11 @@ export default function EventForm({
           placeholder="e.g., Thunder FC, Eagles"
           error={!!fieldErrors.opponent}
           helperText={fieldErrors.opponent || "Required for games"}
+          sx={{
+            '& .MuiInputBase-root': {
+              minHeight: 48,
+            },
+          }}
         />
       )}
 
@@ -242,6 +270,11 @@ export default function EventForm({
         placeholder="Additional information about the event..."
         error={!!fieldErrors.notes}
         helperText={fieldErrors.notes}
+        sx={{
+          '& .MuiInputBase-root': {
+            minHeight: 48,
+          },
+        }}
       />
 
       <Button

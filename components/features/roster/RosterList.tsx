@@ -86,7 +86,7 @@ export default function RosterList({ players, teamId, isAdmin }: RosterListProps
         </Box>
       )}
 
-      {/* Responsive Grid */}
+      {/* Responsive Grid using MUI v7 Grid */}
       <Grid container spacing={2}>
         {players.map((player) => (
           <Grid size={{ xs: 12, sm: 6, md: 4 }} key={player.id}>

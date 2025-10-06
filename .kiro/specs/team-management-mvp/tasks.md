@@ -304,9 +304,9 @@
     - Implement rate limiting on API routes (future: Vercel rate limiting)
     - _Requirements: 10.5_
 
-- [ ] 13. Optimize for mobile and responsive design
+- [x] 13. Optimize for mobile and responsive design
 
-  - [ ] 13.1 Implement responsive navigation
+  - [x] 13.1 Implement responsive navigation
 
     - Create bottom navigation bar for mobile (<600px)
     - Create sidebar navigation for desktop (>960px)
@@ -314,7 +314,7 @@
     - Ensure navigation is touch-friendly with 44x44px targets
     - _Requirements: 8.4_
 
-  - [ ] 13.2 Optimize forms for mobile input
+  - [x] 13.2 Optimize forms for mobile input
 
     - Use appropriate input types (email, tel, datetime-local for startAt)
     - Implement single-column layouts on mobile
@@ -322,7 +322,7 @@
     - Ensure touch targets are minimum 44x44px
     - _Requirements: 8.2, 8.3_
 
-  - [ ] 13.3 Convert tables to card layouts on mobile
+  - [x] 13.3 Convert tables to card layouts on mobile
     - Implement responsive roster list (grid on desktop, cards on mobile)
     - Convert calendar grid to list view on mobile
     - Add swipe gestures for actions (future enhancement)
