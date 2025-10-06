@@ -22,6 +22,19 @@ const envSchema = z.object({
 
 // Validate environment variables
 function validateEnv() {
+    // Skip validation during build time - environment variables are only needed at runtime
+    if (process.env.NEXT_PHASE === 'phase-production-build') {
+        return {
+            DATABASE_URL: process.env.DATABASE_URL || '',
+            NEXTAUTH_URL: process.env.NEXTAUTH_URL || '',
+            NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET || '',
+            MAILCHIMP_API_KEY: process.env.MAILCHIMP_API_KEY || '',
+            EMAIL_FROM: process.env.EMAIL_FROM || '',
+            NODE_ENV: (process.env.NODE_ENV || 'development') as 'development' | 'production' | 'test',
+            AWS_REGION: process.env.AWS_REGION,
+        }
+    }
+
     try {
         const env = envSchema.parse(process.env)
         return env
