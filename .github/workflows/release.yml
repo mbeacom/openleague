@@ -123,32 +123,33 @@ jobs:
           OTHERS=$(echo "$COMMITS" | grep -viE "^- (feat|feature|fix|bugfix)(\(.+\))?:" || echo "")
 
           # Build changelog
-          CHANGELOG="## What's Changed\n\n"
+          CHANGELOG="## What's Changed"
+          CHANGELOG="${CHANGELOG}\n"
 
           if [ -n "$BREAKING" ]; then
-            CHANGELOG="${CHANGELOG}### ⚠️ Breaking Changes\n\n${BREAKING}\n\n"
+            CHANGELOG="${CHANGELOG}\n### ⚠️ Breaking Changes\n\n${BREAKING}\n"
           fi
 
           if [ -n "$FEATURES" ]; then
-            CHANGELOG="${CHANGELOG}### ✨ Features\n\n${FEATURES}\n\n"
+            CHANGELOG="${CHANGELOG}\n### ✨ Features\n\n${FEATURES}\n"
           fi
 
           if [ -n "$FIXES" ]; then
-            CHANGELOG="${CHANGELOG}### 🐛 Bug Fixes\n\n${FIXES}\n\n"
+            CHANGELOG="${CHANGELOG}\n### 🐛 Bug Fixes\n\n${FIXES}\n"
           fi
 
           if [ -n "$OTHERS" ]; then
-            CHANGELOG="${CHANGELOG}### 📦 Other Changes\n\n${OTHERS}\n\n"
+            CHANGELOG="${CHANGELOG}\n### 📦 Other Changes\n\n${OTHERS}\n"
           fi
 
           if [ -n "$LATEST_TAG" ]; then
-            CHANGELOG="${CHANGELOG}**Full Changelog**: https://github.com/${{ github.repository }}/compare/${LATEST_TAG}...v${VERSION}"
+            CHANGELOG="${CHANGELOG}\n**Full Changelog**: https://github.com/${{ github.repository }}/compare/${LATEST_TAG}...v${VERSION}"
           else
-            CHANGELOG="${CHANGELOG}**Full Changelog**: https://github.com/${{ github.repository }}/commits/v${VERSION}"
+            CHANGELOG="${CHANGELOG}\n**Full Changelog**: https://github.com/${{ github.repository }}/commits/v${VERSION}"
           fi
 
-          # Save to file for multi-line output
-          echo "$CHANGELOG" > changelog.txt
+          # Save to file for multi-line output with proper newline interpretation
+          echo -e "$CHANGELOG" > changelog.txt
           echo "Generated changelog for version $VERSION"
 
       - name: Commit version bump
@@ -170,7 +171,7 @@ jobs:
         uses: softprops/action-gh-release@62c96d0c4e8a889135c1f3a25910db8dbe0e85f7 # v2.3.4
         with:
           tag_name: v${{ steps.version.outputs.version }}
-          name: Release v${{ steps.version.outputs.version }}
+          name: v${{ steps.version.outputs.version }}
           body_path: changelog.txt
           draft: false
           prerelease: false
