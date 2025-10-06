@@ -256,16 +256,16 @@
     - Include event details and RSVP link
     - _Requirements: 7.7, 9.5_
 
-- [ ] 11. Add form validation and error handling
+- [x] 11. Add form validation and error handling
 
-  - [ ] 11.1 Create validation schemas with Zod
+  - [x] 11.1 Create validation schemas with Zod
 
     - Create `lib/utils/validation.ts` with all form schemas
     - Define schemas for: signup, login, team creation, player, event, RSVP
     - Export reusable validation functions
     - _Requirements: 1.2, 2.2, 3.2, 5.1_
 
-  - [ ] 11.2 Implement client-side form validation
+  - [x] 11.2 Implement client-side form validation
 
     - Add real-time validation to all forms using Zod schemas
     - Display inline error messages below form fields
@@ -273,7 +273,7 @@
     - Show field-level errors on blur
     - _Requirements: 1.5_
 
-  - [ ] 11.3 Add error boundaries and error handling
+  - [x] 11.3 Add error boundaries and error handling
     - Create error boundary component at route level
     - Implement graceful error UI with retry button
     - Add toast notification system for success/error feedback

@@ -9,12 +9,12 @@ import {
   Button,
   TextField,
   Box,
-  Snackbar,
-  Alert,
 } from "@mui/material";
 import { addPlayer, updatePlayer } from "@/lib/actions/roster";
-import type { AddPlayerInput } from "@/lib/actions/roster";
+import { addPlayerSchema, type AddPlayerInput } from "@/lib/utils/validation";
+import { useToast } from "@/components/ui/Toast";
 import type { Player } from "@/types/roster";
+import type { z } from "zod";
 
 type AddPlayerDialogProps = {
   open: boolean;
@@ -30,6 +30,7 @@ export default function AddPlayerDialog({
   player,
 }: AddPlayerDialogProps) {
   const isEditing = !!player;
+  const { showSuccess, showError } = useToast();
 
   const [formData, setFormData] = useState<AddPlayerInput>({
     name: "",
@@ -42,15 +43,6 @@ export default function AddPlayerDialog({
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [snackbar, setSnackbar] = useState<{
-    open: boolean;
-    message: string;
-    severity: "success" | "error";
-  }>({
-    open: false,
-    message: "",
-    severity: "success",
-  });
 
   // Reset form when dialog opens/closes or player changes
   useEffect(() => {
@@ -84,10 +76,44 @@ export default function AddPlayerDialog({
     }
   };
 
+  const handleBlur = (field: keyof AddPlayerInput) => (
+    e: React.FocusEvent<HTMLInputElement>
+  ) => {
+    const { value } = e.target;
+
+    // Validate individual field on blur - only validate specific known fields
+    if (field === 'name' || field === 'email' || field === 'phone' || field === 'emergencyContact' || field === 'emergencyPhone') {
+      const fieldSchema = addPlayerSchema.pick({ [field]: true });
+      const validationResult = fieldSchema.safeParse({ [field]: value });
+
+      if (!validationResult.success) {
+        const fieldError = validationResult.error.issues[0]?.message;
+        if (fieldError) {
+          setErrors((prev) => ({ ...prev, [field]: fieldError }));
+        }
+      }
+    }
+
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     setErrors({});
+
+    // Client-side validation
+    const validationResult = addPlayerSchema.safeParse(formData);
+    if (!validationResult.success) {
+      const fieldErrors: Record<string, string> = {};
+      validationResult.error.issues.forEach((issue) => {
+        if (issue.path.length > 0) {
+          fieldErrors[String(issue.path[0])] = issue.message;
+        }
+      });
+      setErrors(fieldErrors);
+      setIsSubmitting(false);
+      return;
+    }
 
     try {
       const result = isEditing
@@ -98,7 +124,7 @@ export default function AddPlayerDialog({
         if (result.details) {
           // Zod validation errors
           const fieldErrors: Record<string, string> = {};
-          result.details.forEach((error) => {
+          result.details.forEach((error: z.ZodIssue) => {
             if (error.path && error.path.length > 0) {
               const fieldName = String(error.path[0]);
               fieldErrors[fieldName] = error.message;
@@ -107,38 +133,24 @@ export default function AddPlayerDialog({
           setErrors(fieldErrors);
         } else {
           // General error
-          setSnackbar({
-            open: true,
-            message: result.error,
-            severity: "error",
-          });
+          showError(result.error);
         }
       } else {
         // Success
-        setSnackbar({
-          open: true,
-          message: isEditing
+        showSuccess(
+          isEditing
             ? "Player updated successfully"
-            : "Player added successfully",
-          severity: "success",
-        });
+            : "Player added successfully"
+        );
         // revalidatePath in server action handles the update
         onClose();
       }
     } catch (error) {
       console.error("Error submitting player form:", error);
-      setSnackbar({
-        open: true,
-        message: "An unexpected error occurred",
-        severity: "error",
-      });
+      showError("An unexpected error occurred");
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  const handleSnackbarClose = () => {
-    setSnackbar({ ...snackbar, open: false });
   };
 
   return (
@@ -164,6 +176,7 @@ export default function AddPlayerDialog({
               label="Name"
               value={formData.name}
               onChange={handleChange("name")}
+              onBlur={handleBlur("name")}
               error={!!errors.name}
               helperText={errors.name}
               required
@@ -177,6 +190,7 @@ export default function AddPlayerDialog({
               type="email"
               value={formData.email}
               onChange={handleChange("email")}
+              onBlur={handleBlur("email")}
               error={!!errors.email}
               helperText={errors.email}
               fullWidth
@@ -188,6 +202,7 @@ export default function AddPlayerDialog({
               type="tel"
               value={formData.phone}
               onChange={handleChange("phone")}
+              onBlur={handleBlur("phone")}
               error={!!errors.phone}
               helperText={errors.phone}
               fullWidth
@@ -198,6 +213,7 @@ export default function AddPlayerDialog({
               label="Emergency Contact"
               value={formData.emergencyContact}
               onChange={handleChange("emergencyContact")}
+              onBlur={handleBlur("emergencyContact")}
               error={!!errors.emergencyContact}
               helperText={errors.emergencyContact}
               fullWidth
@@ -209,6 +225,7 @@ export default function AddPlayerDialog({
               type="tel"
               value={formData.emergencyPhone}
               onChange={handleChange("emergencyPhone")}
+              onBlur={handleBlur("emergencyPhone")}
               error={!!errors.emergencyPhone}
               helperText={errors.emergencyPhone}
               fullWidth
@@ -223,32 +240,20 @@ export default function AddPlayerDialog({
           <Button
             type="submit"
             variant="contained"
-            disabled={isSubmitting || !formData.name}
+            disabled={
+              isSubmitting ||
+              !formData.name ||
+              Object.keys(errors).some(key => errors[key])
+            }
           >
             {isSubmitting
               ? "Saving..."
               : isEditing
-              ? "Update"
-              : "Add Player"}
+                ? "Update"
+                : "Add Player"}
           </Button>
         </DialogActions>
       </Dialog>
-
-      {/* Snackbar for feedback */}
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={6000}
-        onClose={handleSnackbarClose}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-      >
-        <Alert
-          onClose={handleSnackbarClose}
-          severity={snackbar.severity}
-          sx={{ width: "100%" }}
-        >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
     </>
   );
 }

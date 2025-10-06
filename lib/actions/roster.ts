@@ -4,35 +4,12 @@ import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
 import { requireUserId } from "@/lib/auth/session";
 import { revalidatePath } from "next/cache";
-
-// Helper for optional string fields that allow empty string
-function optionalString(schema: z.ZodString) {
-  return schema.optional().or(z.literal(""));
-}
-
-// Validation schemas
-export const addPlayerSchema = z.object({
-  name: z
-    .string()
-    .min(1, "Name is required")
-    .max(100, "Name must be less than 100 characters"),
-  email: optionalString(z.string().email("Invalid email address")),
-  phone: optionalString(z.string().max(20, "Phone must be less than 20 characters")),
-  emergencyContact: optionalString(
-    z.string().max(100, "Emergency contact must be less than 100 characters")
-  ),
-  emergencyPhone: optionalString(
-    z.string().max(20, "Emergency phone must be less than 20 characters")
-  ),
-  teamId: z.string().min(1, "Team ID is required"),
-});
-
-export const updatePlayerSchema = addPlayerSchema.extend({
-  id: z.string().min(1, "Player ID is required"),
-});
-
-export type AddPlayerInput = z.infer<typeof addPlayerSchema>;
-export type UpdatePlayerInput = z.infer<typeof updatePlayerSchema>;
+import { 
+  addPlayerSchema, 
+  updatePlayerSchema,
+  type AddPlayerInput,
+  type UpdatePlayerInput 
+} from "@/lib/utils/validation";
 
 /**
  * Check if user is an admin of the team

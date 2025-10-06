@@ -10,7 +10,7 @@ import {
   updateEventSchema,
   type CreateEventInput,
   type UpdateEventInput,
-} from "@/lib/utils/event-validation";
+} from "@/lib/utils/validation";
 
 export type ActionResult<T> =
   | { success: true; data: T }
