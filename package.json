@@ -12,7 +12,7 @@
     "test": "echo \"Tests not yet implemented\" && exit 0",
     "test:watch": "echo \"Tests not yet implemented\" && exit 0",
     "test:coverage": "echo \"Tests not yet implemented\" && exit 0",
-    "postinstall": "prisma generate && prisma migrate deploy",
+    "postinstall": "prisma generate",
     "db:studio": "prisma studio",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
