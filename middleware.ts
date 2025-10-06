@@ -41,7 +41,7 @@ export function middleware(request: NextRequest) {
                     status: 429,
                     headers: {
                         "Content-Type": "application/json",
-                        "X-RateLimit-Limit": process.env.NODE_ENV === "production" ? "5" : "50",
+                        "X-RateLimit-Limit": rateLimitResult.limit.toString(),
                         "X-RateLimit-Remaining": "0",
                         "X-RateLimit-Reset": new Date(rateLimitResult.resetTime).toISOString(),
                         "Retry-After": retryAfter.toString(),
@@ -52,8 +52,7 @@ export function middleware(request: NextRequest) {
 
         // Add rate limit headers to successful responses
         const response = NextResponse.next();
-        const maxLimit = process.env.NODE_ENV === "production" ? "5" : "50";
-        response.headers.set("X-RateLimit-Limit", maxLimit);
+        response.headers.set("X-RateLimit-Limit", rateLimitResult.limit.toString());
         response.headers.set("X-RateLimit-Remaining", rateLimitResult.remaining.toString());
         response.headers.set("X-RateLimit-Reset", new Date(rateLimitResult.resetTime).toISOString());
 

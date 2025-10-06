@@ -15,7 +15,7 @@ class RateLimiter {
         this.windowMs = windowMs;
     }
 
-    isAllowed(identifier: string): { allowed: boolean; remaining: number; resetTime: number } {
+    isAllowed(identifier: string): { allowed: boolean; remaining: number; resetTime: number; limit: number } {
         const now = Date.now();
         const record = this.requests.get(identifier);
 
@@ -23,18 +23,18 @@ class RateLimiter {
             // First request or window has expired
             const resetTime = now + this.windowMs;
             this.requests.set(identifier, { count: 1, resetTime });
-            return { allowed: true, remaining: this.maxRequests - 1, resetTime };
+            return { allowed: true, remaining: this.maxRequests - 1, resetTime, limit: this.maxRequests };
         }
 
         if (record.count >= this.maxRequests) {
             // Rate limit exceeded
-            return { allowed: false, remaining: 0, resetTime: record.resetTime };
+            return { allowed: false, remaining: 0, resetTime: record.resetTime, limit: this.maxRequests };
         }
 
         // Increment count
         record.count++;
         this.requests.set(identifier, record);
-        return { allowed: true, remaining: this.maxRequests - record.count, resetTime: record.resetTime };
+        return { allowed: true, remaining: this.maxRequests - record.count, resetTime: record.resetTime, limit: this.maxRequests };
     }
 
     // Clean up expired entries periodically
