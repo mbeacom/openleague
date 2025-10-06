@@ -44,12 +44,12 @@ function LoginForm() {
 
   const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    
+
     // Validate individual field on blur
     if (name === 'email' || name === 'password') {
       const fieldSchema = loginSchema.pick({ [name]: true });
       const validationResult = fieldSchema.safeParse({ [name]: value });
-      
+
       if (validationResult.success) {
         // Clear error if validation passes
         if (errors[name]) {
@@ -155,11 +155,6 @@ function LoginForm() {
             inputProps={{
               inputMode: 'email',
             }}
-            sx={{
-              '& .MuiInputBase-root': {
-                minHeight: 48,
-              },
-            }}
           />
           <TextField
             margin="normal"
@@ -175,21 +170,12 @@ function LoginForm() {
             onBlur={handleBlur}
             error={!!errors.password}
             helperText={errors.password}
-            sx={{
-              '& .MuiInputBase-root': {
-                minHeight: 48,
-              },
-            }}
           />
           <Button
             type="submit"
             fullWidth
             variant="contained"
-            sx={{ 
-              mt: 3, 
-              mb: 2,
-              minHeight: 48, // Ensure 44x44px minimum touch target
-            }}
+            sx={{ mt: 3, mb: 2 }}
             disabled={isLoading || !formData.email || !formData.password || Object.keys(errors).some(key => errors[key])}
           >
             {isLoading ? "Logging in..." : "Log In"}

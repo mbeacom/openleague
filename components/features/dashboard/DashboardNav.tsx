@@ -115,12 +115,16 @@ export default function DashboardNav({ mobile = false }: DashboardNavProps) {
               value="more"
               icon={<MoreVertIcon />}
               onClick={handleMenuOpen}
+              aria-haspopup="menu"
+              aria-expanded={menuOpen ? "true" : "false"}
+              aria-controls={menuOpen ? "mobile-more-menu" : undefined}
             />
           </BottomNavigation>
         </Paper>
 
         {/* Mobile hamburger menu for secondary actions */}
         <Menu
+          id="mobile-more-menu"
           anchorEl={anchorEl}
           open={menuOpen}
           onClose={handleMenuClose}
@@ -134,7 +138,6 @@ export default function DashboardNav({ mobile = false }: DashboardNavProps) {
           }}
           sx={{
             '& .MuiMenuItem-root': {
-              minHeight: 48, // Ensure 44x44px touch targets
               px: 2,
             },
           }}
@@ -158,7 +161,6 @@ export default function DashboardNav({ mobile = false }: DashboardNavProps) {
           <ListItemButton
             selected={pathname === item.path}
             onClick={() => handleNavigation(item.path)}
-            sx={{ minHeight: 48 }} // Ensure adequate touch target
           >
             <ListItemIcon>{item.icon}</ListItemIcon>
             <ListItemText primary={item.label} />

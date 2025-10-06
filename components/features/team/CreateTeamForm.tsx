@@ -34,12 +34,12 @@ export default function CreateTeamForm() {
 
   const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    
+
     // Validate individual field on blur
     if (name === 'name' || name === 'sport' || name === 'season') {
       const fieldSchema = createTeamSchema.pick({ [name]: true });
       const validationResult = fieldSchema.safeParse({ [name]: value });
-      
+
       if (validationResult.success) {
         // Clear error if validation passes
         setFieldErrors((prev) => ({ ...prev, [name]: undefined }));
@@ -126,11 +126,6 @@ export default function CreateTeamForm() {
         placeholder="e.g., Thunder FC"
         error={!!fieldErrors.name}
         helperText={fieldErrors.name}
-        sx={{
-          '& .MuiInputBase-root': {
-            minHeight: 48,
-          },
-        }}
       />
 
       <TextField
@@ -145,11 +140,6 @@ export default function CreateTeamForm() {
         placeholder="e.g., Soccer, Basketball, Baseball"
         error={!!fieldErrors.sport}
         helperText={fieldErrors.sport}
-        sx={{
-          '& .MuiInputBase-root': {
-            minHeight: 48,
-          },
-        }}
       />
 
       <TextField
@@ -164,11 +154,6 @@ export default function CreateTeamForm() {
         placeholder="e.g., Fall 2025, Spring 2026"
         error={!!fieldErrors.season}
         helperText={fieldErrors.season}
-        sx={{
-          '& .MuiInputBase-root': {
-            minHeight: 48,
-          },
-        }}
       />
 
       <Button
@@ -177,16 +162,13 @@ export default function CreateTeamForm() {
         color="primary"
         size="large"
         disabled={
-          isSubmitting || 
-          !formData.name || 
-          !formData.sport || 
-          !formData.season || 
+          isSubmitting ||
+          !formData.name ||
+          !formData.sport ||
+          !formData.season ||
           Object.keys(fieldErrors).some(key => fieldErrors[key as keyof CreateTeamInput])
         }
-        sx={{
-          mt: 1,
-          minHeight: 48, // Ensure 44x44px minimum touch target
-        }}
+        sx={{ mt: 1 }}
       >
         {isSubmitting ? (
           <>
