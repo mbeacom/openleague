@@ -2,6 +2,9 @@ import { NextRequest } from "next/server";
 
 // Simple in-memory rate limiter for development
 // In production, consider using Redis or a dedicated rate limiting service
+//
+// NOTE: Development uses more permissive limits to accommodate testing flows
+// like signup->signin which trigger multiple auth requests in quick succession
 class RateLimiter {
     private requests: Map<string, { count: number; resetTime: number }> = new Map();
     private readonly maxRequests: number;
@@ -12,7 +15,7 @@ class RateLimiter {
         this.windowMs = windowMs;
     }
 
-    isAllowed(identifier: string): { allowed: boolean; remaining: number; resetTime: number } {
+    isAllowed(identifier: string): { allowed: boolean; remaining: number; resetTime: number; limit: number } {
         const now = Date.now();
         const record = this.requests.get(identifier);
 
@@ -20,18 +23,18 @@ class RateLimiter {
             // First request or window has expired
             const resetTime = now + this.windowMs;
             this.requests.set(identifier, { count: 1, resetTime });
-            return { allowed: true, remaining: this.maxRequests - 1, resetTime };
+            return { allowed: true, remaining: this.maxRequests - 1, resetTime, limit: this.maxRequests };
         }
 
         if (record.count >= this.maxRequests) {
             // Rate limit exceeded
-            return { allowed: false, remaining: 0, resetTime: record.resetTime };
+            return { allowed: false, remaining: 0, resetTime: record.resetTime, limit: this.maxRequests };
         }
 
         // Increment count
         record.count++;
         this.requests.set(identifier, record);
-        return { allowed: true, remaining: this.maxRequests - record.count, resetTime: record.resetTime };
+        return { allowed: true, remaining: this.maxRequests - record.count, resetTime: record.resetTime, limit: this.maxRequests };
     }
 
     // Clean up expired entries periodically
@@ -46,7 +49,12 @@ class RateLimiter {
 }
 
 // Global rate limiters for different endpoints
-const authLimiter = new RateLimiter(5, 15 * 60 * 1000); // 5 requests per 15 minutes for auth
+// More permissive limits in development for testing
+const isDevelopment = process.env.NODE_ENV !== "production";
+const authLimiter = new RateLimiter(
+    isDevelopment ? 50 : 5, // 50 requests in dev, 5 in production
+    15 * 60 * 1000 // 15 minutes
+);
 const generalLimiter = new RateLimiter(100, 15 * 60 * 1000); // 100 requests per 15 minutes for general API
 
 /**
