@@ -46,6 +46,9 @@ cp .env.example .env.local
 # - DATABASE_URL: Your Neon PostgreSQL connection string
 # - NEXTAUTH_SECRET: Generate with: openssl rand -base64 32
 # - MAILCHIMP_API_KEY: Your Mailchimp Transactional API key
+
+# Validate your environment configuration
+bun run validate-env
 ```
 
 ### Development
@@ -66,11 +69,15 @@ bun run start        # Start production server
 bun run lint         # Run ESLint
 bun run type-check   # TypeScript type checking
 
-# Database commands (after Prisma setup)
-bun run db:studio    # Open Prisma Studio
-bun run db:push      # Push schema to database
-bun run db:migrate   # Create and run migrations
-bun run db:generate  # Generate Prisma Client
+# Database commands
+bun run db:studio           # Open Prisma Studio
+bun run db:push             # Push schema to database (dev only)
+bun run db:migrate          # Create and run migrations (dev)
+bun run db:migrate:deploy   # Deploy migrations (production)
+bun run db:migrate:reset    # Reset database and run all migrations
+bun run db:generate         # Generate Prisma Client
+bun run db:seed             # Run seed script (optional)
+bun run validate-env        # Validate environment variables
 ```
 
 ## MVP Features
@@ -83,6 +90,54 @@ bun run db:generate  # Generate Prisma Client
 - **Calendar View**: Responsive calendar (grid on desktop, list on mobile)
 - **RSVP System**: Members respond Going/Not Going/Maybe
 - **Attendance Tracking**: Admins view attendance summaries
+
+## Database Migration Workflow
+
+### Development Workflow
+
+```bash
+# 1. Make changes to prisma/schema.prisma
+# 2. Create and apply migration
+bun run db:migrate
+
+# 3. Generate updated Prisma Client
+bun run db:generate
+
+# 4. Test your changes
+bun run dev
+```
+
+### Production Deployment
+
+Migrations are automatically applied during deployment via the `postinstall` script:
+
+```bash
+# This runs automatically on Vercel deployment
+prisma generate && prisma migrate deploy
+```
+
+### Migration Commands
+
+```bash
+# Development - creates migration files and applies them
+bun run db:migrate
+
+# Production - applies existing migrations only
+bun run db:migrate:deploy
+
+# Reset database (destructive - dev only)
+bun run db:migrate:reset
+
+# View database in browser
+bun run db:studio
+```
+
+### Database Setup
+
+1. **Create Neon Database**: Sign up at [console.neon.tech](https://console.neon.tech)
+2. **Copy Connection String**: Include `?sslmode=require` parameter
+3. **Set Environment Variable**: Add `DATABASE_URL` to `.env.local`
+4. **Run Initial Migration**: `bun run db:migrate`
 
 ## Project Structure
 
@@ -104,7 +159,9 @@ lib/
 └── utils/          # Validation and utilities
 
 prisma/
-└── schema.prisma   # Database schema
+├── schema.prisma   # Database schema
+├── migrations/     # Migration history
+└── seed.ts         # Optional seed script
 ```
 
 ## CI/CD & Releases

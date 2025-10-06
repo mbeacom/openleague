@@ -6,6 +6,9 @@ import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import ErrorBoundary from "@/components/ui/ErrorBoundary";
 import { ToastProvider } from "@/components/ui/Toast";
 
+// Validate environment variables on startup
+import "@/lib/env";
+
 const roboto = Roboto({
   weight: ["300", "400", "500", "700"],
   subsets: ["latin"],

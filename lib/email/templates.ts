@@ -1,10 +1,10 @@
 import { getMailchimpClient } from "./client";
 import { prisma } from "@/lib/db/prisma";
 import { formatDateTime } from "@/lib/utils/date";
-import { DEFAULT_EMAIL_FROM } from "@/lib/config/constants";
+import { env, getBaseUrl } from "@/lib/env";
 
-const EMAIL_FROM = process.env.EMAIL_FROM || DEFAULT_EMAIL_FROM;
-const BASE_URL = process.env.NEXTAUTH_URL || "http://localhost:3000";
+const EMAIL_FROM = env.EMAIL_FROM;
+const BASE_URL = getBaseUrl();
 
 interface InvitationEmailData {
   email: string;
