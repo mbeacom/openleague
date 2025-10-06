@@ -14,17 +14,16 @@ export default async function EditEventPage({ params }: EditEventPageProps) {
   await requireUserId();
   const { id } = await params;
 
-  try {
-    const event = await getEvent(id);
+  const event = await getEvent(id);
 
-    if (!event) {
-      notFound();
-    }
+  if (!event) {
+    notFound();
+  }
 
-    // Only admins can edit events
-    if (event.userRole !== "ADMIN") {
-      redirect(`/events/${id}`);
-    }
+  // Only admins can edit events
+  if (event.userRole !== "ADMIN") {
+    redirect(`/events/${id}`);
+  }
 
     return (
       <Container maxWidth="md">
@@ -51,8 +50,4 @@ export default async function EditEventPage({ params }: EditEventPageProps) {
         </Box>
       </Container>
     );
-  } catch (error) {
-    console.error("Error loading event for editing:", error);
-    redirect("/calendar");
-  }
 }

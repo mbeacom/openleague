@@ -1,7 +1,7 @@
 import { requireUserId } from "@/lib/auth/session";
 import { getEvent } from "@/lib/actions/events";
 import { Box, Container, Divider } from "@mui/material";
-import { redirect, notFound } from "next/navigation";
+import { notFound } from "next/navigation";
 import EventDetail from "@/components/features/events/EventDetail";
 import RSVPButtons from "@/components/features/events/RSVPButtons";
 import AttendanceView from "@/components/features/events/AttendanceView";
@@ -16,20 +16,19 @@ export default async function EventPage({ params }: EventPageProps) {
   const userId = await requireUserId();
   const { id } = await params;
 
-  try {
-    const event = await getEvent(id);
+  const event = await getEvent(id);
 
-    if (!event) {
-      notFound();
-    }
+  if (!event) {
+    notFound();
+  }
 
-    const isAdmin = event.userRole === "ADMIN";
+  const isAdmin = event.userRole === "ADMIN";
 
-    // Find current user's RSVP
-    const userRSVP = event.rsvps.find(
-      (rsvp: { user: { id: string } }) => rsvp.user.id === userId
-    );
-    const currentStatus = userRSVP?.status || "NO_RESPONSE";
+  // Find current user's RSVP
+  const userRSVP = event.rsvps.find(
+    (rsvp: { user: { id: string } }) => rsvp.user.id === userId
+  );
+  const currentStatus = userRSVP?.status || "NO_RESPONSE";
 
     return (
       <Container maxWidth="lg">
@@ -61,8 +60,4 @@ export default async function EventPage({ params }: EventPageProps) {
         </Box>
       </Container>
     );
-  } catch (error) {
-    console.error("Error loading event:", error);
-    redirect("/calendar");
-  }
 }

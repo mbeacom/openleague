@@ -1,4 +1,5 @@
 import { mailchimpClient } from "./client";
+import { prisma } from "@/lib/db/prisma";
 
 const EMAIL_FROM = process.env.EMAIL_FROM || "noreply@openleague.app";
 const BASE_URL = process.env.NEXTAUTH_URL || "http://localhost:3000";
@@ -405,7 +406,7 @@ export async function sendEventNotifications(
   eventId: string,
   type: "created" | "updated" | "cancelled"
 ): Promise<void> {
-  const { prisma } = await import("@/lib/db/prisma");
+  const { formatDateTime } = await import("@/lib/utils/date");
 
   // Fetch event with team members
   const event = await prisma.event.findUnique({
@@ -431,19 +432,9 @@ export async function sendEventNotifications(
     throw new Error("Event not found");
   }
 
-  const emails = event.team.members.map((member) => member.user.email);
-
-  const formatDateTime = (date: Date) => {
-    return new Intl.DateTimeFormat("en-US", {
-      weekday: "long",
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-      timeZoneName: "short",
-    }).format(new Date(date));
-  };
+  const emails = event.team.members.map(
+    (member: { user: { email: string } }) => member.user.email
+  );
 
   const eventData = {
     emails,

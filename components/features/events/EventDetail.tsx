@@ -25,6 +25,7 @@ import {
   Delete,
 } from "@mui/icons-material";
 import { deleteEvent } from "@/lib/actions/events";
+import { formatDateTime } from "@/lib/utils/date";
 
 interface EventDetailProps {
   event: {
@@ -69,18 +70,6 @@ export default function EventDetail({ event, userRole }: EventDetailProps) {
       setError("An unexpected error occurred. Please try again.");
       setIsDeleting(false);
     }
-  };
-
-  const formatDateTime = (date: Date) => {
-    return new Intl.DateTimeFormat("en-US", {
-      weekday: "long",
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-      timeZoneName: "short",
-    }).format(new Date(date));
   };
 
   return (

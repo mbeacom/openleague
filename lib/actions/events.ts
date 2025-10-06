@@ -138,7 +138,7 @@ export async function createEvent(
         notes: validated.notes || null,
         teamId: validated.teamId,
         rsvps: {
-          create: allTeamMembers.map((member) => ({
+          create: allTeamMembers.map((member: { userId: string }) => ({
             userId: member.userId,
             status: "NO_RESPONSE",
           })),
@@ -353,14 +353,14 @@ export async function deleteEvent(
       };
     }
 
-    // Send cancellation email before deleting (async, don't block response)
-    sendEventNotifications(eventId, "cancelled").catch((error) => {
-      console.error("Failed to send event cancellation notification emails:", error);
-    });
-
     // Delete the event (RSVPs will be cascade deleted)
     await prisma.event.delete({
       where: { id: eventId },
+    });
+
+    // Send cancellation email after deletion (async, don't block response)
+    sendEventNotifications(eventId, "cancelled").catch((error) => {
+      console.error("Failed to send event cancellation notification emails:", error);
     });
 
     // Revalidate calendar and events pages
@@ -463,7 +463,7 @@ export async function getEvent(eventId: string) {
     });
 
     if (!event) {
-      throw new Error("Event not found");
+      return null;
     }
 
     // Verify user is a member of the team
@@ -477,7 +477,7 @@ export async function getEvent(eventId: string) {
     });
 
     if (!teamMember) {
-      throw new Error("You are not a member of this team");
+      return null;
     }
 
     return {
