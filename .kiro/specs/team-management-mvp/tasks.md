@@ -220,9 +220,9 @@
     - Add pull-to-refresh functionality (future enhancement)
     - _Requirements: 6.4, 6.6_
 
-- [ ] 10. Implement RSVP and attendance tracking
+- [x] 10. Implement RSVP and attendance tracking
 
-  - [ ] 10.1 Create RSVP Server Actions
+  - [x] 10.1 Create RSVP Server Actions
 
     - Create `lib/actions/rsvp.ts` with RSVP operations
     - Implement `updateRSVP` Server Action accepting userId, eventId, and status
@@ -231,7 +231,7 @@
     - Return updated RSVP data
     - _Requirements: 7.1, 7.2, 7.3_
 
-  - [ ] 10.2 Build RSVP button component
+  - [x] 10.2 Build RSVP button component
 
     - Create `components/features/events/RSVPButtons.tsx` as Client Component
     - Display three buttons: Going, Not Going, Maybe
@@ -240,7 +240,7 @@
     - Implement optimistic update using useOptimistic hook
     - _Requirements: 7.1, 7.2_
 
-  - [ ] 10.3 Create attendance view for admins
+  - [x] 10.3 Create attendance view for admins
 
     - Create `components/features/events/AttendanceView.tsx`
     - Display summary counts: Going, Not Going, Maybe, No Response
@@ -249,7 +249,7 @@
     - Optimize for mobile with responsive layout
     - _Requirements: 7.4, 7.5_
 
-  - [ ] 10.4 Implement RSVP reminder emails
+  - [x] 10.4 Implement RSVP reminder emails
     - Create reminder email template in `lib/email/templates.ts`
     - Implement scheduled job or cron to check events 48 hours out
     - Send reminder emails to members with NO_RESPONSE status

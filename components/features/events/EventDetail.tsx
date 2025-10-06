@@ -26,6 +26,10 @@ import {
 } from "@mui/icons-material";
 import { deleteEvent } from "@/lib/actions/events";
 import { formatDateTime } from "@/lib/utils/date";
+import { RSVPButtons } from "./RSVPButtons";
+import { AttendanceView } from "./AttendanceView";
+
+type RSVPStatus = "GOING" | "NOT_GOING" | "MAYBE" | "NO_RESPONSE";
 
 interface EventDetailProps {
   event: {
@@ -40,17 +44,31 @@ interface EventDetailProps {
       id: string;
       name: string;
     };
+    rsvps: Array<{
+      id: string;
+      status: RSVPStatus;
+      user: {
+        id: string;
+        name: string | null;
+        email: string;
+      };
+    }>;
   };
   userRole: string;
+  currentUserId: string;
 }
 
-export default function EventDetail({ event, userRole }: EventDetailProps) {
+export default function EventDetail({ event, userRole, currentUserId }: EventDetailProps) {
   const router = useRouter();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const isAdmin = userRole === "ADMIN";
+  
+  // Find current user's RSVP status
+  const currentUserRSVP = event.rsvps.find((rsvp) => rsvp.user.id === currentUserId);
+  const currentStatus = currentUserRSVP?.status || "NO_RESPONSE";
 
   const handleDelete = async () => {
     setIsDeleting(true);
@@ -170,6 +188,21 @@ export default function EventDetail({ event, userRole }: EventDetailProps) {
           </Box>
         </CardContent>
       </Card>
+
+      {/* RSVP Buttons */}
+      <Box sx={{ mt: 3 }}>
+        <Typography variant="h6" gutterBottom>
+          Your Response
+        </Typography>
+        <RSVPButtons eventId={event.id} currentStatus={currentStatus} />
+      </Box>
+
+      {/* Attendance View (Admin only) */}
+      {isAdmin && (
+        <Box sx={{ mt: 3 }}>
+          <AttendanceView rsvps={event.rsvps} />
+        </Box>
+      )}
 
       {/* Delete Confirmation Dialog */}
       <Dialog

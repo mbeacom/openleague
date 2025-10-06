@@ -399,6 +399,173 @@ ${calendarLink}`,
   }
 }
 
+interface RSVPReminderEmailData {
+  email: string;
+  userName: string | null;
+  teamName: string;
+  eventType: string;
+  eventTitle: string;
+  eventDate: string;
+  eventLocation: string;
+  opponent?: string | null;
+  eventId: string;
+}
+
+/**
+ * Send RSVP reminder email to a member who hasn't responded
+ */
+export async function sendRSVPReminderEmail(data: RSVPReminderEmailData): Promise<void> {
+  const eventLink = `${BASE_URL}/events/${data.eventId}`;
+  const eventTypeLabel = data.eventType === "GAME" ? "Game" : "Practice";
+  const greeting = data.userName ? `Hi ${data.userName}` : "Hi there";
+
+  const message: {
+    from_email: string;
+    subject: string;
+    html: string;
+    text: string;
+    to: Array<{ email: string; type: "to" }>;
+  } = {
+    from_email: EMAIL_FROM,
+    subject: `RSVP Reminder: ${data.eventTitle}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #1976D2;">RSVP Reminder</h2>
+
+        <p>${greeting},</p>
+
+        <p>This is a friendly reminder to RSVP for an upcoming ${eventTypeLabel.toLowerCase()} with <strong>${data.teamName}</strong>.</p>
+
+        <div style="background-color: #e3f2fd; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #1976D2;">
+          <h3 style="margin-top: 0; color: #333;">${data.eventTitle}</h3>
+          <p style="margin: 10px 0;"><strong>Type:</strong> ${eventTypeLabel}</p>
+          <p style="margin: 10px 0;"><strong>Date & Time:</strong> ${data.eventDate}</p>
+          <p style="margin: 10px 0;"><strong>Location:</strong> ${data.eventLocation}</p>
+          ${data.opponent ? `<p style="margin: 10px 0;"><strong>Opponent:</strong> ${data.opponent}</p>` : ""}
+        </div>
+
+        <p>Your team is counting on you! Please let us know if you can make it.</p>
+
+        <p style="margin: 30px 0;">
+          <a href="${eventLink}"
+             style="background-color: #43A047; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">
+            RSVP Now
+          </a>
+        </p>
+
+        <p style="color: #666; font-size: 14px;">
+          Or copy and paste this link into your browser:<br>
+          <a href="${eventLink}">${eventLink}</a>
+        </p>
+
+        <p style="color: #666; font-size: 14px; margin-top: 30px;">
+          This event is coming up in less than 48 hours.
+        </p>
+      </div>
+    `,
+    text: `RSVP Reminder
+
+${greeting},
+
+This is a friendly reminder to RSVP for an upcoming ${eventTypeLabel.toLowerCase()} with ${data.teamName}.
+
+${data.eventTitle}
+Type: ${eventTypeLabel}
+Date & Time: ${data.eventDate}
+Location: ${data.eventLocation}
+${data.opponent ? `Opponent: ${data.opponent}` : ""}
+
+Your team is counting on you! Please let us know if you can make it.
+
+RSVP at:
+${eventLink}
+
+This event is coming up in less than 48 hours.`,
+    to: [
+      {
+        email: data.email,
+        type: "to",
+      },
+    ],
+  };
+
+  try {
+    await mailchimpClient.messages.send({ message });
+  } catch (error) {
+    console.error("Error sending RSVP reminder email:", error);
+    throw new Error("Failed to send RSVP reminder email");
+  }
+}
+
+/**
+ * Send RSVP reminders for events happening in 48 hours
+ * This function should be called by a scheduled job/cron
+ */
+export async function sendRSVPReminders(): Promise<void> {
+  const { formatDateTime } = await import("@/lib/utils/date");
+
+  // Calculate the time window: 48 hours from now (with a 1-hour buffer)
+  const now = new Date();
+  const fortyEightHoursFromNow = new Date(now.getTime() + 48 * 60 * 60 * 1000);
+  const fortySevenHoursFromNow = new Date(now.getTime() + 47 * 60 * 60 * 1000);
+
+  // Find events happening in approximately 48 hours
+  const upcomingEvents = await prisma.event.findMany({
+    where: {
+      startAt: {
+        gte: fortySevenHoursFromNow,
+        lte: fortyEightHoursFromNow,
+      },
+    },
+    include: {
+      team: {
+        select: {
+          name: true,
+        },
+      },
+      rsvps: {
+        where: {
+          status: "NO_RESPONSE",
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  // Send reminders for each event
+  for (const event of upcomingEvents) {
+    for (const rsvp of event.rsvps) {
+      try {
+        await sendRSVPReminderEmail({
+          email: rsvp.user.email,
+          userName: rsvp.user.name,
+          teamName: event.team.name,
+          eventType: event.type,
+          eventTitle: event.title,
+          eventDate: formatDateTime(event.startAt),
+          eventLocation: event.location,
+          opponent: event.opponent,
+          eventId: event.id,
+        });
+      } catch (error) {
+        console.error(
+          `Failed to send RSVP reminder to ${rsvp.user.email} for event ${event.id}:`,
+          error
+        );
+        // Continue with other reminders even if one fails
+      }
+    }
+  }
+}
+
 /**
  * Helper function to send event notifications to all team members
  */

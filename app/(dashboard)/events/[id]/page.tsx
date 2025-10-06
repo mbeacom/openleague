@@ -1,10 +1,8 @@
 import { requireUserId } from "@/lib/auth/session";
 import { getEvent } from "@/lib/actions/events";
-import { Box, Container, Divider } from "@mui/material";
+import { Box, Container } from "@mui/material";
 import { notFound } from "next/navigation";
 import EventDetail from "@/components/features/events/EventDetail";
-import RSVPButtons from "@/components/features/events/RSVPButtons";
-import AttendanceView from "@/components/features/events/AttendanceView";
 
 interface EventPageProps {
   params: Promise<{
@@ -22,42 +20,15 @@ export default async function EventPage({ params }: EventPageProps) {
     notFound();
   }
 
-  const isAdmin = event.userRole === "ADMIN";
-
-  // Find current user's RSVP
-  const userRSVP = event.rsvps.find(
-    (rsvp: { user: { id: string } }) => rsvp.user.id === userId
+  return (
+    <Container maxWidth="lg">
+      <Box sx={{ py: 4 }}>
+        <EventDetail
+          event={event}
+          userRole={event.userRole}
+          currentUserId={userId}
+        />
+      </Box>
+    </Container>
   );
-  const currentStatus = userRSVP?.status || "NO_RESPONSE";
-
-    return (
-      <Container maxWidth="lg">
-        <Box sx={{ py: 4 }}>
-          <EventDetail
-            event={{
-              id: event.id,
-              type: event.type,
-              title: event.title,
-              startAt: event.startAt,
-              location: event.location,
-              opponent: event.opponent,
-              notes: event.notes,
-              team: event.team,
-            }}
-            userRole={event.userRole}
-          />
-
-          <Divider sx={{ my: 4 }} />
-
-          <RSVPButtons eventId={event.id} currentStatus={currentStatus} />
-
-          {isAdmin && (
-            <>
-              <Divider sx={{ my: 4 }} />
-              <AttendanceView rsvps={event.rsvps} />
-            </>
-          )}
-        </Box>
-      </Container>
-    );
 }
