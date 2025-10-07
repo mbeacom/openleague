@@ -1,4 +1,14 @@
-# Implementation Plan
+# Implementation Plan - Long-Term Vision
+
+> **⚠️ IMPORTANT: This is a long-term vision document (2-3 year roadmap)**
+> 
+> **For immediate implementation, see:** `.kiro/specs/league-management-mvp/tasks.md`
+> 
+> This document represents the complete enterprise-grade platform implementation plan. These tasks will be implemented across multiple phases over 2-3 years, starting with the league-management-mvp foundation.
+> 
+> **Current Status:** These tasks are NOT ready for immediate implementation. They represent the long-term vision and will be broken down into smaller, actionable tasks as each phase approaches.
+
+## Long-Term Implementation Roadmap
 
 - [ ] 1. Establish multi-tenant foundation and enhanced data models
 

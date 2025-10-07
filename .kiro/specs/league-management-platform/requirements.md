@@ -1,8 +1,18 @@
-# Requirements Document
+# Requirements Document - Long-Term Vision
+
+> **⚠️ IMPORTANT: This is a long-term vision document (2-3 year roadmap)**
+> 
+> **For immediate implementation, see:** `.kiro/specs/league-management-mvp/`
+> 
+> This document represents the complete enterprise-grade platform vision. The features described here will be implemented across multiple phases:
+> - **Phase 1 (3-6 months):** league-management-mvp (basic multi-team coordination)
+> - **Phase 2 (6-12 months):** Enhanced features (facility booking, tournaments)
+> - **Phase 3 (12+ months):** Enterprise features (multi-tenancy, advanced analytics)
+> - **Phase 4 (24+ months):** Platform features (white-labeling, mobile app, microservices)
 
 ## Introduction
 
-The OpenLeague Platform is a comprehensive web-based solution designed to manage entire sports leagues, clubs, and organizations. Building on the foundation of the team-management-mvp, this platform expands to handle multi-team coordination, advanced communication systems, facility management, and tournament operations.
+The OpenLeague Platform is a comprehensive web-based solution designed to manage entire sports leagues, clubs, and organizations. Building on the foundation of the team-management-mvp and league-management-mvp, this platform expands to handle enterprise-grade multi-tenant operations, advanced communication systems, comprehensive facility management, and tournament operations.
 
 The system serves multiple user types: league administrators who oversee entire organizations, team managers who handle individual teams, facility managers who coordinate venues, tournament directors who run competitions, and players/parents who participate in activities. The platform replaces fragmented tools with a unified solution that scales from single teams to complex multi-division leagues.
 

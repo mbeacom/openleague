@@ -1,8 +1,18 @@
-# Design Document
+# Design Document - Long-Term Vision
+
+> **⚠️ IMPORTANT: This is a long-term vision document (2-3 year roadmap)**
+> 
+> **For immediate implementation, see:** `.kiro/specs/league-management-mvp/`
+> 
+> This document represents the complete enterprise-grade platform architecture. Implementation will be phased:
+> - **Phase 1:** Build on existing Next.js monolith with basic league features
+> - **Phase 2:** Add facility and tournament modules
+> - **Phase 3:** Introduce advanced analytics and mobile app
+> - **Phase 4:** Extract microservices and add enterprise features
 
 ## Overview
 
-The OpenLeague Platform is a comprehensive, enterprise-grade league management system built on Next.js 14+ with a microservices-ready architecture. The platform expands significantly from the team-management-mvp to handle complex multi-tenant scenarios, real-time communication, advanced scheduling algorithms, and enterprise-level integrations.
+The OpenLeague Platform is a comprehensive, enterprise-grade league management system built on Next.js 14+ with a microservices-ready architecture. The platform expands significantly from the team-management-mvp and league-management-mvp to handle complex multi-tenant scenarios, real-time communication, advanced scheduling algorithms, and enterprise-level integrations.
 
 The system follows a modular monolith approach that can evolve into microservices, using Next.js App Router, TypeScript, React 19, and MUI v7. The architecture supports multi-tenancy at the league level, with sophisticated role-based access control, real-time features via WebSockets, and comprehensive API integrations.
 
@@ -148,6 +158,8 @@ class TenantAwareRepository<T> {
 ## Data Models
 
 ### Enhanced Prisma Schema
+
+> **Note:** This schema represents the complete long-term vision. The current `prisma/schema.prisma` file contains this full schema but most models should not be implemented until their respective phases. See `league-management-mvp` for the subset to implement first.
 
 ```prisma
 // League (Tenant) model
@@ -503,7 +515,7 @@ enum TournamentFormat {
   DOUBLE_ELIMINATION
   ROUND_ROBIN
   POOL_PLAY
-  SWISS
+  // SWISS format removed - not mentioned in requirements, can be added in Phase 3
 }
 
 enum TournamentStatus {
@@ -680,6 +692,7 @@ interface SchedulingConstraints {
   blackoutDates: Date[];
   facilityPreferences: FacilityPreference[];
   teamAvailability: TeamAvailability[];
+  officialAvailability: OfficialAvailability[];  // Added missing constraint
   minimumRestPeriod: number; // hours between games
   maxGamesPerDay: number;
 }
@@ -888,7 +901,7 @@ type Mutation {
   createEvent(input: CreateEventInput!): Event!
   bookFacility(input: BookingInput!): FacilityBooking!
   sendMessage(input: MessageInput!): Message!
-  updateTournamentScore(gameId: ID!, score: ScoreInput!): Game!
+  updateTournamentScore(gameId: ID!, score: ScoreInput!): Event!  # Fixed: Game! -> Event!
 }
 
 type Subscription {
@@ -965,10 +978,16 @@ class CacheService {
   }
   
   async invalidateLeagueCache(leagueId: string): Promise<void> {
-    const keys = await redis.keys(`*:${leagueId}*`);
-    if (keys.length > 0) {
-      await redis.del(...keys);
-    }
+    // Use SCAN instead of KEYS to avoid blocking Redis
+    let cursor = '0';
+    do {
+      const result = await redis.scan(cursor, 'MATCH', `*:${leagueId}*`, 'COUNT', 100);
+      cursor = result[0];
+      const keys = result[1];
+      if (keys.length > 0) {
+        await redis.del(...keys);
+      }
+    } while (cursor !== '0');
   }
 }
 
@@ -1197,7 +1216,7 @@ services:
       - elasticsearch
 
   db:
-    image: postgres:15
+    image: postgres:15.3  # Pinned to specific version for security
     environment:
       POSTGRES_DB: openleague
       POSTGRES_USER: user
@@ -1211,10 +1230,10 @@ services:
       - redis_data:/data
 
   elasticsearch:
-    image: elasticsearch:8.8.0
+    image: elasticsearch:8.8.0  # Consider pinning to patch version in production
     environment:
       - discovery.type=single-node
-      - xpack.security.enabled=false
+      - xpack.security.enabled=false  # WARNING: DO NOT USE IN PRODUCTION
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
 
@@ -1250,7 +1269,7 @@ jobs:
       - uses: actions/checkout@v3
       - uses: actions/setup-node@v3
         with:
-          node-version: '18'
+          node-version: '22'  # Updated to match project requirements
       - run: bun install
       - run: bun run test
       - run: bun run build
