@@ -56,28 +56,41 @@ function MarketingHeader() {
       }}
     >
       <Container maxWidth="lg">
-        <Toolbar disableGutters sx={{ justifyContent: 'space-between' }}>
-          <Link href="/" style={{ textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <Toolbar disableGutters sx={{ justifyContent: 'space-between', py: 1.5 }}>
+          <Box
+            component={Link}
+            href="/"
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1.5,
+              textDecoration: 'none',
+              color: 'inherit',
+              transition: 'transform 0.2s ease-in-out',
+              '&:hover': {
+                transform: 'scale(1.02)',
+              },
+            }}
+          >
             <Image
               src="/images/logo.webp"
               alt="OpenLeague Logo"
-              width={40}
-              height={40}
+              width={48}
+              height={48}
               priority
             />
             <Typography
-              variant="h6"
+              variant="h5"
               component="div"
               sx={{
                 fontWeight: 700,
                 color: 'primary.main',
-                display: 'flex',
-                alignItems: 'center',
+                letterSpacing: '-0.02em',
               }}
             >
               OpenLeague
             </Typography>
-          </Link>
+          </Box>
 
           {isMobile ? (
             <>
