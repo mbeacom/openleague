@@ -81,7 +81,7 @@ export async function isTeamMember(userId: string, teamId: string): Promise<bool
  */
 export async function requireTeamAdmin(teamId: string): Promise<string> {
   const userId = await requireUserId();
-  
+
   const isAdmin = await isTeamAdmin(userId, teamId);
   if (!isAdmin) {
     throw new Error("Unauthorized: Only team admins can perform this action");
@@ -96,7 +96,7 @@ export async function requireTeamAdmin(teamId: string): Promise<string> {
  */
 export async function requireTeamMember(teamId: string): Promise<string> {
   const userId = await requireUserId();
-  
+
   const isMember = await isTeamMember(userId, teamId);
   if (!isMember) {
     throw new Error("Unauthorized: You are not a member of this team");
@@ -123,4 +123,33 @@ export async function getUserTeamRole(userId: string, teamId: string): Promise<"
   });
 
   return member?.role ?? null;
+}
+
+/**
+ * Check if user can create inter-team games in a league
+ * Returns true if user is a league admin or admin of any team in the league
+ */
+export async function canUserCreateLeagueGames(
+  userId: string,
+  leagueId: string,
+  leagueRole?: "LEAGUE_ADMIN" | "TEAM_ADMIN" | "MEMBER"
+): Promise<boolean> {
+  // If league role is provided and is LEAGUE_ADMIN or TEAM_ADMIN, they can create games
+  if (leagueRole === "LEAGUE_ADMIN" || leagueRole === "TEAM_ADMIN") {
+    return true;
+  }
+
+  // Check if user is admin of any team in the league
+  const teamAdminCount = await prisma.teamMember.count({
+    where: {
+      userId,
+      role: "ADMIN",
+      team: {
+        leagueId,
+        isActive: true,
+      },
+    },
+  });
+
+  return teamAdminCount > 0;
 }

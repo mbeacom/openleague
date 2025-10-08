@@ -81,9 +81,9 @@
     - Add invitation management dashboard for league admins
     - _Requirements: 3.5, 3.6, 6.3_
 
-- [ ] 4. Build multi-team scheduling system
+- [x] 4. Build multi-team scheduling system
 
-  - [ ] 4.1 Implement inter-team game creation
+  - [x] 4.1 Implement inter-team game creation
 
     - Create `createInterTeamGame` Server Action with conflict detection
     - Build game creation form with home/away team selection
@@ -91,7 +91,7 @@
     - Add game notification system for both teams
     - _Requirements: 4.1, 4.2, 4.5_
 
-  - [ ] 4.2 Build scheduling conflict detection
+  - [x] 4.2 Build scheduling conflict detection
 
     - Create conflict detection algorithm for team double-booking
     - Implement conflict warning system in game creation UI
@@ -99,7 +99,7 @@
     - Add override capability for league admins when needed
     - _Requirements: 4.2, 4.6_
 
-  - [ ] 4.3 Create league-wide calendar view
+  - [x] 4.3 Create league-wide calendar view
     - Build league calendar showing all team events
     - Implement filtering by teams, divisions, and event types
     - Create responsive calendar layout for mobile and desktop

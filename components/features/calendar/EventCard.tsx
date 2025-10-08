@@ -4,6 +4,20 @@ import { Card, CardContent, Typography, Box, Chip } from "@mui/material";
 import { useRouter } from "next/navigation";
 import type { Event } from "@/types/events";
 
+// EventCard can accept either simple Event or extended with league/team info
+interface EventCardProps extends Event {
+  leagueId?: string;
+  homeTeam?: {
+    id: string;
+    name: string;
+  } | null;
+  awayTeam?: {
+    id: string;
+    name: string;
+  } | null;
+  teamName?: string;
+}
+
 export default function EventCard({
   id,
   type,
@@ -11,7 +25,11 @@ export default function EventCard({
   startAt,
   location,
   opponent,
-}: Event) {
+  leagueId,
+  homeTeam,
+  awayTeam,
+  teamName,
+}: EventCardProps) {
   const router = useRouter();
 
   // Convert UTC date to local timezone
@@ -30,7 +48,12 @@ export default function EventCard({
   const badgeColor = type === "GAME" ? "primary" : "secondary";
 
   const handleClick = () => {
-    router.push(`/events/${id}`);
+    // Navigate to league-specific event page if in league context
+    if (leagueId) {
+      router.push(`/league/${leagueId}/events/${id}`);
+    } else {
+      router.push(`/events/${id}`);
+    }
   };
 
   return (
@@ -60,7 +83,7 @@ export default function EventCard({
         </Box>
 
         <Typography variant="h6" component="h2" gutterBottom>
-          {title}
+          {homeTeam && awayTeam ? `${homeTeam.name} vs ${awayTeam.name}` : title}
         </Typography>
 
         <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
@@ -72,7 +95,17 @@ export default function EventCard({
             📍 {location}
           </Typography>
 
-          {opponent && (
+          {homeTeam && awayTeam ? (
+            <Typography variant="body2" color="text.secondary">
+              👥 {homeTeam.name} (Home) vs {awayTeam.name} (Away)
+            </Typography>
+          ) : teamName ? (
+            <Typography variant="body2" color="text.secondary">
+              👥 {teamName}
+            </Typography>
+          ) : null}
+
+          {opponent && !homeTeam && (
             <Typography variant="body2" color="text.secondary">
               🏆 vs {opponent}
             </Typography>
