@@ -646,6 +646,7 @@ async function detectSchedulingConflicts(
 
 /**
  * Generate alternative time slots when conflicts are detected
+ * Optimized to fetch all events once and check conflicts in memory
  */
 async function generateAlternativeTimeSlots(
   gameData: CreateInterTeamGameInput
@@ -659,6 +660,59 @@ async function generateAlternativeTimeSlots(
   }> = [];
 
   const originalDate = new Date(gameData.startAt);
+
+  // Fetch all events for both teams over the next 7 days once
+  const startRange = new Date(originalDate);
+  startRange.setHours(0, 0, 0, 0); // Start of current day
+  const endRange = new Date(startRange);
+  endRange.setDate(endRange.getDate() + 7); // 7 days ahead
+
+  const allEvents = await prisma.event.findMany({
+    where: {
+      OR: [
+        { teamId: gameData.homeTeamId },
+        { teamId: gameData.awayTeamId },
+        { homeTeamId: gameData.homeTeamId },
+        { awayTeamId: gameData.homeTeamId },
+        { homeTeamId: gameData.awayTeamId },
+        { awayTeamId: gameData.awayTeamId },
+      ],
+      startAt: {
+        gte: startRange,
+        lte: endRange,
+      },
+    },
+    select: {
+      id: true,
+      startAt: true,
+      teamId: true,
+      homeTeamId: true,
+      awayTeamId: true,
+    },
+  });
+
+  // Helper function to check conflicts in memory
+  const hasConflict = (testTime: Date): boolean => {
+    const conflictWindowStart = new Date(testTime.getTime() - 2 * 60 * 60 * 1000);
+    const conflictWindowEnd = new Date(testTime.getTime() + 2 * 60 * 60 * 1000);
+
+    return allEvents.some(event => {
+      const eventTime = new Date(event.startAt).getTime();
+      if (eventTime < conflictWindowStart.getTime() || eventTime > conflictWindowEnd.getTime()) {
+        return false;
+      }
+
+      // Check if either team is involved in this event
+      return (
+        event.teamId === gameData.homeTeamId ||
+        event.teamId === gameData.awayTeamId ||
+        event.homeTeamId === gameData.homeTeamId ||
+        event.awayTeamId === gameData.homeTeamId ||
+        event.homeTeamId === gameData.awayTeamId ||
+        event.awayTeamId === gameData.awayTeamId
+      );
+    });
+  };
 
   // Generate suggestions for the same day at different times
   const timeSlots = [
@@ -681,11 +735,8 @@ async function generateAlternativeTimeSlots(
     // Skip if it's in the past
     if (alternativeTime <= new Date()) continue;
 
-    // Check if this time has conflicts
-    const testGameData = { ...gameData, startAt: alternativeTime };
-    const conflicts = await detectSchedulingConflicts(testGameData);
-
-    if (conflicts.length === 0) {
+    // Check if this time has conflicts (in memory)
+    if (!hasConflict(alternativeTime)) {
       suggestions.push({
         startAt: alternativeTime,
         reason: `Same day at ${slot.label}`,
@@ -698,11 +749,8 @@ async function generateAlternativeTimeSlots(
     const alternativeDate = new Date(originalDate);
     alternativeDate.setDate(alternativeDate.getDate() + dayOffset);
 
-    // Try the same time on different days
-    const testGameData = { ...gameData, startAt: alternativeDate };
-    const conflicts = await detectSchedulingConflicts(testGameData);
-
-    if (conflicts.length === 0) {
+    // Check if this time has conflicts (in memory)
+    if (!hasConflict(alternativeDate)) {
       const dayName = alternativeDate.toLocaleDateString('en-US', { weekday: 'long' });
       suggestions.push({
         startAt: alternativeDate,

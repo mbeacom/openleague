@@ -94,8 +94,8 @@ export default function LeagueCalendar({
       // Division filter
       if (selectedDivisions.length > 0) {
         const team = teams.find(t => t.id === event.team.id);
-        const homeTeam = event.homeTeam ? teams.find(t => t.id === event.homeTeam!.id) : null;
-        const awayTeam = event.awayTeam ? teams.find(t => t.id === event.awayTeam!.id) : null;
+        const homeTeam = event.homeTeam ? teams.find(t => t.id === event.homeTeam?.id) : null;
+        const awayTeam = event.awayTeam ? teams.find(t => t.id === event.awayTeam?.id) : null;
 
         const isDivisionInvolved =
           (team?.division && selectedDivisions.includes(team.division.id)) ||
@@ -123,8 +123,21 @@ export default function LeagueCalendar({
         return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
       };
 
-      const description = event.opponent ? `vs ${event.opponent}` : '';
-      const summary = event.title;
+      // Build description and summary with inter-team game support
+      let description = '';
+      let summary = event.title;
+      if (event.homeTeam && event.awayTeam) {
+        const home = teams.find(t => t.id === event.homeTeam?.id);
+        const away = teams.find(t => t.id === event.awayTeam?.id);
+        if (home && away) {
+          description = `${home.name} vs ${away.name}`;
+          summary = `${home.name} vs ${away.name}`;
+        } else if (event.opponent) {
+          description = `vs ${event.opponent}`;
+        }
+      } else if (event.opponent) {
+        description = `vs ${event.opponent}`;
+      }
 
       return [
         'BEGIN:VEVENT',
