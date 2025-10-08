@@ -21,6 +21,8 @@ import {
   People as PeopleIcon,
   CalendarMonth as CalendarIcon,
   Event as EventIcon,
+  Groups as GroupsIcon,
+  Settings as SettingsIcon,
   Logout as LogoutIcon,
   MoreVert as MoreVertIcon,
 } from "@mui/icons-material";
@@ -32,22 +34,36 @@ interface NavItem {
   icon: React.ReactNode;
 }
 
-const navItems: NavItem[] = [
+// Single-team mode navigation (original)
+const singleTeamNavItems: NavItem[] = [
   { label: "Dashboard", path: "/", icon: <DashboardIcon /> },
   { label: "Roster", path: "/roster", icon: <PeopleIcon /> },
   { label: "Calendar", path: "/calendar", icon: <CalendarIcon /> },
   { label: "Events", path: "/events", icon: <EventIcon /> },
 ];
 
+// League mode navigation
+const leagueNavItems: NavItem[] = [
+  { label: "Dashboard", path: "/", icon: <DashboardIcon /> },
+  { label: "Teams", path: "/teams", icon: <GroupsIcon /> },
+  { label: "Schedule", path: "/schedule", icon: <CalendarIcon /> },
+  { label: "Roster", path: "/roster", icon: <PeopleIcon /> },
+  { label: "Settings", path: "/settings", icon: <SettingsIcon /> },
+];
+
 interface DashboardNavProps {
   mobile?: boolean;
+  isLeagueMode?: boolean;
 }
 
-export default function DashboardNav({ mobile = false }: DashboardNavProps) {
+export default function DashboardNav({ mobile = false, isLeagueMode = false }: DashboardNavProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const menuOpen = Boolean(anchorEl);
+
+  // Select navigation items based on mode
+  const navItems = isLeagueMode ? leagueNavItems : singleTeamNavItems;
 
   const handleNavigation = (path: string) => {
     router.push(path);

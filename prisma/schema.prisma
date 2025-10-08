@@ -23,6 +23,7 @@ model User {
   rsvps       RSVP[]
   invitations Invitation[]
   players     Player[]
+  leagueUsers LeagueUser[]
 }
 
 // Team model
@@ -31,13 +32,26 @@ model Team {
   name      String
   sport     String
   season    String
+  isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  // Optional league relationship for backward compatibility
+  leagueId   String?
+  league     League?   @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  
+  divisionId String?
+  division   Division? @relation(fields: [divisionId], references: [id])
 
   members     TeamMember[]
   players     Player[]
   events      Event[]
   invitations Invitation[]
+  homeEvents  Event[] @relation("HomeTeam")
+  awayEvents  Event[] @relation("AwayTeam")
+
+  @@index([leagueId]) // Optimize league-team queries
+  @@index([divisionId]) // Optimize division-team queries
 }
 
 // TeamMember junction table with role
@@ -81,6 +95,12 @@ model Player {
   teamId String
   team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
   user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  // Optional league relationship for league-wide roster management
+  leagueId String?
+  league   League? @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+
+  @@index([leagueId]) // Optimize league-wide roster queries
 }
 
 // Event model
@@ -95,13 +115,26 @@ model Event {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
+  // Optional league relationship for league-wide scheduling
+  leagueId String?
+  league   League? @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+
   teamId String
   team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  // Multi-team game support
+  homeTeamId String?
+  homeTeam   Team?   @relation("HomeTeam", fields: [homeTeamId], references: [id])
+
+  awayTeamId String?
+  awayTeam   Team?   @relation("AwayTeam", fields: [awayTeamId], references: [id])
 
   rsvps RSVP[]
 
   @@index([teamId, startAt]) // Optimize queries for team events sorted by date
   @@index([startAt]) // Optimize queries for upcoming events across teams
+  @@index([leagueId, startAt]) // Optimize league event queries
+  @@index([homeTeamId, awayTeamId]) // Optimize multi-team game queries
 }
 
 enum EventType {
@@ -153,4 +186,64 @@ enum InvitationStatus {
   PENDING
   ACCEPTED
   EXPIRED
+}
+
+// League model - simplified version for MVP
+model League {
+  id           String   @id @default(cuid())
+  name         String
+  sport        String
+  contactEmail String
+  contactPhone String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Essential relationships only
+  divisions Division[]
+  teams     Team[]
+  events    Event[]
+  players   Player[]
+  users     LeagueUser[]
+
+  @@map("leagues")
+}
+
+// Basic Division model for team organization
+model Division {
+  id         String   @id @default(cuid())
+  name       String
+  ageGroup   String? // U8, U10, Adult, etc.
+  skillLevel String? // Recreational, Competitive
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  leagueId String
+  league   League @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  teams    Team[]
+
+  @@map("divisions")
+}
+
+// Simplified LeagueUser model for role management
+model LeagueUser {
+  id       String     @id @default(cuid())
+  role     LeagueRole
+  joinedAt DateTime   @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  leagueId String
+  league   League @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, leagueId])
+  @@map("league_users")
+}
+
+enum LeagueRole {
+  LEAGUE_ADMIN // Full league control
+  TEAM_ADMIN   // Team management within league
+  MEMBER       // Basic member
 }

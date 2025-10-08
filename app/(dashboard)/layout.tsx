@@ -1,8 +1,9 @@
 import { ReactNode } from "react";
-import { requireAuth } from "@/lib/auth/session";
+import { requireAuth, requireUserId } from "@/lib/auth/session";
 import { Box, AppBar, Toolbar, Typography } from "@mui/material";
 import DashboardNav from "@/components/features/dashboard/DashboardNav";
 import ErrorBoundary from "@/components/ui/ErrorBoundary";
+import { getUserMode } from "@/lib/utils/league-mode";
 
 export default async function DashboardLayout({
   children,
@@ -11,6 +12,10 @@ export default async function DashboardLayout({
 }) {
   // Require authentication for all dashboard routes
   await requireAuth();
+  
+  // Get user mode for adaptive navigation
+  const userId = await requireUserId();
+  const userMode = await getUserMode(userId);
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
@@ -47,7 +52,7 @@ export default async function DashboardLayout({
               OpenLeague
             </Typography>
           </Box>
-          <DashboardNav />
+          <DashboardNav isLeagueMode={userMode.isLeagueMode} />
         </Box>
 
         {/* Main Content */}
@@ -66,7 +71,7 @@ export default async function DashboardLayout({
       </Box>
 
       {/* Mobile Bottom Navigation */}
-      <DashboardNav mobile />
+      <DashboardNav mobile isLeagueMode={userMode.isLeagueMode} />
     </Box>
   );
 }
