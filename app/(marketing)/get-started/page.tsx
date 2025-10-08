@@ -22,7 +22,7 @@ const steps = [
   {
     label: 'Create Your Account',
     description:
-      'Sign up with your email address. No credit card required, no commitment. Your account is free forever.',
+      'Sign up with your email address and start your 14-day free trial. No credit card required to start.',
     action: 'Sign Up Now',
     actionHref: '/signup',
   },
