@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="./public/images/logo.png" alt="OpenLeague Logo" width="200"/>
+  <img src="./public/images/logo.webp" alt="OpenLeague Logo" width="200"/>
 
   # OpenLeague
 

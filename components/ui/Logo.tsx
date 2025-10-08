@@ -2,6 +2,9 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { Box, SxProps, Theme } from '@mui/material';
 
+const LOGO_IMAGE_PATH = '/images/logo.webp';
+const LOGO_ALT_TEXT = 'OpenLeague Logo';
+
 export type LogoSize = 'small' | 'medium' | 'large' | 'xlarge';
 export type LogoVariant = 'default' | 'footer';
 
@@ -80,13 +83,13 @@ export default function Logo({
   sx,
   className,
 }: LogoProps) {
-  // Determine dimensions
-  const width = customWidth ?? SIZE_MAP[size];
-  const height = customHeight ?? SIZE_MAP[size];
+  // Determine dimensions - maintain square aspect ratio when only one dimension is provided
+  const width = customWidth ?? customHeight ?? SIZE_MAP[size];
+  const height = customHeight ?? customWidth ?? SIZE_MAP[size];
 
   // Determine link behavior
-  const shouldLink = variant !== 'footer';
-  const linkHref = href !== undefined ? href : (shouldLink ? '/' : null);
+  // Footer variant never links, otherwise use explicit href or default to '/'
+  const linkHref = href !== undefined ? href : (variant === 'footer' ? null : '/');
 
   // Base styles
   const baseStyles: SxProps<Theme> = {
@@ -108,8 +111,8 @@ export default function Logo({
 
   const logoImage = (
     <Image
-      src="/images/logo.webp"
-      alt="OpenLeague Logo"
+      src={LOGO_IMAGE_PATH}
+      alt={LOGO_ALT_TEXT}
       width={width}
       height={height}
       priority={priority}
