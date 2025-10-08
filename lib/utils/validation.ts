@@ -205,6 +205,53 @@ export const migrateTeamToLeagueSchema = z.object({
   leagueData: createLeagueSchema,
 });
 
+// Division validation schemas
+export const createDivisionSchema = z.object({
+  leagueId: z.string().cuid("Invalid league ID format"),
+  name: sanitizedStringWithMin(1, 100),
+  ageGroup: optionalSanitizedString(50),
+  skillLevel: optionalSanitizedString(50),
+});
+
+export const updateDivisionSchema = z.object({
+  id: z.string().cuid("Invalid division ID format"),
+  leagueId: z.string().cuid("Invalid league ID format"),
+  name: sanitizedStringWithMin(1, 100),
+  ageGroup: optionalSanitizedString(50),
+  skillLevel: optionalSanitizedString(50),
+});
+
+export const deleteDivisionSchema = z.object({
+  id: z.string().cuid("Invalid division ID format"),
+  leagueId: z.string().cuid("Invalid league ID format"),
+});
+
+export const assignTeamToDivisionSchema = z.object({
+  teamId: z.string().cuid("Invalid team ID format"),
+  divisionId: z.string().cuid("Invalid division ID format").nullable(),
+  leagueId: z.string().cuid("Invalid league ID format"),
+});
+
+// Pagination schemas
+export const paginationSchema = z.object({
+  page: z.number().int().min(1).default(1),
+  limit: z.number().int().min(1).max(100).default(20),
+  search: z.string().optional(),
+  sport: z.string().optional(),
+  season: z.string().optional(),
+  divisionId: z.string().cuid().optional(),
+});
+
+export const getLeagueTeamsSchema = z.object({
+  leagueId: z.string().cuid("Invalid league ID format"),
+  page: z.number().int().min(1).default(1),
+  limit: z.number().int().min(1).max(100).default(20),
+  search: z.string().optional(),
+  sport: z.string().optional(),
+  season: z.string().optional(),
+  divisionId: z.string().cuid().optional().nullable(),
+});
+
 // Type exports
 export type SignupInput = z.infer<typeof signupSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
@@ -219,3 +266,9 @@ export type CreateLeagueInput = z.infer<typeof createLeagueSchema>;
 export type UpdateLeagueSettingsInput = z.infer<typeof updateLeagueSettingsSchema>;
 export type AddTeamToLeagueInput = z.infer<typeof addTeamToLeagueSchema>;
 export type MigrateTeamToLeagueInput = z.infer<typeof migrateTeamToLeagueSchema>;
+export type CreateDivisionInput = z.infer<typeof createDivisionSchema>;
+export type UpdateDivisionInput = z.infer<typeof updateDivisionSchema>;
+export type DeleteDivisionInput = z.infer<typeof deleteDivisionSchema>;
+export type AssignTeamToDivisionInput = z.infer<typeof assignTeamToDivisionSchema>;
+export type PaginationInput = z.infer<typeof paginationSchema>;
+export type GetLeagueTeamsInput = z.infer<typeof getLeagueTeamsSchema>;

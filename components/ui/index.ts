@@ -13,3 +13,6 @@ export type { DialogProps } from './Dialog';
 export { default as ErrorBoundary } from './ErrorBoundary';
 
 export { ToastProvider, useToast } from './Toast';
+
+export { default as Pagination } from './Pagination';
+export type { PaginationProps } from './Pagination';

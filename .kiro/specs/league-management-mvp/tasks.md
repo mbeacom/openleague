@@ -31,9 +31,9 @@
     - Add data migration utilities for existing users
     - _Requirements: 8.1, 8.2, 8.3, 8.4_
 
-- [ ] 2. Build basic division and team organization
+- [x] 2. Build basic division and team organization
 
-  - [ ] 2.1 Create division management system
+  - [x] 2.1 Create division management system
 
     - Build `createDivision` Server Action with name, age group, and skill level
     - Implement `assignTeamToDivision` for organizing teams
@@ -41,7 +41,7 @@
     - Add division-based team filtering and organization
     - _Requirements: 2.1, 2.2, 2.3, 2.4_
 
-  - [ ] 2.2 Build team management within leagues
+  - [x] 2.2 Build team management within leagues
 
     - Create team creation form that works within league context
     - Implement team assignment to divisions with drag-and-drop interface
@@ -49,7 +49,7 @@
     - Add team transfer between divisions functionality
     - _Requirements: 2.5, 2.6, 2.7_
 
-  - [ ] 2.3 Create league hierarchy visualization
+  - [x] 2.3 Create league hierarchy visualization
     - Build league dashboard showing divisions and teams
     - Create team cards with division badges and player counts
     - Implement responsive layout for mobile and desktop
