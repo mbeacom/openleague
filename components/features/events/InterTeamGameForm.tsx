@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   Box,
@@ -213,7 +213,10 @@ export default function InterTeamGameForm({
     return team.division ? `${team.name} (${team.division.name})` : team.name;
   };
 
-  const availableAwayTeams = teams.filter(team => team.id !== formData.homeTeamId);
+  const availableAwayTeams = useMemo(
+    () => teams.filter(team => team.id !== formData.homeTeamId),
+    [teams, formData.homeTeamId]
+  );
 
   return (
     <Box

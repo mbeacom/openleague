@@ -55,18 +55,18 @@ export default function ConflictWarning({
   };
 
   return (
-    <Alert 
-      severity="warning" 
+    <Alert
+      severity="warning"
       icon={<Warning />}
       sx={{ mb: 2 }}
     >
       <Typography variant="subtitle2" gutterBottom>
         <strong>Scheduling Conflicts Detected</strong>
       </Typography>
-      
+
       <Stack spacing={1} sx={{ mb: 2 }}>
-        {conflicts.map((conflict, index) => (
-          <Box key={index} sx={{ p: 1, bgcolor: 'warning.light', borderRadius: 1 }}>
+        {conflicts.map((conflict) => (
+          <Box key={`${conflict.teamId}-${conflict.conflictingEvent.id}`} sx={{ p: 1, bgcolor: 'warning.light', borderRadius: 1 }}>
             <Typography variant="body2" color="warning.contrastText">
               <strong>{conflict.teamName}</strong> has a conflict:
             </Typography>
@@ -85,9 +85,9 @@ export default function ConflictWarning({
             Suggested Alternative Times:
           </Typography>
           <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ gap: 1 }}>
-            {suggestions.map((suggestion, index) => (
+            {suggestions.map((suggestion) => (
               <Chip
-                key={index}
+                key={suggestion.startAt.toISOString()}
                 label={`${formatDateTime(suggestion.startAt)} (${suggestion.reason})`}
                 variant="outlined"
                 color="primary"

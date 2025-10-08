@@ -39,8 +39,8 @@ export default async function LeagueSchedulePage({ params }: LeagueSchedulePageP
   }
 
   // Check if user can create inter-team games (league admin or team admin)
-  const canCreateGames = leagueUser.role === "LEAGUE_ADMIN" ||
-    await prisma.teamMember.findFirst({
+  const [teamAdminCheck, events, teams, divisions] = await Promise.all([
+    leagueUser.role === "LEAGUE_ADMIN" ? null : prisma.teamMember.findFirst({
       where: {
         userId,
         role: "ADMIN",
@@ -49,67 +49,67 @@ export default async function LeagueSchedulePage({ params }: LeagueSchedulePageP
           isActive: true,
         },
       },
-    });
+    }),
+    // Fetch all league events
+    prisma.event.findMany({
+      where: {
+        leagueId,
+      },
+      include: {
+        team: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        homeTeam: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        awayTeam: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+      orderBy: {
+        startAt: "asc",
+      },
+    }),
+    // Fetch all teams in the league
+    prisma.team.findMany({
+      where: {
+        leagueId,
+        isActive: true,
+      },
+      include: {
+        division: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+      orderBy: {
+        name: "asc",
+      },
+    }),
+    // Fetch all divisions in the league
+    prisma.division.findMany({
+      where: {
+        leagueId,
+        isActive: true,
+      },
+      orderBy: {
+        name: "asc",
+      },
+    }),
+  ]);
 
-  // Fetch all league events
-  const events = await prisma.event.findMany({
-    where: {
-      leagueId,
-    },
-    include: {
-      team: {
-        select: {
-          id: true,
-          name: true,
-        },
-      },
-      homeTeam: {
-        select: {
-          id: true,
-          name: true,
-        },
-      },
-      awayTeam: {
-        select: {
-          id: true,
-          name: true,
-        },
-      },
-    },
-    orderBy: {
-      startAt: "asc",
-    },
-  });
-
-  // Fetch all teams in the league
-  const teams = await prisma.team.findMany({
-    where: {
-      leagueId,
-      isActive: true,
-    },
-    include: {
-      division: {
-        select: {
-          id: true,
-          name: true,
-        },
-      },
-    },
-    orderBy: {
-      name: "asc",
-    },
-  });
-
-  // Fetch all divisions in the league
-  const divisions = await prisma.division.findMany({
-    where: {
-      leagueId,
-      isActive: true,
-    },
-    orderBy: {
-      name: "asc",
-    },
-  });
+  const canCreateGames = leagueUser.role === "LEAGUE_ADMIN" || teamAdminCheck;
 
   // Serialize events for client component
   const serializedEvents = events.map(event => ({

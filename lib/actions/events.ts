@@ -389,10 +389,10 @@ export async function createInterTeamGame(
 
     // Check authentication and authorization - user must be league admin or admin of one of the teams
     const userId = await requireUserId();
-    
+
     // Import league actions for authorization helpers
     const { verifyLeagueAdmin, verifyTeamAdminInLeague } = await import("@/lib/actions/league");
-    
+
     const isLeagueAdmin = await verifyLeagueAdmin(validated.leagueId, userId);
     const isHomeTeamAdmin = await verifyTeamAdminInLeague(validated.homeTeamId, validated.leagueId, userId);
     const isAwayTeamAdmin = await verifyTeamAdminInLeague(validated.awayTeamId, validated.leagueId, userId);
@@ -424,8 +424,14 @@ export async function createInterTeamGame(
       };
     }
 
-    const homeTeam = teams.find(t => t.id === validated.homeTeamId)!;
-    const awayTeam = teams.find(t => t.id === validated.awayTeamId)!;
+    const homeTeam = teams.find(t => t.id === validated.homeTeamId);
+    const awayTeam = teams.find(t => t.id === validated.awayTeamId);
+    if (!homeTeam || !awayTeam) {
+      return {
+        success: false,
+        error: "One or both teams not found or do not belong to this league",
+      };
+    }
 
     // Check for scheduling conflicts
     const conflicts = await detectSchedulingConflicts(validated);
@@ -433,11 +439,11 @@ export async function createInterTeamGame(
     if (conflicts.length > 0 && !validated.overrideConflicts) {
       // Generate alternative time suggestions
       const suggestions = await generateAlternativeTimeSlots(validated);
-      
+
       return {
         success: false,
         error: "Scheduling conflicts detected",
-        details: { 
+        details: {
           conflicts,
           suggestions,
           canOverride: isLeagueAdmin, // Only league admins can override conflicts
@@ -588,57 +594,49 @@ async function detectSchedulingConflicts(
     },
   });
 
+  // Fetch team names once to avoid N+1 queries
+  const [homeTeamInfo, awayTeamInfo] = await Promise.all([
+    prisma.team.findUnique({ where: { id: gameData.homeTeamId }, select: { name: true } }),
+    prisma.team.findUnique({ where: { id: gameData.awayTeamId }, select: { name: true } }),
+  ]);
+
   // Process conflicts for each team
   for (const event of conflictingEvents) {
     // Check if home team has conflict
-    if (event.teamId === gameData.homeTeamId || 
-        event.homeTeamId === gameData.homeTeamId || 
-        event.awayTeamId === gameData.homeTeamId) {
-      const homeTeam = await prisma.team.findUnique({
-        where: { id: gameData.homeTeamId },
-        select: { name: true },
+    if (homeTeamInfo && (event.teamId === gameData.homeTeamId ||
+        event.homeTeamId === gameData.homeTeamId ||
+        event.awayTeamId === gameData.homeTeamId)) {
+      conflicts.push({
+        teamId: gameData.homeTeamId,
+        teamName: homeTeamInfo.name,
+        conflictingEvent: {
+          id: event.id,
+          title: event.title,
+          startAt: event.startAt,
+        },
       });
-      
-      if (homeTeam) {
-        conflicts.push({
-          teamId: gameData.homeTeamId,
-          teamName: homeTeam.name,
-          conflictingEvent: {
-            id: event.id,
-            title: event.title,
-            startAt: event.startAt,
-          },
-        });
-      }
     }
 
     // Check if away team has conflict
-    if (event.teamId === gameData.awayTeamId || 
-        event.homeTeamId === gameData.awayTeamId || 
-        event.awayTeamId === gameData.awayTeamId) {
-      const awayTeam = await prisma.team.findUnique({
-        where: { id: gameData.awayTeamId },
-        select: { name: true },
+    if (awayTeamInfo && (event.teamId === gameData.awayTeamId ||
+        event.homeTeamId === gameData.awayTeamId ||
+        event.awayTeamId === gameData.awayTeamId)) {
+      conflicts.push({
+        teamId: gameData.awayTeamId,
+        teamName: awayTeamInfo.name,
+        conflictingEvent: {
+          id: event.id,
+          title: event.title,
+          startAt: event.startAt,
+        },
       });
-      
-      if (awayTeam) {
-        conflicts.push({
-          teamId: gameData.awayTeamId,
-          teamName: awayTeam.name,
-          conflictingEvent: {
-            id: event.id,
-            title: event.title,
-            startAt: event.startAt,
-          },
-        });
-      }
     }
   }
 
   // Remove duplicates
   const uniqueConflicts = conflicts.filter((conflict, index, self) =>
-    index === self.findIndex(c => 
-      c.teamId === conflict.teamId && 
+    index === self.findIndex(c =>
+      c.teamId === conflict.teamId &&
       c.conflictingEvent.id === conflict.conflictingEvent.id
     )
   );
@@ -661,7 +659,7 @@ async function generateAlternativeTimeSlots(
   }> = [];
 
   const originalDate = new Date(gameData.startAt);
-  
+
   // Generate suggestions for the same day at different times
   const timeSlots = [
     { hour: 9, minute: 0, label: "9:00 AM" },
@@ -676,17 +674,17 @@ async function generateAlternativeTimeSlots(
   for (const slot of timeSlots) {
     const alternativeTime = new Date(originalDate);
     alternativeTime.setHours(slot.hour, slot.minute, 0, 0);
-    
+
     // Skip if it's the same time as requested
     if (alternativeTime.getTime() === originalDate.getTime()) continue;
-    
+
     // Skip if it's in the past
     if (alternativeTime <= new Date()) continue;
-    
+
     // Check if this time has conflicts
     const testGameData = { ...gameData, startAt: alternativeTime };
     const conflicts = await detectSchedulingConflicts(testGameData);
-    
+
     if (conflicts.length === 0) {
       suggestions.push({
         startAt: alternativeTime,
@@ -699,18 +697,18 @@ async function generateAlternativeTimeSlots(
   for (let dayOffset = 1; dayOffset <= 7; dayOffset++) {
     const alternativeDate = new Date(originalDate);
     alternativeDate.setDate(alternativeDate.getDate() + dayOffset);
-    
+
     // Try the same time on different days
     const testGameData = { ...gameData, startAt: alternativeDate };
     const conflicts = await detectSchedulingConflicts(testGameData);
-    
+
     if (conflicts.length === 0) {
       const dayName = alternativeDate.toLocaleDateString('en-US', { weekday: 'long' });
       suggestions.push({
         startAt: alternativeDate,
         reason: `${dayName} at same time`,
       });
-      
+
       // Limit to 3 day suggestions to avoid overwhelming the user
       if (suggestions.filter(s => s.reason.includes('at same time')).length >= 3) {
         break;
