@@ -23,13 +23,16 @@ app/                         # Next.js App Router (existing)
 ├── (marketing)/             # Marketing route group
 │   ├── page.tsx            # Landing page (/)
 │   ├── features/           # Feature explanations
+│   ├── pricing/            # Pricing information (free tier focus)
 │   ├── about/              # About page
 │   ├── contact/            # Contact page
+│   ├── get-started/        # Sign-up flow and onboarding
 │   └── layout.tsx          # Marketing layout
 ├── (dashboard)/            # Existing dashboard routes
 ├── (auth)/                 # Existing auth routes
 └── docs/                   # Documentation pages
     ├── page.tsx            # Documentation home
+    ├── user-guide/         # Comprehensive user documentation
     ├── guides/             # Getting started guides
     ├── api/                # API documentation
     └── contributing/       # Developer contribution guides

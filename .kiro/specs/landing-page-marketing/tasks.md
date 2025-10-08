@@ -128,22 +128,35 @@
   - Implement responsive layout with proper navigation
   - _Requirements: 3.6, 5.2, 6.6_
 
-- [ ] 8.2 Implement about and contact pages
+- [ ] 8.2 Create pricing page for free tier communication
+  - Build pricing page emphasizing free tier and value proposition
+  - Add comparison with paid alternatives and feature highlights
+  - Implement clear CTAs directing to sign-up flow
+  - _Requirements: 2.5, 4.1, 4.2_
+
+- [ ] 8.3 Implement get-started onboarding flow
+  - Create get-started page with step-by-step onboarding guide
+  - Build user journey from sign-up to first team creation
+  - Add progress indicators and clear next steps
+  - _Requirements: 4.1, 4.3, 4.6_
+
+- [ ] 8.4 Implement about and contact pages
   - Create About page with team information and mission
   - Build Contact page with support information and forms
   - Add proper meta tags and SEO optimization
   - _Requirements: 5.2, 6.1, 10.2_
 
-- [ ] 8.3 Create legal pages (Privacy Policy, Terms of Service)
+- [ ] 8.5 Create legal pages (Privacy Policy, Terms of Service)
   - Implement Privacy Policy with GDPR compliance
   - Create Terms of Service appropriate for free platform
   - Add proper legal disclaimers and contact information
   - _Requirements: 7.6, 10.2_
 
-- [ ]* 8.4 Write supporting page tests
+- [ ]* 8.6 Write supporting page tests
   - Test page navigation and content display
   - Verify form functionality and legal page accessibility
-  - _Requirements: 5.2, 10.2_
+  - Test pricing page CTAs and get-started flow
+  - _Requirements: 5.2, 10.2, 4.1_
 
 - [ ] 9. Build documentation site structure
 - [ ] 9.1 Set up MDX configuration and documentation framework
@@ -159,7 +172,8 @@
   - _Requirements: 5.4, 5.6, 5.7_
 
 - [ ] 9.3 Build initial documentation content
-  - Create getting started guide and user documentation
+  - Create getting started guides for quick onboarding
+  - Build comprehensive user documentation for detailed feature explanations
   - Add API reference documentation structure
   - Implement contribution guidelines and developer setup
   - _Requirements: 5.2, 5.3, 5.5_
