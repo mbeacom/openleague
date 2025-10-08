@@ -1,4 +1,4 @@
-import { requireUserId } from "@/lib/auth/session";
+import { requireUserId, canUserCreateLeagueGames } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
 import { Container, Box, Typography } from "@mui/material";
 import { notFound } from "next/navigation";
@@ -37,17 +37,7 @@ export default async function NewGamePage({ params }: NewGamePageProps) {
   }
 
   // Check if user can create inter-team games (league admin or team admin)
-  const canCreateGames = leagueUser.role === "LEAGUE_ADMIN" || 
-    await prisma.teamMember.findFirst({
-      where: {
-        userId,
-        role: "ADMIN",
-        team: {
-          leagueId,
-          isActive: true,
-        },
-      },
-    });
+  const canCreateGames = await canUserCreateLeagueGames(userId, leagueId, leagueUser.role);
 
   if (!canCreateGames) {
     notFound();

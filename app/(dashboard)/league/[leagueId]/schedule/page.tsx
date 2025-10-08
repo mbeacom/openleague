@@ -1,4 +1,4 @@
-import { requireUserId } from "@/lib/auth/session";
+import { requireUserId, canUserCreateLeagueGames } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
 import { Container, Box, Typography, Button } from "@mui/material";
 import { Add } from "@mui/icons-material";
@@ -39,17 +39,8 @@ export default async function LeagueSchedulePage({ params }: LeagueSchedulePageP
   }
 
   // Check if user can create inter-team games (league admin or team admin)
-  const [teamAdminCheck, events, teams, divisions] = await Promise.all([
-    leagueUser.role === "LEAGUE_ADMIN" ? null : prisma.teamMember.findFirst({
-      where: {
-        userId,
-        role: "ADMIN",
-        team: {
-          leagueId,
-          isActive: true,
-        },
-      },
-    }),
+  const [canCreateGames, events, teams, divisions] = await Promise.all([
+    canUserCreateLeagueGames(userId, leagueId, leagueUser.role),
     // Fetch all league events
     prisma.event.findMany({
       where: {
@@ -108,8 +99,6 @@ export default async function LeagueSchedulePage({ params }: LeagueSchedulePageP
       },
     }),
   ]);
-
-  const canCreateGames = leagueUser.role === "LEAGUE_ADMIN" || teamAdminCheck;
 
   // Serialize events for client component
   const serializedEvents = events.map(event => ({

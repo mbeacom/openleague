@@ -73,6 +73,9 @@ export default function LeagueCalendar({
   const filteredEvents = useMemo(() => {
     const now = new Date();
 
+    // Create a Map for O(1) team lookups by ID
+    const teamMap = new Map(teams.map(t => [t.id, t]));
+
     return events.filter(event => {
       const eventDate = new Date(event.startAt);
 
@@ -91,11 +94,11 @@ export default function LeagueCalendar({
         if (!isTeamInvolved) return false;
       }
 
-      // Division filter
+      // Division filter with O(1) Map lookups
       if (selectedDivisions.length > 0) {
-        const team = teams.find(t => t.id === event.team.id);
-        const homeTeam = event.homeTeam ? teams.find(t => t.id === event.homeTeam?.id) : null;
-        const awayTeam = event.awayTeam ? teams.find(t => t.id === event.awayTeam?.id) : null;
+        const team = teamMap.get(event.team.id);
+        const homeTeam = event.homeTeam ? teamMap.get(event.homeTeam?.id) : null;
+        const awayTeam = event.awayTeam ? teamMap.get(event.awayTeam?.id) : null;
 
         const isDivisionInvolved =
           (team?.division && selectedDivisions.includes(team.division.id)) ||
