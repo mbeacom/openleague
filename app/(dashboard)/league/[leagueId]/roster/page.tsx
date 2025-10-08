@@ -12,8 +12,8 @@ interface LeagueRosterPageProps {
 }
 
 export default async function LeagueRosterPage({ params }: LeagueRosterPageProps) {
-  const userId = await requireUserId();
-  const { leagueId } = await params;
+  // Parallelize independent async operations for better performance
+  const [{ leagueId }, userId] = await Promise.all([params, requireUserId()]);
 
   // Verify user has access to this league
   const leagueUser = await prisma.leagueUser.findFirst({
