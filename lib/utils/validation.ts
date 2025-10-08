@@ -166,6 +166,45 @@ export const sendInvitationSchema = z.object({
   teamId: z.string().cuid("Invalid team ID format"),
 });
 
+// League validation schemas
+export const createLeagueSchema = z.object({
+  name: sanitizedStringWithMin(1, 100).refine(val => val.length > 0, "League name is required"),
+  sport: sanitizedStringWithMin(1, 50).refine(val => val.length > 0, "Sport is required"),
+  contactEmail: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .email("Invalid email address")
+    .max(254, "Email must be less than 254 characters"),
+  contactPhone: optionalSanitizedString(20),
+});
+
+export const updateLeagueSettingsSchema = z.object({
+  id: z.string().cuid("Invalid league ID format"),
+  name: sanitizedStringWithMin(1, 100).refine(val => val.length > 0, "League name is required"),
+  sport: sanitizedStringWithMin(1, 50).refine(val => val.length > 0, "Sport is required"),
+  contactEmail: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .email("Invalid email address")
+    .max(254, "Email must be less than 254 characters"),
+  contactPhone: optionalSanitizedString(20),
+});
+
+export const addTeamToLeagueSchema = z.object({
+  leagueId: z.string().cuid("Invalid league ID format"),
+  name: sanitizedStringWithMin(1, 100).refine(val => val.length > 0, "Team name is required"),
+  sport: sanitizedStringWithMin(1, 50).refine(val => val.length > 0, "Sport is required"),
+  season: sanitizedStringWithMin(1, 50).refine(val => val.length > 0, "Season is required"),
+  divisionId: z.string().cuid("Invalid division ID format").optional(),
+});
+
+export const migrateTeamToLeagueSchema = z.object({
+  teamId: z.string().cuid("Invalid team ID format"),
+  leagueData: createLeagueSchema,
+});
+
 // Type exports
 export type SignupInput = z.infer<typeof signupSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
@@ -176,3 +215,7 @@ export type CreateEventInput = z.infer<typeof createEventSchema>;
 export type UpdateEventInput = z.infer<typeof updateEventSchema>;
 export type UpdateRSVPInput = z.infer<typeof updateRSVPSchema>;
 export type SendInvitationInput = z.infer<typeof sendInvitationSchema>;
+export type CreateLeagueInput = z.infer<typeof createLeagueSchema>;
+export type UpdateLeagueSettingsInput = z.infer<typeof updateLeagueSettingsSchema>;
+export type AddTeamToLeagueInput = z.infer<typeof addTeamToLeagueSchema>;
+export type MigrateTeamToLeagueInput = z.infer<typeof migrateTeamToLeagueSchema>;
