@@ -2,36 +2,37 @@
 
 ## Overview
 
-The OpenLeague landing page and marketing website will be built as a separate Next.js application optimized for marketing, conversion, and SEO. This design focuses on creating a professional, trustworthy experience that clearly communicates OpenLeague's value proposition while providing multiple paths for user engagement and conversion.
+The OpenLeague landing page and marketing website will be integrated into the existing Next.js 15+ application, leveraging the current tech stack including React 19 and MUI v7+. This design focuses on creating a professional, trustworthy experience that clearly communicates OpenLeague's value proposition while providing multiple paths for user engagement and conversion.
 
-The site will follow modern SaaS landing page best practices, with a focus on mobile-first responsive design, fast loading times, and clear conversion funnels. The architecture will support both the main marketing site (openl.app) and documentation site (openleague.dev) from a single codebase.
+The site will follow modern SaaS landing page best practices, with a focus on mobile-first responsive design, fast loading times, and clear conversion funnels. The architecture will support both the main marketing site (openl.app) and documentation site (openleague.dev) within the existing project structure.
 
 ## Architecture
 
 ### Technical Stack
-- **Framework**: Next.js 15+ with App Router for optimal SEO and performance
-- **Styling**: Tailwind CSS for rapid development and consistent design system
+- **Framework**: Next.js 15+ with App Router (existing OpenLeague project)
+- **UI Library**: MUI (Material-UI) v7+ for consistent design system
+- **Styling**: MUI theming with optional Tailwind CSS for marketing utilities
 - **Content**: MDX for documentation pages with syntax highlighting
 - **Analytics**: Google Analytics 4 and privacy-compliant tracking
 - **Deployment**: Vercel for main site, GitHub Pages for documentation
 - **Performance**: Image optimization, lazy loading, and aggressive caching
 
-### Site Structure
+### Site Structure (Integrated into existing app)
 ```
-openl.app/                    # Main marketing site
-├── /                         # Landing page
-├── /features                 # Detailed feature explanations
-├── /pricing                  # Pricing information (free tier focus)
-├── /about                    # About OpenLeague and team
-├── /contact                  # Contact and support information
-└── /get-started             # Sign-up flow and onboarding
-
-openleague.dev/              # Documentation site
-├── /                        # Documentation home
-├── /docs/                   # User documentation
-├── /api/                    # API documentation
-├── /guides/                 # Getting started guides
-└── /contributing/           # Developer contribution guides
+app/                         # Next.js App Router (existing)
+├── (marketing)/             # Marketing route group
+│   ├── page.tsx            # Landing page (/)
+│   ├── features/           # Feature explanations
+│   ├── about/              # About page
+│   ├── contact/            # Contact page
+│   └── layout.tsx          # Marketing layout
+├── (dashboard)/            # Existing dashboard routes
+├── (auth)/                 # Existing auth routes
+└── docs/                   # Documentation pages
+    ├── page.tsx            # Documentation home
+    ├── guides/             # Getting started guides
+    ├── api/                # API documentation
+    └── contributing/       # Developer contribution guides
 ```
 
 ### Responsive Breakpoints
@@ -266,30 +267,29 @@ interface DocumentationPage {
 
 ## Visual Design System
 
-### Color Palette
-- **Primary**: Sports-inspired blue (#1976D2) for trust and reliability
-- **Secondary**: Energetic orange (#FF9800) for CTAs and highlights
-- **Neutral**: Clean grays (#F5F5F5, #757575) for text and backgrounds
-- **Success**: Green (#4CAF50) for positive actions and confirmations
-- **Error**: Red (#F44336) for warnings and error states
+### MUI Theme Extension
+- **Primary**: Sports-inspired blue (#1976D2) - extends existing MUI theme
+- **Secondary**: Energetic orange (#FF9800) for marketing CTAs and highlights
+- **Marketing Palette**: Additional colors for landing page specific elements
+- **Success/Error**: Leverage existing MUI theme colors for consistency
 
-### Typography
-- **Headings**: Inter or similar modern sans-serif for clarity
-- **Body Text**: System fonts for optimal performance and readability
-- **Code**: JetBrains Mono for documentation and technical content
-- **Scale**: Modular scale with clear hierarchy (16px base, 1.25 ratio)
+### Typography (MUI Typography System)
+- **Headings**: Extend MUI Typography variants (h1-h6) for marketing
+- **Body Text**: Use MUI Typography body1/body2 with custom marketing variants
+- **Code**: Leverage existing code typography from main application
+- **Marketing Scale**: Custom typography variants for hero and CTA sections
 
-### Spacing and Layout
-- **Grid System**: 12-column grid with consistent gutters
-- **Spacing Scale**: 8px base unit for consistent spacing
-- **Container Widths**: Max 1200px for readability
-- **Vertical Rhythm**: Consistent line heights and spacing
+### Spacing and Layout (MUI System)
+- **Grid System**: MUI Grid2 system with responsive breakpoints
+- **Spacing Scale**: MUI spacing system (theme.spacing) for consistency
+- **Container Widths**: MUI Container with custom maxWidth for marketing
+- **Breakpoints**: Extend MUI breakpoints for marketing-specific responsive design
 
-### Interactive Elements
-- **Buttons**: Clear hierarchy with primary, secondary, and text variants
-- **Forms**: Clean, accessible inputs with proper labeling
-- **Navigation**: Intuitive hover states and active indicators
-- **Animations**: Subtle, purposeful animations that enhance UX
+### Interactive Elements (MUI Components)
+- **Buttons**: Custom MUI Button variants for marketing CTAs
+- **Cards**: MUI Card components for features and testimonials
+- **Navigation**: MUI AppBar and Drawer for marketing navigation
+- **Animations**: MUI transitions and Framer Motion for enhanced UX
 
 ## Deployment and Infrastructure
 

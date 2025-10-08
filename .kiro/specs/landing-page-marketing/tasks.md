@@ -1,41 +1,41 @@
 # Implementation Plan
 
-- [ ] 1. Set up Next.js project structure and core configuration
-  - Initialize new Next.js 14+ project with App Router and TypeScript
-  - Configure Tailwind CSS for styling and design system
-  - Set up project structure for marketing site and documentation
-  - Configure environment variables and deployment settings
+- [ ] 1. Set up marketing routes and configuration in existing project
+  - Create (marketing) route group in existing Next.js 15+ app
+  - Configure optional Tailwind CSS for marketing utilities alongside MUI
+  - Set up marketing layout and documentation structure
+  - Configure environment variables for analytics and tracking
   - _Requirements: 8.1, 8.2, 8.3, 8.4_
 
 - [ ] 2. Create foundational components and design system
-- [ ] 2.1 Implement core UI components and design tokens
-  - Create design system with colors, typography, and spacing scales
-  - Build reusable Button, Input, and Container components
-  - Implement responsive grid system and layout utilities
+- [ ] 2.1 Extend MUI theme for marketing components
+  - Extend existing MUI theme with marketing-specific colors and typography
+  - Create marketing-specific MUI component variants and styles
+  - Implement responsive breakpoints using MUI's system
   - _Requirements: 9.1, 9.2, 9.3, 9.4_
 
-- [ ] 2.2 Build shared navigation and layout components
-  - Create Header component with logo, navigation, and mobile menu
-  - Implement Footer component with site links and legal pages
-  - Build responsive navigation with mobile hamburger menu
+- [ ] 2.2 Create marketing layout components using MUI
+  - Create MarketingHeader component with MUI AppBar and navigation
+  - Implement MarketingFooter component with MUI Grid and Typography
+  - Build responsive navigation using MUI Drawer for mobile
   - _Requirements: 1.7, 9.1, 9.6_
 
-- [ ]* 2.3 Write component unit tests
-  - Create tests for Button, Input, and layout components
+- [ ]* 2.3 Write marketing component unit tests
+  - Create tests for marketing layout and MUI component variants
   - Test responsive behavior and accessibility features
   - _Requirements: 8.1, 8.2_
 
 - [ ] 3. Implement landing page hero section
-- [ ] 3.1 Create hero section with value proposition
-  - Build Hero component with headline, subheading, and CTA buttons
-  - Implement responsive layout with proper typography scaling
-  - Add hero image/video placeholder with optimized loading
+- [ ] 3.1 Create hero section with value proposition using MUI
+  - Build Hero component with MUI Typography, Container, and Button
+  - Implement responsive layout using MUI Grid and breakpoints
+  - Add hero image with Next.js Image component and MUI Box
   - _Requirements: 1.1, 1.2, 2.1, 2.2_
 
 - [ ] 3.2 Add call-to-action buttons and conversion tracking
-  - Implement primary and secondary CTA buttons with proper styling
+  - Implement primary and secondary MUI Buttons with custom variants
   - Add click tracking and analytics event firing
-  - Create hover states and interactive feedback
+  - Create hover states using MUI's sx prop and theme
   - _Requirements: 4.1, 4.2, 7.2, 7.3_
 
 - [ ]* 3.3 Write hero section tests
@@ -44,16 +44,16 @@
   - _Requirements: 1.1, 4.1_
 
 - [ ] 4. Build feature showcase and problem/solution sections
-- [ ] 4.1 Create problem/solution comparison section
-  - Implement before/after visual comparison layout
-  - Add content highlighting pain points and solutions
-  - Create responsive design with mobile-optimized layout
+- [ ] 4.1 Create problem/solution comparison section with MUI
+  - Implement before/after visual comparison using MUI Grid and Cards
+  - Add content highlighting pain points using MUI Typography and Icons
+  - Create responsive design with MUI breakpoints and Stack components
   - _Requirements: 2.3, 2.4, 3.1, 3.2_
 
 - [ ] 4.2 Implement feature showcase with visual demonstrations
-  - Build Feature component with image, title, and description
-  - Create responsive grid layout for multiple features
-  - Add feature screenshots/mockups with lazy loading
+  - Build Feature component using MUI Card, CardMedia, and CardContent
+  - Create responsive grid layout using MUI Grid2 system
+  - Add feature screenshots/mockups with Next.js Image and MUI Skeleton
   - _Requirements: 3.3, 3.4, 3.5, 3.6_
 
 - [ ] 4.3 Add interactive elements and animations
@@ -68,10 +68,10 @@
   - _Requirements: 3.1, 3.2_
 
 - [ ] 5. Create social proof and testimonial sections
-- [ ] 5.1 Build testimonial component and layout
-  - Create Testimonial component with quote, author, and avatar
-  - Implement responsive testimonial grid or carousel
-  - Add placeholder content and proper typography
+- [ ] 5.1 Build testimonial component and layout with MUI
+  - Create Testimonial component using MUI Card, Avatar, and Typography
+  - Implement responsive testimonial grid using MUI Grid and Stack
+  - Add placeholder content with proper MUI Typography variants
   - _Requirements: 2.6, 2.7, 9.1_
 
 - [ ] 5.2 Add usage statistics and credibility indicators
