@@ -271,6 +271,40 @@ export const getLeagueTeamsSchema = z.object({
   divisionId: z.string().cuid().optional().nullable(),
 });
 
+// Inter-team game validation schema
+export const createInterTeamGameSchema = z.object({
+  title: sanitizedStringWithMin(1, 100).refine(val => val.length > 0, "Title is required"),
+  startAt: z.coerce.date({
+    message: "Valid date and time is required",
+  }),
+  location: sanitizedStringWithMin(1, 200).refine(val => val.length > 0, "Location is required"),
+  notes: optionalSanitizedString(1000),
+  leagueId: z.string().cuid("Invalid league ID format"),
+  homeTeamId: z.string().cuid("Invalid home team ID format"),
+  awayTeamId: z.string().cuid("Invalid away team ID format"),
+  overrideConflicts: z.boolean().optional().default(false),
+})
+  .refine(
+    (data) => {
+      // Validate date is not in the past
+      return data.startAt > new Date();
+    },
+    {
+      message: "Game date must be in the future",
+      path: ["startAt"],
+    }
+  )
+  .refine(
+    (data) => {
+      // Ensure home and away teams are different
+      return data.homeTeamId !== data.awayTeamId;
+    },
+    {
+      message: "Home and away teams must be different",
+      path: ["awayTeamId"],
+    }
+  );
+
 // Type exports
 export type SignupInput = z.infer<typeof signupSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
@@ -279,6 +313,7 @@ export type AddPlayerInput = z.infer<typeof addPlayerSchema>;
 export type UpdatePlayerInput = z.infer<typeof updatePlayerSchema>;
 export type CreateEventInput = z.infer<typeof createEventSchema>;
 export type UpdateEventInput = z.infer<typeof updateEventSchema>;
+export type CreateInterTeamGameInput = z.infer<typeof createInterTeamGameSchema>;
 export type UpdateRSVPInput = z.infer<typeof updateRSVPSchema>;
 export type SendInvitationInput = z.infer<typeof sendInvitationSchema>;
 export type SendLeagueInvitationInput = z.infer<typeof sendLeagueInvitationSchema>;
