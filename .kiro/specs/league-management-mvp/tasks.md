@@ -131,9 +131,9 @@
     - Add unsubscribe management for league communications
     - _Requirements: 5.7, 9.4_
 
-- [ ] 6. Build user interface and navigation
+- [x] 6. Build user interface and navigation
 
-  - [ ] 6.1 Create adaptive navigation system
+  - [x] 6.1 Create adaptive navigation system
 
     - Build navigation that adapts based on single-team vs league mode
     - Implement league context switching for multi-league users (future)
@@ -141,7 +141,7 @@
     - Add mobile-optimized navigation for league features
     - _Requirements: 1.7, 9.1, 9.2, 9.3_
 
-  - [ ] 6.2 Build league dashboard
+  - [x] 6.2 Build league dashboard
 
     - Create league overview dashboard with key metrics
     - Implement recent activity feed across all teams
@@ -149,7 +149,7 @@
     - Add quick action buttons for common league tasks
     - _Requirements: 1.4, 1.5, 7.1, 7.2_
 
-  - [ ] 6.3 Create team management interface
+  - [x] 6.3 Create team management interface
     - Build team list view with division organization
     - Implement team cards with player counts and recent activity
     - Create team creation and editing forms within league context

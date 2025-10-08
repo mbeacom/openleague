@@ -27,29 +27,13 @@ import {
   MoreVert as MoreVertIcon,
 } from "@mui/icons-material";
 import { logout } from "@/lib/actions/logout";
+import { useLeague } from "@/components/providers/LeagueProvider";
 
 interface NavItem {
   label: string;
   path: string;
   icon: React.ReactNode;
 }
-
-// Single-team mode navigation (original)
-const singleTeamNavItems: NavItem[] = [
-  { label: "Dashboard", path: "/", icon: <DashboardIcon /> },
-  { label: "Roster", path: "/roster", icon: <PeopleIcon /> },
-  { label: "Calendar", path: "/calendar", icon: <CalendarIcon /> },
-  { label: "Events", path: "/events", icon: <EventIcon /> },
-];
-
-// League mode navigation
-const leagueNavItems: NavItem[] = [
-  { label: "Dashboard", path: "/", icon: <DashboardIcon /> },
-  { label: "Teams", path: "/teams", icon: <GroupsIcon /> },
-  { label: "Schedule", path: "/schedule", icon: <CalendarIcon /> },
-  { label: "Roster", path: "/roster", icon: <PeopleIcon /> },
-  { label: "Settings", path: "/settings", icon: <SettingsIcon /> },
-];
 
 interface DashboardNavProps {
   mobile?: boolean;
@@ -61,9 +45,40 @@ export default function DashboardNav({ mobile = false, isLeagueMode = false }: D
   const router = useRouter();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const menuOpen = Boolean(anchorEl);
+  
+  // Use league context if available
+  let currentLeague = null;
+  try {
+    const leagueContext = useLeague();
+    currentLeague = leagueContext.currentLeague;
+  } catch {
+    // Not in league context, use props
+  }
 
-  // Select navigation items based on mode
-  const navItems = isLeagueMode ? leagueNavItems : singleTeamNavItems;
+  // Generate navigation items based on mode and context
+  const getNavItems = (): NavItem[] => {
+    if (!isLeagueMode) {
+      // Single-team mode navigation (original)
+      return [
+        { label: "Dashboard", path: "/dashboard", icon: <DashboardIcon /> },
+        { label: "Roster", path: "/roster", icon: <PeopleIcon /> },
+        { label: "Calendar", path: "/calendar", icon: <CalendarIcon /> },
+        { label: "Events", path: "/events", icon: <EventIcon /> },
+      ];
+    }
+
+    // League mode navigation with dynamic paths
+    const leaguePrefix = currentLeague ? `/league/${currentLeague.id}` : '';
+    return [
+      { label: "Dashboard", path: `${leaguePrefix}/dashboard`, icon: <DashboardIcon /> },
+      { label: "Teams", path: `${leaguePrefix}/teams`, icon: <GroupsIcon /> },
+      { label: "Schedule", path: `${leaguePrefix}/schedule`, icon: <CalendarIcon /> },
+      { label: "Roster", path: `${leaguePrefix}/roster`, icon: <PeopleIcon /> },
+      { label: "Settings", path: `${leaguePrefix}/settings`, icon: <SettingsIcon /> },
+    ];
+  };
+
+  const navItems = getNavItems();
 
   const handleNavigation = (path: string) => {
     router.push(path);

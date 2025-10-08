@@ -962,3 +962,448 @@ export async function getLeagueTeamsPaginated(
     };
   }
 }
+
+/**
+ * Check if a user has access to a specific league
+ */
+export async function hasLeagueAccess(userId: string, leagueId: string): Promise<boolean> {
+  try {
+    const leagueUser = await prisma.leagueUser.findFirst({
+      where: {
+        leagueId,
+        userId,
+        league: {
+          isActive: true,
+        },
+      },
+    });
+
+    return !!leagueUser;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Get league data with comprehensive statistics for dashboard
+ */
+export async function getLeagueWithStats(leagueId: string): Promise<{
+  id: string;
+  name: string;
+  sport: string;
+  contactEmail: string;
+  contactPhone: string | null;
+  createdAt: Date;
+  stats: {
+    totalTeams: number;
+    totalPlayers: number;
+    totalEvents: number;
+    upcomingEvents: number;
+    activeDivisions: number;
+  };
+  recentActivity: Array<{
+    id: string;
+    type: 'team_created' | 'player_added' | 'event_scheduled' | 'division_created';
+    description: string;
+    timestamp: Date;
+    teamName?: string;
+    playerName?: string;
+    eventTitle?: string;
+    divisionName?: string;
+  }>;
+  upcomingEvents: Array<{
+    id: string;
+    title: string;
+    startAt: Date;
+    location: string;
+    teamName: string;
+    homeTeamName?: string;
+    awayTeamName?: string;
+    type: string;
+  }>;
+  divisions: Array<{
+    id: string;
+    name: string;
+    ageGroup: string | null;
+    skillLevel: string | null;
+    teamCount: number;
+  }>;
+} | null> {
+  try {
+    // Get basic league info
+    const league = await prisma.league.findFirst({
+      where: {
+        id: leagueId,
+        isActive: true,
+      },
+      select: {
+        id: true,
+        name: true,
+        sport: true,
+        contactEmail: true,
+        contactPhone: true,
+        createdAt: true,
+      },
+    });
+
+    if (!league) return null;
+
+    // Get statistics
+    const [
+      totalTeams,
+      totalPlayers,
+      totalEvents,
+      upcomingEventsCount,
+      activeDivisions,
+    ] = await Promise.all([
+      prisma.team.count({
+        where: { leagueId, isActive: true },
+      }),
+      prisma.player.count({
+        where: { leagueId },
+      }),
+      prisma.event.count({
+        where: { leagueId },
+      }),
+      prisma.event.count({
+        where: {
+          leagueId,
+          startAt: { gte: new Date() },
+        },
+      }),
+      prisma.division.count({
+        where: { leagueId, isActive: true },
+      }),
+    ]);
+
+    // Get recent activity (last 10 items)
+    const [recentTeams, recentPlayers, recentEvents, recentDivisions] = await Promise.all([
+      prisma.team.findMany({
+        where: { leagueId, isActive: true },
+        select: {
+          id: true,
+          name: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 3,
+      }),
+      prisma.player.findMany({
+        where: { leagueId },
+        select: {
+          id: true,
+          name: true,
+          createdAt: true,
+          team: {
+            select: { name: true },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 3,
+      }),
+      prisma.event.findMany({
+        where: { leagueId },
+        select: {
+          id: true,
+          title: true,
+          createdAt: true,
+          team: {
+            select: { name: true },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 3,
+      }),
+      prisma.division.findMany({
+        where: { leagueId, isActive: true },
+        select: {
+          id: true,
+          name: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 2,
+      }),
+    ]);
+
+    // Combine and sort recent activity
+    const recentActivity = [
+      ...recentTeams.map(team => ({
+        id: team.id,
+        type: 'team_created' as const,
+        description: `Team "${team.name}" was created`,
+        timestamp: team.createdAt,
+        teamName: team.name,
+      })),
+      ...recentPlayers.map(player => ({
+        id: player.id,
+        type: 'player_added' as const,
+        description: `${player.name} joined ${player.team.name}`,
+        timestamp: player.createdAt,
+        playerName: player.name,
+        teamName: player.team.name,
+      })),
+      ...recentEvents.map(event => ({
+        id: event.id,
+        type: 'event_scheduled' as const,
+        description: `Event "${event.title}" scheduled for ${event.team.name}`,
+        timestamp: event.createdAt,
+        eventTitle: event.title,
+        teamName: event.team.name,
+      })),
+      ...recentDivisions.map(division => ({
+        id: division.id,
+        type: 'division_created' as const,
+        description: `Division "${division.name}" was created`,
+        timestamp: division.createdAt,
+        divisionName: division.name,
+      })),
+    ]
+      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+      .slice(0, 10);
+
+    // Get upcoming events (next 5)
+    const upcomingEvents = await prisma.event.findMany({
+      where: {
+        leagueId,
+        startAt: { gte: new Date() },
+      },
+      select: {
+        id: true,
+        title: true,
+        startAt: true,
+        location: true,
+        type: true,
+        team: {
+          select: { name: true },
+        },
+        homeTeam: {
+          select: { name: true },
+        },
+        awayTeam: {
+          select: { name: true },
+        },
+      },
+      orderBy: { startAt: 'asc' },
+      take: 5,
+    });
+
+    // Get divisions with team counts
+    const divisions = await prisma.division.findMany({
+      where: { leagueId, isActive: true },
+      select: {
+        id: true,
+        name: true,
+        ageGroup: true,
+        skillLevel: true,
+        _count: {
+          select: {
+            teams: {
+              where: { isActive: true },
+            },
+          },
+        },
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    return {
+      ...league,
+      stats: {
+        totalTeams,
+        totalPlayers,
+        totalEvents,
+        upcomingEvents: upcomingEventsCount,
+        activeDivisions,
+      },
+      recentActivity,
+      upcomingEvents: upcomingEvents.map(event => ({
+        id: event.id,
+        title: event.title,
+        startAt: event.startAt,
+        location: event.location,
+        type: event.type,
+        teamName: event.team.name,
+        homeTeamName: event.homeTeam?.name,
+        awayTeamName: event.awayTeam?.name,
+      })),
+      divisions: divisions.map(division => ({
+        id: division.id,
+        name: division.name,
+        ageGroup: division.ageGroup,
+        skillLevel: division.skillLevel,
+        teamCount: division._count.teams,
+      })),
+    };
+  } catch (error) {
+    console.error("Error fetching league with stats:", error);
+    return null;
+  }
+}/**
+ *
+ Get league teams organized by divisions for team management interface
+ */
+export async function getLeagueTeamsWithDivisions(leagueId: string): Promise<{
+  id: string;
+  name: string;
+  sport: string;
+  divisions: Array<{
+    id: string;
+    name: string;
+    ageGroup: string | null;
+    skillLevel: string | null;
+    teams: Array<{
+      id: string;
+      name: string;
+      sport: string;
+      season: string;
+      createdAt: Date;
+      _count: {
+        players: number;
+        events: number;
+      };
+    }>;
+  }>;
+  unassignedTeams: Array<{
+    id: string;
+    name: string;
+    sport: string;
+    season: string;
+    createdAt: Date;
+    _count: {
+      players: number;
+      events: number;
+    };
+  }>;
+  stats: {
+    totalTeams: number;
+    totalPlayers: number;
+    totalDivisions: number;
+  };
+} | null> {
+  try {
+    // Get basic league info
+    const league = await prisma.league.findFirst({
+      where: {
+        id: leagueId,
+        isActive: true,
+      },
+      select: {
+        id: true,
+        name: true,
+        sport: true,
+      },
+    });
+
+    if (!league) return null;
+
+    // Get divisions with their teams
+    const divisions = await prisma.division.findMany({
+      where: {
+        leagueId,
+        isActive: true,
+      },
+      select: {
+        id: true,
+        name: true,
+        ageGroup: true,
+        skillLevel: true,
+        teams: {
+          where: { isActive: true },
+          select: {
+            id: true,
+            name: true,
+            sport: true,
+            season: true,
+            createdAt: true,
+            _count: {
+              select: {
+                players: true,
+                events: true,
+              },
+            },
+          },
+          orderBy: { name: 'asc' },
+        },
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    // Get teams not assigned to any division
+    const unassignedTeams = await prisma.team.findMany({
+      where: {
+        leagueId,
+        divisionId: null,
+        isActive: true,
+      },
+      select: {
+        id: true,
+        name: true,
+        sport: true,
+        season: true,
+        createdAt: true,
+        _count: {
+          select: {
+            players: true,
+            events: true,
+          },
+        },
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    // Get statistics
+    const [totalTeams, totalPlayers] = await Promise.all([
+      prisma.team.count({
+        where: { leagueId, isActive: true },
+      }),
+      prisma.player.count({
+        where: { leagueId },
+      }),
+    ]);
+
+    return {
+      ...league,
+      divisions,
+      unassignedTeams,
+      stats: {
+        totalTeams,
+        totalPlayers,
+        totalDivisions: divisions.length,
+      },
+    };
+  } catch (error) {
+    console.error("Error fetching league teams with divisions:", error);
+    return null;
+  }
+}/*
+*
+ * Get all divisions for a league (for form dropdowns)
+ */
+export async function getLeagueDivisions(leagueId: string): Promise<Array<{
+  id: string;
+  name: string;
+  ageGroup: string | null;
+  skillLevel: string | null;
+}>> {
+  try {
+    const divisions = await prisma.division.findMany({
+      where: {
+        leagueId,
+        isActive: true,
+      },
+      select: {
+        id: true,
+        name: true,
+        ageGroup: true,
+        skillLevel: true,
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    return divisions;
+  } catch (error) {
+    console.error("Error fetching league divisions:", error);
+    return [];
+  }
+}
