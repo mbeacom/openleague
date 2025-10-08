@@ -1,6 +1,8 @@
 import { ReactNode } from "react";
 import { requireAuth, requireUserId } from "@/lib/auth/session";
 import { Box, AppBar, Toolbar, Typography } from "@mui/material";
+import Image from "next/image";
+import Link from "next/link";
 import DashboardNav from "@/components/features/dashboard/DashboardNav";
 import ErrorBoundary from "@/components/ui/ErrorBoundary";
 import { getUserMode } from "@/lib/utils/league-mode";
@@ -12,7 +14,7 @@ export default async function DashboardLayout({
 }) {
   // Require authentication for all dashboard routes
   await requireAuth();
-  
+
   // Get user mode for adaptive navigation
   const userId = await requireUserId();
   const userMode = await getUserMode(userId);
@@ -27,9 +29,29 @@ export default async function DashboardLayout({
         }}
       >
         <Toolbar>
-          <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-            OpenLeague
-          </Typography>
+          <Box
+            component={Link}
+            href="/dashboard"
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1.5,
+              textDecoration: 'none',
+              color: 'inherit',
+              flexGrow: 1,
+            }}
+          >
+            <Image
+              src="/images/logo.webp"
+              alt="OpenLeague Logo"
+              width={36}
+              height={36}
+              priority
+            />
+            <Typography variant="h6" component="div">
+              OpenLeague
+            </Typography>
+          </Box>
         </Toolbar>
       </AppBar>
 
@@ -47,8 +69,30 @@ export default async function DashboardLayout({
             bgcolor: "background.paper",
           }}
         >
-          <Box sx={{ p: 2 }}>
-            <Typography variant="h5" component="div" color="primary">
+          <Box
+            component={Link}
+            href="/dashboard"
+            sx={{
+              p: 2,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1.5,
+              textDecoration: 'none',
+              color: 'inherit',
+              transition: 'transform 0.2s ease-in-out',
+              '&:hover': {
+                transform: 'scale(1.02)',
+              },
+            }}
+          >
+            <Image
+              src="/images/logo.webp"
+              alt="OpenLeague Logo"
+              width={40}
+              height={40}
+              priority
+            />
+            <Typography variant="h5" component="div" color="primary" sx={{ fontWeight: 600 }}>
               OpenLeague
             </Typography>
           </Box>
