@@ -2,6 +2,7 @@ import { requireUserId } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
 import { Box, Container, Typography, Card, CardContent, Chip } from "@mui/material";
 import CreateTeamForm from "@/components/features/team/CreateTeamForm";
+import TeamCard from "@/components/features/dashboard/TeamCard";
 import { getUserMode } from "@/lib/utils/league-mode";
 
 export default async function DashboardPage() {
@@ -145,42 +146,12 @@ export default async function DashboardPage() {
               }}
             >
               {teams.map((teamMember: typeof teams[0]) => (
-                <Card key={teamMember.team.id}>
-                  <CardContent>
-                    <Typography variant="h6" component="h3" gutterBottom>
-                      {teamMember.team.name}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" gutterBottom>
-                      {teamMember.team.sport} • {teamMember.team.season}
-                    </Typography>
-                    
-                    {/* League and Division Info */}
-                    <Box sx={{ mb: 1 }}>
-                      {teamMember.team.league && (
-                        <Chip 
-                          label={teamMember.team.league.name} 
-                          size="small" 
-                          variant="outlined"
-                          sx={{ mr: 1, mb: 0.5 }}
-                        />
-                      )}
-                      {teamMember.team.division && (
-                        <Chip 
-                          label={teamMember.team.division.name} 
-                          size="small" 
-                          variant="outlined"
-                          sx={{ mb: 0.5 }}
-                        />
-                      )}
-                    </Box>
-
-                    <Chip
-                      label={teamMember.role}
-                      size="small"
-                      color={teamMember.role === "ADMIN" ? "primary" : "default"}
-                    />
-                  </CardContent>
-                </Card>
+                <TeamCard
+                  key={teamMember.team.id}
+                  team={teamMember.team}
+                  role={teamMember.role}
+                  showLeagueInfo={true}
+                />
               ))}
             </Box>
           </>
@@ -204,22 +175,12 @@ export default async function DashboardPage() {
               }}
             >
               {teams.map((teamMember: typeof teams[0]) => (
-                <Card key={teamMember.team.id}>
-                  <CardContent>
-                    <Typography variant="h6" component="h2" gutterBottom>
-                      {teamMember.team.name}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {teamMember.team.sport} • {teamMember.team.season}
-                    </Typography>
-                    <Chip
-                      label={teamMember.role}
-                      size="small"
-                      color={teamMember.role === "ADMIN" ? "primary" : "default"}
-                      sx={{ mt: 1 }}
-                    />
-                  </CardContent>
-                </Card>
+                <TeamCard
+                  key={teamMember.team.id}
+                  team={teamMember.team}
+                  role={teamMember.role}
+                  showLeagueInfo={false}
+                />
               ))}
             </Box>
           </>

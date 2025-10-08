@@ -38,7 +38,7 @@ model Team {
 
   // Optional league relationship for backward compatibility
   leagueId   String?
-  league     League?   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  league     League?   @relation(fields: [leagueId], references: [id], onDelete: Restrict)
   
   divisionId String?
   division   Division? @relation(fields: [divisionId], references: [id])
@@ -98,7 +98,7 @@ model Player {
 
   // Optional league relationship for league-wide roster management
   leagueId String?
-  league   League? @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  league   League? @relation(fields: [leagueId], references: [id], onDelete: Restrict)
 
   @@index([leagueId]) // Optimize league-wide roster queries
 }
@@ -117,7 +117,7 @@ model Event {
 
   // Optional league relationship for league-wide scheduling
   leagueId String?
-  league   League? @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  league   League? @relation(fields: [leagueId], references: [id], onDelete: Restrict)
 
   teamId String
   team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
@@ -220,7 +220,7 @@ model Division {
   updatedAt  DateTime @updatedAt
 
   leagueId String
-  league   League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  league   League @relation(fields: [leagueId], references: [id], onDelete: Restrict)
   teams    Team[]
 
   @@map("divisions")
@@ -236,7 +236,7 @@ model LeagueUser {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   leagueId String
-  league   League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  league   League @relation(fields: [leagueId], references: [id], onDelete: Restrict)
 
   @@unique([userId, leagueId])
   @@map("league_users")

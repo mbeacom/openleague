@@ -191,31 +191,3 @@ export async function hasTeamAdminAccess(userId: string, teamId: string): Promis
 
   return false;
 }
-
-/**
- * Get navigation items based on user mode
- */
-export function getNavigationItems(userMode: {
-  isLeagueMode: boolean;
-  leagues: Array<{ id: string; name: string; sport: string }>;
-  teams: Array<{ id: string; name: string; sport: string; season: string; leagueId: string | null }>;
-}) {
-  if (userMode.isLeagueMode) {
-    // League mode navigation
-    return [
-      { label: "Dashboard", path: "/", icon: "Dashboard" },
-      { label: "Teams", path: "/teams", icon: "Groups" },
-      { label: "Schedule", path: "/schedule", icon: "CalendarMonth" },
-      { label: "Roster", path: "/roster", icon: "People" },
-      { label: "Settings", path: "/settings", icon: "Settings" },
-    ];
-  } else {
-    // Single-team mode navigation (original)
-    return [
-      { label: "Dashboard", path: "/", icon: "Dashboard" },
-      { label: "Roster", path: "/roster", icon: "People" },
-      { label: "Calendar", path: "/calendar", icon: "CalendarMonth" },
-      { label: "Events", path: "/events", icon: "Event" },
-    ];
-  }
-}

@@ -168,8 +168,8 @@ export const sendInvitationSchema = z.object({
 
 // League validation schemas
 export const createLeagueSchema = z.object({
-  name: sanitizedStringWithMin(1, 100).refine(val => val.length > 0, "League name is required"),
-  sport: sanitizedStringWithMin(1, 50).refine(val => val.length > 0, "Sport is required"),
+  name: sanitizedStringWithMin(1, 100),
+  sport: sanitizedStringWithMin(1, 50),
   contactEmail: z
     .string()
     .trim()
@@ -181,8 +181,8 @@ export const createLeagueSchema = z.object({
 
 export const updateLeagueSettingsSchema = z.object({
   id: z.string().cuid("Invalid league ID format"),
-  name: sanitizedStringWithMin(1, 100).refine(val => val.length > 0, "League name is required"),
-  sport: sanitizedStringWithMin(1, 50).refine(val => val.length > 0, "Sport is required"),
+  name: sanitizedStringWithMin(1, 100),
+  sport: sanitizedStringWithMin(1, 50),
   contactEmail: z
     .string()
     .trim()
@@ -194,9 +194,9 @@ export const updateLeagueSettingsSchema = z.object({
 
 export const addTeamToLeagueSchema = z.object({
   leagueId: z.string().cuid("Invalid league ID format"),
-  name: sanitizedStringWithMin(1, 100).refine(val => val.length > 0, "Team name is required"),
-  sport: sanitizedStringWithMin(1, 50).refine(val => val.length > 0, "Sport is required"),
-  season: sanitizedStringWithMin(1, 50).refine(val => val.length > 0, "Season is required"),
+  name: sanitizedStringWithMin(1, 100),
+  sport: sanitizedStringWithMin(1, 50),
+  season: sanitizedStringWithMin(1, 50),
   divisionId: z.string().cuid("Invalid division ID format").optional(),
 });
 
