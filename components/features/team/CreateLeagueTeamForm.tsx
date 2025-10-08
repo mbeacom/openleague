@@ -1,86 +1,80 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import React, { useState } from 'react';
 import {
   Box,
+  Card,
+  CardContent,
+  Typography,
   TextField,
   Button,
-  Typography,
-  Alert,
-  CircularProgress,
   FormControl,
   InputLabel,
   Select,
   MenuItem,
+  Alert,
+  CircularProgress,
   FormHelperText,
-} from "@mui/material";
-import { addTeamToLeague } from "@/lib/actions/league";
-import { addTeamToLeagueSchema, type AddTeamToLeagueInput } from "@/lib/utils/validation";
-
-interface Division {
-  id: string;
-  name: string;
-  ageGroup: string | null;
-  skillLevel: string | null;
-}
+} from '@mui/material';
+import { useRouter } from 'next/navigation';
+import { addTeamToLeague } from '@/lib/actions/league';
+import { addTeamToLeagueSchema, type AddTeamToLeagueInput } from '@/lib/utils/validation';
 
 interface CreateLeagueTeamFormProps {
   leagueId: string;
-  divisions: Division[];
-  onSuccess?: (team: { id: string; name: string; sport: string; season: string }) => void;
+  divisions: Array<{
+    id: string;
+    name: string;
+    ageGroup: string | null;
+    skillLevel: string | null;
+  }>;
+  preselectedDivisionId?: string;
 }
 
-export default function CreateLeagueTeamForm({ 
-  leagueId, 
-  divisions, 
-  onSuccess 
+export default function CreateLeagueTeamForm({
+  leagueId,
+  divisions,
+  preselectedDivisionId
 }: CreateLeagueTeamFormProps) {
   const router = useRouter();
-  const [formData, setFormData] = useState<Omit<AddTeamToLeagueInput, 'leagueId'>>({
-    name: "",
-    sport: "",
-    season: "",
-    divisionId: undefined,
-  });
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof AddTeamToLeagueInput, string>>>({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof Omit<AddTeamToLeagueInput, 'leagueId'>, string>>>({});
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-    setError(null);
-    // Clear field-level error when user types
-    setFieldErrors((prev) => ({ ...prev, [name]: undefined }));
-  };
+  const [formData, setFormData] = useState({
+    name: '',
+    sport: '',
+    season: '',
+    divisionId: preselectedDivisionId || '',
+  });
 
-  const handleSelectChange = (name: string, value: string) => {
-    setFormData((prev) => ({ 
-      ...prev, 
-      [name]: value === "" ? undefined : value 
+  const handleInputChange = (field: string, value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      [field]: value
     }));
-    setError(null);
-    setFieldErrors((prev) => ({ ...prev, [name]: undefined }));
+    // Clear errors when user starts typing
+    if (error) setError(null);
+    if (fieldErrors[field as keyof typeof fieldErrors]) {
+      setFieldErrors(prev => ({ ...prev, [field]: undefined }));
+    }
   };
 
-  const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-
+  const handleBlur = (field: keyof Omit<AddTeamToLeagueInput, 'leagueId'>) => {
     // Validate individual field on blur
-    if (name === 'name' || name === 'sport' || name === 'season') {
-      const fieldSchema = addTeamToLeagueSchema.shape[name];
-      const validationResult = fieldSchema.safeParse(value);
+    const fullFormData: AddTeamToLeagueInput = {
+      leagueId,
+      name: formData.name,
+      sport: formData.sport,
+      season: formData.season,
+      divisionId: formData.divisionId || undefined,
+    };
 
-      if (validationResult.success) {
-        // Clear error if validation passes
-        setFieldErrors((prev) => ({ ...prev, [name]: undefined }));
-      } else {
-        // Set error if validation fails
-        const fieldError = validationResult.error.issues[0]?.message;
-        if (fieldError) {
-          setFieldErrors((prev) => ({ ...prev, [name]: fieldError }));
-        }
+    const validation = addTeamToLeagueSchema.safeParse(fullFormData);
+    if (!validation.success) {
+      const fieldError = validation.error.issues.find(issue => issue.path[0] === field);
+      if (fieldError) {
+        setFieldErrors(prev => ({ ...prev, [field]: fieldError.message }));
       }
     }
   };
@@ -91,162 +85,163 @@ export default function CreateLeagueTeamForm({
     setFieldErrors({});
 
     const fullFormData: AddTeamToLeagueInput = {
-      ...formData,
       leagueId,
+      name: formData.name,
+      sport: formData.sport,
+      season: formData.season,
+      divisionId: formData.divisionId || undefined,
     };
 
-    // Client-side validation
+    // Client-side validation with Zod
     const validation = addTeamToLeagueSchema.safeParse(fullFormData);
     if (!validation.success) {
-      const errors: Partial<Record<keyof AddTeamToLeagueInput, string>> = {};
-      validation.error.issues.forEach((issue) => {
-        const field = issue.path[0] as keyof AddTeamToLeagueInput;
+      const errors: Partial<Record<keyof Omit<AddTeamToLeagueInput, 'leagueId'>, string>> = {};
+      validation.error.issues.forEach(issue => {
+        const field = issue.path[0] as keyof Omit<AddTeamToLeagueInput, 'leagueId'>;
         if (field && !errors[field]) {
           errors[field] = issue.message;
         }
       });
       setFieldErrors(errors);
-      setError("Please fix the errors below.");
+      setError('Please fix the errors below.');
       return;
     }
 
-    setIsSubmitting(true);
+    setLoading(true);
 
     try {
-      const result = await addTeamToLeague(fullFormData);
+      const result = await addTeamToLeague(validation.data);
 
       if (result.success) {
-        if (onSuccess) {
-          onSuccess(result.data);
-        } else {
-          // Redirect to league teams page after successful creation
-          router.push(`/league/${leagueId}/teams`);
-        }
+        // Redirect to teams page
+        router.push(`/league/${leagueId}/teams`);
       } else {
         setError(result.error);
       }
-    } catch (err) {
-      console.error("An unexpected error occurred during team creation:", err);
-      setError("An unexpected error occurred. Please try again.");
+    } catch (error) {
+      console.error('Error creating team:', error);
+      setError('An unexpected error occurred. Please try again.');
     } finally {
-      setIsSubmitting(false);
+      setLoading(false);
     }
   };
 
+  const handleCancel = () => {
+    router.back();
+  };
+
   return (
-    <Box
-      component="form"
-      onSubmit={handleSubmit}
-      sx={{
-        display: "flex",
-        flexDirection: "column",
-        gap: 2,
-        maxWidth: 500,
-        width: "100%",
-      }}
-    >
-      <Typography variant="h5" component="h2" gutterBottom>
-        Add Team to League
+    <Box sx={{ p: 3, maxWidth: 600, mx: 'auto' }}>
+      <Typography variant="h4" component="h1" gutterBottom>
+        Create New Team
+      </Typography>
+      <Typography variant="body1" color="text.secondary" gutterBottom sx={{ mb: 3 }}>
+        Add a new team to your league
       </Typography>
 
-      {error && (
-        <Alert severity="error" onClose={() => setError(null)}>
-          {error}
-        </Alert>
-      )}
-
-      <TextField
-        label="Team Name"
-        name="name"
-        value={formData.name}
-        onChange={handleChange}
-        onBlur={handleBlur}
-        required
-        fullWidth
-        disabled={isSubmitting}
-        placeholder="e.g., Thunder FC"
-        error={!!fieldErrors.name}
-        helperText={fieldErrors.name}
-      />
-
-      <TextField
-        label="Sport"
-        name="sport"
-        value={formData.sport}
-        onChange={handleChange}
-        onBlur={handleBlur}
-        required
-        fullWidth
-        disabled={isSubmitting}
-        placeholder="e.g., Soccer, Basketball, Baseball"
-        error={!!fieldErrors.sport}
-        helperText={fieldErrors.sport}
-      />
-
-      <TextField
-        label="Season"
-        name="season"
-        value={formData.season}
-        onChange={handleChange}
-        onBlur={handleBlur}
-        required
-        fullWidth
-        disabled={isSubmitting}
-        placeholder="e.g., Fall 2025, Spring 2026"
-        error={!!fieldErrors.season}
-        helperText={fieldErrors.season}
-      />
-
-      <FormControl fullWidth error={!!fieldErrors.divisionId}>
-        <InputLabel>Division (Optional)</InputLabel>
-        <Select
-          value={formData.divisionId || ""}
-          onChange={(e) => handleSelectChange("divisionId", e.target.value)}
-          label="Division (Optional)"
-          disabled={isSubmitting}
-        >
-          <MenuItem value="">
-            <em>No Division</em>
-          </MenuItem>
-          {divisions.map((division) => (
-            <MenuItem key={division.id} value={division.id}>
-              {division.name}
-              {(division.ageGroup || division.skillLevel) && (
-                <Typography variant="body2" color="text.secondary" sx={{ ml: 1 }}>
-                  ({[division.ageGroup, division.skillLevel].filter(Boolean).join(", ")})
-                </Typography>
+      <Card>
+        <CardContent>
+          <form onSubmit={handleSubmit}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              {error && (
+                <Alert severity="error">
+                  {error}
+                </Alert>
               )}
-            </MenuItem>
-          ))}
-        </Select>
-        {fieldErrors.divisionId && (
-          <FormHelperText>{fieldErrors.divisionId}</FormHelperText>
-        )}
-      </FormControl>
 
-      <Button
-        type="submit"
-        variant="contained"
-        color="primary"
-        size="large"
-        disabled={
-          isSubmitting ||
-          !formData.name ||
-          !formData.sport ||
-          !formData.season ||
-          Object.keys(fieldErrors).some(key => fieldErrors[key as keyof AddTeamToLeagueInput])
-        }
-        sx={{ mt: 1 }}
-      >
-        {isSubmitting ? (
-          <>
-            <CircularProgress size={20} sx={{ mr: 1 }} color="inherit" />
-            Adding Team...
-          </>
-        ) : (
-          "Add Team"
-        )}
-      </Button>
+              <TextField
+                label="Team Name"
+                value={formData.name}
+                onChange={(e) => handleInputChange('name', e.target.value)}
+                onBlur={() => handleBlur('name')}
+                required
+                fullWidth
+                placeholder="e.g., Lightning Bolts"
+                disabled={loading}
+                error={!!fieldErrors.name}
+                helperText={fieldErrors.name}
+              />
+
+              <TextField
+                label="Sport"
+                value={formData.sport}
+                onChange={(e) => handleInputChange('sport', e.target.value)}
+                onBlur={() => handleBlur('sport')}
+                required
+                fullWidth
+                placeholder="e.g., Hockey, Soccer, Basketball"
+                disabled={loading}
+                error={!!fieldErrors.sport}
+                helperText={fieldErrors.sport}
+              />
+
+              <TextField
+                label="Season"
+                value={formData.season}
+                onChange={(e) => handleInputChange('season', e.target.value)}
+                onBlur={() => handleBlur('season')}
+                required
+                fullWidth
+                placeholder="e.g., Fall 2024, 2024-2025"
+                disabled={loading}
+                error={!!fieldErrors.season}
+                helperText={fieldErrors.season}
+              />
+
+              {divisions.length > 0 && (
+                <FormControl fullWidth error={!!fieldErrors.divisionId}>
+                  <InputLabel>Division (Optional)</InputLabel>
+                  <Select
+                    value={formData.divisionId}
+                    onChange={(e) => handleInputChange('divisionId', e.target.value)}
+                    label="Division (Optional)"
+                    disabled={loading}
+                  >
+                    <MenuItem value="">
+                      <em>No Division</em>
+                    </MenuItem>
+                    {divisions.map((division) => (
+                      <MenuItem key={division.id} value={division.id}>
+                        <Box>
+                          <Typography variant="body2">
+                            {division.name}
+                          </Typography>
+                          {(division.ageGroup || division.skillLevel) && (
+                            <Typography variant="caption" color="text.secondary">
+                              {[division.ageGroup, division.skillLevel].filter(Boolean).join(' • ')}
+                            </Typography>
+                          )}
+                        </Box>
+                      </MenuItem>
+                    ))}
+                  </Select>
+                  {fieldErrors.divisionId && (
+                    <FormHelperText>{fieldErrors.divisionId}</FormHelperText>
+                  )}
+                </FormControl>
+              )}
+
+              <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end', mt: 2 }}>
+                <Button
+                  variant="outlined"
+                  onClick={handleCancel}
+                  disabled={loading}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  variant="contained"
+                  disabled={loading}
+                  startIcon={loading ? <CircularProgress size={20} /> : null}
+                >
+                  {loading ? 'Creating...' : 'Create Team'}
+                </Button>
+              </Box>
+            </Box>
+          </form>
+        </CardContent>
+      </Card>
     </Box>
   );
 }
