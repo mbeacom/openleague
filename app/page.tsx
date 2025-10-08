@@ -3,8 +3,9 @@
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { Box, Typography, Container, Button, CircularProgress } from "@mui/material";
+import { Box, Typography, Container, Button, CircularProgress, AppBar, Toolbar } from "@mui/material";
 import Link from "next/link";
+import Image from "next/image";
 
 /**
  * Marketing Landing Page
@@ -48,26 +49,70 @@ export default function HomePage() {
 
   // Unauthenticated user - show marketing landing page
   return (
-    <Container maxWidth="lg">
-      <Box
+    <>
+      {/* Simple header with logo */}
+      <AppBar
+        position="sticky"
+        elevation={0}
         sx={{
-          marginTop: 8,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          textAlign: "center",
+          bgcolor: 'background.paper',
+          borderBottom: 1,
+          borderColor: 'divider',
         }}
       >
-        {/* Hero Section */}
+        <Container maxWidth="lg">
+          <Toolbar disableGutters sx={{ justifyContent: 'space-between', py: 1 }}>
+            <Link href="/" style={{ textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <Image
+                src="/images/logo.webp"
+                alt="OpenLeague Logo"
+                width={40}
+                height={40}
+                priority
+              />
+              <Typography
+                variant="h6"
+                component="div"
+                sx={{
+                  fontWeight: 700,
+                  color: 'primary.main',
+                }}
+              >
+                OpenLeague
+              </Typography>
+            </Link>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Button component={Link} href="/login" color="inherit" sx={{ color: 'text.primary' }}>
+                Sign In
+              </Button>
+              <Button component={Link} href="/signup" variant="contained">
+                Start Free Trial
+              </Button>
+            </Box>
+          </Toolbar>
+        </Container>
+      </AppBar>
+
+      <Container maxWidth="lg">
+        <Box
+          sx={{
+            marginTop: 8,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            textAlign: "center",
+          }}
+        >
+          {/* Hero Section */}
         <Typography component="h1" variant="h2" gutterBottom>
           Replace Chaotic Spreadsheets with OpenLeague
         </Typography>
         <Typography variant="h5" color="text.secondary" sx={{ mb: 4, maxWidth: 800 }}>
-          The free sports team management platform that brings order to your team&apos;s chaos.
+          Affordable sports team management that brings order to your team&apos;s chaos.
           One source of truth for Who, What, When, and Where.
         </Typography>
         <Typography variant="body1" color="text.secondary" sx={{ mb: 6, maxWidth: 600 }}>
-          Stop juggling spreadsheets, group chats, and email chains. OpenLeague centralizes 
+          Stop juggling spreadsheets, group chats, and email chains. OpenLeague centralizes
           your roster, schedule, and communication in one simple, mobile-friendly platform.
         </Typography>
 
@@ -79,7 +124,7 @@ export default function HomePage() {
             size="large"
             sx={{ minWidth: 160, py: 1.5 }}
           >
-            Get Started Free
+            Start Free Trial
           </Button>
           <Button
             component={Link}
@@ -97,7 +142,7 @@ export default function HomePage() {
           <Typography variant="h4" component="h2" gutterBottom sx={{ textAlign: 'center', mb: 4 }}>
             Why Teams Choose OpenLeague
           </Typography>
-          
+
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 4 }}>
             <Box>
               <Typography variant="h6" component="h3" gutterBottom>
@@ -107,7 +152,7 @@ export default function HomePage() {
                 Send email invitations, manage player information, and keep everyone&apos;s contact details in one place.
               </Typography>
             </Box>
-            
+
             <Box>
               <Typography variant="h6" component="h3" gutterBottom>
                 📅 Smart Scheduling
@@ -116,7 +161,7 @@ export default function HomePage() {
                 Create games and practices with RSVP tracking. Know who&apos;s coming before you show up.
               </Typography>
             </Box>
-            
+
             <Box>
               <Typography variant="h6" component="h3" gutterBottom>
                 📱 Mobile-First Design
@@ -125,13 +170,13 @@ export default function HomePage() {
                 Works perfectly on phones, tablets, and desktops. Your team can access everything on the go.
               </Typography>
             </Box>
-            
+
             <Box>
               <Typography variant="h6" component="h3" gutterBottom>
-                💰 Free Forever
+                💰 Affordable Pricing
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                No hidden costs, no premium tiers, no credit card required. Just powerful team management tools.
+                Transparent pricing starting at $5/month. 14-day free trial, no credit card required.
               </Typography>
             </Box>
           </Box>
@@ -157,5 +202,6 @@ export default function HomePage() {
         </Box>
       </Box>
     </Container>
+    </>
   );
 }

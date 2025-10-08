@@ -17,10 +17,10 @@ const roboto = Roboto({
 });
 
 export const metadata: Metadata = {
-  title: "OpenLeague - Free Sports Team Management Platform",
+  title: "OpenLeague - Affordable Sports Team Management Platform",
   description:
-    "Replace chaotic spreadsheets, group chats, and email chains with a single source of truth for sports team management. Free forever.",
-  keywords: "sports team management, team organization, roster management, scheduling, free team management software",
+    "Replace chaotic spreadsheets, group chats, and email chains with a single source of truth for sports team management. Transparent, affordable pricing.",
+  keywords: "sports team management, team organization, roster management, scheduling, affordable team management software, open source",
   manifest: "/site.webmanifest",
   icons: {
     icon: [
@@ -37,15 +37,15 @@ export const metadata: Metadata = {
     ],
   },
   openGraph: {
-    title: "OpenLeague - Free Sports Team Management Platform",
-    description: "Replace chaotic spreadsheets, group chats, and email chains with a single source of truth for sports team management. Free forever.",
+    title: "OpenLeague - Affordable Sports Team Management Platform",
+    description: "Replace chaotic spreadsheets, group chats, and email chains with a single source of truth for sports team management. Transparent, affordable pricing.",
     type: "website",
     url: "https://openl.app",
   },
   twitter: {
     card: "summary_large_image",
-    title: "OpenLeague - Free Sports Team Management Platform",
-    description: "Replace chaotic spreadsheets, group chats, and email chains with a single source of truth for sports team management. Free forever.",
+    title: "OpenLeague - Affordable Sports Team Management Platform",
+    description: "Replace chaotic spreadsheets, group chats, and email chains with a single source of truth for sports team management. Transparent, affordable pricing.",
   },
 };
 
