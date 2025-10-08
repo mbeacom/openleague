@@ -14,9 +14,11 @@ import {
   MenuItem,
   Alert,
   CircularProgress,
+  FormHelperText,
 } from '@mui/material';
 import { useRouter } from 'next/navigation';
 import { addTeamToLeague } from '@/lib/actions/league';
+import { addTeamToLeagueSchema, type AddTeamToLeagueInput } from '@/lib/utils/validation';
 
 interface CreateLeagueTeamFormProps {
   leagueId: string;
@@ -37,6 +39,7 @@ export default function CreateLeagueTeamForm({
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof Omit<AddTeamToLeagueInput, 'leagueId'>, string>>>({});
 
   const [formData, setFormData] = useState({
     name: '',
@@ -50,39 +53,64 @@ export default function CreateLeagueTeamForm({
       ...prev,
       [field]: value
     }));
-    // Clear error when user starts typing
+    // Clear errors when user starts typing
     if (error) setError(null);
+    if (fieldErrors[field as keyof typeof fieldErrors]) {
+      setFieldErrors(prev => ({ ...prev, [field]: undefined }));
+    }
+  };
+
+  const handleBlur = (field: keyof Omit<AddTeamToLeagueInput, 'leagueId'>) => {
+    // Validate individual field on blur
+    const fullFormData: AddTeamToLeagueInput = {
+      leagueId,
+      name: formData.name,
+      sport: formData.sport,
+      season: formData.season,
+      divisionId: formData.divisionId || undefined,
+    };
+
+    const validation = addTeamToLeagueSchema.safeParse(fullFormData);
+    if (!validation.success) {
+      const fieldError = validation.error.issues.find(issue => issue.path[0] === field);
+      if (fieldError) {
+        setFieldErrors(prev => ({ ...prev, [field]: fieldError.message }));
+      }
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
+    setFieldErrors({});
 
-    if (!formData.name.trim()) {
-      setError('Team name is required');
-      return;
-    }
+    const fullFormData: AddTeamToLeagueInput = {
+      leagueId,
+      name: formData.name,
+      sport: formData.sport,
+      season: formData.season,
+      divisionId: formData.divisionId || undefined,
+    };
 
-    if (!formData.sport.trim()) {
-      setError('Sport is required');
-      return;
-    }
-
-    if (!formData.season.trim()) {
-      setError('Season is required');
+    // Client-side validation with Zod
+    const validation = addTeamToLeagueSchema.safeParse(fullFormData);
+    if (!validation.success) {
+      const errors: Partial<Record<keyof Omit<AddTeamToLeagueInput, 'leagueId'>, string>> = {};
+      validation.error.issues.forEach(issue => {
+        const field = issue.path[0] as keyof Omit<AddTeamToLeagueInput, 'leagueId'>;
+        if (field && !errors[field]) {
+          errors[field] = issue.message;
+        }
+      });
+      setFieldErrors(errors);
+      setError('Please fix the errors below.');
       return;
     }
 
     setLoading(true);
-    setError(null);
 
     try {
-      const result = await addTeamToLeague({
-        leagueId,
-        name: formData.name.trim(),
-        sport: formData.sport.trim(),
-        season: formData.season.trim(),
-        divisionId: formData.divisionId || undefined,
-      });
+      const result = await addTeamToLeague(validation.data);
 
       if (result.success) {
         // Redirect to teams page
@@ -90,7 +118,8 @@ export default function CreateLeagueTeamForm({
       } else {
         setError(result.error);
       }
-    } catch {
+    } catch (error) {
+      console.error('Error creating team:', error);
       setError('An unexpected error occurred. Please try again.');
     } finally {
       setLoading(false);
@@ -124,34 +153,43 @@ export default function CreateLeagueTeamForm({
                 label="Team Name"
                 value={formData.name}
                 onChange={(e) => handleInputChange('name', e.target.value)}
+                onBlur={() => handleBlur('name')}
                 required
                 fullWidth
                 placeholder="e.g., Lightning Bolts"
                 disabled={loading}
+                error={!!fieldErrors.name}
+                helperText={fieldErrors.name}
               />
 
               <TextField
                 label="Sport"
                 value={formData.sport}
                 onChange={(e) => handleInputChange('sport', e.target.value)}
+                onBlur={() => handleBlur('sport')}
                 required
                 fullWidth
                 placeholder="e.g., Hockey, Soccer, Basketball"
                 disabled={loading}
+                error={!!fieldErrors.sport}
+                helperText={fieldErrors.sport}
               />
 
               <TextField
                 label="Season"
                 value={formData.season}
                 onChange={(e) => handleInputChange('season', e.target.value)}
+                onBlur={() => handleBlur('season')}
                 required
                 fullWidth
                 placeholder="e.g., Fall 2024, 2024-2025"
                 disabled={loading}
+                error={!!fieldErrors.season}
+                helperText={fieldErrors.season}
               />
 
               {divisions.length > 0 && (
-                <FormControl fullWidth>
+                <FormControl fullWidth error={!!fieldErrors.divisionId}>
                   <InputLabel>Division (Optional)</InputLabel>
                   <Select
                     value={formData.divisionId}
@@ -177,6 +215,9 @@ export default function CreateLeagueTeamForm({
                       </MenuItem>
                     ))}
                   </Select>
+                  {fieldErrors.divisionId && (
+                    <FormHelperText>{fieldErrors.divisionId}</FormHelperText>
+                  )}
                 </FormControl>
               )}
 

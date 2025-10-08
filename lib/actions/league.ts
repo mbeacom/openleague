@@ -1239,9 +1239,10 @@ export async function getLeagueWithStats(leagueId: string): Promise<{
     console.error("Error fetching league with stats:", error);
     return null;
   }
-}/**
- *
- Get league teams organized by divisions for team management interface
+}
+
+/**
+ * Get league teams organized by divisions for team management interface
  */
 export async function getLeagueTeamsWithDivisions(leagueId: string): Promise<{
   id: string;
@@ -1376,8 +1377,9 @@ export async function getLeagueTeamsWithDivisions(leagueId: string): Promise<{
     console.error("Error fetching league teams with divisions:", error);
     return null;
   }
-}/*
-*
+}
+
+/**
  * Get all divisions for a league (for form dropdowns)
  */
 export async function getLeagueDivisions(leagueId: string): Promise<Array<{

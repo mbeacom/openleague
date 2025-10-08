@@ -4,6 +4,7 @@ import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import DragDropTeams from '@/components/features/team/DragDropTeams';
 import { assignTeamToDivision } from '@/lib/actions/league';
 import { useRouter } from 'next/navigation';
+import { useToast } from '@/components/ui/Toast';
 
 // Mock dependencies
 vi.mock('@/lib/actions/league', () => ({
@@ -14,12 +15,24 @@ vi.mock('next/navigation', () => ({
   useRouter: vi.fn(),
 }));
 
+vi.mock('@/components/ui/Toast', () => ({
+  useToast: vi.fn(),
+}));
+
 const mockRouter = {
   push: vi.fn(),
   refresh: vi.fn(),
   back: vi.fn(),
   forward: vi.fn(),
   prefetch: vi.fn(),
+};
+
+const mockToast = {
+  showToast: vi.fn(),
+  showSuccess: vi.fn(),
+  showError: vi.fn(),
+  showWarning: vi.fn(),
+  showInfo: vi.fn(),
 };
 
 const mockTeam1 = {
@@ -72,6 +85,7 @@ describe('DragDropTeams', () => {
     vi.clearAllMocks();
     (useRouter as ReturnType<typeof vi.fn>).mockReturnValue(mockRouter);
     (assignTeamToDivision as ReturnType<typeof vi.fn>).mockResolvedValue({ success: true });
+    (useToast as ReturnType<typeof vi.fn>).mockReturnValue(mockToast);
   });
 
   afterEach(() => {
@@ -305,6 +319,7 @@ describe('DragDropTeams - Integration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     (useRouter as ReturnType<typeof vi.fn>).mockReturnValue(mockRouter);
+    (useToast as ReturnType<typeof vi.fn>).mockReturnValue(mockToast);
     (assignTeamToDivision as ReturnType<typeof vi.fn>).mockResolvedValue({ success: true });
   });
 

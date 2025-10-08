@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -16,6 +16,7 @@ import { Box, Typography, Card, CardContent, Avatar, alpha } from '@mui/material
 import { Groups as TeamsIcon, DragIndicator as DragIcon } from '@mui/icons-material';
 import { assignTeamToDivision } from '@/lib/actions/league';
 import { useRouter } from 'next/navigation';
+import { useToast } from '@/components/ui/Toast';
 
 interface Team {
   id: string;
@@ -55,9 +56,19 @@ export default function DragDropTeams({
   children,
 }: DragDropTeamsProps) {
   const router = useRouter();
+  const { showError, showSuccess } = useToast();
   const [activeTeam, setActiveTeam] = useState<Team | null>(null);
   const [divisions, setDivisions] = useState(initialDivisions);
   const [unassignedTeams, setUnassignedTeams] = useState(initialUnassigned);
+
+  // Sync state with props when they change
+  useEffect(() => {
+    setDivisions(initialDivisions);
+  }, [initialDivisions]);
+
+  useEffect(() => {
+    setUnassignedTeams(initialUnassigned);
+  }, [initialUnassigned]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -103,8 +114,10 @@ export default function DragDropTeams({
         setDivisions(initialDivisions);
         setUnassignedTeams(initialUnassigned);
         console.error('Failed to update team division:', result.error);
+        showError(result.error || 'Failed to move team. Please try again.');
       } else {
         // Refresh to ensure data consistency
+        showSuccess('Team successfully moved!');
         router.refresh();
       }
     } catch (error) {
@@ -112,6 +125,7 @@ export default function DragDropTeams({
       setDivisions(initialDivisions);
       setUnassignedTeams(initialUnassigned);
       console.error('Error updating team division:', error);
+      showError('An unexpected error occurred while moving the team.');
     }
   };
 
@@ -176,25 +190,25 @@ export default function DragDropTeams({
               },
             }}
           >
-            <CardContent sx={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: 2, 
+            <CardContent sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 2,
               py: 2,
               bgcolor: alpha('#fff', 0.98),
             }}>
-              <DragIcon 
-                color="action" 
-                sx={{ 
+              <DragIcon
+                color="action"
+                sx={{
                   animation: 'pulse 1.5s ease-in-out infinite',
                   '@keyframes pulse': {
                     '0%, 100%': { opacity: 0.6 },
                     '50%': { opacity: 1 },
                   },
-                }} 
+                }}
               />
-              <Avatar 
-                sx={{ 
+              <Avatar
+                sx={{
                   bgcolor: 'primary.main',
                   boxShadow: '0 2px 8px rgba(25, 118, 210, 0.3)',
                 }}>
@@ -213,32 +227,5 @@ export default function DragDropTeams({
         ) : null}
       </DragOverlay>
     </DndContext>
-  );
-}
-
-// Droppable area component for divisions
-interface DroppableAreaProps {
-  children: React.ReactNode;
-  isOver?: boolean;
-  isDragging?: boolean;
-}
-
-export function DroppableArea({ children, isOver, isDragging }: DroppableAreaProps) {
-  return (
-    <Box
-      sx={{
-        minHeight: isDragging ? 100 : 'auto',
-        borderRadius: 1,
-        transition: 'all 0.2s ease',
-        ...(isDragging && {
-          border: 2,
-          borderStyle: 'dashed',
-          borderColor: isOver ? 'primary.main' : 'divider',
-          bgcolor: isOver ? alpha('#1976d2', 0.05) : 'transparent',
-        }),
-      }}
-    >
-      {children}
-    </Box>
   );
 }

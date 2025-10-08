@@ -38,8 +38,18 @@ export default function MobileNavigation({ isLeagueMode = false }: MobileNavigat
   try {
     const leagueContext = useLeague();
     currentLeague = leagueContext.currentLeague;
-  } catch {
-    // Not in league context
+  } catch (err) {
+    // Not in league context - only ignore context-related errors
+    const isContextError =
+      err &&
+      typeof err === "object" &&
+      "message" in err &&
+      typeof err.message === "string" &&
+      (err.message.includes("useLeague") || err.message.includes("context"));
+
+    if (!isContextError) {
+      console.error('Unexpected error in MobileNavigation/useLeague:', err);
+    }
   }
 
   const getNavItems = () => {
