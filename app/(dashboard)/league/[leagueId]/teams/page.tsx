@@ -1,26 +1,28 @@
-import { requireAuth, requireUserId } from "@/lib/auth/session";
+import { requireUserId } from "@/lib/auth/session";
 import { notFound } from "next/navigation";
 import { hasLeagueAccess, getLeagueTeamsWithDivisions } from "@/lib/actions/league";
 import LeagueTeamsView from "@/components/features/team/LeagueTeamsView";
 
 interface LeagueTeamsPageProps {
-  params: {
+  params: Promise<{
     leagueId: string;
-  };
+  }>;
 }
 
 export default async function LeagueTeamsPage({ params }: LeagueTeamsPageProps) {
-  await requireAuth();
-  const userId = await requireUserId();
+  const [userId, { leagueId }] = await Promise.all([
+    requireUserId(),
+    params,
+  ]);
 
   // Verify user has access to this league
-  const hasAccess = await hasLeagueAccess(userId, params.leagueId);
+  const hasAccess = await hasLeagueAccess(userId, leagueId);
   if (!hasAccess) {
     notFound();
   }
 
   // Get league teams with divisions
-  const leagueData = await getLeagueTeamsWithDivisions(params.leagueId);
+  const leagueData = await getLeagueTeamsWithDivisions(leagueId);
   if (!leagueData) {
     notFound();
   }
