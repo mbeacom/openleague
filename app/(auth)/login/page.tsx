@@ -14,7 +14,7 @@ import {
   CircularProgress,
 } from "@mui/material";
 import Link from "next/link";
-import Image from "next/image";
+import Logo from "@/components/ui/Logo";
 import { loginSchema } from "@/lib/utils/validation";
 
 function LoginForm() {
@@ -125,14 +125,7 @@ function LoginForm() {
         }}
       >
         <Box sx={{ mb: 3 }}>
-          <Image
-            src="/images/logo.webp"
-            alt="OpenLeague Logo"
-            width={120}
-            height={120}
-            priority
-            style={{ objectFit: "contain" }}
-          />
+          <Logo width={120} height={120} priority href={null} />
         </Box>
         <Typography component="h1" variant="h4" gutterBottom>
           Log In

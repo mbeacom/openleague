@@ -2,7 +2,6 @@
 
 import { ReactNode, useState } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
 import {
   AppBar,
   Toolbar,
@@ -22,6 +21,7 @@ import {
   ListItemText,
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
+import Logo from '@/components/ui/Logo';
 import './marketing.css';
 
 interface MarketingLayoutProps {
@@ -72,13 +72,7 @@ function MarketingHeader() {
               },
             }}
           >
-            <Image
-              src="/images/logo.webp"
-              alt="OpenLeague Logo"
-              width={48}
-              height={48}
-              priority
-            />
+            <Logo size="large" href={null} priority />
             <Typography
               variant="h5"
               component="div"
@@ -194,12 +188,7 @@ function MarketingFooter() {
         >
           <Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-              <Image
-                src="/images/logo.webp"
-                alt="OpenLeague Logo"
-                width={32}
-                height={32}
-              />
+              <Logo size="small" variant="footer" />
               <Typography variant="h6" fontWeight={700} color="primary">
                 OpenLeague
               </Typography>

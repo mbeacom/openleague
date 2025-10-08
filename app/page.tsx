@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Box, Typography, Container, Button, CircularProgress, AppBar, Toolbar } from "@mui/material";
 import Link from "next/link";
-import Image from "next/image";
+import Logo from "@/components/ui/Logo";
 
 /**
  * Marketing Landing Page
@@ -77,13 +77,7 @@ export default function HomePage() {
                 },
               }}
             >
-              <Image
-                src="/images/logo.webp"
-                alt="OpenLeague Logo"
-                width={48}
-                height={48}
-                priority
-              />
+              <Logo size="large" href={null} priority />
               <Typography
                 variant="h5"
                 component="div"

@@ -140,3 +140,6 @@ vite.config.ts.timestamp-*
 
 # Ignore local context files
 local-context/
+
+# macOS system files
+.DS_Store

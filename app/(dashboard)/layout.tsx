@@ -1,11 +1,11 @@
 import { ReactNode } from "react";
 import { requireAuth, requireUserId } from "@/lib/auth/session";
 import { Box, AppBar, Toolbar, Typography } from "@mui/material";
-import Image from "next/image";
 import Link from "next/link";
 import DashboardNav from "@/components/features/dashboard/DashboardNav";
 import ErrorBoundary from "@/components/ui/ErrorBoundary";
 import { getUserMode } from "@/lib/utils/league-mode";
+import Logo from "@/components/ui/Logo";
 
 export default async function DashboardLayout({
   children,
@@ -41,13 +41,7 @@ export default async function DashboardLayout({
               flexGrow: 1,
             }}
           >
-            <Image
-              src="/images/logo.webp"
-              alt="OpenLeague Logo"
-              width={36}
-              height={36}
-              priority
-            />
+            <Logo size="medium" href={null} priority />
             <Typography variant="h6" component="div">
               OpenLeague
             </Typography>
@@ -85,13 +79,7 @@ export default async function DashboardLayout({
               },
             }}
           >
-            <Image
-              src="/images/logo.webp"
-              alt="OpenLeague Logo"
-              width={40}
-              height={40}
-              priority
-            />
+            <Logo size="large" href={null} priority />
             <Typography variant="h5" component="div" color="primary" sx={{ fontWeight: 600 }}>
               OpenLeague
             </Typography>

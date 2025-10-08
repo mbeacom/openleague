@@ -1,8 +1,12 @@
-# OpenLeague
+<div align="center">
+  <img src="./public/images/logo.png" alt="OpenLeague Logo" width="200"/>
 
-[![Release](https://github.com/mbeacom/openleague/workflows/Release/badge.svg)](https://github.com/mbeacom/openleague/actions/workflows/release.yml)
-[![License](https://img.shields.io/badge/license-BUSL--1.1-blue.svg)](./LICENSE)
-[![Version](https://img.shields.io/github/package-json/v/mbeacom/openleague)](./package.json)
+  # OpenLeague
+
+  [![Release](https://github.com/mbeacom/openleague/workflows/Release/badge.svg)](https://github.com/mbeacom/openleague/actions/workflows/release.yml)
+  [![License](https://img.shields.io/badge/license-BUSL--1.1-blue.svg)](./LICENSE)
+  [![Version](https://img.shields.io/github/package-json/v/mbeacom/openleague)](./package.json)
+</div>
 
 A free, open-source platform for managing sports teams. Simplify your season with tools for roster management, scheduling, and team communication.
 
