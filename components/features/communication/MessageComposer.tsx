@@ -61,7 +61,6 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
   // Form state
   const [subject, setSubject] = useState("");
   const [content, setContent] = useState("");
-  const [messageType, setMessageType] = useState<"MESSAGE" | "ANNOUNCEMENT">("MESSAGE");
   const [priority, setPriority] = useState<"LOW" | "NORMAL" | "HIGH" | "URGENT">("NORMAL");
   const [targetingType, setTargetingType] = useState<"league" | "divisions" | "teams">("league");
   const [selectedDivisions, setSelectedDivisions] = useState<string[]>([]);
@@ -70,7 +69,6 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
   const handleReset = () => {
     setSubject("");
     setContent("");
-    setMessageType("MESSAGE");
     setPriority("NORMAL");
     setTargetingType("league");
     setSelectedDivisions([]);
@@ -98,10 +96,14 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
     if (targetingType === "league") {
       return teams.reduce((sum, team) => sum + team.memberCount, 0);
     } else if (targetingType === "divisions") {
-      const selectedDivisionTeams = teams.filter(team =>
-        selectedDivisions.some(divId =>
-          divisions.find(div => div.id === divId)?.name === team.divisionName
-        )
+      // Optimize: Create a set of selected division names for O(1) lookups
+      const selectedDivisionNames = new Set(
+        divisions
+          .filter(div => selectedDivisions.includes(div.id))
+          .map(div => div.name)
+      );
+      const selectedDivisionTeams = teams.filter(
+        team => team.divisionName && selectedDivisionNames.has(team.divisionName)
       );
       return selectedDivisionTeams.reduce((sum, team) => sum + team.memberCount, 0);
     } else {
@@ -134,7 +136,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
       leagueId,
       subject: subject.trim(),
       content: content.trim(),
-      messageType,
+      messageType: "MESSAGE", // This component is specifically for targeted messages
       priority,
       targeting: {
         entireLeague: targetingType === "league",
@@ -176,7 +178,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
       <DialogTitle>
         <Box display="flex" justifyContent="space-between" alignItems="center">
           <Typography variant="h6">
-            {messageType === "ANNOUNCEMENT" ? "Send League Announcement" : "Send League Message"}
+            Send Targeted Message
           </Typography>
           <Button
             onClick={handleClose}
@@ -203,34 +205,20 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
               </Alert>
             )}
 
-            {/* Message Type and Priority */}
-            <Box display="flex" gap={2}>
-              <FormControl fullWidth>
-                <InputLabel>Message Type</InputLabel>
-                <Select
-                  value={messageType}
-                  label="Message Type"
-                  onChange={(e) => setMessageType(e.target.value as "MESSAGE" | "ANNOUNCEMENT")}
-                >
-                  <MenuItem value="MESSAGE">Targeted Message</MenuItem>
-                  <MenuItem value="ANNOUNCEMENT">League Announcement</MenuItem>
-                </Select>
-              </FormControl>
-
-              <FormControl fullWidth>
-                <InputLabel>Priority</InputLabel>
-                <Select
-                  value={priority}
-                  label="Priority"
-                  onChange={(e) => setPriority(e.target.value as "LOW" | "NORMAL" | "HIGH" | "URGENT")}
-                >
-                  <MenuItem value="LOW">Low</MenuItem>
-                  <MenuItem value="NORMAL">Normal</MenuItem>
-                  <MenuItem value="HIGH">High</MenuItem>
-                  <MenuItem value="URGENT">Urgent</MenuItem>
-                </Select>
-              </FormControl>
-            </Box>
+            {/* Priority Selection */}
+            <FormControl fullWidth>
+              <InputLabel>Priority</InputLabel>
+              <Select
+                value={priority}
+                label="Priority"
+                onChange={(e) => setPriority(e.target.value as "LOW" | "NORMAL" | "HIGH" | "URGENT")}
+              >
+                <MenuItem value="LOW">Low</MenuItem>
+                <MenuItem value="NORMAL">Normal</MenuItem>
+                <MenuItem value="HIGH">High</MenuItem>
+                <MenuItem value="URGENT">Urgent</MenuItem>
+              </Select>
+            </FormControl>
 
             {/* Subject */}
             <TextField

@@ -652,18 +652,20 @@ export async function sendLeagueMessageEmail(data: LeagueMessageEmailData): Prom
   const priorityLabel = data.priority === "URGENT" ? "URGENT: " : data.priority === "HIGH" ? "Important: " : "";
   const priorityColor = data.priority === "URGENT" ? "#D32F2F" : data.priority === "HIGH" ? "#FF9800" : "#1976D2";
 
+  // Batch generate unsubscribe tokens to avoid N+1 query problem
+  const userIds = data.recipients.filter(r => r.userId).map(r => r.userId!);
+  const tokenMap = userIds.length > 0
+    ? await notificationService.batchGenerateUnsubscribeTokens(userIds, data.leagueId)
+    : new Map<string, string>();
+
   // Send individual emails to include personalized unsubscribe links
   for (const recipient of data.recipients) {
     let unsubscribeLink = "";
-    
-    // Generate unsubscribe link if we have userId
-    if (recipient.userId) {
-      try {
-        const token = await notificationService.generateUnsubscribeToken(recipient.userId, data.leagueId);
-        unsubscribeLink = `${BASE_URL}/unsubscribe?token=${token}`;
-      } catch (error) {
-        console.error("Failed to generate unsubscribe token:", error);
-      }
+
+    // Get pre-generated unsubscribe token
+    if (recipient.userId && tokenMap.has(recipient.userId)) {
+      const token = tokenMap.get(recipient.userId)!;
+      unsubscribeLink = `${BASE_URL}/unsubscribe?token=${token}`;
     }
 
     const message: {
@@ -684,7 +686,7 @@ export async function sendLeagueMessageEmail(data: LeagueMessageEmailData): Prom
 
           <div style="background-color: #f5f5f5; padding: 20px; border-radius: 0 0 8px 8px;">
             <h3 style="margin-top: 0; color: #333;">${data.subject}</h3>
-            
+
             <div style="background-color: white; padding: 20px; border-radius: 4px; margin: 20px 0;">
               ${data.content.replace(/\n/g, '<br>')}
             </div>
@@ -712,7 +714,7 @@ export async function sendLeagueMessageEmail(data: LeagueMessageEmailData): Prom
             ${unsubscribeLink ? `
               <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
               <p style="color: #999; font-size: 12px; text-align: center;">
-                Don't want to receive these emails? 
+                Don't want to receive these emails?
                 <a href="${unsubscribeLink}" style="color: #999;">Unsubscribe</a>
               </p>
             ` : ""}
@@ -765,18 +767,20 @@ export async function sendLeagueAnnouncementEmail(data: LeagueAnnouncementEmailD
   const priorityLabel = data.priority === "URGENT" ? "URGENT: " : data.priority === "HIGH" ? "Important: " : "";
   const priorityColor = data.priority === "URGENT" ? "#D32F2F" : data.priority === "HIGH" ? "#FF9800" : "#43A047";
 
+  // Batch generate unsubscribe tokens to avoid N+1 query problem
+  const userIds = data.recipients.filter(r => r.userId).map(r => r.userId!);
+  const tokenMap = userIds.length > 0
+    ? await notificationService.batchGenerateUnsubscribeTokens(userIds, data.leagueId)
+    : new Map<string, string>();
+
   // Send individual emails to include personalized unsubscribe links
   for (const recipient of data.recipients) {
     let unsubscribeLink = "";
-    
-    // Generate unsubscribe link if we have userId
-    if (recipient.userId) {
-      try {
-        const token = await notificationService.generateUnsubscribeToken(recipient.userId, data.leagueId);
-        unsubscribeLink = `${BASE_URL}/unsubscribe?token=${token}`;
-      } catch (error) {
-        console.error("Failed to generate unsubscribe token:", error);
-      }
+
+    // Get pre-generated unsubscribe token
+    if (recipient.userId && tokenMap.has(recipient.userId)) {
+      const token = tokenMap.get(recipient.userId)!;
+      unsubscribeLink = `${BASE_URL}/unsubscribe?token=${token}`;
     }
 
     const message: {
@@ -797,7 +801,7 @@ export async function sendLeagueAnnouncementEmail(data: LeagueAnnouncementEmailD
 
           <div style="background-color: #f5f5f5; padding: 20px; border-radius: 0 0 8px 8px;">
             <h3 style="margin-top: 0; color: #333;">${data.subject}</h3>
-            
+
             <div style="background-color: white; padding: 20px; border-radius: 4px; margin: 20px 0; border-left: 4px solid ${priorityColor};">
               ${data.content.replace(/\n/g, '<br>')}
             </div>
@@ -831,7 +835,7 @@ export async function sendLeagueAnnouncementEmail(data: LeagueAnnouncementEmailD
             ${unsubscribeLink ? `
               <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
               <p style="color: #999; font-size: 12px; text-align: center;">
-                Don't want to receive these emails? 
+                Don't want to receive these emails?
                 <a href="${unsubscribeLink}" style="color: #999;">Unsubscribe</a>
               </p>
             ` : ""}

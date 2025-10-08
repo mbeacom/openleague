@@ -101,7 +101,7 @@ export default async function LeagueMessagesPage({ params }: LeagueMessagesPageP
 
   return (
     <Box>
-      <Box display="flex" justifyContent="between" alignItems="center" mb={3}>
+      <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
         <Typography variant="h4" component="h1">
           League Messages
         </Typography>

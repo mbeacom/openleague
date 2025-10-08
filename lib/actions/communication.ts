@@ -365,6 +365,10 @@ async function getMessageRecipients(
     teamIds?: string[];
   }
 ): Promise<Array<{ id: string; email: string; name: string | null }>> {
+  // Build Prisma where clause based on targeting criteria
+  // - Empty object {} is used as initial value before conditions are applied
+  // - leagueUsers filter is used when targeting entire league
+  // - OR array with teamMembers filters is used for division/team targeting
   let whereClause:
     | { leagueUsers: { some: { leagueId: string } } }
     | { OR: Array<{ teamMembers: { some: { team: { divisionId?: { in: string[] }; id?: { in: string[] }; leagueId: string } } } }> }

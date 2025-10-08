@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { timingSafeEqual } from "crypto";
 import { notificationService } from "@/lib/services/notification";
 import { env } from "@/lib/env";
 
@@ -20,8 +21,22 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    if (authHeader !== `Bearer ${cronSecret}`) {
-      console.error("Unauthorized cron request");
+    // Use timing-safe comparison to prevent timing attacks
+    const providedToken = authHeader?.split('Bearer ')[1];
+
+    if (!providedToken) {
+      console.error("Unauthorized cron request: missing token");
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
+    const expected = Buffer.from(cronSecret);
+    const actual = Buffer.from(providedToken);
+
+    if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) {
+      console.error("Unauthorized cron request: invalid token");
       return NextResponse.json(
         { error: "Unauthorized" },
         { status: 401 }
@@ -29,10 +44,10 @@ export async function GET(request: NextRequest) {
     }
 
     console.log("Processing pending notification batches...");
-    
+
     // Process pending batches
     await notificationService.processPendingBatches();
-    
+
     console.log("Notification batch processing completed");
 
     return NextResponse.json({
@@ -42,7 +57,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error("Error processing notification batches:", error);
-    
+
     return NextResponse.json(
       {
         error: "Failed to process notification batches",

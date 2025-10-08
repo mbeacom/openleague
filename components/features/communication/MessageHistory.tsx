@@ -200,7 +200,7 @@ export const MessageHistory: React.FC<MessageHistoryProps> = ({ leagueId }) => {
           {messages.map((message) => (
             <Card key={message.id} variant="outlined">
               <CardContent>
-                <Box display="flex" justifyContent="between" alignItems="flex-start" mb={2}>
+                <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={2}>
                   <Box flex={1}>
                     <Box display="flex" alignItems="center" gap={1} mb={1}>
                       {message.messageType === "ANNOUNCEMENT" ? (

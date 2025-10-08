@@ -68,6 +68,8 @@ export class NotificationService {
       where: {
         userId_leagueId: {
           userId,
+          // WORKAROUND: Prisma's upsert requires this cast for @@unique constraints on nullable fields
+          // See: https://github.com/prisma/prisma/issues/3387
           leagueId: leagueId ?? (null as unknown as string),
         },
       },
@@ -346,6 +348,8 @@ export class NotificationService {
       where: {
         userId_leagueId: {
           userId,
+          // WORKAROUND: Prisma's upsert requires this cast for @@unique constraints on nullable fields
+          // See: https://github.com/prisma/prisma/issues/3387
           leagueId: leagueId ?? (null as unknown as string),
         },
       },
@@ -369,6 +373,106 @@ export class NotificationService {
     });
 
     return token;
+  }
+
+  /**
+   * Batch generate unsubscribe tokens for multiple users
+   * Optimized to avoid N+1 query problem when sending emails to many recipients
+   */
+  async batchGenerateUnsubscribeTokens(
+    userIds: string[],
+    leagueId?: string
+  ): Promise<Map<string, string>> {
+    if (userIds.length === 0) {
+      return new Map();
+    }
+
+    // Fetch existing preferences in a single query
+    const existingPreferences = await prisma.notificationPreference.findMany({
+      where: {
+        userId: { in: userIds },
+        leagueId: leagueId ?? null,
+      },
+      select: {
+        userId: true,
+        unsubscribeToken: true,
+      },
+    });
+
+    // Create a map of existing tokens
+    const tokenMap = new Map<string, string>();
+    const existingUserIds = new Set<string>();
+
+    for (const pref of existingPreferences) {
+      if (pref.unsubscribeToken) {
+        tokenMap.set(pref.userId, pref.unsubscribeToken);
+        existingUserIds.add(pref.userId);
+      }
+    }
+
+    // Find users without tokens and generate new ones
+    const usersNeedingTokens = userIds.filter(id => !existingUserIds.has(id));
+
+    if (usersNeedingTokens.length > 0) {
+      // Generate new tokens
+      const newTokens = usersNeedingTokens.map(userId => ({
+        userId,
+        token: randomBytes(32).toString("hex"),
+      }));
+
+      // Batch create new preferences
+      const createData = newTokens.map(({ userId, token }) => ({
+        userId,
+        leagueId: leagueId ?? null,
+        unsubscribeToken: token,
+        // Default preferences
+        leagueMessages: true,
+        leagueAnnouncements: true,
+        eventNotifications: true,
+        rsvpReminders: true,
+        teamInvitations: true,
+        emailEnabled: true,
+        urgentOnly: false,
+        batchDelivery: false,
+      }));
+
+      // Use createMany for batch insert (ignores duplicates with skipDuplicates)
+      await prisma.notificationPreference.createMany({
+        data: createData,
+        skipDuplicates: true,
+      });
+
+      // Add new tokens to the map
+      for (const { userId, token } of newTokens) {
+        tokenMap.set(userId, token);
+      }
+    }
+
+    // Handle users who had preferences but no tokens (update them)
+    const usersWithPrefsButNoTokens = existingPreferences
+      .filter(pref => !pref.unsubscribeToken)
+      .map(pref => pref.userId);
+
+    if (usersWithPrefsButNoTokens.length > 0) {
+      // Generate and update tokens for these users
+      for (const userId of usersWithPrefsButNoTokens) {
+        const token = randomBytes(32).toString("hex");
+
+        await prisma.notificationPreference.updateMany({
+          where: {
+            userId,
+            leagueId: leagueId ?? null,
+          },
+          data: {
+            unsubscribeToken: token,
+          },
+        });
+
+        tokenMap.set(userId, token);
+      }
+    }
+
+    return tokenMap;
   }
 
   /**

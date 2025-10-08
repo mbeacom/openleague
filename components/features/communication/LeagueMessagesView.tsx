@@ -2,11 +2,11 @@
 
 import React, { useState } from "react";
 import { Box, Button, Tabs, Tab, Menu, MenuItem } from "@mui/material";
-import { 
-  History as HistoryIcon, 
-  Send as SendIcon, 
+import {
+  History as HistoryIcon,
+  Send as SendIcon,
   Campaign as CampaignIcon,
-  KeyboardArrowDown as ArrowDownIcon 
+  KeyboardArrowDown as ArrowDownIcon
 } from "@mui/icons-material";
 import { MessageComposer } from "./MessageComposer";
 import { MessageHistory } from "./MessageHistory";
@@ -58,16 +58,16 @@ export const LeagueMessagesView: React.FC<LeagueMessagesViewProps> = ({
   return (
     <Box>
       {/* Action Bar */}
-      <Box display="flex" justifyContent="between" alignItems="center" mb={3}>
+      <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
         <Tabs value={activeTab} onChange={handleTabChange}>
-          <Tab 
-            icon={<HistoryIcon />} 
-            label="All Messages" 
+          <Tab
+            icon={<HistoryIcon />}
+            label="All Messages"
             iconPosition="start"
           />
-          <Tab 
-            icon={<CampaignIcon />} 
-            label="Announcements" 
+          <Tab
+            icon={<CampaignIcon />}
+            label="Announcements"
             iconPosition="start"
           />
         </Tabs>
@@ -87,7 +87,7 @@ export const LeagueMessagesView: React.FC<LeagueMessagesViewProps> = ({
               open={Boolean(sendMenuAnchor)}
               onClose={handleSendMenuClose}
             >
-              <MenuItem 
+              <MenuItem
                 onClick={() => {
                   setMessageComposerOpen(true);
                   handleSendMenuClose();
@@ -96,7 +96,7 @@ export const LeagueMessagesView: React.FC<LeagueMessagesViewProps> = ({
                 <SendIcon sx={{ mr: 1 }} />
                 Send Targeted Message
               </MenuItem>
-              <MenuItem 
+              <MenuItem
                 onClick={() => {
                   setAnnouncementComposerOpen(true);
                   handleSendMenuClose();
@@ -131,7 +131,7 @@ export const LeagueMessagesView: React.FC<LeagueMessagesViewProps> = ({
             divisions={leagueData.divisions}
             teams={leagueData.teams}
           />
-          
+
           <AnnouncementComposer
             open={announcementComposerOpen}
             onClose={() => setAnnouncementComposerOpen(false)}

@@ -147,7 +147,7 @@ export const AnnouncementArchive: React.FC<AnnouncementArchiveProps> = ({ league
   return (
     <Box>
       {/* Header */}
-      <Box display="flex" justifyContent="between" alignItems="center" mb={3}>
+      <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
         <Box display="flex" alignItems="center" gap={2}>
           <Typography variant="h6">
             Announcement Archive
@@ -212,7 +212,7 @@ export const AnnouncementArchive: React.FC<AnnouncementArchiveProps> = ({ league
               }}
             >
               <CardContent>
-                <Box display="flex" justifyContent="between" alignItems="flex-start" mb={2}>
+                <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={2}>
                   <Box flex={1}>
                     <Box display="flex" alignItems="center" gap={1} mb={1}>
                       <Typography variant="body2" sx={{ fontSize: "1.2em" }}>

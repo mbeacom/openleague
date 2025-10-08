@@ -37,9 +37,9 @@ export async function getNotificationPreferences(
 ): Promise<ActionResult<NotificationPreferences>> {
   try {
     const userId = await requireUserId();
-    
+
     const preferences = await notificationService.getNotificationPreferences(userId, leagueId);
-    
+
     return {
       success: true,
       data: preferences,
@@ -142,19 +142,55 @@ export async function getAllNotificationPreferences(): Promise<ActionResult<{
       },
     });
 
-    const leaguePreferences = await Promise.all(
-      leagueUsers.map(async (leagueUser) => {
-        const preferences = await notificationService.getNotificationPreferences(
-          userId,
-          leagueUser.leagueId
-        );
-        return {
-          leagueId: leagueUser.leagueId,
-          leagueName: leagueUser.league.name,
-          preferences,
-        };
-      })
+    // Batch fetch all league preferences in a single query to avoid N+1 problem
+    const leagueIds = leagueUsers.map(lu => lu.leagueId);
+    const allPreferences = leagueIds.length > 0
+      ? await prisma.notificationPreference.findMany({
+          where: {
+            userId,
+            leagueId: { in: leagueIds },
+          },
+        })
+      : [];
+
+    // Create a map for O(1) lookup
+    const preferencesMap = new Map(
+      allPreferences.map(pref => [pref.leagueId!, pref])
     );
+
+    // Build league preferences using the fetched data or defaults
+    const leaguePreferences = leagueUsers.map((leagueUser) => {
+      const pref = preferencesMap.get(leagueUser.leagueId);
+
+      const preferences: NotificationPreferences = pref
+        ? {
+            leagueMessages: pref.leagueMessages,
+            leagueAnnouncements: pref.leagueAnnouncements,
+            eventNotifications: pref.eventNotifications,
+            rsvpReminders: pref.rsvpReminders,
+            teamInvitations: pref.teamInvitations,
+            emailEnabled: pref.emailEnabled,
+            urgentOnly: pref.urgentOnly,
+            batchDelivery: pref.batchDelivery,
+          }
+        : {
+            // Default preferences if none exist for this league
+            leagueMessages: true,
+            leagueAnnouncements: true,
+            eventNotifications: true,
+            rsvpReminders: true,
+            teamInvitations: true,
+            emailEnabled: true,
+            urgentOnly: false,
+            batchDelivery: false,
+          };
+
+      return {
+        leagueId: leagueUser.leagueId,
+        leagueName: leagueUser.league.name,
+        preferences,
+      };
+    });
 
     return {
       success: true,
@@ -180,9 +216,9 @@ export async function handleUnsubscribe(
 ): Promise<ActionResult<{ unsubscribed: boolean; leagueName?: string }>> {
   try {
     const validated = unsubscribeSchema.parse(input);
-    
+
     const result = await notificationService.handleUnsubscribe(validated.token);
-    
+
     if (!result.success) {
       return {
         success: false,
@@ -256,28 +292,7 @@ export async function generateUnsubscribeToken(
 }
 
 /**
- * Process pending notification batches (for cron job)
+ * NOTE: Batch processing is handled by the cron endpoint at /api/cron/notification-batches
+ * which uses secret-based authentication. This server action has been removed to avoid
+ * confusion and prevent incorrect usage that would fail auth (cron jobs have no user session).
  */
-export async function processPendingNotificationBatches(): Promise<ActionResult<{ processed: number }>> {
-  try {
-    // This should only be called by system/cron, but we'll add basic protection
-    const userId = await requireUserId();
-    
-    // Only allow system admin or specific service account to call this
-    // For now, we'll just log the attempt
-    console.log(`Notification batch processing requested by user: ${userId}`);
-
-    await notificationService.processPendingBatches();
-
-    return {
-      success: true,
-      data: { processed: 1 }, // We don't track the exact count for now
-    };
-  } catch (error) {
-    console.error("Error processing notification batches:", error);
-    return {
-      success: false,
-      error: "Failed to process notification batches",
-    };
-  }
-}
