@@ -13,8 +13,10 @@ interface LeagueSchedulePageProps {
 }
 
 export default async function LeagueSchedulePage({ params }: LeagueSchedulePageProps) {
-  const userId = await requireUserId();
-  const { leagueId } = await params;
+  const [userId, { leagueId }] = await Promise.all([
+    requireUserId(),
+    params,
+  ]);
 
   // Verify user has access to this league
   const leagueUser = await prisma.leagueUser.findFirst({

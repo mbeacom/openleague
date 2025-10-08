@@ -11,8 +11,10 @@ interface NewGamePageProps {
 }
 
 export default async function NewGamePage({ params }: NewGamePageProps) {
-  const userId = await requireUserId();
-  const { leagueId } = await params;
+  const [userId, { leagueId }] = await Promise.all([
+    requireUserId(),
+    params,
+  ]);
 
   // Verify user has access to this league and can create games
   const leagueUser = await prisma.leagueUser.findFirst({
