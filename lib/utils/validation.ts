@@ -305,6 +305,38 @@ export const createInterTeamGameSchema = z.object({
     }
   );
 
+// League communication validation schemas
+export const sendLeagueMessageSchema = z.object({
+  leagueId: z.string().cuid("Invalid league ID format"),
+  subject: sanitizedStringWithMin(1, 200),
+  content: sanitizedStringWithMin(1, 5000),
+  messageType: z.enum(["MESSAGE", "ANNOUNCEMENT"]).default("MESSAGE"),
+  priority: z.enum(["LOW", "NORMAL", "HIGH", "URGENT"]).default("NORMAL"),
+  targeting: z.object({
+    entireLeague: z.boolean().default(false),
+    divisionIds: z.array(z.string().cuid()).optional(),
+    teamIds: z.array(z.string().cuid()).optional(),
+  }).refine(
+    (data) => {
+      // At least one targeting option must be specified
+      return data.entireLeague || 
+             (data.divisionIds && data.divisionIds.length > 0) || 
+             (data.teamIds && data.teamIds.length > 0);
+    },
+    {
+      message: "At least one targeting option must be specified",
+    }
+  ),
+});
+
+export const getLeagueMessagesSchema = z.object({
+  leagueId: z.string().cuid("Invalid league ID format"),
+  page: z.number().int().min(1).default(1),
+  limit: z.number().int().min(1).max(50).default(20),
+  messageType: z.enum(["MESSAGE", "ANNOUNCEMENT"]).optional(),
+  priority: z.enum(["LOW", "NORMAL", "HIGH", "URGENT"]).optional(),
+});
+
 // Type exports
 export type SignupInput = z.infer<typeof signupSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
@@ -328,3 +360,5 @@ export type AssignTeamToDivisionInput = z.infer<typeof assignTeamToDivisionSchem
 export type TransferPlayerInput = z.infer<typeof transferPlayerSchema>;
 export type PaginationInput = z.infer<typeof paginationSchema>;
 export type GetLeagueTeamsInput = z.infer<typeof getLeagueTeamsSchema>;
+export type SendLeagueMessageInput = z.infer<typeof sendLeagueMessageSchema>;
+export type GetLeagueMessagesInput = z.infer<typeof getLeagueMessagesSchema>;

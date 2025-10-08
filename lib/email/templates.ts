@@ -2,6 +2,7 @@ import { getMailchimpClient } from "./client";
 import { prisma } from "@/lib/db/prisma";
 import { formatDateTime } from "@/lib/utils/date";
 import { env, getBaseUrl } from "@/lib/env";
+import { notificationService } from "@/lib/services/notification";
 
 const EMAIL_FROM = env.EMAIL_FROM;
 const BASE_URL = getBaseUrl();
@@ -630,5 +631,237 @@ export async function sendEventNotifications(
       eventTitle: eventData.eventTitle,
       eventDate: eventData.eventDate,
     });
+  }
+}
+
+interface LeagueMessageEmailData {
+  recipients: Array<{ email: string; name: string | null; userId?: string }>;
+  leagueName: string;
+  senderName: string;
+  subject: string;
+  content: string;
+  priority: string;
+  leagueId?: string;
+}
+
+/**
+ * Send a targeted league message email
+ */
+export async function sendLeagueMessageEmail(data: LeagueMessageEmailData): Promise<void> {
+  const mailchimp = getMailchimpClient();
+  const priorityLabel = data.priority === "URGENT" ? "URGENT: " : data.priority === "HIGH" ? "Important: " : "";
+  const priorityColor = data.priority === "URGENT" ? "#D32F2F" : data.priority === "HIGH" ? "#FF9800" : "#1976D2";
+
+  // Send individual emails to include personalized unsubscribe links
+  for (const recipient of data.recipients) {
+    let unsubscribeLink = "";
+    
+    // Generate unsubscribe link if we have userId
+    if (recipient.userId) {
+      try {
+        const token = await notificationService.generateUnsubscribeToken(recipient.userId, data.leagueId);
+        unsubscribeLink = `${BASE_URL}/unsubscribe?token=${token}`;
+      } catch (error) {
+        console.error("Failed to generate unsubscribe token:", error);
+      }
+    }
+
+    const message: {
+      from_email: string;
+      subject: string;
+      html: string;
+      text: string;
+      to: Array<{ email: string; name?: string; type: "to" }>;
+    } = {
+      from_email: EMAIL_FROM,
+      subject: `${priorityLabel}${data.subject}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="background-color: ${priorityColor}; color: white; padding: 20px; border-radius: 8px 8px 0 0;">
+            <h2 style="margin: 0; color: white;">League Message</h2>
+            <p style="margin: 10px 0 0 0; color: white; opacity: 0.9;">From ${data.senderName} • ${data.leagueName}</p>
+          </div>
+
+          <div style="background-color: #f5f5f5; padding: 20px; border-radius: 0 0 8px 8px;">
+            <h3 style="margin-top: 0; color: #333;">${data.subject}</h3>
+            
+            <div style="background-color: white; padding: 20px; border-radius: 4px; margin: 20px 0;">
+              ${data.content.replace(/\n/g, '<br>')}
+            </div>
+
+            ${data.priority === "URGENT" || data.priority === "HIGH" ? `
+              <div style="background-color: #fff3e0; border-left: 4px solid ${priorityColor}; padding: 15px; margin: 20px 0;">
+                <strong style="color: ${priorityColor};">
+                  ${data.priority === "URGENT" ? "⚠️ This is an urgent message" : "📢 This is a high priority message"}
+                </strong>
+              </div>
+            ` : ""}
+
+            <p style="margin: 30px 0;">
+              <a href="${BASE_URL}/login"
+                 style="background-color: ${priorityColor}; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">
+                Go to openleague
+              </a>
+            </p>
+
+            <p style="color: #666; font-size: 14px;">
+              Or copy and paste this link into your browser:<br>
+              <a href="${BASE_URL}/login">${BASE_URL}/login</a>
+            </p>
+
+            ${unsubscribeLink ? `
+              <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+              <p style="color: #999; font-size: 12px; text-align: center;">
+                Don't want to receive these emails? 
+                <a href="${unsubscribeLink}" style="color: #999;">Unsubscribe</a>
+              </p>
+            ` : ""}
+          </div>
+        </div>
+      `,
+      text: `League Message from ${data.senderName}
+${data.leagueName}
+
+${data.subject}
+
+${data.content}
+
+${data.priority === "URGENT" || data.priority === "HIGH" ? `\n⚠️ This is a ${data.priority.toLowerCase()} priority message\n` : ""}
+
+Go to openleague: ${BASE_URL}/login
+
+${unsubscribeLink ? `\nDon't want to receive these emails? Unsubscribe: ${unsubscribeLink}` : ""}`,
+      to: [{
+        email: recipient.email,
+        name: recipient.name || undefined,
+        type: "to" as const,
+      }],
+    };
+
+    try {
+      await mailchimp.messages.send({ message });
+    } catch (error) {
+      console.error(`Error sending league message email to ${recipient.email}:`, error);
+      // Continue with other recipients
+    }
+  }
+}
+
+interface LeagueAnnouncementEmailData {
+  recipients: Array<{ email: string; name: string | null; userId?: string }>;
+  leagueName: string;
+  senderName: string;
+  subject: string;
+  content: string;
+  priority: string;
+  leagueId?: string;
+}
+
+/**
+ * Send a league announcement email
+ */
+export async function sendLeagueAnnouncementEmail(data: LeagueAnnouncementEmailData): Promise<void> {
+  const mailchimp = getMailchimpClient();
+  const priorityLabel = data.priority === "URGENT" ? "URGENT: " : data.priority === "HIGH" ? "Important: " : "";
+  const priorityColor = data.priority === "URGENT" ? "#D32F2F" : data.priority === "HIGH" ? "#FF9800" : "#43A047";
+
+  // Send individual emails to include personalized unsubscribe links
+  for (const recipient of data.recipients) {
+    let unsubscribeLink = "";
+    
+    // Generate unsubscribe link if we have userId
+    if (recipient.userId) {
+      try {
+        const token = await notificationService.generateUnsubscribeToken(recipient.userId, data.leagueId);
+        unsubscribeLink = `${BASE_URL}/unsubscribe?token=${token}`;
+      } catch (error) {
+        console.error("Failed to generate unsubscribe token:", error);
+      }
+    }
+
+    const message: {
+      from_email: string;
+      subject: string;
+      html: string;
+      text: string;
+      to: Array<{ email: string; name?: string; type: "to" }>;
+    } = {
+      from_email: EMAIL_FROM,
+      subject: `${priorityLabel}${data.subject}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="background-color: ${priorityColor}; color: white; padding: 20px; border-radius: 8px 8px 0 0;">
+            <h2 style="margin: 0; color: white;">📢 League Announcement</h2>
+            <p style="margin: 10px 0 0 0; color: white; opacity: 0.9;">From ${data.senderName} • ${data.leagueName}</p>
+          </div>
+
+          <div style="background-color: #f5f5f5; padding: 20px; border-radius: 0 0 8px 8px;">
+            <h3 style="margin-top: 0; color: #333;">${data.subject}</h3>
+            
+            <div style="background-color: white; padding: 20px; border-radius: 4px; margin: 20px 0; border-left: 4px solid ${priorityColor};">
+              ${data.content.replace(/\n/g, '<br>')}
+            </div>
+
+            ${data.priority === "URGENT" ? `
+              <div style="background-color: #ffebee; border: 2px solid #D32F2F; padding: 15px; margin: 20px 0; border-radius: 4px;">
+                <strong style="color: #D32F2F;">
+                  🚨 URGENT ANNOUNCEMENT - Please read immediately
+                </strong>
+              </div>
+            ` : data.priority === "HIGH" ? `
+              <div style="background-color: #fff3e0; border: 2px solid #FF9800; padding: 15px; margin: 20px 0; border-radius: 4px;">
+                <strong style="color: #FF9800;">
+                  📢 Important announcement for all league members
+                </strong>
+              </div>
+            ` : ""}
+
+            <p style="margin: 30px 0;">
+              <a href="${BASE_URL}/login"
+                 style="background-color: ${priorityColor}; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">
+                Go to openleague
+              </a>
+            </p>
+
+            <p style="color: #666; font-size: 14px;">
+              Or copy and paste this link into your browser:<br>
+              <a href="${BASE_URL}/login">${BASE_URL}/login</a>
+            </p>
+
+            ${unsubscribeLink ? `
+              <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+              <p style="color: #999; font-size: 12px; text-align: center;">
+                Don't want to receive these emails? 
+                <a href="${unsubscribeLink}" style="color: #999;">Unsubscribe</a>
+              </p>
+            ` : ""}
+          </div>
+        </div>
+      `,
+      text: `📢 League Announcement from ${data.senderName}
+${data.leagueName}
+
+${data.subject}
+
+${data.content}
+
+${data.priority === "URGENT" ? "\n🚨 URGENT ANNOUNCEMENT - Please read immediately\n" : data.priority === "HIGH" ? "\n📢 Important announcement for all league members\n" : ""}
+
+Go to openleague: ${BASE_URL}/login
+
+${unsubscribeLink ? `\nDon't want to receive these emails? Unsubscribe: ${unsubscribeLink}` : ""}`,
+      to: [{
+        email: recipient.email,
+        name: recipient.name || undefined,
+        type: "to" as const,
+      }],
+    };
+
+    try {
+      await mailchimp.messages.send({ message });
+    } catch (error) {
+      console.error(`Error sending league announcement email to ${recipient.email}:`, error);
+      // Continue with other recipients
+    }
   }
 }

@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+// Updated with new communication models
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
