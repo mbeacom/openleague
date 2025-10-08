@@ -19,6 +19,15 @@ const envSchema = z.object({
     // Cron job authentication
     CRON_SECRET: z.string().min(32, 'CRON_SECRET must be at least 32 characters long').optional(),
 
+    // Analytics and Tracking (optional)
+    NEXT_PUBLIC_GA_MEASUREMENT_ID: z.string().optional(),
+    NEXT_PUBLIC_SENTRY_DSN: z.string().optional(),
+    SENTRY_ORG: z.string().optional(),
+    SENTRY_PROJECT: z.string().optional(),
+    NEXT_PUBLIC_VERCEL_ANALYTICS_ID: z.string().optional(),
+    NEXT_PUBLIC_HOTJAR_ID: z.string().optional(),
+    NEXT_PUBLIC_MIXPANEL_TOKEN: z.string().optional(),
+
     // Optional AWS variables (for future migration)
     AWS_REGION: z.string().optional(),
 })
@@ -35,6 +44,13 @@ function validateEnv() {
             EMAIL_FROM: process.env.EMAIL_FROM || '',
             NODE_ENV: (process.env.NODE_ENV || 'development') as 'development' | 'production' | 'test',
             CRON_SECRET: process.env.CRON_SECRET,
+            NEXT_PUBLIC_GA_MEASUREMENT_ID: process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID,
+            NEXT_PUBLIC_SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN,
+            SENTRY_ORG: process.env.SENTRY_ORG,
+            SENTRY_PROJECT: process.env.SENTRY_PROJECT,
+            NEXT_PUBLIC_VERCEL_ANALYTICS_ID: process.env.NEXT_PUBLIC_VERCEL_ANALYTICS_ID,
+            NEXT_PUBLIC_HOTJAR_ID: process.env.NEXT_PUBLIC_HOTJAR_ID,
+            NEXT_PUBLIC_MIXPANEL_TOKEN: process.env.NEXT_PUBLIC_MIXPANEL_TOKEN,
             AWS_REGION: process.env.AWS_REGION,
         }
     }

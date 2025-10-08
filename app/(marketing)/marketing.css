@@ -1,0 +1,23 @@
+/* Marketing-specific Tailwind utilities */
+@tailwind utilities;
+
+/* Custom marketing utilities that work alongside MUI */
+.marketing-layout {
+  /* Marketing-specific layout styles */
+}
+
+/* Marketing-specific responsive utilities */
+@media (max-width: 768px) {
+  .marketing-hero-mobile {
+    padding: 2rem 1rem;
+  }
+}
+
+/* Utility classes for marketing CTAs */
+.marketing-cta-shadow {
+  box-shadow: 0 4px 14px 0 rgba(25, 118, 210, 0.25);
+}
+
+.marketing-cta-shadow:hover {
+  box-shadow: 0 6px 20px 0 rgba(25, 118, 210, 0.35);
+}
