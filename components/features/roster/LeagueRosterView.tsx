@@ -22,46 +22,11 @@ import FilterListIcon from "@mui/icons-material/FilterList";
 import LeaguePlayerCard from "./LeaguePlayerCard";
 import { exportLeagueRoster } from "@/lib/actions/roster";
 import { useToast } from "@/components/ui/Toast";
-
-interface Player {
-  id: string;
-  name: string;
-  email: string | null;
-  phone: string | null;
-  emergencyContact: string | null;
-  emergencyPhone: string | null;
-  team: {
-    id: string;
-    name: string;
-    division: {
-      id: string;
-      name: string;
-      ageGroup: string | null;
-      skillLevel: string | null;
-    } | null;
-  };
-  user: {
-    id: string;
-    email: string;
-  } | null;
-}
-
-interface Team {
-  id: string;
-  name: string;
-  divisionId: string | null;
-}
-
-interface Division {
-  id: string;
-  name: string;
-  ageGroup: string | null;
-  skillLevel: string | null;
-}
+import type { PlayerWithTeam, TeamWithDivision, Division } from "@/types/roster";
 
 interface LeagueRosterViewProps {
-  players: Player[];
-  teams: Team[];
+  players: PlayerWithTeam[];
+  teams: TeamWithDivision[];
   divisions: Division[];
   leagueId: string;
   isLeagueAdmin: boolean;
@@ -113,7 +78,7 @@ export default function LeagueRosterView({
       }
       acc[teamId].players.push(player);
       return acc;
-    }, {} as Record<string, { team: Player['team']; players: Player[] }>);
+    }, {} as Record<string, { team: PlayerWithTeam['team']; players: PlayerWithTeam[] }>);
 
     // Sort teams by name
     return Object.values(grouped).sort((a, b) => a.team.name.localeCompare(b.team.name));

@@ -21,15 +21,7 @@ import {
   Divider,
 } from "@mui/material";
 import { sendLeagueInvitation, resendInvitation } from "@/lib/actions/invitations";
-
-interface Team {
-  id: string;
-  name: string;
-  division: {
-    name: string;
-    ageGroup: string | null;
-  } | null;
-}
+import type { TeamWithDivision } from "@/types/roster";
 
 interface Invitation {
   id: string;
@@ -46,7 +38,7 @@ interface Invitation {
 }
 
 interface LeagueInvitationManagerProps {
-  teams: Team[];
+  teams: TeamWithDivision[];
   invitations: Invitation[];
   leagueId: string;
   isLeagueAdmin: boolean;
@@ -194,7 +186,7 @@ export default function LeagueInvitationManager({
           sx={{ flex: 1 }}
           size="small"
         />
-        
+
         <FormControl sx={{ minWidth: 200 }} size="small">
           <InputLabel>Select Team</InputLabel>
           <Select

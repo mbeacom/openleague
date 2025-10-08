@@ -19,28 +19,12 @@ import {
 } from "@mui/material";
 import { transferPlayer } from "@/lib/actions/roster";
 import { useToast } from "@/components/ui/Toast";
-
-interface Player {
-  id: string;
-  name: string;
-  email: string | null;
-  phone: string | null;
-  team: {
-    id: string;
-    name: string;
-    division: {
-      id: string;
-      name: string;
-      ageGroup: string | null;
-      skillLevel: string | null;
-    } | null;
-  };
-}
+import type { PlayerWithTeam } from "@/types/roster";
 
 interface PlayerTransferDialogProps {
   open: boolean;
   onClose: () => void;
-  player: Player;
+  player: PlayerWithTeam;
   leagueId: string;
 }
 

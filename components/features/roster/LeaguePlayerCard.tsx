@@ -18,32 +18,10 @@ import EmailIcon from "@mui/icons-material/Email";
 import PhoneIcon from "@mui/icons-material/Phone";
 import SwapHorizIcon from "@mui/icons-material/SwapHoriz";
 import PlayerTransferDialog from "./PlayerTransferDialog";
-
-interface Player {
-  id: string;
-  name: string;
-  email: string | null;
-  phone: string | null;
-  emergencyContact: string | null;
-  emergencyPhone: string | null;
-  team: {
-    id: string;
-    name: string;
-    division: {
-      id: string;
-      name: string;
-      ageGroup: string | null;
-      skillLevel: string | null;
-    } | null;
-  };
-  user: {
-    id: string;
-    email: string;
-  } | null;
-}
+import type { PlayerWithTeam } from "@/types/roster";
 
 interface LeaguePlayerCardProps {
-  player: Player;
+  player: PlayerWithTeam;
   isLeagueAdmin: boolean;
   leagueId: string;
 }
