@@ -19,11 +19,12 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  teamMembers TeamMember[]
-  rsvps       RSVP[]
-  invitations Invitation[]
-  players     Player[]
-  leagueUsers LeagueUser[]
+  teamMembers     TeamMember[]
+  rsvps           RSVP[]
+  invitations     Invitation[]
+  players         Player[]
+  leagueUsers     LeagueUser[]
+  playerTransfers PlayerTransfer[]
 }
 
 // Team model
@@ -46,9 +47,11 @@ model Team {
   members     TeamMember[]
   players     Player[]
   events      Event[]
-  invitations Invitation[]
-  homeEvents  Event[] @relation("HomeTeam")
-  awayEvents  Event[] @relation("AwayTeam")
+  invitations       Invitation[]
+  homeEvents        Event[] @relation("HomeTeam")
+  awayEvents        Event[] @relation("AwayTeam")
+  transfersFrom     PlayerTransfer[] @relation("TransferFromTeam")
+  transfersTo       PlayerTransfer[] @relation("TransferToTeam")
 
   @@index([leagueId]) // Optimize league-team queries
   @@index([divisionId]) // Optimize division-team queries
@@ -99,6 +102,9 @@ model Player {
   // Optional league relationship for league-wide roster management
   leagueId String?
   league   League? @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+
+  // Transfer history
+  transfers PlayerTransfer[]
 
   @@index([leagueId]) // Optimize league-wide roster queries
 }
@@ -202,9 +208,10 @@ model League {
   // Essential relationships only
   divisions Division[]
   teams     Team[]
-  events    Event[]
-  players   Player[]
-  users     LeagueUser[]
+  events          Event[]
+  players         Player[]
+  users           LeagueUser[]
+  playerTransfers PlayerTransfer[]
 
   @@map("leagues")
 }
@@ -246,4 +253,28 @@ enum LeagueRole {
   LEAGUE_ADMIN // Full league control
   TEAM_ADMIN   // Team management within league
   MEMBER       // Basic member
+}
+
+// Player transfer history model for audit trail
+model PlayerTransfer {
+  id              String   @id @default(cuid())
+  reason          String?  // Optional reason for transfer
+  createdAt       DateTime @default(now())
+
+  playerId        String
+  player          Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  fromTeamId      String
+  fromTeam        Team     @relation("TransferFromTeam", fields: [fromTeamId], references: [id])
+
+  toTeamId        String
+  toTeam          Team     @relation("TransferToTeam", fields: [toTeamId], references: [id])
+
+  leagueId        String
+  league          League   @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+
+  transferredById String
+  transferredBy   User     @relation(fields: [transferredById], references: [id])
+
+  @@map("player_transfers")
 }
