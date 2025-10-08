@@ -16,3 +16,6 @@ export { ToastProvider, useToast } from './Toast';
 
 export { default as Pagination } from './Pagination';
 export type { PaginationProps } from './Pagination';
+
+export { default as Logo } from './Logo';
+export type { LogoSize, LogoVariant } from './Logo';
