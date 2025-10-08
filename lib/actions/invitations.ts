@@ -432,29 +432,24 @@ export async function resendInvitation(
 
     // Check authentication and authorization
     const userId = await requireUserId();
-    
+
     // Check if user is team admin OR league admin
-    let hasPermission = false;
-    
-    // Check team admin permission
-    try {
-      await requireTeamAdmin(invitation.teamId);
-      hasPermission = true;
-    } catch {
-      // If not team admin, check league admin permission
-      if (invitation.team.leagueId) {
-        const leagueUser = await prisma.leagueUser.findFirst({
-          where: {
-            userId,
-            leagueId: invitation.team.leagueId,
-            role: "LEAGUE_ADMIN",
-          },
-        });
-        hasPermission = !!leagueUser;
-      }
+    const isTeamAdmin = await prisma.teamMember.findFirst({
+      where: { userId, teamId: invitation.teamId, role: "ADMIN" },
+    });
+
+    let isLeagueAdmin = null;
+    if (!isTeamAdmin && invitation.team.leagueId) {
+      isLeagueAdmin = await prisma.leagueUser.findFirst({
+        where: {
+          userId,
+          leagueId: invitation.team.leagueId,
+          role: "LEAGUE_ADMIN",
+        },
+      });
     }
 
-    if (!hasPermission) {
+    if (!isTeamAdmin && !isLeagueAdmin) {
       return {
         success: false,
         error: "Unauthorized: Only team or league admins can resend invitations",

@@ -39,99 +39,100 @@ export default async function LeagueRosterPage({ params }: LeagueRosterPageProps
 
   const isLeagueAdmin = leagueUser.role === "LEAGUE_ADMIN";
 
-  // Fetch all players in the league with team and division information
-  const players = await prisma.player.findMany({
-    where: {
-      leagueId,
-    },
-    include: {
-      team: {
-        select: {
-          id: true,
-          name: true,
-          division: {
-            select: {
-              id: true,
-              name: true,
-              ageGroup: true,
-              skillLevel: true,
-            },
-          },
-        },
+  // Fetch data in parallel for better performance
+  const [players, teams, divisions, rawInvitations] = await Promise.all([
+    // Fetch all players in the league with team and division information
+    prisma.player.findMany({
+      where: {
+        leagueId,
       },
-      user: {
-        select: {
-          id: true,
-          email: true,
-        },
-      },
-    },
-    orderBy: [
-      { team: { name: "asc" } },
-      { name: "asc" },
-    ],
-  });
-
-  // Fetch teams and divisions for filtering
-  const teams = await prisma.team.findMany({
-    where: {
-      leagueId,
-      isActive: true,
-    },
-    select: {
-      id: true,
-      name: true,
-      divisionId: true,
-      division: {
-        select: {
-          name: true,
-          ageGroup: true,
-        },
-      },
-    },
-    orderBy: { name: "asc" },
-  });
-
-  const divisions = await prisma.division.findMany({
-    where: {
-      leagueId,
-      isActive: true,
-    },
-    select: {
-      id: true,
-      name: true,
-      ageGroup: true,
-      skillLevel: true,
-    },
-    orderBy: { name: "asc" },
-  });
-
-  // Fetch recent invitations for the league (only for league admins)
-  const rawInvitations = isLeagueAdmin
-    ? await prisma.invitation.findMany({
-        where: {
-          team: {
-            leagueId,
-          },
-        },
-        include: {
-          team: {
-            select: {
-              name: true,
-              division: {
-                select: {
-                  name: true,
-                },
+      include: {
+        team: {
+          select: {
+            id: true,
+            name: true,
+            division: {
+              select: {
+                id: true,
+                name: true,
+                ageGroup: true,
+                skillLevel: true,
               },
             },
           },
         },
-        orderBy: {
-          createdAt: "desc",
+        user: {
+          select: {
+            id: true,
+            email: true,
+          },
         },
-        take: 10, // Limit to recent invitations for roster page
-      })
-    : [];
+      },
+      orderBy: [
+        { team: { name: "asc" } },
+        { name: "asc" },
+      ],
+    }),
+    // Fetch teams for filtering
+    prisma.team.findMany({
+      where: {
+        leagueId,
+        isActive: true,
+      },
+      select: {
+        id: true,
+        name: true,
+        divisionId: true,
+        division: {
+          select: {
+            name: true,
+            ageGroup: true,
+          },
+        },
+      },
+      orderBy: { name: "asc" },
+    }),
+    // Fetch divisions for filtering
+    prisma.division.findMany({
+      where: {
+        leagueId,
+        isActive: true,
+      },
+      select: {
+        id: true,
+        name: true,
+        ageGroup: true,
+        skillLevel: true,
+      },
+      orderBy: { name: "asc" },
+    }),
+    // Fetch recent invitations for the league (only for league admins)
+    isLeagueAdmin
+      ? prisma.invitation.findMany({
+          where: {
+            team: {
+              leagueId,
+            },
+          },
+          include: {
+            team: {
+              select: {
+                name: true,
+                division: {
+                  select: {
+                    name: true,
+                  },
+                },
+              },
+            },
+          },
+          orderBy: {
+            createdAt: "desc",
+          },
+          take: 10, // Limit to recent invitations for roster page
+        })
+      : Promise.resolve([]),
+  ]);
 
   // Serialize dates for client component
   const invitations = rawInvitations.map((inv) => ({

@@ -4,8 +4,8 @@ import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
 import { requireTeamAdmin, requireUserId } from "@/lib/auth/session";
 import { revalidatePath } from "next/cache";
-import { 
-  addPlayerSchema, 
+import {
+  addPlayerSchema,
   updatePlayerSchema,
   transferPlayerSchema,
   type AddPlayerInput,
@@ -362,7 +362,7 @@ export async function exportLeagueRoster(leagueId: string) {
       ],
     });
 
-    // Generate CSV content
+    // Generate CSV content with proper escaping
     const headers = [
       "Player Name",
       "Email",
@@ -376,19 +376,31 @@ export async function exportLeagueRoster(leagueId: string) {
       "Emergency Phone",
     ];
 
+    // Helper function to properly escape CSV fields
+    const escapeCSVField = (field: string | null | undefined): string => {
+      if (!field) return '';
+      // Convert to string and escape double quotes by doubling them
+      const stringField = String(field).replace(/"/g, '""');
+      // Wrap in quotes if field contains comma, quote, or newline
+      if (stringField.includes(',') || stringField.includes('"') || stringField.includes('\n') || stringField.includes('\r')) {
+        return `"${stringField}"`;
+      }
+      return stringField;
+    };
+
     const csvRows = [
       headers.join(","),
       ...players.map(player => [
-        `"${player.name}"`,
-        `"${player.email || ''}"`,
-        `"${player.phone || ''}"`,
-        `"${player.team.name}"`,
-        `"${player.team.division?.name || ''}"`,
-        `"${player.team.division?.ageGroup || ''}"`,
-        `"${player.team.division?.skillLevel || ''}"`,
+        escapeCSVField(player.name),
+        escapeCSVField(player.email),
+        escapeCSVField(player.phone),
+        escapeCSVField(player.team.name),
+        escapeCSVField(player.team.division?.name),
+        escapeCSVField(player.team.division?.ageGroup),
+        escapeCSVField(player.team.division?.skillLevel),
         player.user ? "Yes" : "No",
-        `"${player.emergencyContact || ''}"`,
-        `"${player.emergencyPhone || ''}"`,
+        escapeCSVField(player.emergencyContact),
+        escapeCSVField(player.emergencyPhone),
       ].join(","))
     ];
 

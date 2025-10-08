@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   Dialog,
@@ -63,7 +63,7 @@ export default function PlayerTransferDialog({
   const [teamsLoaded, setTeamsLoaded] = useState(false);
 
   // Load available teams when dialog opens
-  const loadAvailableTeams = async () => {
+  const loadAvailableTeams = useCallback(async () => {
     if (teamsLoaded) return;
 
     try {
@@ -80,7 +80,7 @@ export default function PlayerTransferDialog({
     } catch {
       setError("Failed to load available teams");
     }
-  };
+  }, [teamsLoaded, leagueId, player.team.id]);
 
   const handleTransfer = async () => {
     if (!selectedTeamId) return;
@@ -123,9 +123,11 @@ export default function PlayerTransferDialog({
   };
 
   // Load teams when dialog opens
-  if (open && !teamsLoaded) {
-    loadAvailableTeams();
-  }
+  useEffect(() => {
+    if (open) {
+      loadAvailableTeams();
+    }
+  }, [open, loadAvailableTeams]);
 
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
