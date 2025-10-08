@@ -11,8 +11,10 @@ interface EventPageProps {
 }
 
 export default async function EventPage({ params }: EventPageProps) {
-  const userId = await requireUserId();
-  const { id } = await params;
+  const [userId, { id }] = await Promise.all([
+    requireUserId(),
+    params,
+  ]);
 
   const event = await getEvent(id);
 

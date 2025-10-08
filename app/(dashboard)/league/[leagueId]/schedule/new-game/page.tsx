@@ -5,14 +5,16 @@ import { notFound } from "next/navigation";
 import InterTeamGameForm from "@/components/features/events/InterTeamGameForm";
 
 interface NewGamePageProps {
-  params: {
+  params: Promise<{
     leagueId: string;
-  };
+  }>;
 }
 
 export default async function NewGamePage({ params }: NewGamePageProps) {
-  const userId = await requireUserId();
-  const { leagueId } = params;
+  const [userId, { leagueId }] = await Promise.all([
+    requireUserId(),
+    params,
+  ]);
 
   // Verify user has access to this league and can create games
   const leagueUser = await prisma.leagueUser.findFirst({

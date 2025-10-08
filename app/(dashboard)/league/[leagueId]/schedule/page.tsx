@@ -7,14 +7,16 @@ import { notFound } from "next/navigation";
 import LeagueCalendar from "@/components/features/calendar/LeagueCalendar";
 
 interface LeagueSchedulePageProps {
-  params: {
+  params: Promise<{
     leagueId: string;
-  };
+  }>;
 }
 
 export default async function LeagueSchedulePage({ params }: LeagueSchedulePageProps) {
-  const userId = await requireUserId();
-  const { leagueId } = params;
+  const [userId, { leagueId }] = await Promise.all([
+    requireUserId(),
+    params,
+  ]);
 
   // Verify user has access to this league
   const leagueUser = await prisma.leagueUser.findFirst({

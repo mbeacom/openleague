@@ -11,8 +11,10 @@ interface EditEventPageProps {
 }
 
 export default async function EditEventPage({ params }: EditEventPageProps) {
-  await requireUserId();
-  const { id } = await params;
+  const [, { id }] = await Promise.all([
+    requireUserId(),
+    params,
+  ]);
 
   const event = await getEvent(id);
 
