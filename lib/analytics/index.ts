@@ -1,7 +1,6 @@
 // Analytics utilities for marketing and conversion tracking
 
 export interface AnalyticsEvent {
-  event: string;
   category: 'engagement' | 'conversion' | 'navigation' | 'marketing';
   action: string;
   label?: string;
@@ -10,19 +9,22 @@ export interface AnalyticsEvent {
 
 // Google Analytics 4 event tracking
 export function trackEvent(event: AnalyticsEvent) {
-  if (typeof window !== 'undefined' && window.gtag) {
-    window.gtag('event', event.action, {
-      event_category: event.category,
-      event_label: event.label,
-      value: event.value,
-    });
+  if (typeof window !== 'undefined' && typeof window.gtag === 'function') {
+    try {
+      window.gtag('event', event.action, {
+        category: event.category,
+        label: event.label,
+        value: event.value,
+      });
+    } catch (error) {
+      console.warn('Google Analytics tracking failed:', error);
+    }
   }
 }
 
 // Track marketing conversion events
 export function trackConversion(action: string, label?: string, value?: number) {
   trackEvent({
-    event: 'conversion',
     category: 'conversion',
     action,
     label,
@@ -33,7 +35,6 @@ export function trackConversion(action: string, label?: string, value?: number) 
 // Track marketing engagement events
 export function trackEngagement(action: string, label?: string) {
   trackEvent({
-    event: 'engagement',
     category: 'engagement',
     action,
     label,
@@ -43,7 +44,6 @@ export function trackEngagement(action: string, label?: string) {
 // Track navigation events
 export function trackNavigation(action: string, label?: string) {
   trackEvent({
-    event: 'navigation',
     category: 'navigation',
     action,
     label,
@@ -53,7 +53,6 @@ export function trackNavigation(action: string, label?: string) {
 // Marketing-specific event tracking
 export function trackMarketingEvent(action: string, label?: string, value?: number) {
   trackEvent({
-    event: 'marketing',
     category: 'marketing',
     action,
     label,

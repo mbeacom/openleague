@@ -3,40 +3,12 @@ import { Metadata } from 'next';
 import { Container, Typography, Box, Card, CardContent, Button, Stack, Chip } from '@mui/material';
 import { Check as CheckIcon } from '@mui/icons-material';
 import Link from 'next/link';
+import { PRICING_PLANS, COMPARISON_POINTS } from '@/lib/config/pricing';
 
 export const metadata: Metadata = {
   title: 'Pricing - OpenLeague',
   description: 'Transparent, affordable pricing for sports team management. Simple plans that scale with your needs.',
 };
-
-const starterFeatures = [
-  'Up to 25 team members',
-  'Unlimited events and games',
-  'RSVP tracking',
-  'Email notifications',
-  'Mobile app access',
-  'Basic roster management',
-  'Community support',
-];
-
-const proFeatures = [
-  'Everything in Starter',
-  'Unlimited team members',
-  'League management',
-  'Division organization',
-  'Advanced communication tools',
-  'Multiple teams',
-  'Priority email support',
-  'Custom branding (coming soon)',
-];
-
-const comparisonPoints = [
-  { feature: 'OpenLeague Starter', price: '$5/mo', limit: 'Up to 25 members' },
-  { feature: 'OpenLeague Pro', price: '$15/mo', limit: 'Unlimited' },
-  { feature: 'TeamSnap', price: '$13.99/mo', limit: 'Per team, limited' },
-  { feature: 'SportsEngine', price: '$19.99/mo', limit: 'Per team' },
-  { feature: 'Spreadsheets', price: 'Free', limit: 'Manual & error-prone' },
-];
 
 export default function PricingPage() {
   return (
@@ -56,11 +28,11 @@ export default function PricingPage() {
           <Card>
             <CardContent sx={{ p: 4, textAlign: 'center' }}>
               <Typography variant="h4" component="h2" gutterBottom>
-                Starter
+                {PRICING_PLANS.starter.name}
               </Typography>
               <Box sx={{ my: 3 }}>
                 <Typography variant="h3" component="div" color="primary.main">
-                  $5
+                  {PRICING_PLANS.starter.price}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                   per month
@@ -79,7 +51,7 @@ export default function PricingPage() {
               </Button>
 
               <Stack spacing={2} sx={{ textAlign: 'left' }}>
-                {starterFeatures.map((feature) => (
+                {PRICING_PLANS.starter.features.map((feature) => (
                   <Box key={feature} sx={{ display: 'flex', alignItems: 'center' }}>
                     <CheckIcon sx={{ color: 'success.main', mr: 2, flexShrink: 0 }} />
                     <Typography variant="body2">{feature}</Typography>
@@ -96,24 +68,26 @@ export default function PricingPage() {
               position: 'relative',
             }}
           >
-            <Chip
-              label="Most Popular"
-              color="primary"
-              sx={{
-                position: 'absolute',
-                top: -16,
-                left: '50%',
-                transform: 'translateX(-50%)',
-                fontWeight: 600,
-              }}
-            />
+            {PRICING_PLANS.pro.highlightLabel && (
+              <Chip
+                label={PRICING_PLANS.pro.highlightLabel}
+                color="primary"
+                sx={{
+                  position: 'absolute',
+                  top: -16,
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  fontWeight: 600,
+                }}
+              />
+            )}
             <CardContent sx={{ p: 4, textAlign: 'center' }}>
               <Typography variant="h4" component="h2" gutterBottom>
-                Pro
+                {PRICING_PLANS.pro.name}
               </Typography>
               <Box sx={{ my: 3 }}>
                 <Typography variant="h3" component="div" color="primary.main">
-                  $15
+                  {PRICING_PLANS.pro.price}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                   per month
@@ -132,7 +106,7 @@ export default function PricingPage() {
               </Button>
 
               <Stack spacing={2} sx={{ textAlign: 'left' }}>
-                {proFeatures.map((feature) => (
+                {PRICING_PLANS.pro.features.map((feature) => (
                   <Box key={feature} sx={{ display: 'flex', alignItems: 'center' }}>
                     <CheckIcon sx={{ color: 'success.main', mr: 2, flexShrink: 0 }} />
                     <Typography variant="body2">{feature}</Typography>
@@ -170,13 +144,13 @@ export default function PricingPage() {
                   Limitations
                 </Typography>
 
-                {comparisonPoints.map((point) => (
+                {COMPARISON_POINTS.map((point) => (
                   <React.Fragment key={point.feature}>
                     <Typography variant="body2">{point.feature}</Typography>
                     <Typography
                       variant="body2"
-                      fontWeight={point.feature === 'OpenLeague' ? 600 : 400}
-                      color={point.feature === 'OpenLeague' ? 'success.main' : 'text.primary'}
+                      fontWeight={point.feature.startsWith('OpenLeague') ? 600 : 400}
+                      color={point.feature.startsWith('OpenLeague') ? 'success.main' : 'text.primary'}
                     >
                       {point.price}
                     </Typography>
@@ -248,7 +222,7 @@ export default function PricingPage() {
             Join teams already using OpenLeague to simplify their management. Start with Starter, upgrade anytime.
           </Typography>
           <Button component={Link} href="/signup" variant="contained" size="large">
-            Start Your 14-Day Free Trial
+            Get Started
           </Button>
         </Box>
       </Box>

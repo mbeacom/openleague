@@ -83,7 +83,7 @@ export default function GetStartedPage() {
 
         <Box sx={{ display: 'flex', justifyContent: 'center', mb: 8 }}>
           <Button component={Link} href="/signup" variant="contained" size="large">
-            Start Your 14-Day Free Trial
+            Sign Up Now
           </Button>
         </Box>
 
@@ -106,10 +106,10 @@ export default function GetStartedPage() {
                     ))}
                   </Box>
                 )}
-                {step.action && (
+                {step.action && step.actionHref && (
                   <Button
                     component={Link}
-                    href={step.actionHref!}
+                    href={step.actionHref}
                     variant="contained"
                     sx={{ mt: 2 }}
                   >
@@ -185,10 +185,10 @@ export default function GetStartedPage() {
             Ready to Get Started?
           </Typography>
           <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-            Start your 14-day free trial and begin managing your team in minutes.
+            Sign up and begin managing your team in minutes.
           </Typography>
           <Button component={Link} href="/signup" variant="contained" size="large">
-            Start Free Trial
+            Sign Up Now
           </Button>
         </Box>
       </Box>
