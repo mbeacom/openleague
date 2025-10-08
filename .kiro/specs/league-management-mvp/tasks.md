@@ -56,9 +56,9 @@
     - Add quick actions for team and division management
     - _Requirements: 1.5, 2.7, 9.1, 9.2_
 
-- [ ] 3. Implement cross-team roster management
+- [x] 3. Implement cross-team roster management
 
-  - [ ] 3.1 Build league-wide roster view
+  - [x] 3.1 Build league-wide roster view
 
     - Create league roster page showing all players across teams
     - Implement filtering by team, division, and player attributes
@@ -66,7 +66,7 @@
     - Add export functionality for league roster data
     - _Requirements: 3.1, 3.7, 7.5_
 
-  - [ ] 3.2 Create player transfer system
+  - [x] 3.2 Create player transfer system
 
     - Build `transferPlayer` Server Action with validation
     - Implement player transfer interface with team selection
@@ -74,7 +74,7 @@
     - Create duplicate player detection across teams
     - _Requirements: 3.2, 3.3, 3.4_
 
-  - [ ] 3.3 Enhance invitation system for leagues
+  - [x] 3.3 Enhance invitation system for leagues
     - Update invitation system to work with league context
     - Create team-specific invitations within leagues
     - Implement league admin ability to invite to any team
