@@ -1,6 +1,6 @@
 # Implementation Plan
 
-- [ ] 1. Set up marketing routes and configuration in existing project
+- [x] 1. Set up marketing routes and configuration in existing project
   - Create (marketing) route group in existing Next.js 15+ app
   - Configure optional Tailwind CSS for marketing utilities alongside MUI
   - Set up marketing layout and documentation structure
@@ -20,7 +20,7 @@
   - Build responsive navigation using MUI Drawer for mobile
   - _Requirements: 1.7, 9.1, 9.6_
 
-- [ ]* 2.3 Write marketing component unit tests
+- [ ] 2.3 Write marketing component unit tests
   - Create tests for marketing layout and MUI component variants
   - Test responsive behavior and accessibility features
   - _Requirements: 8.1, 8.2_
