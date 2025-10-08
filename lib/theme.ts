@@ -70,16 +70,16 @@ declare module '@mui/material/Button' {
   }
 }
 
-// Update the Card's variant prop options
-declare module '@mui/material/Card' {
-  interface CardPropsVariantOverrides {
+// Update the Paper's variant prop options (Card extends Paper)
+declare module '@mui/material/Paper' {
+  interface PaperPropsVariantOverrides {
     marketing: true;
   }
 }
 
-// Update the Container's variant prop options
-declare module '@mui/material/Container' {
-  interface ContainerPropsVariantOverrides {
+// Update the Card's variant prop options
+declare module '@mui/material/Card' {
+  interface CardPropsVariantOverrides {
     marketing: true;
   }
 }
@@ -326,31 +326,13 @@ const baseTheme = createTheme({
       },
       variants: [
         {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          props: { variant: 'marketing' } as any,
+          props: { variant: 'marketing' },
           style: {
             padding: '32px',
             background: 'linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 100%)',
             border: '1px solid rgba(25, 118, 210, 0.1)',
             '&:hover': {
               border: '1px solid rgba(25, 118, 210, 0.2)',
-            },
-          },
-        },
-      ],
-    },
-    // Marketing-specific Container styles
-    MuiContainer: {
-      variants: [
-        {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          props: { variant: 'marketing' } as any,
-          style: {
-            paddingTop: '80px',
-            paddingBottom: '80px',
-            '@media (max-width:600px)': {
-              paddingTop: '48px',
-              paddingBottom: '48px',
             },
           },
         },

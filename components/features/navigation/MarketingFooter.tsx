@@ -162,6 +162,7 @@ export default function MarketingFooter() {
             {footerSections.map((section) => (
               <Box key={section.title}>
                 <Typography 
+                  component="h3"
                   variant="subtitle2" 
                   gutterBottom 
                   fontWeight={600}
@@ -172,24 +173,22 @@ export default function MarketingFooter() {
                 </Typography>
                 <Stack spacing={1.5}>
                   {section.links.map((link) => (
-                    <Link 
+                    <Typography
                       key={link.href}
-                      href={link.href} 
-                      style={{ textDecoration: 'none' }}
+                      component={Link}
+                      href={link.href}
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{
+                        textDecoration: 'none',
+                        transition: 'color 0.2s ease-in-out',
+                        '&:hover': {
+                          color: 'marketing.primary',
+                        },
+                      }}
                     >
-                      <Typography 
-                        variant="body2" 
-                        color="text.secondary" 
-                        sx={{ 
-                          transition: 'color 0.2s ease-in-out',
-                          '&:hover': { 
-                            color: 'marketing.primary',
-                          }
-                        }}
-                      >
-                        {link.label}
-                      </Typography>
-                    </Link>
+                      {link.label}
+                    </Typography>
                   ))}
                 </Stack>
               </Box>

@@ -69,7 +69,7 @@ describe('Marketing Theme Extensions', () => {
       const marketingVariant = theme.components?.MuiButton?.variants?.find(
         (variant: any) => variant.props?.variant === 'marketing'
       );
-      
+
       expect(marketingVariant).toBeDefined();
       expect((marketingVariant?.style as any)?.backgroundColor).toBe('#FF9800');
       expect((marketingVariant?.style as any)?.color).toBe('#FFFFFF');
@@ -82,7 +82,7 @@ describe('Marketing Theme Extensions', () => {
       const marketingSecondaryVariant = theme.components?.MuiButton?.variants?.find(
         (variant: any) => variant.props?.variant === 'marketingSecondary'
       );
-      
+
       expect(marketingSecondaryVariant).toBeDefined();
       expect((marketingSecondaryVariant?.style as any)?.backgroundColor).toBe('transparent');
       expect((marketingSecondaryVariant?.style as any)?.color).toBe('#1976D2');
@@ -101,7 +101,7 @@ describe('Marketing Theme Extensions', () => {
       const marketingVariant = theme.components?.MuiCard?.variants?.find(
         (variant: any) => variant.props?.variant === 'marketing'
       );
-      
+
       expect(marketingVariant).toBeDefined();
       expect((marketingVariant?.style as any)?.padding).toBe('32px');
       expect((marketingVariant?.style as any)?.background).toBe('linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 100%)');
@@ -111,28 +111,6 @@ describe('Marketing Theme Extensions', () => {
     it('maintains existing card styles', () => {
       expect((theme.components?.MuiCard?.styleOverrides?.root as any)?.borderRadius).toBe(16);
       expect((theme.components?.MuiCard?.styleOverrides?.root as any)?.transition).toBe('all 0.3s ease-in-out');
-    });
-  });
-
-  describe('Marketing Container Variants', () => {
-    it('includes marketing container variant styles', () => {
-      const marketingVariant = theme.components?.MuiContainer?.variants?.find(
-        (variant: any) => variant.props?.variant === 'marketing'
-      );
-      
-      expect(marketingVariant).toBeDefined();
-      expect((marketingVariant?.style as any)?.paddingTop).toBe('80px');
-      expect((marketingVariant?.style as any)?.paddingBottom).toBe('80px');
-    });
-
-    it('includes responsive padding for marketing container', () => {
-      const marketingVariant = theme.components?.MuiContainer?.variants?.find(
-        (variant: any) => variant.props?.variant === 'marketing'
-      );
-      
-      expect((marketingVariant?.style as any)?.['@media (max-width:600px)']).toBeDefined();
-      expect((marketingVariant?.style as any)?.['@media (max-width:600px)']?.paddingTop).toBe('48px');
-      expect((marketingVariant?.style as any)?.['@media (max-width:600px)']?.paddingBottom).toBe('48px');
     });
   });
 
@@ -155,7 +133,7 @@ describe('Marketing Theme Extensions', () => {
       // Primary colors should maintain contrast
       expect(theme.palette.primary.main).toBe('#1976D2');
       expect(theme.palette.primary.contrastText).toBe('#FFFFFF');
-      
+
       // Marketing colors should be accessible
       expect(theme.palette.marketing.primary).toBe('#1976D2');
       expect(theme.palette.marketing.secondary).toBe('#FF9800');

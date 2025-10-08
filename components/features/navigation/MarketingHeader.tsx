@@ -224,14 +224,13 @@ export default function MarketingHeader() {
                       />
                     </ListItemButton>
                   </ListItem>
-                  <ListItem disablePadding>
+                  <ListItem>
                     <Button
                       component={Link}
                       href="/signup"
                       variant="marketing"
                       fullWidth
                       onClick={handleDrawerToggle}
-                      sx={{ mx: 2 }}
                     >
                       Get Started Free
                     </Button>
