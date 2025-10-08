@@ -9,10 +9,20 @@ import {
   updateLeagueSettingsSchema,
   addTeamToLeagueSchema,
   migrateTeamToLeagueSchema,
+  createDivisionSchema,
+  updateDivisionSchema,
+  deleteDivisionSchema,
+  assignTeamToDivisionSchema,
+  getLeagueTeamsSchema,
   type CreateLeagueInput,
   type UpdateLeagueSettingsInput,
   type AddTeamToLeagueInput,
   type MigrateTeamToLeagueInput,
+  type CreateDivisionInput,
+  type UpdateDivisionInput,
+  type DeleteDivisionInput,
+  type AssignTeamToDivisionInput,
+  type GetLeagueTeamsInput,
 } from "@/lib/utils/validation";
 
 export type ActionResult<T> =
@@ -378,7 +388,7 @@ export async function updateLeagueSettings(
 export async function verifyLeagueAdmin(leagueId: string, userId?: string): Promise<boolean> {
   try {
     const currentUserId = userId || await requireUserId();
-    
+
     const leagueUser = await prisma.leagueUser.findFirst({
       where: {
         leagueId,
@@ -397,13 +407,13 @@ export async function verifyLeagueAdmin(leagueId: string, userId?: string): Prom
  * Helper function to verify team admin permissions within a league context
  */
 export async function verifyTeamAdminInLeague(
-  teamId: string, 
-  leagueId: string, 
+  teamId: string,
+  leagueId: string,
   userId?: string
 ): Promise<boolean> {
   try {
     const currentUserId = userId || await requireUserId();
-    
+
     // Check if user is league admin (has access to all teams)
     const isLeagueAdmin = await verifyLeagueAdmin(leagueId, currentUserId);
     if (isLeagueAdmin) return true;
@@ -423,5 +433,532 @@ export async function verifyTeamAdminInLeague(
     return !!teamMember;
   } catch {
     return false;
+  }
+}
+
+// Division Management Actions
+
+/**
+ * Create a new division within a league
+ */
+export async function createDivision(
+  input: CreateDivisionInput
+): Promise<ActionResult<{ id: string; name: string; ageGroup: string | null; skillLevel: string | null }>> {
+  try {
+    const userId = await requireUserId();
+    const validated = createDivisionSchema.parse(input);
+
+    // Verify user has league admin permissions
+    const leagueUser = await prisma.leagueUser.findFirst({
+      where: {
+        leagueId: validated.leagueId,
+        userId,
+        role: "LEAGUE_ADMIN",
+      },
+    });
+
+    if (!leagueUser) {
+      return {
+        success: false,
+        error: "Unauthorized - you must be a league admin",
+      };
+    }
+
+    // Verify league exists and is active
+    const league = await prisma.league.findFirst({
+      where: {
+        id: validated.leagueId,
+        isActive: true,
+      },
+    });
+
+    if (!league) {
+      return {
+        success: false,
+        error: "League not found or inactive",
+      };
+    }
+
+    // Check for duplicate division name within the league
+    const existingDivision = await prisma.division.findFirst({
+      where: {
+        leagueId: validated.leagueId,
+        name: validated.name,
+        isActive: true,
+      },
+    });
+
+    if (existingDivision) {
+      return {
+        success: false,
+        error: "A division with this name already exists in the league",
+      };
+    }
+
+    // Create division
+    const division = await prisma.division.create({
+      data: {
+        name: validated.name,
+        ageGroup: validated.ageGroup || null,
+        skillLevel: validated.skillLevel || null,
+        leagueId: validated.leagueId,
+      },
+      select: {
+        id: true,
+        name: true,
+        ageGroup: true,
+        skillLevel: true,
+      },
+    });
+
+    revalidatePath(`/league/${validated.leagueId}`);
+    revalidatePath(`/league/${validated.leagueId}/teams`);
+
+    return {
+      success: true,
+      data: division,
+    };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      const fieldErrors = error.issues.map(issue =>
+        `${issue.path.join('.')}: ${issue.message}`
+      ).join(', ');
+      return {
+        success: false,
+        error: `Validation failed: ${fieldErrors}`,
+        details: error.issues,
+      };
+    }
+
+    console.error("Error creating division:", error);
+    return {
+      success: false,
+      error: "Failed to create division. Please try again.",
+    };
+  }
+}
+
+/**
+ * Update an existing division
+ */
+export async function updateDivision(
+  input: UpdateDivisionInput
+): Promise<ActionResult<{ id: string; name: string; ageGroup: string | null; skillLevel: string | null }>> {
+  try {
+    const userId = await requireUserId();
+    const validated = updateDivisionSchema.parse(input);
+
+    // Verify user has league admin permissions
+    const leagueUser = await prisma.leagueUser.findFirst({
+      where: {
+        leagueId: validated.leagueId,
+        userId,
+        role: "LEAGUE_ADMIN",
+      },
+    });
+
+    if (!leagueUser) {
+      return {
+        success: false,
+        error: "Unauthorized - you must be a league admin",
+      };
+    }
+
+    // Verify division exists and belongs to the league
+    const existingDivision = await prisma.division.findFirst({
+      where: {
+        id: validated.id,
+        leagueId: validated.leagueId,
+        isActive: true,
+      },
+    });
+
+    if (!existingDivision) {
+      return {
+        success: false,
+        error: "Division not found or does not belong to this league",
+      };
+    }
+
+    // Check for duplicate division name within the league (excluding current division)
+    const duplicateDivision = await prisma.division.findFirst({
+      where: {
+        leagueId: validated.leagueId,
+        name: validated.name,
+        isActive: true,
+        id: { not: validated.id },
+      },
+    });
+
+    if (duplicateDivision) {
+      return {
+        success: false,
+        error: "A division with this name already exists in the league",
+      };
+    }
+
+    // Update division
+    const division = await prisma.division.update({
+      where: { id: validated.id },
+      data: {
+        name: validated.name,
+        ageGroup: validated.ageGroup || null,
+        skillLevel: validated.skillLevel || null,
+      },
+      select: {
+        id: true,
+        name: true,
+        ageGroup: true,
+        skillLevel: true,
+      },
+    });
+
+    revalidatePath(`/league/${validated.leagueId}`);
+    revalidatePath(`/league/${validated.leagueId}/teams`);
+
+    return {
+      success: true,
+      data: division,
+    };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      const fieldErrors = error.issues.map(issue =>
+        `${issue.path.join('.')}: ${issue.message}`
+      ).join(', ');
+      return {
+        success: false,
+        error: `Validation failed: ${fieldErrors}`,
+        details: error.issues,
+      };
+    }
+
+    console.error("Error updating division:", error);
+    return {
+      success: false,
+      error: "Failed to update division. Please try again.",
+    };
+  }
+}
+
+/**
+ * Delete a division (soft delete by setting isActive to false)
+ */
+export async function deleteDivision(
+  input: DeleteDivisionInput
+): Promise<ActionResult<{ id: string }>> {
+  try {
+    const userId = await requireUserId();
+    const validated = deleteDivisionSchema.parse(input);
+
+    // Verify user has league admin permissions
+    const leagueUser = await prisma.leagueUser.findFirst({
+      where: {
+        leagueId: validated.leagueId,
+        userId,
+        role: "LEAGUE_ADMIN",
+      },
+    });
+
+    if (!leagueUser) {
+      return {
+        success: false,
+        error: "Unauthorized - you must be a league admin",
+      };
+    }
+
+    // Verify division exists and belongs to the league
+    const existingDivision = await prisma.division.findFirst({
+      where: {
+        id: validated.id,
+        leagueId: validated.leagueId,
+        isActive: true,
+      },
+      include: {
+        teams: {
+          where: { isActive: true },
+          select: { id: true },
+        },
+      },
+    });
+
+    if (!existingDivision) {
+      return {
+        success: false,
+        error: "Division not found or does not belong to this league",
+      };
+    }
+
+    // Use transaction to handle division deletion and team reassignment
+    await prisma.$transaction(async (tx) => {
+      // Remove division assignment from all teams in this division
+      await tx.team.updateMany({
+        where: {
+          divisionId: validated.id,
+          isActive: true,
+        },
+        data: {
+          divisionId: null,
+        },
+      });
+
+      // Soft delete the division
+      await tx.division.update({
+        where: { id: validated.id },
+        data: { isActive: false },
+      });
+    });
+
+    revalidatePath(`/league/${validated.leagueId}`);
+    revalidatePath(`/league/${validated.leagueId}/teams`);
+
+    return {
+      success: true,
+      data: { id: validated.id },
+    };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      const fieldErrors = error.issues.map(issue =>
+        `${issue.path.join('.')}: ${issue.message}`
+      ).join(', ');
+      return {
+        success: false,
+        error: `Validation failed: ${fieldErrors}`,
+        details: error.issues,
+      };
+    }
+
+    console.error("Error deleting division:", error);
+    return {
+      success: false,
+      error: "Failed to delete division. Please try again.",
+    };
+  }
+}
+
+/**
+ * Assign a team to a division or remove division assignment
+ */
+export async function assignTeamToDivision(
+  input: AssignTeamToDivisionInput
+): Promise<ActionResult<{ teamId: string; divisionId: string | null }>> {
+  try {
+    const userId = await requireUserId();
+    const validated = assignTeamToDivisionSchema.parse(input);
+
+    // Verify user has league admin permissions or is admin of the specific team
+    const hasPermission = await verifyTeamAdminInLeague(
+      validated.teamId,
+      validated.leagueId,
+      userId
+    );
+
+    if (!hasPermission) {
+      return {
+        success: false,
+        error: "Unauthorized - you must be a league admin or team admin",
+      };
+    }
+
+    // Verify team exists and belongs to the league
+    const team = await prisma.team.findFirst({
+      where: {
+        id: validated.teamId,
+        leagueId: validated.leagueId,
+        isActive: true,
+      },
+    });
+
+    if (!team) {
+      return {
+        success: false,
+        error: "Team not found or does not belong to this league",
+      };
+    }
+
+    // If divisionId is provided, verify it exists and belongs to the league
+    if (validated.divisionId) {
+      const division = await prisma.division.findFirst({
+        where: {
+          id: validated.divisionId,
+          leagueId: validated.leagueId,
+          isActive: true,
+        },
+      });
+
+      if (!division) {
+        return {
+          success: false,
+          error: "Division not found or does not belong to this league",
+        };
+      }
+    }
+
+    // Update team's division assignment
+    await prisma.team.update({
+      where: { id: validated.teamId },
+      data: { divisionId: validated.divisionId },
+    });
+
+    revalidatePath(`/league/${validated.leagueId}`);
+    revalidatePath(`/league/${validated.leagueId}/teams`);
+
+    return {
+      success: true,
+      data: {
+        teamId: validated.teamId,
+        divisionId: validated.divisionId,
+      },
+    };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      const fieldErrors = error.issues.map(issue =>
+        `${issue.path.join('.')}: ${issue.message}`
+      ).join(', ');
+      return {
+        success: false,
+        error: `Validation failed: ${fieldErrors}`,
+        details: error.issues,
+      };
+    }
+
+    console.error("Error assigning team to division:", error);
+    return {
+      success: false,
+      error: "Failed to assign team to division. Please try again.",
+    };
+  }
+}
+
+/**
+ * Get paginated teams for a league with filtering support
+ */
+export async function getLeagueTeamsPaginated(
+  input: GetLeagueTeamsInput
+): Promise<ActionResult<{
+  teams: Array<{
+    id: string;
+    name: string;
+    sport: string;
+    season: string;
+    divisionId: string | null;
+    _count: { players: number; events: number };
+  }>;
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}>> {
+  try {
+    const userId = await requireUserId();
+    const validated = getLeagueTeamsSchema.parse(input);
+
+    // Verify user has access to the league
+    const leagueUser = await prisma.leagueUser.findFirst({
+      where: {
+        leagueId: validated.leagueId,
+        userId,
+      },
+    });
+
+    if (!leagueUser) {
+      return {
+        success: false,
+        error: "Unauthorized - you are not a member of this league",
+      };
+    }
+
+    // Build filter conditions
+    const where: {
+      leagueId: string;
+      isActive: boolean;
+      name?: { contains: string; mode: 'insensitive' };
+      sport?: string;
+      season?: string;
+      divisionId?: string | null;
+    } = {
+      leagueId: validated.leagueId,
+      isActive: true,
+    };
+
+    if (validated.search) {
+      where.name = {
+        contains: validated.search,
+        mode: 'insensitive',
+      };
+    }
+
+    if (validated.sport) {
+      where.sport = validated.sport;
+    }
+
+    if (validated.season) {
+      where.season = validated.season;
+    }
+
+    if (validated.divisionId !== undefined) {
+      where.divisionId = validated.divisionId;
+    }
+
+    // Get total count
+    const total = await prisma.team.count({ where });
+
+    // Calculate pagination
+    const totalPages = Math.ceil(total / validated.limit);
+    const skip = (validated.page - 1) * validated.limit;
+
+    // Fetch teams
+    const teams = await prisma.team.findMany({
+      where,
+      skip,
+      take: validated.limit,
+      select: {
+        id: true,
+        name: true,
+        sport: true,
+        season: true,
+        divisionId: true,
+        _count: {
+          select: {
+            players: true,
+            events: true,
+          },
+        },
+      },
+      orderBy: [
+        { name: 'asc' },
+      ],
+    });
+
+    return {
+      success: true,
+      data: {
+        teams,
+        pagination: {
+          page: validated.page,
+          limit: validated.limit,
+          total,
+          totalPages,
+        },
+      },
+    };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      const fieldErrors = error.issues.map(issue =>
+        `${issue.path.join('.')}: ${issue.message}`
+      ).join(', ');
+      return {
+        success: false,
+        error: `Validation failed: ${fieldErrors}`,
+        details: error.issues,
+      };
+    }
+
+    console.error("Error fetching league teams:", error);
+    return {
+      success: false,
+      error: "Failed to fetch league teams. Please try again.",
+    };
   }
 }
