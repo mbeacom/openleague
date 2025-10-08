@@ -239,7 +239,7 @@ export const paginationSchema = z.object({
   search: z.string().optional(),
   sport: z.string().optional(),
   season: z.string().optional(),
-  divisionId: z.string().cuid().optional(),
+  divisionId: z.string().cuid().optional().nullable(),
 });
 
 export const getLeagueTeamsSchema = z.object({

@@ -69,8 +69,8 @@ export default function CreateLeagueTeamForm({
 
     // Validate individual field on blur
     if (name === 'name' || name === 'sport' || name === 'season') {
-      const fieldSchema = addTeamToLeagueSchema.pick({ [name]: true });
-      const validationResult = fieldSchema.safeParse({ [name]: value });
+      const fieldSchema = addTeamToLeagueSchema.shape[name];
+      const validationResult = fieldSchema.safeParse(value);
 
       if (validationResult.success) {
         // Clear error if validation passes

@@ -582,15 +582,14 @@ export default function LeagueTeamList({
           open={Boolean(anchorEl)}
           onClose={handleMenuClose}
         >
-          <MenuItem onClick={() => onTeamEdit?.(selectedTeam?.id || "")}>
-            <ListItemIcon>
-              <EditIcon fontSize="small" />
-            </ListItemIcon>
-            <ListItemText>Edit Team</ListItemText>
-          </MenuItem>
-
           {selectedTeam && (
             <>
+              <MenuItem onClick={() => onTeamEdit?.(selectedTeam.id)}>
+                <ListItemIcon>
+                  <EditIcon fontSize="small" />
+                </ListItemIcon>
+                <ListItemText>Edit Team</ListItemText>
+              </MenuItem>
               <MenuItem disabled sx={{ opacity: 0.6 }}>
                 <ListItemIcon>
                   <SwapHorizIcon fontSize="small" />

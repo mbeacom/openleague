@@ -19,6 +19,19 @@ export interface UseKeyboardShortcutsOptions {
 }
 
 /**
+ * Helper function to check if keyboard event modifiers match shortcut requirements
+ */
+function modifierKeysMatch(
+  event: KeyboardEvent,
+  shortcut: KeyboardShortcut
+): boolean {
+  const ctrlMatches = shortcut.ctrl ? event.ctrlKey || event.metaKey : !event.ctrlKey && !event.metaKey;
+  const shiftMatches = shortcut.shift ? event.shiftKey : !event.shiftKey;
+  const altMatches = shortcut.alt ? event.altKey : !event.altKey;
+  return ctrlMatches && shiftMatches && altMatches;
+}
+
+/**
  * Custom hook for handling keyboard shortcuts and navigation
  *
  * @example
@@ -64,11 +77,9 @@ export function useKeyboardShortcuts({
 
       for (const shortcut of activeShortcuts) {
         const keyMatches = event.key.toLowerCase() === shortcut.key.toLowerCase();
-        const ctrlMatches = shortcut.ctrl ? event.ctrlKey || event.metaKey : !event.ctrlKey && !event.metaKey;
-        const shiftMatches = shortcut.shift ? event.shiftKey : !event.shiftKey;
-        const altMatches = shortcut.alt ? event.altKey : !event.altKey;
+        const modifiersMatch = modifierKeysMatch(event, shortcut);
 
-        if (keyMatches && ctrlMatches && shiftMatches && altMatches) {
+        if (keyMatches && modifiersMatch) {
           if (preventDefault) {
             event.preventDefault();
           }
