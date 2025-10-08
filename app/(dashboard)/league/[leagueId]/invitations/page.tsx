@@ -5,14 +5,14 @@ import { notFound } from "next/navigation";
 import LeagueInvitationManager from "@/components/features/roster/LeagueInvitationManager";
 
 interface LeagueInvitationsPageProps {
-  params: {
+  params: Promise<{
     leagueId: string;
-  };
+  }>;
 }
 
 export default async function LeagueInvitationsPage({ params }: LeagueInvitationsPageProps) {
-  const userId = await requireUserId();
-  const { leagueId } = params;
+  // Parallelize independent async operations for better performance
+  const [{ leagueId }, userId] = await Promise.all([params, requireUserId()]);
 
   // Verify user has access to this league
   const leagueUser = await prisma.leagueUser.findFirst({
