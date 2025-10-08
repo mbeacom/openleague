@@ -16,6 +16,9 @@ const envSchema = z.object({
     // Node Environment
     NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
 
+    // Cron job authentication
+    CRON_SECRET: z.string().min(32, 'CRON_SECRET must be at least 32 characters long').optional(),
+
     // Optional AWS variables (for future migration)
     AWS_REGION: z.string().optional(),
 })
@@ -31,6 +34,7 @@ function validateEnv() {
             MAILCHIMP_API_KEY: process.env.MAILCHIMP_API_KEY || '',
             EMAIL_FROM: process.env.EMAIL_FROM || '',
             NODE_ENV: (process.env.NODE_ENV || 'development') as 'development' | 'production' | 'test',
+            CRON_SECRET: process.env.CRON_SECRET,
             AWS_REGION: process.env.AWS_REGION,
         }
     }

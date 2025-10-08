@@ -106,9 +106,9 @@
     - Add calendar export functionality (iCal format)
     - _Requirements: 4.3, 4.4, 4.7, 9.3_
 
-- [ ] 5. Implement league communication system
+- [x] 5. Implement league communication system
 
-  - [ ] 5.1 Build targeted messaging system
+  - [x] 5.1 Build targeted messaging system
 
     - Create `sendLeagueMessage` Server Action with targeting options
     - Implement message targeting by league, divisions, or specific teams
@@ -116,7 +116,7 @@
     - Add message history and audit trail for league communications
     - _Requirements: 5.1, 5.2, 5.5_
 
-  - [ ] 5.2 Create league announcement system
+  - [x] 5.2 Create league announcement system
 
     - Build league announcement creation interface
     - Implement announcement distribution to all league members
@@ -124,7 +124,7 @@
     - Add announcement priority levels and urgent notifications
     - _Requirements: 5.3, 5.4, 5.6_
 
-  - [ ] 5.3 Enhance notification system for leagues
+  - [x] 5.3 Enhance notification system for leagues
     - Update email templates to include league context
     - Implement league-specific notification preferences
     - Create notification batching for league-wide messages

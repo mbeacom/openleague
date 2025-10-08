@@ -19,12 +19,16 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  teamMembers     TeamMember[]
-  rsvps           RSVP[]
-  invitations     Invitation[]
-  players         Player[]
-  leagueUsers     LeagueUser[]
-  playerTransfers PlayerTransfer[]
+  teamMembers            TeamMember[]
+  rsvps                  RSVP[]
+  invitations            Invitation[]
+  players                Player[]
+  leagueUsers            LeagueUser[]
+  playerTransfers        PlayerTransfer[]
+  sentMessages           LeagueMessage[]
+  messageRecipients      MessageRecipient[]
+  notificationPreferences NotificationPreference[]
+  notificationBatches    NotificationBatch[]
 }
 
 // Team model
@@ -52,6 +56,7 @@ model Team {
   awayEvents        Event[] @relation("AwayTeam")
   transfersFrom     PlayerTransfer[] @relation("TransferFromTeam")
   transfersTo       PlayerTransfer[] @relation("TransferToTeam")
+  messageTargeting  MessageTargeting[]
 
   @@index([leagueId]) // Optimize league-team queries
   @@index([divisionId]) // Optimize division-team queries
@@ -206,12 +211,15 @@ model League {
   updatedAt    DateTime @updatedAt
 
   // Essential relationships only
-  divisions Division[]
-  teams     Team[]
-  events          Event[]
-  players         Player[]
-  users           LeagueUser[]
-  playerTransfers PlayerTransfer[]
+  divisions              Division[]
+  teams                  Team[]
+  events                 Event[]
+  players                Player[]
+  users                  LeagueUser[]
+  playerTransfers        PlayerTransfer[]
+  messages               LeagueMessage[]
+  notificationPreferences NotificationPreference[]
+  notificationBatches    NotificationBatch[]
 
   @@map("leagues")
 }
@@ -229,6 +237,7 @@ model Division {
   leagueId String
   league   League @relation(fields: [leagueId], references: [id], onDelete: Restrict)
   teams    Team[]
+  messageTargeting MessageTargeting[]
 
   @@map("divisions")
 }
@@ -277,4 +286,154 @@ model PlayerTransfer {
   transferredBy   User     @relation(fields: [transferredById], references: [id])
 
   @@map("player_transfers")
+}
+
+// League message model for targeted messaging system
+model LeagueMessage {
+  id          String              @id @default(cuid())
+  subject     String
+  content     String
+  messageType LeagueMessageType   @default(MESSAGE)
+  priority    MessagePriority     @default(NORMAL)
+  createdAt   DateTime            @default(now())
+
+  leagueId    String
+  league      League              @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  senderId    String
+  sender      User                @relation(fields: [senderId], references: [id])
+
+  // Message targeting
+  targeting      MessageTargeting[]
+  recipients     MessageRecipient[]
+  batchedMessages BatchedMessage[]
+
+  @@index([leagueId, createdAt])
+  @@map("league_messages")
+}
+
+enum LeagueMessageType {
+  MESSAGE       // Regular targeted message
+  ANNOUNCEMENT  // League-wide announcement
+}
+
+enum MessagePriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+// Message targeting configuration
+model MessageTargeting {
+  id        String @id @default(cuid())
+  
+  messageId String
+  message   LeagueMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  // Targeting options (at least one must be specified)
+  entireLeague Boolean @default(false)
+  divisionId   String?
+  division     Division? @relation(fields: [divisionId], references: [id])
+  teamId       String?
+  team         Team? @relation(fields: [teamId], references: [id])
+
+  @@map("message_targeting")
+}
+
+// Message recipients for audit trail
+model MessageRecipient {
+  id          String   @id @default(cuid())
+  sentAt      DateTime @default(now())
+  deliveryStatus MessageDeliveryStatus @default(PENDING)
+
+  messageId   String
+  message     LeagueMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  userId      String
+  user        User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
+  @@map("message_recipients")
+}
+
+enum MessageDeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+// User notification preferences for league communications
+model NotificationPreference {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId   String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  leagueId String?
+  league   League? @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  // Notification types
+  leagueMessages      Boolean @default(true)  // Targeted league messages
+  leagueAnnouncements Boolean @default(true)  // League-wide announcements
+  eventNotifications  Boolean @default(true)  // Event created/updated/cancelled
+  rsvpReminders       Boolean @default(true)  // RSVP reminder emails
+  teamInvitations     Boolean @default(true)  // Team invitation emails
+
+  // Delivery preferences
+  emailEnabled        Boolean @default(true)  // Receive emails
+  urgentOnly          Boolean @default(false) // Only urgent/high priority messages
+  batchDelivery       Boolean @default(false) // Batch non-urgent messages
+
+  // Unsubscribe token for email management
+  unsubscribeToken    String? @unique
+
+  @@unique([userId, leagueId])
+  @@map("notification_preferences")
+}
+
+// Notification batch for grouping non-urgent messages
+model NotificationBatch {
+  id          String   @id @default(cuid())
+  scheduledAt DateTime // When to send the batch
+  sentAt      DateTime?
+  status      NotificationBatchStatus @default(PENDING)
+  createdAt   DateTime @default(now())
+
+  leagueId    String
+  league      League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  userId      String
+  user        User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  messages    BatchedMessage[]
+
+  @@index([scheduledAt, status])
+  @@map("notification_batches")
+}
+
+enum NotificationBatchStatus {
+  PENDING
+  SENT
+  CANCELLED
+}
+
+// Individual messages within a notification batch
+model BatchedMessage {
+  id        String   @id @default(cuid())
+  subject   String
+  content   String
+  priority  MessagePriority
+  createdAt DateTime @default(now())
+
+  batchId   String
+  batch     NotificationBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  // Reference to original message if applicable
+  messageId String?
+  message   LeagueMessage? @relation(fields: [messageId], references: [id], onDelete: SetNull)
+
+  @@map("batched_messages")
 }
