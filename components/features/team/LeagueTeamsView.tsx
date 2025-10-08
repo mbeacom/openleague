@@ -40,6 +40,9 @@ import {
 import { formatDistanceToNow } from 'date-fns';
 import Link from 'next/link';
 import { exportLeagueTeamsToCSV } from '@/lib/utils/csv-export';
+import DragDropTeams from './DragDropTeams';
+import { DraggableTeamCard } from './DraggableTeamCard';
+import { DroppableDivision } from './DroppableDivision';
 
 interface LeagueTeamsViewProps {
   league: {
@@ -303,15 +306,21 @@ export default function LeagueTeamsView({ league }: LeagueTeamsViewProps) {
   };
 
   return (
-    <Box sx={{ p: 3 }}>
-      {/* Header */}
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" component="h1" gutterBottom>
-          Teams
-        </Typography>
-        <Typography variant="body1" color="text.secondary" gutterBottom>
-          Manage teams in {league.name}
-        </Typography>
+    <DragDropTeams
+      leagueId={league.id}
+      divisions={league.divisions}
+      unassignedTeams={league.unassignedTeams}
+    >
+      {() => (
+        <Box sx={{ p: 3 }}>
+          {/* Header */}
+          <Box sx={{ mb: 4 }}>
+            <Typography variant="h4" component="h1" gutterBottom>
+              Teams
+            </Typography>
+            <Typography variant="body1" color="text.secondary" gutterBottom>
+              Manage teams in {league.name}
+            </Typography>
 
         {/* Stats */}
         <Box sx={{ display: 'flex', gap: 3, mt: 2 }}>
@@ -492,15 +501,19 @@ export default function LeagueTeamsView({ league }: LeagueTeamsViewProps) {
                 </CardContent>
               </Card>
             ) : (
-              <Box sx={{
-                display: 'grid',
-                gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(3, 1fr)' },
-                gap: 2
-              }}>
-                {divisionTeams.map((team) => (
-                  <TeamCard key={team.id} team={team} leagueId={league.id} />
-                ))}
-              </Box>
+              <DroppableDivision id={division.id} isEmpty={divisionTeams.length === 0}>
+                <Box sx={{
+                  display: 'grid',
+                  gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(3, 1fr)' },
+                  gap: 2
+                }}>
+                  {divisionTeams.map((team) => (
+                    <DraggableTeamCard key={team.id} id={team.id}>
+                      <TeamCard team={team} leagueId={league.id} />
+                    </DraggableTeamCard>
+                  ))}
+                </Box>
+              </DroppableDivision>
             )}
           </Box>
         );
@@ -536,15 +549,19 @@ export default function LeagueTeamsView({ league }: LeagueTeamsViewProps) {
                 </CardContent>
               </Card>
             ) : (
-              <Box sx={{
-                display: 'grid',
-                gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(3, 1fr)' },
-                gap: 2
-              }}>
-                {unassignedTeams.map((team) => (
-                  <TeamCard key={team.id} team={team} leagueId={league.id} />
-                ))}
-              </Box>
+              <DroppableDivision id="unassigned" isEmpty={unassignedTeams.length === 0}>
+                <Box sx={{
+                  display: 'grid',
+                  gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(3, 1fr)' },
+                  gap: 2
+                }}>
+                  {unassignedTeams.map((team) => (
+                    <DraggableTeamCard key={team.id} id={team.id}>
+                      <TeamCard team={team} leagueId={league.id} />
+                    </DraggableTeamCard>
+                  ))}
+                </Box>
+              </DroppableDivision>
             )}
           </Box>
         );
@@ -588,6 +605,8 @@ export default function LeagueTeamsView({ league }: LeagueTeamsViewProps) {
       >
         <AddIcon />
       </Fab>
-    </Box>
+        </Box>
+      )}
+    </DragDropTeams>
   );
 }
