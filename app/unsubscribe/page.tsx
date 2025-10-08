@@ -5,13 +5,13 @@ import { handleUnsubscribe } from "@/lib/actions/notifications";
 import Link from "next/link";
 
 interface UnsubscribePageProps {
-  searchParams: {
+  searchParams: Promise<{
     token?: string;
-  };
+  }>;
 }
 
 export default async function UnsubscribePage({ searchParams }: UnsubscribePageProps) {
-  const { token } = searchParams;
+  const { token } = await searchParams;
 
   if (!token) {
     return (

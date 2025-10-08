@@ -6,19 +6,20 @@ import { notFound } from "next/navigation";
 import { LeagueMessagesView } from "@/components/features/communication/LeagueMessagesView";
 
 interface LeagueMessagesPageProps {
-  params: {
+  params: Promise<{
     leagueId: string;
-  };
+  }>;
 }
 
 export default async function LeagueMessagesPage({ params }: LeagueMessagesPageProps) {
+  const { leagueId } = await params;
   const userId = await requireUserId();
 
   // Verify user has access to this league
   const leagueUser = await prisma.leagueUser.findFirst({
     where: {
       userId,
-      leagueId: params.leagueId,
+      leagueId,
     },
     include: {
       league: {
@@ -42,7 +43,7 @@ export default async function LeagueMessagesPage({ params }: LeagueMessagesPageP
   const [divisions, teams] = await Promise.all([
     prisma.division.findMany({
       where: {
-        leagueId: params.leagueId,
+        leagueId,
         isActive: true,
       },
       select: {
@@ -60,7 +61,7 @@ export default async function LeagueMessagesPage({ params }: LeagueMessagesPageP
     }),
     prisma.team.findMany({
       where: {
-        leagueId: params.leagueId,
+        leagueId,
         isActive: true,
       },
       select: {
