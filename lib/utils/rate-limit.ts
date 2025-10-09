@@ -51,10 +51,20 @@ class RateLimiter {
 // Global rate limiters for different endpoints
 // More permissive limits in development for testing
 const isDevelopment = process.env.NODE_ENV !== "production";
-const authLimiter = new RateLimiter(
-    isDevelopment ? 50 : 5, // 50 requests in dev, 5 in production
+
+// Session checks need to be permissive since Auth.js polls automatically
+const sessionLimiter = new RateLimiter(
+    isDevelopment ? 100 : 60, // 60 requests per 15 min in production (1 every 15 seconds)
     15 * 60 * 1000 // 15 minutes
 );
+
+// Strict limits for login/signup to prevent brute force
+const authActionLimiter = new RateLimiter(
+    isDevelopment ? 50 : 10, // 10 login attempts per 15 min in production
+    15 * 60 * 1000 // 15 minutes
+);
+
+// General API endpoints
 const generalLimiter = new RateLimiter(100, 15 * 60 * 1000); // 100 requests per 15 minutes for general API
 
 /**
@@ -77,10 +87,19 @@ function getClientIdentifier(request: NextRequest): string {
 
 /**
  * Rate limit middleware for authentication endpoints
+ * Uses more permissive limits for session checks, strict limits for login/signup
  */
 export function rateLimitAuth(request: NextRequest) {
     const identifier = getClientIdentifier(request);
-    return authLimiter.isAllowed(identifier);
+    const pathname = request.nextUrl.pathname;
+
+    // Session endpoint gets more permissive rate limiting since Auth.js polls it
+    if (pathname.includes("/api/auth/session") || pathname.includes("/api/auth/csrf")) {
+        return sessionLimiter.isAllowed(identifier);
+    }
+
+    // Login, signup, and other auth actions get strict rate limiting
+    return authActionLimiter.isAllowed(identifier);
 }
 
 /**
@@ -96,7 +115,8 @@ export function rateLimitGeneral(request: NextRequest) {
  * Should be called periodically (e.g., via cron job)
  */
 export function cleanupRateLimiters() {
-    authLimiter.cleanup();
+    sessionLimiter.cleanup();
+    authActionLimiter.cleanup();
     generalLimiter.cleanup();
 }
 

@@ -27,10 +27,8 @@ export function middleware(request: NextRequest) {
         if (!rateLimitResult.allowed) {
             const retryAfter = Math.ceil((rateLimitResult.resetTime - Date.now()) / 1000);
 
-            // Log rate limit hits in development for debugging
-            if (process.env.NODE_ENV !== "production") {
-                console.warn(`Rate limit hit for ${request.nextUrl.pathname} - Retry after ${retryAfter}s`);
-            }
+            // Log rate limit hits for monitoring (in production too, to track issues)
+            console.warn(`[RATE_LIMIT] ${request.nextUrl.pathname} - IP: ${request.headers.get("x-forwarded-for") || "unknown"} - Retry after ${retryAfter}s`);
 
             return new NextResponse(
                 JSON.stringify({
