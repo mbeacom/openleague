@@ -48,36 +48,54 @@ class RateLimiter {
     }
 }
 
+// Rate limit configuration constants
+const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+
+const SESSION_LIMIT_PROD = 60;
+const SESSION_LIMIT_DEV = 100;
+
+const AUTH_ACTION_LIMIT_PROD = 10;
+const AUTH_ACTION_LIMIT_DEV = 50;
+
+const GENERAL_API_LIMIT = 100;
+
 // Global rate limiters for different endpoints
 // More permissive limits in development for testing
 const isDevelopment = process.env.NODE_ENV !== "production";
 
 // Session checks need to be permissive since Auth.js polls automatically
 const sessionLimiter = new RateLimiter(
-    isDevelopment ? 100 : 60, // 60 requests per 15 min in production (1 every 15 seconds)
-    15 * 60 * 1000 // 15 minutes
+    isDevelopment ? SESSION_LIMIT_DEV : SESSION_LIMIT_PROD, // 60 requests per 15 min in production (1 every 15 seconds)
+    RATE_LIMIT_WINDOW_MS
 );
 
 // Strict limits for login/signup to prevent brute force
 const authActionLimiter = new RateLimiter(
-    isDevelopment ? 50 : 10, // 10 login attempts per 15 min in production
-    15 * 60 * 1000 // 15 minutes
+    isDevelopment ? AUTH_ACTION_LIMIT_DEV : AUTH_ACTION_LIMIT_PROD, // 10 login attempts per 15 min in production
+    RATE_LIMIT_WINDOW_MS
 );
 
 // General API endpoints
-const generalLimiter = new RateLimiter(100, 15 * 60 * 1000); // 100 requests per 15 minutes for general API
+const generalLimiter = new RateLimiter(GENERAL_API_LIMIT, RATE_LIMIT_WINDOW_MS); // 100 requests per 15 minutes for general API
+
+/**
+ * Extract client IP address from request headers
+ * Checks multiple headers to handle different proxy/CDN configurations
+ */
+export function getClientIp(request: NextRequest): string {
+    const forwarded = request.headers.get("x-forwarded-for");
+    const realIp = request.headers.get("x-real-ip");
+    const cfConnectingIp = request.headers.get("cf-connecting-ip"); // Cloudflare
+
+    return forwarded?.split(",")[0]?.trim() || realIp || cfConnectingIp || "unknown";
+}
 
 /**
  * Get client identifier for rate limiting
  * Uses IP address with fallback to user agent
  */
 function getClientIdentifier(request: NextRequest): string {
-    // Try to get real IP from headers (for proxies/load balancers)
-    const forwarded = request.headers.get("x-forwarded-for");
-    const realIp = request.headers.get("x-real-ip");
-    const cfConnectingIp = request.headers.get("cf-connecting-ip"); // Cloudflare
-
-    const ip = forwarded?.split(",")[0]?.trim() || realIp || cfConnectingIp || "unknown";
+    const ip = getClientIp(request);
 
     // Fallback to user agent if IP is not available
     const userAgent = request.headers.get("user-agent") || "unknown";
@@ -94,7 +112,8 @@ export function rateLimitAuth(request: NextRequest) {
     const pathname = request.nextUrl.pathname;
 
     // Session endpoint gets more permissive rate limiting since Auth.js polls it
-    if (pathname.includes("/api/auth/session") || pathname.includes("/api/auth/csrf")) {
+    // Use strict equality to avoid unintentional matches
+    if (pathname === "/api/auth/session" || pathname === "/api/auth/csrf") {
         return sessionLimiter.isAllowed(identifier);
     }
 

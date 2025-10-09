@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { rateLimitAuth, rateLimitGeneral } from "@/lib/utils/rate-limit";
+import { rateLimitAuth, rateLimitGeneral, getClientIp } from "@/lib/utils/rate-limit";
 
 export function middleware(request: NextRequest) {
     // Enforce HTTPS in production
@@ -28,7 +28,7 @@ export function middleware(request: NextRequest) {
             const retryAfter = Math.ceil((rateLimitResult.resetTime - Date.now()) / 1000);
 
             // Log rate limit hits for monitoring (in production too, to track issues)
-            console.warn(`[RATE_LIMIT] ${request.nextUrl.pathname} - IP: ${request.headers.get("x-forwarded-for") || "unknown"} - Retry after ${retryAfter}s`);
+            console.warn(`[RATE_LIMIT] ${request.nextUrl.pathname} - IP: ${getClientIp(request)} - Retry after ${retryAfter}s`);
 
             return new NextResponse(
                 JSON.stringify({
