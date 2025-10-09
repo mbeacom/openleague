@@ -23,6 +23,8 @@ import {
 import MenuIcon from '@mui/icons-material/Menu';
 import CloseIcon from '@mui/icons-material/Close';
 import Logo from '@/components/ui/Logo';
+import CTAButton from '@/components/features/marketing/CTAButton';
+import { marketingEvents } from '@/lib/analytics/tracking';
 
 const navigationLinks = [
   { label: 'Features', href: '/features' },
@@ -122,6 +124,7 @@ export default function MarketingHeader() {
                 component={Link} 
                 href="/login" 
                 color="inherit" 
+                onClick={() => marketingEvents.headerSignInClick()}
                 sx={{ 
                   color: 'text.primary',
                   fontWeight: 500,
@@ -136,14 +139,15 @@ export default function MarketingHeader() {
               >
                 Sign In
               </Button>
-              <Button 
-                component={Link} 
+              <CTAButton 
                 href="/signup" 
                 variant="marketing"
+                trackingAction="header_sign_up_click"
+                trackingLabel="header"
                 sx={{ ml: 1 }}
               >
                 Get Started Free
-              </Button>
+              </CTAButton>
             </Stack>
           ) : (
             /* Mobile Navigation */
@@ -207,7 +211,10 @@ export default function MarketingHeader() {
                     <ListItemButton 
                       component={Link} 
                       href="/login" 
-                      onClick={handleDrawerToggle}
+                      onClick={() => {
+                        marketingEvents.headerSignInClick();
+                        handleDrawerToggle();
+                      }}
                       sx={{
                         borderRadius: 2,
                         '&:hover': {
@@ -225,15 +232,16 @@ export default function MarketingHeader() {
                     </ListItemButton>
                   </ListItem>
                   <ListItem>
-                    <Button
-                      component={Link}
+                    <CTAButton
                       href="/signup"
                       variant="marketing"
+                      trackingAction="header_sign_up_click"
+                      trackingLabel="mobile_header"
                       fullWidth
                       onClick={handleDrawerToggle}
                     >
                       Get Started Free
-                    </Button>
+                    </CTAButton>
                   </ListItem>
                 </List>
               </Drawer>
