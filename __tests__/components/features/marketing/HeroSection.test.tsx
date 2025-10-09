@@ -36,7 +36,7 @@ vi.mock('@/components/features/marketing/CTAButton', () => ({
     trackingAction: string;
     trackingLabel?: string;
     children: React.ReactNode;
-    onClick?: (event: React.MouseEvent) => void;
+    onClick?: React.MouseEventHandler<HTMLAnchorElement>;
     [key: string]: unknown;
   }) => (
     <a

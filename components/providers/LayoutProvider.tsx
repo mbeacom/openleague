@@ -16,7 +16,11 @@ export default function LayoutProvider({ children }: LayoutProviderProps) {
   const pathname = usePathname();
   
   // Determine if we should show marketing layout
-  const isMarketingRoute = pathname === '/' || pathname.startsWith('/(marketing)');
+  // Note: Route groups like (marketing) are excluded from the pathname by Next.js
+  const marketingPaths = ['/', '/features', '/pricing', '/about', '/contact', '/docs'];
+  const isMarketingRoute = marketingPaths.some(path => 
+    pathname === path || (path !== '/' && pathname.startsWith(path))
+  );
   const isAuthRoute = pathname.startsWith('/login') || pathname.startsWith('/signup');
   
   // Show marketing layout for unauthenticated users on marketing routes

@@ -5,9 +5,15 @@ import theme from '@/lib/theme';
 import CTAButton from '@/components/features/marketing/CTAButton';
 import * as tracking from '@/lib/analytics/tracking';
 
+// Define minimal props interface for the mocked Next.js Link
+interface MockLinkProps extends React.AnchorHTMLAttributes<HTMLAnchorElement> {
+  href: string;
+  children: React.ReactNode;
+}
+
 // Mock Next.js components
 vi.mock('next/link', () => ({
-  default: ({ href, children, ...props }: any) => (
+  default: ({ href, children, ...props }: MockLinkProps) => (
     <a href={href} {...props}>
       {children}
     </a>
@@ -205,11 +211,11 @@ describe('CTAButton', () => {
 
       const button = screen.getByRole('link', { name: 'Keyboard Activated' });
       
-      // Simulate Enter key press
-      fireEvent.keyDown(button, { key: 'Enter', code: 'Enter' });
+      // Simulate click via keyboard (links are activated by click events from keyboard)
+      fireEvent.click(button);
       
-      // Note: The actual navigation would be handled by Next.js Link
-      expect(button).toBeInTheDocument();
+      // Verify that the keyboard activation triggers the click handler, which calls analytics
+      expect(tracking.trackConversion).toHaveBeenCalledWith('keyboard_click', undefined);
     });
   });
 

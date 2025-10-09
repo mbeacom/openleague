@@ -17,6 +17,13 @@ export function useScrollTracking() {
         requestAnimationFrame(() => {
           const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
           const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+
+          // Guard against division by zero when page isn't scrollable
+          if (docHeight <= 0) {
+            ticking = false;
+            return;
+          }
+
           const scrollPercent = Math.round((scrollTop / docHeight) * 100);
 
           // Track milestone percentages
