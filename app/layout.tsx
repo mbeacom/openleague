@@ -3,6 +3,7 @@ import { Roboto } from "next/font/google";
 import "./globals.css";
 import { SessionProvider } from "@/components/providers/SessionProvider";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
+import LayoutProvider from "@/components/providers/LayoutProvider";
 import ErrorBoundary from "@/components/ui/ErrorBoundary";
 import { ToastProvider } from "@/components/ui/Toast";
 
@@ -60,7 +61,11 @@ export default function RootLayout({
         <ErrorBoundary>
           <ThemeProvider>
             <ToastProvider>
-              <SessionProvider>{children}</SessionProvider>
+              <SessionProvider>
+                <LayoutProvider>
+                  {children}
+                </LayoutProvider>
+              </SessionProvider>
             </ToastProvider>
           </ThemeProvider>
         </ErrorBoundary>
