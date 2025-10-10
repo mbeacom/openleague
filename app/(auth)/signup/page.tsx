@@ -2,7 +2,6 @@
 
 import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { signIn } from "next-auth/react";
 import {
   Box,
   Button,
@@ -116,21 +115,17 @@ function SignupForm() {
         return;
       }
 
-      // Signup successful, now sign in
-      const signInResult = await signIn("credentials", {
-        email: formData.email,
-        password: formData.password,
-        redirect: false,
-      });
+      // Signup successful - account pending approval
+      if (result.success) {
+        setGeneralError(""); // Clear any previous errors
+        // Show success message instead of trying to sign in
+        setErrors({});
+        setFormData({ email: "", password: "", name: "", invitationToken: undefined });
 
-      if (signInResult?.error) {
-        setGeneralError("Account created but login failed. Please try logging in.");
+        // Redirect to login with a success message
+        router.push("/login?message=signup_pending_approval");
         return;
       }
-
-      // Redirect to dashboard
-      router.push("/");
-      router.refresh();
     } catch (error) {
       console.error("Signup error:", error);
       setGeneralError("An unexpected error occurred");

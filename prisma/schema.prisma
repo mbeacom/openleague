@@ -16,6 +16,7 @@ model User {
   email        String   @unique
   passwordHash String
   name         String?
+  approved     Boolean  @default(false) // Require admin approval for new signups
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -44,7 +45,7 @@ model Team {
   // Optional league relationship for backward compatibility
   leagueId   String?
   league     League?   @relation(fields: [leagueId], references: [id], onDelete: Restrict)
-  
+
   divisionId String?
   division   Division? @relation(fields: [divisionId], references: [id])
 
@@ -327,7 +328,7 @@ enum MessagePriority {
 // Message targeting configuration
 model MessageTargeting {
   id        String @id @default(cuid())
-  
+
   messageId String
   message   LeagueMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
 

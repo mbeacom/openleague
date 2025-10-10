@@ -153,3 +153,16 @@ export async function canUserCreateLeagueGames(
 
   return teamAdminCount > 0;
 }
+
+/**
+ * Check if a user is approved
+ * Returns true if the user account is approved
+ */
+export async function isUserApproved(userId: string): Promise<boolean> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { approved: true },
+  });
+
+  return user?.approved ?? false;
+}

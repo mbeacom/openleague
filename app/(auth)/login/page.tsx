@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useState, Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import {
@@ -21,6 +21,7 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") || "/";
+  const message = searchParams.get("message");
 
   const [formData, setFormData] = useState({
     email: "",
@@ -29,6 +30,14 @@ function LoginForm() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [generalError, setGeneralError] = useState("");
+  const [infoMessage, setInfoMessage] = useState("");
+
+  // Set info message based on query parameter
+  useEffect(() => {
+    if (message === "signup_pending_approval") {
+      setInfoMessage("Account created successfully! Your account is pending approval. You'll be able to log in once an administrator approves your account.");
+    }
+  }, [message]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -133,6 +142,12 @@ function LoginForm() {
         <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
           Welcome back to OpenLeague
         </Typography>
+
+        {infoMessage && (
+          <Alert severity="info" sx={{ width: "100%", mb: 2 }}>
+            {infoMessage}
+          </Alert>
+        )}
 
         {generalError && (
           <Alert severity="error" sx={{ width: "100%", mb: 2 }}>

@@ -36,6 +36,11 @@ export const authOptions: NextAuthConfig = {
           throw new Error("Invalid email or password");
         }
 
+        // Check if user is approved
+        if (!user.approved) {
+          throw new Error("Your account is pending approval. Please contact an administrator.");
+        }
+
         // Return user object (will be stored in JWT)
         return {
           id: user.id,
