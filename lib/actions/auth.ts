@@ -26,17 +26,19 @@ export async function signup(data: SignupWithInvitationInput) {
     // Hash password with bcrypt (cost factor 12)
     const passwordHash = await hash(validated.password, 12);
 
-    // Create user
+    // Create user with approved: false (pending approval)
     const user = await prisma.user.create({
       data: {
         email: validated.email,
         passwordHash,
         name: validated.name,
+        approved: false, // Require admin approval
       },
       select: {
         id: true,
         email: true,
         name: true,
+        approved: true,
       },
     });
 

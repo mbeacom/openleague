@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useState, Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import {
@@ -16,11 +16,13 @@ import {
 import Link from "next/link";
 import Logo from "@/components/ui/Logo";
 import { loginSchema } from "@/lib/utils/validation";
+import { AUTH_MESSAGES } from "@/lib/config/constants";
 
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") || "/";
+  const message = searchParams.get("message");
 
   const [formData, setFormData] = useState({
     email: "",
@@ -29,6 +31,14 @@ function LoginForm() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [generalError, setGeneralError] = useState("");
+  const [infoMessage, setInfoMessage] = useState("");
+
+  // Set info message based on query parameter
+  useEffect(() => {
+    if (message === AUTH_MESSAGES.SIGNUP_PENDING_APPROVAL) {
+      setInfoMessage(AUTH_MESSAGES.ACCOUNT_PENDING_MESSAGE);
+    }
+  }, [message]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -99,7 +109,9 @@ function LoginForm() {
       });
 
       if (result?.error) {
-        setGeneralError("Invalid email or password");
+        // Show specific error message from the credentials provider
+        // This will display the "pending approval" message or other specific errors
+        setGeneralError(result.error || "Invalid email or password");
         return;
       }
 
@@ -133,6 +145,12 @@ function LoginForm() {
         <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
           Welcome back to OpenLeague
         </Typography>
+
+        {infoMessage && (
+          <Alert severity="info" sx={{ width: "100%", mb: 2 }}>
+            {infoMessage}
+          </Alert>
+        )}
 
         {generalError && (
           <Alert severity="error" sx={{ width: "100%", mb: 2 }}>
