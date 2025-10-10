@@ -16,6 +16,7 @@ import {
 import Link from "next/link";
 import Logo from "@/components/ui/Logo";
 import { loginSchema } from "@/lib/utils/validation";
+import { AUTH_MESSAGES } from "@/lib/config/constants";
 
 function LoginForm() {
   const router = useRouter();
@@ -34,8 +35,8 @@ function LoginForm() {
 
   // Set info message based on query parameter
   useEffect(() => {
-    if (message === "signup_pending_approval") {
-      setInfoMessage("Account created successfully! Your account is pending approval. You'll be able to log in once an administrator approves your account.");
+    if (message === AUTH_MESSAGES.SIGNUP_PENDING_APPROVAL) {
+      setInfoMessage(AUTH_MESSAGES.ACCOUNT_PENDING_MESSAGE);
     }
   }, [message]);
 
@@ -108,7 +109,9 @@ function LoginForm() {
       });
 
       if (result?.error) {
-        setGeneralError("Invalid email or password");
+        // Show specific error message from the credentials provider
+        // This will display the "pending approval" message or other specific errors
+        setGeneralError(result.error || "Invalid email or password");
         return;
       }
 

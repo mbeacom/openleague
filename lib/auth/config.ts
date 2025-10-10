@@ -3,6 +3,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { compare } from "bcryptjs";
 import { prisma } from "@/lib/db/prisma";
 import { env, isProduction, isDevelopment } from "@/lib/env";
+import { AUTH_MESSAGES } from "@/lib/config/constants";
 
 export const authOptions: NextAuthConfig = {
   providers: [
@@ -38,7 +39,7 @@ export const authOptions: NextAuthConfig = {
 
         // Check if user is approved
         if (!user.approved) {
-          throw new Error("Your account is pending approval. Please contact an administrator.");
+          throw new Error(AUTH_MESSAGES.ACCOUNT_NOT_APPROVED);
         }
 
         // Return user object (will be stored in JWT)

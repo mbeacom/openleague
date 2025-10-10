@@ -5,57 +5,12 @@ import {
   Box,
   CircularProgress,
 } from "@mui/material";
-import { requireAuth } from "@/lib/auth/session";
-import { prisma } from "@/lib/db/prisma";
-import { redirect } from "next/navigation";
+import { isSystemAdmin, requireAuth } from "@/lib/auth/session";
+import { getAllUsers } from "@/lib/actions/admin";
 import UserApprovalList from "@/components/features/admin/UserApprovalList";
-
-/**
- * Check if user is a system admin (LEAGUE_ADMIN in any league)
- */
-async function isSystemAdmin(userId: string): Promise<boolean> {
-  const adminCount = await prisma.leagueUser.count({
-    where: {
-      userId,
-      role: "LEAGUE_ADMIN",
-    },
-  });
-
-  return adminCount > 0;
-}
-
-/**
- * Get all users with their approval status
- */
-async function getUsers() {
-  const users = await prisma.user.findMany({
-    select: {
-      id: true,
-      email: true,
-      name: true,
-      approved: true,
-      createdAt: true,
-      _count: {
-        select: {
-          teamMembers: true,
-          leagueUsers: true,
-        },
-      },
-    },
-    orderBy: {
-      createdAt: "desc",
-    },
-  });
-
-  return users;
-}
 
 async function UserManagementContent() {
   const session = await requireAuth();
-
-  if (!session.user?.id) {
-    redirect("/login");
-  }
 
   // Check if user is system admin
   const isAdmin = await isSystemAdmin(session.user.id);
@@ -73,7 +28,22 @@ async function UserManagementContent() {
     );
   }
 
-  const users = await getUsers();
+  const result = await getAllUsers();
+
+  if (result.error || !result.data) {
+    return (
+      <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+        <Typography variant="h4" component="h1" gutterBottom>
+          Error
+        </Typography>
+        <Typography variant="body1">
+          {result.error || "Failed to load users"}
+        </Typography>
+      </Container>
+    );
+  }
+
+  const users = result.data;
 
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>

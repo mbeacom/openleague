@@ -14,6 +14,7 @@ import {
 import Link from "next/link";
 import { signup } from "@/lib/actions/auth";
 import { signupSchema } from "@/lib/utils/validation";
+import { AUTH_MESSAGES } from "@/lib/config/constants";
 
 function SignupForm() {
   const router = useRouter();
@@ -123,7 +124,7 @@ function SignupForm() {
         setFormData({ email: "", password: "", name: "", invitationToken: undefined });
 
         // Redirect to login with a success message
-        router.push("/login?message=signup_pending_approval");
+        router.push(`/login?message=${AUTH_MESSAGES.SIGNUP_PENDING_APPROVAL}`);
         return;
       }
     } catch (error) {

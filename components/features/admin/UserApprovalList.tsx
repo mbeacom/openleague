@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   Box,
   Card,
@@ -19,21 +19,38 @@ import {
 import { CheckCircle, Block } from "@mui/icons-material";
 import { approveUser, rejectUser } from "@/lib/actions/admin";
 import { useRouter } from "next/navigation";
+import type { Prisma } from "@prisma/client";
 
-interface User {
-  id: string;
-  email: string;
-  name: string | null;
-  approved: boolean;
-  createdAt: Date;
-  _count: {
-    teamMembers: number;
-    leagueUsers: number;
+// Type-safe user type derived from Prisma query
+type User = Prisma.UserGetPayload<{
+  select: {
+    id: true;
+    email: true;
+    name: true;
+    approved: true;
+    createdAt: true;
+    _count: {
+      select: {
+        teamMembers: true;
+        leagueUsers: true;
+      };
+    };
   };
-}
+}>;
 
 interface UserApprovalListProps {
   users: User[];
+}
+
+/**
+ * Format date in a consistent, accessible way
+ */
+function formatDate(date: Date): string {
+  return new Intl.DateTimeFormat('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  }).format(new Date(date));
 }
 
 export default function UserApprovalList({ users }: UserApprovalListProps) {
@@ -44,8 +61,9 @@ export default function UserApprovalList({ users }: UserApprovalListProps) {
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [userToReject, setUserToReject] = useState<User | null>(null);
 
-  const pendingUsers = users.filter((u) => !u.approved);
-  const approvedUsers = users.filter((u) => u.approved);
+  // Memoize filtered arrays for performance
+  const pendingUsers = useMemo(() => users.filter((u) => !u.approved), [users]);
+  const approvedUsers = useMemo(() => users.filter((u) => u.approved), [users]);
 
   const handleApprove = async (userId: string) => {
     setLoading(userId);
@@ -139,7 +157,7 @@ export default function UserApprovalList({ users }: UserApprovalListProps) {
                         {user.email}
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
-                        Signed up: {new Date(user.createdAt).toLocaleDateString()}
+                        Signed up: {formatDate(user.createdAt)}
                       </Typography>
                     </Box>
                     <Box>

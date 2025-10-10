@@ -1,24 +1,8 @@
 "use server";
 
 import { prisma } from "@/lib/db/prisma";
-import { requireAuth } from "@/lib/auth/session";
+import { requireSystemAdmin } from "@/lib/auth/session";
 import { z } from "zod";
-
-/**
- * Check if a user has admin privileges (system-wide)
- * For now, this checks if user is a LEAGUE_ADMIN in any league
- * In future, could add a separate system admin role
- */
-async function isSystemAdmin(userId: string): Promise<boolean> {
-  const adminCount = await prisma.leagueUser.count({
-    where: {
-      userId,
-      role: "LEAGUE_ADMIN",
-    },
-  });
-
-  return adminCount > 0;
-}
 
 /**
  * Get all pending user approvals
@@ -26,16 +10,7 @@ async function isSystemAdmin(userId: string): Promise<boolean> {
  */
 export async function getPendingApprovals() {
   try {
-    const session = await requireAuth();
-    if (!session.user?.id) {
-      throw new Error("Unauthorized");
-    }
-
-    // Check if user is system admin
-    const isAdmin = await isSystemAdmin(session.user.id);
-    if (!isAdmin) {
-      return { error: "Unauthorized: Admin access required" };
-    }
+    await requireSystemAdmin();
 
     const pendingUsers = await prisma.user.findMany({
       where: {
@@ -65,20 +40,11 @@ export async function getPendingApprovals() {
  */
 export async function approveUser(userId: string) {
   try {
-    const session = await requireAuth();
-    if (!session.user?.id) {
-      throw new Error("Unauthorized");
-    }
+    await requireSystemAdmin();
 
     // Validate input
     const userIdSchema = z.string().cuid("Invalid user ID format");
     const validatedUserId = userIdSchema.parse(userId);
-
-    // Check if user is system admin
-    const isAdmin = await isSystemAdmin(session.user.id);
-    if (!isAdmin) {
-      return { error: "Unauthorized: Admin access required" };
-    }
 
     // Update user approval status
     const updatedUser = await prisma.user.update({
@@ -108,20 +74,11 @@ export async function approveUser(userId: string) {
  */
 export async function rejectUser(userId: string) {
   try {
-    const session = await requireAuth();
-    if (!session.user?.id) {
-      throw new Error("Unauthorized");
-    }
+    await requireSystemAdmin();
 
     // Validate input
     const userIdSchema = z.string().cuid("Invalid user ID format");
     const validatedUserId = userIdSchema.parse(userId);
-
-    // Check if user is system admin
-    const isAdmin = await isSystemAdmin(session.user.id);
-    if (!isAdmin) {
-      return { error: "Unauthorized: Admin access required" };
-    }
 
     // Check if user is actually pending (not approved)
     const user = await prisma.user.findUnique({
@@ -158,16 +115,7 @@ export async function rejectUser(userId: string) {
  */
 export async function getAllUsers() {
   try {
-    const session = await requireAuth();
-    if (!session.user?.id) {
-      throw new Error("Unauthorized");
-    }
-
-    // Check if user is system admin
-    const isAdmin = await isSystemAdmin(session.user.id);
-    if (!isAdmin) {
-      return { error: "Unauthorized: Admin access required" };
-    }
+    await requireSystemAdmin();
 
     const users = await prisma.user.findMany({
       select: {
