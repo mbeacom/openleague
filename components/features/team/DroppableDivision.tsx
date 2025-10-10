@@ -2,7 +2,8 @@
 
 import React from 'react';
 import { useDroppable } from '@dnd-kit/core';
-import { Box, alpha } from '@mui/material';
+import { Box } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 
 interface DroppableDivisionProps {
   id: string;

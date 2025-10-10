@@ -3,7 +3,10 @@
 import React from 'react';
 import { useDraggable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
-import { Box, alpha } from '@mui/material';
+import { Draggable } from '@hello-pangea/dnd';
+import { Box } from '@mui/material';
+import { alpha } from '@mui/material/styles';
+import { Team } from '@prisma/client';
 import { DragIndicator as DragIcon } from '@mui/icons-material';
 
 interface DraggableTeamCardProps {

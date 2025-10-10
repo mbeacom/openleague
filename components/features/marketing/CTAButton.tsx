@@ -1,6 +1,7 @@
 'use client';
 
-import { Button, ButtonProps, alpha } from '@mui/material';
+import { Button, ButtonProps } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import Link from 'next/link';
 import { trackConversion } from '@/lib/analytics/tracking';
 
@@ -19,11 +20,11 @@ interface CTAButtonProps {
 /**
  * Enhanced CTA Button with conversion tracking and optimized hover states
  */
-export default function CTAButton({ 
-  href, 
-  trackingAction, 
-  trackingLabel, 
-  children, 
+export default function CTAButton({
+  href,
+  trackingAction,
+  trackingLabel,
+  children,
   variant = 'marketing',
   size,
   fullWidth,
@@ -63,7 +64,7 @@ export default function CTAButton({
             outlineOffset: '2px',
           },
         };
-        
+
         // Merge with custom sx prop if provided
         if (sx) {
           if (typeof sx === 'function') {
@@ -71,7 +72,7 @@ export default function CTAButton({
           }
           return { ...baseSx, ...sx };
         }
-        
+
         return baseSx;
       }}
     >

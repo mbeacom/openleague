@@ -12,7 +12,8 @@ import {
   type DragStartEvent,
   type DragEndEvent,
 } from '@dnd-kit/core';
-import { Box, Typography, Card, CardContent, Avatar, alpha } from '@mui/material';
+import { Box, Typography, Card, CardContent, Avatar } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import { Groups as TeamsIcon, DragIndicator as DragIcon } from '@mui/icons-material';
 import { assignTeamToDivision } from '@/lib/actions/league';
 import { useRouter } from 'next/navigation';
