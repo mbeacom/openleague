@@ -11,7 +11,6 @@ import {
   Typography,
   Stack,
   Divider,
-  useTheme,
   useMediaQuery,
   IconButton,
   Drawer,
@@ -20,6 +19,7 @@ import {
   ListItemButton,
   ListItemText,
 } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 import MenuIcon from '@mui/icons-material/Menu';
 import CloseIcon from '@mui/icons-material/Close';
 import Logo from '@/components/ui/Logo';
@@ -56,10 +56,10 @@ export default function MarketingHeader() {
       }}
     >
       <Container maxWidth="lg">
-        <Toolbar 
-          disableGutters 
-          sx={{ 
-            justifyContent: 'space-between', 
+        <Toolbar
+          disableGutters
+          sx={{
+            justifyContent: 'space-between',
             py: 1.5,
             minHeight: { xs: 64, md: 72 }
           }}
@@ -104,7 +104,7 @@ export default function MarketingHeader() {
                   component={Link}
                   href={link.href}
                   color="inherit"
-                  sx={{ 
+                  sx={{
                     color: 'text.primary',
                     fontWeight: 500,
                     px: 2,
@@ -120,12 +120,12 @@ export default function MarketingHeader() {
                 </Button>
               ))}
               <Divider orientation="vertical" flexItem sx={{ mx: 1, height: 24 }} />
-              <Button 
-                component={Link} 
-                href="/login" 
-                color="inherit" 
+              <Button
+                component={Link}
+                href="/login"
+                color="inherit"
                 onClick={() => marketingEvents.headerSignInClick()}
-                sx={{ 
+                sx={{
                   color: 'text.primary',
                   fontWeight: 500,
                   px: 2,
@@ -139,8 +139,8 @@ export default function MarketingHeader() {
               >
                 Sign In
               </Button>
-              <CTAButton 
-                href="/signup" 
+              <CTAButton
+                href="/signup"
                 variant="marketing"
                 trackingAction="header_sign_up_click"
                 trackingLabel="header"
@@ -157,7 +157,7 @@ export default function MarketingHeader() {
                 aria-label="open menu"
                 edge="end"
                 onClick={handleDrawerToggle}
-                sx={{ 
+                sx={{
                   color: 'text.primary',
                   '&:hover': {
                     backgroundColor: 'rgba(25, 118, 210, 0.04)',
@@ -171,7 +171,7 @@ export default function MarketingHeader() {
                 open={mobileMenuOpen}
                 onClose={handleDrawerToggle}
                 sx={{
-                  '& .MuiDrawer-paper': { 
+                  '& .MuiDrawer-paper': {
                     width: 280,
                     pt: 2,
                   },
@@ -196,7 +196,7 @@ export default function MarketingHeader() {
                           }
                         }}
                       >
-                        <ListItemText 
+                        <ListItemText
                           primary={link.label}
                           primaryTypographyProps={{
                             fontWeight: 500,
@@ -208,9 +208,9 @@ export default function MarketingHeader() {
                   ))}
                   <Divider sx={{ my: 2 }} />
                   <ListItem disablePadding sx={{ mb: 1 }}>
-                    <ListItemButton 
-                      component={Link} 
-                      href="/login" 
+                    <ListItemButton
+                      component={Link}
+                      href="/login"
                       onClick={() => {
                         marketingEvents.headerSignInClick();
                         handleDrawerToggle();
@@ -222,7 +222,7 @@ export default function MarketingHeader() {
                         }
                       }}
                     >
-                      <ListItemText 
+                      <ListItemText
                         primary="Sign In"
                         primaryTypographyProps={{
                           fontWeight: 500,

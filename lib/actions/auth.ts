@@ -67,18 +67,39 @@ export async function signup(data: SignupWithInvitationInput) {
             }),
           ]);
         }
-      } catch (error) {
-        console.error("Error processing invitation during signup:", error);
+      } catch (inviteError) {
+        console.error("Error processing invitation during signup:", inviteError);
         // Don't fail signup if invitation processing fails
       }
     }
 
-    return { success: true, data: user };
+    // Return a clean, serializable success response
+    return {
+      success: true,
+      data: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        approved: user.approved,
+      }
+    };
   } catch (error) {
+    // Handle Zod validation errors
     if (error instanceof ZodError) {
-      return { error: "Invalid input", details: error.issues };
+      return {
+        error: "Invalid input",
+        details: error.issues.map(issue => ({
+          path: issue.path,
+          message: issue.message,
+        }))
+      };
     }
+
+    // Log the full error for debugging
     console.error("Signup error:", error);
-    return { error: "An unexpected error occurred during signup" };
+
+    // Return a clean, serializable error response
+    const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred during signup";
+    return { error: errorMessage };
   }
 }
