@@ -14,7 +14,7 @@ export default function PrivacyPolicyPage() {
           Privacy Policy
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 4 }}>
-          Last updated: {new Date().getFullYear()}
+          Last updated: October 2024
         </Typography>
         <Typography variant="body1" paragraph>
           We&apos;re drafting a comprehensive privacy policy that reflects how OpenLeague collects, uses, and protects data.

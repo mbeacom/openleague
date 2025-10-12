@@ -1,30 +1,49 @@
 import type { Metadata } from 'next';
 import { Container, Box, Typography, Card, CardContent, Chip, Stack } from '@mui/material';
 
-const roadmapItems = [
+type RoadmapStatus = 'In Progress' | 'Planned' | 'Researching';
+type ChipColor = 'success' | 'info' | 'default';
+
+interface RoadmapItem {
+  id: string;
+  label: string;
+  description: string;
+  status: RoadmapStatus;
+  color: ChipColor;
+}
+
+const roadmapItems: RoadmapItem[] = [
   {
+    id: 'season-setup-tools',
     label: 'Season Setup Tools',
     description:
       'Create recurring events, manage scheduling conflicts, and duplicate last season\'s schedule so managers can launch a new season in minutes.',
     status: 'In Progress',
+    color: 'success',
   },
   {
+    id: 'mobile-app-preview',
     label: 'Mobile App Preview',
     description:
       'Early access to the React Native companion app focused on RSVP flows, chat, and real-time updates while on the go.',
     status: 'Planned',
+    color: 'info',
   },
   {
+    id: 'advanced-permissions',
     label: 'Advanced Permissions',
     description:
       'Role-based access for coaches, captains, and volunteers with scoped control over rosters, announcements, and financial data.',
     status: 'Planned',
+    color: 'info',
   },
   {
+    id: 'integrations-api',
     label: 'Integrations & API',
     description:
       'REST and GraphQL endpoints, calendar sync (iCal, Google Calendar), and automation hooks for Zapier and other tools.',
     status: 'Researching',
+    color: 'default',
   },
 ];
 
@@ -46,7 +65,7 @@ export default function RoadmapPage() {
 
         <Stack spacing={3}>
           {roadmapItems.map((item) => (
-            <Card key={item.label}>
+            <Card key={item.id}>
               <CardContent>
                 <Stack
                   direction={{ xs: 'column', sm: 'row' }}
@@ -57,7 +76,7 @@ export default function RoadmapPage() {
                   <Typography variant="h5" component="h2">
                     {item.label}
                   </Typography>
-                  <Chip label={item.status} color="primary" variant="outlined" />
+                  <Chip label={item.status} color={item.color} variant="outlined" />
                 </Stack>
                 <Typography variant="body1" color="text.secondary" sx={{ mt: 2 }}>
                   {item.description}

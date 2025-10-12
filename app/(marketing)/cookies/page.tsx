@@ -14,7 +14,7 @@ export default function CookiePolicyPage() {
           Cookie Policy
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 4 }}>
-          Last updated: {new Date().getFullYear()}
+          Last updated: October 2024
         </Typography>
         <Typography variant="body1" paragraph>
           OpenLeague uses a limited set of cookies to keep you signed in and remember basic preferences.

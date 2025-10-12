@@ -1,6 +1,9 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import { Box } from '@mui/material';
+import MarketingHeader from '@/components/features/navigation/MarketingHeader';
+import MarketingFooter from '@/components/features/navigation/MarketingFooter';
 import './marketing.css';
 
 interface MarketingLayoutProps {
@@ -9,8 +12,27 @@ interface MarketingLayoutProps {
 
 export default function MarketingLayout({ children }: MarketingLayoutProps) {
   return (
-    <div className="marketing-layout">
-      {children}
-    </div>
+    <Box
+      className="marketing-layout"
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        minHeight: '100vh',
+        bgcolor: 'background.default',
+      }}
+    >
+      <MarketingHeader />
+      <Box
+        component="main"
+        sx={{
+          flexGrow: 1,
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
+        {children}
+      </Box>
+      <MarketingFooter />
+    </Box>
   );
 }
