@@ -3,10 +3,8 @@
 import React from 'react';
 import { useDraggable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
-import { Draggable } from '@hello-pangea/dnd';
 import { Box } from '@mui/material';
 import { alpha } from '@mui/material/styles';
-import { Team } from '@prisma/client';
 import { DragIndicator as DragIcon } from '@mui/icons-material';
 
 interface DraggableTeamCardProps {
@@ -20,7 +18,7 @@ export function DraggableTeamCard({ id, children }: DraggableTeamCardProps) {
   });
 
   const style = {
-    transform: CSS.Translate.toString(transform),
+    transform: transform ? CSS.Translate.toString(transform) : undefined,
     opacity: isDragging ? 0.5 : 1,
     cursor: isDragging ? 'grabbing' : 'grab',
     transition: 'opacity 0.2s ease-in-out',
