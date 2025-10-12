@@ -17,7 +17,21 @@ export default function LayoutProvider({ children }: LayoutProviderProps) {
   
   // Determine if we should show marketing layout
   // Note: Route groups like (marketing) are excluded from the pathname by Next.js
-  const marketingPaths = ['/', '/features', '/pricing', '/about', '/contact', '/docs'];
+  const marketingPaths = [
+    '/',
+    '/features',
+    '/pricing',
+    '/about',
+    '/contact',
+    '/get-started',
+    '/blog',
+    '/careers',
+    '/privacy',
+    '/terms',
+    '/cookies',
+    '/security',
+    '/docs',
+  ];
   const isMarketingRoute = marketingPaths.some(path => 
     pathname === path || (path !== '/' && pathname.startsWith(path))
   );
