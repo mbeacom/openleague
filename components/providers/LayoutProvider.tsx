@@ -32,13 +32,31 @@ export default function LayoutProvider({ children }: LayoutProviderProps) {
     '/security',
     '/docs',
   ];
+  // Routes that already render their own marketing layout components
+  const marketingRouteGroupPaths = [
+    '/features',
+    '/pricing',
+    '/about',
+    '/contact',
+    '/get-started',
+    '/blog',
+    '/careers',
+    '/privacy',
+    '/terms',
+    '/cookies',
+    '/security',
+  ];
   const isMarketingRoute = marketingPaths.some(path => 
     pathname === path || (path !== '/' && pathname.startsWith(path))
+  );
+  const isMarketingRouteGroup = marketingRouteGroupPaths.some(path =>
+    pathname === path || pathname.startsWith(`${path}/`)
   );
   const isAuthRoute = pathname.startsWith('/login') || pathname.startsWith('/signup');
   
   // Show marketing layout for unauthenticated users on marketing routes
-  const shouldShowMarketingLayout = !session?.user && (isMarketingRoute || isAuthRoute);
+  const shouldShowMarketingLayout =
+    !session?.user && ((isMarketingRoute && !isMarketingRouteGroup) || isAuthRoute);
   
   if (shouldShowMarketingLayout) {
     return (
