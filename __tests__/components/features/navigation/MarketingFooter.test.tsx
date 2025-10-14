@@ -65,7 +65,7 @@ describe('MarketingFooter', () => {
 
     it('renders social media links', () => {
       renderWithTheme(<MarketingFooter />);
-      
+
       expect(screen.getByLabelText('GitHub')).toHaveAttribute('href', 'https://github.com/mbeacom/openleague');
       expect(screen.getByLabelText('Twitter')).toHaveAttribute('href', 'https://twitter.com/openleague');
       expect(screen.getByLabelText('LinkedIn')).toHaveAttribute('href', 'https://linkedin.com/company/openleague');
@@ -73,7 +73,7 @@ describe('MarketingFooter', () => {
 
     it('social links open in new tab', () => {
       renderWithTheme(<MarketingFooter />);
-      
+
       const githubLink = screen.getByLabelText('GitHub');
       expect(githubLink).toHaveAttribute('target', '_blank');
       expect(githubLink).toHaveAttribute('rel', 'noopener noreferrer');
@@ -89,7 +89,7 @@ describe('MarketingFooter', () => {
 
       it('renders product links', () => {
         renderWithTheme(<MarketingFooter />);
-        
+
         expect(screen.getByRole('link', { name: 'Features' })).toHaveAttribute('href', '/features');
         expect(screen.getByRole('link', { name: 'Pricing' })).toHaveAttribute('href', '/pricing');
         expect(screen.getByRole('link', { name: 'Get Started' })).toHaveAttribute('href', '/get-started');
@@ -105,7 +105,7 @@ describe('MarketingFooter', () => {
 
       it('renders resource links', () => {
         renderWithTheme(<MarketingFooter />);
-        
+
         expect(screen.getByRole('link', { name: 'Documentation' })).toHaveAttribute('href', '/docs');
         expect(screen.getByRole('link', { name: 'User Guide' })).toHaveAttribute('href', '/docs/user-guide');
         expect(screen.getByRole('link', { name: 'API Reference' })).toHaveAttribute('href', '/docs/api');
@@ -121,7 +121,7 @@ describe('MarketingFooter', () => {
 
       it('renders company links', () => {
         renderWithTheme(<MarketingFooter />);
-        
+
         expect(screen.getByRole('link', { name: 'About' })).toHaveAttribute('href', '/about');
         expect(screen.getByRole('link', { name: 'Contact' })).toHaveAttribute('href', '/contact');
         expect(screen.getByRole('link', { name: 'Blog' })).toHaveAttribute('href', '/blog');
@@ -137,7 +137,7 @@ describe('MarketingFooter', () => {
 
       it('renders legal links', () => {
         renderWithTheme(<MarketingFooter />);
-        
+
         expect(screen.getByRole('link', { name: 'Privacy Policy' })).toHaveAttribute('href', '/privacy');
         expect(screen.getByRole('link', { name: 'Terms of Service' })).toHaveAttribute('href', '/terms');
         expect(screen.getByRole('link', { name: 'Cookie Policy' })).toHaveAttribute('href', '/cookies');
@@ -155,7 +155,7 @@ describe('MarketingFooter', () => {
 
     it('renders feature highlights', () => {
       renderWithTheme(<MarketingFooter />);
-      
+
       expect(screen.getByText('🌟 Free Forever')).toBeInTheDocument();
       expect(screen.getByText('🔒 Privacy First')).toBeInTheDocument();
       expect(screen.getByText('📱 Mobile Ready')).toBeInTheDocument();
@@ -170,14 +170,14 @@ describe('MarketingFooter', () => {
   describe('Responsive Layout', () => {
     it('renders with responsive grid structure', () => {
       renderWithTheme(<MarketingFooter />);
-      
+
       // Component should render without errors
       expect(screen.getByRole('contentinfo')).toBeInTheDocument();
     });
 
     it('maintains proper spacing and structure', () => {
       renderWithTheme(<MarketingFooter />);
-      
+
       // All sections should be present
       expect(screen.getByText('Product')).toBeInTheDocument();
       expect(screen.getByText('Resources')).toBeInTheDocument();
@@ -194,7 +194,7 @@ describe('MarketingFooter', () => {
 
     it('has proper heading structure for sections', () => {
       renderWithTheme(<MarketingFooter />);
-      
+
       // Section titles should be properly structured
       expect(screen.getByText('Product')).toBeInTheDocument();
       expect(screen.getByText('Resources')).toBeInTheDocument();
@@ -204,7 +204,7 @@ describe('MarketingFooter', () => {
 
     it('provides accessible labels for social links', () => {
       renderWithTheme(<MarketingFooter />);
-      
+
       expect(screen.getByLabelText('GitHub')).toBeInTheDocument();
       expect(screen.getByLabelText('Twitter')).toBeInTheDocument();
       expect(screen.getByLabelText('LinkedIn')).toBeInTheDocument();
@@ -212,10 +212,10 @@ describe('MarketingFooter', () => {
 
     it('maintains keyboard navigation for all links', () => {
       renderWithTheme(<MarketingFooter />);
-      
+
       const links = screen.getAllByRole('link');
       expect(links.length).toBeGreaterThan(0);
-      
+
       links.forEach(link => {
         expect(link).toBeInTheDocument();
       });
@@ -225,14 +225,14 @@ describe('MarketingFooter', () => {
   describe('Theme Integration', () => {
     it('uses marketing theme colors', () => {
       renderWithTheme(<MarketingFooter />);
-      
+
       // Component should render without errors with marketing theme
       expect(screen.getByText('OpenLeague')).toBeInTheDocument();
     });
 
     it('applies proper typography variants', () => {
       renderWithTheme(<MarketingFooter />);
-      
+
       // Marketing body typography should be applied
       expect(screen.getByText(/Replace chaotic spreadsheets/)).toBeInTheDocument();
     });

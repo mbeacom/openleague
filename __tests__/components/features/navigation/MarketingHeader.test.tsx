@@ -52,7 +52,7 @@ describe('MarketingHeader', () => {
 
     it('renders all navigation links', () => {
       renderWithTheme(<MarketingHeader />);
-      
+
       expect(screen.getByRole('link', { name: 'Features' })).toHaveAttribute('href', '/features');
       expect(screen.getByRole('link', { name: 'Pricing' })).toHaveAttribute('href', '/pricing');
       expect(screen.getByRole('link', { name: 'About' })).toHaveAttribute('href', '/about');
@@ -62,7 +62,7 @@ describe('MarketingHeader', () => {
 
     it('renders Sign In and Get Started buttons', () => {
       renderWithTheme(<MarketingHeader />);
-      
+
       expect(screen.getByRole('link', { name: 'Sign In' })).toHaveAttribute('href', '/login');
       expect(screen.getByRole('link', { name: 'Get Started Free' })).toHaveAttribute('href', '/signup');
     });
@@ -73,7 +73,7 @@ describe('MarketingHeader', () => {
 
     it('maintains keyboard navigation', () => {
       renderWithTheme(<MarketingHeader />);
-      
+
       const links = screen.getAllByRole('link');
       links.forEach(link => {
         expect(link).toBeInTheDocument();
@@ -82,7 +82,7 @@ describe('MarketingHeader', () => {
 
     it('has proper heading structure', () => {
       renderWithTheme(<MarketingHeader />);
-      
+
       // Logo should be properly structured
       const logo = screen.getByTestId('logo');
       expect(logo).toBeInTheDocument();
@@ -94,7 +94,7 @@ describe('MarketingHeader', () => {
   describe('Theme Integration', () => {
     it('uses marketing theme colors', () => {
       renderWithTheme(<MarketingHeader />);
-      
+
       // Component should render without errors with marketing theme
       const logo = screen.getByTestId('logo');
       expect(logo).toBeInTheDocument();
@@ -104,7 +104,7 @@ describe('MarketingHeader', () => {
 
     it('applies marketing button variant to CTA', () => {
       renderWithTheme(<MarketingHeader />);
-      
+
       const getStartedButton = screen.getByRole('link', { name: 'Get Started Free' });
       expect(getStartedButton).toBeInTheDocument();
     });

@@ -168,7 +168,7 @@ describe('BrandLogo', () => {
       renderWithTheme(<BrandLogo />);
       const link = screen.getByRole('link');
       expect(link).toBeInTheDocument();
-      
+
       // Link should be focusable
       link.focus();
       expect(link).toHaveFocus();
@@ -233,19 +233,19 @@ describe('BrandLogo', () => {
   describe('Hero Section Use Case', () => {
     it('renders correctly for hero section with full branding', () => {
       renderWithTheme(
-        <BrandLogo 
-          variant="full" 
-          size="xlarge" 
-          priority 
+        <BrandLogo
+          variant="full"
+          size="xlarge"
+          priority
           interactive
         />
       );
-      
+
       const logo = screen.getByAltText('OpenLeague - Simplify Your Season');
       expect(logo).toBeInTheDocument();
       expect(logo).toHaveAttribute('src', '/images/alt-logo-transparent-background.png');
       expect(logo).toHaveAttribute('data-priority', 'true');
-      
+
       const link = screen.getByRole('link');
       expect(link).toHaveAttribute('href', '/');
     });
@@ -254,17 +254,17 @@ describe('BrandLogo', () => {
   describe('Navbar Use Case', () => {
     it('renders correctly for navbar with icon logo', () => {
       renderWithTheme(
-        <BrandLogo 
-          variant="icon" 
-          size="large" 
+        <BrandLogo
+          variant="icon"
+          size="large"
           href="/dashboard"
         />
       );
-      
+
       const logo = screen.getByAltText('OpenLeague - Simplify Your Season');
       expect(logo).toBeInTheDocument();
       expect(logo).toHaveAttribute('src', '/images/logo.webp');
-      
+
       const link = screen.getByRole('link');
       expect(link).toHaveAttribute('href', '/dashboard');
     });
@@ -273,17 +273,17 @@ describe('BrandLogo', () => {
   describe('Static Display Use Case', () => {
     it('renders correctly without link for static display', () => {
       renderWithTheme(
-        <BrandLogo 
-          variant="full" 
-          size="medium" 
+        <BrandLogo
+          variant="full"
+          size="medium"
           href={null}
           interactive={false}
         />
       );
-      
+
       const logo = screen.getByAltText('OpenLeague - Simplify Your Season');
       expect(logo).toBeInTheDocument();
-      
+
       const links = screen.queryAllByRole('link');
       expect(links).toHaveLength(0);
     });
@@ -293,7 +293,7 @@ describe('BrandLogo', () => {
     it('renders without errors when all props are provided', () => {
       expect(() => {
         renderWithTheme(
-          <BrandLogo 
+          <BrandLogo
             variant="full"
             size="large"
             width={200}
