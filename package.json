@@ -1,6 +1,6 @@
 {
   "name": "openleague",
-  "version": "0.20.1",
+  "version": "0.21.0",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
