@@ -24,7 +24,7 @@ export default function PricingPage() {
           Start with our Starter plan, upgrade as you grow. No hidden fees or surprise charges.
         </Typography>
 
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)' }, gap: 3, mb: 8 }}>
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)' }, gap: 3, mb: 8, pt: 3 }}>
           <Card>
             <CardContent sx={{ p: 4, textAlign: 'center' }}>
               <Typography variant="h4" component="h2" gutterBottom>
@@ -66,6 +66,7 @@ export default function PricingPage() {
               border: 2,
               borderColor: 'primary.main',
               position: 'relative',
+              overflow: 'visible',
             }}
           >
             {PRICING_PLANS.pro.highlightLabel && (
@@ -78,6 +79,7 @@ export default function PricingPage() {
                   left: '50%',
                   transform: 'translateX(-50%)',
                   fontWeight: 600,
+                  zIndex: 1,
                 }}
               />
             )}

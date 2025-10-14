@@ -15,9 +15,10 @@ vi.mock('next/link', () => ({
 
 // Mock Logo component
 vi.mock('@/components/ui/Logo', () => ({
-  default: ({ size, variant }: any) => (
+  default: ({ size, variant, showText }: any) => (
     <div data-testid="logo" data-size={size} data-variant={variant}>
       Logo
+      {showText && <span>OpenLeague</span>}
     </div>
   ),
 }));
@@ -47,10 +48,13 @@ describe('MarketingFooter', () => {
       const logo = screen.getByTestId('logo');
       expect(logo).toHaveAttribute('data-size', 'medium');
       expect(logo).toHaveAttribute('data-variant', 'footer');
+      // Logo has showText prop, so it renders OpenLeague
+      expect(logo).toHaveTextContent('OpenLeague');
     });
 
     it('renders OpenLeague brand text', () => {
       renderWithTheme(<MarketingFooter />);
+      // Logo renders OpenLeague text when showText is true
       expect(screen.getByText('OpenLeague')).toBeInTheDocument();
     });
 

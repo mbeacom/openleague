@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import {
   AppBar,
@@ -8,7 +9,6 @@ import {
   Container,
   Box,
   Button,
-  Typography,
   Stack,
   Divider,
   useMediaQuery,
@@ -36,25 +36,53 @@ const navigationLinks = [
 
 export default function MarketingHeader() {
   const theme = useTheme();
+  const pathname = usePathname();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
+
+  // Only hide navbar initially on homepage
+  const isHomepage = pathname === '/';
+
+  // Hide navbar completely on auth pages (they have their own logos)
+  const isAuthPage = pathname === '/login' || pathname === '/signup';
+
+  // Track scroll position to show/hide navbar
+  useEffect(() => {
+    const handleScroll = () => {
+      // Show navbar after scrolling down 100px (only matters on homepage)
+      setIsScrolled(window.scrollY > 100);
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Early return after all hooks
+  if (isAuthPage) {
+    return null;
+  }
 
   const handleDrawerToggle = () => {
     setMobileMenuOpen(!mobileMenuOpen);
   };
 
   return (
-    <AppBar
-      position="sticky"
-      elevation={0}
-      sx={{
-        bgcolor: 'background.paper',
-        borderBottom: 1,
-        borderColor: 'divider',
-        backdropFilter: 'blur(8px)',
-        backgroundColor: 'rgba(255, 255, 255, 0.95)',
-      }}
-    >
+    <>
+      <AppBar
+        position="fixed"
+        elevation={isScrolled ? 2 : 0}
+        sx={{
+          bgcolor: isScrolled ? 'background.paper' : 'transparent',
+          borderBottom: isScrolled ? 1 : 0,
+          borderColor: 'divider',
+          backdropFilter: isScrolled ? 'blur(8px)' : 'none',
+          backgroundColor: isScrolled ? 'rgba(255, 255, 255, 0.95)' : 'transparent',
+          // Only hide navbar on homepage initially, show on all other pages
+          transform: isHomepage && !isScrolled ? 'translateY(-100%)' : 'translateY(0)',
+          transition: 'transform 0.3s ease-in-out, background-color 0.3s ease-in-out, box-shadow 0.3s ease-in-out',
+        }}
+      >
       <Container maxWidth="lg">
         <Toolbar
           disableGutters
@@ -65,35 +93,18 @@ export default function MarketingHeader() {
           }}
         >
           {/* Logo and Brand */}
-          <Box
-            component={Link}
+          <Logo
+            size="large"
             href="/"
+            showText
+            priority
             sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 1.5,
-              textDecoration: 'none',
-              color: 'inherit',
               transition: 'transform 0.2s ease-in-out',
               '&:hover': {
                 transform: 'scale(1.02)',
               },
             }}
-          >
-            <Logo size="large" href={null} priority />
-            <Typography
-              variant="h5"
-              component="div"
-              sx={{
-                fontWeight: 700,
-                color: 'marketing.primary',
-                letterSpacing: '-0.02em',
-                display: { xs: 'none', sm: 'block' }
-              }}
-            >
-              OpenLeague
-            </Typography>
-          </Box>
+          />
 
           {/* Desktop Navigation */}
           {!isMobile ? (
@@ -119,7 +130,6 @@ export default function MarketingHeader() {
                   {link.label}
                 </Button>
               ))}
-              <Divider orientation="vertical" flexItem sx={{ mx: 1, height: 24 }} />
               <Button
                 component={Link}
                 href="/login"
@@ -250,5 +260,28 @@ export default function MarketingHeader() {
         </Toolbar>
       </Container>
     </AppBar>
+
+    {/* Floating menu button for mobile - only visible on homepage when navbar is hidden */}
+    {isMobile && isHomepage && !isScrolled && (
+      <IconButton
+        onClick={handleDrawerToggle}
+        sx={{
+          position: 'fixed',
+          top: 16,
+          right: 16,
+          zIndex: 1100,
+          bgcolor: 'background.paper',
+          boxShadow: 2,
+          '&:hover': {
+            bgcolor: 'background.paper',
+            boxShadow: 4,
+          },
+        }}
+        aria-label="open menu"
+      >
+        <MenuIcon />
+      </IconButton>
+    )}
+    </>
   );
 }

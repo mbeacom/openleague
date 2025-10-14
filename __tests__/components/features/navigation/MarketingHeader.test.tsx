@@ -28,9 +28,10 @@ vi.mock('next/image', () => ({
 
 // Mock Logo component
 vi.mock('@/components/ui/Logo', () => ({
-  default: ({ size, href, priority }: any) => (
+  default: ({ size, href, priority, showText }: any) => (
     <div data-testid="logo" data-size={size} data-href={href} data-priority={priority}>
       Logo
+      {showText && <span>OpenLeague</span>}
     </div>
   ),
 }));
@@ -47,11 +48,6 @@ describe('MarketingHeader', () => {
       const logo = screen.getByTestId('logo');
       expect(logo).toHaveAttribute('data-size', 'large');
       expect(logo).toHaveAttribute('data-priority', 'true');
-    });
-
-    it('renders OpenLeague brand text', () => {
-      renderWithTheme(<MarketingHeader />);
-      expect(screen.getByText('OpenLeague')).toBeInTheDocument();
     });
 
     it('renders all navigation links', () => {
@@ -87,9 +83,11 @@ describe('MarketingHeader', () => {
     it('has proper heading structure', () => {
       renderWithTheme(<MarketingHeader />);
       
-      // Brand text should be properly structured
-      const brandText = screen.getByText('OpenLeague');
-      expect(brandText).toBeInTheDocument();
+      // Logo should be properly structured
+      const logo = screen.getByTestId('logo');
+      expect(logo).toBeInTheDocument();
+      // Logo component renders OpenLeague text when showText is true
+      expect(screen.getByText('OpenLeague')).toBeInTheDocument();
     });
   });
 
@@ -98,6 +96,9 @@ describe('MarketingHeader', () => {
       renderWithTheme(<MarketingHeader />);
       
       // Component should render without errors with marketing theme
+      const logo = screen.getByTestId('logo');
+      expect(logo).toBeInTheDocument();
+      // Logo renders OpenLeague text when showText is true
       expect(screen.getByText('OpenLeague')).toBeInTheDocument();
     });
 

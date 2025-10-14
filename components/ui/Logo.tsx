@@ -1,6 +1,6 @@
 import Image from 'next/image';
 import Link from 'next/link';
-import { Box, SxProps, Theme } from '@mui/material';
+import { Box, SxProps, Theme, Typography } from '@mui/material';
 
 const LOGO_IMAGE_PATH = '/images/logo.webp';
 const LOGO_ALT_TEXT = 'OpenLeague Logo';
@@ -40,6 +40,15 @@ interface LogoProps {
    */
   priority?: boolean;
   /**
+   * Whether to show the "OpenLeague" text next to the logo
+   */
+  showText?: boolean;
+  /**
+   * Responsive behavior for text visibility
+   * Object with breakpoint keys (xs, sm, md, etc.) or boolean
+   */
+  showTextResponsive?: { xs?: boolean; sm?: boolean; md?: boolean; lg?: boolean; xl?: boolean } | boolean;
+  /**
    * Additional MUI sx props for the container Box
    */
   sx?: SxProps<Theme>;
@@ -56,21 +65,33 @@ const SIZE_MAP: Record<LogoSize, number> = {
   xlarge: 64,
 };
 
+// Typography variant mapping based on logo size
+const TEXT_VARIANT_MAP: Record<LogoSize, 'body1' | 'h6' | 'h5' | 'h4'> = {
+  small: 'body1',
+  medium: 'h6',
+  large: 'h5',
+  xlarge: 'h4',
+};
+
 /**
  * Logo component for OpenLeague branding
  *
- * The logo includes the "OpenLeague" wordmark, so no additional text is needed.
+ * Can display just the logo icon or include the "OpenLeague" wordmark.
+ * Supports responsive text visibility for optimal display across devices.
  *
  * @example
  * ```tsx
- * // In navbar
- * <Logo size="large" priority />
+ * // In navbar with text
+ * <Logo size="large" showText priority />
  *
- * // In footer
+ * // In navbar with responsive text (hidden on mobile, shown on desktop)
+ * <Logo size="large" showTextResponsive={{ xs: false, md: true }} priority />
+ *
+ * // In footer without text
  * <Logo size="small" variant="footer" />
  *
  * // Custom size with different link
- * <Logo width={48} height={48} href="/dashboard" />
+ * <Logo width={48} height={48} href="/dashboard" showText />
  * ```
  */
 export default function Logo({
@@ -80,6 +101,8 @@ export default function Logo({
   variant = 'default',
   href,
   priority = false,
+  showText = false,
+  showTextResponsive,
   sx,
   className,
 }: LogoProps) {
@@ -91,10 +114,33 @@ export default function Logo({
   // Footer variant never links, otherwise use explicit href or default to '/'
   const linkHref = href !== undefined ? href : (variant === 'footer' ? null : '/');
 
+  // Determine text visibility
+  let textDisplay: 'none' | 'block' | { xs?: 'none' | 'block'; sm?: 'none' | 'block'; md?: 'none' | 'block'; lg?: 'none' | 'block'; xl?: 'none' | 'block' } = 'none';
+
+  if (showTextResponsive) {
+    if (typeof showTextResponsive === 'boolean') {
+      textDisplay = showTextResponsive ? 'block' : 'none';
+    } else {
+      // Create responsive display object
+      textDisplay = {};
+      if (showTextResponsive.xs !== undefined) textDisplay.xs = showTextResponsive.xs ? 'block' : 'none';
+      if (showTextResponsive.sm !== undefined) textDisplay.sm = showTextResponsive.sm ? 'block' : 'none';
+      if (showTextResponsive.md !== undefined) textDisplay.md = showTextResponsive.md ? 'block' : 'none';
+      if (showTextResponsive.lg !== undefined) textDisplay.lg = showTextResponsive.lg ? 'block' : 'none';
+      if (showTextResponsive.xl !== undefined) textDisplay.xl = showTextResponsive.xl ? 'block' : 'none';
+    }
+  } else if (showText) {
+    textDisplay = 'block';
+  }
+
+  // Get appropriate text variant for logo size
+  const textVariant = TEXT_VARIANT_MAP[size];
+
   // Base styles
   const baseStyles: SxProps<Theme> = {
     display: 'flex',
     alignItems: 'center',
+    gap: showText || showTextResponsive ? 1.5 : 0,
     ...sx,
   };
 
@@ -119,6 +165,26 @@ export default function Logo({
     />
   );
 
+  const logoContent = (
+    <>
+      {logoImage}
+      {(showText || showTextResponsive) && (
+        <Typography
+          variant={textVariant}
+          component="div"
+          sx={{
+            fontWeight: 700,
+            color: variant === 'footer' ? 'text.primary' : 'primary.main',
+            letterSpacing: '-0.02em',
+            display: textDisplay,
+          }}
+        >
+          OpenLeague
+        </Typography>
+      )}
+    </>
+  );
+
   // Render with link wrapper if applicable
   if (linkHref) {
     const combinedStyles = { ...baseStyles, ...interactiveStyles };
@@ -129,7 +195,7 @@ export default function Logo({
         sx={combinedStyles}
         className={className}
       >
-        {logoImage}
+        {logoContent}
       </Box>
     );
   }
@@ -137,7 +203,7 @@ export default function Logo({
   // Render without link
   return (
     <Box sx={baseStyles} className={className}>
-      {logoImage}
+      {logoContent}
     </Box>
   );
 }

@@ -8,7 +8,7 @@ interface DocsLayoutProps {
 export default function DocsLayout({ children }: DocsLayoutProps) {
   return (
     <Container maxWidth="lg">
-      <Box sx={{ py: 4 }}>
+      <Box sx={{ py: 4, mt: { xs: '64px', md: '72px' } }}>
         {/* Documentation layout wrapper */}
         <main>
           {children}

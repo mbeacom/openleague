@@ -19,3 +19,6 @@ export type { PaginationProps } from './Pagination';
 
 export { default as Logo } from './Logo';
 export type { LogoSize, LogoVariant } from './Logo';
+
+export { default as BrandLogo } from './BrandLogo';
+export type { BrandLogoVariant, BrandLogoSize } from './BrandLogo';
