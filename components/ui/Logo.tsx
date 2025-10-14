@@ -8,6 +8,28 @@ const LOGO_ALT_TEXT = 'OpenLeague Logo';
 export type LogoSize = 'small' | 'medium' | 'large' | 'xlarge';
 export type LogoVariant = 'default' | 'footer';
 
+/**
+ * Responsive display configuration for text visibility across breakpoints
+ */
+type ResponsiveTextDisplay = {
+  xs?: boolean;
+  sm?: boolean;
+  md?: boolean;
+  lg?: boolean;
+  xl?: boolean;
+} | boolean;
+
+/**
+ * MUI-compatible responsive display type for the text element
+ */
+type MuiResponsiveDisplay = 'none' | 'block' | {
+  xs?: 'none' | 'block';
+  sm?: 'none' | 'block';
+  md?: 'none' | 'block';
+  lg?: 'none' | 'block';
+  xl?: 'none' | 'block';
+};
+
 interface LogoProps {
   /**
    * Size preset for the logo
@@ -47,7 +69,7 @@ interface LogoProps {
    * Responsive behavior for text visibility
    * Object with breakpoint keys (xs, sm, md, etc.) or boolean
    */
-  showTextResponsive?: { xs?: boolean; sm?: boolean; md?: boolean; lg?: boolean; xl?: boolean } | boolean;
+  showTextResponsive?: ResponsiveTextDisplay;
   /**
    * Additional MUI sx props for the container Box
    */
@@ -115,19 +137,17 @@ export default function Logo({
   const linkHref = href !== undefined ? href : (variant === 'footer' ? null : '/');
 
   // Determine text visibility
-  let textDisplay: 'none' | 'block' | { xs?: 'none' | 'block'; sm?: 'none' | 'block'; md?: 'none' | 'block'; lg?: 'none' | 'block'; xl?: 'none' | 'block' } = 'none';
+  let textDisplay: MuiResponsiveDisplay = 'none';
 
   if (showTextResponsive) {
     if (typeof showTextResponsive === 'boolean') {
       textDisplay = showTextResponsive ? 'block' : 'none';
     } else {
-      // Create responsive display object
+      // Create responsive display object using Object.entries for cleaner code
       textDisplay = {};
-      if (showTextResponsive.xs !== undefined) textDisplay.xs = showTextResponsive.xs ? 'block' : 'none';
-      if (showTextResponsive.sm !== undefined) textDisplay.sm = showTextResponsive.sm ? 'block' : 'none';
-      if (showTextResponsive.md !== undefined) textDisplay.md = showTextResponsive.md ? 'block' : 'none';
-      if (showTextResponsive.lg !== undefined) textDisplay.lg = showTextResponsive.lg ? 'block' : 'none';
-      if (showTextResponsive.xl !== undefined) textDisplay.xl = showTextResponsive.xl ? 'block' : 'none';
+      Object.entries(showTextResponsive).forEach(([breakpoint, value]) => {
+        (textDisplay as Record<string, 'none' | 'block'>)[breakpoint] = value ? 'block' : 'none';
+      });
     }
   } else if (showText) {
     textDisplay = 'block';

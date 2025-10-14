@@ -34,6 +34,9 @@ const navigationLinks = [
   { label: 'Docs', href: '/docs' },
 ];
 
+// Auth page pathnames
+const AUTH_PATHNAMES = ['/login', '/signup'];
+
 export default function MarketingHeader() {
   const theme = useTheme();
   const pathname = usePathname();
@@ -45,7 +48,7 @@ export default function MarketingHeader() {
   const isHomepage = pathname === '/';
 
   // Hide navbar completely on auth pages (they have their own logos)
-  const isAuthPage = pathname === '/login' || pathname === '/signup';
+  const isAuthPage = AUTH_PATHNAMES.includes(pathname);
 
   // Track scroll position to show/hide navbar
   useEffect(() => {
@@ -130,6 +133,7 @@ export default function MarketingHeader() {
                   {link.label}
                 </Button>
               ))}
+              <Box sx={{ width: 1, height: 24, bgcolor: 'divider', mx: 1 }} />
               <Button
                 component={Link}
                 href="/login"
