@@ -16,6 +16,7 @@ import Logo from "@/components/ui/Logo";
 import { signup } from "@/lib/actions/auth";
 import { signupSchema } from "@/lib/utils/validation";
 import { AUTH_MESSAGES } from "@/lib/config/constants";
+import { trackAuth } from "@/lib/analytics/umami";
 
 function SignupForm() {
   const router = useRouter();
@@ -123,6 +124,12 @@ function SignupForm() {
         // Show success message instead of trying to sign in
         setErrors({});
         setFormData({ email: "", password: "", name: "", invitationToken: undefined });
+
+        // Track signup event
+        trackAuth('signup', {
+          hasInvitation: !!invitationToken,
+          teamName: teamName || undefined,
+        });
 
         // Redirect to login with a success message
         router.push(`/login?message=${AUTH_MESSAGES.SIGNUP_PENDING_APPROVAL}`);

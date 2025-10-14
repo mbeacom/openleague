@@ -6,6 +6,7 @@ import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import CancelIcon from "@mui/icons-material/Cancel";
 import HelpIcon from "@mui/icons-material/Help";
 import { updateRSVP } from "@/lib/actions/rsvp";
+import { trackRSVP } from "@/lib/analytics/umami";
 
 type RSVPStatus = "GOING" | "NOT_GOING" | "MAYBE" | "NO_RESPONSE";
 
@@ -36,6 +37,14 @@ export function RSVPButtons({
       });
 
       if (result.success) {
+        // Track RSVP event
+        const rsvpStatusMap = {
+          GOING: 'going',
+          NOT_GOING: 'not-going',
+          MAYBE: 'maybe',
+        } as const;
+        trackRSVP(rsvpStatusMap[status], { eventId });
+
         // Notify parent component if callback provided
         onStatusChange?.(status);
       } else {

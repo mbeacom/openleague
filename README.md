@@ -80,6 +80,9 @@ NEXTAUTH_SECRET=""  # Generate with: openssl rand -base64 32
 MAILCHIMP_API_KEY=""  # Get from Mailchimp Transactional dashboard
 EMAIL_FROM="noreply@yourdomain.com"  # Your sender email address
 
+# Optional: Analytics (Umami - privacy-friendly)
+NEXT_PUBLIC_UMAMI_WEBSITE_ID=""  # Get from https://cloud.umami.is
+
 # Optional: For future AWS migration
 AWS_REGION="us-east-1"
 ```
@@ -91,6 +94,10 @@ AWS_REGION="us-east-1"
 - `NEXTAUTH_SECRET` - Random 32+ character secret for JWT signing
 - `MAILCHIMP_API_KEY` - API key for sending emails
 - `EMAIL_FROM` - Verified sender email address
+
+**Optional Environment Variables:**
+
+- `NEXT_PUBLIC_UMAMI_WEBSITE_ID` - Umami analytics website ID (leave empty to disable tracking)
 
 ## Development Workflow
 
