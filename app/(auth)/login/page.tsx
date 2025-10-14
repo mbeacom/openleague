@@ -17,6 +17,7 @@ import Link from "next/link";
 import Logo from "@/components/ui/Logo";
 import { loginSchema } from "@/lib/utils/validation";
 import { AUTH_MESSAGES } from "@/lib/config/constants";
+import { trackAuth } from "@/lib/analytics/umami";
 
 function LoginForm() {
   const router = useRouter();
@@ -114,6 +115,9 @@ function LoginForm() {
         setGeneralError(result.error || "Invalid email or password");
         return;
       }
+
+      // Track successful login
+      trackAuth('login');
 
       // Redirect to callback URL or dashboard
       router.push(callbackUrl);

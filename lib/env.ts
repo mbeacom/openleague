@@ -20,6 +20,7 @@ const envSchema = z.object({
     CRON_SECRET: z.string().min(32, 'CRON_SECRET must be at least 32 characters long').optional(),
 
     // Analytics and Tracking (optional)
+    NEXT_PUBLIC_UMAMI_WEBSITE_ID: z.string().optional(),
     NEXT_PUBLIC_GA_MEASUREMENT_ID: z.string().optional(),
     NEXT_PUBLIC_SENTRY_DSN: z.string().optional(),
     SENTRY_ORG: z.string().optional(),
@@ -44,6 +45,7 @@ function validateEnv() {
             EMAIL_FROM: process.env.EMAIL_FROM || '',
             NODE_ENV: (process.env.NODE_ENV || 'development') as 'development' | 'production' | 'test',
             CRON_SECRET: process.env.CRON_SECRET,
+            NEXT_PUBLIC_UMAMI_WEBSITE_ID: process.env.NEXT_PUBLIC_UMAMI_WEBSITE_ID,
             NEXT_PUBLIC_GA_MEASUREMENT_ID: process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID,
             NEXT_PUBLIC_SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN,
             SENTRY_ORG: process.env.SENTRY_ORG,

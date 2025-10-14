@@ -22,6 +22,7 @@ import {
 } from "@/lib/actions/events";
 import { createEventSchema, updateEventSchema } from "@/lib/utils/validation";
 import { formatDateTimeLocal } from "@/lib/utils/date";
+import { trackEventAction } from "@/lib/analytics/umami";
 
 interface EventFormProps {
   teamId: string;
@@ -115,6 +116,16 @@ export default function EventForm({
         : await createEvent(formData);
 
       if (result.success) {
+        // Track event action
+        const eventType = formData.type === 'GAME' ? 'game' : 'practice';
+        if (isEditMode) {
+          trackEventAction('update', eventType, {});
+        } else {
+          trackEventAction('create', eventType, {
+            hasOpponent: !!formData.opponent,
+          });
+        }
+
         // Redirect to event detail page after successful update, calendar after create
         router.push(isEditMode ? `/events/${eventId}` : "/calendar");
       } else {

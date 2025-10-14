@@ -12,6 +12,7 @@ import {
 } from "@mui/material";
 import { createTeam } from "@/lib/actions/team";
 import { createTeamSchema, type CreateTeamInput } from "@/lib/utils/validation";
+import { trackTeam } from "@/lib/analytics/umami";
 
 export default function CreateTeamForm() {
   const router = useRouter();
@@ -79,6 +80,12 @@ export default function CreateTeamForm() {
       const result = await createTeam(formData);
 
       if (result.success) {
+        // Track team creation event
+        trackTeam('create', {
+          sport: formData.sport,
+          season: formData.season,
+        });
+
         // Redirect to dashboard after successful creation
         router.push("/");
       } else {
