@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Box, Container, CircularProgress } from "@mui/material";
 import HeroSection from "@/components/features/marketing/HeroSection";
+import FeaturesPreview from "@/components/features/marketing/FeaturesPreview";
+import HowItWorks from "@/components/features/marketing/HowItWorks";
+import FinalCTA from "@/components/features/marketing/FinalCTA";
 import { useScrollTracking } from "@/lib/hooks/useScrollTracking";
 
 /**
@@ -16,7 +19,7 @@ import { useScrollTracking } from "@/lib/hooks/useScrollTracking";
 export default function HomePage() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  
+
   // Track scroll engagement for analytics
   useScrollTracking();
 
@@ -54,7 +57,9 @@ export default function HomePage() {
   return (
     <Box>
       <HeroSection />
-      {/* Additional marketing sections will be added in future tasks */}
+      <FeaturesPreview />
+      <HowItWorks />
+      <FinalCTA />
     </Box>
   );
 }

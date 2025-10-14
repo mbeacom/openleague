@@ -54,21 +54,21 @@ const footerSections = [
 ];
 
 const socialLinks = [
-  { 
-    icon: GitHubIcon, 
-    href: 'https://github.com/mbeacom/openleague', 
+  {
+    icon: GitHubIcon,
+    href: 'https://github.com/mbeacom/openleague',
     label: 'GitHub',
     color: '#333'
   },
-  { 
-    icon: TwitterIcon, 
-    href: 'https://twitter.com/openleague', 
+  {
+    icon: TwitterIcon,
+    href: 'https://twitter.com/openleague',
     label: 'Twitter',
     color: '#1DA1F2'
   },
-  { 
-    icon: LinkedInIcon, 
-    href: 'https://linkedin.com/company/openleague', 
+  {
+    icon: LinkedInIcon,
+    href: 'https://linkedin.com/company/openleague',
     label: 'LinkedIn',
     color: '#0077B5'
   },
@@ -104,25 +104,20 @@ export default function MarketingFooter() {
           {/* Brand Section */}
           <Box>
             <Box sx={{ mb: 3 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
-                <Logo size="medium" variant="footer" />
-                <Typography 
-                  variant="h6" 
-                  fontWeight={700} 
-                  color="marketing.primary"
-                  sx={{ letterSpacing: '-0.01em' }}
-                >
-                  OpenLeague
-                </Typography>
-              </Box>
-              <Typography 
-                variant="marketingBody" 
+              <Logo
+                size="medium"
+                variant="footer"
+                showText
+                sx={{ mb: 2 }}
+              />
+              <Typography
+                variant="marketingBody"
                 color="text.secondary"
                 sx={{ mb: 3, maxWidth: 300 }}
               >
                 Replace chaotic spreadsheets, group chats, and email chains with a single source of truth for sports team management.
               </Typography>
-              
+
               {/* Social Links */}
               <Stack direction="row" spacing={1}>
                 {socialLinks.map((social) => (
@@ -161,10 +156,10 @@ export default function MarketingFooter() {
           >
             {footerSections.map((section) => (
               <Box key={section.title}>
-                <Typography 
+                <Typography
                   component="h3"
-                  variant="subtitle2" 
-                  gutterBottom 
+                  variant="subtitle2"
+                  gutterBottom
                   fontWeight={600}
                   color="text.primary"
                   sx={{ mb: 2 }}
@@ -211,31 +206,31 @@ export default function MarketingFooter() {
           <Typography variant="body2" color="text.secondary">
             © {currentYear} OpenLeague. All rights reserved. Made with ❤️ for sports teams everywhere.
           </Typography>
-          
-          <Stack 
-            direction="row" 
+
+          <Stack
+            direction="row"
             spacing={3}
-            sx={{ 
+            sx={{
               flexWrap: 'wrap',
               gap: { xs: 1, sm: 3 }
             }}
           >
-            <Typography 
-              variant="body2" 
+            <Typography
+              variant="body2"
               color="text.secondary"
               sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
             >
               🌟 Free Forever
             </Typography>
-            <Typography 
-              variant="body2" 
+            <Typography
+              variant="body2"
               color="text.secondary"
               sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
             >
               🔒 Privacy First
             </Typography>
-            <Typography 
-              variant="body2" 
+            <Typography
+              variant="body2"
               color="text.secondary"
               sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
             >

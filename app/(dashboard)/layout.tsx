@@ -1,7 +1,6 @@
 import { ReactNode } from "react";
 import { requireAuth, requireUserId } from "@/lib/auth/session";
-import { Box, AppBar, Toolbar, Typography } from "@mui/material";
-import Link from "next/link";
+import { Box, AppBar, Toolbar } from "@mui/material";
 import DashboardNav from "@/components/features/dashboard/DashboardNav";
 import ErrorBoundary from "@/components/ui/ErrorBoundary";
 import { getUserMode } from "@/lib/utils/league-mode";
@@ -37,23 +36,13 @@ export default async function DashboardLayout({
             }}
           >
             <Toolbar>
-              <Box
-                component={Link}
+              <Logo
+                size="medium"
                 href="/dashboard"
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 1.5,
-                  textDecoration: 'none',
-                  color: 'inherit',
-                  flexGrow: 1,
-                }}
-              >
-                <Logo size="medium" href={null} priority />
-                <Typography variant="h6" component="div">
-                  OpenLeague
-                </Typography>
-              </Box>
+                showText
+                priority
+                sx={{ flexGrow: 1 }}
+              />
               {/* Mobile League Switcher */}
               <LeagueContextSwitcher variant="compact" />
             </Toolbar>
@@ -73,27 +62,19 @@ export default async function DashboardLayout({
                 bgcolor: "background.paper",
               }}
             >
-              <Box
-                component={Link}
+              <Logo
+                size="large"
                 href="/dashboard"
+                showText
+                priority
                 sx={{
                   p: 2,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 1.5,
-                  textDecoration: 'none',
-                  color: 'inherit',
                   transition: 'transform 0.2s ease-in-out',
                   '&:hover': {
                     transform: 'scale(1.02)',
                   },
                 }}
-              >
-                <Logo size="large" href={null} priority />
-                <Typography variant="h5" component="div" color="primary" sx={{ fontWeight: 600 }}>
-                  OpenLeague
-                </Typography>
-              </Box>
+              />
 
               {/* Desktop League Switcher */}
               <Box sx={{ px: 2, pb: 2 }}>

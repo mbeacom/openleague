@@ -28,6 +28,7 @@ export default function MarketingLayout({ children }: MarketingLayoutProps) {
           flexGrow: 1,
           display: 'flex',
           flexDirection: 'column',
+          pt: { xs: '64px', md: '72px' },
         }}
       >
         {children}

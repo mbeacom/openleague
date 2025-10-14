@@ -66,7 +66,8 @@ describe('HeroSection', () => {
       renderWithTheme(<HeroSection />);
 
       expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument();
-      expect(screen.getByText('OpenLeague')).toBeInTheDocument();
+      // BrandLogo displays image instead of text
+      expect(screen.getByAltText('OpenLeague - Simplify Your Season')).toBeInTheDocument();
       expect(screen.getByText(/Replace Chaotic Spreadsheets with/)).toBeInTheDocument();
     });
 
@@ -86,12 +87,11 @@ describe('HeroSection', () => {
       expect(screen.getByText('Mobile-First Design')).toBeInTheDocument();
     });
 
-    it('renders hero image mockup', () => {
+    it('renders brand logo', () => {
       renderWithTheme(<HeroSection />);
 
-      const heroImage = screen.getByAltText('OpenLeague Dashboard - Clean and organized team management interface');
-      expect(heroImage).toBeInTheDocument();
-      expect(heroImage).toHaveAttribute('src', '/images/hero-dashboard-mockup.svg');
+      const brandLogo = screen.getByAltText('OpenLeague - Simplify Your Season');
+      expect(brandLogo).toBeInTheDocument();
     });
 
     it('renders additional trust signal text', () => {
@@ -203,11 +203,11 @@ describe('HeroSection', () => {
       });
     });
 
-    it('hero image section is responsive', () => {
+    it('brand logo section is responsive', () => {
       renderWithTheme(<HeroSection />);
 
-      const heroImage = screen.getByAltText('OpenLeague Dashboard - Clean and organized team management interface');
-      expect(heroImage).toBeInTheDocument();
+      const brandLogo = screen.getByAltText('OpenLeague - Simplify Your Season');
+      expect(brandLogo).toBeInTheDocument();
     });
 
     it('background decorative elements are conditionally rendered', () => {
@@ -225,7 +225,7 @@ describe('HeroSection', () => {
 
       const mainHeading = screen.getByRole('heading', { level: 1 });
       expect(mainHeading).toBeInTheDocument();
-      expect(mainHeading).toHaveTextContent(/Replace Chaotic Spreadsheets with.*OpenLeague/);
+      expect(mainHeading).toHaveTextContent(/Replace Chaotic Spreadsheets with.*One Platform/);
     });
 
     it('provides meaningful text content for screen readers', () => {
@@ -275,21 +275,18 @@ describe('HeroSection', () => {
       expect(heroSection).toBeInTheDocument();
     });
 
-    it('renders OpenLeague brand highlighting', () => {
+    it('renders OpenLeague brand logo', () => {
       renderWithTheme(<HeroSection />);
 
-      const brandElement = screen.getByText('OpenLeague');
-      expect(brandElement).toBeInTheDocument();
-
-      // Should be within a span element for styling
-      expect(brandElement.tagName).toBe('SPAN');
+      const brandLogo = screen.getByAltText('OpenLeague - Simplify Your Season');
+      expect(brandLogo).toBeInTheDocument();
     });
 
-    it('renders hero image mockup with decorative elements', () => {
+    it('renders brand logo with decorative elements', () => {
       renderWithTheme(<HeroSection />);
 
-      const heroImage = screen.getByAltText('OpenLeague Dashboard - Clean and organized team management interface');
-      expect(heroImage).toBeInTheDocument();
+      const brandLogo = screen.getByAltText('OpenLeague - Simplify Your Season');
+      expect(brandLogo).toBeInTheDocument();
     });
 
     it('trust indicator visual dots are present in structure', () => {
@@ -319,7 +316,6 @@ describe('HeroSection', () => {
       renderWithTheme(<HeroSection />);
 
       // All critical text should be immediately available
-      expect(screen.getByText('OpenLeague')).toBeInTheDocument();
       expect(screen.getByText('Get Started Free')).toBeInTheDocument();
       expect(screen.getByText('See How It Works')).toBeInTheDocument();
       expect(screen.getByText('100% Free to Use')).toBeInTheDocument();
@@ -328,9 +324,9 @@ describe('HeroSection', () => {
     it('component structure supports lazy loading patterns', () => {
       renderWithTheme(<HeroSection />);
 
-      // Hero image should be present and optimized with Next.js Image
-      const heroImage = screen.getByAltText('OpenLeague Dashboard - Clean and organized team management interface');
-      expect(heroImage).toBeInTheDocument();
+      // Brand logo should be present and optimized with Next.js Image
+      const brandLogo = screen.getByAltText('OpenLeague - Simplify Your Season');
+      expect(brandLogo).toBeInTheDocument();
     });
   });
 });

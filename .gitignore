@@ -143,3 +143,6 @@ local-context/
 
 # macOS system files
 .DS_Store
+
+# Playwright MCP files
+.playwright-mcp/

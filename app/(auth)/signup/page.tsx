@@ -12,6 +12,7 @@ import {
   Link as MuiLink,
 } from "@mui/material";
 import Link from "next/link";
+import Logo from "@/components/ui/Logo";
 import { signup } from "@/lib/actions/auth";
 import { signupSchema } from "@/lib/utils/validation";
 import { AUTH_MESSAGES } from "@/lib/config/constants";
@@ -145,6 +146,9 @@ function SignupForm() {
           alignItems: "center",
         }}
       >
+        <Box sx={{ mb: 3 }}>
+          <Logo width={120} height={120} priority href={null} />
+        </Box>
         <Typography component="h1" variant="h4" gutterBottom>
           Create Account
         </Typography>
