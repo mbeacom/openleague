@@ -14,7 +14,7 @@ export default function TermsPage() {
           Terms of Service
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 4 }}>
-          Last updated: October 2024
+          Last updated: October 2025
         </Typography>
         <Typography variant="body1" paragraph>
           We&apos;re preparing the formal Terms of Service for OpenLeague. Until those are finalized, here&apos;s what you can expect:

@@ -182,7 +182,7 @@ export default function CreateLeagueTeamForm({
                 onBlur={() => handleBlur('season')}
                 required
                 fullWidth
-                placeholder="e.g., Fall 2024, 2024-2025"
+                placeholder="e.g., Fall 2025, 2025-2026"
                 disabled={loading}
                 error={!!fieldErrors.season}
                 helperText={fieldErrors.season}
