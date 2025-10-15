@@ -134,10 +134,26 @@ async function getParticipationStats(leagueId: string) {
     });
 
     const totalRSVPs = rsvps.length;
-    const goingCount = rsvps.filter((r: { status: string }) => r.status === 'GOING').length;
-    const notGoingCount = rsvps.filter((r: { status: string }) => r.status === 'NOT_GOING').length;
-    const maybeCount = rsvps.filter((r: { status: string }) => r.status === 'MAYBE').length;
-    const noResponseCount = rsvps.filter((r: { status: string }) => r.status === 'NO_RESPONSE').length;
+    const { goingCount, notGoingCount, maybeCount, noResponseCount } = rsvps.reduce(
+        (acc, r: { status: string }) => {
+            switch (r.status) {
+                case 'GOING':
+                    acc.goingCount += 1;
+                    break;
+                case 'NOT_GOING':
+                    acc.notGoingCount += 1;
+                    break;
+                case 'MAYBE':
+                    acc.maybeCount += 1;
+                    break;
+                case 'NO_RESPONSE':
+                    acc.noResponseCount += 1;
+                    break;
+            }
+            return acc;
+        },
+        { goingCount: 0, notGoingCount: 0, maybeCount: 0, noResponseCount: 0 }
+    );
 
     // Calculate participation rate (going + maybe / total)
     const participationRate = totalRSVPs > 0
@@ -259,85 +275,130 @@ async function getAttendanceStats(leagueId: string) {
 async function getTrendAnalysis(leagueId: string) {
     const now = new Date();
 
-    // Get monthly activity data
-    const monthlyActivity = [];
-    const participationTrend = [];
-
+    // Calculate 6-month window
+    const months: Array<{ start: Date; end: Date; label: string; key: string }> = [];
     for (let i = 5; i >= 0; i--) {
         const monthDate = subMonths(now, i);
-        const monthStart = startOfMonth(monthDate);
-        const monthEnd = endOfMonth(monthDate);
-        const monthLabel = format(monthDate, 'MMM yyyy');
+        months.push({
+            start: startOfMonth(monthDate),
+            end: endOfMonth(monthDate),
+            label: format(monthDate, 'MMM yyyy'),
+            key: format(monthDate, 'yyyy-MM'),
+        });
+    }
 
-        // Count teams created in this month
-        const teamsCreated = await prisma.team.count({
+    const windowStart = months[0].start;
+    const windowEnd = months[months.length - 1].end;
+
+    // Batch fetch all data for the 6-month window
+    const [teams, players, events, eventsWithRsvps] = await Promise.all([
+        prisma.team.findMany({
             where: {
                 leagueId,
                 createdAt: {
-                    gte: monthStart,
-                    lte: monthEnd,
+                    gte: windowStart,
+                    lte: windowEnd,
                 },
             },
-        });
-
-        // Count players added in this month
-        const playersAdded = await prisma.player.count({
+            select: { createdAt: true },
+        }),
+        prisma.player.findMany({
             where: {
                 leagueId,
                 createdAt: {
-                    gte: monthStart,
-                    lte: monthEnd,
+                    gte: windowStart,
+                    lte: windowEnd,
                 },
             },
-        });
-
-        // Count events scheduled in this month
-        const eventsScheduled = await prisma.event.count({
+            select: { createdAt: true },
+        }),
+        prisma.event.findMany({
             where: {
                 leagueId,
                 createdAt: {
-                    gte: monthStart,
-                    lte: monthEnd,
+                    gte: windowStart,
+                    lte: windowEnd,
                 },
             },
-        });
-
-        monthlyActivity.push({
-            month: monthLabel,
-            teamsCreated,
-            playersAdded,
-            eventsScheduled,
-        });
-
-        // Get participation rate for events that occurred in this month
-        const monthEvents = await prisma.event.findMany({
+            select: { createdAt: true },
+        }),
+        prisma.event.findMany({
             where: {
                 leagueId,
                 startAt: {
-                    gte: monthStart,
-                    lte: monthEnd,
+                    gte: windowStart,
+                    lte: windowEnd,
                 },
             },
             select: {
+                startAt: true,
                 rsvps: {
                     select: {
                         status: true,
                     },
                 },
             },
+        }),
+    ]);
+
+    // Helper to get month key from date
+    const getMonthKey = (date: Date) => format(date, 'yyyy-MM');
+
+    // Group teams by month
+    const teamsByMonth: Record<string, number> = {};
+    teams.forEach(team => {
+        const key = getMonthKey(team.createdAt);
+        teamsByMonth[key] = (teamsByMonth[key] || 0) + 1;
+    });
+
+    // Group players by month
+    const playersByMonth: Record<string, number> = {};
+    players.forEach(player => {
+        const key = getMonthKey(player.createdAt);
+        playersByMonth[key] = (playersByMonth[key] || 0) + 1;
+    });
+
+    // Group events by month
+    const eventsByMonth: Record<string, number> = {};
+    events.forEach(event => {
+        const key = getMonthKey(event.createdAt);
+        eventsByMonth[key] = (eventsByMonth[key] || 0) + 1;
+    });
+
+    // Group RSVPs by month
+    const rsvpsByMonth: Record<string, { total: number; going: number }> = {};
+    eventsWithRsvps.forEach(event => {
+        const key = getMonthKey(event.startAt);
+        if (!rsvpsByMonth[key]) {
+            rsvpsByMonth[key] = { total: 0, going: 0 };
+        }
+        const total = event.rsvps.length;
+        const going = event.rsvps.filter(r => r.status === 'GOING' || r.status === 'MAYBE').length;
+        rsvpsByMonth[key].total += total;
+        rsvpsByMonth[key].going += going;
+    });
+
+    // Build monthly activity and participation trend arrays
+    const monthlyActivity = [];
+    const participationTrend = [];
+
+    for (const { label, key } of months) {
+        monthlyActivity.push({
+            month: label,
+            teamsCreated: teamsByMonth[key] || 0,
+            playersAdded: playersByMonth[key] || 0,
+            eventsScheduled: eventsByMonth[key] || 0,
         });
 
-        const monthRSVPs = monthEvents.flatMap(e => e.rsvps);
-        const totalRSVPs = monthRSVPs.length;
-        const goingRSVPs = monthRSVPs.filter(r => r.status === 'GOING' || r.status === 'MAYBE').length;
-        const participationRate = totalRSVPs > 0
-            ? Math.round((goingRSVPs / totalRSVPs) * 1000) / 10
+        const rsvpStats = rsvpsByMonth[key] || { total: 0, going: 0 };
+        const participationRate = rsvpStats.total > 0
+            ? Math.round((rsvpStats.going / rsvpStats.total) * 1000) / 10
             : 0;
 
         participationTrend.push({
-            month: monthLabel,
+            month: label,
             participationRate,
-            totalRSVPs,
+            totalRSVPs: rsvpStats.total,
         });
     }
 

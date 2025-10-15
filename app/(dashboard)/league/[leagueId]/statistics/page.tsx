@@ -5,16 +5,14 @@ import LeagueStatisticsDashboard from "@/components/features/dashboard/LeagueSta
 import { Box, Alert } from "@mui/material";
 
 interface LeagueStatisticsPageProps {
-    params: Promise<{
+    params: {
         leagueId: string;
-    }>;
+    };
 }
 
 export default async function LeagueStatisticsPage({ params }: LeagueStatisticsPageProps) {
-    const [userId, { leagueId }] = await Promise.all([
-        requireUserId(),
-        params,
-    ]);
+    const userId = await requireUserId();
+    const { leagueId } = params;
 
     // Verify user has access to this league
     const hasAccess = await hasLeagueAccess(userId, leagueId);

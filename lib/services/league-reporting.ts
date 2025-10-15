@@ -54,10 +54,10 @@ export async function generateLeagueRosterCSV(leagueId: string): Promise<string>
         format(player.createdAt, 'yyyy-MM-dd'),
     ]);
 
-    // Combine headers and rows
+    // Combine headers and rows with proper CSV escaping
     const csvContent = [
         headers.join(','),
-        ...rows.map(row => row.map(cell => `"${cell}"`).join(',')),
+        ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')),
     ].join('\n');
 
     return csvContent;
@@ -124,10 +124,10 @@ export async function generateLeagueScheduleCSV(leagueId: string): Promise<strin
         event.notes || '',
     ]);
 
-    // Combine headers and rows
+    // Combine headers and rows with proper CSV escaping
     const csvContent = [
         headers.join(','),
-        ...rows.map(row => row.map(cell => `"${cell}"`).join(',')),
+        ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')),
     ].join('\n');
 
     return csvContent;
@@ -201,10 +201,10 @@ export async function generateAttendanceReportByDivisionCSV(leagueId: string): P
         });
     });
 
-    // Combine headers and rows
+    // Combine headers and rows with proper CSV escaping
     const csvContent = [
         headers.join(','),
-        ...rows.map(row => row.map(cell => `"${cell}"`).join(',')),
+        ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')),
     ].join('\n');
 
     return csvContent;
@@ -258,10 +258,10 @@ export async function generateFinancialReportCSV(leagueId: string): Promise<stri
         '',
     ]);
 
-    // Combine headers and rows
+    // Combine headers and rows with proper CSV escaping
     const csvContent = [
         headers.join(','),
-        ...rows.map(row => row.map(cell => `"${cell}"`).join(',')),
+        ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')),
     ].join('\n');
 
     return csvContent;
