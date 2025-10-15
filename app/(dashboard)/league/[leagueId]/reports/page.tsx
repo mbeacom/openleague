@@ -4,14 +4,14 @@ import { hasLeagueAccess, verifyLeagueAdmin } from "@/lib/actions/league";
 import LeagueReportsView from "@/components/features/dashboard/LeagueReportsView";
 
 interface LeagueReportsPageProps {
-    params: {
+    params: Promise<{
         leagueId: string;
-    };
+    }>;
 }
 
 export default async function LeagueReportsPage({ params }: LeagueReportsPageProps) {
     const userId = await requireUserId();
-    const { leagueId } = params;
+    const { leagueId } = await params;
 
     // Verify user has access to this league
     const hasAccess = await hasLeagueAccess(userId, leagueId);
