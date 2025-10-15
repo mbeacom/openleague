@@ -121,8 +121,10 @@ export default function MarketingHeader() {
                   sx={{
                     color: 'text.primary',
                     fontWeight: 500,
+                    fontSize: '0.9375rem',
                     px: 2,
                     py: 1,
+                    minHeight: '40px',
                     borderRadius: 2,
                     '&:hover': {
                       backgroundColor: 'rgba(25, 118, 210, 0.04)',
@@ -133,7 +135,7 @@ export default function MarketingHeader() {
                   {link.label}
                 </Button>
               ))}
-              <Box sx={{ width: 1, height: 24, bgcolor: 'divider', mx: 1 }} />
+              <Divider orientation="vertical" flexItem sx={{ mx: 1, height: 24, alignSelf: 'center' }} />
               <Button
                 component={Link}
                 href="/login"
@@ -142,8 +144,10 @@ export default function MarketingHeader() {
                 sx={{
                   color: 'text.primary',
                   fontWeight: 500,
+                  fontSize: '0.9375rem',
                   px: 2,
                   py: 1,
+                  minHeight: '40px',
                   borderRadius: 2,
                   '&:hover': {
                     backgroundColor: 'rgba(25, 118, 210, 0.04)',
