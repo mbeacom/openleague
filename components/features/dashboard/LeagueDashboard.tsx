@@ -27,6 +27,8 @@ import {
   TrendingUp as TrendingUpIcon,
   AccessTime as TimeIcon,
   LocationOn as LocationIcon,
+  Assessment as AssessmentIcon,
+  Download as DownloadIcon,
 } from '@mui/icons-material';
 import { formatDistanceToNow, format } from 'date-fns';
 import Link from 'next/link';
@@ -229,6 +231,22 @@ export default function LeagueDashboard({ league }: LeagueDashboardProps) {
               href={`/league/${league.id}/divisions/new`}
             >
               Create Division
+            </Button>
+            <Button
+              variant="outlined"
+              startIcon={<AssessmentIcon />}
+              component={Link}
+              href={`/league/${league.id}/statistics`}
+            >
+              View Statistics
+            </Button>
+            <Button
+              variant="outlined"
+              startIcon={<DownloadIcon />}
+              component={Link}
+              href={`/league/${league.id}/reports`}
+            >
+              Export Reports
             </Button>
           </Box>
         </CardContent>

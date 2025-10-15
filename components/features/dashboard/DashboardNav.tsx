@@ -22,9 +22,10 @@ import {
   CalendarMonth as CalendarIcon,
   Event as EventIcon,
   Groups as GroupsIcon,
-  Settings as SettingsIcon,
   Logout as LogoutIcon,
   MoreVert as MoreVertIcon,
+  Analytics as AnalyticsIcon,
+  Assessment as ReportsIcon,
 } from "@mui/icons-material";
 import { logout } from "@/lib/actions/logout";
 import { useLeague } from "@/components/providers/LeagueProvider";
@@ -45,7 +46,7 @@ export default function DashboardNav({ mobile = false, isLeagueMode = false }: D
   const router = useRouter();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const menuOpen = Boolean(anchorEl);
-  
+
   // Use league context if available
   let currentLeague = null;
   try {
@@ -74,7 +75,8 @@ export default function DashboardNav({ mobile = false, isLeagueMode = false }: D
       { label: "Teams", path: `${leaguePrefix}/teams`, icon: <GroupsIcon /> },
       { label: "Schedule", path: `${leaguePrefix}/schedule`, icon: <CalendarIcon /> },
       { label: "Roster", path: `${leaguePrefix}/roster`, icon: <PeopleIcon /> },
-      { label: "Settings", path: `${leaguePrefix}/settings`, icon: <SettingsIcon /> },
+      { label: "Statistics", path: `${leaguePrefix}/statistics`, icon: <AnalyticsIcon /> },
+      { label: "Reports", path: `${leaguePrefix}/reports`, icon: <ReportsIcon /> },
     ];
   };
 

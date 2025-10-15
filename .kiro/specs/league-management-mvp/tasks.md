@@ -156,9 +156,9 @@
     - Add team settings and configuration options
     - _Requirements: 2.3, 2.5, 2.6, 2.7_
 
-- [ ] 7. Implement basic reporting and analytics
+- [x] 7. Implement basic reporting and analytics
 
-  - [ ] 7.1 Build league statistics dashboard
+  - [x] 7.1 Build league statistics dashboard
 
     - Create league overview with team, player, and event counts
     - Implement participation tracking across all teams
@@ -166,7 +166,7 @@
     - Add basic trend analysis for league activity
     - _Requirements: 7.1, 7.2, 7.3, 7.4_
 
-  - [ ] 7.2 Create league reporting system
+  - [x] 7.2 Create league reporting system
     - Build league roster export functionality (CSV, PDF)
     - Implement schedule export for all teams
     - Create attendance reports aggregated by division

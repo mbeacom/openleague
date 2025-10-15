@@ -4,6 +4,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
 import { requireUserId } from "@/lib/auth/session";
 import { revalidatePath } from "next/cache";
+import { format } from "date-fns";
 import {
   createLeagueSchema,
   updateLeagueSettingsSchema,
@@ -24,6 +25,7 @@ import {
   type AssignTeamToDivisionInput,
   type GetLeagueTeamsInput,
 } from "@/lib/utils/validation";
+import { getLeagueStatistics, type LeagueStatistics } from "@/lib/services/league-statistics";
 
 export type ActionResult<T> =
   | { success: true; data: T }
@@ -1407,5 +1409,199 @@ export async function getLeagueDivisions(leagueId: string): Promise<Array<{
   } catch (error) {
     console.error("Error fetching league divisions:", error);
     return [];
+  }
+}
+/**
+
+ * Get comprehensive league statistics for analytics dashboard
+ */
+export async function getLeagueStatisticsData(
+  leagueId: string
+): Promise<ActionResult<LeagueStatistics>> {
+  try {
+    const userId = await requireUserId();
+
+    // Verify user has access to the league
+    const hasAccess = await hasLeagueAccess(userId, leagueId);
+    if (!hasAccess) {
+      return {
+        success: false,
+        error: "Unauthorized - you are not a member of this league",
+      };
+    }
+
+    // Get comprehensive statistics
+    const statistics = await getLeagueStatistics(leagueId);
+
+    return {
+      success: true,
+      data: statistics,
+    };
+  } catch (error) {
+    console.error("Error fetching league statistics:", error);
+    return {
+      success: false,
+      error: "Failed to fetch league statistics. Please try again.",
+    };
+  }
+}
+
+/**
+ * Export league roster as CSV
+ */
+export async function exportLeagueRosterCSV(
+  leagueId: string
+): Promise<ActionResult<{ csv: string; filename: string }>> {
+  try {
+    const userId = await requireUserId();
+
+    // Verify user has access to the league
+    const hasAccess = await hasLeagueAccess(userId, leagueId);
+    if (!hasAccess) {
+      return {
+        success: false,
+        error: "Unauthorized - you are not a member of this league",
+      };
+    }
+
+    const { generateLeagueRosterCSV, getReportMetadata } = await import("@/lib/services/league-reporting");
+
+    const [csv, metadata] = await Promise.all([
+      generateLeagueRosterCSV(leagueId),
+      getReportMetadata(leagueId),
+    ]);
+
+    const filename = `${metadata.leagueName.replace(/\s+/g, '_')}_roster_${format(new Date(), 'yyyy-MM-dd')}.csv`;
+
+    return {
+      success: true,
+      data: { csv, filename },
+    };
+  } catch (error) {
+    console.error("Error exporting league roster:", error);
+    return {
+      success: false,
+      error: "Failed to export league roster. Please try again.",
+    };
+  }
+}
+
+/**
+ * Export league schedule as CSV
+ */
+export async function exportLeagueScheduleCSV(
+  leagueId: string
+): Promise<ActionResult<{ csv: string; filename: string }>> {
+  try {
+    const userId = await requireUserId();
+
+    // Verify user has access to the league
+    const hasAccess = await hasLeagueAccess(userId, leagueId);
+    if (!hasAccess) {
+      return {
+        success: false,
+        error: "Unauthorized - you are not a member of this league",
+      };
+    }
+
+    const { generateLeagueScheduleCSV, getReportMetadata } = await import("@/lib/services/league-reporting");
+
+    const [csv, metadata] = await Promise.all([
+      generateLeagueScheduleCSV(leagueId),
+      getReportMetadata(leagueId),
+    ]);
+
+    const filename = `${metadata.leagueName.replace(/\s+/g, '_')}_schedule_${format(new Date(), 'yyyy-MM-dd')}.csv`;
+
+    return {
+      success: true,
+      data: { csv, filename },
+    };
+  } catch (error) {
+    console.error("Error exporting league schedule:", error);
+    return {
+      success: false,
+      error: "Failed to export league schedule. Please try again.",
+    };
+  }
+}
+
+/**
+ * Export attendance report by division as CSV
+ */
+export async function exportAttendanceReportCSV(
+  leagueId: string
+): Promise<ActionResult<{ csv: string; filename: string }>> {
+  try {
+    const userId = await requireUserId();
+
+    // Verify user has access to the league
+    const hasAccess = await hasLeagueAccess(userId, leagueId);
+    if (!hasAccess) {
+      return {
+        success: false,
+        error: "Unauthorized - you are not a member of this league",
+      };
+    }
+
+    const { generateAttendanceReportByDivisionCSV, getReportMetadata } = await import("@/lib/services/league-reporting");
+
+    const [csv, metadata] = await Promise.all([
+      generateAttendanceReportByDivisionCSV(leagueId),
+      getReportMetadata(leagueId),
+    ]);
+
+    const filename = `${metadata.leagueName.replace(/\s+/g, '_')}_attendance_${format(new Date(), 'yyyy-MM-dd')}.csv`;
+
+    return {
+      success: true,
+      data: { csv, filename },
+    };
+  } catch (error) {
+    console.error("Error exporting attendance report:", error);
+    return {
+      success: false,
+      error: "Failed to export attendance report. Please try again.",
+    };
+  }
+}
+
+/**
+ * Export financial report as CSV
+ */
+export async function exportFinancialReportCSV(
+  leagueId: string
+): Promise<ActionResult<{ csv: string; filename: string }>> {
+  try {
+    const userId = await requireUserId();
+
+    // Verify user has league admin access
+    const isAdmin = await verifyLeagueAdmin(leagueId, userId);
+    if (!isAdmin) {
+      return {
+        success: false,
+        error: "Unauthorized - you must be a league admin",
+      };
+    }
+
+    const { generateFinancialReportCSV, getReportMetadata } = await import("@/lib/services/league-reporting");
+
+    const [csv, metadata] = await Promise.all([
+      generateFinancialReportCSV(leagueId),
+      getReportMetadata(leagueId),
+    ]);
+
+    const filename = `${metadata.leagueName.replace(/\s+/g, '_')}_financial_${format(new Date(), 'yyyy-MM-dd')}.csv`;
+
+    return {
+      success: true,
+      data: { csv, filename },
+    };
+  } catch (error) {
+    console.error("Error exporting financial report:", error);
+    return {
+      success: false,
+      error: "Failed to export financial report. Please try again.",
+    };
   }
 }
