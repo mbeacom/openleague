@@ -123,12 +123,20 @@ export default function LeagueRosterView({
   return (
     <Box>
       {/* Search and Filter Controls */}
-      <Paper sx={{ p: 3, mb: 3 }}>
-        <Box sx={{ display: "flex", gap: 2, mb: 2, flexWrap: "wrap", alignItems: "center" }}>
+      <Paper sx={{ p: { xs: 2, sm: 3 }, mb: { xs: 2, sm: 3 } }}>
+        <Box sx={{
+          display: "flex",
+          gap: { xs: 1, sm: 2 },
+          mb: 2,
+          flexWrap: "wrap",
+          alignItems: "center",
+          flexDirection: { xs: 'column', sm: 'row' }
+        }}>
           <TextField
             placeholder="Search players, emails, or teams..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
+            size="small"
             InputProps={{
               startAdornment: (
                 <InputAdornment position="start">
@@ -136,13 +144,15 @@ export default function LeagueRosterView({
                 </InputAdornment>
               ),
             }}
-            sx={{ flexGrow: 1, minWidth: 300 }}
+            sx={{ flexGrow: 1, minWidth: { xs: '100%', sm: 300 } }}
           />
 
           <Button
             variant="outlined"
-            startIcon={<FilterListIcon />}
+            startIcon={<FilterListIcon sx={{ display: { xs: 'none', sm: 'inline-flex' } }} />}
             onClick={() => setShowFilters(!showFilters)}
+            size="small"
+            sx={{ width: { xs: '100%', sm: 'auto' } }}
           >
             Filters
           </Button>
@@ -150,9 +160,11 @@ export default function LeagueRosterView({
           {isLeagueAdmin && (
             <Button
               variant="outlined"
-              startIcon={<DownloadIcon />}
+              startIcon={<DownloadIcon sx={{ display: { xs: 'none', sm: 'inline-flex' } }} />}
               onClick={handleExport}
               disabled={isExporting}
+              size="small"
+              sx={{ width: { xs: '100%', sm: 'auto' } }}
             >
               {isExporting ? "Exporting..." : "Export CSV"}
             </Button>
@@ -161,8 +173,14 @@ export default function LeagueRosterView({
 
         {/* Filter Controls */}
         {showFilters && (
-          <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap", alignItems: "center" }}>
-            <FormControl sx={{ minWidth: 200 }}>
+          <Box sx={{
+            display: "flex",
+            gap: { xs: 1, sm: 2 },
+            flexWrap: "wrap",
+            alignItems: "center",
+            flexDirection: { xs: 'column', sm: 'row' }
+          }}>
+            <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 200 } }}>
               <InputLabel>Team</InputLabel>
               <Select
                 value={selectedTeam}
@@ -178,7 +196,7 @@ export default function LeagueRosterView({
               </Select>
             </FormControl>
 
-            <FormControl sx={{ minWidth: 200 }}>
+            <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 200 } }}>
               <InputLabel>Division</InputLabel>
               <Select
                 value={selectedDivision}
@@ -196,7 +214,15 @@ export default function LeagueRosterView({
             </FormControl>
 
             {hasActiveFilters && (
-              <Button variant="text" onClick={clearFilters}>
+              <Button
+                variant="text"
+                onClick={clearFilters}
+                size="small"
+                sx={{
+                  fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                  width: { xs: '100%', sm: 'auto' }
+                }}
+              >
                 Clear Filters
               </Button>
             )}
@@ -232,8 +258,12 @@ export default function LeagueRosterView({
       </Paper>
 
       {/* Results Summary */}
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="h6" gutterBottom>
+      <Box sx={{ mb: { xs: 2, sm: 3 } }}>
+        <Typography
+          variant="h6"
+          gutterBottom
+          sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}
+        >
           {filteredPlayers.length} Player{filteredPlayers.length !== 1 ? 's' : ''}
           {hasActiveFilters && ` (filtered from ${players.length} total)`}
         </Typography>
@@ -246,9 +276,19 @@ export default function LeagueRosterView({
         </Alert>
       ) : (
         playersByTeam.map(({ team, players: teamPlayers }) => (
-          <Box key={team.id} sx={{ mb: 4 }}>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 2 }}>
-              <Typography variant="h5" component="h2">
+          <Box key={team.id} sx={{ mb: { xs: 3, sm: 4 } }}>
+            <Box sx={{
+              display: "flex",
+              alignItems: "center",
+              gap: { xs: 1, sm: 2 },
+              mb: 2,
+              flexWrap: 'wrap'
+            }}>
+              <Typography
+                variant="h5"
+                component="h2"
+                sx={{ fontSize: { xs: '1.25rem', sm: '1.5rem' } }}
+              >
                 {team.name}
               </Typography>
               {team.division && (
@@ -256,12 +296,14 @@ export default function LeagueRosterView({
                   label={`${team.division.name}${team.division.ageGroup ? ` (${team.division.ageGroup})` : ''}`}
                   variant="outlined"
                   size="small"
+                  sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}
                 />
               )}
               <Chip
                 label={`${teamPlayers.length} player${teamPlayers.length !== 1 ? 's' : ''}`}
                 size="small"
                 color="primary"
+                sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}
               />
             </Box>
 

@@ -150,12 +150,26 @@ export default function LeagueReportsView({ leagueId, isAdmin }: LeagueReportsVi
     ];
 
     return (
-        <Box sx={{ p: 3 }}>
-            <Typography variant="h5" gutterBottom sx={{ mb: 3 }}>
+        <Box sx={{ p: { xs: 2, sm: 3 } }}>
+            <Typography
+                variant="h5"
+                gutterBottom
+                sx={{
+                    mb: { xs: 2, sm: 3 },
+                    fontSize: { xs: '1.25rem', sm: '1.5rem' }
+                }}
+            >
                 League Reports & Exports
             </Typography>
 
-            <Typography variant="body1" color="text.secondary" sx={{ mb: 4 }}>
+            <Typography
+                variant="body1"
+                color="text.secondary"
+                sx={{
+                    mb: { xs: 3, sm: 4 },
+                    fontSize: { xs: '0.875rem', sm: '1rem' }
+                }}
+            >
                 Download reports in CSV format for analysis, record keeping, or sharing with stakeholders.
             </Typography>
 
@@ -181,42 +195,66 @@ export default function LeagueReportsView({ leagueId, isAdmin }: LeagueReportsVi
                                     opacity: isDisabled ? 0.6 : 1,
                                 }}
                             >
-                                <CardContent sx={{ flexGrow: 1 }}>
+                                <CardContent sx={{ flexGrow: 1, p: { xs: 2, sm: 3 } }}>
                                     <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                                         <Box
                                             sx={{
-                                                width: 48,
-                                                height: 48,
+                                                width: { xs: 40, sm: 48 },
+                                                height: { xs: 40, sm: 48 },
                                                 borderRadius: 1,
                                                 bgcolor: 'primary.main',
                                                 display: 'flex',
                                                 alignItems: 'center',
                                                 justifyContent: 'center',
-                                                mr: 2,
+                                                mr: { xs: 1.5, sm: 2 },
                                             }}
                                         >
-                                            <Icon sx={{ fontSize: 28, color: 'white' }} />
+                                            <Icon sx={{ fontSize: { xs: 24, sm: 28 }, color: 'white' }} />
                                         </Box>
                                         <Box sx={{ flexGrow: 1 }}>
-                                            <Typography variant="h6" component="h3">
+                                            <Typography
+                                                variant="h6"
+                                                component="h3"
+                                                sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}
+                                            >
                                                 {report.title}
                                             </Typography>
                                         </Box>
                                     </Box>
-                                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                                    <Typography
+                                        variant="body2"
+                                        color="text.secondary"
+                                        sx={{
+                                            mb: 2,
+                                            fontSize: { xs: '0.8rem', sm: '0.875rem' }
+                                        }}
+                                    >
                                         {report.description}
                                     </Typography>
                                     <Button
                                         variant="contained"
-                                        startIcon={isLoading ? <CircularProgress size={20} /> : <DownloadIcon />}
+                                        startIcon={isLoading ? <CircularProgress size={20} /> : <DownloadIcon sx={{ display: { xs: 'none', sm: 'inline-flex' } }} />}
                                         onClick={report.action}
                                         disabled={isDisabled || isLoading}
                                         fullWidth
+                                        size="small"
+                                        sx={{
+                                            minHeight: 44,
+                                            fontSize: { xs: '0.8rem', sm: '0.875rem' }
+                                        }}
                                     >
                                         {isLoading ? 'Exporting...' : 'Export CSV'}
                                     </Button>
                                     {isDisabled && (
-                                        <Typography variant="caption" color="error" sx={{ mt: 1, display: 'block' }}>
+                                        <Typography
+                                            variant="caption"
+                                            color="error"
+                                            sx={{
+                                                mt: 1,
+                                                display: 'block',
+                                                fontSize: { xs: '0.7rem', sm: '0.75rem' }
+                                            }}
+                                        >
                                             Admin access required
                                         </Typography>
                                     )}
@@ -227,14 +265,27 @@ export default function LeagueReportsView({ leagueId, isAdmin }: LeagueReportsVi
                 })}
             </Grid>
 
-            <Box sx={{ mt: 4 }}>
-                <Typography variant="h6" gutterBottom>
+            <Box sx={{ mt: { xs: 3, sm: 4 } }}>
+                <Typography
+                    variant="h6"
+                    gutterBottom
+                    sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}
+                >
                     About CSV Exports
                 </Typography>
-                <Typography variant="body2" color="text.secondary" paragraph>
+                <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    paragraph
+                    sx={{ fontSize: { xs: '0.8rem', sm: '0.875rem' } }}
+                >
                     CSV (Comma-Separated Values) files can be opened in spreadsheet applications like Microsoft Excel, Google Sheets, or Apple Numbers.
                 </Typography>
-                <Typography variant="body2" color="text.secondary">
+                <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{ fontSize: { xs: '0.8rem', sm: '0.875rem' } }}
+                >
                     All exports include current data as of the download time. For historical tracking, save exports with dated filenames.
                 </Typography>
             </Box>

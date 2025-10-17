@@ -186,32 +186,50 @@ export default function LeagueCalendar({
 
   return (
     <Box>
-      <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
+      <Box sx={{
+        mb: { xs: 2, sm: 3 },
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: { xs: 1, sm: 2 }
+      }}>
         <Box>
-          <Typography variant="h4" component="h1" gutterBottom>
+          <Typography
+            variant="h4"
+            component="h1"
+            gutterBottom
+            sx={{ fontSize: { xs: '1.75rem', sm: '2.125rem' } }}
+          >
             League Schedule
           </Typography>
-          <Typography variant="body2" color="text.secondary">
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
+          >
             {leagueName} • {filteredEvents.length} events
           </Typography>
         </Box>
 
         <Button
           variant="outlined"
-          startIcon={<Download />}
+          startIcon={<Download sx={{ display: { xs: 'none', sm: 'inline-flex' } }} />}
           onClick={handleExportCalendar}
           disabled={filteredEvents.length === 0}
+          size="small"
+          sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
         >
-          Export Calendar
+          Export
         </Button>
       </Box>
 
       {/* Filters */}
       <Box sx={{
-        mb: 3,
+        mb: { xs: 2, sm: 3 },
         display: 'flex',
         flexDirection: isDesktop ? 'row' : 'column',
-        gap: 2,
+        gap: { xs: 1, sm: 2 },
         alignItems: isDesktop ? 'center' : 'stretch'
       }}>
         <FormControl size="small" sx={{ minWidth: 120 }}>
@@ -299,23 +317,35 @@ export default function LeagueCalendar({
             variant="text"
             size="small"
             onClick={clearFilters}
-            sx={{ whiteSpace: 'nowrap' }}
+            sx={{
+              whiteSpace: 'nowrap',
+              fontSize: { xs: '0.75rem', sm: '0.875rem' }
+            }}
           >
             Clear Filters ({activeFiltersCount})
           </Button>
         )}
       </Box>
 
-      <Divider sx={{ mb: 3 }} />
+      <Divider sx={{ mb: { xs: 2, sm: 3 } }} />
 
       {/* Events List */}
       {filteredEvents.length === 0 ? (
-        <Box sx={{ py: 8, textAlign: "center" }}>
-          <CalendarMonth sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
-          <Typography variant="h6" color="text.secondary" gutterBottom>
+        <Box sx={{ py: { xs: 4, sm: 8 }, textAlign: "center" }}>
+          <CalendarMonth sx={{ fontSize: { xs: 48, sm: 64 }, color: 'text.disabled', mb: 2 }} />
+          <Typography
+            variant="h6"
+            color="text.secondary"
+            gutterBottom
+            sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}
+          >
             No events found
           </Typography>
-          <Typography variant="body2" color="text.secondary">
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
+          >
             {activeFiltersCount > 0
               ? "Try adjusting your filters to see more events"
               : "No events have been scheduled yet"
@@ -328,7 +358,7 @@ export default function LeagueCalendar({
             display: isDesktop ? "grid" : "flex",
             flexDirection: isDesktop ? undefined : "column",
             gridTemplateColumns: isDesktop ? "repeat(auto-fill, minmax(320px, 1fr))" : undefined,
-            gap: 2,
+            gap: { xs: 1.5, sm: 2 },
           }}
         >
           {filteredEvents.map((event) => (

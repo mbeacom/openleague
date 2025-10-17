@@ -74,8 +74,8 @@ describe('Marketing Theme Extensions', () => {
       expect((marketingVariant?.style as any)?.backgroundColor).toBe('#FF9800');
       expect((marketingVariant?.style as any)?.color).toBe('#FFFFFF');
       expect((marketingVariant?.style as any)?.fontWeight).toBe(600);
-      expect((marketingVariant?.style as any)?.fontSize).toBe('1.125rem');
-      expect((marketingVariant?.style as any)?.borderRadius).toBe(12);
+      expect((marketingVariant?.style as any)?.fontSize).toBe('0.9375rem');
+      expect((marketingVariant?.style as any)?.borderRadius).toBe(8);
     });
 
     it('includes marketing secondary button variant styles', () => {

@@ -173,9 +173,9 @@
     - Add basic financial reporting for league activities
     - _Requirements: 7.5, 7.6, 7.7_
 
-- [ ] 8. Add mobile responsiveness and optimization
+- [x] 8. Add mobile responsiveness and optimization
 
-  - [ ] 8.1 Optimize league features for mobile
+  - [x] 8.1 Optimize league features for mobile
 
     - Ensure all league management interfaces work on mobile devices
     - Create mobile-optimized team switching and navigation
@@ -183,7 +183,7 @@
     - Add touch-friendly controls for league administration
     - _Requirements: 9.1, 9.2, 9.3, 9.4_
 
-  - [ ] 8.2 Implement mobile-specific league features
+  - [x] 8.2 Implement mobile-specific league features
     - Create mobile-optimized roster management across teams
     - Build mobile-friendly messaging and communication interfaces
     - Implement mobile calendar integration for league events
