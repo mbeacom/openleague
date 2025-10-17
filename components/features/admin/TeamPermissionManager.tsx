@@ -82,6 +82,8 @@ export const TeamPermissionManager: React.FC<TeamPermissionManagerProps> = ({
 }) => {
     const [teamMembers, setTeamMembers] = useState<TeamMembersState>({});
     const [editDialogOpen, setEditDialogOpen] = useState(false);
+    const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+    const [memberToRemove, setMemberToRemove] = useState<{ teamId: string; member: TeamMember } | null>(null);
     const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
     const [selectedMember, setSelectedMember] = useState<TeamMember | null>(null);
     const [selectedRole, setSelectedRole] = useState<"ADMIN" | "MEMBER">("MEMBER");
@@ -176,10 +178,16 @@ export const TeamPermissionManager: React.FC<TeamPermissionManagerProps> = ({
         }
     };
 
-    const handleRemoveMember = async (teamId: string, member: TeamMember) => {
-        if (!confirm(`Are you sure you want to remove ${member.name || member.email} from this team?`)) {
-            return;
-        }
+    const handleRemoveMemberClick = (teamId: string, member: TeamMember) => {
+        setMemberToRemove({ teamId, member });
+        setConfirmDialogOpen(true);
+    };
+
+    const handleConfirmRemove = async () => {
+        if (!memberToRemove) return;
+
+        const { teamId, member } = memberToRemove;
+        setConfirmDialogOpen(false);
 
         try {
             setActionLoading(true);
@@ -203,7 +211,13 @@ export const TeamPermissionManager: React.FC<TeamPermissionManagerProps> = ({
             console.error("Error removing member:", err);
         } finally {
             setActionLoading(false);
+            setMemberToRemove(null);
         }
+    };
+
+    const handleCancelRemove = () => {
+        setConfirmDialogOpen(false);
+        setMemberToRemove(null);
     };
 
     const getRoleColor = (role: string) => {
@@ -370,7 +384,7 @@ export const TeamPermissionManager: React.FC<TeamPermissionManagerProps> = ({
                                                                     <Tooltip title="Remove Member">
                                                                         <IconButton
                                                                             size="small"
-                                                                            onClick={() => handleRemoveMember(team.id, member)}
+                                                                            onClick={() => handleRemoveMemberClick(team.id, member)}
                                                                             disabled={actionLoading}
                                                                             color="error"
                                                                         >
@@ -417,6 +431,27 @@ export const TeamPermissionManager: React.FC<TeamPermissionManagerProps> = ({
                             disabled={actionLoading}
                         >
                             {actionLoading ? <CircularProgress size={20} /> : "Save"}
+                        </Button>
+                    </DialogActions>
+                </Dialog>
+
+                {/* Remove Member Confirmation Dialog */}
+                <Dialog open={confirmDialogOpen} onClose={handleCancelRemove}>
+                    <DialogTitle>Confirm Removal</DialogTitle>
+                    <DialogContent>
+                        <Typography>
+                            Are you sure you want to remove {memberToRemove?.member.name || memberToRemove?.member.email} from this team?
+                        </Typography>
+                    </DialogContent>
+                    <DialogActions>
+                        <Button onClick={handleCancelRemove}>Cancel</Button>
+                        <Button
+                            onClick={handleConfirmRemove}
+                            variant="contained"
+                            color="error"
+                            disabled={actionLoading}
+                        >
+                            {actionLoading ? <CircularProgress size={20} /> : "Remove"}
                         </Button>
                     </DialogActions>
                 </Dialog>

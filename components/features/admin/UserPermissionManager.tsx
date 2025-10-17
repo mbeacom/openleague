@@ -74,6 +74,8 @@ export const UserPermissionManager: React.FC<UserPermissionManagerProps> = ({
     const [error, setError] = useState<string | null>(null);
     const [editDialogOpen, setEditDialogOpen] = useState(false);
     const [permissionsDialogOpen, setPermissionsDialogOpen] = useState(false);
+    const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+    const [userToRemove, setUserToRemove] = useState<LeagueUser | null>(null);
     const [selectedUser, setSelectedUser] = useState<LeagueUser | null>(null);
     const [selectedRole, setSelectedRole] = useState<"LEAGUE_ADMIN" | "TEAM_ADMIN" | "MEMBER">("MEMBER");
     const [userPermissions, setUserPermissions] = useState<UserPermissions | null>(null);
@@ -165,10 +167,15 @@ export const UserPermissionManager: React.FC<UserPermissionManagerProps> = ({
         }
     };
 
-    const handleRemoveUser = async (user: LeagueUser) => {
-        if (!confirm(`Are you sure you want to remove ${user.name || user.email} from this league?`)) {
-            return;
-        }
+    const handleRemoveUserClick = (user: LeagueUser) => {
+        setUserToRemove(user);
+        setConfirmDialogOpen(true);
+    };
+
+    const handleConfirmRemove = async () => {
+        if (!userToRemove) return;
+
+        setConfirmDialogOpen(false);
 
         try {
             setActionLoading(true);
@@ -176,7 +183,7 @@ export const UserPermissionManager: React.FC<UserPermissionManagerProps> = ({
 
             const input: RemoveLeagueRoleInput = {
                 leagueId,
-                targetUserId: user.id,
+                targetUserId: userToRemove.id,
             };
 
             const result = await removeLeagueRoleAction(input);
@@ -191,7 +198,13 @@ export const UserPermissionManager: React.FC<UserPermissionManagerProps> = ({
             console.error("Error removing user:", err);
         } finally {
             setActionLoading(false);
+            setUserToRemove(null);
         }
+    };
+
+    const handleCancelRemove = () => {
+        setConfirmDialogOpen(false);
+        setUserToRemove(null);
     };
 
     const getRoleColor = (role: string) => {
@@ -344,7 +357,7 @@ export const UserPermissionManager: React.FC<UserPermissionManagerProps> = ({
                                             <Tooltip title="Remove User">
                                                 <IconButton
                                                     size="small"
-                                                    onClick={() => handleRemoveUser(user)}
+                                                    onClick={() => handleRemoveUserClick(user)}
                                                     disabled={actionLoading}
                                                     color="error"
                                                 >
@@ -437,6 +450,27 @@ export const UserPermissionManager: React.FC<UserPermissionManagerProps> = ({
                     <DialogActions>
                         <Button onClick={() => setPermissionsDialogOpen(false)}>
                             Close
+                        </Button>
+                    </DialogActions>
+                </Dialog>
+
+                {/* Remove User Confirmation Dialog */}
+                <Dialog open={confirmDialogOpen} onClose={handleCancelRemove}>
+                    <DialogTitle>Confirm Removal</DialogTitle>
+                    <DialogContent>
+                        <Typography>
+                            Are you sure you want to remove {userToRemove?.name || userToRemove?.email} from the league?
+                        </Typography>
+                    </DialogContent>
+                    <DialogActions>
+                        <Button onClick={handleCancelRemove}>Cancel</Button>
+                        <Button
+                            onClick={handleConfirmRemove}
+                            variant="contained"
+                            color="error"
+                            disabled={actionLoading}
+                        >
+                            {actionLoading ? <CircularProgress size={20} /> : "Remove"}
                         </Button>
                     </DialogActions>
                 </Dialog>
