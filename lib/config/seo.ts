@@ -129,7 +129,24 @@ export function getOrganizationSchema() {
 /**
  * Software Application structured data (JSON-LD)
  */
-export function getSoftwareApplicationSchema() {
+export function getSoftwareApplicationSchema(): {
+    '@context': string;
+    '@type': string;
+    name: string;
+    applicationCategory: string;
+    operatingSystem: string;
+    offers: {
+        '@type': string;
+        price: string;
+        priceCurrency: string;
+        description: string;
+    };
+    description: string;
+    url: string;
+    screenshot: string;
+    featureList: string;
+    aggregateRating?: undefined;
+} {
     return {
         '@context': 'https://schema.org',
         '@type': 'SoftwareApplication',
