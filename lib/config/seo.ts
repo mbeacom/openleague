@@ -11,7 +11,7 @@ export const SITE_CONFIG = {
     description:
         'Replace chaotic spreadsheets, group chats, and email chains with a single source of truth for sports team management. Free, open-source, and easy to use.',
     url: 'https://openl.app',
-    ogImage: '/images/og-image.png',
+    ogImage: '/images/logo.webp',
     twitterHandle: '@openleague',
     keywords: [
         'sports team management',
@@ -45,7 +45,7 @@ export function generatePageMetadata({
     noIndex?: boolean;
 }): Metadata {
     const url = `${SITE_CONFIG.url}${path}`;
-    const image = ogImage || SITE_CONFIG.ogImage;
+    const imageUrl = ogImage ? (ogImage.startsWith('http') ? ogImage : `${SITE_CONFIG.url}${ogImage}`) : SITE_CONFIG.ogImage;
     const fullTitle = title.includes('OpenLeague') ? title : `${title} - OpenLeague`;
     const allKeywords = [...SITE_CONFIG.keywords, ...keywords];
 
@@ -83,7 +83,7 @@ export function generatePageMetadata({
             siteName: SITE_CONFIG.name,
             images: [
                 {
-                    url: image,
+                    url: imageUrl,
                     width: 1200,
                     height: 630,
                     alt: fullTitle,
@@ -97,7 +97,7 @@ export function generatePageMetadata({
             creator: SITE_CONFIG.twitterHandle,
             title: fullTitle,
             description,
-            images: [image],
+            images: [imageUrl],
         },
     };
 }
@@ -145,21 +145,7 @@ export function getSoftwareApplicationSchema() {
         description: SITE_CONFIG.description,
         url: SITE_CONFIG.url,
         screenshot: `${SITE_CONFIG.url}/images/hero-dashboard-mockup.svg`,
-        aggregateRating: {
-            '@type': 'AggregateRating',
-            ratingValue: '5',
-            ratingCount: '1',
-            bestRating: '5',
-            worstRating: '1',
-        },
-        featureList: [
-            'Roster Management',
-            'Event Scheduling',
-            'RSVP Tracking',
-            'Email Notifications',
-            'Mobile-First Design',
-            'Team Calendar',
-        ],
+        featureList: 'Roster Management, Event Scheduling, RSVP Tracking, Email Notifications, Mobile-First Design, Team Calendar',
     };
 }
 

@@ -127,12 +127,8 @@ describe('SEO Configuration', () => {
             const ogImages = metadata.openGraph?.images;
             const twitterImages = (metadata.twitter as any)?.images;
 
-            if (Array.isArray(ogImages)) {
-                expect((ogImages[0] as any)?.url).toBe('/custom-image.png');
-            }
-            if (Array.isArray(twitterImages)) {
-                expect(twitterImages[0]).toBe('/custom-image.png');
-            }
+            expect(ogImages).toEqual([{ url: 'https://openl.app/custom-image.png', width: 1200, height: 630, alt: 'Custom - OpenLeague' }]);
+            expect(twitterImages).toEqual(['https://openl.app/custom-image.png']);
         });
     });
 
@@ -186,21 +182,19 @@ describe('SEO Configuration', () => {
                 expect(schema.offers.priceCurrency).toBe('USD');
             });
 
-            it('should include feature list', () => {
+            it('should include feature list as string per Schema.org spec', () => {
                 const schema = getSoftwareApplicationSchema();
 
-                expect(Array.isArray(schema.featureList)).toBe(true);
+                expect(typeof schema.featureList).toBe('string');
                 expect(schema.featureList).toContain('Roster Management');
                 expect(schema.featureList).toContain('Event Scheduling');
                 expect(schema.featureList).toContain('RSVP Tracking');
             });
 
-            it('should include aggregate rating', () => {
+            it('should not include aggregate rating to avoid credibility issues', () => {
                 const schema = getSoftwareApplicationSchema();
 
-                expect(schema.aggregateRating).toBeDefined();
-                expect(schema.aggregateRating['@type']).toBe('AggregateRating');
-                expect(schema.aggregateRating.ratingValue).toBeTruthy();
+                expect(schema.aggregateRating).toBeUndefined();
             });
         });
 

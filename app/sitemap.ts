@@ -92,12 +92,6 @@ export default function sitemap(): MetadataRoute.Sitemap {
             changeFrequency: 'monthly' as const,
             priority: 0.6,
         },
-        {
-            url: `${baseUrl}/docs/roadmap`,
-            lastModified: currentDate,
-            changeFrequency: 'weekly' as const,
-            priority: 0.6,
-        },
     ];
 
     // Legal pages (lower priority, no index in metadata)

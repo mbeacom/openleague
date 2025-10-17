@@ -8,7 +8,7 @@ import LayoutProvider from "@/components/providers/LayoutProvider";
 import ErrorBoundary from "@/components/ui/ErrorBoundary";
 import { ToastProvider } from "@/components/ui/Toast";
 import StructuredData from "@/components/ui/StructuredData";
-import { getOrganizationSchema, getSoftwareApplicationSchema } from "@/lib/config/seo";
+import { SITE_CONFIG, getOrganizationSchema, getSoftwareApplicationSchema } from "@/lib/config/seo";
 
 // Validate environment variables on startup
 import "@/lib/env";
@@ -21,24 +21,13 @@ const roboto = Roboto({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://openl.app"),
+  metadataBase: new URL(SITE_CONFIG.url),
   title: {
-    default: "OpenLeague - Free Sports Team Management Platform",
+    default: SITE_CONFIG.title,
     template: "%s - OpenLeague",
   },
-  description:
-    "Replace chaotic spreadsheets, group chats, and email chains with a single source of truth for sports team management. Free, open-source, and easy to use.",
-  keywords: [
-    "sports team management",
-    "team organization",
-    "roster management",
-    "scheduling software",
-    "free team management",
-    "sports scheduling",
-    "team calendar",
-    "RSVP tracking",
-    "open source sports",
-  ],
+  description: SITE_CONFIG.description,
+  keywords: SITE_CONFIG.keywords,
   authors: [{ name: "OpenLeague Team" }],
   creator: "OpenLeague",
   publisher: "OpenLeague",
@@ -71,13 +60,13 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     locale: "en_US",
-    url: "https://openl.app",
+    url: SITE_CONFIG.url,
     siteName: "OpenLeague",
-    title: "OpenLeague - Free Sports Team Management Platform",
-    description: "Replace chaotic spreadsheets, group chats, and email chains with a single source of truth for sports team management. Free, open-source, and easy to use.",
+    title: SITE_CONFIG.title,
+    description: SITE_CONFIG.description,
     images: [
       {
-        url: "/images/og-image.png",
+        url: `${SITE_CONFIG.url}${SITE_CONFIG.ogImage}`,
         width: 1200,
         height: 630,
         alt: "OpenLeague - Free Sports Team Management",
@@ -86,14 +75,14 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    site: "@openleague",
-    creator: "@openleague",
-    title: "OpenLeague - Free Sports Team Management Platform",
-    description: "Replace chaotic spreadsheets, group chats, and email chains with a single source of truth for sports team management. Free, open-source, and easy to use.",
-    images: ["/images/og-image.png"],
+    site: SITE_CONFIG.twitterHandle,
+    creator: SITE_CONFIG.twitterHandle,
+    title: SITE_CONFIG.title,
+    description: SITE_CONFIG.description,
+    images: [`${SITE_CONFIG.url}${SITE_CONFIG.ogImage}`],
   },
   alternates: {
-    canonical: "https://openl.app",
+    canonical: SITE_CONFIG.url,
   },
   verification: {
     google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION,
@@ -109,12 +98,10 @@ export default function RootLayout({
 
   return (
     <html lang="en">
-      <head>
+      <body className={roboto.variable}>
         <StructuredData
           data={[getOrganizationSchema(), getSoftwareApplicationSchema()]}
         />
-      </head>
-      <body className={roboto.variable}>
         {umamiWebsiteId && (
           <Script
             src="https://cloud.umami.is/script.js"
