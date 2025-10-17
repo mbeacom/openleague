@@ -50,11 +50,11 @@ const nextConfig: NextConfig = {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-eval' 'unsafe-inline'", // Next.js requires unsafe-eval and unsafe-inline
+              "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://cloud.umami.is", // Next.js requires unsafe-eval and unsafe-inline, Umami for analytics
               "style-src 'self' 'unsafe-inline' fonts.googleapis.com", // MUI requires unsafe-inline
               "font-src 'self' fonts.gstatic.com",
               "img-src 'self' data: blob:",
-              "connect-src 'self'",
+              "connect-src 'self' https://cloud.umami.is", // Allow Umami analytics connections
               "frame-ancestors 'self'",
               "base-uri 'self'",
               "form-action 'self'",
