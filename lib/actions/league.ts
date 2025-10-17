@@ -13,7 +13,6 @@ import {
   AuditAction,
   LeagueAccessLevel
 } from "@/lib/utils/security";
-import { requirePermission, Permission } from "@/lib/utils/permissions";
 import {
   createLeagueSchema,
   updateLeagueSettingsSchema,
@@ -263,9 +262,6 @@ export async function addTeamToLeague(
       };
     }
 
-    // Additional permission check
-    await requirePermission(userId, validated.leagueId, Permission.CREATE_TEAM);
-
     // Verify league exists and is active
     const league = await prisma.league.findFirst({
       where: {
@@ -391,9 +387,6 @@ export async function updateLeagueSettings(
         error: "Unauthorized - you must be a league admin",
       };
     }
-
-    // Additional permission check
-    await requirePermission(userId, validated.id, Permission.UPDATE_LEAGUE);
 
     // Update league settings
     const league = await prisma.league.update({

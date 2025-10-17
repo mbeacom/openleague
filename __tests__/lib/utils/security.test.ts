@@ -145,7 +145,7 @@ describe('Security Utils', () => {
             expect(checkLeagueOperationRateLimit(userId, operation, maxOperations)).toBe(false);
         });
 
-        it('should reset rate limit after window expires', () => {
+        it('should reset rate limit after window expires', async () => {
             const userId = 'test-user-3';
             const operation = 'create_team';
             const maxOperations = 1;
@@ -158,12 +158,10 @@ describe('Security Utils', () => {
             expect(checkLeagueOperationRateLimit(userId, operation, maxOperations, windowMs)).toBe(false);
 
             // Wait for window to expire and try again
-            return new Promise<void>((resolve) => {
-                setTimeout(() => {
-                    expect(checkLeagueOperationRateLimit(userId, operation, maxOperations, windowMs)).toBe(true);
-                    resolve();
-                }, 150);
-            });
+            await new Promise(resolve => setTimeout(resolve, windowMs + 10));
+
+            // Try again - should succeed after window expired
+            expect(checkLeagueOperationRateLimit(userId, operation, maxOperations, windowMs)).toBe(true);
         });
 
         it('should handle different operations separately', () => {
@@ -180,7 +178,7 @@ describe('Security Utils', () => {
     });
 
     describe('cleanupRateLimitEntries', () => {
-        it('should remove expired entries', () => {
+        it('should remove expired entries', async () => {
             const userId = 'test-user-5';
             const operation = 'test_operation';
             const windowMs = 50; // Very short window
@@ -189,15 +187,11 @@ describe('Security Utils', () => {
             checkLeagueOperationRateLimit(userId, operation, 1, windowMs);
 
             // Wait for it to expire
-            return new Promise<void>((resolve) => {
-                setTimeout(() => {
-                    cleanupRateLimitEntries();
+            await new Promise(resolve => setTimeout(resolve, windowMs + 10));
+            cleanupRateLimitEntries();
 
-                    // Should be able to perform operation again after cleanup
-                    expect(checkLeagueOperationRateLimit(userId, operation, 1, windowMs)).toBe(true);
-                    resolve();
-                }, 100);
-            });
+            // Should be able to perform operation again after cleanup
+            expect(checkLeagueOperationRateLimit(userId, operation, 1, windowMs)).toBe(true);
         });
     });
 

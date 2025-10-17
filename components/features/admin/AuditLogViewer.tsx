@@ -34,7 +34,7 @@ import {
     Info as InfoIcon,
     Error as ErrorIcon,
 } from "@mui/icons-material";
-import { getAuditLogsAction, type AuditLogEntry } from "@/lib/actions/audit";
+import { getAuditLogsAction, getAuditActionsForLeague, type AuditLogEntry } from "@/lib/actions/audit";
 
 interface AuditLogViewerProps {
     leagueId: string;
@@ -54,6 +54,7 @@ export const AuditLogViewer: React.FC<AuditLogViewerProps> = ({
     const [page, setPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
     const [totalCount, setTotalCount] = useState(0);
+    const [uniqueActions, setUniqueActions] = useState<string[]>([]);
     const itemsPerPage = 10;
 
     // Only league admins can view audit logs
@@ -62,6 +63,7 @@ export const AuditLogViewer: React.FC<AuditLogViewerProps> = ({
     useEffect(() => {
         if (canViewAuditLogs) {
             loadAuditLogs();
+            loadUniqueActions();
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [leagueId, canViewAuditLogs, page, actionFilter, severityFilter, userFilter]);
@@ -119,15 +121,21 @@ export const AuditLogViewer: React.FC<AuditLogViewerProps> = ({
         }
     };
 
+    const loadUniqueActions = async () => {
+        try {
+            const actions = await getAuditActionsForLeague(leagueId);
+            setUniqueActions(actions);
+        } catch (err) {
+            console.error("Error loading unique actions:", err);
+        }
+    };
+
     const formatActionName = (action: string) => {
         return action
             .replace(/_/g, " ")
             .toLowerCase()
             .replace(/\b\w/g, l => l.toUpperCase());
     };
-
-    // Get unique actions from current logs for filter dropdown
-    const uniqueActions = Array.from(new Set(logs.map(log => log.action)));
 
     const handleFilterChange = () => {
         // Reset to page 1 when filters change
@@ -187,7 +195,10 @@ export const AuditLogViewer: React.FC<AuditLogViewerProps> = ({
                         <InputLabel>Action</InputLabel>
                         <Select
                             value={actionFilter}
-                            onChange={(e) => setActionFilter(e.target.value)}
+                            onChange={(e) => {
+                                setActionFilter(e.target.value);
+                                handleFilterChange();
+                            }}
                             label="Action"
                         >
                             <MenuItem value="all">All Actions</MenuItem>

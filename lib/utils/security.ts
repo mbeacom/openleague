@@ -5,6 +5,7 @@
 import { prisma } from "@/lib/db/prisma";
 import { requireUserId } from "@/lib/auth/session";
 import { sanitizeErrorForLogging } from "./error-handling";
+import type { Prisma } from "@prisma/client";
 
 /**
  * League access levels for permission checking
@@ -356,7 +357,7 @@ export async function logAuditEvent(entry: AuditLogEntry): Promise<void> {
                 teamId: entry.teamId,
                 resourceId: entry.resourceId,
                 resourceType: entry.resourceType,
-                details: entry.details ? JSON.parse(JSON.stringify(entry.details)) : undefined,
+                details: (entry.details as Prisma.InputJsonValue) ?? undefined,
                 ipAddress: entry.ipAddress,
                 userAgent: entry.userAgent,
                 severity,
@@ -454,6 +455,9 @@ export function validateLeagueOperationData(data: Record<string, unknown>): {
 
 /**
  * Rate limiting for league operations to prevent abuse
+ *
+ * TODO: This in-memory implementation won't work correctly in serverless/multi-instance deployments.
+ * For production, implement database-backed or Redis-based rate limiting.
  */
 const operationCounts = new Map<string, { count: number; resetTime: number }>();
 
@@ -499,6 +503,8 @@ export function cleanupRateLimitEntries(): void {
 }
 
 // Clean up rate limit entries every 5 minutes
+// TODO: This interval won't work correctly in serverless environments (e.g., Vercel).
+// Consider on-demand cleanup during rate limit checks instead.
 if (typeof setInterval !== "undefined") {
     setInterval(cleanupRateLimitEntries, 5 * 60 * 1000);
 }

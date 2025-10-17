@@ -72,7 +72,7 @@ export async function getAuditLogsAction(
       leagueId?: string;
       action?: string;
       severity?: string;
-      user?: { email?: { contains: string; mode: "insensitive" } | { contains: string; mode: "insensitive" } };
+      user?: { email?: { contains: string; mode: "insensitive" } };
     } = {
       leagueId: validated.leagueId,
     };

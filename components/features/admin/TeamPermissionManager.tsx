@@ -160,10 +160,11 @@ export const TeamPermissionManager: React.FC<TeamPermissionManagerProps> = ({
             const result = await assignTeamRoleAction(input);
 
             if (result.success) {
+                const teamIdToReload = selectedTeam;
                 setEditDialogOpen(false);
                 setSelectedTeam(null);
                 setSelectedMember(null);
-                await loadTeamMembers(selectedTeam); // Reload team members
+                await loadTeamMembers(teamIdToReload); // Reload team members
             } else {
                 setGlobalError(result.error);
             }

@@ -40,9 +40,9 @@ model AuditLog {
   userId       String
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   leagueId     String?
-  league       League?  @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  league       League?  @relation(fields: [leagueId], references: [id], onDelete: SetNull)
   teamId       String?
-  team         Team?    @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  team         Team?    @relation(fields: [teamId], references: [id], onDelete: SetNull)
   resourceId   String?  // ID of the affected resource
   resourceType String?  // Type of the affected resource (team, player, event, etc.)
   details      Json?    // Additional details about the action
