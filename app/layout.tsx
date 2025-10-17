@@ -27,7 +27,7 @@ export const metadata: Metadata = {
     template: "%s - OpenLeague",
   },
   description: SITE_CONFIG.description,
-  keywords: SITE_CONFIG.keywords,
+  keywords: [...SITE_CONFIG.keywords],
   authors: [{ name: "OpenLeague Team" }],
   creator: "OpenLeague",
   publisher: "OpenLeague",
