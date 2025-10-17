@@ -30,6 +30,33 @@ model User {
   messageRecipients      MessageRecipient[]
   notificationPreferences NotificationPreference[]
   notificationBatches    NotificationBatch[]
+  auditLogs              AuditLog[]
+}
+
+// Audit log model for tracking administrative actions and security events
+model AuditLog {
+  id           String   @id @default(cuid())
+  action       String   // AuditAction enum value
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  leagueId     String?
+  league       League?  @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  teamId       String?
+  team         Team?    @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  resourceId   String?  // ID of the affected resource
+  resourceType String?  // Type of the affected resource (team, player, event, etc.)
+  details      Json?    // Additional details about the action
+  ipAddress    String?  // IP address of the user
+  userAgent    String?  // User agent string
+  severity     String   @default("info") // info, warning, error
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+  @@index([leagueId])
+  @@index([teamId])
+  @@index([action])
+  @@index([createdAt])
+  @@index([severity])
 }
 
 // Team model
@@ -58,6 +85,7 @@ model Team {
   transfersFrom     PlayerTransfer[] @relation("TransferFromTeam")
   transfersTo       PlayerTransfer[] @relation("TransferToTeam")
   messageTargeting  MessageTargeting[]
+  auditLogs         AuditLog[]
 
   @@index([leagueId]) // Optimize league-team queries
   @@index([divisionId]) // Optimize division-team queries
@@ -221,6 +249,7 @@ model League {
   messages               LeagueMessage[]
   notificationPreferences NotificationPreference[]
   notificationBatches    NotificationBatch[]
+  auditLogs              AuditLog[]
 
   @@map("leagues")
 }

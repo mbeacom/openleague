@@ -6,6 +6,15 @@ import { requireUserId } from "@/lib/auth/session";
 import { revalidatePath } from "next/cache";
 import { format } from "date-fns";
 import {
+  verifyLeagueAccess,
+  validateLeagueDataIsolation,
+  validateLeagueOperationData,
+  logAuditEvent,
+  AuditAction,
+  LeagueAccessLevel
+} from "@/lib/utils/security";
+import { requirePermission, Permission } from "@/lib/utils/permissions";
+import {
   createLeagueSchema,
   updateLeagueSettingsSchema,
   addTeamToLeagueSchema,
@@ -41,6 +50,15 @@ export async function createLeague(
     // Authorization check - user must be authenticated
     const userId = await requireUserId();
 
+    // Validate input data for security
+    const dataValidation = validateLeagueOperationData(input);
+    if (!dataValidation.isValid) {
+      return {
+        success: false,
+        error: `Invalid input data: ${dataValidation.errors.join(", ")}`,
+      };
+    }
+
     // Validate input
     const validated = createLeagueSchema.parse(input);
 
@@ -63,6 +81,18 @@ export async function createLeague(
         name: true,
         sport: true,
       },
+    });
+
+    // Log audit event
+    await logAuditEvent({
+      action: AuditAction.LEAGUE_CREATED,
+      userId,
+      leagueId: league.id,
+      details: {
+        leagueName: league.name,
+        sport: league.sport,
+      },
+      timestamp: new Date(),
     });
 
     // Revalidate relevant pages
@@ -212,23 +242,29 @@ export async function addTeamToLeague(
 ): Promise<ActionResult<{ id: string; name: string; sport: string; season: string }>> {
   try {
     const userId = await requireUserId();
+
+    // Validate input data for security
+    const dataValidation = validateLeagueOperationData(input);
+    if (!dataValidation.isValid) {
+      return {
+        success: false,
+        error: `Invalid input data: ${dataValidation.errors.join(", ")}`,
+      };
+    }
+
     const validated = addTeamToLeagueSchema.parse(input);
 
-    // Verify user has league admin permissions
-    const leagueUser = await prisma.leagueUser.findFirst({
-      where: {
-        leagueId: validated.leagueId,
-        userId,
-        role: "LEAGUE_ADMIN",
-      },
-    });
-
-    if (!leagueUser) {
+    // Verify user has league admin permissions using new security system
+    const accessCheck = await verifyLeagueAccess(validated.leagueId, LeagueAccessLevel.LEAGUE_ADMIN, userId);
+    if (!accessCheck.hasAccess) {
       return {
         success: false,
         error: "Unauthorized - you must be a league admin",
       };
     }
+
+    // Additional permission check
+    await requirePermission(userId, validated.leagueId, Permission.CREATE_TEAM);
 
     // Verify league exists and is active
     const league = await prisma.league.findFirst({
@@ -245,17 +281,15 @@ export async function addTeamToLeague(
       };
     }
 
-    // If divisionId is provided, verify it belongs to this league
+    // If divisionId is provided, verify it belongs to this league using data isolation check
     if (validated.divisionId) {
-      const division = await prisma.division.findFirst({
-        where: {
-          id: validated.divisionId,
-          leagueId: validated.leagueId,
-          isActive: true,
-        },
-      });
+      const isValidDivision = await validateLeagueDataIsolation(
+        "division",
+        validated.divisionId,
+        validated.leagueId
+      );
 
-      if (!division) {
+      if (!isValidDivision) {
         return {
           success: false,
           error: "Division not found or does not belong to this league",
@@ -284,6 +318,21 @@ export async function addTeamToLeague(
         sport: true,
         season: true,
       },
+    });
+
+    // Log audit event
+    await logAuditEvent({
+      action: AuditAction.TEAM_CREATED,
+      userId,
+      leagueId: validated.leagueId,
+      teamId: team.id,
+      details: {
+        teamName: team.name,
+        sport: team.sport,
+        season: team.season,
+        divisionId: validated.divisionId,
+      },
+      timestamp: new Date(),
     });
 
     revalidatePath("/");
@@ -322,23 +371,29 @@ export async function updateLeagueSettings(
 ): Promise<ActionResult<{ id: string; name: string; sport: string }>> {
   try {
     const userId = await requireUserId();
+
+    // Validate input data for security
+    const dataValidation = validateLeagueOperationData(input);
+    if (!dataValidation.isValid) {
+      return {
+        success: false,
+        error: `Invalid input data: ${dataValidation.errors.join(", ")}`,
+      };
+    }
+
     const validated = updateLeagueSettingsSchema.parse(input);
 
-    // Verify user has league admin permissions
-    const leagueUser = await prisma.leagueUser.findFirst({
-      where: {
-        leagueId: validated.id,
-        userId,
-        role: "LEAGUE_ADMIN",
-      },
-    });
-
-    if (!leagueUser) {
+    // Verify user has league admin permissions using new security system
+    const accessCheck = await verifyLeagueAccess(validated.id, LeagueAccessLevel.LEAGUE_ADMIN, userId);
+    if (!accessCheck.hasAccess) {
       return {
         success: false,
         error: "Unauthorized - you must be a league admin",
       };
     }
+
+    // Additional permission check
+    await requirePermission(userId, validated.id, Permission.UPDATE_LEAGUE);
 
     // Update league settings
     const league = await prisma.league.update({
@@ -354,6 +409,22 @@ export async function updateLeagueSettings(
         name: true,
         sport: true,
       },
+    });
+
+    // Log audit event
+    await logAuditEvent({
+      action: AuditAction.LEAGUE_UPDATED,
+      userId,
+      leagueId: validated.id,
+      details: {
+        updatedFields: {
+          name: validated.name,
+          sport: validated.sport,
+          contactEmail: validated.contactEmail,
+          contactPhone: validated.contactPhone,
+        },
+      },
+      timestamp: new Date(),
     });
 
     revalidatePath("/");
