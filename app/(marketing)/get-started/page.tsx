@@ -1,4 +1,3 @@
-import { Metadata } from 'next';
 import {
   Container,
   Typography,
@@ -12,11 +11,15 @@ import {
   StepContent,
 } from '@mui/material';
 import Link from 'next/link';
+import { generatePageMetadata, getBreadcrumbSchema } from '@/lib/config/seo';
+import StructuredData from '@/components/ui/StructuredData';
 
-export const metadata: Metadata = {
-  title: 'Get Started - OpenLeague',
-  description: 'Start managing your sports team with OpenLeague. Quick setup guide and onboarding.',
-};
+export const metadata = generatePageMetadata({
+  title: 'Get Started',
+  description: 'Start managing your sports team with OpenLeague in minutes. Quick setup guide and onboarding to get your team organized.',
+  path: '/get-started',
+  keywords: ['getting started', 'onboarding', 'setup guide', 'quick start'],
+});
 
 const steps = [
   {
@@ -68,130 +71,138 @@ const steps = [
 ];
 
 export default function GetStartedPage() {
+  const breadcrumbSchema = getBreadcrumbSchema([
+    { name: 'Home', url: '/' },
+    { name: 'Get Started', url: '/get-started' },
+  ]);
+
   return (
-    <Container maxWidth="lg">
-      <Box sx={{ py: 8 }}>
-        <Typography variant="h1" component="h1" gutterBottom textAlign="center">
-          Get Started with OpenLeague
-        </Typography>
-        <Typography variant="h5" color="text.secondary" textAlign="center" sx={{ mb: 2 }}>
-          Your team can be up and running in minutes.
-        </Typography>
-        <Typography variant="body1" color="text.secondary" textAlign="center" sx={{ mb: 6 }}>
-          Follow these simple steps to replace your spreadsheets and group chats with OpenLeague.
-        </Typography>
+    <>
+      <StructuredData data={breadcrumbSchema} />
+      <Container maxWidth="lg">
+        <Box sx={{ py: 8 }}>
+          <Typography variant="h1" component="h1" gutterBottom textAlign="center">
+            Get Started with OpenLeague
+          </Typography>
+          <Typography variant="h5" color="text.secondary" textAlign="center" sx={{ mb: 2 }}>
+            Your team can be up and running in minutes.
+          </Typography>
+          <Typography variant="body1" color="text.secondary" textAlign="center" sx={{ mb: 6 }}>
+            Follow these simple steps to replace your spreadsheets and group chats with OpenLeague.
+          </Typography>
 
-        <Box sx={{ display: 'flex', justifyContent: 'center', mb: 8 }}>
-          <Button component={Link} href="/signup" variant="contained" size="large">
-            Sign Up Now
-          </Button>
-        </Box>
+          <Box sx={{ display: 'flex', justifyContent: 'center', mb: 8 }}>
+            <Button component={Link} href="/signup" variant="contained" size="large">
+              Sign Up Now
+            </Button>
+          </Box>
 
-        <Stepper orientation="vertical" sx={{ mb: 8 }}>
-          {steps.map((step) => (
-            <Step key={step.label} active={true} expanded={true}>
-              <StepLabel>
-                <Typography variant="h6">{step.label}</Typography>
-              </StepLabel>
-              <StepContent>
-                <Typography variant="body1" paragraph>
-                  {step.description}
-                </Typography>
-                {step.details && (
-                  <Box component="ul" sx={{ mt: 2, pl: 2 }}>
-                    {step.details.map((detail) => (
-                      <Typography component="li" key={detail} variant="body2" color="text.secondary">
-                        {detail}
-                      </Typography>
-                    ))}
-                  </Box>
-                )}
-                {step.action && step.actionHref && (
-                  <Button
-                    component={Link}
-                    href={step.actionHref}
-                    variant="contained"
-                    sx={{ mt: 2 }}
-                  >
-                    {step.action}
+          <Stepper orientation="vertical" sx={{ mb: 8 }}>
+            {steps.map((step) => (
+              <Step key={step.label} active={true} expanded={true}>
+                <StepLabel>
+                  <Typography variant="h6">{step.label}</Typography>
+                </StepLabel>
+                <StepContent>
+                  <Typography variant="body1" paragraph>
+                    {step.description}
+                  </Typography>
+                  {step.details && (
+                    <Box component="ul" sx={{ mt: 2, pl: 2 }}>
+                      {step.details.map((detail) => (
+                        <Typography component="li" key={detail} variant="body2" color="text.secondary">
+                          {detail}
+                        </Typography>
+                      ))}
+                    </Box>
+                  )}
+                  {step.action && step.actionHref && (
+                    <Button
+                      component={Link}
+                      href={step.actionHref}
+                      variant="contained"
+                      sx={{ mt: 2 }}
+                    >
+                      {step.action}
+                    </Button>
+                  )}
+                </StepContent>
+              </Step>
+            ))}
+          </Stepper>
+
+          <Box sx={{ mb: 8 }}>
+            <Typography variant="h4" component="h2" gutterBottom textAlign="center">
+              Need Help?
+            </Typography>
+            <Typography variant="body1" color="text.secondary" textAlign="center" sx={{ mb: 4 }}>
+              We&apos;re here to help you get started successfully.
+            </Typography>
+
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' },
+                gap: 3,
+              }}
+            >
+              <Card>
+                <CardContent>
+                  <Typography variant="h6" gutterBottom>
+                    Documentation
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" paragraph>
+                    Comprehensive guides and tutorials to help you make the most of OpenLeague.
+                  </Typography>
+                  <Button component={Link} href="/docs" size="small">
+                    View Docs
                   </Button>
-                )}
-              </StepContent>
-            </Step>
-          ))}
-        </Stepper>
+                </CardContent>
+              </Card>
 
-        <Box sx={{ mb: 8 }}>
-          <Typography variant="h4" component="h2" gutterBottom textAlign="center">
-            Need Help?
-          </Typography>
-          <Typography variant="body1" color="text.secondary" textAlign="center" sx={{ mb: 4 }}>
-            We&apos;re here to help you get started successfully.
-          </Typography>
+              <Card>
+                <CardContent>
+                  <Typography variant="h6" gutterBottom>
+                    User Guide
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" paragraph>
+                    Step-by-step instructions for common tasks and features.
+                  </Typography>
+                  <Button component={Link} href="/docs/user-guide" size="small">
+                    Read Guide
+                  </Button>
+                </CardContent>
+              </Card>
 
-          <Box
-            sx={{
-              display: 'grid',
-              gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' },
-              gap: 3,
-            }}
-          >
-            <Card>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  Documentation
-                </Typography>
-                <Typography variant="body2" color="text.secondary" paragraph>
-                  Comprehensive guides and tutorials to help you make the most of OpenLeague.
-                </Typography>
-                <Button component={Link} href="/docs" size="small">
-                  View Docs
-                </Button>
-              </CardContent>
-            </Card>
+              <Card>
+                <CardContent>
+                  <Typography variant="h6" gutterBottom>
+                    Contact Support
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" paragraph>
+                    Have questions? Our support team is ready to help.
+                  </Typography>
+                  <Button component={Link} href="/contact" size="small">
+                    Get Help
+                  </Button>
+                </CardContent>
+              </Card>
+            </Box>
+          </Box>
 
-            <Card>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  User Guide
-                </Typography>
-                <Typography variant="body2" color="text.secondary" paragraph>
-                  Step-by-step instructions for common tasks and features.
-                </Typography>
-                <Button component={Link} href="/docs/user-guide" size="small">
-                  Read Guide
-                </Button>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  Contact Support
-                </Typography>
-                <Typography variant="body2" color="text.secondary" paragraph>
-                  Have questions? Our support team is ready to help.
-                </Typography>
-                <Button component={Link} href="/contact" size="small">
-                  Get Help
-                </Button>
-              </CardContent>
-            </Card>
+          <Box sx={{ textAlign: 'center', p: 4, bgcolor: 'background.paper', borderRadius: 2 }}>
+            <Typography variant="h5" gutterBottom>
+              Ready to Get Started?
+            </Typography>
+            <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
+              Sign up and begin managing your team in minutes.
+            </Typography>
+            <Button component={Link} href="/signup" variant="contained" size="large">
+              Sign Up Now
+            </Button>
           </Box>
         </Box>
-
-        <Box sx={{ textAlign: 'center', p: 4, bgcolor: 'background.paper', borderRadius: 2 }}>
-          <Typography variant="h5" gutterBottom>
-            Ready to Get Started?
-          </Typography>
-          <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-            Sign up and begin managing your team in minutes.
-          </Typography>
-          <Button component={Link} href="/signup" variant="contained" size="large">
-            Sign Up Now
-          </Button>
-        </Box>
-      </Box>
-    </Container>
+      </Container>
+    </>
   );
 }

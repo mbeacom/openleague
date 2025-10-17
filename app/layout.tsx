@@ -7,6 +7,8 @@ import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import LayoutProvider from "@/components/providers/LayoutProvider";
 import ErrorBoundary from "@/components/ui/ErrorBoundary";
 import { ToastProvider } from "@/components/ui/Toast";
+import StructuredData from "@/components/ui/StructuredData";
+import { getOrganizationSchema, getSoftwareApplicationSchema } from "@/lib/config/seo";
 
 // Validate environment variables on startup
 import "@/lib/env";
@@ -19,10 +21,27 @@ const roboto = Roboto({
 });
 
 export const metadata: Metadata = {
-  title: "OpenLeague - Affordable Sports Team Management Platform",
+  metadataBase: new URL("https://openl.app"),
+  title: {
+    default: "OpenLeague - Free Sports Team Management Platform",
+    template: "%s - OpenLeague",
+  },
   description:
-    "Replace chaotic spreadsheets, group chats, and email chains with a single source of truth for sports team management. Transparent, affordable pricing.",
-  keywords: "sports team management, team organization, roster management, scheduling, affordable team management software, open source",
+    "Replace chaotic spreadsheets, group chats, and email chains with a single source of truth for sports team management. Free, open-source, and easy to use.",
+  keywords: [
+    "sports team management",
+    "team organization",
+    "roster management",
+    "scheduling software",
+    "free team management",
+    "sports scheduling",
+    "team calendar",
+    "RSVP tracking",
+    "open source sports",
+  ],
+  authors: [{ name: "OpenLeague Team" }],
+  creator: "OpenLeague",
+  publisher: "OpenLeague",
   manifest: "/site.webmanifest",
   icons: {
     icon: [
@@ -38,16 +57,46 @@ export const metadata: Metadata = {
       { rel: "android-chrome", url: "/android-chrome-512x512.png", sizes: "512x512", type: "image/png" },
     ],
   },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
   openGraph: {
-    title: "OpenLeague - Affordable Sports Team Management Platform",
-    description: "Replace chaotic spreadsheets, group chats, and email chains with a single source of truth for sports team management. Transparent, affordable pricing.",
     type: "website",
+    locale: "en_US",
     url: "https://openl.app",
+    siteName: "OpenLeague",
+    title: "OpenLeague - Free Sports Team Management Platform",
+    description: "Replace chaotic spreadsheets, group chats, and email chains with a single source of truth for sports team management. Free, open-source, and easy to use.",
+    images: [
+      {
+        url: "/images/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "OpenLeague - Free Sports Team Management",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "OpenLeague - Affordable Sports Team Management Platform",
-    description: "Replace chaotic spreadsheets, group chats, and email chains with a single source of truth for sports team management. Transparent, affordable pricing.",
+    site: "@openleague",
+    creator: "@openleague",
+    title: "OpenLeague - Free Sports Team Management Platform",
+    description: "Replace chaotic spreadsheets, group chats, and email chains with a single source of truth for sports team management. Free, open-source, and easy to use.",
+    images: ["/images/og-image.png"],
+  },
+  alternates: {
+    canonical: "https://openl.app",
+  },
+  verification: {
+    google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION,
   },
 };
 
@@ -60,6 +109,11 @@ export default function RootLayout({
 
   return (
     <html lang="en">
+      <head>
+        <StructuredData
+          data={[getOrganizationSchema(), getSoftwareApplicationSchema()]}
+        />
+      </head>
       <body className={roboto.variable}>
         {umamiWebsiteId && (
           <Script

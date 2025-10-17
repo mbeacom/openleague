@@ -9,6 +9,8 @@ import FeaturesPreview from "@/components/features/marketing/FeaturesPreview";
 import HowItWorks from "@/components/features/marketing/HowItWorks";
 import FinalCTA from "@/components/features/marketing/FinalCTA";
 import { useScrollTracking } from "@/lib/hooks/useScrollTracking";
+import StructuredData from "@/components/ui/StructuredData";
+import { getBreadcrumbSchema } from "@/lib/config/seo";
 
 /**
  * Root Landing Page
@@ -54,12 +56,19 @@ export default function HomePage() {
   }
 
   // Unauthenticated user - show marketing landing page with header/footer
+  const breadcrumbSchema = getBreadcrumbSchema([
+    { name: 'Home', url: '/' },
+  ]);
+
   return (
-    <Box>
-      <HeroSection />
-      <FeaturesPreview />
-      <HowItWorks />
-      <FinalCTA />
-    </Box>
+    <>
+      <StructuredData data={breadcrumbSchema} />
+      <Box>
+        <HeroSection />
+        <FeaturesPreview />
+        <HowItWorks />
+        <FinalCTA />
+      </Box>
+    </>
   );
 }
