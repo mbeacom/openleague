@@ -24,7 +24,7 @@ export const SITE_CONFIG = {
         'RSVP tracking',
         'open source sports',
     ],
-} as const;
+};
 
 /**
  * Generate metadata for a page
