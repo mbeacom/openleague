@@ -10,6 +10,7 @@ vi.mock('@/lib/db/prisma', () => ({
         },
         player: {
             count: vi.fn(),
+            findMany: vi.fn(),
         },
         event: {
             count: vi.fn(),
@@ -35,11 +36,16 @@ describe('League Statistics Service', () => {
             const leagueId = 'league-1';
 
             // Mock overview data
-            vi.mocked(prisma.team.count).mockResolvedValueOnce(5); // totalTeams
-            vi.mocked(prisma.player.count).mockResolvedValueOnce(50); // totalPlayers
+            vi.mocked(prisma.team.count)
+                .mockResolvedValueOnce(5) // totalTeams
+                .mockResolvedValueOnce(0); // In trends analysis
+            vi.mocked(prisma.player.count)
+                .mockResolvedValueOnce(50) // totalPlayers
+                .mockResolvedValue(0); // In trends analysis
             vi.mocked(prisma.event.count)
                 .mockResolvedValueOnce(20) // totalEvents
-                .mockResolvedValueOnce(8); // upcomingEvents
+                .mockResolvedValueOnce(8) // upcomingEvents
+                .mockResolvedValue(0);
             vi.mocked(prisma.division.count).mockResolvedValueOnce(3); // activeDivisions
 
             // Mock participation data
@@ -51,8 +57,8 @@ describe('League Statistics Service', () => {
                 { status: 'NO_RESPONSE' },
             ] as unknown as Awaited<ReturnType<typeof prisma.rSVP.findMany>>);
 
-            // Mock attendance data
-            vi.mocked(prisma.team.findMany).mockResolvedValueOnce([
+            // Mock attendance and trend data
+            const attendanceTeamMock = [
                 {
                     id: 'team-1',
                     name: 'Team A',
@@ -64,7 +70,17 @@ describe('League Statistics Service', () => {
                         },
                     ],
                 },
-            ] as unknown as Awaited<ReturnType<typeof prisma.team.findMany>>);
+            ] as unknown as Awaited<ReturnType<typeof prisma.team.findMany>>;
+
+            const trendTeamMock = [
+                { createdAt: new Date('2024-10-15') },
+                { createdAt: new Date('2024-10-20') },
+            ] as unknown as Awaited<ReturnType<typeof prisma.team.findMany>>;
+
+            // Use mockResolvedValueOnce for sequential calls
+            vi.mocked(prisma.team.findMany)
+                .mockResolvedValueOnce(attendanceTeamMock)
+                .mockResolvedValueOnce(trendTeamMock);
 
             vi.mocked(prisma.division.findMany).mockResolvedValueOnce([
                 {
@@ -83,14 +99,15 @@ describe('League Statistics Service', () => {
                 },
             ] as unknown as Awaited<ReturnType<typeof prisma.division.findMany>>);
 
-            // Mock trend analysis data
-            vi.mocked(prisma.team.count)
-                .mockResolvedValueOnce(5)
-                .mockResolvedValue(1);
-            vi.mocked(prisma.player.count).mockResolvedValue(5);
-            vi.mocked(prisma.event.count).mockResolvedValue(2);
+            // Mock trend analysis player and event data
+            vi.mocked(prisma.player.findMany).mockResolvedValue([
+                { createdAt: new Date('2024-10-10') },
+                { createdAt: new Date('2024-10-18') },
+            ] as unknown as Awaited<ReturnType<typeof prisma.player.findMany>>);
             vi.mocked(prisma.event.findMany).mockResolvedValue([
                 {
+                    createdAt: new Date('2024-10-12'),
+                    startAt: new Date('2024-10-25'),
                     rsvps: [{ status: 'GOING' }, { status: 'NOT_GOING' }],
                 },
             ] as unknown as Awaited<ReturnType<typeof prisma.event.findMany>>);
@@ -144,6 +161,7 @@ describe('League Statistics Service', () => {
             ] as unknown as Awaited<ReturnType<typeof prisma.rSVP.findMany>>);
 
             vi.mocked(prisma.team.findMany).mockResolvedValue([]);
+            vi.mocked(prisma.player.findMany).mockResolvedValue([]);
             vi.mocked(prisma.division.findMany).mockResolvedValue([]);
             vi.mocked(prisma.event.findMany).mockResolvedValue([]);
 
@@ -161,6 +179,7 @@ describe('League Statistics Service', () => {
             vi.mocked(prisma.division.count).mockResolvedValue(0);
             vi.mocked(prisma.rSVP.findMany).mockResolvedValue([]);
             vi.mocked(prisma.team.findMany).mockResolvedValue([]);
+            vi.mocked(prisma.player.findMany).mockResolvedValue([]);
             vi.mocked(prisma.division.findMany).mockResolvedValue([]);
             vi.mocked(prisma.event.findMany).mockResolvedValue([]);
 

@@ -56,17 +56,36 @@ export const LeagueMessagesView: React.FC<LeagueMessagesViewProps> = ({
   const totalMembers = leagueData.teams.reduce((sum, team) => sum + team.memberCount, 0);
 
   return (
-    <Box>
+    <Box sx={{ p: { xs: 2, sm: 3 } }}>
       {/* Action Bar */}
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Tabs value={activeTab} onChange={handleTabChange}>
+      <Box
+        display="flex"
+        justifyContent="space-between"
+        alignItems="center"
+        mb={{ xs: 2, sm: 3 }}
+        flexWrap="wrap"
+        gap={2}
+      >
+        <Tabs
+          value={activeTab}
+          onChange={handleTabChange}
+          variant="scrollable"
+          scrollButtons="auto"
+          sx={{
+            '& .MuiTab-root': {
+              minHeight: { xs: 48, sm: 64 },
+              fontSize: { xs: '0.8rem', sm: '0.875rem' },
+              px: { xs: 1, sm: 2 }
+            }
+          }}
+        >
           <Tab
-            icon={<HistoryIcon />}
+            icon={<HistoryIcon sx={{ fontSize: { xs: 18, sm: 20 } }} />}
             label="All Messages"
             iconPosition="start"
           />
           <Tab
-            icon={<CampaignIcon />}
+            icon={<CampaignIcon sx={{ fontSize: { xs: 18, sm: 20 } }} />}
             label="Announcements"
             iconPosition="start"
           />
@@ -76,9 +95,14 @@ export const LeagueMessagesView: React.FC<LeagueMessagesViewProps> = ({
           <Box>
             <Button
               variant="contained"
-              startIcon={<SendIcon />}
+              startIcon={<SendIcon sx={{ display: { xs: 'none', sm: 'inline-flex' } }} />}
               endIcon={<ArrowDownIcon />}
               onClick={handleSendMenuOpen}
+              size="small"
+              sx={{
+                minHeight: 44,
+                fontSize: { xs: '0.8rem', sm: '0.875rem' }
+              }}
             >
               Send
             </Button>
@@ -86,6 +110,13 @@ export const LeagueMessagesView: React.FC<LeagueMessagesViewProps> = ({
               anchorEl={sendMenuAnchor}
               open={Boolean(sendMenuAnchor)}
               onClose={handleSendMenuClose}
+              sx={{
+                '& .MuiMenuItem-root': {
+                  minHeight: 56,
+                  px: 2,
+                  fontSize: { xs: '0.875rem', sm: '1rem' }
+                }
+              }}
             >
               <MenuItem
                 onClick={() => {
@@ -93,7 +124,7 @@ export const LeagueMessagesView: React.FC<LeagueMessagesViewProps> = ({
                   handleSendMenuClose();
                 }}
               >
-                <SendIcon sx={{ mr: 1 }} />
+                <SendIcon sx={{ mr: 1, fontSize: { xs: 18, sm: 20 } }} />
                 Send Targeted Message
               </MenuItem>
               <MenuItem
@@ -102,7 +133,7 @@ export const LeagueMessagesView: React.FC<LeagueMessagesViewProps> = ({
                   handleSendMenuClose();
                 }}
               >
-                <CampaignIcon sx={{ mr: 1 }} />
+                <CampaignIcon sx={{ mr: 1, fontSize: { xs: 18, sm: 20 } }} />
                 Send League Announcement
               </MenuItem>
             </Menu>

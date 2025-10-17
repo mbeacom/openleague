@@ -110,15 +110,26 @@ export default function LeagueDashboard({ league }: LeagueDashboardProps) {
   };
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box sx={{ p: { xs: 2, sm: 3 } }}>
       {/* Header */}
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" component="h1" gutterBottom>
+      <Box sx={{ mb: { xs: 3, sm: 4 } }}>
+        <Typography
+          variant="h4"
+          component="h1"
+          gutterBottom
+          sx={{ fontSize: { xs: '1.75rem', sm: '2.125rem' } }}
+        >
           {league.name}
         </Typography>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-          <Chip label={league.sport} color="primary" />
-          <Typography variant="body2" color="text.secondary">
+        <Box sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: { xs: 1, sm: 2 },
+          mb: 2,
+          flexWrap: 'wrap'
+        }}>
+          <Chip label={league.sport} color="primary" size="small" />
+          <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
             Created {formatDistanceToNow(new Date(league.createdAt))} ago
           </Typography>
         </Box>
@@ -195,58 +206,83 @@ export default function LeagueDashboard({ league }: LeagueDashboardProps) {
 
       {/* Quick Actions */}
       <Card sx={{ mb: 3 }}>
-        <CardContent>
-          <Typography variant="h6" gutterBottom>
+        <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
+          <Typography variant="h6" gutterBottom sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}>
             Quick Actions
           </Typography>
-          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+          <Box sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)', md: 'repeat(6, 1fr)' },
+            gap: { xs: 1, sm: 2 }
+          }}>
             <Button
               variant="contained"
-              startIcon={<AddIcon />}
+              startIcon={<AddIcon sx={{ display: { xs: 'none', sm: 'inline-flex' } }} />}
               component={Link}
               href={`/league/${league.id}/teams/new`}
+              fullWidth
+              size="small"
+              sx={{
+                fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                py: { xs: 1, sm: 1.5 }
+              }}
             >
               Add Team
             </Button>
             <Button
               variant="outlined"
-              startIcon={<ScheduleIcon />}
+              startIcon={<ScheduleIcon sx={{ display: { xs: 'none', sm: 'inline-flex' } }} />}
               component={Link}
               href={`/league/${league.id}/schedule/new-game`}
+              fullWidth
+              size="small"
+              sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
             >
-              Schedule Game
+              Schedule
             </Button>
             <Button
               variant="outlined"
-              startIcon={<AnnouncementIcon />}
+              startIcon={<AnnouncementIcon sx={{ display: { xs: 'none', sm: 'inline-flex' } }} />}
               component={Link}
               href={`/league/${league.id}/messages/new`}
+              fullWidth
+              size="small"
+              sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
             >
-              Send Announcement
+              Announce
             </Button>
             <Button
               variant="outlined"
-              startIcon={<DivisionIcon />}
+              startIcon={<DivisionIcon sx={{ display: { xs: 'none', sm: 'inline-flex' } }} />}
               component={Link}
               href={`/league/${league.id}/divisions/new`}
+              fullWidth
+              size="small"
+              sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
             >
-              Create Division
+              Division
             </Button>
             <Button
               variant="outlined"
-              startIcon={<AssessmentIcon />}
+              startIcon={<AssessmentIcon sx={{ display: { xs: 'none', sm: 'inline-flex' } }} />}
               component={Link}
               href={`/league/${league.id}/statistics`}
+              fullWidth
+              size="small"
+              sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
             >
-              View Statistics
+              Stats
             </Button>
             <Button
               variant="outlined"
-              startIcon={<DownloadIcon />}
+              startIcon={<DownloadIcon sx={{ display: { xs: 'none', sm: 'inline-flex' } }} />}
               component={Link}
               href={`/league/${league.id}/reports`}
+              fullWidth
+              size="small"
+              sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
             >
-              Export Reports
+              Reports
             </Button>
           </Box>
         </CardContent>
@@ -256,20 +292,28 @@ export default function LeagueDashboard({ league }: LeagueDashboardProps) {
       <Box sx={{
         display: 'grid',
         gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
-        gap: 3,
-        mb: 3
+        gap: { xs: 2, sm: 3 },
+        mb: { xs: 2, sm: 3 }
       }}>
         {/* Upcoming Events */}
         <Card>
-          <CardContent>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-              <Typography variant="h6">
+          <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
+            <Box sx={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              mb: 2,
+              flexWrap: 'wrap',
+              gap: 1
+            }}>
+              <Typography variant="h6" sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}>
                 Upcoming Events
               </Typography>
               <Button
                 size="small"
                 component={Link}
                 href={`/league/${league.id}/schedule`}
+                sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
               >
                 View All
               </Button>
@@ -282,27 +326,44 @@ export default function LeagueDashboard({ league }: LeagueDashboardProps) {
               <List dense>
                 {league.upcomingEvents.map((event, index) => (
                   <React.Fragment key={event.id}>
-                    <ListItem sx={{ px: 0 }}>
-                      <ListItemIcon>
-                        <Avatar sx={{ width: 32, height: 32, bgcolor: 'primary.main' }}>
+                    <ListItem sx={{ px: 0, py: { xs: 1.5, sm: 2 } }}>
+                      <ListItemIcon sx={{ minWidth: { xs: 40, sm: 56 } }}>
+                        <Avatar sx={{ width: { xs: 28, sm: 32 }, height: { xs: 28, sm: 32 }, bgcolor: 'primary.main' }}>
                           <EventIcon fontSize="small" />
                         </Avatar>
                       </ListItemIcon>
                       <ListItemText
                         primary={
                           <Box>
-                            <Typography variant="subtitle2" component="div">
+                            <Typography
+                              variant="subtitle2"
+                              component="div"
+                              sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}
+                            >
                               {event.title}
                             </Typography>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
-                              <TimeIcon fontSize="small" color="action" />
-                              <Typography variant="caption" color="text.secondary">
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
+                              <TimeIcon sx={{ fontSize: { xs: 14, sm: 16 } }} color="action" />
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                                sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}
+                              >
                                 {format(new Date(event.startAt), 'MMM d, h:mm a')}
                               </Typography>
                             </Box>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <LocationIcon fontSize="small" color="action" />
-                              <Typography variant="caption" color="text.secondary">
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                              <LocationIcon sx={{ fontSize: { xs: 14, sm: 16 } }} color="action" />
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                                sx={{
+                                  fontSize: { xs: '0.7rem', sm: '0.75rem' },
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap'
+                                }}
+                              >
                                 {event.location}
                               </Typography>
                             </Box>
@@ -313,6 +374,9 @@ export default function LeagueDashboard({ league }: LeagueDashboardProps) {
                             ? `${event.homeTeamName} vs ${event.awayTeamName}`
                             : event.teamName
                         }
+                        secondaryTypographyProps={{
+                          sx: { fontSize: { xs: '0.7rem', sm: '0.75rem' } }
+                        }}
                       />
                     </ListItem>
                     {index < league.upcomingEvents.length - 1 && <Divider />}
@@ -325,8 +389,8 @@ export default function LeagueDashboard({ league }: LeagueDashboardProps) {
 
         {/* Recent Activity */}
         <Card>
-          <CardContent>
-            <Typography variant="h6" gutterBottom>
+          <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
+            <Typography variant="h6" gutterBottom sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}>
               Recent Activity
             </Typography>
             {league.recentActivity.length === 0 ? (
@@ -337,12 +401,12 @@ export default function LeagueDashboard({ league }: LeagueDashboardProps) {
               <List dense>
                 {league.recentActivity.map((activity, index) => (
                   <React.Fragment key={activity.id}>
-                    <ListItem sx={{ px: 0 }}>
-                      <ListItemIcon>
+                    <ListItem sx={{ px: 0, py: { xs: 1.5, sm: 2 } }}>
+                      <ListItemIcon sx={{ minWidth: { xs: 40, sm: 56 } }}>
                         <Avatar
                           sx={{
-                            width: 32,
-                            height: 32,
+                            width: { xs: 28, sm: 32 },
+                            height: { xs: 28, sm: 32 },
                             bgcolor: `${getActivityColor(activity.type)}.main`
                           }}
                         >
@@ -352,6 +416,12 @@ export default function LeagueDashboard({ league }: LeagueDashboardProps) {
                       <ListItemText
                         primary={activity.description}
                         secondary={formatDistanceToNow(new Date(activity.timestamp), { addSuffix: true })}
+                        primaryTypographyProps={{
+                          sx: { fontSize: { xs: '0.875rem', sm: '1rem' } }
+                        }}
+                        secondaryTypographyProps={{
+                          sx: { fontSize: { xs: '0.7rem', sm: '0.75rem' } }
+                        }}
                       />
                     </ListItem>
                     {index < league.recentActivity.length - 1 && <Divider />}
@@ -366,15 +436,23 @@ export default function LeagueDashboard({ league }: LeagueDashboardProps) {
       {/* Divisions Overview */}
       {league.divisions.length > 0 && (
         <Card>
-          <CardContent>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-              <Typography variant="h6">
+          <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
+            <Box sx={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              mb: 2,
+              flexWrap: 'wrap',
+              gap: 1
+            }}>
+              <Typography variant="h6" sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}>
                 Divisions
               </Typography>
               <Button
                 size="small"
                 component={Link}
                 href={`/league/${league.id}/teams`}
+                sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
               >
                 Manage Teams
               </Button>
@@ -382,23 +460,31 @@ export default function LeagueDashboard({ league }: LeagueDashboardProps) {
             <Box sx={{
               display: 'grid',
               gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' },
-              gap: 2
+              gap: { xs: 1.5, sm: 2 }
             }}>
               {league.divisions.map((division) => (
                 <Card variant="outlined" key={division.id}>
-                  <CardContent sx={{ py: 2 }}>
-                    <Typography variant="subtitle1" gutterBottom>
+                  <CardContent sx={{ py: { xs: 1.5, sm: 2 }, px: { xs: 1.5, sm: 2 } }}>
+                    <Typography
+                      variant="subtitle1"
+                      gutterBottom
+                      sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}
+                    >
                       {division.name}
                     </Typography>
-                    <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
+                    <Box sx={{ display: 'flex', gap: 0.5, mb: 1, flexWrap: 'wrap' }}>
                       {division.ageGroup && (
-                        <Chip label={division.ageGroup} size="small" />
+                        <Chip label={division.ageGroup} size="small" sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }} />
                       )}
                       {division.skillLevel && (
-                        <Chip label={division.skillLevel} size="small" variant="outlined" />
+                        <Chip label={division.skillLevel} size="small" variant="outlined" sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }} />
                       )}
                     </Box>
-                    <Typography variant="body2" color="text.secondary">
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
+                    >
                       {division.teamCount} {division.teamCount === 1 ? 'team' : 'teams'}
                     </Typography>
                   </CardContent>

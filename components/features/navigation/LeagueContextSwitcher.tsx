@@ -57,9 +57,11 @@ const LeagueContextSwitcher = React.memo(function LeagueContextSwitcher({
             textTransform: 'none',
             color: 'text.primary',
             minWidth: 'auto',
+            minHeight: 44, // Touch-friendly height
+            px: 1.5,
           }}
         >
-          <Typography variant="body2" noWrap sx={{ maxWidth: 120 }}>
+          <Typography variant="body2" noWrap sx={{ maxWidth: { xs: 100, sm: 120 }, fontSize: { xs: '0.8rem', sm: '0.875rem' } }}>
             {currentLeague?.name}
           </Typography>
         </Button>
@@ -68,6 +70,12 @@ const LeagueContextSwitcher = React.memo(function LeagueContextSwitcher({
           open={open}
           onClose={handleClose}
           anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+          sx={{
+            '& .MuiMenuItem-root': {
+              minHeight: 56, // Touch-friendly menu items
+              px: 2,
+            }
+          }}
         >
           {leagues.map((league) => (
             <MenuItem
@@ -85,6 +93,12 @@ const LeagueContextSwitcher = React.memo(function LeagueContextSwitcher({
               <ListItemText
                 primary={league.name}
                 secondary={league.sport}
+                primaryTypographyProps={{
+                  sx: { fontSize: { xs: '0.875rem', sm: '1rem' } }
+                }}
+                secondaryTypographyProps={{
+                  sx: { fontSize: { xs: '0.75rem', sm: '0.875rem' } }
+                }}
               />
             </MenuItem>
           ))}
@@ -102,14 +116,25 @@ const LeagueContextSwitcher = React.memo(function LeagueContextSwitcher({
         sx={{
           textTransform: 'none',
           justifyContent: 'space-between',
-          minWidth: 200,
+          minWidth: { xs: 180, sm: 200 },
+          minHeight: 48, // Touch-friendly height
         }}
       >
         <Box sx={{ textAlign: 'left' }}>
-          <Typography variant="body2" sx={{ fontWeight: 600 }}>
+          <Typography
+            variant="body2"
+            sx={{
+              fontWeight: 600,
+              fontSize: { xs: '0.875rem', sm: '0.875rem' }
+            }}
+          >
             {currentLeague?.name}
           </Typography>
-          <Typography variant="caption" color="text.secondary">
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}
+          >
             {currentLeague?.sport}
           </Typography>
         </Box>
@@ -120,7 +145,13 @@ const LeagueContextSwitcher = React.memo(function LeagueContextSwitcher({
         onClose={handleClose}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
         transformOrigin={{ vertical: 'top', horizontal: 'left' }}
-        sx={{ mt: 1 }}
+        sx={{
+          mt: 1,
+          '& .MuiMenuItem-root': {
+            minHeight: 56, // Touch-friendly menu items
+            px: 2,
+          }
+        }}
       >
         {leagues.map((league) => (
           <MenuItem
@@ -138,6 +169,12 @@ const LeagueContextSwitcher = React.memo(function LeagueContextSwitcher({
             <ListItemText
               primary={league.name}
               secondary={league.sport}
+              primaryTypographyProps={{
+                sx: { fontSize: { xs: '0.875rem', sm: '1rem' } }
+              }}
+              secondaryTypographyProps={{
+                sx: { fontSize: { xs: '0.75rem', sm: '0.875rem' } }
+              }}
             />
           </MenuItem>
         ))}

@@ -94,87 +94,134 @@ export default function LeagueStatisticsDashboard({ statistics }: LeagueStatisti
     const trendDirection = getTrendDirection();
 
     return (
-        <Box sx={{ p: 3 }}>
-            <Typography variant="h5" gutterBottom sx={{ mb: 3 }}>
+        <Box sx={{ p: { xs: 2, sm: 3 } }}>
+            <Typography
+                variant="h5"
+                gutterBottom
+                sx={{
+                    mb: { xs: 2, sm: 3 },
+                    fontSize: { xs: '1.25rem', sm: '1.5rem' }
+                }}
+            >
                 League Statistics & Analytics
             </Typography>
 
             {/* Participation Overview */}
-            <Card sx={{ mb: 3 }}>
-                <CardContent>
-                    <Typography variant="h6" gutterBottom>
+            <Card sx={{ mb: { xs: 2, sm: 3 } }}>
+                <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
+                    <Typography
+                        variant="h6"
+                        gutterBottom
+                        sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}
+                    >
                         Participation Overview
                     </Typography>
-                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 3 }}>
+                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: { xs: 2, sm: 3 } }}>
                         <Box>
                             <Box sx={{ mb: 2 }}>
-                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                                    <Typography variant="body2" color="text.secondary">
+                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1, flexWrap: 'wrap', gap: 1 }}>
+                                    <Typography
+                                        variant="body2"
+                                        color="text.secondary"
+                                        sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
+                                    >
                                         Overall Participation Rate
                                     </Typography>
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                        <Typography variant="h6" color="primary">
+                                        <Typography
+                                            variant="h6"
+                                            color="primary"
+                                            sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}
+                                        >
                                             {participation.participationRate}%
                                         </Typography>
                                         {trendDirection === 'up' && (
-                                            <TrendingUpIcon color="success" fontSize="small" />
+                                            <TrendingUpIcon color="success" sx={{ fontSize: { xs: 18, sm: 20 } }} />
                                         )}
                                         {trendDirection === 'down' && (
-                                            <TrendingDownIcon color="error" fontSize="small" />
+                                            <TrendingDownIcon color="error" sx={{ fontSize: { xs: 18, sm: 20 } }} />
                                         )}
                                     </Box>
                                 </Box>
                                 <LinearProgress
                                     variant="determinate"
                                     value={participation.participationRate}
-                                    sx={{ height: 8, borderRadius: 1 }}
+                                    sx={{ height: { xs: 6, sm: 8 }, borderRadius: 1 }}
                                 />
                             </Box>
-                            <Typography variant="caption" color="text.secondary">
+                            <Typography
+                                variant="caption"
+                                color="text.secondary"
+                                sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}
+                            >
                                 Based on {participation.totalRSVPs} total RSVPs across all events
                             </Typography>
                         </Box>
                         <Box>
-                            <Grid container spacing={2}>
+                            <Grid container spacing={{ xs: 1.5, sm: 2 }}>
                                 <Grid size={{ xs: 6 }}>
-                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                        <CheckCircleIcon color="success" />
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.5, sm: 1 } }}>
+                                        <CheckCircleIcon color="success" sx={{ fontSize: { xs: 20, sm: 24 } }} />
                                         <Box>
-                                            <Typography variant="h6">{participation.goingCount}</Typography>
-                                            <Typography variant="caption" color="text.secondary">
+                                            <Typography variant="h6" sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}>
+                                                {participation.goingCount}
+                                            </Typography>
+                                            <Typography
+                                                variant="caption"
+                                                color="text.secondary"
+                                                sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}
+                                            >
                                                 Going
                                             </Typography>
                                         </Box>
                                     </Box>
                                 </Grid>
                                 <Grid size={{ xs: 6 }}>
-                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                        <CancelIcon color="error" />
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.5, sm: 1 } }}>
+                                        <CancelIcon color="error" sx={{ fontSize: { xs: 20, sm: 24 } }} />
                                         <Box>
-                                            <Typography variant="h6">{participation.notGoingCount}</Typography>
-                                            <Typography variant="caption" color="text.secondary">
+                                            <Typography variant="h6" sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}>
+                                                {participation.notGoingCount}
+                                            </Typography>
+                                            <Typography
+                                                variant="caption"
+                                                color="text.secondary"
+                                                sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}
+                                            >
                                                 Not Going
                                             </Typography>
                                         </Box>
                                     </Box>
                                 </Grid>
                                 <Grid size={{ xs: 6 }}>
-                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                        <HelpOutlineIcon color="warning" />
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.5, sm: 1 } }}>
+                                        <HelpOutlineIcon color="warning" sx={{ fontSize: { xs: 20, sm: 24 } }} />
                                         <Box>
-                                            <Typography variant="h6">{participation.maybeCount}</Typography>
-                                            <Typography variant="caption" color="text.secondary">
+                                            <Typography variant="h6" sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}>
+                                                {participation.maybeCount}
+                                            </Typography>
+                                            <Typography
+                                                variant="caption"
+                                                color="text.secondary"
+                                                sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}
+                                            >
                                                 Maybe
                                             </Typography>
                                         </Box>
                                     </Box>
                                 </Grid>
                                 <Grid size={{ xs: 6 }}>
-                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                        <RemoveCircleOutlineIcon color="disabled" />
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.5, sm: 1 } }}>
+                                        <RemoveCircleOutlineIcon color="disabled" sx={{ fontSize: { xs: 20, sm: 24 } }} />
                                         <Box>
-                                            <Typography variant="h6">{participation.noResponseCount}</Typography>
-                                            <Typography variant="caption" color="text.secondary">
+                                            <Typography variant="h6" sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}>
+                                                {participation.noResponseCount}
+                                            </Typography>
+                                            <Typography
+                                                variant="caption"
+                                                color="text.secondary"
+                                                sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}
+                                            >
                                                 No Response
                                             </Typography>
                                         </Box>
@@ -187,13 +234,17 @@ export default function LeagueStatisticsDashboard({ statistics }: LeagueStatisti
             </Card>
 
             {/* Attendance by Team */}
-            <Card sx={{ mb: 3 }}>
-                <CardContent>
-                    <Typography variant="h6" gutterBottom>
+            <Card sx={{ mb: { xs: 2, sm: 3 } }}>
+                <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
+                    <Typography
+                        variant="h6"
+                        gutterBottom
+                        sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}
+                    >
                         Attendance by Team
                     </Typography>
-                    <TableContainer component={Paper} variant="outlined">
-                        <Table size="small">
+                    <TableContainer component={Paper} variant="outlined" sx={{ overflowX: 'auto' }}>
+                        <Table size="small" sx={{ minWidth: { xs: 500, sm: 'auto' } }}>
                             <TableHead>
                                 <TableRow>
                                     <TableCell>Team Name</TableCell>

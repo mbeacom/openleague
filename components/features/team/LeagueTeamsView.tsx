@@ -116,15 +116,23 @@ function TeamCard({ team, leagueId }: TeamCardProps) {
     <Card>
       <CardContent>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <Avatar sx={{ bgcolor: 'primary.main' }}>
-              <TeamsIcon />
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, sm: 2 } }}>
+            <Avatar sx={{ bgcolor: 'primary.main', width: { xs: 36, sm: 40 }, height: { xs: 36, sm: 40 } }}>
+              <TeamsIcon sx={{ fontSize: { xs: 18, sm: 20 } }} />
             </Avatar>
             <Box>
-              <Typography variant="h6" component="div">
+              <Typography
+                variant="h6"
+                component="div"
+                sx={{ fontSize: { xs: '0.95rem', sm: '1.25rem' } }}
+              >
                 {team.name}
               </Typography>
-              <Typography variant="body2" color="text.secondary">
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ fontSize: { xs: '0.7rem', sm: '0.875rem' } }}
+              >
                 {team.season} • {team.sport}
               </Typography>
             </Box>
@@ -133,36 +141,50 @@ function TeamCard({ team, leagueId }: TeamCardProps) {
             size="small"
             onClick={handleMenuOpen}
             aria-label="team options"
+            sx={{ mt: -0.5 }}
           >
-            <MoreVertIcon />
+            <MoreVertIcon fontSize="small" />
           </IconButton>
         </Box>
 
-        <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+        <Box sx={{ display: 'flex', gap: { xs: 1.5, sm: 2 }, mb: 2, flexWrap: 'wrap' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <PlayersIcon fontSize="small" color="action" />
-            <Typography variant="body2" color="text.secondary">
+            <PlayersIcon sx={{ fontSize: { xs: 16, sm: 18 } }} color="action" />
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
+            >
               {team._count.players} players
             </Typography>
           </Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <EventIcon fontSize="small" color="action" />
-            <Typography variant="body2" color="text.secondary">
+            <EventIcon sx={{ fontSize: { xs: 16, sm: 18 } }} color="action" />
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
+            >
               {team._count.events} events
             </Typography>
           </Box>
         </Box>
 
-        <Typography variant="caption" color="text.secondary">
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}
+        >
           Created {formatDistanceToNow(new Date(team.createdAt))} ago
         </Typography>
       </CardContent>
 
-      <CardActions>
+      <CardActions sx={{ px: { xs: 1.5, sm: 2 }, py: { xs: 1, sm: 1.5 } }}>
         <Button
           size="small"
           component={Link}
           href={`/league/${leagueId}/teams/${team.id}`}
+          sx={{ fontSize: { xs: '0.7rem', sm: '0.8125rem' } }}
         >
           View Team
         </Button>
@@ -170,6 +192,7 @@ function TeamCard({ team, leagueId }: TeamCardProps) {
           size="small"
           component={Link}
           href={`/league/${leagueId}/teams/${team.id}/roster`}
+          sx={{ fontSize: { xs: '0.7rem', sm: '0.8125rem' } }}
         >
           Roster
         </Button>
@@ -322,289 +345,299 @@ export default function LeagueTeamsView({ league }: LeagueTeamsViewProps) {
               Manage teams in {league.name}
             </Typography>
 
-        {/* Stats */}
-        <Box sx={{ display: 'flex', gap: 3, mt: 2 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <TeamsIcon color="primary" />
-            <Typography variant="body2">
-              {league.stats.totalTeams} teams
-            </Typography>
-          </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <PlayersIcon color="success" />
-            <Typography variant="body2">
-              {league.stats.totalPlayers} players
-            </Typography>
-          </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <DivisionIcon color="secondary" />
-            <Typography variant="body2">
-              {league.stats.totalDivisions} divisions
-            </Typography>
-          </Box>
-        </Box>
-      </Box>
-
-      {/* Search and Filters */}
-      <Box sx={{ mb: 3 }}>
-        <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
-          <TextField
-            placeholder="Search teams..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            size="small"
-            data-search-input
-            sx={{ flexGrow: 1, minWidth: 200 }}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon />
-                </InputAdornment>
-              ),
-            }}
-          />
-
-          <FormControl size="small" sx={{ minWidth: 150 }}>
-            <InputLabel>Division</InputLabel>
-            <Select
-              value={divisionFilter}
-              label="Division"
-              onChange={(e: SelectChangeEvent) => setDivisionFilter(e.target.value)}
-            >
-              <MenuItem value="all">All Divisions</MenuItem>
-              {league.divisions.map(division => (
-                <MenuItem key={division.id} value={division.id}>
-                  {division.name}
-                </MenuItem>
-              ))}
-              <MenuItem value="unassigned">Unassigned</MenuItem>
-            </Select>
-          </FormControl>
-
-          <FormControl size="small" sx={{ minWidth: 120 }}>
-            <InputLabel>Sort By</InputLabel>
-            <Select
-              value={sortBy}
-              label="Sort By"
-              onChange={(e: SelectChangeEvent<'name' | 'players' | 'created'>) =>
-                setSortBy(e.target.value as 'name' | 'players' | 'created')
-              }
-            >
-              <MenuItem value="name">Name</MenuItem>
-              <MenuItem value="players">Players</MenuItem>
-              <MenuItem value="created">Newest</MenuItem>
-            </Select>
-          </FormControl>
-
-          <Button
-            variant="outlined"
-            startIcon={<DownloadIcon />}
-            onClick={handleExport}
-            sx={{ ml: 'auto' }}
-          >
-            Export CSV
-          </Button>
-        </Box>
-      </Box>
-
-      {/* Quick Actions */}
-      <Box sx={{ display: 'flex', gap: 2, mb: 4, flexWrap: 'wrap' }}>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          component={Link}
-          href={`/league/${league.id}/teams/new`}
-        >
-          Add Team
-        </Button>
-        <Button
-          variant="outlined"
-          startIcon={<DivisionIcon />}
-          component={Link}
-          href={`/league/${league.id}/divisions/new`}
-        >
-          Create Division
-        </Button>
-      </Box>
-
-      {/* Results count */}
-      {(searchQuery || divisionFilter !== 'all') && (
-        <Box sx={{ mb: 2 }}>
-          <Typography variant="body2" color="text.secondary">
-            Showing {filteredTeams.length} of {allTeams.length} teams
-            {searchQuery && ` matching "${searchQuery}"`}
-          </Typography>
-        </Box>
-      )}
-
-      {/* Divisions with filtered teams */}
-      {league.divisions.map((division) => {
-        const divisionTeams = groupedTeams[division.id] || [];
-
-        // Skip division if no teams match filter
-        if (divisionFilter !== 'all' && divisionFilter !== division.id && divisionTeams.length === 0) {
-          return null;
-        }
-
-        return (
-          <Box key={division.id} sx={{ mb: 4 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-              <Box>
-                <Typography variant="h5" component="h2" gutterBottom>
-                  {division.name}
+            {/* Stats */}
+            <Box sx={{ display: 'flex', gap: { xs: 2, sm: 3 }, mt: 2, flexWrap: 'wrap' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <TeamsIcon color="primary" sx={{ fontSize: { xs: 18, sm: 20 } }} />
+                <Typography variant="body2" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
+                  {league.stats.totalTeams} teams
                 </Typography>
-                <Box sx={{ display: 'flex', gap: 1 }}>
-                  {division.ageGroup && (
-                    <Chip label={division.ageGroup} size="small" />
-                  )}
-                  {division.skillLevel && (
-                    <Chip label={division.skillLevel} size="small" variant="outlined" />
-                  )}
-                  {divisionTeams.length > 0 && (
-                    <Chip
-                      label={`${divisionTeams.length} team${divisionTeams.length !== 1 ? 's' : ''}`}
-                      size="small"
-                      color="primary"
-                      variant="outlined"
-                    />
-                  )}
-                </Box>
               </Box>
-              <Button
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <PlayersIcon color="success" sx={{ fontSize: { xs: 18, sm: 20 } }} />
+                <Typography variant="body2" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
+                  {league.stats.totalPlayers} players
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <DivisionIcon color="secondary" sx={{ fontSize: { xs: 18, sm: 20 } }} />
+                <Typography variant="body2" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
+                  {league.stats.totalDivisions} divisions
+                </Typography>
+              </Box>
+            </Box>
+          </Box>
+
+          {/* Search and Filters */}
+          <Box sx={{ mb: 3 }}>
+            <Box sx={{
+              display: 'flex',
+              gap: { xs: 1, sm: 2 },
+              flexWrap: 'wrap',
+              alignItems: 'stretch',
+              flexDirection: { xs: 'column', sm: 'row' }
+            }}>
+              <TextField
+                placeholder="Search teams..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
                 size="small"
-                component={Link}
-                href={`/league/${league.id}/divisions/${division.id}/edit`}
+                data-search-input
+                sx={{ flexGrow: 1, minWidth: { xs: '100%', sm: 200 } }}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon />
+                    </InputAdornment>
+                  ),
+                }}
+              />
+
+              <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 150 } }}>
+                <InputLabel>Division</InputLabel>
+                <Select
+                  value={divisionFilter}
+                  label="Division"
+                  onChange={(e: SelectChangeEvent) => setDivisionFilter(e.target.value)}
+                >
+                  <MenuItem value="all">All Divisions</MenuItem>
+                  {league.divisions.map(division => (
+                    <MenuItem key={division.id} value={division.id}>
+                      {division.name}
+                    </MenuItem>
+                  ))}
+                  <MenuItem value="unassigned">Unassigned</MenuItem>
+                </Select>
+              </FormControl>
+
+              <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 120 } }}>
+                <InputLabel>Sort By</InputLabel>
+                <Select
+                  value={sortBy}
+                  label="Sort By"
+                  onChange={(e: SelectChangeEvent<'name' | 'players' | 'created'>) =>
+                    setSortBy(e.target.value as 'name' | 'players' | 'created')
+                  }
+                >
+                  <MenuItem value="name">Name</MenuItem>
+                  <MenuItem value="players">Players</MenuItem>
+                  <MenuItem value="created">Newest</MenuItem>
+                </Select>
+              </FormControl>
+
+              <Button
+                variant="outlined"
+                startIcon={<DownloadIcon sx={{ display: { xs: 'none', sm: 'inline-flex' } }} />}
+                onClick={handleExport}
+                size="small"
+                sx={{
+                  minWidth: { sm: 'auto' },
+                  width: { xs: '100%', sm: 'auto' }
+                }}
               >
-                Edit Division
+                Export CSV
               </Button>
             </Box>
-
-            {divisionTeams.length === 0 ? (
-              <Card variant="outlined">
-                <CardContent sx={{ textAlign: 'center', py: 4 }}>
-                  <Typography variant="body2" color="text.secondary">
-                    {searchQuery || divisionFilter !== 'all'
-                      ? 'No teams match your search in this division'
-                      : 'No teams in this division yet'}
-                  </Typography>
-                  {!searchQuery && divisionFilter === 'all' && (
-                    <Button
-                      size="small"
-                      startIcon={<AddIcon />}
-                      component={Link}
-                      href={`/league/${league.id}/teams/new?divisionId=${division.id}`}
-                      sx={{ mt: 1 }}
-                    >
-                      Add Team to Division
-                    </Button>
-                  )}
-                </CardContent>
-              </Card>
-            ) : (
-              <DroppableDivision id={division.id} isEmpty={divisionTeams.length === 0}>
-                <Box sx={{
-                  display: 'grid',
-                  gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(3, 1fr)' },
-                  gap: 2
-                }}>
-                  {divisionTeams.map((team) => (
-                    <DraggableTeamCard key={team.id} id={team.id}>
-                      <TeamCard team={team} leagueId={league.id} />
-                    </DraggableTeamCard>
-                  ))}
-                </Box>
-              </DroppableDivision>
-            )}
           </Box>
-        );
-      })}
 
-      {/* Unassigned Teams */}
-      {(() => {
-        const unassignedTeams = groupedTeams['unassigned'] || [];
-
-        if (divisionFilter !== 'all' && divisionFilter !== 'unassigned' && unassignedTeams.length === 0) {
-          return null;
-        }
-
-        if (unassignedTeams.length === 0 && league.unassignedTeams.length === 0) {
-          return null;
-        }
-
-        return (
-          <Box sx={{ mb: 4 }}>
-            <Typography variant="h5" component="h2" gutterBottom>
-              Other Teams
-            </Typography>
-            <Typography variant="body2" color="text.secondary" gutterBottom>
-              Teams not assigned to any division
-            </Typography>
-
-            {unassignedTeams.length === 0 ? (
-              <Card variant="outlined">
-                <CardContent sx={{ textAlign: 'center', py: 4 }}>
-                  <Typography variant="body2" color="text.secondary">
-                    No unassigned teams match your search
-                  </Typography>
-                </CardContent>
-              </Card>
-            ) : (
-              <DroppableDivision id="unassigned" isEmpty={unassignedTeams.length === 0}>
-                <Box sx={{
-                  display: 'grid',
-                  gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(3, 1fr)' },
-                  gap: 2
-                }}>
-                  {unassignedTeams.map((team) => (
-                    <DraggableTeamCard key={team.id} id={team.id}>
-                      <TeamCard team={team} leagueId={league.id} />
-                    </DraggableTeamCard>
-                  ))}
-                </Box>
-              </DroppableDivision>
-            )}
-          </Box>
-        );
-      })()}
-
-      {/* Empty State */}
-      {league.stats.totalTeams === 0 && (
-        <Card variant="outlined">
-          <CardContent sx={{ textAlign: 'center', py: 6 }}>
-            <TeamsIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
-            <Typography variant="h6" gutterBottom>
-              No teams yet
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-              Get started by creating your first team in this league
-            </Typography>
+          {/* Quick Actions - Hidden on mobile, FAB used instead */}
+          <Box sx={{ display: { xs: 'none', sm: 'flex' }, gap: 2, mb: 4, flexWrap: 'wrap' }}>
             <Button
               variant="contained"
               startIcon={<AddIcon />}
               component={Link}
               href={`/league/${league.id}/teams/new`}
             >
-              Create First Team
+              Add Team
             </Button>
-          </CardContent>
-        </Card>
-      )}
+            <Button
+              variant="outlined"
+              startIcon={<DivisionIcon />}
+              component={Link}
+              href={`/league/${league.id}/divisions/new`}
+            >
+              Create Division
+            </Button>
+          </Box>
 
-      {/* Floating Action Button for Mobile */}
-      <Fab
-        color="primary"
-        aria-label="add team"
-        component={Link}
-        href={`/league/${league.id}/teams/new`}
-        sx={{
-          position: 'fixed',
-          bottom: { xs: 80, md: 16 }, // Account for mobile bottom nav
-          right: 16,
-          display: { xs: 'flex', sm: 'none' }, // Only show on mobile
-        }}
-      >
-        <AddIcon />
-      </Fab>
+          {/* Results count */}
+          {(searchQuery || divisionFilter !== 'all') && (
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="body2" color="text.secondary">
+                Showing {filteredTeams.length} of {allTeams.length} teams
+                {searchQuery && ` matching "${searchQuery}"`}
+              </Typography>
+            </Box>
+          )}
+
+          {/* Divisions with filtered teams */}
+          {league.divisions.map((division) => {
+            const divisionTeams = groupedTeams[division.id] || [];
+
+            // Skip division if no teams match filter
+            if (divisionFilter !== 'all' && divisionFilter !== division.id && divisionTeams.length === 0) {
+              return null;
+            }
+
+            return (
+              <Box key={division.id} sx={{ mb: 4 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                  <Box>
+                    <Typography variant="h5" component="h2" gutterBottom>
+                      {division.name}
+                    </Typography>
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                      {division.ageGroup && (
+                        <Chip label={division.ageGroup} size="small" />
+                      )}
+                      {division.skillLevel && (
+                        <Chip label={division.skillLevel} size="small" variant="outlined" />
+                      )}
+                      {divisionTeams.length > 0 && (
+                        <Chip
+                          label={`${divisionTeams.length} team${divisionTeams.length !== 1 ? 's' : ''}`}
+                          size="small"
+                          color="primary"
+                          variant="outlined"
+                        />
+                      )}
+                    </Box>
+                  </Box>
+                  <Button
+                    size="small"
+                    component={Link}
+                    href={`/league/${league.id}/divisions/${division.id}/edit`}
+                  >
+                    Edit Division
+                  </Button>
+                </Box>
+
+                {divisionTeams.length === 0 ? (
+                  <Card variant="outlined">
+                    <CardContent sx={{ textAlign: 'center', py: 4 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        {searchQuery || divisionFilter !== 'all'
+                          ? 'No teams match your search in this division'
+                          : 'No teams in this division yet'}
+                      </Typography>
+                      {!searchQuery && divisionFilter === 'all' && (
+                        <Button
+                          size="small"
+                          startIcon={<AddIcon />}
+                          component={Link}
+                          href={`/league/${league.id}/teams/new?divisionId=${division.id}`}
+                          sx={{ mt: 1 }}
+                        >
+                          Add Team to Division
+                        </Button>
+                      )}
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <DroppableDivision id={division.id} isEmpty={divisionTeams.length === 0}>
+                    <Box sx={{
+                      display: 'grid',
+                      gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(3, 1fr)' },
+                      gap: 2
+                    }}>
+                      {divisionTeams.map((team) => (
+                        <DraggableTeamCard key={team.id} id={team.id}>
+                          <TeamCard team={team} leagueId={league.id} />
+                        </DraggableTeamCard>
+                      ))}
+                    </Box>
+                  </DroppableDivision>
+                )}
+              </Box>
+            );
+          })}
+
+          {/* Unassigned Teams */}
+          {(() => {
+            const unassignedTeams = groupedTeams['unassigned'] || [];
+
+            if (divisionFilter !== 'all' && divisionFilter !== 'unassigned' && unassignedTeams.length === 0) {
+              return null;
+            }
+
+            if (unassignedTeams.length === 0 && league.unassignedTeams.length === 0) {
+              return null;
+            }
+
+            return (
+              <Box sx={{ mb: 4 }}>
+                <Typography variant="h5" component="h2" gutterBottom>
+                  Other Teams
+                </Typography>
+                <Typography variant="body2" color="text.secondary" gutterBottom>
+                  Teams not assigned to any division
+                </Typography>
+
+                {unassignedTeams.length === 0 ? (
+                  <Card variant="outlined">
+                    <CardContent sx={{ textAlign: 'center', py: 4 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        No unassigned teams match your search
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <DroppableDivision id="unassigned" isEmpty={unassignedTeams.length === 0}>
+                    <Box sx={{
+                      display: 'grid',
+                      gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(3, 1fr)' },
+                      gap: 2
+                    }}>
+                      {unassignedTeams.map((team) => (
+                        <DraggableTeamCard key={team.id} id={team.id}>
+                          <TeamCard team={team} leagueId={league.id} />
+                        </DraggableTeamCard>
+                      ))}
+                    </Box>
+                  </DroppableDivision>
+                )}
+              </Box>
+            );
+          })()}
+
+          {/* Empty State */}
+          {league.stats.totalTeams === 0 && (
+            <Card variant="outlined">
+              <CardContent sx={{ textAlign: 'center', py: 6 }}>
+                <TeamsIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
+                <Typography variant="h6" gutterBottom>
+                  No teams yet
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                  Get started by creating your first team in this league
+                </Typography>
+                <Button
+                  variant="contained"
+                  startIcon={<AddIcon />}
+                  component={Link}
+                  href={`/league/${league.id}/teams/new`}
+                >
+                  Create First Team
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Floating Action Button for Mobile */}
+          <Fab
+            color="primary"
+            aria-label="add team"
+            component={Link}
+            href={`/league/${league.id}/teams/new`}
+            sx={{
+              position: 'fixed',
+              bottom: { xs: 80, md: 16 }, // Account for mobile bottom nav
+              right: 16,
+              display: { xs: 'flex', sm: 'none' }, // Only show on mobile
+            }}
+          >
+            <AddIcon />
+          </Fab>
         </Box>
       )}
     </DragDropTeams>
