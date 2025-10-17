@@ -190,9 +190,9 @@
     - Add mobile notifications for league activities
     - _Requirements: 9.5, 9.6, 9.7_
 
-- [ ] 9. Ensure security and data integrity
+- [x] 9. Ensure security and data integrity
 
-  - [ ] 9.1 Implement league-level security
+  - [x] 9.1 Implement league-level security
 
     - Add league data isolation and access control
     - Create role-based permissions for league vs team operations
@@ -200,7 +200,7 @@
     - Add data validation for all league-related operations
     - _Requirements: 6.4, 6.5, 6.6, 10.1, 10.2_
 
-  - [ ] 9.2 Build user permission management
+  - [x] 9.2 Build user permission management
     - Create league admin role assignment and management
     - Implement team admin permissions within league context
     - Add permission checking for all league operations

@@ -155,6 +155,59 @@ export async function canUserCreateLeagueGames(
 }
 
 /**
+ * Get user's league role if they belong to the league
+ */
+export async function getUserLeagueRole(
+  userId: string,
+  leagueId: string
+): Promise<"LEAGUE_ADMIN" | "TEAM_ADMIN" | "MEMBER" | null> {
+  try {
+    const leagueUser = await prisma.leagueUser.findFirst({
+      where: {
+        userId,
+        leagueId,
+        league: { isActive: true },
+      },
+      select: { role: true },
+    });
+
+    return leagueUser?.role || null;
+  } catch (error) {
+    console.error("Error getting user league role:", error);
+    return null;
+  }
+}
+
+/**
+ * Require user to have a specific league role
+ */
+export async function requireLeagueRole(
+  leagueId: string,
+  requiredRole: "LEAGUE_ADMIN" | "TEAM_ADMIN" | "MEMBER"
+): Promise<string> {
+  const userId = await requireUserId();
+
+  const userRole = await getUserLeagueRole(userId, leagueId);
+
+  if (!userRole) {
+    throw new Error("Unauthorized: You are not a member of this league");
+  }
+
+  // Define role hierarchy
+  const roleHierarchy = {
+    "MEMBER": 1,
+    "TEAM_ADMIN": 2,
+    "LEAGUE_ADMIN": 3,
+  };
+
+  if (roleHierarchy[userRole] < roleHierarchy[requiredRole]) {
+    throw new Error(`Unauthorized: ${requiredRole} role required`);
+  }
+
+  return userId;
+}
+
+/**
  * Check if a user is approved
  * Returns true if the user account is approved
  */
