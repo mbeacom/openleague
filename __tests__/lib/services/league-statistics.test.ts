@@ -36,12 +36,8 @@ describe('League Statistics Service', () => {
             const leagueId = 'league-1';
 
             // Mock overview data
-            vi.mocked(prisma.team.count)
-                .mockResolvedValueOnce(5) // totalTeams
-                .mockResolvedValueOnce(0); // In trends analysis
-            vi.mocked(prisma.player.count)
-                .mockResolvedValueOnce(50) // totalPlayers
-                .mockResolvedValue(0); // In trends analysis
+            vi.mocked(prisma.team.count).mockResolvedValueOnce(5); // totalTeams
+            vi.mocked(prisma.player.count).mockResolvedValueOnce(50); // totalPlayers
             vi.mocked(prisma.event.count)
                 .mockResolvedValueOnce(20) // totalEvents
                 .mockResolvedValueOnce(8) // upcomingEvents
