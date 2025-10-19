@@ -12,21 +12,23 @@ async function main() {
 
   const adminUser = await prisma.user.upsert({
     where: { email: 'admin@test.com' },
-    update: {},
+    update: { approved: true }, // Ensure existing users are approved
     create: {
       email: 'admin@test.com',
       passwordHash: adminPassword,
       name: 'Test Admin',
+      approved: true, // Pre-approve test accounts
     },
   })
 
   const memberUser = await prisma.user.upsert({
     where: { email: 'member@test.com' },
-    update: {},
+    update: { approved: true }, // Ensure existing users are approved
     create: {
       email: 'member@test.com',
       passwordHash: memberPassword,
       name: 'Test Member',
+      approved: true, // Pre-approve test accounts
     },
   })
 
