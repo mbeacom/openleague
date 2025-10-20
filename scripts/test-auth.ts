@@ -1,23 +1,21 @@
 #!/usr/bin/env bun
 /**
  * Test Authentication Locally
- * 
+ *
  * This script tests the authentication system by attempting to login
  * with test credentials and verifying the response.
  */
-
-import { signIn } from 'next-auth/react'
 
 async function testLogin() {
   console.log('🧪 Testing Authentication System\n')
   console.log('This script is intended to be run from the browser console.')
   console.log('Copy and paste this into your browser console while on the login page:\n')
-  
+
   console.log(`
 // Test login with admin account
 async function testAdminLogin() {
   console.log('🔐 Testing admin login...');
-  
+
   const result = await fetch('/api/auth/callback/credentials', {
     method: 'POST',
     headers: {
@@ -29,10 +27,10 @@ async function testAdminLogin() {
       redirect: false,
     }),
   });
-  
+
   const data = await result.json();
   console.log('Response:', data);
-  
+
   if (data.error) {
     console.error('❌ Login failed:', data.error);
   } else {
@@ -45,7 +43,7 @@ async function testAdminLogin() {
 
 testAdminLogin();
   `)
-  
+
   console.log('\n📝 Or use these credentials manually in the login form:')
   console.log('   Email: admin@test.com')
   console.log('   Password: admin123')
