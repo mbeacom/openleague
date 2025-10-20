@@ -109,7 +109,11 @@ export const authOptions: NextAuthConfig = {
   // Enable CSRF protection (enabled by default, but explicit for clarity)
   useSecureCookies: isProduction,
   // Trust host header in production (required for Auth.js v5 with proxies/Vercel)
+  // This allows the auth URL to be derived from the request headers
   trustHost: true,
+  // Explicitly set basePath (default value, but documented for clarity)
+  // This ensures auth routes are at /api/auth/* (session, signin, signout, etc.)
+  basePath: "/api/auth",
   // Additional security settings
   debug: isDevelopment,
 };
