@@ -38,7 +38,7 @@ export default function PricingPage() {
     <>
       <StructuredData data={[breadcrumbSchema, faqSchema]} />
       <Container maxWidth="lg">
-        <Box sx={{ 
+        <Box sx={{
           py: 4,
           px: 3,
           bgcolor: 'info.lighter',
@@ -53,7 +53,7 @@ export default function PricingPage() {
             🚀 Early Access Beta
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            OpenLeague is currently in beta. Pricing is flexible and will be tailored to your team's needs. Sign up today and let's talk about the right plan for you.
+            OpenLeague is currently in beta. Pricing is flexible and will be tailored to your team&apos;s needs. Sign up today and let&apos;s talk about the right plan for you.
           </Typography>
         </Box>
 
@@ -65,7 +65,7 @@ export default function PricingPage() {
             Early access pricing tailored to your needs
           </Typography>
           <Typography variant="body1" color="text.secondary" textAlign="center" sx={{ mb: 8 }}>
-            We're currently in beta and finalizing our pricing plans. Sign up now to get early access, and we'll be in touch about your plan options.
+            We&apos;re currently in beta and finalizing our pricing plans. Sign up now to get early access, and we&apos;ll be in touch about your plan options.
           </Typography>
 
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)' }, gap: 3, mb: 8, pt: 3 }}>
