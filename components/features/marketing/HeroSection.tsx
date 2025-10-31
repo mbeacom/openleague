@@ -1,6 +1,7 @@
 'use client';
 
-import { Box, Container, Typography, Stack, keyframes } from '@mui/material';
+import { Box, Container, Typography, Stack } from '@mui/material';
+import { keyframes } from '@mui/system';
 import CTAButton from './CTAButton';
 import BrandLogo from '@/components/ui/BrandLogo';
 import { marketingEvents } from '@/lib/analytics/tracking';

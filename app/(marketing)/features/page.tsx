@@ -44,7 +44,7 @@ const features = [
     icon: CheckCircleIcon,
     title: 'RSVP Tracking',
     description:
-      'Know who&apos;s coming to each event. Players can RSVP with Going, Not Going, or Maybe status.',
+      'Know who is coming to each event. Players can RSVP with Going, Not Going, or Maybe status.',
     highlights: ['Real-time updates', 'Attendance tracking', 'Status notifications', 'Team visibility'],
   },
   {

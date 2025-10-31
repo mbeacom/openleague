@@ -1,6 +1,7 @@
 'use client';
 
-import { Box, Container, Typography, Grid, keyframes } from '@mui/material';
+import { Box, Container, Typography, Grid } from '@mui/material';
+import { keyframes } from '@mui/system';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import GroupAddIcon from '@mui/icons-material/GroupAdd';
 import RocketLaunchIcon from '@mui/icons-material/RocketLaunch';

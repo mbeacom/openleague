@@ -1,6 +1,7 @@
 'use client';
 
-import { Box, Container, Typography, Grid, Card, CardContent, keyframes } from '@mui/material';
+import { Box, Container, Typography, Grid, Card, CardContent } from '@mui/material';
+import { keyframes } from '@mui/system';
 import GroupsIcon from '@mui/icons-material/Groups';
 import EventIcon from '@mui/icons-material/Event';
 import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
@@ -127,7 +128,17 @@ export default function FeaturesPreview() {
                     animation: `slideUp 0.6s cubic-bezier(0.4, 0, 0.2, 1) ${index * 0.1}s both`,
                   }}
                 >
-                  <CardContent sx={{ flexGrow: 1, textAlign: 'center', p: 4 }}>
+                  <CardContent
+                    sx={{
+                      flexGrow: 1,
+                      textAlign: 'center',
+                      p: 4,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'flex-start',
+                      alignItems: 'center',
+                    }}
+                  >
                     <Box
                       sx={{
                         display: 'flex',
@@ -158,11 +169,11 @@ export default function FeaturesPreview() {
                     <Typography
                       variant="featureTitle"
                       component="h3"
-                      gutterBottom
                       sx={{
                         fontWeight: 700,
                         color: 'text.primary',
                         mb: 2,
+                        minHeight: { xs: 'auto', md: '3.5rem' }, // Ensure consistent title height
                       }}
                     >
                       {feature.title}
@@ -170,7 +181,10 @@ export default function FeaturesPreview() {
                     <Typography
                       variant="body1"
                       color="text.secondary"
-                      sx={{ lineHeight: 1.7 }}
+                      sx={{
+                        lineHeight: 1.7,
+                        flexGrow: 1, // Allow description to grow
+                      }}
                     >
                       {feature.description}
                     </Typography>
