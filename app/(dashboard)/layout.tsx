@@ -31,11 +31,11 @@ export default async function DashboardLayout({
           {/* Top App Bar - Digital Playbook styling */}
           <AppBar
             position="sticky"
-            sx={{
+            sx={(theme) => ({
               display: { xs: "flex", md: "none" },
-              background: 'linear-gradient(135deg, #0D47A1 0%, #1976D2 100%)',
-              boxShadow: '0 4px 12px rgba(13, 71, 161, 0.15)',
-            }}
+              background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.light} 100%)`,
+              boxShadow: `0 4px 12px rgba(13, 71, 161, 0.15)`,
+            })}
           >
             <Toolbar>
               <Logo
@@ -55,15 +55,15 @@ export default async function DashboardLayout({
             {/* Desktop Sidebar Navigation - Digital Playbook styling */}
             <Box
               component="nav"
-              sx={{
+              sx={(theme) => ({
                 display: { xs: "none", md: "block" },
                 width: 260,
                 flexShrink: 0,
                 borderRight: '2px solid',
-                borderColor: 'rgba(13, 71, 161, 0.08)',
+                borderColor: `rgba(${theme.palette.mode === 'light' ? '13, 71, 161' : '255, 255, 255'}, 0.08)`,
                 bgcolor: "background.paper",
-                boxShadow: '4px 0 12px rgba(13, 71, 161, 0.03)',
-              }}
+                boxShadow: `4px 0 12px rgba(13, 71, 161, 0.03)`,
+              })}
             >
               <Logo
                 size="large"

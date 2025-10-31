@@ -134,7 +134,7 @@ const baseTheme = createTheme({
     },
   },
   typography: {
-    // Cabinet Grotesk for headlines and UI (loaded via globals.css)
+    // Cabinet Grotesk for headlines and UI (loaded via globals.css from Fontshare)
     fontFamily: "'Cabinet Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
     // Marketing-specific typography variants with extreme weight contrasts
     heroTitle: {

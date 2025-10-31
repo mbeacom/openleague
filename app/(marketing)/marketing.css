@@ -45,7 +45,7 @@ html {
 /* Playbook grid texture for backgrounds */
 .playbook-grid {
   background-image:
-    linear-gradient(rgba(13, 71, 161, 0.02) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(13, 71, 161, 0.02) 1px, transparent 1px);
+    linear-gradient(rgba(var(--league-blue-rgb), 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(var(--league-blue-rgb), 0.02) 1px, transparent 1px);
   background-size: 40px 40px;
 }

@@ -66,6 +66,10 @@ export default function HeroSection() {
         `,
         backgroundSize: '400% 400%, auto',
         animation: `${patternShift} 20s ease infinite`,
+        '@media (prefers-reduced-motion: reduce)': {
+          animation: 'none',
+          backgroundPosition: '50% 50%',
+        },
         py: { xs: 8, md: 12 },
         position: 'relative',
         overflow: 'hidden',
@@ -113,6 +117,9 @@ export default function HeroSection() {
               justifyContent: 'center',
               mb: 5,
               animation: `${scaleIn} 0.6s cubic-bezier(0.4, 0, 0.2, 1) 0.1s both`,
+              '@media (prefers-reduced-motion: reduce)': {
+                animation: 'none',
+              },
             }}
           >
             <BrandLogo
@@ -132,6 +139,9 @@ export default function HeroSection() {
               color: 'text.primary',
               mb: 4,
               animation: `${fadeInUp} 0.8s cubic-bezier(0.4, 0, 0.2, 1) 0.3s both`,
+              '@media (prefers-reduced-motion: reduce)': {
+                animation: 'none',
+              },
             }}
           >
             Simplify Your Season.{' '}
@@ -167,6 +177,9 @@ export default function HeroSection() {
               maxWidth: 800,
               mx: 'auto',
               animation: `${fadeInUp} 0.8s cubic-bezier(0.4, 0, 0.2, 1) 0.5s both`,
+              '@media (prefers-reduced-motion: reduce)': {
+                animation: 'none',
+              },
             }}
           >
             The free, open-source team management platform built for coaches and players.
@@ -179,6 +192,9 @@ export default function HeroSection() {
             sx={{
               mb: 6,
               animation: `${fadeInUp} 0.8s cubic-bezier(0.4, 0, 0.2, 1) 0.7s both`,
+              '@media (prefers-reduced-motion: reduce)': {
+                animation: 'none',
+              },
             }}
           >
             <Stack
@@ -193,6 +209,9 @@ export default function HeroSection() {
                   alignItems: 'center',
                   gap: 1.5,
                   animation: `${slideInLeft} 0.6s cubic-bezier(0.4, 0, 0.2, 1) 0.9s both`,
+                  '@media (prefers-reduced-motion: reduce)': {
+                    animation: 'none',
+                  },
                 }}
               >
                 <Box
@@ -214,6 +233,9 @@ export default function HeroSection() {
                   alignItems: 'center',
                   gap: 1.5,
                   animation: `${slideInLeft} 0.6s cubic-bezier(0.4, 0, 0.2, 1) 1s both`,
+                  '@media (prefers-reduced-motion: reduce)': {
+                    animation: 'none',
+                  },
                 }}
               >
                 <Box
@@ -235,6 +257,9 @@ export default function HeroSection() {
                   alignItems: 'center',
                   gap: 1.5,
                   animation: `${slideInLeft} 0.6s cubic-bezier(0.4, 0, 0.2, 1) 1.1s both`,
+                  '@media (prefers-reduced-motion: reduce)': {
+                    animation: 'none',
+                  },
                 }}
               >
                 <Box
@@ -261,6 +286,9 @@ export default function HeroSection() {
             sx={{
               mb: 6,
               animation: `${fadeInUp} 0.8s cubic-bezier(0.4, 0, 0.2, 1) 0.9s both`,
+              '@media (prefers-reduced-motion: reduce)': {
+                animation: 'none',
+              },
             }}
           >
             <CTAButton
@@ -297,6 +325,9 @@ export default function HeroSection() {
           <Box
             sx={{
               animation: `${fadeInUp} 0.8s cubic-bezier(0.4, 0, 0.2, 1) 1.1s both`,
+              '@media (prefers-reduced-motion: reduce)': {
+                animation: 'none',
+              },
             }}
           >
             <Typography

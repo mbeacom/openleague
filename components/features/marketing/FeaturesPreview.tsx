@@ -126,6 +126,9 @@ export default function FeaturesPreview() {
                       },
                     },
                     animation: `slideUp 0.6s cubic-bezier(0.4, 0, 0.2, 1) ${index * 0.1}s both`,
+                    '@media (prefers-reduced-motion: reduce)': {
+                      animation: 'none',
+                    },
                   }}
                 >
                   <CardContent
@@ -157,10 +160,14 @@ export default function FeaturesPreview() {
                           justifyContent: 'center',
                           position: 'relative',
                           transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                          '&:hover': {
-                            transform: 'scale(1.1) rotate(5deg)',
-                            animation: `${pulse} 1.5s infinite`,
+                        '&:hover': {
+                          transform: 'scale(1.1) rotate(5deg)',
+                          animation: `${pulse} 1.5s infinite`,
+                          '@media (prefers-reduced-motion: reduce)': {
+                            animation: 'none',
+                            transform: 'scale(1.05)',
                           },
+                        },
                         }}
                       >
                         <Icon sx={{ fontSize: 40, color: 'white' }} />

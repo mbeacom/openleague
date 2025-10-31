@@ -116,6 +116,9 @@ export default function HowItWorks() {
                       },
                     },
                     animation: `fadeInScale 0.6s cubic-bezier(0.4, 0, 0.2, 1) ${index * 0.15}s both`,
+                    '@media (prefers-reduced-motion: reduce)': {
+                      animation: 'none',
+                    },
                   }}
                 >
                   {/* Step number badge with icon */}
@@ -151,6 +154,9 @@ export default function HowItWorks() {
                           borderRadius: '50%',
                           border: `2px solid ${step.color}30`,
                           animation: 'spin 10s linear infinite',
+                          '@media (prefers-reduced-motion: reduce)': {
+                            animation: 'none',
+                          },
                         },
                         '@keyframes spin': {
                           from: { transform: 'rotate(0deg)' },

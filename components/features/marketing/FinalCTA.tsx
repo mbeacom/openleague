@@ -33,6 +33,10 @@ export default function FinalCTA() {
           },
         },
         animation: 'gradientShift 8s ease infinite',
+        '@media (prefers-reduced-motion: reduce)': {
+          animation: 'none',
+          backgroundPosition: '50% 50%',
+        },
       }}
     >
       {/* Decorative orbital elements - inspired by logo */}
@@ -46,6 +50,9 @@ export default function FinalCTA() {
           borderRadius: '50%',
           border: '2px solid rgba(255, 255, 255, 0.1)',
           animation: `${float} 6s ease-in-out infinite`,
+          '@media (prefers-reduced-motion: reduce)': {
+            animation: 'none',
+          },
         }}
       />
       <Box
@@ -59,6 +66,9 @@ export default function FinalCTA() {
           background: 'radial-gradient(circle, rgba(255, 255, 255, 0.15) 0%, transparent 70%)',
           animation: `${float} 8s ease-in-out infinite`,
           animationDelay: '1s',
+          '@media (prefers-reduced-motion: reduce)': {
+            animation: 'none',
+          },
         }}
       />
       <Box
@@ -72,6 +82,9 @@ export default function FinalCTA() {
           border: '3px solid rgba(255, 255, 255, 0.08)',
           animation: `${float} 10s ease-in-out infinite`,
           animationDelay: '2s',
+          '@media (prefers-reduced-motion: reduce)': {
+            animation: 'none',
+          },
         }}
       />
       <Box
@@ -85,6 +98,9 @@ export default function FinalCTA() {
           background: 'radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 70%)',
           animation: `${float} 7s ease-in-out infinite`,
           animationDelay: '0.5s',
+          '@media (prefers-reduced-motion: reduce)': {
+            animation: 'none',
+          },
         }}
       />
 

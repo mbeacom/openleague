@@ -13,7 +13,7 @@ import { SITE_CONFIG, getOrganizationSchema, getSoftwareApplicationSchema } from
 // Validate environment variables on startup
 import "@/lib/env";
 
-// Cabinet Grotesk is loaded via CSS @import in globals.css (from Google Fonts)
+// Cabinet Grotesk is loaded via CSS @import in globals.css (from Fontshare)
 // JetBrains Mono for data/code elements
 const jetbrainsMono = JetBrains_Mono({
   weight: ["300", "400", "500", "700"],

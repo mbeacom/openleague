@@ -1,5 +1,5 @@
-/* Import Cabinet Grotesk - distinctive geometric sans-serif */
-@import url('https://fonts.googleapis.com/css2?family=Cabinet+Grotesk:wght@100;200;300;400;500;600;700;800;900&display=swap');
+/* Import Cabinet Grotesk - distinctive geometric sans-serif from Fontshare */
+@import url('https://api.fontshare.com/css?f[]=cabinet-grotesk@100,200,300,400,500,600,700,800,900');
 
 :root {
   --background: #ffffff;
@@ -8,10 +8,15 @@
 
   /* Digital Playbook Colors */
   --league-blue: #0D47A1;
+  --league-blue-rgb: 13, 71, 161;
   --action-blue: #1976D2;
+  --action-blue-rgb: 25, 118, 210;
   --fresh-ice: #F8FAFB;
+  --fresh-ice-rgb: 248, 250, 251;
   --scoreboard-green: #2E7D32;
+  --scoreboard-green-rgb: 46, 125, 50;
   --penalty-red: #C62828;
+  --penalty-red-rgb: 198, 40, 40;
 }
 
 @media (prefers-color-scheme: dark) {
