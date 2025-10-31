@@ -146,3 +146,6 @@ local-context/
 
 # Playwright MCP files
 .playwright-mcp/
+
+# Github prompt files intentionally left ignored
+.github/prompts/local-*.prompt.md
