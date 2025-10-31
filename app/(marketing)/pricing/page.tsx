@@ -8,9 +8,9 @@ import StructuredData from '@/components/ui/StructuredData';
 
 export const metadata = generatePageMetadata({
   title: 'Pricing',
-  description: 'Transparent, affordable pricing for sports team management. Start free and upgrade as you grow. No hidden fees or surprise charges.',
+  description: 'OpenLeague early access pricing. Sign up now during our beta period. Flexible pricing plans coming soon - contact us for details.',
   path: '/pricing',
-  keywords: ['pricing', 'free team management', 'affordable sports software', 'team management cost'],
+  keywords: ['pricing', 'free team management', 'affordable sports software', 'team management cost', 'early access'],
 });
 
 export default function PricingPage() {
@@ -21,16 +21,16 @@ export default function PricingPage() {
 
   const faqSchema = getFAQSchema([
     {
-      question: 'Is OpenLeague really free?',
-      answer: 'Yes! OpenLeague offers a free Starter plan that includes all core features for managing your sports team.',
+      question: 'Is OpenLeague free?',
+      answer: "OpenLeague is currently in early access beta with flexible pricing. We'll work with you to find the right plan for your team.",
     },
     {
-      question: 'Can I upgrade or downgrade my plan?',
-      answer: 'Yes, you can upgrade or downgrade your plan at any time. Changes take effect immediately.',
+      question: 'Can I sign up now?',
+      answer: "Yes! You can sign up for early access today. We'll be in touch to discuss pricing options tailored to your needs.",
     },
     {
-      question: 'Are there any hidden fees?',
-      answer: 'No hidden fees. What you see is what you pay. Simple monthly pricing with no surprise charges.',
+      question: 'Will pricing change after launch?',
+      answer: 'Pricing may be adjusted as we refine our plans, but early adopters will receive favorable rates. We value your feedback during beta.',
     },
   ]);
 
@@ -38,15 +38,34 @@ export default function PricingPage() {
     <>
       <StructuredData data={[breadcrumbSchema, faqSchema]} />
       <Container maxWidth="lg">
+        <Box sx={{ 
+          py: 4,
+          px: 3,
+          bgcolor: 'info.lighter',
+          borderRadius: 2,
+          mb: 4,
+          mt: 4,
+          textAlign: 'center',
+          border: '1px solid',
+          borderColor: 'info.light',
+        }}>
+          <Typography variant="h6" sx={{ color: 'info.main', fontWeight: 600 }}>
+            🚀 Early Access Beta
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            OpenLeague is currently in beta. Pricing is flexible and will be tailored to your team's needs. Sign up today and let's talk about the right plan for you.
+          </Typography>
+        </Box>
+
         <Box sx={{ py: 8 }}>
           <Typography variant="h1" component="h1" gutterBottom textAlign="center">
-            Simple, Transparent Pricing
+            Simple, Flexible Pricing
           </Typography>
           <Typography variant="h5" color="text.secondary" textAlign="center" sx={{ mb: 2 }}>
-            Affordable plans that scale with your team.
+            Early access pricing tailored to your needs
           </Typography>
           <Typography variant="body1" color="text.secondary" textAlign="center" sx={{ mb: 8 }}>
-            Start with our Starter plan, upgrade as you grow. No hidden fees or surprise charges.
+            We're currently in beta and finalizing our pricing plans. Sign up now to get early access, and we'll be in touch about your plan options.
           </Typography>
 
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)' }, gap: 3, mb: 8, pt: 3 }}>
@@ -60,7 +79,7 @@ export default function PricingPage() {
                     {PRICING_PLANS.starter.price}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    per month
+                    early access
                   </Typography>
                 </Box>
 
@@ -117,7 +136,7 @@ export default function PricingPage() {
                     {PRICING_PLANS.pro.price}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    per month
+                    early access
                   </Typography>
                 </Box>
 
