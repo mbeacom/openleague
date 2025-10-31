@@ -149,3 +149,4 @@ local-context/
 
 # Github prompt files intentionally left ignored
 .github/prompts/local-*.prompt.md
+CLAUDE.local.md

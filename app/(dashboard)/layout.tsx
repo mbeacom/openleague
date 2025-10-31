@@ -28,11 +28,13 @@ export default async function DashboardLayout({
     <LeagueProvider initialData={userMode}>
       <KeyboardShortcutsProvider>
         <Box sx={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
-          {/* Top App Bar */}
+          {/* Top App Bar - Digital Playbook styling */}
           <AppBar
             position="sticky"
             sx={{
               display: { xs: "flex", md: "none" },
+              background: 'linear-gradient(135deg, #0D47A1 0%, #1976D2 100%)',
+              boxShadow: '0 4px 12px rgba(13, 71, 161, 0.15)',
             }}
           >
             <Toolbar>
@@ -50,16 +52,17 @@ export default async function DashboardLayout({
 
           {/* Desktop Sidebar + Content */}
           <Box sx={{ display: "flex", flex: 1 }}>
-            {/* Desktop Sidebar Navigation */}
+            {/* Desktop Sidebar Navigation - Digital Playbook styling */}
             <Box
               component="nav"
               sx={{
                 display: { xs: "none", md: "block" },
-                width: 240,
+                width: 260,
                 flexShrink: 0,
-                borderRight: 1,
-                borderColor: "divider",
+                borderRight: '2px solid',
+                borderColor: 'rgba(13, 71, 161, 0.08)',
                 bgcolor: "background.paper",
+                boxShadow: '4px 0 12px rgba(13, 71, 161, 0.03)',
               }}
             >
               <Logo

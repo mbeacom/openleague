@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Roboto } from "next/font/google";
+import { JetBrains_Mono } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
 import { SessionProvider } from "@/components/providers/SessionProvider";
@@ -13,11 +13,13 @@ import { SITE_CONFIG, getOrganizationSchema, getSoftwareApplicationSchema } from
 // Validate environment variables on startup
 import "@/lib/env";
 
-const roboto = Roboto({
+// Cabinet Grotesk is loaded via CSS @import in globals.css (from Google Fonts)
+// JetBrains Mono for data/code elements
+const jetbrainsMono = JetBrains_Mono({
   weight: ["300", "400", "500", "700"],
   subsets: ["latin"],
   display: "swap",
-  variable: "--font-roboto",
+  variable: "--font-mono",
 });
 
 export const metadata: Metadata = {
@@ -98,7 +100,7 @@ export default function RootLayout({
 
   return (
     <html lang="en">
-      <body className={roboto.variable}>
+      <body className={jetbrainsMono.variable}>
         <StructuredData
           data={[getOrganizationSchema(), getSoftwareApplicationSchema()]}
         />

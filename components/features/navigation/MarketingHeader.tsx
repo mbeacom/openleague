@@ -74,16 +74,17 @@ export default function MarketingHeader() {
     <>
       <AppBar
         position="fixed"
-        elevation={isScrolled ? 2 : 0}
+        elevation={0}
         sx={{
           bgcolor: isScrolled ? 'background.paper' : 'transparent',
-          borderBottom: isScrolled ? 1 : 0,
-          borderColor: 'divider',
-          backdropFilter: isScrolled ? 'blur(8px)' : 'none',
+          borderBottom: isScrolled ? '2px solid' : 0,
+          borderColor: 'rgba(13, 71, 161, 0.08)',
+          backdropFilter: isScrolled ? 'blur(12px)' : 'none',
           backgroundColor: isScrolled ? 'rgba(255, 255, 255, 0.95)' : 'transparent',
+          boxShadow: isScrolled ? '0 4px 12px rgba(13, 71, 161, 0.08)' : 'none',
           // Only hide navbar on homepage initially, show on all other pages
           transform: isHomepage && !isScrolled ? 'translateY(-100%)' : 'translateY(0)',
-          transition: 'transform 0.3s ease-in-out, background-color 0.3s ease-in-out, box-shadow 0.3s ease-in-out',
+          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
         }}
       >
       <Container maxWidth="lg">
@@ -120,15 +121,17 @@ export default function MarketingHeader() {
                   color="inherit"
                   sx={{
                     color: 'text.primary',
-                    fontWeight: 500,
+                    fontWeight: 600,
                     fontSize: '0.9375rem',
-                    px: 2,
+                    px: 2.5,
                     py: 1,
                     minHeight: '40px',
                     borderRadius: 2,
+                    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
                     '&:hover': {
-                      backgroundColor: 'rgba(25, 118, 210, 0.04)',
-                      color: 'marketing.primary',
+                      backgroundColor: 'rgba(25, 118, 210, 0.08)',
+                      color: 'primary.main',
+                      transform: 'translateY(-2px)',
                     }
                   }}
                 >
@@ -143,15 +146,17 @@ export default function MarketingHeader() {
                 onClick={() => marketingEvents.headerSignInClick()}
                 sx={{
                   color: 'text.primary',
-                  fontWeight: 500,
+                  fontWeight: 600,
                   fontSize: '0.9375rem',
-                  px: 2,
+                  px: 2.5,
                   py: 1,
                   minHeight: '40px',
                   borderRadius: 2,
+                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
                   '&:hover': {
-                    backgroundColor: 'rgba(25, 118, 210, 0.04)',
-                    color: 'marketing.primary',
+                    backgroundColor: 'rgba(25, 118, 210, 0.08)',
+                    color: 'primary.main',
+                    transform: 'translateY(-2px)',
                   }
                 }}
               >
