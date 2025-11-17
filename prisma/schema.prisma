@@ -487,7 +487,7 @@ model PracticeSession {
   team        Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   createdById String
-  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdBy   User     @relation(fields: [createdById], references: [id], onDelete: Restrict)
 
   plays       PracticeSessionPlay[]
 
@@ -502,12 +502,14 @@ model PracticeSessionPlay {
   duration     Int      // Duration for this play in minutes
   instructions String?  // Specific instructions for this instance
   createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt  // Track modifications for auditing
 
   sessionId    String
   session      PracticeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   playId       String
-  play         Play     @relation(fields: [playId], references: [id])
+  // Cascade delete to preserve session integrity when library play is deleted (Req 4.5)
+  play         Play     @relation(fields: [playId], references: [id], onDelete: Cascade)
 
   @@unique([sessionId, sequence])
   @@index([sessionId])
@@ -519,7 +521,7 @@ model Play {
   id          String   @id @default(cuid())
   name        String
   description String?
-  thumbnail   String?  // Base64 encoded PNG thumbnail
+  thumbnail   String?  // Base64 encoded PNG thumbnail (generated server-side from canvas export)
   playData    Json     // Serialized PlayData structure
   isTemplate  Boolean  @default(false) // Library plays vs session-specific
   createdAt   DateTime @default(now())
@@ -529,7 +531,7 @@ model Play {
   team        Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   createdById String
-  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdBy   User     @relation(fields: [createdById], references: [id], onDelete: Restrict)
 
   sessions    PracticeSessionPlay[]
 

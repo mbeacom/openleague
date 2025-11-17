@@ -23,6 +23,7 @@ CREATE TABLE "practice_session_plays" (
     "duration" INTEGER NOT NULL,
     "instructions" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
     "sessionId" TEXT NOT NULL,
     "playId" TEXT NOT NULL,
 
@@ -67,7 +68,7 @@ ALTER TABLE "practice_sessions" ADD CONSTRAINT "practice_sessions_createdById_fk
 ALTER TABLE "practice_session_plays" ADD CONSTRAINT "practice_session_plays_sessionId_fkey" FOREIGN KEY ("sessionId") REFERENCES "practice_sessions"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "practice_session_plays" ADD CONSTRAINT "practice_session_plays_playId_fkey" FOREIGN KEY ("playId") REFERENCES "plays"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "practice_session_plays" ADD CONSTRAINT "practice_session_plays_playId_fkey" FOREIGN KEY ("playId") REFERENCES "plays"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "plays" ADD CONSTRAINT "plays_teamId_fkey" FOREIGN KEY ("teamId") REFERENCES "Team"("id") ON DELETE CASCADE ON UPDATE CASCADE;

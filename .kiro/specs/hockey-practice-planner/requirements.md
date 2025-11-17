@@ -48,7 +48,7 @@ The Hockey Practice Planner feature enables coaches and team administrators to d
 1. WHEN the Coach shares a practice session, THE Practice Planner SHALL make the session accessible to all Team Members of the associated team
 2. WHEN a Team Member views a shared practice session, THE Practice Planner SHALL display all plays in the correct sequence with timing and instructions
 3. WHEN a Team Member views a play, THE Practice Planner SHALL render the rink board with all player positions, movements, and annotations
-4. WHERE the practice session is updated after sharing, THE Practice Planner SHALL reflect the changes to all Team Members immediately
+4. WHEN the practice session is updated after sharing, THE Practice Planner SHALL reflect the changes to all Team Members immediately
 5. WHEN a Team Member accesses the practice plan on mobile, THE Practice Planner SHALL display the rink board and plays in a mobile-optimized layout
 
 ### Requirement 4
@@ -84,5 +84,5 @@ The Hockey Practice Planner feature enables coaches and team administrators to d
 1. WHEN the Coach shares a practice session, THE Practice Planner SHALL send email notifications to all Team Members
 2. WHEN a Team Member receives the notification, THE Practice Planner SHALL include a direct link to view the practice session
 3. WHEN the Coach updates a shared practice session, THE Practice Planner SHALL send update notifications to Team Members
-4. WHERE a Team Member has notification preferences disabled, THE Practice Planner SHALL not send email notifications to that Team Member
+4. WHEN a Team Member has notification preferences disabled, THE Practice Planner SHALL not send email notifications to that Team Member
 5. WHEN a Team Member clicks the notification link, THE Practice Planner SHALL display the practice session without requiring additional navigation
