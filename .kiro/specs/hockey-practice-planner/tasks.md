@@ -7,7 +7,7 @@
   - Update User and Team models with new relations
   - _Requirements: 1.5, 2.1, 4.1_
 
-- [ ] 2. Create TypeScript type definitions
+- [x] 2. Create TypeScript type definitions
 
   - Define PlayData, PlayerIcon, DrawingElement, and TextAnnotation interfaces in types directory
   - Define PracticeSessionData and PlayInSession interfaces
