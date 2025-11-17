@@ -19,6 +19,12 @@ import {
 import { TransformContext, canvasToRink } from "./rink-renderer";
 
 /**
+ * Hit detection constants
+ */
+const PLAYER_ICON_RADIUS = 12; // feet in rink coordinates (must match drawing-utils)
+const HIT_THRESHOLD = 5; // Hit detection threshold in rink coordinates
+
+/**
  * Type for elements that can be selected
  */
 export type SelectableElement = PlayerIcon | DrawingElement | TextAnnotation;
@@ -228,11 +234,10 @@ export function hitTestPlayer(
     point: Position,
     player: PlayerIcon
 ): boolean {
-    const radius = 12; // Player icon radius in rink coordinates
     const distance = Math.sqrt(
         Math.pow(point.x - player.position.x, 2) + Math.pow(point.y - player.position.y, 2)
     );
-    return distance <= radius;
+    return distance <= PLAYER_ICON_RADIUS;
 }
 
 /**
@@ -247,15 +252,13 @@ export function hitTestDrawing(
     point: Position,
     drawing: DrawingElement
 ): boolean {
-    const hitThreshold = 5; // Hit detection threshold in rink coordinates
-
     // Check each line segment in the drawing
     for (let i = 0; i < drawing.points.length - 1; i++) {
         const p1 = drawing.points[i];
         const p2 = drawing.points[i + 1];
 
         const distance = distanceToLineSegment(point, p1, p2);
-        if (distance <= hitThreshold) {
+        if (distance <= HIT_THRESHOLD) {
             return true;
         }
     }
@@ -267,6 +270,11 @@ export function hitTestDrawing(
  * Tests if a point hits a text annotation
  * Requirements: 5.4
  *
+ * NOTE: This uses an approximation for text bounds. For pixel-perfect accuracy,
+ * ctx.measureText() should be used, which would require refactoring to pass a
+ * CanvasRenderingContext2D to this function. Current approximation works well
+ * for typical use cases but may be slightly inaccurate for variable-width fonts.
+ *
  * @param point - Point to test in rink coordinates
  * @param annotation - Text annotation to test against
  * @returns True if point hits the annotation
@@ -275,17 +283,21 @@ export function hitTestAnnotation(
     point: Position,
     annotation: TextAnnotation
 ): boolean {
-    // Estimate text bounds (rough approximation)
+    // Estimate text bounds (approximation using average character width)
+    // Most proportional fonts average ~0.6x fontSize for character width
     const charWidth = annotation.fontSize * 0.6;
     const textWidth = annotation.text.length * charWidth;
     const textHeight = annotation.fontSize;
 
-    // Check if point is within text bounds
+    // Add small padding for easier selection
+    const padding = annotation.fontSize * 0.2;
+
+    // Check if point is within text bounds (with padding)
     return (
-        point.x >= annotation.position.x &&
-        point.x <= annotation.position.x + textWidth &&
-        point.y >= annotation.position.y - textHeight &&
-        point.y <= annotation.position.y
+        point.x >= annotation.position.x - padding &&
+        point.x <= annotation.position.x + textWidth + padding &&
+        point.y >= annotation.position.y - textHeight - padding &&
+        point.y <= annotation.position.y + padding
     );
 }
 

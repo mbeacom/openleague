@@ -21,6 +21,13 @@ export const THUMBNAIL_DIMENSIONS = {
 } as const;
 
 /**
+ * Base64 encoding constants
+ */
+const BASE64_PADDING_BYTES = 3;
+const BASE64_GROUP_SIZE = 4;
+const MAX_BASE64_LENGTH = 10 * 1024 * 1024; // 10MB limit to prevent DoS
+
+/**
  * Options for thumbnail generation
  */
 export interface ThumbnailOptions {
@@ -235,6 +242,11 @@ export function isValidPngBase64(base64String: string): boolean {
         return false;
     }
 
+    // DoS protection: check maximum length before attempting decode
+    if (base64Data.length > MAX_BASE64_LENGTH) {
+        return false;
+    }
+
     try {
         // Try to decode base64
         atob(base64Data);
@@ -246,6 +258,8 @@ export function isValidPngBase64(base64String: string): boolean {
 
 /**
  * Gets the size of a base64 image in bytes
+ * Formula: (base64_length * 3) / 4
+ * Base64 encoding uses 4 characters to represent 3 bytes of data
  *
  * @param base64String - Base64 string
  * @returns Size in bytes
@@ -256,8 +270,8 @@ export function getBase64Size(base64String: string): number {
         ? base64String.split(",")[1]
         : base64String;
 
-    // Calculate size (base64 encoding increases size by ~33%)
-    return Math.floor((base64Data.length * 3) / 4);
+    // Calculate size using base64 encoding formula
+    return Math.floor((base64Data.length * BASE64_PADDING_BYTES) / BASE64_GROUP_SIZE);
 }
 
 /**

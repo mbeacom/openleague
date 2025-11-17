@@ -1,6 +1,6 @@
 /**
  * Type definitions for the Hockey Practice Planner feature
- * 
+ *
  * This file contains all TypeScript interfaces and types for:
  * - Play data structures (players, drawings, annotations)
  * - Practice session data
@@ -225,7 +225,7 @@ export function isValidPlayerIcon(player: unknown): player is PlayerIcon {
         p.id.length > 0 &&
         isValidPosition(p.position) &&
         typeof p.label === "string" &&
-        p.label.length > 0 &&
+        p.label.trim().length > 0 &&
         typeof p.color === "string" &&
         /^#[0-9A-Fa-f]{6}$/.test(p.color)
     );
@@ -265,7 +265,7 @@ export function isValidTextAnnotation(annotation: unknown): annotation is TextAn
         typeof a.id === "string" &&
         a.id.length > 0 &&
         typeof a.text === "string" &&
-        a.text.length > 0 &&
+        a.text.trim().length > 0 &&
         a.text.length <= VALIDATION_CONSTRAINTS.MAX_ANNOTATION_LENGTH &&
         isValidPosition(a.position) &&
         typeof a.fontSize === "number" &&
@@ -437,7 +437,7 @@ export function validateSessionDuration(duration: number): ValidationResult {
     } else if (duration < VALIDATION_CONSTRAINTS.MIN_DURATION) {
         errors.push({
             field: "duration",
-            message: `Duration must be at least ${VALIDATION_CONSTRAINTS.MIN_DURATION} minute`,
+            message: `Duration must be at least ${VALIDATION_CONSTRAINTS.MIN_DURATION} minute${VALIDATION_CONSTRAINTS.MIN_DURATION === 1 ? '' : 's'}`,
             code: "DURATION_TOO_SHORT",
         });
     } else if (duration > VALIDATION_CONSTRAINTS.MAX_DURATION) {
@@ -523,7 +523,7 @@ export function validatePracticeSessionData(data: unknown): ValidationResult {
             if (typeof play.duration !== "number" || play.duration < VALIDATION_CONSTRAINTS.MIN_DURATION) {
                 errors.push({
                     field: `plays[${index}].duration`,
-                    message: `Play duration must be at least ${VALIDATION_CONSTRAINTS.MIN_DURATION} minute`,
+                    message: `Play duration must be at least ${VALIDATION_CONSTRAINTS.MIN_DURATION} minute${VALIDATION_CONSTRAINTS.MIN_DURATION === 1 ? '' : 's'}`,
                     code: "INVALID_PLAY_DURATION",
                 });
             }

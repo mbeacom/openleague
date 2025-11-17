@@ -18,6 +18,12 @@ import {
 import { TransformContext, rinkToCanvas } from "./rink-renderer";
 
 /**
+ * Visual constants for drawing
+ */
+const PLAYER_ICON_RADIUS = 12; // feet in rink coordinates
+const SELECTION_COLOR = "#FFD700"; // Gold highlight for selected elements
+
+/**
  * Draws a line with optional directional arrow
  * Requirements: 5.1
  *
@@ -89,29 +95,38 @@ export function drawCurve(
     ctx.lineJoin = "round";
 
     ctx.beginPath();
-    const startCanvas = rinkToCanvas(points[0], transform);
-    ctx.moveTo(startCanvas.x, startCanvas.y);
 
-    if (points.length === 2) {
-        // Just draw a straight line if only 2 points
-        const endCanvas = rinkToCanvas(points[1], transform);
-        ctx.lineTo(endCanvas.x, endCanvas.y);
+    if (points.length < 3) {
+        // Just draw a straight line if there are only 2 points
+        const startCanvas = rinkToCanvas(points[0], transform);
+        ctx.moveTo(startCanvas.x, startCanvas.y);
+        if (points.length === 2) {
+            const endCanvas = rinkToCanvas(points[1], transform);
+            ctx.lineTo(endCanvas.x, endCanvas.y);
+        }
     } else {
-        // Use quadratic curves for smooth path
-        for (let i = 1; i < points.length - 1; i++) {
-            const currentCanvas = rinkToCanvas(points[i], transform);
-            const nextCanvas = rinkToCanvas(points[i + 1], transform);
+        // Use quadratic curves for a smooth path through all points
+        // Technique: use midpoints as destinations and actual points as control points
+        const canvasPoints = points.map(p => rinkToCanvas(p, transform));
 
-            // Calculate control point as midpoint
-            const controlX = (currentCanvas.x + nextCanvas.x) / 2;
-            const controlY = (currentCanvas.y + nextCanvas.y) / 2;
+        // Start at the first point
+        ctx.moveTo(canvasPoints[0].x, canvasPoints[0].y);
 
-            ctx.quadraticCurveTo(currentCanvas.x, currentCanvas.y, controlX, controlY);
+        // Curve through all middle points
+        for (let i = 1; i < canvasPoints.length - 2; i++) {
+            const xc = (canvasPoints[i].x + canvasPoints[i + 1].x) / 2;
+            const yc = (canvasPoints[i].y + canvasPoints[i + 1].y) / 2;
+            ctx.quadraticCurveTo(canvasPoints[i].x, canvasPoints[i].y, xc, yc);
         }
 
-        // Draw to the last point
-        const lastCanvas = rinkToCanvas(points[points.length - 1], transform);
-        ctx.lineTo(lastCanvas.x, lastCanvas.y);
+        // For the last segment, curve to the final point
+        const last = canvasPoints.length - 1;
+        ctx.quadraticCurveTo(
+            canvasPoints[last - 1].x,
+            canvasPoints[last - 1].y,
+            canvasPoints[last].x,
+            canvasPoints[last].y
+        );
     }
 
     ctx.stroke();
@@ -204,11 +219,11 @@ export function drawPlayerIcon(
     isSelected: boolean = false
 ): void {
     const canvasPos = rinkToCanvas(player.position, transform);
-    const radius = 12 * Math.min(transform.scaleX, transform.scaleY);
+    const radius = PLAYER_ICON_RADIUS * Math.min(transform.scaleX, transform.scaleY);
 
     // Draw selection highlight if selected
     if (isSelected) {
-        ctx.strokeStyle = "#FFD700"; // Gold
+        ctx.strokeStyle = SELECTION_COLOR;
         ctx.lineWidth = 3;
         ctx.beginPath();
         ctx.arc(canvasPos.x, canvasPos.y, radius + 4, 0, Math.PI * 2);
@@ -296,7 +311,7 @@ export function drawElement(
 ): void {
     // Draw selection highlight if selected
     if (isSelected) {
-        ctx.strokeStyle = "#FFD700"; // Gold
+        ctx.strokeStyle = SELECTION_COLOR;
         ctx.lineWidth = element.strokeWidth + 4;
         ctx.lineCap = "round";
         ctx.lineJoin = "round";

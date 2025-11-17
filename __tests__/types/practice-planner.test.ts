@@ -98,6 +98,16 @@ describe("Hockey Practice Planner Types", () => {
             expect(isValidPlayerIcon(player)).toBe(false);
         });
 
+        it("should reject player with whitespace-only label", () => {
+            const player = {
+                id: "player-1",
+                position: { x: 50, y: 100 },
+                label: "   ",
+                color: "#FF0000",
+            };
+            expect(isValidPlayerIcon(player)).toBe(false);
+        });
+
         it("should reject player with invalid hex color", () => {
             const player = {
                 id: "player-1",
@@ -926,7 +936,7 @@ describe("Hockey Practice Planner Types", () => {
             expect(isValidPosition(position)).toBe(true);
         });
 
-        it("should handle whitespace-only text annotation", () => {
+        it("should reject whitespace-only text annotation", () => {
             const annotation = {
                 id: "t1",
                 text: "   ",
@@ -934,8 +944,8 @@ describe("Hockey Practice Planner Types", () => {
                 fontSize: 14,
                 color: "#000000",
             };
-            // Whitespace is considered non-empty
-            expect(isValidTextAnnotation(annotation)).toBe(true);
+            // Whitespace-only text should be invalid after trim()
+            expect(isValidTextAnnotation(annotation)).toBe(false);
         });
 
         it("should validate multiple plays with different types", () => {

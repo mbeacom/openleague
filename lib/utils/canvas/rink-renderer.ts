@@ -1,10 +1,10 @@
 /**
  * Rink rendering utilities for the Hockey Practice Planner
- * 
+ *
  * This module provides functions to draw a standard hockey rink with proper
  * dimensions and markings, coordinate transformations for responsive scaling,
  * and layer caching for performance optimization.
- * 
+ *
  * Requirements: 1.1
  */
 
@@ -48,6 +48,14 @@ const LINE_DIMENSIONS = {
 } as const;
 
 /**
+ * Faceoff positioning constants
+ */
+const FACEOFF_POSITIONING = {
+    circleOffsetY: 22, // feet from center line
+    circleGoalOffset: 20, // feet from goal line
+} as const;
+
+/**
  * Coordinate transformation context for responsive scaling
  */
 export interface TransformContext {
@@ -62,7 +70,7 @@ export interface TransformContext {
 /**
  * Creates a transformation context for converting between rink coordinates
  * and canvas coordinates with responsive scaling
- * 
+ *
  * @param canvasWidth - Width of the canvas element in pixels
  * @param canvasHeight - Height of the canvas element in pixels
  * @param padding - Padding around the rink in pixels (default: 20)
@@ -99,7 +107,7 @@ export function createTransformContext(
 
 /**
  * Converts rink coordinates to canvas coordinates
- * 
+ *
  * @param rinkPos - Position in rink coordinates (feet)
  * @param transform - Transformation context
  * @returns Position in canvas coordinates (pixels)
@@ -113,7 +121,7 @@ export function rinkToCanvas(rinkPos: Position, transform: TransformContext): Po
 
 /**
  * Converts canvas coordinates to rink coordinates
- * 
+ *
  * @param canvasPos - Position in canvas coordinates (pixels)
  * @param transform - Transformation context
  * @returns Position in rink coordinates (feet)
@@ -141,7 +149,7 @@ export function clearRinkCache(): void {
 
 /**
  * Gets or creates a cached rink background canvas
- * 
+ *
  * @param width - Canvas width in pixels
  * @param height - Canvas height in pixels
  * @returns Cached canvas with rink background
@@ -178,7 +186,7 @@ function getCachedRinkCanvas(width: number, height: number): HTMLCanvasElement {
 
 /**
  * Draws the complete hockey rink with all markings
- * 
+ *
  * @param ctx - Canvas 2D rendering context
  * @param transform - Transformation context for coordinate conversion
  */
@@ -196,7 +204,7 @@ export function drawRink(ctx: CanvasRenderingContext2D, transform: TransformCont
 
 /**
  * Draws the rink background with all markings (internal function)
- * 
+ *
  * @param ctx - Canvas 2D rendering context
  * @param transform - Transformation context
  */
@@ -363,11 +371,11 @@ function drawCenterCircle(ctx: CanvasRenderingContext2D, transform: TransformCon
  * Draws the faceoff circles
  */
 function drawFaceoffCircles(ctx: CanvasRenderingContext2D, transform: TransformContext): void {
-    const circleY1 = RINK_DIMENSIONS.height / 2 - 22; // 22 feet from center
-    const circleY2 = RINK_DIMENSIONS.height / 2 + 22;
+    const circleY1 = RINK_DIMENSIONS.height / 2 - FACEOFF_POSITIONING.circleOffsetY;
+    const circleY2 = RINK_DIMENSIONS.height / 2 + FACEOFF_POSITIONING.circleOffsetY;
 
-    const leftCircleX = LINE_DIMENSIONS.goalLineDistance + 20; // 20 feet from goal line
-    const rightCircleX = RINK_DIMENSIONS.width - LINE_DIMENSIONS.goalLineDistance - 20;
+    const leftCircleX = LINE_DIMENSIONS.goalLineDistance + FACEOFF_POSITIONING.circleGoalOffset;
+    const rightCircleX = RINK_DIMENSIONS.width - LINE_DIMENSIONS.goalLineDistance - FACEOFF_POSITIONING.circleGoalOffset;
 
     const radius = CIRCLE_DIMENSIONS.faceoffCircleRadius * transform.scaleX;
 
@@ -394,11 +402,11 @@ function drawFaceoffCircles(ctx: CanvasRenderingContext2D, transform: TransformC
  * Draws the faceoff dots
  */
 function drawFaceoffDots(ctx: CanvasRenderingContext2D, transform: TransformContext): void {
-    const circleY1 = RINK_DIMENSIONS.height / 2 - 22;
-    const circleY2 = RINK_DIMENSIONS.height / 2 + 22;
+    const circleY1 = RINK_DIMENSIONS.height / 2 - FACEOFF_POSITIONING.circleOffsetY;
+    const circleY2 = RINK_DIMENSIONS.height / 2 + FACEOFF_POSITIONING.circleOffsetY;
 
-    const leftCircleX = LINE_DIMENSIONS.goalLineDistance + 20;
-    const rightCircleX = RINK_DIMENSIONS.width - LINE_DIMENSIONS.goalLineDistance - 20;
+    const leftCircleX = LINE_DIMENSIONS.goalLineDistance + FACEOFF_POSITIONING.circleGoalOffset;
+    const rightCircleX = RINK_DIMENSIONS.width - LINE_DIMENSIONS.goalLineDistance - FACEOFF_POSITIONING.circleGoalOffset;
 
     const dotRadius = CIRCLE_DIMENSIONS.faceoffDotRadius * transform.scaleX;
 
