@@ -7,7 +7,7 @@
   - Update User and Team models with new relations
   - _Requirements: 1.5, 2.1, 4.1_
 
-- [ ] 2. Create TypeScript type definitions
+- [x] 2. Create TypeScript type definitions
 
   - Define PlayData, PlayerIcon, DrawingElement, and TextAnnotation interfaces in types directory
   - Define PracticeSessionData and PlayInSession interfaces
@@ -15,30 +15,30 @@
   - Create validation schemas for play data JSON structure
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 5.1, 5.2_
 
-- [ ] 3. Implement canvas utility functions
+- [x] 3. Implement canvas utility functions
 
-  - [ ] 3.1 Create rink rendering utilities
+  - [x] 3.1 Create rink rendering utilities
 
     - Write function to draw hockey rink with standard dimensions and markings
     - Implement coordinate transformation utilities for responsive scaling
     - Create layer caching system for rink background
     - _Requirements: 1.1_
 
-  - [ ] 3.2 Implement drawing utilities
+  - [x] 3.2 Implement drawing utilities
 
     - Write functions for drawing lines, curves, and arrows with directional indicators
     - Implement player icon rendering with labels and colors
     - Create text annotation rendering functions
     - _Requirements: 1.2, 1.3, 1.4, 5.1, 5.2_
 
-  - [ ] 3.3 Create interaction utilities
+  - [x] 3.3 Create interaction utilities
 
     - Implement hit detection for selecting elements on canvas
     - Write touch and mouse event handlers with coordinate mapping
     - Create undo/redo history management system
     - _Requirements: 5.4, 5.5_
 
-  - [ ] 3.4 Implement thumbnail generation
+  - [x] 3.4 Implement thumbnail generation
     - Write function to export canvas as base64 PNG
     - Create thumbnail scaling and optimization utilities
     - _Requirements: 4.2_
