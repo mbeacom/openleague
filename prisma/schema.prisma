@@ -31,6 +31,8 @@ model User {
   notificationPreferences NotificationPreference[]
   notificationBatches    NotificationBatch[]
   auditLogs              AuditLog[]
+  practiceSessions       PracticeSession[]
+  plays                  Play[]
 }
 
 // Audit log model for tracking administrative actions and security events
@@ -86,6 +88,8 @@ model Team {
   transfersTo       PlayerTransfer[] @relation("TransferToTeam")
   messageTargeting  MessageTargeting[]
   auditLogs         AuditLog[]
+  practiceSessions  PracticeSession[]
+  plays             Play[]
 
   @@index([leagueId]) // Optimize league-team queries
   @@index([divisionId]) // Optimize division-team queries
@@ -411,6 +415,7 @@ model NotificationPreference {
   eventNotifications  Boolean @default(true)  // Event created/updated/cancelled
   rsvpReminders       Boolean @default(true)  // RSVP reminder emails
   teamInvitations     Boolean @default(true)  // Team invitation emails
+  practicePlanNotifications Boolean @default(true)  // Practice plan share/update notifications
 
   // Delivery preferences
   emailEnabled        Boolean @default(true)  // Receive emails
@@ -466,4 +471,70 @@ model BatchedMessage {
   message   LeagueMessage? @relation(fields: [messageId], references: [id], onDelete: SetNull)
 
   @@map("batched_messages")
+}
+
+// Practice session model for hockey practice planner
+model PracticeSession {
+  id          String   @id @default(cuid())
+  title       String
+  date        DateTime
+  duration    Int      // Total duration in minutes
+  isShared    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  teamId      String
+  team        Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  plays       PracticeSessionPlay[]
+
+  @@index([teamId, date])
+  @@map("practice_sessions")
+}
+
+// Junction table for plays in practice sessions
+model PracticeSessionPlay {
+  id           String   @id @default(cuid())
+  sequence     Int      // Order in the session
+  duration     Int      // Duration for this play in minutes
+  instructions String?  // Specific instructions for this instance
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt  // Track modifications for auditing
+
+  sessionId    String
+  session      PracticeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  playId       String
+  // Cascade delete to preserve session integrity when library play is deleted (Req 4.5)
+  play         Play     @relation(fields: [playId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, sequence])
+  @@index([sessionId])
+  @@map("practice_session_plays")
+}
+
+// Reusable play model for practice planner
+model Play {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  thumbnail   String?  // Base64 encoded PNG thumbnail (generated server-side from canvas export)
+  playData    Json     // Serialized PlayData structure
+  isTemplate  Boolean  @default(false) // Library plays vs session-specific
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  teamId      String
+  team        Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  sessions    PracticeSessionPlay[]
+
+  @@index([teamId, isTemplate])
+  @@map("plays")
 }
