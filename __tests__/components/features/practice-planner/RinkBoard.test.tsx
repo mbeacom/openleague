@@ -4,16 +4,16 @@
  * Basic smoke tests to verify the component renders and initializes correctly.
  */
 
-import { describe, it, expect, vi, beforeAll, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeAll } from "vitest";
 import { render } from "@testing-library/react";
 import { RinkBoard } from "@/components/features/practice-planner/RinkBoard";
 import { PlayData } from "@/types/practice-planner";
 
 // Mock ResizeObserver
 class ResizeObserverMock {
-    observe() { }
-    unobserve() { }
-    disconnect() { }
+    observe() { /* No-op: Mock implementation for testing */ }
+    unobserve() { /* No-op: Mock implementation for testing */ }
+    disconnect() { /* No-op: Mock implementation for testing */ }
 }
 
 // Mock canvas context

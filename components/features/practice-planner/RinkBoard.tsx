@@ -24,12 +24,13 @@ import {
     drawRink,
     TransformContext,
     rinkToCanvas,
+    canvasToRink,
 } from "@/lib/utils/canvas/rink-renderer";
 import { drawAllElements } from "@/lib/utils/canvas/drawing-utils";
 import {
     HistoryManager,
     hitTest,
-    getEventRinkPosition,
+    getMousePosition,
     clampToRinkBounds,
 } from "@/lib/utils/canvas/interaction-utils";
 
@@ -83,12 +84,67 @@ export function RinkBoard({
     const [isDragging, setIsDragging] = useState(false);
     const [dragOffset, setDragOffset] = useState<Position | null>(null);
 
+    // Temporary drag position state (for visual feedback during drag, committed on mouseUp)
+    const [dragPreviewPosition, setDragPreviewPosition] = useState<Position | null>(null);
+
     // Touch interaction state
     const [touchStartDistance, setTouchStartDistance] = useState<number | null>(null);
     const [initialScale, setInitialScale] = useState(1);
     const [scale, setScale] = useState(1);
     const [panOffset, setPanOffset] = useState<Position>({ x: 0, y: 0 });
     const [lastTouchCenter, setLastTouchCenter] = useState<Position | null>(null);
+
+    // Refs to avoid stale closures in event handlers
+    // These refs hold the latest values without triggering callback recreation
+    const playDataRef = useRef(playData);
+    const isDraggingRef = useRef(isDragging);
+    const selectedElementIdRef = useRef(selectedElementId);
+    const dragOffsetRef = useRef(dragOffset);
+    const scaleRef = useRef(scale);
+    const panOffsetRef = useRef(panOffset);
+
+    // Keep refs in sync with state
+    useEffect(() => { playDataRef.current = playData; }, [playData]);
+    useEffect(() => { isDraggingRef.current = isDragging; }, [isDragging]);
+    useEffect(() => { selectedElementIdRef.current = selectedElementId; }, [selectedElementId]);
+    useEffect(() => { dragOffsetRef.current = dragOffset; }, [dragOffset]);
+    useEffect(() => { scaleRef.current = scale; }, [scale]);
+    useEffect(() => { panOffsetRef.current = panOffset; }, [panOffset]);
+
+    /**
+     * Get rink position from event, accounting for zoom/pan transformations.
+     * Applies inverse transformation to mouse/touch coordinates before converting to rink space.
+     * This ensures accurate coordinate calculation after zooming or panning.
+     */
+    const getTransformedRinkPosition = useCallback(
+        (event: MouseEvent | TouchEvent, canvas: HTMLCanvasElement, transformCtx: TransformContext): Position | null => {
+            // Get canvas position from mouse or touch event
+            let canvasPos: Position | null;
+            if (event instanceof MouseEvent) {
+                canvasPos = getMousePosition(event, canvas);
+            } else {
+                // TouchEvent - get position from first touch
+                if (event.touches.length === 0) return null;
+                const rect = canvas.getBoundingClientRect();
+                const touch = event.touches[0];
+                canvasPos = {
+                    x: touch.clientX - rect.left,
+                    y: touch.clientY - rect.top,
+                };
+            }
+            if (!canvasPos) return null;
+
+            // Apply inverse transformation to account for zoom and pan
+            const currentScale = scaleRef.current;
+            const currentPan = panOffsetRef.current;
+            const transformedX = (canvasPos.x - currentPan.x) / currentScale;
+            const transformedY = (canvasPos.y - currentPan.y) / currentScale;
+            const transformedCanvasPos = { x: transformedX, y: transformedY };
+
+            return canvasToRink(transformedCanvasPos, transformCtx);
+        },
+        []
+    );
 
     /**
      * Handle canvas resize for responsive sizing
@@ -158,12 +214,37 @@ export function RinkBoard({
         // Draw rink background
         drawRink(ctx, transform);
 
-        // Draw all elements
+        // Create a modified version of playData for rendering with drag preview
+        let renderPlayers = playData.players;
+        let renderAnnotations = playData.annotations;
+
+        // Apply drag preview position during dragging (visual feedback only)
+        if (isDragging && selectedElementId && dragPreviewPosition) {
+            const playerIndex = playData.players.findIndex((p) => p.id === selectedElementId);
+            if (playerIndex !== -1) {
+                renderPlayers = [...playData.players];
+                renderPlayers[playerIndex] = {
+                    ...renderPlayers[playerIndex],
+                    position: dragPreviewPosition,
+                };
+            } else {
+                const annotationIndex = playData.annotations.findIndex((a) => a.id === selectedElementId);
+                if (annotationIndex !== -1) {
+                    renderAnnotations = [...playData.annotations];
+                    renderAnnotations[annotationIndex] = {
+                        ...renderAnnotations[annotationIndex],
+                        position: dragPreviewPosition,
+                    };
+                }
+            }
+        }
+
+        // Draw all elements (with preview position during drag)
         drawAllElements(
             ctx,
-            playData.players,
+            renderPlayers,
             playData.drawings,
-            playData.annotations,
+            renderAnnotations,
             transform,
             selectedElementId || undefined
         );
@@ -191,6 +272,8 @@ export function RinkBoard({
         playData,
         selectedElementId,
         isDrawing,
+        isDragging,
+        dragPreviewPosition,
         currentDrawingPoints,
         selectedColor,
     ]);
@@ -292,7 +375,7 @@ export function RinkBoard({
         (event: React.MouseEvent<HTMLCanvasElement>) => {
             if (mode === "view" || !transform || !canvasRef.current) return;
 
-            const rinkPos = getEventRinkPosition(event.nativeEvent, canvasRef.current, transform);
+            const rinkPos = getTransformedRinkPosition(event.nativeEvent, canvasRef.current, transform);
             if (!rinkPos) return;
 
             const clampedPos = clampToRinkBounds(rinkPos);
@@ -407,18 +490,23 @@ export function RinkBoard({
             playData,
             updatePlayData,
             generateId,
+            getTransformedRinkPosition,
         ]
     );
 
     /**
      * Handle mouse move event
      * Requirements: 1.3, 5.1, 5.2
+     *
+     * Uses refs for drag-related state to avoid stale closures.
+     * During dragging, only updates the preview position (visual feedback).
+     * The actual data change is committed on mouseUp for performance.
      */
     const handleMouseMove = useCallback(
         (event: React.MouseEvent<HTMLCanvasElement>) => {
             if (mode === "view" || !transform || !canvasRef.current) return;
 
-            const rinkPos = getEventRinkPosition(event.nativeEvent, canvasRef.current, transform);
+            const rinkPos = getTransformedRinkPosition(event.nativeEvent, canvasRef.current, transform);
             if (!rinkPos) return;
 
             const clampedPos = clampToRinkBounds(rinkPos);
@@ -428,55 +516,29 @@ export function RinkBoard({
                 setCurrentDrawingPoints((prev) => [...prev, clampedPos]);
             }
 
-            // Handle dragging selected elements
+            // Handle dragging selected elements - using refs to avoid stale closures
             // Requirements: 5.4
-            if (isDragging && selectedElementId && dragOffset) {
+            // Only update visual preview during drag - commit on mouseUp for performance
+            if (isDraggingRef.current && selectedElementIdRef.current && dragOffsetRef.current) {
                 const newPosition = {
-                    x: clampedPos.x - dragOffset.x,
-                    y: clampedPos.y - dragOffset.y,
+                    x: clampedPos.x - dragOffsetRef.current.x,
+                    y: clampedPos.y - dragOffsetRef.current.y,
                 };
                 const clampedNewPos = clampToRinkBounds(newPosition);
 
-                const newPlayData = { ...playData };
-
-                // Update player position
-                const playerIndex = playData.players.findIndex((p) => p.id === selectedElementId);
-                if (playerIndex !== -1) {
-                    newPlayData.players = [...playData.players];
-                    newPlayData.players[playerIndex] = {
-                        ...newPlayData.players[playerIndex],
-                        position: clampedNewPos,
-                    };
-                    updatePlayData(newPlayData);
-                    return;
-                }
-
-                // Update annotation position
-                const annotationIndex = playData.annotations.findIndex(
-                    (a) => a.id === selectedElementId
-                );
-                if (annotationIndex !== -1) {
-                    const updatedAnnotations = [...playData.annotations];
-                    updatedAnnotations[annotationIndex] = {
-                        ...updatedAnnotations[annotationIndex],
-                        position: clampedNewPos,
-                    };
-                    updatePlayData({
-                        ...playData,
-                        annotations: updatedAnnotations,
-                    });
-                }
+                // Update preview position only (visual feedback during drag)
+                setDragPreviewPosition(clampedNewPos);
             }
         },
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        [mode, transform, isDrawing, selectedTool]
-        // Note: Intentionally omitting dragOffset, isDragging, playData, selectedElementId, updatePlayData
-        // to avoid infinite re-render loops. These are used within the callback but should not trigger recreation.
+        [mode, transform, isDrawing, selectedTool, getTransformedRinkPosition]
     );
 
     /**
      * Handle mouse up event
      * Requirements: 1.3, 5.1, 5.2
+     * 
+     * Commits drag changes to playData on mouseUp (performance optimization).
+     * During drag, only the preview position is updated for visual feedback.
      */
     const handleMouseUp = useCallback(
         () => {
@@ -498,6 +560,41 @@ export function RinkBoard({
                 });
             }
 
+            // Commit drag changes to playData (single history entry)
+            if (isDragging && selectedElementId && dragPreviewPosition) {
+                const currentPlayData = playDataRef.current;
+                
+                // Update player position
+                const playerIndex = currentPlayData.players.findIndex((p) => p.id === selectedElementId);
+                if (playerIndex !== -1) {
+                    const newPlayers = [...currentPlayData.players];
+                    newPlayers[playerIndex] = {
+                        ...newPlayers[playerIndex],
+                        position: dragPreviewPosition,
+                    };
+                    updatePlayData({
+                        ...currentPlayData,
+                        players: newPlayers,
+                    });
+                } else {
+                    // Update annotation position
+                    const annotationIndex = currentPlayData.annotations.findIndex(
+                        (a) => a.id === selectedElementId
+                    );
+                    if (annotationIndex !== -1) {
+                        const newAnnotations = [...currentPlayData.annotations];
+                        newAnnotations[annotationIndex] = {
+                            ...newAnnotations[annotationIndex],
+                            position: dragPreviewPosition,
+                        };
+                        updatePlayData({
+                            ...currentPlayData,
+                            annotations: newAnnotations,
+                        });
+                    }
+                }
+            }
+
             // Reset drawing state
             setIsDrawing(false);
             setCurrentDrawingPoints([]);
@@ -505,11 +602,15 @@ export function RinkBoard({
             // Reset dragging state
             setIsDragging(false);
             setDragOffset(null);
+            setDragPreviewPosition(null);
         },
         [
             mode,
             transform,
             isDrawing,
+            isDragging,
+            selectedElementId,
+            dragPreviewPosition,
             currentDrawingPoints,
             selectedTool,
             selectedColor,
@@ -606,22 +707,16 @@ export function RinkBoard({
 
             if (event.touches.length === 1) {
                 // Single touch - treat like mouse down
-                const rinkPos = getEventRinkPosition(
-                    event.nativeEvent,
-                    canvasRef.current,
-                    transform
-                );
-                if (!rinkPos) return;
-
-                // Simulate mouse event for single touch
+                // Use getTransformedRinkPosition to account for zoom/pan
                 const mouseEvent = new MouseEvent("mousedown", {
                     clientX: event.touches[0].clientX,
                     clientY: event.touches[0].clientY,
                 });
+                // Simulate mouse event for single touch (handleMouseDown uses getTransformedRinkPosition)
                 handleMouseDown({
                     nativeEvent: mouseEvent,
-                    preventDefault: () => { },
-                    stopPropagation: () => { },
+                    preventDefault: () => { /* No-op: touch preventDefault handled at parent level */ },
+                    stopPropagation: () => { /* No-op: propagation control not needed for simulated events */ },
                 } as React.MouseEvent<HTMLCanvasElement>);
             } else if (event.touches.length === 2) {
                 // Two touches - pinch to zoom or pan
