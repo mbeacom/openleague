@@ -57,6 +57,44 @@ export interface DrawingToolbarProps {
 }
 
 /**
+ * Calculate relative luminance of a color for contrast decisions
+ * Uses WCAG 2.0 formula: https://www.w3.org/TR/WCAG20/#relativeluminancedef
+ * @param hexColor - Hex color string (e.g., "#FFFFFF")
+ * @returns Relative luminance value between 0 (black) and 1 (white)
+ */
+function getRelativeLuminance(hexColor: string): number {
+    // Remove # if present
+    const hex = hexColor.replace("#", "");
+
+    // Parse RGB components
+    const r = parseInt(hex.substring(0, 2), 16) / 255;
+    const g = parseInt(hex.substring(2, 4), 16) / 255;
+    const b = parseInt(hex.substring(4, 6), 16) / 255;
+
+    // Apply gamma correction
+    const toLinear = (c: number) =>
+        c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+
+    const rLinear = toLinear(r);
+    const gLinear = toLinear(g);
+    const bLinear = toLinear(b);
+
+    // Calculate relative luminance
+    return 0.2126 * rLinear + 0.7152 * gLinear + 0.0722 * bLinear;
+}
+
+/**
+ * Get contrasting text color (black or white) based on background luminance
+ * @param backgroundColor - Hex color of the background
+ * @returns "#000000" for light backgrounds, "#FFFFFF" for dark backgrounds
+ */
+function getContrastingColor(backgroundColor: string): string {
+    const luminance = getRelativeLuminance(backgroundColor);
+    // Use 0.5 as threshold (midpoint between black=0 and white=1)
+    return luminance > 0.5 ? "#000000" : "#FFFFFF";
+}
+
+/**
  * Predefined color palette for drawing
  * Requirements: 5.2
  */
@@ -192,41 +230,41 @@ export function DrawingToolbar({
                         flexWrap: isMobile ? "wrap" : "nowrap",
                     }}
                 >
-                    <ToggleButton value="select" aria-label="select tool">
-                        <Tooltip title="Select">
+                    <Tooltip title="Select">
+                        <ToggleButton value="select" aria-label="select tool">
                             <SelectIcon />
-                        </Tooltip>
-                    </ToggleButton>
-                    <ToggleButton value="player" aria-label="player tool">
-                        <Tooltip title="Add Player">
+                        </ToggleButton>
+                    </Tooltip>
+                    <Tooltip title="Add Player">
+                        <ToggleButton value="player" aria-label="player tool">
                             <PlayerIcon />
-                        </Tooltip>
-                    </ToggleButton>
-                    <ToggleButton value="line" aria-label="line tool">
-                        <Tooltip title="Draw Line">
+                        </ToggleButton>
+                    </Tooltip>
+                    <Tooltip title="Draw Line">
+                        <ToggleButton value="line" aria-label="line tool">
                             <LineIcon />
-                        </Tooltip>
-                    </ToggleButton>
-                    <ToggleButton value="curve" aria-label="curve tool">
-                        <Tooltip title="Draw Curve">
+                        </ToggleButton>
+                    </Tooltip>
+                    <Tooltip title="Draw Curve">
+                        <ToggleButton value="curve" aria-label="curve tool">
                             <CurveIcon />
-                        </Tooltip>
-                    </ToggleButton>
-                    <ToggleButton value="arrow" aria-label="arrow tool">
-                        <Tooltip title="Draw Arrow">
+                        </ToggleButton>
+                    </Tooltip>
+                    <Tooltip title="Draw Arrow">
+                        <ToggleButton value="arrow" aria-label="arrow tool">
                             <ArrowIcon />
-                        </Tooltip>
-                    </ToggleButton>
-                    <ToggleButton value="text" aria-label="text tool">
-                        <Tooltip title="Add Text">
+                        </ToggleButton>
+                    </Tooltip>
+                    <Tooltip title="Add Text">
+                        <ToggleButton value="text" aria-label="text tool">
                             <TextIcon />
-                        </Tooltip>
-                    </ToggleButton>
-                    <ToggleButton value="eraser" aria-label="eraser tool">
-                        <Tooltip title="Eraser">
+                        </ToggleButton>
+                    </Tooltip>
+                    <Tooltip title="Eraser">
+                        <ToggleButton value="eraser" aria-label="eraser tool">
                             <EraserIcon />
-                        </Tooltip>
-                    </ToggleButton>
+                        </ToggleButton>
+                    </Tooltip>
                 </ToggleButtonGroup>
 
                 {/* Color Picker */}
@@ -246,10 +284,7 @@ export function DrawingToolbar({
                     >
                         <PaletteIcon
                             sx={{
-                                color:
-                                    selectedColor === "#FFFFFF" || selectedColor === "#FFFF00"
-                                        ? "#000000"
-                                        : "#FFFFFF",
+                                color: getContrastingColor(selectedColor),
                             }}
                         />
                     </IconButton>

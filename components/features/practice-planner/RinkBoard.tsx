@@ -10,7 +10,7 @@
  * Requirements: 1.1, 1.2, 1.3, 1.4, 5.1, 5.2, 5.4, 5.5, 3.5
  */
 
-import React, { useRef, useEffect, useState, useCallback } from "react";
+import React, { useRef, useEffect, useState, useCallback, forwardRef, useImperativeHandle } from "react";
 import {
     PlayData,
     DrawingTool,
@@ -49,6 +49,16 @@ export interface RinkBoardProps {
 }
 
 /**
+ * Handle interface for imperative methods exposed via ref
+ * Allows parent components to trigger undo/redo/clear actions
+ */
+export interface RinkBoardHandle {
+    undo: () => void;
+    redo: () => void;
+    clear: () => void;
+}
+
+/**
  * Default dimensions for the canvas
  */
 const DEFAULT_WIDTH = 800;
@@ -60,16 +70,19 @@ const DEFAULT_COLOR = "#000000";
  *
  * Requirements: 1.1 - Display visual hockey rink board
  */
-export function RinkBoard({
-    mode,
-    playData,
-    onPlayDataChange,
-    selectedTool = "select",
-    selectedColor = DEFAULT_COLOR,
-    width = DEFAULT_WIDTH,
-    height = DEFAULT_HEIGHT,
-    onUndoRedoStateChange,
-}: RinkBoardProps) {
+export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function RinkBoard(
+    {
+        mode,
+        playData,
+        onPlayDataChange,
+        selectedTool = "select",
+        selectedColor = DEFAULT_COLOR,
+        width = DEFAULT_WIDTH,
+        height = DEFAULT_HEIGHT,
+        onUndoRedoStateChange,
+    },
+    ref
+) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const [canvasSize, setCanvasSize] = useState({ width, height });
@@ -359,6 +372,43 @@ export function RinkBoard({
             }
         }
     }, [mode, onPlayDataChange, onUndoRedoStateChange]);
+
+    /**
+     * Handle clear operation - removes all elements from the canvas
+     * Requirements: 5.3
+     */
+    const handleClear = useCallback(() => {
+        if (mode === "view") return;
+
+        const clearedData: PlayData = {
+            players: [],
+            drawings: [],
+            annotations: [],
+        };
+
+        if (onPlayDataChange) {
+            onPlayDataChange(clearedData);
+            historyManagerRef.current.push(clearedData);
+
+            // Notify parent of undo/redo state changes
+            if (onUndoRedoStateChange) {
+                onUndoRedoStateChange(
+                    historyManagerRef.current.canUndo(),
+                    historyManagerRef.current.canRedo()
+                );
+            }
+        }
+    }, [mode, onPlayDataChange, onUndoRedoStateChange]);
+
+    /**
+     * Expose imperative methods to parent components via ref
+     * Allows toolbar to trigger undo/redo/clear actions on RinkBoard
+     */
+    useImperativeHandle(ref, () => ({
+        undo: handleUndo,
+        redo: handleRedo,
+        clear: handleClear,
+    }), [handleUndo, handleRedo, handleClear]);
 
     /**
      * Generate unique ID for new elements
@@ -856,4 +906,4 @@ export function RinkBoard({
             />
         </div>
     );
-}
+});

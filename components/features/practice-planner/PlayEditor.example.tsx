@@ -7,9 +7,9 @@
  * with RinkBoard. This will be replaced by the full PlayEditor in task 6.
  */
 
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { Box, Paper, Typography } from "@mui/material";
-import { RinkBoard } from "./RinkBoard";
+import { RinkBoard, RinkBoardHandle } from "./RinkBoard";
 import { DrawingToolbar } from "./DrawingToolbar";
 import { PlayData, DrawingTool } from "@/types/practice-planner";
 
@@ -17,6 +17,8 @@ import { PlayData, DrawingTool } from "@/types/practice-planner";
  * Example PlayEditor component demonstrating toolbar integration
  */
 export function PlayEditorExample() {
+    const rinkBoardRef = useRef<RinkBoardHandle>(null);
+
     const [playData, setPlayData] = useState<PlayData>({
         players: [],
         drawings: [],
@@ -33,21 +35,15 @@ export function PlayEditorExample() {
     };
 
     const handleUndo = () => {
-        // Undo functionality is handled by RinkBoard internally
-        console.log("Undo triggered");
+        rinkBoardRef.current?.undo();
     };
 
     const handleRedo = () => {
-        // Redo functionality is handled by RinkBoard internally
-        console.log("Redo triggered");
+        rinkBoardRef.current?.redo();
     };
 
     const handleClear = () => {
-        setPlayData({
-            players: [],
-            drawings: [],
-            annotations: [],
-        });
+        rinkBoardRef.current?.clear();
     };
 
     const handleUndoRedoStateChange = (undo: boolean, redo: boolean) => {
@@ -77,6 +73,7 @@ export function PlayEditorExample() {
 
             <Paper elevation={2} sx={{ p: 2 }}>
                 <RinkBoard
+                    ref={rinkBoardRef}
                     mode="edit"
                     playData={playData}
                     onPlayDataChange={handlePlayDataChange}
