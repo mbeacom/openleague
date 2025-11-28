@@ -7,6 +7,7 @@
  * - Schema validation against spec requirements
  */
 
+import { describe, it, expect } from "vitest";
 import {
     Position,
     PlayerIcon,

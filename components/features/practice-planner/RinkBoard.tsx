@@ -536,7 +536,7 @@ export function RinkBoard({
     /**
      * Handle mouse up event
      * Requirements: 1.3, 5.1, 5.2
-     * 
+     *
      * Commits drag changes to playData on mouseUp (performance optimization).
      * During drag, only the preview position is updated for visual feedback.
      */
@@ -563,7 +563,7 @@ export function RinkBoard({
             // Commit drag changes to playData (single history entry)
             if (isDragging && selectedElementId && dragPreviewPosition) {
                 const currentPlayData = playDataRef.current;
-                
+
                 // Update player position
                 const playerIndex = currentPlayData.players.findIndex((p) => p.id === selectedElementId);
                 if (playerIndex !== -1) {
