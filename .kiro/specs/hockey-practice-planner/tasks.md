@@ -79,7 +79,7 @@
     - Add pan gesture support
     - _Requirements: 3.5_
 
-- [ ] 5. Create DrawingToolbar component
+- [x] 5. Create DrawingToolbar component
 
   - Implement tool selection buttons with active state
   - Add color picker for drawing colors
