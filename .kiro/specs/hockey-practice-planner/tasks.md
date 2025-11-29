@@ -88,16 +88,16 @@
   - Implement responsive layout for mobile
   - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5_
 
-- [ ] 6. Build PlayEditor component
+- [x] 6. Build PlayEditor component
 
-  - [ ] 6.1 Create play editor layout
+  - [x] 6.1 Create play editor layout
 
     - Integrate RinkBoard component in edit mode
     - Add DrawingToolbar component
     - Create play metadata form (name, description)
     - _Requirements: 1.1, 1.2, 1.3, 1.4_
 
-  - [ ] 6.2 Implement save functionality
+  - [x] 6.2 Implement save functionality
 
     - Add save button with loading state
     - Implement auto-save with debouncing
@@ -105,7 +105,7 @@
     - Show save status feedback
     - _Requirements: 1.5, 4.1_
 
-  - [ ] 6.3 Add save to library option
+  - [x] 6.3 Add save to library option
     - Create checkbox to mark play as template
     - Implement save to library action
     - _Requirements: 4.1_

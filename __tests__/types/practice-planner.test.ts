@@ -899,11 +899,13 @@ describe("Hockey Practice Planner Types", () => {
                 description: "5v4 power play setup",
                 thumbnail: "data:image/png;base64,...",
                 playData: { players: [], drawings: [], annotations: [] },
+                isTemplate: true,
                 createdAt: new Date(),
                 updatedAt: new Date(),
             };
             expect(savedPlay).toHaveProperty("id");
             expect(savedPlay).toHaveProperty("thumbnail");
+            expect(savedPlay).toHaveProperty("isTemplate");
         });
 
         it("should support requirement 5.1 - drawing tools color support", () => {
