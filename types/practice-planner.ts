@@ -128,6 +128,7 @@ export interface SavedPlay {
     description: string;
     thumbnail: string; // base64 PNG
     playData: PlayData;
+    isTemplate: boolean; // Whether this play is saved to the library
     createdAt: Date;
     updatedAt: Date;
 }
