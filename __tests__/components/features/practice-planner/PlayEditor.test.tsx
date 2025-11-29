@@ -223,8 +223,7 @@ describe("PlayEditor", () => {
             });
         });
 
-        it("validates name is required", async () => {
-            const user = userEvent.setup();
+        it("validates name is required", () => {
             const onSave = vi.fn();
             renderWithTheme(createDefaultProps({ onSave }));
 

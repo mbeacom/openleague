@@ -42,7 +42,8 @@ global.ResizeObserver = vi.fn().mockImplementation(() => ({
 }));
 
 // Mock HTMLCanvasElement.getContext for canvas-based components
-HTMLCanvasElement.prototype.getContext = vi.fn().mockImplementation((contextId: string) => {
+HTMLCanvasElement.prototype.getContext = vi.fn().mockImplementation(
+  (contextId: '2d' | 'webgl' | 'webgl2' | 'bitmaprenderer') => {
   if (contextId === '2d') {
     return {
       fillRect: vi.fn(),

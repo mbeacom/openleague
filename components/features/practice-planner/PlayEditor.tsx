@@ -57,13 +57,6 @@ export function PlayEditor({
     const isMobile = useMediaQuery(theme.breakpoints.down("md"));
     const rinkBoardRef = useRef<RinkBoardHandle>(null);
 
-    // Team ID reference for future server actions
-    // Currently used to associate plays with teams when saving
-    const teamIdRef = useRef(teamId);
-    useEffect(() => {
-        teamIdRef.current = teamId;
-    }, [teamId]);
-
     // Play metadata state
     const [name, setName] = useState(initialData?.name || "");
     const [description, setDescription] = useState(initialData?.description || "");
@@ -92,6 +85,8 @@ export function PlayEditor({
     // Auto-save state
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
     const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const successTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const handleSaveRef = useRef<(() => Promise<void>) | undefined>(undefined);
 
     /**
      * Handle play data changes
@@ -177,7 +172,7 @@ export function PlayEditor({
             return;
         }
 
-        if (description.length > 500) {
+        if (description.trim().length > 500) {
             setSaveError("Description must be 500 characters or less");
             return;
         }
@@ -218,8 +213,11 @@ export function PlayEditor({
             setHasUnsavedChanges(false);
             setSaveSuccess(true);
 
-            // Clear success message after 3 seconds
-            setTimeout(() => {
+            // Clear success message after 3 seconds (with cleanup to prevent memory leak)
+            if (successTimeoutRef.current) {
+                clearTimeout(successTimeoutRef.current);
+            }
+            successTimeoutRef.current = setTimeout(() => {
                 setSaveSuccess(false);
             }, 3000);
         } catch (error) {
@@ -232,9 +230,15 @@ export function PlayEditor({
         }
     }, [name, description, playData, isTemplate, playId, initialData, onSave]);
 
+    // Keep handleSaveRef updated with latest handleSave function
+    useEffect(() => {
+        handleSaveRef.current = handleSave;
+    }, [handleSave]);
+
     /**
      * Auto-save with debouncing
      * Requirements: 1.5, 4.1
+     * Uses ref pattern to avoid infinite loop from handleSave dependency changes
      */
     useEffect(() => {
         // Clear existing timer
@@ -245,7 +249,7 @@ export function PlayEditor({
         // Only auto-save if there are unsaved changes and we have a playId (editing existing play)
         if (hasUnsavedChanges && playId) {
             autoSaveTimerRef.current = setTimeout(() => {
-                handleSave();
+                handleSaveRef.current?.();
             }, 2000); // 2 second debounce
         }
 
@@ -254,7 +258,16 @@ export function PlayEditor({
                 clearTimeout(autoSaveTimerRef.current);
             }
         };
-    }, [hasUnsavedChanges, playId, handleSave]);
+    }, [hasUnsavedChanges, playId]);
+
+    // Cleanup success timeout on unmount to prevent memory leak
+    useEffect(() => {
+        return () => {
+            if (successTimeoutRef.current) {
+                clearTimeout(successTimeoutRef.current);
+            }
+        };
+    }, []);
 
     return (
         <Box
@@ -354,7 +367,7 @@ export function PlayEditor({
 
                     {/* Success Message */}
                     {saveSuccess && (
-                        <Alert severity="success">
+                        <Alert severity="success" onClose={() => setSaveSuccess(false)}>
                             Play saved successfully!
                         </Alert>
                     )}
