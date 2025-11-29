@@ -364,10 +364,24 @@ export type SendLeagueMessageInput = z.infer<typeof sendLeagueMessageSchema>;
 export type GetLeagueMessagesInput = z.infer<typeof getLeagueMessagesSchema>;
 
 // Practice planner validation schemas
+
+// Maximum thumbnail size (1MB in base64 is ~1.37MB, so limit to ~750KB base64)
+const MAX_THUMBNAIL_SIZE = 1000000;
+
+// Base64 image validation helper
+const base64ImageSchema = z
+  .string()
+  .regex(
+    /^data:image\/(png|jpeg|jpg|webp);base64,/,
+    "Thumbnail must be a base64-encoded image (PNG, JPEG, or WebP)"
+  )
+  .max(MAX_THUMBNAIL_SIZE, "Thumbnail must be less than 1MB")
+  .optional();
+
 export const createPlaySchema = z.object({
   name: sanitizedStringWithMin(1, 100),
   description: optionalSanitizedString(1000),
-  thumbnail: z.string().optional(), // Base64 PNG
+  thumbnail: base64ImageSchema,
   playData: z.any(), // Will be validated separately with custom validation
   isTemplate: z.boolean().default(false),
   teamId: z.string().cuid("Invalid team ID format"),
@@ -377,7 +391,7 @@ export const updatePlaySchema = z.object({
   id: z.string().cuid("Invalid play ID format"),
   name: sanitizedStringWithMin(1, 100),
   description: optionalSanitizedString(1000),
-  thumbnail: z.string().optional(),
+  thumbnail: base64ImageSchema,
   playData: z.any(), // Will be validated separately with custom validation
   isTemplate: z.boolean().optional(),
   teamId: z.string().cuid("Invalid team ID format"),

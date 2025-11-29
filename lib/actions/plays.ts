@@ -44,12 +44,21 @@ function sanitizeText(text: string | null | undefined, maxLength: number): strin
 }
 
 /**
- * Sanitize PlayData by sanitizing all text annotations
+ * Maximum length for player labels
+ */
+const MAX_PLAYER_LABEL_LENGTH = 50;
+
+/**
+ * Sanitize PlayData by sanitizing all text annotations and player labels
  * Requirements: 1.5
  */
 function sanitizePlayData(playData: PlayData): PlayData {
     return {
         ...playData,
+        players: playData.players.map(player => ({
+            ...player,
+            label: sanitizeText(player.label, MAX_PLAYER_LABEL_LENGTH),
+        })),
         annotations: playData.annotations.map(annotation => ({
             ...annotation,
             text: sanitizeText(annotation.text, VALIDATION_CONSTRAINTS.MAX_ANNOTATION_LENGTH),
@@ -72,17 +81,8 @@ export async function createPlay(
         // Check authentication and authorization - only ADMIN can create plays
         const userId = await requireTeamAdmin(validated.teamId);
 
-        // Sanitize text inputs
-        const sanitizedName = sanitizeText(validated.name, 100);
-        const sanitizedDescription = sanitizeText(validated.description, 1000);
-
-        // Validate name is not empty after sanitization
-        if (sanitizedName.length === 0) {
-            return {
-                success: false,
-                error: "Play name cannot be empty",
-            };
-        }
+        // Note: name and description are already sanitized by Zod schema
+        // (sanitizedStringWithMin and optionalSanitizedString)
 
         // Validate PlayData structure
         const playDataValidation = validatePlayData(validated.playData);
@@ -100,8 +100,8 @@ export async function createPlay(
         // Create play
         const play = await prisma.play.create({
             data: {
-                name: sanitizedName,
-                description: sanitizedDescription || null,
+                name: validated.name,
+                description: validated.description || null,
                 thumbnail: validated.thumbnail || null,
                 playData: sanitizedPlayData as unknown as Prisma.InputJsonValue,
                 isTemplate: validated.isTemplate,
@@ -159,10 +159,8 @@ export async function updatePlay(
         // Validate input
         const validated = updatePlaySchema.parse(input);
 
-        // Check authentication and authorization - only ADMIN can update plays
-        await requireTeamAdmin(validated.teamId);
-
-        // Verify play belongs to the team before updating
+        // First fetch the existing play to get its actual teamId for authorization
+        // This prevents authorization bypass by providing a different teamId
         const existingPlay = await prisma.play.findUnique({
             where: { id: validated.id },
             select: { teamId: true },
@@ -175,6 +173,10 @@ export async function updatePlay(
             };
         }
 
+        // Authorize against the play's actual teamId, not user-provided input
+        await requireTeamAdmin(existingPlay.teamId);
+
+        // Verify the teamId in the request matches the play's actual teamId
         if (existingPlay.teamId !== validated.teamId) {
             return {
                 success: false,
@@ -182,17 +184,7 @@ export async function updatePlay(
             };
         }
 
-        // Sanitize text inputs
-        const sanitizedName = sanitizeText(validated.name, 100);
-        const sanitizedDescription = sanitizeText(validated.description, 1000);
-
-        // Validate name is not empty after sanitization
-        if (sanitizedName.length === 0) {
-            return {
-                success: false,
-                error: "Play name cannot be empty",
-            };
-        }
+        // Note: name and description are already sanitized by Zod schema
 
         // Validate PlayData structure
         const playDataValidation = validatePlayData(validated.playData);
@@ -211,8 +203,8 @@ export async function updatePlay(
         const play = await prisma.play.update({
             where: { id: validated.id },
             data: {
-                name: sanitizedName,
-                description: sanitizedDescription || null,
+                name: validated.name,
+                description: validated.description || null,
                 thumbnail: validated.thumbnail || null,
                 playData: sanitizedPlayData as unknown as Prisma.InputJsonValue,
                 ...(validated.isTemplate !== undefined && { isTemplate: validated.isTemplate }),
@@ -259,20 +251,18 @@ export async function updatePlay(
 /**
  * Delete a play from the library
  * Only ADMIN role can delete plays
- * Note: Cascade delete will preserve instances in existing practice sessions
+ * Note: Cascade delete will also remove play instances from practice sessions (PracticeSessionPlay records)
  * Requirements: 4.5
  */
 export async function deletePlay(
     input: DeletePlayInput
-): Promise<ActionResult<{ success: true }>> {
+): Promise<ActionResult<{ id: string }>> {
     try {
         // Validate input
         const validated = deletePlaySchema.parse(input);
 
-        // Check authentication and authorization - only ADMIN can delete plays
-        await requireTeamAdmin(validated.teamId);
-
-        // Verify play belongs to the team before deleting
+        // First fetch the existing play to get its actual teamId for authorization
+        // This prevents authorization bypass by providing a different teamId
         const existingPlay = await prisma.play.findUnique({
             where: { id: validated.id },
             select: { teamId: true },
@@ -285,6 +275,10 @@ export async function deletePlay(
             };
         }
 
+        // Authorize against the play's actual teamId, not user-provided input
+        await requireTeamAdmin(existingPlay.teamId);
+
+        // Verify the teamId in the request matches the play's actual teamId
         if (existingPlay.teamId !== validated.teamId) {
             return {
                 success: false,
@@ -292,7 +286,7 @@ export async function deletePlay(
             };
         }
 
-        // Delete play (cascade will handle PracticeSessionPlay records)
+        // Delete play (cascade will remove associated PracticeSessionPlay records)
         await prisma.play.delete({
             where: { id: validated.id },
         });
@@ -303,7 +297,7 @@ export async function deletePlay(
 
         return {
             success: true,
-            data: { success: true },
+            data: { id: validated.id },
         };
     } catch (error) {
         if (error instanceof z.ZodError) {
