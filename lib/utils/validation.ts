@@ -319,9 +319,9 @@ export const sendLeagueMessageSchema = z.object({
   }).refine(
     (data) => {
       // At least one targeting option must be specified
-      return data.entireLeague || 
-             (data.divisionIds && data.divisionIds.length > 0) || 
-             (data.teamIds && data.teamIds.length > 0);
+      return data.entireLeague ||
+        (data.divisionIds && data.divisionIds.length > 0) ||
+        (data.teamIds && data.teamIds.length > 0);
     },
     {
       message: "At least one targeting option must be specified",
@@ -362,3 +362,61 @@ export type PaginationInput = z.infer<typeof paginationSchema>;
 export type GetLeagueTeamsInput = z.infer<typeof getLeagueTeamsSchema>;
 export type SendLeagueMessageInput = z.infer<typeof sendLeagueMessageSchema>;
 export type GetLeagueMessagesInput = z.infer<typeof getLeagueMessagesSchema>;
+
+// Practice planner validation schemas
+
+// Maximum thumbnail size (1MB in base64 is ~1.37MB, so limit to ~750KB base64)
+const MAX_THUMBNAIL_SIZE = 1000000;
+
+// Base64 image validation helper
+const base64ImageSchema = z
+  .string()
+  .regex(
+    /^data:image\/(png|jpeg|jpg|webp);base64,/,
+    "Thumbnail must be a base64-encoded image (PNG, JPEG, or WebP)"
+  )
+  .max(MAX_THUMBNAIL_SIZE, "Thumbnail must be less than 1MB")
+  .optional();
+
+export const createPlaySchema = z.object({
+  name: sanitizedStringWithMin(1, 100),
+  description: optionalSanitizedString(1000),
+  thumbnail: base64ImageSchema,
+  playData: z.any(), // Will be validated separately with custom validation
+  isTemplate: z.boolean().default(false),
+  teamId: z.string().cuid("Invalid team ID format"),
+});
+
+export const updatePlaySchema = z.object({
+  id: z.string().cuid("Invalid play ID format"),
+  name: sanitizedStringWithMin(1, 100),
+  description: optionalSanitizedString(1000),
+  thumbnail: base64ImageSchema,
+  playData: z.any(), // Will be validated separately with custom validation
+  isTemplate: z.boolean().optional(),
+  teamId: z.string().cuid("Invalid team ID format"),
+});
+
+export const deletePlaySchema = z.object({
+  id: z.string().cuid("Invalid play ID format"),
+  teamId: z.string().cuid("Invalid team ID format"),
+});
+
+export const getPlayByIdSchema = z.object({
+  id: z.string().cuid("Invalid play ID format"),
+  teamId: z.string().cuid("Invalid team ID format"),
+});
+
+export const getPlaysByTeamSchema = z.object({
+  teamId: z.string().cuid("Invalid team ID format"),
+  isTemplate: z.boolean().optional(),
+  page: z.number().int().min(1).default(1),
+  limit: z.number().int().min(1).max(100).default(20),
+});
+
+// Type exports for practice planner
+export type CreatePlayInput = z.infer<typeof createPlaySchema>;
+export type UpdatePlayInput = z.infer<typeof updatePlaySchema>;
+export type DeletePlayInput = z.infer<typeof deletePlaySchema>;
+export type GetPlayByIdInput = z.infer<typeof getPlayByIdSchema>;
+export type GetPlaysByTeamInput = z.infer<typeof getPlaysByTeamSchema>;

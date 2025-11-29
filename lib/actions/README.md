@@ -11,10 +11,12 @@ This directory contains Next.js Server Actions for handling data mutations and s
 - `events.ts` - Event scheduling and management actions
 - `rsvp.ts` - RSVP update actions
 - `invitations.ts` - Invitation sending and management actions
+- `plays.ts` - Practice planner play CRUD operations
 
 ## Pattern
 
 All Server Actions must:
+
 1. Include `'use server'` directive at the top
 2. Start with authentication check using `requireAuth()` (except auth.ts and logout.ts)
 3. Validate inputs using Zod schemas
@@ -25,15 +27,15 @@ All Server Actions must:
 ## Example
 
 ```typescript
-'use server'
+"use server";
 
-import { requireAuth } from '@/lib/auth/session';
-import { prisma } from '@/lib/db/prisma';
-import { teamSchema } from '@/lib/utils/validation';
+import { requireAuth } from "@/lib/auth/session";
+import { prisma } from "@/lib/db/prisma";
+import { teamSchema } from "@/lib/utils/validation";
 
 export async function createTeam(data: CreateTeamInput) {
   const session = await requireAuth();
-  if (!session.user?.id) throw new Error('Unauthorized');
+  if (!session.user?.id) throw new Error("Unauthorized");
 
   const validated = teamSchema.parse(data);
 
@@ -41,9 +43,9 @@ export async function createTeam(data: CreateTeamInput) {
     data: {
       ...validated,
       members: {
-        create: { userId: session.user.id, role: 'ADMIN' }
-      }
-    }
+        create: { userId: session.user.id, role: "ADMIN" },
+      },
+    },
   });
 }
 ```

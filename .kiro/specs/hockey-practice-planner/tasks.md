@@ -110,9 +110,9 @@
     - Implement save to library action
     - _Requirements: 4.1_
 
-- [ ] 7. Implement server actions for plays
+- [x] 7. Implement server actions for plays
 
-  - [ ] 7.1 Create play CRUD actions
+  - [x] 7.1 Create play CRUD actions
 
     - Write createPlay server action with validation
     - Implement updatePlay server action
@@ -120,14 +120,14 @@
     - Add getPlayById and getPlaysByTeam query actions
     - _Requirements: 1.5, 4.1, 4.5_
 
-  - [ ] 7.2 Add permission checks
+  - [x] 7.2 Add permission checks
 
     - Verify team admin role for create/edit/delete operations
     - Verify team membership for read operations
     - Prevent cross-team data access
     - _Requirements: 1.5, 4.1_
 
-  - [ ] 7.3 Implement validation
+  - [x] 7.3 Implement validation
     - Validate PlayData JSON structure
     - Sanitize text inputs (name, description, annotations)
     - Enforce element count limits (max 100 per play)
