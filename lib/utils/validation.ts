@@ -412,6 +412,8 @@ export const getPlaysByTeamSchema = z.object({
   isTemplate: z.boolean().optional(),
   page: z.number().int().min(1).default(1),
   limit: z.number().int().min(1).max(100).default(20),
+  search: z.string().max(100).optional(),
+  dateFilter: z.enum(["all", "today", "week", "month"]).optional().default("all"),
 });
 
 // Type exports for practice planner
