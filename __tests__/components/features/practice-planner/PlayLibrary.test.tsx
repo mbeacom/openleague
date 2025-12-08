@@ -86,7 +86,7 @@ describe("PlayLibrary", () => {
 
         // Default successful response with no plays
         mockGetPlaysByTeam.mockResolvedValue(createMockResponse([], 0));
-        
+
         // Default successful response for getPlayById
         mockGetPlayById.mockResolvedValue({
             success: true,
@@ -251,7 +251,7 @@ describe("PlayLibrary", () => {
 
             // Clear mock to track new calls
             mockGetPlaysByTeam.mockClear();
-            
+
             // Return filtered results for search
             mockGetPlaysByTeam.mockResolvedValue(createMockResponse(
                 [createMockPlayData({ id: "play-1", name: "Power Play Setup" })],
@@ -262,7 +262,7 @@ describe("PlayLibrary", () => {
                 "Search plays by name or description..."
             );
             await userEvent.type(searchInput, "Power");
-            
+
             // Wait for debounce (300ms)
             await vi.advanceTimersByTimeAsync(350);
 
@@ -285,7 +285,7 @@ describe("PlayLibrary", () => {
 
             // Clear mock to track new calls
             mockGetPlaysByTeam.mockClear();
-            
+
             // Return filtered results for today filter
             mockGetPlaysByTeam.mockResolvedValue(createMockResponse(
                 [createMockPlayData({ id: "play-1", name: "Power Play Setup" })],
@@ -349,7 +349,7 @@ describe("PlayLibrary", () => {
                 "Search plays by name or description..."
             );
             await userEvent.type(searchInput, "test");
-            
+
             // Wait for debounce
             await vi.advanceTimersByTimeAsync(350);
 
@@ -377,7 +377,7 @@ describe("PlayLibrary", () => {
                 "Search plays by name or description..."
             );
             await userEvent.type(searchInput, "xyz123");
-            
+
             // Wait for debounce
             await vi.advanceTimersByTimeAsync(350);
 
@@ -398,7 +398,7 @@ describe("PlayLibrary", () => {
             ];
 
             mockGetPlaysByTeam.mockResolvedValue(createMockResponse(mockPlays, 2));
-            
+
             // Mock getPlayById to return full play data
             mockGetPlayById.mockResolvedValue({
                 success: true,
