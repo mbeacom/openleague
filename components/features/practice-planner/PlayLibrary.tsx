@@ -47,8 +47,9 @@ import {
 } from "@mui/icons-material";
 import Image from "next/image";
 import { SavedPlay } from "@/types/practice-planner";
-import { getPlaysByTeam, deletePlay } from "@/lib/actions/plays";
-import { formatDistanceToNow, isToday, isThisWeek, isThisMonth } from "date-fns";
+import { getPlaysByTeam, getPlayById, deletePlay } from "@/lib/actions/plays";
+import { formatDistanceToNow } from "date-fns";
+import { useDebouncedCallback } from "use-debounce";
 
 /**
  * Props for the PlayLibrary component
@@ -67,6 +68,7 @@ interface PlayCardProps {
     play: SavedPlay;
     mode: "select" | "manage";
     isSelected: boolean;
+    isLoading?: boolean;
     onSelect: (play: SavedPlay) => void;
     onEdit?: (playId: string) => void;
     onDelete?: (playId: string) => void;
@@ -82,6 +84,7 @@ function PlayCard({
     play,
     mode,
     isSelected,
+    isLoading,
     onSelect,
     onEdit,
     onDelete,
@@ -98,6 +101,7 @@ function PlayCard({
                 border: isSelected ? `2px solid ${theme.palette.primary.main}` : "1px solid",
                 borderColor: isSelected ? "primary.main" : "divider",
                 transition: "all 0.2s",
+                opacity: isLoading ? 0.7 : 1,
                 "&:hover": mode === "select"
                     ? {
                         transform: "translateY(-4px)",
@@ -105,7 +109,7 @@ function PlayCard({
                     }
                     : {},
             }}
-            onClick={() => mode === "select" && onSelect(play)}
+            onClick={() => mode === "select" && !isLoading && onSelect(play)}
         >
             {/* Thumbnail */}
             {/* Requirements: 4.2 - Display play thumbnails */}
@@ -135,7 +139,7 @@ function PlayCard({
                 )}
                 {isSelected && (
                     <Chip
-                        label="Selected"
+                        label={isLoading ? "Loading..." : "Selected"}
                         color="primary"
                         size="small"
                         sx={{
@@ -172,7 +176,7 @@ function PlayCard({
                     <Typography variant="caption" color="text.secondary">
                         Created {formatDistanceToNow(new Date(play.createdAt), { addSuffix: true })}
                     </Typography>
-                    {play.updatedAt && new Date(play.updatedAt).getTime() !== new Date(play.createdAt).getTime() && (
+                    {play.updatedAt && new Date(play.updatedAt) > new Date(play.createdAt) && (
                         <Typography variant="caption" color="text.secondary">
                             • Updated {formatDistanceToNow(new Date(play.updatedAt), { addSuffix: true })}
                         </Typography>
@@ -227,11 +231,11 @@ export function PlayLibrary({
 
     // State
     const [plays, setPlays] = useState<SavedPlay[]>([]);
-    const [filteredPlays, setFilteredPlays] = useState<SavedPlay[]>([]);
     const [selectedPlayId, setSelectedPlayId] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState("");
     const [dateFilter, setDateFilter] = useState<"all" | "today" | "week" | "month">("all");
     const [isLoading, setIsLoading] = useState(true);
+    const [isSelecting, setIsSelecting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [playToDelete, setPlayToDelete] = useState<string | null>(null);
@@ -244,10 +248,10 @@ export function PlayLibrary({
     const playsPerPage = 20;
 
     /**
-     * Load plays from the server
-     * Requirements: 4.2
+     * Load plays from the server with search and filter parameters
+     * Requirements: 4.2, 8.4 - Server-side search and filtering
      */
-    const loadPlays = useCallback(async () => {
+    const loadPlays = useCallback(async (search: string, dateFilterValue: "all" | "today" | "week" | "month") => {
         setIsLoading(true);
         setError(null);
 
@@ -257,16 +261,19 @@ export function PlayLibrary({
                 isTemplate: true, // Only load library plays
                 page: currentPage,
                 limit: playsPerPage,
+                search: search.trim() || undefined,
+                dateFilter: dateFilterValue,
             });
 
             if (result.success) {
                 const playsData = result.data.plays.map((play) => ({
                     ...play,
+                    description: play.description ?? "",
+                    thumbnail: play.thumbnail ?? "",
                     playData: { players: [], drawings: [], annotations: [] }, // Will be loaded when needed
                 })) as SavedPlay[];
 
                 setPlays(playsData);
-                setFilteredPlays(playsData);
                 setTotalPages(Math.ceil(result.data.total / playsPerPage));
             } else {
                 setError(result.error);
@@ -279,61 +286,78 @@ export function PlayLibrary({
         }
     }, [teamId, currentPage]);
 
-    // Load plays on mount and when page changes
+    // Debounced search to avoid too many server requests
+    const debouncedSearch = useDebouncedCallback(
+        (search: string) => {
+            setCurrentPage(1); // Reset to first page on search
+            loadPlays(search, dateFilter);
+        },
+        300
+    );
+
+    // Load plays on mount and when page or dateFilter changes
     useEffect(() => {
-        loadPlays();
-    }, [loadPlays]);
+        loadPlays(searchQuery, dateFilter);
+    }, [currentPage, dateFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
     /**
-     * Handle search query and date filter changes
-     * Requirements: 8.4 - Search by play name, filter by creation date
+     * Handle search input change
      */
-    useEffect(() => {
-        let filtered = plays;
-
-        // Apply date filter
-        // Requirements: 8.4 - Filter by creation date
-        if (dateFilter !== "all") {
-            filtered = filtered.filter((play) => {
-                const createdAt = new Date(play.createdAt);
-                switch (dateFilter) {
-                    case "today":
-                        return isToday(createdAt);
-                    case "week":
-                        return isThisWeek(createdAt);
-                    case "month":
-                        return isThisMonth(createdAt);
-                    default:
-                        return true;
-                }
-            });
-        }
-
-        // Apply search filter
-        if (searchQuery.trim()) {
-            const query = searchQuery.toLowerCase();
-            filtered = filtered.filter(
-                (play) =>
-                    play.name.toLowerCase().includes(query) ||
-                    play.description?.toLowerCase().includes(query)
-            );
-        }
-
-        setFilteredPlays(filtered);
-    }, [searchQuery, dateFilter, plays]);
+    const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = e.target.value;
+        setSearchQuery(value);
+        debouncedSearch(value);
+    }, [debouncedSearch]);
 
     /**
-     * Handle play selection
+     * Handle date filter change
+     */
+    const handleDateFilterChange = useCallback((e: SelectChangeEvent) => {
+        const value = e.target.value as "all" | "today" | "week" | "month";
+        setDateFilter(value);
+        setCurrentPage(1); // Reset to first page on filter change
+    }, []);
+
+    /**
+     * Handle play selection - fetch complete play data before calling onSelectPlay
      * Requirements: 4.3
      */
     const handleSelectPlay = useCallback(
-        (play: SavedPlay) => {
+        async (play: SavedPlay) => {
             if (mode === "select") {
                 setSelectedPlayId(play.id);
-                onSelectPlay?.(play);
+                setIsSelecting(true);
+                setError(null);
+
+                try {
+                    // Fetch complete play data from server
+                    const result = await getPlayById({ id: play.id, teamId });
+                    if (result.success) {
+                        const fullPlay: SavedPlay = {
+                            id: result.data.id,
+                            name: result.data.name,
+                            description: result.data.description ?? "",
+                            thumbnail: result.data.thumbnail ?? "",
+                            playData: result.data.playData,
+                            isTemplate: result.data.isTemplate,
+                            createdAt: result.data.createdAt,
+                            updatedAt: result.data.updatedAt,
+                        };
+                        onSelectPlay?.(fullPlay);
+                    } else {
+                        setError(`Failed to load play details: ${result.error}`);
+                        setSelectedPlayId(null);
+                    }
+                } catch (err) {
+                    console.error("Error fetching play details:", err);
+                    setError("An error occurred while fetching play details.");
+                    setSelectedPlayId(null);
+                } finally {
+                    setIsSelecting(false);
+                }
             }
         },
-        [mode, onSelectPlay]
+        [mode, onSelectPlay, teamId]
     );
 
     /**
@@ -363,7 +387,7 @@ export function PlayLibrary({
 
             if (result.success) {
                 // Reload plays after deletion
-                await loadPlays();
+                await loadPlays(searchQuery, dateFilter);
                 setDeleteDialogOpen(false);
                 setPlayToDelete(null);
             } else {
@@ -375,7 +399,7 @@ export function PlayLibrary({
         } finally {
             setIsDeleting(false);
         }
-    }, [playToDelete, teamId, loadPlays]);
+    }, [playToDelete, teamId, loadPlays, searchQuery, dateFilter]);
 
     /**
      * Handle delete dialog close
@@ -421,7 +445,7 @@ export function PlayLibrary({
                     fullWidth
                     placeholder="Search plays by name or description..."
                     value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onChange={handleSearchChange}
                     InputProps={{
                         startAdornment: (
                             <InputAdornment position="start">
@@ -438,7 +462,7 @@ export function PlayLibrary({
                         id="date-filter"
                         value={dateFilter}
                         label="Date Filter"
-                        onChange={(e: SelectChangeEvent) => setDateFilter(e.target.value as typeof dateFilter)}
+                        onChange={handleDateFilterChange}
                     >
                         <MenuItem value="all">All Time</MenuItem>
                         <MenuItem value="today">Today</MenuItem>
@@ -471,7 +495,7 @@ export function PlayLibrary({
 
             {/* Empty State */}
             {/* Requirements: 4.2 - Empty state for no plays */}
-            {!isLoading && filteredPlays.length === 0 && (
+            {!isLoading && plays.length === 0 && (
                 <Box
                     sx={{
                         display: "flex",
@@ -498,15 +522,16 @@ export function PlayLibrary({
 
             {/* Play Grid */}
             {/* Requirements: 4.2 - Responsive grid for play thumbnails */}
-            {!isLoading && filteredPlays.length > 0 && (
+            {!isLoading && plays.length > 0 && (
                 <>
                     <Grid container spacing={3}>
-                        {filteredPlays.map((play) => (
+                        {plays.map((play) => (
                             <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }} key={play.id}>
                                 <PlayCard
                                     play={play}
                                     mode={mode}
                                     isSelected={selectedPlayId === play.id}
+                                    isLoading={selectedPlayId === play.id && isSelecting}
                                     onSelect={handleSelectPlay}
                                     onEdit={onEditPlay}
                                     onDelete={handleDeleteClick}
@@ -549,8 +574,8 @@ export function PlayLibrary({
                 <DialogContent>
                     <DialogContentText id="delete-dialog-description">
                         Are you sure you want to delete this play from your library? This
-                        action cannot be undone. Note that any practice sessions using
-                        this play will retain their own copies.
+                        action cannot be undone. This will also remove this play from all
+                        practice sessions where it&apos;s used.
                     </DialogContentText>
                 </DialogContent>
                 <DialogActions>

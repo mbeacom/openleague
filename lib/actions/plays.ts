@@ -116,8 +116,8 @@ export async function createPlay(
         });
 
         // Revalidate practice planner pages
-        revalidatePath(`/dashboard/team/${validated.teamId}/practice-planner`);
-        revalidatePath(`/dashboard/team/${validated.teamId}/practice-planner/library`);
+        revalidatePath("/practice-planner");
+        revalidatePath("/practice-planner/library");
 
         return {
             success: true,
@@ -217,8 +217,8 @@ export async function updatePlay(
         });
 
         // Revalidate practice planner pages
-        revalidatePath(`/dashboard/team/${validated.teamId}/practice-planner`);
-        revalidatePath(`/dashboard/team/${validated.teamId}/practice-planner/library`);
+        revalidatePath("/practice-planner");
+        revalidatePath("/practice-planner/library");
 
         return {
             success: true,
@@ -292,8 +292,8 @@ export async function deletePlay(
         });
 
         // Revalidate practice planner pages
-        revalidatePath(`/dashboard/team/${validated.teamId}/practice-planner`);
-        revalidatePath(`/dashboard/team/${validated.teamId}/practice-planner/library`);
+        revalidatePath("/practice-planner");
+        revalidatePath("/practice-planner/library");
 
         return {
             success: true,
@@ -416,7 +416,7 @@ export async function getPlayById(input: GetPlayByIdInput): Promise<ActionResult
 /**
  * Get plays by team with optional filtering
  * Team members can view plays
- * Requirements: 4.1, 4.2
+ * Requirements: 4.1, 4.2, 8.4
  */
 export async function getPlaysByTeam(input: GetPlaysByTeamInput): Promise<ActionResult<{
     plays: Array<{
@@ -439,16 +439,48 @@ export async function getPlaysByTeam(input: GetPlaysByTeamInput): Promise<Action
         // Check authentication and authorization - team members can view plays
         await requireTeamMember(validated.teamId);
 
-        // Build where clause
-        const where: {
-            teamId: string;
-            isTemplate?: boolean;
-        } = {
+        // Build where clause with search and date filter support
+        // Requirements: 8.4 - Server-side search and date filtering
+        const where: Prisma.PlayWhereInput = {
             teamId: validated.teamId,
         };
 
         if (validated.isTemplate !== undefined) {
             where.isTemplate = validated.isTemplate;
+        }
+
+        // Apply search filter (search by name or description)
+        if (validated.search && validated.search.trim()) {
+            const searchTerm = validated.search.trim();
+            where.OR = [
+                { name: { contains: searchTerm, mode: "insensitive" } },
+                { description: { contains: searchTerm, mode: "insensitive" } },
+            ];
+        }
+
+        // Apply date filter
+        if (validated.dateFilter && validated.dateFilter !== "all") {
+            const now = new Date();
+            let startDate: Date;
+
+            switch (validated.dateFilter) {
+                case "today":
+                    startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                    break;
+                case "week":
+                    // Start of current week (Sunday)
+                    startDate = new Date(now);
+                    startDate.setDate(now.getDate() - now.getDay());
+                    startDate.setHours(0, 0, 0, 0);
+                    break;
+                case "month":
+                    startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+                    break;
+                default:
+                    startDate = new Date(0); // All time
+            }
+
+            where.createdAt = { gte: startDate };
         }
 
         // Calculate pagination

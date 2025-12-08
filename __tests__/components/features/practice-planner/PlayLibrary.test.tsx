@@ -13,16 +13,18 @@ import userEvent from "@testing-library/user-event";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { PlayLibrary, PlayLibraryProps } from "@/components/features/practice-planner/PlayLibrary";
 
-import { getPlaysByTeam, deletePlay } from "@/lib/actions/plays";
+import { getPlaysByTeam, getPlayById, deletePlay } from "@/lib/actions/plays";
 
 // Mock the server actions
 vi.mock("@/lib/actions/plays", () => ({
     getPlaysByTeam: vi.fn(),
+    getPlayById: vi.fn(),
     deletePlay: vi.fn(),
 }));
 
 // Cast to mock types for proper typing
 const mockGetPlaysByTeam = getPlaysByTeam as ReturnType<typeof vi.fn>;
+const mockGetPlayById = getPlayById as ReturnType<typeof vi.fn>;
 const mockDeletePlay = deletePlay as ReturnType<typeof vi.fn>;
 
 // Create a theme for consistent testing
@@ -80,13 +82,30 @@ const createDefaultProps = (overrides?: Partial<PlayLibraryProps>): PlayLibraryP
 describe("PlayLibrary", () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        vi.useFakeTimers({ shouldAdvanceTime: true });
 
         // Default successful response with no plays
         mockGetPlaysByTeam.mockResolvedValue(createMockResponse([], 0));
+        
+        // Default successful response for getPlayById
+        mockGetPlayById.mockResolvedValue({
+            success: true,
+            data: {
+                id: "play-1",
+                name: "Power Play Setup",
+                description: "Standard power play formation",
+                thumbnail: "data:image/png;base64,mockBase64Data",
+                playData: { players: [], drawings: [], annotations: [] },
+                isTemplate: true,
+                createdAt: new Date("2025-01-15T10:00:00Z"),
+                updatedAt: new Date("2025-01-15T10:00:00Z"),
+            },
+        });
     });
 
     afterEach(() => {
         vi.resetAllMocks();
+        vi.useRealTimers();
     });
 
     describe("Rendering", () => {
@@ -123,7 +142,7 @@ describe("PlayLibrary", () => {
     });
 
     describe("Data Loading (Requirements: 4.2)", () => {
-        it("calls getPlaysByTeam on mount", async () => {
+        it("calls getPlaysByTeam on mount with default parameters", async () => {
             renderWithTheme(createDefaultProps());
 
             await waitFor(() => {
@@ -132,6 +151,8 @@ describe("PlayLibrary", () => {
                     isTemplate: true,
                     page: 1,
                     limit: 20,
+                    search: undefined,
+                    dateFilter: "all",
                 });
             });
         });
@@ -193,33 +214,9 @@ describe("PlayLibrary", () => {
                 ).toBeInTheDocument();
             });
         });
-
-        it("shows no results message when search returns nothing", async () => {
-            const mockPlays = [createMockPlayData({ name: "Power Play" })];
-            mockGetPlaysByTeam.mockResolvedValue(createMockResponse(mockPlays, 1));
-
-            renderWithTheme(createDefaultProps());
-
-            await waitFor(() => {
-                expect(screen.getByText("Power Play")).toBeInTheDocument();
-            });
-
-            // Search for non-existent play
-            const searchInput = screen.getByPlaceholderText(
-                "Search plays by name or description..."
-            );
-            await userEvent.type(searchInput, "xyz123");
-
-            await waitFor(() => {
-                expect(screen.getByText("No plays found")).toBeInTheDocument();
-                expect(
-                    screen.getByText("Try adjusting your search or filter settings")
-                ).toBeInTheDocument();
-            });
-        });
     });
 
-    describe("Search and Filtering (Requirements: 8.4)", () => {
+    describe("Search and Filtering - Server-Side (Requirements: 8.4)", () => {
         beforeEach(() => {
             const mockPlays = [
                 createMockPlayData({
@@ -245,72 +242,55 @@ describe("PlayLibrary", () => {
             mockGetPlaysByTeam.mockResolvedValue(createMockResponse(mockPlays, 3));
         });
 
-        it("filters plays by name search", async () => {
+        it("sends search query to server when searching", async () => {
             renderWithTheme(createDefaultProps());
 
             await waitFor(() => {
                 expect(screen.getByText("Power Play Setup")).toBeInTheDocument();
             });
+
+            // Clear mock to track new calls
+            mockGetPlaysByTeam.mockClear();
+            
+            // Return filtered results for search
+            mockGetPlaysByTeam.mockResolvedValue(createMockResponse(
+                [createMockPlayData({ id: "play-1", name: "Power Play Setup" })],
+                1
+            ));
 
             const searchInput = screen.getByPlaceholderText(
                 "Search plays by name or description..."
             );
             await userEvent.type(searchInput, "Power");
+            
+            // Wait for debounce (300ms)
+            await vi.advanceTimersByTimeAsync(350);
 
             await waitFor(() => {
-                expect(screen.getByText("Power Play Setup")).toBeInTheDocument();
-                expect(
-                    screen.queryByText("Penalty Kill Formation")
-                ).not.toBeInTheDocument();
-                expect(
-                    screen.queryByText("Breakout Pattern")
-                ).not.toBeInTheDocument();
+                expect(mockGetPlaysByTeam).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        search: "Power",
+                        teamId: "team-1",
+                    })
+                );
             });
         });
 
-        it("filters plays by description search", async () => {
+        it("sends date filter to server when filtering", async () => {
             renderWithTheme(createDefaultProps());
 
             await waitFor(() => {
                 expect(screen.getByText("Power Play Setup")).toBeInTheDocument();
             });
 
-            const searchInput = screen.getByPlaceholderText(
-                "Search plays by name or description..."
-            );
-            await userEvent.type(searchInput, "Defensive");
-
-            await waitFor(() => {
-                expect(screen.getByText("Penalty Kill Formation")).toBeInTheDocument();
-                expect(
-                    screen.queryByText("Power Play Setup")
-                ).not.toBeInTheDocument();
-            });
-        });
-
-        it("search is case-insensitive", async () => {
-            renderWithTheme(createDefaultProps());
-
-            await waitFor(() => {
-                expect(screen.getByText("Power Play Setup")).toBeInTheDocument();
-            });
-
-            const searchInput = screen.getByPlaceholderText(
-                "Search plays by name or description..."
-            );
-            await userEvent.type(searchInput, "power play");
-
-            await waitFor(() => {
-                expect(screen.getByText("Power Play Setup")).toBeInTheDocument();
-            });
-        });
-
-        it("filters by date - Today", async () => {
-            renderWithTheme(createDefaultProps());
-
-            await waitFor(() => {
-                expect(screen.getByText("Power Play Setup")).toBeInTheDocument();
-            });
+            // Clear mock to track new calls
+            mockGetPlaysByTeam.mockClear();
+            
+            // Return filtered results for today filter
+            mockGetPlaysByTeam.mockResolvedValue(createMockResponse(
+                [createMockPlayData({ id: "play-1", name: "Power Play Setup" })],
+                1
+            ));
 
             // Open date filter dropdown
             const dateFilter = screen.getByLabelText("Date Filter");
@@ -320,38 +300,92 @@ describe("PlayLibrary", () => {
             const todayOption = screen.getByRole("option", { name: "Today" });
             await userEvent.click(todayOption);
 
-            // Only "Power Play Setup" was created today
             await waitFor(() => {
-                expect(screen.getByText("Power Play Setup")).toBeInTheDocument();
-                expect(
-                    screen.queryByText("Penalty Kill Formation")
-                ).not.toBeInTheDocument();
+                expect(mockGetPlaysByTeam).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        dateFilter: "today",
+                        teamId: "team-1",
+                    })
+                );
             });
         });
 
-        it("combines search and date filter", async () => {
+        it("resets to page 1 when search query changes", async () => {
+            // Start with page 2
+            mockGetPlaysByTeam.mockResolvedValue(
+                createMockResponse(
+                    Array.from({ length: 20 }, (_, i) =>
+                        createMockPlayData({ id: `play-${i}`, name: `Play ${i + 1}` })
+                    ),
+                    45
+                )
+            );
+
+            renderWithTheme(createDefaultProps());
+
+            await waitFor(() => {
+                expect(screen.getByText("Play 1")).toBeInTheDocument();
+            });
+
+            // Go to page 2
+            const page2Button = screen.getByRole("button", { name: "Go to page 2" });
+            await userEvent.click(page2Button);
+
+            await waitFor(() => {
+                expect(mockGetPlaysByTeam).toHaveBeenCalledWith(
+                    expect.objectContaining({ page: 2 })
+                );
+            });
+
+            // Clear mock
+            mockGetPlaysByTeam.mockClear();
+            mockGetPlaysByTeam.mockResolvedValue(createMockResponse(
+                [createMockPlayData({ name: "Search Result" })],
+                1
+            ));
+
+            // Type in search - should reset to page 1
+            const searchInput = screen.getByPlaceholderText(
+                "Search plays by name or description..."
+            );
+            await userEvent.type(searchInput, "test");
+            
+            // Wait for debounce
+            await vi.advanceTimersByTimeAsync(350);
+
+            await waitFor(() => {
+                expect(mockGetPlaysByTeam).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        page: 1,
+                        search: "test",
+                    })
+                );
+            });
+        });
+
+        it("shows no results when server returns empty for search", async () => {
             renderWithTheme(createDefaultProps());
 
             await waitFor(() => {
                 expect(screen.getByText("Power Play Setup")).toBeInTheDocument();
             });
 
-            // Apply date filter first
-            const dateFilter = screen.getByLabelText("Date Filter");
-            await userEvent.click(dateFilter);
-            await userEvent.click(screen.getByRole("option", { name: "All Time" }));
+            // Return empty for search
+            mockGetPlaysByTeam.mockResolvedValue(createMockResponse([], 0));
 
-            // Then search
             const searchInput = screen.getByPlaceholderText(
                 "Search plays by name or description..."
             );
-            await userEvent.type(searchInput, "Pattern");
+            await userEvent.type(searchInput, "xyz123");
+            
+            // Wait for debounce
+            await vi.advanceTimersByTimeAsync(350);
 
             await waitFor(() => {
-                expect(screen.getByText("Breakout Pattern")).toBeInTheDocument();
+                expect(screen.getByText("No plays found")).toBeInTheDocument();
                 expect(
-                    screen.queryByText("Power Play Setup")
-                ).not.toBeInTheDocument();
+                    screen.getByText("Try adjusting your search or filter settings")
+                ).toBeInTheDocument();
             });
         });
     });
@@ -364,9 +398,24 @@ describe("PlayLibrary", () => {
             ];
 
             mockGetPlaysByTeam.mockResolvedValue(createMockResponse(mockPlays, 2));
+            
+            // Mock getPlayById to return full play data
+            mockGetPlayById.mockResolvedValue({
+                success: true,
+                data: {
+                    id: "play-1",
+                    name: "Power Play Setup",
+                    description: "Standard power play formation",
+                    thumbnail: "data:image/png;base64,mockBase64Data",
+                    playData: { players: [], drawings: [], annotations: [] },
+                    isTemplate: true,
+                    createdAt: new Date("2025-01-15T10:00:00Z"),
+                    updatedAt: new Date("2025-01-15T10:00:00Z"),
+                },
+            });
         });
 
-        it("calls onSelectPlay when play is clicked in select mode", async () => {
+        it("fetches full play data and calls onSelectPlay when play is clicked in select mode", async () => {
             const onSelectPlay = vi.fn();
             renderWithTheme(
                 createDefaultProps({ mode: "select", onSelectPlay })
@@ -378,9 +427,27 @@ describe("PlayLibrary", () => {
 
             await userEvent.click(screen.getByText("Power Play Setup"));
 
-            expect(onSelectPlay).toHaveBeenCalledWith(
-                expect.objectContaining({ name: "Power Play Setup" })
-            );
+            // Should call getPlayById to fetch full data
+            await waitFor(() => {
+                expect(mockGetPlayById).toHaveBeenCalledWith({
+                    id: "play-1",
+                    teamId: "team-1",
+                });
+            });
+
+            // Should call onSelectPlay with full play data
+            await waitFor(() => {
+                expect(onSelectPlay).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        name: "Power Play Setup",
+                        playData: expect.objectContaining({
+                            players: [],
+                            drawings: [],
+                            annotations: [],
+                        }),
+                    })
+                );
+            });
         });
 
         it("shows selected state on play card", async () => {
@@ -412,6 +479,31 @@ describe("PlayLibrary", () => {
             });
 
             await userEvent.click(screen.getByText("Power Play Setup"));
+
+            expect(onSelectPlay).not.toHaveBeenCalled();
+            expect(mockGetPlayById).not.toHaveBeenCalled();
+        });
+
+        it("shows error when getPlayById fails", async () => {
+            mockGetPlayById.mockResolvedValue({
+                success: false,
+                error: "Failed to load play",
+            });
+
+            const onSelectPlay = vi.fn();
+            renderWithTheme(
+                createDefaultProps({ mode: "select", onSelectPlay })
+            );
+
+            await waitFor(() => {
+                expect(screen.getByText("Power Play Setup")).toBeInTheDocument();
+            });
+
+            await userEvent.click(screen.getByText("Power Play Setup"));
+
+            await waitFor(() => {
+                expect(screen.getByText(/Failed to load play details/)).toBeInTheDocument();
+            });
 
             expect(onSelectPlay).not.toHaveBeenCalled();
         });
