@@ -103,6 +103,7 @@ export interface PlayInSession {
     duration: number; // minutes
     instructions: string;
     playData: PlayData;
+    thumbnail?: string; // base64 PNG thumbnail from library play
 }
 
 /**

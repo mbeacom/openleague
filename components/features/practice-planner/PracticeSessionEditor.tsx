@@ -107,8 +107,8 @@ function PlayCard({
     const [editDuration, setEditDuration] = useState(play.duration);
     const [editInstructions, setEditInstructions] = useState(play.instructions);
 
-    // Get thumbnail from playData if available
-    const thumbnail = play.playData ? "" : ""; // Thumbnail will be generated when needed
+    // Get thumbnail from play instance (copied from library play when added)
+    const thumbnail = play.thumbnail || "";
 
     /**
      * Handle save edits
@@ -430,16 +430,14 @@ export function PracticeSessionEditor({
      * Requirements: 2.1 - Save session metadata
      */
     const handleSave = useCallback(async () => {
-        // Validate form
+        // Validate form (includes date validation)
         if (!validateForm()) {
             setSaveError("Please fix the validation errors");
             return;
         }
 
-        if (!date) {
-            setSaveError("Date is required");
-            return;
-        }
+        // TypeScript narrowing: after validateForm() passes, date is guaranteed to be non-null
+        if (!date) return;
 
         setIsSaving(true);
         setSaveError(null);
@@ -629,13 +627,15 @@ export function PracticeSessionEditor({
     const handleAddPlayFromLibrary = useCallback((savedPlay: SavedPlay) => {
         // Requirements: 4.4 - Create copy of library play when adding to session
         // Generate unique ID for this play instance
+        // Use JSON.parse(JSON.stringify()) for deep copy to prevent mutations affecting library play
         const playInstance: PlayInSession = {
             id: `play-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
             playId: savedPlay.id,
             sequence: plays.length + 1, // Requirements: 2.2 - Assign sequence number automatically
             duration: 10, // Default duration
             instructions: savedPlay.description || "",
-            playData: { ...savedPlay.playData }, // Create a copy of the play data
+            playData: JSON.parse(JSON.stringify(savedPlay.playData)), // Deep copy to prevent library play mutation
+            thumbnail: savedPlay.thumbnail || "", // Copy thumbnail from library play
         };
 
         setPlays((prevPlays) => [...prevPlays, playInstance]);
@@ -974,40 +974,37 @@ export function PracticeSessionEditor({
 
                 {/* Play Library Dialog */}
                 {/* Requirements: 4.3 - Integrate PlayLibrary component in selection mode */}
-                {showLibrary && (
-                    <Paper
-                        elevation={3}
-                        sx={{
-                            position: "fixed",
-                            top: 0,
-                            left: 0,
-                            right: 0,
-                            bottom: 0,
-                            zIndex: theme.zIndex.modal,
-                            overflow: "auto",
-                            bgcolor: "background.default",
-                        }}
-                    >
-                        <Box sx={{ p: 2 }}>
-                            <Stack
-                                direction="row"
-                                justifyContent="space-between"
-                                alignItems="center"
-                                mb={2}
-                            >
-                                <Typography variant="h5">Select Play from Library</Typography>
-                                <Button variant="outlined" onClick={handleCloseLibrary}>
-                                    Close
-                                </Button>
-                            </Stack>
-                            <PlayLibrary
-                                teamId={teamId}
-                                onSelectPlay={handleAddPlayFromLibrary}
-                                mode="select"
-                            />
-                        </Box>
-                    </Paper>
-                )}
+                {/* Using MUI Dialog for accessibility: focus trapping, scroll locking, Escape key handling */}
+                <Dialog
+                    open={showLibrary}
+                    onClose={handleCloseLibrary}
+                    fullScreen={isMobile}
+                    maxWidth="lg"
+                    fullWidth
+                    aria-labelledby="play-library-dialog-title"
+                >
+                    <DialogTitle id="play-library-dialog-title">
+                        <Stack
+                            direction="row"
+                            justifyContent="space-between"
+                            alignItems="center"
+                        >
+                            <Typography variant="h5" component="span">
+                                Select Play from Library
+                            </Typography>
+                            <Button variant="outlined" onClick={handleCloseLibrary}>
+                                Close
+                            </Button>
+                        </Stack>
+                    </DialogTitle>
+                    <DialogContent dividers>
+                        <PlayLibrary
+                            teamId={teamId}
+                            onSelectPlay={handleAddPlayFromLibrary}
+                            mode="select"
+                        />
+                    </DialogContent>
+                </Dialog>
 
                 {/* Share Confirmation Dialog */}
                 {/* Requirements: 3.1 - Share button with confirmation */}
