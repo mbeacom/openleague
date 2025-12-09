@@ -45,9 +45,9 @@ export interface PlayEditorProps {
  * PlayEditor Component
  *
  * Requirements: 1.1, 1.2, 1.3, 1.4 - Integrate RinkBoard and DrawingToolbar
+ * Note: teamId is included in props for API consistency but handled by parent via onSave callback
  */
 export function PlayEditor({
-    teamId,
     playId,
     initialData,
     onSave,
