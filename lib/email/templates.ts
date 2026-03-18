@@ -869,3 +869,225 @@ ${unsubscribeLink ? `\nDon't want to receive these emails? Unsubscribe: ${unsubs
     }
   }
 }
+
+interface PracticePlanSharedEmailData {
+  emails: string[];
+  teamName: string;
+  sessionTitle: string;
+  sessionDate: string;
+  duration: number;
+  playCount: number;
+  sessionId: string;
+  teamId: string;
+}
+
+/**
+ * Send notification emails when a practice plan is shared
+ * Requirements: 6.1, 6.2
+ */
+export async function sendPracticePlanSharedEmail(data: PracticePlanSharedEmailData): Promise<void> {
+  const mailchimp = getMailchimpClient();
+  const sessionLink = `${BASE_URL}/practice-planner/${data.sessionId}`;
+
+  const message: {
+    from_email: string;
+    subject: string;
+    html: string;
+    text: string;
+    to: Array<{ email: string; type: "to" }>;
+  } = {
+    from_email: EMAIL_FROM,
+    subject: `Practice Plan Shared: ${data.sessionTitle}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #1976D2;">New Practice Plan Available</h2>
+
+        <p>A new practice plan has been shared with <strong>${data.teamName}</strong>.</p>
+
+        <div style="background-color: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
+          <h3 style="margin-top: 0; color: #333;">${data.sessionTitle}</h3>
+          <p style="margin: 10px 0;"><strong>Date:</strong> ${data.sessionDate}</p>
+          <p style="margin: 10px 0;"><strong>Duration:</strong> ${data.duration} minutes</p>
+          <p style="margin: 10px 0;"><strong>Number of Drills:</strong> ${data.playCount}</p>
+        </div>
+
+        <p>Review the practice plan to see the drills and prepare for the upcoming practice.</p>
+
+        <p style="margin: 30px 0;">
+          <a href="${sessionLink}"
+             style="background-color: #1976D2; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">
+            View Practice Plan
+          </a>
+        </p>
+
+        <p style="color: #666; font-size: 14px;">
+          Or copy and paste this link into your browser:<br>
+          <a href="${sessionLink}">${sessionLink}</a>
+        </p>
+      </div>
+    `,
+    text: `New Practice Plan Available
+
+A new practice plan has been shared with ${data.teamName}.
+
+${data.sessionTitle}
+Date: ${data.sessionDate}
+Duration: ${data.duration} minutes
+Number of Drills: ${data.playCount}
+
+Review the practice plan to see the drills and prepare for the upcoming practice.
+
+View practice plan at:
+${sessionLink}`,
+    to: data.emails.map((email) => ({ email, type: "to" as const })),
+  };
+
+  try {
+    await mailchimp.messages.send({ message });
+  } catch (error) {
+    console.error("Error sending practice plan shared email:", error);
+    throw new Error("Failed to send practice plan notification email");
+  }
+}
+
+interface PracticePlanUpdatedEmailData {
+  emails: string[];
+  teamName: string;
+  sessionTitle: string;
+  sessionDate: string;
+  duration: number;
+  playCount: number;
+  sessionId: string;
+  teamId: string;
+}
+
+/**
+ * Send notification emails when a shared practice plan is updated
+ * Requirements: 6.3
+ */
+export async function sendPracticePlanUpdatedEmail(data: PracticePlanUpdatedEmailData): Promise<void> {
+  const mailchimp = getMailchimpClient();
+  const sessionLink = `${BASE_URL}/practice-planner/${data.sessionId}`;
+
+  const message: {
+    from_email: string;
+    subject: string;
+    html: string;
+    text: string;
+    to: Array<{ email: string; type: "to" }>;
+  } = {
+    from_email: EMAIL_FROM,
+    subject: `Practice Plan Updated: ${data.sessionTitle}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #FF9800;">Practice Plan Updated</h2>
+
+        <p>A practice plan for <strong>${data.teamName}</strong> has been updated.</p>
+
+        <div style="background-color: #fff3e0; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #FF9800;">
+          <h3 style="margin-top: 0; color: #333;">${data.sessionTitle}</h3>
+          <p style="margin: 10px 0;"><strong>Date:</strong> ${data.sessionDate}</p>
+          <p style="margin: 10px 0;"><strong>Duration:</strong> ${data.duration} minutes</p>
+          <p style="margin: 10px 0;"><strong>Number of Drills:</strong> ${data.playCount}</p>
+        </div>
+
+        <p>The practice plan has been modified. Please review the updated drills and instructions.</p>
+
+        <p style="margin: 30px 0;">
+          <a href="${sessionLink}"
+             style="background-color: #FF9800; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">
+            View Updated Practice Plan
+          </a>
+        </p>
+
+        <p style="color: #666; font-size: 14px;">
+          Or copy and paste this link into your browser:<br>
+          <a href="${sessionLink}">${sessionLink}</a>
+        </p>
+      </div>
+    `,
+    text: `Practice Plan Updated
+
+A practice plan for ${data.teamName} has been updated.
+
+${data.sessionTitle}
+Date: ${data.sessionDate}
+Duration: ${data.duration} minutes
+Number of Drills: ${data.playCount}
+
+The practice plan has been modified. Please review the updated drills and instructions.
+
+View updated practice plan at:
+${sessionLink}`,
+    to: data.emails.map((email) => ({ email, type: "to" as const })),
+  };
+
+  try {
+    await mailchimp.messages.send({ message });
+  } catch (error) {
+    console.error("Error sending practice plan updated email:", error);
+    throw new Error("Failed to send practice plan update notification email");
+  }
+}
+
+/**
+ * Helper function to send practice plan notifications to all team members
+ * Requirements: 6.1, 6.3, 6.4
+ */
+export async function sendPracticePlanNotifications(
+  sessionId: string,
+  teamId: string,
+  type: "shared" | "updated"
+): Promise<void> {
+  // Fetch session with team members
+  const session = await prisma.practiceSession.findUnique({
+    where: { id: sessionId },
+    include: {
+      team: {
+        include: {
+          members: {
+            include: {
+              user: {
+                select: {
+                  email: true,
+                },
+              },
+            },
+          },
+        },
+      },
+      _count: {
+        select: {
+          plays: true,
+        },
+      },
+    },
+  });
+
+  if (!session) {
+    throw new Error("Practice session not found");
+  }
+
+  // Filter team members based on notification preferences
+  // TODO: Add notification preference check when NotificationPreference model is updated
+  const emails = session.team.members.map(
+    (member: { user: { email: string } }) => member.user.email
+  );
+
+  const sessionData = {
+    emails,
+    teamName: session.team.name,
+    sessionTitle: session.title,
+    sessionDate: formatDateTime(session.date),
+    duration: session.duration,
+    playCount: session._count.plays,
+    sessionId: session.id,
+    teamId: session.teamId,
+  };
+
+  if (type === "shared") {
+    await sendPracticePlanSharedEmail(sessionData);
+  } else if (type === "updated") {
+    await sendPracticePlanUpdatedEmail(sessionData);
+  }
+}

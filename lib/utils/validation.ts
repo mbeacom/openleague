@@ -416,9 +416,72 @@ export const getPlaysByTeamSchema = z.object({
   dateFilter: z.enum(["all", "today", "week", "month"]).optional().default("all"),
 });
 
+// Practice session validation schemas
+export const createPracticeSessionSchema = z.object({
+  title: sanitizedStringWithMin(1, 100),
+  date: z.coerce.date({
+    message: "Valid date is required",
+  }),
+  duration: z.number().int().min(1, "Duration must be at least 1 minute").max(300, "Duration must be less than 300 minutes"),
+  teamId: z.string().cuid("Invalid team ID format"),
+  plays: z.array(z.object({
+    playId: z.string().cuid("Invalid play ID format"),
+    sequence: z.number().int().min(0),
+    duration: z.number().int().min(1, "Play duration must be at least 1 minute").max(300, "Play duration must be less than 300 minutes"),
+    instructions: optionalSanitizedString(2000),
+  })).optional().default([]),
+});
+
+export const updatePracticeSessionSchema = z.object({
+  id: z.string().cuid("Invalid session ID format"),
+  title: sanitizedStringWithMin(1, 100),
+  date: z.coerce.date({
+    message: "Valid date is required",
+  }),
+  duration: z.number().int().min(1, "Duration must be at least 1 minute").max(300, "Duration must be less than 300 minutes"),
+  teamId: z.string().cuid("Invalid team ID format"),
+  plays: z.array(z.object({
+    playId: z.string().cuid("Invalid play ID format"),
+    sequence: z.number().int().min(0),
+    duration: z.number().int().min(1, "Play duration must be at least 1 minute").max(300, "Play duration must be less than 300 minutes"),
+    instructions: optionalSanitizedString(2000),
+  })).optional().default([]),
+});
+
+export const deletePracticeSessionSchema = z.object({
+  id: z.string().cuid("Invalid session ID format"),
+  teamId: z.string().cuid("Invalid team ID format"),
+});
+
+export const getPracticeSessionByIdSchema = z.object({
+  id: z.string().cuid("Invalid session ID format"),
+  teamId: z.string().cuid("Invalid team ID format"),
+});
+
+export const getPracticeSessionsByTeamSchema = z.object({
+  teamId: z.string().cuid("Invalid team ID format"),
+  page: z.number().int().min(1).default(1),
+  limit: z.number().int().min(1).max(100).default(20),
+  search: z.string().max(100).optional(),
+  dateFilter: z.enum(["all", "upcoming", "past"]).optional().default("all"),
+});
+
+export const sharePracticeSessionSchema = z.object({
+  id: z.string().cuid("Invalid session ID format"),
+  teamId: z.string().cuid("Invalid team ID format"),
+  isShared: z.boolean(),
+});
+
 // Type exports for practice planner
 export type CreatePlayInput = z.infer<typeof createPlaySchema>;
 export type UpdatePlayInput = z.infer<typeof updatePlaySchema>;
 export type DeletePlayInput = z.infer<typeof deletePlaySchema>;
 export type GetPlayByIdInput = z.infer<typeof getPlayByIdSchema>;
 export type GetPlaysByTeamInput = z.infer<typeof getPlaysByTeamSchema>;
+
+export type CreatePracticeSessionInput = z.infer<typeof createPracticeSessionSchema>;
+export type UpdatePracticeSessionInput = z.infer<typeof updatePracticeSessionSchema>;
+export type DeletePracticeSessionInput = z.infer<typeof deletePracticeSessionSchema>;
+export type GetPracticeSessionByIdInput = z.infer<typeof getPracticeSessionByIdSchema>;
+export type GetPracticeSessionsByTeamInput = z.infer<typeof getPracticeSessionsByTeamSchema>;
+export type SharePracticeSessionInput = z.infer<typeof sharePracticeSessionSchema>;

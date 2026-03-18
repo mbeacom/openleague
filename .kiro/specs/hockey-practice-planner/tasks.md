@@ -210,9 +210,9 @@
     - Implement auto-save for session metadata
     - _Requirements: 2.1, 3.1_
 
-- [ ] 10. Implement server actions for practice sessions
+- [x] 10. Implement server actions for practice sessions
 
-  - [ ] 10.1 Create session CRUD actions
+  - [x] 10.1 Create session CRUD actions
 
     - Write createPracticeSession server action
     - Implement updatePracticeSession server action
@@ -221,21 +221,21 @@
     - Implement getPracticeSessionsByTeam query action
     - _Requirements: 2.1, 2.2, 2.5_
 
-  - [ ] 10.2 Implement session sharing action
+  - [x] 10.2 Implement session sharing action
 
     - Create sharePracticeSession server action
     - Update isShared flag in database
     - Trigger notification sending
     - _Requirements: 3.1_
 
-  - [ ] 10.3 Add permission checks
+  - [x] 10.3 Add permission checks
 
     - Verify team admin role for create/edit/delete/share operations
     - Verify team membership for view operations
     - Prevent cross-team session access
     - _Requirements: 3.1, 3.2_
 
-  - [ ] 10.4 Implement validation
+  - [x] 10.4 Implement validation
     - Validate session metadata (title, date, duration)
     - Validate play sequence integrity
     - Validate total duration against session duration
