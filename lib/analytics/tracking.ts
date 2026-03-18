@@ -8,7 +8,7 @@ interface GtagWindow extends Window {
 }
 
 function getGtag(): GtagWindow['gtag'] | null {
-  if (typeof window !== 'undefined' && 'gtag' in window) {
+  if (typeof window !== 'undefined' && typeof (window as unknown as GtagWindow).gtag === 'function') {
     return (window as unknown as GtagWindow).gtag;
   }
   return null;

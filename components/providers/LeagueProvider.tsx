@@ -77,7 +77,11 @@ export const LeagueProvider: React.FC<LeagueProviderProps> = ({
     }
 
     if (currentLeague) {
-      return `/league/${currentLeague.id}${pathname.startsWith('/league/') ? pathname.split('/').slice(3).join('/') : pathname}`;
+      if (pathname.startsWith('/league/')) {
+        const remainder = pathname.split('/').slice(3).join('/');
+        return `/league/${currentLeague.id}${remainder ? `/${remainder}` : ''}`;
+      }
+      return `/league/${currentLeague.id}${pathname}`;
     }
 
     return pathname;
