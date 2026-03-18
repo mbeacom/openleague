@@ -30,6 +30,14 @@ export const CONTACT_EMAIL = `mark@${APP_DOMAIN}`;
 export const DOCS_URL = "https://openleague.dev";
 
 /**
+ * Authentication error codes (used in CredentialsSignin.code for Auth.js v5)
+ */
+export const AUTH_ERROR_CODES = {
+  INVALID_CREDENTIALS: "invalid_credentials",
+  ACCOUNT_NOT_APPROVED: "account_not_approved",
+} as const;
+
+/**
  * Authentication and authorization messages
  */
 export const AUTH_MESSAGES = {
