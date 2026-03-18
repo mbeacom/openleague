@@ -1,5 +1,20 @@
 import { z } from "zod";
 
+/**
+ * Type-safe wrapper for Zod .pick() with computed property names.
+ *
+ * Zod 4.x `.pick()` requires a literal object type like `{ email: true }`,
+ * but computed property names `{ [name]: true }` produce `{ [x: string]: true }`
+ * which fails type-checking. This helper encapsulates the necessary assertion.
+ */
+export function pickField<T extends z.ZodObject<z.ZodRawShape>>(
+  schema: T,
+  field: keyof z.input<T>,
+) {
+  const key = field as string;
+  return z.object({ [key]: schema.shape[key] });
+}
+
 // Helper to sanitize string input by trimming and removing dangerous characters
 function sanitizedString(maxLength: number = 255) {
   return z

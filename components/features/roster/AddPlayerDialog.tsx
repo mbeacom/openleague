@@ -11,7 +11,7 @@ import {
   Box,
 } from "@mui/material";
 import { addPlayer, updatePlayer } from "@/lib/actions/roster";
-import { addPlayerSchema, type AddPlayerInput } from "@/lib/utils/validation";
+import { addPlayerSchema, pickField, type AddPlayerInput } from "@/lib/utils/validation";
 import { useToast } from "@/components/ui/Toast";
 import type { Player } from "@/types/roster";
 import type { z } from "zod";
@@ -83,7 +83,7 @@ export default function AddPlayerDialog({
 
     // Validate individual field on blur
     if (Object.prototype.hasOwnProperty.call(addPlayerSchema.shape, field)) {
-      const fieldSchema = addPlayerSchema.pick({ [field]: true } as Parameters<typeof addPlayerSchema.pick>[0]);
+      const fieldSchema = pickField(addPlayerSchema, field);
       const validationResult = fieldSchema.safeParse({ [field]: value });
 
       if (validationResult.success) {

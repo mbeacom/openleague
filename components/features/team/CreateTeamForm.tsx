@@ -11,7 +11,7 @@ import {
   CircularProgress,
 } from "@mui/material";
 import { createTeam } from "@/lib/actions/team";
-import { createTeamSchema, type CreateTeamInput } from "@/lib/utils/validation";
+import { createTeamSchema, pickField, type CreateTeamInput } from "@/lib/utils/validation";
 import { trackTeam } from "@/lib/analytics/umami";
 
 export default function CreateTeamForm() {
@@ -38,7 +38,7 @@ export default function CreateTeamForm() {
 
     // Validate individual field on blur
     if (name === 'name' || name === 'sport' || name === 'season') {
-      const fieldSchema = createTeamSchema.pick({ [name]: true } as { name?: true; sport?: true; season?: true });
+      const fieldSchema = pickField(createTeamSchema, name);
       const validationResult = fieldSchema.safeParse({ [name]: value });
 
       if (validationResult.success) {
