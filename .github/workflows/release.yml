@@ -99,7 +99,20 @@ jobs:
             echo "version=${NEW_VERSION}" >> $GITHUB_OUTPUT
           fi
 
+      - name: Check if tag already exists
+        id: tag_check
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "⏭️ Tag v$VERSION already exists — skipping tag creation and release (handled by tag-release workflow)"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "🆕 Tag v$VERSION does not exist — will create tag and release"
+          fi
+
       - name: Update package.json version
+        if: steps.tag_check.outputs.exists == 'false'
         run: |
           VERSION=${{ steps.version.outputs.version }}
           # Update version in package.json
@@ -108,6 +121,7 @@ jobs:
           echo "Updated package.json to version $VERSION"
 
       - name: Commit version bump
+        if: steps.tag_check.outputs.exists == 'false'
         run: |
           VERSION=${{ steps.version.outputs.version }}
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
@@ -117,12 +131,14 @@ jobs:
           git push
 
       - name: Create Git tag
+        if: steps.tag_check.outputs.exists == 'false'
         run: |
           VERSION=${{ steps.version.outputs.version }}
           git tag -a "v$VERSION" -m "Release v$VERSION"
           git push origin "v$VERSION"
 
       - name: Create GitHub Release
+        if: steps.tag_check.outputs.exists == 'false'
         uses: softprops/action-gh-release@62c96d0c4e8a889135c1f3a25910db8dbe0e85f7 # v2.3.4
         with:
           tag_name: v${{ steps.version.outputs.version }}
@@ -135,7 +151,13 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Notify success
-        if: success()
+        if: success() && steps.tag_check.outputs.exists == 'false'
         run: |
           echo "✅ Release v${{ steps.version.outputs.version }} created successfully!"
           echo "🔗 View release: https://github.com/${{ github.repository }}/releases/tag/v${{ steps.version.outputs.version }}"
+
+      - name: Notify skipped
+        if: steps.tag_check.outputs.exists == 'true'
+        run: |
+          echo "⏭️ Release skipped — tag v${{ steps.version.outputs.version }} was already created manually"
+          echo "🔗 The tag-release workflow handles manually pushed tags"
