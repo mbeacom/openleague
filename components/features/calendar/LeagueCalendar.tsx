@@ -12,8 +12,8 @@ import {
   Chip,
   Button,
   Divider,
-  useMediaQuery,
 } from "@mui/material";
+import useMediaQuery from "@mui/material/useMediaQuery";
 import { useTheme } from "@mui/material/styles";
 import { Download, CalendarMonth } from "@mui/icons-material";
 import EventCard from "./EventCard";

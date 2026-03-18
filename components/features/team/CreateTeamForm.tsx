@@ -38,7 +38,7 @@ export default function CreateTeamForm() {
 
     // Validate individual field on blur
     if (name === 'name' || name === 'sport' || name === 'season') {
-      const fieldSchema = createTeamSchema.pick({ [name]: true });
+      const fieldSchema = createTeamSchema.pick({ [name]: true } as { name?: true; sport?: true; season?: true });
       const validationResult = fieldSchema.safeParse({ [name]: value });
 
       if (validationResult.success) {

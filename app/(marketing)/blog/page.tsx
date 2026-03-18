@@ -32,10 +32,10 @@ export default function BlogPage() {
           </Typography>
 
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="center" sx={{ mt: 4 }}>
-            <Button component={Link} href="/docs" variant="contained">
+            <Button href="/docs" variant="contained">
               Explore Documentation
             </Button>
-            <Button component={Link} href="/contact" variant="outlined">
+            <Button href="/contact" variant="outlined">
               Share Blog Ideas
             </Button>
           </Stack>

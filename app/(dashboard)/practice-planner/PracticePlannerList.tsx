@@ -18,9 +18,9 @@ import {
   IconButton,
   Tooltip,
   Paper,
-  useMediaQuery,
-  useTheme,
 } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
+import useMediaQuery from "@mui/material/useMediaQuery";
 import Link from "next/link";
 import Image from "next/image";
 import AddIcon from "@mui/icons-material/Add";

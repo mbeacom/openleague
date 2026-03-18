@@ -23,9 +23,9 @@ import {
   IconButton,
   Tooltip,
   LinearProgress,
-  useMediaQuery,
-  useTheme,
 } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
+import useMediaQuery from "@mui/material/useMediaQuery";
 import {
   ArrowBack as ArrowBackIcon,
   Edit as EditIcon,

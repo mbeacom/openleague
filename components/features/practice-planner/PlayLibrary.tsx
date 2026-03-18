@@ -36,9 +36,9 @@ import {
     InputLabel,
     Select,
     MenuItem,
-    useTheme,
-    useMediaQuery,
 } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
+import useMediaQuery from "@mui/material/useMediaQuery";
 import type { SelectChangeEvent } from "@mui/material";
 import {
     Search as SearchIcon,

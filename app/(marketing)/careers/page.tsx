@@ -32,10 +32,10 @@ export default function CareersPage() {
           </Typography>
 
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="center" sx={{ mt: 4 }}>
-            <Button component={Link} href="https://github.com/mbeacom/openleague" target="_blank" rel="noopener noreferrer" variant="contained">
+            <Button href="https://github.com/mbeacom/openleague" target="_blank" rel="noopener noreferrer" variant="contained">
               View GitHub
             </Button>
-            <Button component={Link} href="/contact" variant="outlined">
+            <Button href="/contact" variant="outlined">
               Say Hello
             </Button>
           </Stack>

@@ -19,8 +19,6 @@ import {
     CircularProgress,
     Alert,
     Stack,
-    useTheme,
-    useMediaQuery,
     Card,
     CardContent,
     CardMedia,
@@ -33,6 +31,8 @@ import {
     DialogContentText,
     DialogActions,
 } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
+import useMediaQuery from "@mui/material/useMediaQuery";
 import {
     Save as SaveIcon,
     Share as ShareIcon,

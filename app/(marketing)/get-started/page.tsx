@@ -10,7 +10,6 @@ import {
   StepLabel,
   StepContent,
 } from '@mui/material';
-import Link from 'next/link';
 import { generatePageMetadata, getBreadcrumbSchema } from '@/lib/config/seo';
 import StructuredData from '@/components/ui/StructuredData';
 
@@ -92,7 +91,7 @@ export default function GetStartedPage() {
           </Typography>
 
           <Box sx={{ display: 'flex', justifyContent: 'center', mb: 8 }}>
-            <Button component={Link} href="/signup" variant="contained" size="large">
+            <Button href="/signup" variant="contained" size="large">
               Sign Up Now
             </Button>
           </Box>
@@ -118,7 +117,6 @@ export default function GetStartedPage() {
                   )}
                   {step.action && step.actionHref && (
                     <Button
-                      component={Link}
                       href={step.actionHref}
                       variant="contained"
                       sx={{ mt: 2 }}
@@ -154,7 +152,7 @@ export default function GetStartedPage() {
                   <Typography variant="body2" color="text.secondary" paragraph>
                     Comprehensive guides and tutorials to help you make the most of OpenLeague.
                   </Typography>
-                  <Button component={Link} href="/docs" size="small">
+                  <Button href="/docs" size="small">
                     View Docs
                   </Button>
                 </CardContent>
@@ -168,7 +166,7 @@ export default function GetStartedPage() {
                   <Typography variant="body2" color="text.secondary" paragraph>
                     Step-by-step instructions for common tasks and features.
                   </Typography>
-                  <Button component={Link} href="/docs/user-guide" size="small">
+                  <Button href="/docs/user-guide" size="small">
                     Read Guide
                   </Button>
                 </CardContent>
@@ -182,7 +180,7 @@ export default function GetStartedPage() {
                   <Typography variant="body2" color="text.secondary" paragraph>
                     Have questions? Our support team is ready to help.
                   </Typography>
-                  <Button component={Link} href="/contact" size="small">
+                  <Button href="/contact" size="small">
                     Get Help
                   </Button>
                 </CardContent>
@@ -197,7 +195,7 @@ export default function GetStartedPage() {
             <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
               Sign up and begin managing your team in minutes.
             </Typography>
-            <Button component={Link} href="/signup" variant="contained" size="large">
+            <Button href="/signup" variant="contained" size="large">
               Sign Up Now
             </Button>
           </Box>

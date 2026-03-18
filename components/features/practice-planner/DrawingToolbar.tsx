@@ -18,14 +18,14 @@ import {
     Tooltip,
     Popover,
     Stack,
-    useTheme,
-    useMediaQuery,
     Dialog,
     DialogTitle,
     DialogContent,
     DialogActions,
     Button,
 } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
+import useMediaQuery from "@mui/material/useMediaQuery";
 import {
     PanTool as SelectIcon,
     PersonAdd as PlayerIcon,

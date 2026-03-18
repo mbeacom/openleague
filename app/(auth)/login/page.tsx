@@ -60,7 +60,7 @@ function LoginForm() {
 
     // Validate individual field on blur
     if (name === 'email' || name === 'password') {
-      const fieldSchema = loginSchema.pick({ [name]: true });
+      const fieldSchema = loginSchema.pick({ [name]: true } as { email?: true; password?: true });
       const validationResult = fieldSchema.safeParse({ [name]: value });
 
       if (validationResult.success) {

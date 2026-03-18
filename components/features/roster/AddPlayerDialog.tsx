@@ -83,7 +83,7 @@ export default function AddPlayerDialog({
 
     // Validate individual field on blur
     if (Object.prototype.hasOwnProperty.call(addPlayerSchema.shape, field)) {
-      const fieldSchema = addPlayerSchema.pick({ [field]: true });
+      const fieldSchema = addPlayerSchema.pick({ [field]: true } as Parameters<typeof addPlayerSchema.pick>[0]);
       const validationResult = fieldSchema.safeParse({ [field]: value });
 
       if (validationResult.success) {

@@ -55,7 +55,7 @@ function SignupForm() {
 
     // Validate individual field on blur
     if (name === 'email' || name === 'password' || name === 'name') {
-      const fieldSchema = signupSchema.pick({ [name]: true });
+      const fieldSchema = signupSchema.pick({ [name]: true } as { email?: true; password?: true; name?: true });
       const validationResult = fieldSchema.safeParse({ [name]: value });
 
       if (validationResult.success) {
