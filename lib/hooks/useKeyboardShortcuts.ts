@@ -184,7 +184,7 @@ export function useFocusNavigation({
   }, [enabled, handleKeyDown]);
 
   return {
-    currentIndex: currentIndexRef.current,
+    getCurrentIndex: () => currentIndexRef.current,
     setCurrentIndex: (index: number) => {
       currentIndexRef.current = index;
     },

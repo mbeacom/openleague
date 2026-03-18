@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useTransition } from "react";
+import React, { useState, useEffect, useTransition } from "react";
 import {
   Box,
   Card,
@@ -53,34 +53,34 @@ export const NotificationPreferencesComponent: React.FC<NotificationPreferencesP
     }>;
   } | null>(null);
 
-  const loadPreferences = useCallback(async () => {
-    try {
-      if (leagueId) {
-        // Load specific league preferences
-        const result = await getNotificationPreferences(leagueId);
+  useEffect(() => {
+    let cancelled = false;
+    if (leagueId) {
+      getNotificationPreferences(leagueId).then(result => {
+        if (cancelled) return;
         if (result.success) {
           setPreferences(result.data);
         } else {
           setError(result.error);
         }
-      } else {
-        // Load all preferences
-        const result = await getAllNotificationPreferences();
+      }).catch(() => {
+        if (!cancelled) setError("Failed to load notification preferences");
+      });
+    } else {
+      getAllNotificationPreferences().then(result => {
+        if (cancelled) return;
         if (result.success) {
           setAllPreferences(result.data);
           setPreferences(result.data.global);
         } else {
           setError(result.error);
         }
-      }
-    } catch {
-      setError("Failed to load notification preferences");
+      }).catch(() => {
+        if (!cancelled) setError("Failed to load notification preferences");
+      });
     }
+    return () => { cancelled = true; };
   }, [leagueId]);
-
-  useEffect(() => {
-    loadPreferences();
-  }, [leagueId, loadPreferences]);
 
   const handlePreferenceChange = (key: keyof NotificationPreferences, value: boolean) => {
     if (!preferences) return;
