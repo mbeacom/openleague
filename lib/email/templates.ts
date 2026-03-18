@@ -1086,6 +1086,11 @@ export async function sendPracticePlanNotifications(
     })
     .map((member: { user: { email: string } }) => member.user.email);
 
+  // No eligible recipients — skip sending to avoid Mailchimp 400 error
+  if (emails.length === 0) {
+    return;
+  }
+
   const sessionData = {
     emails,
     teamName: session.team.name,
