@@ -1039,7 +1039,7 @@ export async function sendPracticePlanNotifications(
   teamId: string,
   type: "shared" | "updated"
 ): Promise<void> {
-  // Fetch session with team members
+  // Fetch session with team members and their notification preferences
   const session = await prisma.practiceSession.findUnique({
     where: { id: sessionId },
     include: {
@@ -1049,7 +1049,14 @@ export async function sendPracticePlanNotifications(
             include: {
               user: {
                 select: {
+                  id: true,
                   email: true,
+                  notificationPreferences: {
+                    select: {
+                      practicePlanNotifications: true,
+                      emailEnabled: true,
+                    },
+                  },
                 },
               },
             },
@@ -1068,11 +1075,16 @@ export async function sendPracticePlanNotifications(
     throw new Error("Practice session not found");
   }
 
-  // Filter team members based on notification preferences
-  // TODO: Add notification preference check when NotificationPreference model is updated
-  const emails = session.team.members.map(
-    (member: { user: { email: string } }) => member.user.email
-  );
+  // Filter team members based on notification preferences (Requirements: 6.4)
+  const emails = session.team.members
+    .filter((member: { user: { notificationPreferences: Array<{ practicePlanNotifications: boolean; emailEnabled: boolean }> } }) => {
+      const prefs = member.user.notificationPreferences;
+      // If no preferences set, default to sending
+      if (prefs.length === 0) return true;
+      // Check if any preference disables practice plan notifications or email
+      return prefs.every(p => p.practicePlanNotifications && p.emailEnabled);
+    })
+    .map((member: { user: { email: string } }) => member.user.email);
 
   const sessionData = {
     emails,

@@ -582,7 +582,11 @@ export function PracticeSessionEditor({
      * Requirements: 2.2 - Remove plays from session
      */
     const handleDeletePlay = useCallback((playId: string) => {
-        setPlays((prevPlays) => prevPlays.filter((p) => p.id !== playId));
+        setPlays((prevPlays) =>
+            prevPlays
+                .filter((p) => p.id !== playId)
+                .map((play, idx) => ({ ...play, sequence: idx }))
+        );
         setHasUnsavedChanges(true);
         setSaveSuccess(false);
     }, []);

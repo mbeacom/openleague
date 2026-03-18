@@ -3,7 +3,7 @@ import { requireUserId } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
 import { redirect, notFound } from "next/navigation";
 import { Container, Box } from "@mui/material";
-import { SessionDetailView } from "./SessionDetailView";
+import { SessionDetailView } from "@/app/(dashboard)/practice-planner/[sessionId]/SessionDetailView";
 
 export const metadata: Metadata = {
   title: "Practice Session | OpenLeague",

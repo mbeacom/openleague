@@ -7,13 +7,22 @@
  * Requirements: 4.2, 4.3, 4.5, 8.4
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { PlayLibrary, PlayLibraryProps } from "@/components/features/practice-planner/PlayLibrary";
 
 import { getPlaysByTeam, getPlayById, deletePlay } from "@/lib/actions/plays";
+
+// Mock ResizeObserver (required by MUI Select)
+beforeAll(() => {
+    global.ResizeObserver = class {
+        observe() { /* noop */ }
+        unobserve() { /* noop */ }
+        disconnect() { /* noop */ }
+    } as unknown as typeof ResizeObserver;
+});
 
 // Mock the server actions
 vi.mock("@/lib/actions/plays", () => ({

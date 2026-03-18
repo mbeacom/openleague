@@ -26,6 +26,7 @@ import {
   MoreVert as MoreVertIcon,
   Analytics as AnalyticsIcon,
   Assessment as ReportsIcon,
+  SportsHockey as SportsHockeyIcon,
 } from "@mui/icons-material";
 import { logout } from "@/lib/actions/logout";
 import { useLeague } from "@/components/providers/LeagueProvider";
@@ -65,6 +66,7 @@ export default function DashboardNav({ mobile = false, isLeagueMode = false }: D
         { label: "Roster", path: "/roster", icon: <PeopleIcon /> },
         { label: "Calendar", path: "/calendar", icon: <CalendarIcon /> },
         { label: "Events", path: "/events", icon: <EventIcon /> },
+        { label: "Practice Planner", path: "/practice-planner", icon: <SportsHockeyIcon /> },
       ];
     }
 
