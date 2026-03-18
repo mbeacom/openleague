@@ -19,6 +19,7 @@ import {
   Settings as SettingsIcon,
   Logout as LogoutIcon,
   MoreVert as MoreVertIcon,
+  SportsHockey as SportsHockeyIcon,
 } from '@mui/icons-material';
 import { usePathname, useRouter } from 'next/navigation';
 import { logout } from '@/lib/actions/logout';
@@ -175,6 +176,19 @@ export default function MobileNavigation({ isLeagueMode = false }: MobileNavigat
           },
         }}
       >
+        {!isLeagueMode && (
+          <MenuItem
+            onClick={() => {
+              handleMenuClose();
+              handleNavigation('/practice-planner');
+            }}
+          >
+            <ListItemIcon>
+              <SportsHockeyIcon />
+            </ListItemIcon>
+            <ListItemText>Practice Planner</ListItemText>
+          </MenuItem>
+        )}
         {isLeagueMode && (
           <MenuItem
             onClick={() => {

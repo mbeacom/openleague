@@ -21,11 +21,12 @@ import {
     Checkbox,
     FormControlLabel,
     Stack,
-    useTheme,
-    useMediaQuery,
 } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
+import useMediaQuery from "@mui/material/useMediaQuery";
 import { Save as SaveIcon } from "@mui/icons-material";
 import { RinkBoard, RinkBoardHandle } from "./RinkBoard";
+import { RinkBoardErrorBoundary } from "./RinkBoardErrorBoundary";
 import { DrawingToolbar } from "./DrawingToolbar";
 import { PlayData, DrawingTool, SavedPlay } from "@/types/practice-planner";
 import { generateThumbnail } from "@/lib/utils/canvas/thumbnail-generator";
@@ -343,16 +344,18 @@ export function PlayEditor({
             {/* Rink Board */}
             {/* Requirements: 1.1, 1.2, 1.3, 1.4 */}
             <Paper elevation={2} sx={{ p: 2 }}>
-                <RinkBoard
-                    ref={rinkBoardRef}
-                    mode="edit"
-                    playData={playData}
-                    onPlayDataChange={handlePlayDataChange}
-                    selectedTool={selectedTool}
-                    selectedColor={selectedColor}
-                    onUndoRedoStateChange={handleUndoRedoStateChange}
-                    height={isMobile ? 400 : 600}
-                />
+                <RinkBoardErrorBoundary height={isMobile ? 400 : 600}>
+                    <RinkBoard
+                        ref={rinkBoardRef}
+                        mode="edit"
+                        playData={playData}
+                        onPlayDataChange={handlePlayDataChange}
+                        selectedTool={selectedTool}
+                        selectedColor={selectedColor}
+                        onUndoRedoStateChange={handleUndoRedoStateChange}
+                        height={isMobile ? 400 : 600}
+                    />
+                </RinkBoardErrorBoundary>
             </Paper>
 
             {/* Save Status and Actions */}

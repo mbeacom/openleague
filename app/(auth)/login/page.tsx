@@ -16,7 +16,7 @@ import {
 } from "@mui/material";
 import Link from "next/link";
 import Logo from "@/components/ui/Logo";
-import { loginSchema } from "@/lib/utils/validation";
+import { loginSchema, pickField } from "@/lib/utils/validation";
 import { AUTH_MESSAGES } from "@/lib/config/constants";
 import { trackAuth } from "@/lib/analytics/umami";
 
@@ -60,7 +60,7 @@ function LoginForm() {
 
     // Validate individual field on blur
     if (name === 'email' || name === 'password') {
-      const fieldSchema = loginSchema.pick({ [name]: true });
+      const fieldSchema = pickField(loginSchema, name);
       const validationResult = fieldSchema.safeParse({ [name]: value });
 
       if (validationResult.success) {

@@ -34,7 +34,6 @@ export default async function UnsubscribePage({ searchParams }: UnsubscribePageP
               and try clicking the link again.
             </Typography>
             <Button
-              component={Link}
               href="/"
               variant="contained"
               sx={{ mt: 2 }}
@@ -84,14 +83,12 @@ export default async function UnsubscribePage({ searchParams }: UnsubscribePageP
               </Alert>
               <Box display="flex" gap={2} justifyContent="center">
                 <Button
-                  component={Link}
                   href="/login"
                   variant="contained"
                 >
                   Sign In to Account
                 </Button>
                 <Button
-                  component={Link}
                   href="/"
                   variant="outlined"
                 >
@@ -114,14 +111,12 @@ export default async function UnsubscribePage({ searchParams }: UnsubscribePageP
               </Typography>
               <Box display="flex" gap={2} justifyContent="center">
                 <Button
-                  component={Link}
                   href="/login"
                   variant="contained"
                 >
                   Sign In to Account
                 </Button>
                 <Button
-                  component={Link}
                   href="/"
                   variant="outlined"
                 >

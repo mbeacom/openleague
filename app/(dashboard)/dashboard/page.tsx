@@ -1,6 +1,13 @@
 import { requireUserId } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
-import { Box, Container, Typography, Card, CardContent, Chip } from "@mui/material";
+import { Box, Container, Typography, Card, CardContent, Chip, Stack, Button } from "@mui/material";
+import Link from "next/link";
+import {
+  SportsHockey as SportsHockeyIcon,
+  AccessTime as ClockIcon,
+  CalendarToday as CalendarIcon,
+  ArrowForward as ArrowForwardIcon,
+} from "@mui/icons-material";
 import CreateTeamForm from "@/components/features/team/CreateTeamForm";
 import TeamCard from "@/components/features/dashboard/TeamCard";
 import { getUserMode } from "@/lib/utils/league-mode";
@@ -41,6 +48,26 @@ export default async function DashboardPage() {
       joinedAt: "desc",
     },
   });
+
+  // Fetch upcoming practice sessions for the user's first team
+  const firstTeam = teams[0]?.team;
+  const upcomingPractices = firstTeam
+    ? await prisma.practiceSession.findMany({
+        where: {
+          teamId: firstTeam.id,
+          date: { gte: new Date() },
+          OR: [
+            { isShared: true },
+            { createdById: userId },
+          ],
+        },
+        orderBy: { date: "asc" },
+        take: 3,
+        include: {
+          _count: { select: { plays: true } },
+        },
+      })
+    : [];
 
   // If user has no teams, show empty state with create team form
   if (teams.length === 0 && userMode.leagues.length === 0) {
@@ -184,6 +211,78 @@ export default async function DashboardPage() {
               ))}
             </Box>
           </>
+        )}
+
+        {/* Upcoming Practice Sessions Widget - single team mode only */}
+        {!userMode.isLeagueMode && upcomingPractices.length > 0 && (
+          <Box sx={{ mt: 4 }}>
+            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+              <Typography variant="h5" component="h2">
+                Upcoming Practices
+              </Typography>
+              <Button
+                component={Link}
+                href="/practice-planner"
+                endIcon={<ArrowForwardIcon />}
+                size="small"
+              >
+                View All
+              </Button>
+            </Stack>
+            <Stack spacing={1.5}>
+              {upcomingPractices.map((practice) => (
+                <Card
+                  key={practice.id}
+                  variant="outlined"
+                  component={Link}
+                  href={`/practice-planner/${practice.id}`}
+                  sx={{
+                    textDecoration: "none",
+                    color: "inherit",
+                    transition: "all 0.2s",
+                    "&:hover": {
+                      borderColor: "primary.main",
+                      boxShadow: 1,
+                    },
+                  }}
+                >
+                  <CardContent sx={{ py: 1.5, "&:last-child": { pb: 1.5 } }}>
+                    <Stack direction="row" justifyContent="space-between" alignItems="center">
+                      <Stack direction="row" alignItems="center" spacing={1.5}>
+                        <SportsHockeyIcon sx={{ color: "primary.main", fontSize: 20 }} />
+                        <Box>
+                          <Typography variant="subtitle2" fontWeight={600}>
+                            {practice.title}
+                          </Typography>
+                          <Stack direction="row" spacing={1.5} sx={{ color: "text.secondary" }}>
+                            <Stack direction="row" alignItems="center" spacing={0.5}>
+                              <CalendarIcon sx={{ fontSize: 13 }} />
+                              <Typography variant="caption">
+                                {practice.date.toLocaleDateString("en-US", {
+                                  weekday: "short",
+                                  month: "short",
+                                  day: "numeric",
+                                })}
+                              </Typography>
+                            </Stack>
+                            <Stack direction="row" alignItems="center" spacing={0.5}>
+                              <ClockIcon sx={{ fontSize: 13 }} />
+                              <Typography variant="caption">
+                                {practice.duration} min
+                              </Typography>
+                            </Stack>
+                            <Typography variant="caption">
+                              {practice._count.plays} play{practice._count.plays !== 1 ? "s" : ""}
+                            </Typography>
+                          </Stack>
+                        </Box>
+                      </Stack>
+                    </Stack>
+                  </CardContent>
+                </Card>
+              ))}
+            </Stack>
+          </Box>
         )}
 
         {/* Add new team button - available in both modes */}

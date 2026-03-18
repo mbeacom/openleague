@@ -15,11 +15,8 @@ import {
   Select,
   SelectChangeEvent,
 } from "@mui/material";
-import {
-  createEvent,
-  updateEvent,
-  type CreateEventInput,
-} from "@/lib/actions/events";
+import { createEvent, updateEvent } from "@/lib/actions/events";
+import type { CreateEventInput } from "@/lib/utils/validation";
 import { createEventSchema, updateEventSchema } from "@/lib/utils/validation";
 import { formatDateTimeLocal } from "@/lib/utils/date";
 import { trackEventAction } from "@/lib/analytics/umami";

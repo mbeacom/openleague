@@ -28,7 +28,7 @@ export default function DocsHomePage() {
             </Typography>
           </CardContent>
           <CardActions>
-            <Button size="small" component={Link} href="/docs/user-guide">
+            <Button size="small" href="/docs/user-guide">
               Learn More
             </Button>
           </CardActions>
@@ -44,7 +44,7 @@ export default function DocsHomePage() {
             </Typography>
           </CardContent>
           <CardActions>
-            <Button size="small" component={Link} href="/docs/guides">
+            <Button size="small" href="/docs/guides">
               Get Started
             </Button>
           </CardActions>
@@ -60,7 +60,7 @@ export default function DocsHomePage() {
             </Typography>
           </CardContent>
           <CardActions>
-            <Button size="small" component={Link} href="/docs/api">
+            <Button size="small" href="/docs/api">
               View API
             </Button>
           </CardActions>
@@ -76,7 +76,7 @@ export default function DocsHomePage() {
             </Typography>
           </CardContent>
           <CardActions>
-            <Button size="small" component={Link} href="/docs/contributing">
+            <Button size="small" href="/docs/contributing">
               Contribute
             </Button>
           </CardActions>

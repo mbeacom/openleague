@@ -16,10 +16,8 @@ import {
   SelectChangeEvent,
 } from "@mui/material";
 import ConflictWarning from "./ConflictWarning";
-import {
-  createInterTeamGame,
-  type CreateInterTeamGameInput,
-} from "@/lib/actions/events";
+import { createInterTeamGame } from "@/lib/actions/events";
+import type { CreateInterTeamGameInput } from "@/lib/utils/validation";
 import { createInterTeamGameSchema } from "@/lib/utils/validation";
 import { formatDateTimeLocal } from "@/lib/utils/date";
 

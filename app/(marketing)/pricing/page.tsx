@@ -84,7 +84,6 @@ export default function PricingPage() {
                 </Box>
 
                 <Button
-                  component={Link}
                   href="/signup"
                   variant="outlined"
                   size="large"
@@ -141,7 +140,6 @@ export default function PricingPage() {
                 </Box>
 
                 <Button
-                  component={Link}
                   href="/signup"
                   variant="contained"
                   size="large"
@@ -267,7 +265,7 @@ export default function PricingPage() {
             <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
               Join teams already using OpenLeague to simplify their management. Start with Starter, upgrade anytime.
             </Typography>
-            <Button component={Link} href="/signup" variant="contained" size="large">
+            <Button href="/signup" variant="contained" size="large">
               Get Started
             </Button>
           </Box>

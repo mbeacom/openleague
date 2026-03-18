@@ -14,7 +14,7 @@ import {
 import Link from "next/link";
 import Logo from "@/components/ui/Logo";
 import { signup } from "@/lib/actions/auth";
-import { signupSchema } from "@/lib/utils/validation";
+import { signupSchema, pickField } from "@/lib/utils/validation";
 import { AUTH_MESSAGES } from "@/lib/config/constants";
 import { trackAuth } from "@/lib/analytics/umami";
 
@@ -55,7 +55,7 @@ function SignupForm() {
 
     // Validate individual field on blur
     if (name === 'email' || name === 'password' || name === 'name') {
-      const fieldSchema = signupSchema.pick({ [name]: true });
+      const fieldSchema = pickField(signupSchema, name);
       const validationResult = fieldSchema.safeParse({ [name]: value });
 
       if (validationResult.success) {

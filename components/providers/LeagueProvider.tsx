@@ -90,6 +90,24 @@ export const LeagueProvider: React.FC<LeagueProviderProps> = ({
       } else if (segments[0] === 'events') {
         breadcrumbs.push({ label: 'Dashboard', href: '/dashboard' });
         breadcrumbs.push({ label: 'Events' });
+      } else if (segments[0] === 'practice-planner') {
+        breadcrumbs.push({ label: 'Dashboard', href: '/dashboard' });
+        if (segments.length === 1) {
+          breadcrumbs.push({ label: 'Practice Planner' });
+        } else if (segments[1] === 'new') {
+          breadcrumbs.push({ label: 'Practice Planner', href: '/practice-planner' });
+          breadcrumbs.push({ label: 'New Session' });
+        } else if (segments[1] === 'library') {
+          breadcrumbs.push({ label: 'Practice Planner', href: '/practice-planner' });
+          breadcrumbs.push({ label: 'Play Library' });
+        } else if (segments[2] === 'edit') {
+          breadcrumbs.push({ label: 'Practice Planner', href: '/practice-planner' });
+          breadcrumbs.push({ label: 'Session', href: `/practice-planner/${segments[1]}` });
+          breadcrumbs.push({ label: 'Edit' });
+        } else {
+          breadcrumbs.push({ label: 'Practice Planner', href: '/practice-planner' });
+          breadcrumbs.push({ label: 'Session' });
+        }
       }
       return breadcrumbs;
     }

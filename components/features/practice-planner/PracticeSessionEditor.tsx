@@ -19,8 +19,6 @@ import {
     CircularProgress,
     Alert,
     Stack,
-    useTheme,
-    useMediaQuery,
     Card,
     CardContent,
     CardMedia,
@@ -33,6 +31,8 @@ import {
     DialogContentText,
     DialogActions,
 } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
+import useMediaQuery from "@mui/material/useMediaQuery";
 import {
     Save as SaveIcon,
     Share as ShareIcon,
@@ -582,7 +582,11 @@ export function PracticeSessionEditor({
      * Requirements: 2.2 - Remove plays from session
      */
     const handleDeletePlay = useCallback((playId: string) => {
-        setPlays((prevPlays) => prevPlays.filter((p) => p.id !== playId));
+        setPlays((prevPlays) =>
+            prevPlays
+                .filter((p) => p.id !== playId)
+                .map((play, idx) => ({ ...play, sequence: idx }))
+        );
         setHasUnsavedChanges(true);
         setSaveSuccess(false);
     }, []);
@@ -631,7 +635,7 @@ export function PracticeSessionEditor({
         const playInstance: PlayInSession = {
             id: `play-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
             playId: savedPlay.id,
-            sequence: plays.length + 1, // Requirements: 2.2 - Assign sequence number automatically
+            sequence: plays.length, // Requirements: 2.2 - Assign sequence number automatically (0-based)
             duration: 10, // Default duration
             instructions: savedPlay.description || "",
             playData: JSON.parse(JSON.stringify(savedPlay.playData)), // Deep copy to prevent library play mutation
@@ -670,10 +674,10 @@ export function PracticeSessionEditor({
             const newPlays = [...prevPlays];
             // Swap with previous play
             [newPlays[index - 1], newPlays[index]] = [newPlays[index], newPlays[index - 1]];
-            // Update sequence numbers
+            // Update sequence numbers (0-based to match server validation)
             return newPlays.map((play, idx) => ({
                 ...play,
-                sequence: idx + 1,
+                sequence: idx,
             }));
         });
         setHasUnsavedChanges(true);
@@ -691,10 +695,10 @@ export function PracticeSessionEditor({
             const newPlays = [...prevPlays];
             // Swap with next play
             [newPlays[index], newPlays[index + 1]] = [newPlays[index + 1], newPlays[index]];
-            // Update sequence numbers
+            // Update sequence numbers (0-based to match server validation)
             return newPlays.map((play, idx) => ({
                 ...play,
-                sequence: idx + 1,
+                sequence: idx,
             }));
         });
         setHasUnsavedChanges(true);

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { rateLimitAuth, rateLimitGeneral, getClientIp } from "@/lib/utils/rate-limit";
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
     // Enforce HTTPS in production
     if (
         process.env.NODE_ENV === "production" &&

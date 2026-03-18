@@ -18,7 +18,6 @@ export type ActionResult<T> =
   | { success: true; data: T }
   | { success: false; error: string; details?: unknown };
 
-export type { CreateEventInput, UpdateEventInput, CreateInterTeamGameInput };
 
 /**
  * Create a new event and initialize RSVPs for all team members
