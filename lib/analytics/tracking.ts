@@ -3,6 +3,17 @@
  * Supports Google Analytics 4 and other analytics platforms
  */
 
+interface GtagWindow extends Window {
+  gtag: (...args: unknown[]) => void;
+}
+
+function getGtag(): GtagWindow['gtag'] | null {
+  if (typeof window !== 'undefined' && typeof (window as unknown as GtagWindow).gtag === 'function') {
+    return (window as unknown as GtagWindow).gtag;
+  }
+  return null;
+}
+
 export interface AnalyticsEvent {
   event: string;
   category: 'engagement' | 'conversion' | 'navigation';
@@ -24,9 +35,9 @@ export function trackConversion(action: string, label?: string, value?: number) 
   };
 
   // Google Analytics 4 (gtag)
-  if (typeof window !== 'undefined' && 'gtag' in window) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (window as any).gtag('event', action, {
+  const gtag = getGtag();
+  if (gtag) {
+    gtag('event', action, {
       event_category: event.category,
       event_label: label,
       value: value,
@@ -52,9 +63,9 @@ export function trackEngagement(action: string, label?: string) {
     label,
   };
 
-  if (typeof window !== 'undefined' && 'gtag' in window) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (window as any).gtag('event', action, {
+  const gtag = getGtag();
+  if (gtag) {
+    gtag('event', action, {
       event_category: event.category,
       event_label: label,
     });
@@ -76,9 +87,9 @@ export function trackNavigation(action: string, label?: string) {
     label,
   };
 
-  if (typeof window !== 'undefined' && 'gtag' in window) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (window as any).gtag('event', action, {
+  const gtag = getGtag();
+  if (gtag) {
+    gtag('event', action, {
       event_category: event.category,
       event_label: label,
     });
@@ -96,15 +107,15 @@ export const marketingEvents = {
   // Hero section CTAs
   heroGetStartedClick: () => trackConversion('hero_get_started_click', 'hero_section'),
   heroSeeHowItWorksClick: () => trackConversion('hero_see_how_it_works_click', 'hero_section'),
-  
+
   // Header CTAs
   headerSignUpClick: () => trackConversion('header_sign_up_click', 'header'),
   headerSignInClick: () => trackNavigation('header_sign_in_click', 'header'),
-  
+
   // Feature exploration
   featuresPageView: () => trackNavigation('features_page_view', 'features'),
   pricingPageView: () => trackNavigation('pricing_page_view', 'pricing'),
-  
+
   // Engagement
   heroSectionView: () => trackEngagement('hero_section_view', 'landing_page'),
   pageScroll: (percentage: number) => trackEngagement('page_scroll', `${percentage}%`),

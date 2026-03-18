@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 
 interface League {
@@ -45,17 +45,27 @@ export const LeagueProvider: React.FC<LeagueProviderProps> = ({
   const router = useRouter();
   const pathname = usePathname();
 
-  const [currentLeague, setCurrentLeague] = useState<League | null>(
+  const [manualLeague, setManualLeague] = useState<League | null>(
     initialData.leagues.length > 0 ? initialData.leagues[0] : null
   );
   const [leagues] = useState<League[]>(initialData.leagues);
   const [teams] = useState<Team[]>(initialData.teams);
   const isLeagueMode = initialData.isLeagueMode;
 
+  // Derive current league from URL when in league mode
+  const currentLeague = useMemo(() => {
+    if (isLeagueMode && pathname.startsWith('/league/')) {
+      const leagueIdFromPath = pathname.split('/')[2];
+      const leagueFromPath = leagues.find(l => l.id === leagueIdFromPath);
+      if (leagueFromPath) return leagueFromPath;
+    }
+    return manualLeague;
+  }, [isLeagueMode, pathname, leagues, manualLeague]);
+
   const switchLeague = useCallback((leagueId: string) => {
     const league = leagues.find(l => l.id === leagueId);
     if (league) {
-      setCurrentLeague(league);
+      setManualLeague(league);
       // Navigate to league dashboard
       router.push(`/league/${league.id}/dashboard`);
     }
@@ -67,7 +77,11 @@ export const LeagueProvider: React.FC<LeagueProviderProps> = ({
     }
 
     if (currentLeague) {
-      return `/league/${currentLeague.id}${pathname.startsWith('/league/') ? pathname.split('/').slice(3).join('/') : pathname}`;
+      if (pathname.startsWith('/league/')) {
+        const remainder = pathname.split('/').slice(3).join('/');
+        return `/league/${currentLeague.id}${remainder ? `/${remainder}` : ''}`;
+      }
+      return `/league/${currentLeague.id}${pathname}`;
     }
 
     return pathname;
@@ -146,17 +160,6 @@ export const LeagueProvider: React.FC<LeagueProviderProps> = ({
 
     return breadcrumbs;
   }, [pathname, currentLeague, isLeagueMode]);
-
-  // Update current league based on URL
-  useEffect(() => {
-    if (isLeagueMode && pathname.startsWith('/league/')) {
-      const leagueIdFromPath = pathname.split('/')[2];
-      const leagueFromPath = leagues.find(l => l.id === leagueIdFromPath);
-      if (leagueFromPath && leagueFromPath.id !== currentLeague?.id) {
-        setCurrentLeague(leagueFromPath);
-      }
-    }
-  }, [pathname, leagues, currentLeague, isLeagueMode]);
 
   // Memoize context value to prevent unnecessary re-renders
   const contextValue = useMemo(() => ({
