@@ -87,7 +87,7 @@ export async function getPracticeSessionDetail(sessionId: string): Promise<{
     plays: Array<{
       id: string;
       sequence: number;
-      duration: number | null;
+      duration: number;
       instructions: string | null;
       play: {
         id: string;

@@ -180,7 +180,7 @@ export async function getRosterData(): Promise<{
   invitations: Array<{
     id: string;
     email: string;
-    status: string;
+    status: "PENDING" | "ACCEPTED" | "EXPIRED";
     expiresAt: string;
     createdAt: string;
   }>;
