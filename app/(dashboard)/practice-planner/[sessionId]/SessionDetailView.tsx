@@ -48,7 +48,7 @@ import {
 interface SessionPlay {
   id: string;
   sequence: number;
-  duration: number | null;
+  duration: number;
   instructions: string | null;
   play: {
     id: string;
@@ -133,7 +133,7 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
     setActivePlayIndex((prev) => Math.min(session.plays.length - 1, prev + 1));
   }, [session.plays.length]);
 
-  const totalPlayTime = session.plays.reduce((sum, p) => sum + (p.duration ?? 0), 0);
+  const totalPlayTime = session.plays.reduce((sum, p) => sum + p.duration, 0);
   const durationPercent = Math.min(
     (totalPlayTime / session.duration) * 100,
     100
