@@ -103,7 +103,11 @@ const baseEventSchema = z.object({
   startAt: z.coerce.date({
     message: "Valid date and time is required",
   }),
+  endAt: z.coerce.date({
+    message: "Valid end date and time is required",
+  }).optional(),
   location: sanitizedStringWithMin(1, 200).refine(val => val.length > 0, "Location is required"),
+  venueId: z.string().cuid("Invalid venue ID format").optional().or(z.literal("")),
   opponent: optionalSanitizedString(100),
   notes: optionalSanitizedString(1000),
   teamId: z.string().cuid("Invalid team ID format"),
@@ -118,6 +122,19 @@ export const createEventSchema = baseEventSchema
     {
       message: "Event date must be in the future",
       path: ["startAt"],
+    }
+  )
+  .refine(
+    (data) => {
+      // If endAt provided, it must be after startAt
+      if (data.endAt) {
+        return data.endAt > data.startAt;
+      }
+      return true;
+    },
+    {
+      message: "End time must be after start time",
+      path: ["endAt"],
     }
   )
   .refine(
@@ -146,6 +163,19 @@ export const updateEventSchema = baseEventSchema
     {
       message: "Event date must be in the future",
       path: ["startAt"],
+    }
+  )
+  .refine(
+    (data) => {
+      // If endAt provided, it must be after startAt
+      if (data.endAt) {
+        return data.endAt > data.startAt;
+      }
+      return true;
+    },
+    {
+      message: "End time must be after start time",
+      path: ["endAt"],
     }
   )
   .refine(
@@ -377,6 +407,158 @@ export type PaginationInput = z.infer<typeof paginationSchema>;
 export type GetLeagueTeamsInput = z.infer<typeof getLeagueTeamsSchema>;
 export type SendLeagueMessageInput = z.infer<typeof sendLeagueMessageSchema>;
 export type GetLeagueMessagesInput = z.infer<typeof getLeagueMessagesSchema>;
+
+// Venue validation schemas
+export const createVenueSchema = z.object({
+  name: sanitizedStringWithMin(1, 100),
+  address: optionalSanitizedString(200),
+  city: optionalSanitizedString(100),
+  state: optionalSanitizedString(50),
+  zipCode: optionalSanitizedString(20),
+  surfaceType: z.enum(["ICE", "TURF", "COURT", "FIELD", "OTHER"], {
+    message: "Surface type must be ICE, TURF, COURT, FIELD, or OTHER",
+  }).default("OTHER"),
+  capacity: z.number().int().min(1, "Capacity must be at least 1").optional(),
+  amenities: z.array(z.string().max(50)).max(20).default([]),
+  phone: optionalSanitizedString(20),
+  website: optionalSanitizedString(500),
+  notes: optionalSanitizedString(1000),
+  visibility: z.enum(["PUBLIC", "LEAGUE", "TEAM"], {
+    message: "Visibility must be PUBLIC, LEAGUE, or TEAM",
+  }).default("PUBLIC"),
+  teamId: z.string().cuid("Invalid team ID format").optional().or(z.literal("")),
+  leagueId: z.string().cuid("Invalid league ID format").optional().or(z.literal("")),
+}).refine(
+  (data) => {
+    // LEAGUE visibility requires leagueId
+    if (data.visibility === "LEAGUE" && !data.leagueId) {
+      return false;
+    }
+    return true;
+  },
+  {
+    message: "League ID is required for league-visible venues",
+    path: ["leagueId"],
+  }
+).refine(
+  (data) => {
+    // TEAM visibility requires teamId
+    if (data.visibility === "TEAM" && !data.teamId) {
+      return false;
+    }
+    return true;
+  },
+  {
+    message: "Team ID is required for team-private venues",
+    path: ["teamId"],
+  }
+);
+
+export const updateVenueSchema = z.object({
+  id: z.string().cuid("Invalid venue ID format"),
+  name: sanitizedStringWithMin(1, 100),
+  address: optionalSanitizedString(200),
+  city: optionalSanitizedString(100),
+  state: optionalSanitizedString(50),
+  zipCode: optionalSanitizedString(20),
+  surfaceType: z.enum(["ICE", "TURF", "COURT", "FIELD", "OTHER"]).default("OTHER"),
+  capacity: z.number().int().min(1, "Capacity must be at least 1").optional(),
+  amenities: z.array(z.string().max(50)).max(20).default([]),
+  phone: optionalSanitizedString(20),
+  website: optionalSanitizedString(500),
+  notes: optionalSanitizedString(1000),
+  visibility: z.enum(["PUBLIC", "LEAGUE", "TEAM"]).default("PUBLIC"),
+  teamId: z.string().cuid("Invalid team ID format").optional().or(z.literal("")),
+  leagueId: z.string().cuid("Invalid league ID format").optional().or(z.literal("")),
+}).refine(
+  (data) => {
+    if (data.visibility === "LEAGUE" && !data.leagueId) {
+      return false;
+    }
+    return true;
+  },
+  {
+    message: "League ID is required for league-visible venues",
+    path: ["leagueId"],
+  }
+).refine(
+  (data) => {
+    if (data.visibility === "TEAM" && !data.teamId) {
+      return false;
+    }
+    return true;
+  },
+  {
+    message: "Team ID is required for team-private venues",
+    path: ["teamId"],
+  }
+);
+
+export const venueAvailabilitySchema = z.object({
+  venueId: z.string().cuid("Invalid venue ID format"),
+  startAt: z.coerce.date({ message: "Valid start date is required" }),
+  endAt: z.coerce.date({ message: "Valid end date is required" }),
+  excludeEventId: z.string().cuid("Invalid event ID format").optional(),
+}).refine(
+  (data) => data.endAt > data.startAt,
+  {
+    message: "End time must be after start time",
+    path: ["endAt"],
+  }
+);
+
+// Game schedule validation schemas
+export const createGameScheduleSchema = z.object({
+  name: sanitizedStringWithMin(1, 100),
+  seasonName: optionalSanitizedString(100),
+  startDate: z.coerce.date({ message: "Valid start date is required" }),
+  endDate: z.coerce.date({ message: "Valid end date is required" }),
+  roundRobin: z.boolean().default(true),
+  rounds: z.number().int().min(1, "At least 1 round required").max(4, "Maximum 4 rounds").default(1),
+  notes: optionalSanitizedString(1000),
+  leagueId: z.string().cuid("Invalid league ID format").optional().or(z.literal("")),
+  teamId: z.string().cuid("Invalid team ID format").optional().or(z.literal("")),
+  // Teams participating in the schedule
+  teamIds: z.array(z.string().cuid("Invalid team ID format")).min(2, "At least 2 teams are required"),
+  // Venues to rotate through
+  venueIds: z.array(z.string().cuid("Invalid venue ID format")).min(1, "At least 1 venue is required"),
+  // Scheduling preferences
+  dayOfWeek: z.number().int().min(0).max(6).optional(), // 0=Sunday, 6=Saturday
+  preferredStartTime: z.string().regex(/^\d{2}:\d{2}$/, "Time format must be HH:MM").optional(),
+  gameDurationMinutes: z.number().int().min(30).max(300).default(90),
+}).refine(
+  (data) => data.endDate > data.startDate,
+  {
+    message: "End date must be after start date",
+    path: ["endDate"],
+  }
+);
+
+export const generateScheduleGamesSchema = z.object({
+  gameScheduleId: z.string().cuid("Invalid schedule ID format"),
+  overrideConflicts: z.boolean().default(false),
+});
+
+export const publishScheduleSchema = z.object({
+  gameScheduleId: z.string().cuid("Invalid schedule ID format"),
+});
+
+export const updateScheduleGameSchema = z.object({
+  scheduleGameId: z.string().cuid("Invalid schedule game ID format"),
+  startAt: z.coerce.date({ message: "Valid start date is required" }).optional(),
+  endAt: z.coerce.date({ message: "Valid end date is required" }).optional(),
+  venueId: z.string().cuid("Invalid venue ID format").optional(),
+  overrideConflicts: z.boolean().default(false),
+});
+
+// Venue & schedule type exports
+export type CreateVenueInput = z.infer<typeof createVenueSchema>;
+export type UpdateVenueInput = z.infer<typeof updateVenueSchema>;
+export type VenueAvailabilityInput = z.infer<typeof venueAvailabilitySchema>;
+export type CreateGameScheduleInput = z.infer<typeof createGameScheduleSchema>;
+export type GenerateScheduleGamesInput = z.infer<typeof generateScheduleGamesSchema>;
+export type PublishScheduleInput = z.infer<typeof publishScheduleSchema>;
+export type UpdateScheduleGameInput = z.infer<typeof updateScheduleGameSchema>;
 
 // Practice planner validation schemas
 

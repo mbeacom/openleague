@@ -584,6 +584,7 @@ export async function sendEventNotifications(
   const event = await prisma.event.findUnique({
     where: { id: eventId },
     include: {
+      venue: { select: { name: true, address: true, city: true, state: true } },
       team: {
         include: {
           members: {
@@ -608,13 +609,22 @@ export async function sendEventNotifications(
     (member: { user: { email: string } }) => member.user.email
   );
 
+  // Build location string with venue address if available
+  let eventLocation = event.location;
+  if (event.venue) {
+    const parts = [event.venue.name, event.venue.address, event.venue.city, event.venue.state]
+      .filter(Boolean)
+      .join(", ");
+    if (parts) eventLocation = parts;
+  }
+
   const eventData = {
     emails,
     teamName: event.team.name,
     eventType: event.type,
     eventTitle: event.title,
     eventDate: formatDateTime(event.startAt),
-    eventLocation: event.location,
+    eventLocation,
     opponent: event.opponent,
     eventId: event.id,
   };

@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db/prisma";
 import { requireTeamAdmin, requireTeamMember, requireUserId } from "@/lib/auth/session";
 import { revalidatePath } from "next/cache";
 import { sendEventNotifications } from "@/lib/email/templates";
+import { findVenueConflicts, canUserAccessVenue as checkVenueAccess } from "@/lib/actions/venues";
 import {
   createEventSchema,
   updateEventSchema,
@@ -40,7 +41,7 @@ export async function createEvent(
     const validated = createEventSchema.parse(input);
 
     // Check authentication and authorization - only ADMIN can create events
-    await requireTeamAdmin(validated.teamId);
+    const currentUserId = await requireTeamAdmin(validated.teamId);
 
     // Get all team members to initialize RSVPs
     const allTeamMembers = await prisma.teamMember.findMany({
@@ -52,13 +53,52 @@ export async function createEvent(
       },
     });
 
+    // Check venue availability if venueId and endAt are provided
+    const venueId = validated.venueId || null;
+    if (venueId) {
+      const venue = await prisma.venue.findUnique({
+        where: { id: venueId },
+        select: { id: true, name: true, isActive: true, visibility: true, teamId: true, leagueId: true },
+      });
+      if (!venue) {
+        return { success: false, error: "Selected venue not found" };
+      }
+      if (!venue.isActive) {
+        return { success: false, error: "Selected venue is no longer active" };
+      }
+      // Validate team/league has access to this venue
+      const hasAccess = await checkVenueAccess(currentUserId, venue);
+      if (!hasAccess) {
+        return { success: false, error: "Your team does not have access to this venue" };
+      }
+      if (validated.endAt) {
+        const conflicts = await findVenueConflicts(venueId, validated.startAt, validated.endAt);
+        if (conflicts.length > 0) {
+          return {
+            success: false,
+            error: `Venue is already booked at this time by ${conflicts[0].teamName} (${conflicts[0].title})`,
+            details: conflicts,
+          };
+        }
+      }
+    }
+
+    // If venueId provided, auto-populate location from venue name
+    let location = validated.location;
+    if (venueId) {
+      const venue = await prisma.venue.findUnique({ where: { id: venueId }, select: { name: true } });
+      if (venue) location = venue.name;
+    }
+
     // Create event with RSVPs for all team members
     const event = await prisma.event.create({
       data: {
         type: validated.type,
         title: validated.title,
         startAt: validated.startAt,
-        location: validated.location,
+        endAt: validated.endAt || null,
+        location,
+        venueId,
         opponent: validated.opponent || null,
         notes: validated.notes || null,
         teamId: validated.teamId,
@@ -148,7 +188,44 @@ export async function updateEvent(
     }
 
     // Check authentication and authorization - only ADMIN can update events
-    await requireTeamAdmin(existingEvent.teamId);
+    const currentUserId = await requireTeamAdmin(existingEvent.teamId);
+
+    // Check venue availability if venueId and endAt are provided
+    const venueId = validated.venueId || null;
+    if (venueId) {
+      const venue = await prisma.venue.findUnique({
+        where: { id: venueId },
+        select: { id: true, name: true, isActive: true, visibility: true, teamId: true, leagueId: true },
+      });
+      if (!venue) {
+        return { success: false, error: "Selected venue not found" };
+      }
+      if (!venue.isActive) {
+        return { success: false, error: "Selected venue is no longer active" };
+      }
+      // Validate team/league has access to this venue
+      const hasAccess = await checkVenueAccess(currentUserId, venue);
+      if (!hasAccess) {
+        return { success: false, error: "Your team does not have access to this venue" };
+      }
+      if (validated.endAt) {
+        const conflicts = await findVenueConflicts(venueId, validated.startAt, validated.endAt, validated.id);
+        if (conflicts.length > 0) {
+          return {
+            success: false,
+            error: `Venue is already booked at this time by ${conflicts[0].teamName} (${conflicts[0].title})`,
+            details: conflicts,
+          };
+        }
+      }
+    }
+
+    // If venueId provided, auto-populate location from venue name
+    let location = validated.location;
+    if (venueId) {
+      const venue = await prisma.venue.findUnique({ where: { id: venueId }, select: { name: true } });
+      if (venue) location = venue.name;
+    }
 
     // Update the event
     const event = await prisma.event.update({
@@ -157,7 +234,9 @@ export async function updateEvent(
         type: validated.type,
         title: validated.title,
         startAt: validated.startAt,
-        location: validated.location,
+        endAt: validated.endAt || null,
+        location,
+        venueId,
         opponent: validated.opponent || null,
         notes: validated.notes || null,
       },

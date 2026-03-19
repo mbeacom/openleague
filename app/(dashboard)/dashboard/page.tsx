@@ -1,5 +1,3 @@
-import { requireUserId } from "@/lib/auth/session";
-import { prisma } from "@/lib/db/prisma";
 import { Box, Container, Typography, Card, CardContent, Chip, Stack, Button } from "@mui/material";
 import Link from "next/link";
 import {
@@ -11,65 +9,17 @@ import {
 import CreateTeamForm from "@/components/features/team/CreateTeamForm";
 import TeamCard from "@/components/features/dashboard/TeamCard";
 import { getUserMode } from "@/lib/utils/league-mode";
+import { getDashboardData } from "@/lib/actions/team-context";
+import { requireUserId } from "@/lib/auth/session";
 
 export default async function DashboardPage() {
   const userId = await requireUserId();
 
-  // Get user mode and context
-  const userMode = await getUserMode(userId);
+  const [userMode, { teams, upcomingPractices }] = await Promise.all([
+    getUserMode(userId),
+    getDashboardData(),
+  ]);
 
-  // Fetch user's teams with league information
-  const teams = await prisma.teamMember.findMany({
-    where: { userId },
-    include: {
-      team: {
-        select: {
-          id: true,
-          name: true,
-          sport: true,
-          season: true,
-          leagueId: true,
-          league: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
-          division: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
-        },
-      },
-    },
-    orderBy: {
-      joinedAt: "desc",
-    },
-  });
-
-  // Fetch upcoming practice sessions for the user's first team
-  const firstTeam = teams[0]?.team;
-  const upcomingPractices = firstTeam
-    ? await prisma.practiceSession.findMany({
-        where: {
-          teamId: firstTeam.id,
-          date: { gte: new Date() },
-          OR: [
-            { isShared: true },
-            { createdById: userId },
-          ],
-        },
-        orderBy: { date: "asc" },
-        take: 3,
-        include: {
-          _count: { select: { plays: true } },
-        },
-      })
-    : [];
-
-  // If user has no teams, show empty state with create team form
   if (teams.length === 0 && userMode.leagues.length === 0) {
     return (
       <Container maxWidth="md">
@@ -105,18 +55,15 @@ export default async function DashboardPage() {
     );
   }
 
-  // Display dashboard based on user mode
   return (
     <Container maxWidth="lg">
       <Box sx={{ py: 4 }}>
         {userMode.isLeagueMode ? (
-          // League Mode Dashboard
           <>
             <Typography variant="h4" component="h1" gutterBottom>
               League Dashboard
             </Typography>
-            
-            {/* League Overview */}
+
             {userMode.leagues.length > 0 && (
               <Box sx={{ mb: 4 }}>
                 <Typography variant="h5" component="h2" gutterBottom>
@@ -143,10 +90,10 @@ export default async function DashboardPage() {
                         <Typography variant="body2" color="text.secondary">
                           {league.sport}
                         </Typography>
-                        <Chip 
-                          label="League Admin" 
-                          size="small" 
-                          color="primary" 
+                        <Chip
+                          label="League Admin"
+                          size="small"
+                          color="primary"
                           sx={{ mt: 1 }}
                         />
                       </CardContent>
@@ -156,7 +103,6 @@ export default async function DashboardPage() {
               </Box>
             )}
 
-            {/* Teams in League Mode */}
             <Typography variant="h5" component="h2" gutterBottom>
               My Teams
             </Typography>
@@ -172,7 +118,7 @@ export default async function DashboardPage() {
                 mt: 2,
               }}
             >
-              {teams.map((teamMember: typeof teams[0]) => (
+              {teams.map((teamMember) => (
                 <TeamCard
                   key={teamMember.team.id}
                   team={teamMember.team}
@@ -183,7 +129,6 @@ export default async function DashboardPage() {
             </Box>
           </>
         ) : (
-          // Single-Team Mode Dashboard (Original)
           <>
             <Typography variant="h4" component="h1" gutterBottom>
               My Teams
@@ -201,7 +146,7 @@ export default async function DashboardPage() {
                 mt: 3,
               }}
             >
-              {teams.map((teamMember: typeof teams[0]) => (
+              {teams.map((teamMember) => (
                 <TeamCard
                   key={teamMember.team.id}
                   team={teamMember.team}
@@ -213,7 +158,6 @@ export default async function DashboardPage() {
           </>
         )}
 
-        {/* Upcoming Practice Sessions Widget - single team mode only */}
         {!userMode.isLeagueMode && upcomingPractices.length > 0 && (
           <Box sx={{ mt: 4 }}>
             <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
@@ -258,7 +202,7 @@ export default async function DashboardPage() {
                             <Stack direction="row" alignItems="center" spacing={0.5}>
                               <CalendarIcon sx={{ fontSize: 13 }} />
                               <Typography variant="caption">
-                                {practice.date.toLocaleDateString("en-US", {
+                                {new Date(practice.date).toLocaleDateString("en-US", {
                                   weekday: "short",
                                   month: "short",
                                   day: "numeric",
@@ -272,7 +216,7 @@ export default async function DashboardPage() {
                               </Typography>
                             </Stack>
                             <Typography variant="caption">
-                              {practice._count.plays} play{practice._count.plays !== 1 ? "s" : ""}
+                              {practice.playCount} play{practice.playCount !== 1 ? "s" : ""}
                             </Typography>
                           </Stack>
                         </Box>
@@ -285,7 +229,6 @@ export default async function DashboardPage() {
           </Box>
         )}
 
-        {/* Add new team button - available in both modes */}
         <Box sx={{ mt: 4 }}>
           <Typography variant="h5" component="h2" gutterBottom>
             {userMode.isLeagueMode ? "Create New Team" : "Create Another Team"}

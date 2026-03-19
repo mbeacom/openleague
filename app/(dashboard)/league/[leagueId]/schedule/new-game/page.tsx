@@ -1,70 +1,22 @@
-import { requireUserId, canUserCreateLeagueGames } from "@/lib/auth/session";
-import { prisma } from "@/lib/db/prisma";
 import { Container, Box, Typography } from "@mui/material";
 import { notFound } from "next/navigation";
 import InterTeamGameForm from "@/components/features/events/InterTeamGameForm";
+import { getNewLeagueGameContext } from "@/lib/actions/league-context";
 
 interface NewGamePageProps {
-  params: Promise<{
-    leagueId: string;
-  }>;
+  params: Promise<{ leagueId: string }>;
 }
 
 export default async function NewGamePage({ params }: NewGamePageProps) {
-  const [userId, { leagueId }] = await Promise.all([
-    requireUserId(),
-    params,
-  ]);
+  const { leagueId } = await params;
 
-  // Verify user has access to this league and can create games
-  const leagueUser = await prisma.leagueUser.findFirst({
-    where: {
-      leagueId,
-      userId,
-    },
-    include: {
-      league: {
-        select: {
-          id: true,
-          name: true,
-          sport: true,
-          isActive: true,
-        },
-      },
-    },
-  });
+  const data = await getNewLeagueGameContext(leagueId);
 
-  if (!leagueUser || !leagueUser.league.isActive) {
+  if (!data) {
     notFound();
   }
 
-  // Check if user can create inter-team games (league admin or team admin)
-  const canCreateGames = await canUserCreateLeagueGames(userId, leagueId, leagueUser.role);
-
-  if (!canCreateGames) {
-    notFound();
-  }
-
-  // Fetch all teams in the league
-  const teams = await prisma.team.findMany({
-    where: {
-      leagueId,
-      isActive: true,
-    },
-    include: {
-      division: {
-        select: {
-          id: true,
-          name: true,
-        },
-      },
-    },
-    orderBy: {
-      name: "asc",
-    },
-  });
-
-  if (teams.length < 2) {
+  if (data.teams.length < 2) {
     return (
       <Container maxWidth="md">
         <Box sx={{ py: 4 }}>
@@ -86,12 +38,12 @@ export default async function NewGamePage({ params }: NewGamePageProps) {
           Schedule Inter-Team Game
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 4 }}>
-          {leagueUser.league.name} • Create a game between two teams
+          {data.league.name} • Create a game between two teams
         </Typography>
 
         <InterTeamGameForm
           leagueId={leagueId}
-          teams={teams}
+          teams={data.teams}
         />
       </Box>
     </Container>

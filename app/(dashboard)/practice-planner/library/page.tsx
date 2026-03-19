@@ -1,45 +1,24 @@
-import { requireUserId } from "@/lib/auth/session";
-import { prisma } from "@/lib/db/prisma";
 import { Box, Container, Typography, Button, Stack, Alert } from "@mui/material";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { PlayLibrary } from "@/components/features/practice-planner/PlayLibrary";
+import { getPlayLibraryContext } from "@/lib/actions/practice-session-queries";
+import type { Metadata } from "next";
 
-export const metadata = {
+export const metadata: Metadata = {
   title: "Play Library | OpenLeague",
   description: "Browse and manage your saved plays",
 };
 
 export default async function PlayLibraryPage() {
-  const userId = await requireUserId();
+  const context = await getPlayLibraryContext();
 
-  // Get user's first team (MVP: single team focus)
-  const teamMember = await prisma.teamMember.findFirst({
-    where: { userId },
-    include: {
-      team: {
-        select: {
-          id: true,
-          name: true,
-        },
-      },
-    },
-    orderBy: {
-      joinedAt: "desc",
-    },
-  });
-
-  // If user has no teams, redirect to dashboard
-  if (!teamMember) {
+  if (!context) {
     redirect("/dashboard");
   }
 
-  const teamId = teamMember.team.id;
-  const isAdmin = teamMember.role === "ADMIN";
-
-  // Only admins can manage the play library
-  if (!isAdmin) {
+  if (!context.isAdmin) {
     return (
       <Container maxWidth="lg">
         <Box sx={{ py: 4 }}>
@@ -83,7 +62,7 @@ export default async function PlayLibraryPage() {
           </Stack>
         </Stack>
 
-        <PlayLibrary teamId={teamId} mode="manage" />
+        <PlayLibrary teamId={context.teamId} mode="manage" />
       </Box>
     </Container>
   );

@@ -1,95 +1,19 @@
-import { requireUserId } from "@/lib/auth/session";
-import { prisma } from "@/lib/db/prisma";
 import { Box, Container, Typography } from "@mui/material";
 import { notFound } from "next/navigation";
 import LeagueInvitationManager from "@/components/features/roster/LeagueInvitationManager";
+import { getLeagueInvitationsData } from "@/lib/actions/league-context";
 
 interface LeagueInvitationsPageProps {
-  params: Promise<{
-    leagueId: string;
-  }>;
+  params: Promise<{ leagueId: string }>;
 }
 
 export default async function LeagueInvitationsPage({ params }: LeagueInvitationsPageProps) {
-  // Parallelize independent async operations for better performance
-  const [{ leagueId }, userId] = await Promise.all([params, requireUserId()]);
+  const { leagueId } = await params;
 
-  // Verify user has access to this league
-  const leagueUser = await prisma.leagueUser.findFirst({
-    where: {
-      userId,
-      leagueId,
-      league: { isActive: true },
-    },
-    include: {
-      league: {
-        select: {
-          id: true,
-          name: true,
-          sport: true,
-        },
-      },
-    },
-  });
-
-  if (!leagueUser) {
+  const data = await getLeagueInvitationsData(leagueId);
+  if (!data) {
     notFound();
   }
-
-  const isLeagueAdmin = leagueUser.role === "LEAGUE_ADMIN";
-
-  // Fetch teams in the league
-  const teams = await prisma.team.findMany({
-    where: {
-      leagueId,
-      isActive: true,
-    },
-    select: {
-      id: true,
-      name: true,
-      division: {
-        select: {
-          name: true,
-          ageGroup: true,
-        },
-      },
-    },
-    orderBy: { name: "asc" },
-  });
-
-  // Fetch recent invitations for the league (only for league admins)
-  const rawInvitations = isLeagueAdmin
-    ? await prisma.invitation.findMany({
-        where: {
-          team: {
-            leagueId,
-          },
-        },
-        include: {
-          team: {
-            select: {
-              name: true,
-              division: {
-                select: {
-                  name: true,
-                },
-              },
-            },
-          },
-        },
-        orderBy: {
-          createdAt: "desc",
-        },
-        take: 50, // Limit to recent invitations
-      })
-    : [];
-
-  // Serialize dates for client component
-  const invitations = rawInvitations.map((inv) => ({
-    ...inv,
-    expiresAt: inv.expiresAt.toISOString(),
-    createdAt: inv.createdAt.toISOString(),
-  }));
 
   return (
     <Container maxWidth="lg">
@@ -103,15 +27,15 @@ export default async function LeagueInvitationsPage({ params }: LeagueInvitation
           }}
         >
           <Typography variant="h4" component="h1">
-            Invitations - {leagueUser.league.name}
+            Invitations - {data.league.name}
           </Typography>
         </Box>
 
         <LeagueInvitationManager
-          teams={teams}
-          invitations={invitations}
+          teams={data.teams}
+          invitations={data.invitations}
           leagueId={leagueId}
-          isLeagueAdmin={isLeagueAdmin}
+          isLeagueAdmin={data.isLeagueAdmin}
         />
       </Box>
     </Container>
