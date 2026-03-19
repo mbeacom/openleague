@@ -1,9 +1,16 @@
 import type { NextAuthConfig } from "next-auth";
+import { CredentialsSignin } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { compare } from "bcryptjs";
 import { prisma } from "@/lib/db/prisma";
 import { env, isProduction, isDevelopment } from "@/lib/env";
-import { AUTH_MESSAGES } from "@/lib/config/constants";
+import { AUTH_ERROR_CODES } from "@/lib/config/constants";
+
+function throwCredentialsError(code: string): never {
+  const err = new CredentialsSignin();
+  err.code = code;
+  throw err;
+}
 
 export const authOptions: NextAuthConfig = {
   providers: [
@@ -15,7 +22,7 @@ export const authOptions: NextAuthConfig = {
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
-          throw new Error("Email and password are required");
+          throwCredentialsError(AUTH_ERROR_CODES.INVALID_CREDENTIALS);
         }
 
         const email = credentials.email as string;
@@ -27,19 +34,19 @@ export const authOptions: NextAuthConfig = {
         });
 
         if (!user) {
-          throw new Error("Invalid email or password");
+          throwCredentialsError(AUTH_ERROR_CODES.INVALID_CREDENTIALS);
         }
 
         // Verify password
         const isPasswordValid = await compare(password, user.passwordHash);
 
         if (!isPasswordValid) {
-          throw new Error("Invalid email or password");
+          throwCredentialsError(AUTH_ERROR_CODES.INVALID_CREDENTIALS);
         }
 
         // Check if user is approved
         if (!user.approved) {
-          throw new Error(AUTH_MESSAGES.ACCOUNT_NOT_APPROVED);
+          throwCredentialsError(AUTH_ERROR_CODES.ACCOUNT_NOT_APPROVED);
         }
 
         // Return user object (will be stored in JWT)

@@ -17,7 +17,7 @@ import {
 import Link from "next/link";
 import Logo from "@/components/ui/Logo";
 import { loginSchema, pickField } from "@/lib/utils/validation";
-import { AUTH_MESSAGES } from "@/lib/config/constants";
+import { AUTH_MESSAGES, AUTH_ERROR_CODES } from "@/lib/config/constants";
 import { trackAuth } from "@/lib/analytics/umami";
 
 function LoginForm() {
@@ -111,9 +111,16 @@ function LoginForm() {
       });
 
       if (result?.error) {
-        // Show specific error message from the credentials provider
-        // This will display the "pending approval" message or other specific errors
-        setGeneralError(result.error || "Invalid email or password");
+        // Auth.js v5 may pass the custom code via result.code or embed it in result.error
+        const errorCode = result.code || result.error;
+
+        if (errorCode?.includes(AUTH_ERROR_CODES.ACCOUNT_NOT_APPROVED)) {
+          setGeneralError(AUTH_MESSAGES.ACCOUNT_NOT_APPROVED);
+        } else if (errorCode?.includes(AUTH_ERROR_CODES.INVALID_CREDENTIALS)) {
+          setGeneralError("Invalid email or password");
+        } else {
+          setGeneralError("Unable to sign in. Please try again.");
+        }
         return;
       }
 
