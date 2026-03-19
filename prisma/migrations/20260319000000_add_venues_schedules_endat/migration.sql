@@ -21,7 +21,7 @@ CREATE TABLE "venues" (
     "zipCode" TEXT,
     "surfaceType" "SurfaceType" NOT NULL DEFAULT 'OTHER',
     "capacity" INTEGER,
-    "amenities" TEXT[],
+    "amenities" TEXT[] NOT NULL DEFAULT '{}'::text[],
     "phone" TEXT,
     "website" TEXT,
     "notes" TEXT,

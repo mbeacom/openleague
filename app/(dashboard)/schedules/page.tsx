@@ -1,27 +1,17 @@
 import { Container, Box, Typography } from "@mui/material";
-import { prisma } from "@/lib/db/prisma";
-import { requireUserId } from "@/lib/auth/session";
 import { redirect } from "next/navigation";
-import { getSchedulesForContext } from "@/lib/actions/game-schedules";
+import { getSchedulesForContext, getSchedulesPageContext } from "@/lib/actions/game-schedules";
 import ScheduleList from "@/components/features/schedules/ScheduleList";
 
 export default async function SchedulesPage() {
-  const userId = await requireUserId();
-
-  const membership = await prisma.teamMember.findFirst({
-    where: { userId },
-    select: { role: true, team: { select: { id: true, leagueId: true } } },
-  });
-
-  if (!membership) {
+  const context = await getSchedulesPageContext();
+  if (!context) {
     redirect("/");
   }
 
-  const isAdmin = membership.role === "ADMIN";
-
   const schedules = await getSchedulesForContext({
-    teamId: membership.team.id,
-    leagueId: membership.team.leagueId || undefined,
+    teamId: context.teamId,
+    leagueId: context.leagueId,
   });
 
   const serialized = schedules.map((s) => ({
@@ -39,7 +29,7 @@ export default async function SchedulesPage() {
         <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
           Build and manage season schedules with round-robin matchups across venues.
         </Typography>
-        <ScheduleList schedules={serialized} isAdmin={isAdmin} />
+        <ScheduleList schedules={serialized} isAdmin={context.isAdmin} />
       </Box>
     </Container>
   );

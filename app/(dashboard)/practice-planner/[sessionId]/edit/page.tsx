@@ -1,10 +1,8 @@
 import type { Metadata } from "next";
-import { requireUserId } from "@/lib/auth/session";
-import { prisma } from "@/lib/db/prisma";
-import { redirect, notFound } from "next/navigation";
+import { notFound } from "next/navigation";
 import { Container, Box } from "@mui/material";
 import { EditSessionWrapper } from "./EditSessionWrapper";
-import type { PlayData } from "@/types/practice-planner";
+import { getPracticeSessionForEdit } from "@/lib/actions/practice-session-queries";
 
 export const metadata: Metadata = {
   title: "Edit Practice Session | OpenLeague",
@@ -17,67 +15,22 @@ interface PageProps {
 
 export default async function EditPracticeSessionPage({ params }: PageProps) {
   const { sessionId } = await params;
-  const userId = await requireUserId();
 
-  // Fetch the session
-  const session = await prisma.practiceSession.findUnique({
-    where: { id: sessionId },
-    include: {
-      plays: {
-        orderBy: { sequence: "asc" },
-        include: {
-          play: {
-            select: {
-              id: true,
-              name: true,
-              description: true,
-              thumbnail: true,
-              playData: true,
-            },
-          },
-        },
-      },
-    },
-  });
+  const data = await getPracticeSessionForEdit(sessionId);
 
-  if (!session) {
+  if (data === null) {
+    // Session either doesn't exist or user isn't an admin for it
+    // Try notFound — the action returns null for missing sessions too
     notFound();
-  }
-
-  // Verify user is admin for this team
-  const membership = await prisma.teamMember.findFirst({
-    where: {
-      userId,
-      teamId: session.teamId,
-      role: "ADMIN",
-    },
-  });
-
-  if (!membership) {
-    redirect(`/practice-planner/${sessionId}`);
   }
 
   return (
     <Container maxWidth="lg">
       <Box sx={{ py: 4 }}>
         <EditSessionWrapper
-          sessionId={session.id}
-          teamId={session.teamId}
-          initialData={{
-            title: session.title,
-            date: session.date,
-            duration: session.duration,
-            isShared: session.isShared,
-            plays: session.plays.map((sp) => ({
-              id: sp.id,
-              playId: sp.play.id,
-              sequence: sp.sequence,
-              duration: sp.duration,
-              instructions: sp.instructions || "",
-              playData: sp.play.playData as unknown as PlayData,
-              thumbnail: sp.play.thumbnail || "",
-            })),
-          }}
+          sessionId={data.sessionId}
+          teamId={data.teamId}
+          initialData={data.initialData}
         />
       </Box>
     </Container>

@@ -470,7 +470,29 @@ export const updateVenueSchema = z.object({
   visibility: z.enum(["PUBLIC", "LEAGUE", "TEAM"]).default("PUBLIC"),
   teamId: z.string().cuid("Invalid team ID format").optional().or(z.literal("")),
   leagueId: z.string().cuid("Invalid league ID format").optional().or(z.literal("")),
-});
+}).refine(
+  (data) => {
+    if (data.visibility === "LEAGUE" && !data.leagueId) {
+      return false;
+    }
+    return true;
+  },
+  {
+    message: "League ID is required for league-visible venues",
+    path: ["leagueId"],
+  }
+).refine(
+  (data) => {
+    if (data.visibility === "TEAM" && !data.teamId) {
+      return false;
+    }
+    return true;
+  },
+  {
+    message: "Team ID is required for team-private venues",
+    path: ["teamId"],
+  }
+);
 
 export const venueAvailabilitySchema = z.object({
   venueId: z.string().cuid("Invalid venue ID format"),

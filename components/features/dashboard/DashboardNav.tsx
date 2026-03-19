@@ -80,7 +80,7 @@ export default function DashboardNav({ mobile = false, isLeagueMode = false }: D
       { label: "Dashboard", path: `${leaguePrefix}/dashboard`, icon: <DashboardIcon /> },
       { label: "Teams", path: `${leaguePrefix}/teams`, icon: <GroupsIcon /> },
       { label: "Schedule", path: `${leaguePrefix}/schedule`, icon: <CalendarIcon /> },
-      { label: "Venues", path: "/venues", icon: <PlaceIcon /> },
+      { label: "Venues", path: `${leaguePrefix}/venues`, icon: <PlaceIcon /> },
       { label: "Roster", path: `${leaguePrefix}/roster`, icon: <PeopleIcon /> },
       { label: "Statistics", path: `${leaguePrefix}/statistics`, icon: <AnalyticsIcon /> },
       { label: "Reports", path: `${leaguePrefix}/reports`, icon: <ReportsIcon /> },

@@ -1,72 +1,15 @@
-import { requireUserId } from "@/lib/auth/session";
-import { prisma } from "@/lib/db/prisma";
 import { Box, Container, Typography, Divider } from "@mui/material";
 import { redirect } from "next/navigation";
 import RosterList from "@/components/features/roster/RosterList";
 import InvitationManager from "@/components/features/roster/InvitationManager";
+import { getRosterData } from "@/lib/actions/team-context";
 
 export default async function RosterPage() {
-  const userId = await requireUserId();
+  const data = await getRosterData();
 
-  // Get user's first team (MVP: single team focus)
-  const teamMember = await prisma.teamMember.findFirst({
-    where: { userId },
-    include: {
-      team: {
-        select: {
-          id: true,
-          name: true,
-        },
-      },
-    },
-    orderBy: {
-      joinedAt: "desc",
-    },
-  });
-
-  // If user has no teams, redirect to dashboard
-  if (!teamMember) {
+  if (!data) {
     redirect("/");
   }
-
-  const teamId = teamMember.team.id;
-  const isAdmin = teamMember.role === "ADMIN";
-
-  // Fetch roster
-  const players = await prisma.player.findMany({
-    where: {
-      teamId,
-    },
-    orderBy: {
-      name: "asc",
-    },
-  });
-
-  // Fetch invitations (only for admins)
-  const rawInvitations = isAdmin
-    ? await prisma.invitation.findMany({
-        where: {
-          teamId,
-        },
-        orderBy: {
-          createdAt: "desc",
-        },
-        select: {
-          id: true,
-          email: true,
-          status: true,
-          expiresAt: true,
-          createdAt: true,
-        },
-      })
-    : [];
-
-  // Serialize dates for client component
-  const invitations = rawInvitations.map((inv: typeof rawInvitations[number]) => ({
-    ...inv,
-    expiresAt: inv.expiresAt.toISOString(),
-    createdAt: inv.createdAt.toISOString(),
-  }));
 
   return (
     <Container maxWidth="lg">
@@ -84,17 +27,17 @@ export default async function RosterPage() {
           </Typography>
         </Box>
 
-        {isAdmin && (
+        {data.isAdmin && (
           <>
-            <InvitationManager invitations={invitations} teamId={teamId} />
+            <InvitationManager invitations={data.invitations} teamId={data.teamId} />
             <Divider sx={{ my: 4 }} />
           </>
         )}
 
         <RosterList
-          players={players}
-          teamId={teamId}
-          isAdmin={isAdmin}
+          players={data.players}
+          teamId={data.teamId}
+          isAdmin={data.isAdmin}
         />
       </Box>
     </Container>

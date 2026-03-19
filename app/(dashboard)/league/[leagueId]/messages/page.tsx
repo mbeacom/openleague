@@ -1,104 +1,19 @@
-import React from "react";
 import { Box, Typography, Card, CardContent } from "@mui/material";
-import { prisma } from "@/lib/db/prisma";
-import { requireUserId } from "@/lib/auth/session";
 import { notFound } from "next/navigation";
 import { LeagueMessagesView } from "@/components/features/communication/LeagueMessagesView";
+import { getLeagueMessagesData } from "@/lib/actions/league-context";
 
 interface LeagueMessagesPageProps {
-  params: Promise<{
-    leagueId: string;
-  }>;
+  params: Promise<{ leagueId: string }>;
 }
 
 export default async function LeagueMessagesPage({ params }: LeagueMessagesPageProps) {
   const { leagueId } = await params;
-  const userId = await requireUserId();
 
-  // Verify user has access to this league
-  const leagueUser = await prisma.leagueUser.findFirst({
-    where: {
-      userId,
-      leagueId,
-    },
-    include: {
-      league: {
-        select: {
-          id: true,
-          name: true,
-          isActive: true,
-        },
-      },
-    },
-  });
-
-  if (!leagueUser || !leagueUser.league.isActive) {
+  const data = await getLeagueMessagesData(leagueId);
+  if (!data) {
     notFound();
   }
-
-  // Check if user has permission to send messages (league admin or team admin)
-  const canSendMessages = leagueUser.role === "LEAGUE_ADMIN" || leagueUser.role === "TEAM_ADMIN";
-
-  // Get league structure for message targeting
-  const [divisions, teams] = await Promise.all([
-    prisma.division.findMany({
-      where: {
-        leagueId,
-        isActive: true,
-      },
-      select: {
-        id: true,
-        name: true,
-        _count: {
-          select: {
-            teams: true,
-          },
-        },
-      },
-      orderBy: {
-        name: "asc",
-      },
-    }),
-    prisma.team.findMany({
-      where: {
-        leagueId,
-        isActive: true,
-      },
-      select: {
-        id: true,
-        name: true,
-        division: {
-          select: {
-            name: true,
-          },
-        },
-        _count: {
-          select: {
-            members: true,
-          },
-        },
-      },
-      orderBy: {
-        name: "asc",
-      },
-    }),
-  ]);
-
-  const leagueData = {
-    id: leagueUser.league.id,
-    name: leagueUser.league.name,
-    divisions: divisions.map((division) => ({
-      id: division.id,
-      name: division.name,
-      teamCount: division._count.teams,
-    })),
-    teams: teams.map((team) => ({
-      id: team.id,
-      name: team.name,
-      divisionName: team.division?.name,
-      memberCount: team._count.members,
-    })),
-  };
 
   return (
     <Box>
@@ -112,7 +27,7 @@ export default async function LeagueMessagesPage({ params }: LeagueMessagesPageP
         Send targeted messages and announcements to league members, divisions, or specific teams.
       </Typography>
 
-      {!canSendMessages && (
+      {!data.canSendMessages && (
         <Card sx={{ mb: 3 }}>
           <CardContent>
             <Typography variant="body2" color="text.secondary">
@@ -123,8 +38,8 @@ export default async function LeagueMessagesPage({ params }: LeagueMessagesPageP
       )}
 
       <LeagueMessagesView
-        leagueData={leagueData}
-        canSendMessages={canSendMessages}
+        leagueData={data.leagueData}
+        canSendMessages={data.canSendMessages}
       />
     </Box>
   );

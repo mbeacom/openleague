@@ -108,6 +108,24 @@ export async function updateVenue(
       return { success: false, error: "You don't have permission to edit this venue" };
     }
 
+    // If visibility is changing, validate authorization for the new scope
+    if (validated.visibility === "TEAM" && validated.teamId && validated.teamId !== existing.teamId) {
+      const membership = await prisma.teamMember.findUnique({
+        where: { userId_teamId: { userId, teamId: validated.teamId } },
+      });
+      if (!membership || membership.role !== "ADMIN") {
+        return { success: false, error: "You must be a team admin to assign venues to that team" };
+      }
+    }
+    if (validated.visibility === "LEAGUE" && validated.leagueId && validated.leagueId !== existing.leagueId) {
+      const leagueUser = await prisma.leagueUser.findUnique({
+        where: { userId_leagueId: { userId, leagueId: validated.leagueId } },
+      });
+      if (!leagueUser || leagueUser.role !== "LEAGUE_ADMIN") {
+        return { success: false, error: "You must be a league admin to assign venues to that league" };
+      }
+    }
+
     const venue = await prisma.venue.update({
       where: { id: validated.id },
       data: {
@@ -196,9 +214,7 @@ export async function getVenue(venueId: string) {
       createdBy: { select: { id: true, name: true } },
       _count: {
         select: {
-          events: {
-            where: { startAt: { gte: new Date() } },
-          },
+          events: true,
         },
       },
     },
@@ -230,10 +246,18 @@ export async function getAvailableVenues(filters?: {
     select: { teamId: true, team: { select: { leagueId: true } } },
   });
 
+  // Also get direct league memberships (for league-only users)
+  const leagueUsers = await prisma.leagueUser.findMany({
+    where: { userId },
+    select: { leagueId: true },
+  });
+
   const teamIds = memberships.map((m) => m.teamId);
-  const leagueIds = memberships
+  const leagueIdsFromTeams = memberships
     .map((m) => m.team.leagueId)
     .filter((id): id is string => id !== null);
+  const leagueIdsFromDirect = leagueUsers.map((lu) => lu.leagueId);
+  const leagueIds = [...new Set([...leagueIdsFromTeams, ...leagueIdsFromDirect])];
 
   // Build visibility filter: PUBLIC + user's leagues + user's teams
   const visibilityFilter = [
@@ -311,7 +335,19 @@ export async function checkVenueAvailability(
 > {
   try {
     const validated = venueAvailabilitySchema.parse(input);
-    await requireUserId();
+    const userId = await requireUserId();
+
+    // Verify the user has access to this venue before revealing scheduling details
+    const venue = await prisma.venue.findUnique({
+      where: { id: validated.venueId },
+    });
+    if (!venue) {
+      return { success: false, error: "Venue not found" };
+    }
+    const hasAccess = await canUserAccessVenue(userId, venue);
+    if (!hasAccess) {
+      return { success: false, error: "You don't have access to this venue" };
+    }
 
     const conflicts = await findVenueConflicts(
       validated.venueId,
@@ -400,6 +436,99 @@ export async function findVenueConflicts(
   }));
 }
 
+/**
+ * Check if the current user can edit a given venue, and get upcoming events at it.
+ * Used by venue detail and edit pages.
+ */
+export async function getVenuePageData(venueId: string): Promise<{
+  venue: Awaited<ReturnType<typeof getVenue>>;
+  canEdit: boolean;
+  upcomingEvents: Array<{
+    id: string;
+    title: string;
+    startAt: string;
+    type: string;
+    team: { name: string };
+  }>;
+} | null> {
+  const userId = await requireUserId();
+  const venue = await getVenue(venueId);
+  if (!venue) return null;
+
+  const canEdit = await canUserEditVenue(userId, venue);
+
+  const upcomingEventsRaw = await prisma.event.findMany({
+    where: {
+      venueId,
+      startAt: { gte: new Date() },
+    },
+    select: {
+      id: true,
+      title: true,
+      startAt: true,
+      type: true,
+      team: { select: { name: true } },
+    },
+    orderBy: { startAt: "asc" },
+    take: 10,
+  });
+
+  const upcomingEvents = upcomingEventsRaw.map((e) => ({
+    ...e,
+    startAt: e.startAt.toISOString(),
+  }));
+
+  return { venue, canEdit, upcomingEvents };
+}
+
+/**
+ * Get the context needed for the new/edit venue form:
+ * teams and leagues the user admins.
+ * Returns null if the user has no admin access.
+ */
+export async function getVenueFormContext(): Promise<{
+  teams: Array<{ id: string; name: string; leagueId: string | null }>;
+  leagues: Array<{ id: string; name: string }>;
+} | null> {
+  const userId = await requireUserId();
+
+  const [memberships, leagueUsers] = await Promise.all([
+    prisma.teamMember.findMany({
+      where: { userId, role: "ADMIN" },
+      select: { team: { select: { id: true, name: true, leagueId: true } } },
+    }),
+    prisma.leagueUser.findMany({
+      where: { userId, role: "LEAGUE_ADMIN" },
+      select: { league: { select: { id: true, name: true } } },
+    }),
+  ]);
+
+  if (memberships.length === 0 && leagueUsers.length === 0) return null;
+
+  return {
+    teams: memberships.map((m) => m.team),
+    leagues: leagueUsers.map((lu) => lu.league),
+  };
+}
+
+/**
+ * Check access to the venues list page — returns isAdmin flag or null if no membership.
+ */
+export async function getVenuesPageAccess(): Promise<{ isAdmin: boolean } | null> {
+  const userId = await requireUserId();
+
+  const [membership, leagueUser] = await Promise.all([
+    prisma.teamMember.findFirst({ where: { userId }, select: { role: true } }),
+    prisma.leagueUser.findFirst({ where: { userId }, select: { role: true } }),
+  ]);
+
+  if (!membership && !leagueUser) return null;
+
+  return {
+    isAdmin: membership?.role === "ADMIN" || leagueUser?.role === "LEAGUE_ADMIN",
+  };
+}
+
 // --- Helper functions ---
 
 async function canUserEditVenue(
@@ -428,7 +557,7 @@ async function canUserEditVenue(
   return false;
 }
 
-async function canUserAccessVenue(
+export async function canUserAccessVenue(
   userId: string,
   venue: { visibility: string; teamId: string | null; leagueId: string | null }
 ): Promise<boolean> {

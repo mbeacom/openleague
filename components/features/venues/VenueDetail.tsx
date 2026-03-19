@@ -286,7 +286,7 @@ export default function VenueDetail({ venue, canEdit, upcomingEvents = [] }: Ven
         <DialogContent>
           <DialogContentText>
             {venue._count.events > 0
-              ? `This venue has ${venue._count.events} upcoming events. It will be deactivated instead of deleted.`
+              ? `This venue has ${venue._count.events} associated events. It will be deactivated instead of deleted to preserve event history.`
               : "Are you sure you want to delete this venue? This action cannot be undone."}
           </DialogContentText>
         </DialogContent>

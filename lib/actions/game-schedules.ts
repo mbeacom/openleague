@@ -26,31 +26,53 @@ export async function createGameSchedule(
     const userId = await requireUserId();
 
     // Verify authorization: league admin or team admin
-    if (validated.leagueId) {
+    // When teamId is provided, check team admin first (allows team admins even if leagueId is also set)
+    if (validated.teamId) {
+      const membership = await prisma.teamMember.findUnique({
+        where: { userId_teamId: { userId, teamId: validated.teamId } },
+      });
+      if (membership?.role === "ADMIN") {
+        // Team admin authorized — proceed
+      } else if (validated.leagueId) {
+        // Fall back to league admin check
+        const leagueUser = await prisma.leagueUser.findUnique({
+          where: { userId_leagueId: { userId, leagueId: validated.leagueId } },
+        });
+        if (!leagueUser || leagueUser.role !== "LEAGUE_ADMIN") {
+          return { success: false, error: "You must be a team admin or league admin to create schedules" };
+        }
+      } else {
+        return { success: false, error: "You must be a team admin to create schedules" };
+      }
+    } else if (validated.leagueId) {
       const leagueUser = await prisma.leagueUser.findUnique({
         where: { userId_leagueId: { userId, leagueId: validated.leagueId } },
       });
       if (!leagueUser || leagueUser.role !== "LEAGUE_ADMIN") {
         return { success: false, error: "You must be a league admin to create schedules" };
       }
-    } else if (validated.teamId) {
-      const membership = await prisma.teamMember.findUnique({
-        where: { userId_teamId: { userId, teamId: validated.teamId } },
-      });
-      if (!membership || membership.role !== "ADMIN") {
-        return { success: false, error: "You must be a team admin to create schedules" };
-      }
     } else {
       return { success: false, error: "Either leagueId or teamId is required" };
     }
 
-    // Verify all teams exist
+    // Verify all teams exist and belong to the authorized scope
+    const teamWhereFilter: Record<string, unknown> = { id: { in: validated.teamIds } };
+    if (validated.leagueId) {
+      teamWhereFilter.leagueId = validated.leagueId;
+    } else if (validated.teamId) {
+      // For team-scoped schedules, allow only teams the user manages
+      const userTeamIds = (await prisma.teamMember.findMany({
+        where: { userId, role: "ADMIN" },
+        select: { teamId: true },
+      })).map((m) => m.teamId);
+      teamWhereFilter.id = { in: validated.teamIds.filter((id: string) => userTeamIds.includes(id)) };
+    }
     const teams = await prisma.team.findMany({
-      where: { id: { in: validated.teamIds } },
+      where: teamWhereFilter,
       select: { id: true, name: true },
     });
     if (teams.length !== validated.teamIds.length) {
-      return { success: false, error: "One or more teams not found" };
+      return { success: false, error: "One or more teams not found or not in your authorized scope" };
     }
 
     // Verify all venues exist
@@ -526,6 +548,99 @@ export async function getGameSchedule(scheduleId: string) {
   });
 
   return schedule;
+}
+
+/**
+ * Get the context needed to render the schedules list page.
+ * Returns null if the user has no team membership.
+ */
+export async function getSchedulesPageContext(): Promise<{
+  teamId: string;
+  leagueId: string | undefined;
+  isAdmin: boolean;
+} | null> {
+  const userId = await requireUserId();
+
+  const membership = await prisma.teamMember.findFirst({
+    where: { userId },
+    select: { role: true, team: { select: { id: true, leagueId: true } } },
+  });
+
+  if (!membership) return null;
+
+  return {
+    teamId: membership.team.id,
+    leagueId: membership.team.leagueId || undefined,
+    isAdmin: membership.role === "ADMIN",
+  };
+}
+
+/**
+ * Get the context needed to render the new schedule page.
+ * Returns null if user has no admin team membership.
+ */
+export async function getNewSchedulePageContext(): Promise<{
+  teamId: string;
+  leagueId: string | null;
+  teams: Array<{ id: string; name: string }>;
+} | null> {
+  const userId = await requireUserId();
+
+  const membership = await prisma.teamMember.findFirst({
+    where: { userId, role: "ADMIN" },
+    select: { team: { select: { id: true, leagueId: true } } },
+  });
+
+  if (!membership) return null;
+
+  let teams: Array<{ id: string; name: string }>;
+  if (membership.team.leagueId) {
+    teams = await prisma.team.findMany({
+      where: { leagueId: membership.team.leagueId, isActive: true },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    });
+  } else {
+    const memberships = await prisma.teamMember.findMany({
+      where: { userId, role: "ADMIN" },
+      select: { team: { select: { id: true, name: true } } },
+    });
+    teams = memberships.map((m) => m.team);
+  }
+
+  return {
+    teamId: membership.team.id,
+    leagueId: membership.team.leagueId,
+    teams,
+  };
+}
+
+/**
+ * Get a schedule along with the current user's edit permission.
+ */
+export async function getScheduleWithPermission(scheduleId: string): Promise<{
+  schedule: NonNullable<Awaited<ReturnType<typeof getGameSchedule>>>;
+  canEdit: boolean;
+} | null> {
+  const userId = await requireUserId();
+  const schedule = await getGameSchedule(scheduleId);
+  if (!schedule) return null;
+
+  let canEdit = schedule.createdById === userId;
+  if (!canEdit && schedule.leagueId) {
+    const leagueUser = await prisma.leagueUser.findUnique({
+      where: { userId_leagueId: { userId, leagueId: schedule.leagueId } },
+    });
+    if (leagueUser?.role === "LEAGUE_ADMIN") canEdit = true;
+  }
+  if (!canEdit && schedule.teamId) {
+    const membership = await prisma.teamMember.findUnique({
+      where: { userId_teamId: { userId, teamId: schedule.teamId } },
+    });
+    if (membership?.role === "ADMIN") canEdit = true;
+  }
+
+  return { schedule, canEdit };
 }
 
 /**

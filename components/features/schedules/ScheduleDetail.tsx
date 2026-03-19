@@ -84,6 +84,8 @@ export default function ScheduleDetail({ schedule, canEdit }: ScheduleDetailProp
       const result = await publishSchedule({ gameScheduleId: schedule.id });
       if (!result.success) {
         setError(result.error);
+      } else {
+        router.refresh();
       }
     } catch {
       setError("Failed to publish schedule.");
@@ -99,6 +101,8 @@ export default function ScheduleDetail({ schedule, canEdit }: ScheduleDetailProp
       const result = await archiveSchedule(schedule.id);
       if (!result.success) {
         setError(result.error);
+      } else {
+        router.refresh();
       }
     } catch {
       setError("Failed to archive schedule.");
