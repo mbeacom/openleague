@@ -111,6 +111,8 @@ model TeamMember {
   teamId String
   team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
+  usahMemberId String? @db.VarChar(20) // USA Hockey Member ID. Admin-only.
+
   @@unique([userId, teamId])
 }
 
@@ -133,6 +135,8 @@ model Player {
   phone            String?
   emergencyContact String? // Admin-only field, not visible to regular members
   emergencyPhone   String? // Admin-only field, not visible to regular members
+  jerseyNumber     Int?    // Optional jersey number (1–99). No unique constraint; duplicates trigger warning only.
+  usahMemberId     String? @db.VarChar(20) // USA Hockey Member ID. Admin-only.
   userId           String? // Optional link to User account if player has registered
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt

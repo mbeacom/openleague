@@ -8,9 +8,11 @@ import {
   addPlayerSchema,
   updatePlayerSchema,
   transferPlayerSchema,
+  updateTeamMemberUsahIdSchema,
   type AddPlayerInput,
   type UpdatePlayerInput,
-  type TransferPlayerInput
+  type TransferPlayerInput,
+  type UpdateTeamMemberUsahIdInput,
 } from "@/lib/utils/validation";
 
 
@@ -36,8 +38,26 @@ export async function addPlayer(input: AddPlayerInput) {
         emergencyContact: validated.emergencyContact || null,
         emergencyPhone: validated.emergencyPhone || null,
         teamId: validated.teamId,
+        jerseyNumber: validated.jerseyNumber ?? null,
+        usahMemberId: validated.usahMemberId || null,
       },
     });
+
+    // Check for duplicate jersey number on same team
+    let warning: string | undefined;
+    if (validated.jerseyNumber != null) {
+      const duplicate = await prisma.player.findFirst({
+        where: {
+          teamId: validated.teamId,
+          jerseyNumber: validated.jerseyNumber,
+          id: { not: player.id },
+        },
+        select: { name: true },
+      });
+      if (duplicate) {
+        warning = `Jersey #${validated.jerseyNumber} is already assigned to ${duplicate.name}`;
+      }
+    }
 
     // Revalidate roster page
     revalidatePath(`/roster`);
@@ -45,6 +65,7 @@ export async function addPlayer(input: AddPlayerInput) {
     return {
       success: true,
       data: player,
+      warning,
     };
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -102,8 +123,26 @@ export async function updatePlayer(input: UpdatePlayerInput) {
         phone: validated.phone || null,
         emergencyContact: validated.emergencyContact || null,
         emergencyPhone: validated.emergencyPhone || null,
+        jerseyNumber: validated.jerseyNumber ?? null,
+        usahMemberId: validated.usahMemberId || null,
       },
     });
+
+    // Check for duplicate jersey number on same team (excluding the updated player)
+    let warning: string | undefined;
+    if (validated.jerseyNumber != null) {
+      const duplicate = await prisma.player.findFirst({
+        where: {
+          teamId: validated.teamId,
+          jerseyNumber: validated.jerseyNumber,
+          id: { not: validated.id },
+        },
+        select: { name: true },
+      });
+      if (duplicate) {
+        warning = `Jersey #${validated.jerseyNumber} is already assigned to ${duplicate.name}`;
+      }
+    }
 
     // Revalidate roster page
     revalidatePath(`/roster`);
@@ -111,6 +150,7 @@ export async function updatePlayer(input: UpdatePlayerInput) {
     return {
       success: true,
       data: player,
+      warning,
     };
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -306,6 +346,48 @@ export async function transferPlayer(input: TransferPlayerInput) {
     return {
       error: "Failed to transfer player. Please try again.",
     };
+  }
+}
+
+/**
+ * Update the USA Hockey Member ID for a team official (coach/manager)
+ * Only ADMIN role can update team member USAH IDs
+ */
+export async function updateTeamMemberUsahId(input: UpdateTeamMemberUsahIdInput) {
+  try {
+    const validated = updateTeamMemberUsahIdSchema.parse(input);
+
+    await requireTeamAdmin(validated.teamId);
+
+    // Verify the TeamMember belongs to the given team
+    const member = await prisma.teamMember.findUnique({
+      where: { id: validated.teamMemberId },
+      select: { teamId: true },
+    });
+
+    if (!member) {
+      return { success: false as const, error: "Team member not found" };
+    }
+
+    if (member.teamId !== validated.teamId) {
+      return { success: false as const, error: "Unauthorized: Team member does not belong to this team" };
+    }
+
+    const updated = await prisma.teamMember.update({
+      where: { id: validated.teamMemberId },
+      data: { usahMemberId: validated.usahMemberId || null },
+      select: { id: true, usahMemberId: true },
+    });
+
+    revalidatePath("/roster");
+
+    return { success: true as const, data: updated };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return { success: false as const, error: "Invalid input", details: error.issues };
+    }
+    console.error("Error updating team member USAH ID:", error);
+    return { success: false as const, error: "Failed to update USA Hockey Member ID. Please try again." };
   }
 }
 

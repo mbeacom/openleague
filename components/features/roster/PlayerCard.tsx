@@ -19,6 +19,7 @@ import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EmailIcon from "@mui/icons-material/Email";
 import PhoneIcon from "@mui/icons-material/Phone";
+import Chip from "@mui/material/Chip";
 import { deletePlayer } from "@/lib/actions/roster";
 import type { Player } from "@/types/roster";
 
@@ -89,7 +90,7 @@ export default function PlayerCard({
         }}
       >
         <CardContent sx={{ flex: 1 }}>
-          {/* Player Name */}
+          {/* Player Name + Jersey Number */}
           <Box
             sx={{
               display: "flex",
@@ -98,9 +99,20 @@ export default function PlayerCard({
               mb: 2,
             }}
           >
-            <Typography variant="h6" component="h2">
-              {player.name}
-            </Typography>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              {player.jerseyNumber != null && (
+                <Chip
+                  label={`#${player.jerseyNumber}`}
+                  size="small"
+                  color="primary"
+                  variant="outlined"
+                  sx={{ fontWeight: 700, fontSize: "0.75rem" }}
+                />
+              )}
+              <Typography variant="h6" component="h2">
+                {player.name}
+              </Typography>
+            </Box>
 
             {/* Edit/Delete Buttons (Admin only) */}
             {isAdmin && (
@@ -147,8 +159,8 @@ export default function PlayerCard({
             )}
           </Box>
 
-          {/* Emergency Contact (Admin only) */}
-          {isAdmin && (player.emergencyContact || player.emergencyPhone) && (
+          {/* Admin-only fields */}
+          {isAdmin && (player.emergencyContact || player.emergencyPhone || player.usahMemberId) && (
             <Box
               sx={{
                 mt: 2,
@@ -157,22 +169,40 @@ export default function PlayerCard({
                 borderColor: "divider",
               }}
             >
-              <Typography
-                variant="caption"
-                color="text.secondary"
-                sx={{ fontWeight: 600, display: "block", mb: 1 }}
-              >
-                Emergency Contact
-              </Typography>
-              {player.emergencyContact && (
-                <Typography variant="body2" color="text.secondary">
-                  {player.emergencyContact}
-                </Typography>
+              {(player.emergencyContact || player.emergencyPhone) && (
+                <>
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ fontWeight: 600, display: "block", mb: 1 }}
+                  >
+                    Emergency Contact
+                  </Typography>
+                  {player.emergencyContact && (
+                    <Typography variant="body2" color="text.secondary">
+                      {player.emergencyContact}
+                    </Typography>
+                  )}
+                  {player.emergencyPhone && (
+                    <Typography variant="body2" color="text.secondary">
+                      {player.emergencyPhone}
+                    </Typography>
+                  )}
+                </>
               )}
-              {player.emergencyPhone && (
-                <Typography variant="body2" color="text.secondary">
-                  {player.emergencyPhone}
-                </Typography>
+              {player.usahMemberId && (
+                <Box sx={{ mt: player.emergencyContact || player.emergencyPhone ? 1 : 0 }}>
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ fontWeight: 600, display: "block" }}
+                  >
+                    USA Hockey ID
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {player.usahMemberId}
+                  </Typography>
+                </Box>
               )}
             </Box>
           )}

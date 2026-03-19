@@ -39,6 +39,8 @@ export default function AddPlayerDialog({
     emergencyContact: "",
     emergencyPhone: "",
     teamId,
+    jerseyNumber: null,
+    usahMemberId: null,
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -54,6 +56,8 @@ export default function AddPlayerDialog({
         emergencyContact: player?.emergencyContact || "",
         emergencyPhone: player?.emergencyPhone || "",
         teamId,
+        jerseyNumber: player?.jerseyNumber ?? null,
+        usahMemberId: player?.usahMemberId ?? null,
       });
       setErrors({});
     }
@@ -145,7 +149,10 @@ export default function AddPlayerDialog({
           showError(result.error);
         }
       } else {
-        // Success
+        // Success — show warning if duplicate jersey number
+        if ("warning" in result && result.warning) {
+          showError(result.warning);
+        }
         showSuccess(
           isEditing
             ? "Player updated successfully"
@@ -247,6 +254,48 @@ export default function AddPlayerDialog({
               inputProps={{
                 inputMode: 'tel',
               }}
+            />
+
+            {/* Jersey Number */}
+            <TextField
+              label="Jersey Number"
+              type="number"
+              value={formData.jerseyNumber ?? ""}
+              onChange={(e) => {
+                const val = e.target.value;
+                setFormData((prev) => ({
+                  ...prev,
+                  jerseyNumber: val === "" ? null : parseInt(val, 10),
+                }));
+                if (errors.jerseyNumber) {
+                  setErrors((prev) => { const n = { ...prev }; delete n.jerseyNumber; return n; });
+                }
+              }}
+              error={!!errors.jerseyNumber}
+              helperText={errors.jerseyNumber || "Optional — 1 to 99"}
+              fullWidth
+              inputProps={{ min: 1, max: 99, step: 1 }}
+            />
+
+            {/* USA Hockey Member ID */}
+            <TextField
+              label="USA Hockey Member ID"
+              value={formData.usahMemberId ?? ""}
+              onChange={(e) => {
+                const val = e.target.value;
+                setFormData((prev) => ({
+                  ...prev,
+                  usahMemberId: val === "" ? null : val,
+                }));
+                if (errors.usahMemberId) {
+                  setErrors((prev) => { const n = { ...prev }; delete n.usahMemberId; return n; });
+                }
+              }}
+              onBlur={handleBlur("usahMemberId")}
+              error={!!errors.usahMemberId}
+              helperText={errors.usahMemberId || "Optional — alphanumeric, up to 20 characters"}
+              fullWidth
+              inputProps={{ maxLength: 20 }}
             />
           </Box>
         </DialogContent>

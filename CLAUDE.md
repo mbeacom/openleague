@@ -76,15 +76,29 @@ app/                              # Next.js App Router
 │   ├── roster/                  # Roster management
 │   ├── calendar/                # Event calendar views
 │   ├── events/                  # Event creation and details
+│   ├── schedules/               # Game schedule management
+│   ├── venues/                  # Venue CRUD
 │   ├── league/                  # League management (if applicable)
 │   ├── practice-planner/        # Practice session planning with rink board
 │   ├── dashboard/               # Main dashboard view
 │   └── admin/                   # Admin-only features
 ├── api/                         # API routes (minimal - prefer Server Actions)
 │   ├── auth/[...nextauth]/      # Auth.js endpoints
-│   ├── cron/                    # Scheduled jobs (RSVP reminders)
-│   └── invitations/             # Invitation acceptance webhooks
+│   ├── cron/                    # Scheduled jobs (RSVP reminders, notification batches)
+│   ├── invitations/             # Invitation acceptance webhooks
+│   ├── leagues/                 # League API (team listing)
+│   └── roster/export/           # CSV roster export (GET endpoint — file download, not a mutation)
 └── docs/                        # Documentation pages
+
+components/                      # React components
+├── features/                    # Feature-specific components (grouped by domain)
+│   ├── roster/                  # RosterList, PlayerCard, AddPlayerDialog, TeamOfficialCard
+│   ├── dashboard/               # DashboardNav, DashboardSidebar
+│   ├── events/                  # EventForm, EventCard, RSVPButton
+│   ├── practice-planner/        # RinkBoard, DrawingToolbar, PlayEditor, PlayLibrary
+│   └── navigation/              # MobileNavigation, Breadcrumbs
+├── ui/                          # Generic reusable UI primitives
+└── providers/                   # Context providers (LeagueProvider, ThemeProvider, etc.)
 
 lib/                             # Core application logic
 ├── actions/                     # Server Actions (primary mutation method)
@@ -95,6 +109,8 @@ lib/                             # Core application logic
 │   ├── rsvp.ts                  # Attendance tracking
 │   ├── invitations.ts           # Email invitations
 │   ├── league.ts                # League management
+│   ├── league-context.ts        # League context resolution helpers
+│   ├── team-context.ts          # Team context resolution helpers
 │   ├── communication.ts         # Messaging system
 │   ├── notifications.ts         # Notification preferences
 │   ├── permissions.ts           # Permission checks
@@ -102,7 +118,10 @@ lib/                             # Core application logic
 │   ├── audit.ts                 # Audit logging
 │   ├── logout.ts                # Logout action
 │   ├── plays.ts                 # Play/drill management (practice planner)
-│   └── practice-sessions.ts     # Practice session management
+│   ├── practice-sessions.ts     # Practice session management
+│   ├── practice-session-queries.ts # Read-only practice session queries
+│   ├── game-schedules.ts        # Game schedule CRUD
+│   └── venues.ts                # Venue management
 ├── auth/                        # Authentication utilities
 │   ├── config.ts                # Auth.js configuration
 │   └── session.ts               # Session helpers (requireAuth, requireTeamAdmin, etc.)
@@ -116,9 +135,28 @@ lib/                             # Core application logic
 │   ├── date.ts                  # Date formatting
 │   ├── permissions.ts           # Permission utilities
 │   ├── security.ts              # Security utilities
+│   ├── sanitization.ts          # Input sanitization helpers
 │   ├── rate-limit.ts            # Rate limiting
-│   └── error-handling.ts        # Error utilities
+│   ├── error-handling.ts        # Error utilities
+│   ├── csv.ts                   # CSV generation primitives
+│   ├── csv-export.ts            # Roster/data export helpers
+│   ├── league-mode.ts           # League vs standalone team mode detection
+│   └── data-migration.ts        # Data migration utilities
 └── hooks/                       # React hooks for Client Components
+
+types/                           # Shared TypeScript types
+├── roster.ts                    # Player, TeamOfficial, export types
+├── events.ts                    # Event and RSVP types
+├── practice-planner.ts          # Practice session and play types
+├── auth.ts                      # Session and auth types
+└── invitations.ts               # Invitation types
+
+specs/                           # SpecKit feature specifications
+└── <feature-name>/              # One folder per feature
+    ├── spec.md                  # Feature specification
+    ├── plan.md                  # Implementation plan
+    ├── tasks.md                 # Task breakdown
+    └── ...
 
 prisma/
 ├── schema.prisma                # Database schema (single source of truth)
@@ -408,6 +446,10 @@ describe('Feature Name', () => {
 - Server Action logic (mock Prisma)
 - React components (Testing Library)
 - Integration tests for critical flows
+
+**Pre-existing test failures** (not regressions — do not attempt to fix):
+- `theme-marketing.test.ts` — marketing theme variant tests
+- `DragDropTeams.test.tsx` — DnD context issues
 
 ### Common Gotchas
 
