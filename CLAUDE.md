@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-OpenLeague is a free, open-source sports team management platform built with Next.js 15, React 19, and TypeScript. The application uses a modern stack with MUI v7, Prisma ORM with PostgreSQL (Neon), and Auth.js for authentication. The project follows a mobile-first design philosophy and uses Next.js Server Actions as the primary data mutation pattern.
+OpenLeague is a free, open-source sports team management platform built with Next.js 16, React 19, and TypeScript. The application uses a modern stack with MUI v7 (with Emotion), Tailwind CSS v4, Prisma 7 with PostgreSQL (Neon), and Auth.js for authentication. The project follows a mobile-first design philosophy and uses Next.js Server Actions as the primary data mutation pattern.
 
 ## Development Commands
 
@@ -55,11 +55,12 @@ bun run test:watch __tests__/lib/utils/validation.test.ts
 ## High-Level Architecture
 
 ### Tech Stack Philosophy
-- **Framework**: Next.js 15 App Router (NOT Pages Router) with React 19
+- **Framework**: Next.js 16 App Router (NOT Pages Router) with React 19
 - **Data Mutations**: Server Actions first, API routes only for webhooks/external integrations
 - **Data Fetching**: React Server Components by default, Client Components only when needed
-- **Styling**: MUI v7 with Emotion (NOT Tailwind)
-- **Database**: Prisma ORM with PostgreSQL - parameterized queries prevent SQL injection
+- **Styling**: MUI v7 with Emotion + Tailwind CSS v4 (MUI is primary component library; Tailwind for utility styling)
+- **Database**: Prisma 7 ORM with PostgreSQL - parameterized queries prevent SQL injection; config in `prisma/prisma.config.ts`
+- **Validation**: Zod v4 (API differs from v3 — check schemas carefully)
 - **Authentication**: Auth.js v5 with credential provider, bcrypt password hashing
 - **Email**: Mailchimp Transactional Email (abstracted for future AWS SES migration)
 
@@ -76,6 +77,8 @@ app/                              # Next.js App Router
 │   ├── calendar/                # Event calendar views
 │   ├── events/                  # Event creation and details
 │   ├── league/                  # League management (if applicable)
+│   ├── practice-planner/        # Practice session planning with rink board
+│   ├── dashboard/               # Main dashboard view
 │   └── admin/                   # Admin-only features
 ├── api/                         # API routes (minimal - prefer Server Actions)
 │   ├── auth/[...nextauth]/      # Auth.js endpoints
@@ -96,7 +99,10 @@ lib/                             # Core application logic
 │   ├── notifications.ts         # Notification preferences
 │   ├── permissions.ts           # Permission checks
 │   ├── admin.ts                 # Admin operations
-│   └── audit.ts                 # Audit logging
+│   ├── audit.ts                 # Audit logging
+│   ├── logout.ts                # Logout action
+│   ├── plays.ts                 # Play/drill management (practice planner)
+│   └── practice-sessions.ts     # Practice session management
 ├── auth/                        # Authentication utilities
 │   ├── config.ts                # Auth.js configuration
 │   └── session.ts               # Session helpers (requireAuth, requireTeamAdmin, etc.)
@@ -166,6 +172,8 @@ const userId = await requireUserId(); // Throws and redirects if not authenticat
 **Key Auth Helpers** (`lib/auth/session.ts`):
 - `requireAuth()` - Redirects to login if not authenticated, returns session
 - `requireUserId()` - Returns userId or redirects to login
+
+**Auth Error Handling**: Login/signup pages display user-friendly error messages (not raw exceptions). Auth Server Actions return structured `ActionResult` with descriptive error strings for the UI.
 - `requireTeamAdmin(teamId)` - Ensures user is ADMIN role for team
 - `requireTeamMember(teamId)` - Ensures user belongs to team
 - `requireLeagueRole(leagueId, role)` - Ensures user has required league role
@@ -256,7 +264,7 @@ export default async function RosterPage({ params }: { params: { teamId: string 
 4. **SQL Injection Prevention**: Prisma ORM with parameterized queries (no raw SQL)
 5. **XSS Prevention**: React's built-in escaping + CSP headers
 6. **CSRF Protection**: Auth.js built-in token validation
-7. **HTTPS Enforcement**: Middleware redirects HTTP to HTTPS in production
+7. **HTTPS Enforcement**: Proxy (`proxy.ts`) redirects HTTP to HTTPS in production
 8. **Rate Limiting**: Applied to API routes (auth: 5 req/15min, general: 100 req/15min)
 9. **Security Headers**: Configured in `next.config.ts` (HSTS, CSP, X-Frame-Options, etc.)
 10. **Password Security**: Minimum length 8 chars, bcrypt hashing
@@ -334,7 +342,7 @@ bun run dev
 
 **Migration commands**:
 - Development: `bun run db:migrate` (creates migration files and applies them)
-- Production: `bun run db:migrate:deploy` (applies existing migrations, runs in postinstall script)
+- Production: `bun run db:migrate:deploy` (applies existing migrations)
 - Prototyping: `bun run db:push` (skips migration files, direct schema push)
 
 **Important**: Always commit both `schema.prisma` and migration files together.
@@ -411,21 +419,23 @@ describe('Feature Name', () => {
 6. **Emergency contacts are admin-only** - Never expose to regular members
 7. **Player vs User distinction** - Player is roster entry, User is authenticated account
 8. **League relationships are optional** - Teams can exist standalone (leagueId is nullable)
+9. **Zod v4 is in use** - API differs from Zod v3 (e.g., `z.string().min()` still works, but some advanced patterns changed)
+10. **`proxy.ts` not `middleware.ts`** - Next.js 16 renamed middleware to proxy; runs on Node.js runtime
 
-### Middleware Configuration
+### Proxy Configuration
 
-**Middleware** (`middleware.ts`) handles:
+**Proxy** (`proxy.ts`, Next.js 16 replacement for `middleware.ts`) handles:
 - HTTPS enforcement in production
 - Rate limiting for API routes (auth: 5 req/15min, general: 100 req/15min)
-- Security header injection
-- Applied to all routes except static files
+- Security header injection (X-Robots-Tag)
+- Applied to all routes except static files (`_next/static`, `_next/image`, `favicon.ico`)
 
 ### Deployment Notes
 
 **Automatic on Vercel** (configured in `vercel.json`):
 - Build command: `bun run build`
 - Install command: `bun install`
-- Database migrations: Run automatically via `postinstall` script
+- Prisma Client generation: Runs automatically via `postinstall` script (`prisma generate`)
 - Environment variables: Must be configured in Vercel dashboard
 
 **Pre-deployment checklist**:
@@ -464,7 +474,7 @@ See `.github/AUTOMATION.md` for full CI/CD details.
 - `.github/AUTOMATION.md` - CI/CD and release automation
 
 **External Documentation**:
-- Next.js 15: https://nextjs.org/docs
+- Next.js 16: https://nextjs.org/docs
 - React 19: https://react.dev
 - MUI v7: https://mui.com/material-ui/
 - Prisma: https://www.prisma.io/docs
