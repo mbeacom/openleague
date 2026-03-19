@@ -188,7 +188,7 @@ export async function updateEvent(
     }
 
     // Check authentication and authorization - only ADMIN can update events
-    await requireTeamAdmin(existingEvent.teamId);
+    const currentUserId = await requireTeamAdmin(existingEvent.teamId);
 
     // Check venue availability if venueId and endAt are provided
     const venueId = validated.venueId || null;
@@ -202,6 +202,11 @@ export async function updateEvent(
       }
       if (!venue.isActive) {
         return { success: false, error: "Selected venue is no longer active" };
+      }
+      // Validate team/league has access to this venue
+      const hasAccess = await checkVenueAccess(currentUserId, venue);
+      if (!hasAccess) {
+        return { success: false, error: "Your team does not have access to this venue" };
       }
       if (validated.endAt) {
         const conflicts = await findVenueConflicts(venueId, validated.startAt, validated.endAt, validated.id);
