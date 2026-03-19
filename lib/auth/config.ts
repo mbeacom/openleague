@@ -6,6 +6,12 @@ import { prisma } from "@/lib/db/prisma";
 import { env, isProduction, isDevelopment } from "@/lib/env";
 import { AUTH_ERROR_CODES } from "@/lib/config/constants";
 
+function throwCredentialsError(code: string): never {
+  const err = new CredentialsSignin();
+  err.code = code;
+  throw err;
+}
+
 export const authOptions: NextAuthConfig = {
   providers: [
     CredentialsProvider({
@@ -16,9 +22,7 @@ export const authOptions: NextAuthConfig = {
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
-          const err = new CredentialsSignin();
-          err.code = AUTH_ERROR_CODES.INVALID_CREDENTIALS;
-          throw err;
+          throwCredentialsError(AUTH_ERROR_CODES.INVALID_CREDENTIALS);
         }
 
         const email = credentials.email as string;
@@ -30,25 +34,19 @@ export const authOptions: NextAuthConfig = {
         });
 
         if (!user) {
-          const err = new CredentialsSignin();
-          err.code = AUTH_ERROR_CODES.INVALID_CREDENTIALS;
-          throw err;
+          throwCredentialsError(AUTH_ERROR_CODES.INVALID_CREDENTIALS);
         }
 
         // Verify password
         const isPasswordValid = await compare(password, user.passwordHash);
 
         if (!isPasswordValid) {
-          const err = new CredentialsSignin();
-          err.code = AUTH_ERROR_CODES.INVALID_CREDENTIALS;
-          throw err;
+          throwCredentialsError(AUTH_ERROR_CODES.INVALID_CREDENTIALS);
         }
 
         // Check if user is approved
         if (!user.approved) {
-          const err = new CredentialsSignin();
-          err.code = AUTH_ERROR_CODES.ACCOUNT_NOT_APPROVED;
-          throw err;
+          throwCredentialsError(AUTH_ERROR_CODES.ACCOUNT_NOT_APPROVED);
         }
 
         // Return user object (will be stored in JWT)

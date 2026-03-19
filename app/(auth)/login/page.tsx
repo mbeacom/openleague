@@ -111,13 +111,15 @@ function LoginForm() {
       });
 
       if (result?.error) {
-        // Auth.js v5 passes the CredentialsSignin.code via result.code
-        // Map error codes to user-friendly messages
-        const errorCode = result.code;
-        if (errorCode === AUTH_ERROR_CODES.ACCOUNT_NOT_APPROVED) {
+        // Auth.js v5 may pass the custom code via result.code or embed it in result.error
+        const errorCode = result.code || result.error;
+
+        if (errorCode?.includes(AUTH_ERROR_CODES.ACCOUNT_NOT_APPROVED)) {
           setGeneralError(AUTH_MESSAGES.ACCOUNT_NOT_APPROVED);
-        } else {
+        } else if (errorCode?.includes(AUTH_ERROR_CODES.INVALID_CREDENTIALS)) {
           setGeneralError("Invalid email or password");
+        } else {
+          setGeneralError("Unable to sign in. Please try again.");
         }
         return;
       }
