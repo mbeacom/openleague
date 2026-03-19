@@ -41,7 +41,7 @@ export async function createEvent(
     const validated = createEventSchema.parse(input);
 
     // Check authentication and authorization - only ADMIN can create events
-    await requireTeamAdmin(validated.teamId);
+    const currentUserId = await requireTeamAdmin(validated.teamId);
 
     // Get all team members to initialize RSVPs
     const allTeamMembers = await prisma.teamMember.findMany({
@@ -67,15 +67,9 @@ export async function createEvent(
         return { success: false, error: "Selected venue is no longer active" };
       }
       // Validate team/league has access to this venue
-      const userId = (await prisma.teamMember.findFirst({
-        where: { teamId: validated.teamId, role: "ADMIN" },
-        select: { userId: true },
-      }))?.userId;
-      if (userId) {
-        const hasAccess = await checkVenueAccess(userId, venue);
-        if (!hasAccess) {
-          return { success: false, error: "Your team does not have access to this venue" };
-        }
+      const hasAccess = await checkVenueAccess(currentUserId, venue);
+      if (!hasAccess) {
+        return { success: false, error: "Your team does not have access to this venue" };
       }
       if (validated.endAt) {
         const conflicts = await findVenueConflicts(venueId, validated.startAt, validated.endAt);
