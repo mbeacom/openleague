@@ -113,18 +113,18 @@ export async function getCalendarData(): Promise<{
   teamName: string;
   upcomingEvents: Array<{
     id: string;
-    type: string;
+    type: "GAME" | "PRACTICE";
     title: string;
     startAt: string;
-    location: string | null;
+    location: string;
     opponent: string | null;
   }>;
   pastEvents: Array<{
     id: string;
-    type: string;
+    type: "GAME" | "PRACTICE";
     title: string;
     startAt: string;
-    location: string | null;
+    location: string;
     opponent: string | null;
   }>;
 } | null> {
