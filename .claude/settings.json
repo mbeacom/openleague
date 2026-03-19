@@ -1,0 +1,48 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bun run test)",
+      "Bash(bun run test:watch)",
+      "Bash(bun run test:coverage)",
+      "Bash(bun run test:ui)",
+      "Bash(bun run lint)",
+      "Bash(bun run type-check)",
+      "Bash(bun run db:generate)",
+      "Bash(bun run db:studio)",
+      "Bash(bun run validate-env)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "case \"$CLAUDE_FILE_PATH\" in *.env|*.env.local|*.env.production|*.env.development|bun.lock|bun.lockb) echo 'BLOCKED: Do not edit env or lock files directly' && exit 1;; *) exit 0;; esac"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "case \"$CLAUDE_FILE_PATH\" in *.ts|*.tsx|*.js|*.jsx|*.mjs) npx eslint --fix \"$CLAUDE_FILE_PATH\" || echo \"ESLint reported issues in $CLAUDE_FILE_PATH\";; esac"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "case \"$CLAUDE_FILE_PATH\" in */schema.prisma) bun run db:generate && bun run type-check || echo 'Type errors found after schema change';; esac"
+          }
+        ]
+      }
+    ]
+  }
+}
