@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db/prisma";
 import { requireTeamAdmin, requireTeamMember, requireUserId } from "@/lib/auth/session";
 import { revalidatePath } from "next/cache";
 import { sendEventNotifications } from "@/lib/email/templates";
+import { findVenueConflicts } from "@/lib/actions/venues";
 import {
   createEventSchema,
   updateEventSchema,
@@ -52,13 +53,35 @@ export async function createEvent(
       },
     });
 
+    // Check venue availability if venueId and endAt are provided
+    const venueId = validated.venueId || null;
+    if (venueId && validated.endAt) {
+      const conflicts = await findVenueConflicts(venueId, validated.startAt, validated.endAt);
+      if (conflicts.length > 0) {
+        return {
+          success: false,
+          error: `Venue is already booked at this time by ${conflicts[0].teamName} (${conflicts[0].title})`,
+          details: conflicts,
+        };
+      }
+    }
+
+    // If venueId provided, auto-populate location from venue name
+    let location = validated.location;
+    if (venueId) {
+      const venue = await prisma.venue.findUnique({ where: { id: venueId }, select: { name: true } });
+      if (venue) location = venue.name;
+    }
+
     // Create event with RSVPs for all team members
     const event = await prisma.event.create({
       data: {
         type: validated.type,
         title: validated.title,
         startAt: validated.startAt,
-        location: validated.location,
+        endAt: validated.endAt || null,
+        location,
+        venueId,
         opponent: validated.opponent || null,
         notes: validated.notes || null,
         teamId: validated.teamId,
@@ -150,6 +173,26 @@ export async function updateEvent(
     // Check authentication and authorization - only ADMIN can update events
     await requireTeamAdmin(existingEvent.teamId);
 
+    // Check venue availability if venueId and endAt are provided
+    const venueId = validated.venueId || null;
+    if (venueId && validated.endAt) {
+      const conflicts = await findVenueConflicts(venueId, validated.startAt, validated.endAt, validated.id);
+      if (conflicts.length > 0) {
+        return {
+          success: false,
+          error: `Venue is already booked at this time by ${conflicts[0].teamName} (${conflicts[0].title})`,
+          details: conflicts,
+        };
+      }
+    }
+
+    // If venueId provided, auto-populate location from venue name
+    let location = validated.location;
+    if (venueId) {
+      const venue = await prisma.venue.findUnique({ where: { id: venueId }, select: { name: true } });
+      if (venue) location = venue.name;
+    }
+
     // Update the event
     const event = await prisma.event.update({
       where: { id: validated.id },
@@ -157,7 +200,9 @@ export async function updateEvent(
         type: validated.type,
         title: validated.title,
         startAt: validated.startAt,
-        location: validated.location,
+        endAt: validated.endAt || null,
+        location,
+        venueId,
         opponent: validated.opponent || null,
         notes: validated.notes || null,
       },

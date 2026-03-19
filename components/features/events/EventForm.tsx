@@ -20,6 +20,7 @@ import type { CreateEventInput } from "@/lib/utils/validation";
 import { createEventSchema, updateEventSchema } from "@/lib/utils/validation";
 import { formatDateTimeLocal } from "@/lib/utils/date";
 import { trackEventAction } from "@/lib/analytics/umami";
+import VenueSelector from "@/components/features/venues/VenueSelector";
 
 interface EventFormProps {
   teamId: string;
@@ -28,7 +29,9 @@ interface EventFormProps {
     type: "GAME" | "PRACTICE";
     title: string;
     startAt: Date;
+    endAt?: Date;
     location: string;
+    venueId?: string;
     opponent: string;
     notes: string;
   };
@@ -46,7 +49,9 @@ export default function EventForm({
     type: initialData?.type || "PRACTICE",
     title: initialData?.title || "",
     startAt: initialData?.startAt || new Date(),
+    endAt: initialData?.endAt || undefined,
     location: initialData?.location || "",
+    venueId: initialData?.venueId || "",
     opponent: initialData?.opponent || "",
     notes: initialData?.notes || "",
     teamId,
@@ -74,10 +79,24 @@ export default function EventForm({
   };
 
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { value } = e.target;
-    setFormData((prev) => ({ ...prev, startAt: new Date(value) }));
+    const { name, value } = e.target;
+    if (name === "endAt") {
+      setFormData((prev) => ({ ...prev, endAt: value ? new Date(value) : undefined }));
+      setFieldErrors((prev) => ({ ...prev, endAt: undefined }));
+    } else {
+      setFormData((prev) => ({ ...prev, startAt: new Date(value) }));
+      setFieldErrors((prev) => ({ ...prev, startAt: undefined }));
+    }
     setError(null);
-    setFieldErrors((prev) => ({ ...prev, startAt: undefined }));
+  };
+
+  const handleVenueChange = (venueId: string, venueName: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      venueId: venueId || "",
+      location: venueName || prev.location,
+    }));
+    setError(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -195,7 +214,7 @@ export default function EventForm({
       />
 
       <TextField
-        label="Date & Time"
+        label="Start Date & Time"
         name="startAt"
         type="datetime-local"
         value={formatDateTimeLocal(formData.startAt)}
@@ -204,10 +223,29 @@ export default function EventForm({
         fullWidth
         disabled={isSubmitting}
         error={!!fieldErrors.startAt}
-        helperText={fieldErrors.startAt || "Select the event date and time"}
-        InputLabelProps={{
-          shrink: true,
-        }}
+        helperText={fieldErrors.startAt || "Select the event start time"}
+        slotProps={{ inputLabel: { shrink: true } }}
+      />
+
+      <TextField
+        label="End Date & Time (optional)"
+        name="endAt"
+        type="datetime-local"
+        value={formData.endAt ? formatDateTimeLocal(formData.endAt) : ""}
+        onChange={handleDateChange}
+        fullWidth
+        disabled={isSubmitting}
+        error={!!fieldErrors.endAt}
+        helperText={fieldErrors.endAt || "Set an end time for ice time scheduling"}
+        slotProps={{ inputLabel: { shrink: true } }}
+      />
+
+      <VenueSelector
+        value={formData.venueId || ""}
+        onChange={handleVenueChange}
+        disabled={isSubmitting}
+        error={!!fieldErrors.venueId}
+        helperText={fieldErrors.venueId}
       />
 
       <TextField
@@ -220,7 +258,7 @@ export default function EventForm({
         disabled={isSubmitting}
         placeholder="e.g., Main Field, Community Center"
         error={!!fieldErrors.location}
-        helperText={fieldErrors.location}
+        helperText={fieldErrors.location || (formData.venueId ? "Auto-filled from venue" : "")}
       />
 
       {formData.type === "GAME" && (
