@@ -101,14 +101,14 @@ export async function createGameSchedule(
       throw genError;
     }
 
-    revalidatePath("/schedules");
-
     if (!generationResult.success) {
       // Schedule was created but game generation returned a failure — clean up
       await prisma.scheduleGame.deleteMany({ where: { gameScheduleId: schedule.id } });
       await prisma.gameSchedule.delete({ where: { id: schedule.id } });
       return { success: false, error: generationResult.error };
     }
+
+    revalidatePath("/schedules");
 
     return {
       success: true,
