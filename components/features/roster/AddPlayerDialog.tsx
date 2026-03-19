@@ -30,7 +30,7 @@ export default function AddPlayerDialog({
   player,
 }: AddPlayerDialogProps) {
   const isEditing = !!player;
-  const { showSuccess, showError } = useToast();
+  const { showSuccess, showError, showWarning } = useToast();
 
   const [formData, setFormData] = useState<AddPlayerInput>({
     name: "",
@@ -151,7 +151,7 @@ export default function AddPlayerDialog({
       } else {
         // Success — show warning if duplicate jersey number
         if ("warning" in result && result.warning) {
-          showError(result.warning);
+          showWarning(result.warning);
         }
         showSuccess(
           isEditing
@@ -263,10 +263,14 @@ export default function AddPlayerDialog({
               value={formData.jerseyNumber ?? ""}
               onChange={(e) => {
                 const val = e.target.value;
-                setFormData((prev) => ({
-                  ...prev,
-                  jerseyNumber: val === "" ? null : parseInt(val, 10),
-                }));
+                if (val === "") {
+                  setFormData((prev) => ({ ...prev, jerseyNumber: null }));
+                } else {
+                  const num = Number(val);
+                  if (!Number.isNaN(num) && Number.isInteger(num)) {
+                    setFormData((prev) => ({ ...prev, jerseyNumber: num }));
+                  }
+                }
                 if (errors.jerseyNumber) {
                   setErrors((prev) => { const n = { ...prev }; delete n.jerseyNumber; return n; });
                 }

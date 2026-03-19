@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
-import { requireUserId, requireTeamAdmin } from "@/lib/auth/session";
+import { getCurrentUserId, isTeamAdmin } from "@/lib/auth/session";
 import { toCsvContent } from "@/lib/utils/csv";
 
 export async function GET(request: Request) {
@@ -11,10 +11,15 @@ export async function GET(request: Request) {
       return new Response("Bad Request", { status: 400 });
     }
 
-    await requireUserId();
+    const userId = await getCurrentUserId();
+    if (!userId) {
+      return new Response("Unauthorized", { status: 401 });
+    }
 
-    // Verify user is admin for this team
-    await requireTeamAdmin(teamId);
+    const admin = await isTeamAdmin(userId, teamId);
+    if (!admin) {
+      return new Response("Forbidden", { status: 403 });
+    }
 
     // Fetch team name for filename
     const team = await prisma.team.findUnique({
@@ -53,7 +58,7 @@ export async function GET(request: Request) {
     ]);
 
     const headers = [
-      "Type",
+      "Role",
       "Name",
       "Email",
       "Phone",
@@ -91,7 +96,8 @@ export async function GET(request: Request) {
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-|-$/g, "");
-    const filename = `${teamSlug}-roster.csv`;
+    const date = new Date().toISOString().slice(0, 10);
+    const filename = `roster-${teamSlug}-${date}.csv`;
 
     return new Response(csvContent, {
       status: 200,
@@ -102,16 +108,6 @@ export async function GET(request: Request) {
       },
     });
   } catch (error) {
-    if (error instanceof Error && error.message.startsWith("Unauthorized")) {
-      return new Response("Forbidden", { status: 403 });
-    }
-    // requireUserId redirects unauthenticated users — treat as 401
-    if (
-      error instanceof Error &&
-      (error.message.includes("NEXT_REDIRECT") || error.message.includes("redirect"))
-    ) {
-      return new Response("Unauthorized", { status: 401 });
-    }
     console.error("Error exporting roster:", error);
     return new Response("Failed to export roster", { status: 500 });
   }

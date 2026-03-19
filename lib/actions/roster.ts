@@ -123,8 +123,8 @@ export async function updatePlayer(input: UpdatePlayerInput) {
         phone: validated.phone || null,
         emergencyContact: validated.emergencyContact || null,
         emergencyPhone: validated.emergencyPhone || null,
-        jerseyNumber: validated.jerseyNumber ?? null,
-        usahMemberId: validated.usahMemberId || null,
+        ...(validated.jerseyNumber !== undefined && { jerseyNumber: validated.jerseyNumber }),
+        ...(validated.usahMemberId !== undefined && { usahMemberId: validated.usahMemberId || null }),
       },
     });
 
@@ -373,9 +373,14 @@ export async function updateTeamMemberUsahId(input: UpdateTeamMemberUsahIdInput)
       return { success: false as const, error: "Unauthorized: Team member does not belong to this team" };
     }
 
+    const updateData: { usahMemberId?: string | null } = {};
+    if (validated.usahMemberId !== undefined) {
+      updateData.usahMemberId = validated.usahMemberId || null;
+    }
+
     const updated = await prisma.teamMember.update({
       where: { id: validated.teamMemberId },
-      data: { usahMemberId: validated.usahMemberId || null },
+      data: updateData,
       select: { id: true, usahMemberId: true },
     });
 
