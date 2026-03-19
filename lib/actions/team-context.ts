@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db/prisma";
 import { requireUserId } from "@/lib/auth/session";
+import type { Player } from "@/types/roster";
 
 export type TeamContext = {
   teamId: string;
@@ -176,7 +177,13 @@ export async function getRosterData(): Promise<{
   teamId: string;
   teamName: string;
   isAdmin: boolean;
-  players: Awaited<ReturnType<typeof prisma.player.findMany>>;
+  players: Player[];
+  teamMembers: Array<{
+    id: string;
+    role: string;
+    usahMemberId: string | null;
+    user: { id: string; name: string | null; email: string };
+  }>;
   invitations: Array<{
     id: string;
     email: string;
@@ -198,10 +205,32 @@ export async function getRosterData(): Promise<{
   const teamId = teamMember.team.id;
   const isAdmin = teamMember.role === "ADMIN";
 
-  const [players, rawInvitations] = await Promise.all([
+  const [players, teamMembers, rawInvitations] = await Promise.all([
     prisma.player.findMany({
       where: { teamId },
       orderBy: { name: "asc" },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        emergencyContact: isAdmin,
+        emergencyPhone: isAdmin,
+        jerseyNumber: true,
+        // FR-008: USAH Member IDs are admin-only — must not appear in non-admin queries
+        usahMemberId: isAdmin,
+      },
+    }),
+    prisma.teamMember.findMany({
+      where: { teamId },
+      select: {
+        id: true,
+        role: true,
+        // FR-008: USAH Member IDs are admin-only
+        usahMemberId: isAdmin,
+        user: { select: { id: true, name: true, email: true } },
+      },
+      orderBy: [{ role: "asc" }, { joinedAt: "asc" }],
     }),
     isAdmin
       ? prisma.invitation.findMany({
@@ -230,6 +259,7 @@ export async function getRosterData(): Promise<{
     teamName: teamMember.team.name,
     isAdmin,
     players,
+    teamMembers,
     invitations,
   };
 }

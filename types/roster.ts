@@ -12,6 +12,8 @@ export type Player = {
   phone: string | null;
   emergencyContact: string | null;
   emergencyPhone: string | null;
+  jerseyNumber: number | null;
+  usahMemberId: string | null; // admin-only — must not appear in non-admin query selects
 };
 
 // Player with team and division relations (for league roster views)
@@ -49,6 +51,19 @@ export type TeamWithDivision = {
     name: string;
     ageGroup: string | null;
   } | null;
+};
+
+// Team member with user info (for admin views — includes usahMemberId)
+export type TeamMemberWithUser = {
+  id: string;
+  role: "ADMIN" | "MEMBER";
+  joinedAt: Date;
+  usahMemberId: string | null; // admin-only
+  user: {
+    id: string;
+    name: string | null;
+    email: string;
+  };
 };
 
 // Division type (for filtering/organization)

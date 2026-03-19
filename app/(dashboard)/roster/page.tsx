@@ -36,6 +36,7 @@ export default async function RosterPage() {
 
         <RosterList
           players={data.players}
+          teamMembers={data.teamMembers}
           teamId={data.teamId}
           isAdmin={data.isAdmin}
         />

@@ -88,11 +88,40 @@ export const addPlayerSchema = z.object({
   emergencyContact: optionalSanitizedString(100),
   emergencyPhone: optionalSanitizedString(20),
   teamId: z.string().cuid("Invalid team ID format"),
+  jerseyNumber: z
+    .number()
+    .int("Jersey number must be a whole number")
+    .min(1, "Jersey number must be between 1 and 99")
+    .max(99, "Jersey number must be between 1 and 99")
+    .nullable()
+    .optional(),
+  usahMemberId: z
+    .string()
+    .trim()
+    .max(20, "USA Hockey Member ID must be 20 characters or fewer")
+    .regex(/^[a-zA-Z0-9]*$/, "USA Hockey Member ID must be alphanumeric")
+    .nullable()
+    .optional(),
 });
 
 export const updatePlayerSchema = addPlayerSchema.extend({
   id: z.string().min(1, "Player ID is required"),
 });
+
+// Team member USAH ID update schema
+export const updateTeamMemberUsahIdSchema = z.object({
+  teamMemberId: z.string().cuid("Invalid team member ID format"),
+  teamId: z.string().cuid("Invalid team ID format"),
+  usahMemberId: z
+    .string()
+    .trim()
+    .max(20, "USA Hockey Member ID must be 20 characters or fewer")
+    .regex(/^[a-zA-Z0-9]*$/, "USA Hockey Member ID must be alphanumeric")
+    .nullable()
+    .optional(),
+});
+
+export type UpdateTeamMemberUsahIdInput = z.infer<typeof updateTeamMemberUsahIdSchema>;
 
 // Event validation schemas
 const baseEventSchema = z.object({
