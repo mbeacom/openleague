@@ -62,8 +62,9 @@ export default function ScheduleBuilder({
   });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    const { name, value, type } = e.target as HTMLInputElement;
+    const parsed = type === "number" ? (value === "" ? "" : Number(value)) : value;
+    setFormData((prev) => ({ ...prev, [name]: parsed }));
     setError(null);
   };
 
