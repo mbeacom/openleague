@@ -79,23 +79,33 @@ export async function createGameSchedule(
     });
 
     // Generate round-robin games
-    const generationResult = await generateRoundRobinGames(
-      schedule.id,
-      validated.teamIds,
-      validated.venueIds,
-      validated.startDate,
-      validated.endDate,
-      validated.rounds,
-      validated.gameDurationMinutes,
-      validated.dayOfWeek,
-      validated.preferredStartTime,
-      validated.leagueId || null
-    );
+    let generationResult: ActionResult<{ gamesCreated: number; conflicts: string[] }>;
+    try {
+      generationResult = await generateRoundRobinGames(
+        schedule.id,
+        validated.teamIds,
+        validated.venueIds,
+        validated.startDate,
+        validated.endDate,
+        validated.rounds,
+        validated.gameDurationMinutes,
+        validated.dayOfWeek,
+        validated.preferredStartTime,
+        validated.leagueId || null
+      );
+    } catch (genError) {
+      // Game generation threw — clean up the orphaned schedule and any partial games
+      console.error("Game generation threw an exception, cleaning up schedule:", genError);
+      await prisma.scheduleGame.deleteMany({ where: { gameScheduleId: schedule.id } });
+      await prisma.gameSchedule.delete({ where: { id: schedule.id } });
+      throw genError;
+    }
 
     revalidatePath("/schedules");
 
     if (!generationResult.success) {
-      // Schedule was created but game generation failed — clean up
+      // Schedule was created but game generation returned a failure — clean up
+      await prisma.scheduleGame.deleteMany({ where: { gameScheduleId: schedule.id } });
       await prisma.gameSchedule.delete({ where: { id: schedule.id } });
       return { success: false, error: generationResult.error };
     }
