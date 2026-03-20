@@ -37,11 +37,11 @@ export async function getMigrationSuggestions(userId: string): Promise<{
   }>;
 }> {
   const teams = await prisma.teamMember.findMany({
-    where: { 
+    where: {
       userId,
       role: "ADMIN", // Only suggest migration for teams user administers
     },
-    include: {
+    select: {
       team: {
         select: {
           id: true,

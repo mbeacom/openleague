@@ -65,7 +65,10 @@ export async function getDashboardData() {
 
   const teams = await prisma.teamMember.findMany({
     where: { userId },
-    include: {
+    select: {
+      id: true,
+      role: true,
+      joinedAt: true,
       team: {
         select: {
           id: true,

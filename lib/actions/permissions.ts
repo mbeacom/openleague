@@ -611,7 +611,11 @@ export async function getTeamMembersWithRoles(
         // Get team members with their roles
         const teamMembers = await prisma.teamMember.findMany({
             where: { teamId },
-            include: {
+            select: {
+                id: true,
+                role: true,
+                joinedAt: true,
+                userId: true,
                 user: {
                     select: {
                         id: true,
