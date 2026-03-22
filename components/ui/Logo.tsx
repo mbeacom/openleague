@@ -161,19 +161,12 @@ export default function Logo({
     display: 'flex',
     alignItems: 'center',
     gap: showText || showTextResponsive ? 1.5 : 0,
+    ...(variant === 'default' && {
+      transition: 'transform 0.2s ease-in-out',
+      '&:hover': { transform: 'scale(1.05)' },
+    }),
     ...sx,
   };
-
-  // Interactive styles for default variant
-  const interactiveStyles: SxProps<Theme> = variant === 'default' ? {
-    textDecoration: 'none',
-    color: 'inherit',
-    transition: 'transform 0.2s ease-in-out',
-    '&:hover': {
-      transform: 'scale(1.05)',
-    },
-    cursor: 'pointer',
-  } : {};
 
   const logoImage = (
     <Image
@@ -207,16 +200,12 @@ export default function Logo({
 
   // Render with link wrapper if applicable
   if (linkHref) {
-    const combinedStyles = { ...baseStyles, ...interactiveStyles };
     return (
-      <Box
-        component={Link}
-        href={linkHref}
-        sx={combinedStyles}
-        className={className}
-      >
-        {logoContent}
-      </Box>
+      <Link href={linkHref} style={{ textDecoration: 'none', color: 'inherit' }} className={className}>
+        <Box sx={baseStyles}>
+          {logoContent}
+        </Box>
+      </Link>
     );
   }
 
