@@ -37,7 +37,7 @@ export async function getUserMode(userId: string): Promise<{
   // Get user's team memberships
   const teamMembers = await prisma.teamMember.findMany({
     where: { userId },
-    include: {
+    select: {
       team: {
         select: {
           id: true,
