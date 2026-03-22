@@ -65,7 +65,7 @@
     "eslint": "^9.39.4",
     "eslint-config-next": "16.2.0",
     "eslint-plugin-react": "^7.37.5",
-    "jsdom": "^29.0.0",
+    "jsdom": "^29.0.1",
     "postcss": "^8.5.8",
     "prisma": "^7.5.0",
     "tailwindcss": "^4.2.2",
