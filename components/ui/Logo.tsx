@@ -187,7 +187,7 @@ export default function Logo({
           component="div"
           sx={{
             fontWeight: 700,
-            color: variant === 'footer' ? 'text.primary' : 'primary.main',
+            color: variant === 'footer' ? 'text.primary' : 'inherit',
             letterSpacing: '-0.02em',
             display: textDisplay,
           }}

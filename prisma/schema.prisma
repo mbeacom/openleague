@@ -63,11 +63,23 @@ model AuditLog {
   @@index([severity])
 }
 
+enum Sport {
+  HOCKEY
+  LACROSSE
+  SOCCER
+  BASKETBALL
+  BASEBALL
+  SOFTBALL
+  FOOTBALL
+  VOLLEYBALL
+  OTHER
+}
+
 // Team model
 model Team {
   id        String   @id @default(cuid())
   name      String
-  sport     String
+  sport     Sport    @default(HOCKEY)
   season    String
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
@@ -251,7 +263,7 @@ enum InvitationStatus {
 model League {
   id           String   @id @default(cuid())
   name         String
-  sport        String
+  sport        Sport    @default(HOCKEY)
   contactEmail String
   contactPhone String?
   isActive     Boolean  @default(true)

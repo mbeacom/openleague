@@ -20,7 +20,10 @@ export async function getUserTeamContext(): Promise<TeamContext | null> {
 
   const teamMember = await prisma.teamMember.findFirst({
     where: { userId },
-    include: { team: { select: { id: true, name: true } } },
+    select: {
+      role: true,
+      team: { select: { id: true, name: true } },
+    },
     orderBy: { joinedAt: "desc" },
   });
 
@@ -43,7 +46,10 @@ export async function getUserAdminTeamContext(): Promise<TeamContext | null> {
 
   const teamMember = await prisma.teamMember.findFirst({
     where: { userId, role: "ADMIN" },
-    include: { team: { select: { id: true, name: true } } },
+    select: {
+      role: true,
+      team: { select: { id: true, name: true } },
+    },
     orderBy: { joinedAt: "desc" },
   });
 
@@ -136,7 +142,9 @@ export async function getCalendarData(): Promise<{
 
   const teamMember = await prisma.teamMember.findFirst({
     where: { userId },
-    include: { team: { select: { id: true, name: true } } },
+    select: {
+      team: { select: { id: true, name: true } },
+    },
     orderBy: { joinedAt: "desc" },
   });
 
@@ -199,7 +207,10 @@ export async function getRosterData(): Promise<{
 
   const teamMember = await prisma.teamMember.findFirst({
     where: { userId },
-    include: { team: { select: { id: true, name: true } } },
+    select: {
+      role: true,
+      team: { select: { id: true, name: true } },
+    },
     orderBy: { joinedAt: "desc" },
   });
 

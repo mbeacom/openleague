@@ -139,8 +139,18 @@ export async function migrateTeamToLeague(
         userId,
         role: "ADMIN",
       },
-      include: {
-        team: true,
+      select: {
+        id: true,
+        team: {
+          select: {
+            id: true,
+            name: true,
+            sport: true,
+            season: true,
+            isActive: true,
+            leagueId: true,
+          },
+        },
       },
     });
 
@@ -494,6 +504,7 @@ export async function verifyTeamAdminInLeague(
           leagueId,
         },
       },
+      select: { id: true },
     });
 
     return !!teamMember;

@@ -18,7 +18,14 @@ import {
 } from '@mui/material';
 import { useRouter } from 'next/navigation';
 import { addTeamToLeague } from '@/lib/actions/league';
-import { addTeamToLeagueSchema, type AddTeamToLeagueInput } from '@/lib/utils/validation';
+import {
+  addTeamToLeagueSchema,
+  type AddTeamToLeagueInput,
+  SPORTS,
+  SPORT_LABELS,
+  FEATURED_SPORTS,
+  type SportValue,
+} from '@/lib/utils/validation';
 
 interface CreateLeagueTeamFormProps {
   leagueId: string;
@@ -41,9 +48,14 @@ export default function CreateLeagueTeamForm({
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof Omit<AddTeamToLeagueInput, 'leagueId'>, string>>>({});
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    name: string;
+    sport: SportValue;
+    season: string;
+    divisionId: string;
+  }>({
     name: '',
-    sport: '',
+    sport: 'HOCKEY',
     season: '',
     divisionId: preselectedDivisionId || '',
   });
@@ -163,17 +175,25 @@ export default function CreateLeagueTeamForm({
               />
 
               <TextField
+                select
                 label="Sport"
                 value={formData.sport}
                 onChange={(e) => handleInputChange('sport', e.target.value)}
-                onBlur={() => handleBlur('sport')}
                 required
                 fullWidth
-                placeholder="e.g., Hockey, Soccer, Basketball"
                 disabled={loading}
                 error={!!fieldErrors.sport}
                 helperText={fieldErrors.sport}
-              />
+              >
+                {([...FEATURED_SPORTS, ...SPORTS.filter(s => !FEATURED_SPORTS.includes(s))] as SportValue[]).map((sport, index) => [
+                  index === FEATURED_SPORTS.length && (
+                    <MenuItem key="divider" disabled divider sx={{ opacity: 0 }} />
+                  ),
+                  <MenuItem key={sport} value={sport}>
+                    {SPORT_LABELS[sport]}
+                  </MenuItem>,
+                ])}
+              </TextField>
 
               <TextField
                 label="Season"

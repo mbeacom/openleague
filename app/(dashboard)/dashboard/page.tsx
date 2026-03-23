@@ -6,6 +6,7 @@ import {
   CalendarToday as CalendarIcon,
   ArrowForward as ArrowForwardIcon,
 } from "@mui/icons-material";
+import OnboardingFlow from "@/components/features/onboarding/OnboardingFlow";
 import CreateTeamForm from "@/components/features/team/CreateTeamForm";
 import TeamCard from "@/components/features/dashboard/TeamCard";
 import { getUserMode } from "@/lib/utils/league-mode";
@@ -23,34 +24,7 @@ export default async function DashboardPage() {
   if (teams.length === 0 && userMode.leagues.length === 0) {
     return (
       <Container maxWidth="md">
-        <Box
-          sx={{
-            minHeight: "80vh",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            py: 4,
-          }}
-        >
-          <Typography
-            variant="h4"
-            component="h1"
-            gutterBottom
-            sx={{ textAlign: "center", mb: 2 }}
-          >
-            Welcome to OpenLeague
-          </Typography>
-          <Typography
-            variant="body1"
-            color="text.secondary"
-            sx={{ textAlign: "center", mb: 4, maxWidth: 500 }}
-          >
-            Get started by creating your first team. You&apos;ll be able to manage
-            your roster, schedule events, and track attendance all in one place.
-          </Typography>
-          <CreateTeamForm />
-        </Box>
+        <OnboardingFlow />
       </Container>
     );
   }

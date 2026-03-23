@@ -1,5 +1,39 @@
 import { z } from "zod";
 
+// Sport enum — must match the Prisma Sport enum exactly
+export const SPORTS = [
+  "HOCKEY",
+  "LACROSSE",
+  "SOCCER",
+  "BASKETBALL",
+  "BASEBALL",
+  "SOFTBALL",
+  "FOOTBALL",
+  "VOLLEYBALL",
+  "OTHER",
+] as const;
+
+export type SportValue = (typeof SPORTS)[number];
+
+export const SPORT_LABELS: Record<SportValue, string> = {
+  HOCKEY: "Hockey",
+  LACROSSE: "Lacrosse",
+  SOCCER: "Soccer",
+  BASKETBALL: "Basketball",
+  BASEBALL: "Baseball",
+  SOFTBALL: "Softball",
+  FOOTBALL: "Football",
+  VOLLEYBALL: "Volleyball",
+  OTHER: "Other",
+};
+
+// Sports that appear first (primary focus)
+export const FEATURED_SPORTS: SportValue[] = ["HOCKEY", "LACROSSE"];
+
+export const sportSchema = z.enum(SPORTS, {
+  message: "Please select a valid sport",
+});
+
 /**
  * Type-safe wrapper for Zod .pick() with computed property names.
  *
@@ -73,7 +107,7 @@ export const loginSchema = z.object({
 // Team validation schemas
 export const createTeamSchema = z.object({
   name: sanitizedStringWithMin(1, 100).refine(val => val.length > 0, "Team name is required"),
-  sport: sanitizedStringWithMin(1, 50).refine(val => val.length > 0, "Sport is required"),
+  sport: sportSchema,
   season: sanitizedStringWithMin(1, 50).refine(val => val.length > 0, "Season is required"),
 });
 
@@ -254,7 +288,7 @@ export const sendLeagueInvitationSchema = z.object({
 // League validation schemas
 export const createLeagueSchema = z.object({
   name: sanitizedStringWithMin(1, 100),
-  sport: sanitizedStringWithMin(1, 50),
+  sport: sportSchema,
   contactEmail: z
     .string()
     .trim()
@@ -267,7 +301,7 @@ export const createLeagueSchema = z.object({
 export const updateLeagueSettingsSchema = z.object({
   id: z.string().cuid("Invalid league ID format"),
   name: sanitizedStringWithMin(1, 100),
-  sport: sanitizedStringWithMin(1, 50),
+  sport: sportSchema,
   contactEmail: z
     .string()
     .trim()
@@ -280,7 +314,7 @@ export const updateLeagueSettingsSchema = z.object({
 export const addTeamToLeagueSchema = z.object({
   leagueId: z.string().cuid("Invalid league ID format"),
   name: sanitizedStringWithMin(1, 100),
-  sport: sanitizedStringWithMin(1, 50),
+  sport: sportSchema,
   season: sanitizedStringWithMin(1, 50),
   divisionId: z.string().cuid("Invalid division ID format").optional(),
 });
