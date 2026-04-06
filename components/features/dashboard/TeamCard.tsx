@@ -1,15 +1,16 @@
 "use client";
 
-import { 
-  Card, 
-  CardContent, 
+import {
+  Card,
+  CardContent,
   CardActions,
-  Typography, 
-  Chip, 
-  Box, 
+  Typography,
+  Chip,
+  Box,
   Button,
   Avatar,
 } from "@mui/material";
+import { formatSport } from "@/lib/utils/validation";
 import {
   People as PeopleIcon,
   Event as EventIcon,
@@ -41,11 +42,11 @@ type TeamCardProps = {
   showStats?: boolean;
 };
 
-export default function TeamCard({ 
-  team, 
-  role, 
+export default function TeamCard({
+  team,
+  role,
   showLeagueInfo = false,
-  showStats = false 
+  showStats = false
 }: TeamCardProps) {
   const router = useRouter();
 
@@ -67,8 +68,8 @@ export default function TeamCard({
   };
 
   return (
-    <Card 
-      sx={{ 
+    <Card
+      sx={{
         height: '100%',
         transition: 'all 0.2s ease-in-out',
         '&:hover': {
@@ -80,10 +81,10 @@ export default function TeamCard({
       <CardContent>
         {/* Team Header */}
         <Box display="flex" alignItems="flex-start" gap={2} mb={2}>
-          <Avatar 
-            sx={{ 
-              width: 40, 
-              height: 40, 
+          <Avatar
+            sx={{
+              width: 40,
+              height: 40,
               bgcolor: 'primary.main',
               fontSize: '0.875rem',
               fontWeight: 'bold'
@@ -96,11 +97,11 @@ export default function TeamCard({
               {team.name}
             </Typography>
             <Box display="flex" alignItems="center" gap={1} mb={1}>
-              <Chip 
+              <Chip
                 icon={<SportsIcon />}
-                label={team.sport} 
-                size="small" 
-                variant="outlined" 
+                label={formatSport(team.sport)}
+                size="small"
+                variant="outlined"
               />
               <Typography variant="body2" color="text.secondary">
                 {team.season}
@@ -108,23 +109,23 @@ export default function TeamCard({
             </Box>
           </Box>
         </Box>
-        
+
         {/* League and Division Info - Only shown in league mode */}
         {showLeagueInfo && (team.league || team.division) && (
           <Box sx={{ mb: 2 }}>
             {team.league && (
-              <Chip 
-                label={team.league.name} 
-                size="small" 
+              <Chip
+                label={team.league.name}
+                size="small"
                 variant="outlined"
                 color="primary"
                 sx={{ mr: 1, mb: 0.5 }}
               />
             )}
             {team.division && (
-              <Chip 
-                label={`Division: ${team.division.name}`} 
-                size="small" 
+              <Chip
+                label={`Division: ${team.division.name}`}
+                size="small"
                 variant="outlined"
                 color="secondary"
                 sx={{ mb: 0.5 }}
@@ -135,8 +136,8 @@ export default function TeamCard({
 
         {/* Team Stats */}
         {showStats && team._count && (
-          <Box 
-            sx={{ 
+          <Box
+            sx={{
               display: 'grid',
               gridTemplateColumns: 'repeat(2, 1fr)',
               gap: 2,

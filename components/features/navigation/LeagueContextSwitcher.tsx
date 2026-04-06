@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
+import { formatSport } from "@/lib/utils/validation";
 import {
   Box,
   Button,
@@ -92,7 +93,7 @@ const LeagueContextSwitcher = React.memo(function LeagueContextSwitcher({
               </ListItemIcon>
               <ListItemText
                 primary={league.name}
-                secondary={league.sport}
+                secondary={formatSport(league.sport)}
                 primaryTypographyProps={{
                   sx: { fontSize: { xs: '0.875rem', sm: '1rem' } }
                 }}
@@ -135,7 +136,7 @@ const LeagueContextSwitcher = React.memo(function LeagueContextSwitcher({
             color="text.secondary"
             sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}
           >
-            {currentLeague?.sport}
+            {currentLeague ? formatSport(currentLeague.sport) : ''}
           </Typography>
         </Box>
       </Button>
@@ -168,7 +169,7 @@ const LeagueContextSwitcher = React.memo(function LeagueContextSwitcher({
             </ListItemIcon>
             <ListItemText
               primary={league.name}
-              secondary={league.sport}
+              secondary={formatSport(league.sport)}
               primaryTypographyProps={{
                 sx: { fontSize: { xs: '0.875rem', sm: '1rem' } }
               }}

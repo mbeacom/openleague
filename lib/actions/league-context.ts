@@ -287,6 +287,7 @@ export async function getLeagueRosterData(leagueId: string): Promise<{
     emergencyContact: string | null;
     emergencyPhone: string | null;
     jerseyNumber: number | null;
+    position: string | null;
     usahMemberId: string | null;
     teamId: string;
     leagueId: string | null;

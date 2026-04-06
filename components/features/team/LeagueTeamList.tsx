@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useOptimistic, useTransition, useRef, useCallback } from "react";
+import { formatSport } from "@/lib/utils/validation";
 import {
   Box,
   Typography,
@@ -402,7 +403,7 @@ export default function LeagueTeamList({
                 {team.name}
               </Typography>
               <Box display="flex" gap={1} mb={1} flexWrap="wrap">
-                <Chip label={team.sport} size="small" variant="outlined" />
+                <Chip label={formatSport(team.sport)} size="small" variant="outlined" />
                 <Chip label={team.season} size="small" variant="outlined" />
               </Box>
               <Box display="flex" gap={2} alignItems="center">
@@ -647,7 +648,7 @@ export default function LeagueTeamList({
             <CardContent>
               <Typography variant="h6">{activeTeam.name}</Typography>
               <Box display="flex" gap={1} mt={1}>
-                <Chip label={activeTeam.sport} size="small" />
+                <Chip label={formatSport(activeTeam.sport)} size="small" />
                 <Chip label={activeTeam.season} size="small" />
               </Box>
             </CardContent>

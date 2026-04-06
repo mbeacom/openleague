@@ -110,11 +110,11 @@ export const loginSchema = z.object({
  * Use this for all user-facing sport chips/labels instead of rendering
  * the raw enum (e.g. "HOCKEY") directly.
  */
-export function formatSport(sport: SportValue | null | undefined): string {
+export function formatSport(sport: SportValue | string | null | undefined): string {
   if (!sport) {
     return "Unknown";
   }
-  return SPORT_LABELS[sport] ?? "Unknown";
+  return SPORT_LABELS[sport as SportValue] ?? sport;
 }
 
 // Team validation schemas

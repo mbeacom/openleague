@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import LeagueCalendar from "@/components/features/calendar/LeagueCalendar";
 import { getLeagueScheduleData } from "@/lib/actions/league-context";
+import { formatSport } from "@/lib/utils/validation";
 
 interface LeagueSchedulePageProps {
   params: Promise<{ leagueId: string }>;
@@ -33,7 +34,7 @@ export default async function LeagueSchedulePage({ params }: LeagueSchedulePageP
               League Schedule
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              {data.league.name} • {data.league.sport}
+              {data.league.name} • {formatSport(data.league.sport)}
             </Typography>
           </Box>
 

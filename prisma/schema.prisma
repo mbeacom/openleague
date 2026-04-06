@@ -148,6 +148,7 @@ model Player {
   emergencyContact String? // Admin-only field, not visible to regular members
   emergencyPhone   String? // Admin-only field, not visible to regular members
   jerseyNumber     Int?    // Optional jersey number (1–99). No unique constraint; duplicates trigger warning only.
+  position         String? // Free-text position (e.g., Center, Goalie, Midfielder). Varies by sport.
   usahMemberId     String? @db.VarChar(20) // USA Hockey Member ID. Admin-only.
   userId           String? // Optional link to User account if player has registered
   createdAt        DateTime @default(now())

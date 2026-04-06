@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo } from 'react';
+import { formatSport } from "@/lib/utils/validation";
 import {
   Box,
   Typography,
@@ -133,7 +134,7 @@ function TeamCard({ team, leagueId }: TeamCardProps) {
                 color="text.secondary"
                 sx={{ fontSize: { xs: '0.7rem', sm: '0.875rem' } }}
               >
-                {team.season} • {team.sport}
+                {team.season} • {formatSport(team.sport)}
               </Typography>
             </Box>
           </Box>
@@ -269,6 +270,7 @@ export default function LeagueTeamsView({ league }: LeagueTeamsViewProps) {
       filtered = filtered.filter(team =>
         team.name.toLowerCase().includes(query) ||
         team.sport.toLowerCase().includes(query) ||
+        formatSport(team.sport).toLowerCase().includes(query) ||
         team.season.toLowerCase().includes(query)
       );
     }

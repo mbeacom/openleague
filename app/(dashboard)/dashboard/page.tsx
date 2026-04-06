@@ -12,6 +12,7 @@ import TeamCard from "@/components/features/dashboard/TeamCard";
 import { getUserMode } from "@/lib/utils/league-mode";
 import { getDashboardData } from "@/lib/actions/team-context";
 import { requireUserId } from "@/lib/auth/session";
+import { formatSport } from "@/lib/utils/validation";
 
 export default async function DashboardPage() {
   const userId = await requireUserId();
@@ -62,7 +63,7 @@ export default async function DashboardPage() {
                           {league.name}
                         </Typography>
                         <Typography variant="body2" color="text.secondary">
-                          {league.sport}
+                          {formatSport(league.sport)}
                         </Typography>
                         <Chip
                           label="League Admin"
