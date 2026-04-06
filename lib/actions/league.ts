@@ -32,6 +32,7 @@ import {
   type DeleteDivisionInput,
   type AssignTeamToDivisionInput,
   type GetLeagueTeamsInput,
+  type SportValue,
 } from "@/lib/utils/validation";
 import { getLeagueStatistics, type LeagueStatistics } from "@/lib/services/league-statistics";
 
@@ -951,7 +952,7 @@ export async function getLeagueTeamsPaginated(
       leagueId: string;
       isActive: boolean;
       name?: { contains: string; mode: 'insensitive' };
-      sport?: string;
+      sport?: SportValue;
       season?: string;
       divisionId?: string | null;
     } = {
