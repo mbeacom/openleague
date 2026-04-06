@@ -1,14 +1,19 @@
 "use server";
 
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { requireUserId } from "@/lib/auth/session";
 import { revalidatePath } from "next/cache";
 import { createTeamSchema, type CreateTeamInput } from "@/lib/utils/validation";
+import { sanitizeErrorForLogging } from "@/lib/utils/error-handling";
 
 export type ActionResult<T> =
   | { success: true; data: T }
   | { success: false; error: string; details?: unknown };
+
+const ACCOUNT_NOT_FOUND_ERROR =
+  "Your account was not found. Please sign out and sign up again.";
 
 /**
  * Create a new team and assign the creator as ADMIN
@@ -23,21 +28,9 @@ export async function createTeam(
     // Validate input
     const validated = createTeamSchema.parse(input);
 
-    // Verify the user actually exists in the database
-    // (JWT session can outlive a database reset)
-    const userExists = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { id: true },
-    });
-    if (!userExists) {
-      return {
-        success: false,
-        error:
-          "Your account was not found. Please sign out and sign up again.",
-      };
-    }
-
     // Create team and assign creator as ADMIN
+    // Prisma enforces referential integrity — if userId is invalid,
+    // a foreign key constraint error (P2003) is thrown and caught below.
     const team = await prisma.team.create({
       data: {
         name: validated.name,
@@ -78,20 +71,17 @@ export async function createTeam(
       };
     }
 
-    // Log full error for debugging
-    console.error("Error creating team:", error);
+    // Log sanitized error to avoid leaking sensitive details
+    console.error("Error creating team:", sanitizeErrorForLogging(error));
 
     // Check for foreign key violation (user doesn't exist in DB)
-    const errorMessage = error instanceof Error ? error.message : String(error);
     if (
-      errorMessage.includes("Foreign key constraint") ||
-      errorMessage.includes("foreign key") ||
-      errorMessage.includes("violates foreign key")
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2003"
     ) {
       return {
         success: false,
-        error:
-          "Your account was not found. Please sign out and sign up again.",
+        error: ACCOUNT_NOT_FOUND_ERROR,
       };
     }
 
