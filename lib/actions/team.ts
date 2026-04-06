@@ -23,6 +23,20 @@ export async function createTeam(
     // Validate input
     const validated = createTeamSchema.parse(input);
 
+    // Verify the user actually exists in the database
+    // (JWT session can outlive a database reset)
+    const userExists = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    });
+    if (!userExists) {
+      return {
+        success: false,
+        error:
+          "Your account was not found. Please sign out and sign up again.",
+      };
+    }
+
     // Create team and assign creator as ADMIN
     const team = await prisma.team.create({
       data: {
@@ -64,8 +78,22 @@ export async function createTeam(
       };
     }
 
-    // Log error for debugging but don't expose internals to client
+    // Log full error for debugging
     console.error("Error creating team:", error);
+
+    // Check for foreign key violation (user doesn't exist in DB)
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (
+      errorMessage.includes("Foreign key constraint") ||
+      errorMessage.includes("foreign key") ||
+      errorMessage.includes("violates foreign key")
+    ) {
+      return {
+        success: false,
+        error:
+          "Your account was not found. Please sign out and sign up again.",
+      };
+    }
 
     return {
       success: false,
