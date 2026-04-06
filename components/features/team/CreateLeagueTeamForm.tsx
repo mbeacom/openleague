@@ -12,6 +12,7 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  Divider,
   Alert,
   CircularProgress,
   FormHelperText,
@@ -185,14 +186,17 @@ export default function CreateLeagueTeamForm({
                 error={!!fieldErrors.sport}
                 helperText={fieldErrors.sport}
               >
-                {([...FEATURED_SPORTS, ...SPORTS.filter(s => !FEATURED_SPORTS.includes(s))] as SportValue[]).map((sport, index) => [
-                  index === FEATURED_SPORTS.length && (
-                    <MenuItem key="divider" disabled divider sx={{ opacity: 0 }} />
-                  ),
+                {FEATURED_SPORTS.map((sport) => (
                   <MenuItem key={sport} value={sport}>
                     {SPORT_LABELS[sport]}
-                  </MenuItem>,
-                ])}
+                  </MenuItem>
+                ))}
+                <Divider />
+                {SPORTS.filter((s) => !FEATURED_SPORTS.includes(s)).map((sport) => (
+                  <MenuItem key={sport} value={sport}>
+                    {SPORT_LABELS[sport]}
+                  </MenuItem>
+                ))}
               </TextField>
 
               <TextField

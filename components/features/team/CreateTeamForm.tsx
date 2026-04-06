@@ -9,6 +9,7 @@ import {
   Typography,
   Alert,
   CircularProgress,
+  Divider,
   MenuItem,
 } from "@mui/material";
 import { createTeam } from "@/lib/actions/team";
@@ -19,7 +20,6 @@ import {
   SPORTS,
   SPORT_LABELS,
   FEATURED_SPORTS,
-  type SportValue,
 } from "@/lib/utils/validation";
 import { trackTeam } from "@/lib/analytics/umami";
 
@@ -44,7 +44,7 @@ export default function CreateTeamForm() {
   const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
 
-    if (name === "name" || name === "sport" || name === "season") {
+    if (name === "name" || name === "season") {
       const fieldSchema = pickField(createTeamSchema, name);
       const validationResult = fieldSchema.safeParse({ [name]: value });
 
@@ -100,12 +100,6 @@ export default function CreateTeamForm() {
     }
   };
 
-  // Featured sports first, then the rest
-  const orderedSports: SportValue[] = [
-    ...FEATURED_SPORTS,
-    ...SPORTS.filter((s) => !FEATURED_SPORTS.includes(s)),
-  ];
-
   return (
     <Box
       component="form"
@@ -154,15 +148,17 @@ export default function CreateTeamForm() {
         error={!!fieldErrors.sport}
         helperText={fieldErrors.sport ?? "Select the sport your team plays"}
       >
-        {orderedSports.map((sport, index) => [
-          // Divider after featured sports
-          index === FEATURED_SPORTS.length && (
-            <MenuItem key="divider" disabled divider sx={{ opacity: 0 }} />
-          ),
+        {FEATURED_SPORTS.map((sport) => (
           <MenuItem key={sport} value={sport}>
             {SPORT_LABELS[sport]}
-          </MenuItem>,
-        ])}
+          </MenuItem>
+        ))}
+        <Divider />
+        {SPORTS.filter((s) => !FEATURED_SPORTS.includes(s)).map((sport) => (
+          <MenuItem key={sport} value={sport}>
+            {SPORT_LABELS[sport]}
+          </MenuItem>
+        ))}
       </TextField>
 
       <TextField

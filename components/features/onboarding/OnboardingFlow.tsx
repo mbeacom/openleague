@@ -3,6 +3,7 @@
 import { useState } from "react";
 import {
   Box,
+  Button,
   Typography,
   Card,
   CardActionArea,
@@ -127,8 +128,7 @@ function IntentCard({
         transition: "all 0.18s ease",
         "&:hover": {
           borderColor: "primary.main",
-          boxShadow: "0 0 0 2px",
-          boxShadowColor: "primary.light",
+          boxShadow: (theme: any) => `0 0 0 2px ${theme.palette.primary.light}`,
         },
       }}
     >
@@ -184,13 +184,10 @@ function OnboardingShell({
       }}
     >
       <Box sx={{ width: "100%", maxWidth: 520 }}>
-        <Typography
-          component="button"
+        <Button
           onClick={onBack}
+          variant="text"
           sx={{
-            background: "none",
-            border: "none",
-            cursor: "pointer",
             color: "text.secondary",
             fontSize: "0.875rem",
             mb: 3,
@@ -198,11 +195,12 @@ function OnboardingShell({
             alignItems: "center",
             gap: 0.5,
             p: 0,
-            "&:hover": { color: "text.primary" },
+            textTransform: "none",
+            "&:hover": { color: "text.primary", backgroundColor: "transparent" },
           }}
         >
           ← Back
-        </Typography>
+        </Button>
         {children}
       </Box>
     </Box>

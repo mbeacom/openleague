@@ -104,11 +104,24 @@ export const loginSchema = z.object({
   password: z.string().min(1, "Password is required").max(128),
 });
 
+/**
+ * Format a sport enum value into a user-friendly label.
+ *
+ * Use this for all user-facing sport chips/labels instead of rendering
+ * the raw enum (e.g. "HOCKEY") directly.
+ */
+export function formatSport(sport: SportValue | null | undefined): string {
+  if (!sport) {
+    return "Unknown";
+  }
+  return SPORT_LABELS[sport] ?? "Unknown";
+}
+
 // Team validation schemas
 export const createTeamSchema = z.object({
-  name: sanitizedStringWithMin(1, 100).refine(val => val.length > 0, "Team name is required"),
+  name: sanitizedStringWithMin(1, 100),
   sport: sportSchema,
-  season: sanitizedStringWithMin(1, 50).refine(val => val.length > 0, "Season is required"),
+  season: sanitizedStringWithMin(1, 50),
 });
 
 // Player validation schemas

@@ -9,6 +9,7 @@ import {
   Typography,
   Alert,
   CircularProgress,
+  Divider,
   MenuItem,
 } from "@mui/material";
 import { createLeague } from "@/lib/actions/league";
@@ -90,11 +91,6 @@ export default function CreateLeagueOnboardingForm() {
     }
   };
 
-  const orderedSports: SportValue[] = [
-    ...FEATURED_SPORTS,
-    ...SPORTS.filter((s) => !FEATURED_SPORTS.includes(s)),
-  ];
-
   return (
     <Box
       component="form"
@@ -148,14 +144,17 @@ export default function CreateLeagueOnboardingForm() {
         error={!!fieldErrors.sport}
         helperText={fieldErrors.sport}
       >
-        {orderedSports.map((sport, index) => [
-          index === FEATURED_SPORTS.length && (
-            <MenuItem key="divider" disabled divider sx={{ opacity: 0 }} />
-          ),
+        {FEATURED_SPORTS.map((sport) => (
           <MenuItem key={sport} value={sport}>
             {SPORT_LABELS[sport]}
-          </MenuItem>,
-        ])}
+          </MenuItem>
+        ))}
+        <Divider />
+        {SPORTS.filter((s) => !FEATURED_SPORTS.includes(s)).map((sport) => (
+          <MenuItem key={sport} value={sport}>
+            {SPORT_LABELS[sport]}
+          </MenuItem>
+        ))}
       </TextField>
 
       <TextField
@@ -197,7 +196,8 @@ export default function CreateLeagueOnboardingForm() {
           isSubmitting ||
           !formData.name ||
           !formData.sport ||
-          !formData.contactEmail
+          !formData.contactEmail ||
+          Object.values(fieldErrors).some((error) => !!error)
         }
         sx={{ mt: 1 }}
       >
