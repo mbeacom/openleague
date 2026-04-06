@@ -36,6 +36,7 @@ export async function createVenue(
     if (validated.visibility === "TEAM" && validated.teamId) {
       const membership = await prisma.teamMember.findUnique({
         where: { userId_teamId: { userId, teamId: validated.teamId } },
+        select: { role: true },
       });
       if (!membership || membership.role !== "ADMIN") {
         return { success: false, error: "You must be a team admin to create team venues" };
@@ -112,6 +113,7 @@ export async function updateVenue(
     if (validated.visibility === "TEAM" && validated.teamId && validated.teamId !== existing.teamId) {
       const membership = await prisma.teamMember.findUnique({
         where: { userId_teamId: { userId, teamId: validated.teamId } },
+        select: { role: true },
       });
       if (!membership || membership.role !== "ADMIN") {
         return { success: false, error: "You must be a team admin to assign venues to that team" };

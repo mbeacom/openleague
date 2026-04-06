@@ -10,6 +10,7 @@ import {
   Button,
   Avatar,
 } from "@mui/material";
+import { formatSport } from "@/lib/utils/validation";
 import {
   People as PeopleIcon,
   Event as EventIcon,
@@ -115,7 +116,7 @@ export default function LeagueOverviewCard({
             <Box display="flex" alignItems="center" gap={1} mb={1}>
               <Chip
                 icon={<SportsIcon />}
-                label={league.sport}
+                label={formatSport(league.sport)}
                 size="small"
                 variant="outlined"
               />

@@ -59,6 +59,7 @@ export default function DashboardShell({ isLeagueMode, children }: DashboardShel
             priority
             sx={{
               p: 2,
+              color: "primary.main",
               transition: "transform 0.2s ease-in-out",
               "&:hover": { transform: "scale(1.02)" },
             }}

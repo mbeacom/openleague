@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
+import { formatSport } from "@/lib/utils/validation";
 import {
   DndContext,
   DragOverlay,
@@ -220,7 +221,7 @@ export default function DragDropTeams({
                   {activeTeam.name}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
-                  {activeTeam.sport} • {activeTeam.season} • {activeTeam._count.players} players
+                  {formatSport(activeTeam.sport)} • {activeTeam.season} • {activeTeam._count.players} players
                 </Typography>
               </Box>
             </CardContent>

@@ -12,26 +12,34 @@ import {
   Divider,
   MenuItem,
 } from "@mui/material";
-import { createTeam } from "@/lib/actions/team";
+import { createLeague } from "@/lib/actions/league";
 import {
-  createTeamSchema,
-  pickField,
-  type CreateTeamInput,
+  createLeagueSchema,
   SPORTS,
   SPORT_LABELS,
   FEATURED_SPORTS,
+  type SportValue,
 } from "@/lib/utils/validation";
-import { trackTeam } from "@/lib/analytics/umami";
 
-export default function CreateTeamForm() {
+type FormData = {
+  name: string;
+  sport: SportValue;
+  contactEmail: string;
+  contactPhone: string;
+};
+
+type FieldErrors = Partial<Record<keyof FormData, string>>;
+
+export default function CreateLeagueOnboardingForm() {
   const router = useRouter();
-  const [formData, setFormData] = useState<CreateTeamInput>({
+  const [formData, setFormData] = useState<FormData>({
     name: "",
     sport: "HOCKEY",
-    season: "",
+    contactEmail: "",
+    contactPhone: "",
   });
   const [error, setError] = useState<string | null>(null);
-  const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof CreateTeamInput, string>>>({});
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -41,34 +49,16 @@ export default function CreateTeamForm() {
     setFieldErrors((prev) => ({ ...prev, [name]: undefined }));
   };
 
-  const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-
-    if (name === "name" || name === "season") {
-      const fieldSchema = pickField(createTeamSchema, name);
-      const validationResult = fieldSchema.safeParse({ [name]: value });
-
-      if (!validationResult.success) {
-        const fieldError = validationResult.error.issues[0]?.message;
-        if (fieldError) {
-          setFieldErrors((prev) => ({ ...prev, [name]: fieldError }));
-        }
-      } else {
-        setFieldErrors((prev) => ({ ...prev, [name]: undefined }));
-      }
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setFieldErrors({});
 
-    const validation = createTeamSchema.safeParse(formData);
+    const validation = createLeagueSchema.safeParse(formData);
     if (!validation.success) {
-      const errors: Partial<Record<keyof CreateTeamInput, string>> = {};
+      const errors: FieldErrors = {};
       validation.error.issues.forEach((issue) => {
-        const field = issue.path[0] as keyof CreateTeamInput;
+        const field = issue.path[0] as keyof FormData;
         if (field && !errors[field]) {
           errors[field] = issue.message;
         }
@@ -81,19 +71,20 @@ export default function CreateTeamForm() {
     setIsSubmitting(true);
 
     try {
-      const result = await createTeam(formData);
+      const result = await createLeague({
+        name: formData.name,
+        sport: formData.sport,
+        contactEmail: formData.contactEmail,
+        contactPhone: formData.contactPhone || undefined,
+      });
 
       if (result.success) {
-        trackTeam("create", {
-          sport: formData.sport,
-          season: formData.season,
-        });
-        router.push("/");
+        router.push(`/league/${result.data.id}/dashboard`);
       } else {
         setError(result.error);
       }
     } catch (err) {
-      console.error("An unexpected error occurred during team creation:", err);
+      console.error("Unexpected error during league creation:", err);
       setError("An unexpected error occurred. Please try again.");
     } finally {
       setIsSubmitting(false);
@@ -112,9 +103,15 @@ export default function CreateTeamForm() {
         width: "100%",
       }}
     >
-      <Typography variant="h5" component="h2" gutterBottom>
-        Create Your Team
-      </Typography>
+      <Box>
+        <Typography variant="h5" component="h2" fontWeight={700} gutterBottom>
+          Create Your League or Association
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          You&apos;ll be set up as the league admin. You can add divisions and
+          teams after creating your league.
+        </Typography>
+      </Box>
 
       {error && (
         <Alert severity="error" onClose={() => setError(null)}>
@@ -123,15 +120,14 @@ export default function CreateTeamForm() {
       )}
 
       <TextField
-        label="Team Name"
+        label="League / Association Name"
         name="name"
         value={formData.name}
         onChange={handleChange}
-        onBlur={handleBlur}
         required
         fullWidth
         disabled={isSubmitting}
-        placeholder="e.g., Northside Wolves"
+        placeholder="e.g., Northside Hockey Association"
         error={!!fieldErrors.name}
         helperText={fieldErrors.name}
       />
@@ -146,7 +142,7 @@ export default function CreateTeamForm() {
         fullWidth
         disabled={isSubmitting}
         error={!!fieldErrors.sport}
-        helperText={fieldErrors.sport ?? "Select the sport your team plays"}
+        helperText={fieldErrors.sport}
       >
         {FEATURED_SPORTS.map((sport) => (
           <MenuItem key={sport} value={sport}>
@@ -162,17 +158,33 @@ export default function CreateTeamForm() {
       </TextField>
 
       <TextField
-        label="Season"
-        name="season"
-        value={formData.season}
+        label="Contact Email"
+        name="contactEmail"
+        type="email"
+        value={formData.contactEmail}
         onChange={handleChange}
-        onBlur={handleBlur}
         required
         fullWidth
         disabled={isSubmitting}
-        placeholder="e.g., Fall 2025, Spring 2026"
-        error={!!fieldErrors.season}
-        helperText={fieldErrors.season}
+        placeholder="admin@yourleague.com"
+        error={!!fieldErrors.contactEmail}
+        helperText={
+          fieldErrors.contactEmail ??
+          "Used for league-wide communications and member inquiries"
+        }
+      />
+
+      <TextField
+        label="Contact Phone"
+        name="contactPhone"
+        type="tel"
+        value={formData.contactPhone}
+        onChange={handleChange}
+        fullWidth
+        disabled={isSubmitting}
+        placeholder="e.g., (555) 123-4567"
+        error={!!fieldErrors.contactPhone}
+        helperText={fieldErrors.contactPhone ?? "Optional"}
       />
 
       <Button
@@ -184,10 +196,8 @@ export default function CreateTeamForm() {
           isSubmitting ||
           !formData.name ||
           !formData.sport ||
-          !formData.season ||
-          Object.keys(fieldErrors).some(
-            (key) => fieldErrors[key as keyof CreateTeamInput]
-          )
+          !formData.contactEmail ||
+          Object.values(fieldErrors).some((error) => !!error)
         }
         sx={{ mt: 1 }}
       >
@@ -197,7 +207,7 @@ export default function CreateTeamForm() {
             Creating...
           </>
         ) : (
-          "Create Team"
+          "Create League"
         )}
       </Button>
     </Box>

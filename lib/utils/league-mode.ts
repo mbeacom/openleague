@@ -122,6 +122,7 @@ export async function hasTeamAccess(userId: string, teamId: string): Promise<boo
       teamId,
       team: { isActive: true },
     },
+    select: { id: true },
   });
 
   if (teamMember) return true;
@@ -163,6 +164,7 @@ export async function hasTeamAdminAccess(userId: string, teamId: string): Promis
       role: "ADMIN",
       team: { isActive: true },
     },
+    select: { id: true },
   });
 
   if (teamMember) return true;

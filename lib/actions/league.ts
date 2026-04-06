@@ -32,6 +32,7 @@ import {
   type DeleteDivisionInput,
   type AssignTeamToDivisionInput,
   type GetLeagueTeamsInput,
+  type SportValue,
 } from "@/lib/utils/validation";
 import { getLeagueStatistics, type LeagueStatistics } from "@/lib/services/league-statistics";
 
@@ -139,8 +140,18 @@ export async function migrateTeamToLeague(
         userId,
         role: "ADMIN",
       },
-      include: {
-        team: true,
+      select: {
+        id: true,
+        team: {
+          select: {
+            id: true,
+            name: true,
+            sport: true,
+            season: true,
+            isActive: true,
+            leagueId: true,
+          },
+        },
       },
     });
 
@@ -494,6 +505,7 @@ export async function verifyTeamAdminInLeague(
           leagueId,
         },
       },
+      select: { id: true },
     });
 
     return !!teamMember;
@@ -940,7 +952,7 @@ export async function getLeagueTeamsPaginated(
       leagueId: string;
       isActive: boolean;
       name?: { contains: string; mode: 'insensitive' };
-      sport?: string;
+      sport?: SportValue;
       season?: string;
       divisionId?: string | null;
     } = {

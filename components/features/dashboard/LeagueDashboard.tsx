@@ -1,6 +1,7 @@
 "use client";
 
 import React from 'react';
+import { formatSport } from "@/lib/utils/validation";
 import {
   Box,
   Card,
@@ -128,7 +129,7 @@ export default function LeagueDashboard({ league }: LeagueDashboardProps) {
           mb: 2,
           flexWrap: 'wrap'
         }}>
-          <Chip label={league.sport} color="primary" size="small" />
+          <Chip label={formatSport(league.sport)} color="primary" size="small" />
           <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
             Created {formatDistanceToNow(new Date(league.createdAt))} ago
           </Typography>

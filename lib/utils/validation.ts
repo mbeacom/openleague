@@ -1,5 +1,39 @@
 import { z } from "zod";
 
+// Sport enum — must match the Prisma Sport enum exactly
+export const SPORTS = [
+  "HOCKEY",
+  "LACROSSE",
+  "SOCCER",
+  "BASKETBALL",
+  "BASEBALL",
+  "SOFTBALL",
+  "FOOTBALL",
+  "VOLLEYBALL",
+  "OTHER",
+] as const;
+
+export type SportValue = (typeof SPORTS)[number];
+
+export const SPORT_LABELS: Record<SportValue, string> = {
+  HOCKEY: "Hockey",
+  LACROSSE: "Lacrosse",
+  SOCCER: "Soccer",
+  BASKETBALL: "Basketball",
+  BASEBALL: "Baseball",
+  SOFTBALL: "Softball",
+  FOOTBALL: "Football",
+  VOLLEYBALL: "Volleyball",
+  OTHER: "Other",
+};
+
+// Sports that appear first (primary focus)
+export const FEATURED_SPORTS: SportValue[] = ["HOCKEY", "LACROSSE"];
+
+export const sportSchema = z.enum(SPORTS, {
+  message: "Please select a valid sport",
+});
+
 /**
  * Type-safe wrapper for Zod .pick() with computed property names.
  *
@@ -70,11 +104,24 @@ export const loginSchema = z.object({
   password: z.string().min(1, "Password is required").max(128),
 });
 
+/**
+ * Format a sport enum value into a user-friendly label.
+ *
+ * Use this for all user-facing sport chips/labels instead of rendering
+ * the raw enum (e.g. "HOCKEY") directly.
+ */
+export function formatSport(sport: SportValue | string | null | undefined): string {
+  if (!sport) {
+    return "Unknown";
+  }
+  return SPORT_LABELS[sport as SportValue] ?? sport;
+}
+
 // Team validation schemas
 export const createTeamSchema = z.object({
-  name: sanitizedStringWithMin(1, 100).refine(val => val.length > 0, "Team name is required"),
-  sport: sanitizedStringWithMin(1, 50).refine(val => val.length > 0, "Sport is required"),
-  season: sanitizedStringWithMin(1, 50).refine(val => val.length > 0, "Season is required"),
+  name: sanitizedStringWithMin(1, 100),
+  sport: sportSchema,
+  season: sanitizedStringWithMin(1, 50),
 });
 
 // Player validation schemas
@@ -254,7 +301,7 @@ export const sendLeagueInvitationSchema = z.object({
 // League validation schemas
 export const createLeagueSchema = z.object({
   name: sanitizedStringWithMin(1, 100),
-  sport: sanitizedStringWithMin(1, 50),
+  sport: sportSchema,
   contactEmail: z
     .string()
     .trim()
@@ -267,7 +314,7 @@ export const createLeagueSchema = z.object({
 export const updateLeagueSettingsSchema = z.object({
   id: z.string().cuid("Invalid league ID format"),
   name: sanitizedStringWithMin(1, 100),
-  sport: sanitizedStringWithMin(1, 50),
+  sport: sportSchema,
   contactEmail: z
     .string()
     .trim()
@@ -280,7 +327,7 @@ export const updateLeagueSettingsSchema = z.object({
 export const addTeamToLeagueSchema = z.object({
   leagueId: z.string().cuid("Invalid league ID format"),
   name: sanitizedStringWithMin(1, 100),
-  sport: sanitizedStringWithMin(1, 50),
+  sport: sportSchema,
   season: sanitizedStringWithMin(1, 50),
   divisionId: z.string().cuid("Invalid division ID format").optional(),
 });
@@ -340,7 +387,7 @@ export const getLeagueTeamsSchema = z.object({
   page: z.number().int().min(1).default(1),
   limit: z.number().int().min(1).max(100).default(20),
   search: z.string().optional(),
-  sport: z.string().optional(),
+  sport: sportSchema.optional(),
   season: z.string().optional(),
   divisionId: z.string().cuid().optional().nullable(),
 });

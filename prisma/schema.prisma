@@ -63,11 +63,23 @@ model AuditLog {
   @@index([severity])
 }
 
+enum Sport {
+  HOCKEY
+  LACROSSE
+  SOCCER
+  BASKETBALL
+  BASEBALL
+  SOFTBALL
+  FOOTBALL
+  VOLLEYBALL
+  OTHER
+}
+
 // Team model
 model Team {
   id        String   @id @default(cuid())
   name      String
-  sport     String
+  sport     Sport    @default(HOCKEY)
   season    String
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
@@ -136,6 +148,7 @@ model Player {
   emergencyContact String? // Admin-only field, not visible to regular members
   emergencyPhone   String? // Admin-only field, not visible to regular members
   jerseyNumber     Int?    // Optional jersey number (1–99). No unique constraint; duplicates trigger warning only.
+  position         String? // Free-text position (e.g., Center, Goalie, Midfielder). Varies by sport.
   usahMemberId     String? @db.VarChar(20) // USA Hockey Member ID. Admin-only.
   userId           String? // Optional link to User account if player has registered
   createdAt        DateTime @default(now())
@@ -251,7 +264,7 @@ enum InvitationStatus {
 model League {
   id           String   @id @default(cuid())
   name         String
-  sport        String
+  sport        Sport    @default(HOCKEY)
   contactEmail String
   contactPhone String?
   isActive     Boolean  @default(true)

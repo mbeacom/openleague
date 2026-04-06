@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { formatSport } from "@/lib/utils/validation";
 import {
     Box,
     Card,
@@ -288,7 +289,7 @@ export const TeamPermissionManager: React.FC<TeamPermissionManagerProps> = ({
                                         {team.name}
                                     </Typography>
                                     <Chip
-                                        label={`${team.sport} - ${team.season}`}
+                                        label={`${formatSport(team.sport)} - ${team.season}`}
                                         size="small"
                                         variant="outlined"
                                     />
