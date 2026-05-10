@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { useRef } from 'react';
 import { Box } from '@mui/material';
 import type { SxProps, Theme } from '@mui/material/styles';
 import { ADS_CONFIG, type AdPlacement, getConfiguredAdSlot, isAdsEnabled } from '@/lib/config/ads';
@@ -26,6 +27,8 @@ export default function AdSlot({
   minHeight = 90,
   sx,
 }: AdSlotProps) {
+  const adElementRef = useRef<HTMLElement | null>(null);
+  const initializedSlotRef = useRef<string | null>(null);
   const resolvedSlot = slot ?? getConfiguredAdSlot(placement);
   const shouldRender = isAdsEnabled() && Boolean(resolvedSlot);
 
@@ -34,10 +37,16 @@ export default function AdSlot({
       return;
     }
 
+    const adElement = adElementRef.current;
+    if (!resolvedSlot || !adElement || initializedSlotRef.current === resolvedSlot) {
+      return;
+    }
+
     try {
       const adsWindow = window as AdsWindow;
       adsWindow.adsbygoogle = adsWindow.adsbygoogle ?? [];
       adsWindow.adsbygoogle.push({});
+      initializedSlotRef.current = resolvedSlot;
     } catch (error) {
       if (process.env.NODE_ENV !== 'production') {
         console.warn('Unable to initialize ad slot', error);
@@ -67,6 +76,7 @@ export default function AdSlot({
     >
       <Box
         component="ins"
+        ref={adElementRef}
         className="adsbygoogle"
         sx={{ display: 'block', width: '100%' }}
         data-ad-client={ADS_CONFIG.adsenseClient}

@@ -1,6 +1,16 @@
 import type { NextConfig } from "next";
 
-const adsEnabled = process.env.NEXT_PUBLIC_ADS_ENABLED === "true";
+const parseBooleanFlag = (value: string | undefined) => {
+  if (!value) {
+    return false;
+  }
+
+  return ["true", "1", "yes", "on"].includes(value.trim().toLowerCase());
+};
+
+const adsEnabled =
+  parseBooleanFlag(process.env.NEXT_PUBLIC_ADS_ENABLED) &&
+  Boolean(process.env.NEXT_PUBLIC_GOOGLE_ADSENSE_CLIENT?.trim());
 
 const scriptSrc = [
   "'self'",

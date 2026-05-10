@@ -1,7 +1,13 @@
 export type AdsProvider = 'adsense';
 export type AdPlacement = 'marketing' | 'dashboard';
 
-const parseBooleanFlag = (value: string | undefined) => value === 'true';
+const parseBooleanFlag = (value: string | undefined) => {
+  if (!value) {
+    return false;
+  }
+
+  return ['true', '1', 'yes', 'on'].includes(value.trim().toLowerCase());
+};
 
 export const ADS_CONFIG = {
   enabled: parseBooleanFlag(process.env.NEXT_PUBLIC_ADS_ENABLED),
@@ -14,7 +20,7 @@ export const ADS_CONFIG = {
 } as const;
 
 export function isAdsEnabled() {
-  return ADS_CONFIG.enabled && Boolean(ADS_CONFIG.adsenseClient);
+  return ADS_CONFIG.enabled && Boolean(ADS_CONFIG.adsenseClient.trim());
 }
 
 export function getConfiguredAdSlot(placement: AdPlacement) {

@@ -1,5 +1,32 @@
 import { z } from 'zod'
 
+const normalizeBooleanString = (value: unknown) => {
+    if (typeof value !== 'string') {
+        return value
+    }
+
+    switch (value.trim().toLowerCase()) {
+        case 'true':
+        case '1':
+        case 'yes':
+        case 'on':
+            return 'true'
+        case 'false':
+        case '0':
+        case 'no':
+        case 'off':
+        case '':
+            return 'false'
+        default:
+            return value
+    }
+}
+
+const normalizeOptionalBooleanString = (value: string | undefined): 'true' | 'false' | undefined => {
+    const normalized = normalizeBooleanString(value)
+    return normalized === 'true' || normalized === 'false' ? normalized : undefined
+}
+
 // Environment variable schema
 const envSchema = z.object({
     // Database
@@ -30,7 +57,7 @@ const envSchema = z.object({
     NEXT_PUBLIC_MIXPANEL_TOKEN: z.string().optional(),
 
     // Optional advertising controls (disabled unless explicitly enabled)
-    NEXT_PUBLIC_ADS_ENABLED: z.enum(['true', 'false']).optional(),
+    NEXT_PUBLIC_ADS_ENABLED: z.preprocess(normalizeBooleanString, z.enum(['true', 'false']).optional()),
     NEXT_PUBLIC_GOOGLE_ADSENSE_CLIENT: z.string().optional(),
     NEXT_PUBLIC_GOOGLE_ADSENSE_MARKETING_SLOT: z.string().optional(),
     NEXT_PUBLIC_GOOGLE_ADSENSE_DASHBOARD_SLOT: z.string().optional(),
@@ -59,7 +86,7 @@ function validateEnv() {
             NEXT_PUBLIC_VERCEL_ANALYTICS_ID: process.env.NEXT_PUBLIC_VERCEL_ANALYTICS_ID,
             NEXT_PUBLIC_HOTJAR_ID: process.env.NEXT_PUBLIC_HOTJAR_ID,
             NEXT_PUBLIC_MIXPANEL_TOKEN: process.env.NEXT_PUBLIC_MIXPANEL_TOKEN,
-            NEXT_PUBLIC_ADS_ENABLED: process.env.NEXT_PUBLIC_ADS_ENABLED as 'true' | 'false' | undefined,
+            NEXT_PUBLIC_ADS_ENABLED: normalizeOptionalBooleanString(process.env.NEXT_PUBLIC_ADS_ENABLED),
             NEXT_PUBLIC_GOOGLE_ADSENSE_CLIENT: process.env.NEXT_PUBLIC_GOOGLE_ADSENSE_CLIENT,
             NEXT_PUBLIC_GOOGLE_ADSENSE_MARKETING_SLOT: process.env.NEXT_PUBLIC_GOOGLE_ADSENSE_MARKETING_SLOT,
             NEXT_PUBLIC_GOOGLE_ADSENSE_DASHBOARD_SLOT: process.env.NEXT_PUBLIC_GOOGLE_ADSENSE_DASHBOARD_SLOT,

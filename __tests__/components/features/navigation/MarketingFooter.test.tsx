@@ -91,7 +91,6 @@ describe('MarketingFooter', () => {
         renderWithTheme(<MarketingFooter />);
 
         expect(screen.getByRole('link', { name: 'Features' })).toHaveAttribute('href', '/features');
-        expect(screen.getByRole('link', { name: 'Pricing' })).toHaveAttribute('href', '/pricing');
         expect(screen.getByRole('link', { name: 'Get Started' })).toHaveAttribute('href', '/get-started');
         expect(screen.getByRole('link', { name: 'Roadmap' })).toHaveAttribute('href', '/docs/roadmap');
       });
@@ -156,7 +155,7 @@ describe('MarketingFooter', () => {
     it('renders feature highlights', () => {
       renderWithTheme(<MarketingFooter />);
 
-      expect(screen.getByText('🌟 Free Forever')).toBeInTheDocument();
+      expect(screen.getByText('🌟 Free for Now')).toBeInTheDocument();
       expect(screen.getByText('🔒 Privacy First')).toBeInTheDocument();
       expect(screen.getByText('📱 Mobile Ready')).toBeInTheDocument();
     });
@@ -242,7 +241,6 @@ describe('MarketingFooter', () => {
     const allExpectedLinks = [
       // Product
       { name: 'Features', href: '/features' },
-      { name: 'Pricing', href: '/pricing' },
       { name: 'Get Started', href: '/get-started' },
       { name: 'Roadmap', href: '/docs/roadmap' },
       // Resources

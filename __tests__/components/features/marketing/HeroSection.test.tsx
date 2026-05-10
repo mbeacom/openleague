@@ -68,23 +68,23 @@ describe('HeroSection', () => {
       expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument();
       // BrandLogo displays image instead of text
       expect(screen.getByAltText('OpenLeague - Simplify Your Season')).toBeInTheDocument();
-      expect(screen.getByText(/Replace Chaotic Spreadsheets with/)).toBeInTheDocument();
+      expect(screen.getByText(/Simplify Your Season/)).toBeInTheDocument();
+      expect(screen.getByText(/Play More/)).toBeInTheDocument();
     });
 
     it('renders value proposition subtitle', () => {
       renderWithTheme(<HeroSection />);
 
-      expect(screen.getByText(/The single source of truth for sports team management/)).toBeInTheDocument();
-      expect(screen.getByText(/Stop juggling group chats, email chains, and messy spreadsheets/)).toBeInTheDocument();
-      expect(screen.getByText(/Who, What, When, and Where/)).toBeInTheDocument();
+      expect(screen.getByText(/The free, open-source team management platform/)).toBeInTheDocument();
+      expect(screen.getByText(/one organized hub for rosters/)).toBeInTheDocument();
     });
 
     it('renders trust indicators', () => {
       renderWithTheme(<HeroSection />);
 
-      expect(screen.getByText('100% Free to Use')).toBeInTheDocument();
-      expect(screen.getByText('No Credit Card Required')).toBeInTheDocument();
-      expect(screen.getByText('Mobile-First Design')).toBeInTheDocument();
+      expect(screen.getByText('Free for Now')).toBeInTheDocument();
+      expect(screen.getByText('No Credit Card')).toBeInTheDocument();
+      expect(screen.getByText('Mobile-First')).toBeInTheDocument();
     });
 
     it('renders brand logo', () => {
@@ -97,7 +97,7 @@ describe('HeroSection', () => {
     it('renders additional trust signal text', () => {
       renderWithTheme(<HeroSection />);
 
-      expect(screen.getByText(/Join teams already using OpenLeague/)).toBeInTheDocument();
+      expect(screen.getByText(/Built by coaches, for coaches/)).toBeInTheDocument();
     });
   });
 
@@ -114,9 +114,9 @@ describe('HeroSection', () => {
     it('renders secondary CTA button with correct props', () => {
       renderWithTheme(<HeroSection />);
 
-      const secondaryCTA = screen.getByRole('link', { name: 'See How It Works' });
+      const secondaryCTA = screen.getByRole('link', { name: 'Explore Features' });
       expect(secondaryCTA).toHaveAttribute('href', '/features');
-      expect(secondaryCTA).toHaveAttribute('data-tracking-action', 'hero_see_how_it_works_click');
+      expect(secondaryCTA).toHaveAttribute('data-tracking-action', 'hero_see_features_click');
       expect(secondaryCTA).toHaveAttribute('data-tracking-label', 'hero_section');
     });
 
@@ -124,7 +124,7 @@ describe('HeroSection', () => {
       renderWithTheme(<HeroSection />);
 
       const primaryCTA = screen.getByRole('link', { name: 'Get Started Free' });
-      const secondaryCTA = screen.getByRole('link', { name: 'See How It Works' });
+      const secondaryCTA = screen.getByRole('link', { name: 'Explore Features' });
 
       expect(primaryCTA).toBeInTheDocument();
       expect(secondaryCTA).toBeInTheDocument();
@@ -178,7 +178,7 @@ describe('HeroSection', () => {
       renderWithTheme(<HeroSection />);
 
       const primaryCTA = screen.getByRole('link', { name: 'Get Started Free' });
-      const secondaryCTA = screen.getByRole('link', { name: 'See How It Works' });
+      const secondaryCTA = screen.getByRole('link', { name: 'Explore Features' });
 
       // Both buttons should be present and accessible
       expect(primaryCTA).toBeInTheDocument();
@@ -193,9 +193,9 @@ describe('HeroSection', () => {
       renderWithTheme(<HeroSection />);
 
       const trustIndicators = [
-        '100% Free to Use',
-        'No Credit Card Required',
-        'Mobile-First Design'
+        'Free for Now',
+        'No Credit Card',
+        'Mobile-First'
       ];
 
       trustIndicators.forEach(indicator => {
@@ -225,25 +225,25 @@ describe('HeroSection', () => {
 
       const mainHeading = screen.getByRole('heading', { level: 1 });
       expect(mainHeading).toBeInTheDocument();
-      expect(mainHeading).toHaveTextContent(/Replace Chaotic Spreadsheets with.*One Platform/);
+      expect(mainHeading).toHaveTextContent(/Simplify Your Season.*Play More/);
     });
 
     it('provides meaningful text content for screen readers', () => {
       renderWithTheme(<HeroSection />);
 
       // Check that important content is accessible
-      expect(screen.getByText(/single source of truth/)).toBeInTheDocument();
-      expect(screen.getByText(/sports team management/)).toBeInTheDocument();
-      expect(screen.getByText(/Who, What, When, and Where/)).toBeInTheDocument();
+      expect(screen.getByText(/open-source team management platform/)).toBeInTheDocument();
+      expect(screen.getByText(/built for coaches and players/)).toBeInTheDocument();
+      expect(screen.getByText(/rosters, schedules, attendance, and communication/)).toBeInTheDocument();
     });
 
     it('trust indicators have proper visual structure', () => {
       renderWithTheme(<HeroSection />);
 
       const trustIndicators = [
-        '100% Free to Use',
-        'No Credit Card Required',
-        'Mobile-First Design'
+        'Free for Now',
+        'No Credit Card',
+        'Mobile-First'
       ];
 
       trustIndicators.forEach(indicator => {
@@ -258,7 +258,7 @@ describe('HeroSection', () => {
       renderWithTheme(<HeroSection />);
 
       const primaryCTA = screen.getByRole('link', { name: 'Get Started Free' });
-      const secondaryCTA = screen.getByRole('link', { name: 'See How It Works' });
+      const secondaryCTA = screen.getByRole('link', { name: 'Explore Features' });
 
       // Both buttons should be rendered as links (for Next.js Link component)
       expect(primaryCTA.tagName).toBe('A');
@@ -293,9 +293,9 @@ describe('HeroSection', () => {
       renderWithTheme(<HeroSection />);
 
       // Each trust indicator should have a visual structure
-      const freeToUse = screen.getByText('100% Free to Use');
-      const noCreditCard = screen.getByText('No Credit Card Required');
-      const mobileFirst = screen.getByText('Mobile-First Design');
+      const freeToUse = screen.getByText('Free for Now');
+      const noCreditCard = screen.getByText('No Credit Card');
+      const mobileFirst = screen.getByText('Mobile-First');
 
       // Each should be in a container with flex layout for the dot
       [freeToUse, noCreditCard, mobileFirst].forEach(element => {
@@ -317,8 +317,8 @@ describe('HeroSection', () => {
 
       // All critical text should be immediately available
       expect(screen.getByText('Get Started Free')).toBeInTheDocument();
-      expect(screen.getByText('See How It Works')).toBeInTheDocument();
-      expect(screen.getByText('100% Free to Use')).toBeInTheDocument();
+      expect(screen.getByText('Explore Features')).toBeInTheDocument();
+      expect(screen.getByText('Free for Now')).toBeInTheDocument();
     });
 
     it('component structure supports lazy loading patterns', () => {
