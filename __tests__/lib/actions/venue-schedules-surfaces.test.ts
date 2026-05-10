@@ -1,0 +1,162 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("next/cache", () => ({
+  revalidatePath: vi.fn(),
+}));
+
+const { mockRequireVenueScheduleManager, mockPrisma, mockLogVenueActivity } = vi.hoisted(() => ({
+  mockRequireVenueScheduleManager: vi.fn(),
+  mockLogVenueActivity: vi.fn(),
+  mockPrisma: {
+    venue: {
+      findFirst: vi.fn(),
+    },
+    iceSurface: {
+      create: vi.fn(),
+      update: vi.fn(),
+    },
+    venueOperatingHour: {
+      create: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
+      findFirst: vi.fn(),
+    },
+  },
+}));
+
+vi.mock("@/lib/auth/session", () => ({
+  requireVenueScheduleManager: (...args: unknown[]) => mockRequireVenueScheduleManager(...args),
+}));
+
+vi.mock("@/lib/db/prisma", () => ({
+  prisma: mockPrisma,
+}));
+
+vi.mock("@/lib/actions/venue-organizations", () => ({
+  logVenueActivity: (...args: unknown[]) => mockLogVenueActivity(...args),
+}));
+
+import {
+  archiveIceSurface,
+  createIceSurface,
+  setOperatingHours,
+  updateIceSurface,
+} from "@/lib/actions/venue-schedules";
+
+const USER_ID = "clusrxxxxxxxxxxxxxxxxxxxxxxx";
+const ORGANIZATION_ID = "clorgxxxxxxxxxxxxxxxxxxxxxxx";
+const VENUE_ID = "clvenxxxxxxxxxxxxxxxxxxxxxxx";
+const SURFACE_ID = "clsurxxxxxxxxxxxxxxxxxxxxxxx";
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockRequireVenueScheduleManager.mockResolvedValue(USER_ID);
+  mockPrisma.venue.findFirst.mockResolvedValue({ id: VENUE_ID, organizationId: ORGANIZATION_ID });
+  mockLogVenueActivity.mockResolvedValue({ id: "cllogxxxxxxxxxxxxxxxxxxxxxxx" });
+});
+
+describe("ice surface actions", () => {
+  it("creates an ice surface for authorized venue schedulers", async () => {
+    mockPrisma.iceSurface.create.mockResolvedValue({
+      id: SURFACE_ID,
+      venueId: VENUE_ID,
+      name: "Main Rink",
+    });
+
+    const result = await createIceSurface({
+      organizationId: ORGANIZATION_ID,
+      venueId: VENUE_ID,
+      name: "Main Rink",
+      surfaceType: "ICE",
+      isDefault: true,
+    });
+
+    expect(result.success).toBe(true);
+    expect(mockRequireVenueScheduleManager).toHaveBeenCalledWith(ORGANIZATION_ID, VENUE_ID);
+    expect(mockPrisma.iceSurface.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          venueId: VENUE_ID,
+          name: "Main Rink",
+          surfaceType: "ICE",
+          isDefault: true,
+        }),
+      })
+    );
+  });
+
+  it("updates and archives ice surfaces without hard deletion", async () => {
+    mockPrisma.iceSurface.update
+      .mockResolvedValueOnce({ id: SURFACE_ID, venueId: VENUE_ID, name: "Studio" })
+      .mockResolvedValueOnce({ id: SURFACE_ID, venueId: VENUE_ID, isActive: false });
+
+    const updateResult = await updateIceSurface({
+      organizationId: ORGANIZATION_ID,
+      venueId: VENUE_ID,
+      surfaceId: SURFACE_ID,
+      name: "Studio",
+      surfaceType: "STUDIO",
+    });
+    const archiveResult = await archiveIceSurface({
+      organizationId: ORGANIZATION_ID,
+      venueId: VENUE_ID,
+      surfaceId: SURFACE_ID,
+    });
+
+    expect(updateResult.success).toBe(true);
+    expect(archiveResult.success).toBe(true);
+    expect(mockPrisma.iceSurface.update).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        where: { id: SURFACE_ID, venueId: VENUE_ID },
+        data: { isActive: false },
+      })
+    );
+  });
+});
+
+describe("operating hour actions", () => {
+  it("creates operating hours when no overlapping rule exists", async () => {
+    mockPrisma.venueOperatingHour.findFirst.mockResolvedValue(null);
+    mockPrisma.venueOperatingHour.create.mockResolvedValue({ id: "clhrxxxxxxxxxxxxxxxxxxxxxxxx", venueId: VENUE_ID });
+
+    const result = await setOperatingHours({
+      organizationId: ORGANIZATION_ID,
+      venueId: VENUE_ID,
+      surfaceId: SURFACE_ID,
+      dayOfWeek: 1,
+      opensAt: "08:00",
+      closesAt: "22:00",
+      effectiveStartDate: "2026-01-01T00:00:00Z",
+      status: "OPEN",
+    });
+
+    expect(result.success).toBe(true);
+    expect(mockPrisma.venueOperatingHour.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          venueId: VENUE_ID,
+          surfaceId: SURFACE_ID,
+          dayOfWeek: 1,
+        }),
+      })
+    );
+  });
+
+  it("rejects overlapping operating hour rules for the same day and surface", async () => {
+    mockPrisma.venueOperatingHour.findFirst.mockResolvedValue({ id: "existing-rule" });
+
+    const result = await setOperatingHours({
+      organizationId: ORGANIZATION_ID,
+      venueId: VENUE_ID,
+      surfaceId: SURFACE_ID,
+      dayOfWeek: 1,
+      opensAt: "08:00",
+      closesAt: "22:00",
+      effectiveStartDate: "2026-01-01T00:00:00Z",
+      status: "OPEN",
+    });
+
+    expect(result.success).toBe(false);
+    expect(mockPrisma.venueOperatingHour.create).not.toHaveBeenCalled();
+  });
+});
