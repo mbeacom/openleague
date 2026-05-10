@@ -1,19 +1,16 @@
 {
   "mcpServers": {
     "context7": {
-      "command": "npx",
-      "args": ["-y", "@upstash/context7-mcp@^2"]
+      "command": "bunx",
+      "args": ["--bun", "-y", "@upstash/context7-mcp@^2"]
     },
     "playwright": {
-      "command": "npx",
-      "args": ["-y", "@playwright/mcp@latest"]
+      "command": "bunx",
+      "args": ["--bun", "-y", "@playwright/mcp@latest"]
     },
     "next-devtools": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "next-devtools-mcp@latest"
-      ]
+      "command": "bunx",
+      "args": ["--bun", "-y", "next-devtools-mcp@latest"]
     }
   }
 }
