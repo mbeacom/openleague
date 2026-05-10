@@ -253,7 +253,7 @@ export default function FinalCTA() {
                     fontWeight: 600,
                   }}
                 >
-                  Free Forever
+                  Free for Now
                 </Typography>
               </Box>
               <Box

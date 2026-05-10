@@ -83,6 +83,12 @@ EMAIL_FROM="noreply@yourdomain.com"  # Your sender email address
 # Optional: Analytics (Umami - privacy-friendly)
 NEXT_PUBLIC_UMAMI_WEBSITE_ID=""  # Get from https://cloud.umami.is
 
+# Optional: Advertising (disabled by default)
+NEXT_PUBLIC_ADS_ENABLED="false"
+NEXT_PUBLIC_GOOGLE_ADSENSE_CLIENT=""
+NEXT_PUBLIC_GOOGLE_ADSENSE_MARKETING_SLOT=""
+NEXT_PUBLIC_GOOGLE_ADSENSE_DASHBOARD_SLOT=""
+
 # Optional: For future AWS migration
 AWS_REGION="us-east-1"
 ```
@@ -98,6 +104,10 @@ AWS_REGION="us-east-1"
 **Optional Environment Variables:**
 
 - `NEXT_PUBLIC_UMAMI_WEBSITE_ID` - Umami analytics website ID (leave empty to disable tracking)
+- `NEXT_PUBLIC_ADS_ENABLED` - Set to `true` to enable configured ad slots; defaults to disabled
+- `NEXT_PUBLIC_GOOGLE_ADSENSE_CLIENT` - Google AdSense publisher/client ID used only when ads are enabled
+- `NEXT_PUBLIC_GOOGLE_ADSENSE_MARKETING_SLOT` - AdSense slot ID for the public marketing layout
+- `NEXT_PUBLIC_GOOGLE_ADSENSE_DASHBOARD_SLOT` - Reserved AdSense slot ID for future dashboard placements
 
 ## Development Workflow
 
@@ -737,8 +747,10 @@ Coming soon - we'll offer a professionally hosted version at [openl.app](https:/
 
 - Zero setup or maintenance
 - Automatic updates and backups
-- Professional support
-- Free tier for small teams
+- Free access for teams as of now
+- No subscription billing or paid tiers currently offered
+
+Hosted access is currently free, but it is not guaranteed to remain free indefinitely. The hosted service may be modified, limited, suspended, discontinued, or shut down, and future releases may introduce paid subscriptions, usage limits, advertising, sponsored placements, or paid feature gates. Any future charges would apply prospectively under the terms presented at that time.
 
 📚 **Developer Documentation:** [openleague.dev](https://openleague.dev)
 

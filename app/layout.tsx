@@ -8,6 +8,7 @@ import LayoutProvider from "@/components/providers/LayoutProvider";
 import ErrorBoundary from "@/components/ui/ErrorBoundary";
 import { ToastProvider } from "@/components/ui/Toast";
 import StructuredData from "@/components/ui/StructuredData";
+import { ADS_CONFIG, isAdsEnabled } from "@/lib/config/ads";
 import { SITE_CONFIG, getOrganizationSchema, getSoftwareApplicationSchema } from "@/lib/config/seo";
 
 // Validate environment variables on startup
@@ -97,6 +98,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   const umamiWebsiteId = process.env.NEXT_PUBLIC_UMAMI_WEBSITE_ID;
+  const adsEnabled = isAdsEnabled();
 
   return (
     <html lang="en">
@@ -109,6 +111,15 @@ export default function RootLayout({
             src="https://cloud.umami.is/script.js"
             data-website-id={umamiWebsiteId}
             strategy="afterInteractive"
+          />
+        )}
+        {adsEnabled && (
+          <Script
+            id="adsense-script"
+            async
+            crossOrigin="anonymous"
+            strategy="afterInteractive"
+            src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADS_CONFIG.adsenseClient}`}
           />
         )}
         <ErrorBoundary>

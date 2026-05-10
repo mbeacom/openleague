@@ -29,6 +29,12 @@ const envSchema = z.object({
     NEXT_PUBLIC_HOTJAR_ID: z.string().optional(),
     NEXT_PUBLIC_MIXPANEL_TOKEN: z.string().optional(),
 
+    // Optional advertising controls (disabled unless explicitly enabled)
+    NEXT_PUBLIC_ADS_ENABLED: z.enum(['true', 'false']).optional(),
+    NEXT_PUBLIC_GOOGLE_ADSENSE_CLIENT: z.string().optional(),
+    NEXT_PUBLIC_GOOGLE_ADSENSE_MARKETING_SLOT: z.string().optional(),
+    NEXT_PUBLIC_GOOGLE_ADSENSE_DASHBOARD_SLOT: z.string().optional(),
+
     // Optional AWS variables (for future migration)
     AWS_REGION: z.string().optional(),
 })
@@ -53,6 +59,10 @@ function validateEnv() {
             NEXT_PUBLIC_VERCEL_ANALYTICS_ID: process.env.NEXT_PUBLIC_VERCEL_ANALYTICS_ID,
             NEXT_PUBLIC_HOTJAR_ID: process.env.NEXT_PUBLIC_HOTJAR_ID,
             NEXT_PUBLIC_MIXPANEL_TOKEN: process.env.NEXT_PUBLIC_MIXPANEL_TOKEN,
+            NEXT_PUBLIC_ADS_ENABLED: process.env.NEXT_PUBLIC_ADS_ENABLED as 'true' | 'false' | undefined,
+            NEXT_PUBLIC_GOOGLE_ADSENSE_CLIENT: process.env.NEXT_PUBLIC_GOOGLE_ADSENSE_CLIENT,
+            NEXT_PUBLIC_GOOGLE_ADSENSE_MARKETING_SLOT: process.env.NEXT_PUBLIC_GOOGLE_ADSENSE_MARKETING_SLOT,
+            NEXT_PUBLIC_GOOGLE_ADSENSE_DASHBOARD_SLOT: process.env.NEXT_PUBLIC_GOOGLE_ADSENSE_DASHBOARD_SLOT,
             AWS_REGION: process.env.AWS_REGION,
         }
     }
