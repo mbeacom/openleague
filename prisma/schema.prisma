@@ -20,38 +20,50 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  teamMembers            TeamMember[]
-  rsvps                  RSVP[]
-  invitations            Invitation[]
-  players                Player[]
-  leagueUsers            LeagueUser[]
-  playerTransfers        PlayerTransfer[]
-  sentMessages           LeagueMessage[]
-  messageRecipients      MessageRecipient[]
-  notificationPreferences NotificationPreference[]
-  notificationBatches    NotificationBatch[]
-  auditLogs              AuditLog[]
-  practiceSessions       PracticeSession[]
-  plays                  Play[]
-  venues                 Venue[]
-  gameSchedules          GameSchedule[]
+  teamMembers                  TeamMember[]
+  rsvps                        RSVP[]
+  invitations                  Invitation[]
+  players                      Player[]
+  leagueUsers                  LeagueUser[]
+  playerTransfers              PlayerTransfer[]
+  sentMessages                 LeagueMessage[]
+  messageRecipients            MessageRecipient[]
+  notificationPreferences      NotificationPreference[]
+  notificationBatches          NotificationBatch[]
+  auditLogs                    AuditLog[]
+  practiceSessions             PracticeSession[]
+  plays                        Play[]
+  venues                       Venue[]
+  gameSchedules                GameSchedule[]
+  createdVenueOrganizations    VenueOrganization[]      @relation("VenueOrganizationCreator")
+  venueStaffMemberships        VenueStaff[]             @relation("VenueStaffUser")
+  sentVenueStaffInvites        VenueStaff[]             @relation("VenueStaffInviter")
+  createdVenueScheduleBlocks   VenueScheduleBlock[]     @relation("VenueScheduleBlockCreator")
+  updatedVenueScheduleBlocks   VenueScheduleBlock[]     @relation("VenueScheduleBlockUpdater")
+  iceTimeRequests              IceTimeRequest[]         @relation("IceTimeRequester")
+  decidedIceTimeRequests       IceTimeRequest[]         @relation("IceTimeDecider")
+  venueContentPosts            VenueContentPost[]       @relation("VenueContentAuthor")
+  sentVenueRelationshipInvites VenueRelationship[]      @relation("VenueRelationshipInviter")
+  acceptedVenueRelationships   VenueRelationship[]      @relation("VenueRelationshipAccepter")
+  removedVenueRelationships    VenueRelationship[]      @relation("VenueRelationshipRemover")
+  venueActivityLogs            VenueActivityLog[]       @relation("VenueActivityActor")
 }
 
 // Audit log model for tracking administrative actions and security events
 model AuditLog {
   id           String   @id @default(cuid())
-  action       String   // AuditAction enum value
+  action       String // AuditAction enum value
   userId       String
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   leagueId     String?
   league       League?  @relation(fields: [leagueId], references: [id], onDelete: SetNull)
   teamId       String?
   team         Team?    @relation(fields: [teamId], references: [id], onDelete: SetNull)
-  resourceId   String?  // ID of the affected resource
-  resourceType String?  // Type of the affected resource (team, player, event, etc.)
-  details      Json?    // Additional details about the action
-  ipAddress    String?  // IP address of the user
-  userAgent    String?  // User agent string
+  resourceId   String? // ID of the affected resource
+  resourceType String? // Type of the affected resource (team, player, event, etc.)
+  details      Json? // Additional details about the action
+  ipAddress    String? // IP address of the user
+  userAgent    String? // User agent string
   severity     String   @default("info") // info, warning, error
   createdAt    DateTime @default(now())
 
@@ -86,26 +98,28 @@ model Team {
   updatedAt DateTime @updatedAt
 
   // Optional league relationship for backward compatibility
-  leagueId   String?
-  league     League?   @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  leagueId String?
+  league   League? @relation(fields: [leagueId], references: [id], onDelete: Restrict)
 
   divisionId String?
   division   Division? @relation(fields: [divisionId], references: [id])
 
-  members     TeamMember[]
-  players     Player[]
-  events      Event[]
-  invitations       Invitation[]
-  homeEvents        Event[] @relation("HomeTeam")
-  awayEvents        Event[] @relation("AwayTeam")
-  transfersFrom     PlayerTransfer[] @relation("TransferFromTeam")
-  transfersTo       PlayerTransfer[] @relation("TransferToTeam")
-  messageTargeting  MessageTargeting[]
-  auditLogs         AuditLog[]
-  practiceSessions  PracticeSession[]
-  plays             Play[]
-  venues            Venue[]
-  gameSchedules     GameSchedule[]
+  members            TeamMember[]
+  players            Player[]
+  events             Event[]
+  invitations        Invitation[]
+  homeEvents         Event[]             @relation("HomeTeam")
+  awayEvents         Event[]             @relation("AwayTeam")
+  transfersFrom      PlayerTransfer[]    @relation("TransferFromTeam")
+  transfersTo        PlayerTransfer[]    @relation("TransferToTeam")
+  messageTargeting   MessageTargeting[]
+  auditLogs          AuditLog[]
+  practiceSessions   PracticeSession[]
+  plays              Play[]
+  venues             Venue[]
+  gameSchedules      GameSchedule[]
+  venueRelationships VenueRelationship[]
+  iceTimeRequests    IceTimeRequest[]
 
   @@index([leagueId]) // Optimize league-team queries
   @@index([divisionId]) // Optimize division-team queries
@@ -147,9 +161,9 @@ model Player {
   phone            String?
   emergencyContact String? // Admin-only field, not visible to regular members
   emergencyPhone   String? // Admin-only field, not visible to regular members
-  jerseyNumber     Int?    // Optional jersey number (1–99). No unique constraint; duplicates trigger warning only.
+  jerseyNumber     Int? // Optional jersey number (1–99). No unique constraint; duplicates trigger warning only.
   position         String? // Free-text position (e.g., Center, Goalie, Midfielder). Varies by sport.
-  usahMemberId     String? @db.VarChar(20) // USA Hockey Member ID. Admin-only.
+  usahMemberId     String?  @db.VarChar(20) // USA Hockey Member ID. Admin-only.
   userId           String? // Optional link to User account if player has registered
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -272,18 +286,20 @@ model League {
   updatedAt    DateTime @updatedAt
 
   // Essential relationships only
-  divisions              Division[]
-  teams                  Team[]
-  events                 Event[]
-  players                Player[]
-  users                  LeagueUser[]
-  playerTransfers        PlayerTransfer[]
-  messages               LeagueMessage[]
+  divisions               Division[]
+  teams                   Team[]
+  events                  Event[]
+  players                 Player[]
+  users                   LeagueUser[]
+  playerTransfers         PlayerTransfer[]
+  messages                LeagueMessage[]
   notificationPreferences NotificationPreference[]
-  notificationBatches    NotificationBatch[]
-  auditLogs              AuditLog[]
-  venues                 Venue[]
-  gameSchedules          GameSchedule[]
+  notificationBatches     NotificationBatch[]
+  auditLogs               AuditLog[]
+  venues                  Venue[]
+  gameSchedules           GameSchedule[]
+  venueRelationships      VenueRelationship[]
+  iceTimeRequests         IceTimeRequest[]
 
   @@map("leagues")
 }
@@ -298,9 +314,9 @@ model Division {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  leagueId String
-  league   League @relation(fields: [leagueId], references: [id], onDelete: Restrict)
-  teams    Team[]
+  leagueId         String
+  league           League             @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  teams            Team[]
   messageTargeting MessageTargeting[]
 
   @@map("divisions")
@@ -324,52 +340,52 @@ model LeagueUser {
 
 enum LeagueRole {
   LEAGUE_ADMIN // Full league control
-  TEAM_ADMIN   // Team management within league
-  MEMBER       // Basic member
+  TEAM_ADMIN // Team management within league
+  MEMBER // Basic member
 }
 
 // Player transfer history model for audit trail
 model PlayerTransfer {
-  id              String   @id @default(cuid())
-  reason          String?  // Optional reason for transfer
-  createdAt       DateTime @default(now())
+  id        String   @id @default(cuid())
+  reason    String? // Optional reason for transfer
+  createdAt DateTime @default(now())
 
-  playerId        String
-  player          Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  playerId String
+  player   Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
 
-  fromTeamId      String
-  fromTeam        Team     @relation("TransferFromTeam", fields: [fromTeamId], references: [id])
+  fromTeamId String
+  fromTeam   Team   @relation("TransferFromTeam", fields: [fromTeamId], references: [id])
 
-  toTeamId        String
-  toTeam          Team     @relation("TransferToTeam", fields: [toTeamId], references: [id])
+  toTeamId String
+  toTeam   Team   @relation("TransferToTeam", fields: [toTeamId], references: [id])
 
-  leagueId        String
-  league          League   @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  leagueId String
+  league   League @relation(fields: [leagueId], references: [id], onDelete: Restrict)
 
   transferredById String
-  transferredBy   User     @relation(fields: [transferredById], references: [id])
+  transferredBy   User   @relation(fields: [transferredById], references: [id])
 
   @@map("player_transfers")
 }
 
 // League message model for targeted messaging system
 model LeagueMessage {
-  id          String              @id @default(cuid())
+  id          String            @id @default(cuid())
   subject     String
   content     String
-  messageType LeagueMessageType   @default(MESSAGE)
-  priority    MessagePriority     @default(NORMAL)
-  createdAt   DateTime            @default(now())
+  messageType LeagueMessageType @default(MESSAGE)
+  priority    MessagePriority   @default(NORMAL)
+  createdAt   DateTime          @default(now())
 
-  leagueId    String
-  league      League              @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  leagueId String
+  league   League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
 
-  senderId    String
-  sender      User                @relation(fields: [senderId], references: [id])
+  senderId String
+  sender   User   @relation(fields: [senderId], references: [id])
 
   // Message targeting
-  targeting      MessageTargeting[]
-  recipients     MessageRecipient[]
+  targeting       MessageTargeting[]
+  recipients      MessageRecipient[]
   batchedMessages BatchedMessage[]
 
   @@index([leagueId, createdAt])
@@ -377,8 +393,8 @@ model LeagueMessage {
 }
 
 enum LeagueMessageType {
-  MESSAGE       // Regular targeted message
-  ANNOUNCEMENT  // League-wide announcement
+  MESSAGE // Regular targeted message
+  ANNOUNCEMENT // League-wide announcement
 }
 
 enum MessagePriority {
@@ -390,32 +406,32 @@ enum MessagePriority {
 
 // Message targeting configuration
 model MessageTargeting {
-  id        String @id @default(cuid())
+  id String @id @default(cuid())
 
   messageId String
   message   LeagueMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
   // Targeting options (at least one must be specified)
-  entireLeague Boolean @default(false)
+  entireLeague Boolean   @default(false)
   divisionId   String?
   division     Division? @relation(fields: [divisionId], references: [id])
   teamId       String?
-  team         Team? @relation(fields: [teamId], references: [id])
+  team         Team?     @relation(fields: [teamId], references: [id])
 
   @@map("message_targeting")
 }
 
 // Message recipients for audit trail
 model MessageRecipient {
-  id          String   @id @default(cuid())
-  sentAt      DateTime @default(now())
+  id             String                @id @default(cuid())
+  sentAt         DateTime              @default(now())
   deliveryStatus MessageDeliveryStatus @default(PENDING)
 
-  messageId   String
-  message     LeagueMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  messageId String
+  message   LeagueMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
-  userId      String
-  user        User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([messageId, userId])
   @@map("message_recipients")
@@ -433,27 +449,27 @@ model NotificationPreference {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  userId   String
-  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   leagueId String?
   league   League? @relation(fields: [leagueId], references: [id], onDelete: Cascade)
 
   // Notification types
-  leagueMessages      Boolean @default(true)  // Targeted league messages
-  leagueAnnouncements Boolean @default(true)  // League-wide announcements
-  eventNotifications  Boolean @default(true)  // Event created/updated/cancelled
-  rsvpReminders       Boolean @default(true)  // RSVP reminder emails
-  teamInvitations     Boolean @default(true)  // Team invitation emails
-  practicePlanNotifications Boolean @default(true)  // Practice plan share/update notifications
+  leagueMessages            Boolean @default(true) // Targeted league messages
+  leagueAnnouncements       Boolean @default(true) // League-wide announcements
+  eventNotifications        Boolean @default(true) // Event created/updated/cancelled
+  rsvpReminders             Boolean @default(true) // RSVP reminder emails
+  teamInvitations           Boolean @default(true) // Team invitation emails
+  practicePlanNotifications Boolean @default(true) // Practice plan share/update notifications
 
   // Delivery preferences
-  emailEnabled        Boolean @default(true)  // Receive emails
-  urgentOnly          Boolean @default(false) // Only urgent/high priority messages
-  batchDelivery       Boolean @default(false) // Batch non-urgent messages
+  emailEnabled  Boolean @default(true) // Receive emails
+  urgentOnly    Boolean @default(false) // Only urgent/high priority messages
+  batchDelivery Boolean @default(false) // Batch non-urgent messages
 
   // Unsubscribe token for email management
-  unsubscribeToken    String? @unique
+  unsubscribeToken String? @unique
 
   @@unique([userId, leagueId])
   @@map("notification_preferences")
@@ -461,19 +477,19 @@ model NotificationPreference {
 
 // Notification batch for grouping non-urgent messages
 model NotificationBatch {
-  id          String   @id @default(cuid())
+  id          String                  @id @default(cuid())
   scheduledAt DateTime // When to send the batch
   sentAt      DateTime?
   status      NotificationBatchStatus @default(PENDING)
-  createdAt   DateTime @default(now())
+  createdAt   DateTime                @default(now())
 
-  leagueId    String
-  league      League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  leagueId String
+  league   League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
 
-  userId      String
-  user        User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  messages    BatchedMessage[]
+  messages BatchedMessage[]
 
   @@index([scheduledAt, status])
   @@map("notification_batches")
@@ -487,14 +503,14 @@ enum NotificationBatchStatus {
 
 // Individual messages within a notification batch
 model BatchedMessage {
-  id        String   @id @default(cuid())
+  id        String          @id @default(cuid())
   subject   String
   content   String
   priority  MessagePriority
-  createdAt DateTime @default(now())
+  createdAt DateTime        @default(now())
 
-  batchId   String
-  batch     NotificationBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  batchId String
+  batch   NotificationBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
 
   // Reference to original message if applicable
   messageId String?
@@ -505,21 +521,21 @@ model BatchedMessage {
 
 // Practice session model for hockey practice planner
 model PracticeSession {
-  id          String   @id @default(cuid())
-  title       String
-  date        DateTime
-  duration    Int      // Total duration in minutes
-  isShared    Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(cuid())
+  title     String
+  date      DateTime
+  duration  Int // Total duration in minutes
+  isShared  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  teamId      String
-  team        Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  teamId String
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   createdById String
-  createdBy   User     @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  createdBy   User   @relation(fields: [createdById], references: [id], onDelete: Restrict)
 
-  plays       PracticeSessionPlay[]
+  plays PracticeSessionPlay[]
 
   @@index([teamId, date])
   @@map("practice_sessions")
@@ -528,18 +544,18 @@ model PracticeSession {
 // Junction table for plays in practice sessions
 model PracticeSessionPlay {
   id           String   @id @default(cuid())
-  sequence     Int      // Order in the session
-  duration     Int      // Duration for this play in minutes
-  instructions String?  // Specific instructions for this instance
+  sequence     Int // Order in the session
+  duration     Int // Duration for this play in minutes
+  instructions String? // Specific instructions for this instance
   createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt  // Track modifications for auditing
+  updatedAt    DateTime @updatedAt // Track modifications for auditing
 
-  sessionId    String
-  session      PracticeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId String
+  session   PracticeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
-  playId       String
+  playId String
   // Cascade delete to preserve session integrity when library play is deleted (Req 4.5)
-  play         Play     @relation(fields: [playId], references: [id], onDelete: Cascade)
+  play   Play   @relation(fields: [playId], references: [id], onDelete: Cascade)
 
   @@unique([sessionId, sequence])
   @@index([sessionId])
@@ -551,19 +567,19 @@ model Play {
   id          String   @id @default(cuid())
   name        String
   description String?
-  thumbnail   String?  // Base64 encoded PNG thumbnail (generated server-side from canvas export)
-  playData    Json     // Serialized PlayData structure
+  thumbnail   String? // Base64 encoded PNG thumbnail (generated server-side from canvas export)
+  playData    Json // Serialized PlayData structure
   isTemplate  Boolean  @default(false) // Library plays vs session-specific
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  teamId      String
-  team        Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  teamId String
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   createdById String
-  createdBy   User     @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  createdBy   User   @relation(fields: [createdById], references: [id], onDelete: Restrict)
 
-  sessions    PracticeSessionPlay[]
+  sessions PracticeSessionPlay[]
 
   @@index([teamId, isTemplate])
   @@map("plays")
@@ -572,6 +588,9 @@ model Play {
 // Venue/Rink model for structured location management
 enum SurfaceType {
   ICE
+  STUDIO
+  ROOM
+  DRYLAND
   TURF
   COURT
   FIELD
@@ -581,26 +600,244 @@ enum SurfaceType {
 enum VenueVisibility {
   PUBLIC // Anyone can see and use
   LEAGUE // Visible to all teams in a league
-  TEAM   // Private to the owning team
+  TEAM // Private to the owning team
+}
+
+enum VenueOrganizationType {
+  RINK
+  ARENA
+  SKATING_CENTER
+  SPORTS_COMPLEX
+  OTHER
+}
+
+enum VenueOrganizationStatus {
+  DRAFT
+  ACTIVE
+  SUSPENDED
+  ARCHIVED
+}
+
+enum VenueStaffRole {
+  OWNER
+  MANAGER
+  SCHEDULER
+  CONTENT_EDITOR
+  REQUEST_MANAGER
+  VIEWER
+}
+
+enum VenueStaffStatus {
+  INVITED
+  ACTIVE
+  REMOVED
+}
+
+enum VenueProfileStatus {
+  DRAFT
+  PUBLISHED
+  UNPUBLISHED
+  ARCHIVED
+}
+
+enum OperatingHourStatus {
+  OPEN
+  CLOSED
+  RESTRICTED
+}
+
+enum VenueScheduleActivityType {
+  OPEN_SKATE
+  STICK_AND_PICK
+  FREE_SKATE
+  FIGURE_SKATING
+  SPECIALTY_EVENT
+  PRIVATE_LESSON
+  PUBLIC_LESSON
+  TEAM_ICE
+  ORGANIZATION_ICE
+  RENTAL
+  CLOSURE
+  CUSTOM
+}
+
+enum VenueScheduleAudience {
+  PUBLIC
+  TEAMS
+  COACHES
+  ORGANIZATIONS
+  INVITE_ONLY
+  STAFF_ONLY
+}
+
+enum VenueScheduleVisibility {
+  PUBLIC
+  AUTHENTICATED
+  RELATIONSHIP_ONLY
+  PRIVATE
+}
+
+enum VenueScheduleBlockStatus {
+  DRAFT
+  PUBLISHED
+  CANCELED
+  ARCHIVED
+}
+
+enum RegistrationMode {
+  INFO_ONLY
+  REQUEST_REQUIRED
+  EXTERNAL_REGISTRATION
+}
+
+enum IceTimeRequestStatus {
+  SUBMITTED
+  UNDER_REVIEW
+  ACCEPTED
+  DECLINED
+  CANCELED
+  EXPIRED
+}
+
+enum LessonOfferingType {
+  PRIVATE
+  SEMI_PRIVATE
+  GROUP
+  CLINIC
+  CAMP
+}
+
+enum LessonOfferingStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum VenueContentPostStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHED
+  UNPUBLISHED
+  ARCHIVED
+}
+
+enum VenueRelationshipType {
+  PREFERRED
+  HOME
+}
+
+enum VenueRelationshipTargetType {
+  TEAM
+  LEAGUE
+  COACH
+  ORGANIZATION
+}
+
+enum VenueRelationshipStatus {
+  PENDING
+  ACTIVE
+  REJECTED
+  REMOVED
+  EXPIRED
+}
+
+enum SkillLevelSource {
+  USA_HOCKEY
+  US_FIGURE_SKATING
+  RINK_CUSTOM
+  OTHER
+}
+
+enum SkillLevelDiscipline {
+  HOCKEY
+  FIGURE_SKATING
+  SKATING
+  GOALIE
+  OTHER
+}
+
+model VenueOrganization {
+  id                  String                  @id @default(cuid())
+  name                String
+  type                VenueOrganizationType   @default(RINK)
+  description         String?
+  primaryContactName  String?
+  primaryContactEmail String?
+  primaryContactPhone String?
+  website             String?
+  status              VenueOrganizationStatus @default(DRAFT)
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+
+  createdById String
+  createdBy   User   @relation("VenueOrganizationCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  venues Venue[]
+  staff  VenueStaff[]
+
+  @@index([createdById])
+  @@index([status])
+  @@map("venue_organizations")
+}
+
+model VenueStaff {
+  id        String           @id @default(cuid())
+  role      VenueStaffRole   @default(VIEWER)
+  status    VenueStaffStatus @default(INVITED)
+  joinedAt  DateTime?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  organizationId String
+  organization   VenueOrganization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  venueId String?
+  venue   Venue?  @relation(fields: [venueId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation("VenueStaffUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  invitedById String?
+  invitedBy   User?   @relation("VenueStaffInviter", fields: [invitedById], references: [id], onDelete: SetNull)
+
+  @@unique([organizationId, venueId, userId])
+  @@index([userId])
+  @@index([organizationId, role])
+  @@index([venueId])
+  @@map("venue_staff")
 }
 
 model Venue {
-  id          String          @id @default(cuid())
-  name        String
-  address     String?
-  city        String?
-  state       String?
-  zipCode     String?
-  surfaceType SurfaceType     @default(OTHER)
-  capacity    Int?
-  amenities   String[]        // e.g., ["locker_rooms", "parking", "pro_shop", "scoreboard"]
-  phone       String?
-  website     String?
-  notes       String?
-  visibility  VenueVisibility @default(PUBLIC)
-  isActive    Boolean         @default(true)
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  id                  String             @id @default(cuid())
+  name                String
+  address             String?
+  city                String?
+  state               String?
+  zipCode             String?
+  surfaceType         SurfaceType        @default(OTHER)
+  capacity            Int?
+  amenities           String[] // e.g., ["locker_rooms", "parking", "pro_shop", "scoreboard"]
+  phone               String?
+  website             String?
+  notes               String?
+  visibility          VenueVisibility    @default(PUBLIC)
+  isActive            Boolean            @default(true)
+  slug                String?            @unique
+  publicDescription   String?
+  logoUrl             String?
+  brandPrimaryColor   String?
+  brandSecondaryColor String?
+  timezone            String             @default("America/New_York")
+  publicEmail         String?
+  publicPhone         String?
+  privateManagerNotes String?
+  profileStatus       VenueProfileStatus @default(DRAFT)
+  publishedAt         DateTime?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  organizationId String?
+  organization   VenueOrganization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   // Ownership — at most one of these is set
   teamId String?
@@ -612,13 +849,284 @@ model Venue {
   createdById String
   createdBy   User   @relation(fields: [createdById], references: [id], onDelete: Restrict)
 
-  events Event[]
+  events          Event[]
+  staff           VenueStaff[]
+  surfaces        IceSurface[]
+  operatingHours  VenueOperatingHour[]
+  scheduleBlocks  VenueScheduleBlock[]
+  iceTimeRequests IceTimeRequest[]
+  lessonOfferings LessonOffering[]
+  contentPosts    VenueContentPost[]
+  relationships   VenueRelationship[]
+  activityLogs    VenueActivityLog[]
 
   @@index([visibility])
   @@index([teamId])
   @@index([leagueId])
+  @@index([organizationId])
+  @@index([profileStatus])
   @@index([surfaceType])
   @@map("venues")
+}
+
+model IceSurface {
+  id           String      @id @default(cuid())
+  name         String
+  surfaceType  SurfaceType @default(ICE)
+  capacity     Int?
+  isDefault    Boolean     @default(false)
+  isActive     Boolean     @default(true)
+  displayOrder Int         @default(0)
+  notes        String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  venueId String
+  venue   Venue  @relation(fields: [venueId], references: [id], onDelete: Cascade)
+
+  operatingHours  VenueOperatingHour[]
+  scheduleBlocks  VenueScheduleBlock[]
+  lessonOfferings LessonOffering[]
+
+  @@unique([venueId, name])
+  @@index([venueId, isActive])
+  @@map("ice_surfaces")
+}
+
+model VenueOperatingHour {
+  id                 String              @id @default(cuid())
+  dayOfWeek          Int
+  opensAt            String
+  closesAt           String
+  effectiveStartDate DateTime
+  effectiveEndDate   DateTime?
+  status             OperatingHourStatus @default(OPEN)
+  label              String?
+  notes              String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  venueId String
+  venue   Venue  @relation(fields: [venueId], references: [id], onDelete: Cascade)
+
+  surfaceId String?
+  surface   IceSurface? @relation(fields: [surfaceId], references: [id], onDelete: Cascade)
+
+  @@index([venueId, dayOfWeek])
+  @@index([surfaceId, dayOfWeek])
+  @@map("venue_operating_hours")
+}
+
+model VenueScheduleBlock {
+  id                      String                    @id @default(cuid())
+  title                   String
+  description             String?
+  activityType            VenueScheduleActivityType
+  audience                VenueScheduleAudience     @default(PUBLIC)
+  visibility              VenueScheduleVisibility   @default(PUBLIC)
+  status                  VenueScheduleBlockStatus  @default(DRAFT)
+  startsAt                DateTime
+  endsAt                  DateTime
+  recurrenceRule          String?
+  recurrenceStartDate     DateTime?
+  recurrenceEndDate       DateTime?
+  capacity                Int?
+  priceAmount             Int?
+  priceCurrency           String                    @default("USD")
+  priceLabel              String?
+  registrationMode        RegistrationMode          @default(INFO_ONLY)
+  externalRegistrationUrl String?
+  createdAt               DateTime                  @default(now())
+  updatedAt               DateTime                  @updatedAt
+
+  venueId String
+  venue   Venue  @relation(fields: [venueId], references: [id], onDelete: Cascade)
+
+  surfaceId String?
+  surface   IceSurface? @relation(fields: [surfaceId], references: [id], onDelete: SetNull)
+
+  createdById String
+  createdBy   User   @relation("VenueScheduleBlockCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  updatedById String?
+  updatedBy   User?   @relation("VenueScheduleBlockUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  iceTimeRequests IceTimeRequest[]
+  lessonOfferings LessonOffering[]
+  skillLevels     SkillLevelReference[]
+
+  @@index([venueId, startsAt])
+  @@index([surfaceId, startsAt])
+  @@index([status, visibility])
+  @@index([activityType])
+  @@map("venue_schedule_blocks")
+}
+
+model IceTimeRequest {
+  id                        String               @id @default(cuid())
+  requesterOrganizationName String?
+  contactName               String
+  contactEmail              String
+  contactPhone              String?
+  requestedStartAt          DateTime
+  requestedEndAt            DateTime
+  notes                     String?
+  status                    IceTimeRequestStatus @default(SUBMITTED)
+  decisionMessage           String?
+  decidedAt                 DateTime?
+  createdAt                 DateTime             @default(now())
+  updatedAt                 DateTime             @updatedAt
+
+  scheduleBlockId String
+  scheduleBlock   VenueScheduleBlock @relation(fields: [scheduleBlockId], references: [id], onDelete: Cascade)
+
+  venueId String
+  venue   Venue  @relation(fields: [venueId], references: [id], onDelete: Cascade)
+
+  requesterUserId String
+  requesterUser   User   @relation("IceTimeRequester", fields: [requesterUserId], references: [id], onDelete: Cascade)
+
+  requesterTeamId String?
+  requesterTeam   Team?   @relation(fields: [requesterTeamId], references: [id], onDelete: SetNull)
+
+  requesterLeagueId String?
+  requesterLeague   League? @relation(fields: [requesterLeagueId], references: [id], onDelete: SetNull)
+
+  decidedById String?
+  decidedBy   User?   @relation("IceTimeDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+
+  @@index([venueId, status])
+  @@index([scheduleBlockId, status])
+  @@index([requesterUserId])
+  @@index([requesterTeamId])
+  @@index([requesterLeagueId])
+  @@map("ice_time_requests")
+}
+
+model LessonOffering {
+  id                      String               @id @default(cuid())
+  title                   String
+  description             String?
+  lessonType              LessonOfferingType
+  instructorName          String?
+  priceAmount             Int?
+  priceCurrency           String               @default("USD")
+  durationMinutes         Int?
+  availabilityDescription String?
+  registrationMode        RegistrationMode     @default(INFO_ONLY)
+  externalRegistrationUrl String?
+  status                  LessonOfferingStatus @default(DRAFT)
+  createdAt               DateTime             @default(now())
+  updatedAt               DateTime             @updatedAt
+
+  venueId String
+  venue   Venue  @relation(fields: [venueId], references: [id], onDelete: Cascade)
+
+  surfaceId String?
+  surface   IceSurface? @relation(fields: [surfaceId], references: [id], onDelete: SetNull)
+
+  scheduleBlocks VenueScheduleBlock[]
+  skillLevels    SkillLevelReference[]
+
+  @@index([venueId, status])
+  @@index([lessonType])
+  @@map("lesson_offerings")
+}
+
+model VenueContentPost {
+  id           String                 @id @default(cuid())
+  title        String
+  slug         String
+  excerpt      String?
+  body         String
+  status       VenueContentPostStatus @default(DRAFT)
+  publishedAt  DateTime?
+  scheduledFor DateTime?
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+
+  venueId String
+  venue   Venue  @relation(fields: [venueId], references: [id], onDelete: Cascade)
+
+  authorId String
+  author   User   @relation("VenueContentAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+
+  @@unique([venueId, slug])
+  @@index([venueId, status])
+  @@map("venue_content_posts")
+}
+
+model VenueRelationship {
+  id               String                      @id @default(cuid())
+  relationshipType VenueRelationshipType
+  targetType       VenueRelationshipTargetType
+  targetName       String?
+  invitedEmail     String?
+  status           VenueRelationshipStatus     @default(PENDING)
+  expiresAt        DateTime?
+  createdAt        DateTime                    @default(now())
+  updatedAt        DateTime                    @updatedAt
+
+  venueId String
+  venue   Venue  @relation(fields: [venueId], references: [id], onDelete: Cascade)
+
+  teamId String?
+  team   Team?   @relation(fields: [teamId], references: [id], onDelete: SetNull)
+
+  leagueId String?
+  league   League? @relation(fields: [leagueId], references: [id], onDelete: SetNull)
+
+  invitedById String
+  invitedBy   User   @relation("VenueRelationshipInviter", fields: [invitedById], references: [id], onDelete: Restrict)
+
+  acceptedById String?
+  acceptedBy   User?   @relation("VenueRelationshipAccepter", fields: [acceptedById], references: [id], onDelete: SetNull)
+
+  removedById String?
+  removedBy   User?   @relation("VenueRelationshipRemover", fields: [removedById], references: [id], onDelete: SetNull)
+
+  @@index([venueId, status])
+  @@index([teamId, status])
+  @@index([leagueId, status])
+  @@map("venue_relationships")
+}
+
+model SkillLevelReference {
+  id          String               @id @default(cuid())
+  source      SkillLevelSource
+  discipline  SkillLevelDiscipline
+  label       String
+  description String?
+  sortOrder   Int?
+  isActive    Boolean              @default(true)
+
+  scheduleBlocks  VenueScheduleBlock[]
+  lessonOfferings LessonOffering[]
+
+  @@unique([source, discipline, label])
+  @@index([discipline, isActive])
+  @@map("skill_level_references")
+}
+
+model VenueActivityLog {
+  id           String   @id @default(cuid())
+  action       String
+  resourceType String
+  resourceId   String?
+  summary      String
+  details      Json?
+  createdAt    DateTime @default(now())
+
+  venueId String
+  venue   Venue  @relation(fields: [venueId], references: [id], onDelete: Cascade)
+
+  actorId String
+  actor   User   @relation("VenueActivityActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([venueId, createdAt])
+  @@index([actorId])
+  @@index([action])
+  @@map("venue_activity_logs")
 }
 
 // Game schedule for season management
@@ -631,7 +1139,7 @@ enum ScheduleStatus {
 model GameSchedule {
   id         String         @id @default(cuid())
   name       String
-  seasonName String?        // e.g., "Fall 2026"
+  seasonName String? // e.g., "Fall 2026"
   startDate  DateTime
   endDate    DateTime
   status     ScheduleStatus @default(DRAFT)
@@ -661,8 +1169,8 @@ model GameSchedule {
 // Individual game within a schedule, linking to an Event
 model ScheduleGame {
   id          String   @id @default(cuid())
-  roundNumber Int      // Round / matchday number
-  gameNumber  Int      // Game number within the round
+  roundNumber Int // Round / matchday number
+  gameNumber  Int // Game number within the round
   createdAt   DateTime @default(now())
 
   gameScheduleId String

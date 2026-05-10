@@ -1,6 +1,30 @@
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db/prisma";
+import type { VenueStaffRole } from "@prisma/client";
+
+export const VENUE_PROFILE_ROLES = ["OWNER", "MANAGER"] as const satisfies VenueStaffRole[];
+export const VENUE_STAFF_ADMIN_ROLES = ["OWNER", "MANAGER"] as const satisfies VenueStaffRole[];
+export const VENUE_SCHEDULE_ROLES = ["OWNER", "MANAGER", "SCHEDULER"] as const satisfies VenueStaffRole[];
+export const VENUE_REQUEST_ROLES = ["OWNER", "MANAGER", "REQUEST_MANAGER"] as const satisfies VenueStaffRole[];
+export const VENUE_CONTENT_ROLES = ["OWNER", "MANAGER", "CONTENT_EDITOR"] as const satisfies VenueStaffRole[];
+export const VENUE_VIEW_ROLES = [
+  "OWNER",
+  "MANAGER",
+  "SCHEDULER",
+  "CONTENT_EDITOR",
+  "REQUEST_MANAGER",
+  "VIEWER",
+] as const satisfies VenueStaffRole[];
+
+const venueRoleRank: Record<VenueStaffRole, number> = {
+  VIEWER: 1,
+  CONTENT_EDITOR: 2,
+  REQUEST_MANAGER: 2,
+  SCHEDULER: 2,
+  MANAGER: 3,
+  OWNER: 4,
+};
 
 /**
  * Get the current user session
@@ -255,4 +279,96 @@ export async function requireSystemAdmin() {
   }
 
   return session;
+}
+
+/**
+ * Return the highest active venue staff role a user has for an organization or specific venue.
+ * Organization-wide staff rows have a null venueId and apply to every venue in the organization.
+ */
+export async function getUserVenueStaffRole(
+  userId: string,
+  organizationId: string,
+  venueId?: string
+): Promise<VenueStaffRole | null> {
+  const memberships = await prisma.venueStaff.findMany({
+    where: {
+      userId,
+      organizationId,
+      status: "ACTIVE",
+      organization: {
+        status: { in: ["DRAFT", "ACTIVE"] },
+      },
+      OR: venueId ? [{ venueId: null }, { venueId }] : undefined,
+    },
+    select: {
+      role: true,
+    },
+  });
+
+  const highestRole = memberships
+    .map((membership) => membership.role)
+    .sort((left, right) => venueRoleRank[right] - venueRoleRank[left])[0];
+
+  return highestRole ?? null;
+}
+
+export async function hasVenueStaffRole(
+  userId: string,
+  organizationId: string,
+  allowedRoles: readonly VenueStaffRole[],
+  venueId?: string
+): Promise<boolean> {
+  const role = await getUserVenueStaffRole(userId, organizationId, venueId);
+  return role ? allowedRoles.includes(role) : false;
+}
+
+export async function isVenueStaffMember(
+  userId: string,
+  organizationId: string,
+  venueId?: string
+): Promise<boolean> {
+  return hasVenueStaffRole(userId, organizationId, VENUE_VIEW_ROLES, venueId);
+}
+
+export async function requireVenueStaffRole(
+  organizationId: string,
+  allowedRoles: readonly VenueStaffRole[],
+  venueId?: string
+): Promise<string> {
+  const userId = await requireUserId();
+  const allowed = await hasVenueStaffRole(userId, organizationId, allowedRoles, venueId);
+
+  if (!allowed) {
+    throw new Error("Unauthorized: You do not have permission to manage this venue");
+  }
+
+  return userId;
+}
+
+export async function requireVenueProfileManager(
+  organizationId: string,
+  venueId?: string
+): Promise<string> {
+  return requireVenueStaffRole(organizationId, VENUE_PROFILE_ROLES, venueId);
+}
+
+export async function requireVenueScheduleManager(
+  organizationId: string,
+  venueId?: string
+): Promise<string> {
+  return requireVenueStaffRole(organizationId, VENUE_SCHEDULE_ROLES, venueId);
+}
+
+export async function requireVenueRequestManager(
+  organizationId: string,
+  venueId?: string
+): Promise<string> {
+  return requireVenueStaffRole(organizationId, VENUE_REQUEST_ROLES, venueId);
+}
+
+export async function requireVenueContentManager(
+  organizationId: string,
+  venueId?: string
+): Promise<string> {
+  return requireVenueStaffRole(organizationId, VENUE_CONTENT_ROLES, venueId);
 }

@@ -34,6 +34,58 @@ export const sportSchema = z.enum(SPORTS, {
   message: "Please select a valid sport",
 });
 
+export const SURFACE_TYPES = ["ICE", "STUDIO", "ROOM", "DRYLAND", "TURF", "COURT", "FIELD", "OTHER"] as const;
+export const VENUE_ORGANIZATION_TYPES = ["RINK", "ARENA", "SKATING_CENTER", "SPORTS_COMPLEX", "OTHER"] as const;
+export const VENUE_STAFF_ROLES = [
+  "OWNER",
+  "MANAGER",
+  "SCHEDULER",
+  "CONTENT_EDITOR",
+  "REQUEST_MANAGER",
+  "VIEWER",
+] as const;
+export const VENUE_PROFILE_STATUSES = ["DRAFT", "PUBLISHED", "UNPUBLISHED", "ARCHIVED"] as const;
+export const OPERATING_HOUR_STATUSES = ["OPEN", "CLOSED", "RESTRICTED"] as const;
+export const VENUE_SCHEDULE_ACTIVITY_TYPES = [
+  "OPEN_SKATE",
+  "STICK_AND_PICK",
+  "FREE_SKATE",
+  "FIGURE_SKATING",
+  "SPECIALTY_EVENT",
+  "PRIVATE_LESSON",
+  "PUBLIC_LESSON",
+  "TEAM_ICE",
+  "ORGANIZATION_ICE",
+  "RENTAL",
+  "CLOSURE",
+  "CUSTOM",
+] as const;
+export const VENUE_SCHEDULE_AUDIENCES = [
+  "PUBLIC",
+  "TEAMS",
+  "COACHES",
+  "ORGANIZATIONS",
+  "INVITE_ONLY",
+  "STAFF_ONLY",
+] as const;
+export const VENUE_SCHEDULE_VISIBILITIES = ["PUBLIC", "AUTHENTICATED", "RELATIONSHIP_ONLY", "PRIVATE"] as const;
+export const VENUE_SCHEDULE_BLOCK_STATUSES = ["DRAFT", "PUBLISHED", "CANCELED", "ARCHIVED"] as const;
+export const REGISTRATION_MODES = ["INFO_ONLY", "REQUEST_REQUIRED", "EXTERNAL_REGISTRATION"] as const;
+export const ICE_TIME_REQUEST_STATUSES = [
+  "SUBMITTED",
+  "UNDER_REVIEW",
+  "ACCEPTED",
+  "DECLINED",
+  "CANCELED",
+  "EXPIRED",
+] as const;
+export const LESSON_OFFERING_TYPES = ["PRIVATE", "SEMI_PRIVATE", "GROUP", "CLINIC", "CAMP"] as const;
+export const VENUE_CONTENT_POST_STATUSES = ["DRAFT", "SCHEDULED", "PUBLISHED", "UNPUBLISHED", "ARCHIVED"] as const;
+export const VENUE_RELATIONSHIP_TYPES = ["PREFERRED", "HOME"] as const;
+export const VENUE_RELATIONSHIP_TARGET_TYPES = ["TEAM", "LEAGUE", "COACH", "ORGANIZATION"] as const;
+export const SKILL_LEVEL_SOURCES = ["USA_HOCKEY", "US_FIGURE_SKATING", "RINK_CUSTOM", "OTHER"] as const;
+export const SKILL_LEVEL_DISCIPLINES = ["HOCKEY", "FIGURE_SKATING", "SKATING", "GOALIE", "OTHER"] as const;
+
 /**
  * Type-safe wrapper for Zod .pick() with computed property names.
  *
@@ -78,6 +130,35 @@ function sanitizedStringWithMin(minLength: number, maxLength: number = 255) {
 function optionalSanitizedString(maxLength: number = 255) {
   return sanitizedString(maxLength).optional().or(z.literal(""));
 }
+
+const optionalCuid = (message: string) => z.string().cuid(message).optional().or(z.literal(""));
+const timeStringSchema = z.string().regex(/^\d{2}:\d{2}$/, "Time format must be HH:MM");
+const hexColorSchema = z
+  .string()
+  .trim()
+  .regex(/^#[0-9a-fA-F]{6}$/, "Color must be a 6-digit hex value")
+  .optional()
+  .or(z.literal(""));
+const optionalUrlSchema = (maxLength = 500) =>
+  optionalSanitizedString(maxLength).refine((value) => !value || z.string().url().safeParse(value).success, {
+    message: "Invalid URL",
+  });
+const optionalEmailSchema = optionalSanitizedString(254).refine(
+  (value) => !value || z.string().email().safeParse(value).success,
+  {
+    message: "Invalid email address",
+  }
+);
+const optionalPositiveInt = (message: string, max?: number) =>
+  z.preprocess(
+    (value) => (value === "" || value === null ? undefined : value),
+    z.coerce
+      .number()
+      .int(message)
+      .min(1, message)
+      .pipe(max ? z.number().max(max, message) : z.number())
+      .optional()
+  );
 
 // Auth validation schemas
 export const signupSchema = z.object({
@@ -491,8 +572,8 @@ export const createVenueSchema = z.object({
   city: optionalSanitizedString(100),
   state: optionalSanitizedString(50),
   zipCode: optionalSanitizedString(20),
-  surfaceType: z.enum(["ICE", "TURF", "COURT", "FIELD", "OTHER"], {
-    message: "Surface type must be ICE, TURF, COURT, FIELD, or OTHER",
+  surfaceType: z.enum(SURFACE_TYPES, {
+    message: "Please select a valid surface type",
   }).default("OTHER"),
   capacity: z.number().int().min(1, "Capacity must be at least 1").optional(),
   amenities: z.array(z.string().max(50)).max(20).default([]),
@@ -504,6 +585,7 @@ export const createVenueSchema = z.object({
   }).default("PUBLIC"),
   teamId: z.string().cuid("Invalid team ID format").optional().or(z.literal("")),
   leagueId: z.string().cuid("Invalid league ID format").optional().or(z.literal("")),
+  organizationId: optionalCuid("Invalid organization ID format"),
 }).refine(
   (data) => {
     // LEAGUE visibility requires leagueId
@@ -537,7 +619,7 @@ export const updateVenueSchema = z.object({
   city: optionalSanitizedString(100),
   state: optionalSanitizedString(50),
   zipCode: optionalSanitizedString(20),
-  surfaceType: z.enum(["ICE", "TURF", "COURT", "FIELD", "OTHER"]).default("OTHER"),
+  surfaceType: z.enum(SURFACE_TYPES).default("OTHER"),
   capacity: z.number().int().min(1, "Capacity must be at least 1").optional(),
   amenities: z.array(z.string().max(50)).max(20).default([]),
   phone: optionalSanitizedString(20),
@@ -546,6 +628,7 @@ export const updateVenueSchema = z.object({
   visibility: z.enum(["PUBLIC", "LEAGUE", "TEAM"]).default("PUBLIC"),
   teamId: z.string().cuid("Invalid team ID format").optional().or(z.literal("")),
   leagueId: z.string().cuid("Invalid league ID format").optional().or(z.literal("")),
+  organizationId: optionalCuid("Invalid organization ID format"),
 }).refine(
   (data) => {
     if (data.visibility === "LEAGUE" && !data.leagueId) {
@@ -582,6 +665,247 @@ export const venueAvailabilitySchema = z.object({
     path: ["endAt"],
   }
 );
+
+// Venue management validation schemas
+export const createVenueOrganizationSchema = z.object({
+  name: sanitizedStringWithMin(1, 100),
+  type: z.enum(VENUE_ORGANIZATION_TYPES).default("RINK"),
+  description: optionalSanitizedString(1000),
+  primaryContactName: optionalSanitizedString(100),
+  primaryContactEmail: optionalEmailSchema,
+  primaryContactPhone: optionalSanitizedString(30),
+  website: optionalUrlSchema(),
+});
+
+export const updateVenueOrganizationSchema = createVenueOrganizationSchema.extend({
+  organizationId: z.string().cuid("Invalid organization ID format"),
+});
+
+export const updateVenueProfileSchema = z.object({
+  organizationId: z.string().cuid("Invalid organization ID format"),
+  venueId: optionalCuid("Invalid venue ID format"),
+  name: sanitizedStringWithMin(1, 100),
+  address: optionalSanitizedString(200),
+  city: optionalSanitizedString(100),
+  state: optionalSanitizedString(50),
+  zipCode: optionalSanitizedString(20),
+  surfaceType: z.enum(SURFACE_TYPES).default("ICE"),
+  capacity: optionalPositiveInt("Capacity must be a positive whole number"),
+  amenities: z.array(sanitizedStringWithMin(1, 50)).max(20).default([]),
+  phone: optionalSanitizedString(20),
+  website: optionalUrlSchema(),
+  notes: optionalSanitizedString(1000),
+  slug: sanitizedStringWithMin(3, 80)
+    .refine(
+      (value) => /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value),
+      "Slug must use lowercase letters, numbers, and hyphens"
+    )
+    .optional()
+    .or(z.literal("")),
+  publicDescription: optionalSanitizedString(2000),
+  logoUrl: optionalUrlSchema(),
+  brandPrimaryColor: hexColorSchema,
+  brandSecondaryColor: hexColorSchema,
+  timezone: sanitizedStringWithMin(1, 100).default("America/New_York"),
+  publicEmail: optionalEmailSchema,
+  publicPhone: optionalSanitizedString(30),
+  privateManagerNotes: optionalSanitizedString(2000),
+  profileStatus: z.enum(VENUE_PROFILE_STATUSES).default("DRAFT"),
+});
+
+export const publishVenueProfileSchema = z.object({
+  organizationId: z.string().cuid("Invalid organization ID format"),
+  venueId: z.string().cuid("Invalid venue ID format"),
+});
+
+export const inviteVenueStaffSchema = z.object({
+  organizationId: z.string().cuid("Invalid organization ID format"),
+  venueId: optionalCuid("Invalid venue ID format"),
+  email: z.string().trim().toLowerCase().email("Invalid email address").max(254),
+  role: z.enum(VENUE_STAFF_ROLES).refine((role) => role !== "OWNER", {
+    message: "Owner role cannot be assigned by invitation",
+  }),
+});
+
+export const updateVenueStaffSchema = z.object({
+  organizationId: z.string().cuid("Invalid organization ID format"),
+  staffId: z.string().cuid("Invalid staff ID format"),
+  role: z.enum(VENUE_STAFF_ROLES).refine((role) => role !== "OWNER", {
+    message: "Owner role cannot be assigned here",
+  }),
+});
+
+export const createIceSurfaceSchema = z.object({
+  organizationId: z.string().cuid("Invalid organization ID format"),
+  venueId: z.string().cuid("Invalid venue ID format"),
+  name: sanitizedStringWithMin(1, 100),
+  surfaceType: z.enum(SURFACE_TYPES).default("ICE"),
+  capacity: optionalPositiveInt("Capacity must be a positive whole number"),
+  isDefault: z.boolean().default(false),
+  isActive: z.boolean().default(true),
+  displayOrder: z.coerce.number().int().min(0).max(1000).default(0),
+  notes: optionalSanitizedString(1000),
+});
+
+export const updateIceSurfaceSchema = createIceSurfaceSchema.extend({
+  surfaceId: z.string().cuid("Invalid surface ID format"),
+});
+
+export const venueOperatingHourSchema = z
+  .object({
+    organizationId: z.string().cuid("Invalid organization ID format"),
+    venueId: z.string().cuid("Invalid venue ID format"),
+    surfaceId: optionalCuid("Invalid surface ID format"),
+    dayOfWeek: z.coerce.number().int().min(0).max(6),
+    opensAt: timeStringSchema,
+    closesAt: timeStringSchema,
+    effectiveStartDate: z.coerce.date({ message: "Valid effective start date is required" }),
+    effectiveEndDate: z.coerce.date({ message: "Valid effective end date is required" }).optional(),
+    status: z.enum(OPERATING_HOUR_STATUSES).default("OPEN"),
+    label: optionalSanitizedString(100),
+    notes: optionalSanitizedString(1000),
+  })
+  .refine((data) => !data.effectiveEndDate || data.effectiveEndDate >= data.effectiveStartDate, {
+    message: "Effective end date must be on or after the start date",
+    path: ["effectiveEndDate"],
+  });
+
+export const venueScheduleBlockSchema = z
+  .object({
+    organizationId: z.string().cuid("Invalid organization ID format"),
+    venueId: z.string().cuid("Invalid venue ID format"),
+    surfaceId: optionalCuid("Invalid surface ID format"),
+    title: sanitizedStringWithMin(1, 120),
+    description: optionalSanitizedString(2000),
+    activityType: z.enum(VENUE_SCHEDULE_ACTIVITY_TYPES),
+    audience: z.enum(VENUE_SCHEDULE_AUDIENCES).default("PUBLIC"),
+    visibility: z.enum(VENUE_SCHEDULE_VISIBILITIES).default("PUBLIC"),
+    status: z.enum(VENUE_SCHEDULE_BLOCK_STATUSES).default("DRAFT"),
+    startsAt: z.coerce.date({ message: "Valid start date is required" }),
+    endsAt: z.coerce.date({ message: "Valid end date is required" }),
+    recurrenceRule: optionalSanitizedString(500),
+    recurrenceStartDate: z.coerce.date().optional(),
+    recurrenceEndDate: z.coerce.date().optional(),
+    capacity: optionalPositiveInt("Capacity must be a positive whole number"),
+    priceAmount: z.preprocess(
+      (value) => (value === "" || value === null ? undefined : value),
+      z.coerce.number().int().min(0, "Price must be zero or greater").optional()
+    ),
+    priceCurrency: sanitizedStringWithMin(3, 3).default("USD"),
+    priceLabel: optionalSanitizedString(100),
+    registrationMode: z.enum(REGISTRATION_MODES).default("INFO_ONLY"),
+    externalRegistrationUrl: optionalUrlSchema(),
+  })
+  .refine((data) => data.endsAt > data.startsAt, {
+    message: "End time must be after start time",
+    path: ["endsAt"],
+  })
+  .refine((data) => !data.recurrenceEndDate || !data.recurrenceStartDate || data.recurrenceEndDate >= data.recurrenceStartDate, {
+    message: "Recurrence end date must be on or after the start date",
+    path: ["recurrenceEndDate"],
+  })
+  .refine((data) => data.registrationMode !== "EXTERNAL_REGISTRATION" || !!data.externalRegistrationUrl, {
+    message: "External registration URL is required",
+    path: ["externalRegistrationUrl"],
+  });
+
+export const submitIceTimeRequestSchema = z
+  .object({
+    scheduleBlockId: z.string().cuid("Invalid schedule block ID format"),
+    venueId: z.string().cuid("Invalid venue ID format"),
+    requesterTeamId: optionalCuid("Invalid team ID format"),
+    requesterLeagueId: optionalCuid("Invalid league ID format"),
+    requesterOrganizationName: optionalSanitizedString(150),
+    contactName: sanitizedStringWithMin(1, 100),
+    contactEmail: z.string().trim().toLowerCase().email("Invalid email address").max(254),
+    contactPhone: optionalSanitizedString(30),
+    requestedStartAt: z.coerce.date({ message: "Valid requested start time is required" }),
+    requestedEndAt: z.coerce.date({ message: "Valid requested end time is required" }),
+    notes: optionalSanitizedString(2000),
+  })
+  .refine((data) => data.requestedEndAt > data.requestedStartAt, {
+    message: "Requested end time must be after requested start time",
+    path: ["requestedEndAt"],
+  });
+
+export const decideIceTimeRequestSchema = z.object({
+  organizationId: z.string().cuid("Invalid organization ID format"),
+  venueId: z.string().cuid("Invalid venue ID format"),
+  requestId: z.string().cuid("Invalid request ID format"),
+  status: z.enum(["ACCEPTED", "DECLINED"]),
+  decisionMessage: optionalSanitizedString(1000),
+});
+
+export const lessonOfferingSchema = z.object({
+  organizationId: z.string().cuid("Invalid organization ID format"),
+  venueId: z.string().cuid("Invalid venue ID format"),
+  surfaceId: optionalCuid("Invalid surface ID format"),
+  title: sanitizedStringWithMin(1, 120),
+  description: optionalSanitizedString(2000),
+  lessonType: z.enum(LESSON_OFFERING_TYPES),
+  instructorName: optionalSanitizedString(100),
+  priceAmount: z.preprocess(
+    (value) => (value === "" || value === null ? undefined : value),
+    z.coerce.number().int().min(0, "Price must be zero or greater").optional()
+  ),
+  priceCurrency: sanitizedStringWithMin(3, 3).default("USD"),
+  durationMinutes: optionalPositiveInt("Duration must be a positive whole number", 600),
+  availabilityDescription: optionalSanitizedString(1000),
+  registrationMode: z.enum(REGISTRATION_MODES).default("INFO_ONLY"),
+  externalRegistrationUrl: optionalUrlSchema(),
+});
+
+export const venueContentPostSchema = z.object({
+  organizationId: z.string().cuid("Invalid organization ID format"),
+  venueId: z.string().cuid("Invalid venue ID format"),
+  postId: optionalCuid("Invalid post ID format"),
+  title: sanitizedStringWithMin(1, 150),
+  slug: sanitizedStringWithMin(3, 100).refine(
+    (value) => /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value),
+    "Invalid post slug"
+  ),
+  excerpt: optionalSanitizedString(300),
+  body: sanitizedStringWithMin(1, 10000),
+  status: z.enum(VENUE_CONTENT_POST_STATUSES).default("DRAFT"),
+  scheduledFor: z.coerce.date().optional(),
+});
+
+export const venueRelationshipSchema = z.object({
+  organizationId: z.string().cuid("Invalid organization ID format"),
+  venueId: z.string().cuid("Invalid venue ID format"),
+  relationshipType: z.enum(VENUE_RELATIONSHIP_TYPES),
+  targetType: z.enum(VENUE_RELATIONSHIP_TARGET_TYPES),
+  teamId: optionalCuid("Invalid team ID format"),
+  leagueId: optionalCuid("Invalid league ID format"),
+  targetName: optionalSanitizedString(150),
+  invitedEmail: optionalEmailSchema,
+  expiresAt: z.coerce.date().optional(),
+});
+
+export const skillLevelReferenceSchema = z.object({
+  source: z.enum(SKILL_LEVEL_SOURCES),
+  discipline: z.enum(SKILL_LEVEL_DISCIPLINES),
+  label: sanitizedStringWithMin(1, 100),
+  description: optionalSanitizedString(500),
+  sortOrder: z.coerce.number().int().min(0).max(1000).optional(),
+  isActive: z.boolean().default(true),
+});
+
+export type CreateVenueOrganizationInput = z.input<typeof createVenueOrganizationSchema>;
+export type UpdateVenueOrganizationInput = z.input<typeof updateVenueOrganizationSchema>;
+export type UpdateVenueProfileInput = z.input<typeof updateVenueProfileSchema>;
+export type InviteVenueStaffInput = z.input<typeof inviteVenueStaffSchema>;
+export type UpdateVenueStaffInput = z.input<typeof updateVenueStaffSchema>;
+export type CreateIceSurfaceInput = z.input<typeof createIceSurfaceSchema>;
+export type UpdateIceSurfaceInput = z.input<typeof updateIceSurfaceSchema>;
+export type VenueOperatingHourInput = z.input<typeof venueOperatingHourSchema>;
+export type VenueScheduleBlockInput = z.input<typeof venueScheduleBlockSchema>;
+export type SubmitIceTimeRequestInput = z.input<typeof submitIceTimeRequestSchema>;
+export type DecideIceTimeRequestInput = z.input<typeof decideIceTimeRequestSchema>;
+export type LessonOfferingInput = z.input<typeof lessonOfferingSchema>;
+export type VenueContentPostInput = z.input<typeof venueContentPostSchema>;
+export type VenueRelationshipInput = z.input<typeof venueRelationshipSchema>;
+export type SkillLevelReferenceInput = z.input<typeof skillLevelReferenceSchema>;
 
 // Game schedule validation schemas
 export const createGameScheduleSchema = z.object({

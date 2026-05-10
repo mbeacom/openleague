@@ -8,12 +8,55 @@
  */
 
 import { PrismaClient } from '@prisma/client';
+import { PrismaNeon } from '@prisma/adapter-neon';
+import { existsSync, readFileSync } from 'node:fs';
 
 const MAX_RETRIES = 20; // Try for up to 40 seconds (20 * 2s)
 const RETRY_DELAY = 2000; // 2 seconds between retries
 
+function loadDatabaseUrlFromEnvFiles() {
+  if (process.env.DATABASE_URL) {
+    return;
+  }
+
+  for (const file of ['.env', '.env.local']) {
+    if (!existsSync(file)) {
+      continue;
+    }
+
+    for (const rawLine of readFileSync(file, 'utf8').split(/\r?\n/)) {
+      const line = rawLine.trim();
+      if (!line || line.startsWith('#')) {
+        continue;
+      }
+
+      const match = line.match(/^(?:export\s+)?DATABASE_URL\s*=\s*(.*)$/);
+      if (!match) {
+        continue;
+      }
+
+      let value = match[1].trim();
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1);
+      }
+
+      process.env.DATABASE_URL = value;
+    }
+  }
+}
+
 async function wakeDatabase() {
-  const prisma = new PrismaClient();
+  loadDatabaseUrlFromEnvFiles();
+
+  if (!process.env.DATABASE_URL) {
+    throw new Error('DATABASE_URL environment variable is not set');
+  }
+
+  const adapter = new PrismaNeon({ connectionString: process.env.DATABASE_URL });
+  const prisma = new PrismaClient({ adapter });
 
   console.log('🔌 Connecting to database...');
 
