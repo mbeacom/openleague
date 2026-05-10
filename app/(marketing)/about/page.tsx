@@ -14,7 +14,7 @@ export default function AboutPage() {
           About OpenLeague
         </Typography>
         <Typography variant="h5" color="text.secondary" sx={{ mb: 6 }}>
-          An open-source platform with affordable pricing, dedicated to simplifying sports team management.
+          A free, open-source platform dedicated to simplifying sports team management.
         </Typography>
 
         <Box sx={{ mb: 6 }}>
@@ -27,9 +27,9 @@ export default function AboutPage() {
             platform that keeps everyone on the same page.
           </Typography>
           <Typography variant="body1" paragraph>
-            We believe that managing a sports team shouldn&apos;t require expensive software or complex
-            tools. OpenLeague offers transparent, affordable pricing that&apos;s accessible to teams of all sizes,
-            with no hidden fees or restrictive feature gates.
+            We believe that managing a sports team shouldn&apos;t require expensive software, complex
+            tools, or paid subscriptions. OpenLeague currently offers free hosted access for teams,
+            with no subscription billing or paid feature gates as of now.
           </Typography>
         </Box>
 
@@ -80,10 +80,10 @@ export default function AboutPage() {
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 3, mt: 3 }}>
             <Box>
               <Typography variant="h6" gutterBottom>
-                Affordable & Transparent
+                Free & Transparent
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Simple, honest pricing that scales with your needs. No hidden fees or surprise charges.
+                Free hosted access as of now, with clear communication before material service or monetization changes where practical.
               </Typography>
             </Box>
             <Box>

@@ -224,7 +224,7 @@ export default function HeroSection() {
                   }}
                 />
                 <Typography variant="body1" color="text.primary" fontWeight={600}>
-                  100% Free Forever
+                  Free for Now
                 </Typography>
               </Box>
               <Box

@@ -24,7 +24,7 @@ const steps = [
   {
     label: 'Create Your Account',
     description:
-      'Sign up with your email address and start your 14-day free trial. No credit card required to start.',
+      'Sign up with your email address and start managing your team for free. No credit card required.',
     action: 'Sign Up Now',
     actionHref: '/signup',
   },

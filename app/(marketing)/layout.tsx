@@ -1,9 +1,12 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import Script from 'next/script';
 import { Box } from '@mui/material';
+import AdSlot from '@/components/features/ads/AdSlot';
 import MarketingHeader from '@/components/features/navigation/MarketingHeader';
 import MarketingFooter from '@/components/features/navigation/MarketingFooter';
+import { ADS_CONFIG, isAdsEnabled } from '@/lib/config/ads';
 import './marketing.css';
 
 interface MarketingLayoutProps {
@@ -11,6 +14,8 @@ interface MarketingLayoutProps {
 }
 
 export default function MarketingLayout({ children }: MarketingLayoutProps) {
+  const adsEnabled = isAdsEnabled();
+
   return (
     <Box
       className="marketing-layout"
@@ -21,6 +26,15 @@ export default function MarketingLayout({ children }: MarketingLayoutProps) {
         bgcolor: 'background.default',
       }}
     >
+      {adsEnabled && (
+        <Script
+          id="adsense-script"
+          async
+          crossOrigin="anonymous"
+          strategy="afterInteractive"
+          src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADS_CONFIG.adsenseClient}`}
+        />
+      )}
       <MarketingHeader />
       <Box
         component="main"
@@ -33,6 +47,14 @@ export default function MarketingLayout({ children }: MarketingLayoutProps) {
       >
         {children}
       </Box>
+      <AdSlot
+        placement="marketing"
+        sx={{
+          px: { xs: 2, md: 4 },
+          py: { xs: 2, md: 3 },
+          bgcolor: 'background.default',
+        }}
+      />
       <MarketingFooter />
     </Box>
   );

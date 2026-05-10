@@ -1,5 +1,45 @@
 import type { NextConfig } from "next";
 
+const parseBooleanFlag = (value: string | undefined) => {
+  if (!value) {
+    return false;
+  }
+
+  return ["true", "1", "yes", "on"].includes(value.trim().toLowerCase());
+};
+
+const adsEnabled =
+  parseBooleanFlag(process.env.NEXT_PUBLIC_ADS_ENABLED) &&
+  Boolean(process.env.NEXT_PUBLIC_GOOGLE_ADSENSE_CLIENT?.trim());
+
+const scriptSrc = [
+  "'self'",
+  "'unsafe-eval'",
+  "'unsafe-inline'",
+  "https://cloud.umami.is",
+  "https://vercel.live",
+  ...(adsEnabled ? ["https://pagead2.googlesyndication.com", "https://fundingchoicesmessages.google.com"] : []),
+];
+
+const imgSrc = [
+  "'self'",
+  "data:",
+  "blob:",
+  ...(adsEnabled ? ["https://pagead2.googlesyndication.com", "https://googleads.g.doubleclick.net", "https://tpc.googlesyndication.com"] : []),
+];
+
+const connectSrc = [
+  "'self'",
+  "https://cloud.umami.is",
+  "https://api-gateway.umami.dev",
+  ...(adsEnabled ? ["https://pagead2.googlesyndication.com", "https://googleads.g.doubleclick.net", "https://fundingchoicesmessages.google.com"] : []),
+];
+
+const frameSrc = [
+  "'self'",
+  ...(adsEnabled ? ["https://googleads.g.doubleclick.net", "https://tpc.googlesyndication.com", "https://www.google.com"] : []),
+];
+
 const nextConfig: NextConfig = {
   compiler: {
     emotion: true,
@@ -50,11 +90,12 @@ const nextConfig: NextConfig = {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://cloud.umami.is https://vercel.live", // Next.js requires unsafe-eval and unsafe-inline, Umami for analytics, Vercel toolbar
+              `script-src ${scriptSrc.join(" ")}`,
               "style-src 'self' 'unsafe-inline' fonts.googleapis.com", // MUI requires unsafe-inline
               "font-src 'self' fonts.gstatic.com",
-              "img-src 'self' data: blob:",
-              "connect-src 'self' https://cloud.umami.is https://api-gateway.umami.dev", // Allow Umami analytics connections
+              `img-src ${imgSrc.join(" ")}`,
+              `connect-src ${connectSrc.join(" ")}`,
+              `frame-src ${frameSrc.join(" ")}`,
               "frame-ancestors 'self'",
               "base-uri 'self'",
               "form-action 'self'",

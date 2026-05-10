@@ -116,19 +116,19 @@ export default function FeaturesPage() {
 
           <Box sx={{ mt: 8, p: 4, bgcolor: 'primary.main', color: 'primary.contrastText', borderRadius: 2 }}>
             <Typography variant="h4" component="h2" gutterBottom textAlign="center">
-              Affordable Pricing, Open Source
+              Free Team Management, Open Source
             </Typography>
             <Typography variant="body1" textAlign="center" paragraph>
-              All features available across our simple pricing tiers.
-              OpenLeague is open-source (BSL 1.1) and community-driven.
+              OpenLeague currently offers free hosted access with no subscriptions, paid tiers, or feature gates.
+              It remains open-source (BSL 1.1) and community-driven.
             </Typography>
             <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2, mt: 3 }}>
               <Chip
-                label="Transparent Pricing"
+                label="Free Services"
                 sx={{ bgcolor: 'rgba(255, 255, 255, 0.2)', color: 'inherit' }}
               />
               <Chip
-                label="No Hidden Fees"
+                label="No Subscriptions Today"
                 sx={{ bgcolor: 'rgba(255, 255, 255, 0.2)', color: 'inherit' }}
               />
               <Chip label="Open Source" sx={{ bgcolor: 'rgba(255, 255, 255, 0.2)', color: 'inherit' }} />

@@ -19,7 +19,6 @@ const footerSections = [
     title: 'Product',
     links: [
       { label: 'Features', href: '/features' },
-      { label: 'Pricing', href: '/pricing' },
       { label: 'Get Started', href: '/get-started' },
       { label: 'Roadmap', href: '/docs/roadmap' },
     ],
@@ -220,7 +219,7 @@ export default function MarketingFooter() {
               color="text.secondary"
               sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
             >
-              🌟 Free Forever
+              🌟 Free for Now
             </Typography>
             <Typography
               variant="body2"
