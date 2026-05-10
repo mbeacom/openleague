@@ -1,8 +1,16 @@
 {
   "mcpServers": {
     "context7": {
-      "command": "npx",
-      "args": ["-y", "@upstash/context7-mcp@^1"]
+      "command": "bunx",
+      "args": ["--bun", "-y", "@upstash/context7-mcp@^2"]
+    },
+    "playwright": {
+      "command": "bunx",
+      "args": ["--bun", "-y", "@playwright/mcp@latest"]
+    },
+    "next-devtools": {
+      "command": "bunx",
+      "args": ["--bun", "-y", "next-devtools-mcp@latest"]
     }
   }
 }
