@@ -18,9 +18,12 @@ vi.mock("@/lib/actions/venue-organizations", () => ({
 const venue = {
   id: "clvenxxxxxxxxxxxxxxxxxxxxxxx",
   name: "North Rink",
+  address: "100 Ice Way",
   slug: "north-rink",
   city: "Cleveland",
   state: "OH",
+  zipCode: "44114",
+  website: "https://example.com",
   publicDescription: "Community rink",
   logoUrl: "https://example.com/logo.png",
   brandPrimaryColor: "#003B73",
@@ -73,6 +76,7 @@ beforeEach(() => {
     expect(screen.getByRole("heading", { name: "Venue profile" })).toBeInTheDocument();
     expect(screen.getByLabelText(/Venue name/)).toHaveValue("North Rink");
     expect(screen.getByLabelText("Public slug")).toHaveValue("north-rink");
+    expect(screen.getByLabelText("Street address")).toHaveValue("100 Ice Way");
     expect(screen.getByLabelText("Logo URL")).toHaveValue("https://example.com/logo.png");
     expect(screen.getByLabelText("Private manager notes")).toHaveValue("Private note");
   });

@@ -23,9 +23,12 @@ export default async function VenueProfilePage({ params }: VenueProfilePageProps
     select: {
       id: true,
       name: true,
+      address: true,
       slug: true,
       city: true,
       state: true,
+      zipCode: true,
+      website: true,
       publicDescription: true,
       logoUrl: true,
       brandPrimaryColor: true,

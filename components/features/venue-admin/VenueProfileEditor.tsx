@@ -11,9 +11,12 @@ interface VenueProfileEditorProps {
   venue: {
     id: string;
     name: string;
+    address: string | null;
     slug: string | null;
     city: string | null;
     state: string | null;
+    zipCode: string | null;
+    website: string | null;
     publicDescription: string | null;
     logoUrl: string | null;
     brandPrimaryColor: string | null;
@@ -32,9 +35,12 @@ export function VenueProfileEditor({ organizationId, venue }: VenueProfileEditor
   const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: venue.name,
+    address: venue.address ?? "",
     slug: venue.slug ?? "",
     city: venue.city ?? "",
     state: venue.state ?? "",
+    zipCode: venue.zipCode ?? "",
+    website: venue.website ?? "",
     publicDescription: venue.publicDescription ?? "",
     logoUrl: venue.logoUrl ?? "",
     brandPrimaryColor: venue.brandPrimaryColor ?? "",
@@ -43,8 +49,6 @@ export function VenueProfileEditor({ organizationId, venue }: VenueProfileEditor
     publicEmail: venue.publicEmail ?? "",
     publicPhone: venue.publicPhone ?? "",
     privateManagerNotes: venue.privateManagerNotes ?? "",
-    surfaceType: "ICE",
-    profileStatus: venue.profileStatus as "DRAFT" | "PUBLISHED" | "UNPUBLISHED" | "ARCHIVED",
   });
 
   function updateField(field: keyof typeof formData, value: string) {
@@ -110,6 +114,10 @@ export function VenueProfileEditor({ organizationId, venue }: VenueProfileEditor
         <TextField label="City" value={formData.city} onChange={(event) => updateField("city", event.target.value)} disabled={isPending} fullWidth />
         <TextField label="State" value={formData.state} onChange={(event) => updateField("state", event.target.value)} disabled={isPending} fullWidth />
       </Stack>
+        <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+          <TextField label="Street address" value={formData.address} onChange={(event) => updateField("address", event.target.value)} disabled={isPending} fullWidth />
+          <TextField label="ZIP code" value={formData.zipCode} onChange={(event) => updateField("zipCode", event.target.value)} disabled={isPending} fullWidth />
+        </Stack>
       <TextField
         label="Public description"
         value={formData.publicDescription}
@@ -133,6 +141,23 @@ export function VenueProfileEditor({ organizationId, venue }: VenueProfileEditor
         onChange={(event) => updateField("publicEmail", event.target.value)}
         disabled={isPending}
       />
+        <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+          <TextField
+            label="Public phone"
+            value={formData.publicPhone}
+            onChange={(event) => updateField("publicPhone", event.target.value)}
+            disabled={isPending}
+            fullWidth
+          />
+          <TextField
+            label="Website"
+            type="url"
+            value={formData.website}
+            onChange={(event) => updateField("website", event.target.value)}
+            disabled={isPending}
+            fullWidth
+          />
+        </Stack>
       <TextField
         label="Private manager notes"
         value={formData.privateManagerNotes}

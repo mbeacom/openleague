@@ -38,16 +38,24 @@ export default async function VenueAdminPage() {
                         {organization.type} - {organization.status}
                       </Typography>
                     </Box>
-                    <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+                      <Stack spacing={1}>
                       {organization.venues.map((venue) => (
-                        <Button
-                          key={venue.id}
-                          component={Link}
-                          href={`/venue-admin/${organization.id}/venues/${venue.id}/profile`}
-                          variant="outlined"
-                        >
-                          Manage {venue.name}
-                        </Button>
+                          <Stack key={venue.id} direction={{ xs: "column", sm: "row" }} spacing={1}>
+                            <Button
+                              component={Link}
+                              href={`/venue-admin/${organization.id}/venues/${venue.id}/profile`}
+                              variant="outlined"
+                            >
+                              Manage {venue.name}
+                            </Button>
+                            <Button
+                              component={Link}
+                              href={`/venue-admin/${organization.id}/venues/${venue.id}/schedule`}
+                              variant="text"
+                            >
+                              Schedule
+                            </Button>
+                          </Stack>
                       ))}
                     </Stack>
                   </Stack>

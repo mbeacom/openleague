@@ -14,6 +14,7 @@ const { mockRequireVenueScheduleManager, mockPrisma, mockLogVenueActivity } = vi
     iceSurface: {
       create: vi.fn(),
       update: vi.fn(),
+        findFirst: vi.fn(),
     },
     venueOperatingHour: {
       create: vi.fn(),
@@ -52,6 +53,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockRequireVenueScheduleManager.mockResolvedValue(USER_ID);
   mockPrisma.venue.findFirst.mockResolvedValue({ id: VENUE_ID, organizationId: ORGANIZATION_ID });
+    mockPrisma.iceSurface.findFirst.mockResolvedValue({ id: SURFACE_ID });
   mockLogVenueActivity.mockResolvedValue({ id: "cllogxxxxxxxxxxxxxxxxxxxxxxx" });
 });
 
