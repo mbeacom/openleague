@@ -5,8 +5,8 @@ import { requireUserId, requireVenueProfileManager } from "@/lib/auth/session";
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
 import {
+  getPublicVenueProfileSelect,
   publicPublishedVenueWhere,
-  publicVenueProfileSelect,
   publicVenueSummarySelect,
 } from "@/lib/utils/public-venues";
 import {
@@ -424,12 +424,13 @@ export async function getPublicRinkSummaries() {
 
 export async function getPublicRinkProfile(slug: string) {
   try {
+    const now = new Date();
     return await prisma.venue.findFirst({
       where: {
         ...publicPublishedVenueWhere,
         slug,
       },
-      select: publicVenueProfileSelect,
+      select: getPublicVenueProfileSelect(now),
     });
   } catch (error) {
     if (isMissingVenueManagementSchemaError(error)) {

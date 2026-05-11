@@ -42,7 +42,7 @@ interface ScheduleBlockSummary {
 
 export default async function VenueSchedulePage({ params }: VenueSchedulePageProps) {
   const { organizationId, venueId } = await params;
-  const result = await getVenueScheduleAdminData(venueId);
+  const result = await getVenueScheduleAdminData(organizationId, venueId);
 
   if (!result.success) {
     notFound();

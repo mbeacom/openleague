@@ -7,6 +7,83 @@ import { notificationService } from "@/lib/services/notification";
 const EMAIL_FROM = env.EMAIL_FROM;
 const BASE_URL = getBaseUrl();
 
+interface IceTimeRequestSubmittedEmailData {
+  managerEmails: string[];
+  venueName: string;
+  scheduleTitle: string;
+  contactName: string;
+  contactEmail: string;
+  requestId: string;
+  organizationId: string;
+  venueId: string;
+}
+
+interface VenueRelationshipInvitationEmailData {
+  email: string;
+  venueName: string;
+  relationshipType: "PREFERRED" | "HOME";
+  relationshipId: string;
+}
+
+export async function sendVenueRelationshipInvitationEmail(
+  data: VenueRelationshipInvitationEmailData
+): Promise<void> {
+  const mailchimp = getMailchimpClient();
+  const invitationLink = `${BASE_URL}/venue-relationships/${data.relationshipId}`;
+  const relationshipLabel = data.relationshipType === "HOME" ? "home rink" : "preferred rink";
+
+  await mailchimp.messages.send({
+    message: {
+      from_email: EMAIL_FROM,
+      subject: `${data.venueName} invited you to add a ${relationshipLabel}`,
+      html: `<p>${data.venueName} invited you to add them as a ${relationshipLabel}.</p><p><a href="${invitationLink}">Review invitation</a></p>`,
+      text: `${data.venueName} invited you to add them as a ${relationshipLabel}. Review: ${invitationLink}`,
+      to: [{ email: data.email, type: "to" as const }],
+    },
+  });
+}
+
+export async function sendIceTimeRequestSubmittedEmail(
+  data: IceTimeRequestSubmittedEmailData
+): Promise<void> {
+  const mailchimp = getMailchimpClient();
+  const requestLink = `${BASE_URL}/venue-admin/${data.organizationId}/venues/${data.venueId}/requests?requestId=${encodeURIComponent(data.requestId)}`;
+
+  await mailchimp.messages.send({
+    message: {
+      from_email: EMAIL_FROM,
+      subject: `New ice time request for ${data.venueName}`,
+      html: `<p>${data.contactName} (${data.contactEmail}) requested ${data.scheduleTitle}.</p><p><a href="${requestLink}">Review request</a></p>`,
+      text: `${data.contactName} (${data.contactEmail}) requested ${data.scheduleTitle}. Review: ${requestLink}`,
+      to: data.managerEmails.map((email) => ({ email, type: "to" as const })),
+    },
+  });
+}
+
+interface IceTimeRequestDecisionEmailData {
+  contactEmail: string;
+  venueName: string;
+  status: "ACCEPTED" | "DECLINED";
+  decisionMessage?: string | null;
+}
+
+export async function sendIceTimeRequestDecisionEmail(
+  data: IceTimeRequestDecisionEmailData
+): Promise<void> {
+  const mailchimp = getMailchimpClient();
+  const statusLabel = data.status === "ACCEPTED" ? "accepted" : "declined";
+
+  await mailchimp.messages.send({
+    message: {
+      from_email: EMAIL_FROM,
+      subject: `Your ice time request was ${statusLabel}`,
+      html: `<p>${data.venueName} ${statusLabel} your ice time request.</p>${data.decisionMessage ? `<p>${data.decisionMessage}</p>` : ""}`,
+      text: `${data.venueName} ${statusLabel} your ice time request.${data.decisionMessage ? `\n\n${data.decisionMessage}` : ""}`,
+      to: [{ email: data.contactEmail, type: "to" as const }],
+    },
+  });
+}
+
 interface InvitationEmailData {
   email: string;
   teamName: string;

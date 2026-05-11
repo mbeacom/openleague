@@ -1,10 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { z } from "zod";
 import type { Prisma } from "@prisma/client";
-import { requireUserId, requireVenueScheduleManager } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
+import { requireVenueScheduleManager } from "@/lib/auth/session";
 import { logVenueActivity, type ActionResult } from "@/lib/actions/venue-organizations";
 import { publicPublishedVenueWhere } from "@/lib/utils/public-venues";
 import {
@@ -19,78 +18,130 @@ import {
 } from "@/lib/utils/validation";
 import { findScheduleConflicts, type ScheduleBlockRange } from "@/lib/utils/venue-schedule";
 
-const OPEN_ENDED_OPERATING_HOURS_END = new Date("9999-12-31T23:59:59.999Z");
-
-const archiveIceSurfaceSchema = z.object({
-  organizationId: z.string().cuid("Invalid organization ID format"),
-  venueId: z.string().cuid("Invalid venue ID format"),
-  surfaceId: z.string().cuid("Invalid surface ID format"),
-});
-
-const scheduleBlockMutationSchema = venueScheduleBlockSchema.extend({
-  scheduleBlockId: z.string().cuid("Invalid schedule block ID format"),
-});
-
-const scheduleBlockStatusMutationSchema = z.object({
-  organizationId: z.string().cuid("Invalid organization ID format"),
-  venueId: z.string().cuid("Invalid venue ID format"),
-  scheduleBlockId: z.string().cuid("Invalid schedule block ID format"),
-});
-
-type ScheduleBlockMutationInput = VenueScheduleBlockInput & { scheduleBlockId: string };
-
-interface ExistingScheduleBlock {
+type VenueContext = {
   id: string;
-  surfaceId?: string | null;
-  startsAt?: Date;
-  endsAt?: Date;
-  startAt?: Date;
-  endAt?: Date;
-  status?: string | null;
-  activityType?: string | null;
-}
+  organizationId: string | null;
+  slug: string | null;
+};
+
+const scheduleBlockIdSchema = venueScheduleBlockSchema.extend({
+  scheduleBlockId: createIceSurfaceSchema.shape.venueId,
+});
+
+const scheduleBlockCommandSchema = createIceSurfaceSchema.pick({
+  organizationId: true,
+  venueId: true,
+}).extend({
+  scheduleBlockId: createIceSurfaceSchema.shape.venueId,
+});
+
+const surfaceCommandSchema = createIceSurfaceSchema.pick({
+  organizationId: true,
+  venueId: true,
+}).extend({
+  surfaceId: updateIceSurfaceSchema.shape.surfaceId,
+});
+
+const operatingHourCommandSchema = createIceSurfaceSchema.pick({
+  organizationId: true,
+  venueId: true,
+}).extend({
+  operatingHourId: createIceSurfaceSchema.shape.venueId,
+});
 
 export async function getVenueScheduleAdminData(
+  organizationId: string,
   venueId: string
-): Promise<ActionResult<{ venueId: string; surfaces: unknown[]; operatingHours: unknown[]; scheduleBlocks: unknown[] }>> {
-  await requireUserId();
+): Promise<
+  ActionResult<{
+    venueId: string;
+    surfaces: Array<{
+      id: string;
+      name: string;
+      surfaceType: string;
+      isActive: boolean;
+      isDefault: boolean;
+      displayOrder: number;
+    }>;
+    operatingHours: Array<{
+      id: string;
+      dayOfWeek: number;
+      opensAt: string;
+      closesAt: string;
+      status: string;
+      surfaceId: string | null;
+    }>;
+    scheduleBlocks: Array<{
+      id: string;
+      title: string;
+      startsAt: Date;
+      endsAt: Date;
+      activityType: string;
+      status: string;
+      surfaceId: string | null;
+    }>;
+  }>
+> {
+  try {
+    await requireVenueScheduleManager(organizationId, venueId);
+    await ensureVenueContext(organizationId, venueId);
 
-  const venue = await prisma.venue.findFirst({
-    where: { id: venueId },
-    select: {
-      id: true,
-      organizationId: true,
-      surfaces: { orderBy: [{ displayOrder: "asc" }, { name: "asc" }] },
-      operatingHours: { orderBy: [{ dayOfWeek: "asc" }, { opensAt: "asc" }] },
-      scheduleBlocks: { orderBy: { startsAt: "asc" } },
-    },
-  });
+    const [surfaces, operatingHours, scheduleBlocks] = await Promise.all([
+      prisma.iceSurface.findMany({
+        where: { venueId },
+        select: {
+          id: true,
+          name: true,
+          surfaceType: true,
+          isActive: true,
+          isDefault: true,
+          displayOrder: true,
+        },
+        orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
+      }),
+      prisma.venueOperatingHour.findMany({
+        where: { venueId },
+        select: {
+          id: true,
+          dayOfWeek: true,
+          opensAt: true,
+          closesAt: true,
+          status: true,
+          surfaceId: true,
+        },
+        orderBy: [{ dayOfWeek: "asc" }, { opensAt: "asc" }],
+      }),
+      prisma.venueScheduleBlock.findMany({
+        where: { venueId, status: { not: "ARCHIVED" } },
+        select: {
+          id: true,
+          title: true,
+          startsAt: true,
+          endsAt: true,
+          activityType: true,
+          status: true,
+          surfaceId: true,
+        },
+        orderBy: { startsAt: "asc" },
+      }),
+    ]);
 
-  if (!venue?.organizationId) {
-    return { success: false, error: "Venue schedule data was not found" };
+    return { success: true, data: { venueId, surfaces, operatingHours, scheduleBlocks } };
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("NEXT_REDIRECT")) {
+      throw error;
+    }
+    return { success: false, error: "Failed to load venue schedule data." };
   }
-
-  await requireVenueScheduleManager(venue.organizationId, venue.id);
-
-  return {
-    success: true,
-    data: {
-      venueId: venue.id,
-      surfaces: venue.surfaces,
-      operatingHours: venue.operatingHours,
-      scheduleBlocks: venue.scheduleBlocks,
-    },
-  };
 }
 
-export async function createIceSurface(input: CreateIceSurfaceInput): Promise<ActionResult<{ surfaceId: string }>> {
+export async function createIceSurface(
+  input: CreateIceSurfaceInput
+): Promise<ActionResult<{ surfaceId: string; venueId: string }>> {
   try {
     const validated = createIceSurfaceSchema.parse(input);
     const userId = await requireVenueScheduleManager(validated.organizationId, validated.venueId);
-    const venue = await getAuthorizedVenue(validated.organizationId, validated.venueId);
-    if (!venue) {
-      return { success: false, error: "Venue not found" };
-    }
+    await ensureVenueContext(validated.organizationId, validated.venueId);
 
     const surface = await prisma.iceSurface.create({
       data: {
@@ -112,31 +163,29 @@ export async function createIceSurface(input: CreateIceSurfaceInput): Promise<Ac
       action: "ICE_SURFACE_CREATED",
       resourceType: "IceSurface",
       resourceId: surface.id,
-      summary: `Created ice surface ${surface.name}`,
+      summary: `Created surface ${surface.name}`,
     });
+    revalidateVenueSchedule(validated.organizationId, validated.venueId);
 
-    revalidateVenueSchedulePaths(validated.organizationId, validated.venueId, venue.slug);
-
-    return { success: true, data: { surfaceId: surface.id } };
+    return { success: true, data: { surfaceId: surface.id, venueId: surface.venueId } };
   } catch (error) {
-    if (isRedirectError(error)) {
+    if (error instanceof Error && error.message.includes("NEXT_REDIRECT")) {
       throw error;
     }
-    return { success: false, error: "Failed to create ice surface. Please try again." };
+    return { success: false, error: "Failed to create ice surface." };
   }
 }
 
-export async function updateIceSurface(input: UpdateIceSurfaceInput): Promise<ActionResult<{ surfaceId: string }>> {
+export async function updateIceSurface(
+  input: UpdateIceSurfaceInput
+): Promise<ActionResult<{ surfaceId: string; venueId: string }>> {
   try {
     const validated = updateIceSurfaceSchema.parse(input);
     const userId = await requireVenueScheduleManager(validated.organizationId, validated.venueId);
-    const venue = await getAuthorizedVenue(validated.organizationId, validated.venueId);
-    if (!venue) {
-      return { success: false, error: "Venue not found" };
-    }
+    await ensureVenueContext(validated.organizationId, validated.venueId);
 
     const surface = await prisma.iceSurface.update({
-      where: { id: validated.surfaceId, venueId: validated.venueId } as Prisma.IceSurfaceWhereUniqueInput,
+      where: { id: validated.surfaceId, venueId: validated.venueId },
       data: {
         name: validated.name,
         surfaceType: validated.surfaceType,
@@ -146,7 +195,7 @@ export async function updateIceSurface(input: UpdateIceSurfaceInput): Promise<Ac
         displayOrder: validated.displayOrder,
         notes: validated.notes || null,
       },
-      select: { id: true, name: true },
+      select: { id: true, venueId: true, name: true },
     });
 
     await logVenueActivity({
@@ -155,33 +204,33 @@ export async function updateIceSurface(input: UpdateIceSurfaceInput): Promise<Ac
       action: "ICE_SURFACE_UPDATED",
       resourceType: "IceSurface",
       resourceId: surface.id,
-      summary: `Updated ice surface ${surface.name}`,
+      summary: `Updated surface ${surface.name}`,
     });
+    revalidateVenueSchedule(validated.organizationId, validated.venueId);
 
-    revalidateVenueSchedulePaths(validated.organizationId, validated.venueId, venue.slug);
-
-    return { success: true, data: { surfaceId: surface.id } };
+    return { success: true, data: { surfaceId: surface.id, venueId: surface.venueId } };
   } catch (error) {
-    if (isRedirectError(error)) {
+    if (error instanceof Error && error.message.includes("NEXT_REDIRECT")) {
       throw error;
     }
-    return { success: false, error: "Failed to update ice surface. Please try again." };
+    return { success: false, error: "Failed to update ice surface." };
   }
 }
 
-export async function archiveIceSurface(input: z.input<typeof archiveIceSurfaceSchema>): Promise<ActionResult<{ surfaceId: string }>> {
+export async function archiveIceSurface(input: {
+  organizationId: string;
+  venueId: string;
+  surfaceId: string;
+}): Promise<ActionResult<{ surfaceId: string; venueId: string }>> {
   try {
-    const validated = archiveIceSurfaceSchema.parse(input);
+    const validated = surfaceCommandSchema.parse(input);
     const userId = await requireVenueScheduleManager(validated.organizationId, validated.venueId);
-    const venue = await getAuthorizedVenue(validated.organizationId, validated.venueId);
-    if (!venue) {
-      return { success: false, error: "Venue not found" };
-    }
+    await ensureVenueContext(validated.organizationId, validated.venueId);
 
     const surface = await prisma.iceSurface.update({
-      where: { id: validated.surfaceId, venueId: validated.venueId } as Prisma.IceSurfaceWhereUniqueInput,
+      where: { id: validated.surfaceId, venueId: validated.venueId },
       data: { isActive: false },
-      select: { id: true },
+      select: { id: true, venueId: true },
     });
 
     await logVenueActivity({
@@ -192,53 +241,49 @@ export async function archiveIceSurface(input: z.input<typeof archiveIceSurfaceS
       resourceId: surface.id,
       summary: "Archived ice surface",
     });
+    revalidateVenueSchedule(validated.organizationId, validated.venueId);
 
-    revalidateVenueSchedulePaths(validated.organizationId, validated.venueId, venue.slug);
-
-    return { success: true, data: { surfaceId: surface.id } };
+    return { success: true, data: { surfaceId: surface.id, venueId: surface.venueId } };
   } catch (error) {
-    if (isRedirectError(error)) {
+    if (error instanceof Error && error.message.includes("NEXT_REDIRECT")) {
       throw error;
     }
-    return { success: false, error: "Failed to archive ice surface. Please try again." };
+    return { success: false, error: "Failed to archive ice surface." };
   }
 }
 
-export async function setOperatingHours(input: VenueOperatingHourInput): Promise<ActionResult<{ operatingHourId: string }>> {
+export async function setOperatingHours(
+  input: VenueOperatingHourInput
+): Promise<ActionResult<{ operatingHourId: string; venueId: string }>> {
   try {
     const validated = venueOperatingHourSchema.parse(input);
     const userId = await requireVenueScheduleManager(validated.organizationId, validated.venueId);
-    const venue = await getAuthorizedVenue(validated.organizationId, validated.venueId);
-    if (!venue) {
-      return { success: false, error: "Venue not found" };
-    }
+    await ensureVenueContext(validated.organizationId, validated.venueId);
 
-    const surfaceId = normalizeOptionalId(validated.surfaceId);
-    const validSurface = await isVenueSurface(validated.venueId, surfaceId);
-    if (!validSurface) {
-      return { success: false, error: "Selected surface was not found for this venue" };
-    }
-
-    const effectiveEndDate = validated.effectiveEndDate ?? OPEN_ENDED_OPERATING_HOURS_END;
-    const overlappingRule = await prisma.venueOperatingHour.findFirst({
+    const conflict = await prisma.venueOperatingHour.findFirst({
       where: {
         venueId: validated.venueId,
-        surfaceId,
+        surfaceId: validated.surfaceId || null,
         dayOfWeek: validated.dayOfWeek,
-        effectiveStartDate: { lte: effectiveEndDate },
-        OR: [{ effectiveEndDate: null }, { effectiveEndDate: { gte: validated.effectiveStartDate } }],
+        ...(validated.effectiveEndDate
+          ? { effectiveStartDate: { lte: validated.effectiveEndDate } }
+          : {}),
+        OR: [
+          { effectiveEndDate: null },
+          { effectiveEndDate: { gte: validated.effectiveStartDate } },
+        ],
       },
       select: { id: true },
     });
 
-    if (overlappingRule) {
-      return { success: false, error: "Operating hours already exist for this surface and date range" };
+    if (conflict) {
+      return { success: false, error: "Operating hours overlap an existing rule for this day and surface." };
     }
 
     const operatingHour = await prisma.venueOperatingHour.create({
       data: {
         venueId: validated.venueId,
-        surfaceId,
+        surfaceId: validated.surfaceId || null,
         dayOfWeek: validated.dayOfWeek,
         opensAt: validated.opensAt,
         closesAt: validated.closesAt,
@@ -248,7 +293,7 @@ export async function setOperatingHours(input: VenueOperatingHourInput): Promise
         label: validated.label || null,
         notes: validated.notes || null,
       },
-      select: { id: true },
+      select: { id: true, venueId: true },
     });
 
     await logVenueActivity({
@@ -257,43 +302,117 @@ export async function setOperatingHours(input: VenueOperatingHourInput): Promise
       action: "OPERATING_HOURS_SET",
       resourceType: "VenueOperatingHour",
       resourceId: operatingHour.id,
-      summary: "Set venue operating hours",
+      summary: "Set operating hours",
     });
+    revalidateVenueSchedule(validated.organizationId, validated.venueId);
 
-    revalidateVenueSchedulePaths(validated.organizationId, validated.venueId, venue.slug);
-
-    return { success: true, data: { operatingHourId: operatingHour.id } };
+    return { success: true, data: { operatingHourId: operatingHour.id, venueId: operatingHour.venueId } };
   } catch (error) {
-    if (isRedirectError(error)) {
+    if (error instanceof Error && error.message.includes("NEXT_REDIRECT")) {
       throw error;
     }
-    return { success: false, error: "Failed to set operating hours. Please try again." };
+    return { success: false, error: "Failed to set operating hours." };
   }
 }
 
-export async function createScheduleBlock(input: VenueScheduleBlockInput): Promise<ActionResult<{ scheduleBlockId: string }>> {
+export async function updateOperatingHours(
+  input: VenueOperatingHourInput & { operatingHourId: string }
+): Promise<ActionResult<{ operatingHourId: string; venueId: string }>> {
+  try {
+    const command = operatingHourCommandSchema.parse(input);
+    const validated = venueOperatingHourSchema.parse(input);
+    const userId = await requireVenueScheduleManager(validated.organizationId, validated.venueId);
+    await ensureVenueContext(validated.organizationId, validated.venueId);
+
+    const operatingHour = await prisma.venueOperatingHour.update({
+      where: { id: command.operatingHourId, venueId: validated.venueId },
+      data: {
+        surfaceId: validated.surfaceId || null,
+        dayOfWeek: validated.dayOfWeek,
+        opensAt: validated.opensAt,
+        closesAt: validated.closesAt,
+        effectiveStartDate: validated.effectiveStartDate,
+        effectiveEndDate: validated.effectiveEndDate ?? null,
+        status: validated.status,
+        label: validated.label || null,
+        notes: validated.notes || null,
+      },
+      select: { id: true, venueId: true },
+    });
+
+    await logVenueActivity({
+      venueId: validated.venueId,
+      actorId: userId,
+      action: "OPERATING_HOURS_UPDATED",
+      resourceType: "VenueOperatingHour",
+      resourceId: operatingHour.id,
+      summary: "Updated operating hours",
+    });
+    revalidateVenueSchedule(validated.organizationId, validated.venueId);
+
+    return { success: true, data: { operatingHourId: operatingHour.id, venueId: operatingHour.venueId } };
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("NEXT_REDIRECT")) {
+      throw error;
+    }
+    return { success: false, error: "Failed to update operating hours." };
+  }
+}
+
+export async function deleteOperatingHours(input: {
+  organizationId: string;
+  venueId: string;
+  operatingHourId: string;
+}): Promise<ActionResult<{ operatingHourId: string }>> {
+  try {
+    const validated = operatingHourCommandSchema.parse(input);
+    const userId = await requireVenueScheduleManager(validated.organizationId, validated.venueId);
+    await ensureVenueContext(validated.organizationId, validated.venueId);
+
+    await prisma.venueOperatingHour.delete({
+      where: { id: validated.operatingHourId, venueId: validated.venueId },
+    });
+
+    await logVenueActivity({
+      venueId: validated.venueId,
+      actorId: userId,
+      action: "OPERATING_HOURS_DELETED",
+      resourceType: "VenueOperatingHour",
+      resourceId: validated.operatingHourId,
+      summary: "Deleted operating hours",
+    });
+    revalidateVenueSchedule(validated.organizationId, validated.venueId);
+
+    return { success: true, data: { operatingHourId: validated.operatingHourId } };
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("NEXT_REDIRECT")) {
+      throw error;
+    }
+    return { success: false, error: "Failed to delete operating hours." };
+  }
+}
+
+export async function createScheduleBlock(
+  input: VenueScheduleBlockInput
+): Promise<ActionResult<{ scheduleBlockId: string; status: string }>> {
   try {
     const validated = venueScheduleBlockSchema.parse(input);
     const userId = await requireVenueScheduleManager(validated.organizationId, validated.venueId);
-    const venue = await getAuthorizedVenue(validated.organizationId, validated.venueId);
-    if (!venue) {
-      return { success: false, error: "Venue not found" };
-    }
+    const venue = await ensureVenueContext(validated.organizationId, validated.venueId);
+    const conflicts = await getScheduleConflicts(validated.venueId, {
+      startAt: validated.startsAt,
+      endAt: validated.endsAt,
+      surfaceId: validated.surfaceId || null,
+      activityType: validated.activityType,
+    });
 
-    const surfaceId = normalizeOptionalId(validated.surfaceId);
-    const validSurface = await isVenueSurface(validated.venueId, surfaceId);
-    if (!validSurface) {
-      return { success: false, error: "Selected surface was not found for this venue" };
-    }
-
-    const conflictError = await getScheduleConflictError(validated.venueId, surfaceId, validated.startsAt, validated.endsAt);
-    if (conflictError) {
-      return { success: false, error: conflictError };
+    if (validated.status !== "DRAFT" && conflicts.length > 0) {
+      return { success: false, error: "Schedule block conflicts with an existing published block." };
     }
 
     const block = await prisma.venueScheduleBlock.create({
-      data: buildScheduleBlockCreateData(validated, userId),
-      select: { id: true, title: true },
+      data: scheduleBlockData(validated, userId),
+      select: { id: true, status: true },
     });
 
     await logVenueActivity({
@@ -302,63 +421,49 @@ export async function createScheduleBlock(input: VenueScheduleBlockInput): Promi
       action: "SCHEDULE_BLOCK_CREATED",
       resourceType: "VenueScheduleBlock",
       resourceId: block.id,
-      summary: `Created schedule block ${block.title}`,
+      summary: `Created schedule block ${validated.title}`,
     });
+    revalidateSchedulePaths(validated.organizationId, validated.venueId, venue.slug);
 
-    revalidateVenueSchedulePaths(validated.organizationId, validated.venueId, venue.slug);
-
-    return { success: true, data: { scheduleBlockId: block.id } };
+    return { success: true, data: { scheduleBlockId: block.id, status: block.status } };
   } catch (error) {
-    if (isRedirectError(error)) {
+    if (error instanceof Error && error.message.includes("NEXT_REDIRECT")) {
       throw error;
     }
-    return { success: false, error: "Failed to create schedule block. Please try again." };
+    return { success: false, error: "Failed to create schedule block." };
   }
 }
 
-export async function updateScheduleBlock(input: ScheduleBlockMutationInput): Promise<ActionResult<{ scheduleBlockId: string }>> {
+export async function updateScheduleBlock(
+  input: VenueScheduleBlockInput & { scheduleBlockId: string }
+): Promise<ActionResult<{ scheduleBlockId: string; status: string }>> {
   try {
-    const validated = scheduleBlockMutationSchema.parse(input);
+    const command = scheduleBlockIdSchema.parse(input);
+    const validated = venueScheduleBlockSchema.parse(input);
     const userId = await requireVenueScheduleManager(validated.organizationId, validated.venueId);
-    const venue = await getAuthorizedVenue(validated.organizationId, validated.venueId);
-    if (!venue) {
-      return { success: false, error: "Venue not found" };
-    }
-
-    const existing = await prisma.venueScheduleBlock.findFirst({
-      where: {
-        id: validated.scheduleBlockId,
-        venueId: validated.venueId,
-        venue: { organizationId: validated.organizationId },
-      },
-      select: { id: true },
-    });
-
-    if (!existing) {
-      return { success: false, error: "Schedule block not found" };
-    }
-
-    const surfaceId = normalizeOptionalId(validated.surfaceId);
-    const validSurface = await isVenueSurface(validated.venueId, surfaceId);
-    if (!validSurface) {
-      return { success: false, error: "Selected surface was not found for this venue" };
-    }
-
-    const conflictError = await getScheduleConflictError(
+    const venue = await ensureVenueContext(validated.organizationId, validated.venueId);
+    const conflicts = await getScheduleConflicts(
       validated.venueId,
-      surfaceId,
-      validated.startsAt,
-      validated.endsAt,
-      [validated.scheduleBlockId]
+      {
+        startAt: validated.startsAt,
+        endAt: validated.endsAt,
+        surfaceId: validated.surfaceId || null,
+        activityType: validated.activityType,
+      },
+      command.scheduleBlockId
     );
-    if (conflictError) {
-      return { success: false, error: conflictError };
+
+    if (validated.status !== "DRAFT" && conflicts.length > 0) {
+      return { success: false, error: "Schedule block conflicts with an existing published block." };
     }
 
     const block = await prisma.venueScheduleBlock.update({
-      where: { id: validated.scheduleBlockId },
-      data: buildScheduleBlockUpdateData(validated, userId),
-      select: { id: true, title: true },
+      where: { id: command.scheduleBlockId, venueId: validated.venueId },
+      data: {
+        ...scheduleBlockUpdateData(validated),
+        updatedById: userId,
+      },
+      select: { id: true, status: true },
     });
 
     await logVenueActivity({
@@ -367,32 +472,44 @@ export async function updateScheduleBlock(input: ScheduleBlockMutationInput): Pr
       action: "SCHEDULE_BLOCK_UPDATED",
       resourceType: "VenueScheduleBlock",
       resourceId: block.id,
-      summary: `Updated schedule block ${block.title}`,
+      summary: `Updated schedule block ${validated.title}`,
     });
+    revalidateSchedulePaths(validated.organizationId, validated.venueId, venue.slug);
 
-    revalidateVenueSchedulePaths(validated.organizationId, validated.venueId, venue.slug);
-
-    return { success: true, data: { scheduleBlockId: block.id } };
+    return { success: true, data: { scheduleBlockId: block.id, status: block.status } };
   } catch (error) {
-    if (isRedirectError(error)) {
+    if (error instanceof Error && error.message.includes("NEXT_REDIRECT")) {
       throw error;
     }
-    return { success: false, error: "Failed to update schedule block. Please try again." };
+    return { success: false, error: "Failed to update schedule block." };
   }
 }
 
-export async function publishScheduleBlock(input: z.input<typeof scheduleBlockStatusMutationSchema>): Promise<ActionResult<{ scheduleBlockId: string }>> {
-  return updateScheduleBlockStatus(input, "PUBLISHED", "SCHEDULE_BLOCK_PUBLISHED", "Published schedule block");
+export async function publishScheduleBlock(input: {
+  organizationId: string;
+  venueId: string;
+  scheduleBlockId: string;
+}): Promise<ActionResult<{ scheduleBlockId: string; status: string }>> {
+  return setScheduleBlockStatus(input, "PUBLISHED", "SCHEDULE_BLOCK_PUBLISHED");
 }
 
-export async function cancelScheduleBlock(input: z.input<typeof scheduleBlockStatusMutationSchema>): Promise<ActionResult<{ scheduleBlockId: string }>> {
-  return updateScheduleBlockStatus(input, "CANCELED", "SCHEDULE_BLOCK_CANCELED", "Canceled schedule block");
+export async function cancelScheduleBlock(input: {
+  organizationId: string;
+  venueId: string;
+  scheduleBlockId: string;
+}): Promise<ActionResult<{ scheduleBlockId: string; status: string }>> {
+  return setScheduleBlockStatus(input, "CANCELED", "SCHEDULE_BLOCK_CANCELED");
 }
 
-export async function getPublicVenueSchedule(slug: string) {
-  if (!slug) {
-    return null;
-  }
+interface PublicVenueScheduleFilters {
+  skillLevelIds?: string[];
+}
+
+export async function getPublicVenueSchedule(slug: string, filters: PublicVenueScheduleFilters = {}) {
+  const now = new Date();
+  const skillLevelWhere = filters.skillLevelIds?.length
+    ? { skillLevels: { some: { id: { in: filters.skillLevelIds } } } }
+    : {};
 
   return prisma.venue.findFirst({
     where: {
@@ -402,14 +519,13 @@ export async function getPublicVenueSchedule(slug: string) {
     select: {
       id: true,
       name: true,
-      slug: true,
-      timezone: true,
       scheduleBlocks: {
         where: {
           status: "PUBLISHED",
           visibility: "PUBLIC",
+          startsAt: { gte: now },
+          ...skillLevelWhere,
         },
-        orderBy: { startsAt: "asc" },
         select: {
           id: true,
           title: true,
@@ -418,7 +534,6 @@ export async function getPublicVenueSchedule(slug: string) {
           audience: true,
           startsAt: true,
           endsAt: true,
-          capacity: true,
           priceAmount: true,
           priceCurrency: true,
           priceLabel: true,
@@ -428,66 +543,68 @@ export async function getPublicVenueSchedule(slug: string) {
             select: {
               id: true,
               name: true,
-              surfaceType: true,
+            },
+          },
+          skillLevels: {
+            select: {
+              id: true,
+              label: true,
+              discipline: true,
             },
           },
         },
+        orderBy: { startsAt: "asc" },
       },
     },
   });
 }
 
-async function updateScheduleBlockStatus(
-  input: z.input<typeof scheduleBlockStatusMutationSchema>,
+async function setScheduleBlockStatus(
+  input: { organizationId: string; venueId: string; scheduleBlockId: string },
   status: "PUBLISHED" | "CANCELED",
-  action: string,
-  summary: string
-): Promise<ActionResult<{ scheduleBlockId: string }>> {
+  action: string
+): Promise<ActionResult<{ scheduleBlockId: string; status: string }>> {
   try {
-    const validated = scheduleBlockStatusMutationSchema.parse(input);
+    const validated = scheduleBlockCommandSchema.parse(input);
     const userId = await requireVenueScheduleManager(validated.organizationId, validated.venueId);
-    const venue = await getAuthorizedVenue(validated.organizationId, validated.venueId);
-    if (!venue) {
-      return { success: false, error: "Venue not found" };
-    }
-
-    const existing = await prisma.venueScheduleBlock.findFirst({
-      where: {
-        id: validated.scheduleBlockId,
-        venueId: validated.venueId,
-        venue: { organizationId: validated.organizationId },
-      },
+    const block = await prisma.venueScheduleBlock.findFirst({
+      where: { id: validated.scheduleBlockId, venueId: validated.venueId },
       select: {
         id: true,
-        surfaceId: true,
+        venueId: true,
         startsAt: true,
         endsAt: true,
         status: true,
         activityType: true,
+        surfaceId: true,
+        venue: { select: { organizationId: true, slug: true } },
       },
     });
 
-    if (!existing) {
+    if (!block || block.venue.organizationId !== validated.organizationId) {
       return { success: false, error: "Schedule block not found" };
     }
 
     if (status === "PUBLISHED") {
-      const conflictError = await getScheduleConflictError(
+      const conflicts = await getScheduleConflicts(
         validated.venueId,
-        existing.surfaceId ?? null,
-        existing.startsAt,
-        existing.endsAt,
-        [validated.scheduleBlockId]
+        {
+          startAt: block.startsAt,
+          endAt: block.endsAt,
+          surfaceId: block.surfaceId,
+          activityType: block.activityType,
+        },
+        block.id
       );
-      if (conflictError) {
-        return { success: false, error: conflictError };
+      if (conflicts.length > 0) {
+        return { success: false, error: "Schedule block conflicts with an existing published block." };
       }
     }
 
-    const block = await prisma.venueScheduleBlock.update({
-      where: { id: validated.scheduleBlockId },
+    const updated = await prisma.venueScheduleBlock.update({
+      where: { id: block.id, venueId: validated.venueId },
       data: { status, updatedById: userId },
-      select: { id: true },
+      select: { id: true, status: true },
     });
 
     await logVenueActivity({
@@ -495,23 +612,22 @@ async function updateScheduleBlockStatus(
       actorId: userId,
       action,
       resourceType: "VenueScheduleBlock",
-      resourceId: block.id,
-      summary,
+      resourceId: updated.id,
+      summary: `${status === "PUBLISHED" ? "Published" : "Canceled"} schedule block`,
     });
+    revalidateSchedulePaths(validated.organizationId, validated.venueId, block.venue.slug);
 
-    revalidateVenueSchedulePaths(validated.organizationId, validated.venueId, venue.slug);
-
-    return { success: true, data: { scheduleBlockId: block.id } };
+    return { success: true, data: { scheduleBlockId: updated.id, status: updated.status } };
   } catch (error) {
-    if (isRedirectError(error)) {
+    if (error instanceof Error && error.message.includes("NEXT_REDIRECT")) {
       throw error;
     }
-    return { success: false, error: "Failed to update schedule block status. Please try again." };
+    return { success: false, error: "Failed to update schedule block status." };
   }
 }
 
-async function getAuthorizedVenue(organizationId: string, venueId: string) {
-  return prisma.venue.findFirst({
+async function ensureVenueContext(organizationId: string, venueId: string): Promise<VenueContext> {
+  const venue = await prisma.venue.findFirst({
     where: {
       id: venueId,
       organizationId,
@@ -522,71 +638,82 @@ async function getAuthorizedVenue(organizationId: string, venueId: string) {
       slug: true,
     },
   });
-}
 
-async function isVenueSurface(venueId: string, surfaceId: string | null): Promise<boolean> {
-  if (!surfaceId) {
-    return true;
+  if (!venue) {
+    throw new Error("Venue not found");
   }
 
-  const surface = await prisma.iceSurface.findFirst({
-    where: {
-      id: surfaceId,
-      venueId,
-      isActive: true,
-    },
-    select: { id: true },
-  });
-
-  return Boolean(surface);
+  return venue;
 }
 
-async function getScheduleConflictError(
+async function getScheduleConflicts(
   venueId: string,
-  surfaceId: string | null,
-  startsAt: Date,
-  endsAt: Date,
-  ignoreIds: string[] = []
-): Promise<string | null> {
-  const where: Prisma.VenueScheduleBlockWhereInput = {
-    venueId,
-    surfaceId,
-    status: { in: ["DRAFT", "PUBLISHED"] },
-    startsAt: { lt: endsAt },
-    endsAt: { gt: startsAt },
-  };
-
-  if (ignoreIds.length > 0) {
-    where.id = { notIn: ignoreIds };
-  }
-
-  const existingBlocks = await prisma.venueScheduleBlock.findMany({
-    where,
+  candidate: ScheduleBlockRange,
+  excludeId?: string
+) {
+  const ranges = await prisma.venueScheduleBlock.findMany({
+    where: {
+      venueId,
+      ...(candidate.surfaceId ? { OR: [{ surfaceId: candidate.surfaceId }, { surfaceId: null }] } : {}),
+      status: { in: ["PUBLISHED"] },
+      ...(excludeId ? { id: { not: excludeId } } : {}),
+      startsAt: { lt: candidate.endAt },
+      endsAt: { gt: candidate.startAt },
+    },
     select: {
       id: true,
-      surfaceId: true,
       startsAt: true,
       endsAt: true,
       status: true,
       activityType: true,
+      surfaceId: true,
     },
   });
 
-  const conflicts = findScheduleConflicts(
-    { startAt: startsAt, endAt: endsAt },
-    existingBlocks.map(toScheduleRange),
-    { ignoreIds }
-  );
-
-  return conflicts.length > 0 ? "Schedule block overlaps an existing published block" : null;
+  return findScheduleConflicts(candidate, ranges.map((range) => ({
+    id: range.id,
+    startAt: range.startsAt,
+    endAt: range.endsAt,
+    status: range.status,
+    activityType: range.activityType,
+    surfaceId: range.surfaceId,
+  })));
 }
 
-function buildScheduleBlockBaseData(
+function scheduleBlockData(
   validated: ReturnType<typeof venueScheduleBlockSchema.parse>,
-): Omit<Prisma.VenueScheduleBlockUncheckedCreateInput, "createdById"> {
+  userId: string
+): Prisma.VenueScheduleBlockUncheckedCreateInput {
   return {
     venueId: validated.venueId,
-    surfaceId: normalizeOptionalId(validated.surfaceId),
+    surfaceId: validated.surfaceId || null,
+    title: validated.title,
+    description: validated.description || null,
+    activityType: validated.activityType,
+    audience: validated.audience,
+    visibility: validated.visibility,
+    status: validated.status,
+    startsAt: validated.startsAt,
+    endsAt: validated.endsAt,
+    recurrenceRule: validated.recurrenceRule || null,
+    recurrenceStartDate: validated.recurrenceStartDate ?? null,
+    recurrenceEndDate: validated.recurrenceEndDate ?? null,
+    capacity: validated.capacity ?? null,
+    priceAmount: validated.priceAmount ?? null,
+    priceCurrency: validated.priceCurrency,
+    priceLabel: validated.priceLabel || null,
+    registrationMode: validated.registrationMode,
+    externalRegistrationUrl: validated.externalRegistrationUrl || null,
+    createdById: userId,
+  };
+}
+
+function scheduleBlockUpdateData(
+  validated: ReturnType<typeof venueScheduleBlockSchema.parse>
+): Prisma.VenueScheduleBlockUncheckedUpdateInput {
+  return {
+    venueId: validated.venueId,
+    surfaceId: validated.surfaceId || null,
     title: validated.title,
     description: validated.description || null,
     activityType: validated.activityType,
@@ -607,49 +734,15 @@ function buildScheduleBlockBaseData(
   };
 }
 
-function buildScheduleBlockCreateData(
-  validated: ReturnType<typeof venueScheduleBlockSchema.parse>,
-  userId: string
-): Prisma.VenueScheduleBlockUncheckedCreateInput {
-  return {
-    ...buildScheduleBlockBaseData(validated),
-    createdById: userId,
-  };
-}
-
-function buildScheduleBlockUpdateData(
-  validated: ReturnType<typeof scheduleBlockMutationSchema.parse>,
-  userId: string
-): Prisma.VenueScheduleBlockUncheckedUpdateInput {
-  return {
-    ...buildScheduleBlockBaseData(validated),
-    updatedById: userId,
-  };
-}
-
-function toScheduleRange(block: ExistingScheduleBlock): ScheduleBlockRange {
-  return {
-    id: block.id,
-    surfaceId: block.surfaceId ?? null,
-    startAt: block.startsAt ?? block.startAt ?? new Date(0),
-    endAt: block.endsAt ?? block.endAt ?? new Date(0),
-    status: block.status,
-    activityType: block.activityType,
-  };
-}
-
-function normalizeOptionalId(value: string | null | undefined): string | null {
-  return value || null;
-}
-
-function revalidateVenueSchedulePaths(organizationId: string, venueId: string, slug?: string | null) {
+function revalidateVenueSchedule(organizationId: string, venueId: string) {
+  revalidatePath(`/venue-admin/${organizationId}/venues/${venueId}/surfaces`);
   revalidatePath(`/venue-admin/${organizationId}/venues/${venueId}/schedule`);
-  revalidatePath(`/venue-admin/${organizationId}/venues/${venueId}/profile`);
+}
+
+function revalidateSchedulePaths(organizationId: string, venueId: string, slug?: string | null) {
+  revalidateVenueSchedule(organizationId, venueId);
   if (slug) {
     revalidatePath(`/rinks/${slug}`);
+    revalidatePath(`/rinks/${slug}/schedule`);
   }
-}
-
-function isRedirectError(error: unknown): error is Error {
-  return error instanceof Error && error.message.includes("NEXT_REDIRECT");
 }
