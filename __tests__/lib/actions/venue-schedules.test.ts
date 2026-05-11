@@ -96,8 +96,8 @@ describe("schedule block actions", () => {
     mockPrisma.venueScheduleBlock.findMany.mockResolvedValue([
       {
         id: "existing",
-        startAt: new Date("2026-02-01T19:00:00Z"),
-        endAt: new Date("2026-02-01T21:00:00Z"),
+        startsAt: new Date("2026-02-01T19:00:00Z"),
+        endsAt: new Date("2026-02-01T21:00:00Z"),
         status: "PUBLISHED",
         activityType: "OPEN_SKATE",
       },

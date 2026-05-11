@@ -58,6 +58,9 @@
    bun run test __tests__/lib/actions/venue-organizations.test.ts
    bun run test __tests__/lib/actions/venue-schedules.test.ts
    bun run test __tests__/lib/actions/venue-requests.test.ts
+   bun run test __tests__/lib/actions/venue-content-lessons.test.ts
+   bun run test __tests__/lib/actions/venue-relationships.test.ts
+   bun run test __tests__/lib/actions/venue-skill-levels.test.ts
    ```
 
 7. Run repository validation before opening a PR:
@@ -98,6 +101,15 @@
 2. Accept the invitation as an authorized team admin.
 3. Confirm the relationship appears on both venue and team surfaces.
 
+### Content and Skill-Level Flow
+
+1. Publish a lesson offering, specialty event, and rink post from the content manager.
+2. Assign one or more skill-level labels to a lesson or schedule block.
+3. Confirm public rink profile content only shows published entries.
+4. Confirm `/rinks/[slug]/schedule?level=[skillLevelId]` narrows the public schedule without blocking untagged publishing workflows.
+
 ## Known Baseline Considerations
 
 Full test runs may expose pre-existing failures outside this feature area. Feature work should still keep lint, type-check, and focused tests for changed areas passing.
+
+The local development database may report migration drift from earlier schema history. Do not run destructive migration resets without explicit approval.

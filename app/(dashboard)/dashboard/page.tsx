@@ -11,6 +11,7 @@ import CreateTeamForm from "@/components/features/team/CreateTeamForm";
 import TeamCard from "@/components/features/dashboard/TeamCard";
 import { getUserMode } from "@/lib/utils/league-mode";
 import { getDashboardData } from "@/lib/actions/team-context";
+import { getTeamVenueRelationships } from "@/lib/actions/venue-relationships";
 import { requireUserId } from "@/lib/auth/session";
 import { formatSport } from "@/lib/utils/validation";
 
@@ -21,6 +22,7 @@ export default async function DashboardPage() {
     getUserMode(userId),
     getDashboardData(),
   ]);
+  const venueRelationships = await getTeamVenueRelationships(teams.map((teamMember) => teamMember.team.id));
 
   if (teams.length === 0 && userMode.leagues.length === 0) {
     return (
@@ -196,6 +198,31 @@ export default async function DashboardPage() {
                           </Stack>
                         </Box>
                       </Stack>
+                    </Stack>
+                  </CardContent>
+                </Card>
+              ))}
+            </Stack>
+          </Box>
+        )}
+
+        {venueRelationships.length > 0 && (
+          <Box sx={{ mt: 4 }}>
+            <Typography variant="h5" component="h2" gutterBottom>
+              Preferred and home rinks
+            </Typography>
+            <Stack spacing={1.5}>
+              {venueRelationships.map((relationship) => (
+                <Card key={relationship.id} variant="outlined">
+                  <CardContent>
+                    <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                      <Typography variant="subtitle1">{relationship.venue.name}</Typography>
+                      <Chip size="small" label={relationship.relationshipType} />
+                      {relationship.venue.slug ? (
+                        <Button component={Link} href={`/rinks/${relationship.venue.slug}`} size="small">
+                          View rink
+                        </Button>
+                      ) : null}
                     </Stack>
                   </CardContent>
                 </Card>

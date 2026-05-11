@@ -89,24 +89,24 @@
 
 ### Tests for User Story 2
 
-- [ ] T035 [P] [US2] Add Server Action tests for ice surface CRUD and operating hours in `__tests__/lib/actions/venue-schedules-surfaces.test.ts`
-- [ ] T036 [P] [US2] Add Server Action tests for schedule block draft/publish/conflict flows in `__tests__/lib/actions/venue-schedules.test.ts`
-- [ ] T037 [P] [US2] Add schedule management component tests in `__tests__/components/features/venue-admin/VenueScheduleManager.test.tsx`
+- [X] T035 [P] [US2] Add Server Action tests for ice surface CRUD and operating hours in `__tests__/lib/actions/venue-schedules-surfaces.test.ts`
+- [X] T036 [P] [US2] Add Server Action tests for schedule block draft/publish/conflict flows in `__tests__/lib/actions/venue-schedules.test.ts`
+- [X] T037 [P] [US2] Add schedule management component tests in `__tests__/components/features/venue-admin/VenueScheduleManager.test.tsx`
 
 ### Implementation for User Story 2
 
-- [ ] T038 [US2] Implement create/update/archive ice surface actions in `lib/actions/venue-schedules.ts`
-- [ ] T039 [US2] Implement set/update/delete operating hours actions in `lib/actions/venue-schedules.ts`
-- [ ] T040 [US2] Implement create/update/publish/cancel schedule block actions with conflict checks in `lib/actions/venue-schedules.ts`
-- [ ] T041 [US2] Implement public schedule query with visibility filtering in `lib/actions/venue-schedules.ts`
-- [ ] T042 [P] [US2] Create surface manager component in `components/features/venue-admin/IceSurfaceManager.tsx`
-- [ ] T043 [P] [US2] Create operating hours editor component in `components/features/venue-admin/OperatingHoursEditor.tsx`
-- [ ] T044 [P] [US2] Create schedule block editor component in `components/features/venue-admin/ScheduleBlockEditor.tsx`
-- [ ] T045 [P] [US2] Create venue schedule calendar/list component in `components/features/venue-admin/VenueScheduleCalendar.tsx`
-- [ ] T046 [US2] Create surfaces admin route in `app/(dashboard)/venue-admin/[organizationId]/venues/[venueId]/surfaces/page.tsx`
-- [ ] T047 [US2] Create schedule admin route in `app/(dashboard)/venue-admin/[organizationId]/venues/[venueId]/schedule/page.tsx`
-- [ ] T048 [US2] Create public rink schedule route in `app/(marketing)/rinks/[slug]/schedule/page.tsx`
-- [ ] T049 [US2] Add schedule teaser sections to public rink profile in `components/features/venue-admin/PublicRinkProfile.tsx`
+- [X] T038 [US2] Implement create/update/archive ice surface actions in `lib/actions/venue-schedules.ts`
+- [X] T039 [US2] Implement set/update/delete operating hours actions in `lib/actions/venue-schedules.ts`
+- [X] T040 [US2] Implement create/update/publish/cancel schedule block actions with conflict checks in `lib/actions/venue-schedules.ts`
+- [X] T041 [US2] Implement public schedule query with visibility filtering in `lib/actions/venue-schedules.ts`
+- [X] T042 [P] [US2] Create surface manager component in `components/features/venue-admin/IceSurfaceManager.tsx`
+- [X] T043 [P] [US2] Create operating hours editor component in `components/features/venue-admin/OperatingHoursEditor.tsx`
+- [X] T044 [P] [US2] Create schedule block editor component in `components/features/venue-admin/ScheduleBlockEditor.tsx`
+- [X] T045 [P] [US2] Create venue schedule calendar/list component in `components/features/venue-admin/VenueScheduleCalendar.tsx`
+- [X] T046 [US2] Create surfaces admin route in `app/(dashboard)/venue-admin/[organizationId]/venues/[venueId]/surfaces/page.tsx`
+- [X] T047 [US2] Create schedule admin route in `app/(dashboard)/venue-admin/[organizationId]/venues/[venueId]/schedule/page.tsx`
+- [X] T048 [US2] Create public rink schedule route in `app/(marketing)/rinks/[slug]/schedule/page.tsx`
+- [X] T049 [US2] Add schedule teaser sections to public rink profile in `components/features/venue-admin/PublicRinkProfile.tsx`
 
 **Checkpoint**: US2 should work independently for profile-owned schedule publishing after US1/foundation.
 
@@ -120,21 +120,21 @@
 
 ### Tests for User Story 3
 
-- [ ] T050 [P] [US3] Add request lifecycle Server Action tests in `__tests__/lib/actions/venue-requests.test.ts`
-- [ ] T051 [P] [US3] Add requester authorization and double-booking tests in `__tests__/lib/actions/venue-requests-auth.test.ts`
-- [ ] T052 [P] [US3] Add available ice request component tests in `__tests__/components/features/venue-admin/IceTimeRequestForm.test.tsx`
+- [X] T050 [P] [US3] Add request lifecycle Server Action tests in `__tests__/lib/actions/venue-requests.test.ts`
+- [X] T051 [P] [US3] Add requester authorization and double-booking tests in `__tests__/lib/actions/venue-requests-auth.test.ts`
+- [X] T052 [P] [US3] Add available ice request component tests in `__tests__/components/features/venue-admin/IceTimeRequestForm.test.tsx`
 
 ### Implementation for User Story 3
 
-- [ ] T053 [US3] Implement submitIceTimeRequest and requester team/league authorization in `lib/actions/venue-requests.ts`
-- [ ] T054 [US3] Implement decideIceTimeRequest, cancelIceTimeRequest, and expireIceTimeRequest in `lib/actions/venue-requests.ts`
-- [ ] T055 [US3] Implement request notifications using existing email/template patterns in `lib/actions/venue-requests.ts`
-- [ ] T056 [US3] Implement manager request inbox query with private requester details in `lib/actions/venue-requests.ts`
-- [ ] T057 [P] [US3] Create public available ice browser component in `components/features/venue-admin/AvailableIceBrowser.tsx`
-- [ ] T058 [P] [US3] Create ice-time request form component in `components/features/venue-admin/IceTimeRequestForm.tsx`
-- [ ] T059 [P] [US3] Create manager request queue component in `components/features/venue-admin/IceTimeRequestQueue.tsx`
-- [ ] T060 [US3] Add request form integration to public rink schedule in `app/(marketing)/rinks/[slug]/schedule/page.tsx`
-- [ ] T061 [US3] Create venue requests admin route in `app/(dashboard)/venue-admin/[organizationId]/venues/[venueId]/requests/page.tsx`
+- [X] T053 [US3] Implement submitIceTimeRequest and requester team/league authorization in `lib/actions/venue-requests.ts`
+- [X] T054 [US3] Implement decideIceTimeRequest, cancelIceTimeRequest, and expireIceTimeRequest in `lib/actions/venue-requests.ts`
+- [X] T055 [US3] Implement request notifications using existing email/template patterns in `lib/actions/venue-requests.ts`
+- [X] T056 [US3] Implement manager request inbox query with private requester details in `lib/actions/venue-requests.ts`
+- [X] T057 [P] [US3] Create public available ice browser component in `components/features/venue-admin/AvailableIceBrowser.tsx`
+- [X] T058 [P] [US3] Create ice-time request form component in `components/features/venue-admin/IceTimeRequestForm.tsx`
+- [X] T059 [P] [US3] Create manager request queue component in `components/features/venue-admin/IceTimeRequestQueue.tsx`
+- [X] T060 [US3] Add request form integration to public rink schedule in `app/(marketing)/rinks/[slug]/schedule/page.tsx`
+- [X] T061 [US3] Create venue requests admin route in `app/(dashboard)/venue-admin/[organizationId]/venues/[venueId]/requests/page.tsx`
 
 **Checkpoint**: US3 should allow a complete request/decision loop without direct payments.
 
@@ -148,22 +148,22 @@
 
 ### Tests for User Story 4
 
-- [ ] T062 [P] [US4] Add lesson offering and specialty event action tests in `__tests__/lib/actions/venue-content-lessons.test.ts`
-- [ ] T063 [P] [US4] Add venue post lifecycle action tests in `__tests__/lib/actions/venue-content-posts.test.ts`
-- [ ] T064 [P] [US4] Add content manager component tests in `__tests__/components/features/venue-admin/VenueContentManager.test.tsx`
+- [X] T062 [P] [US4] Add lesson offering and specialty event action tests in `__tests__/lib/actions/venue-content-lessons.test.ts`
+- [X] T063 [P] [US4] Add venue post lifecycle action tests in `__tests__/lib/actions/venue-content-posts.test.ts`
+- [X] T064 [P] [US4] Add content manager component tests in `__tests__/components/features/venue-admin/VenueContentManager.test.tsx`
 
 ### Implementation for User Story 4
 
-- [ ] T065 [US4] Implement create/update/publish/archive lesson offering actions in `lib/actions/venue-content.ts`
-- [ ] T066 [US4] Implement specialty event publishing by linking event-like schedule blocks in `lib/actions/venue-content.ts`
-- [ ] T067 [US4] Implement create/update/publish/schedule/unpublish/archive venue post actions in `lib/actions/venue-content.ts`
-- [ ] T068 [US4] Implement public content and lesson queries in `lib/actions/venue-content.ts`
-- [ ] T069 [P] [US4] Create lesson offering editor component in `components/features/venue-admin/LessonOfferingEditor.tsx`
-- [ ] T070 [P] [US4] Create specialty event editor component in `components/features/venue-admin/SpecialtyEventEditor.tsx`
-- [ ] T071 [P] [US4] Create venue content manager component in `components/features/venue-admin/VenueContentManager.tsx`
-- [ ] T072 [P] [US4] Create public lessons/events/posts section component in `components/features/venue-admin/PublicRinkContent.tsx`
-- [ ] T073 [US4] Create content admin route in `app/(dashboard)/venue-admin/[organizationId]/venues/[venueId]/content/page.tsx`
-- [ ] T074 [US4] Add lessons, events, and posts to public rink profile in `app/(marketing)/rinks/[slug]/page.tsx`
+- [X] T065 [US4] Implement create/update/publish/archive lesson offering actions in `lib/actions/venue-content.ts`
+- [X] T066 [US4] Implement specialty event publishing by linking event-like schedule blocks in `lib/actions/venue-content.ts`
+- [X] T067 [US4] Implement create/update/publish/schedule/unpublish/archive venue post actions in `lib/actions/venue-content.ts`
+- [X] T068 [US4] Implement public content and lesson queries in `lib/actions/venue-content.ts`
+- [X] T069 [P] [US4] Create lesson offering editor component in `components/features/venue-admin/LessonOfferingEditor.tsx`
+- [X] T070 [P] [US4] Create specialty event editor component in `components/features/venue-admin/SpecialtyEventEditor.tsx`
+- [X] T071 [P] [US4] Create venue content manager component in `components/features/venue-admin/VenueContentManager.tsx`
+- [X] T072 [P] [US4] Create public lessons/events/posts section component in `components/features/venue-admin/PublicRinkContent.tsx`
+- [X] T073 [US4] Create content admin route in `app/(dashboard)/venue-admin/[organizationId]/venues/[venueId]/content/page.tsx`
+- [X] T074 [US4] Add lessons, events, and posts to public rink profile in `app/(marketing)/rinks/[slug]/page.tsx`
 
 **Checkpoint**: US4 should publish venue marketing/program content independently of request workflows.
 
@@ -177,21 +177,21 @@
 
 ### Tests for User Story 5
 
-- [ ] T075 [P] [US5] Add venue relationship invitation and response action tests in `__tests__/lib/actions/venue-relationships.test.ts`
-- [ ] T076 [P] [US5] Add target authority and relationship removal tests in `__tests__/lib/actions/venue-relationships-auth.test.ts`
-- [ ] T077 [P] [US5] Add relationship manager component tests in `__tests__/components/features/venue-admin/VenueRelationshipManager.test.tsx`
+- [X] T075 [P] [US5] Add venue relationship invitation and response action tests in `__tests__/lib/actions/venue-relationships.test.ts`
+- [X] T076 [P] [US5] Add target authority and relationship removal tests in `__tests__/lib/actions/venue-relationships-auth.test.ts`
+- [X] T077 [P] [US5] Add relationship manager component tests in `__tests__/components/features/venue-admin/VenueRelationshipManager.test.tsx`
 
 ### Implementation for User Story 5
 
-- [ ] T078 [US5] Implement inviteVenueRelationship action with team/league/organization target validation in `lib/actions/venue-relationships.ts`
-- [ ] T079 [US5] Implement respondToVenueRelationship and removeVenueRelationship actions in `lib/actions/venue-relationships.ts`
-- [ ] T080 [US5] Implement relationship history and public-safe relationship queries in `lib/actions/venue-relationships.ts`
-- [ ] T081 [US5] Implement relationship invitation notifications using existing email/template patterns in `lib/actions/venue-relationships.ts`
-- [ ] T082 [P] [US5] Create venue relationship manager component in `components/features/venue-admin/VenueRelationshipManager.tsx`
-- [ ] T083 [P] [US5] Create relationship invitation response component in `components/features/venue-admin/VenueRelationshipInvitation.tsx`
-- [ ] T084 [US5] Create relationships admin route in `app/(dashboard)/venue-admin/[organizationId]/venues/[venueId]/relationships/page.tsx`
-- [ ] T085 [US5] Add team-facing preferred/home rink display to team dashboard in `app/(dashboard)/page.tsx`
-- [ ] T086 [US5] Add public preferred/home team relationship section to public rink profile in `components/features/venue-admin/PublicRinkProfile.tsx`
+- [X] T078 [US5] Implement inviteVenueRelationship action with team/league/organization target validation in `lib/actions/venue-relationships.ts`
+- [X] T079 [US5] Implement respondToVenueRelationship and removeVenueRelationship actions in `lib/actions/venue-relationships.ts`
+- [X] T080 [US5] Implement relationship history and public-safe relationship queries in `lib/actions/venue-relationships.ts`
+- [X] T081 [US5] Implement relationship invitation notifications using existing email/template patterns in `lib/actions/venue-relationships.ts`
+- [X] T082 [P] [US5] Create venue relationship manager component in `components/features/venue-admin/VenueRelationshipManager.tsx`
+- [X] T083 [P] [US5] Create relationship invitation response component in `components/features/venue-admin/VenueRelationshipInvitation.tsx`
+- [X] T084 [US5] Create relationships admin route in `app/(dashboard)/venue-admin/[organizationId]/venues/[venueId]/relationships/page.tsx`
+- [X] T085 [US5] Add team-facing preferred/home rink display to team dashboard in `app/(dashboard)/page.tsx`
+- [X] T086 [US5] Add public preferred/home team relationship section to public rink profile in `components/features/venue-admin/PublicRinkProfile.tsx`
 
 **Checkpoint**: US5 should complete invitation, acceptance, removal, and profile display flows.
 
@@ -205,19 +205,19 @@
 
 ### Tests for User Story 6
 
-- [ ] T087 [P] [US6] Add skill-level validation and reference query tests in `__tests__/lib/actions/venue-skill-levels.test.ts`
-- [ ] T088 [P] [US6] Add level-filtering tests for public schedule and lesson queries in `__tests__/lib/actions/venue-skill-level-filters.test.ts`
-- [ ] T089 [P] [US6] Add skill-level selector component tests in `__tests__/components/features/venue-admin/SkillLevelSelector.test.tsx`
+- [X] T087 [P] [US6] Add skill-level validation and reference query tests in `__tests__/lib/actions/venue-skill-levels.test.ts`
+- [X] T088 [P] [US6] Add level-filtering tests for public schedule and lesson queries in `__tests__/lib/actions/venue-skill-level-filters.test.ts`
+- [X] T089 [P] [US6] Add skill-level selector component tests in `__tests__/components/features/venue-admin/SkillLevelSelector.test.tsx`
 
 ### Implementation for User Story 6
 
-- [ ] T090 [US6] Implement skill level seed/reference helpers in `lib/actions/venue-content.ts`
-- [ ] T091 [US6] Implement skill-level assignment for lessons and schedule blocks in `lib/actions/venue-content.ts`
-- [ ] T092 [US6] Extend public schedule and lesson filters for level labels in `lib/actions/venue-schedules.ts`
-- [ ] T093 [P] [US6] Create skill-level selector component in `components/features/venue-admin/SkillLevelSelector.tsx`
-- [ ] T094 [P] [US6] Create public level filter component in `components/features/venue-admin/PublicRinkFilters.tsx`
-- [ ] T095 [US6] Integrate level selectors into lesson and schedule editors in `components/features/venue-admin/LessonOfferingEditor.tsx` and `components/features/venue-admin/ScheduleBlockEditor.tsx`
-- [ ] T096 [US6] Integrate level filters into public rink schedule page in `app/(marketing)/rinks/[slug]/schedule/page.tsx`
+- [X] T090 [US6] Implement skill level seed/reference helpers in `lib/actions/venue-content.ts`
+- [X] T091 [US6] Implement skill-level assignment for lessons and schedule blocks in `lib/actions/venue-content.ts`
+- [X] T092 [US6] Extend public schedule and lesson filters for level labels in `lib/actions/venue-schedules.ts`
+- [X] T093 [P] [US6] Create skill-level selector component in `components/features/venue-admin/SkillLevelSelector.tsx`
+- [X] T094 [P] [US6] Create public level filter component in `components/features/venue-admin/PublicRinkFilters.tsx`
+- [X] T095 [US6] Integrate level selectors into lesson and schedule editors in `components/features/venue-admin/LessonOfferingEditor.tsx` and `components/features/venue-admin/ScheduleBlockEditor.tsx`
+- [X] T096 [US6] Integrate level filters into public rink schedule page in `app/(marketing)/rinks/[slug]/schedule/page.tsx`
 
 **Checkpoint**: US6 should make level guidance optional, filterable, and non-blocking for publication.
 
@@ -227,13 +227,13 @@
 
 **Purpose**: Hardening, compatibility, documentation, and validation across all desired stories.
 
-- [ ] T097 [P] Add migration backfill for default ice surfaces on existing venues in `prisma/migrations/`
-- [ ] T098 [P] Update venue management documentation in `docs/`
-- [ ] T099 Audit public/private data boundaries across rink pages and actions in `lib/actions/venue-organizations.ts`, `lib/actions/venue-schedules.ts`, `lib/actions/venue-requests.ts`, `lib/actions/venue-content.ts`, and `lib/actions/venue-relationships.ts`
-- [ ] T100 Validate legacy `/venues` and event venue selection compatibility in `app/(dashboard)/venues/page.tsx`, `components/features/venues/VenueForm.tsx`, and `components/features/events/EventForm.tsx`
-- [ ] T101 Run focused validation for rink management tests using `__tests__/lib/actions/` and `__tests__/components/features/venue-admin/`
-- [ ] T102 Run `bun run lint`, `bun run type-check`, and selected stable focused tests before PR validation in `package.json`
-- [ ] T103 Update quickstart outcomes and known baseline notes after implementation in `specs/002-ice-rink-management/quickstart.md`
+- [X] T097 [P] Add migration backfill for default ice surfaces on existing venues in `prisma/migrations/`
+- [X] T098 [P] Update venue management documentation in `docs/`
+- [X] T099 Audit public/private data boundaries across rink pages and actions in `lib/actions/venue-organizations.ts`, `lib/actions/venue-schedules.ts`, `lib/actions/venue-requests.ts`, `lib/actions/venue-content.ts`, and `lib/actions/venue-relationships.ts`
+- [X] T100 Validate legacy `/venues` and event venue selection compatibility in `app/(dashboard)/venues/page.tsx`, `components/features/venues/VenueForm.tsx`, and `components/features/events/EventForm.tsx`
+- [X] T101 Run focused validation for rink management tests using `__tests__/lib/actions/` and `__tests__/components/features/venue-admin/`
+- [X] T102 Run `bun run lint`, `bun run type-check`, and selected stable focused tests before PR validation in `package.json`
+- [X] T103 Update quickstart outcomes and known baseline notes after implementation in `specs/002-ice-rink-management/quickstart.md`
 
 ---
 

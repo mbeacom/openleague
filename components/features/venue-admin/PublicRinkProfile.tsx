@@ -2,6 +2,15 @@ import Link from "next/link";
 import { Box, Button, Card, CardContent, Chip, Stack, Typography } from "@mui/material";
 import type { PublicVenueProfile, PublicVenueSummary } from "@/lib/actions/venue-organizations";
 
+interface PublicVenueRelationship {
+  id: string;
+  relationshipType: string;
+  targetType: string;
+  targetName?: string | null;
+  team?: { name: string } | null;
+  league?: { name: string } | null;
+}
+
 export function PublicRinkProfileCard({ venue }: { venue: PublicVenueSummary }) {
   return (
     <Card sx={{ height: "100%" }}>
@@ -32,7 +41,13 @@ export function PublicRinkProfileCard({ venue }: { venue: PublicVenueSummary }) 
   );
 }
 
-export function PublicRinkProfile({ venue }: { venue: PublicVenueProfile }) {
+export function PublicRinkProfile({
+  venue,
+  relationships = [],
+}: {
+  venue: PublicVenueProfile;
+  relationships?: PublicVenueRelationship[];
+}) {
   return (
     <Stack spacing={4}>
       <Box
@@ -81,6 +96,52 @@ export function PublicRinkProfile({ venue }: { venue: PublicVenueProfile }) {
           </CardContent>
         </Card>
       </Stack>
+      {relationships.length > 0 ? (
+        <Card>
+          <CardContent>
+            <Stack spacing={2}>
+              <Typography variant="h5">Preferred and home teams</Typography>
+              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                {relationships.map((relationship) => {
+                  const label = relationship.team?.name ?? relationship.league?.name ?? relationship.targetName ?? relationship.targetType;
+                  return (
+                    <Chip
+                      key={relationship.id}
+                      label={`${label} (${relationship.relationshipType})`}
+                      color={relationship.relationshipType === "HOME" ? "primary" : "default"}
+                    />
+                  );
+                })}
+              </Stack>
+            </Stack>
+          </CardContent>
+        </Card>
+      ) : null}
+      <Card>
+        <CardContent>
+          <Stack spacing={2}>
+            <Typography variant="h5">Upcoming public schedule</Typography>
+            {venue.scheduleBlocks.length === 0 ? (
+              <Typography color="text.secondary">No public schedule blocks are currently published.</Typography>
+            ) : (
+              venue.scheduleBlocks.map((block) => (
+                <Box key={block.id}>
+                  <Typography variant="subtitle1">{block.title}</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {new Date(block.startsAt).toLocaleString()} - {new Date(block.endsAt).toLocaleString()}
+                    {block.surface ? ` · ${block.surface.name}` : ""}
+                  </Typography>
+                </Box>
+              ))
+            )}
+            {venue.slug ? (
+              <Button component={Link} href={`/rinks/${venue.slug}/schedule`} variant="outlined">
+                View full schedule
+              </Button>
+            ) : null}
+          </Stack>
+        </CardContent>
+      </Card>
     </Stack>
   );
 }

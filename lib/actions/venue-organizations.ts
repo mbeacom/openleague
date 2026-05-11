@@ -369,6 +369,27 @@ export const publicVenueProfileSelect = {
     },
     orderBy: { displayOrder: "asc" },
   },
+  scheduleBlocks: {
+    where: {
+      status: "PUBLISHED",
+      visibility: "PUBLIC",
+    },
+    select: {
+      id: true,
+      title: true,
+      activityType: true,
+      startsAt: true,
+      endsAt: true,
+      surface: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+    },
+    orderBy: { startsAt: "asc" },
+    take: 3,
+  },
 } as const;
 
 export const publicVenueSummarySelect = {
