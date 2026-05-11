@@ -17,7 +17,7 @@ import {
   publicPublishedVenueWhere,
   publicVenueProfileSelect,
   publicVenueSummarySelect,
-} from "@/lib/actions/venue-organizations";
+} from "@/lib/utils/public-venues";
 
 describe("public venue selectors", () => {
   it("only selects public-safe profile fields", () => {
@@ -53,14 +53,11 @@ describe("public venue selectors", () => {
       city: true,
       state: true,
       slug: true,
-      _count: {
-        select: {
-          surfaces: true,
-        },
-      },
     });
 
     expect(publicVenueSummarySelect).not.toHaveProperty("privateManagerNotes");
     expect(publicVenueSummarySelect).not.toHaveProperty("publicEmail");
+    expect(publicVenueSummarySelect).not.toHaveProperty("surfaces");
+    expect(publicVenueSummarySelect).not.toHaveProperty("_count");
   });
 });

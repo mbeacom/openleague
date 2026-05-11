@@ -3,6 +3,8 @@ import { Container, Stack } from "@mui/material";
 import { PublicRinkProfile } from "@/components/features/venue-admin/PublicRinkProfile";
 import { getPublicRinkProfile } from "@/lib/actions/venue-organizations";
 
+export const dynamic = "force-dynamic";
+
 interface PublicRinkPageProps {
   params: Promise<{ slug: string }>;
 }

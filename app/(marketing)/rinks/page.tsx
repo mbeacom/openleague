@@ -2,6 +2,8 @@ import { Box, Container, Grid, Stack, Typography } from "@mui/material";
 import { PublicRinkProfileCard } from "@/components/features/venue-admin/PublicRinkProfile";
 import { getPublicRinkSummaries } from "@/lib/actions/venue-organizations";
 
+export const dynamic = "force-dynamic";
+
 export default async function PublicRinksPage() {
   const rinks = await getPublicRinkSummaries();
 

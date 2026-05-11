@@ -40,7 +40,7 @@ export const publicVenueProfileSelect = {
     },
     orderBy: { displayOrder: "asc" },
   },
-} as const;
+} as const satisfies Prisma.VenueSelect;
 
 export const publicVenueSummarySelect = {
   id: true,
@@ -53,19 +53,14 @@ export const publicVenueSummarySelect = {
   brandPrimaryColor: true,
   brandSecondaryColor: true,
   profileStatus: true,
-  _count: {
-    select: {
-      surfaces: true,
-    },
-  },
-} as const;
+} as const satisfies Prisma.VenueSelect;
 
 export const publicPublishedVenueWhere = {
   isActive: true,
   visibility: "PUBLIC",
   profileStatus: "PUBLISHED",
   slug: { not: null },
-} as const;
+} as const satisfies Prisma.VenueWhereInput;
 
 export type PublicVenueProfile = Prisma.VenueGetPayload<{
   select: typeof publicVenueProfileSelect;

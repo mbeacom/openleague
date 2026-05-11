@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/db/prisma";
 import { requireUserId, requireVenueProfileManager } from "@/lib/auth/session";
 import { revalidatePath } from "next/cache";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import {
   publicPublishedVenueWhere,
   publicVenueProfileSelect,
@@ -317,21 +317,51 @@ export async function getVenueAdminDashboard() {
 }
 
 export async function getPublicRinkSummaries() {
-  return prisma.venue.findMany({
-    where: publicPublishedVenueWhere,
-    select: publicVenueSummarySelect,
-    orderBy: [{ state: "asc" }, { city: "asc" }, { name: "asc" }],
-  });
+  try {
+    return await prisma.venue.findMany({
+      where: publicPublishedVenueWhere,
+      select: publicVenueSummarySelect,
+      orderBy: [{ state: "asc" }, { city: "asc" }, { name: "asc" }],
+    });
+  } catch (error) {
+    if (isMissingVenueManagementSchemaError(error)) {
+      console.warn("Public rink listing unavailable until venue management migration is applied", {
+        code: error.code,
+      });
+      return [];
+    }
+    throw error;
+  }
 }
 
 export async function getPublicRinkProfile(slug: string) {
-  return prisma.venue.findFirst({
-    where: {
-      ...publicPublishedVenueWhere,
-      slug,
-    },
-    select: publicVenueProfileSelect,
-  });
+  try {
+    return await prisma.venue.findFirst({
+      where: {
+        ...publicPublishedVenueWhere,
+        slug,
+      },
+      select: publicVenueProfileSelect,
+    });
+  } catch (error) {
+    if (isMissingVenueManagementSchemaError(error)) {
+      console.warn("Public rink profile unavailable until venue management migration is applied", {
+        code: error.code,
+        slug,
+      });
+      return null;
+    }
+    throw error;
+  }
+}
+
+function isMissingVenueManagementSchemaError(
+  error: unknown
+): error is Prisma.PrismaClientKnownRequestError {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    (error.code === "P2021" || error.code === "P2022")
+  );
 }
 
 export interface VenueActivityLogInput {
