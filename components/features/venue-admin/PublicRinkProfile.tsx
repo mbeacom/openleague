@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Box, Button, Card, CardContent, Chip, Stack, Typography } from "@mui/material";
-import type { PublicVenueProfile, PublicVenueSummary } from "@/lib/actions/venue-organizations";
+import type { PublicVenueProfile, PublicVenueSummary } from "@/lib/utils/public-venues";
 
 export function PublicRinkProfileCard({ venue }: { venue: PublicVenueSummary }) {
   return (
