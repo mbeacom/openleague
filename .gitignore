@@ -144,6 +144,12 @@ local-context/
 # macOS system files
 .DS_Store
 
+# Editor and temporary files
+.vscode/
+.idea/
+*.tmp
+*.swp
+
 # Playwright MCP files
 .playwright-mcp/
 

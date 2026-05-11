@@ -1,8 +1,14 @@
 "use server";
 
 import { prisma } from "@/lib/db/prisma";
-import { requireUserId } from "@/lib/auth/session";
+import {
+  hasVenueStaffRole,
+  requireUserId,
+  requireVenueProfileManager,
+  VENUE_PROFILE_ROLES,
+} from "@/lib/auth/session";
 import { revalidatePath } from "next/cache";
+import type { SurfaceType } from "@prisma/client";
 import {
   createVenueSchema,
   updateVenueSchema,
@@ -31,6 +37,10 @@ export async function createVenue(
   try {
     const validated = createVenueSchema.parse(input);
     const userId = await requireUserId();
+
+    if (validated.organizationId) {
+      await requireVenueProfileManager(validated.organizationId);
+    }
 
     // Verify ownership authorization
     if (validated.visibility === "TEAM" && validated.teamId) {
@@ -68,6 +78,7 @@ export async function createVenue(
         visibility: validated.visibility,
         teamId: validated.visibility === "TEAM" ? (validated.teamId || null) : null,
         leagueId: validated.visibility === "LEAGUE" ? (validated.leagueId || null) : null,
+        organizationId: validated.organizationId || null,
         createdById: userId,
       },
     });
@@ -109,6 +120,10 @@ export async function updateVenue(
       return { success: false, error: "You don't have permission to edit this venue" };
     }
 
+    if (validated.organizationId && validated.organizationId !== existing.organizationId) {
+      await requireVenueProfileManager(validated.organizationId);
+    }
+
     // If visibility is changing, validate authorization for the new scope
     if (validated.visibility === "TEAM" && validated.teamId && validated.teamId !== existing.teamId) {
       const membership = await prisma.teamMember.findUnique({
@@ -145,6 +160,7 @@ export async function updateVenue(
         visibility: validated.visibility,
         teamId: validated.visibility === "TEAM" ? (validated.teamId || null) : null,
         leagueId: validated.visibility === "LEAGUE" ? (validated.leagueId || null) : null,
+        organizationId: validated.organizationId || null,
       },
     });
 
@@ -278,7 +294,7 @@ export async function getAvailableVenues(filters?: {
         AND: [
           { OR: visibilityFilter },
           ...(filters.includeInactive ? [] : [{ isActive: true }]),
-          ...(filters.surfaceType ? [{ surfaceType: filters.surfaceType as "ICE" | "TURF" | "COURT" | "FIELD" | "OTHER" }] : []),
+          ...(filters.surfaceType ? [{ surfaceType: filters.surfaceType as SurfaceType }] : []),
           ...(filters.city ? [{ city: { contains: filters.city, mode: "insensitive" as const } }] : []),
           {
             OR: [
@@ -303,7 +319,7 @@ export async function getAvailableVenues(filters?: {
       AND: [
         { OR: visibilityFilter },
         ...(filters?.includeInactive ? [] : [{ isActive: true }]),
-        ...(filters?.surfaceType ? [{ surfaceType: filters.surfaceType as "ICE" | "TURF" | "COURT" | "FIELD" | "OTHER" }] : []),
+        ...(filters?.surfaceType ? [{ surfaceType: filters.surfaceType as SurfaceType }] : []),
         ...(filters?.city ? [{ city: { contains: filters.city, mode: "insensitive" as const } }] : []),
       ],
     },
@@ -535,10 +551,27 @@ export async function getVenuesPageAccess(): Promise<{ isAdmin: boolean } | null
 
 async function canUserEditVenue(
   userId: string,
-  venue: { createdById: string; visibility: string; teamId: string | null; leagueId: string | null }
+  venue: {
+    id: string;
+    createdById: string;
+    visibility: string;
+    teamId: string | null;
+    leagueId: string | null;
+    organizationId?: string | null;
+  }
 ): Promise<boolean> {
   // Creator can always edit
   if (venue.createdById === userId) return true;
+
+  if (venue.organizationId) {
+    const canManageVenue = await hasVenueStaffRole(
+      userId,
+      venue.organizationId,
+      VENUE_PROFILE_ROLES,
+      venue.id
+    );
+    if (canManageVenue) return true;
+  }
 
   // Team admin can edit TEAM venues
   if (venue.visibility === "TEAM" && venue.teamId) {
