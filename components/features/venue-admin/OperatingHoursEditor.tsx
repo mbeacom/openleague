@@ -1,8 +1,6 @@
-"use client";
-
 import { Card, CardContent, Chip, Stack, Typography } from "@mui/material";
 
-const dayLabels = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 interface OperatingHourSummary {
   id: string;
@@ -15,29 +13,33 @@ interface OperatingHourSummary {
 interface OperatingHoursEditorProps {
   organizationId: string;
   venueId: string;
-  operatingHours: OperatingHourSummary[];
+  operatingHours?: OperatingHourSummary[];
 }
 
-export function OperatingHoursEditor({ organizationId: _organizationId, venueId: _venueId, operatingHours }: OperatingHoursEditorProps) {
+export function OperatingHoursEditor({ organizationId, venueId, operatingHours = [] }: OperatingHoursEditorProps) {
   return (
-    <Stack spacing={2}>
-      <Typography variant="h5">Operating hours</Typography>
-      {operatingHours.length === 0 ? (
-        <Typography color="text.secondary">No operating hours have been configured yet.</Typography>
-      ) : (
-        operatingHours.map((hour) => (
-          <Card key={hour.id}>
-            <CardContent>
-              <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
-                <Typography>
-                  {dayLabels[hour.dayOfWeek] ?? "Day"}: {hour.opensAt}-{hour.closesAt}
-                </Typography>
-                <Chip label={hour.status} size="small" />
-              </Stack>
-            </CardContent>
-          </Card>
-        ))
-      )}
-    </Stack>
+    <Card aria-labelledby="operating-hours-heading">
+      <CardContent>
+        <Stack spacing={2} data-organization-id={organizationId} data-venue-id={venueId}>
+          <Typography id="operating-hours-heading" variant="h6" component="h2">
+            Operating hours
+          </Typography>
+          {operatingHours.length > 0 ? (
+            <Stack spacing={1}>
+              {operatingHours.map((hour) => (
+                <Stack key={hour.id} direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                  <Typography>{`${DAYS[hour.dayOfWeek] ?? "Day"}: ${hour.opensAt}-${hour.closesAt}`}</Typography>
+                  <Chip size="small" label={hour.status} />
+                </Stack>
+              ))}
+            </Stack>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              Operating hours have not been configured yet.
+            </Typography>
+          )}
+        </Stack>
+      </CardContent>
+    </Card>
   );
 }

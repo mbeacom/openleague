@@ -195,7 +195,7 @@ function minDate(left: Date, right: Date): Date {
 function isWeeklyIntervalMatch(start: Date, candidate: Date, interval: number): boolean {
   const startWeek = startOfDay(start).getTime();
   const candidateWeek = startOfDay(candidate).getTime();
-  const days = Math.floor((candidateWeek - startWeek) / 86_400_000);
+  const days = Math.round((candidateWeek - startWeek) / 86_400_000);
   const weeks = Math.floor(days / 7);
   return weeks % interval === 0;
 }

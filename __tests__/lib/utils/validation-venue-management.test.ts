@@ -60,6 +60,17 @@ describe("venue profile validation", () => {
     expect(result.success).toBe(true);
   });
 
+    it("accepts 3-digit shorthand brand colors", () => {
+      const result = updateVenueProfileSchema.safeParse({
+        organizationId,
+        venueId,
+        brandPrimaryColor: "#037",
+        brandSecondaryColor: "#FFF",
+      });
+
+      expect(result.success).toBe(true);
+    });
+
   it("rejects unsafe slugs and malformed brand colors", () => {
     expect(
       updateVenueProfileSchema.safeParse({

@@ -1,27 +1,26 @@
-"use client";
-
-import { Button, Card, CardContent, Stack, TextField, Typography } from "@mui/material";
-import { SkillLevelSelector } from "./SkillLevelSelector";
+import { Card, CardContent, Stack, TextField, Typography } from "@mui/material";
 
 interface ScheduleBlockEditorProps {
   organizationId: string;
   venueId: string;
 }
 
-export function ScheduleBlockEditor({ organizationId: _organizationId, venueId: _venueId }: ScheduleBlockEditorProps) {
+export function ScheduleBlockEditor({ organizationId, venueId }: ScheduleBlockEditorProps) {
   return (
-    <Card>
+    <Card aria-labelledby="schedule-block-heading">
       <CardContent>
-        <Stack spacing={2}>
-          <Typography variant="h5">Schedule block</Typography>
-          <TextField label="Title" name="title" />
-          <TextField label="Activity type" name="activityType" placeholder="OPEN_SKATE" />
+        <Stack spacing={2} data-organization-id={organizationId} data-venue-id={venueId}>
+          <Typography id="schedule-block-heading" variant="h6" component="h2">
+            Schedule block
+          </Typography>
+          <TextField label="Title" size="small" disabled fullWidth />
           <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-            <TextField label="Starts at" name="startsAt" type="datetime-local" InputLabelProps={{ shrink: true }} fullWidth />
-            <TextField label="Ends at" name="endsAt" type="datetime-local" InputLabelProps={{ shrink: true }} fullWidth />
+            <TextField label="Starts" size="small" disabled fullWidth />
+            <TextField label="Ends" size="small" disabled fullWidth />
           </Stack>
-          <SkillLevelSelector skillLevels={[]} />
-          <Button variant="contained">Save schedule block</Button>
+          <Typography variant="body2" color="text.secondary">
+            Create and publish bookable public ice-time blocks from the venue schedule actions.
+          </Typography>
         </Stack>
       </CardContent>
     </Card>

@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { requireVenueScheduleManager } from "@/lib/auth/session";
-import { logVenueActivity, publicPublishedVenueWhere, type ActionResult } from "@/lib/actions/venue-organizations";
+import { logVenueActivity, type ActionResult } from "@/lib/actions/venue-organizations";
+import { publicPublishedVenueWhere } from "@/lib/utils/public-venues";
 import {
   createIceSurfaceSchema,
   updateIceSurfaceSchema,

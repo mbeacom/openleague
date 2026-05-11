@@ -5,6 +5,8 @@ import { getPublicVenueContent } from "@/lib/actions/venue-content";
 import { getPublicRinkProfile } from "@/lib/actions/venue-organizations";
 import { getPublicVenueRelationships } from "@/lib/actions/venue-relationships";
 
+export const dynamic = "force-dynamic";
+
 interface PublicRinkPageProps {
   params: Promise<{ slug: string }>;
 }

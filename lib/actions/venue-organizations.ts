@@ -3,7 +3,12 @@
 import { prisma } from "@/lib/db/prisma";
 import { requireUserId, requireVenueProfileManager } from "@/lib/auth/session";
 import { revalidatePath } from "next/cache";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
+import {
+  publicPublishedVenueWhere,
+  publicVenueProfileSelect,
+  publicVenueSummarySelect,
+} from "@/lib/utils/public-venues";
 import {
   createVenueOrganizationSchema,
   publishVenueProfileSchema,
@@ -15,6 +20,91 @@ import {
 export type ActionResult<T> =
   | { success: true; data: T }
   | { success: false; error: string; details?: unknown };
+
+type ParsedUpdateVenueProfileInput = ReturnType<typeof updateVenueProfileSchema.parse>;
+
+const nullableVenueProfileFields = [
+  "address",
+  "city",
+  "state",
+  "zipCode",
+  "phone",
+  "website",
+  "notes",
+  "slug",
+  "publicDescription",
+  "logoUrl",
+  "brandPrimaryColor",
+  "brandSecondaryColor",
+  "publicEmail",
+  "publicPhone",
+  "privateManagerNotes",
+] as const;
+
+function hasInputField(input: UpdateVenueProfileInput, field: keyof UpdateVenueProfileInput): boolean {
+  return Object.prototype.hasOwnProperty.call(input, field);
+}
+
+function setDataField(data: Prisma.VenueUpdateInput, field: string, value: unknown) {
+  (data as Record<string, unknown>)[field] = value;
+}
+
+function buildVenueProfileUpdateData(
+  input: UpdateVenueProfileInput,
+  validated: ParsedUpdateVenueProfileInput
+): Prisma.VenueUpdateInput {
+  const data: Prisma.VenueUpdateInput = {};
+
+  if (hasInputField(input, "name") && validated.name !== undefined) {
+    data.name = validated.name;
+  }
+  if (hasInputField(input, "surfaceType") && validated.surfaceType !== undefined) {
+    data.surfaceType = validated.surfaceType;
+  }
+  if (hasInputField(input, "timezone") && validated.timezone !== undefined) {
+    data.timezone = validated.timezone;
+  }
+  if (hasInputField(input, "capacity")) {
+    data.capacity = validated.capacity ?? null;
+  }
+  if (hasInputField(input, "amenities") && validated.amenities !== undefined) {
+    data.amenities = validated.amenities;
+  }
+
+  for (const field of nullableVenueProfileFields) {
+    if (hasInputField(input, field)) {
+      setDataField(data, field, validated[field] || null);
+    }
+  }
+
+  return data;
+}
+
+interface PublishableVenueProfile {
+  name: string | null;
+  slug: string | null;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  publicDescription: string | null;
+  timezone: string | null;
+  publicEmail: string | null;
+  publicPhone: string | null;
+  website: string | null;
+  hasActiveOwnerOrManager: boolean;
+}
+
+function getVenuePublishMissingFields(venue: PublishableVenueProfile): string[] {
+  return [
+    !venue.name ? "name" : null,
+    !venue.slug ? "slug" : null,
+    !venue.publicDescription ? "public description" : null,
+    !venue.timezone ? "timezone" : null,
+    !venue.address && !(venue.city && venue.state) ? "address or city/state" : null,
+    !(venue.publicEmail || venue.publicPhone || venue.website) ? "public contact method" : null,
+    !venue.hasActiveOwnerOrManager ? "active owner or manager" : null,
+  ].filter((field): field is string => Boolean(field));
+}
 
 export async function createVenueOrganization(
   input: CreateVenueOrganizationInput
@@ -103,6 +193,13 @@ export async function updateVenueProfile(
       return { success: false, error: "Venue ID is required" };
     }
 
+      const updateData = buildVenueProfileUpdateData(input, validated);
+      if (Object.keys(updateData).length === 0) {
+        return { success: false, error: "At least one venue profile field is required" };
+      }
+
+      const userId = await requireVenueProfileManager(validated.organizationId, validated.venueId);
+
     const venue = await prisma.venue.findFirst({
       where: {
         id: validated.venueId,
@@ -115,43 +212,23 @@ export async function updateVenueProfile(
       return { success: false, error: "Venue profile not found" };
     }
 
-    const userId = await requireVenueProfileManager(validated.organizationId, validated.venueId);
+      const updated = await prisma.$transaction(async (tx) => {
+        const updatedVenue = await tx.venue.update({
+          where: { id: validated.venueId },
+          data: updateData,
+          select: { id: true, profileStatus: true, updatedAt: true, slug: true },
+        });
 
-    const updated = await prisma.venue.update({
-      where: { id: validated.venueId },
-      data: {
-        name: validated.name,
-        address: validated.address || null,
-        city: validated.city || null,
-        state: validated.state || null,
-        zipCode: validated.zipCode || null,
-        surfaceType: validated.surfaceType,
-        capacity: validated.capacity ?? null,
-        amenities: validated.amenities,
-        phone: validated.phone || null,
-        website: validated.website || null,
-        notes: validated.notes || null,
-        slug: validated.slug || null,
-        publicDescription: validated.publicDescription || null,
-        logoUrl: validated.logoUrl || null,
-        brandPrimaryColor: validated.brandPrimaryColor || null,
-        brandSecondaryColor: validated.brandSecondaryColor || null,
-        timezone: validated.timezone,
-        publicEmail: validated.publicEmail || null,
-        publicPhone: validated.publicPhone || null,
-        privateManagerNotes: validated.privateManagerNotes || null,
-        profileStatus: validated.profileStatus,
-      },
-      select: { id: true, profileStatus: true, updatedAt: true, slug: true },
-    });
+        await createVenueActivityLog(tx, {
+          venueId: updatedVenue.id,
+          actorId: userId,
+          action: "VENUE_PROFILE_UPDATED",
+          resourceType: "Venue",
+          resourceId: updatedVenue.id,
+          summary: "Updated venue profile",
+        });
 
-    await logVenueActivity({
-      venueId: updated.id,
-      actorId: userId,
-      action: "VENUE_PROFILE_UPDATED",
-      resourceType: "Venue",
-      resourceId: updated.id,
-      summary: "Updated venue profile",
+        return updatedVenue;
     });
 
     revalidatePath("/venue-admin");
@@ -185,6 +262,7 @@ export async function publishVenueProfile(
 ): Promise<ActionResult<{ venueId: string; profileStatus: string; publishedAt: Date }>> {
   try {
     const validated = publishVenueProfileSchema.parse(input);
+      const userId = await requireVenueProfileManager(validated.organizationId, validated.venueId);
 
     const venue = await prisma.venue.findFirst({
       where: {
@@ -195,9 +273,14 @@ export async function publishVenueProfile(
         id: true,
         name: true,
         slug: true,
+          address: true,
         city: true,
         state: true,
         publicDescription: true,
+          timezone: true,
+          publicEmail: true,
+          publicPhone: true,
+          website: true,
       },
     });
 
@@ -205,13 +288,20 @@ export async function publishVenueProfile(
       return { success: false, error: "Venue profile not found" };
     }
 
-    const missingFields = [
-      !venue.name ? "name" : null,
-      !venue.slug ? "slug" : null,
-      !venue.city ? "city" : null,
-      !venue.state ? "state" : null,
-      !venue.publicDescription ? "public description" : null,
-    ].filter(Boolean);
+      const activeOwnerOrManager = await prisma.venueStaff.findFirst({
+        where: {
+          organizationId: validated.organizationId,
+          status: "ACTIVE",
+          role: { in: ["OWNER", "MANAGER"] },
+          OR: [{ venueId: null }, { venueId: validated.venueId }],
+        },
+        select: { id: true },
+      });
+
+      const missingFields = getVenuePublishMissingFields({
+        ...venue,
+        hasActiveOwnerOrManager: Boolean(activeOwnerOrManager),
+      });
 
     if (missingFields.length > 0) {
       return {
@@ -232,25 +322,28 @@ export async function publishVenueProfile(
       return { success: false, error: "That public rink slug is already in use" };
     }
 
-    const userId = await requireVenueProfileManager(validated.organizationId, validated.venueId);
     const publishedAt = new Date();
-    const updated = await prisma.venue.update({
-      where: { id: venue.id },
-      data: {
-        profileStatus: "PUBLISHED",
-        publishedAt,
-      },
-      select: { id: true, profileStatus: true, publishedAt: true },
+      const updated = await prisma.$transaction(async (tx) => {
+        const updatedVenue = await tx.venue.update({
+          where: { id: venue.id },
+          data: {
+            profileStatus: "PUBLISHED",
+            publishedAt,
+          },
+          select: { id: true, profileStatus: true, publishedAt: true },
+        });
+
+        await createVenueActivityLog(tx, {
+          venueId: updatedVenue.id,
+          actorId: userId,
+          action: "VENUE_PROFILE_PUBLISHED",
+          resourceType: "Venue",
+          resourceId: updatedVenue.id,
+          summary: "Published venue profile",
     });
 
-    await logVenueActivity({
-      venueId: updated.id,
-      actorId: userId,
-      action: "VENUE_PROFILE_PUBLISHED",
-      resourceType: "Venue",
-      resourceId: updated.id,
-      summary: "Published venue profile",
-    });
+        return updatedVenue;
+      });
 
     revalidatePath("/venue-admin");
     revalidatePath(`/venue-admin/${validated.organizationId}/venues/${updated.id}/profile`);
@@ -312,118 +405,52 @@ export async function getVenueAdminDashboard() {
 }
 
 export async function getPublicRinkSummaries() {
-  return prisma.venue.findMany({
-    where: publicPublishedVenueWhere,
-    select: publicVenueSummarySelect,
-    orderBy: [{ state: "asc" }, { city: "asc" }, { name: "asc" }],
-  });
+  try {
+    return await prisma.venue.findMany({
+      where: publicPublishedVenueWhere,
+      select: publicVenueSummarySelect,
+      orderBy: [{ state: "asc" }, { city: "asc" }, { name: "asc" }],
+    });
+  } catch (error) {
+    if (isMissingVenueManagementSchemaError(error)) {
+      console.warn("Public rink listing unavailable until venue management migration is applied", {
+        code: error.code,
+      });
+      return [];
+    }
+    throw error;
+  }
 }
 
 export async function getPublicRinkProfile(slug: string) {
-  return prisma.venue.findFirst({
-    where: {
-      ...publicPublishedVenueWhere,
-      slug,
-    },
-    select: publicVenueProfileSelect,
-  });
+  try {
+    return await prisma.venue.findFirst({
+      where: {
+        ...publicPublishedVenueWhere,
+        slug,
+      },
+      select: publicVenueProfileSelect,
+    });
+  } catch (error) {
+    if (isMissingVenueManagementSchemaError(error)) {
+      console.warn("Public rink profile unavailable until venue management migration is applied", {
+        code: error.code,
+        slug,
+      });
+      return null;
+    }
+    throw error;
+  }
 }
 
-export const publicVenueProfileSelect = {
-  id: true,
-  name: true,
-  address: true,
-  city: true,
-  state: true,
-  zipCode: true,
-  website: true,
-  slug: true,
-  surfaceType: true,
-  capacity: true,
-  amenities: true,
-  publicDescription: true,
-  logoUrl: true,
-  brandPrimaryColor: true,
-  brandSecondaryColor: true,
-  timezone: true,
-  publicEmail: true,
-  publicPhone: true,
-  profileStatus: true,
-  publishedAt: true,
-  organization: {
-    select: {
-      id: true,
-      name: true,
-      type: true,
-    },
-  },
-  surfaces: {
-    where: { isActive: true },
-    select: {
-      id: true,
-      name: true,
-      surfaceType: true,
-      capacity: true,
-      isDefault: true,
-      displayOrder: true,
-    },
-    orderBy: { displayOrder: "asc" },
-  },
-  scheduleBlocks: {
-    where: {
-      status: "PUBLISHED",
-      visibility: "PUBLIC",
-    },
-    select: {
-      id: true,
-      title: true,
-      activityType: true,
-      startsAt: true,
-      endsAt: true,
-      surface: {
-        select: {
-          id: true,
-          name: true,
-        },
-      },
-    },
-    orderBy: { startsAt: "asc" },
-    take: 3,
-  },
-} as const;
-
-export const publicVenueSummarySelect = {
-  id: true,
-  name: true,
-  city: true,
-  state: true,
-  slug: true,
-  publicDescription: true,
-  logoUrl: true,
-  brandPrimaryColor: true,
-  brandSecondaryColor: true,
-  profileStatus: true,
-  _count: {
-    select: {
-      surfaces: true,
-    },
-  },
-} as const;
-
-export const publicPublishedVenueWhere = {
-  isActive: true,
-  visibility: "PUBLIC",
-  profileStatus: "PUBLISHED",
-  slug: { not: null },
-} as const;
-
-export type PublicVenueProfile = Prisma.VenueGetPayload<{
-  select: typeof publicVenueProfileSelect;
-}>;
-
-export type PublicVenueSummary = Prisma.VenueGetPayload<{
-  select: typeof publicVenueSummarySelect;
-}>;
+function isMissingVenueManagementSchemaError(
+  error: unknown
+): error is Prisma.PrismaClientKnownRequestError {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    (error.code === "P2021" || error.code === "P2022")
+  );
+}
 
 export interface VenueActivityLogInput {
   venueId: string;
@@ -435,8 +462,8 @@ export interface VenueActivityLogInput {
   details?: Prisma.InputJsonValue;
 }
 
-export async function logVenueActivity(input: VenueActivityLogInput) {
-  return prisma.venueActivityLog.create({
+function createVenueActivityLog(client: Pick<typeof prisma, "venueActivityLog">, input: VenueActivityLogInput) {
+  return client.venueActivityLog.create({
     data: {
       venueId: input.venueId,
       actorId: input.actorId,
@@ -447,6 +474,10 @@ export async function logVenueActivity(input: VenueActivityLogInput) {
       details: input.details ?? undefined,
     },
   });
+}
+
+export async function logVenueActivity(input: VenueActivityLogInput) {
+  return createVenueActivityLog(prisma, input);
 }
 
 export async function logCurrentUserVenueActivity(

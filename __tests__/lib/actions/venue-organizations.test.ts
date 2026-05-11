@@ -20,6 +20,7 @@ const { mockRequireUserId, mockRequireVenueProfileManager, mockPrisma } = vi.hoi
     },
     venueStaff: {
       create: vi.fn(),
+        findFirst: vi.fn(),
     },
     venueActivityLog: {
       create: vi.fn(),
@@ -51,6 +52,7 @@ beforeEach(() => {
   mockRequireUserId.mockResolvedValue(USER_ID);
   mockRequireVenueProfileManager.mockResolvedValue(USER_ID);
   mockPrisma.$transaction.mockImplementation((callback) => callback(mockPrisma));
+    mockPrisma.venueStaff.findFirst.mockResolvedValue({ id: "clstfxxxxxxxxxxxxxxxxxxxxxxx" });
 });
 
 describe("createVenueOrganization", () => {
@@ -131,6 +133,10 @@ describe("updateVenueProfile", () => {
         }),
       })
     );
+      const updateCall = mockPrisma.venue.update.mock.calls[0]?.[0];
+      expect(updateCall.data).not.toHaveProperty("amenities");
+      expect(updateCall.data).not.toHaveProperty("address");
+      expect(updateCall.data).not.toHaveProperty("phone");
   });
 
   it("returns an error when venueId is missing", async () => {
@@ -152,9 +158,15 @@ describe("publishVenueProfile", () => {
         id: VENUE_ID,
         name: "North Rink",
         slug: "north-rink",
+          address: "100 Ice Way",
         city: "Cleveland",
         state: "OH",
         publicDescription: "Community rink",
+          timezone: "America/New_York",
+          publicEmail: "info@example.com",
+          publicPhone: null,
+          website: null,
+          staff: [{ id: "clstfxxxxxxxxxxxxxxxxxxxxxxx" }],
       })
       .mockResolvedValueOnce(null);
     mockPrisma.venue.update.mockResolvedValue({
@@ -190,9 +202,15 @@ describe("publishVenueProfile", () => {
       id: VENUE_ID,
       name: "North Rink",
       slug: "",
+        address: null,
       city: null,
       state: "OH",
       publicDescription: null,
+        timezone: "America/New_York",
+        publicEmail: null,
+        publicPhone: null,
+        website: null,
+        staff: [],
     });
 
     const result = await publishVenueProfile({

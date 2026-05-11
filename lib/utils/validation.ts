@@ -136,7 +136,7 @@ const timeStringSchema = z.string().regex(/^\d{2}:\d{2}$/, "Time format must be 
 const hexColorSchema = z
   .string()
   .trim()
-  .regex(/^#[0-9a-fA-F]{6}$/, "Color must be a 6-digit hex value")
+  .regex(/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/, "Color must be a 3- or 6-digit hex value")
   .optional()
   .or(z.literal(""));
 const optionalUrlSchema = (maxLength = 500) =>
@@ -684,14 +684,14 @@ export const updateVenueOrganizationSchema = createVenueOrganizationSchema.exten
 export const updateVenueProfileSchema = z.object({
   organizationId: z.string().cuid("Invalid organization ID format"),
   venueId: optionalCuid("Invalid venue ID format"),
-  name: sanitizedStringWithMin(1, 100),
+  name: sanitizedStringWithMin(1, 100).optional(),
   address: optionalSanitizedString(200),
   city: optionalSanitizedString(100),
   state: optionalSanitizedString(50),
   zipCode: optionalSanitizedString(20),
-  surfaceType: z.enum(SURFACE_TYPES).default("ICE"),
+  surfaceType: z.enum(SURFACE_TYPES).optional(),
   capacity: optionalPositiveInt("Capacity must be a positive whole number"),
-  amenities: z.array(sanitizedStringWithMin(1, 50)).max(20).default([]),
+  amenities: z.array(sanitizedStringWithMin(1, 50)).max(20).optional(),
   phone: optionalSanitizedString(20),
   website: optionalUrlSchema(),
   notes: optionalSanitizedString(1000),
@@ -706,11 +706,10 @@ export const updateVenueProfileSchema = z.object({
   logoUrl: optionalUrlSchema(),
   brandPrimaryColor: hexColorSchema,
   brandSecondaryColor: hexColorSchema,
-  timezone: sanitizedStringWithMin(1, 100).default("America/New_York"),
+  timezone: sanitizedStringWithMin(1, 100).optional(),
   publicEmail: optionalEmailSchema,
   publicPhone: optionalSanitizedString(30),
   privateManagerNotes: optionalSanitizedString(2000),
-  profileStatus: z.enum(VENUE_PROFILE_STATUSES).default("DRAFT"),
 });
 
 export const publishVenueProfileSchema = z.object({

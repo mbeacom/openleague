@@ -533,3 +533,4 @@ Business Source License 1.1 (BUSL-1.1) - converts to Apache 2.0 on October 4, 20
 
 ## Recent Changes
 - 002-ice-rink-management: Added TypeScript with Next.js 16 App Router and React 19 + MUI v7/Emotion, Prisma 7, Neon PostgreSQL adapter, Auth.js v5, Zod v4, Bun
+- 002-ice-rink-management: Added venue organization onboarding, branded public rink profiles, venue staff roles, multi-surface scheduling models, and public rink discovery contracts.

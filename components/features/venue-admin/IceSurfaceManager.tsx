@@ -1,41 +1,45 @@
-"use client";
-
 import { Card, CardContent, Chip, Stack, Typography } from "@mui/material";
 
-interface SurfaceSummary {
+interface IceSurfaceSummary {
   id: string;
   name: string;
   surfaceType: string;
   isActive: boolean;
-  isDefault?: boolean;
+  capacity?: number | null;
 }
 
 interface IceSurfaceManagerProps {
   organizationId: string;
   venueId: string;
-  surfaces: SurfaceSummary[];
+  surfaces?: IceSurfaceSummary[];
 }
 
-export function IceSurfaceManager({ organizationId: _organizationId, venueId: _venueId, surfaces }: IceSurfaceManagerProps) {
+export function IceSurfaceManager({ organizationId, venueId, surfaces = [] }: IceSurfaceManagerProps) {
   return (
-    <Stack spacing={2}>
-      <Typography variant="h5">Ice surfaces</Typography>
-      {surfaces.length === 0 ? (
-        <Typography color="text.secondary">No surfaces have been configured yet.</Typography>
-      ) : (
-        surfaces.map((surface) => (
-          <Card key={surface.id}>
-            <CardContent>
-              <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
-                <Typography variant="h6">{surface.name}</Typography>
-                <Chip label={surface.surfaceType} size="small" />
-                {surface.isDefault ? <Chip label="Default" color="primary" size="small" /> : null}
-                {!surface.isActive ? <Chip label="Archived" size="small" /> : null}
-              </Stack>
-            </CardContent>
-          </Card>
-        ))
-      )}
-    </Stack>
+    <Card aria-labelledby="ice-surfaces-heading">
+      <CardContent>
+        <Stack spacing={2} data-organization-id={organizationId} data-venue-id={venueId}>
+          <Typography id="ice-surfaces-heading" variant="h6" component="h2">
+            Ice surfaces
+          </Typography>
+          {surfaces.length > 0 ? (
+            <Stack spacing={1}>
+              {surfaces.map((surface) => (
+                <Stack key={surface.id} direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                  <Typography fontWeight={700}>{surface.name}</Typography>
+                  <Chip size="small" label={surface.surfaceType} />
+                  <Chip size="small" color={surface.isActive ? "success" : "default"} label={surface.isActive ? "Active" : "Archived"} />
+                  {surface.capacity ? <Typography variant="body2">Capacity {surface.capacity}</Typography> : null}
+                </Stack>
+              ))}
+            </Stack>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              No ice surfaces have been added yet.
+            </Typography>
+          )}
+        </Stack>
+      </CardContent>
+    </Card>
   );
 }

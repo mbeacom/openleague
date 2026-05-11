@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Box, Button, Card, CardContent, Chip, Stack, Typography } from "@mui/material";
-import type { PublicVenueProfile, PublicVenueSummary } from "@/lib/actions/venue-organizations";
+import type { PublicVenueProfile, PublicVenueSummary } from "@/lib/utils/public-venues";
 
 interface PublicVenueRelationship {
   id: string;
@@ -27,9 +27,6 @@ export function PublicRinkProfileCard({ venue }: { venue: PublicVenueSummary }) 
           {venue.publicDescription ? (
             <Typography variant="body2">{venue.publicDescription}</Typography>
           ) : null}
-          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-            <Chip size="small" label={`${venue._count.surfaces} surface${venue._count.surfaces === 1 ? "" : "s"}`} />
-          </Stack>
           {venue.slug ? (
             <Button component={Link} href={`/rinks/${venue.slug}`} variant="outlined">
               View rink profile

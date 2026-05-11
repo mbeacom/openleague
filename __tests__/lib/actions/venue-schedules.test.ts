@@ -96,8 +96,8 @@ describe("schedule block actions", () => {
     mockPrisma.venueScheduleBlock.findMany.mockResolvedValue([
       {
         id: "existing",
-        startsAt: new Date("2026-02-01T19:00:00Z"),
-        endsAt: new Date("2026-02-01T21:00:00Z"),
+          startsAt: new Date("2026-02-01T19:00:00Z"),
+          endsAt: new Date("2026-02-01T21:00:00Z"),
         status: "PUBLISHED",
         activityType: "OPEN_SKATE",
       },
@@ -119,8 +119,8 @@ describe("schedule block actions", () => {
       id: BLOCK_ID,
       venueId: VENUE_ID,
       venue: { organizationId: ORGANIZATION_ID, slug: "north-rink" },
-      startAt: new Date("2026-02-01T18:00:00Z"),
-      endAt: new Date("2026-02-01T20:00:00Z"),
+      startsAt: new Date("2026-02-01T18:00:00Z"),
+      endsAt: new Date("2026-02-01T20:00:00Z"),
       status: "DRAFT",
       activityType: "OPEN_SKATE",
     });
