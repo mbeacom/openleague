@@ -265,7 +265,9 @@ export async function setOperatingHours(
         venueId: validated.venueId,
         surfaceId: validated.surfaceId || null,
         dayOfWeek: validated.dayOfWeek,
-        effectiveStartDate: { lte: validated.effectiveEndDate ?? validated.effectiveStartDate },
+        ...(validated.effectiveEndDate
+          ? { effectiveStartDate: { lte: validated.effectiveEndDate } }
+          : {}),
         OR: [
           { effectiveEndDate: null },
           { effectiveEndDate: { gte: validated.effectiveStartDate } },
@@ -458,7 +460,7 @@ export async function updateScheduleBlock(
     const block = await prisma.venueScheduleBlock.update({
       where: { id: command.scheduleBlockId, venueId: validated.venueId },
       data: {
-        ...scheduleBlockData(validated, userId),
+        ...scheduleBlockUpdateData(validated),
         updatedById: userId,
       },
       select: { id: true, status: true },
@@ -504,6 +506,7 @@ interface PublicVenueScheduleFilters {
 }
 
 export async function getPublicVenueSchedule(slug: string, filters: PublicVenueScheduleFilters = {}) {
+  const now = new Date();
   const skillLevelWhere = filters.skillLevelIds?.length
     ? { skillLevels: { some: { id: { in: filters.skillLevelIds } } } }
     : {};
@@ -520,7 +523,7 @@ export async function getPublicVenueSchedule(slug: string, filters: PublicVenueS
         where: {
           status: "PUBLISHED",
           visibility: "PUBLIC",
-          startsAt: { gte: new Date() },
+          startsAt: { gte: now },
           ...skillLevelWhere,
         },
         select: {
@@ -702,6 +705,32 @@ function scheduleBlockData(
     registrationMode: validated.registrationMode,
     externalRegistrationUrl: validated.externalRegistrationUrl || null,
     createdById: userId,
+  };
+}
+
+function scheduleBlockUpdateData(
+  validated: ReturnType<typeof venueScheduleBlockSchema.parse>
+): Prisma.VenueScheduleBlockUncheckedUpdateInput {
+  return {
+    venueId: validated.venueId,
+    surfaceId: validated.surfaceId || null,
+    title: validated.title,
+    description: validated.description || null,
+    activityType: validated.activityType,
+    audience: validated.audience,
+    visibility: validated.visibility,
+    status: validated.status,
+    startsAt: validated.startsAt,
+    endsAt: validated.endsAt,
+    recurrenceRule: validated.recurrenceRule || null,
+    recurrenceStartDate: validated.recurrenceStartDate ?? null,
+    recurrenceEndDate: validated.recurrenceEndDate ?? null,
+    capacity: validated.capacity ?? null,
+    priceAmount: validated.priceAmount ?? null,
+    priceCurrency: validated.priceCurrency,
+    priceLabel: validated.priceLabel || null,
+    registrationMode: validated.registrationMode,
+    externalRegistrationUrl: validated.externalRegistrationUrl || null,
   };
 }
 

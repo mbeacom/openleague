@@ -14,6 +14,8 @@ interface IceTimeRequestSubmittedEmailData {
   contactName: string;
   contactEmail: string;
   requestId: string;
+  organizationId: string;
+  venueId: string;
 }
 
 interface VenueRelationshipInvitationEmailData {
@@ -45,7 +47,7 @@ export async function sendIceTimeRequestSubmittedEmail(
   data: IceTimeRequestSubmittedEmailData
 ): Promise<void> {
   const mailchimp = getMailchimpClient();
-  const requestLink = `${BASE_URL}/venue-admin/requests/${data.requestId}`;
+  const requestLink = `${BASE_URL}/venue-admin/${data.organizationId}/venues/${data.venueId}/requests?requestId=${encodeURIComponent(data.requestId)}`;
 
   await mailchimp.messages.send({
     message: {

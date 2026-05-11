@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
@@ -19,6 +19,10 @@ import { getPublicVenueContent } from "@/lib/actions/venue-content";
 import { getPublicVenueSchedule } from "@/lib/actions/venue-schedules";
 
 describe("public skill level filters", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("filters public schedule blocks by level IDs", async () => {
     mockPrisma.venue.findFirst.mockResolvedValue({ id: "venue", name: "Rink", scheduleBlocks: [] });
 
@@ -38,16 +42,18 @@ describe("public skill level filters", () => {
   });
 
   it("filters public lessons by level IDs", async () => {
-    mockPrisma.venueContentPost.findMany.mockResolvedValue([]);
-    mockPrisma.lessonOffering.findMany.mockResolvedValue([]);
-    mockPrisma.venueScheduleBlock.findMany.mockResolvedValue([]);
+    mockPrisma.venue.findFirst.mockResolvedValue({ contentPosts: [], lessonOfferings: [], scheduleBlocks: [] });
 
     await getPublicVenueContent("clvenxxxxxxxxxxxxxxxxxxxxxxx", { skillLevelIds: ["clsklxxxxxxxxxxxxxxxxxxxxxxx"] });
 
-    expect(mockPrisma.lessonOffering.findMany).toHaveBeenCalledWith(
+    expect(mockPrisma.venue.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({
-          skillLevels: { some: { id: { in: ["clsklxxxxxxxxxxxxxxxxxxxxxxx"] } } },
+        select: expect.objectContaining({
+          lessonOfferings: expect.objectContaining({
+            where: expect.objectContaining({
+              skillLevels: { some: { id: { in: ["clsklxxxxxxxxxxxxxxxxxxxxxxx"] } } },
+            }),
+          }),
         }),
       })
     );

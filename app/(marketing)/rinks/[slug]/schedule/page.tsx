@@ -4,6 +4,8 @@ import { getSkillLevelReferences } from "@/lib/actions/venue-content";
 import { getPublicVenueSchedule } from "@/lib/actions/venue-schedules";
 import { AvailableIceBrowser, IceTimeRequestForm, PublicRinkFilters, VenueScheduleCalendar } from "@/components/features/venue-admin";
 
+export const dynamic = "force-dynamic";
+
 interface PublicRinkSchedulePageProps {
   params: Promise<{ slug: string }>;
   searchParams: Promise<{ level?: string }>;
@@ -32,9 +34,16 @@ export default async function PublicRinkSchedulePage({ params, searchParams }: P
         <PublicRinkFilters skillLevels={skillLevels} basePath={`/rinks/${slug}/schedule`} />
         <VenueScheduleCalendar blocks={venue.scheduleBlocks.map((block) => ({ ...block, status: "PUBLISHED" }))} />
         <AvailableIceBrowser blocks={requestableBlocks} />
-        {requestableBlocks[0] ? (
-          <IceTimeRequestForm scheduleBlockId={requestableBlocks[0].id} venueId={venue.id} />
-        ) : null}
+        {requestableBlocks.map((block) => (
+          <IceTimeRequestForm
+            key={block.id}
+            scheduleBlockId={block.id}
+            venueId={venue.id}
+            venueName={venue.name}
+            startsAt={block.startsAt}
+            endsAt={block.endsAt}
+          />
+        ))}
       </Stack>
     </Container>
   );

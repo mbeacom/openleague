@@ -66,6 +66,19 @@ describe("venue relationship actions", () => {
     expect(mockSendEmail).toHaveBeenCalled();
   });
 
+  it("requires an invited email for coach and organization relationship targets", async () => {
+    const result = await inviteVenueRelationship({
+      organizationId: ORGANIZATION_ID,
+      venueId: VENUE_ID,
+      relationshipType: "PREFERRED",
+      targetType: "COACH",
+      targetName: "Coach One",
+    });
+
+    expect(result.success).toBe(false);
+    expect(mockPrisma.venueRelationship.create).not.toHaveBeenCalled();
+  });
+
   it("accepts a relationship as target team admin", async () => {
     mockPrisma.venueRelationship.findFirst.mockResolvedValue({
       id: RELATIONSHIP_ID,

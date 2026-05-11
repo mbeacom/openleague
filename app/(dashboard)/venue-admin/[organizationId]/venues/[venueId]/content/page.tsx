@@ -26,7 +26,7 @@ export default async function VenueContentAdminPage({ params }: VenueContentAdmi
         </Typography>
         <LessonOfferingEditor organizationId={organizationId} venueId={venueId} />
         <SpecialtyEventEditor organizationId={organizationId} venueId={venueId} />
-        <VenueContentManager posts={result.data.posts as Array<{ id: string; title: string; status: string }>} />
+        <VenueContentManager posts={result.data.posts} />
       </Stack>
     </Container>
   );

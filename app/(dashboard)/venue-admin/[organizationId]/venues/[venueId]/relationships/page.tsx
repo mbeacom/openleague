@@ -24,17 +24,7 @@ export default async function VenueRelationshipsAdminPage({ params }: VenueRelat
         <Typography variant="h4" component="h1">
           Venue Relationships
         </Typography>
-        <VenueRelationshipManager
-          relationships={result.data.relationships as Array<{
-            id: string;
-            relationshipType: string;
-            targetType: string;
-            targetName?: string | null;
-            status: string;
-            team?: { name: string } | null;
-            league?: { name: string } | null;
-          }>}
-        />
+        <VenueRelationshipManager relationships={result.data.relationships} />
       </Stack>
     </Container>
   );

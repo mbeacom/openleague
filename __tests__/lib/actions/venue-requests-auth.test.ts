@@ -41,6 +41,7 @@ beforeEach(() => {
     startsAt: new Date("2026-03-01T10:00:00Z"),
     endsAt: new Date("2026-03-01T12:00:00Z"),
     status: "PUBLISHED",
+    registrationMode: "REQUEST_REQUIRED",
     venue: { id: VENUE_ID, name: "North Rink", organizationId: "clorgxxxxxxxxxxxxxxxxxxxxxxx", slug: "north-rink" },
   });
   mockPrisma.iceTimeRequest.create.mockResolvedValue({ id: "clreqxxxxxxxxxxxxxxxxxxxxxxx", status: "SUBMITTED" });

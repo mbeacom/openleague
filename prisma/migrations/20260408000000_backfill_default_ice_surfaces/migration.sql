@@ -11,7 +11,7 @@ INSERT INTO "ice_surfaces" (
     "venueId"
 )
 SELECT
-    'default_surface_' || left(md5(v."id"), 16),
+    'cl' || left(md5(v."id" || ':default_surface'), 23),
     'Main Surface',
     v."surfaceType",
     true,

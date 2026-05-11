@@ -1,12 +1,37 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
-import { requireLeagueRole, requireTeamAdmin, requireUserId, requireVenueProfileManager } from "@/lib/auth/session";
+import { requireAuth, requireLeagueRole, requireTeamAdmin, requireVenueProfileManager } from "@/lib/auth/session";
 import type { ActionResult } from "@/lib/actions/venue-organizations";
 import { sendVenueRelationshipInvitationEmail } from "@/lib/email/templates";
 import { venueRelationshipSchema, type VenueRelationshipInput } from "@/lib/utils/validation";
+
+const venueRelationshipAdminInclude = {
+  team: { select: { id: true, name: true } },
+  league: { select: { id: true, name: true } },
+} as const satisfies Prisma.VenueRelationshipInclude;
+
+type VenueRelationshipAdminSummary = Prisma.VenueRelationshipGetPayload<{
+  include: typeof venueRelationshipAdminInclude;
+}>;
+
+type VenueRelationshipInvitationSummary = {
+  relationshipId: string;
+  venueName: string;
+  relationshipType: string;
+  targetType: string;
+  targetName: string | null;
+  expiresAt: Date | null;
+};
+
+type RelationshipTargetAuthority = {
+  teamId: string | null;
+  leagueId: string | null;
+  invitedEmail: string | null;
+};
 
 const relationshipResponseSchema = z.object({
   relationshipId: z.string().cuid("Invalid relationship ID format"),
@@ -22,16 +47,13 @@ const removeRelationshipSchema = z.object({
 export async function getVenueRelationshipAdminData(
   organizationId: string,
   venueId: string
-): Promise<ActionResult<{ venueId: string; relationships: unknown[] }>> {
+): Promise<ActionResult<{ venueId: string; relationships: VenueRelationshipAdminSummary[] }>> {
   try {
     await requireVenueProfileManager(organizationId, venueId);
     const relationships = await prisma.venueRelationship.findMany({
       where: { venueId },
       orderBy: { createdAt: "desc" },
-      include: {
-        team: { select: { id: true, name: true } },
-        league: { select: { id: true, name: true } },
-      },
+      include: venueRelationshipAdminInclude,
     });
 
     return { success: true, data: { venueId, relationships } };
@@ -57,8 +79,8 @@ export async function inviteVenueRelationship(
         venueId: validated.venueId,
         relationshipType: validated.relationshipType,
         targetType: validated.targetType,
-        teamId: validated.teamId || null,
-        leagueId: validated.leagueId || null,
+        teamId: validated.targetType === "TEAM" ? validated.teamId ?? null : null,
+        leagueId: validated.targetType === "LEAGUE" ? validated.leagueId ?? null : null,
         targetName: validated.targetName || null,
         invitedEmail: validated.invitedEmail || null,
         expiresAt: validated.expiresAt ?? null,
@@ -87,16 +109,42 @@ export async function inviteVenueRelationship(
   }
 }
 
+export async function getVenueRelationshipInvitation(
+  relationshipId: string
+): Promise<ActionResult<VenueRelationshipInvitationSummary>> {
+  try {
+    const validated = relationshipResponseSchema.shape.relationshipId.parse(relationshipId);
+    const relationship = await findRelationship(validated);
+    await requireTargetAuthority(relationship);
+
+    return {
+      success: true,
+      data: {
+        relationshipId: relationship.id,
+        venueName: relationship.venue.name,
+        relationshipType: relationship.relationshipType,
+        targetType: relationship.targetType,
+        targetName: relationship.targetName,
+        expiresAt: relationship.expiresAt,
+      },
+    };
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("NEXT_REDIRECT")) {
+      throw error;
+    }
+    return { success: false, error: "Failed to load venue relationship invitation." };
+  }
+}
+
 export async function respondToVenueRelationship(
   input: z.input<typeof relationshipResponseSchema>
 ): Promise<ActionResult<{ relationshipId: string; status: string }>> {
   try {
     const validated = relationshipResponseSchema.parse(input);
     const relationship = await findRelationship(validated.relationshipId);
-    await requireTargetAuthority(relationship);
+    const userId = await requireTargetAuthority(relationship);
 
     const status = validated.response === "ACCEPT" ? "ACTIVE" : "REJECTED";
-    const userId = await requireUserId();
     const updated = await prisma.venueRelationship.update({
       where: { id: relationship.id },
       data: {
@@ -121,16 +169,24 @@ export async function removeVenueRelationship(
 ): Promise<ActionResult<{ relationshipId: string; status: string }>> {
   try {
     const validated = removeRelationshipSchema.parse(input);
-    const removedById = await requireVenueProfileManager(validated.organizationId, validated.venueId);
-    const venue = await ensureVenue(validated.organizationId, validated.venueId);
+    const existingRelationship = await findRelationshipForRemoval(
+      validated.organizationId,
+      validated.venueId,
+      validated.relationshipId
+    );
+    const removedById = await requireRelationshipRemovalAuthority(
+      validated.organizationId,
+      validated.venueId,
+      existingRelationship
+    );
 
     const relationship = await prisma.venueRelationship.update({
-      where: { id: validated.relationshipId },
+      where: { id: existingRelationship.id },
       data: { status: "REMOVED", removedById },
       select: { id: true, status: true },
     });
 
-    revalidateRelationshipPaths(validated.organizationId, validated.venueId, venue.slug);
+    revalidateRelationshipPaths(existingRelationship.venue.organizationId, validated.venueId, existingRelationship.venue.slug);
     return { success: true, data: { relationshipId: relationship.id, status: relationship.status } };
   } catch (error) {
     if (error instanceof Error && error.message.includes("NEXT_REDIRECT")) {
@@ -167,7 +223,7 @@ export async function getTeamVenueRelationships(teamIds: string[]) {
       relationshipType: true,
       teamId: true,
       venue: {
-        select: { id: true, name: true, slug: true },
+        select: { id: true, name: true, slug: true, organizationId: true },
       },
     },
     orderBy: { createdAt: "desc" },
@@ -189,21 +245,44 @@ async function validateTarget(input: z.infer<typeof venueRelationshipSchema>) {
     return;
   }
 
-  if (!input.targetName && !input.invitedEmail) {
-    throw new Error("Target name or invited email is required");
+  if (!input.invitedEmail) {
+    throw new Error("An invited email is required for coach and organization relationship targets");
   }
 }
 
-async function requireTargetAuthority(relationship: Awaited<ReturnType<typeof findRelationship>>) {
+async function requireTargetAuthority(relationship: RelationshipTargetAuthority): Promise<string> {
   if (relationship.teamId) {
-    await requireTeamAdmin(relationship.teamId);
-    return;
+    return requireTeamAdmin(relationship.teamId);
   }
   if (relationship.leagueId) {
-    await requireLeagueRole(relationship.leagueId, "LEAGUE_ADMIN");
-    return;
+    return requireLeagueRole(relationship.leagueId, "LEAGUE_ADMIN");
   }
-  await requireUserId();
+  if (relationship.invitedEmail) {
+    const session = await requireAuth();
+    const sessionEmail = session.user.email?.trim().toLowerCase();
+    if (!sessionEmail || sessionEmail !== relationship.invitedEmail.trim().toLowerCase()) {
+      throw new Error("Unauthorized: This invitation is for a different email address");
+    }
+    return session.user.id;
+  }
+
+  throw new Error("Relationship target does not have an authorized responder");
+}
+
+async function requireRelationshipRemovalAuthority(
+  organizationId: string,
+  venueId: string,
+  relationship: RelationshipTargetAuthority
+): Promise<string> {
+  try {
+    return await requireVenueProfileManager(organizationId, venueId);
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("NEXT_REDIRECT")) {
+      throw error;
+    }
+
+    return requireTargetAuthority(relationship);
+  }
 }
 
 async function findRelationship(relationshipId: string) {
@@ -214,12 +293,44 @@ async function findRelationship(relationshipId: string) {
       venueId: true,
       teamId: true,
       leagueId: true,
-      venue: { select: { organizationId: true, slug: true } },
+      targetType: true,
+      targetName: true,
+      invitedEmail: true,
+      relationshipType: true,
+      expiresAt: true,
+      venue: { select: { name: true, organizationId: true, slug: true } },
     },
   });
 
   if (!relationship) {
     throw new Error("Relationship invitation not found");
+  }
+
+  if (relationship.expiresAt && relationship.expiresAt < new Date()) {
+    throw new Error("Relationship invitation has expired");
+  }
+
+  return relationship;
+}
+
+async function findRelationshipForRemoval(organizationId: string, venueId: string, relationshipId: string) {
+  const relationship = await prisma.venueRelationship.findFirst({
+    where: {
+      id: relationshipId,
+      venueId,
+      venue: { organizationId },
+    },
+    select: {
+      id: true,
+      teamId: true,
+      leagueId: true,
+      invitedEmail: true,
+      venue: { select: { organizationId: true, slug: true } },
+    },
+  });
+
+  if (!relationship) {
+    throw new Error("Relationship not found");
   }
 
   return relationship;

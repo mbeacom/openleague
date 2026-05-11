@@ -63,6 +63,19 @@ export const publicVenueProfileSelect = {
   },
 } as const satisfies Prisma.VenueSelect;
 
+export function getPublicVenueProfileSelect(now: Date) {
+  return {
+    ...publicVenueProfileSelect,
+    scheduleBlocks: {
+      ...publicVenueProfileSelect.scheduleBlocks,
+      where: {
+        ...publicVenueProfileSelect.scheduleBlocks.where,
+        startsAt: { gte: now },
+      },
+    },
+  } as const satisfies Prisma.VenueSelect;
+}
+
 export const publicVenueSummarySelect = {
   id: true,
   name: true,
@@ -84,7 +97,7 @@ export const publicPublishedVenueWhere = {
 } as const satisfies Prisma.VenueWhereInput;
 
 export type PublicVenueProfile = Prisma.VenueGetPayload<{
-  select: typeof publicVenueProfileSelect;
+  select: ReturnType<typeof getPublicVenueProfileSelect>;
 }>;
 
 export type PublicVenueSummary = Prisma.VenueGetPayload<{

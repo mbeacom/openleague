@@ -59,6 +59,7 @@ export async function submitIceTimeRequest(
         startsAt: true,
         endsAt: true,
         title: true,
+        registrationMode: true,
         venue: {
           select: {
             id: true,
@@ -72,6 +73,10 @@ export async function submitIceTimeRequest(
 
     if (!block) {
       return { success: false, error: "Available ice block not found" };
+    }
+
+    if (block.registrationMode !== "REQUEST_REQUIRED") {
+      return { success: false, error: "That ice block is not accepting ice time requests" };
     }
 
     if (validated.requestedStartAt < block.startsAt || validated.requestedEndAt > block.endsAt) {
@@ -111,8 +116,9 @@ export async function submitIceTimeRequest(
       select: { id: true, status: true },
     });
 
-    const managerEmails = await getRequestManagerEmails(block.venue.organizationId);
-    if (managerEmails.length > 0) {
+    const organizationId = block.venue.organizationId;
+    const managerEmails = await getRequestManagerEmails(organizationId);
+    if (organizationId && managerEmails.length > 0) {
       await sendIceTimeRequestSubmittedEmail({
         managerEmails,
         venueName: block.venue.name,
@@ -120,6 +126,8 @@ export async function submitIceTimeRequest(
         contactName: validated.contactName,
         contactEmail: validated.contactEmail,
         requestId: request.id,
+        organizationId,
+        venueId: block.venue.id,
       });
     }
 
@@ -142,6 +150,23 @@ export async function decideIceTimeRequest(
     const request = await findManagedRequest(validated.organizationId, validated.venueId, validated.requestId);
     if (!request) {
       return { success: false, error: "Ice time request not found" };
+    }
+
+    if (validated.status === "ACCEPTED") {
+      const acceptedConflict = await prisma.iceTimeRequest.findFirst({
+        where: {
+          id: { not: request.id },
+          scheduleBlockId: request.scheduleBlockId,
+          status: "ACCEPTED",
+          requestedStartAt: { lt: request.requestedEndAt },
+          requestedEndAt: { gt: request.requestedStartAt },
+        },
+        select: { id: true },
+      });
+
+      if (acceptedConflict) {
+        return { success: false, error: "That ice time has already been accepted for another request" };
+      }
     }
 
     const decidedAt = validated.status === "UNDER_REVIEW" ? null : new Date();
@@ -269,6 +294,9 @@ async function findManagedRequest(organizationId: string, venueId: string, reque
     select: {
       id: true,
       contactEmail: true,
+      scheduleBlockId: true,
+      requestedStartAt: true,
+      requestedEndAt: true,
       venue: {
         select: {
           id: true,

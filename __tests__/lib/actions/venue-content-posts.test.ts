@@ -49,14 +49,43 @@ describe("venue content posts", () => {
   });
 
   it("queries public posts, lessons, and specialty events", async () => {
-    mockPrisma.venueContentPost.findMany.mockResolvedValue([{ id: POST_ID, title: "Post" }]);
-    mockPrisma.lessonOffering.findMany.mockResolvedValue([{ id: "lesson", title: "Lesson" }]);
-    mockPrisma.venueScheduleBlock.findMany.mockResolvedValue([{ id: "event", title: "Event" }]);
+    mockPrisma.venue.findFirst.mockResolvedValue({
+      contentPosts: [{ id: POST_ID, title: "Post", slug: "post", excerpt: "Public" }],
+      lessonOfferings: [{ id: "lesson", title: "Lesson", lessonType: "GROUP" }],
+      scheduleBlocks: [{ id: "event", title: "Event" }],
+    });
 
     const result = await getPublicVenueContent(VENUE_ID);
 
     expect(result.posts).toHaveLength(1);
     expect(result.lessons).toHaveLength(1);
     expect(result.events).toHaveLength(1);
+    expect(mockPrisma.venue.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          id: VENUE_ID,
+          visibility: "PUBLIC",
+          profileStatus: "PUBLISHED",
+        }),
+        select: expect.objectContaining({
+          contentPosts: expect.objectContaining({
+            select: expect.not.objectContaining({ authorId: true }),
+          }),
+          scheduleBlocks: expect.objectContaining({
+            select: expect.not.objectContaining({ createdById: true, updatedById: true }),
+          }),
+        }),
+      })
+    );
+    expect(mockPrisma.venueContentPost.findMany).not.toHaveBeenCalled();
+    expect(mockPrisma.venueScheduleBlock.findMany).not.toHaveBeenCalled();
+  });
+
+  it("does not return content when the venue is not publicly published", async () => {
+    mockPrisma.venue.findFirst.mockResolvedValue(null);
+
+    const result = await getPublicVenueContent(VENUE_ID);
+
+    expect(result).toEqual({ posts: [], lessons: [], events: [] });
   });
 });

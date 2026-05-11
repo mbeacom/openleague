@@ -1,10 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
 import { requireVenueContentManager } from "@/lib/auth/session";
 import type { ActionResult } from "@/lib/actions/venue-organizations";
+import { publicPublishedVenueWhere } from "@/lib/utils/public-venues";
 import {
   lessonOfferingSchema,
   skillLevelReferenceSchema,
@@ -40,6 +42,83 @@ const skillLevelAssignmentSchema = z.object({
   scheduleBlockId: z.string().cuid("Invalid schedule block ID format").optional(),
   skillLevelIds: z.array(z.string().cuid("Invalid skill level ID format")).max(20),
 });
+
+const lessonSkillLevelAssignmentSchema = skillLevelAssignmentSchema.extend({
+  lessonOfferingId: z.string().cuid("Invalid lesson offering ID format"),
+});
+
+const scheduleBlockSkillLevelAssignmentSchema = skillLevelAssignmentSchema.extend({
+  scheduleBlockId: z.string().cuid("Invalid schedule block ID format"),
+});
+
+const lessonOfferingAdminSelect = {
+  id: true,
+  title: true,
+  status: true,
+} as const satisfies Prisma.LessonOfferingSelect;
+
+const venueContentPostAdminSelect = {
+  id: true,
+  title: true,
+  status: true,
+} as const satisfies Prisma.VenueContentPostSelect;
+
+type LessonOfferingAdminSummary = Prisma.LessonOfferingGetPayload<{
+  select: typeof lessonOfferingAdminSelect;
+}>;
+
+type VenueContentPostAdminSummary = Prisma.VenueContentPostGetPayload<{
+  select: typeof venueContentPostAdminSelect;
+}>;
+
+const publicContentPostSelect = {
+  id: true,
+  title: true,
+  slug: true,
+  excerpt: true,
+  body: true,
+  publishedAt: true,
+} as const satisfies Prisma.VenueContentPostSelect;
+
+const publicLessonOfferingSelect = {
+  id: true,
+  title: true,
+  description: true,
+  lessonType: true,
+  instructorName: true,
+  priceAmount: true,
+  priceCurrency: true,
+  durationMinutes: true,
+  availabilityDescription: true,
+  registrationMode: true,
+  externalRegistrationUrl: true,
+  skillLevels: {
+    select: {
+      id: true,
+      label: true,
+      discipline: true,
+    },
+  },
+} as const satisfies Prisma.LessonOfferingSelect;
+
+const publicSpecialtyEventSelect = {
+  id: true,
+  title: true,
+  description: true,
+  startsAt: true,
+  endsAt: true,
+  priceAmount: true,
+  priceCurrency: true,
+  priceLabel: true,
+  registrationMode: true,
+  externalRegistrationUrl: true,
+  surface: {
+    select: {
+      id: true,
+      name: true,
+    },
+  },
+} as const satisfies Prisma.VenueScheduleBlockSelect;
 
 interface PublicContentFilters {
   skillLevelIds?: string[];
@@ -93,17 +172,14 @@ export async function getSkillLevelReferences() {
 }
 
 export async function assignSkillLevelsToLesson(
-  input: z.input<typeof skillLevelAssignmentSchema> & { lessonOfferingId: string }
+  input: z.input<typeof lessonSkillLevelAssignmentSchema>
 ): Promise<ActionResult<{ lessonOfferingId: string }>> {
   try {
-    const validated = skillLevelAssignmentSchema.parse(input);
+    const validated = lessonSkillLevelAssignmentSchema.parse(input);
     await requireVenueContentManager(validated.organizationId, validated.venueId);
-    if (!validated.lessonOfferingId) {
-      return { success: false, error: "Lesson offering ID is required." };
-    }
 
     const lesson = await prisma.lessonOffering.update({
-      where: { id: validated.lessonOfferingId },
+      where: { id: validated.lessonOfferingId, venueId: validated.venueId },
       data: { skillLevels: { set: validated.skillLevelIds.map((id) => ({ id })) } },
       select: { id: true },
     });
@@ -118,17 +194,14 @@ export async function assignSkillLevelsToLesson(
 }
 
 export async function assignSkillLevelsToScheduleBlock(
-  input: z.input<typeof skillLevelAssignmentSchema> & { scheduleBlockId: string }
+  input: z.input<typeof scheduleBlockSkillLevelAssignmentSchema>
 ): Promise<ActionResult<{ scheduleBlockId: string }>> {
   try {
-    const validated = skillLevelAssignmentSchema.parse(input);
+    const validated = scheduleBlockSkillLevelAssignmentSchema.parse(input);
     await requireVenueContentManager(validated.organizationId, validated.venueId);
-    if (!validated.scheduleBlockId) {
-      return { success: false, error: "Schedule block ID is required." };
-    }
 
     const block = await prisma.venueScheduleBlock.update({
-      where: { id: validated.scheduleBlockId },
+      where: { id: validated.scheduleBlockId, venueId: validated.venueId },
       data: { skillLevels: { set: validated.skillLevelIds.map((id) => ({ id })) } },
       select: { id: true },
     });
@@ -145,12 +218,12 @@ export async function assignSkillLevelsToScheduleBlock(
 export async function getVenueContentAdminData(
   organizationId: string,
   venueId: string
-): Promise<ActionResult<{ venueId: string; lessons: unknown[]; posts: unknown[] }>> {
+): Promise<ActionResult<{ venueId: string; lessons: LessonOfferingAdminSummary[]; posts: VenueContentPostAdminSummary[] }>> {
   try {
     await requireVenueContentManager(organizationId, venueId);
     const [lessons, posts] = await Promise.all([
-      prisma.lessonOffering.findMany({ where: { venueId }, orderBy: { createdAt: "desc" } }),
-      prisma.venueContentPost.findMany({ where: { venueId }, orderBy: { createdAt: "desc" } }),
+      prisma.lessonOffering.findMany({ where: { venueId }, select: lessonOfferingAdminSelect, orderBy: { createdAt: "desc" } }),
+      prisma.venueContentPost.findMany({ where: { venueId }, select: venueContentPostAdminSelect, orderBy: { createdAt: "desc" } }),
     ]);
 
     return { success: true, data: { venueId, lessons, posts } };
@@ -327,23 +400,35 @@ export async function getPublicVenueContent(venueId: string, filters: PublicCont
     ? { skillLevels: { some: { id: { in: filters.skillLevelIds } } } }
     : {};
 
-  const [posts, lessons, events] = await Promise.all([
-    prisma.venueContentPost.findMany({
-      where: { venueId, status: "PUBLISHED" },
-      orderBy: { publishedAt: "desc" },
-    }),
-    prisma.lessonOffering.findMany({
-      where: { venueId, status: "PUBLISHED", ...skillLevelWhere },
-      include: { skillLevels: true },
-      orderBy: { title: "asc" },
-    }),
-    prisma.venueScheduleBlock.findMany({
-      where: { venueId, status: "PUBLISHED", visibility: "PUBLIC", activityType: "SPECIALTY_EVENT" },
-      orderBy: { startsAt: "asc" },
-    }),
-  ]);
+  const venue = await prisma.venue.findFirst({
+    where: {
+      ...publicPublishedVenueWhere,
+      id: venueId,
+    },
+    select: {
+      contentPosts: {
+        where: { status: "PUBLISHED" },
+        select: publicContentPostSelect,
+        orderBy: { publishedAt: "desc" },
+      },
+      lessonOfferings: {
+        where: { status: "PUBLISHED", ...skillLevelWhere },
+        select: publicLessonOfferingSelect,
+        orderBy: { title: "asc" },
+      },
+      scheduleBlocks: {
+        where: { status: "PUBLISHED", visibility: "PUBLIC", activityType: "SPECIALTY_EVENT" },
+        select: publicSpecialtyEventSelect,
+        orderBy: { startsAt: "asc" },
+      },
+    },
+  });
 
-  return { posts, lessons, events };
+  if (!venue) {
+    return { posts: [], lessons: [], events: [] };
+  }
+
+  return { posts: venue.contentPosts, lessons: venue.lessonOfferings, events: venue.scheduleBlocks };
 }
 
 async function setLessonStatus(
