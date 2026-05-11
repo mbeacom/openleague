@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import {
   getUserLeagueRole,
@@ -147,39 +148,77 @@ export async function decideIceTimeRequest(
   try {
     const validated = decisionSchema.parse(input);
     const userId = await requireVenueRequestManager(validated.organizationId, validated.venueId);
-    const request = await findManagedRequest(validated.organizationId, validated.venueId, validated.requestId);
-    if (!request) {
-      return { success: false, error: "Ice time request not found" };
-    }
+    const decision = await prisma.$transaction(
+      async (tx) => {
+        const request = await tx.iceTimeRequest.findFirst({
+          where: {
+            id: validated.requestId,
+            venueId: validated.venueId,
+            venue: { organizationId: validated.organizationId },
+          },
+          select: {
+            id: true,
+            contactEmail: true,
+            scheduleBlockId: true,
+            requestedStartAt: true,
+            requestedEndAt: true,
+            venue: {
+              select: {
+                id: true,
+                name: true,
+                organizationId: true,
+                slug: true,
+              },
+            },
+          },
+        });
 
-    if (validated.status === "ACCEPTED") {
-      const acceptedConflict = await prisma.iceTimeRequest.findFirst({
-        where: {
-          id: { not: request.id },
-          scheduleBlockId: request.scheduleBlockId,
-          status: "ACCEPTED",
-          requestedStartAt: { lt: request.requestedEndAt },
-          requestedEndAt: { gt: request.requestedStartAt },
-        },
-        select: { id: true },
-      });
+        if (!request) {
+          return { success: false as const, error: "Ice time request not found" };
+        }
 
-      if (acceptedConflict) {
-        return { success: false, error: "That ice time has already been accepted for another request" };
-      }
-    }
+        if (validated.status === "ACCEPTED") {
+          const acceptedConflict = await tx.iceTimeRequest.findFirst({
+            where: {
+              id: { not: request.id },
+              scheduleBlockId: request.scheduleBlockId,
+              status: "ACCEPTED",
+              requestedStartAt: { lt: request.requestedEndAt },
+              requestedEndAt: { gt: request.requestedStartAt },
+            },
+            select: { id: true },
+          });
 
-    const decidedAt = validated.status === "UNDER_REVIEW" ? null : new Date();
-    const updated = await prisma.iceTimeRequest.update({
-      where: { id: request.id },
-      data: {
-        status: validated.status,
-        decisionMessage: validated.decisionMessage || null,
-        decidedAt,
-        decidedById: userId,
+          if (acceptedConflict) {
+            return {
+              success: false as const,
+              error: "That ice time has already been accepted for another request",
+            };
+          }
+        }
+
+        const decidedAt = validated.status === "UNDER_REVIEW" ? null : new Date();
+        const updated = await tx.iceTimeRequest.update({
+          where: { id: request.id },
+          data: {
+            status: validated.status,
+            decisionMessage: validated.decisionMessage || null,
+            decidedAt,
+            decidedById: userId,
+          },
+          select: { id: true, status: true, decidedAt: true },
+        });
+
+        return { success: true as const, request, updated };
       },
-      select: { id: true, status: true, decidedAt: true },
-    });
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
+    );
+
+    if (!decision.success) {
+      return { success: false, error: decision.error };
+    }
+
+    const { request, updated } = decision;
 
     if (validated.status !== "UNDER_REVIEW") {
       await sendIceTimeRequestDecisionEmail({
@@ -198,6 +237,12 @@ export async function decideIceTimeRequest(
   } catch (error) {
     if (error instanceof Error && error.message.includes("NEXT_REDIRECT")) {
       throw error;
+    }
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") {
+      return {
+        success: false,
+        error: "That ice time was updated by another manager. Please review the queue and try again.",
+      };
     }
     return { success: false, error: "Failed to update ice time request." };
   }

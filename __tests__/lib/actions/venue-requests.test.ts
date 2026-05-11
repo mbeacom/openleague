@@ -8,6 +8,7 @@ const { mockRequireUserId, mockRequireVenueRequestManager, mockPrisma, mockSubmi
   mockSubmitEmail: vi.fn(),
   mockDecisionEmail: vi.fn(),
   mockPrisma: {
+    $transaction: vi.fn(),
     venueScheduleBlock: { findFirst: vi.fn() },
     iceTimeRequest: { create: vi.fn(), findFirst: vi.fn(), update: vi.fn(), findMany: vi.fn() },
     venueStaff: { findMany: vi.fn() },
@@ -43,6 +44,7 @@ const REQUEST_ID = "clreqxxxxxxxxxxxxxxxxxxxxxxx";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockPrisma.$transaction.mockImplementation((callback) => callback(mockPrisma));
   mockRequireUserId.mockResolvedValue(USER_ID);
   mockRequireVenueRequestManager.mockResolvedValue(USER_ID);
   mockPrisma.venueScheduleBlock.findFirst.mockResolvedValue({
@@ -103,6 +105,9 @@ describe("ice time request lifecycle", () => {
       .mockResolvedValueOnce({ id: REQUEST_ID, status: "EXPIRED" });
 
     expect((await decideIceTimeRequest({ organizationId: ORGANIZATION_ID, venueId: VENUE_ID, requestId: REQUEST_ID, status: "ACCEPTED" })).success).toBe(true);
+    expect(mockPrisma.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+      isolationLevel: "Serializable",
+    });
     expect((await cancelIceTimeRequest({ organizationId: ORGANIZATION_ID, venueId: VENUE_ID, requestId: REQUEST_ID })).success).toBe(true);
     expect((await expireIceTimeRequest({ organizationId: ORGANIZATION_ID, venueId: VENUE_ID, requestId: REQUEST_ID })).success).toBe(true);
     expect(mockDecisionEmail).toHaveBeenCalled();
