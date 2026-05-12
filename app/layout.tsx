@@ -9,6 +9,7 @@ import AnalyticsProvider from "@/components/providers/AnalyticsProvider";
 import ErrorBoundary from "@/components/ui/ErrorBoundary";
 import { ToastProvider } from "@/components/ui/Toast";
 import StructuredData from "@/components/ui/StructuredData";
+import { ANALYTICS_CONSENT_STORAGE_KEY } from "@/lib/analytics/tracking";
 import { SITE_CONFIG, getOrganizationSchema, getSoftwareApplicationSchema } from "@/lib/config/seo";
 
 // Validate environment variables on startup
@@ -121,13 +122,14 @@ export default function RootLayout({
                 window.dataLayer = window.dataLayer || [];
                 function gtag(){window.dataLayer.push(arguments);}
                 window.gtag = gtag;
+                var consentStorageKey = ${JSON.stringify(ANALYTICS_CONSENT_STORAGE_KEY)};
                 var analyticsOptedOut =
                   navigator.doNotTrack === '1' ||
                   navigator.doNotTrack === 'yes' ||
                   navigator.globalPrivacyControl === true;
                 try {
                   analyticsOptedOut = analyticsOptedOut ||
-                    window.localStorage.getItem('openleague.analytics.consent') === 'denied';
+                    window.localStorage.getItem(consentStorageKey) === 'denied';
                 } catch (_) {
                   // Preserve DNT/GPC decisions even when localStorage is unavailable.
                 }

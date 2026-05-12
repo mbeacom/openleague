@@ -97,12 +97,12 @@ export function setAnalyticsConsent(consent: 'granted' | 'denied') {
   const analyticsWindow = getAnalyticsWindow();
 
   if (gaMeasurementId && analyticsWindow) {
-    analyticsWindow[`ga-disable-${gaMeasurementId}`] = consent === 'denied';
+    const shouldDisableAnalytics = consent === 'denied' || hasDoNotTrackEnabled();
+    analyticsWindow[`ga-disable-${gaMeasurementId}`] = shouldDisableAnalytics;
   }
 }
 
 export interface AnalyticsEvent {
-  event?: string;
   category: 'engagement' | 'conversion' | 'navigation' | 'marketing';
   action: string;
   label?: string;
@@ -150,7 +150,6 @@ export function trackEvent(event: AnalyticsEvent) {
  */
 export function trackConversion(action: string, label?: string, value?: number) {
   trackEvent({
-    event: 'conversion',
     category: 'conversion',
     action,
     label,
@@ -165,7 +164,6 @@ export function trackConversion(action: string, label?: string, value?: number) 
  */
 export function trackEngagement(action: string, label?: string) {
   trackEvent({
-    event: 'engagement',
     category: 'engagement',
     action,
     label,
@@ -177,7 +175,6 @@ export function trackEngagement(action: string, label?: string) {
  */
 export function trackNavigation(action: string, label?: string) {
   trackEvent({
-    event: 'navigation',
     category: 'navigation',
     action,
     label,
@@ -199,7 +196,6 @@ export function trackWebVital(metric: WebVitalMetric) {
     : Math.round(metric.value);
 
   trackEvent({
-    event: 'web_vital',
     category: 'engagement',
     action: `web_vital_${metric.name.toLowerCase()}`,
     label: metric.id,
@@ -216,7 +212,6 @@ export function trackWebVital(metric: WebVitalMetric) {
 
 export function trackClientError(errorType: string, context: 'window_error' | 'unhandled_rejection') {
   trackEvent({
-    event: 'client_error',
     category: 'engagement',
     action: 'client_error',
     label: context,

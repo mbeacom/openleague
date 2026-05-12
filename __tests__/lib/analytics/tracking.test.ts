@@ -113,6 +113,22 @@ describe('marketing analytics tracking', () => {
     expect(getAnalyticsWindow()['ga-disable-G-TEST123']).toBe(false);
   });
 
+  it('keeps GA disabled when privacy signals are active even after consent is granted', () => {
+    setNavigatorPrivacyFlag('doNotTrack', '1');
+
+    setAnalyticsConsent('granted');
+
+    expect(window.localStorage.getItem(ANALYTICS_CONSENT_STORAGE_KEY)).toBe('granted');
+    expect(getAnalyticsWindow()['ga-disable-G-TEST123']).toBe(true);
+
+    setNavigatorPrivacyFlag('doNotTrack', '0');
+    setNavigatorPrivacyFlag('globalPrivacyControl', true);
+
+    setAnalyticsConsent('granted');
+
+    expect(getAnalyticsWindow()['ga-disable-G-TEST123']).toBe(true);
+  });
+
   it('tracks web vitals with GA4-safe metric payloads', () => {
     const gtag = vi.fn();
     getAnalyticsWindow().gtag = gtag;

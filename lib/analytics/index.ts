@@ -27,7 +27,6 @@ export const MarketingEvents = {
 
 export function trackMarketingEvent(action: string, label?: string, value?: number) {
   trackEvent({
-    event: 'marketing',
     category: 'marketing',
     action,
     label,
