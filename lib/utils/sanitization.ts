@@ -15,17 +15,31 @@
  * - Third-party data processing
  */
 
+const HTML_ESCAPE_MAP: Record<string, string> = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#x27;",
+  "`": "&#x60;",
+  "=": "&#x3D;",
+  "/": "&#x2F;",
+};
+
+const HTML_ESCAPE_PATTERN = /[&<>"'`=/]/g;
+const UNSAFE_CONTROL_CHAR_PATTERN = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
+
 /**
- * Remove potentially dangerous HTML/script content
- * Basic XSS prevention for text fields
+ * Escape potentially dangerous HTML/script content for text contexts.
+ *
+ * This intentionally encodes markup instead of attempting to remove tags or
+ * URL schemes with regexes. Regex-based HTML filtering is easy to bypass and
+ * can create new dangerous strings as pieces are removed.
  */
 export function sanitizeHtml(input: string): string {
   return input
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "") // Remove script tags
-    .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, "") // Remove iframe tags
-    .replace(/javascript:/gi, "") // Remove javascript: URLs
-    .replace(/on\w+\s*=/gi, "") // Remove event handlers like onclick=
-    .replace(/data:/gi, ""); // Remove data: URLs
+    .replace(UNSAFE_CONTROL_CHAR_PATTERN, "")
+    .replace(HTML_ESCAPE_PATTERN, (character) => HTML_ESCAPE_MAP[character] ?? "");
 }
 
 /**
@@ -76,7 +90,7 @@ export function validateCuid(id: string): boolean {
  * Combines multiple sanitization methods
  */
 export function sanitizeForDatabase(input: string): string {
-  return sanitizeSqlInput(sanitizeHtml(input.trim()));
+  return sanitizeHtml(sanitizeSqlInput(input.trim()));
 }
 
 /**
