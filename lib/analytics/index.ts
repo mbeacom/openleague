@@ -1,66 +1,20 @@
-// Analytics utilities for marketing and conversion tracking
+export {
+  ANALYTICS_CONSENT_STORAGE_KEY,
+  isAnalyticsOptedOut,
+  marketingEvents,
+  setAnalyticsConsent,
+  trackClientError,
+  trackConversion,
+  trackEngagement,
+  trackEvent,
+  trackNavigation,
+  trackWebVital,
+  type AnalyticsEvent,
+  type WebVitalMetric,
+} from './tracking';
 
-export interface AnalyticsEvent {
-  category: 'engagement' | 'conversion' | 'navigation' | 'marketing';
-  action: string;
-  label?: string;
-  value?: number;
-}
+import { trackEvent } from './tracking';
 
-// Google Analytics 4 event tracking
-export function trackEvent(event: AnalyticsEvent) {
-  if (typeof window !== 'undefined' && typeof window.gtag === 'function') {
-    try {
-      window.gtag('event', event.action, {
-        category: event.category,
-        label: event.label,
-        value: event.value,
-      });
-    } catch (error) {
-      console.warn('Google Analytics tracking failed:', error);
-    }
-  }
-}
-
-// Track marketing conversion events
-export function trackConversion(action: string, label?: string, value?: number) {
-  trackEvent({
-    category: 'conversion',
-    action,
-    label,
-    value,
-  });
-}
-
-// Track marketing engagement events
-export function trackEngagement(action: string, label?: string) {
-  trackEvent({
-    category: 'engagement',
-    action,
-    label,
-  });
-}
-
-// Track navigation events
-export function trackNavigation(action: string, label?: string) {
-  trackEvent({
-    category: 'navigation',
-    action,
-    label,
-  });
-}
-
-// Marketing-specific event tracking
-export function trackMarketingEvent(action: string, label?: string, value?: number) {
-  trackEvent({
-    category: 'marketing',
-    action,
-    label,
-    value,
-  });
-}
-
-// Common marketing events
 export const MarketingEvents = {
   HERO_CTA_CLICK: 'hero_cta_click',
   FEATURE_VIEW: 'feature_view',
@@ -71,13 +25,11 @@ export const MarketingEvents = {
   CONTACT_FORM_SUBMIT: 'contact_form_submit',
 } as const;
 
-// Declare global gtag function for TypeScript
-declare global {
-  interface Window {
-    gtag?: (
-      command: 'config' | 'event' | 'js',
-      targetId: string | Date,
-      config?: Record<string, unknown>
-    ) => void;
-  }
+export function trackMarketingEvent(action: string, label?: string, value?: number) {
+  trackEvent({
+    category: 'marketing',
+    action,
+    label,
+    value,
+  });
 }

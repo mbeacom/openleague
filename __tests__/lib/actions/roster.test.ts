@@ -1,33 +1,41 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+const {
+  mockPrismaPlayer,
+  mockPrismaTeamMember,
+  mockRequireTeamAdmin,
+  mockRequireUserId,
+} = vi.hoisted(() => ({
+  mockPrismaPlayer: {
+    create: vi.fn(),
+    findFirst: vi.fn(),
+    findUnique: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+    findMany: vi.fn(),
+  },
+  mockPrismaTeamMember: {
+    findUnique: vi.fn(),
+    update: vi.fn(),
+    findFirst: vi.fn(),
+    findMany: vi.fn(),
+  },
+  mockRequireTeamAdmin: vi.fn(),
+  mockRequireUserId: vi.fn(),
+}));
+
 // Mock next/cache before importing actions
 vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
 }));
 
 // Mock auth session helpers
-const mockRequireTeamAdmin = vi.fn();
-const mockRequireUserId = vi.fn();
 vi.mock("@/lib/auth/session", () => ({
   requireTeamAdmin: (...args: unknown[]) => mockRequireTeamAdmin(...args),
   requireUserId: (...args: unknown[]) => mockRequireUserId(...args),
 }));
 
 // Mock Prisma client
-const mockPrismaPlayer = {
-  create: vi.fn(),
-  findFirst: vi.fn(),
-  findUnique: vi.fn(),
-  update: vi.fn(),
-  delete: vi.fn(),
-  findMany: vi.fn(),
-};
-const mockPrismaTeamMember = {
-  findUnique: vi.fn(),
-  update: vi.fn(),
-  findFirst: vi.fn(),
-  findMany: vi.fn(),
-};
 vi.mock("@/lib/db/prisma", () => ({
   prisma: {
     player: mockPrismaPlayer,

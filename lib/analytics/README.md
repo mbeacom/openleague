@@ -142,7 +142,9 @@ The marketing site also uses Google Analytics 4 for tracking conversions and eng
 - Google Analytics 4 event tracking
 - Marketing conversion tracking
 - User engagement analytics
-- Privacy-compliant tracking
+- Core Web Vitals reporting through GA4 when a Measurement ID is configured
+- Coarse client error event tracking without stack traces or message payloads
+- Privacy-safe defaults: disabled when no public ID is configured, Do Not Track/GPC respected, no ad personalization signals
 
 ### Usage
 
@@ -165,4 +167,4 @@ trackEngagement(MarketingEvents.FEATURE_VIEW, 'roster_management');
 
 ### Privacy
 
-All tracking is designed to be privacy-compliant and respects user consent preferences.
+All tracking is designed to be privacy-compliant and respects user consent preferences. Session recording is intentionally not wired by default because it requires an explicit vendor decision and consent policy.
