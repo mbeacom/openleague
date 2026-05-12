@@ -5,9 +5,11 @@ import "./globals.css";
 import { SessionProvider } from "@/components/providers/SessionProvider";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import LayoutProvider from "@/components/providers/LayoutProvider";
+import AnalyticsProvider from "@/components/providers/AnalyticsProvider";
 import ErrorBoundary from "@/components/ui/ErrorBoundary";
 import { ToastProvider } from "@/components/ui/Toast";
 import StructuredData from "@/components/ui/StructuredData";
+import { ANALYTICS_CONSENT_STORAGE_KEY } from "@/lib/analytics/tracking";
 import { SITE_CONFIG, getOrganizationSchema, getSoftwareApplicationSchema } from "@/lib/config/seo";
 
 // Validate environment variables on startup
@@ -96,7 +98,9 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const umamiWebsiteId = process.env.NEXT_PUBLIC_UMAMI_WEBSITE_ID;
+  const umamiWebsiteId = process.env.NEXT_PUBLIC_UMAMI_WEBSITE_ID?.trim();
+  const gaMeasurementId = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID?.trim();
+  const gaDisableKey = gaMeasurementId ? `ga-disable-${gaMeasurementId}` : undefined;
 
   return (
     <html lang="en">
@@ -111,10 +115,45 @@ export default function RootLayout({
             strategy="afterInteractive"
           />
         )}
+        {gaMeasurementId && gaDisableKey && (
+          <>
+            <Script id="ga4-privacy-defaults" strategy="beforeInteractive">
+              {`
+                window.dataLayer = window.dataLayer || [];
+                function gtag(){window.dataLayer.push(arguments);}
+                window.gtag = gtag;
+                var consentStorageKey = ${JSON.stringify(ANALYTICS_CONSENT_STORAGE_KEY)};
+                var analyticsOptedOut =
+                  navigator.doNotTrack === '1' ||
+                  navigator.doNotTrack === 'yes' ||
+                  navigator.globalPrivacyControl === true;
+                try {
+                  analyticsOptedOut = analyticsOptedOut ||
+                    window.localStorage.getItem(consentStorageKey) === 'denied';
+                } catch (_) {
+                  // Preserve DNT/GPC decisions even when localStorage is unavailable.
+                }
+                window[${JSON.stringify(gaDisableKey)}] = analyticsOptedOut;
+                gtag('js', new Date());
+                gtag('config', ${JSON.stringify(gaMeasurementId)}, {
+                  anonymize_ip: true,
+                  allow_google_signals: false,
+                  allow_ad_personalization_signals: false,
+                  send_page_view: !window[${JSON.stringify(gaDisableKey)}]
+                });
+              `}
+            </Script>
+            <Script
+              src={`https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(gaMeasurementId)}`}
+              strategy="afterInteractive"
+            />
+          </>
+        )}
         <ErrorBoundary>
           <ThemeProvider>
             <ToastProvider>
               <SessionProvider>
+                <AnalyticsProvider />
                 <LayoutProvider>
                   {children}
                 </LayoutProvider>

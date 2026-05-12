@@ -1,17 +1,26 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+const {
+  mockPrismaPlayer,
+  mockPrismaTeam,
+  mockPrismaTeamMember,
+  mockGetCurrentUserId,
+  mockIsTeamAdmin,
+} = vi.hoisted(() => ({
+  mockPrismaPlayer: { findMany: vi.fn() },
+  mockPrismaTeam: { findUnique: vi.fn() },
+  mockPrismaTeamMember: { findMany: vi.fn() },
+  mockGetCurrentUserId: vi.fn(),
+  mockIsTeamAdmin: vi.fn(),
+}));
+
 // Mock auth helpers
-const mockRequireUserId = vi.fn();
-const mockRequireTeamAdmin = vi.fn();
 vi.mock("@/lib/auth/session", () => ({
-  requireUserId: (...args: unknown[]) => mockRequireUserId(...args),
-  requireTeamAdmin: (...args: unknown[]) => mockRequireTeamAdmin(...args),
+  getCurrentUserId: (...args: unknown[]) => mockGetCurrentUserId(...args),
+  isTeamAdmin: (...args: unknown[]) => mockIsTeamAdmin(...args),
 }));
 
 // Mock Prisma
-const mockPrismaTeam = { findUnique: vi.fn() };
-const mockPrismaPlayer = { findMany: vi.fn() };
-const mockPrismaTeamMember = { findMany: vi.fn() };
 vi.mock("@/lib/db/prisma", () => ({
   prisma: {
     team: mockPrismaTeam,
@@ -33,8 +42,8 @@ function makeRequest(teamId?: string): Request {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockRequireUserId.mockResolvedValue("user-123");
-  mockRequireTeamAdmin.mockResolvedValue("user-123");
+  mockGetCurrentUserId.mockResolvedValue("user-123");
+  mockIsTeamAdmin.mockResolvedValue(true);
 });
 
 describe("GET /api/roster/export", () => {
@@ -44,16 +53,14 @@ describe("GET /api/roster/export", () => {
   });
 
   it("returns 403 when user is not admin", async () => {
-    mockRequireTeamAdmin.mockRejectedValue(
-      new Error("Unauthorized: Only team admins can perform this action")
-    );
+    mockIsTeamAdmin.mockResolvedValue(false);
 
     const response = await GET(makeRequest(TEAM_ID));
     expect(response.status).toBe(403);
   });
 
   it("returns 401 when user is not authenticated", async () => {
-    mockRequireUserId.mockRejectedValue(new Error("NEXT_REDIRECT"));
+    mockGetCurrentUserId.mockResolvedValue(null);
 
     const response = await GET(makeRequest(TEAM_ID));
     expect(response.status).toBe(401);
@@ -77,10 +84,13 @@ describe("GET /api/roster/export", () => {
       "text/csv; charset=utf-8"
     );
 
+    // Should have UTF-8 BOM bytes for Excel compatibility. `Response.text()`
+    // decodes and strips the BOM, so verify the raw bytes first.
+    const bytes = new Uint8Array(await response.clone().arrayBuffer());
+    expect(Array.from(bytes.slice(0, 3))).toEqual([0xef, 0xbb, 0xbf]);
+
     const body = await response.text();
-    // Should have BOM + header row only
-    expect(body.charCodeAt(0)).toBe(0xfeff);
-    const lines = body.slice(1).split("\r\n");
+    const lines = body.split("\r\n");
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain("Name");
     expect(lines[0]).toContain("USA Hockey Member ID");

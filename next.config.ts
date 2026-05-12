@@ -11,12 +11,14 @@ const parseBooleanFlag = (value: string | undefined) => {
 const adsEnabled =
   parseBooleanFlag(process.env.NEXT_PUBLIC_ADS_ENABLED) &&
   Boolean(process.env.NEXT_PUBLIC_GOOGLE_ADSENSE_CLIENT?.trim());
+const gaEnabled = Boolean(process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID?.trim());
 
 const scriptSrc = [
   "'self'",
   "'unsafe-eval'",
   "'unsafe-inline'",
   "https://cloud.umami.is",
+  ...(gaEnabled ? ["https://www.googletagmanager.com"] : []),
   "https://vercel.live",
   ...(adsEnabled ? ["https://pagead2.googlesyndication.com", "https://fundingchoicesmessages.google.com"] : []),
 ];
@@ -25,6 +27,7 @@ const imgSrc = [
   "'self'",
   "data:",
   "blob:",
+  ...(gaEnabled ? ["https://www.google-analytics.com", "https://*.google-analytics.com"] : []),
   ...(adsEnabled ? ["https://pagead2.googlesyndication.com", "https://googleads.g.doubleclick.net", "https://tpc.googlesyndication.com"] : []),
 ];
 
@@ -32,6 +35,7 @@ const connectSrc = [
   "'self'",
   "https://cloud.umami.is",
   "https://api-gateway.umami.dev",
+  ...(gaEnabled ? ["https://www.google-analytics.com", "https://*.google-analytics.com", "https://region1.google-analytics.com"] : []),
   ...(adsEnabled ? ["https://pagead2.googlesyndication.com", "https://googleads.g.doubleclick.net", "https://fundingchoicesmessages.google.com"] : []),
 ];
 
