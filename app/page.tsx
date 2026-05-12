@@ -6,7 +6,9 @@ import { useEffect } from "react";
 import { Box, Container, CircularProgress } from "@mui/material";
 import HeroSection from "@/components/features/marketing/HeroSection";
 import FeaturesPreview from "@/components/features/marketing/FeaturesPreview";
+import ProblemSolutionSection from "@/components/features/marketing/ProblemSolutionSection";
 import HowItWorks from "@/components/features/marketing/HowItWorks";
+import SocialProofSection from "@/components/features/marketing/SocialProofSection";
 import FinalCTA from "@/components/features/marketing/FinalCTA";
 import { useScrollTracking } from "@/lib/hooks/useScrollTracking";
 import StructuredData from "@/components/ui/StructuredData";
@@ -65,8 +67,10 @@ export default function HomePage() {
       <StructuredData data={breadcrumbSchema} />
       <Box>
         <HeroSection />
+        <ProblemSolutionSection />
         <FeaturesPreview />
         <HowItWorks />
+        <SocialProofSection />
         <FinalCTA />
       </Box>
     </>

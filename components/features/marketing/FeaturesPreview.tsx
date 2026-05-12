@@ -1,7 +1,17 @@
 'use client';
 
-import { Box, Container, Typography, Grid, Card, CardContent } from '@mui/material';
-import { keyframes } from '@mui/system';
+import {
+  Box,
+  Card,
+  CardContent,
+  Chip,
+  Container,
+  Grid,
+  LinearProgress,
+  Stack,
+  Typography,
+} from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import GroupsIcon from '@mui/icons-material/Groups';
 import EventIcon from '@mui/icons-material/Event';
 import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
@@ -11,47 +21,50 @@ const features = [
   {
     icon: GroupsIcon,
     title: 'Team Roster Management',
-    description: 'Keep track of players, contact info, and emergency details all in one secure place.',
-    color: '#0D47A1',
+    description: 'Keep players, guardians, team officials, and emergency details organized in one secure roster.',
+    tone: 'primary' as const,
+    demoLabel: 'Live roster demo',
+    stats: ['18 players', '4 staff', '2 invites pending'],
+    progress: 86,
   },
   {
     icon: EventIcon,
     title: 'Event Scheduling & RSVPs',
-    description: 'Schedule games and practices with instant RSVP tracking. Know who&apos;s coming at a glance.',
-    color: '#1976D2',
+    description: 'Schedule games and practices with instant RSVP tracking so coaches know who is available.',
+    tone: 'secondary' as const,
+    demoLabel: 'Attendance snapshot demo',
+    stats: ['14 going', '2 maybe', '1 out'],
+    progress: 78,
   },
   {
     icon: NotificationsActiveIcon,
     title: 'Automated Communications',
-    description: 'Send event updates and reminders automatically. No more chasing down responses.',
-    color: '#42A5F5',
+    description: 'Send targeted updates and reminders without chasing responses across multiple channels.',
+    tone: 'success' as const,
+    demoLabel: 'Reminder queue demo',
+    stats: ['Reminder queued', '48h before', 'Team notified'],
+    progress: 92,
   },
   {
     icon: PhoneIphoneIcon,
     title: 'Mobile-First Experience',
-    description: 'Designed for on-the-go team management. Works perfectly on any device.',
-    color: '#1565C0',
+    description: 'Manage the season from the rink, car, or sideline with touch-friendly workflows on any device.',
+    tone: 'warning' as const,
+    demoLabel: 'Mobile dashboard demo',
+    stats: ['Tonight 6:30 PM', 'Game vs Hawks', 'Tap to RSVP'],
+    progress: 88,
   },
 ];
-
-// Pulse animation for icon containers
-const pulse = keyframes`
-  0%, 100% {
-    box-shadow: 0 0 0 0 rgba(25, 118, 210, 0.4);
-  }
-  50% {
-    box-shadow: 0 0 0 12px rgba(25, 118, 210, 0);
-  }
-`;
 
 export default function FeaturesPreview() {
   return (
     <Box
+      component="section"
+      aria-labelledby="feature-showcase-heading"
       sx={{
         py: { xs: 10, md: 14 },
         bgcolor: 'background.default',
         position: 'relative',
-        // Subtle playbook grid pattern
         backgroundImage: `
           linear-gradient(rgba(13, 71, 161, 0.02) 1px, transparent 1px),
           linear-gradient(90deg, rgba(13, 71, 161, 0.02) 1px, transparent 1px)
@@ -62,14 +75,12 @@ export default function FeaturesPreview() {
       <Container maxWidth="lg">
         <Box sx={{ textAlign: 'center', mb: 10 }}>
           <Typography
+            id="feature-showcase-heading"
             variant="sectionTitle"
             component="h2"
-            sx={{
-              mb: 3,
-              color: 'text.primary',
-            }}
+            sx={{ mb: 3, color: 'text.primary' }}
           >
-            Everything in{' '}
+            See the Season Run from{' '}
             <Box
               component="span"
               sx={{
@@ -92,14 +103,10 @@ export default function FeaturesPreview() {
           </Typography>
           <Typography
             variant="marketingBody"
-            sx={{
-              color: 'text.secondary',
-              maxWidth: 700,
-              mx: 'auto',
-            }}
+            sx={{ color: 'text.secondary', maxWidth: 760, mx: 'auto' }}
           >
-            Simple, powerful tools that eliminate the chaos of spreadsheets and group chats.
-            Everything your team needs to stay organized and focused on the game.
+            Visual snapshots show how OpenLeague replaces spreadsheets and group chats with clear,
+            actionable views for rosters, schedules, RSVPs, and updates.
           </Typography>
         </Box>
 
@@ -107,94 +114,114 @@ export default function FeaturesPreview() {
           {features.map((feature, index) => {
             const Icon = feature.icon;
             return (
-              <Grid size={{ xs: 12, sm: 6, md: 3 }} key={feature.title}>
+              <Grid size={{ xs: 12, md: 6 }} key={feature.title}>
                 <Card
                   variant="marketing"
-                  sx={{
-                    height: '100%',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    // Staggered entrance animation
-                    '@keyframes slideUp': {
-                      from: {
-                        opacity: 0,
-                        transform: 'translateY(40px)',
-                      },
-                      to: {
-                        opacity: 1,
-                        transform: 'translateY(0)',
-                      },
-                    },
-                    animation: `slideUp 0.6s cubic-bezier(0.4, 0, 0.2, 1) ${index * 0.1}s both`,
-                    '@media (prefers-reduced-motion: reduce)': {
-                      animation: 'none',
-                    },
-                  }}
-                >
-                  <CardContent
-                    sx={{
-                      flexGrow: 1,
-                      textAlign: 'center',
-                      p: 4,
+                  tabIndex={0}
+                  aria-label={`${feature.title} feature demo`}
+                  sx={(theme) => {
+                    const accent = theme.palette[feature.tone].main;
+                    return {
+                      height: '100%',
                       display: 'flex',
                       flexDirection: 'column',
-                      justifyContent: 'flex-start',
-                      alignItems: 'center',
-                    }}
-                  >
-                    <Box
-                      sx={{
-                        display: 'flex',
-                        justifyContent: 'center',
-                        mb: 3,
-                      }}
-                    >
+                      outline: 'none',
+                      '@keyframes slideUp': {
+                        from: { opacity: 0, transform: 'translateY(40px)' },
+                        to: { opacity: 1, transform: 'translateY(0)' },
+                      },
+                      animation: `slideUp 0.6s cubic-bezier(0.4, 0, 0.2, 1) ${index * 0.1}s both`,
+                      transition: 'transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease',
+                      border: `1px solid ${alpha(accent, 0.14)}`,
+                      '&:hover, &:focus-visible': {
+                        transform: 'translateY(-6px)',
+                        boxShadow: `0 18px 40px ${alpha(accent, 0.18)}`,
+                        borderColor: alpha(accent, 0.34),
+                      },
+                      '@media (prefers-reduced-motion: reduce)': {
+                        animation: 'none',
+                        transition: 'none',
+                        '&:hover, &:focus-visible': { transform: 'none' },
+                      },
+                    };
+                  }}
+                >
+                  <CardContent sx={{ p: { xs: 3, md: 4 }, flexGrow: 1 }}>
+                    <Stack spacing={3} sx={{ height: '100%' }}>
+                      <Stack direction="row" spacing={2} alignItems="center">
+                        <Box
+                          sx={(theme) => {
+                            const accent = theme.palette[feature.tone].main;
+                            return {
+                              width: 64,
+                              height: 64,
+                              borderRadius: '50%',
+                              background: `linear-gradient(135deg, ${accent} 0%, ${alpha(accent, 0.72)} 100%)`,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: 'common.white',
+                              flexShrink: 0,
+                            };
+                          }}
+                        >
+                          <Icon sx={{ fontSize: 34 }} />
+                        </Box>
+                        <Box>
+                          <Typography variant="featureTitle" component="h3" sx={{ color: 'text.primary' }}>
+                            {feature.title}
+                          </Typography>
+                          <Chip label={feature.demoLabel} size="small" color={feature.tone} sx={{ mt: 1 }} />
+                        </Box>
+                      </Stack>
+
+                      <Typography variant="body1" color="text.secondary" sx={{ lineHeight: 1.7 }}>
+                        {feature.description}
+                      </Typography>
+
                       <Box
-                        sx={{
-                          width: 80,
-                          height: 80,
-                          borderRadius: '50%',
-                          background: `linear-gradient(135deg, ${feature.color} 0%, ${feature.color}dd 100%)`,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          position: 'relative',
-                          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                        '&:hover': {
-                          transform: 'scale(1.1) rotate(5deg)',
-                          animation: `${pulse} 1.5s infinite`,
-                          '@media (prefers-reduced-motion: reduce)': {
-                            animation: 'none',
-                            transform: 'scale(1.05)',
-                          },
-                        },
+                        sx={(theme) => {
+                          const accent = theme.palette[feature.tone].main;
+                          return {
+                            mt: 'auto',
+                            p: 2.5,
+                            borderRadius: 3,
+                            bgcolor: alpha(accent, 0.07),
+                            border: `1px solid ${alpha(accent, 0.18)}`,
+                          };
                         }}
                       >
-                        <Icon sx={{ fontSize: 40, color: 'white' }} />
+                        <Stack spacing={1.5}>
+                          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                            {feature.stats.map((stat) => (
+                              <Chip
+                                key={stat}
+                                label={stat}
+                                size="small"
+                                sx={(theme) => ({
+                                  bgcolor: alpha(theme.palette.background.paper, 0.9),
+                                  fontWeight: 700,
+                                })}
+                              />
+                            ))}
+                          </Stack>
+                          <LinearProgress
+                            variant="determinate"
+                            value={feature.progress}
+                            aria-label={`${feature.demoLabel} progress`}
+                            sx={(theme) => ({
+                              height: 10,
+                              borderRadius: 999,
+                              bgcolor: alpha(theme.palette[feature.tone].main, 0.16),
+                              '& .MuiLinearProgress-bar': {
+                                borderRadius: 999,
+                                bgcolor: theme.palette[feature.tone].main,
+                              },
+                            })}
+                          />
+                        </Stack>
                       </Box>
-                    </Box>
-                    <Typography
-                      variant="featureTitle"
-                      component="h3"
-                      sx={{
-                        fontWeight: 700,
-                        color: 'text.primary',
-                        mb: 2,
-                        minHeight: { xs: 'auto', md: '3.5rem' }, // Ensure consistent title height
-                      }}
-                    >
-                      {feature.title}
-                    </Typography>
-                    <Typography
-                      variant="body1"
-                      color="text.secondary"
-                      sx={{
-                        lineHeight: 1.7,
-                        flexGrow: 1, // Allow description to grow
-                      }}
-                    >
-                      {feature.description}
-                    </Typography>
+                    </Stack>
                   </CardContent>
                 </Card>
               </Grid>
