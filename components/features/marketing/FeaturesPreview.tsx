@@ -113,19 +113,19 @@ export default function FeaturesPreview() {
         <Grid container spacing={4}>
           {features.map((feature, index) => {
             const Icon = feature.icon;
+            const headingId = `feature-preview-${index}-heading`;
             return (
               <Grid size={{ xs: 12, md: 6 }} key={feature.title}>
                 <Card
+                  component="article"
                   variant="marketing"
-                  tabIndex={0}
-                  aria-label={`${feature.title} feature demo`}
+                  aria-labelledby={headingId}
                   sx={(theme) => {
                     const accent = theme.palette[feature.tone].main;
                     return {
                       height: '100%',
                       display: 'flex',
                       flexDirection: 'column',
-                      outline: 'none',
                       '@keyframes slideUp': {
                         from: { opacity: 0, transform: 'translateY(40px)' },
                         to: { opacity: 1, transform: 'translateY(0)' },
@@ -133,7 +133,7 @@ export default function FeaturesPreview() {
                       animation: `slideUp 0.6s cubic-bezier(0.4, 0, 0.2, 1) ${index * 0.1}s both`,
                       transition: 'transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease',
                       border: `1px solid ${alpha(accent, 0.14)}`,
-                      '&:hover, &:focus-visible': {
+                      '&:hover': {
                         transform: 'translateY(-6px)',
                         boxShadow: `0 18px 40px ${alpha(accent, 0.18)}`,
                         borderColor: alpha(accent, 0.34),
@@ -141,7 +141,7 @@ export default function FeaturesPreview() {
                       '@media (prefers-reduced-motion: reduce)': {
                         animation: 'none',
                         transition: 'none',
-                        '&:hover, &:focus-visible': { transform: 'none' },
+                        '&:hover': { transform: 'none' },
                       },
                     };
                   }}
@@ -168,7 +168,12 @@ export default function FeaturesPreview() {
                           <Icon sx={{ fontSize: 34 }} />
                         </Box>
                         <Box>
-                          <Typography variant="featureTitle" component="h3" sx={{ color: 'text.primary' }}>
+                          <Typography
+                            id={headingId}
+                            variant="featureTitle"
+                            component="h3"
+                            sx={{ color: 'text.primary' }}
+                          >
                             {feature.title}
                           </Typography>
                           <Chip label={feature.demoLabel} size="small" color={feature.tone} sx={{ mt: 1 }} />

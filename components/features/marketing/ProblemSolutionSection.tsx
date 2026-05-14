@@ -69,7 +69,8 @@ export default function ProblemSolutionSection() {
         <Grid container spacing={4} alignItems="stretch">
           <Grid size={{ xs: 12, md: 5 }}>
             <Card
-              aria-label="The usual team-management chaos"
+              component="section"
+              aria-labelledby="team-management-chaos-heading"
               sx={(theme) => ({
                 height: '100%',
                 border: `1px solid ${alpha(theme.palette.error.main, 0.22)}`,
@@ -79,7 +80,7 @@ export default function ProblemSolutionSection() {
               <CardContent sx={{ p: { xs: 3, md: 4 } }}>
                 <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 3 }}>
                   <WarningAmberIcon color="error" />
-                  <Typography variant="h5" component="h3">
+                  <Typography id="team-management-chaos-heading" variant="h5" component="h3">
                     The usual team-management chaos
                   </Typography>
                 </Stack>
@@ -132,7 +133,8 @@ export default function ProblemSolutionSection() {
 
           <Grid size={{ xs: 12, md: 5 }}>
             <Card
-              aria-label="The OpenLeague playbook"
+              component="section"
+              aria-labelledby="openleague-playbook-heading"
               sx={(theme) => ({
                 height: '100%',
                 border: `1px solid ${alpha(theme.palette.success.main, 0.24)}`,
@@ -142,7 +144,7 @@ export default function ProblemSolutionSection() {
               <CardContent sx={{ p: { xs: 3, md: 4 } }}>
                 <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 3 }}>
                   <TaskAltIcon color="success" />
-                  <Typography variant="h5" component="h3">
+                  <Typography id="openleague-playbook-heading" variant="h5" component="h3">
                     The OpenLeague playbook
                   </Typography>
                 </Stack>

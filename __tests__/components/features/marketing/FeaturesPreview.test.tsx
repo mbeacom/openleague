@@ -17,8 +17,8 @@ describe('FeaturesPreview', () => {
     ).toBeInTheDocument();
     expect(screen.getByText(/visual snapshots show how OpenLeague replaces spreadsheets/i)).toBeInTheDocument();
 
-    expect(screen.getByLabelText('Team Roster Management feature demo')).toBeInTheDocument();
-    expect(screen.getByLabelText('Event Scheduling & RSVPs feature demo')).toBeInTheDocument();
+    expect(screen.getByRole('article', { name: 'Team Roster Management' })).toBeInTheDocument();
+    expect(screen.getByRole('article', { name: 'Event Scheduling & RSVPs' })).toBeInTheDocument();
     expect(screen.getByText('Live roster demo')).toBeInTheDocument();
     expect(screen.getByText('Attendance snapshot demo')).toBeInTheDocument();
   });
@@ -34,12 +34,11 @@ describe('FeaturesPreview', () => {
     expect(screen.getByLabelText('Mobile dashboard demo progress')).toHaveAttribute('aria-valuenow', '88');
   });
 
-  it('makes demo cards keyboard focusable for interactive exploration', () => {
+  it('keeps demo cards out of the keyboard tab order because they are non-interactive', () => {
     renderWithTheme(<FeaturesPreview />);
 
-    const rosterDemo = screen.getByLabelText('Team Roster Management feature demo');
-    rosterDemo.focus();
+    const rosterDemo = screen.getByRole('article', { name: 'Team Roster Management' });
 
-    expect(rosterDemo).toHaveFocus();
+    expect(rosterDemo).not.toHaveAttribute('tabindex');
   });
 });

@@ -12,6 +12,7 @@ import {
   Stack,
   Typography,
 } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import GitHubIcon from '@mui/icons-material/GitHub';
 import GroupsIcon from '@mui/icons-material/Groups';
 import PhoneIphoneIcon from '@mui/icons-material/PhoneIphone';
@@ -160,7 +161,7 @@ function AnimatedCounter({
       return () => window.clearTimeout(timer);
     }
 
-    const steps = 24;
+    const steps = Math.min(Math.abs(value), 24) || 1;
     let currentStep = 0;
     const timer = window.setInterval(() => {
       currentStep += 1;
@@ -190,12 +191,11 @@ export default function SocialProofSection() {
     <Box
       component="section"
       aria-labelledby="social-proof-heading"
-      sx={{
+      sx={(theme) => ({
         py: { xs: 10, md: 14 },
         bgcolor: 'background.paper',
-        backgroundImage:
-          'linear-gradient(180deg, rgba(25, 118, 210, 0.04) 0%, rgba(248, 250, 251, 0.85) 100%)',
-      }}
+        backgroundImage: `linear-gradient(180deg, ${alpha(theme.palette.primary.light, 0.04)} 0%, ${alpha(theme.palette.background.default, 0.85)} 100%)`,
+      })}
     >
       <Container maxWidth="lg">
         <Box sx={{ textAlign: 'center', mb: 8 }}>
@@ -234,7 +234,7 @@ export default function SocialProofSection() {
             borderColor: 'primary.light',
             borderRadius: 4,
             overflow: 'hidden',
-            bgcolor: 'rgba(255, 255, 255, 0.92)',
+            bgcolor: (theme) => alpha(theme.palette.background.paper, 0.92),
           }}
         >
           <CardContent sx={{ p: { xs: 3, md: 5 } }}>

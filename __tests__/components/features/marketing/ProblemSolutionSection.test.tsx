@@ -25,8 +25,10 @@ describe('ProblemSolutionSection', () => {
   it('shows before and after comparison panels', () => {
     renderWithTheme(<ProblemSolutionSection />);
 
-    expect(screen.getByLabelText('The usual team-management chaos')).toBeInTheDocument();
-    expect(screen.getByLabelText('The OpenLeague playbook')).toBeInTheDocument();
+    expect(
+      screen.getByRole('region', { name: 'The usual team-management chaos' })
+    ).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'The OpenLeague playbook' })).toBeInTheDocument();
     expect(screen.getByText(/roster details scattered/i)).toBeInTheDocument();
     expect(screen.getByText(/one secure roster/i)).toBeInTheDocument();
     expect(screen.getByText(/coaches guess attendance/i)).toBeInTheDocument();
