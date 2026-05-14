@@ -28,6 +28,7 @@ import { marketingEvents } from '@/lib/analytics/tracking';
 
 const navigationLinks = [
   { label: 'Features', href: '/features' },
+  { label: 'Pricing', href: '/pricing' },
   { label: 'About', href: '/about' },
   { label: 'Contact', href: '/contact' },
   { label: 'Docs', href: '/docs' },
