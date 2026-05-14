@@ -1,6 +1,5 @@
 import {
   Box,
-  Button,
   Card,
   CardContent,
   Chip,
@@ -16,6 +15,7 @@ import {
   Mail as MailIcon,
   Security as SecurityIcon,
 } from '@mui/icons-material';
+import CTAButton from '@/components/features/marketing/CTAButton';
 import { generatePageMetadata, getBreadcrumbSchema, getFAQSchema } from '@/lib/config/seo';
 import StructuredData from '@/components/ui/StructuredData';
 
@@ -95,12 +95,24 @@ export default function PricingPage() {
               OpenLeague currently gives coaches and managers the core team-management tools they need without subscriptions, paid tiers, or a credit card.
             </Typography>
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ pt: 2 }}>
-              <Button href="/signup" variant="contained" size="large">
+              <CTAButton
+                href="/signup"
+                variant="contained"
+                size="large"
+                trackingAction="pricing_start_free_click"
+                trackingLabel="pricing_hero"
+              >
                 Start Free Today
-              </Button>
-              <Button href="/features" variant="outlined" size="large">
+              </CTAButton>
+              <CTAButton
+                href="/features"
+                variant="outlined"
+                size="large"
+                trackingAction="pricing_compare_features_click"
+                trackingLabel="pricing_hero"
+              >
                 Compare Features
-              </Button>
+              </CTAButton>
             </Stack>
           </Stack>
 
@@ -212,9 +224,15 @@ export default function PricingPage() {
             <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
               Create your account, set up a team, and invite players in minutes.
             </Typography>
-            <Button href="/signup" variant="contained" size="large">
+            <CTAButton
+              href="/signup"
+              variant="contained"
+              size="large"
+              trackingAction="pricing_get_started_click"
+              trackingLabel="pricing_final_cta"
+            >
               Get Started Free
-            </Button>
+            </CTAButton>
           </Box>
         </Box>
       </Container>
