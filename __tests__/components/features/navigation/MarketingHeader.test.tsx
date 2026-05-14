@@ -54,6 +54,7 @@ describe('MarketingHeader', () => {
       renderWithTheme(<MarketingHeader />);
 
       expect(screen.getByRole('link', { name: 'Features' })).toHaveAttribute('href', '/features');
+      expect(screen.getByRole('link', { name: 'Pricing' })).toHaveAttribute('href', '/pricing');
       expect(screen.getByRole('link', { name: 'About' })).toHaveAttribute('href', '/about');
       expect(screen.getByRole('link', { name: 'Contact' })).toHaveAttribute('href', '/contact');
       expect(screen.getByRole('link', { name: 'Docs' })).toHaveAttribute('href', '/docs');
@@ -112,6 +113,7 @@ describe('MarketingHeader', () => {
     describe('Navigation Links', () => {
     const navigationLinks = [
       { label: 'Features', href: '/features' },
+      { label: 'Pricing', href: '/pricing' },
       { label: 'About', href: '/about' },
       { label: 'Contact', href: '/contact' },
       { label: 'Docs', href: '/docs' },

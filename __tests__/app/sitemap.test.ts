@@ -23,7 +23,7 @@ describe('Sitemap Generation', () => {
         const urls = sitemapData.map((entry) => entry.url);
 
         expect(urls).toContain('https://openl.app/features');
-        expect(urls).not.toContain('https://openl.app/pricing');
+        expect(urls).toContain('https://openl.app/pricing');
         expect(urls).toContain('https://openl.app/get-started');
         expect(urls).toContain('https://openl.app/contact');
         expect(urls).toContain('https://openl.app/about');
