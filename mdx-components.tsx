@@ -1,18 +1,19 @@
 import type { ComponentPropsWithoutRef } from 'react';
 import type { MDXComponents } from 'mdx/types';
 import { Box, Divider, Link as MuiLink, Typography } from '@mui/material';
+import { DocsMuiLink } from '@/components/features/docs/DocsLink';
 
 function MdxLink({ href, children, ...props }: ComponentPropsWithoutRef<'a'>) {
   if (href?.startsWith('/')) {
     return (
-      <MuiLink href={href} {...props}>
+      <DocsMuiLink href={href} {...props}>
         {children}
-      </MuiLink>
+      </DocsMuiLink>
     );
   }
 
   return (
-    <MuiLink href={href} target="_blank" rel="noreferrer" {...props}>
+    <MuiLink href={href} {...props} target="_blank" rel="noopener noreferrer">
       {children}
     </MuiLink>
   );

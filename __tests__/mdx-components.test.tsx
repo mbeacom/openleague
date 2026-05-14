@@ -41,4 +41,16 @@ describe('MDX components', () => {
 
     expect(screen.getByRole('link', { name: /getting started/i })).toHaveAttribute('href', '/docs/guides');
   });
+
+  it('opens external documentation links in a hardened new tab', () => {
+    const components = useMDXComponents();
+    const Anchor = components.a as ComponentType<{ href: string; children: ReactNode }>;
+
+    renderWithTheme(<Anchor href="https://example.com/docs">External docs</Anchor>);
+
+    const link = screen.getByRole('link', { name: /external docs/i });
+    expect(link).toHaveAttribute('href', 'https://example.com/docs');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+  });
 });

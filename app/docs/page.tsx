@@ -1,5 +1,6 @@
 import { Metadata } from 'next';
-import { Typography, Box, Card, CardContent, CardActions, Button, Chip, Stack } from '@mui/material';
+import { Typography, Box, Card, CardContent, CardActions, Chip, Stack } from '@mui/material';
+import { DocsLinkButton } from '@/components/features/docs/DocsLink';
 import { docsSections } from '@/lib/docs/config';
 
 export const metadata: Metadata = {
@@ -33,9 +34,9 @@ export default function DocsHomePage() {
                 </Typography>
               </CardContent>
               <CardActions>
-                <Button size="small" href={item.href}>
+                <DocsLinkButton href={item.href}>
                   Read guide
-                </Button>
+                </DocsLinkButton>
               </CardActions>
             </Card>
           )),
