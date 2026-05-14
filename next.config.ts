@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import createMDX from "@next/mdx";
 
 const parseBooleanFlag = (value: string | undefined) => {
   if (!value) {
@@ -45,6 +46,7 @@ const frameSrc = [
 ];
 
 const nextConfig: NextConfig = {
+  pageExtensions: ["js", "jsx", "md", "mdx", "ts", "tsx"],
   compiler: {
     emotion: true,
   },
@@ -111,4 +113,6 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+const withMDX = createMDX({});
+
+export default withMDX(nextConfig);

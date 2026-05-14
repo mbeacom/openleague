@@ -1,0 +1,39 @@
+export const metadata = {
+  title: 'API Reference - OpenLeague Documentation',
+  description: 'Technical API documentation for OpenLeague platform.',
+};
+
+# API Reference
+
+OpenLeague uses Server Actions for first-party mutations. API routes are reserved for file-style downloads, authentication, cron jobs, and integration-oriented endpoints.
+
+## Current route surface
+
+- `/api/auth/[...nextauth]` handles Auth.js authentication callbacks.
+- `/api/cron/*` runs scheduled jobs such as RSVP reminders.
+- `/api/invitations/*` supports invitation acceptance flows.
+- `/api/leagues/*` exposes league team listing where an HTTP endpoint is appropriate.
+- `/api/roster/export` returns roster CSV downloads.
+
+## Integration guidance
+
+Prefer Server Actions for application forms and user-initiated mutations. Use API routes when a browser needs a downloadable response or when an external service cannot call a Server Action.
+
+```ts
+const response = await fetch('/api/roster/export?teamId=team_123');
+
+if (!response.ok) {
+  throw new Error('Unable to export roster');
+}
+```
+
+## Security expectations
+
+Every route and action must authenticate the current user, authorize the target team or league, validate input with Zod, and avoid exposing sensitive roster fields to non-admins.
+
+## Planned reference areas
+
+- Authentication and session helpers
+- CSV export fields
+- Invitation token lifecycle
+- Cron endpoint configuration

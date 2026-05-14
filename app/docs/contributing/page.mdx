@@ -1,0 +1,33 @@
+export const metadata = {
+  title: 'Contributing - OpenLeague Documentation',
+  description: 'Learn how to contribute to the OpenLeague project.',
+};
+
+# Contributing to OpenLeague
+
+Thanks for helping improve OpenLeague. The project values small, reviewed changes that keep team data safe and the mobile experience fast.
+
+## Local setup
+
+```bash
+bun install
+bun run validate-env
+bun run dev
+```
+
+Use Bun for package management and scripts. Keep environment values local and never commit secrets.
+
+## Before opening a pull request
+
+- Run relevant tests for the files you changed.
+- Run `bun run type-check` for TypeScript changes.
+- Add or update tests when behavior changes.
+- Keep Server Actions authenticated, authorized, validated, and revalidated.
+
+## Documentation changes
+
+Docs pages live under `/app/docs` and are rendered with MDX. Use headings, lists, links, and fenced code blocks so the shared MDX components can provide consistent styling.
+
+## Commit style
+
+OpenLeague uses conventional commits. Use `feat:` for new user-facing functionality and `fix:` for bug fixes.
