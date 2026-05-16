@@ -46,6 +46,9 @@ const envSchema = z.object({
     // Cron job authentication
     CRON_SECRET: z.string().min(32, 'CRON_SECRET must be at least 32 characters long').optional(),
 
+    // Protected uptime/readiness checks
+    UPTIME_CHECK_TOKEN: z.string().min(32, 'UPTIME_CHECK_TOKEN must be at least 32 characters long').optional(),
+
     // Analytics and Tracking (optional)
     NEXT_PUBLIC_UMAMI_WEBSITE_ID: z.string().optional(),
     NEXT_PUBLIC_GA_MEASUREMENT_ID: z.string().optional(),
@@ -78,6 +81,7 @@ function validateEnv() {
             EMAIL_FROM: process.env.EMAIL_FROM || '',
             NODE_ENV: (process.env.NODE_ENV || 'development') as 'development' | 'production' | 'test',
             CRON_SECRET: process.env.CRON_SECRET,
+            UPTIME_CHECK_TOKEN: process.env.UPTIME_CHECK_TOKEN,
             NEXT_PUBLIC_UMAMI_WEBSITE_ID: process.env.NEXT_PUBLIC_UMAMI_WEBSITE_ID,
             NEXT_PUBLIC_GA_MEASUREMENT_ID: process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID,
             NEXT_PUBLIC_SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN,
