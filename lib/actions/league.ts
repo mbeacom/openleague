@@ -171,7 +171,7 @@ export async function migrateTeamToLeague(
     }
 
     // Use transaction to ensure data consistency
-    const result = await prisma.$transaction(async (tx) => {
+    const migrationResult = await prisma.$transaction(async (tx) => {
       // Create league
       const league = await tx.league.create({
         data: {
@@ -203,18 +203,40 @@ export async function migrateTeamToLeague(
       });
 
       // Update all team's events to belong to league
-      await tx.event.updateMany({
+      const migratedEvents = await tx.event.updateMany({
         where: { teamId: validated.teamId },
         data: { leagueId: league.id },
       });
 
       // Update all team's players to belong to league
-      await tx.player.updateMany({
+      const migratedPlayers = await tx.player.updateMany({
         where: { teamId: validated.teamId },
         data: { leagueId: league.id },
       });
 
-      return { league, team };
+      return {
+        league,
+        team,
+        migratedEventCount: migratedEvents.count,
+        migratedPlayerCount: migratedPlayers.count,
+      };
+    });
+
+    // Log audit event
+    await logAuditEvent({
+      action: AuditAction.TEAM_MIGRATED,
+      userId,
+      leagueId: migrationResult.league.id,
+      teamId: migrationResult.team.id,
+      details: {
+        teamName: teamMember.team.name,
+        leagueName: migrationResult.league.name,
+        sport: teamMember.team.sport,
+        season: teamMember.team.season,
+        backfilledEvents: migrationResult.migratedEventCount,
+        backfilledPlayers: migrationResult.migratedPlayerCount,
+      },
+      timestamp: new Date(),
     });
 
     revalidatePath("/");
@@ -222,7 +244,10 @@ export async function migrateTeamToLeague(
 
     return {
       success: true,
-      data: result,
+      data: {
+        league: migrationResult.league,
+        team: migrationResult.team,
+      },
     };
   } catch (error) {
     if (error instanceof z.ZodError) {

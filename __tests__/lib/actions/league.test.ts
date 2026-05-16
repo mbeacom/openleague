@@ -102,6 +102,7 @@ vi.mock("@/lib/utils/security", () => ({
     LEAGUE_CREATED: "league_created",
     LEAGUE_UPDATED: "league_updated",
     TEAM_CREATED: "team_created",
+    TEAM_MIGRATED: "team_migrated",
   },
   LeagueAccessLevel: {
     NONE: 0,
@@ -217,7 +218,7 @@ describe("league Server Actions", () => {
   });
 
   describe("migrateTeamToLeague", () => {
-    it("migrates a standalone team in one transaction and backfills leagueId onto dependent records", async () => {
+    it("migrates a standalone team in one transaction, backfills leagueId onto dependent records, logs audit, and revalidates", async () => {
       mockPrisma.teamMember.findFirst.mockResolvedValue({
         id: "team-member-1",
         team: {
@@ -268,6 +269,41 @@ describe("league Server Actions", () => {
         where: { teamId: TEAM_ID },
         data: { leagueId: LEAGUE_ID },
       });
+      expect(mockLogAuditEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: "team_migrated",
+          userId: USER_ID,
+          leagueId: LEAGUE_ID,
+          teamId: TEAM_ID,
+          details: {
+            teamName: "Sharks",
+            leagueName: "Metro Hockey",
+            sport: "HOCKEY",
+            season: "Winter 2026",
+            backfilledEvents: 12,
+            backfilledPlayers: 18,
+          },
+        }),
+      );
+      expect(mockRevalidatePath).toHaveBeenCalledWith("/");
+      expect(mockRevalidatePath).toHaveBeenCalledWith("/dashboard");
+    });
+
+    it("does not migrate a team when the user is not a team admin", async () => {
+      mockPrisma.teamMember.findFirst.mockResolvedValue(null);
+
+      const result = await migrateTeamToLeague({
+        teamId: TEAM_ID,
+        leagueData: validLeagueInput,
+      });
+
+      expect(result).toEqual({
+        success: false,
+        error: "Unauthorized - you must be an admin of this team",
+      });
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+      expect(mockLogAuditEvent).not.toHaveBeenCalled();
+      expect(mockRevalidatePath).not.toHaveBeenCalled();
     });
 
     it("does not migrate a team that already belongs to a league", async () => {
@@ -360,6 +396,35 @@ describe("league Server Actions", () => {
           teamId: TEAM_ID,
         }),
       );
+      expect(mockRevalidatePath).toHaveBeenCalledWith("/");
+      expect(mockRevalidatePath).toHaveBeenCalledWith("/dashboard");
+      expect(mockRevalidatePath).toHaveBeenCalledWith(`/league/${LEAGUE_ID}`);
+    });
+
+    it("does not create a team when the requested division fails league data isolation", async () => {
+      mockPrisma.league.findFirst.mockResolvedValue({ id: LEAGUE_ID, isActive: true });
+      mockValidateLeagueDataIsolation.mockResolvedValueOnce(false);
+
+      const result = await addTeamToLeague({
+        leagueId: LEAGUE_ID,
+        name: "Wolves",
+        sport: "HOCKEY",
+        season: "Winter 2026",
+        divisionId: DIVISION_ID,
+      });
+
+      expect(result).toEqual({
+        success: false,
+        error: "Division not found or does not belong to this league",
+      });
+      expect(mockValidateLeagueDataIsolation).toHaveBeenCalledWith(
+        "division",
+        DIVISION_ID,
+        LEAGUE_ID,
+      );
+      expect(mockPrisma.team.create).not.toHaveBeenCalled();
+      expect(mockLogAuditEvent).not.toHaveBeenCalled();
+      expect(mockRevalidatePath).not.toHaveBeenCalled();
     });
   });
 
