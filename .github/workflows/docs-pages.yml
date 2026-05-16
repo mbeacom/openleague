@@ -1,0 +1,64 @@
+name: Documentation Pages
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'app/docs/**'
+      - 'components/features/docs/**'
+      - 'docs/**'
+      - 'lib/docs/**'
+      - 'scripts/build-docs-pages.ts'
+      - '.github/workflows/docs-pages.yml'
+      - 'package.json'
+      - 'bun.lockb'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build documentation site
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build docs pages artifact
+        run: bun run docs:build-pages
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: dist/docs-pages
+
+  deploy:
+    name: Deploy documentation site
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

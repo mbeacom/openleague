@@ -33,6 +33,9 @@ NEXTAUTH_SECRET="your-generated-secret-here"
 # Email Service
 MAILCHIMP_API_KEY="your-mailchimp-transactional-api-key"
 EMAIL_FROM="noreply@yourdomain.com"
+
+# Cron job authentication
+CRON_SECRET="your-generated-cron-secret-here"
 ```
 
 #### How to Set Environment Variables in Vercel
@@ -40,8 +43,8 @@ EMAIL_FROM="noreply@yourdomain.com"
 1. Go to your project dashboard on Vercel
 2. Navigate to **Settings** → **Environment Variables**
 3. Add each variable with appropriate values for each environment:
-   - **Production**: Live database and email credentials
-   - **Preview**: Staging/preview database (optional)
+   - **Production**: `openl.app`, production Neon database, production Mailchimp sender, production `CRON_SECRET`
+   - **Preview/Staging**: Vercel preview URLs, staging Neon database, staging Mailchimp sender, separate `CRON_SECRET`
    - **Development**: Local development values (optional)
 
 #### Environment Variable Security
@@ -49,7 +52,8 @@ EMAIL_FROM="noreply@yourdomain.com"
 - **Never commit** `.env.local` or `.env.production` files
 - **Use strong secrets**: Generate `NEXTAUTH_SECRET` with `openssl rand -base64 32`
 - **Verify domains**: Ensure `EMAIL_FROM` domain is verified in Mailchimp
-- **Test locally**: Run `bun run validate-env` before deployment
+- **Test locally**: Run `bun run validate-env` and `bun run deployment:check` before deployment
+- **Separate environments**: Do not reuse production database URLs, email API keys, or cron secrets in Preview/Staging
 
 ### Database Setup
 
@@ -62,15 +66,13 @@ EMAIL_FROM="noreply@yourdomain.com"
 
 #### Database Migrations
 
-Migrations run automatically on deployment via the build process. The `postinstall` script in `package.json` handles this:
+The `postinstall` script generates the Prisma Client during dependency installation. Apply schema migrations as an explicit deployment step against the target database:
 
-```json
-{
-  "scripts": {
-    "postinstall": "prisma generate && prisma migrate deploy"
-  }
-}
+```bash
+bun run db:migrate:deploy
 ```
+
+Run migrations before promoting a production deployment, or configure the Vercel project/deployment pipeline to run `bun run db:migrate:deploy` with the production `DATABASE_URL`.
 
 ### Email Service Setup
 
@@ -127,7 +129,7 @@ Vercel automatically detects Next.js projects, but verify these settings:
 
 - **Framework Preset**: Next.js
 - **Build Command**: `bun run build` (configured in `vercel.json`)
-- **Install Command**: `bun install` (configured in `vercel.json`)
+- **Install Command**: `bun install --frozen-lockfile` (configured in `vercel.json`)
 - **Output Directory**: `.next` (automatic)
 - **Node.js Version**: 22.x (latest LTS)
 
@@ -163,12 +165,54 @@ The application includes a cron job for RSVP reminders:
     {
       "path": "/api/cron/rsvp-reminders",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/notification-batches",
+      "schedule": "0 8 * * *"
     }
   ]
 }
 ```
 
-This runs every hour to check for events needing RSVP reminders.
+The first job runs hourly to check for events needing RSVP reminders. The second job runs daily at 08:00 UTC to process notification batches. Configure `CRON_SECRET`; Vercel Cron requests include it as a bearer token when the environment variable is present.
+
+## GitHub Pages Documentation Deployment
+
+The repository includes `.github/workflows/docs-pages.yml` to publish a static documentation site to GitHub Pages.
+
+### Repository-local setup
+
+- `bun run docs:build-pages` renders `app/docs` MDX content plus repository reference docs from `docs/` into `dist/docs-pages`.
+- The generated artifact includes `.nojekyll`, `sitemap.xml`, and `CNAME`.
+- The default docs domain is `openleague.dev`; override with `DOCS_PAGES_DOMAIN` if the domain changes.
+
+### GitHub configuration required
+
+1. In **Settings** → **Pages**, set **Build and deployment** to **GitHub Actions**.
+2. Add or verify the `openleague.dev` custom domain.
+3. Configure DNS records with the domain registrar.
+4. Enable and verify HTTPS after DNS propagation.
+5. Run the **Documentation Pages** workflow manually once, then rely on automatic deploys when docs change on `main`.
+
+These account, DNS, SSL, and Pages settings cannot be completed from repository code alone.
+
+## Deployment Tests
+
+Run the repository-local deployment checks before promoting a release:
+
+```bash
+bun run deployment:check
+bun run type-check
+bun run lint
+bun run test
+bun run build
+```
+
+`bun run deployment:check` validates the Vercel deployment configuration, required environment-variable documentation, cron coverage, security headers, and the GitHub Pages documentation build.
+
+The `.github/workflows/deployment-checks.yml` workflow runs the deployment readiness check on relevant pull requests and `main` changes.
+
+The `.github/workflows/uptime-monitoring.yml` workflow runs every 30 minutes and on demand. It executes `bun run uptime:check`, which checks the production app (`https://openl.app`) and documentation site (`https://openleague.dev`) by default. Manual runs can override targets with `UPTIME_CHECK_URLS`-style comma-separated URLs or `name=url` pairs.
 
 ## Alternative Deployment Options
 
@@ -284,16 +328,16 @@ docker run -p 3000:3000 --env-file .env.production openleague
 - **Vercel Function Logs**: Runtime logs and errors
 - **Neon Dashboard**: Database performance and connections
 - **Mailchimp Reports**: Email delivery and engagement
+- **GitHub Actions uptime checks**: Scheduled checks for `https://openl.app` and `https://openleague.dev`; workflow failures provide maintainer notifications through GitHub.
 
 ### Recommended Additional Monitoring
 
-```bash
-# Add to your monitoring stack
-- Error Tracking: Sentry
-- Uptime Monitoring: UptimeRobot or Pingdom
-- Performance: Vercel Speed Insights
-- User Analytics: Vercel Analytics or Google Analytics
-```
+- **Uptime monitoring**: Keep the scheduled GitHub Actions monitor enabled and optionally mirror checks in an external uptime vendor for SMS/on-call escalation.
+- **Performance monitoring**: Enable Vercel Analytics and Speed Insights for production; monitor Core Web Vitals and function duration.
+- **Error tracking**: Configure Sentry (or the selected vendor) with `NEXT_PUBLIC_SENTRY_DSN`, `SENTRY_ORG`, and `SENTRY_PROJECT`.
+- **Alerting**: Route uptime and error alerts to the maintainer notification channel.
+
+Vendor account creation, monitor activation, alert destinations, and production secrets are external setup tasks.
 
 ### Maintenance Tasks
 
