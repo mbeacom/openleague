@@ -45,7 +45,7 @@ const frameSrc = [
   ...(adsEnabled ? ["https://googleads.g.doubleclick.net", "https://tpc.googlesyndication.com", "https://www.google.com"] : []),
 ];
 
-const LONG_LIVED_CACHE_CONTROL = "public, max-age=31536000, immutable";
+const PUBLIC_ASSET_CACHE_CONTROL = "public, max-age=86400, stale-while-revalidate=31536000";
 const REVALIDATING_CACHE_CONTROL = "public, max-age=86400, stale-while-revalidate=604800";
 const SERVICE_WORKER_CACHE_CONTROL = "public, max-age=0, must-revalidate";
 const cacheControlHeader = (value: string) => [
@@ -85,11 +85,11 @@ const nextConfig: NextConfig = {
     return [
       {
         source: "/images/:path*",
-        headers: cacheControlHeader(LONG_LIVED_CACHE_CONTROL),
+        headers: cacheControlHeader(PUBLIC_ASSET_CACHE_CONTROL),
       },
       ...staticIconSources.map((source) => ({
         source,
-        headers: cacheControlHeader(LONG_LIVED_CACHE_CONTROL),
+        headers: cacheControlHeader(PUBLIC_ASSET_CACHE_CONTROL),
       })),
       {
         source: "/site.webmanifest",

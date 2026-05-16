@@ -17,13 +17,13 @@ describe('Next.js performance configuration', () => {
     expect(nextConfig.images?.minimumCacheTTL).toBeGreaterThanOrEqual(604800);
   });
 
-  it('adds long-lived caching for repository-local public image assets', async () => {
+  it('adds revalidating caching for repository-local public image assets', async () => {
     const headers = await getHeaders();
     const imageHeaders = headers.find((entry) => entry.source === '/images/:path*')?.headers;
 
     expect(imageHeaders).toContainEqual({
       key: 'Cache-Control',
-      value: 'public, max-age=31536000, immutable',
+      value: 'public, max-age=86400, stale-while-revalidate=31536000',
     });
   });
 
@@ -36,7 +36,7 @@ describe('Next.js performance configuration', () => {
 
     expect(iconHeaders).toContainEqual({
       key: 'Cache-Control',
-      value: 'public, max-age=31536000, immutable',
+      value: 'public, max-age=86400, stale-while-revalidate=31536000',
     });
     expect(manifestHeaders).toContainEqual({
       key: 'Cache-Control',
@@ -61,13 +61,13 @@ describe('Next.js performance configuration', () => {
     expect(csp).toContain("worker-src 'self'");
   });
 
-  it('configures Vercel CDN headers for immutable assets and service worker updates', () => {
+  it('configures Vercel CDN headers for revalidating assets and service worker updates', () => {
     const imageHeaders = vercelConfig.headers.find((entry) => entry.source === '/images/(.*)')?.headers;
     const serviceWorkerHeaders = vercelConfig.headers.find((entry) => entry.source === '/sw.js')?.headers;
 
     expect(imageHeaders).toContainEqual({
       key: 'Cache-Control',
-      value: 'public, max-age=31536000, immutable',
+      value: 'public, max-age=86400, stale-while-revalidate=31536000',
     });
     expect(serviceWorkerHeaders).toContainEqual({
       key: 'Cache-Control',

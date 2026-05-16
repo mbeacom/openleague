@@ -1,7 +1,7 @@
 const CACHE_NAMESPACE = 'openleague-landing-cache';
 // Bump patch for precache/offline asset changes, minor for routing strategy changes,
 // and major for cache privacy boundary changes or incompatible service-worker behavior.
-const CACHE_SCHEMA_VERSION = 'v1.0.0';
+const CACHE_SCHEMA_VERSION = 'v1.1.0';
 const CACHE_PREFIX = `${CACHE_NAMESPACE}-${CACHE_SCHEMA_VERSION}`;
 const STATIC_CACHE = `${CACHE_PREFIX}-static`;
 const RUNTIME_CACHE = `${CACHE_PREFIX}-runtime`;
@@ -17,6 +17,7 @@ const PRECACHE_URLS = [
   '/android-chrome-512x512.png',
   '/apple-touch-icon.png',
   '/images/logo.webp',
+  '/images/alt-logo-transparent-background.png',
 ];
 
 const PUBLIC_NAVIGATION_PREFIXES = [
@@ -38,10 +39,13 @@ const PUBLIC_NAVIGATION_PREFIXES = [
 
 const CACHE_FIRST_ASSET_PREFIXES = [
   '/_next/static/',
+];
+
+const STALE_WHILE_REVALIDATE_ASSET_PREFIXES = [
   '/images/',
 ];
 
-const CACHE_FIRST_EXACT_ASSETS = new Set([
+const STALE_WHILE_REVALIDATE_EXACT_ASSETS = new Set([
   '/site.webmanifest',
   '/favicon.ico',
   '/favicon-16x16.png',
@@ -60,7 +64,12 @@ function isPublicNavigationPath(pathname) {
 }
 
 function isCacheFirstAsset(pathname) {
-  return CACHE_FIRST_EXACT_ASSETS.has(pathname) || CACHE_FIRST_ASSET_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+  return CACHE_FIRST_ASSET_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+}
+
+function isStaleWhileRevalidateAsset(pathname) {
+  return STALE_WHILE_REVALIDATE_EXACT_ASSETS.has(pathname) ||
+    STALE_WHILE_REVALIDATE_ASSET_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 }
 
 async function cacheFirst(request) {
@@ -78,6 +87,42 @@ async function cacheFirst(request) {
   return response;
 }
 
+async function staleWhileRevalidate(request) {
+  const cache = await caches.open(STATIC_CACHE);
+  const cachedResponse = await cache.match(request);
+  const fetchAndCache = fetch(request)
+    .then(async (response) => {
+      if (response.ok) {
+        try {
+          await cache.put(request, response.clone());
+        } catch {
+          // A cache write failure should not block a fresh network response.
+        }
+      }
+
+      return response;
+    })
+    .catch(() => undefined);
+
+  if (cachedResponse) {
+    return cachedResponse;
+  }
+
+  const networkResponse = await fetchAndCache;
+  if (networkResponse) {
+    return networkResponse;
+  }
+
+  return new Response('Offline', {
+    status: 503,
+    statusText: 'Service Unavailable',
+    headers: {
+      'Content-Type': 'text/plain; charset=utf-8',
+      'Cache-Control': 'no-store',
+    },
+  });
+}
+
 async function networkFirstNavigation(request, url) {
   const isPublicPage = isPublicNavigationPath(url.pathname);
 
@@ -90,15 +135,17 @@ async function networkFirstNavigation(request, url) {
 
     return response;
   } catch {
+    const offlineFallback = await caches.match('/offline.html');
+
     if (isPublicPage) {
       const cachedPage = await caches.match(request);
-      const offlineFallback = await caches.match('/offline.html');
       if (cachedPage) {
         return cachedPage;
       }
-      if (offlineFallback) {
-        return offlineFallback;
-      }
+    }
+
+    if (offlineFallback) {
+      return offlineFallback;
     }
 
     return new Response('Offline', {
@@ -156,5 +203,10 @@ self.addEventListener('fetch', (event) => {
 
   if (isCacheFirstAsset(url.pathname)) {
     event.respondWith(cacheFirst(request));
+    return;
+  }
+
+  if (isStaleWhileRevalidateAsset(url.pathname)) {
+    event.respondWith(staleWhileRevalidate(request));
   }
 });
