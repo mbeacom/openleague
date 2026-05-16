@@ -17,6 +17,8 @@ const float = keyframes`
 export default function FinalCTA() {
   return (
     <Box
+      component="section"
+      aria-labelledby="final-cta-heading"
       sx={{
         py: { xs: 10, md: 14 },
         background: 'linear-gradient(135deg, #0D47A1 0%, #1976D2 50%, #42A5F5 100%)',
@@ -41,6 +43,7 @@ export default function FinalCTA() {
     >
       {/* Decorative orbital elements - inspired by logo */}
       <Box
+        aria-hidden="true"
         sx={{
           position: 'absolute',
           top: -80,
@@ -56,6 +59,7 @@ export default function FinalCTA() {
         }}
       />
       <Box
+        aria-hidden="true"
         sx={{
           position: 'absolute',
           top: '20%',
@@ -72,6 +76,7 @@ export default function FinalCTA() {
         }}
       />
       <Box
+        aria-hidden="true"
         sx={{
           position: 'absolute',
           bottom: -100,
@@ -88,6 +93,7 @@ export default function FinalCTA() {
         }}
       />
       <Box
+        aria-hidden="true"
         sx={{
           position: 'absolute',
           bottom: '30%',
@@ -113,6 +119,7 @@ export default function FinalCTA() {
           }}
         >
           <Typography
+            id="final-cta-heading"
             variant="sectionTitle"
             component="h2"
             sx={{

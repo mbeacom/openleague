@@ -59,6 +59,8 @@ export default function HeroSection() {
 
   return (
     <Box
+      component="section"
+      aria-labelledby="landing-hero-heading"
       sx={{
         background: `
           linear-gradient(135deg, rgba(13, 71, 161, 0.03) 0%, rgba(25, 118, 210, 0.05) 50%, rgba(248, 250, 251, 1) 100%),
@@ -133,6 +135,7 @@ export default function HeroSection() {
 
           {/* Hero Title with staggered reveal */}
           <Typography
+            id="landing-hero-heading"
             variant="heroTitle"
             component="h1"
             sx={{

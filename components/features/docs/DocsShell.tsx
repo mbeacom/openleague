@@ -134,7 +134,7 @@ export default function DocsShell({ children, pathname }: DocsShellProps) {
           </Stack>
         </Paper>
 
-        <Box component="main" sx={{ minWidth: 0 }}>
+        <Box component="main" id="main-content" tabIndex={-1} sx={{ minWidth: 0 }}>
           <Breadcrumbs
             aria-label="documentation breadcrumbs"
             separator={<NavigateNextIcon fontSize="small" />}
