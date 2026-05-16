@@ -9,6 +9,7 @@ interface MockImageProps {
   width: number;
   height: number;
   priority?: boolean;
+  loading?: 'lazy' | 'eager';
 }
 
 interface MockLinkProps {
@@ -19,7 +20,7 @@ interface MockLinkProps {
 
 // Mock Next.js Image component
 vi.mock('next/image', () => ({
-  default: ({ src, alt, width, height, priority }: MockImageProps) => (
+  default: ({ src, alt, width, height, priority, loading }: MockImageProps) => (
     // eslint-disable-next-line @next/next/no-img-element
     <img
       src={src}
@@ -27,6 +28,7 @@ vi.mock('next/image', () => ({
       width={width}
       height={height}
       data-priority={priority}
+      loading={loading}
     />
   ),
 }));
@@ -142,6 +144,18 @@ describe('Logo Component', () => {
       renderWithTheme(<Logo priority />);
       const logo = screen.getByAltText('OpenLeague Logo');
       expect(logo).toHaveAttribute('data-priority', 'true');
+    });
+
+    it('lazy loads non-priority logo images', () => {
+      renderWithTheme(<Logo />);
+      const logo = screen.getByAltText('OpenLeague Logo');
+      expect(logo).toHaveAttribute('loading', 'lazy');
+    });
+
+    it('does not set lazy loading when priority is specified', () => {
+      renderWithTheme(<Logo priority />);
+      const logo = screen.getByAltText('OpenLeague Logo');
+      expect(logo).not.toHaveAttribute('loading');
     });
   });
 

@@ -14,13 +14,15 @@ vi.mock('next/link', () => ({
 }));
 
 vi.mock('next/image', () => ({
-  default: ({ src, alt, fill, priority, style }: { src: string; alt: string; fill?: boolean; priority?: boolean; style?: React.CSSProperties; [key: string]: unknown }) => (
+  default: ({ src, alt, fill, priority, style, loading, sizes }: { src: string; alt: string; fill?: boolean; priority?: boolean; style?: React.CSSProperties; loading?: 'lazy' | 'eager'; sizes?: string; [key: string]: unknown }) => (
     // eslint-disable-next-line @next/next/no-img-element
     <img
       src={src}
       alt={alt}
       data-fill={fill}
       data-priority={priority}
+      loading={loading}
+      sizes={sizes}
       style={style}
     />
   ),
@@ -136,6 +138,30 @@ describe('BrandLogo', () => {
       renderWithTheme(<BrandLogo />);
       const logo = screen.getByAltText('OpenLeague - Simplify Your Season');
       expect(logo).toHaveAttribute('data-priority', 'false');
+    });
+
+    it('lazy loads non-priority brand images', () => {
+      renderWithTheme(<BrandLogo />);
+      const logo = screen.getByAltText('OpenLeague - Simplify Your Season');
+      expect(logo).toHaveAttribute('loading', 'lazy');
+    });
+
+    it('omits lazy loading when priority is specified', () => {
+      renderWithTheme(<BrandLogo priority />);
+      const logo = screen.getByAltText('OpenLeague - Simplify Your Season');
+      expect(logo).not.toHaveAttribute('loading');
+    });
+
+    it('sets sizes for fill images to avoid oversized responsive requests', () => {
+      renderWithTheme(<BrandLogo size="medium" />);
+      const logo = screen.getByAltText('OpenLeague - Simplify Your Season');
+      expect(logo).toHaveAttribute('sizes', '44px');
+    });
+
+    it('sets sizes for full logo variants', () => {
+      renderWithTheme(<BrandLogo variant="full" size="xlarge" />);
+      const logo = screen.getByAltText('OpenLeague - Simplify Your Season');
+      expect(logo).toHaveAttribute('sizes', '360px');
     });
   });
 

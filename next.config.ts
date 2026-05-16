@@ -45,10 +45,32 @@ const frameSrc = [
   ...(adsEnabled ? ["https://googleads.g.doubleclick.net", "https://tpc.googlesyndication.com", "https://www.google.com"] : []),
 ];
 
+const PUBLIC_ASSET_CACHE_CONTROL = "public, max-age=86400, stale-while-revalidate=31536000";
+const REVALIDATING_CACHE_CONTROL = "public, max-age=86400, stale-while-revalidate=604800";
+const SERVICE_WORKER_CACHE_CONTROL = "public, max-age=0, must-revalidate";
+const cacheControlHeader = (value: string) => [
+  {
+    key: "Cache-Control",
+    value,
+  },
+];
+const staticIconSources = [
+  "/favicon.ico",
+  "/favicon-16x16.png",
+  "/favicon-32x32.png",
+  "/android-chrome-192x192.png",
+  "/android-chrome-512x512.png",
+  "/apple-touch-icon.png",
+];
+
 const nextConfig: NextConfig = {
   pageExtensions: ["js", "jsx", "md", "mdx", "ts", "tsx"],
   compiler: {
     emotion: true,
+  },
+  images: {
+    formats: ["image/avif", "image/webp"],
+    minimumCacheTTL: 604800,
   },
   modularizeImports: {
     "@mui/material": {
@@ -61,6 +83,26 @@ const nextConfig: NextConfig = {
   // Security headers (Requirement 10.6)
   async headers() {
     return [
+      {
+        source: "/images/:path*",
+        headers: cacheControlHeader(PUBLIC_ASSET_CACHE_CONTROL),
+      },
+      ...staticIconSources.map((source) => ({
+        source,
+        headers: cacheControlHeader(PUBLIC_ASSET_CACHE_CONTROL),
+      })),
+      {
+        source: "/site.webmanifest",
+        headers: cacheControlHeader(REVALIDATING_CACHE_CONTROL),
+      },
+      {
+        source: "/offline.html",
+        headers: cacheControlHeader(REVALIDATING_CACHE_CONTROL),
+      },
+      {
+        source: "/sw.js",
+        headers: cacheControlHeader(SERVICE_WORKER_CACHE_CONTROL),
+      },
       {
         source: "/:path*",
         headers: [
@@ -102,6 +144,7 @@ const nextConfig: NextConfig = {
               `img-src ${imgSrc.join(" ")}`,
               `connect-src ${connectSrc.join(" ")}`,
               `frame-src ${frameSrc.join(" ")}`,
+              "worker-src 'self'",
               "frame-ancestors 'self'",
               "base-uri 'self'",
               "form-action 'self'",

@@ -171,7 +171,7 @@ export async function migrateTeamToLeague(
     }
 
     // Use transaction to ensure data consistency
-    const result = await prisma.$transaction(async (tx) => {
+    const migrationResult = await prisma.$transaction(async (tx) => {
       // Create league
       const league = await tx.league.create({
         data: {
@@ -203,18 +203,40 @@ export async function migrateTeamToLeague(
       });
 
       // Update all team's events to belong to league
-      await tx.event.updateMany({
+      const migratedEvents = await tx.event.updateMany({
         where: { teamId: validated.teamId },
         data: { leagueId: league.id },
       });
 
       // Update all team's players to belong to league
-      await tx.player.updateMany({
+      const migratedPlayers = await tx.player.updateMany({
         where: { teamId: validated.teamId },
         data: { leagueId: league.id },
       });
 
-      return { league, team };
+      return {
+        league,
+        team,
+        migratedEventCount: migratedEvents.count,
+        migratedPlayerCount: migratedPlayers.count,
+      };
+    });
+
+    // Log audit event
+    await logAuditEvent({
+      action: AuditAction.TEAM_MIGRATED,
+      userId,
+      leagueId: migrationResult.league.id,
+      teamId: migrationResult.team.id,
+      details: {
+        teamName: teamMember.team.name,
+        leagueName: migrationResult.league.name,
+        sport: teamMember.team.sport,
+        season: teamMember.team.season,
+        backfilledEvents: migrationResult.migratedEventCount,
+        backfilledPlayers: migrationResult.migratedPlayerCount,
+      },
+      timestamp: new Date(),
     });
 
     revalidatePath("/");
@@ -222,7 +244,10 @@ export async function migrateTeamToLeague(
 
     return {
       success: true,
-      data: result,
+      data: {
+        league: migrationResult.league,
+        team: migrationResult.team,
+      },
     };
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -1540,10 +1565,11 @@ export async function exportLeagueRosterCSV(
       };
     }
 
+    const isAdmin = await verifyLeagueAdmin(leagueId, userId);
     const { generateLeagueRosterCSV, getReportMetadata } = await import("@/lib/services/league-reporting");
 
     const [csv, metadata] = await Promise.all([
-      generateLeagueRosterCSV(leagueId),
+      generateLeagueRosterCSV(leagueId, { includeAdminFields: isAdmin }),
       getReportMetadata(leagueId),
     ]);
 
@@ -1558,6 +1584,44 @@ export async function exportLeagueRosterCSV(
     return {
       success: false,
       error: "Failed to export league roster. Please try again.",
+    };
+  }
+}
+
+/**
+ * Export league roster as PDF
+ */
+export async function exportLeagueRosterPDF(
+  leagueId: string
+): Promise<ActionResult<{ pdfBase64: string; filename: string }>> {
+  try {
+    const userId = await requireUserId();
+
+    const hasAccess = await hasLeagueAccess(userId, leagueId);
+    if (!hasAccess) {
+      return {
+        success: false,
+        error: "Unauthorized - you are not a member of this league",
+      };
+    }
+
+    const isAdmin = await verifyLeagueAdmin(leagueId, userId);
+    const { generateLeagueRosterPDF, getReportMetadata } = await import("@/lib/services/league-reporting");
+
+    const metadata = await getReportMetadata(leagueId);
+    const pdfBase64 = await generateLeagueRosterPDF(leagueId, { includeAdminFields: isAdmin }, metadata);
+
+    const filename = `${metadata.leagueName.replace(/\s+/g, '_')}_roster_${format(new Date(), 'yyyy-MM-dd')}.pdf`;
+
+    return {
+      success: true,
+      data: { pdfBase64, filename },
+    };
+  } catch (error) {
+    console.error("Error exporting league roster PDF:", error);
+    return {
+      success: false,
+      error: "Failed to export league roster PDF. Please try again.",
     };
   }
 }
@@ -1603,6 +1667,43 @@ export async function exportLeagueScheduleCSV(
 }
 
 /**
+ * Export league schedule as PDF
+ */
+export async function exportLeagueSchedulePDF(
+  leagueId: string
+): Promise<ActionResult<{ pdfBase64: string; filename: string }>> {
+  try {
+    const userId = await requireUserId();
+
+    const hasAccess = await hasLeagueAccess(userId, leagueId);
+    if (!hasAccess) {
+      return {
+        success: false,
+        error: "Unauthorized - you are not a member of this league",
+      };
+    }
+
+    const { generateLeagueSchedulePDF, getReportMetadata } = await import("@/lib/services/league-reporting");
+
+    const metadata = await getReportMetadata(leagueId);
+    const pdfBase64 = await generateLeagueSchedulePDF(leagueId, metadata);
+
+    const filename = `${metadata.leagueName.replace(/\s+/g, '_')}_schedule_${format(new Date(), 'yyyy-MM-dd')}.pdf`;
+
+    return {
+      success: true,
+      data: { pdfBase64, filename },
+    };
+  } catch (error) {
+    console.error("Error exporting league schedule PDF:", error);
+    return {
+      success: false,
+      error: "Failed to export league schedule PDF. Please try again.",
+    };
+  }
+}
+
+/**
  * Export attendance report by division as CSV
  */
 export async function exportAttendanceReportCSV(
@@ -1643,6 +1744,43 @@ export async function exportAttendanceReportCSV(
 }
 
 /**
+ * Export attendance report by division as PDF
+ */
+export async function exportAttendanceReportPDF(
+  leagueId: string
+): Promise<ActionResult<{ pdfBase64: string; filename: string }>> {
+  try {
+    const userId = await requireUserId();
+
+    const hasAccess = await hasLeagueAccess(userId, leagueId);
+    if (!hasAccess) {
+      return {
+        success: false,
+        error: "Unauthorized - you are not a member of this league",
+      };
+    }
+
+    const { generateAttendanceReportByDivisionPDF, getReportMetadata } = await import("@/lib/services/league-reporting");
+
+    const metadata = await getReportMetadata(leagueId);
+    const pdfBase64 = await generateAttendanceReportByDivisionPDF(leagueId, metadata);
+
+    const filename = `${metadata.leagueName.replace(/\s+/g, '_')}_attendance_${format(new Date(), 'yyyy-MM-dd')}.pdf`;
+
+    return {
+      success: true,
+      data: { pdfBase64, filename },
+    };
+  } catch (error) {
+    console.error("Error exporting attendance report PDF:", error);
+    return {
+      success: false,
+      error: "Failed to export attendance report PDF. Please try again.",
+    };
+  }
+}
+
+/**
  * Export financial report as CSV
  */
 export async function exportFinancialReportCSV(
@@ -1678,6 +1816,43 @@ export async function exportFinancialReportCSV(
     return {
       success: false,
       error: "Failed to export financial report. Please try again.",
+    };
+  }
+}
+
+/**
+ * Export financial report as PDF
+ */
+export async function exportFinancialReportPDF(
+  leagueId: string
+): Promise<ActionResult<{ pdfBase64: string; filename: string }>> {
+  try {
+    const userId = await requireUserId();
+
+    const isAdmin = await verifyLeagueAdmin(leagueId, userId);
+    if (!isAdmin) {
+      return {
+        success: false,
+        error: "Unauthorized - you must be a league admin",
+      };
+    }
+
+    const { generateFinancialReportPDF, getReportMetadata } = await import("@/lib/services/league-reporting");
+
+    const metadata = await getReportMetadata(leagueId);
+    const pdfBase64 = await generateFinancialReportPDF(leagueId, metadata);
+
+    const filename = `${metadata.leagueName.replace(/\s+/g, '_')}_financial_${format(new Date(), 'yyyy-MM-dd')}.pdf`;
+
+    return {
+      success: true,
+      data: { pdfBase64, filename },
+    };
+  } catch (error) {
+    console.error("Error exporting financial report PDF:", error);
+    return {
+      success: false,
+      error: "Failed to export financial report PDF. Please try again.",
     };
   }
 }
