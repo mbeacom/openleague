@@ -35,11 +35,13 @@ export default function LayoutProvider({ children }: LayoutProviderProps) {
   // Routes that already render their own marketing layout components
   const marketingRouteGroupPaths = [
     '/features',
+    '/pricing',
     '/about',
     '/contact',
     '/get-started',
     '/blog',
     '/careers',
+    '/rinks',
     '/privacy',
     '/terms',
     '/cookies',
