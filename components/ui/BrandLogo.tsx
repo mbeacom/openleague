@@ -143,7 +143,6 @@ export default function BrandLogo({
         style={{ objectFit: 'contain' }}
         priority={priority}
         loading={priority ? undefined : 'lazy'}
-        sizes={`${width}px`}
       />
     </Box>
   );
