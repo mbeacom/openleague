@@ -36,6 +36,9 @@ EMAIL_FROM="noreply@yourdomain.com"
 
 # Cron job authentication
 CRON_SECRET="your-generated-cron-secret-here"
+
+# Protected uptime/readiness checks
+UPTIME_CHECK_TOKEN="your-generated-uptime-token-here"
 ```
 
 #### How to Set Environment Variables in Vercel
@@ -54,6 +57,7 @@ CRON_SECRET="your-generated-cron-secret-here"
 - **Verify domains**: Ensure `EMAIL_FROM` domain is verified in Mailchimp
 - **Test locally**: Run `bun run validate-env` and `bun run deployment:check` before deployment
 - **Separate environments**: Do not reuse production database URLs, email API keys, or cron secrets in Preview/Staging
+- **Scoped uptime token**: Store the same `UPTIME_CHECK_TOKEN` in Vercel and the GitHub Actions secret used by the uptime workflow. It is only sent to the protected `health` target, not to public URLs.
 
 ### Database Setup
 
@@ -212,7 +216,9 @@ bun run build
 
 The `.github/workflows/deployment-checks.yml` workflow runs the deployment readiness check on relevant pull requests and `main` changes.
 
-The `.github/workflows/uptime-monitoring.yml` workflow runs every 30 minutes and on demand. It executes `bun run uptime:check`, which checks the production app (`https://openl.app`) and documentation site (`https://openleague.dev`) by default. Manual runs can override targets with `UPTIME_CHECK_URLS`-style comma-separated URLs or `name=url` pairs.
+The `.github/workflows/uptime-monitoring.yml` workflow runs every 30 minutes and on demand. It executes `bun run uptime:check`, which checks the production app (`https://openl.app`), documentation site (`https://openleague.dev`), and protected app readiness endpoint (`https://openl.app/api/health`). Manual runs can override targets with `UPTIME_CHECK_URLS`-style comma-separated URLs or `name=url` pairs.
+
+Set `UPTIME_CHECK_TOKEN` as both a Vercel environment variable and a GitHub Actions secret. The workflow marks only the `health` target as authenticated via `UPTIME_CHECK_AUTH_TARGETS=health`, and `UPTIME_CHECK_AUTH_ALLOWED_HOSTS=openl.app,openhockey.app` prevents the token from being sent to public pages or arbitrary manual URLs.
 
 ## Alternative Deployment Options
 
@@ -328,7 +334,7 @@ docker run -p 3000:3000 --env-file .env.production openleague
 - **Vercel Function Logs**: Runtime logs and errors
 - **Neon Dashboard**: Database performance and connections
 - **Mailchimp Reports**: Email delivery and engagement
-- **GitHub Actions uptime checks**: Scheduled checks for `https://openl.app` and `https://openleague.dev`; workflow failures provide maintainer notifications through GitHub.
+- **GitHub Actions uptime checks**: Scheduled checks for `https://openl.app`, `https://openleague.dev`, and the token-protected `https://openl.app/api/health`; workflow failures provide maintainer notifications through GitHub.
 
 ### Recommended Additional Monitoring
 

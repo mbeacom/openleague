@@ -17,9 +17,13 @@ export interface UptimeCheckResult extends UptimeTarget {
 export interface UptimeCheckOptions {
   fetcher?: typeof fetch;
   timeoutMs?: number;
+  authToken?: string;
+  authTargetNames?: Set<string>;
+  authAllowedHosts?: Set<string>;
 }
 
 export const DEFAULT_UPTIME_TIMEOUT_MS = 10_000;
+export const DEFAULT_AUTH_ALLOWED_HOSTS = new Set(['openl.app', 'openhockey.app']);
 
 export const DEFAULT_UPTIME_TARGETS: UptimeTarget[] = [
   { name: 'main', url: 'https://openl.app' },
@@ -29,6 +33,14 @@ export const DEFAULT_UPTIME_TARGETS: UptimeTarget[] = [
 function normalizeTargetName(value: string, index: number): string {
   const normalized = value.trim().toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-|-$/g, '');
   return normalized || `target-${index + 1}`;
+}
+
+function normalizeOptionalName(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-|-$/g, '');
+}
+
+function normalizeHost(value: string): string {
+  return value.trim().toLowerCase().replace(/\.$/u, '');
 }
 
 function normalizeTargetUrl(value: string): string {
@@ -72,24 +84,87 @@ export function parseTimeoutMs(value = process.env.UPTIME_CHECK_TIMEOUT_MS): num
   return Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : DEFAULT_UPTIME_TIMEOUT_MS;
 }
 
+export function parseAuthTargetNames(value = process.env.UPTIME_CHECK_AUTH_TARGETS): Set<string> {
+  return new Set(
+    (value ?? '')
+      .split(',')
+      .map(normalizeOptionalName)
+      .filter(Boolean),
+  );
+}
+
+export function parseAuthAllowedHosts(value = process.env.UPTIME_CHECK_AUTH_ALLOWED_HOSTS): Set<string> {
+  const hosts = (value ?? '')
+    .split(',')
+    .map(normalizeHost)
+    .filter(Boolean);
+
+  return hosts.length > 0 ? new Set(hosts) : new Set(DEFAULT_AUTH_ALLOWED_HOSTS);
+}
+
+function requiresAuthentication(target: UptimeTarget, authTargetNames: Set<string>): boolean {
+  return authTargetNames.has(normalizeTargetName(target.name, 0));
+}
+
+function isAuthAllowedForTarget(target: UptimeTarget, authAllowedHosts: Set<string>): boolean {
+  try {
+    return authAllowedHosts.has(new URL(target.url).hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
 export async function checkUptimeTarget(
   target: UptimeTarget,
   options: UptimeCheckOptions = {},
 ): Promise<UptimeCheckResult> {
   const fetcher = options.fetcher ?? fetch;
   const timeoutMs = options.timeoutMs ?? DEFAULT_UPTIME_TIMEOUT_MS;
+  const authTargetNames = options.authTargetNames ?? new Set<string>();
+  const authAllowedHosts = options.authAllowedHosts ?? DEFAULT_AUTH_ALLOWED_HOSTS;
+  const shouldAuthenticate = requiresAuthentication(target, authTargetNames);
   const startedAt = Date.now();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  if (shouldAuthenticate && !isAuthAllowedForTarget(target, authAllowedHosts)) {
+    clearTimeout(timeout);
+
+    return {
+      ...target,
+      ok: false,
+      durationMs: Date.now() - startedAt,
+      checkedAt: new Date().toISOString(),
+      error: 'authenticated target host is not allowed',
+    };
+  }
+
+  if (shouldAuthenticate && !options.authToken?.trim()) {
+    clearTimeout(timeout);
+
+    return {
+      ...target,
+      ok: false,
+      durationMs: Date.now() - startedAt,
+      checkedAt: new Date().toISOString(),
+      error: 'missing uptime check token',
+    };
+  }
+
+  const headers: Record<string, string> = {
+    'User-Agent': 'OpenLeague-Uptime-Monitor/1.0',
+  };
+
+  if (shouldAuthenticate) {
+    headers.Authorization = `Bearer ${options.authToken?.trim()}`;
+  }
 
   try {
     const response = await fetcher(target.url, {
       method: 'GET',
       redirect: 'follow',
       signal: controller.signal,
-      headers: {
-        'User-Agent': 'OpenLeague-Uptime-Monitor/1.0',
-      },
+      headers,
     });
 
     const durationMs = Date.now() - startedAt;
@@ -130,7 +205,12 @@ export function formatUptimeResult(result: UptimeCheckResult): string {
 
 async function main() {
   const targets = parseUptimeTargets();
-  const results = await checkUptimeTargets(targets, { timeoutMs: parseTimeoutMs() });
+  const results = await checkUptimeTargets(targets, {
+    authAllowedHosts: parseAuthAllowedHosts(),
+    authTargetNames: parseAuthTargetNames(),
+    authToken: process.env.UPTIME_CHECK_TOKEN,
+    timeoutMs: parseTimeoutMs(),
+  });
 
   for (const result of results) {
     console.log(formatUptimeResult(result));

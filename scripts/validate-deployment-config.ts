@@ -71,7 +71,7 @@ export async function validateDeploymentConfig(rootDir = process.cwd()): Promise
     requireCondition(failures, envExample.includes(`${envName}=`), `.env.example must document ${envName}.`);
   }
 
-  for (const envName of ['UPTIME_CHECK_URLS', 'UPTIME_CHECK_TIMEOUT_MS']) {
+  for (const envName of ['UPTIME_CHECK_TOKEN', 'UPTIME_CHECK_URLS', 'UPTIME_CHECK_AUTH_TARGETS', 'UPTIME_CHECK_AUTH_ALLOWED_HOSTS', 'UPTIME_CHECK_TIMEOUT_MS']) {
     requireCondition(failures, envExample.includes(envName), `.env.example must document optional ${envName}.`);
   }
 
@@ -80,12 +80,14 @@ export async function validateDeploymentConfig(rootDir = process.cwd()): Promise
   const uptimeWorkflowPath = path.join(rootDir, '.github', 'workflows', 'uptime-monitoring.yml');
   const docsBuildScriptPath = path.join(rootDir, 'scripts', 'build-docs-pages.ts');
   const uptimeCheckScriptPath = path.join(rootDir, 'scripts', 'check-uptime.ts');
+  const healthRoutePath = path.join(rootDir, 'app', 'api', 'health', 'route.ts');
 
   requireCondition(failures, existsSync(deploymentChecksWorkflowPath), 'Deployment checks workflow is required.');
   requireCondition(failures, existsSync(docsWorkflowPath), 'GitHub Pages docs workflow is required.');
   requireCondition(failures, existsSync(docsBuildScriptPath), 'Documentation Pages build script is required.');
   requireCondition(failures, existsSync(uptimeWorkflowPath), 'Scheduled uptime monitoring workflow is required.');
   requireCondition(failures, existsSync(uptimeCheckScriptPath), 'Uptime monitoring check script is required.');
+  requireCondition(failures, existsSync(healthRoutePath), 'Protected application health endpoint is required.');
 
   if (existsSync(docsWorkflowPath)) {
     const docsWorkflow = await readFile(docsWorkflowPath, 'utf8');
@@ -115,8 +117,8 @@ export async function validateDeploymentConfig(rootDir = process.cwd()): Promise
     const uptimeWorkflow = await readFile(uptimeWorkflowPath, 'utf8');
     requireCondition(
       failures,
-      includesAll(uptimeWorkflow, ['schedule:', 'bun run uptime:check', 'workflow_dispatch', 'UPTIME_CHECK_URLS']),
-      'Uptime monitoring workflow must run on a schedule and support manual target overrides.',
+      includesAll(uptimeWorkflow, ['schedule:', 'bun run uptime:check', 'workflow_dispatch', 'UPTIME_CHECK_URLS', 'UPTIME_CHECK_AUTH_TARGETS', 'UPTIME_CHECK_AUTH_ALLOWED_HOSTS', 'secrets.UPTIME_CHECK_TOKEN', '/api/health']),
+      'Uptime monitoring workflow must run on a schedule, support manual target overrides, and check the protected health endpoint.',
     );
   }
 
@@ -124,8 +126,17 @@ export async function validateDeploymentConfig(rootDir = process.cwd()): Promise
     const uptimeCheckScript = await readFile(uptimeCheckScriptPath, 'utf8');
     requireCondition(
       failures,
-      includesAll(uptimeCheckScript, ['https://openl.app', 'https://openleague.dev']),
-      'Uptime monitoring script must default to the main and documentation domains.',
+      includesAll(uptimeCheckScript, ['https://openl.app', 'https://openleague.dev', 'UPTIME_CHECK_TOKEN', 'UPTIME_CHECK_AUTH_TARGETS', 'UPTIME_CHECK_AUTH_ALLOWED_HOSTS', 'Authorization']),
+      'Uptime monitoring script must default to public domains and support scoped authenticated checks.',
+    );
+  }
+
+  if (existsSync(healthRoutePath)) {
+    const healthRoute = await readFile(healthRoutePath, 'utf8');
+    requireCondition(
+      failures,
+      includesAll(healthRoute, ['UPTIME_CHECK_TOKEN', 'timingSafeEqual', 'SELECT 1']),
+      'Protected application health endpoint must require a token and verify database readiness.',
     );
   }
 
