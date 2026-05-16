@@ -20,6 +20,36 @@ const PDF_LINE_HEIGHT = 14;
 const PDF_LINES_PER_PAGE = 49;
 const PDF_MAX_LINE_LENGTH = 110;
 
+const WIN_ANSI_SPECIAL_BYTES = new Map<string, number>([
+  ["€", 0x80],
+  ["‚", 0x82],
+  ["ƒ", 0x83],
+  ["„", 0x84],
+  ["…", 0x85],
+  ["†", 0x86],
+  ["‡", 0x87],
+  ["ˆ", 0x88],
+  ["‰", 0x89],
+  ["Š", 0x8a],
+  ["‹", 0x8b],
+  ["Œ", 0x8c],
+  ["Ž", 0x8e],
+  ["‘", 0x91],
+  ["’", 0x92],
+  ["“", 0x93],
+  ["”", 0x94],
+  ["•", 0x95],
+  ["–", 0x96],
+  ["—", 0x97],
+  ["˜", 0x98],
+  ["™", 0x99],
+  ["š", 0x9a],
+  ["›", 0x9b],
+  ["œ", 0x9c],
+  ["ž", 0x9e],
+  ["Ÿ", 0x9f],
+]);
+
 export function generateSimplePdfReportBase64({
   title,
   subtitle = [],
@@ -44,7 +74,7 @@ export function generateSimplePdfReportBase64({
     `<< /Type /Pages /Kids [${pageObjectNumbers.map((objectNumber) => `${objectNumber} 0 R`).join(" ")}] /Count ${pages.length} >>`
   );
 
-  objects.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+  objects.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>");
 
   pages.forEach((pageLines, index) => {
     const pageObjectNumber = 4 + index * 2;
@@ -100,10 +130,55 @@ function buildPdf(objects: string[]): string {
 }
 
 function escapePdfText(value: string): string {
-  return value
+  return Array.from(value.normalize("NFC"), (char) => {
+    const byte = getWinAnsiByte(char);
+
+    if (byte !== null) {
+      return escapePdfByte(byte);
+    }
+
+    const asciiFallback = getAsciiFallback(char);
+    if (asciiFallback.length > 0) {
+      return Array.from(asciiFallback, (fallbackChar) => escapePdfByte(fallbackChar.charCodeAt(0))).join("");
+    }
+
+    const codePoint = char.codePointAt(0)?.toString(16).toUpperCase().padStart(4, "0") ?? "FFFD";
+    return `[U+${codePoint}]`;
+  }).join("");
+}
+
+function getWinAnsiByte(char: string): number | null {
+  const codePoint = char.codePointAt(0);
+  if (codePoint === undefined) return null;
+
+  if (codePoint === 0x09 || (codePoint >= 0x20 && codePoint <= 0x7e)) {
+    return codePoint;
+  }
+
+  if (codePoint >= 0xa0 && codePoint <= 0xff) {
+    return codePoint;
+  }
+
+  return WIN_ANSI_SPECIAL_BYTES.get(char) ?? null;
+}
+
+function getAsciiFallback(char: string): string {
+  return char
     .normalize("NFKD")
-    .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, "?")
-    .replace(/([\\()])/g, "\\$1");
+    .replace(/\p{Mark}/gu, "")
+    .replace(/[^\x20-\x7E]/g, "");
+}
+
+function escapePdfByte(byte: number): string {
+  if (byte === 0x5c || byte === 0x28 || byte === 0x29) {
+    return `\\${String.fromCharCode(byte)}`;
+  }
+
+  if (byte >= 0x20 && byte <= 0x7e) {
+    return String.fromCharCode(byte);
+  }
+
+  return `\\${byte.toString(8).padStart(3, "0")}`;
 }
 
 function wrapLine(line: string, maxLength: number): string[] {
@@ -113,8 +188,9 @@ function wrapLine(line: string, maxLength: number): string[] {
   let remaining = line;
 
   while (remaining.length > maxLength) {
-    wrapped.push(remaining.slice(0, maxLength));
-    remaining = remaining.slice(maxLength);
+    const wrapAt = findWrapBoundary(remaining, maxLength);
+    wrapped.push(remaining.slice(0, wrapAt).trimEnd());
+    remaining = remaining.slice(wrapAt).trimStart();
   }
 
   if (remaining.length > 0) {
@@ -122,6 +198,15 @@ function wrapLine(line: string, maxLength: number): string[] {
   }
 
   return wrapped;
+}
+
+function findWrapBoundary(line: string, maxLength: number): number {
+  const candidate = line.slice(0, maxLength + 1);
+  const whitespaceMatches = Array.from(candidate.matchAll(/\s+/g))
+    .filter((match) => (match.index ?? 0) > 0 && (match.index ?? 0) < maxLength);
+  const lastWhitespace = whitespaceMatches.at(-1);
+
+  return lastWhitespace?.index ?? maxLength;
 }
 
 function chunk<T>(items: T[], size: number): T[][] {

@@ -21,6 +21,15 @@ interface FinancialIceTimeRequest {
     } | null;
 }
 
+interface LeagueReportMetadata {
+    leagueName: string;
+    sport: string;
+    teamCount: number;
+    playerCount: number;
+    eventCount: number;
+    generatedAt: Date;
+}
+
 const PENDING_ICE_TIME_STATUSES = new Set(["SUBMITTED", "UNDER_REVIEW"]);
 
 function buildCsvContent(headers: string[], rows: ReportCell[][]): string {
@@ -33,18 +42,20 @@ function buildCsvContent(headers: string[], rows: ReportCell[][]): string {
 async function generatePdfFromCsv(
     leagueId: string,
     reportTitle: string,
-    csv: string
+    csv: string,
+    metadata?: LeagueReportMetadata
 ): Promise<string> {
-    const metadata = await getReportMetadata(leagueId);
+    const reportMetadata = metadata ?? await getReportMetadata(leagueId);
     const lines = csvToPdfLines(csv);
 
     return generateSimplePdfReportBase64({
-        title: `${metadata.leagueName} - ${reportTitle}`,
+        title: `${reportMetadata.leagueName} - ${reportTitle}`,
         subtitle: [
-            `Sport: ${metadata.sport}`,
-            `Teams: ${metadata.teamCount} | Players: ${metadata.playerCount} | Events: ${metadata.eventCount}`,
+            `Sport: ${reportMetadata.sport}`,
+            `Teams: ${reportMetadata.teamCount} | Players: ${reportMetadata.playerCount} | Events: ${reportMetadata.eventCount}`,
         ],
         lines,
+        generatedAt: reportMetadata.generatedAt,
     });
 }
 
@@ -53,7 +64,39 @@ function csvToPdfLines(csv: string): string[] {
         .replace(/^\uFEFF/, '')
         .split(/\r?\n/)
         .filter((line) => line.trim().length > 0)
-        .map((line) => line.replace(/^"|"$/g, '').replace(/","/g, ' | ').replace(/,/g, ' | '));
+        .map((line) => parseCsvLine(line).join(' | '));
+}
+
+function parseCsvLine(line: string): string[] {
+    const cells: string[] = [];
+    let cell = '';
+    let inQuotes = false;
+
+    for (let index = 0; index < line.length; index += 1) {
+        const char = line[index];
+        const nextChar = line[index + 1];
+
+        if (char === '"') {
+            if (inQuotes && nextChar === '"') {
+                cell += '"';
+                index += 1;
+            } else {
+                inQuotes = !inQuotes;
+            }
+            continue;
+        }
+
+        if (char === ',' && !inQuotes) {
+            cells.push(cell);
+            cell = '';
+            continue;
+        }
+
+        cell += char;
+    }
+
+    cells.push(cell);
+    return cells;
 }
 
 function summarizeIceTimeRequests(requests: FinancialIceTimeRequest[]) {
@@ -200,10 +243,11 @@ export async function generateLeagueRosterCSV(
  */
 export async function generateLeagueRosterPDF(
     leagueId: string,
-    options: LeagueRosterCSVOptions = {}
+    options: LeagueRosterCSVOptions = {},
+    metadata?: LeagueReportMetadata
 ): Promise<string> {
     const csv = await generateLeagueRosterCSV(leagueId, options);
-    return generatePdfFromCsv(leagueId, "League Roster Report", csv);
+    return generatePdfFromCsv(leagueId, "League Roster Report", csv, metadata);
 }
 
 /**
@@ -273,9 +317,12 @@ export async function generateLeagueScheduleCSV(leagueId: string): Promise<strin
 /**
  * Generate PDF content for league schedule.
  */
-export async function generateLeagueSchedulePDF(leagueId: string): Promise<string> {
+export async function generateLeagueSchedulePDF(
+    leagueId: string,
+    metadata?: LeagueReportMetadata
+): Promise<string> {
     const csv = await generateLeagueScheduleCSV(leagueId);
-    return generatePdfFromCsv(leagueId, "League Schedule Report", csv);
+    return generatePdfFromCsv(leagueId, "League Schedule Report", csv, metadata);
 }
 
 /**
@@ -352,9 +399,12 @@ export async function generateAttendanceReportByDivisionCSV(leagueId: string): P
 /**
  * Generate PDF content for attendance report by division.
  */
-export async function generateAttendanceReportByDivisionPDF(leagueId: string): Promise<string> {
+export async function generateAttendanceReportByDivisionPDF(
+    leagueId: string,
+    metadata?: LeagueReportMetadata
+): Promise<string> {
     const csv = await generateAttendanceReportByDivisionCSV(leagueId);
-    return generatePdfFromCsv(leagueId, "Attendance by Division Report", csv);
+    return generatePdfFromCsv(leagueId, "Attendance by Division Report", csv, metadata);
 }
 
 /**
@@ -499,15 +549,18 @@ export async function generateFinancialReportCSV(leagueId: string): Promise<stri
 /**
  * Generate PDF content for financial report.
  */
-export async function generateFinancialReportPDF(leagueId: string): Promise<string> {
+export async function generateFinancialReportPDF(
+    leagueId: string,
+    metadata?: LeagueReportMetadata
+): Promise<string> {
     const csv = await generateFinancialReportCSV(leagueId);
-    return generatePdfFromCsv(leagueId, "Financial Activity Report", csv);
+    return generatePdfFromCsv(leagueId, "Financial Activity Report", csv, metadata);
 }
 
 /**
  * Get report metadata for a league
  */
-export async function getReportMetadata(leagueId: string) {
+export async function getReportMetadata(leagueId: string): Promise<LeagueReportMetadata> {
     const [league, teamCount, playerCount, eventCount] = await Promise.all([
         prisma.league.findUnique({
             where: { id: leagueId },

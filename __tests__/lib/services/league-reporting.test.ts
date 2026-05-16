@@ -3,9 +3,11 @@ import {
     generateLeagueRosterCSV,
     generateLeagueRosterPDF,
     generateLeagueScheduleCSV,
+    generateLeagueSchedulePDF,
     generateAttendanceReportByDivisionCSV,
     generateFinancialReportCSV,
 } from '@/lib/services/league-reporting';
+import { generateSimplePdfReportBase64 } from '@/lib/utils/pdf-report';
 import { prisma } from '@/lib/db/prisma';
 
 vi.mock('@/lib/db/prisma', () => ({
@@ -240,6 +242,75 @@ describe('League Reporting Service', () => {
 
             expect(csv).toContain('Team A');
             expect(csv).toContain('Team B');
+        });
+
+        it('should preserve commas inside quoted CSV cells when generating schedule PDFs', async () => {
+            const leagueId = 'league-1';
+
+            vi.mocked(prisma.event.findMany).mockResolvedValue([
+                {
+                    id: 'event-1',
+                    title: 'Travel Practice',
+                    type: 'PRACTICE',
+                    startAt: new Date('2024-06-01T10:00:00Z'),
+                    location: 'Springfield, IL',
+                    opponent: null,
+                    notes: 'Bring water, please',
+                    team: {
+                        name: 'Team A',
+                        division: {
+                            name: 'Division 1',
+                        },
+                    },
+                    homeTeam: null,
+                    awayTeam: null,
+                },
+            ] as unknown as Awaited<ReturnType<typeof prisma.event.findMany>>);
+            vi.mocked(prisma.league.findUnique).mockResolvedValue({
+                name: 'Test League',
+                sport: 'HOCKEY',
+            } as unknown as Awaited<ReturnType<typeof prisma.league.findUnique>>);
+            vi.mocked(prisma.team.count).mockResolvedValue(1);
+            vi.mocked(prisma.player.count).mockResolvedValue(0);
+            vi.mocked(prisma.event.count).mockResolvedValue(1);
+
+            const pdfBase64 = await generateLeagueSchedulePDF(leagueId);
+            const pdfText = Buffer.from(pdfBase64, 'base64').toString('utf8');
+
+            expect(pdfText).toContain('Springfield, IL');
+            expect(pdfText).toContain('Bring) Tj');
+            expect(pdfText).toContain('(water, please) Tj');
+            expect(pdfText).not.toContain('Springfield | IL');
+            expect(pdfText).not.toContain('Bring water | please');
+        });
+    });
+
+    describe('generateSimplePdfReportBase64', () => {
+        it('should encode WinAnsi characters and keep explicit fallbacks for unsupported Unicode', () => {
+            const pdfBase64 = generateSimplePdfReportBase64({
+                title: 'München € Report',
+                lines: ['Team 张伟 plays at Café — Rink'],
+                generatedAt: new Date('2024-01-01T00:00:00Z'),
+            });
+            const pdfText = Buffer.from(pdfBase64, 'base64').toString('utf8');
+
+            expect(pdfText).toContain('M\\374nchen \\200 Report');
+            expect(pdfText).toContain('Caf\\351 \\227 Rink');
+            expect(pdfText).toContain('[U+5F20][U+4F1F]');
+            expect(pdfText).not.toContain('M?nchen');
+        });
+
+        it('should wrap long lines at word boundaries when possible', () => {
+            const pdfBase64 = generateSimplePdfReportBase64({
+                title: 'Wrap Test',
+                lines: [`${'A'.repeat(108)} word boundary wrapping should avoid mid-word breaks`],
+                generatedAt: new Date('2024-01-01T00:00:00Z'),
+            });
+            const pdfText = Buffer.from(pdfBase64, 'base64').toString('utf8');
+
+            expect(pdfText).toContain(`${'A'.repeat(108)}) Tj`);
+            expect(pdfText).toContain('(word boundary wrapping should avoid mid-word breaks) Tj');
+            expect(pdfText).not.toContain('wo) Tj');
         });
     });
 

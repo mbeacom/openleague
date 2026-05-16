@@ -1583,10 +1583,8 @@ export async function exportLeagueRosterPDF(
     const isAdmin = await verifyLeagueAdmin(leagueId, userId);
     const { generateLeagueRosterPDF, getReportMetadata } = await import("@/lib/services/league-reporting");
 
-    const [pdfBase64, metadata] = await Promise.all([
-      generateLeagueRosterPDF(leagueId, { includeAdminFields: isAdmin }),
-      getReportMetadata(leagueId),
-    ]);
+    const metadata = await getReportMetadata(leagueId);
+    const pdfBase64 = await generateLeagueRosterPDF(leagueId, { includeAdminFields: isAdmin }, metadata);
 
     const filename = `${metadata.leagueName.replace(/\s+/g, '_')}_roster_${format(new Date(), 'yyyy-MM-dd')}.pdf`;
 
@@ -1662,10 +1660,8 @@ export async function exportLeagueSchedulePDF(
 
     const { generateLeagueSchedulePDF, getReportMetadata } = await import("@/lib/services/league-reporting");
 
-    const [pdfBase64, metadata] = await Promise.all([
-      generateLeagueSchedulePDF(leagueId),
-      getReportMetadata(leagueId),
-    ]);
+    const metadata = await getReportMetadata(leagueId);
+    const pdfBase64 = await generateLeagueSchedulePDF(leagueId, metadata);
 
     const filename = `${metadata.leagueName.replace(/\s+/g, '_')}_schedule_${format(new Date(), 'yyyy-MM-dd')}.pdf`;
 
@@ -1741,10 +1737,8 @@ export async function exportAttendanceReportPDF(
 
     const { generateAttendanceReportByDivisionPDF, getReportMetadata } = await import("@/lib/services/league-reporting");
 
-    const [pdfBase64, metadata] = await Promise.all([
-      generateAttendanceReportByDivisionPDF(leagueId),
-      getReportMetadata(leagueId),
-    ]);
+    const metadata = await getReportMetadata(leagueId);
+    const pdfBase64 = await generateAttendanceReportByDivisionPDF(leagueId, metadata);
 
     const filename = `${metadata.leagueName.replace(/\s+/g, '_')}_attendance_${format(new Date(), 'yyyy-MM-dd')}.pdf`;
 
@@ -1820,10 +1814,8 @@ export async function exportFinancialReportPDF(
 
     const { generateFinancialReportPDF, getReportMetadata } = await import("@/lib/services/league-reporting");
 
-    const [pdfBase64, metadata] = await Promise.all([
-      generateFinancialReportPDF(leagueId),
-      getReportMetadata(leagueId),
-    ]);
+    const metadata = await getReportMetadata(leagueId);
+    const pdfBase64 = await generateFinancialReportPDF(leagueId, metadata);
 
     const filename = `${metadata.leagueName.replace(/\s+/g, '_')}_financial_${format(new Date(), 'yyyy-MM-dd')}.pdf`;
 
