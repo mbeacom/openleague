@@ -1,11 +1,16 @@
 import { existsSync } from 'node:fs';
 import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { Marked, type RendererObject } from 'marked';
 import { docsHome, docsItems, docsSections, type DocsNavItem } from '../lib/docs/config';
 
 const rootDir = process.cwd();
 const outputDir = path.join(rootDir, 'dist', 'docs-pages');
-const docsDomain = process.env.DOCS_PAGES_DOMAIN?.trim() || 'openleague.dev';
+export const DEFAULT_DOCS_PAGES_DOMAIN = 'openleague.dev';
+export const DOCS_PAGES_DOMAIN_ENV = 'DOCS_PAGES_DOMAIN';
+
+const docsDomain = process.env[DOCS_PAGES_DOMAIN_ENV]?.trim() || DEFAULT_DOCS_PAGES_DOMAIN;
 
 interface StaticPage {
   title: string;
@@ -23,110 +28,57 @@ function escapeHtml(value: string): string {
     .replaceAll("'", '&#39;');
 }
 
-function renderInlineMarkdown(value: string): string {
-  return escapeHtml(value)
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, label: string, href: string) => {
-      const docsPath = href.replace(/^\/docs\/?/, '');
-      const safeHref = href.startsWith('/docs') ? `/${docsPath}` : href;
-      return `<a href="${safeHref}">${label}</a>`;
-    });
+function staticDocsUrlForHref(href: string): string {
+  const relative = href.replace(/^\/docs\/?/u, '').replace(/^\/+|\/+$/gu, '');
+  return relative ? `/${relative}/` : '/';
+}
+
+function normalizeMarkdownHref(href: string): string {
+  const trimmed = href.trim();
+
+  if (!trimmed) {
+    return '#';
+  }
+
+  if (trimmed.startsWith('/docs')) {
+    return staticDocsUrlForHref(trimmed);
+  }
+
+  if (trimmed.startsWith('/') || trimmed.startsWith('#')) {
+    return trimmed;
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+    return ['http:', 'https:', 'mailto:', 'tel:'].includes(parsed.protocol) ? parsed.toString() : '#';
+  } catch {
+    return '#';
+  }
 }
 
 function stripMdxMetadata(content: string): string {
   return content.replace(/^export const metadata = \{[\s\S]*?\};\s*/u, '').trim();
 }
 
-function renderMarkdown(markdown: string): string {
-  const lines = stripMdxMetadata(markdown).split(/\r?\n/);
-  const html: string[] = [];
-  const paragraph: string[] = [];
-  let listType: 'ul' | 'ol' | null = null;
-  let inCodeBlock = false;
-  let codeLines: string[] = [];
+const docsMarkdownRenderer: RendererObject<string, string> = {
+  link({ href, title, tokens }) {
+    const label = this.parser.parseInline(tokens);
+    const safeHref = escapeHtml(normalizeMarkdownHref(href));
+    const titleAttribute = title ? ` title="${escapeHtml(title)}"` : '';
 
-  const flushParagraph = () => {
-    if (paragraph.length === 0) return;
-    html.push(`<p>${renderInlineMarkdown(paragraph.join(' '))}</p>`);
-    paragraph.length = 0;
-  };
+    return `<a href="${safeHref}"${titleAttribute}>${label}</a>`;
+  },
+};
 
-  const closeList = () => {
-    if (!listType) return;
-    html.push(`</${listType}>`);
-    listType = null;
-  };
+const docsMarkdown = new Marked({
+  async: false,
+  breaks: false,
+  gfm: true,
+  renderer: docsMarkdownRenderer,
+});
 
-  const openList = (type: 'ul' | 'ol') => {
-    if (listType === type) return;
-    closeList();
-    html.push(`<${type}>`);
-    listType = type;
-  };
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-
-    if (trimmed.startsWith('```')) {
-      flushParagraph();
-      closeList();
-      if (inCodeBlock) {
-        html.push(`<pre><code>${escapeHtml(codeLines.join('\n'))}</code></pre>`);
-        codeLines = [];
-        inCodeBlock = false;
-      } else {
-        inCodeBlock = true;
-      }
-      continue;
-    }
-
-    if (inCodeBlock) {
-      codeLines.push(line);
-      continue;
-    }
-
-    if (!trimmed) {
-      flushParagraph();
-      closeList();
-      continue;
-    }
-
-    const heading = /^(#{1,6})\s+(.+)$/.exec(trimmed);
-    if (heading) {
-      flushParagraph();
-      closeList();
-      const level = heading[1].length;
-      html.push(`<h${level}>${renderInlineMarkdown(heading[2])}</h${level}>`);
-      continue;
-    }
-
-    const unordered = /^[-*]\s+(.+)$/.exec(trimmed);
-    if (unordered) {
-      flushParagraph();
-      openList('ul');
-      html.push(`<li>${renderInlineMarkdown(unordered[1])}</li>`);
-      continue;
-    }
-
-    const ordered = /^\d+\.\s+(.+)$/.exec(trimmed);
-    if (ordered) {
-      flushParagraph();
-      openList('ol');
-      html.push(`<li>${renderInlineMarkdown(ordered[1])}</li>`);
-      continue;
-    }
-
-    paragraph.push(trimmed);
-  }
-
-  flushParagraph();
-  closeList();
-
-  if (inCodeBlock) {
-    html.push(`<pre><code>${escapeHtml(codeLines.join('\n'))}</code></pre>`);
-  }
-
-  return html.join('\n');
+export function renderMarkdown(markdown: string): string {
+  return docsMarkdown.parse(stripMdxMetadata(markdown), { async: false });
 }
 
 function pagePathForHref(href: string): string {
@@ -137,8 +89,7 @@ function pagePathForHref(href: string): string {
 function wrapPage(page: StaticPage, navItems: DocsNavItem[]): string {
   const navLinks = navItems
     .map((item) => {
-      const href = item.href === '/docs' ? '/' : `/${item.href.replace(/^\/docs\/?/, '')}/`;
-      return `<a href="${href}">${escapeHtml(item.title)}</a>`;
+      return `<a href="${staticDocsUrlForHref(item.href)}">${escapeHtml(item.title)}</a>`;
     })
     .join('');
 
@@ -180,7 +131,7 @@ async function buildAppDocsPages(): Promise<StaticPage[]> {
   const pages: StaticPage[] = [];
   const cards = docsSections
     .map((section) => section.items
-      .map((item) => `<article class="card"><p class="muted">${escapeHtml(section.title)}</p><h2><a href="/${item.href.replace(/^\/docs\/?/, '')}/">${escapeHtml(item.title)}</a></h2><p>${escapeHtml(item.description)}</p></article>`)
+      .map((item) => `<article class="card"><p class="muted">${escapeHtml(section.title)}</p><h2><a href="${staticDocsUrlForHref(item.href)}">${escapeHtml(item.title)}</a></h2><p>${escapeHtml(item.description)}</p></article>`)
       .join('\n'))
     .join('\n');
 
@@ -263,14 +214,16 @@ async function main() {
   await writeFile(
     path.join(outputDir, 'sitemap.xml'),
     `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${pages
-      .map((page) => `  <url><loc>https://${docsDomain}${page.href === '/docs' ? '/' : page.href.replace(/^\/docs/u, '')}</loc></url>`)
+      .map((page) => `  <url><loc>https://${docsDomain}${staticDocsUrlForHref(page.href)}</loc></url>`)
       .join('\n')}\n</urlset>\n`,
   );
 
   console.log(`Built ${pages.length} documentation pages in ${path.relative(rootDir, outputDir)}`);
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}

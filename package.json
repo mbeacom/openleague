@@ -74,6 +74,7 @@
     "eslint-config-next": "16.2.0",
     "eslint-plugin-react": "^7.37.5",
     "jsdom": "^29.1.1",
+    "marked": "^18.0.3",
     "postcss": "^8.5.14",
     "prisma": "^7.8.0",
     "tailwindcss": "^4.3.0",

@@ -24,6 +24,13 @@ export interface UptimeCheckOptions {
 
 export const DEFAULT_UPTIME_TIMEOUT_MS = 10_000;
 export const DEFAULT_AUTH_ALLOWED_HOSTS = new Set(['openl.app', 'openhockey.app']);
+export const UPTIME_CHECK_ENV_NAMES = {
+  authAllowedHosts: 'UPTIME_CHECK_AUTH_ALLOWED_HOSTS',
+  authTargetNames: 'UPTIME_CHECK_AUTH_TARGETS',
+  timeoutMs: 'UPTIME_CHECK_TIMEOUT_MS',
+  token: 'UPTIME_CHECK_TOKEN',
+  urls: 'UPTIME_CHECK_URLS',
+} as const;
 
 export const DEFAULT_UPTIME_TARGETS: UptimeTarget[] = [
   { name: 'main', url: 'https://openl.app' },
@@ -53,7 +60,7 @@ function normalizeTargetUrl(value: string): string {
   return parsed.toString().replace(/\/$/u, '');
 }
 
-export function parseUptimeTargets(value = process.env.UPTIME_CHECK_URLS): UptimeTarget[] {
+export function parseUptimeTargets(value = process.env[UPTIME_CHECK_ENV_NAMES.urls]): UptimeTarget[] {
   if (!value?.trim()) {
     return [...DEFAULT_UPTIME_TARGETS];
   }
@@ -79,12 +86,12 @@ export function parseUptimeTargets(value = process.env.UPTIME_CHECK_URLS): Uptim
     });
 }
 
-export function parseTimeoutMs(value = process.env.UPTIME_CHECK_TIMEOUT_MS): number {
+export function parseTimeoutMs(value = process.env[UPTIME_CHECK_ENV_NAMES.timeoutMs]): number {
   const timeoutMs = Number.parseInt(value ?? '', 10);
   return Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : DEFAULT_UPTIME_TIMEOUT_MS;
 }
 
-export function parseAuthTargetNames(value = process.env.UPTIME_CHECK_AUTH_TARGETS): Set<string> {
+export function parseAuthTargetNames(value = process.env[UPTIME_CHECK_ENV_NAMES.authTargetNames]): Set<string> {
   return new Set(
     (value ?? '')
       .split(',')
@@ -93,7 +100,7 @@ export function parseAuthTargetNames(value = process.env.UPTIME_CHECK_AUTH_TARGE
   );
 }
 
-export function parseAuthAllowedHosts(value = process.env.UPTIME_CHECK_AUTH_ALLOWED_HOSTS): Set<string> {
+export function parseAuthAllowedHosts(value = process.env[UPTIME_CHECK_ENV_NAMES.authAllowedHosts]): Set<string> {
   const hosts = (value ?? '')
     .split(',')
     .map(normalizeHost)
@@ -208,7 +215,7 @@ async function main() {
   const results = await checkUptimeTargets(targets, {
     authAllowedHosts: parseAuthAllowedHosts(),
     authTargetNames: parseAuthTargetNames(),
-    authToken: process.env.UPTIME_CHECK_TOKEN,
+    authToken: process.env[UPTIME_CHECK_ENV_NAMES.token],
     timeoutMs: parseTimeoutMs(),
   });
 

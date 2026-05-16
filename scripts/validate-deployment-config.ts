@@ -2,6 +2,8 @@ import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { DEFAULT_DOCS_PAGES_DOMAIN, DOCS_PAGES_DOMAIN_ENV } from './build-docs-pages';
+import { DEFAULT_AUTH_ALLOWED_HOSTS, DEFAULT_UPTIME_TARGETS, UPTIME_CHECK_ENV_NAMES } from './check-uptime';
 
 interface VercelConfig {
   framework?: string;
@@ -33,6 +35,16 @@ function hasHeader(vercel: VercelConfig, key: string): boolean {
   return Boolean(vercel.headers?.some((group) => group.headers?.some((header) => header.key?.toLowerCase() === key.toLowerCase())));
 }
 
+function hasHeaderValue(vercel: VercelConfig, key: string, valueSnippet: string): boolean {
+  return Boolean(vercel.headers?.some((group) => group.headers?.some((header) => (
+    header.key?.toLowerCase() === key.toLowerCase() && header.value?.includes(valueSnippet)
+  ))));
+}
+
+function workflowUsesPinnedAction(workflow: string, actionName: string): boolean {
+  return new RegExp(`uses:\\s+${actionName}@[a-f0-9]{40}\\b`, 'u').test(workflow);
+}
+
 function includesAll(value: string, snippets: string[]): boolean {
   return snippets.every((snippet) => value.includes(snippet));
 }
@@ -59,9 +71,15 @@ export async function validateDeploymentConfig(rootDir = process.cwd()): Promise
     'Vercel cron must process notification batches daily.',
   );
 
-  for (const header of ['Strict-Transport-Security', 'X-Content-Type-Options', 'Referrer-Policy']) {
+  for (const header of ['Strict-Transport-Security', 'X-Content-Type-Options', 'Referrer-Policy', 'Content-Security-Policy']) {
     requireCondition(failures, hasHeader(vercel, header), `vercel.json must configure ${header}.`);
   }
+
+  requireCondition(
+    failures,
+    hasHeaderValue(vercel, 'Content-Security-Policy', "frame-ancestors 'self'"),
+    'vercel.json Content-Security-Policy must explicitly restrict frame ancestors.',
+  );
 
   for (const script of ['build', 'start', 'type-check', 'lint', 'test', 'validate-env', 'docs:build-pages', 'uptime:check']) {
     requireCondition(failures, Boolean(packageJson.scripts?.[script]), `package.json must define a ${script} script.`);
@@ -71,7 +89,7 @@ export async function validateDeploymentConfig(rootDir = process.cwd()): Promise
     requireCondition(failures, envExample.includes(`${envName}=`), `.env.example must document ${envName}.`);
   }
 
-  for (const envName of ['UPTIME_CHECK_TOKEN', 'UPTIME_CHECK_URLS', 'UPTIME_CHECK_AUTH_TARGETS', 'UPTIME_CHECK_AUTH_ALLOWED_HOSTS', 'UPTIME_CHECK_TIMEOUT_MS']) {
+  for (const envName of [DOCS_PAGES_DOMAIN_ENV, ...Object.values(UPTIME_CHECK_ENV_NAMES)]) {
     requireCondition(failures, envExample.includes(envName), `.env.example must document optional ${envName}.`);
   }
 
@@ -96,6 +114,14 @@ export async function validateDeploymentConfig(rootDir = process.cwd()): Promise
       includesAll(docsWorkflow, ['actions/configure-pages', 'actions/upload-pages-artifact', 'actions/deploy-pages', 'bun run docs:build-pages']),
       'GitHub Pages workflow must build, upload, and deploy the documentation artifact.',
     );
+
+    for (const actionName of ['actions/configure-pages', 'actions/upload-pages-artifact', 'actions/deploy-pages']) {
+      requireCondition(
+        failures,
+        workflowUsesPinnedAction(docsWorkflow, actionName),
+        `GitHub Pages workflow must pin ${actionName} to an immutable commit SHA.`,
+      );
+    }
   }
 
   if (existsSync(deploymentChecksWorkflowPath)) {
@@ -109,7 +135,7 @@ export async function validateDeploymentConfig(rootDir = process.cwd()): Promise
 
   if (existsSync(docsBuildScriptPath)) {
     const docsBuildScript = await readFile(docsBuildScriptPath, 'utf8');
-    requireCondition(failures, docsBuildScript.includes('openleague.dev'), 'Documentation build script must configure the openleague.dev custom domain.');
+    requireCondition(failures, DEFAULT_DOCS_PAGES_DOMAIN === 'openleague.dev', 'Documentation build script must configure the openleague.dev custom domain.');
     requireCondition(failures, docsBuildScript.includes('CNAME'), 'Documentation build script must emit a CNAME file for GitHub Pages.');
   }
 
@@ -122,14 +148,15 @@ export async function validateDeploymentConfig(rootDir = process.cwd()): Promise
     );
   }
 
-  if (existsSync(uptimeCheckScriptPath)) {
-    const uptimeCheckScript = await readFile(uptimeCheckScriptPath, 'utf8');
-    requireCondition(
-      failures,
-      includesAll(uptimeCheckScript, ['https://openl.app', 'https://openleague.dev', 'UPTIME_CHECK_TOKEN', 'UPTIME_CHECK_AUTH_TARGETS', 'UPTIME_CHECK_AUTH_ALLOWED_HOSTS', 'Authorization']),
-      'Uptime monitoring script must default to public domains and support scoped authenticated checks.',
-    );
-  }
+  requireCondition(
+    failures,
+    DEFAULT_UPTIME_TARGETS.some((target) => target.url === 'https://openl.app')
+      && DEFAULT_UPTIME_TARGETS.some((target) => target.url === 'https://openleague.dev')
+      && DEFAULT_AUTH_ALLOWED_HOSTS.has('openl.app')
+      && DEFAULT_AUTH_ALLOWED_HOSTS.has('openhockey.app')
+      && Object.values(UPTIME_CHECK_ENV_NAMES).includes('UPTIME_CHECK_TOKEN'),
+    'Uptime monitoring script must default to public domains and support scoped authenticated checks.',
+  );
 
   if (existsSync(healthRoutePath)) {
     const healthRoute = await readFile(healthRoutePath, 'utf8');
