@@ -40,6 +40,8 @@ const dashFlow = keyframes`
 export default function HowItWorks() {
   return (
     <Box
+      component="section"
+      aria-labelledby="how-it-works-heading"
       sx={{
         py: { xs: 10, md: 14 },
         background: `
@@ -51,6 +53,7 @@ export default function HowItWorks() {
       <Container maxWidth="lg">
         <Box sx={{ textAlign: 'center', mb: 10 }}>
           <Typography
+            id="how-it-works-heading"
             variant="sectionTitle"
             component="h2"
             sx={{

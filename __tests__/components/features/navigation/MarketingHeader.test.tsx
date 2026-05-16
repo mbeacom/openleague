@@ -48,11 +48,13 @@ describe('MarketingHeader', () => {
       const logo = screen.getByTestId('logo');
       expect(logo).toHaveAttribute('data-size', 'large');
       expect(logo).toHaveAttribute('data-priority', 'true');
+      expect(screen.getByRole('banner')).toBeInTheDocument();
     });
 
     it('renders all navigation links', () => {
       renderWithTheme(<MarketingHeader />);
 
+      expect(screen.getByRole('navigation', { name: /primary marketing navigation/i })).toBeInTheDocument();
       expect(screen.getByRole('link', { name: 'Features' })).toHaveAttribute('href', '/features');
       expect(screen.getByRole('link', { name: 'Pricing' })).toHaveAttribute('href', '/pricing');
       expect(screen.getByRole('link', { name: 'About' })).toHaveAttribute('href', '/about');
@@ -88,6 +90,43 @@ describe('MarketingHeader', () => {
       expect(logo).toBeInTheDocument();
       // Logo component renders OpenLeague text when showText is true
       expect(screen.getByText('OpenLeague')).toBeInTheDocument();
+    });
+
+    it('opens an accessible mobile navigation drawer on small screens', () => {
+      const originalMatchMedia = window.matchMedia;
+
+      Object.defineProperty(window, 'matchMedia', {
+        writable: true,
+        value: vi.fn().mockImplementation((query: string) => ({
+          matches: query.includes('max-width'),
+          media: query,
+          onchange: null,
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+          dispatchEvent: vi.fn(),
+        })),
+      });
+
+      try {
+        renderWithTheme(<MarketingHeader />);
+
+        const menuButton = screen.getByRole('button', { name: /open navigation menu/i });
+        expect(menuButton).toHaveAttribute('aria-expanded', 'false');
+
+        fireEvent.click(menuButton);
+
+        expect(screen.getByRole('dialog', { name: /marketing navigation menu/i })).toBeInTheDocument();
+        expect(screen.getByRole('navigation', { name: /mobile marketing navigation/i })).toBeInTheDocument();
+        expect(menuButton).toHaveAttribute('aria-expanded', 'true');
+        expect(screen.getByRole('link', { name: 'Features' })).toHaveAttribute('href', '/features');
+      } finally {
+        Object.defineProperty(window, 'matchMedia', {
+          writable: true,
+          value: originalMatchMedia,
+        });
+      }
     });
   });
 

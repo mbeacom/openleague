@@ -44,19 +44,19 @@ export default function MarketingHeader() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
 
-  // Only hide navbar initially on homepage
   const isHomepage = pathname === '/';
+  const isTransparent = isHomepage && !isScrolled;
 
   // Hide navbar completely on auth pages (they have their own logos)
   const isAuthPage = AUTH_PATHNAMES.includes(pathname);
 
-  // Track scroll position to show/hide navbar
+  // Track scroll position to transition the homepage header from transparent to solid.
   useEffect(() => {
     const handleScroll = () => {
-      // Show navbar after scrolling down 100px (only matters on homepage)
       setIsScrolled(window.scrollY > 100);
     };
 
+    handleScroll();
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
@@ -70,21 +70,27 @@ export default function MarketingHeader() {
     setMobileMenuOpen(!mobileMenuOpen);
   };
 
+  const isActiveHref = (href: string) => (
+    pathname === href || (href !== '/' && pathname.startsWith(`${href}/`))
+  );
+
   return (
     <>
       <AppBar
+        component="header"
         position="fixed"
         elevation={0}
         sx={{
-          bgcolor: isScrolled ? 'background.paper' : 'transparent',
-          borderBottom: isScrolled ? '2px solid' : 0,
+          bgcolor: isTransparent ? 'transparent' : 'background.paper',
+          borderBottom: isTransparent ? 0 : '2px solid',
           borderColor: 'rgba(13, 71, 161, 0.08)',
-          backdropFilter: isScrolled ? 'blur(12px)' : 'none',
-          backgroundColor: isScrolled ? 'rgba(255, 255, 255, 0.95)' : 'transparent',
-          boxShadow: isScrolled ? '0 4px 12px rgba(13, 71, 161, 0.08)' : 'none',
-          // Only hide navbar on homepage initially, show on all other pages
-          transform: isHomepage && !isScrolled ? 'translateY(-100%)' : 'translateY(0)',
-          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          backdropFilter: isTransparent ? 'none' : 'blur(12px)',
+          backgroundColor: isTransparent ? 'transparent' : 'rgba(255, 255, 255, 0.95)',
+          boxShadow: isTransparent ? 'none' : '0 4px 12px rgba(13, 71, 161, 0.08)',
+          transition: 'background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          '@media (prefers-reduced-motion: reduce)': {
+            transition: 'none',
+          },
         }}
       >
       <Container maxWidth="lg">
@@ -112,12 +118,19 @@ export default function MarketingHeader() {
 
           {/* Desktop Navigation */}
           {!isMobile ? (
-            <Stack direction="row" spacing={1} alignItems="center">
+            <Stack
+              component="nav"
+              aria-label="Primary marketing navigation"
+              direction="row"
+              spacing={1}
+              alignItems="center"
+            >
               {navigationLinks.map((link) => (
                 <Button
                   key={link.href}
                   component={Link}
                   href={link.href}
+                  aria-current={isActiveHref(link.href) ? 'page' : undefined}
                   color="inherit"
                   sx={{
                     color: 'text.primary',
@@ -177,7 +190,9 @@ export default function MarketingHeader() {
             <>
               <IconButton
                 color="inherit"
-                aria-label="open menu"
+                aria-label={mobileMenuOpen ? 'close navigation menu' : 'open navigation menu'}
+                aria-controls="marketing-mobile-menu"
+                aria-expanded={mobileMenuOpen}
                 edge="end"
                 onClick={handleDrawerToggle}
                 sx={{
@@ -193,6 +208,13 @@ export default function MarketingHeader() {
                 anchor="right"
                 open={mobileMenuOpen}
                 onClose={handleDrawerToggle}
+                slotProps={{
+                  paper: {
+                    id: 'marketing-mobile-menu',
+                    role: 'dialog',
+                    'aria-label': 'Marketing navigation menu',
+                  },
+                }}
                 sx={{
                   '& .MuiDrawer-paper': {
                     width: 280,
@@ -201,16 +223,17 @@ export default function MarketingHeader() {
                 }}
               >
                 <Box sx={{ display: 'flex', justifyContent: 'flex-end', px: 2, pb: 1 }}>
-                  <IconButton onClick={handleDrawerToggle}>
+                  <IconButton onClick={handleDrawerToggle} aria-label="close menu">
                     <CloseIcon />
                   </IconButton>
                 </Box>
-                <List sx={{ px: 2 }}>
+                <List component="nav" aria-label="Mobile marketing navigation" sx={{ px: 2 }}>
                   {navigationLinks.map((link) => (
                     <ListItem key={link.href} disablePadding sx={{ mb: 1 }}>
                       <ListItemButton
                         component={Link}
                         href={link.href}
+                        aria-current={isActiveHref(link.href) ? 'page' : undefined}
                         onClick={handleDrawerToggle}
                         sx={{
                           borderRadius: 2,
@@ -273,28 +296,6 @@ export default function MarketingHeader() {
         </Toolbar>
       </Container>
     </AppBar>
-
-    {/* Floating menu button for mobile - only visible on homepage when navbar is hidden */}
-    {isMobile && isHomepage && !isScrolled && (
-      <IconButton
-        onClick={handleDrawerToggle}
-        sx={{
-          position: 'fixed',
-          top: 16,
-          right: 16,
-          zIndex: 1100,
-          bgcolor: 'background.paper',
-          boxShadow: 2,
-          '&:hover': {
-            bgcolor: 'background.paper',
-            boxShadow: 4,
-          },
-        }}
-        aria-label="open menu"
-      >
-        <MenuIcon />
-      </IconButton>
-    )}
     </>
   );
 }

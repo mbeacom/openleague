@@ -139,6 +139,7 @@ export default function BrandLogo({
         src={imagePath}
         alt={LOGO_ALT_TEXT}
         fill
+        sizes={`${width}px`}
         style={{ objectFit: 'contain' }}
         priority={priority}
       />

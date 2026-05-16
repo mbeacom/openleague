@@ -6,6 +6,7 @@ import { Box } from '@mui/material';
 import AdSlot from '@/components/features/ads/AdSlot';
 import MarketingHeader from '@/components/features/navigation/MarketingHeader';
 import MarketingFooter from '@/components/features/navigation/MarketingFooter';
+import SkipLink from '@/components/ui/SkipLink';
 import { ADS_CONFIG, isAdsEnabled } from '@/lib/config/ads';
 import './marketing.css';
 
@@ -35,9 +36,12 @@ export default function MarketingLayout({ children }: MarketingLayoutProps) {
           src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADS_CONFIG.adsenseClient}`}
         />
       )}
+      <SkipLink />
       <MarketingHeader />
       <Box
         component="main"
+        id="main-content"
+        tabIndex={-1}
         sx={{
           flexGrow: 1,
           display: 'flex',
