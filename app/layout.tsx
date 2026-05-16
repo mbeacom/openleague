@@ -6,6 +6,7 @@ import { SessionProvider } from "@/components/providers/SessionProvider";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import LayoutProvider from "@/components/providers/LayoutProvider";
 import AnalyticsProvider from "@/components/providers/AnalyticsProvider";
+import ServiceWorkerProvider from "@/components/providers/ServiceWorkerProvider";
 import ErrorBoundary from "@/components/ui/ErrorBoundary";
 import { ToastProvider } from "@/components/ui/Toast";
 import StructuredData from "@/components/ui/StructuredData";
@@ -154,6 +155,7 @@ export default function RootLayout({
             <ToastProvider>
               <SessionProvider>
                 <AnalyticsProvider />
+                <ServiceWorkerProvider />
                 <LayoutProvider>
                   {children}
                 </LayoutProvider>

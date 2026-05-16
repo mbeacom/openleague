@@ -1,6 +1,6 @@
 {
   "name": "openleague",
-  "version": "0.45.0",
+  "version": "0.49.0",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
@@ -23,7 +23,11 @@
     "db:generate": "prisma generate",
     "db:seed": "tsx prisma/seed.ts",
     "db:wake": "tsx scripts/wake-db.ts",
-    "validate-env": "tsx scripts/validate-env.js"
+    "validate-env": "tsx scripts/validate-env.js",
+    "docs:build-pages": "tsx scripts/build-docs-pages.ts",
+    "uptime:check": "tsx scripts/check-uptime.ts",
+    "validate-deployment-config": "tsx scripts/validate-deployment-config.ts",
+    "deployment:check": "bun run validate-deployment-config && bun run docs:build-pages"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -70,6 +74,7 @@
     "eslint-config-next": "16.2.0",
     "eslint-plugin-react": "^7.37.5",
     "jsdom": "^29.1.1",
+    "marked": "^18.0.3",
     "postcss": "^8.5.14",
     "prisma": "^7.8.0",
     "tailwindcss": "^4.3.0",

@@ -175,6 +175,7 @@ export default function Logo({
       width={width}
       height={height}
       priority={priority}
+      loading={priority ? undefined : 'lazy'}
     />
   );
 

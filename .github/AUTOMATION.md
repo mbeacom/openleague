@@ -11,6 +11,8 @@ OpenLeague uses GitHub Actions to automate the entire release lifecycle, from ve
 | **Release** | Push to `main` | ![Release](https://github.com/mbeacom/openleague/workflows/Release/badge.svg) | Automated releases with semantic versioning |
 | **Tag Release** | Push tag `v*.*.*` | ![Tag Release](https://github.com/mbeacom/openleague/workflows/Tag%20Release/badge.svg) | Release from manual tags |
 | **Version Check** | PR to `main` | ![Version Check](https://github.com/mbeacom/openleague/workflows/Version%20Check/badge.svg) | Validate version bumps in PRs |
+| **Documentation Pages** | Docs changes on `main` | ![Documentation Pages](https://github.com/mbeacom/openleague/workflows/Documentation%20Pages/badge.svg) | Build and deploy static docs to GitHub Pages |
+| **Deployment Checks** | Deployment/docs PR changes | ![Deployment Checks](https://github.com/mbeacom/openleague/workflows/Deployment%20Checks/badge.svg) | Validate deployment config and docs artifact |
 
 ## Quick Start
 
@@ -102,11 +104,34 @@ gh pr merge --merge  # Auto-release triggers on merge
 2. Compares PR version with base branch version
 3. Validates version bump is valid and incremental
 4. Posts comment on PR with analysis:
-   - 🟢 Valid patch bump
-   - 🟡 Valid minor bump
-   - 🔴 Valid major bump
-   - ⚠️ Version unchanged
-   - ❌ Invalid version bump (fails CI)
+    - 🟢 Valid patch bump
+    - 🟡 Valid minor bump
+    - 🔴 Valid major bump
+    - ⚠️ Version unchanged
+    - ❌ Invalid version bump (fails CI)
+
+### 4. Documentation Pages Workflow
+
+**File**: `.github/workflows/docs-pages.yml`
+
+**Process**:
+
+1. Triggered by documentation changes on `main` or manual dispatch
+2. Installs dependencies with Bun using the lockfile
+3. Runs `bun run docs:build-pages`
+4. Uploads `dist/docs-pages` as a GitHub Pages artifact
+5. Deploys the artifact through GitHub Pages
+
+### 5. Deployment Checks Workflow
+
+**File**: `.github/workflows/deployment-checks.yml`
+
+**Process**:
+
+1. Triggered by deployment, documentation, cron, or workflow changes
+2. Installs dependencies with Bun using the lockfile
+3. Runs `bun run deployment:check`
+4. Fails when Vercel config, environment docs, cron coverage, or docs artifact generation drift
 
 ## Release Configuration
 

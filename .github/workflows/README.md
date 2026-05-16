@@ -67,6 +67,28 @@ git push origin v1.2.3
 - Must follow semantic versioning format (X.Y.Z)
 - Warns if version is unchanged
 
+### 4. Documentation Pages Workflow (`docs-pages.yml`)
+
+**Trigger**: Push to `main` that changes documentation sources, or manual dispatch
+
+**Purpose**: Builds and deploys the static documentation site to GitHub Pages
+
+**Features**:
+- Generates a GitHub Pages artifact with `bun run docs:build-pages`
+- Publishes `app/docs` content and repository reference docs from `docs/`
+- Includes `.nojekyll`, `sitemap.xml`, and the `openleague.dev` CNAME
+
+### 5. Deployment Checks Workflow (`deployment-checks.yml`)
+
+**Trigger**: Pull requests or `main` pushes that change deployment, docs, cron, or workflow files
+
+**Purpose**: Validates repository-local deployment readiness before hosting changes merge
+
+**Features**:
+- Verifies Vercel build/install commands, security headers, and cron schedules
+- Verifies required environment variables are documented
+- Builds the GitHub Pages documentation artifact
+
 ## Release Configuration
 
 ### `release.yml`
@@ -268,6 +290,7 @@ gh pr merge --merge
 
 - [Release Template](./RELEASE_TEMPLATE.md) - Full release checklist
 - [Contributing Guide](../CONTRIBUTING.md) - Development workflow
+- [Deployment Guide](../../DEPLOYMENT.md) - Vercel, GitHub Pages, monitoring, and deployment checks
 - [Semantic Versioning](https://semver.org/) - Versioning specification
 - [Conventional Commits](https://www.conventionalcommits.org/) - Commit format
 

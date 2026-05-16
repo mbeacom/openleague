@@ -13,6 +13,7 @@ import {
 } from '@mui/material';
 import {
     Download as DownloadIcon,
+    PictureAsPdf as PdfIcon,
     People as PeopleIcon,
     Event as EventIcon,
     Assessment as AssessmentIcon,
@@ -20,9 +21,13 @@ import {
 } from '@mui/icons-material';
 import {
     exportLeagueRosterCSV,
+    exportLeagueRosterPDF,
     exportLeagueScheduleCSV,
+    exportLeagueSchedulePDF,
     exportAttendanceReportCSV,
+    exportAttendanceReportPDF,
     exportFinancialReportCSV,
+    exportFinancialReportPDF,
 } from '@/lib/actions/league';
 
 interface LeagueReportsViewProps {
@@ -30,12 +35,34 @@ interface LeagueReportsViewProps {
     isAdmin: boolean;
 }
 
+type ReportExportResult =
+    | { success: true; data: { csv: string; filename: string } | { pdfBase64: string; filename: string } }
+    | { success: false; error: string; details?: unknown };
+
+type ReportExportAction = () => Promise<ReportExportResult>;
+
 export default function LeagueReportsView({ leagueId, isAdmin }: LeagueReportsViewProps) {
     const [loading, setLoading] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
 
     const downloadCSV = (csv: string, filename: string) => {
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        downloadBlob(blob, filename);
+    };
+
+    const downloadPDF = (pdfBase64: string, filename: string) => {
+        const binary = atob(pdfBase64);
+        const bytes = new Uint8Array(binary.length);
+
+        for (let index = 0; index < binary.length; index += 1) {
+            bytes[index] = binary.charCodeAt(index);
+        }
+
+        const blob = new Blob([bytes], { type: 'application/pdf' });
+        downloadBlob(blob, filename);
+    };
+
+    const downloadBlob = (blob: Blob, filename: string) => {
         const link = document.createElement('a');
         const url = URL.createObjectURL(blob);
         link.setAttribute('href', url);
@@ -44,71 +71,31 @@ export default function LeagueReportsView({ leagueId, isAdmin }: LeagueReportsVi
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+        URL.revokeObjectURL(url);
     };
 
-    const handleExportRoster = async () => {
-        setLoading('roster');
+    const handleExport = async (
+        reportId: string,
+        format: 'csv' | 'pdf',
+        action: ReportExportAction,
+        fallbackError: string
+    ) => {
+        setLoading(`${reportId}-${format}`);
         setError(null);
+
         try {
-            const result = await exportLeagueRosterCSV(leagueId);
+            const result = await action();
             if (result.success) {
-                downloadCSV(result.data.csv, result.data.filename);
+                if ('csv' in result.data) {
+                    downloadCSV(result.data.csv, result.data.filename);
+                } else {
+                    downloadPDF(result.data.pdfBase64, result.data.filename);
+                }
             } else {
                 setError(result.error);
             }
         } catch {
-            setError('Failed to export roster');
-        } finally {
-            setLoading(null);
-        }
-    };
-
-    const handleExportSchedule = async () => {
-        setLoading('schedule');
-        setError(null);
-        try {
-            const result = await exportLeagueScheduleCSV(leagueId);
-            if (result.success) {
-                downloadCSV(result.data.csv, result.data.filename);
-            } else {
-                setError(result.error);
-            }
-        } catch {
-            setError('Failed to export schedule');
-        } finally {
-            setLoading(null);
-        }
-    };
-
-    const handleExportAttendance = async () => {
-        setLoading('attendance');
-        setError(null);
-        try {
-            const result = await exportAttendanceReportCSV(leagueId);
-            if (result.success) {
-                downloadCSV(result.data.csv, result.data.filename);
-            } else {
-                setError(result.error);
-            }
-        } catch {
-            setError('Failed to export attendance report');
-        } finally {
-            setLoading(null);
-        }
-    };
-
-    const handleExportFinancial = async () => {
-        setLoading('financial');
-        setError(null);
-        try {
-            const result = await exportFinancialReportCSV(leagueId);
-            if (result.success) {
-                downloadCSV(result.data.csv, result.data.filename);
-            } else {
-                setError(result.error);
-            }
-        } catch {
-            setError('Failed to export financial report');
+            setError(fallbackError);
         } finally {
             setLoading(null);
         }
@@ -120,7 +107,9 @@ export default function LeagueReportsView({ leagueId, isAdmin }: LeagueReportsVi
             title: 'League Roster',
             description: 'Export complete roster with all players across all teams',
             icon: PeopleIcon,
-            action: handleExportRoster,
+            csvAction: () => exportLeagueRosterCSV(leagueId),
+            pdfAction: () => exportLeagueRosterPDF(leagueId),
+            fallbackError: 'Failed to export roster',
             adminOnly: false,
         },
         {
@@ -128,7 +117,9 @@ export default function LeagueReportsView({ leagueId, isAdmin }: LeagueReportsVi
             title: 'League Schedule',
             description: 'Export all events and games for all teams',
             icon: EventIcon,
-            action: handleExportSchedule,
+            csvAction: () => exportLeagueScheduleCSV(leagueId),
+            pdfAction: () => exportLeagueSchedulePDF(leagueId),
+            fallbackError: 'Failed to export schedule',
             adminOnly: false,
         },
         {
@@ -136,15 +127,19 @@ export default function LeagueReportsView({ leagueId, isAdmin }: LeagueReportsVi
             title: 'Attendance Report',
             description: 'Export attendance statistics by division and team',
             icon: AssessmentIcon,
-            action: handleExportAttendance,
+            csvAction: () => exportAttendanceReportCSV(leagueId),
+            pdfAction: () => exportAttendanceReportPDF(leagueId),
+            fallbackError: 'Failed to export attendance report',
             adminOnly: false,
         },
         {
             id: 'financial',
             title: 'Financial Report',
-            description: 'Export basic team and player summary (MVP - Payment tracking not yet implemented)',
+            description: 'Export roster size, event volume, ice-time requests, and known accepted venue costs',
             icon: MoneyIcon,
-            action: handleExportFinancial,
+            csvAction: () => exportFinancialReportCSV(leagueId),
+            pdfAction: () => exportFinancialReportPDF(leagueId),
+            fallbackError: 'Failed to export financial report',
             adminOnly: true,
         },
     ];
@@ -170,7 +165,7 @@ export default function LeagueReportsView({ leagueId, isAdmin }: LeagueReportsVi
                     fontSize: { xs: '0.875rem', sm: '1rem' }
                 }}
             >
-                Download reports in CSV format for analysis, record keeping, or sharing with stakeholders.
+                Download reports in CSV or PDF format for analysis, record keeping, or sharing with stakeholders.
             </Typography>
 
             {error && (
@@ -183,7 +178,9 @@ export default function LeagueReportsView({ leagueId, isAdmin }: LeagueReportsVi
                 {reports.map((report) => {
                     const Icon = report.icon;
                     const isDisabled = report.adminOnly && !isAdmin;
-                    const isLoading = loading === report.id;
+                    const isCsvLoading = loading === `${report.id}-csv`;
+                    const isPdfLoading = loading === `${report.id}-pdf`;
+                    const isLoading = isCsvLoading || isPdfLoading;
 
                     return (
                         <Grid size={{ xs: 12, sm: 6, md: 6 }} key={report.id}>
@@ -231,20 +228,36 @@ export default function LeagueReportsView({ leagueId, isAdmin }: LeagueReportsVi
                                     >
                                         {report.description}
                                     </Typography>
-                                    <Button
-                                        variant="contained"
-                                        startIcon={isLoading ? <CircularProgress size={20} /> : <DownloadIcon sx={{ display: { xs: 'none', sm: 'inline-flex' } }} />}
-                                        onClick={report.action}
-                                        disabled={isDisabled || isLoading}
-                                        fullWidth
-                                        size="small"
-                                        sx={{
-                                            minHeight: 44,
-                                            fontSize: { xs: '0.8rem', sm: '0.875rem' }
-                                        }}
-                                    >
-                                        {isLoading ? 'Exporting...' : 'Export CSV'}
-                                    </Button>
+                                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1 }}>
+                                        <Button
+                                            variant="contained"
+                                            startIcon={isCsvLoading ? <CircularProgress size={20} /> : <DownloadIcon sx={{ display: { xs: 'none', sm: 'inline-flex' } }} />}
+                                            onClick={() => handleExport(report.id, 'csv', report.csvAction, report.fallbackError)}
+                                            disabled={isDisabled || isLoading}
+                                            fullWidth
+                                            size="small"
+                                            sx={{
+                                                minHeight: 44,
+                                                fontSize: { xs: '0.8rem', sm: '0.875rem' }
+                                            }}
+                                        >
+                                            {isCsvLoading ? 'Exporting...' : 'CSV'}
+                                        </Button>
+                                        <Button
+                                            variant="outlined"
+                                            startIcon={isPdfLoading ? <CircularProgress size={20} /> : <PdfIcon sx={{ display: { xs: 'none', sm: 'inline-flex' } }} />}
+                                            onClick={() => handleExport(report.id, 'pdf', report.pdfAction, report.fallbackError)}
+                                            disabled={isDisabled || isLoading}
+                                            fullWidth
+                                            size="small"
+                                            sx={{
+                                                minHeight: 44,
+                                                fontSize: { xs: '0.8rem', sm: '0.875rem' }
+                                            }}
+                                        >
+                                            {isPdfLoading ? 'Exporting...' : 'PDF'}
+                                        </Button>
+                                    </Box>
                                     {isDisabled && (
                                         <Typography
                                             variant="caption"
@@ -271,7 +284,7 @@ export default function LeagueReportsView({ leagueId, isAdmin }: LeagueReportsVi
                     gutterBottom
                     sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}
                 >
-                    About CSV Exports
+                    About Report Exports
                 </Typography>
                 <Typography
                     variant="body2"
@@ -279,7 +292,7 @@ export default function LeagueReportsView({ leagueId, isAdmin }: LeagueReportsVi
                     paragraph
                     sx={{ fontSize: { xs: '0.8rem', sm: '0.875rem' } }}
                 >
-                    CSV (Comma-Separated Values) files can be opened in spreadsheet applications like Microsoft Excel, Google Sheets, or Apple Numbers.
+                    CSV files can be opened in spreadsheet applications like Microsoft Excel, Google Sheets, or Apple Numbers. PDF exports provide a readable snapshot for sharing or archival.
                 </Typography>
                 <Typography
                     variant="body2"
