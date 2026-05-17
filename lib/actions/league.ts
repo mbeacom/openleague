@@ -40,6 +40,10 @@ export type ActionResult<T> =
   | { success: true; data: T }
   | { success: false; error: string; details?: unknown };
 
+function isNextRedirectError(error: unknown): error is Error {
+  return error instanceof Error && error.message.includes("NEXT_REDIRECT");
+}
+
 /**
  * Create a new league and assign the creator as LEAGUE_ADMIN
  */
@@ -113,6 +117,10 @@ export async function createLeague(
         error: `Validation failed: ${fieldErrors}`,
         details: error.issues,
       };
+    }
+
+    if (isNextRedirectError(error)) {
+      throw error;
     }
 
     console.error("Error creating league:", error);

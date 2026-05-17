@@ -49,13 +49,34 @@ export async function requireAuth() {
   return session;
 }
 
+type AuthSession = Awaited<ReturnType<typeof getSession>>;
+
+async function resolveUserIdFromSession(session: AuthSession): Promise<string | null> {
+  const userId = session?.user?.id;
+  if (typeof userId === "string" && userId.trim()) {
+    return userId;
+  }
+
+  const email = session?.user?.email;
+  if (typeof email !== "string" || !email.trim()) {
+    return null;
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { email: email.trim() },
+    select: { id: true },
+  });
+
+  return user?.id ?? null;
+}
+
 /**
  * Get the current user ID
  * Returns null if user is not authenticated
  */
 export async function getCurrentUserId(): Promise<string | null> {
   const session = await getSession();
-  return session?.user?.id ?? null;
+  return resolveUserIdFromSession(session);
 }
 
 /**
@@ -65,7 +86,14 @@ export async function getCurrentUserId(): Promise<string | null> {
  */
 export async function requireUserId(): Promise<string> {
   const session = await requireAuth();
-  return session.user.id;
+  const userId = await resolveUserIdFromSession(session);
+
+  if (!userId) {
+    console.warn("Authenticated session is missing a resolvable user id; redirecting to login.");
+    redirect("/login");
+  }
+
+  return userId;
 }
 
 /**
