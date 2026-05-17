@@ -13,6 +13,7 @@ import {
 } from "@/lib/auth/session";
 import type { ActionResult } from "@/lib/actions/venue-organizations";
 import { sendVenueRelationshipInvitationEmail } from "@/lib/email/templates";
+import { rethrowIfNextRedirectError } from "@/lib/utils/next-errors";
 import { venueRelationshipSchema, type VenueRelationshipInput } from "@/lib/utils/validation";
 
 const venueRelationshipAdminInclude = {
@@ -64,9 +65,7 @@ export async function getVenueRelationshipAdminData(
 
     return { success: true, data: { venueId, relationships } };
   } catch (error) {
-    if (error instanceof Error && error.message.includes("NEXT_REDIRECT")) {
-      throw error;
-    }
+    rethrowIfNextRedirectError(error);
     return { success: false, error: "Failed to load venue relationships." };
   }
 }
@@ -108,9 +107,7 @@ export async function inviteVenueRelationship(
     revalidateRelationshipPaths(validated.organizationId, validated.venueId, venue.slug);
     return { success: true, data: { relationshipId: relationship.id, status: relationship.status } };
   } catch (error) {
-    if (error instanceof Error && error.message.includes("NEXT_REDIRECT")) {
-      throw error;
-    }
+    rethrowIfNextRedirectError(error);
     return { success: false, error: "Failed to invite venue relationship." };
   }
 }
@@ -135,9 +132,7 @@ export async function getVenueRelationshipInvitation(
       },
     };
   } catch (error) {
-    if (error instanceof Error && error.message.includes("NEXT_REDIRECT")) {
-      throw error;
-    }
+    rethrowIfNextRedirectError(error);
     return { success: false, error: "Failed to load venue relationship invitation." };
   }
 }
@@ -163,9 +158,7 @@ export async function respondToVenueRelationship(
     revalidateRelationshipPaths(relationship.venue.organizationId, relationship.venueId, relationship.venue.slug);
     return { success: true, data: { relationshipId: updated.id, status: updated.status } };
   } catch (error) {
-    if (error instanceof Error && error.message.includes("NEXT_REDIRECT")) {
-      throw error;
-    }
+    rethrowIfNextRedirectError(error);
     return { success: false, error: "Failed to respond to venue relationship." };
   }
 }
@@ -195,9 +188,7 @@ export async function removeVenueRelationship(
     revalidateRelationshipPaths(existingRelationship.venue.organizationId, validated.venueId, existingRelationship.venue.slug);
     return { success: true, data: { relationshipId: relationship.id, status: relationship.status } };
   } catch (error) {
-    if (error instanceof Error && error.message.includes("NEXT_REDIRECT")) {
-      throw error;
-    }
+    rethrowIfNextRedirectError(error);
     return { success: false, error: "Failed to remove venue relationship." };
   }
 }
@@ -283,9 +274,7 @@ async function requireRelationshipRemovalAuthority(
   try {
     return await requireVenueProfileManager(organizationId, venueId);
   } catch (error) {
-    if (error instanceof Error && error.message.includes("NEXT_REDIRECT")) {
-      throw error;
-    }
+    rethrowIfNextRedirectError(error);
 
     return requireTargetAuthority(relationship);
   }

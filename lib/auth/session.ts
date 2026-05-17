@@ -57,13 +57,13 @@ async function resolveUserIdFromSession(session: AuthSession): Promise<string | 
     return userId;
   }
 
-  const email = session?.user?.email;
-  if (typeof email !== "string" || !email.trim()) {
+  const email = session?.user?.email?.trim();
+  if (!email) {
     return null;
   }
 
   const user = await prisma.user.findUnique({
-    where: { email: email.trim() },
+    where: { email },
     select: { id: true },
   });
 
