@@ -70,6 +70,17 @@ async function resolveUserIdFromSession(session: AuthSession): Promise<string | 
   return user?.id ?? null;
 }
 
+export async function requireUserIdFromSession(session: AuthSession): Promise<string> {
+  const userId = await resolveUserIdFromSession(session);
+
+  if (!userId) {
+    console.warn("Authenticated session is missing a resolvable user id; redirecting to login.");
+    redirect("/login");
+  }
+
+  return userId;
+}
+
 /**
  * Get the current user ID
  * Returns null if user is not authenticated
@@ -86,14 +97,7 @@ export async function getCurrentUserId(): Promise<string | null> {
  */
 export async function requireUserId(): Promise<string> {
   const session = await requireAuth();
-  const userId = await resolveUserIdFromSession(session);
-
-  if (!userId) {
-    console.warn("Authenticated session is missing a resolvable user id; redirecting to login.");
-    redirect("/login");
-  }
-
-  return userId;
+  return requireUserIdFromSession(session);
 }
 
 /**
@@ -300,8 +304,9 @@ export async function isSystemAdmin(userId: string): Promise<boolean> {
  */
 export async function requireSystemAdmin() {
   const session = await requireAuth();
+  const userId = await requireUserIdFromSession(session);
 
-  const isAdmin = await isSystemAdmin(session.user.id);
+  const isAdmin = await isSystemAdmin(userId);
   if (!isAdmin) {
     throw new Error("Unauthorized: Admin access required");
   }

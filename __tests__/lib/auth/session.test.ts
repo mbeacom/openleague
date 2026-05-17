@@ -3,6 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const { mockAuth, mockPrisma, mockRedirect } = vi.hoisted(() => ({
   mockAuth: vi.fn(),
   mockPrisma: {
+    leagueUser: {
+      findFirst: vi.fn(),
+    },
     user: {
       findUnique: vi.fn(),
     },
@@ -24,7 +27,7 @@ vi.mock("next/navigation", () => ({
   redirect: (path: string) => mockRedirect(path),
 }));
 
-import { getCurrentUserId, requireUserId } from "@/lib/auth/session";
+import { getCurrentUserId, requireSystemAdmin, requireUserId } from "@/lib/auth/session";
 
 describe("auth session helpers", () => {
   beforeEach(() => {
@@ -64,5 +67,24 @@ describe("auth session helpers", () => {
     await expect(requireUserId()).rejects.toThrow("NEXT_REDIRECT:/login");
 
     expect(mockRedirect).toHaveBeenCalledWith("/login");
+  });
+
+  it("resolves stale JWT sessions before checking system admin status", async () => {
+    const session = { user: { email: "admin@example.com" } };
+    mockAuth.mockResolvedValue(session);
+    mockPrisma.user.findUnique.mockResolvedValue({ id: "user-from-email" });
+    mockPrisma.leagueUser.findFirst.mockResolvedValue({ id: "league-user-1" });
+
+    await expect(requireSystemAdmin()).resolves.toBe(session);
+
+    expect(mockPrisma.leagueUser.findFirst).toHaveBeenCalledWith({
+      where: {
+        userId: "user-from-email",
+        role: "LEAGUE_ADMIN",
+      },
+      select: {
+        id: true,
+      },
+    });
   });
 });

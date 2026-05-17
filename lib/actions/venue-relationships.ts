@@ -4,7 +4,13 @@ import { revalidatePath } from "next/cache";
 import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
-import { requireAuth, requireLeagueRole, requireTeamAdmin, requireVenueProfileManager } from "@/lib/auth/session";
+import {
+  requireAuth,
+  requireLeagueRole,
+  requireTeamAdmin,
+  requireUserIdFromSession,
+  requireVenueProfileManager,
+} from "@/lib/auth/session";
 import type { ActionResult } from "@/lib/actions/venue-organizations";
 import { sendVenueRelationshipInvitationEmail } from "@/lib/email/templates";
 import { venueRelationshipSchema, type VenueRelationshipInput } from "@/lib/utils/validation";
@@ -263,7 +269,7 @@ async function requireTargetAuthority(relationship: RelationshipTargetAuthority)
     if (!sessionEmail || sessionEmail !== relationship.invitedEmail.trim().toLowerCase()) {
       throw new Error("Unauthorized: This invitation is for a different email address");
     }
-    return session.user.id;
+    return requireUserIdFromSession(session);
   }
 
   throw new Error("Relationship target does not have an authorized responder");

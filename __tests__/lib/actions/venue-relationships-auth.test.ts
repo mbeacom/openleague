@@ -17,6 +17,7 @@ const { mockRequireAuth, mockRequireUserId, mockRequireTeamAdmin, mockRequireVen
 vi.mock("@/lib/auth/session", () => ({
   requireAuth: (...args: unknown[]) => mockRequireAuth(...args),
   requireUserId: (...args: unknown[]) => mockRequireUserId(...args),
+  requireUserIdFromSession: () => mockRequireUserId(),
   requireTeamAdmin: (...args: unknown[]) => mockRequireTeamAdmin(...args),
   requireLeagueRole: vi.fn(),
   requireVenueProfileManager: (...args: unknown[]) => mockRequireVenueProfileManager(...args),
@@ -75,6 +76,33 @@ describe("venue relationship authorization", () => {
 
     expect(result.success).toBe(false);
     expect(mockPrisma.venueRelationship.update).not.toHaveBeenCalled();
+  });
+
+  it("uses the resolved user id when an invited-email response has a stale session", async () => {
+    mockRequireAuth.mockResolvedValue({ user: { email: "invitee@example.com" } });
+    mockRequireUserId.mockResolvedValue("clresolvedxxxxxxxxxxxxxxxxxx");
+    mockPrisma.venueRelationship.findFirst.mockResolvedValue({
+      id: RELATIONSHIP_ID,
+      venueId: "clvenxxxxxxxxxxxxxxxxxxxxxxx",
+      teamId: null,
+      leagueId: null,
+      targetType: "COACH",
+      targetName: "Coach One",
+      invitedEmail: "invitee@example.com",
+      relationshipType: "PREFERRED",
+      expiresAt: null,
+      venue: { name: "North Rink", organizationId: "clorgxxxxxxxxxxxxxxxxxxxxxxx", slug: "north-rink" },
+    });
+    mockPrisma.venueRelationship.update.mockResolvedValue({ id: RELATIONSHIP_ID, status: "ACTIVE" });
+
+    const result = await respondToVenueRelationship({ relationshipId: RELATIONSHIP_ID, response: "ACCEPT" });
+
+    expect(result.success).toBe(true);
+    expect(mockPrisma.venueRelationship.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ acceptedById: "clresolvedxxxxxxxxxxxxxxxxxx" }),
+      })
+    );
   });
 
   it("rejects responses without a concrete target authority", async () => {
