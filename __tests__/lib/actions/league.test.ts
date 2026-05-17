@@ -215,6 +215,15 @@ describe("league Server Actions", () => {
       expect(mockPrisma.league.create).not.toHaveBeenCalled();
       expect(mockLogAuditEvent).not.toHaveBeenCalled();
     });
+
+    it("rethrows auth redirects instead of returning a generic create failure", async () => {
+      mockRequireUserId.mockRejectedValueOnce(new Error("NEXT_REDIRECT:/login"));
+
+      await expect(createLeague(validLeagueInput)).rejects.toThrow("NEXT_REDIRECT:/login");
+
+      expect(mockPrisma.league.create).not.toHaveBeenCalled();
+      expect(mockLogAuditEvent).not.toHaveBeenCalled();
+    });
   });
 
   describe("migrateTeamToLeague", () => {

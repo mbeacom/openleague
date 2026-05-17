@@ -35,6 +35,7 @@ import {
   type SportValue,
 } from "@/lib/utils/validation";
 import { getLeagueStatistics, type LeagueStatistics } from "@/lib/services/league-statistics";
+import { rethrowIfNextRedirectError } from "@/lib/utils/next-errors";
 
 export type ActionResult<T> =
   | { success: true; data: T }
@@ -114,6 +115,8 @@ export async function createLeague(
         details: error.issues,
       };
     }
+
+    rethrowIfNextRedirectError(error);
 
     console.error("Error creating league:", error);
     return {

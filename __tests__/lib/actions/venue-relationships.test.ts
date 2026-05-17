@@ -17,7 +17,9 @@ const { mockRequireUserId, mockRequireTeamAdmin, mockRequireLeagueRole, mockRequ
 }));
 
 vi.mock("@/lib/auth/session", () => ({
+  requireAuth: vi.fn(),
   requireUserId: (...args: unknown[]) => mockRequireUserId(...args),
+  requireUserIdFromSession: () => mockRequireUserId(),
   requireTeamAdmin: (...args: unknown[]) => mockRequireTeamAdmin(...args),
   requireLeagueRole: (...args: unknown[]) => mockRequireLeagueRole(...args),
   requireVenueProfileManager: (...args: unknown[]) => mockRequireVenueProfileManager(...args),
