@@ -37,7 +37,7 @@ describe('deployment configuration', () => {
     }>('vercel.json');
 
     expect(vercel.framework).toBe('nextjs');
-    expect(vercel.buildCommand).toBe('bun run build');
+    expect(vercel.buildCommand).toBe('bun run vercel:build');
     expect(vercel.installCommand).toBe('bun install --frozen-lockfile');
     expect(vercel.crons).toEqual(expect.arrayContaining([
       expect.objectContaining({ path: '/api/cron/rsvp-reminders', schedule: '0 * * * *' }),
@@ -50,6 +50,13 @@ describe('deployment configuration', () => {
       'X-Content-Type-Options',
       'Referrer-Policy',
     ]));
+  });
+
+  it('documents the preview migration override environment flag', async () => {
+    const envExample = await readText('.env.example');
+
+    expect(envExample).toContain('OPENLEAGUE_RUN_MIGRATIONS_ON_BUILD');
+    expect(envExample).toContain('safe, isolated database');
   });
 
   it('publishes documentation to GitHub Pages with the custom domain artifact', async () => {

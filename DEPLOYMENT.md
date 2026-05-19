@@ -70,13 +70,15 @@ UPTIME_CHECK_TOKEN="your-generated-uptime-token-here"
 
 #### Database Migrations
 
-The `postinstall` script generates the Prisma Client during dependency installation. Apply schema migrations as an explicit deployment step against the target database:
+The `postinstall` script generates the Prisma Client during dependency installation. Vercel production builds run `bun run vercel:build`, which applies schema migrations against the target database before `next build`.
+
+For non-Vercel deployments or one-off production repairs, apply schema migrations explicitly against the target database:
 
 ```bash
 bun run db:migrate:deploy
 ```
 
-Run migrations before promoting a production deployment, or configure the Vercel project/deployment pipeline to run `bun run db:migrate:deploy` with the production `DATABASE_URL`.
+Preview deployments skip automatic migration deployment by default. Set `OPENLEAGUE_RUN_MIGRATIONS_ON_BUILD=true` only for previews connected to a safe, isolated database.
 
 ### Email Service Setup
 
@@ -270,8 +272,8 @@ docker run -p 3000:3000 --env-file .env.production openleague
 
    ```bash
    bun install
-   bunx prisma generate
-   bunx prisma migrate deploy
+   bun run db:generate
+   bun run db:migrate:deploy
    bun run build
    bun run start
    ```

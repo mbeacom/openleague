@@ -184,11 +184,17 @@ bun run dev
 
 ### Production Deployment
 
-Migrations are automatically applied during deployment via the `postinstall` script:
+Prisma Client generation runs during dependency installation via `postinstall`.
+For Vercel production deployments, `bun run vercel:build` applies pending Prisma
+migrations with `bun run db:migrate:deploy` before `next build`. Preview builds
+skip migration deployment by default; set `OPENLEAGUE_RUN_MIGRATIONS_ON_BUILD=true`
+only when the preview has its own safe target database.
+
+For non-Vercel deployments, run migrations explicitly before promoting the new
+application version:
 
 ```bash
-# This runs automatically on Vercel deployment
-prisma generate && prisma migrate deploy
+bun run db:migrate:deploy
 ```
 
 ### Migration Commands
@@ -450,17 +456,11 @@ AWS_REGION="us-east-1"
 
 #### 4. Database Migration
 
-Migrations run automatically on deployment via the `postinstall` script in `package.json`:
-
-```json
-{
-  "scripts": {
-    "postinstall": "prisma generate && prisma migrate deploy"
-  }
-}
-```
-
-This ensures your production database is always up-to-date with your schema.
+Prisma Client generation runs automatically through `postinstall`. Vercel
+production builds run `bun run vercel:build`, which applies pending migrations
+with `bun run db:migrate:deploy` before building the app. For non-Vercel
+deployments, run the migration command explicitly against the production
+`DATABASE_URL` before promoting the deployment.
 
 #### 5. Custom Domain (Optional)
 
@@ -509,7 +509,7 @@ docker run -p 3000:3000 --env-file .env.local openleague
 
 1. **Build the application**: `bun run build`
 2. **Set environment variables** on your platform
-3. **Run migrations**: `bunx prisma migrate deploy`
+3. **Run migrations**: `bun run db:migrate:deploy`
 4. **Start the server**: `bun run start`
 
 ### Deployment Checklist
