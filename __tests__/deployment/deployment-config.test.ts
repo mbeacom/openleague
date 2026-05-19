@@ -59,6 +59,19 @@ describe('deployment configuration', () => {
     expect(envExample).toContain('safe, isolated database');
   });
 
+  it('keeps Sport enum value repair separate from column casts and defaults', async () => {
+    const enumRepair = await readText('prisma/migrations/20260517000000_repair_public_sport_enum/migration.sql');
+    const columnRepair = await readText('prisma/migrations/20260517000001_repair_public_sport_columns/migration.sql');
+
+    expect(enumRepair).toContain('ALTER TYPE public."Sport" ADD VALUE IF NOT EXISTS');
+    expect(enumRepair).not.toContain('ALTER TABLE public."Team"');
+    expect(enumRepair).not.toContain('ALTER TABLE public."leagues"');
+
+    expect(columnRepair).toContain('ALTER TABLE public."Team"');
+    expect(columnRepair).toContain('ALTER TABLE public."leagues"');
+    expect(columnRepair).not.toContain('ADD VALUE IF NOT EXISTS');
+  });
+
   it('publishes documentation to GitHub Pages with the custom domain artifact', async () => {
     const docsWorkflow = await readText('.github/workflows/docs-pages.yml');
     const docsBuilder = await readText('scripts/build-docs-pages.ts');
