@@ -17,6 +17,18 @@ interface PackageJson {
   scripts?: Record<string, string>;
 }
 
+const PRISMA_CONFIG_PATH = 'prisma/prisma.config.ts';
+
+const REQUIRED_PRISMA_CONFIG_SCRIPTS: Record<string, string> = {
+  postinstall: `prisma generate --config ${PRISMA_CONFIG_PATH}`,
+  'db:studio': `prisma studio --config ${PRISMA_CONFIG_PATH}`,
+  'db:push': `prisma db push --config ${PRISMA_CONFIG_PATH}`,
+  'db:migrate': `prisma migrate dev --config ${PRISMA_CONFIG_PATH}`,
+  'db:migrate:deploy': `prisma migrate deploy --config ${PRISMA_CONFIG_PATH}`,
+  'db:migrate:reset': `prisma migrate reset --config ${PRISMA_CONFIG_PATH}`,
+  'db:generate': `prisma generate --config ${PRISMA_CONFIG_PATH}`,
+};
+
 async function readJson<T>(rootDir: string, relativePath: string): Promise<T> {
   return JSON.parse(await readFile(path.join(rootDir, relativePath), 'utf8')) as T;
 }
@@ -83,6 +95,19 @@ export async function validateDeploymentConfig(rootDir = process.cwd()): Promise
 
   for (const script of ['build', 'vercel:build', 'start', 'type-check', 'lint', 'test', 'validate-env', 'docs:build-pages', 'uptime:check']) {
     requireCondition(failures, Boolean(packageJson.scripts?.[script]), `package.json must define a ${script} script.`);
+  }
+
+  for (const [scriptName, expectedCommand] of Object.entries(REQUIRED_PRISMA_CONFIG_SCRIPTS)) {
+    const actualCommand = packageJson.scripts?.[scriptName];
+
+    requireCondition(failures, Boolean(actualCommand), `package.json must define a ${scriptName} script.`);
+    if (actualCommand) {
+      requireCondition(
+        failures,
+        actualCommand === expectedCommand,
+        `package.json ${scriptName} must be \`${expectedCommand}\` so Prisma uses the nested config at ${PRISMA_CONFIG_PATH}.`,
+      );
+    }
   }
 
   for (const envName of ['DATABASE_URL', 'NEXTAUTH_URL', 'NEXTAUTH_SECRET', 'MAILCHIMP_API_KEY', 'EMAIL_FROM', 'CRON_SECRET']) {
