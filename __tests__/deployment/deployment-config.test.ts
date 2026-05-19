@@ -37,7 +37,7 @@ describe('deployment configuration', () => {
     }>('vercel.json');
 
     expect(vercel.framework).toBe('nextjs');
-    expect(vercel.buildCommand).toBe('bun run build');
+    expect(vercel.buildCommand).toBe('bun run vercel:build');
     expect(vercel.installCommand).toBe('bun install --frozen-lockfile');
     expect(vercel.crons).toEqual(expect.arrayContaining([
       expect.objectContaining({ path: '/api/cron/rsvp-reminders', schedule: '0 * * * *' }),
@@ -50,6 +50,26 @@ describe('deployment configuration', () => {
       'X-Content-Type-Options',
       'Referrer-Policy',
     ]));
+  });
+
+  it('documents the preview migration override environment flag', async () => {
+    const envExample = await readText('.env.example');
+
+    expect(envExample).toContain('OPENLEAGUE_RUN_MIGRATIONS_ON_BUILD');
+    expect(envExample).toContain('safe, isolated database');
+  });
+
+  it('keeps Sport enum value repair separate from column casts and defaults', async () => {
+    const enumRepair = await readText('prisma/migrations/20260517000000_repair_public_sport_enum/migration.sql');
+    const columnRepair = await readText('prisma/migrations/20260517000001_repair_public_sport_columns/migration.sql');
+
+    expect(enumRepair).toContain('ALTER TYPE public."Sport" ADD VALUE IF NOT EXISTS');
+    expect(enumRepair).not.toContain('ALTER TABLE public."Team"');
+    expect(enumRepair).not.toContain('ALTER TABLE public."leagues"');
+
+    expect(columnRepair).toContain('ALTER TABLE public."Team"');
+    expect(columnRepair).toContain('ALTER TABLE public."leagues"');
+    expect(columnRepair).not.toContain('ADD VALUE IF NOT EXISTS');
   });
 
   it('publishes documentation to GitHub Pages with the custom domain artifact', async () => {

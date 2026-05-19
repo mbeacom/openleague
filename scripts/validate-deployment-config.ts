@@ -58,7 +58,7 @@ export async function validateDeploymentConfig(rootDir = process.cwd()): Promise
   ]);
 
   requireCondition(failures, vercel.framework === 'nextjs', 'vercel.json must declare the Next.js framework preset.');
-  requireCondition(failures, vercel.buildCommand === 'bun run build', 'vercel.json buildCommand must be `bun run build`.');
+  requireCondition(failures, vercel.buildCommand === 'bun run vercel:build', 'vercel.json buildCommand must be `bun run vercel:build`.');
   requireCondition(
     failures,
     vercel.installCommand === 'bun install --frozen-lockfile',
@@ -81,7 +81,7 @@ export async function validateDeploymentConfig(rootDir = process.cwd()): Promise
     'vercel.json Content-Security-Policy must explicitly restrict frame ancestors.',
   );
 
-  for (const script of ['build', 'start', 'type-check', 'lint', 'test', 'validate-env', 'docs:build-pages', 'uptime:check']) {
+  for (const script of ['build', 'vercel:build', 'start', 'type-check', 'lint', 'test', 'validate-env', 'docs:build-pages', 'uptime:check']) {
     requireCondition(failures, Boolean(packageJson.scripts?.[script]), `package.json must define a ${script} script.`);
   }
 
@@ -89,7 +89,7 @@ export async function validateDeploymentConfig(rootDir = process.cwd()): Promise
     requireCondition(failures, envExample.includes(`${envName}=`), `.env.example must document ${envName}.`);
   }
 
-  for (const envName of [DOCS_PAGES_DOMAIN_ENV, ...Object.values(UPTIME_CHECK_ENV_NAMES)]) {
+  for (const envName of ['OPENLEAGUE_RUN_MIGRATIONS_ON_BUILD', DOCS_PAGES_DOMAIN_ENV, ...Object.values(UPTIME_CHECK_ENV_NAMES)]) {
     requireCondition(failures, envExample.includes(envName), `.env.example must document optional ${envName}.`);
   }
 

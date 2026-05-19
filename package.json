@@ -6,6 +6,7 @@
     "dev": "next dev --turbopack",
     "dev:wake": "tsx scripts/wake-db.ts && bun run dev",
     "build": "next build",
+    "vercel:build": "node scripts/vercel-build.mjs",
     "start": "next start",
     "lint": "eslint .",
     "type": "tsc --noEmit",
