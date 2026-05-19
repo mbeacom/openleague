@@ -59,6 +59,12 @@ describe('deployment configuration', () => {
     expect(envExample).toContain('safe, isolated database');
   });
 
+  it('passes the nested Prisma config path when deploying migrations', async () => {
+    const packageJson = await readJson<{ scripts?: Record<string, string> }>('package.json');
+
+    expect(packageJson.scripts?.['db:migrate:deploy']).toBe('prisma migrate deploy --config prisma/prisma.config.ts');
+  });
+
   it('keeps Sport enum value repair separate from column casts and defaults', async () => {
     const enumRepair = await readText('prisma/migrations/20260517000000_repair_public_sport_enum/migration.sql');
     const columnRepair = await readText('prisma/migrations/20260517000001_repair_public_sport_columns/migration.sql');

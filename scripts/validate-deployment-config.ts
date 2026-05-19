@@ -85,6 +85,12 @@ export async function validateDeploymentConfig(rootDir = process.cwd()): Promise
     requireCondition(failures, Boolean(packageJson.scripts?.[script]), `package.json must define a ${script} script.`);
   }
 
+  requireCondition(
+    failures,
+    packageJson.scripts?.['db:migrate:deploy'] === 'prisma migrate deploy --config prisma/prisma.config.ts',
+    'package.json db:migrate:deploy must pass the nested Prisma config path.',
+  );
+
   for (const envName of ['DATABASE_URL', 'NEXTAUTH_URL', 'NEXTAUTH_SECRET', 'MAILCHIMP_API_KEY', 'EMAIL_FROM', 'CRON_SECRET']) {
     requireCondition(failures, envExample.includes(`${envName}=`), `.env.example must document ${envName}.`);
   }

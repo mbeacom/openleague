@@ -19,7 +19,7 @@
     "db:studio": "prisma studio",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
-    "db:migrate:deploy": "prisma migrate deploy",
+    "db:migrate:deploy": "prisma migrate deploy --config prisma/prisma.config.ts",
     "db:migrate:reset": "prisma migrate reset",
     "db:generate": "prisma generate",
     "db:seed": "tsx prisma/seed.ts",
