@@ -53,6 +53,8 @@ interface EventDetailProps {
         email: string;
       };
     }>;
+    canRSVP?: boolean;
+    canManageEvent?: boolean;
   };
   userRole: string;
   currentUserId: string;
@@ -64,8 +66,9 @@ export default function EventDetail({ event, userRole, currentUserId }: EventDet
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const isAdmin = userRole === "ADMIN";
-  
+  const isAdmin = event.canManageEvent ?? userRole === "ADMIN";
+  const canRSVP = event.canRSVP ?? true;
+
   // Find current user's RSVP status
   const currentUserRSVP = event.rsvps.find((rsvp) => rsvp.user.id === currentUserId);
   const currentStatus = currentUserRSVP?.status || "NO_RESPONSE";
@@ -190,12 +193,14 @@ export default function EventDetail({ event, userRole, currentUserId }: EventDet
       </Card>
 
       {/* RSVP Buttons */}
-      <Box sx={{ mt: 3 }}>
-        <Typography variant="h6" gutterBottom>
-          Your Response
-        </Typography>
-        <RSVPButtons eventId={event.id} currentStatus={currentStatus} />
-      </Box>
+      {canRSVP && (
+        <Box sx={{ mt: 3 }}>
+          <Typography variant="h6" gutterBottom>
+            Your Response
+          </Typography>
+          <RSVPButtons eventId={event.id} currentStatus={currentStatus} />
+        </Box>
+      )}
 
       {/* Attendance View (Admin only) */}
       {isAdmin && (

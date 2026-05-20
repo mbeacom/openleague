@@ -387,6 +387,7 @@ export async function getEvent(eventId: string) {
           select: {
             id: true,
             name: true,
+            leagueId: true,
           },
         },
         rsvps: {
@@ -421,14 +422,30 @@ export async function getEvent(eventId: string) {
       },
     });
 
-    // If user is not a member of the team, return null as before.
-    if (!teamMember) {
+    const eventLeagueId = event.leagueId ?? event.team.leagueId;
+    const leagueAdmin = !teamMember && eventLeagueId
+      ? await prisma.leagueUser.findFirst({
+          where: {
+            userId,
+            leagueId: eventLeagueId,
+            role: "LEAGUE_ADMIN",
+            league: { isActive: true },
+          },
+          select: { role: true },
+        })
+      : null;
+
+    // Direct team members can RSVP; league admins can inspect league events
+    // without receiving broken RSVP/edit/delete controls for teams they do not belong to.
+    if (!teamMember && !leagueAdmin) {
       return null;
     }
 
     return {
       ...event,
-      userRole: teamMember.role,
+      userRole: teamMember?.role ?? "LEAGUE_ADMIN",
+      canRSVP: !!teamMember,
+      canManageEvent: teamMember?.role === "ADMIN",
     };
   } catch (error) {
     console.error("Error fetching event:", error);

@@ -51,8 +51,10 @@ export async function createTeam(
       },
     });
 
-    // Revalidate the dashboard page to show the new team
+    // Revalidate dashboard/team pages to show the new team immediately.
     revalidatePath("/");
+    revalidatePath("/dashboard");
+    revalidatePath(`/team/${team.id}`);
 
     return {
       success: true,

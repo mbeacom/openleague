@@ -235,7 +235,7 @@ export default async function DashboardPage() {
           <Typography variant="h5" component="h2" gutterBottom>
             {userMode.isLeagueMode ? "Create New Team" : "Create Another Team"}
           </Typography>
-          <CreateTeamForm />
+          <CreateTeamForm title={null} />
         </Box>
       </Box>
     </Container>

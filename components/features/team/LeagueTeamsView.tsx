@@ -11,12 +11,7 @@ import {
   CardActions,
   Chip,
   Avatar,
-  IconButton,
-  Menu,
   MenuItem,
-  ListItemIcon,
-  ListItemText,
-  Divider,
   Fab,
   TextField,
   InputAdornment,
@@ -30,11 +25,7 @@ import {
   Groups as TeamsIcon,
   People as PlayersIcon,
   Event as EventIcon,
-  MoreVert as MoreVertIcon,
-  Edit as EditIcon,
-  Delete as DeleteIcon,
   Category as DivisionIcon,
-  Schedule as ScheduleIcon,
   Search as SearchIcon,
   FileDownload as DownloadIcon,
 } from '@mui/icons-material';
@@ -102,17 +93,6 @@ interface TeamCardProps {
 }
 
 function TeamCard({ team, leagueId }: TeamCardProps) {
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const menuOpen = Boolean(anchorEl);
-
-  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
-    setAnchorEl(event.currentTarget);
-  };
-
-  const handleMenuClose = () => {
-    setAnchorEl(null);
-  };
-
   return (
     <Card>
       <CardContent>
@@ -138,14 +118,6 @@ function TeamCard({ team, leagueId }: TeamCardProps) {
               </Typography>
             </Box>
           </Box>
-          <IconButton
-            size="small"
-            onClick={handleMenuOpen}
-            aria-label="team options"
-            sx={{ mt: -0.5 }}
-          >
-            <MoreVertIcon fontSize="small" />
-          </IconButton>
         </Box>
 
         <Box sx={{ display: 'flex', gap: { xs: 1.5, sm: 2 }, mb: 2, flexWrap: 'wrap' }}>
@@ -198,42 +170,6 @@ function TeamCard({ team, leagueId }: TeamCardProps) {
           Roster
         </Button>
       </CardActions>
-
-      <Menu
-        anchorEl={anchorEl}
-        open={menuOpen}
-        onClose={handleMenuClose}
-        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
-        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-      >
-        <MenuItem
-          component={Link}
-          href={`/league/${leagueId}/teams/${team.id}/edit`}
-          onClick={handleMenuClose}
-        >
-          <ListItemIcon>
-            <EditIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>Edit Team</ListItemText>
-        </MenuItem>
-        <MenuItem
-          component={Link}
-          href={`/league/${leagueId}/teams/${team.id}/schedule`}
-          onClick={handleMenuClose}
-        >
-          <ListItemIcon>
-            <ScheduleIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>Schedule</ListItemText>
-        </MenuItem>
-        <Divider />
-        <MenuItem onClick={handleMenuClose} sx={{ color: 'error.main' }}>
-          <ListItemIcon>
-            <DeleteIcon fontSize="small" color="error" />
-          </ListItemIcon>
-          <ListItemText>Delete Team</ListItemText>
-        </MenuItem>
-      </Menu>
     </Card>
   );
 }

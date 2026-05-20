@@ -15,7 +15,14 @@ import {
   type UpdateTeamMemberUsahIdInput,
 } from "@/lib/utils/validation";
 
+function revalidateRosterPaths(...teamIds: string[]) {
+  revalidatePath("/roster");
 
+  for (const teamId of new Set(teamIds)) {
+    revalidatePath(`/team/${teamId}`);
+    revalidatePath(`/team/${teamId}/roster`);
+  }
+}
 
 /**
  * Add a player to the team roster
@@ -59,8 +66,8 @@ export async function addPlayer(input: AddPlayerInput) {
       }
     }
 
-    // Revalidate roster page
-    revalidatePath(`/roster`);
+    // Revalidate roster pages
+    revalidateRosterPaths(validated.teamId);
 
     return {
       success: true,
@@ -144,8 +151,8 @@ export async function updatePlayer(input: UpdatePlayerInput) {
       }
     }
 
-    // Revalidate roster page
-    revalidatePath(`/roster`);
+    // Revalidate roster pages
+    revalidateRosterPaths(validated.teamId);
 
     return {
       success: true,
@@ -201,8 +208,8 @@ export async function deletePlayer(playerId: string, teamId: string) {
       },
     });
 
-    // Revalidate roster page
-    revalidatePath(`/roster`);
+    // Revalidate roster pages
+    revalidateRosterPaths(teamId);
 
     return {
       success: true,
@@ -328,7 +335,7 @@ export async function transferPlayer(input: TransferPlayerInput) {
 
     // Revalidate relevant pages
     revalidatePath(`/league/${validated.leagueId}/roster`);
-    revalidatePath(`/roster`);
+    revalidateRosterPaths(validated.fromTeamId, validated.toTeamId);
 
     return {
       success: true,
@@ -384,7 +391,7 @@ export async function updateTeamMemberUsahId(input: UpdateTeamMemberUsahIdInput)
       select: { id: true, usahMemberId: true },
     });
 
-    revalidatePath("/roster");
+    revalidateRosterPaths(validated.teamId);
 
     return { success: true as const, data: updated };
   } catch (error) {

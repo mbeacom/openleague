@@ -23,7 +23,11 @@ import {
 } from "@/lib/utils/validation";
 import { trackTeam } from "@/lib/analytics/umami";
 
-export default function CreateTeamForm() {
+type CreateTeamFormProps = {
+  title?: string | null;
+};
+
+export default function CreateTeamForm({ title = "Create Your Team" }: CreateTeamFormProps) {
   const router = useRouter();
   const [formData, setFormData] = useState<CreateTeamInput>({
     name: "",
@@ -88,7 +92,7 @@ export default function CreateTeamForm() {
           sport: formData.sport,
           season: formData.season,
         });
-        router.push("/");
+        router.push(`/team/${result.data.id}`);
       } else {
         setError(result.error);
       }
@@ -112,9 +116,11 @@ export default function CreateTeamForm() {
         width: "100%",
       }}
     >
-      <Typography variant="h5" component="h2" gutterBottom>
-        Create Your Team
-      </Typography>
+      {title && (
+        <Typography variant="h5" component="h2" gutterBottom>
+          {title}
+        </Typography>
+      )}
 
       {error && (
         <Alert severity="error" onClose={() => setError(null)}>
