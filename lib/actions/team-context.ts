@@ -277,3 +277,247 @@ export async function getRosterData(): Promise<{
     invitations,
   };
 }
+
+type AccessibleTeamData = {
+  id: string;
+  name: string;
+  sport: string;
+  season: string;
+  createdAt: Date;
+  role: string;
+  isAdmin: boolean;
+  canOpenEventDetails: boolean;
+  league: { id: string; name: string } | null;
+  division: { id: string; name: string } | null;
+  stats: {
+    players: number;
+    events: number;
+    members: number;
+  };
+};
+
+async function getAccessibleTeamData(teamId: string): Promise<AccessibleTeamData | null> {
+  const userId = await requireUserId();
+
+  const team = await prisma.team.findFirst({
+    where: { id: teamId, isActive: true },
+    select: {
+      id: true,
+      name: true,
+      sport: true,
+      season: true,
+      createdAt: true,
+      league: {
+        select: {
+          id: true,
+          name: true,
+          isActive: true,
+          users: {
+            where: { userId },
+            select: { role: true },
+          },
+        },
+      },
+      division: { select: { id: true, name: true } },
+      members: {
+        where: { userId },
+        select: { role: true },
+      },
+      _count: {
+        select: {
+          players: true,
+          events: true,
+          members: true,
+        },
+      },
+    },
+  });
+
+  if (!team) return null;
+
+  const directRole = team.members[0]?.role ?? null;
+  const leagueRole = team.league?.isActive ? team.league.users[0]?.role ?? null : null;
+
+  if (!directRole && !leagueRole) {
+    return null;
+  }
+
+  return {
+    id: team.id,
+    name: team.name,
+    sport: team.sport,
+    season: team.season,
+    createdAt: team.createdAt,
+    role: directRole ?? leagueRole ?? "MEMBER",
+    isAdmin: directRole === "ADMIN",
+    canOpenEventDetails: !!directRole,
+    league: team.league?.isActive ? { id: team.league.id, name: team.league.name } : null,
+    division: team.division,
+    stats: {
+      players: team._count.players,
+      events: team._count.events,
+      members: team._count.members,
+    },
+  };
+}
+
+/**
+ * Get overview data for a specific team the current user can access.
+ */
+export async function getTeamOverviewData(teamId: string): Promise<{
+  id: string;
+  name: string;
+  sport: string;
+  season: string;
+  createdAt: string;
+  role: string;
+  isAdmin: boolean;
+  canOpenEventDetails: boolean;
+  league: { id: string; name: string } | null;
+  division: { id: string; name: string } | null;
+  stats: {
+    players: number;
+    events: number;
+    members: number;
+  };
+  upcomingEvents: Array<{
+    id: string;
+    type: "GAME" | "PRACTICE";
+    title: string;
+    startAt: string;
+    location: string;
+    opponent: string | null;
+  }>;
+} | null> {
+  const team = await getAccessibleTeamData(teamId);
+  if (!team) return null;
+
+  const upcomingEvents = await prisma.event.findMany({
+    where: {
+      teamId: team.id,
+      startAt: { gte: new Date() },
+    },
+    orderBy: { startAt: "asc" },
+    take: 5,
+    select: {
+      id: true,
+      type: true,
+      title: true,
+      startAt: true,
+      location: true,
+      opponent: true,
+    },
+  });
+
+  return {
+    ...team,
+    createdAt: team.createdAt.toISOString(),
+    upcomingEvents: upcomingEvents.map((event) => ({
+      ...event,
+      type: event.type as "GAME" | "PRACTICE",
+      startAt: event.startAt.toISOString(),
+    })),
+  };
+}
+
+/**
+ * Get roster data for a specific team the current user can access.
+ */
+export async function getTeamRosterDataById(teamId: string): Promise<{
+  teamId: string;
+  teamName: string;
+  isAdmin: boolean;
+  players: Player[];
+  teamMembers: Array<{
+    id: string;
+    role: string;
+    usahMemberId: string | null;
+    user: { id: string; name: string | null; email: string };
+  }>;
+  invitations: Array<{
+    id: string;
+    email: string;
+    status: "PENDING" | "ACCEPTED" | "EXPIRED";
+    expiresAt: string;
+    createdAt: string;
+  }>;
+} | null> {
+  const team = await getAccessibleTeamData(teamId);
+  if (!team) return null;
+
+  const [players, teamMembers, rawInvitations] = await Promise.all([
+    prisma.player.findMany({
+      where: { teamId: team.id },
+      orderBy: { name: "asc" },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        emergencyContact: team.isAdmin,
+        emergencyPhone: team.isAdmin,
+        jerseyNumber: true,
+        // FR-008: USAH Member IDs are admin-only — must not appear in non-admin queries
+        usahMemberId: team.isAdmin,
+      },
+    }),
+    prisma.teamMember.findMany({
+      where: { teamId: team.id },
+      select: {
+        id: true,
+        role: true,
+        // FR-008: USAH Member IDs are admin-only
+        usahMemberId: team.isAdmin,
+        user: { select: { id: true, name: true, email: true } },
+      },
+      orderBy: [{ role: "asc" }, { joinedAt: "asc" }],
+    }),
+    team.isAdmin
+      ? prisma.invitation.findMany({
+          where: { teamId: team.id },
+          orderBy: { createdAt: "desc" },
+          select: {
+            id: true,
+            email: true,
+            status: true,
+            expiresAt: true,
+            createdAt: true,
+          },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  const invitations = rawInvitations.map((inv) => ({
+    ...inv,
+    status: inv.status as "PENDING" | "ACCEPTED" | "EXPIRED",
+    expiresAt: inv.expiresAt.toISOString(),
+    createdAt: inv.createdAt.toISOString(),
+  }));
+
+  return {
+    teamId: team.id,
+    teamName: team.name,
+    isAdmin: team.isAdmin,
+    players,
+    teamMembers,
+    invitations,
+  };
+}
+
+/**
+ * Verify that an active team belongs to an active league.
+ * Used by route aliases before redirecting to canonical team pages.
+ */
+export async function isActiveTeamInLeague(teamId: string, leagueId: string): Promise<boolean> {
+  const team = await prisma.team.findFirst({
+    where: {
+      id: teamId,
+      leagueId,
+      isActive: true,
+      league: { isActive: true },
+    },
+    select: { id: true },
+  });
+
+  return !!team;
+}
