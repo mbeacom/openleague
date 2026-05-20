@@ -22,6 +22,10 @@ jobs:
     name: Check production uptime
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    env:
+      # Prisma client generation runs during bun install. A real secret is used
+      # when available; the fallback only satisfies generate-time URL parsing.
+      DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/openleague_ci' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0

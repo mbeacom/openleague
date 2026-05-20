@@ -26,6 +26,10 @@ jobs:
     name: Create Release
     runs-on: ubuntu-latest
     if: ${{ !contains(github.event.head_commit.message, '[skip ci]') }}
+    env:
+      # Prisma client generation runs during bun install. A real secret is used
+      # when available; the fallback only satisfies generate-time URL parsing.
+      DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/openleague_ci' }}
 
     steps:
       - name: Checkout code
@@ -43,7 +47,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Generate Prisma Client
-        run: bunx prisma generate
+        run: bun run db:generate
 
       - name: Run type check
         run: bun run type-check

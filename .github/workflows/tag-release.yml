@@ -13,6 +13,10 @@ jobs:
   validate-and-release:
     name: Validate Tag and Create Release
     runs-on: ubuntu-latest
+    env:
+      # Prisma client generation runs during bun install. A real secret is used
+      # when available; the fallback only satisfies generate-time URL parsing.
+      DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/openleague_ci' }}
 
     steps:
       - name: Checkout code

@@ -18,6 +18,7 @@ interface PackageJson {
 }
 
 const PRISMA_CONFIG_PATH = 'prisma/prisma.config.ts';
+const CI_DATABASE_URL_FALLBACK = "DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/openleague_ci' }}";
 
 const REQUIRED_PRISMA_CONFIG_SCRIPTS: Record<string, string> = {
   postinstall: `prisma generate --config ${PRISMA_CONFIG_PATH}`,
@@ -59,6 +60,10 @@ function workflowUsesPinnedAction(workflow: string, actionName: string): boolean
 
 function includesAll(value: string, snippets: string[]): boolean {
   return snippets.every((snippet) => value.includes(snippet));
+}
+
+function hasCiDatabaseUrlFallback(workflow: string): boolean {
+  return workflow.includes(CI_DATABASE_URL_FALLBACK);
 }
 
 export async function validateDeploymentConfig(rootDir = process.cwd()): Promise<string[]> {
@@ -121,16 +126,31 @@ export async function validateDeploymentConfig(rootDir = process.cwd()): Promise
   const docsWorkflowPath = path.join(rootDir, '.github', 'workflows', 'docs-pages.yml');
   const deploymentChecksWorkflowPath = path.join(rootDir, '.github', 'workflows', 'deployment-checks.yml');
   const uptimeWorkflowPath = path.join(rootDir, '.github', 'workflows', 'uptime-monitoring.yml');
+  const releaseWorkflowPath = path.join(rootDir, '.github', 'workflows', 'release.yml');
+  const tagReleaseWorkflowPath = path.join(rootDir, '.github', 'workflows', 'tag-release.yml');
   const docsBuildScriptPath = path.join(rootDir, 'scripts', 'build-docs-pages.ts');
   const uptimeCheckScriptPath = path.join(rootDir, 'scripts', 'check-uptime.ts');
   const healthRoutePath = path.join(rootDir, 'app', 'api', 'health', 'route.ts');
 
   requireCondition(failures, existsSync(deploymentChecksWorkflowPath), 'Deployment checks workflow is required.');
   requireCondition(failures, existsSync(docsWorkflowPath), 'GitHub Pages docs workflow is required.');
+  requireCondition(failures, existsSync(releaseWorkflowPath), 'Release workflow is required.');
+  requireCondition(failures, existsSync(tagReleaseWorkflowPath), 'Tag release workflow is required.');
   requireCondition(failures, existsSync(docsBuildScriptPath), 'Documentation Pages build script is required.');
   requireCondition(failures, existsSync(uptimeWorkflowPath), 'Scheduled uptime monitoring workflow is required.');
   requireCondition(failures, existsSync(uptimeCheckScriptPath), 'Uptime monitoring check script is required.');
   requireCondition(failures, existsSync(healthRoutePath), 'Protected application health endpoint is required.');
+
+  for (const workflowPath of [docsWorkflowPath, deploymentChecksWorkflowPath, uptimeWorkflowPath, releaseWorkflowPath, tagReleaseWorkflowPath]) {
+    if (existsSync(workflowPath)) {
+      const workflow = await readFile(workflowPath, 'utf8');
+      requireCondition(
+        failures,
+        hasCiDatabaseUrlFallback(workflow),
+        `${path.relative(rootDir, workflowPath)} must provide DATABASE_URL during install so Prisma postinstall generation works in CI.`,
+      );
+    }
+  }
 
   if (existsSync(docsWorkflowPath)) {
     const docsWorkflow = await readFile(docsWorkflowPath, 'utf8');
