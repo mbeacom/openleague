@@ -15,10 +15,13 @@ import {
   type UpdateTeamMemberUsahIdInput,
 } from "@/lib/utils/validation";
 
-function revalidateRosterPaths(teamId: string) {
+function revalidateRosterPaths(...teamIds: string[]) {
   revalidatePath("/roster");
-  revalidatePath(`/team/${teamId}`);
-  revalidatePath(`/team/${teamId}/roster`);
+
+  for (const teamId of new Set(teamIds)) {
+    revalidatePath(`/team/${teamId}`);
+    revalidatePath(`/team/${teamId}/roster`);
+  }
 }
 
 /**
@@ -332,8 +335,7 @@ export async function transferPlayer(input: TransferPlayerInput) {
 
     // Revalidate relevant pages
     revalidatePath(`/league/${validated.leagueId}/roster`);
-    revalidateRosterPaths(validated.fromTeamId);
-    revalidateRosterPaths(validated.toTeamId);
+    revalidateRosterPaths(validated.fromTeamId, validated.toTeamId);
 
     return {
       success: true,

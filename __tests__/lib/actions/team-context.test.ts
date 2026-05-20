@@ -34,6 +34,7 @@ vi.mock("@/lib/db/prisma", () => ({
 }));
 
 import {
+  canAccessActiveTeamInLeague,
   getTeamOverviewData,
   getTeamRosterDataById,
   isActiveTeamInLeague,
@@ -146,8 +147,54 @@ describe("team context Server Actions", () => {
       expect(result).toMatchObject({
         role: "LEAGUE_ADMIN",
         isAdmin: false,
-        canOpenEventDetails: false,
+        canOpenEventDetails: true,
         league: { id: LEAGUE_ID, name: "Metro Hockey" },
+      });
+    });
+
+    it("prioritizes a league-admin role over a less-permissive direct team role", async () => {
+      mockPrisma.team.findFirst.mockResolvedValue(
+        buildTeam({
+          members: [{ role: "MEMBER" }],
+          league: {
+            id: LEAGUE_ID,
+            name: "Metro Hockey",
+            isActive: true,
+            users: [{ role: "LEAGUE_ADMIN" }],
+          },
+        }),
+      );
+      mockPrisma.event.findMany.mockResolvedValue([]);
+
+      const result = await getTeamOverviewData(TEAM_ID);
+
+      expect(result).toMatchObject({
+        role: "LEAGUE_ADMIN",
+        isAdmin: false,
+        canOpenEventDetails: true,
+      });
+    });
+
+    it("prioritizes a league team-admin role over a direct member role", async () => {
+      mockPrisma.team.findFirst.mockResolvedValue(
+        buildTeam({
+          members: [{ role: "MEMBER" }],
+          league: {
+            id: LEAGUE_ID,
+            name: "Metro Hockey",
+            isActive: true,
+            users: [{ role: "TEAM_ADMIN" }],
+          },
+        }),
+      );
+      mockPrisma.event.findMany.mockResolvedValue([]);
+
+      const result = await getTeamOverviewData(TEAM_ID);
+
+      expect(result).toMatchObject({
+        role: "TEAM_ADMIN",
+        isAdmin: false,
+        canOpenEventDetails: true,
       });
     });
 
@@ -296,6 +343,66 @@ describe("team context Server Actions", () => {
       mockPrisma.team.findFirst.mockResolvedValue(null);
 
       await expect(isActiveTeamInLeague(TEAM_ID, LEAGUE_ID)).resolves.toBe(false);
+    });
+  });
+
+  describe("canAccessActiveTeamInLeague", () => {
+    it("returns true when the current user has direct team membership", async () => {
+      mockPrisma.team.findFirst.mockResolvedValue({
+        members: [{ id: "member-1" }],
+        league: { users: [] },
+      });
+
+      await expect(canAccessActiveTeamInLeague(TEAM_ID, LEAGUE_ID)).resolves.toBe(true);
+      expect(mockRequireUserId).toHaveBeenCalled();
+      expect(mockPrisma.team.findFirst).toHaveBeenCalledWith({
+        where: {
+          id: TEAM_ID,
+          leagueId: LEAGUE_ID,
+          isActive: true,
+          league: { isActive: true },
+        },
+        select: {
+          members: {
+            where: { userId: USER_ID },
+            select: { id: true },
+            take: 1,
+          },
+          league: {
+            select: {
+              users: {
+                where: { userId: USER_ID },
+                select: { id: true },
+                take: 1,
+              },
+            },
+          },
+        },
+      });
+    });
+
+    it("returns true when the current user has league membership", async () => {
+      mockPrisma.team.findFirst.mockResolvedValue({
+        members: [],
+        league: { users: [{ id: "league-user-1" }] },
+      });
+
+      await expect(canAccessActiveTeamInLeague(TEAM_ID, LEAGUE_ID)).resolves.toBe(true);
+    });
+
+    it("returns false when the team belongs to the league but the user lacks access", async () => {
+      mockPrisma.team.findFirst.mockResolvedValue({
+        members: [],
+        league: { users: [] },
+      });
+
+      await expect(canAccessActiveTeamInLeague(TEAM_ID, LEAGUE_ID)).resolves.toBe(false);
+    });
+
+    it("returns false when the active team/league relationship is missing", async () => {
+      mockPrisma.team.findFirst.mockResolvedValue(null);
+
+      await expect(canAccessActiveTeamInLeague(TEAM_ID, LEAGUE_ID)).resolves.toBe(false);
     });
   });
 });

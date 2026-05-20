@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
-  mockIsActiveTeamInLeague,
+  mockCanAccessActiveTeamInLeague,
   mockNotFound,
   mockRedirect,
 } = vi.hoisted(() => ({
-  mockIsActiveTeamInLeague: vi.fn(),
+  mockCanAccessActiveTeamInLeague: vi.fn(),
   mockNotFound: vi.fn(() => {
     throw new Error("NEXT_NOT_FOUND");
   }),
@@ -20,7 +20,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("@/lib/actions/team-context", () => ({
-  isActiveTeamInLeague: (...args: unknown[]) => mockIsActiveTeamInLeague(...args),
+  canAccessActiveTeamInLeague: (...args: unknown[]) => mockCanAccessActiveTeamInLeague(...args),
 }));
 
 import LeagueTeamRedirectPage from "@/app/(dashboard)/league/[leagueId]/teams/[teamId]/page";
@@ -36,45 +36,45 @@ beforeEach(() => {
 
 describe("league team route aliases", () => {
   it("redirects a valid league team alias to the canonical team page", async () => {
-    mockIsActiveTeamInLeague.mockResolvedValue(true);
+    mockCanAccessActiveTeamInLeague.mockResolvedValue(true);
 
     await expect(LeagueTeamRedirectPage({ params })).rejects.toThrow(
       `NEXT_REDIRECT:/team/${TEAM_ID}`,
     );
 
-    expect(mockIsActiveTeamInLeague).toHaveBeenCalledWith(TEAM_ID, LEAGUE_ID);
+    expect(mockCanAccessActiveTeamInLeague).toHaveBeenCalledWith(TEAM_ID, LEAGUE_ID);
     expect(mockRedirect).toHaveBeenCalledWith(`/team/${TEAM_ID}`);
     expect(mockNotFound).not.toHaveBeenCalled();
   });
 
   it("redirects a valid league team roster alias to the canonical team roster page", async () => {
-    mockIsActiveTeamInLeague.mockResolvedValue(true);
+    mockCanAccessActiveTeamInLeague.mockResolvedValue(true);
 
     await expect(LeagueTeamRosterRedirectPage({ params })).rejects.toThrow(
       `NEXT_REDIRECT:/team/${TEAM_ID}/roster`,
     );
 
-    expect(mockIsActiveTeamInLeague).toHaveBeenCalledWith(TEAM_ID, LEAGUE_ID);
+    expect(mockCanAccessActiveTeamInLeague).toHaveBeenCalledWith(TEAM_ID, LEAGUE_ID);
     expect(mockRedirect).toHaveBeenCalledWith(`/team/${TEAM_ID}/roster`);
     expect(mockNotFound).not.toHaveBeenCalled();
   });
 
   it("returns not found when the team does not belong to the requested league", async () => {
-    mockIsActiveTeamInLeague.mockResolvedValue(false);
+    mockCanAccessActiveTeamInLeague.mockResolvedValue(false);
 
     await expect(LeagueTeamRedirectPage({ params })).rejects.toThrow("NEXT_NOT_FOUND");
 
-    expect(mockIsActiveTeamInLeague).toHaveBeenCalledWith(TEAM_ID, LEAGUE_ID);
+    expect(mockCanAccessActiveTeamInLeague).toHaveBeenCalledWith(TEAM_ID, LEAGUE_ID);
     expect(mockNotFound).toHaveBeenCalledTimes(1);
     expect(mockRedirect).not.toHaveBeenCalled();
   });
 
   it("returns not found for invalid roster aliases", async () => {
-    mockIsActiveTeamInLeague.mockResolvedValue(false);
+    mockCanAccessActiveTeamInLeague.mockResolvedValue(false);
 
     await expect(LeagueTeamRosterRedirectPage({ params })).rejects.toThrow("NEXT_NOT_FOUND");
 
-    expect(mockIsActiveTeamInLeague).toHaveBeenCalledWith(TEAM_ID, LEAGUE_ID);
+    expect(mockCanAccessActiveTeamInLeague).toHaveBeenCalledWith(TEAM_ID, LEAGUE_ID);
     expect(mockNotFound).toHaveBeenCalledTimes(1);
     expect(mockRedirect).not.toHaveBeenCalled();
   });

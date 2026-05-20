@@ -46,14 +46,13 @@ function formatEventDate(value: string) {
 }
 
 function formatAccessRole(role: string, isAdmin: boolean) {
-  if (isAdmin) return "Team Admin";
-
   switch (role) {
     case "LEAGUE_ADMIN":
       return "League Admin";
     case "TEAM_ADMIN":
       return "League Team Admin";
     default:
+      if (isAdmin) return "Team Admin";
       return "Member";
   }
 }
