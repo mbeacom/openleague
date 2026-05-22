@@ -51,7 +51,7 @@ describe('deployment configuration', () => {
     }));
     expect(proxySource).toContain('export const config');
     expect(proxySource).toContain('matcher');
-    expect(proxySource).not.toMatch(/\bruntime\s*:/u);
+    expect(proxySource).not.toMatch(/\bruntime\s*[:=]/u);
     expect(vercel.crons).toEqual(expect.arrayContaining([
       expect.objectContaining({ path: '/api/cron/rsvp-reminders', schedule: '0 * * * *' }),
       expect.objectContaining({ path: '/api/cron/notification-batches', schedule: '0 8 * * *' }),

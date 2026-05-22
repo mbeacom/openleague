@@ -38,6 +38,8 @@ const REQUIRED_BUN_RUNTIME_SCRIPTS: Record<string, string> = {
   start: 'bun --bun next start',
 };
 
+const REQUIRED_GENERAL_SCRIPTS = ['type-check', 'lint', 'test', 'validate-env', 'docs:build-pages', 'uptime:check'];
+
 async function readJson<T>(rootDir: string, relativePath: string): Promise<T> {
   return JSON.parse(await readFile(path.join(rootDir, relativePath), 'utf8')) as T;
 }
@@ -107,7 +109,7 @@ export async function validateDeploymentConfig(rootDir = process.cwd()): Promise
     'vercel.json Content-Security-Policy must explicitly restrict frame ancestors.',
   );
 
-  for (const script of ['build', 'vercel:build', 'start', 'type-check', 'lint', 'test', 'validate-env', 'docs:build-pages', 'uptime:check']) {
+  for (const script of REQUIRED_GENERAL_SCRIPTS) {
     requireCondition(failures, Boolean(packageJson.scripts?.[script]), `package.json must define a ${script} script.`);
   }
 
@@ -207,7 +209,7 @@ export async function validateDeploymentConfig(rootDir = process.cwd()): Promise
     requireCondition(failures, includesAll(proxySource, ['export const config', 'matcher']), 'proxy.ts must export matcher config for route coverage.');
     requireCondition(
       failures,
-      !/\bruntime\s*:/u.test(proxySource),
+      !/\bruntime\s*[:=]/u.test(proxySource),
       'proxy.ts must not export a runtime config; Next.js 16 proxy always runs on Node.js and route segment runtime config breaks builds.',
     );
   }
