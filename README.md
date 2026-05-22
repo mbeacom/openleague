@@ -186,7 +186,7 @@ bun run dev
 
 Prisma Client generation runs during dependency installation via `postinstall`.
 For Vercel production deployments, `bun run vercel:build` applies pending Prisma
-migrations with `bun run db:migrate:deploy` before `next build`. Preview builds
+migrations with `bun run db:migrate:deploy` before the Bun-powered Next.js build. Preview builds
 skip migration deployment by default; set `OPENLEAGUE_RUN_MIGRATIONS_ON_BUILD=true`
 only when the preview has its own safe target database.
 

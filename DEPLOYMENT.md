@@ -70,7 +70,7 @@ UPTIME_CHECK_TOKEN="your-generated-uptime-token-here"
 
 #### Database Migrations
 
-The `postinstall` script generates the Prisma Client during dependency installation. Vercel production builds run `bun run vercel:build`, which applies schema migrations against the target database before `next build`.
+The `postinstall` script generates the Prisma Client during dependency installation. Vercel production builds run `bun run vercel:build`, which applies schema migrations against the target database before the Bun-powered Next.js build.
 
 For non-Vercel deployments or one-off production repairs, apply schema migrations explicitly against the target database:
 
@@ -134,7 +134,7 @@ vercel
 Vercel automatically detects Next.js projects, but verify these settings:
 
 - **Framework Preset**: Next.js
-- **Build Command**: `bun run build` (configured in `vercel.json`)
+- **Build Command**: `bun run vercel:build` (configured in `vercel.json`)
 - **Install Command**: `bun install --frozen-lockfile` (configured in `vercel.json`)
 - **Output Directory**: `.next` (automatic)
 - **Node.js Version**: 22.x (latest LTS)

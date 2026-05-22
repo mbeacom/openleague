@@ -67,7 +67,8 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-    // Apply middleware to all routes except static files
+    // Next.js 16 proxy files always run on the Node.js runtime.
+    // Apply proxy to all routes except static files.
     matcher: [
         /*
          * Match all request paths except for the ones starting with:

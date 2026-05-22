@@ -2,6 +2,7 @@
   "buildCommand": "bun run vercel:build",
   "installCommand": "bun install --frozen-lockfile",
   "framework": "nextjs",
+  "bunVersion": "1.x",
   "crons": [
     {
       "path": "/api/cron/rsvp-reminders",
