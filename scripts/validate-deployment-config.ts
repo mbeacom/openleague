@@ -9,6 +9,7 @@ interface VercelConfig {
   framework?: string;
   buildCommand?: string;
   installCommand?: string;
+  bunVersion?: string;
   crons?: Array<{ path?: string; schedule?: string }>;
   headers?: Array<{ source?: string; headers?: Array<{ key?: string; value?: string }> }>;
 }
@@ -28,6 +29,13 @@ const REQUIRED_PRISMA_CONFIG_SCRIPTS: Record<string, string> = {
   'db:migrate:deploy': `prisma migrate deploy --config ${PRISMA_CONFIG_PATH}`,
   'db:migrate:reset': `prisma migrate reset --config ${PRISMA_CONFIG_PATH}`,
   'db:generate': `prisma generate --config ${PRISMA_CONFIG_PATH}`,
+};
+
+const REQUIRED_BUN_RUNTIME_SCRIPTS: Record<string, string> = {
+  dev: 'bun --bun next dev --turbopack',
+  build: 'bun --bun next build',
+  'vercel:build': 'bun scripts/vercel-build.mjs',
+  start: 'bun --bun next start',
 };
 
 async function readJson<T>(rootDir: string, relativePath: string): Promise<T> {
@@ -76,6 +84,7 @@ export async function validateDeploymentConfig(rootDir = process.cwd()): Promise
 
   requireCondition(failures, vercel.framework === 'nextjs', 'vercel.json must declare the Next.js framework preset.');
   requireCondition(failures, vercel.buildCommand === 'bun run vercel:build', 'vercel.json buildCommand must be `bun run vercel:build`.');
+  requireCondition(failures, vercel.bunVersion === '1.x', 'vercel.json must set bunVersion to `1.x` so Vercel runs functions with Bun.');
   requireCondition(
     failures,
     vercel.installCommand === 'bun install --frozen-lockfile',
@@ -100,6 +109,19 @@ export async function validateDeploymentConfig(rootDir = process.cwd()): Promise
 
   for (const script of ['build', 'vercel:build', 'start', 'type-check', 'lint', 'test', 'validate-env', 'docs:build-pages', 'uptime:check']) {
     requireCondition(failures, Boolean(packageJson.scripts?.[script]), `package.json must define a ${script} script.`);
+  }
+
+  for (const [scriptName, expectedCommand] of Object.entries(REQUIRED_BUN_RUNTIME_SCRIPTS)) {
+    const actualCommand = packageJson.scripts?.[scriptName];
+
+    requireCondition(failures, Boolean(actualCommand), `package.json must define a ${scriptName} script.`);
+    if (actualCommand) {
+      requireCondition(
+        failures,
+        actualCommand === expectedCommand,
+        `package.json ${scriptName} must be \`${expectedCommand}\` so Next.js commands run under the Bun runtime.`,
+      );
+    }
   }
 
   for (const [scriptName, expectedCommand] of Object.entries(REQUIRED_PRISMA_CONFIG_SCRIPTS)) {
@@ -131,6 +153,7 @@ export async function validateDeploymentConfig(rootDir = process.cwd()): Promise
   const docsBuildScriptPath = path.join(rootDir, 'scripts', 'build-docs-pages.ts');
   const uptimeCheckScriptPath = path.join(rootDir, 'scripts', 'check-uptime.ts');
   const healthRoutePath = path.join(rootDir, 'app', 'api', 'health', 'route.ts');
+  const proxyPath = path.join(rootDir, 'proxy.ts');
 
   requireCondition(failures, existsSync(deploymentChecksWorkflowPath), 'Deployment checks workflow is required.');
   requireCondition(failures, existsSync(docsWorkflowPath), 'GitHub Pages docs workflow is required.');
@@ -140,6 +163,7 @@ export async function validateDeploymentConfig(rootDir = process.cwd()): Promise
   requireCondition(failures, existsSync(uptimeWorkflowPath), 'Scheduled uptime monitoring workflow is required.');
   requireCondition(failures, existsSync(uptimeCheckScriptPath), 'Uptime monitoring check script is required.');
   requireCondition(failures, existsSync(healthRoutePath), 'Protected application health endpoint is required.');
+  requireCondition(failures, existsSync(proxyPath), 'Next.js proxy.ts is required for security headers, HTTPS enforcement, and rate limiting.');
 
   for (const workflowPath of [docsWorkflowPath, deploymentChecksWorkflowPath, uptimeWorkflowPath, releaseWorkflowPath, tagReleaseWorkflowPath]) {
     if (existsSync(workflowPath)) {
@@ -175,6 +199,16 @@ export async function validateDeploymentConfig(rootDir = process.cwd()): Promise
       failures,
       includesAll(deploymentChecksWorkflow, ['scripts/check-uptime.ts', '.github/workflows/uptime-monitoring.yml', 'bun run deployment:check']),
       'Deployment checks workflow must run readiness checks when uptime monitoring files change.',
+    );
+  }
+
+  if (existsSync(proxyPath)) {
+    const proxySource = await readFile(proxyPath, 'utf8');
+    requireCondition(failures, includesAll(proxySource, ['export const config', 'matcher']), 'proxy.ts must export matcher config for route coverage.');
+    requireCondition(
+      failures,
+      !/\bruntime\s*:/u.test(proxySource),
+      'proxy.ts must not export a runtime config; Next.js 16 proxy always runs on Node.js and route segment runtime config breaks builds.',
     );
   }
 

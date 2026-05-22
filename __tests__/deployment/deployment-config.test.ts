@@ -32,13 +32,26 @@ describe('deployment configuration', () => {
       framework?: string;
       buildCommand?: string;
       installCommand?: string;
+      bunVersion?: string;
       crons?: Array<{ path?: string; schedule?: string }>;
       headers?: Array<{ headers?: Array<{ key?: string }> }>;
     }>('vercel.json');
+    const packageJson = await readJson<{ scripts?: Record<string, string> }>('package.json');
+    const proxySource = await readText('proxy.ts');
 
     expect(vercel.framework).toBe('nextjs');
     expect(vercel.buildCommand).toBe('bun run vercel:build');
     expect(vercel.installCommand).toBe('bun install --frozen-lockfile');
+    expect(vercel.bunVersion).toBe('1.x');
+    expect(packageJson.scripts).toEqual(expect.objectContaining({
+      dev: 'bun --bun next dev --turbopack',
+      build: 'bun --bun next build',
+      'vercel:build': 'bun scripts/vercel-build.mjs',
+      start: 'bun --bun next start',
+    }));
+    expect(proxySource).toContain('export const config');
+    expect(proxySource).toContain('matcher');
+    expect(proxySource).not.toMatch(/\bruntime\s*:/u);
     expect(vercel.crons).toEqual(expect.arrayContaining([
       expect.objectContaining({ path: '/api/cron/rsvp-reminders', schedule: '0 * * * *' }),
       expect.objectContaining({ path: '/api/cron/notification-batches', schedule: '0 8 * * *' }),

@@ -3,11 +3,11 @@
   "version": "0.54.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack",
+    "dev": "bun --bun next dev --turbopack",
     "dev:wake": "tsx scripts/wake-db.ts && bun run dev",
-    "build": "next build",
-    "vercel:build": "node scripts/vercel-build.mjs",
-    "start": "next start",
+    "build": "bun --bun next build",
+    "vercel:build": "bun scripts/vercel-build.mjs",
+    "start": "bun --bun next start",
     "lint": "eslint .",
     "type": "tsc --noEmit",
     "type-check": "tsc --noEmit",
@@ -65,11 +65,11 @@
     "@testing-library/user-event": "^14.6.1",
     "@types/bcryptjs": "^3.0.0",
     "@types/mdx": "^2.0.13",
-    "@types/node": "^25.6.2",
+    "@types/node": "^25.8.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^4.7.0",
-    "@vitest/ui": "^4.1.5",
+    "@vitest/ui": "^4.1.6",
     "autoprefixer": "^10.5.0",
     "eslint": "^9.39.4",
     "eslint-config-next": "16.2.0",
@@ -79,8 +79,8 @@
     "postcss": "^8.5.14",
     "prisma": "^7.8.0",
     "tailwindcss": "^4.3.0",
-    "tsx": "^4.21.0",
+    "tsx": "^4.22.0",
     "typescript": "^5.9.3",
-    "vitest": "^4.1.5"
+    "vitest": "^4.1.6"
   }
 }
