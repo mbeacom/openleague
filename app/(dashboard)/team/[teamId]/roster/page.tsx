@@ -1,10 +1,10 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Box, Button, Container, Divider, Stack, Typography } from "@mui/material";
+import { Box, Container, Divider, Stack, Typography } from "@mui/material";
 import { ArrowBack as ArrowBackIcon } from "@mui/icons-material";
 import RosterList from "@/components/features/roster/RosterList";
 import InvitationManager from "@/components/features/roster/InvitationManager";
 import { getTeamRosterDataById } from "@/lib/actions/team-context";
+import { NextLinkButton } from "@/components/ui/NextLinkComponents";
 
 interface TeamRosterPageProps {
   params: Promise<{ teamId: string }>;
@@ -21,14 +21,13 @@ export default async function TeamRosterPage({ params }: TeamRosterPageProps) {
   return (
     <Container maxWidth="lg">
       <Box sx={{ py: 4 }}>
-        <Button
-          component={Link}
+        <NextLinkButton
           href={`/team/${teamId}`}
           startIcon={<ArrowBackIcon />}
           sx={{ mb: 3 }}
         >
           Back to team
-        </Button>
+        </NextLinkButton>
 
         <Stack
           direction={{ xs: "column", sm: "row" }}
