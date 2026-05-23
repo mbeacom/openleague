@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Box, Button, Container, Divider, Stack, Typography } from "@mui/material";
 import { ArrowBack as ArrowBackIcon } from "@mui/icons-material";
@@ -22,7 +21,6 @@ export default async function TeamRosterPage({ params }: TeamRosterPageProps) {
     <Container maxWidth="lg">
       <Box sx={{ py: 4 }}>
         <Button
-          component={Link}
           href={`/team/${teamId}`}
           startIcon={<ArrowBackIcon />}
           sx={{ mb: 3 }}

@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   Avatar,
@@ -69,7 +68,6 @@ export default async function TeamPage({ params }: TeamPageProps) {
     <Container maxWidth="lg">
       <Box sx={{ py: 4 }}>
         <Button
-          component={Link}
           href="/dashboard"
           startIcon={<ArrowBackIcon />}
           sx={{ mb: 3 }}
@@ -124,7 +122,6 @@ export default async function TeamPage({ params }: TeamPageProps) {
 
               <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ width: { xs: "100%", md: "auto" } }}>
                 <Button
-                  component={Link}
                   href={`/team/${team.id}/roster`}
                   variant="contained"
                   startIcon={<PeopleIcon />}
@@ -134,7 +131,6 @@ export default async function TeamPage({ params }: TeamPageProps) {
                 </Button>
                 {team.league ? (
                   <Button
-                    component={Link}
                     href={`/league/${team.league.id}/teams`}
                     variant="outlined"
                     startIcon={<GroupsIcon />}
@@ -180,7 +176,7 @@ export default async function TeamPage({ params }: TeamPageProps) {
                   <Card
                     key={event.id}
                     {...(team.canOpenEventDetails
-                      ? { component: Link, href: `/events/${event.id}` }
+                      ? { component: "a", href: `/events/${event.id}` }
                       : {})}
                     variant="outlined"
                     sx={{
