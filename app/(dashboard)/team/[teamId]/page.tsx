@@ -2,7 +2,6 @@ import { notFound } from "next/navigation";
 import {
   Avatar,
   Box,
-  Button,
   Card,
   CardContent,
   Chip,
@@ -20,6 +19,7 @@ import {
 } from "@mui/icons-material";
 import { getTeamOverviewData } from "@/lib/actions/team-context";
 import { formatSport } from "@/lib/utils/validation";
+import { NextLinkButton, NextLinkCard } from "@/components/ui/NextLinkComponents";
 
 interface TeamPageProps {
   params: Promise<{ teamId: string }>;
@@ -67,13 +67,13 @@ export default async function TeamPage({ params }: TeamPageProps) {
   return (
     <Container maxWidth="lg">
       <Box sx={{ py: 4 }}>
-        <Button
+        <NextLinkButton
           href="/dashboard"
           startIcon={<ArrowBackIcon />}
           sx={{ mb: 3 }}
         >
           Back to dashboard
-        </Button>
+        </NextLinkButton>
 
         <Card
           sx={{
@@ -121,23 +121,23 @@ export default async function TeamPage({ params }: TeamPageProps) {
               </Stack>
 
               <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ width: { xs: "100%", md: "auto" } }}>
-                <Button
+                <NextLinkButton
                   href={`/team/${team.id}/roster`}
                   variant="contained"
                   startIcon={<PeopleIcon />}
                   fullWidth
                 >
                   {team.isAdmin ? "Manage roster" : "View roster"}
-                </Button>
+                </NextLinkButton>
                 {team.league ? (
-                  <Button
+                  <NextLinkButton
                     href={`/league/${team.league.id}/teams`}
                     variant="outlined"
                     startIcon={<GroupsIcon />}
                     fullWidth
                   >
                     League teams
-                  </Button>
+                  </NextLinkButton>
                 ) : null}
               </Stack>
             </Stack>
@@ -172,14 +172,10 @@ export default async function TeamPage({ params }: TeamPageProps) {
               </Typography>
             ) : (
               <Stack spacing={1.5}>
-                {team.upcomingEvents.map((event) => (
-                  <Card
-                    key={event.id}
-                    {...(team.canOpenEventDetails
-                      ? { component: "a", href: `/events/${event.id}` }
-                      : {})}
-                    variant="outlined"
-                    sx={{
+                {team.upcomingEvents.map((event) => {
+                  const eventCardProps = {
+                    variant: "outlined" as const,
+                    sx: {
                       color: "inherit",
                       textDecoration: "none",
                       transition: "border-color 0.2s, box-shadow 0.2s",
@@ -190,8 +186,10 @@ export default async function TeamPage({ params }: TeamPageProps) {
                         borderColor: "primary.main",
                         boxShadow: 1,
                       } : undefined,
-                    }}
-                  >
+                    },
+                  };
+
+                  const eventCardContent = (
                     <CardContent sx={{ py: 1.5, "&:last-child": { pb: 1.5 } }}>
                       <Stack
                         direction={{ xs: "column", sm: "row" }}
@@ -215,8 +213,18 @@ export default async function TeamPage({ params }: TeamPageProps) {
                         </Stack>
                       </Stack>
                     </CardContent>
-                  </Card>
-                ))}
+                  );
+
+                  return team.canOpenEventDetails ? (
+                    <NextLinkCard key={event.id} href={`/events/${event.id}`} {...eventCardProps}>
+                      {eventCardContent}
+                    </NextLinkCard>
+                  ) : (
+                    <Card key={event.id} {...eventCardProps}>
+                      {eventCardContent}
+                    </Card>
+                  );
+                })}
               </Stack>
             )}
           </CardContent>
