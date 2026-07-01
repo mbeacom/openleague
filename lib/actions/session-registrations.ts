@@ -62,7 +62,7 @@ async function countCommittedSpots(
   excludeRegistrationId?: string
 ): Promise<number> {
   const holdCutoff = new Date(Date.now() - HOLD_WINDOW_MS);
-  const registrations = await client.sessionRegistration.findMany({
+  const result = await client.sessionRegistration.aggregate({
     where: {
       scheduleBlockId,
       id: excludeRegistrationId ? { not: excludeRegistrationId } : undefined,
@@ -71,9 +71,9 @@ async function countCommittedSpots(
         { status: "PENDING", createdAt: { gte: holdCutoff } },
       ],
     },
-    select: { quantity: true },
+    _sum: { quantity: true },
   });
-  return registrations.reduce((total, reg) => total + reg.quantity, 0);
+  return result._sum.quantity ?? 0;
 }
 
 /**

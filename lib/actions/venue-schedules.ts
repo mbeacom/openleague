@@ -519,6 +519,7 @@ export async function getPublicVenueSchedule(slug: string, filters: PublicVenueS
     select: {
       id: true,
       name: true,
+      timezone: true,
       organizationId: true,
       scheduleBlocks: {
         where: {
@@ -554,9 +555,16 @@ export async function getPublicVenueSchedule(slug: string, filters: PublicVenueS
               discipline: true,
             },
           },
-          // Confirmed registrations (quantities only) to compute remaining spots.
+          // Confirmed + actively-held pending registrations, matching the
+          // capacity enforced at registration time, so "spots remaining" is
+          // consistent with what a registrant can actually reserve.
           registrations: {
-            where: { status: "CONFIRMED" },
+            where: {
+              OR: [
+                { status: "CONFIRMED" },
+                { status: "PENDING", createdAt: { gte: new Date(now.getTime() - 30 * 60 * 1000) } },
+              ],
+            },
             select: { quantity: true },
           },
         },

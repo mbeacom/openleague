@@ -18,7 +18,7 @@ const {
   mockPrisma: {
     $transaction: vi.fn(),
     payment: { findUnique: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
-    sessionRegistration: { update: vi.fn(), findMany: vi.fn() },
+    sessionRegistration: { update: vi.fn(), findMany: vi.fn(), aggregate: vi.fn() },
     venueStaff: { findMany: vi.fn() },
     venueOrganization: { updateMany: vi.fn() },
   },
@@ -183,7 +183,7 @@ describe("stripe webhook route", () => {
       },
     });
     // One spot already confirmed; this 2-spot payment would exceed capacity 2.
-    mockPrisma.sessionRegistration.findMany.mockResolvedValue([{ quantity: 1 }]);
+    mockPrisma.sessionRegistration.aggregate.mockResolvedValue({ _sum: { quantity: 1 } });
     mockRefund.mockResolvedValue({ id: "re_1" });
 
     const response = await POST(webhookRequest());

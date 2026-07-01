@@ -11,6 +11,7 @@ import {
   VenueScheduleCalendar,
 } from "@/components/features/venue-admin";
 import { formatCurrencyFromCents } from "@/lib/utils/currency";
+import { formatDateTimeInZone } from "@/lib/utils/date";
 
 export const dynamic = "force-dynamic";
 
@@ -63,7 +64,10 @@ export default async function PublicRinkSchedulePage({ params, searchParams }: P
         </Typography>
 
         {registration === "success" ? (
-          <Alert severity="success">Your registration is confirmed. A receipt has been emailed to you.</Alert>
+          <Alert severity="success">
+            Payment received — we&apos;re confirming your spot. It will appear under My
+            Registrations once your payment finishes processing.
+          </Alert>
         ) : null}
         {registration === "canceled" ? (
           <Alert severity="warning">Checkout was canceled — you have not been charged.</Alert>
@@ -103,7 +107,8 @@ export default async function PublicRinkSchedulePage({ params, searchParams }: P
                             )}
                           </Stack>
                           <Typography variant="body2" color="text.secondary">
-                            {block.startsAt.toLocaleString()} – {block.endsAt.toLocaleString()}
+                            {formatDateTimeInZone(block.startsAt, venue.timezone)} –{" "}
+                            {formatDateTimeInZone(block.endsAt, venue.timezone)}
                             {block.surface ? ` · ${block.surface.name}` : ""}
                           </Typography>
                           {remaining != null ? (

@@ -106,11 +106,11 @@ async function findCheckoutPayment(sessionId: string, registrationId: string | n
 
 /** Sum confirmed spots for a schedule block, excluding one registration. */
 async function countConfirmedSpots(scheduleBlockId: string, excludeRegistrationId: string): Promise<number> {
-  const regs = await prisma.sessionRegistration.findMany({
+  const result = await prisma.sessionRegistration.aggregate({
     where: { scheduleBlockId, id: { not: excludeRegistrationId }, status: "CONFIRMED" },
-    select: { quantity: true },
+    _sum: { quantity: true },
   });
-  return regs.reduce((total, reg) => total + reg.quantity, 0);
+  return result._sum.quantity ?? 0;
 }
 
 async function handleCheckoutCompleted(

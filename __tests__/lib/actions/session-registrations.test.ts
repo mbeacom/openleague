@@ -28,7 +28,7 @@ const {
     venueScheduleBlock: { findFirst: vi.fn() },
     lessonOffering: { findFirst: vi.fn() },
     venue: { findFirst: vi.fn() },
-    sessionRegistration: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
+    sessionRegistration: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn(), aggregate: vi.fn() },
     payment: { update: vi.fn(), updateMany: vi.fn(), aggregate: vi.fn() },
     venueStaff: { findMany: vi.fn() },
   },
@@ -116,6 +116,7 @@ beforeEach(() => {
       : Promise.resolve(arg)
   );
   mockPrisma.sessionRegistration.findMany.mockResolvedValue([]);
+  mockPrisma.sessionRegistration.aggregate.mockResolvedValue({ _sum: { quantity: 0 } });
   mockPrisma.payment.updateMany.mockResolvedValue({ count: 1 });
   mockPrisma.venueStaff.findMany.mockResolvedValue([]);
   mockPrisma.sessionRegistration.create.mockResolvedValue({ id: REG_ID });
@@ -145,7 +146,7 @@ describe("registerForSession — free", () => {
 
   it("rejects registration when the session is full", async () => {
     mockPrisma.venueScheduleBlock.findFirst.mockResolvedValue(blockOffering({ capacity: 2 }));
-    mockPrisma.sessionRegistration.findMany.mockResolvedValue([{ quantity: 2 }]);
+    mockPrisma.sessionRegistration.aggregate.mockResolvedValue({ _sum: { quantity: 2 } });
 
     const result = await registerForSession(freeInput);
 

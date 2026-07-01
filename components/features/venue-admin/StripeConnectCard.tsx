@@ -24,10 +24,14 @@ export function StripeConnectCard({ organizationId, status, autoRefresh = false 
 
   useEffect(() => {
     if (!autoRefresh) return;
+    let active = true;
     startTransition(async () => {
       const result = await refreshStripeAccountStatus({ organizationId });
-      if (result.success) setCurrent(result.data);
+      if (active && result.success) setCurrent(result.data);
     });
+    return () => {
+      active = false;
+    };
   }, [autoRefresh, organizationId]);
 
   const redirectTo = (url: string) => {
