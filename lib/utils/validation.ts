@@ -70,7 +70,7 @@ export const VENUE_SCHEDULE_AUDIENCES = [
 ] as const;
 export const VENUE_SCHEDULE_VISIBILITIES = ["PUBLIC", "AUTHENTICATED", "RELATIONSHIP_ONLY", "PRIVATE"] as const;
 export const VENUE_SCHEDULE_BLOCK_STATUSES = ["DRAFT", "PUBLISHED", "CANCELED", "ARCHIVED"] as const;
-export const REGISTRATION_MODES = ["INFO_ONLY", "REQUEST_REQUIRED", "EXTERNAL_REGISTRATION"] as const;
+export const REGISTRATION_MODES = ["INFO_ONLY", "REQUEST_REQUIRED", "EXTERNAL_REGISTRATION", "SELF_REGISTER"] as const;
 export const ICE_TIME_REQUEST_STATUSES = [
   "SUBMITTED",
   "UNDER_REVIEW",
@@ -890,6 +890,56 @@ export const skillLevelReferenceSchema = z.object({
   isActive: z.boolean().default(true),
 });
 
+// --- Rink session registration & purchasing ---
+
+export const SESSION_REGISTRATION_STATUSES = [
+  "PENDING",
+  "CONFIRMED",
+  "WAITLISTED",
+  "CANCELED",
+  "REFUNDED",
+  "EXPIRED",
+] as const;
+
+/**
+ * End-user opt-in for a self-register schedule block OR lesson offering.
+ * Exactly one of scheduleBlockId / lessonOfferingId must be provided. Price is
+ * never accepted from the client — the server snapshots it from the offering.
+ */
+export const sessionRegistrationSchema = z
+  .object({
+    venueId: z.string().cuid("Invalid venue ID format"),
+    scheduleBlockId: optionalCuid("Invalid schedule block ID format"),
+    lessonOfferingId: optionalCuid("Invalid lesson ID format"),
+    participantName: sanitizedStringWithMin(1, 100),
+    participantEmail: z.string().trim().toLowerCase().email("Invalid email address").max(254),
+    participantPhone: optionalSanitizedString(30),
+    skillLevelNote: optionalSanitizedString(120),
+    notes: optionalSanitizedString(1000),
+    quantity: z.coerce.number().int().min(1, "At least one spot is required").max(20, "Too many spots"),
+  })
+  .refine(
+    (data) => Boolean(data.scheduleBlockId) !== Boolean(data.lessonOfferingId),
+    {
+      message: "Select exactly one session or lesson to register for",
+      path: ["scheduleBlockId"],
+    }
+  );
+
+export const connectOnboardingSchema = z.object({
+  organizationId: z.string().cuid("Invalid organization ID format"),
+});
+
+export const registrationCommandSchema = z.object({
+  organizationId: z.string().cuid("Invalid organization ID format"),
+  venueId: z.string().cuid("Invalid venue ID format"),
+  registrationId: z.string().cuid("Invalid registration ID format"),
+});
+
+export const refundRegistrationSchema = registrationCommandSchema.extend({
+  reason: optionalSanitizedString(500),
+});
+
 export type CreateVenueOrganizationInput = z.input<typeof createVenueOrganizationSchema>;
 export type UpdateVenueOrganizationInput = z.input<typeof updateVenueOrganizationSchema>;
 export type UpdateVenueProfileInput = z.input<typeof updateVenueProfileSchema>;
@@ -905,6 +955,10 @@ export type LessonOfferingInput = z.input<typeof lessonOfferingSchema>;
 export type VenueContentPostInput = z.input<typeof venueContentPostSchema>;
 export type VenueRelationshipInput = z.input<typeof venueRelationshipSchema>;
 export type SkillLevelReferenceInput = z.input<typeof skillLevelReferenceSchema>;
+export type SessionRegistrationInput = z.input<typeof sessionRegistrationSchema>;
+export type ConnectOnboardingInput = z.input<typeof connectOnboardingSchema>;
+export type RegistrationCommandInput = z.input<typeof registrationCommandSchema>;
+export type RefundRegistrationInput = z.input<typeof refundRegistrationSchema>;
 
 // Game schedule validation schemas
 export const createGameScheduleSchema = z.object({

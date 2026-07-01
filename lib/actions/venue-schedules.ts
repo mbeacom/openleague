@@ -519,6 +519,7 @@ export async function getPublicVenueSchedule(slug: string, filters: PublicVenueS
     select: {
       id: true,
       name: true,
+      organizationId: true,
       scheduleBlocks: {
         where: {
           status: "PUBLISHED",
@@ -534,6 +535,7 @@ export async function getPublicVenueSchedule(slug: string, filters: PublicVenueS
           audience: true,
           startsAt: true,
           endsAt: true,
+          capacity: true,
           priceAmount: true,
           priceCurrency: true,
           priceLabel: true,
@@ -552,8 +554,29 @@ export async function getPublicVenueSchedule(slug: string, filters: PublicVenueS
               discipline: true,
             },
           },
+          // Confirmed registrations (quantities only) to compute remaining spots.
+          registrations: {
+            where: { status: "CONFIRMED" },
+            select: { quantity: true },
+          },
         },
         orderBy: { startsAt: "asc" },
+      },
+      lessonOfferings: {
+        where: { status: "PUBLISHED", registrationMode: "SELF_REGISTER", ...skillLevelWhere },
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          lessonType: true,
+          instructorName: true,
+          priceAmount: true,
+          priceCurrency: true,
+          durationMinutes: true,
+          availabilityDescription: true,
+          skillLevels: { select: { id: true, label: true, discipline: true } },
+        },
+        orderBy: { title: "asc" },
       },
     },
   });
