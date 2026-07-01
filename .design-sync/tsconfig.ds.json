@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "baseUrl": "..",
+    "jsx": "react-jsx",
+    "paths": {
+      "next/link": ["./.design-sync/shims/next-link.tsx"],
+      "next/image": ["./.design-sync/shims/next-image.tsx"],
+      "next/navigation": ["./.design-sync/shims/next-navigation.tsx"],
+      "@/lib/actions/roster": ["./.design-sync/shims/actions-stub.ts"],
+      "@/lib/actions/rsvp": ["./.design-sync/shims/actions-stub.ts"],
+      "@/lib/analytics/umami": ["./.design-sync/shims/analytics-stub.ts"],
+      "@/*": ["./*"]
+    }
+  }
+}
