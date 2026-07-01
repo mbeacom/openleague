@@ -15,6 +15,27 @@ export function formatDateTime(date: Date): string {
 }
 
 /**
+ * Format a date in a specific IANA timezone (e.g. a venue's local timezone).
+ * Falls back to the default locale rendering if the timezone is invalid.
+ */
+export function formatDateTimeInZone(date: Date | string, timeZone: string): string {
+  const value = new Date(date);
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      timeZone,
+      timeZoneName: "short",
+    }).format(value);
+  } catch {
+    return value.toLocaleString("en-US");
+  }
+}
+
+/**
  * Format a date for datetime-local input fields
  * Returns format: YYYY-MM-DDTHH:MM
  */

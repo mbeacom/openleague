@@ -84,6 +84,76 @@ export async function sendIceTimeRequestDecisionEmail(
   });
 }
 
+interface SessionRegistrationConfirmationEmailData {
+  to: string;
+  participantName: string;
+  venueName: string;
+  offeringTitle: string;
+  quantity: number;
+  amountTotal: number; // cents
+  currency: string;
+  receiptUrl?: string | null;
+}
+
+function formatMoney(amountCents: number, currency: string): string {
+  try {
+    return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(amountCents / 100);
+  } catch {
+    return `${(amountCents / 100).toFixed(2)} ${currency}`;
+  }
+}
+
+/**
+ * Confirmation sent to the participant after a successful session/lesson registration.
+ */
+export async function sendSessionRegistrationConfirmationEmail(
+  data: SessionRegistrationConfirmationEmailData
+): Promise<void> {
+  const mailchimp = getMailchimpClient();
+  const registrationsLink = `${BASE_URL}/my-registrations`;
+  const priceLine =
+    data.amountTotal > 0 ? ` Amount paid: ${formatMoney(data.amountTotal, data.currency)}.` : " This session is free.";
+  const receiptLine = data.receiptUrl ? `<p><a href="${data.receiptUrl}">View your receipt</a></p>` : "";
+
+  await mailchimp.messages.send({
+    message: {
+      from_email: EMAIL_FROM,
+      subject: `You're registered for ${data.offeringTitle}`,
+      html: `<p>Hi ${data.participantName},</p><p>You're registered for <strong>${data.offeringTitle}</strong> at ${data.venueName} (${data.quantity} spot${data.quantity === 1 ? "" : "s"}).${priceLine}</p>${receiptLine}<p><a href="${registrationsLink}">View your registrations</a></p>`,
+      text: `Hi ${data.participantName}, you're registered for ${data.offeringTitle} at ${data.venueName} (${data.quantity} spot(s)).${priceLine} View your registrations: ${registrationsLink}`,
+      to: [{ email: data.to, type: "to" as const }],
+    },
+  });
+}
+
+interface SessionRegistrationManagerEmailData {
+  managerEmails: string[];
+  venueName: string;
+  offeringTitle: string;
+  participantName: string;
+  quantity: number;
+}
+
+/**
+ * Notify rink managers that a new registration was received.
+ */
+export async function sendSessionRegistrationManagerEmail(
+  data: SessionRegistrationManagerEmailData
+): Promise<void> {
+  if (data.managerEmails.length === 0) return;
+  const mailchimp = getMailchimpClient();
+
+  await mailchimp.messages.send({
+    message: {
+      from_email: EMAIL_FROM,
+      subject: `New registration for ${data.offeringTitle}`,
+      html: `<p>${data.participantName} registered for <strong>${data.offeringTitle}</strong> at ${data.venueName} (${data.quantity} spot${data.quantity === 1 ? "" : "s"}).</p>`,
+      text: `${data.participantName} registered for ${data.offeringTitle} at ${data.venueName} (${data.quantity} spot(s)).`,
+      to: data.managerEmails.map((email) => ({ email, type: "to" as const })),
+    },
+  });
+}
+
 interface InvitationEmailData {
   email: string;
   teamName: string;

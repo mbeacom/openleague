@@ -38,6 +38,16 @@ export default async function VenueAdminPage() {
                         {organization.type} - {organization.status}
                       </Typography>
                     </Box>
+                    <Box>
+                      <Button
+                        component={Link}
+                        href={`/venue-admin/${organization.id}/payments`}
+                        variant="text"
+                        size="small"
+                      >
+                        Payments &amp; payouts
+                      </Button>
+                    </Box>
                       <Stack spacing={1}>
                       {organization.venues.map((venue) => (
                           <Stack key={venue.id} direction={{ xs: "column", sm: "row" }} spacing={1}>
@@ -54,6 +64,13 @@ export default async function VenueAdminPage() {
                               variant="text"
                             >
                               Schedule
+                            </Button>
+                            <Button
+                              component={Link}
+                              href={`/venue-admin/${organization.id}/venues/${venue.id}/registrations`}
+                              variant="text"
+                            >
+                              Registrations
                             </Button>
                           </Stack>
                       ))}

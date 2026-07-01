@@ -47,6 +47,8 @@ model User {
   acceptedVenueRelationships   VenueRelationship[]      @relation("VenueRelationshipAccepter")
   removedVenueRelationships    VenueRelationship[]      @relation("VenueRelationshipRemover")
   venueActivityLogs            VenueActivityLog[]       @relation("VenueActivityActor")
+  sessionRegistrations         SessionRegistration[]    @relation("SessionRegistrant")
+  canceledSessionRegistrations SessionRegistration[]    @relation("SessionRegistrationCanceler")
 }
 
 // Audit log model for tracking administrative actions and security events
@@ -688,6 +690,27 @@ enum RegistrationMode {
   INFO_ONLY
   REQUEST_REQUIRED
   EXTERNAL_REGISTRATION
+  SELF_REGISTER
+}
+
+enum SessionRegistrationStatus {
+  PENDING
+  CONFIRMED
+  WAITLISTED
+  CANCELED
+  REFUNDED
+  EXPIRED
+}
+
+enum PaymentStatus {
+  FREE
+  REQUIRES_PAYMENT
+  PROCESSING
+  PAID
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+  CANCELED
 }
 
 enum IceTimeRequestStatus {
@@ -766,14 +789,24 @@ model VenueOrganization {
   primaryContactPhone String?
   website             String?
   status              VenueOrganizationStatus @default(DRAFT)
-  createdAt           DateTime                @default(now())
-  updatedAt           DateTime                @updatedAt
+
+  // Stripe Connect (direct charges) — the organization is the merchant of record.
+  stripeAccountId        String? @unique
+  stripeChargesEnabled   Boolean @default(false)
+  stripePayoutsEnabled   Boolean @default(false)
+  stripeDetailsSubmitted Boolean @default(false)
+  // Optional platform application fee in basis points (e.g. 250 = 2.5%). Falls back to env default.
+  platformFeeBps         Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   createdById String
   createdBy   User   @relation("VenueOrganizationCreator", fields: [createdById], references: [id], onDelete: Restrict)
 
-  venues Venue[]
-  staff  VenueStaff[]
+  venues   Venue[]
+  staff    VenueStaff[]
+  payments Payment[]
 
   @@index([createdById])
   @@index([status])
@@ -859,6 +892,8 @@ model Venue {
   contentPosts    VenueContentPost[]
   relationships   VenueRelationship[]
   activityLogs    VenueActivityLog[]
+  registrations   SessionRegistration[]
+  payments        Payment[]
 
   @@index([visibility])
   @@index([teamId])
@@ -954,6 +989,7 @@ model VenueScheduleBlock {
   iceTimeRequests IceTimeRequest[]
   lessonOfferings LessonOffering[]
   skillLevels     SkillLevelReference[]
+  registrations   SessionRegistration[]
 
   @@index([venueId, startsAt])
   @@index([surfaceId, startsAt])
@@ -1027,6 +1063,7 @@ model LessonOffering {
 
   scheduleBlocks VenueScheduleBlock[]
   skillLevels    SkillLevelReference[]
+  registrations  SessionRegistration[]
 
   @@index([venueId, status])
   @@index([lessonType])
@@ -1127,6 +1164,83 @@ model VenueActivityLog {
   @@index([actorId])
   @@index([action])
   @@map("venue_activity_logs")
+}
+
+model SessionRegistration {
+  id               String                    @id @default(cuid())
+  status           SessionRegistrationStatus @default(PENDING)
+  // Snapshot of participant details at registration time.
+  participantName  String
+  participantEmail String
+  participantPhone String?
+  skillLevelNote   String?
+  notes            String?
+  quantity         Int                       @default(1)
+  // Price snapshot in the smallest currency unit (cents). amountTotal = unitAmount * quantity.
+  unitAmount       Int                       @default(0)
+  amountTotal      Int                       @default(0)
+  currency         String                    @default("USD")
+  confirmedAt      DateTime?
+  canceledAt       DateTime?
+  createdAt        DateTime                  @default(now())
+  updatedAt        DateTime                  @updatedAt
+
+  venueId String
+  venue   Venue  @relation(fields: [venueId], references: [id], onDelete: Cascade)
+
+  // Exactly one of scheduleBlockId / lessonOfferingId is set.
+  scheduleBlockId String?
+  scheduleBlock   VenueScheduleBlock? @relation(fields: [scheduleBlockId], references: [id], onDelete: Cascade)
+
+  lessonOfferingId String?
+  lessonOffering   LessonOffering? @relation(fields: [lessonOfferingId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation("SessionRegistrant", fields: [userId], references: [id], onDelete: Cascade)
+
+  canceledById String?
+  canceledBy   User?   @relation("SessionRegistrationCanceler", fields: [canceledById], references: [id], onDelete: SetNull)
+
+  payment Payment?
+
+  @@index([venueId, status])
+  @@index([scheduleBlockId, status])
+  @@index([lessonOfferingId, status])
+  @@index([userId])
+  @@map("session_registrations")
+}
+
+model Payment {
+  id                      String        @id @default(cuid())
+  status                  PaymentStatus @default(REQUIRES_PAYMENT)
+  amount                  Int // gross amount charged in cents
+  currency                String        @default("USD")
+  applicationFeeAmount    Int           @default(0)
+  refundedAmount          Int           @default(0)
+  // Stripe identifiers. The charge lives on the connected account.
+  stripeAccountId         String?
+  stripeCheckoutSessionId String?       @unique
+  stripePaymentIntentId   String?       @unique
+  receiptUrl              String?
+  failureReason           String?
+  paidAt                  DateTime?
+  refundedAt              DateTime?
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
+
+  registrationId String              @unique
+  registration   SessionRegistration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  venueId String
+  venue   Venue  @relation(fields: [venueId], references: [id], onDelete: Cascade)
+
+  organizationId String
+  organization   VenueOrganization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, status])
+  @@index([venueId, status])
+  @@index([stripePaymentIntentId])
+  @@map("payments")
 }
 
 // Game schedule for season management

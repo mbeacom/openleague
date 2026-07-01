@@ -15,6 +15,12 @@ export function proxy(request: NextRequest) {
 
     // Apply rate limiting to API routes (more permissive in development)
     if (request.nextUrl.pathname.startsWith("/api/")) {
+        // Stripe webhooks are authenticated by signature and must be delivered
+        // reliably from Stripe's IPs, so they bypass IP-based rate limiting.
+        if (request.nextUrl.pathname.startsWith("/api/webhooks/")) {
+            return NextResponse.next();
+        }
+
         let rateLimitResult;
 
         // Use stricter rate limiting for auth endpoints

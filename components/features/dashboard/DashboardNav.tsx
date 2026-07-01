@@ -30,6 +30,7 @@ import {
   Place as PlaceIcon,
   DateRange as DateRangeIcon,
   Storefront as StorefrontIcon,
+  ConfirmationNumber as ConfirmationNumberIcon,
 } from "@mui/icons-material";
 import { logout } from "@/lib/actions/logout";
 import { useLeague } from "@/components/providers/LeagueProvider";
@@ -71,6 +72,7 @@ export default function DashboardNav({ mobile = false, isLeagueMode = false }: D
         { label: "Events", path: "/events", icon: <EventIcon /> },
         { label: "Venues", path: "/venues", icon: <PlaceIcon /> },
         { label: "Venue Admin", path: "/venue-admin", icon: <StorefrontIcon /> },
+        { label: "My Registrations", path: "/my-registrations", icon: <ConfirmationNumberIcon /> },
         { label: "Schedules", path: "/schedules", icon: <DateRangeIcon /> },
         { label: "Practice Planner", path: "/practice-planner", icon: <SportsHockeyIcon /> },
       ];
@@ -84,6 +86,7 @@ export default function DashboardNav({ mobile = false, isLeagueMode = false }: D
       { label: "Schedule", path: `${leaguePrefix}/schedule`, icon: <CalendarIcon /> },
       { label: "Venues", path: `${leaguePrefix}/venues`, icon: <PlaceIcon /> },
       { label: "Venue Admin", path: "/venue-admin", icon: <StorefrontIcon /> },
+      { label: "My Registrations", path: "/my-registrations", icon: <ConfirmationNumberIcon /> },
       { label: "Roster", path: `${leaguePrefix}/roster`, icon: <PeopleIcon /> },
       { label: "Statistics", path: `${leaguePrefix}/statistics`, icon: <AnalyticsIcon /> },
       { label: "Reports", path: `${leaguePrefix}/reports`, icon: <ReportsIcon /> },

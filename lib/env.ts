@@ -67,6 +67,13 @@ const envSchema = z.object({
 
     // Optional AWS variables (for future migration)
     AWS_REGION: z.string().optional(),
+
+    // Payments — Stripe Connect (optional; payments disabled when unset)
+    STRIPE_SECRET_KEY: z.string().optional(),
+    STRIPE_CONNECT_WEBHOOK_SECRET: z.string().optional(),
+    NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: z.string().optional(),
+    // Default platform application fee in basis points (e.g. 250 = 2.5%). Overridable per organization.
+    STRIPE_PLATFORM_FEE_BPS: z.coerce.number().int().min(0).max(10000).optional(),
 })
 
 // Validate environment variables
@@ -95,6 +102,12 @@ function validateEnv() {
             NEXT_PUBLIC_GOOGLE_ADSENSE_MARKETING_SLOT: process.env.NEXT_PUBLIC_GOOGLE_ADSENSE_MARKETING_SLOT,
             NEXT_PUBLIC_GOOGLE_ADSENSE_DASHBOARD_SLOT: process.env.NEXT_PUBLIC_GOOGLE_ADSENSE_DASHBOARD_SLOT,
             AWS_REGION: process.env.AWS_REGION,
+            STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
+            STRIPE_CONNECT_WEBHOOK_SECRET: process.env.STRIPE_CONNECT_WEBHOOK_SECRET,
+            NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY,
+            STRIPE_PLATFORM_FEE_BPS: process.env.STRIPE_PLATFORM_FEE_BPS
+                ? Number(process.env.STRIPE_PLATFORM_FEE_BPS)
+                : undefined,
         }
     }
 
@@ -145,3 +158,7 @@ export const getBaseUrl = () => {
     // On the server, NEXTAUTH_URL is guaranteed to be set by env validation.
     return env.NEXTAUTH_URL
 }
+
+// Payments helpers
+export const isStripeConfigured = Boolean(env.STRIPE_SECRET_KEY)
+export const DEFAULT_PLATFORM_FEE_BPS = env.STRIPE_PLATFORM_FEE_BPS ?? 0
