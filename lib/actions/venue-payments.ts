@@ -16,6 +16,7 @@ import {
   isStripeEnabled,
   retrieveAccount,
 } from "@/lib/payments/stripe";
+import { computeRevenueSummary } from "@/lib/payments/revenue";
 
 export type ConnectStatus = {
   configured: boolean;
@@ -86,11 +87,22 @@ export async function startStripeOnboarding(
         organizationName: organization.name,
         email: organization.primaryContactEmail,
       });
-      accountId = account.id;
-      await prisma.venueOrganization.update({
-        where: { id: organization.id },
-        data: { stripeAccountId: accountId },
+      // Claim the account id only if none was set meanwhile (guards against two
+      // admins onboarding concurrently and creating duplicate Connect accounts).
+      const claim = await prisma.venueOrganization.updateMany({
+        where: { id: organization.id, stripeAccountId: null },
+        data: { stripeAccountId: account.id },
       });
+      if (claim.count === 0) {
+        // Another request won the race; use the already-stored account.
+        const current = await prisma.venueOrganization.findUnique({
+          where: { id: organization.id },
+          select: { stripeAccountId: true },
+        });
+        accountId = current?.stripeAccountId ?? account.id;
+      } else {
+        accountId = account.id;
+      }
     }
 
     const link = await createAccountLink(accountId, onboardingPaths(organizationId));
@@ -234,15 +246,7 @@ export async function getOrganizationPaymentsOverview(
       return { success: false, error: "Organization not found" };
     }
 
-    const paidAgg = await prisma.payment.aggregate({
-      where: { organizationId, status: { in: ["PAID", "PARTIALLY_REFUNDED"] } },
-      _sum: { amount: true, refundedAmount: true, applicationFeeAmount: true },
-      _count: true,
-    });
-
-    const grossCents = paidAgg._sum.amount ?? 0;
-    const refundedCents = paidAgg._sum.refundedAmount ?? 0;
-    const platformFeeCents = paidAgg._sum.applicationFeeAmount ?? 0;
+    const revenue = await computeRevenueSummary({ organizationId });
 
     return {
       success: true,
@@ -256,11 +260,7 @@ export async function getOrganizationPaymentsOverview(
           onboardingComplete: organization.stripeChargesEnabled && organization.stripeDetailsSubmitted,
         },
         revenue: {
-          paidCount: paidAgg._count,
-          grossCents,
-          refundedCents,
-          platformFeeCents,
-          netCents: grossCents - refundedCents - platformFeeCents,
+          ...revenue,
           currency: "USD",
         },
       },

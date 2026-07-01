@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { requireUserId, requireVenueRequestManager, requireVenueStaffRole, VENUE_STAFF_ADMIN_ROLES } from "@/lib/auth/session";
 import type { ActionResult } from "@/lib/actions/venue-organizations";
@@ -17,10 +18,12 @@ import {
   StripeDisabledError,
   computeApplicationFee,
   createRegistrationCheckoutSession,
+  expireCheckoutSession,
   isStripeEnabled,
   refundPaymentIntent,
 } from "@/lib/payments/stripe";
 import { sendSessionRegistrationConfirmationEmail, sendSessionRegistrationManagerEmail } from "@/lib/email/templates";
+import { computeRevenueSummary } from "@/lib/payments/revenue";
 
 export type RegisterForSessionResult = {
   registrationId: string;
@@ -29,15 +32,37 @@ export type RegisterForSessionResult = {
   checkoutUrl?: string;
 };
 
+type PrismaClientLike = Prisma.TransactionClient | typeof prisma;
+
 /**
  * Count the spots already committed to a schedule block (confirmed + active holds).
  * PENDING registrations only hold a spot for HOLD_WINDOW_MS to avoid orphaned holds.
  */
 const HOLD_WINDOW_MS = 30 * 60 * 1000;
 
-async function countCommittedSpots(scheduleBlockId: string, excludeRegistrationId?: string): Promise<number> {
+/** Thrown inside the reservation transaction when a block is at capacity. */
+class CapacityError extends Error {
+  constructor(public readonly remaining: number) {
+    super("Session at capacity");
+    this.name = "CapacityError";
+  }
+}
+
+/** True for Prisma serialization/write-conflict failures worth retrying. */
+function isSerializationError(error: unknown): boolean {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    (error.code === "P2034" || error.code === "P2028")
+  );
+}
+
+async function countCommittedSpots(
+  client: PrismaClientLike,
+  scheduleBlockId: string,
+  excludeRegistrationId?: string
+): Promise<number> {
   const holdCutoff = new Date(Date.now() - HOLD_WINDOW_MS);
-  const registrations = await prisma.sessionRegistration.findMany({
+  const registrations = await client.sessionRegistration.findMany({
     where: {
       scheduleBlockId,
       id: excludeRegistrationId ? { not: excludeRegistrationId } : undefined,
@@ -49,6 +74,32 @@ async function countCommittedSpots(scheduleBlockId: string, excludeRegistrationI
     select: { quantity: true },
   });
   return registrations.reduce((total, reg) => total + reg.quantity, 0);
+}
+
+/**
+ * Atomically enforce capacity and create the registration row. Runs in a
+ * serializable transaction so concurrent registrations cannot oversell a block.
+ * Throws {@link CapacityError} when full.
+ */
+async function reserveRegistration(params: {
+  scheduleBlockId: string | null;
+  capacity: number | null;
+  quantity: number;
+  data: Prisma.SessionRegistrationCreateArgs["data"];
+}): Promise<string> {
+  return prisma.$transaction(
+    async (tx) => {
+      if (params.capacity != null && params.scheduleBlockId) {
+        const taken = await countCommittedSpots(tx, params.scheduleBlockId);
+        if (taken + params.quantity > params.capacity) {
+          throw new CapacityError(Math.max(0, params.capacity - taken));
+        }
+      }
+      const registration = await tx.sessionRegistration.create({ data: params.data, select: { id: true } });
+      return registration.id;
+    },
+    { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
+  );
 }
 
 type RegistrableOffering = {
@@ -190,21 +241,6 @@ export async function registerForSession(
       return { success: false, error: offering.error };
     }
 
-    // Capacity check (schedule blocks only).
-    if (offering.capacity != null && validated.scheduleBlockId) {
-      const taken = await countCommittedSpots(validated.scheduleBlockId);
-      if (taken + validated.quantity > offering.capacity) {
-        const remaining = Math.max(0, offering.capacity - taken);
-        return {
-          success: false,
-          error:
-            remaining === 0
-              ? "This session is full."
-              : `Only ${remaining} spot${remaining === 1 ? "" : "s"} left for this session.`,
-        };
-      }
-    }
-
     const unitAmount = offering.priceAmount;
     const quantity = validated.quantity;
     const amountTotal = unitAmount * quantity;
@@ -226,15 +262,19 @@ export async function registerForSession(
       currency: offering.currency,
     };
 
-    // --- Free registration: confirm immediately ---
+    const scheduleBlockId = validated.scheduleBlockId || null;
+
+    // --- Free registration: reserve + confirm atomically ---
     if (!isPaid) {
-      const registration = await prisma.sessionRegistration.create({
+      const registrationId = await reserveRegistration({
+        scheduleBlockId,
+        capacity: offering.capacity,
+        quantity,
         data: { ...baseData, status: "CONFIRMED", confirmedAt: new Date() },
-        select: { id: true },
       });
 
       await afterConfirmation({
-        registrationId: registration.id,
+        registrationId,
         offering,
         participantEmail: validated.participantEmail,
         participantName: validated.participantName,
@@ -246,7 +286,7 @@ export async function registerForSession(
       revalidateRegistrationPaths(offering);
       return {
         success: true,
-        data: { registrationId: registration.id, status: "CONFIRMED", requiresPayment: false },
+        data: { registrationId, status: "CONFIRMED", requiresPayment: false },
       };
     }
 
@@ -261,8 +301,11 @@ export async function registerForSession(
     const organizationId = offering.organization.id;
     const applicationFeeAmount = computeApplicationFee(amountTotal, offering.organization.platformFeeBps);
 
-    // Create the registration + payment placeholder before contacting Stripe.
-    const registration = await prisma.sessionRegistration.create({
+    // Reserve a PENDING hold (capacity-enforced) with a payment placeholder.
+    const registrationId = await reserveRegistration({
+      scheduleBlockId,
+      capacity: offering.capacity,
+      quantity,
       data: {
         ...baseData,
         status: "PENDING",
@@ -278,7 +321,6 @@ export async function registerForSession(
           },
         },
       },
-      select: { id: true },
     });
 
     const slug = offering.venue.slug;
@@ -292,7 +334,7 @@ export async function registerForSession(
     try {
       const checkout = await createRegistrationCheckoutSession({
         connectedAccountId: offering.organization.stripeAccountId,
-        registrationId: registration.id,
+        registrationId,
         productName: `${offering.title} — ${offering.venue.name}`,
         productDescription: offering.kind === "lesson" ? "Lesson registration" : "Session registration",
         unitAmount,
@@ -302,11 +344,13 @@ export async function registerForSession(
         customerEmail: validated.participantEmail,
         successPath,
         cancelPath,
+        // Match the app-level hold window so late payments cannot overbook.
+        expiresInSeconds: Math.floor(HOLD_WINDOW_MS / 1000),
         metadata: { venueId: offering.venue.id, organizationId },
       });
 
       await prisma.payment.update({
-        where: { registrationId: registration.id },
+        where: { registrationId },
         data: { stripeCheckoutSessionId: checkout.id },
       });
 
@@ -314,7 +358,7 @@ export async function registerForSession(
       return {
         success: true,
         data: {
-          registrationId: registration.id,
+          registrationId,
           status: "PENDING",
           requiresPayment: true,
           checkoutUrl: checkout.url ?? undefined,
@@ -323,7 +367,7 @@ export async function registerForSession(
     } catch (stripeError) {
       // Roll back the pending registration if checkout could not be created.
       await prisma.sessionRegistration.update({
-        where: { id: registration.id },
+        where: { id: registrationId },
         data: { status: "EXPIRED", payment: { update: { status: "CANCELED" } } },
       });
       if (stripeError instanceof StripeDisabledError) {
@@ -334,6 +378,18 @@ export async function registerForSession(
   } catch (error) {
     if (error instanceof Error && error.message.includes("NEXT_REDIRECT")) {
       throw error;
+    }
+    if (error instanceof CapacityError) {
+      return {
+        success: false,
+        error:
+          error.remaining === 0
+            ? "This session is full."
+            : `Only ${error.remaining} spot${error.remaining === 1 ? "" : "s"} left for this session.`,
+      };
+    }
+    if (isSerializationError(error)) {
+      return { success: false, error: "This session is filling up fast — please try again." };
     }
     return { success: false, error: "Failed to register for this session." };
   }
@@ -357,6 +413,9 @@ export async function cancelMyRegistration(
         status: true,
         amountTotal: true,
         venue: { select: { id: true, slug: true, organizationId: true } },
+        payment: {
+          select: { id: true, status: true, stripeCheckoutSessionId: true, stripeAccountId: true },
+        },
       },
     });
 
@@ -370,6 +429,17 @@ export async function cancelMyRegistration(
 
     if (registration.amountTotal > 0 && registration.status === "CONFIRMED") {
       return { success: false, error: "This is a paid registration — contact the rink to request a refund." };
+    }
+
+    // For a paid PENDING hold, expire the open Checkout Session first so the
+    // customer cannot pay the stale URL and resurrect a canceled registration.
+    const payment = registration.payment;
+    if (payment?.stripeCheckoutSessionId && payment.stripeAccountId && payment.status !== "PAID") {
+      try {
+        await expireCheckoutSession(payment.stripeCheckoutSessionId, payment.stripeAccountId);
+      } catch (expireError) {
+        console.error("Failed to expire Stripe Checkout session on cancel:", expireError);
+      }
     }
 
     const updated = await prisma.sessionRegistration.update({
@@ -423,9 +493,19 @@ export async function getMyRegistrations() {
 export async function getVenueRegistrations(input: { organizationId: string; venueId: string }) {
   await requireVenueRequestManager(input.organizationId, input.venueId);
 
-  const [registrations, paidAgg] = await Promise.all([
+  // Bind venue to organization: org-wide staff roles authorize any venueId, so we
+  // must confirm the venue actually belongs to this org before returning data.
+  const venue = await prisma.venue.findFirst({
+    where: { id: input.venueId, organizationId: input.organizationId },
+    select: { id: true },
+  });
+  if (!venue) {
+    throw new Error("Venue not found for this organization");
+  }
+
+  const [registrations, summary] = await Promise.all([
     prisma.sessionRegistration.findMany({
-      where: { venueId: input.venueId },
+      where: { venueId: input.venueId, venue: { organizationId: input.organizationId } },
       orderBy: { createdAt: "desc" },
       take: 500,
       select: {
@@ -443,27 +523,10 @@ export async function getVenueRegistrations(input: { organizationId: string; ven
         payment: { select: { status: true, amount: true, refundedAmount: true, applicationFeeAmount: true } },
       },
     }),
-    prisma.payment.aggregate({
-      where: { venueId: input.venueId, status: { in: ["PAID", "PARTIALLY_REFUNDED"] } },
-      _sum: { amount: true, refundedAmount: true, applicationFeeAmount: true },
-      _count: true,
-    }),
+    computeRevenueSummary({ venueId: input.venueId, organizationId: input.organizationId }),
   ]);
 
-  const grossCents = paidAgg._sum.amount ?? 0;
-  const refundedCents = paidAgg._sum.refundedAmount ?? 0;
-  const feeCents = paidAgg._sum.applicationFeeAmount ?? 0;
-
-  return {
-    registrations,
-    summary: {
-      paidCount: paidAgg._count,
-      grossCents,
-      refundedCents,
-      platformFeeCents: feeCents,
-      netCents: grossCents - refundedCents - feeCents,
-    },
-  };
+  return { registrations, summary };
 }
 
 /** Admin: refund a paid registration via Stripe and mark it refunded. */
@@ -498,14 +561,39 @@ export async function refundRegistration(
       return { success: false, error: "Registration not found" };
     }
     const payment = registration.payment;
-    if (!payment || payment.status !== "PAID" || !payment.stripePaymentIntentId || !payment.stripeAccountId) {
+    const refundable = payment?.status === "PAID" || payment?.status === "PARTIALLY_REFUNDED";
+    if (!payment || !refundable || !payment.stripePaymentIntentId || !payment.stripeAccountId) {
       return { success: false, error: "This registration has no captured payment to refund." };
     }
 
-    await refundPaymentIntent({
-      paymentIntentId: payment.stripePaymentIntentId,
-      connectedAccountId: payment.stripeAccountId,
+    const remaining = payment.amount - payment.refundedAmount;
+    if (remaining <= 0) {
+      return { success: false, error: "This payment has already been fully refunded." };
+    }
+
+    // Claim the payment for refunding so concurrent requests cannot double-refund.
+    const claim = await prisma.payment.updateMany({
+      where: { id: payment.id, status: { in: ["PAID", "PARTIALLY_REFUNDED"] } },
+      data: { status: "PROCESSING" },
     });
+    if (claim.count === 0) {
+      return { success: false, error: "This registration is already being refunded." };
+    }
+
+    try {
+      await refundPaymentIntent({
+        paymentIntentId: payment.stripePaymentIntentId,
+        connectedAccountId: payment.stripeAccountId,
+        // Refund the outstanding balance; omit amount for a never-refunded payment.
+        amount: payment.refundedAmount > 0 ? remaining : undefined,
+        refundApplicationFee: true,
+        idempotencyKey: `refund-full:${registration.id}`,
+      });
+    } catch (stripeError) {
+      // Release the claim so the admin can retry.
+      await prisma.payment.update({ where: { id: payment.id }, data: { status: payment.status } });
+      throw stripeError;
+    }
 
     await prisma.$transaction([
       prisma.payment.update({
@@ -552,25 +640,31 @@ async function afterConfirmation(input: {
   amountTotal: number;
   currency: string;
 }) {
-  await sendSessionRegistrationConfirmationEmail({
-    to: input.participantEmail,
-    participantName: input.participantName,
-    venueName: input.offering.venue.name,
-    offeringTitle: input.offering.title,
-    quantity: input.quantity,
-    amountTotal: input.amountTotal,
-    currency: input.currency,
-  });
-
-  const managerEmails = await getVenueManagerEmails(input.offering.venue.organizationId);
-  if (managerEmails.length > 0) {
-    await sendSessionRegistrationManagerEmail({
-      managerEmails,
+  // Notifications are best-effort: a mail failure must not fail a committed
+  // registration (which would prompt the user to retry and double-register).
+  try {
+    await sendSessionRegistrationConfirmationEmail({
+      to: input.participantEmail,
+      participantName: input.participantName,
       venueName: input.offering.venue.name,
       offeringTitle: input.offering.title,
-      participantName: input.participantName,
       quantity: input.quantity,
+      amountTotal: input.amountTotal,
+      currency: input.currency,
     });
+
+    const managerEmails = await getVenueManagerEmails(input.offering.venue.organizationId);
+    if (managerEmails.length > 0) {
+      await sendSessionRegistrationManagerEmail({
+        managerEmails,
+        venueName: input.offering.venue.name,
+        offeringTitle: input.offering.title,
+        participantName: input.participantName,
+        quantity: input.quantity,
+      });
+    }
+  } catch (emailError) {
+    console.error("Failed to send registration confirmation email:", emailError);
   }
 }
 

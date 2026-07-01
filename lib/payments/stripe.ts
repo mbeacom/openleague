@@ -122,6 +122,8 @@ export interface RegistrationCheckoutInput {
   customerEmail?: string | null;
   successPath: string;
   cancelPath: string;
+  /** Seconds from now the Checkout Session should expire (min 1800, max 86400). */
+  expiresInSeconds?: number;
   metadata?: Record<string, string>;
 }
 
@@ -135,10 +137,15 @@ export async function createRegistrationCheckoutSession(
   const stripe = getStripeClient();
   const baseUrl = getBaseUrl() || env.NEXTAUTH_URL;
 
+  // Stripe requires expires_at between 30 minutes and 24 hours from creation.
+  const expiresInSeconds = Math.min(Math.max(input.expiresInSeconds ?? 1800, 1800), 86400);
+  const metadata = { registrationId: input.registrationId, ...input.metadata };
+
   return stripe.checkout.sessions.create(
     {
       mode: "payment",
       customer_email: input.customerEmail ?? undefined,
+      expires_at: Math.floor(Date.now() / 1000) + expiresInSeconds,
       line_items: [
         {
           quantity: input.quantity,
@@ -152,20 +159,30 @@ export async function createRegistrationCheckoutSession(
           },
         },
       ],
-      payment_intent_data:
-        input.applicationFeeAmount > 0
+      // Always attach metadata to the PaymentIntent so refund/failure webhooks
+      // can reconcile even if they arrive before checkout.session.completed.
+      payment_intent_data: {
+        metadata,
+        ...(input.applicationFeeAmount > 0
           ? { application_fee_amount: input.applicationFeeAmount }
-          : undefined,
+          : {}),
+      },
       success_url: `${baseUrl}${input.successPath}`,
       cancel_url: `${baseUrl}${input.cancelPath}`,
       client_reference_id: input.registrationId,
-      metadata: {
-        registrationId: input.registrationId,
-        ...input.metadata,
-      },
+      metadata,
     },
     { stripeAccount: input.connectedAccountId }
   );
+}
+
+/**
+ * Expire an open Checkout Session so a canceled/abandoned registration cannot be
+ * paid later. Best-effort: callers should ignore failures (e.g. already expired).
+ */
+export async function expireCheckoutSession(sessionId: string, connectedAccountId: string): Promise<void> {
+  const stripe = getStripeClient();
+  await stripe.checkout.sessions.expire(sessionId, {}, { stripeAccount: connectedAccountId });
 }
 
 /**
@@ -177,6 +194,8 @@ export async function refundPaymentIntent(input: {
   amount?: number;
   /** Reverse the application fee back to the rink (default true for full refunds). */
   refundApplicationFee?: boolean;
+  /** Deterministic key so retries/double-clicks do not create duplicate refunds. */
+  idempotencyKey?: string;
 }): Promise<Stripe.Refund> {
   const stripe = getStripeClient();
   return stripe.refunds.create(
@@ -185,7 +204,10 @@ export async function refundPaymentIntent(input: {
       amount: input.amount,
       refund_application_fee: input.refundApplicationFee ?? input.amount === undefined,
     },
-    { stripeAccount: input.connectedAccountId }
+    {
+      stripeAccount: input.connectedAccountId,
+      idempotencyKey: input.idempotencyKey,
+    }
   );
 }
 

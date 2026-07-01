@@ -34,9 +34,17 @@ mutations, session-helper auth, Zod validation in `lib/utils/validation.ts`, Pri
    verified with `STRIPE_CONNECT_WEBHOOK_SECRET` at `POST /api/webhooks/stripe`.
 3. **Registration + Payment split** — free registrations have no `Payment`; paid ones create a
    `Payment` placeholder before contacting Stripe and are confirmed on webhook.
-4. **Capacity** — enforced by summing confirmed + actively held pending registration
-   quantities against the block capacity; a 30-minute hold window prevents orphaned holds.
-5. **Optional payments** — `isStripeEnabled()` gates paid flows; without keys the platform
+4. **Capacity** — enforced atomically inside a Serializable transaction that counts confirmed
+   + actively-held pending quantities and inserts the registration together, so concurrent
+   registrations cannot oversell. A 30-minute hold window (matched by the Checkout Session
+   `expires_at`) releases abandoned checkouts, and `checkout.session.completed` re-checks
+   capacity and auto-refunds a late payment that would oversell.
+5. **Webhook robustness** — idempotent handlers only confirm a still-`PENDING` hold whose
+   payment is `REQUIRES_PAYMENT`/`PROCESSING` (canceled rows are never resurrected); payments
+   reconcile by checkout session id with a fallback to `client_reference_id` / PaymentIntent
+   `metadata.registrationId` for out-of-order or orphaned events. Refunds use a claim + Stripe
+   idempotency key.
+6. **Optional payments** — `isStripeEnabled()` gates paid flows; without keys the platform
    supports free registration only and hides/disables paid actions.
 
 ## Project Structure

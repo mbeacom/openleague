@@ -5,6 +5,7 @@ import {
   constructConnectWebhookEvent,
   getStripeClient,
   isStripeEnabled,
+  refundPaymentIntent,
 } from "@/lib/payments/stripe";
 import { env } from "@/lib/env";
 import {
@@ -51,7 +52,7 @@ export async function POST(request: Request): Promise<Response> {
         await handlePaymentFailed(event.data.object as Stripe.PaymentIntent);
         break;
       case "charge.refunded":
-        await handleChargeRefunded(event.data.object as Stripe.Charge);
+        await handleChargeRefunded(event.data.object as Stripe.Charge, event.account);
         break;
       case "account.updated":
         await handleAccountUpdated(event.data.object as Stripe.Account);
@@ -68,42 +69,109 @@ export async function POST(request: Request): Promise<Response> {
   return NextResponse.json({ received: true });
 }
 
+const checkoutPaymentSelect = {
+  id: true,
+  status: true,
+  amount: true,
+  stripeAccountId: true,
+  registration: {
+    select: {
+      id: true,
+      status: true,
+      participantEmail: true,
+      participantName: true,
+      quantity: true,
+      amountTotal: true,
+      currency: true,
+      venue: { select: { name: true, slug: true, organizationId: true } },
+      scheduleBlock: { select: { id: true, title: true, capacity: true } },
+      lessonOffering: { select: { title: true } },
+    },
+  },
+} as const;
+
+/** Locate the payment for a completed checkout, falling back to the registration id. */
+async function findCheckoutPayment(sessionId: string, registrationId: string | null) {
+  const bySession = await prisma.payment.findUnique({
+    where: { stripeCheckoutSessionId: sessionId },
+    select: checkoutPaymentSelect,
+  });
+  if (bySession) return bySession;
+  if (!registrationId) return null;
+  return prisma.payment.findUnique({
+    where: { registrationId },
+    select: checkoutPaymentSelect,
+  });
+}
+
+/** Sum confirmed spots for a schedule block, excluding one registration. */
+async function countConfirmedSpots(scheduleBlockId: string, excludeRegistrationId: string): Promise<number> {
+  const regs = await prisma.sessionRegistration.findMany({
+    where: { scheduleBlockId, id: { not: excludeRegistrationId }, status: "CONFIRMED" },
+    select: { quantity: true },
+  });
+  return regs.reduce((total, reg) => total + reg.quantity, 0);
+}
+
 async function handleCheckoutCompleted(
   session: Stripe.Checkout.Session,
   connectedAccountId?: string | null
 ): Promise<void> {
   if (session.payment_status !== "paid") return;
 
-  const payment = await prisma.payment.findUnique({
-    where: { stripeCheckoutSessionId: session.id },
-    select: {
-      id: true,
-      status: true,
-      stripeAccountId: true,
-      registration: {
-        select: {
-          id: true,
-          status: true,
-          participantEmail: true,
-          participantName: true,
-          quantity: true,
-          amountTotal: true,
-          currency: true,
-          venue: { select: { name: true, slug: true, organizationId: true } },
-          scheduleBlock: { select: { title: true } },
-          lessonOffering: { select: { title: true } },
-        },
-      },
-    },
-  });
+  const registrationId =
+    session.client_reference_id ??
+    (typeof session.metadata?.registrationId === "string" ? session.metadata.registrationId : null);
+
+  const payment = await findCheckoutPayment(session.id, registrationId);
 
   if (!payment || !payment.registration) return;
-  if (payment.status === "PAID") return; // idempotent
+  // Only confirm an outstanding, still-pending hold. This makes the handler
+  // idempotent and prevents a canceled/expired registration from being revived
+  // by a late payment on a stale checkout URL.
+  if (payment.status !== "REQUIRES_PAYMENT" && payment.status !== "PROCESSING") return;
+  if (payment.registration.status !== "PENDING") return;
 
   const paymentIntentId =
     typeof session.payment_intent === "string" ? session.payment_intent : session.payment_intent?.id ?? null;
+  const account = connectedAccountId ?? payment.stripeAccountId;
+  const reg = payment.registration;
 
-  const receiptUrl = await resolveReceiptUrl(paymentIntentId, connectedAccountId ?? payment.stripeAccountId);
+  // Capacity re-check: a late payment must not oversell a schedule block.
+  if (reg.scheduleBlock?.capacity != null) {
+    const confirmed = await countConfirmedSpots(reg.scheduleBlock.id, reg.id);
+    if (confirmed + reg.quantity > reg.scheduleBlock.capacity) {
+      if (paymentIntentId && account) {
+        try {
+          await refundPaymentIntent({
+            paymentIntentId,
+            connectedAccountId: account,
+            refundApplicationFee: true,
+            idempotencyKey: `overbook-refund:${reg.id}`,
+          });
+        } catch (refundError) {
+          console.error("Failed to auto-refund overbooked registration:", refundError);
+        }
+      }
+      await prisma.$transaction([
+        prisma.payment.update({
+          where: { id: payment.id },
+          data: {
+            status: "REFUNDED",
+            stripePaymentIntentId: paymentIntentId,
+            stripeCheckoutSessionId: session.id,
+            paidAt: new Date(),
+            refundedAmount: payment.amount,
+            refundedAt: new Date(),
+          },
+        }),
+        prisma.sessionRegistration.update({ where: { id: reg.id }, data: { status: "EXPIRED" } }),
+      ]);
+      return;
+    }
+  }
+
+  const receiptUrl = await resolveReceiptUrl(paymentIntentId, account);
 
   await prisma.$transaction([
     prisma.payment.update({
@@ -111,39 +179,44 @@ async function handleCheckoutCompleted(
       data: {
         status: "PAID",
         stripePaymentIntentId: paymentIntentId,
+        stripeCheckoutSessionId: session.id,
         receiptUrl,
         paidAt: new Date(),
       },
     }),
     prisma.sessionRegistration.update({
-      where: { id: payment.registration.id },
+      where: { id: reg.id },
       data: { status: "CONFIRMED", confirmedAt: new Date() },
     }),
   ]);
 
-  const reg = payment.registration;
   const offeringTitle = reg.scheduleBlock?.title ?? reg.lessonOffering?.title ?? "your session";
 
-  await sendSessionRegistrationConfirmationEmail({
-    to: reg.participantEmail,
-    participantName: reg.participantName,
-    venueName: reg.venue.name,
-    offeringTitle,
-    quantity: reg.quantity,
-    amountTotal: reg.amountTotal,
-    currency: reg.currency,
-    receiptUrl,
-  });
-
-  const managerEmails = await getVenueManagerEmails(reg.venue.organizationId);
-  if (managerEmails.length > 0) {
-    await sendSessionRegistrationManagerEmail({
-      managerEmails,
+  try {
+    await sendSessionRegistrationConfirmationEmail({
+      to: reg.participantEmail,
+      participantName: reg.participantName,
       venueName: reg.venue.name,
       offeringTitle,
-      participantName: reg.participantName,
       quantity: reg.quantity,
+      amountTotal: reg.amountTotal,
+      currency: reg.currency,
+      receiptUrl,
     });
+
+    const managerEmails = await getVenueManagerEmails(reg.venue.organizationId);
+    if (managerEmails.length > 0) {
+      await sendSessionRegistrationManagerEmail({
+        managerEmails,
+        venueName: reg.venue.name,
+        offeringTitle,
+        participantName: reg.participantName,
+        quantity: reg.quantity,
+      });
+    }
+  } catch (emailError) {
+    // The payment is already recorded; do not fail the webhook on email errors.
+    console.error("Failed to send registration confirmation email:", emailError);
   }
 }
 
@@ -164,29 +237,65 @@ async function handleCheckoutExpired(session: Stripe.Checkout.Session): Promise<
 }
 
 async function handlePaymentFailed(paymentIntent: Stripe.PaymentIntent): Promise<void> {
-  const payment = await prisma.payment.findFirst({
+  let payment = await prisma.payment.findFirst({
     where: { stripePaymentIntentId: paymentIntent.id },
     select: { id: true, status: true, registrationId: true },
   });
+  // Fall back to the registration id carried in PaymentIntent metadata in case
+  // this event arrives before checkout.session.completed stored the intent id.
+  if (!payment) {
+    const registrationId =
+      typeof paymentIntent.metadata?.registrationId === "string" ? paymentIntent.metadata.registrationId : null;
+    if (registrationId) {
+      payment = await prisma.payment.findUnique({
+        where: { registrationId },
+        select: { id: true, status: true, registrationId: true },
+      });
+    }
+  }
   if (!payment || payment.status === "PAID") return;
 
   await prisma.payment.update({
     where: { id: payment.id },
     data: {
       status: "FAILED",
+      stripePaymentIntentId: paymentIntent.id,
       failureReason: paymentIntent.last_payment_error?.message ?? "Payment failed",
     },
   });
 }
 
-async function handleChargeRefunded(charge: Stripe.Charge): Promise<void> {
+async function handleChargeRefunded(charge: Stripe.Charge, connectedAccountId?: string | null): Promise<void> {
   const paymentIntentId = typeof charge.payment_intent === "string" ? charge.payment_intent : charge.payment_intent?.id;
   if (!paymentIntentId) return;
 
-  const payment = await prisma.payment.findFirst({
+  let payment = await prisma.payment.findFirst({
     where: { stripePaymentIntentId: paymentIntentId },
-    select: { id: true, amount: true, registrationId: true },
+    select: { id: true, amount: true, status: true, registrationId: true },
   });
+
+  // If the completed webhook has not yet stored the intent id, reconcile via the
+  // registration id carried in PaymentIntent metadata.
+  if (!payment && connectedAccountId) {
+    try {
+      const intent = await getStripeClient().paymentIntents.retrieve(
+        paymentIntentId,
+        {},
+        { stripeAccount: connectedAccountId }
+      );
+      const registrationId =
+        typeof intent.metadata?.registrationId === "string" ? intent.metadata.registrationId : null;
+      if (registrationId) {
+        payment = await prisma.payment.findUnique({
+          where: { registrationId },
+          select: { id: true, amount: true, status: true, registrationId: true },
+        });
+      }
+    } catch (retrieveError) {
+      console.error("Failed to retrieve PaymentIntent for refund reconciliation:", retrieveError);
+    }
+  }
+
   if (!payment) return;
 
   const refundedAmount = charge.amount_refunded;
@@ -197,6 +306,7 @@ async function handleChargeRefunded(charge: Stripe.Charge): Promise<void> {
       where: { id: payment.id },
       data: {
         status: fullyRefunded ? "REFUNDED" : "PARTIALLY_REFUNDED",
+        stripePaymentIntentId: paymentIntentId,
         refundedAmount,
         refundedAt: new Date(),
       },

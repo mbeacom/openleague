@@ -27,8 +27,9 @@ const {
     $transaction: vi.fn(),
     venueScheduleBlock: { findFirst: vi.fn() },
     lessonOffering: { findFirst: vi.fn() },
+    venue: { findFirst: vi.fn() },
     sessionRegistration: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
-    payment: { update: vi.fn(), aggregate: vi.fn() },
+    payment: { update: vi.fn(), updateMany: vi.fn(), aggregate: vi.fn() },
     venueStaff: { findMany: vi.fn() },
   },
 }));
@@ -60,7 +61,7 @@ vi.mock("@/lib/actions/venue-organizations", () => ({
   logVenueActivity: (...args: unknown[]) => mockLogActivity(...args),
 }));
 
-import { refundRegistration, registerForSession } from "@/lib/actions/session-registrations";
+import { getVenueRegistrations, refundRegistration, registerForSession } from "@/lib/actions/session-registrations";
 
 const USER_ID = "clusrxxxxxxxxxxxxxxxxxxxxxxx";
 const VENUE_ID = "clvenxxxxxxxxxxxxxxxxxxxxxxx";
@@ -107,10 +108,23 @@ beforeEach(() => {
   mockRequireUserId.mockResolvedValue(USER_ID);
   mockRequireVenueStaffRole.mockResolvedValue(USER_ID);
   mockIsStripeEnabled.mockReturnValue(true);
-  mockPrisma.$transaction.mockResolvedValue([]);
+  // Support both the callback form ($transaction(fn, opts)) used by the atomic
+  // reservation and the array form ($transaction([...])) used by refunds.
+  mockPrisma.$transaction.mockImplementation((arg: unknown) =>
+    typeof arg === "function"
+      ? (arg as (tx: typeof mockPrisma) => unknown)(mockPrisma)
+      : Promise.resolve(arg)
+  );
   mockPrisma.sessionRegistration.findMany.mockResolvedValue([]);
+  mockPrisma.payment.updateMany.mockResolvedValue({ count: 1 });
   mockPrisma.venueStaff.findMany.mockResolvedValue([]);
   mockPrisma.sessionRegistration.create.mockResolvedValue({ id: REG_ID });
+  mockRequireVenueRequestManager.mockResolvedValue(USER_ID);
+  mockPrisma.venue.findFirst.mockResolvedValue({ id: VENUE_ID });
+  mockPrisma.payment.aggregate.mockResolvedValue({
+    _sum: { amount: 0, refundedAmount: 0, applicationFeeAmount: 0 },
+    _count: 0,
+  });
 });
 
 describe("registerForSession — free", () => {
@@ -235,5 +249,76 @@ describe("refundRegistration", () => {
 
     expect(result.success).toBe(false);
     expect(mockRefund).not.toHaveBeenCalled();
+  });
+
+  it("refuses to refund when another request already claimed it (idempotency)", async () => {
+    mockPrisma.sessionRegistration.findFirst.mockResolvedValue({
+      id: REG_ID,
+      status: "CONFIRMED",
+      amountTotal: 1500,
+      venue: { organizationId: ORG_ID, slug: "ice-palace" },
+      payment: {
+        id: "pay_1",
+        status: "PAID",
+        amount: 1500,
+        refundedAmount: 0,
+        stripePaymentIntentId: "pi_1",
+        stripeAccountId: "acct_123",
+      },
+    });
+    mockPrisma.payment.updateMany.mockResolvedValue({ count: 0 });
+
+    const result = await refundRegistration({ organizationId: ORG_ID, venueId: VENUE_ID, registrationId: REG_ID });
+
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error).toMatch(/already being refunded/i);
+    expect(mockRefund).not.toHaveBeenCalled();
+  });
+
+  it("completes a partially-refunded payment via the remaining balance", async () => {
+    mockPrisma.sessionRegistration.findFirst.mockResolvedValue({
+      id: REG_ID,
+      status: "CONFIRMED",
+      amountTotal: 1500,
+      venue: { organizationId: ORG_ID, slug: "ice-palace" },
+      payment: {
+        id: "pay_1",
+        status: "PARTIALLY_REFUNDED",
+        amount: 1500,
+        refundedAmount: 500,
+        stripePaymentIntentId: "pi_1",
+        stripeAccountId: "acct_123",
+      },
+    });
+    mockRefund.mockResolvedValue({ id: "re_2" });
+
+    const result = await refundRegistration({ organizationId: ORG_ID, venueId: VENUE_ID, registrationId: REG_ID });
+
+    expect(result.success).toBe(true);
+    expect(mockRefund).toHaveBeenCalledWith(expect.objectContaining({ amount: 1000 }));
+  });
+});
+
+describe("getVenueRegistrations — tenant isolation", () => {
+  it("throws when the venue does not belong to the organization", async () => {
+    mockPrisma.venue.findFirst.mockResolvedValue(null);
+
+    await expect(getVenueRegistrations({ organizationId: ORG_ID, venueId: VENUE_ID })).rejects.toThrow(
+      /venue not found/i
+    );
+    expect(mockPrisma.sessionRegistration.findMany).not.toHaveBeenCalled();
+  });
+
+  it("scopes registration queries to the organization's venue", async () => {
+    mockPrisma.venue.findFirst.mockResolvedValue({ id: VENUE_ID });
+    mockPrisma.sessionRegistration.findMany.mockResolvedValue([]);
+
+    await getVenueRegistrations({ organizationId: ORG_ID, venueId: VENUE_ID });
+
+    expect(mockPrisma.sessionRegistration.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { venueId: VENUE_ID, venue: { organizationId: ORG_ID } },
+      })
+    );
   });
 });
