@@ -229,10 +229,14 @@ async function handleCheckoutExpired(session: Stripe.Checkout.Session): Promise<
 
   await prisma.$transaction([
     prisma.payment.update({ where: { id: payment.id }, data: { status: "CANCELED" } }),
-    prisma.sessionRegistration.updateMany({
-      where: { id: payment.registrationId, status: "PENDING" },
-      data: { status: "EXPIRED" },
-    }),
+    ...(payment.registrationId
+      ? [
+          prisma.sessionRegistration.updateMany({
+            where: { id: payment.registrationId, status: "PENDING" },
+            data: { status: "EXPIRED" },
+          }),
+        ]
+      : []),
   ]);
 }
 
@@ -311,7 +315,7 @@ async function handleChargeRefunded(charge: Stripe.Charge, connectedAccountId?: 
         refundedAt: new Date(),
       },
     }),
-    ...(fullyRefunded
+    ...(fullyRefunded && payment.registrationId
       ? [
           prisma.sessionRegistration.update({
             where: { id: payment.registrationId },

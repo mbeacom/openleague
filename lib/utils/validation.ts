@@ -1135,3 +1135,204 @@ export type DeletePracticeSessionInput = z.infer<typeof deletePracticeSessionSch
 export type GetPracticeSessionByIdInput = z.infer<typeof getPracticeSessionByIdSchema>;
 export type GetPracticeSessionsByTeamInput = z.infer<typeof getPracticeSessionsByTeamSchema>;
 export type SharePracticeSessionInput = z.infer<typeof sharePracticeSessionSchema>;
+
+// --- Signup events (feature 004) ---
+
+export const SIGNUP_EVENT_CATEGORIES = [
+  "CLINIC",
+  "SCRIMMAGE",
+  "TRYOUT",
+  "VOLUNTEER",
+  "FUNDRAISER",
+  "TOURNAMENT",
+  "SOCIAL",
+  "OTHER",
+] as const;
+
+export const SIGNUP_EVENT_VISIBILITIES = ["PRIVATE", "INVITE_ONLY", "LINK", "PUBLIC"] as const;
+
+export const AGE_CLASSIFICATIONS = [
+  "U6",
+  "U8",
+  "SQUIRT_U10",
+  "PEEWEE_U12",
+  "BANTAM_U14",
+  "U16",
+  "U18",
+  "JUNIOR",
+  "ADULT",
+  "OPEN",
+] as const;
+
+export const PHASE_AUDIENCES = ["HOST_MEMBERS", "SELECTED_GROUPS", "INVITEES", "EVERYONE"] as const;
+
+export const MANUAL_PAYMENT_STATUSES = ["NOT_REQUIRED", "UNPAID", "PAID", "WAIVED"] as const;
+
+export const GALLERY_VISIBILITIES = ["PARTICIPANTS", "EVENT_AUDIENCE"] as const;
+
+/** A capacity-limited role slot within a signup event. `id` present = update existing. */
+export const signupSlotSchema = z.object({
+  id: optionalCuid("Invalid slot ID format"),
+  name: sanitizedStringWithMin(1, 100),
+  description: optionalSanitizedString(500),
+  sortOrder: z.coerce.number().int().min(0).max(1000).default(0),
+  capacity: optionalPositiveInt("Capacity must be a positive whole number", 10000),
+  priceAmount: z.preprocess(
+    (value) => (value === "" || value === null ? undefined : value),
+    z.coerce.number().int().min(0, "Price must be zero or greater").optional()
+  ),
+  waitlistEnabled: z.boolean().default(true),
+});
+
+/** An ordered registration access window. `id` present = update existing. */
+export const signupPhaseSchema = z.object({
+  id: optionalCuid("Invalid phase ID format"),
+  name: sanitizedStringWithMin(1, 100),
+  opensAt: z.coerce.date({ message: "Valid phase opening time is required" }),
+  audience: z.enum(PHASE_AUDIENCES),
+  sortOrder: z.coerce.number().int().min(0).max(100).default(0),
+  divisionIds: z.array(z.string().cuid("Invalid division ID format")).max(50).default([]),
+  teamIds: z.array(z.string().cuid("Invalid team ID format")).max(100).default([]),
+});
+
+const signupEventBaseSchema = z.object({
+  title: sanitizedStringWithMin(1, 150),
+  description: optionalSanitizedString(5000),
+  category: z.enum(SIGNUP_EVENT_CATEGORIES).default("OTHER"),
+  ageClassification: z.enum(AGE_CLASSIFICATIONS).default("OPEN"),
+  visibility: z.enum(SIGNUP_EVENT_VISIBILITIES).default("PRIVATE"),
+  startAt: z.coerce.date({ message: "Valid start time is required" }),
+  endAt: z.coerce.date({ message: "Valid end time is required" }),
+  venueId: optionalCuid("Invalid venue ID format"),
+  locationText: optionalSanitizedString(300),
+  registrationOpensAt: z.coerce.date().optional(),
+  registrationClosesAt: z.coerce.date().optional(),
+  cancellationCutoffAt: z.coerce.date().optional(),
+  contactName: optionalSanitizedString(100),
+  contactEmail: optionalEmailSchema,
+  contactPhone: optionalSanitizedString(30),
+  acceptsOnlinePayment: z.boolean().default(false),
+  acceptsManualPayment: z.boolean().default(true),
+  venmoHandle: optionalSanitizedString(60),
+  zelleHandle: optionalSanitizedString(120),
+  cashAppHandle: optionalSanitizedString(60),
+  paymentPhone: optionalSanitizedString(30),
+  paymentInstructions: optionalSanitizedString(1000),
+  galleryEnabled: z.boolean().default(true),
+  galleryVisibility: z.enum(GALLERY_VISIBILITIES).default("PARTICIPANTS"),
+  publicRoster: z.boolean().default(false),
+  slots: z.array(signupSlotSchema).min(1, "At least one signup slot is required").max(50),
+  phases: z.array(signupPhaseSchema).max(10).default([]),
+});
+
+type SignupEventTimeFields = {
+  startAt: Date;
+  endAt: Date;
+  registrationOpensAt?: Date;
+  registrationClosesAt?: Date;
+  cancellationCutoffAt?: Date;
+};
+
+const applySignupEventTimeChecks = (data: SignupEventTimeFields, ctx: z.RefinementCtx) => {
+  if (data.endAt <= data.startAt) {
+    ctx.addIssue({ code: "custom", message: "End time must be after start time", path: ["endAt"] });
+  }
+  if (
+    data.registrationClosesAt && data.registrationOpensAt &&
+    data.registrationClosesAt <= data.registrationOpensAt
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      message: "Registration close must be after registration open",
+      path: ["registrationClosesAt"],
+    });
+  }
+  if (data.cancellationCutoffAt && data.cancellationCutoffAt > data.startAt) {
+    ctx.addIssue({
+      code: "custom",
+      message: "Cancellation cutoff must be at or before the event start",
+      path: ["cancellationCutoffAt"],
+    });
+  }
+};
+
+/** Create — exactly one hosting entity must be provided. */
+export const createSignupEventSchema = signupEventBaseSchema
+  .extend({
+    hostOrganizationId: optionalCuid("Invalid organization ID format"),
+    hostLeagueId: optionalCuid("Invalid league ID format"),
+    hostTeamId: optionalCuid("Invalid team ID format"),
+  })
+  .superRefine((data, ctx) => {
+    applySignupEventTimeChecks(data, ctx);
+    if ([data.hostOrganizationId, data.hostLeagueId, data.hostTeamId].filter(Boolean).length !== 1) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Exactly one hosting entity is required",
+        path: ["hostOrganizationId"],
+      });
+    }
+  });
+
+/** Update — host cannot change after creation. */
+export const updateSignupEventSchema = signupEventBaseSchema
+  .extend({
+    eventId: z.string().cuid("Invalid event ID format"),
+  })
+  .superRefine(applySignupEventTimeChecks);
+
+export const signupEventCommandSchema = z.object({
+  eventId: z.string().cuid("Invalid event ID format"),
+});
+
+export const cancelSignupEventSchema = signupEventCommandSchema.extend({
+  reason: optionalSanitizedString(500),
+});
+
+/** One named participant claiming one spot in a slot. */
+export const eventParticipantSchema = z.object({
+  name: sanitizedStringWithMin(1, 100),
+  email: optionalEmailSchema,
+  phone: optionalSanitizedString(30),
+  notes: optionalSanitizedString(500),
+  playerId: optionalCuid("Invalid player ID format"),
+});
+
+/**
+ * Registration request: one or more named participants into a single slot.
+ * Price is never accepted from the client — the server snapshots it.
+ */
+export const eventRegistrationSchema = z.object({
+  eventId: z.string().cuid("Invalid event ID format"),
+  slotId: z.string().cuid("Invalid slot ID format"),
+  // LINK-visibility events pass the link token for access verification.
+  linkToken: optionalSanitizedString(128),
+  participants: z
+    .array(eventParticipantSchema)
+    .min(1, "At least one participant is required")
+    .max(10, "Too many participants in one request"),
+});
+
+export const eventRegistrationCommandSchema = z.object({
+  registrationId: z.string().cuid("Invalid registration ID format"),
+});
+
+export const setEventCheckInSchema = eventRegistrationCommandSchema.extend({
+  checkedIn: z.boolean(),
+});
+
+export const removeEventRegistrationSchema = eventRegistrationCommandSchema.extend({
+  reason: optionalSanitizedString(500),
+});
+
+export type SignupSlotInput = z.input<typeof signupSlotSchema>;
+export type SignupPhaseInput = z.input<typeof signupPhaseSchema>;
+export type CreateSignupEventInput = z.input<typeof createSignupEventSchema>;
+export type UpdateSignupEventInput = z.input<typeof updateSignupEventSchema>;
+export type SignupEventCommandInput = z.input<typeof signupEventCommandSchema>;
+export type CancelSignupEventInput = z.input<typeof cancelSignupEventSchema>;
+export type EventParticipantInput = z.input<typeof eventParticipantSchema>;
+export type EventRegistrationInput = z.input<typeof eventRegistrationSchema>;
+export type EventRegistrationCommandInput = z.input<typeof eventRegistrationCommandSchema>;
+export type SetEventCheckInInput = z.input<typeof setEventCheckInSchema>;
+export type RemoveEventRegistrationInput = z.input<typeof removeEventRegistrationSchema>;
