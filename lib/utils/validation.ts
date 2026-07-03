@@ -1336,3 +1336,18 @@ export type EventRegistrationInput = z.input<typeof eventRegistrationSchema>;
 export type EventRegistrationCommandInput = z.input<typeof eventRegistrationCommandSchema>;
 export type SetEventCheckInInput = z.input<typeof setEventCheckInSchema>;
 export type RemoveEventRegistrationInput = z.input<typeof removeEventRegistrationSchema>;
+
+export const sendEventInvitationsSchema = z.object({
+  eventId: z.string().cuid("Invalid event ID format"),
+  emails: z
+    .array(z.string().trim().toLowerCase().email("Invalid email address").max(254))
+    .min(1, "Add at least one email address")
+    .max(100, "Too many invitations at once"),
+});
+
+export const eventInvitationCommandSchema = z.object({
+  invitationId: z.string().cuid("Invalid invitation ID format"),
+});
+
+export type SendEventInvitationsInput = z.input<typeof sendEventInvitationsSchema>;
+export type EventInvitationCommandInput = z.input<typeof eventInvitationCommandSchema>;

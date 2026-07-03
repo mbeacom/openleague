@@ -113,12 +113,12 @@ clock, cancellation triggers ordered offer with expiry cascade.
 **Independent Test**: invite-only event blocks non-invitees, invitee lands ready to
 register; LINK event reachable only via token; regeneration kills old link.
 
-- [ ] T033 [US4] Implement lib/actions/event-invitations.ts: `sendEventInvitations` (token gen, existing-user vs signup email variants, invitedUserId binding), `revokeEventInvitation`, `resendEventInvitation`, `listEventInvitations` + invitation schemas in lib/utils/validation.ts
-- [ ] T034 [US4] Accept route app/api/event-invitations/[token]/route.ts (signed-in match → event; unknown → signup flow carrying token; expired/revoked → friendly redirect)
-- [ ] T035 [US4] Enforce INVITE_ONLY gate in `getSignupEvent`/`registerForSignupEvent` (invitation email/user match) and add INVITEES audience support to the phase predicate; LINK route app/(marketing)/events/l/[token]/page.tsx
-- [ ] T036 [P] [US4] Invitation email templates (member + non-member variants) in lib/email/templates.ts
-- [ ] T037 [P] [US4] InvitePanel.tsx (bulk emails, status chips, resend/revoke) in components/features/signup-events/ + invitations tab on dashboard [eventId] page
-- [ ] T038 [P] [US4] Tests: visibility gate matrix (PRIVATE/INVITE_ONLY/LINK/PUBLIC × viewer types) in __tests__/lib/actions/event-visibility.test.ts
+- [X] T033 [US4] Implement lib/actions/event-invitations.ts: `sendEventInvitations` (token gen, existing-user vs signup email variants, invitedUserId binding), `revokeEventInvitation`, `resendEventInvitation`, `listEventInvitations` + invitation schemas in lib/utils/validation.ts
+- [X] T034 [US4] Accept route app/api/event-invitations/[token]/route.ts (signed-in match → event; unknown → signup flow carrying token; expired/revoked → friendly redirect)
+- [X] T035 [US4] Enforce INVITE_ONLY gate in `getSignupEvent`/`registerForSignupEvent` (invitation email/user match) and add INVITEES audience support to the phase predicate; LINK route app/(marketing)/events/l/[token]/page.tsx
+- [X] T036 [P] [US4] Invitation email templates (member + non-member variants) in lib/email/templates.ts
+- [X] T037 [P] [US4] InvitePanel.tsx (bulk emails, status chips, resend/revoke) in components/features/signup-events/ + invitations tab on dashboard [eventId] page
+- [X] T038 [P] [US4] Tests: visibility gate matrix (PRIVATE/INVITE_ONLY/LINK/PUBLIC × viewer types) in __tests__/lib/actions/event-visibility.test.ts
 
 **Checkpoint**: all four visibility tiers enforced.
 

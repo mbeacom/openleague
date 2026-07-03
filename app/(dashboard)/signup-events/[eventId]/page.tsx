@@ -14,7 +14,9 @@ import EditIcon from "@mui/icons-material/Edit";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import { getManagedSignupEvent } from "@/lib/actions/signup-events";
 import { getEventRoster } from "@/lib/actions/event-registrations";
+import { listEventInvitations } from "@/lib/actions/event-invitations";
 import { EventStatusActions, RosterTable } from "@/components/features/signup-events";
+import { InvitePanel } from "@/components/features/signup-events/InvitePanel";
 import { AGE_CLASSIFICATION_LABELS } from "@/lib/utils/age-level";
 import { formatDateTime } from "@/lib/utils/date";
 import { getBaseUrl } from "@/lib/env";
@@ -34,7 +36,11 @@ export default async function ManageSignupEventPage({
   params: Promise<{ eventId: string }>;
 }) {
   const { eventId } = await params;
-  const [event, roster] = await Promise.all([getManagedSignupEvent(eventId), getEventRoster({ eventId })]);
+  const [event, roster, invitations] = await Promise.all([
+    getManagedSignupEvent(eventId),
+    getEventRoster({ eventId }),
+    listEventInvitations(eventId),
+  ]);
   if (!event) {
     notFound();
   }
@@ -101,6 +107,16 @@ export default async function ManageSignupEventPage({
               <Typography variant="h6">Roster</Typography>
               <RosterTable eventId={event.id} slots={roster} />
             </Stack>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent>
+            <InvitePanel
+              eventId={event.id}
+              invitations={invitations}
+              isInviteOnly={event.visibility === "INVITE_ONLY"}
+            />
           </CardContent>
         </Card>
       </Stack>

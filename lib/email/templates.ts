@@ -1489,3 +1489,31 @@ export async function sendWaitlistOfferEmail(data: WaitlistOfferEmailData): Prom
     },
   });
 }
+
+interface EventInvitationEmailData {
+  to: string;
+  eventTitle: string;
+  hostName: string;
+  startAtFormatted: string;
+  token: string;
+  isExistingUser: boolean;
+}
+
+/** Invitation to view/register for a signup event (access list for invite-only events). */
+export async function sendEventInvitationEmail(data: EventInvitationEmailData): Promise<void> {
+  const mailchimp = getMailchimpClient();
+  const inviteLink = `${BASE_URL}/api/event-invitations/${data.token}`;
+  const cta = data.isExistingUser
+    ? "View the event and sign up"
+    : "Create your free account and sign up";
+
+  await mailchimp.messages.send({
+    message: {
+      from_email: EMAIL_FROM,
+      subject: `You're invited: ${data.eventTitle}`,
+      html: `<p>${data.hostName} invited you to <strong>${data.eventTitle}</strong> on ${data.startAtFormatted}.</p><p><a href="${inviteLink}">${cta}</a></p>`,
+      text: `${data.hostName} invited you to ${data.eventTitle} on ${data.startAtFormatted}. ${cta}: ${inviteLink}`,
+      to: [{ email: data.to, type: "to" as const }],
+    },
+  });
+}
