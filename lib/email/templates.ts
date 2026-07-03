@@ -1265,3 +1265,119 @@ export async function sendPracticePlanNotifications(
     await sendPracticePlanUpdatedEmail(sessionData);
   }
 }
+
+// --- Signup events (feature 004) ---
+
+interface SignupEventRecipient {
+  email: string;
+  name?: string | null;
+}
+
+interface SignupEventUpdatedEmailData {
+  recipients: SignupEventRecipient[];
+  eventTitle: string;
+  hostName: string;
+  changeSummary: string;
+  eventId: string;
+}
+
+/** Material-change notification (time/venue/details) to all active registrants. */
+export async function sendSignupEventUpdatedEmail(data: SignupEventUpdatedEmailData): Promise<void> {
+  if (data.recipients.length === 0) return;
+  const mailchimp = getMailchimpClient();
+  const eventLink = `${BASE_URL}/events/${data.eventId}`;
+
+  await mailchimp.messages.send({
+    message: {
+      from_email: EMAIL_FROM,
+      subject: `Updated: ${data.eventTitle}`,
+      html: `<p><strong>${data.eventTitle}</strong> (hosted by ${data.hostName}) has been updated.</p><p>${data.changeSummary}</p><p><a href="${eventLink}">View the event</a></p>`,
+      text: `${data.eventTitle} (hosted by ${data.hostName}) has been updated. ${data.changeSummary} View: ${eventLink}`,
+      to: data.recipients.map((recipient) => ({ email: recipient.email, type: "bcc" as const })),
+    },
+  });
+}
+
+interface SignupEventCanceledEmailData {
+  recipients: SignupEventRecipient[];
+  eventTitle: string;
+  hostName: string;
+  reason?: string;
+}
+
+/** Cancellation notice to all active registrants. */
+export async function sendSignupEventCanceledEmail(data: SignupEventCanceledEmailData): Promise<void> {
+  if (data.recipients.length === 0) return;
+  const mailchimp = getMailchimpClient();
+  const reasonHtml = data.reason ? `<p>Reason: ${data.reason}</p>` : "";
+
+  await mailchimp.messages.send({
+    message: {
+      from_email: EMAIL_FROM,
+      subject: `Canceled: ${data.eventTitle}`,
+      html: `<p><strong>${data.eventTitle}</strong> (hosted by ${data.hostName}) has been canceled.</p>${reasonHtml}<p>If you paid online, the organizer will process refunds.</p>`,
+      text: `${data.eventTitle} (hosted by ${data.hostName}) has been canceled.${data.reason ? ` Reason: ${data.reason}` : ""} If you paid online, the organizer will process refunds.`,
+      to: data.recipients.map((recipient) => ({ email: recipient.email, type: "bcc" as const })),
+    },
+  });
+}
+
+interface EventRegistrationConfirmationEmailData {
+  to: string;
+  participantNames: string[];
+  eventTitle: string;
+  slotName: string;
+  hostName: string;
+  startAtFormatted: string;
+  eventId: string;
+  amountTotal: number;
+  currency: string;
+  manualPaymentNote?: string;
+}
+
+/** Registration confirmation to the registrant (contact of record). */
+export async function sendEventRegistrationConfirmationEmail(
+  data: EventRegistrationConfirmationEmailData
+): Promise<void> {
+  const mailchimp = getMailchimpClient();
+  const eventLink = `${BASE_URL}/events/${data.eventId}`;
+  const names = data.participantNames.join(", ");
+  const paymentHtml =
+    data.amountTotal > 0
+      ? `<p>Amount due: <strong>${formatMoney(data.amountTotal, data.currency)}</strong>${data.manualPaymentNote ? ` — ${data.manualPaymentNote}` : ""}</p>`
+      : "";
+
+  await mailchimp.messages.send({
+    message: {
+      from_email: EMAIL_FROM,
+      subject: `You're in: ${data.eventTitle}`,
+      html: `<p>${names} ${data.participantNames.length === 1 ? "is" : "are"} confirmed for <strong>${data.slotName}</strong> at <strong>${data.eventTitle}</strong> (hosted by ${data.hostName}) on ${data.startAtFormatted}.</p>${paymentHtml}<p><a href="${eventLink}">View the event</a></p>`,
+      text: `${names} confirmed for ${data.slotName} at ${data.eventTitle} (hosted by ${data.hostName}) on ${data.startAtFormatted}.${data.amountTotal > 0 ? ` Amount due: ${formatMoney(data.amountTotal, data.currency)}.` : ""} View: ${eventLink}`,
+      to: [{ email: data.to, type: "to" as const }],
+    },
+  });
+}
+
+interface EventRegistrationRemovedEmailData {
+  to: string;
+  participantName: string;
+  eventTitle: string;
+  reason?: string;
+}
+
+/** Notice that an organizer removed a registration. */
+export async function sendEventRegistrationRemovedEmail(
+  data: EventRegistrationRemovedEmailData
+): Promise<void> {
+  const mailchimp = getMailchimpClient();
+
+  await mailchimp.messages.send({
+    message: {
+      from_email: EMAIL_FROM,
+      subject: `Registration removed: ${data.eventTitle}`,
+      html: `<p>${data.participantName}'s registration for <strong>${data.eventTitle}</strong> was removed by an organizer.</p>${data.reason ? `<p>Reason: ${data.reason}</p>` : ""}`,
+      text: `${data.participantName}'s registration for ${data.eventTitle} was removed by an organizer.${data.reason ? ` Reason: ${data.reason}` : ""}`,
+      to: [{ email: data.to, type: "to" as const }],
+    },
+  });
+}
