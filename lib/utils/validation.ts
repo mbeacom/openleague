@@ -1372,3 +1372,15 @@ export const refundEventRegistrationSchema = z.object({
 export type LeaguePaymentCommandInput = z.input<typeof leaguePaymentCommandSchema>;
 export type SetManualPaymentStatusInput = z.input<typeof setManualPaymentStatusSchema>;
 export type RefundEventRegistrationInput = z.input<typeof refundEventRegistrationSchema>;
+
+export const addEventManagerSchema = z.object({
+  eventId: z.string().cuid("Invalid event ID format"),
+  email: z.string().trim().toLowerCase().email("Invalid email address").max(254),
+});
+
+export const eventManagerCommandSchema = z.object({
+  managerId: z.string().cuid("Invalid manager ID format"),
+});
+
+export type AddEventManagerInput = z.input<typeof addEventManagerSchema>;
+export type EventManagerCommandInput = z.input<typeof eventManagerCommandSchema>;

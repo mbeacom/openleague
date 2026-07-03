@@ -27,6 +27,7 @@ import {
 import { canViewSignupEvent } from "@/lib/utils/event-access";
 import { resolvePhaseEligibility } from "@/lib/utils/event-phases";
 import { promoteNextWaitlistEntriesForSlot } from "@/lib/utils/event-waitlist";
+import { logSignupEventActivity } from "@/lib/utils/event-activity";
 import { formatDateTime } from "@/lib/utils/date";
 import { EVENT_WAITLIST_CLAIM_HOURS } from "@/lib/env";
 import { EVENT_HOLD_WINDOW_MS } from "@/lib/utils/event-capacity";
@@ -809,6 +810,14 @@ export async function removeEventRegistration(
       data: { status: "CANCELED", canceledAt: new Date(), canceledById: userId },
     });
 
+    await logSignupEventActivity({
+      eventId: registration.eventId,
+      actorId: userId,
+      action: "registration.removed",
+      summary: `Removed ${registration.participantName}'s registration`,
+      details: { registrationId: registration.id, reason: validated.reason },
+    });
+
     try {
       if (registration.registrant.email) {
         await sendEventRegistrationRemovedEmail({
@@ -1170,6 +1179,14 @@ export async function promoteWaitlistEntry(
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
     );
 
+    await logSignupEventActivity({
+      eventId: registration.eventId,
+      actorId: await requireUserId(),
+      action: "waitlist.promoted",
+      summary: `Offered a ${registration.slot.name} spot to ${registration.participantName} (manual promotion)`,
+      details: { registrationId: registration.id },
+    });
+
     try {
       if (registration.registrant.email) {
         await sendWaitlistOfferEmail({
@@ -1246,6 +1263,14 @@ export async function setManualPaymentStatus(
     await prisma.eventRegistration.update({
       where: { id: registration.id },
       data: { manualPaymentStatus: validated.status, manualPaymentMarkedById: userId },
+    });
+
+    await logSignupEventActivity({
+      eventId: registration.eventId,
+      actorId: userId,
+      action: "payment.marked",
+      summary: `Marked a manual payment ${validated.status.toLowerCase()}`,
+      details: { registrationId: registration.id, status: validated.status },
     });
 
     revalidatePath(`/signup-events/${registration.eventId}`);
@@ -1348,6 +1373,14 @@ export async function refundEventRegistration(
         data: { status: "REFUNDED", canceledAt: new Date(), canceledById: userId },
       }),
     ]);
+
+    await logSignupEventActivity({
+      eventId: registration.eventId,
+      actorId: userId,
+      action: "payment.refunded",
+      summary: "Refunded an online payment",
+      details: { registrationId: registration.id, amountCents: payment.amount, reason: validated.reason },
+    });
 
     // The refunded spot frees capacity — offer it to the waitlist.
     try {

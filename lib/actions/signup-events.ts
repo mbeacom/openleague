@@ -29,6 +29,7 @@ import { resolvePhaseEligibility } from "@/lib/utils/event-phases";
 import { promoteNextWaitlistEntriesForSlot } from "@/lib/utils/event-waitlist";
 import { isStripeEnabled } from "@/lib/payments/stripe";
 import { sendSignupEventCanceledEmail, sendSignupEventUpdatedEmail } from "@/lib/email/templates";
+import { logSignupEventActivity } from "@/lib/utils/event-activity";
 
 const ACTIVE_REGISTRATION_STATUSES = ["CONFIRMED", "PENDING_PAYMENT", "OFFERED", "WAITLISTED"] as const;
 
@@ -484,6 +485,13 @@ export async function publishSignupEvent(
       },
     });
 
+    await logSignupEventActivity({
+      eventId,
+      actorId: await requireUserId(),
+      action: "published",
+      summary: "Event published",
+    });
+
     revalidateEventPaths({ id: eventId, venue: event.venue, hostLeague: { slug: leagueSlug } });
     return { success: true, data: { eventId } };
   } catch (error) {
@@ -543,6 +551,14 @@ export async function cancelSignupEvent(
     await prisma.signupEvent.update({
       where: { id: event.id },
       data: { status: "CANCELED", canceledAt: new Date() },
+    });
+
+    await logSignupEventActivity({
+      eventId: event.id,
+      actorId: await requireUserId(),
+      action: "canceled",
+      summary: validated.reason ? `Event canceled: ${validated.reason}` : "Event canceled",
+      details: { paidRegistrations },
     });
 
     try {

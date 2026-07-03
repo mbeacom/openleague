@@ -152,9 +152,9 @@ organizer refund reverses charge.
 **Independent Test**: member granted manager manages one event only; actions logged;
 revocation immediate.
 
-- [ ] T046 [US6] Implement lib/actions/event-managers.ts (`addEventManager` by email/userId, `removeEventManager`, `listEventManagers`; host-admin-only) and ensure every management mutation logs via a `logSignupEventActivity` helper (reuse AuditLog/VenueActivityLog pattern) capturing actor + action (FR-029)
-- [ ] T047 [P] [US6] ManagerPanel.tsx (grant by email, list, revoke) on the dashboard settings tab; activity log view for host admins
-- [ ] T048 [P] [US6] Tests: manager-scope authorization (event-scoped yes, entity settings no) in __tests__/lib/actions/event-managers.test.ts
+- [X] T046 [US6] Implement lib/actions/event-managers.ts (`addEventManager` by email/userId, `removeEventManager`, `listEventManagers`; host-admin-only) and ensure every management mutation logs via a `logSignupEventActivity` helper (reuse AuditLog/VenueActivityLog pattern) capturing actor + action (FR-029)
+- [X] T047 [P] [US6] ManagerPanel.tsx (grant by email, list, revoke) on the dashboard settings tab; activity log view for host admins
+- [X] T048 [P] [US6] Tests: manager-scope authorization (event-scoped yes, entity settings no) in __tests__/lib/actions/event-managers.test.ts
 
 **Checkpoint**: delegation matches FR-028/FR-029.
 
