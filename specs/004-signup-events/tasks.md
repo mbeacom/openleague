@@ -133,13 +133,13 @@ collection; league merchants; refunds.
 confirms immediately and tracks unpaid→paid; abandoned checkout frees the hold;
 organizer refund reverses charge.
 
-- [ ] T039 [US5] Implement lib/actions/league-payments.ts (`startLeagueStripeOnboarding`, `refreshLeagueStripeStatus`, `getLeagueStripeDashboardLink`, `getLeaguePaymentsOverview`) persisting League Connect columns, reusing lib/payments/stripe.ts helpers unchanged
-- [ ] T040 [US5] Extend `registerForSignupEvent`/`claimWaitlistOffer` paid path: price snapshot, PENDING_PAYMENT hold + Payment(REQUIRES_PAYMENT, eventRegistrationId, org-or-league merchant), Checkout session with expires_at clamped to hold/offer window, rollback on checkout failure
-- [ ] T041 [US5] Extend app/api/webhooks/stripe/route.ts: branch on `payment.eventRegistrationId` (completed → slot re-count → confirm or overbook auto-refund; expired/failed/refunded → 003 state maps + sync waitlist promotion); `account.updated` syncs VenueOrganization **or** League by stripeAccountId
-- [ ] T042 [US5] Implement `setManualPaymentStatus` (UNPAID/PAID/WAIVED, logged) and `refundEventRegistration` (Stripe refund, → REFUNDED, free spot → promotion) in lib/actions/event-registrations.ts; cancel-event flow prompts refund follow-up list
-- [ ] T043 [P] [US5] League payments dashboard page app/(dashboard)/league/payments/page.tsx (Connect status card + revenue overview, reusing StripeConnectCard patterns)
-- [ ] T044 [P] [US5] Payment UX: method chooser in RegisterDialog (online vs manual instructions display), payment-status chips + mark-paid/refund actions in RosterTable, receipt links in my-registrations
-- [ ] T045 [P] [US5] Tests: webhook event-registration branch (idempotency, late-payment auto-refund, league account.updated) in __tests__/api/stripe-webhook-events.test.ts; manual payment status transitions in existing registration test file
+- [X] T039 [US5] Implement lib/actions/league-payments.ts (`startLeagueStripeOnboarding`, `refreshLeagueStripeStatus`, `getLeagueStripeDashboardLink`, `getLeaguePaymentsOverview`) persisting League Connect columns, reusing lib/payments/stripe.ts helpers unchanged
+- [X] T040 [US5] Extend `registerForSignupEvent`/`claimWaitlistOffer` paid path: price snapshot, PENDING_PAYMENT hold + Payment(REQUIRES_PAYMENT, eventRegistrationId, org-or-league merchant), Checkout session with expires_at clamped to hold/offer window, rollback on checkout failure
+- [X] T041 [US5] Extend app/api/webhooks/stripe/route.ts: branch on `payment.eventRegistrationId` (completed → slot re-count → confirm or overbook auto-refund; expired/failed/refunded → 003 state maps + sync waitlist promotion); `account.updated` syncs VenueOrganization **or** League by stripeAccountId
+- [X] T042 [US5] Implement `setManualPaymentStatus` (UNPAID/PAID/WAIVED, logged) and `refundEventRegistration` (Stripe refund, → REFUNDED, free spot → promotion) in lib/actions/event-registrations.ts; cancel-event flow prompts refund follow-up list
+- [X] T043 [P] [US5] League payments dashboard page app/(dashboard)/league/payments/page.tsx (Connect status card + revenue overview, reusing StripeConnectCard patterns)
+- [X] T044 [P] [US5] Payment UX: method chooser in RegisterDialog (online vs manual instructions display), payment-status chips + mark-paid/refund actions in RosterTable, receipt links in my-registrations
+- [X] T045 [P] [US5] Tests: webhook event-registration branch (idempotency, late-payment auto-refund, league account.updated) in __tests__/api/stripe-webhook-events.test.ts; manual payment status transitions in existing registration test file
 
 **Checkpoint**: paid Mite Night runs end-to-end.
 

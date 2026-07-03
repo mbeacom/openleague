@@ -10,10 +10,14 @@ import {
   eventRegistrationCommandSchema,
   setEventCheckInSchema,
   removeEventRegistrationSchema,
+  setManualPaymentStatusSchema,
+  refundEventRegistrationSchema,
   type EventRegistrationInput,
   type EventRegistrationCommandInput,
   type SetEventCheckInInput,
   type RemoveEventRegistrationInput,
+  type SetManualPaymentStatusInput,
+  type RefundEventRegistrationInput,
 } from "@/lib/utils/validation";
 import {
   countCommittedSlotSpots,
@@ -25,6 +29,15 @@ import { resolvePhaseEligibility } from "@/lib/utils/event-phases";
 import { promoteNextWaitlistEntriesForSlot } from "@/lib/utils/event-waitlist";
 import { formatDateTime } from "@/lib/utils/date";
 import { EVENT_WAITLIST_CLAIM_HOURS } from "@/lib/env";
+import { EVENT_HOLD_WINDOW_MS } from "@/lib/utils/event-capacity";
+import {
+  StripeDisabledError,
+  computeApplicationFee,
+  createRegistrationCheckoutSession,
+  expireCheckoutSession,
+  isStripeEnabled,
+  refundPaymentIntent,
+} from "@/lib/payments/stripe";
 import {
   sendEventRegistrationConfirmationEmail,
   sendEventRegistrationRemovedEmail,
@@ -33,9 +46,53 @@ import {
 
 export type RegisterForEventResult = {
   registrationIds: string[];
-  status: "CONFIRMED" | "WAITLISTED";
+  status: "CONFIRMED" | "WAITLISTED" | "PENDING_PAYMENT";
   requiresPayment: boolean;
+  checkoutUrl?: string;
 };
+
+type EventMerchant = {
+  kind: "organization" | "league";
+  id: string;
+  stripeAccountId: string;
+  platformFeeBps: number | null;
+};
+
+/** Resolve the onboarded merchant (rink org or league) for an event, if any. */
+function resolveEventMerchant(event: {
+  hostOrganization: {
+    id: string;
+    stripeAccountId: string | null;
+    stripeChargesEnabled: boolean;
+    platformFeeBps: number | null;
+  } | null;
+  hostLeague: {
+    id: string;
+    stripeAccountId: string | null;
+    stripeChargesEnabled: boolean;
+    platformFeeBps: number | null;
+  } | null;
+}): EventMerchant | null {
+  const org = event.hostOrganization;
+  if (org?.stripeAccountId && org.stripeChargesEnabled) {
+    return {
+      kind: "organization",
+      id: org.id,
+      stripeAccountId: org.stripeAccountId,
+      platformFeeBps: org.platformFeeBps,
+    };
+  }
+  const league = event.hostLeague;
+  if (league?.stripeAccountId && league.stripeChargesEnabled) {
+    return {
+      kind: "league",
+      id: league.id,
+      stripeAccountId: league.stripeAccountId,
+      platformFeeBps: league.platformFeeBps,
+    };
+  }
+  return null;
+}
 
 const ACTIVE_STATUSES = ["CONFIRMED", "PENDING_PAYMENT", "WAITLISTED", "OFFERED"] as const;
 
@@ -136,8 +193,25 @@ export async function registerForSignupEvent(
               },
             },
             venue: { select: { slug: true } },
-            hostLeague: { select: { slug: true, name: true } },
-            hostOrganization: { select: { name: true } },
+            hostLeague: {
+              select: {
+                id: true,
+                slug: true,
+                name: true,
+                stripeAccountId: true,
+                stripeChargesEnabled: true,
+                platformFeeBps: true,
+              },
+            },
+            hostOrganization: {
+              select: {
+                id: true,
+                name: true,
+                stripeAccountId: true,
+                stripeChargesEnabled: true,
+                platformFeeBps: true,
+              },
+            },
             hostTeam: { select: { name: true } },
           },
         },
@@ -188,13 +262,44 @@ export async function registerForSignupEvent(
 
     const unitAmount = slot.priceAmount ?? 0;
     const isPaid = unitAmount > 0;
-    if (isPaid && !event.acceptsManualPayment) {
-      // Online checkout arrives with the payments story; manual is the fallback.
-      return {
-        success: false,
-        error: "Online payment for this event isn't available yet — contact the organizer.",
-      };
+
+    // Payment method resolution for priced slots (waitlist joins pay at claim
+    // time instead). Explicit choice wins; otherwise manual keeps its historic
+    // default, with online as the fallback for online-only events.
+    const merchant = isPaid ? resolveEventMerchant(event) : null;
+    const onlineAvailable = isPaid && event.acceptsOnlinePayment && isStripeEnabled() && merchant !== null;
+    const manualAvailable = isPaid && event.acceptsManualPayment;
+    let payOnline = false;
+    if (isPaid && !joinWaitlistInstead) {
+      if (validated.paymentMethod === "ONLINE") {
+        if (!onlineAvailable) {
+          return { success: false, error: "Online payment isn't available for this event." };
+        }
+        payOnline = true;
+      } else if (validated.paymentMethod === "MANUAL") {
+        if (!manualAvailable) {
+          return { success: false, error: "This event doesn't accept manual payment — pay online instead." };
+        }
+      } else if (!manualAvailable) {
+        if (!onlineAvailable) {
+          return {
+            success: false,
+            error: "The organizer hasn't finished setting up payment collection for this event.",
+          };
+        }
+        payOnline = true;
+      }
+      if (payOnline && validated.participants.length > 1) {
+        return {
+          success: false,
+          error:
+            "Online payment supports one participant per checkout — sign each participant up separately, or choose a manual payment method.",
+        };
+      }
     }
+    const applicationFeeAmount = payOnline && merchant
+      ? computeApplicationFee(unitAmount, merchant.platformFeeBps)
+      : 0;
 
     // Reject duplicates within the request itself before touching the database.
     const requestedNames = validated.participants.map((participant) =>
@@ -251,13 +356,27 @@ export async function registerForSignupEvent(
               participantPhone: participant.phone || null,
               notes: participant.notes || null,
               playerId: participant.playerId || null,
-              status: toWaitlist ? "WAITLISTED" : "CONFIRMED",
-              confirmedAt: toWaitlist ? null : now,
+              status: toWaitlist ? "WAITLISTED" : payOnline ? "PENDING_PAYMENT" : "CONFIRMED",
+              confirmedAt: toWaitlist || payOnline ? null : now,
               waitlistJoinedAt: toWaitlist ? now : null,
               unitAmount,
               currency: slot.priceCurrency,
-              // Manual payment is owed on confirmation, not while waitlisted.
-              manualPaymentStatus: !toWaitlist && isPaid ? "UNPAID" : "NOT_REQUIRED",
+              // Manual payment is owed on confirmation; online confirms via webhook.
+              manualPaymentStatus: !toWaitlist && !payOnline && isPaid ? "UNPAID" : "NOT_REQUIRED",
+              payment:
+                !toWaitlist && payOnline && merchant
+                  ? {
+                      create: {
+                        status: "REQUIRES_PAYMENT",
+                        amount: unitAmount,
+                        currency: slot.priceCurrency,
+                        applicationFeeAmount,
+                        stripeAccountId: merchant.stripeAccountId,
+                        organizationId: merchant.kind === "organization" ? merchant.id : null,
+                        leagueId: merchant.kind === "league" ? merchant.id : null,
+                      },
+                    }
+                  : undefined,
             },
             select: { id: true },
           });
@@ -274,6 +393,61 @@ export async function registerForSignupEvent(
         success: true,
         data: { registrationIds, status: "WAITLISTED", requiresPayment: false },
       };
+    }
+
+    // Online payment: hold reserved above — send the registrant to Checkout.
+    // The webhook confirms on verified payment; abandoning releases the hold.
+    if (payOnline && merchant) {
+      const registrationId = registrationIds[0];
+      try {
+        const registrant = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { email: true },
+        });
+        const checkout = await createRegistrationCheckoutSession({
+          connectedAccountId: merchant.stripeAccountId,
+          registrationId,
+          productName: `${slot.name} — ${event.title}`,
+          productDescription: "Event registration",
+          unitAmount,
+          currency: slot.priceCurrency,
+          quantity: 1,
+          applicationFeeAmount,
+          customerEmail: registrant?.email,
+          successPath: `/events/${event.id}?registration=success`,
+          cancelPath: `/events/${event.id}?registration=canceled`,
+          // Match the app-level hold window so late payments cannot overbook.
+          expiresInSeconds: Math.floor(EVENT_HOLD_WINDOW_MS / 1000),
+          metadata: { eventRegistrationId: registrationId, eventId: event.id },
+        });
+
+        await prisma.payment.update({
+          where: { eventRegistrationId: registrationId },
+          data: { stripeCheckoutSessionId: checkout.id },
+        });
+
+        revalidateEventRegistrationPaths(event);
+        return {
+          success: true,
+          data: {
+            registrationIds,
+            status: "PENDING_PAYMENT",
+            requiresPayment: true,
+            checkoutUrl: checkout.url ?? undefined,
+          },
+        };
+      } catch (stripeError) {
+        // Roll back the pending hold if checkout could not be created.
+        await prisma.eventRegistration.update({
+          where: { id: registrationId },
+          data: { status: "EXPIRED", payment: { update: { status: "CANCELED" } } },
+        });
+        if (stripeError instanceof StripeDisabledError) {
+          return { success: false, error: stripeError.message };
+        }
+        console.error("Failed to create event checkout session:", stripeError);
+        return { success: false, error: "Could not start checkout. Please try again." };
+      }
     }
 
     // Best-effort confirmation email — a mail failure must not fail the
@@ -359,7 +533,7 @@ export async function cancelMyEventRegistration(
         status: true,
         slotId: true,
         unitAmount: true,
-        payment: { select: { status: true } },
+        payment: { select: { status: true, stripeCheckoutSessionId: true, stripeAccountId: true } },
         event: {
           select: {
             id: true,
@@ -393,9 +567,25 @@ export async function cancelMyEventRegistration(
       };
     }
 
+    // For a pending online hold, expire the open Checkout Session first so the
+    // stale URL cannot be paid and resurrect a canceled registration.
+    const payment = registration.payment;
+    if (payment?.stripeCheckoutSessionId && payment.stripeAccountId && payment.status !== "PAID") {
+      try {
+        await expireCheckoutSession(payment.stripeCheckoutSessionId, payment.stripeAccountId);
+      } catch (expireError) {
+        console.error("Failed to expire event checkout session on cancel:", expireError);
+      }
+    }
+
     await prisma.eventRegistration.update({
       where: { id: registration.id },
-      data: { status: "CANCELED", canceledAt: now, canceledById: userId },
+      data: {
+        status: "CANCELED",
+        canceledAt: now,
+        canceledById: userId,
+        payment: payment && payment.status !== "PAID" ? { update: { status: "CANCELED" } } : undefined,
+      },
     });
 
     // A canceled confirmation/hold frees a committed spot — cascade an offer.
@@ -662,7 +852,7 @@ export async function removeEventRegistration(
  */
 export async function claimWaitlistOffer(
   input: EventRegistrationCommandInput
-): Promise<ActionResult<{ registrationId: string; status: string }>> {
+): Promise<ActionResult<{ registrationId: string; status: string; checkoutUrl?: string }>> {
   try {
     const { registrationId } = eventRegistrationCommandSchema.parse(input);
     const userId = await requireUserId();
@@ -681,6 +871,7 @@ export async function claimWaitlistOffer(
             id: true,
             title: true,
             startAt: true,
+            acceptsOnlinePayment: true,
             acceptsManualPayment: true,
             venmoHandle: true,
             zelleHandle: true,
@@ -688,8 +879,25 @@ export async function claimWaitlistOffer(
             paymentPhone: true,
             paymentInstructions: true,
             venue: { select: { slug: true } },
-            hostLeague: { select: { slug: true, name: true } },
-            hostOrganization: { select: { name: true } },
+            hostLeague: {
+              select: {
+                id: true,
+                slug: true,
+                name: true,
+                stripeAccountId: true,
+                stripeChargesEnabled: true,
+                platformFeeBps: true,
+              },
+            },
+            hostOrganization: {
+              select: {
+                id: true,
+                name: true,
+                stripeAccountId: true,
+                stripeChargesEnabled: true,
+                platformFeeBps: true,
+              },
+            },
             hostTeam: { select: { name: true } },
           },
         },
@@ -708,6 +916,91 @@ export async function claimWaitlistOffer(
     }
 
     const isPaid = registration.unitAmount > 0;
+
+    // Online-only events collect payment before confirming the claim: the
+    // OFFERED hold becomes a PENDING_PAYMENT hold and the webhook confirms.
+    if (isPaid && !registration.event.acceptsManualPayment) {
+      const merchant = resolveEventMerchant(registration.event);
+      if (!registration.event.acceptsOnlinePayment || !isStripeEnabled() || !merchant) {
+        return {
+          success: false,
+          error: "Payment collection isn't available for this event — contact the organizer.",
+        };
+      }
+
+      const originalOfferExpiresAt = registration.offerExpiresAt;
+      const applicationFeeAmount = computeApplicationFee(registration.unitAmount, merchant.platformFeeBps);
+      const held = await prisma.eventRegistration.updateMany({
+        where: { id: registration.id, status: "OFFERED", offerExpiresAt: { gt: now } },
+        data: { status: "PENDING_PAYMENT", offerExpiresAt: null },
+      });
+      if (held.count === 0) {
+        return { success: false, error: "This offer is no longer available." };
+      }
+
+      try {
+        await prisma.payment.create({
+          data: {
+            status: "REQUIRES_PAYMENT",
+            amount: registration.unitAmount,
+            currency: registration.slot.priceCurrency,
+            applicationFeeAmount,
+            stripeAccountId: merchant.stripeAccountId,
+            eventRegistrationId: registration.id,
+            organizationId: merchant.kind === "organization" ? merchant.id : null,
+            leagueId: merchant.kind === "league" ? merchant.id : null,
+          },
+        });
+        const registrant = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { email: true },
+        });
+        const checkout = await createRegistrationCheckoutSession({
+          connectedAccountId: merchant.stripeAccountId,
+          registrationId: registration.id,
+          productName: `${registration.slot.name} — ${registration.event.title}`,
+          productDescription: "Event registration (waitlist claim)",
+          unitAmount: registration.unitAmount,
+          currency: registration.slot.priceCurrency,
+          quantity: 1,
+          applicationFeeAmount,
+          customerEmail: registrant?.email,
+          successPath: `/events/${registration.event.id}?registration=success`,
+          cancelPath: `/my-registrations?registration=canceled`,
+          expiresInSeconds: Math.floor(EVENT_HOLD_WINDOW_MS / 1000),
+          metadata: { eventRegistrationId: registration.id, eventId: registration.event.id },
+        });
+        await prisma.payment.update({
+          where: { eventRegistrationId: registration.id },
+          data: { stripeCheckoutSessionId: checkout.id },
+        });
+
+        revalidateEventRegistrationPaths(registration.event);
+        return {
+          success: true,
+          data: {
+            registrationId: registration.id,
+            status: "PENDING_PAYMENT",
+            checkoutUrl: checkout.url ?? undefined,
+          },
+        };
+      } catch (stripeError) {
+        // Restore the offer so the claimant can retry within their window.
+        await prisma.$transaction([
+          prisma.payment.deleteMany({ where: { eventRegistrationId: registration.id } }),
+          prisma.eventRegistration.update({
+            where: { id: registration.id },
+            data: { status: "OFFERED", offerExpiresAt: originalOfferExpiresAt },
+          }),
+        ]);
+        if (stripeError instanceof StripeDisabledError) {
+          return { success: false, error: stripeError.message };
+        }
+        console.error("Failed to create claim checkout session:", stripeError);
+        return { success: false, error: "Could not start checkout. Please try again." };
+      }
+    }
+
     const claimed = await prisma.eventRegistration.updateMany({
       where: { id: registration.id, status: "OFFERED", offerExpiresAt: { gt: now } },
       data: {
@@ -912,5 +1205,167 @@ export async function promoteWaitlistEntry(
     }
     console.error("Failed to promote waitlist entry:", error);
     return { success: false, error: "Failed to offer this spot." };
+  }
+}
+
+/**
+ * Organizer bookkeeping for manual (Venmo/Zelle/Cash App/cash) payments.
+ * Only applies to priced registrations without an online payment.
+ */
+export async function setManualPaymentStatus(
+  input: SetManualPaymentStatusInput
+): Promise<ActionResult<{ registrationId: string; status: string }>> {
+  try {
+    const validated = setManualPaymentStatusSchema.parse(input);
+
+    const registration = await prisma.eventRegistration.findUnique({
+      where: { id: validated.registrationId },
+      select: {
+        id: true,
+        eventId: true,
+        status: true,
+        unitAmount: true,
+        payment: { select: { id: true } },
+      },
+    });
+    if (!registration) {
+      return { success: false, error: "Registration not found" };
+    }
+    const userId = await requireEventManager(registration.eventId);
+
+    if (registration.unitAmount <= 0) {
+      return { success: false, error: "This registration is free — there is nothing to mark paid." };
+    }
+    if (registration.payment) {
+      return { success: false, error: "This registration was paid online — use Refund instead." };
+    }
+    if (registration.status !== "CONFIRMED") {
+      return { success: false, error: "Only confirmed registrations carry a payment status." };
+    }
+
+    await prisma.eventRegistration.update({
+      where: { id: registration.id },
+      data: { manualPaymentStatus: validated.status, manualPaymentMarkedById: userId },
+    });
+
+    revalidatePath(`/signup-events/${registration.eventId}`);
+    return { success: true, data: { registrationId: registration.id, status: validated.status } };
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("NEXT_REDIRECT")) {
+      throw error;
+    }
+    if (error instanceof Error && error.message.startsWith("Unauthorized")) {
+      return { success: false, error: error.message };
+    }
+    console.error("Failed to set manual payment status:", error);
+    return { success: false, error: "Failed to update the payment status." };
+  }
+}
+
+/**
+ * Organizer refund of an online event payment (full refund). Reverses the
+ * charge on the host's connected account, marks the registration REFUNDED,
+ * and cascades the freed spot to the waitlist.
+ */
+export async function refundEventRegistration(
+  input: RefundEventRegistrationInput
+): Promise<ActionResult<{ registrationId: string; status: string }>> {
+  try {
+    const validated = refundEventRegistrationSchema.parse(input);
+
+    const registration = await prisma.eventRegistration.findUnique({
+      where: { id: validated.registrationId },
+      select: {
+        id: true,
+        eventId: true,
+        slotId: true,
+        status: true,
+        event: {
+          select: { id: true, venue: { select: { slug: true } }, hostLeague: { select: { slug: true } } },
+        },
+        payment: {
+          select: {
+            id: true,
+            status: true,
+            amount: true,
+            refundedAmount: true,
+            stripePaymentIntentId: true,
+            stripeAccountId: true,
+          },
+        },
+      },
+    });
+    if (!registration) {
+      return { success: false, error: "Registration not found" };
+    }
+    const userId = await requireEventManager(registration.eventId);
+
+    const payment = registration.payment;
+    const refundable = payment?.status === "PAID" || payment?.status === "PARTIALLY_REFUNDED";
+    if (!payment || !refundable || !payment.stripePaymentIntentId || !payment.stripeAccountId) {
+      return { success: false, error: "This registration has no captured online payment to refund." };
+    }
+
+    const remaining = payment.amount - payment.refundedAmount;
+    if (remaining <= 0) {
+      return { success: false, error: "This payment has already been fully refunded." };
+    }
+
+    // Claim the payment so concurrent refund requests cannot double-refund.
+    const claim = await prisma.payment.updateMany({
+      where: { id: payment.id, status: { in: ["PAID", "PARTIALLY_REFUNDED"] } },
+      data: { status: "PROCESSING" },
+    });
+    if (claim.count === 0) {
+      return { success: false, error: "This registration is already being refunded." };
+    }
+
+    try {
+      await refundPaymentIntent({
+        paymentIntentId: payment.stripePaymentIntentId,
+        connectedAccountId: payment.stripeAccountId,
+        amount: payment.refundedAmount > 0 ? remaining : undefined,
+        refundApplicationFee: true,
+        idempotencyKey: `refund-full:${registration.id}`,
+      });
+    } catch (stripeError) {
+      // Release the claim so the organizer can retry.
+      await prisma.payment.update({ where: { id: payment.id }, data: { status: payment.status } });
+      if (stripeError instanceof StripeDisabledError) {
+        return { success: false, error: stripeError.message };
+      }
+      console.error("Failed to refund event payment:", stripeError);
+      return { success: false, error: "Stripe refused the refund. Please try again." };
+    }
+
+    await prisma.$transaction([
+      prisma.payment.update({
+        where: { id: payment.id },
+        data: { status: "REFUNDED", refundedAmount: payment.amount, refundedAt: new Date() },
+      }),
+      prisma.eventRegistration.update({
+        where: { id: registration.id },
+        data: { status: "REFUNDED", canceledAt: new Date(), canceledById: userId },
+      }),
+    ]);
+
+    // The refunded spot frees capacity — offer it to the waitlist.
+    try {
+      await promoteNextWaitlistEntriesForSlot(registration.slotId);
+    } catch (promotionError) {
+      console.error("Waitlist promotion after refund failed:", promotionError);
+    }
+
+    revalidateEventRegistrationPaths(registration.event);
+    return { success: true, data: { registrationId: registration.id, status: "REFUNDED" } };
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("NEXT_REDIRECT")) {
+      throw error;
+    }
+    if (error instanceof Error && error.message.startsWith("Unauthorized")) {
+      return { success: false, error: error.message };
+    }
+    console.error("Failed to refund event registration:", error);
+    return { success: false, error: "Failed to refund this registration." };
   }
 }

@@ -1307,6 +1307,9 @@ export const eventRegistrationSchema = z.object({
   slotId: z.string().cuid("Invalid slot ID format"),
   // LINK-visibility events pass the link token for access verification.
   linkToken: optionalSanitizedString(128),
+  // For priced slots on events accepting both methods. ONLINE checkout is
+  // limited to one participant per request (one checkout = one payment).
+  paymentMethod: z.enum(["ONLINE", "MANUAL"]).optional(),
   participants: z
     .array(eventParticipantSchema)
     .min(1, "At least one participant is required")
@@ -1351,3 +1354,21 @@ export const eventInvitationCommandSchema = z.object({
 
 export type SendEventInvitationsInput = z.input<typeof sendEventInvitationsSchema>;
 export type EventInvitationCommandInput = z.input<typeof eventInvitationCommandSchema>;
+
+export const leaguePaymentCommandSchema = z.object({
+  leagueId: z.string().cuid("Invalid league ID format"),
+});
+
+export const setManualPaymentStatusSchema = z.object({
+  registrationId: z.string().cuid("Invalid registration ID format"),
+  status: z.enum(["UNPAID", "PAID", "WAIVED"]),
+});
+
+export const refundEventRegistrationSchema = z.object({
+  registrationId: z.string().cuid("Invalid registration ID format"),
+  reason: optionalSanitizedString(500),
+});
+
+export type LeaguePaymentCommandInput = z.input<typeof leaguePaymentCommandSchema>;
+export type SetManualPaymentStatusInput = z.input<typeof setManualPaymentStatusSchema>;
+export type RefundEventRegistrationInput = z.input<typeof refundEventRegistrationSchema>;

@@ -24,10 +24,13 @@ import {
 import PersonRemoveIcon from "@mui/icons-material/PersonRemove";
 import DownloadIcon from "@mui/icons-material/Download";
 import UpgradeIcon from "@mui/icons-material/Upgrade";
+import CurrencyExchangeIcon from "@mui/icons-material/CurrencyExchange";
 import {
   promoteWaitlistEntry,
+  refundEventRegistration,
   removeEventRegistration,
   setEventCheckIn,
+  setManualPaymentStatus,
 } from "@/lib/actions/event-registrations";
 import { formatCurrencyFromCents } from "@/lib/utils/currency";
 import { formatDateTime } from "@/lib/utils/date";
@@ -126,6 +129,37 @@ export function RosterTable({ eventId, slots }: RosterTableProps) {
     startTransition(async () => {
       setError(null);
       const result = await promoteWaitlistEntry({ registrationId: registration.id });
+      if (!result.success) {
+        setError(result.error);
+        return;
+      }
+      router.refresh();
+    });
+  };
+
+  const markPayment = (registration: RosterRegistration, status: "UNPAID" | "PAID" | "WAIVED") => {
+    startTransition(async () => {
+      setError(null);
+      const result = await setManualPaymentStatus({ registrationId: registration.id, status });
+      if (!result.success) {
+        setError(result.error);
+        return;
+      }
+      router.refresh();
+    });
+  };
+
+  const refund = (registration: RosterRegistration) => {
+    if (
+      !window.confirm(
+        `Refund ${registration.participantName}'s payment of ${formatCurrencyFromCents(registration.unitAmount, registration.currency)}? The charge is reversed and the spot is offered to the waitlist.`
+      )
+    ) {
+      return;
+    }
+    startTransition(async () => {
+      setError(null);
+      const result = await refundEventRegistration({ registrationId: registration.id });
       if (!result.success) {
         setError(result.error);
         return;
@@ -236,12 +270,51 @@ export function RosterTable({ eventId, slots }: RosterTableProps) {
                         <Chip
                           size="small"
                           variant="outlined"
+                          color={
+                            registration.payment?.status === "PAID" || registration.manualPaymentStatus === "PAID"
+                              ? "success"
+                              : registration.unitAmount > 0 && registration.manualPaymentStatus === "UNPAID"
+                                ? "warning"
+                                : "default"
+                          }
                           label={paymentLabel(registration).replace("_", " ").toLowerCase()}
                         />
                         {registration.unitAmount > 0 ? (
                           <Typography variant="caption" color="text.secondary">
                             {formatCurrencyFromCents(registration.unitAmount, registration.currency)}
                           </Typography>
+                        ) : null}
+                        {registration.unitAmount > 0 &&
+                        !registration.payment &&
+                        registration.status === "CONFIRMED" ? (
+                          <Stack direction="row" spacing={0.5}>
+                            {registration.manualPaymentStatus !== "PAID" ? (
+                              <Button size="small" disabled={isPending} onClick={() => markPayment(registration, "PAID")}>
+                                Mark paid
+                              </Button>
+                            ) : (
+                              <Button size="small" disabled={isPending} onClick={() => markPayment(registration, "UNPAID")}>
+                                Mark unpaid
+                              </Button>
+                            )}
+                            {registration.manualPaymentStatus !== "WAIVED" ? (
+                              <Button size="small" disabled={isPending} onClick={() => markPayment(registration, "WAIVED")}>
+                                Waive
+                              </Button>
+                            ) : null}
+                          </Stack>
+                        ) : null}
+                        {registration.payment?.status === "PAID" ||
+                        registration.payment?.status === "PARTIALLY_REFUNDED" ? (
+                          <Button
+                            size="small"
+                            color="error"
+                            startIcon={<CurrencyExchangeIcon fontSize="small" />}
+                            disabled={isPending}
+                            onClick={() => refund(registration)}
+                          >
+                            Refund
+                          </Button>
                         ) : null}
                       </Stack>
                     </TableCell>

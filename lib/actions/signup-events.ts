@@ -725,6 +725,8 @@ export type PublicSignupEventView = {
   viewerCanManage: boolean;
   /** Phase gate for THIS viewer: may they register right now? */
   viewerPhase: { eligibleNow: boolean; nextOpensAt: Date | null };
+  /** True when the host merchant is onboarded and Stripe is configured. */
+  onlinePaymentReady: boolean;
 };
 
 /**
@@ -763,6 +765,8 @@ export async function getPublicSignupEvent(params: {
       hostOrganizationId: true,
       hostLeagueId: true,
       hostTeamId: true,
+      hostOrganization: { select: { stripeAccountId: true, stripeChargesEnabled: true } },
+      hostLeague: { select: { stripeAccountId: true, stripeChargesEnabled: true } },
       phases: {
         select: {
           id: true,
@@ -783,7 +787,13 @@ export async function getPublicSignupEvent(params: {
       : Promise.resolve({ eligibleNow: true, nextOpensAt: null }),
   ]);
 
-  return { event, availability, viewerCanManage, viewerPhase };
+  const merchantReady = Boolean(
+    (hostIds?.hostOrganization?.stripeAccountId && hostIds.hostOrganization.stripeChargesEnabled) ||
+      (hostIds?.hostLeague?.stripeAccountId && hostIds.hostLeague.stripeChargesEnabled)
+  );
+  const onlinePaymentReady = event.acceptsOnlinePayment && isStripeEnabled() && merchantReady;
+
+  return { event, availability, viewerCanManage, viewerPhase, onlinePaymentReady };
 }
 
 /** PUBLIC + PUBLISHED (and recently CANCELED) events for discovery pages and rollups. */

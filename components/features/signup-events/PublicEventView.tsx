@@ -36,7 +36,7 @@ function paymentNote(event: PublicSignupEventView["event"]): string | null {
 }
 
 export function PublicEventView({ view, isAuthenticated, loginRedirect, linkToken }: PublicEventViewProps) {
-  const { event, availability, viewerPhase } = view;
+  const { event, availability, viewerPhase, onlinePaymentReady } = view;
   const hostName =
     event.hostOrganization?.name ?? event.hostLeague?.name ?? event.hostTeam?.name ?? "Organizer";
   const now = new Date();
@@ -176,6 +176,8 @@ export function PublicEventView({ view, isAuthenticated, loginRedirect, linkToke
                         paymentNote={note}
                         waitlistMode={waitlistJoinable || (remaining === 0 && slot.waitlistEnabled)}
                         waitlistEnabled={slot.waitlistEnabled}
+                        onlineAvailable={onlinePaymentReady}
+                        manualAvailable={event.acceptsManualPayment}
                       />
                     ) : null}
                   </Stack>

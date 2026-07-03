@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { Container, Stack } from "@mui/material";
+import { Alert, Container, Stack } from "@mui/material";
 import { getPublicSignupEvent } from "@/lib/actions/signup-events";
 import { PublicEventView } from "@/components/features/signup-events/PublicEventView";
 import { getCurrentUserId } from "@/lib/auth/session";
@@ -8,10 +8,12 @@ export const dynamic = "force-dynamic";
 
 export default async function PublicEventPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ eventId: string }>;
+  searchParams: Promise<{ registration?: string }>;
 }) {
-  const { eventId } = await params;
+  const [{ eventId }, { registration }] = await Promise.all([params, searchParams]);
   const [view, userId] = await Promise.all([getPublicSignupEvent({ eventId }), getCurrentUserId()]);
   if (!view) {
     notFound();
@@ -19,7 +21,16 @@ export default async function PublicEventPage({
 
   return (
     <Container maxWidth="md">
-      <Stack sx={{ py: { xs: 4, md: 6 } }}>
+      <Stack spacing={3} sx={{ py: { xs: 4, md: 6 } }}>
+        {registration === "success" ? (
+          <Alert severity="success">
+            Payment received — we&apos;re confirming your spot. It will appear under My
+            Registrations once your payment finishes processing.
+          </Alert>
+        ) : null}
+        {registration === "canceled" ? (
+          <Alert severity="warning">Checkout was canceled — you have not been charged.</Alert>
+        ) : null}
         <PublicEventView
           view={view}
           isAuthenticated={Boolean(userId)}

@@ -8,6 +8,7 @@ const {
   mockRequireEventManager,
   mockConfirmEmail,
   mockRemovedEmail,
+  mockCreateCheckout,
   mockPrisma,
   mockTx,
 } = vi.hoisted(() => {
@@ -19,6 +20,7 @@ const {
     mockRequireEventManager: vi.fn(),
     mockConfirmEmail: vi.fn(),
     mockRemovedEmail: vi.fn(),
+    mockCreateCheckout: vi.fn(),
     mockTx,
     mockPrisma: {
       $transaction: vi.fn(),
@@ -30,6 +32,7 @@ const {
         update: vi.fn(),
         count: vi.fn(),
       },
+      payment: { update: vi.fn(), updateMany: vi.fn(), create: vi.fn(), deleteMany: vi.fn() },
       user: { findUnique: vi.fn() },
       eventInvitation: { findFirst: vi.fn() },
     },
@@ -43,6 +46,16 @@ vi.mock("@/lib/auth/session", () => ({
 
 vi.mock("@/lib/db/prisma", () => ({ prisma: mockPrisma }));
 
+vi.mock("@/lib/payments/stripe", () => ({
+  StripeDisabledError: class StripeDisabledError extends Error {},
+  isStripeEnabled: () => true,
+  computeApplicationFee: (amount: number, bps?: number | null) =>
+    !bps || bps <= 0 || amount <= 0 ? 0 : Math.floor((amount * bps) / 10000),
+  createRegistrationCheckoutSession: (...args: unknown[]) => mockCreateCheckout(...args),
+  expireCheckoutSession: vi.fn(),
+  refundPaymentIntent: vi.fn(),
+}));
+
 vi.mock("@/lib/email/templates", () => ({
   sendEventRegistrationConfirmationEmail: (...args: unknown[]) => mockConfirmEmail(...args),
   sendEventRegistrationRemovedEmail: (...args: unknown[]) => mockRemovedEmail(...args),
@@ -53,6 +66,7 @@ vi.mock("@/lib/actions/venue-organizations", () => ({}));
 import {
   registerForSignupEvent,
   cancelMyEventRegistration,
+  setManualPaymentStatus,
 } from "@/lib/actions/event-registrations";
 
 const EVENT_ID = "cldevent0000000000000001";
@@ -397,5 +411,192 @@ describe("cancelMyEventRegistration", () => {
     expect(result).toEqual({ success: false, error: "Registration not found" });
     const where = mockPrisma.eventRegistration.findFirst.mock.calls[0][0].where;
     expect(where.registrantId).toBe("user-1");
+  });
+});
+
+describe("registerForSignupEvent online checkout", () => {
+  const onboardedLeague = {
+    id: "league-1",
+    slug: "gfha",
+    name: "GFHA",
+    stripeAccountId: "acct_league",
+    stripeChargesEnabled: true,
+    platformFeeBps: 250,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockRequireUserId.mockResolvedValue("user-1");
+    mockPrisma.$transaction.mockImplementation(async (fn: (tx: typeof mockTx) => Promise<unknown>) => fn(mockTx));
+    mockTx.eventRegistration.findMany.mockResolvedValue([]);
+    mockTx.eventRegistration.count.mockResolvedValue(0);
+    mockTx.eventRegistration.create.mockResolvedValue({ id: "reg-1" });
+    mockPrisma.user.findUnique.mockResolvedValue({ email: "parent@example.com" });
+    mockCreateCheckout.mockResolvedValue({ id: "cs_1", url: "https://checkout.stripe.test/cs_1" });
+    mockPrisma.payment.update.mockResolvedValue({});
+  });
+
+  it("creates a pending hold with a nested payment and returns the checkout URL", async () => {
+    mockPrisma.signupSlot.findFirst.mockResolvedValue(
+      makeSlot(
+        { priceAmount: 2500 },
+        { acceptsOnlinePayment: true, acceptsManualPayment: false, hostLeague: onboardedLeague }
+      )
+    );
+
+    const result = await registerForSignupEvent({
+      eventId: EVENT_ID,
+      slotId: SLOT_ID,
+      paymentMethod: "ONLINE",
+      participants: [{ name: "Liam Beacom" }],
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.status).toBe("PENDING_PAYMENT");
+      expect(result.data.checkoutUrl).toBe("https://checkout.stripe.test/cs_1");
+    }
+    expect(mockTx.eventRegistration.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: "PENDING_PAYMENT",
+          payment: {
+            create: expect.objectContaining({
+              status: "REQUIRES_PAYMENT",
+              amount: 2500,
+              applicationFeeAmount: 62, // floor(2500 * 250 / 10000)
+              leagueId: "league-1",
+              organizationId: null,
+            }),
+          },
+        }),
+      })
+    );
+    expect(mockPrisma.payment.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { eventRegistrationId: "reg-1" },
+        data: { stripeCheckoutSessionId: "cs_1" },
+      })
+    );
+  });
+
+  it("limits online checkout to one participant per request", async () => {
+    mockPrisma.signupSlot.findFirst.mockResolvedValue(
+      makeSlot(
+        { priceAmount: 2500 },
+        { acceptsOnlinePayment: true, acceptsManualPayment: true, hostLeague: onboardedLeague }
+      )
+    );
+
+    const result = await registerForSignupEvent({
+      eventId: EVENT_ID,
+      slotId: SLOT_ID,
+      paymentMethod: "ONLINE",
+      participants: [{ name: "Liam Beacom" }, { name: "Nora Beacom" }],
+    });
+
+    expect(result.success).toBe(false);
+    expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("rolls the hold back when checkout creation fails", async () => {
+    mockPrisma.signupSlot.findFirst.mockResolvedValue(
+      makeSlot(
+        { priceAmount: 2500 },
+        { acceptsOnlinePayment: true, acceptsManualPayment: false, hostLeague: onboardedLeague }
+      )
+    );
+    mockCreateCheckout.mockRejectedValue(new Error("stripe down"));
+    mockPrisma.eventRegistration.update.mockResolvedValue({});
+
+    const result = await registerForSignupEvent({
+      eventId: EVENT_ID,
+      slotId: SLOT_ID,
+      paymentMethod: "ONLINE",
+      participants: [{ name: "Liam Beacom" }],
+    });
+
+    expect(result).toEqual({ success: false, error: "Could not start checkout. Please try again." });
+    expect(mockPrisma.eventRegistration.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "reg-1" },
+        data: expect.objectContaining({ status: "EXPIRED" }),
+      })
+    );
+  });
+
+  it("refuses online payment when the merchant is not onboarded", async () => {
+    mockPrisma.signupSlot.findFirst.mockResolvedValue(
+      makeSlot({ priceAmount: 2500 }, { acceptsOnlinePayment: true, acceptsManualPayment: false })
+    );
+
+    const result = await registerForSignupEvent({
+      eventId: EVENT_ID,
+      slotId: SLOT_ID,
+      paymentMethod: "ONLINE",
+      participants: [{ name: "Liam Beacom" }],
+    });
+
+    expect(result).toEqual({ success: false, error: "Online payment isn't available for this event." });
+  });
+});
+
+describe("setManualPaymentStatus", () => {
+  const REG = "cldreg000000000000000001";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockRequireEventManager.mockResolvedValue("admin-1");
+  });
+
+  it("marks a confirmed manual registration paid", async () => {
+    mockPrisma.eventRegistration.findUnique.mockResolvedValue({
+      id: REG,
+      eventId: EVENT_ID,
+      status: "CONFIRMED",
+      unitAmount: 2500,
+      payment: null,
+    });
+    mockPrisma.eventRegistration.update.mockResolvedValue({});
+
+    const result = await setManualPaymentStatus({ registrationId: REG, status: "PAID" });
+
+    expect(result).toEqual({ success: true, data: { registrationId: REG, status: "PAID" } });
+    expect(mockPrisma.eventRegistration.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: { manualPaymentStatus: "PAID", manualPaymentMarkedById: "admin-1" },
+      })
+    );
+  });
+
+  it("refuses to touch online payments", async () => {
+    mockPrisma.eventRegistration.findUnique.mockResolvedValue({
+      id: REG,
+      eventId: EVENT_ID,
+      status: "CONFIRMED",
+      unitAmount: 2500,
+      payment: { id: "pay-1" },
+    });
+
+    const result = await setManualPaymentStatus({ registrationId: REG, status: "PAID" });
+
+    expect(result).toEqual({
+      success: false,
+      error: "This registration was paid online — use Refund instead.",
+    });
+  });
+
+  it("refuses free registrations", async () => {
+    mockPrisma.eventRegistration.findUnique.mockResolvedValue({
+      id: REG,
+      eventId: EVENT_ID,
+      status: "CONFIRMED",
+      unitAmount: 0,
+      payment: null,
+    });
+
+    const result = await setManualPaymentStatus({ registrationId: REG, status: "PAID" });
+
+    expect(result.success).toBe(false);
   });
 });

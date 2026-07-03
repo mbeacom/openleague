@@ -9,7 +9,12 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControl,
+  FormControlLabel,
+  FormLabel,
   IconButton,
+  Radio,
+  RadioGroup,
   Stack,
   TextField,
   Typography,
@@ -34,6 +39,9 @@ interface RegisterDialogProps {
   /** True when this signup will join the waitlist (slot full or viewer's phase not open). */
   waitlistMode?: boolean;
   waitlistEnabled?: boolean;
+  /** Payment methods available for priced slots. */
+  onlineAvailable?: boolean;
+  manualAvailable?: boolean;
 }
 
 type ParticipantRow = { name: string; email: string; phone: string; notes: string };
@@ -53,6 +61,8 @@ export function RegisterDialog({
   paymentNote,
   waitlistMode = false,
   waitlistEnabled = true,
+  onlineAvailable = false,
+  manualAvailable = true,
 }: RegisterDialogProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -60,8 +70,11 @@ export function RegisterDialog({
   const [success, setSuccess] = useState<"CONFIRMED" | "WAITLISTED" | null>(null);
   const [isPending, startTransition] = useTransition();
   const [participants, setParticipants] = useState<ParticipantRow[]>([{ ...EMPTY_PARTICIPANT }]);
+  const [method, setMethod] = useState<"ONLINE" | "MANUAL">(manualAvailable ? "MANUAL" : "ONLINE");
 
   const isPaid = (priceAmount ?? 0) > 0;
+  const showMethodChoice = isPaid && !waitlistMode && onlineAvailable && manualAvailable;
+  const paysOnline = isPaid && !waitlistMode && (method === "ONLINE" || !manualAvailable) && onlineAvailable;
   const isFull = spotsRemaining != null && spotsRemaining <= 0;
   const joinsWaitlist = waitlistMode || (isFull && waitlistEnabled);
   const disabled = isFull && !waitlistEnabled;
@@ -97,6 +110,7 @@ export function RegisterDialog({
         eventId,
         slotId,
         linkToken,
+        paymentMethod: isPaid && !waitlistMode ? (paysOnline ? "ONLINE" : "MANUAL") : undefined,
         participants: participants
           .filter((participant) => participant.name.trim().length > 0)
           .map((participant) => ({
@@ -109,6 +123,16 @@ export function RegisterDialog({
 
       if (!result.success) {
         setError(result.error);
+        return;
+      }
+
+      if (result.data.status === "PENDING_PAYMENT") {
+        if (result.data.checkoutUrl) {
+          // Off to Stripe Checkout — the webhook confirms on payment.
+          window.location.href = result.data.checkoutUrl;
+          return;
+        }
+        setError("Checkout could not be started. Please try again.");
         return;
       }
 
@@ -137,11 +161,40 @@ export function RegisterDialog({
             ) : isPaid ? (
               <Alert severity="info">
                 {formatCurrencyFromCents(priceAmount ?? 0, currency)} per participant.
-                {paymentNote ? ` ${paymentNote}` : ""}
+                {paysOnline
+                  ? " You'll pay securely by card at checkout."
+                  : paymentNote
+                    ? ` ${paymentNote}`
+                    : ""}
               </Alert>
             ) : (
               <Alert severity="info">This slot is free.</Alert>
             )}
+
+            {showMethodChoice ? (
+              <FormControl>
+                <FormLabel id={`payment-method-${slotId}`}>How would you like to pay?</FormLabel>
+                <RadioGroup
+                  row
+                  aria-labelledby={`payment-method-${slotId}`}
+                  value={method}
+                  onChange={(event) => setMethod(event.target.value as "ONLINE" | "MANUAL")}
+                >
+                  <FormControlLabel value="ONLINE" control={<Radio />} label="Pay online now" />
+                  <FormControlLabel
+                    value="MANUAL"
+                    control={<Radio />}
+                    label="Venmo / Zelle / Cash App / cash"
+                  />
+                </RadioGroup>
+              </FormControl>
+            ) : null}
+            {paysOnline && participants.length > 1 ? (
+              <Alert severity="warning">
+                Online payment covers one participant per checkout — remove extra participants or
+                choose a manual payment method.
+              </Alert>
+            ) : null}
             {spotsRemaining != null && !joinsWaitlist ? (
               <Typography variant="body2" color="text.secondary">
                 {spotsRemaining} spot{spotsRemaining === 1 ? "" : "s"} remaining
@@ -202,7 +255,7 @@ export function RegisterDialog({
               </Stack>
             ))}
 
-            {participants.length < 10 ? (
+            {participants.length < 10 && !paysOnline ? (
               <Button
                 startIcon={<AddIcon />}
                 onClick={() => setParticipants((current) => [...current, { ...EMPTY_PARTICIPANT }])}
@@ -219,9 +272,19 @@ export function RegisterDialog({
           <Button
             variant="contained"
             onClick={handleSubmit}
-            disabled={isPending || participants.every((participant) => !participant.name.trim())}
+            disabled={
+              isPending ||
+              participants.every((participant) => !participant.name.trim()) ||
+              (paysOnline && participants.filter((participant) => participant.name.trim()).length > 1)
+            }
           >
-            {isPending ? "Working…" : joinsWaitlist ? "Join waitlist" : "Confirm signup"}
+            {isPending
+              ? "Working…"
+              : joinsWaitlist
+                ? "Join waitlist"
+                : paysOnline
+                  ? "Continue to payment"
+                  : "Confirm signup"}
           </Button>
         </DialogActions>
       </Dialog>
