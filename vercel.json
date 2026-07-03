@@ -11,6 +11,10 @@
     {
       "path": "/api/cron/notification-batches",
       "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/event-waitlist",
+      "schedule": "*/10 * * * *"
     }
   ],
   "functions": {

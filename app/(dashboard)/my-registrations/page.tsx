@@ -4,6 +4,7 @@ import { getMyRegistrations } from "@/lib/actions/session-registrations";
 import { getMyEventRegistrations } from "@/lib/actions/event-registrations";
 import { CancelRegistrationButton } from "@/components/features/venue-admin";
 import { CancelEventRegistrationButton } from "@/components/features/signup-events/CancelEventRegistrationButton";
+import { WaitlistOfferActions } from "@/components/features/signup-events/WaitlistOfferActions";
 import { formatCurrencyFromCents } from "@/lib/utils/currency";
 import { formatDateTime } from "@/lib/utils/date";
 
@@ -136,7 +137,11 @@ export default async function MyRegistrationsPage() {
                         <Chip
                           size="small"
                           color={EVENT_STATUS_COLORS[reg.status] ?? "default"}
-                          label={reg.status.replace("_", " ")}
+                          label={
+                            reg.status === "WAITLISTED" && reg.waitlistPosition
+                              ? `WAITLISTED · #${reg.waitlistPosition}`
+                              : reg.status.replace("_", " ")
+                          }
                         />
                         <Chip size="small" variant="outlined" label={reg.slot.name} />
                         {reg.unitAmount > 0 ? (
@@ -166,7 +171,25 @@ export default async function MyRegistrationsPage() {
                         </Typography>
                       ) : null}
 
-                      {cancelable ? (
+                      {reg.status === "OFFERED" && reg.offerExpiresAt ? (
+                        <>
+                          <Divider />
+                          <Stack
+                            direction={{ xs: "column", sm: "row" }}
+                            spacing={1}
+                            alignItems={{ sm: "center" }}
+                            justifyContent="space-between"
+                          >
+                            <Typography variant="body2" color="warning.main">
+                              A spot opened up! Claim it by {formatDateTime(reg.offerExpiresAt)}.
+                            </Typography>
+                            <WaitlistOfferActions
+                              registrationId={reg.id}
+                              participantName={reg.participantName}
+                            />
+                          </Stack>
+                        </>
+                      ) : cancelable ? (
                         <>
                           <Divider />
                           <Stack direction="row" justifyContent="flex-end">

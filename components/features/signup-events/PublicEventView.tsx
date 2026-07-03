@@ -36,15 +36,25 @@ function paymentNote(event: PublicSignupEventView["event"]): string | null {
 }
 
 export function PublicEventView({ view, isAuthenticated, loginRedirect, linkToken }: PublicEventViewProps) {
-  const { event, availability } = view;
+  const { event, availability, viewerPhase } = view;
   const hostName =
     event.hostOrganization?.name ?? event.hostLeague?.name ?? event.hostTeam?.name ?? "Organizer";
   const now = new Date();
-  const registrationOpen =
+  const hasPhases = event.phases.length > 0;
+  // Global window: published and not past the close/start. Opening is governed
+  // by phases when they exist, else by the event-level open time.
+  const withinGlobalWindow =
     event.status === "PUBLISHED" &&
     now < event.startAt &&
-    (!event.registrationOpensAt || now >= event.registrationOpensAt) &&
     (!event.registrationClosesAt || now <= event.registrationClosesAt);
+  const openForViewer =
+    withinGlobalWindow &&
+    (hasPhases
+      ? viewerPhase.eligibleNow
+      : !event.registrationOpensAt || now >= event.registrationOpensAt);
+  // Outside the viewer's phase (or before the event-level open), the waitlist
+  // is still joinable while the global window is open.
+  const waitlistJoinable = withinGlobalWindow && !openForViewer && hasPhases;
   const note = paymentNote(event);
 
   return (
@@ -74,11 +84,29 @@ export function PublicEventView({ view, isAuthenticated, loginRedirect, linkToke
       {event.status === "CANCELED" ? (
         <Alert severity="error">This event has been canceled by the organizer.</Alert>
       ) : null}
-      {event.status === "PUBLISHED" && event.registrationOpensAt && now < event.registrationOpensAt ? (
+      {event.status === "PUBLISHED" && !hasPhases && event.registrationOpensAt && now < event.registrationOpensAt ? (
         <Alert severity="info">Registration opens {formatDateTime(event.registrationOpensAt)}.</Alert>
       ) : null}
       {event.status === "PUBLISHED" && event.registrationClosesAt && now > event.registrationClosesAt ? (
         <Alert severity="info">Registration is closed for this event.</Alert>
+      ) : null}
+      {waitlistJoinable ? (
+        <Alert severity="info">
+          Registration isn&apos;t open for you yet
+          {viewerPhase.nextOpensAt ? ` — the next window opens ${formatDateTime(viewerPhase.nextOpensAt)}` : ""}.
+          You can join the waitlist now and you&apos;ll be offered a spot automatically when one is available.
+        </Alert>
+      ) : null}
+
+      {hasPhases ? (
+        <Stack spacing={0.5}>
+          <Typography variant="subtitle2">Registration phases</Typography>
+          {event.phases.map((phase) => (
+            <Typography key={phase.id} variant="body2" color="text.secondary">
+              {phase.name} — opens {formatDateTime(phase.opensAt)}
+            </Typography>
+          ))}
+        </Stack>
       ) : null}
 
       {event.description ? (
@@ -134,7 +162,7 @@ export function PublicEventView({ view, isAuthenticated, loginRedirect, linkToke
                         />
                       </Stack>
                     </Stack>
-                    {registrationOpen ? (
+                    {openForViewer || (waitlistJoinable && slot.waitlistEnabled) ? (
                       <RegisterDialog
                         eventId={event.id}
                         slotId={slot.id}
@@ -146,6 +174,8 @@ export function PublicEventView({ view, isAuthenticated, loginRedirect, linkToke
                         loginRedirect={loginRedirect}
                         linkToken={linkToken}
                         paymentNote={note}
+                        waitlistMode={waitlistJoinable || (remaining === 0 && slot.waitlistEnabled)}
+                        waitlistEnabled={slot.waitlistEnabled}
                       />
                     ) : null}
                   </Stack>

@@ -85,6 +85,10 @@ function makeSlot(overrides: Record<string, unknown> = {}, eventOverrides: Recor
       cashAppHandle: null,
       paymentPhone: null,
       paymentInstructions: null,
+      hostOrganizationId: null,
+      hostLeagueId: "league-1",
+      hostTeamId: null,
+      phases: [],
       venue: null,
       hostLeague: { slug: "gfha", name: "GFHA" },
       hostOrganization: null,
@@ -150,8 +154,10 @@ describe("registerForSignupEvent", () => {
     expect(mockTx.eventRegistration.create).toHaveBeenCalledTimes(2);
   });
 
-  it("blocks registration when the slot is full", async () => {
-    mockPrisma.signupSlot.findFirst.mockResolvedValue(makeSlot({ capacity: 40 }));
+  it("blocks registration when the slot is full and waitlist is disabled", async () => {
+    mockPrisma.signupSlot.findFirst.mockResolvedValue(
+      makeSlot({ capacity: 40, waitlistEnabled: false })
+    );
     mockTx.eventRegistration.count.mockResolvedValue(40);
 
     const result = await registerForSignupEvent({
@@ -164,8 +170,10 @@ describe("registerForSignupEvent", () => {
     expect(mockTx.eventRegistration.create).not.toHaveBeenCalled();
   });
 
-  it("reports remaining spots when a batch does not fit", async () => {
-    mockPrisma.signupSlot.findFirst.mockResolvedValue(makeSlot({ capacity: 40 }));
+  it("reports remaining spots when a batch does not fit and waitlist is disabled", async () => {
+    mockPrisma.signupSlot.findFirst.mockResolvedValue(
+      makeSlot({ capacity: 40, waitlistEnabled: false })
+    );
     mockTx.eventRegistration.count.mockResolvedValue(39);
 
     const result = await registerForSignupEvent({

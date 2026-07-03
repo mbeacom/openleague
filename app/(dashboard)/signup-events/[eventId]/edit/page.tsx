@@ -25,6 +25,13 @@ export default async function EditSignupEventPage({
         <EventForm
           hostOptions={[]}
           venueOptions={venueOptions}
+          host={
+            event.hostOrganization
+              ? { kind: "organization", id: event.hostOrganization.id }
+              : event.hostLeague
+                ? { kind: "league", id: event.hostLeague.id }
+                : { kind: "team", id: event.hostTeam?.id ?? "" }
+          }
           initialValues={{
             eventId: event.id,
             title: event.title,
@@ -59,6 +66,14 @@ export default async function EditSignupEventPage({
               priceAmount: slot.priceAmount,
               waitlistEnabled: slot.waitlistEnabled,
               registrationCount: slot._count.registrations,
+            })),
+            phases: event.phases.map((phase) => ({
+              id: phase.id,
+              name: phase.name,
+              opensAt: phase.opensAt,
+              audience: phase.audience,
+              divisionIds: phase.divisions.map((division) => division.id),
+              teamIds: phase.teams.map((team) => team.id),
             })),
           }}
         />

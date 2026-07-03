@@ -94,13 +94,13 @@ enforcement, confirmation email, self-cancel, roster view + export.
 **Independent Test**: two-phase event, non-member waitlists in phase 1, phase 2 opens by
 clock, cancellation triggers ordered offer with expiry cascade.
 
-- [ ] T026 [US3] Implement phase eligibility predicate `resolvePhaseEligibility(user, event, now)` (HOST_MEMBERS via LeagueUser/TeamMember/org relationships, SELECTED_GROUPS via linked divisions/teams, INVITEES, EVERYONE) in lib/actions/event-registrations.ts (research R6)
-- [ ] T027 [US3] Extend `registerForSignupEvent`: full slot or not-yet-open phase → WAITLISTED (waitlistJoinedAt); expose waitlist position in reads
-- [ ] T028 [US3] Implement promotion routine `promoteNextWaitlistEntries(slotId)` (sync cascade on cancel/remove/refund/capacity-increase; offerExpiresAt = min(now + EVENT_WAITLIST_CLAIM_HOURS, startAt)), `claimWaitlistOffer`, `declineWaitlistOffer`, `promoteWaitlistEntry` (manual, logged) in lib/actions/event-registrations.ts (research R5)
-- [ ] T029 [US3] Cron route app/api/cron/event-waitlist/route.ts (expire lapsed offers/holds → cascade; phase-open backfill) + add `*/10` cron entry to vercel.json
-- [ ] T030 [P] [US3] Waitlist offer/expiry email templates in lib/email/templates.ts
-- [ ] T031 [P] [US3] PhaseEditor.tsx (audiences, division/team pickers, opensAt) and WaitlistPanel.tsx (ordered list, positions, manual promote/remove) in components/features/signup-events/; waitlist tab on dashboard [eventId] page; "Join waitlist" state on public pages
-- [ ] T032 [P] [US3] Tests: eligibility predicate matrix and offer/expiry cascade (incl. simultaneous claim vs manual promote) in __tests__/lib/actions/event-waitlist.test.ts
+- [X] T026 [US3] Implement phase eligibility predicate `resolvePhaseEligibility(user, event, now)` (HOST_MEMBERS via LeagueUser/TeamMember/org relationships, SELECTED_GROUPS via linked divisions/teams, INVITEES, EVERYONE) in lib/actions/event-registrations.ts (research R6)
+- [X] T027 [US3] Extend `registerForSignupEvent`: full slot or not-yet-open phase → WAITLISTED (waitlistJoinedAt); expose waitlist position in reads
+- [X] T028 [US3] Implement promotion routine `promoteNextWaitlistEntries(slotId)` (sync cascade on cancel/remove/refund/capacity-increase; offerExpiresAt = min(now + EVENT_WAITLIST_CLAIM_HOURS, startAt)), `claimWaitlistOffer`, `declineWaitlistOffer`, `promoteWaitlistEntry` (manual, logged) in lib/actions/event-registrations.ts (research R5)
+- [X] T029 [US3] Cron route app/api/cron/event-waitlist/route.ts (expire lapsed offers/holds → cascade; phase-open backfill) + add `*/10` cron entry to vercel.json
+- [X] T030 [P] [US3] Waitlist offer/expiry email templates in lib/email/templates.ts
+- [X] T031 [P] [US3] PhaseEditor.tsx (audiences, division/team pickers, opensAt) and WaitlistPanel.tsx (ordered list, positions, manual promote/remove) in components/features/signup-events/; waitlist tab on dashboard [eventId] page; "Join waitlist" state on public pages
+- [X] T032 [P] [US3] Tests: eligibility predicate matrix and offer/expiry cascade (incl. simultaneous claim vs manual promote) in __tests__/lib/actions/event-waitlist.test.ts
 
 **Checkpoint**: Mite Night priority scenario works with free events.
 

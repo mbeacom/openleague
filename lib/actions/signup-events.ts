@@ -25,6 +25,8 @@ import {
 import { publicSignupEventSelect, type PublicSignupEvent } from "@/lib/utils/public-signup-events";
 import { countCommittedSlotSpots } from "@/lib/utils/event-capacity";
 import { canViewSignupEvent } from "@/lib/utils/event-access";
+import { resolvePhaseEligibility } from "@/lib/utils/event-phases";
+import { promoteNextWaitlistEntriesForSlot } from "@/lib/utils/event-waitlist";
 import { isStripeEnabled } from "@/lib/payments/stripe";
 import { sendSignupEventCanceledEmail, sendSignupEventUpdatedEmail } from "@/lib/email/templates";
 
@@ -341,6 +343,25 @@ export async function updateSignupEvent(
         await tx.eventRegistrationPhase.create({ data: { ...phase, eventId: validated.eventId } });
       }
     });
+
+    // A capacity increase frees spots — cascade waitlist offers for those slots.
+    const increasedSlotIds = validated.slots
+      .filter((slot) => {
+        if (!slot.id) return false;
+        const current = existing.slots.find((existingSlot) => existingSlot.id === slot.id);
+        if (!current) return false;
+        const oldCapacity = current.capacity;
+        const newCapacity = slot.capacity ?? null;
+        return oldCapacity != null && (newCapacity == null || newCapacity > oldCapacity);
+      })
+      .map((slot) => slot.id as string);
+    for (const slotId of increasedSlotIds) {
+      try {
+        await promoteNextWaitlistEntriesForSlot(slotId);
+      } catch (promotionError) {
+        console.error("Waitlist promotion after capacity increase failed:", promotionError);
+      }
+    }
 
     if (materialChange) {
       const registrants = await prisma.eventRegistration.findMany({
@@ -702,6 +723,8 @@ export type PublicSignupEventView = {
   event: PublicSignupEvent;
   availability: SlotAvailability;
   viewerCanManage: boolean;
+  /** Phase gate for THIS viewer: may they register right now? */
+  viewerPhase: { eligibleNow: boolean; nextOpensAt: Date | null };
 };
 
 /**
@@ -734,8 +757,33 @@ export async function getPublicSignupEvent(params: {
   });
   if (!event) return null;
 
-  const availability = await computeSlotAvailability(event.slots);
-  return { event, availability, viewerCanManage };
+  const hostIds = await prisma.signupEvent.findUnique({
+    where: { id: gate.id },
+    select: {
+      hostOrganizationId: true,
+      hostLeagueId: true,
+      hostTeamId: true,
+      phases: {
+        select: {
+          id: true,
+          name: true,
+          opensAt: true,
+          audience: true,
+          divisions: { select: { id: true } },
+          teams: { select: { id: true } },
+        },
+      },
+    },
+  });
+
+  const [availability, viewerPhase] = await Promise.all([
+    computeSlotAvailability(event.slots),
+    hostIds
+      ? resolvePhaseEligibility(prisma, { id: gate.id, ...hostIds }, userId)
+      : Promise.resolve({ eligibleNow: true, nextOpensAt: null }),
+  ]);
+
+  return { event, availability, viewerCanManage, viewerPhase };
 }
 
 /** PUBLIC + PUBLISHED (and recently CANCELED) events for discovery pages and rollups. */
@@ -901,4 +949,57 @@ export async function listVenueOptions() {
     take: 300,
     select: { id: true, name: true, city: true, state: true, timezone: true },
   });
+}
+
+export type HostGroupOptions = {
+  divisions: Array<{ id: string; name: string }>;
+  teams: Array<{ id: string; name: string }>;
+};
+
+/**
+ * Divisions/teams selectable for a phase's SELECTED_GROUPS audience,
+ * resolved from the hosting entity.
+ */
+export async function listHostGroupOptions(host: {
+  kind: "organization" | "league" | "team";
+  id: string;
+}): Promise<HostGroupOptions> {
+  await requireUserId();
+
+  if (host.kind === "league") {
+    const [divisions, teams] = await Promise.all([
+      prisma.division.findMany({
+        where: { leagueId: host.id, isActive: true },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true },
+      }),
+      prisma.team.findMany({
+        where: { leagueId: host.id, isActive: true },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true },
+      }),
+    ]);
+    return { divisions, teams };
+  }
+
+  if (host.kind === "team") {
+    const team = await prisma.team.findUnique({
+      where: { id: host.id },
+      select: { id: true, name: true },
+    });
+    return { divisions: [], teams: team ? [team] : [] };
+  }
+
+  // Organization hosts: teams with an active relationship to the org's venues.
+  const teams = await prisma.team.findMany({
+    where: {
+      isActive: true,
+      venueRelationships: {
+        some: { status: "ACTIVE", venue: { organizationId: host.id } },
+      },
+    },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true },
+  });
+  return { divisions: [], teams };
 }

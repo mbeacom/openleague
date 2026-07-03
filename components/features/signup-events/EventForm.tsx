@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useState, useTransition } from "react";
+import { type FormEvent, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   Alert,
@@ -20,7 +20,14 @@ import {
 } from "@mui/material";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import AddIcon from "@mui/icons-material/Add";
-import { createSignupEvent, updateSignupEvent, type HostOption } from "@/lib/actions/signup-events";
+import {
+  createSignupEvent,
+  updateSignupEvent,
+  listHostGroupOptions,
+  type HostOption,
+  type HostGroupOptions,
+} from "@/lib/actions/signup-events";
+import { PhaseEditor, type PhaseRow } from "./PhaseEditor";
 import { AGE_CLASSIFICATION_LABELS, AGE_CLASSIFICATION_OPTIONS } from "@/lib/utils/age-level";
 import {
   SIGNUP_EVENT_CATEGORIES,
@@ -90,12 +97,22 @@ export type EventFormInitialValues = {
     waitlistEnabled: boolean;
     registrationCount: number;
   }>;
+  phases: Array<{
+    id: string;
+    name: string;
+    opensAt: Date;
+    audience: PhaseRow["audience"];
+    divisionIds: string[];
+    teamIds: string[];
+  }>;
 };
 
 interface EventFormProps {
   hostOptions: HostOption[];
   venueOptions: Array<{ id: string; name: string; city: string | null; state: string | null }>;
   initialValues?: EventFormInitialValues;
+  /** Fixed host in edit mode (host cannot change after creation). */
+  host?: { kind: "organization" | "league" | "team"; id: string };
 }
 
 function toLocalInputValue(date: Date | null): string {
@@ -109,7 +126,7 @@ const DEFAULT_SLOTS: SlotRow[] = [
   { name: "Goalie", description: "", capacity: "4", priceDollars: "", waitlistEnabled: true },
 ];
 
-export function EventForm({ hostOptions, venueOptions, initialValues }: EventFormProps) {
+export function EventForm({ hostOptions, venueOptions, initialValues, host }: EventFormProps) {
   const router = useRouter();
   const isEdit = Boolean(initialValues);
   const [isPending, startTransition] = useTransition();
@@ -119,6 +136,40 @@ export function EventForm({ hostOptions, venueOptions, initialValues }: EventFor
     hostOptions.length === 1 ? `${hostOptions[0].kind}:${hostOptions[0].id}` : ""
   );
   const [acceptsManual, setAcceptsManual] = useState(initialValues?.acceptsManualPayment ?? true);
+  const [phases, setPhases] = useState<PhaseRow[]>(
+    initialValues
+      ? initialValues.phases.map((phase) => ({
+          id: phase.id,
+          name: phase.name,
+          opensAt: toLocalInputValue(phase.opensAt),
+          audience: phase.audience,
+          divisionIds: phase.divisionIds,
+          teamIds: phase.teamIds,
+        }))
+      : []
+  );
+  const [groupOptions, setGroupOptions] = useState<HostGroupOptions>({ divisions: [], teams: [] });
+
+  // Load division/team pickers for the selected host (fixed host in edit mode).
+  const activeHost = host ?? (hostKey ? { kind: hostKey.split(":")[0] as HostOption["kind"], id: hostKey.split(":")[1] } : null);
+  const activeHostKey = activeHost ? `${activeHost.kind}:${activeHost.id}` : "";
+  useEffect(() => {
+    if (!activeHostKey) {
+      return;
+    }
+    const [kind, id] = activeHostKey.split(":");
+    let stale = false;
+    listHostGroupOptions({ kind: kind as HostOption["kind"], id })
+      .then((options) => {
+        if (!stale) setGroupOptions(options);
+      })
+      .catch(() => {
+        if (!stale) setGroupOptions({ divisions: [], teams: [] });
+      });
+    return () => {
+      stale = true;
+    };
+  }, [activeHostKey]);
   const [slots, setSlots] = useState<SlotRow[]>(
     initialValues
       ? initialValues.slots.map((slot) => ({
@@ -189,7 +240,17 @@ export function EventForm({ hostOptions, venueOptions, initialValues }: EventFor
       galleryEnabled: formData.get("galleryEnabled") === "on",
       publicRoster: formData.get("publicRoster") === "on",
       slots: slotInputs,
-      phases: [],
+      phases: phases
+        .filter((phase) => phase.name.trim().length > 0 && phase.opensAt)
+        .map((phase, index) => ({
+          id: phase.id,
+          name: phase.name.trim(),
+          opensAt: new Date(phase.opensAt),
+          audience: phase.audience,
+          sortOrder: index,
+          divisionIds: phase.audience === "SELECTED_GROUPS" ? phase.divisionIds : [],
+          teamIds: phase.audience === "SELECTED_GROUPS" ? phase.teamIds : [],
+        })),
     };
 
     startTransition(async () => {
@@ -476,6 +537,12 @@ export function EventForm({ hostOptions, venueOptions, initialValues }: EventFor
               label="Allow participants to share photos and videos"
             />
           </Stack>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent>
+          <PhaseEditor phases={phases} onChange={setPhases} groupOptions={groupOptions} />
         </CardContent>
       </Card>
 

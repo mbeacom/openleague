@@ -23,8 +23,14 @@ import {
 } from "@mui/material";
 import PersonRemoveIcon from "@mui/icons-material/PersonRemove";
 import DownloadIcon from "@mui/icons-material/Download";
-import { removeEventRegistration, setEventCheckIn } from "@/lib/actions/event-registrations";
+import UpgradeIcon from "@mui/icons-material/Upgrade";
+import {
+  promoteWaitlistEntry,
+  removeEventRegistration,
+  setEventCheckIn,
+} from "@/lib/actions/event-registrations";
 import { formatCurrencyFromCents } from "@/lib/utils/currency";
+import { formatDateTime } from "@/lib/utils/date";
 
 const STATUS_COLORS: Record<string, "default" | "success" | "warning" | "error" | "info"> = {
   CONFIRMED: "success",
@@ -47,6 +53,8 @@ type RosterRegistration = {
   currency: string;
   manualPaymentStatus: string;
   checkedInAt: Date | null;
+  waitlistJoinedAt: Date | null;
+  offerExpiresAt: Date | null;
   registrant: { id: string; name: string | null; email: string };
   player: { id: string; name: string; team: { name: string } | null } | null;
   payment: { status: string } | null;
@@ -106,6 +114,18 @@ export function RosterTable({ eventId, slots }: RosterTableProps) {
     startTransition(async () => {
       setError(null);
       const result = await removeEventRegistration({ registrationId: registration.id });
+      if (!result.success) {
+        setError(result.error);
+        return;
+      }
+      router.refresh();
+    });
+  };
+
+  const offerSpot = (registration: RosterRegistration) => {
+    startTransition(async () => {
+      setError(null);
+      const result = await promoteWaitlistEntry({ registrationId: registration.id });
       if (!result.success) {
         setError(result.error);
         return;
@@ -197,6 +217,11 @@ export function RosterTable({ eventId, slots }: RosterTableProps) {
                         label={registration.status.replace("_", " ").toLowerCase()}
                         color={STATUS_COLORS[registration.status] ?? "default"}
                       />
+                      {registration.status === "OFFERED" && registration.offerExpiresAt ? (
+                        <Typography variant="caption" color="text.secondary" display="block">
+                          claim by {formatDateTime(registration.offerExpiresAt)}
+                        </Typography>
+                      ) : null}
                     </TableCell>
                     <TableCell>
                       <Typography variant="body2">
@@ -231,6 +256,18 @@ export function RosterTable({ eventId, slots }: RosterTableProps) {
                       />
                     </TableCell>
                     <TableCell align="right">
+                      {registration.status === "WAITLISTED" ? (
+                        <Tooltip title="Offer this spot now (skips the queue)">
+                          <IconButton
+                            size="small"
+                            disabled={isPending}
+                            onClick={() => offerSpot(registration)}
+                            aria-label={`Offer a spot to ${registration.participantName}`}
+                          >
+                            <UpgradeIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      ) : null}
                       {active ? (
                         <Tooltip title="Remove registration">
                           <IconButton

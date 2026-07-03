@@ -31,6 +31,9 @@ interface RegisterDialogProps {
   loginRedirect: string;
   linkToken?: string;
   paymentNote?: string | null;
+  /** True when this signup will join the waitlist (slot full or viewer's phase not open). */
+  waitlistMode?: boolean;
+  waitlistEnabled?: boolean;
 }
 
 type ParticipantRow = { name: string; email: string; phone: string; notes: string };
@@ -48,21 +51,27 @@ export function RegisterDialog({
   loginRedirect,
   linkToken,
   paymentNote,
+  waitlistMode = false,
+  waitlistEnabled = true,
 }: RegisterDialogProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
+  const [success, setSuccess] = useState<"CONFIRMED" | "WAITLISTED" | null>(null);
   const [isPending, startTransition] = useTransition();
   const [participants, setParticipants] = useState<ParticipantRow[]>([{ ...EMPTY_PARTICIPANT }]);
 
   const isPaid = (priceAmount ?? 0) > 0;
   const isFull = spotsRemaining != null && spotsRemaining <= 0;
-  const ctaLabel = isFull
+  const joinsWaitlist = waitlistMode || (isFull && waitlistEnabled);
+  const disabled = isFull && !waitlistEnabled;
+  const ctaLabel = disabled
     ? "Full"
-    : isPaid
-      ? `Sign up · ${formatCurrencyFromCents(priceAmount ?? 0, currency)}`
-      : "Sign up";
+    : joinsWaitlist
+      ? "Join waitlist"
+      : isPaid
+        ? `Sign up · ${formatCurrencyFromCents(priceAmount ?? 0, currency)}`
+        : "Sign up";
 
   const updateParticipant = (index: number, patch: Partial<ParticipantRow>) => {
     setParticipants((current) =>
@@ -76,7 +85,7 @@ export function RegisterDialog({
       return;
     }
     setError(null);
-    setSuccess(false);
+    setSuccess(null);
     setParticipants([{ ...EMPTY_PARTICIPANT }]);
     setOpen(true);
   };
@@ -103,25 +112,29 @@ export function RegisterDialog({
         return;
       }
 
-      setSuccess(true);
+      setSuccess(result.data.status);
       setTimeout(() => {
         setOpen(false);
         router.refresh();
-      }, 1200);
+      }, 1500);
     });
   };
 
   return (
     <>
-      <Button variant="contained" size="small" onClick={handleOpen} disabled={isFull}>
+      <Button variant={joinsWaitlist ? "outlined" : "contained"} size="small" onClick={handleOpen} disabled={disabled}>
         {ctaLabel}
       </Button>
 
       <Dialog open={open} onClose={() => (isPending ? undefined : setOpen(false))} fullWidth maxWidth="sm">
-        <DialogTitle>Sign up — {slotName}</DialogTitle>
+        <DialogTitle>{joinsWaitlist ? "Join the waitlist" : "Sign up"} — {slotName}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ pt: 1 }}>
-            {isPaid ? (
+            {joinsWaitlist ? (
+              <Alert severity="info">
+                You&apos;ll be added to the waitlist and offered a spot automatically when one opens up.
+              </Alert>
+            ) : isPaid ? (
               <Alert severity="info">
                 {formatCurrencyFromCents(priceAmount ?? 0, currency)} per participant.
                 {paymentNote ? ` ${paymentNote}` : ""}
@@ -129,13 +142,18 @@ export function RegisterDialog({
             ) : (
               <Alert severity="info">This slot is free.</Alert>
             )}
-            {spotsRemaining != null ? (
+            {spotsRemaining != null && !joinsWaitlist ? (
               <Typography variant="body2" color="text.secondary">
                 {spotsRemaining} spot{spotsRemaining === 1 ? "" : "s"} remaining
               </Typography>
             ) : null}
             {error ? <Alert severity="error">{error}</Alert> : null}
-            {success ? <Alert severity="success">You&apos;re signed up! Check your email for confirmation.</Alert> : null}
+            {success === "CONFIRMED" ? (
+              <Alert severity="success">You&apos;re signed up! Check your email for confirmation.</Alert>
+            ) : null}
+            {success === "WAITLISTED" ? (
+              <Alert severity="success">You&apos;re on the waitlist — we&apos;ll email you when a spot opens up.</Alert>
+            ) : null}
 
             {participants.map((participant, index) => (
               <Stack key={index} spacing={1.5} sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 2 }}>
@@ -203,7 +221,7 @@ export function RegisterDialog({
             onClick={handleSubmit}
             disabled={isPending || participants.every((participant) => !participant.name.trim())}
           >
-            {isPending ? "Signing up…" : "Confirm signup"}
+            {isPending ? "Working…" : joinsWaitlist ? "Join waitlist" : "Confirm signup"}
           </Button>
         </DialogActions>
       </Dialog>

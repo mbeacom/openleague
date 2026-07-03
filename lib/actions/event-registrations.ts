@@ -21,15 +21,19 @@ import {
   SlotCapacityError,
 } from "@/lib/utils/event-capacity";
 import { canViewSignupEvent } from "@/lib/utils/event-access";
+import { resolvePhaseEligibility } from "@/lib/utils/event-phases";
+import { promoteNextWaitlistEntriesForSlot } from "@/lib/utils/event-waitlist";
 import { formatDateTime } from "@/lib/utils/date";
+import { EVENT_WAITLIST_CLAIM_HOURS } from "@/lib/env";
 import {
   sendEventRegistrationConfirmationEmail,
   sendEventRegistrationRemovedEmail,
+  sendWaitlistOfferEmail,
 } from "@/lib/email/templates";
 
 export type RegisterForEventResult = {
   registrationIds: string[];
-  status: "CONFIRMED";
+  status: "CONFIRMED" | "WAITLISTED";
   requiresPayment: boolean;
 };
 
@@ -118,6 +122,19 @@ export async function registerForSignupEvent(
             cashAppHandle: true,
             paymentPhone: true,
             paymentInstructions: true,
+            hostOrganizationId: true,
+            hostLeagueId: true,
+            hostTeamId: true,
+            phases: {
+              select: {
+                id: true,
+                name: true,
+                opensAt: true,
+                audience: true,
+                divisions: { select: { id: true } },
+                teams: { select: { id: true } },
+              },
+            },
             venue: { select: { slug: true } },
             hostLeague: { select: { slug: true, name: true } },
             hostOrganization: { select: { name: true } },
@@ -146,11 +163,27 @@ export async function registerForSignupEvent(
     if (now >= event.startAt) {
       return { success: false, error: "Registration has closed — this event has already started." };
     }
-    if (event.registrationOpensAt && now < event.registrationOpensAt) {
-      return { success: false, error: "Registration hasn't opened yet for this event." };
-    }
     if (event.registrationClosesAt && now > event.registrationClosesAt) {
       return { success: false, error: "Registration has closed for this event." };
+    }
+
+    // Opening: phases govern when they exist; otherwise the event-level window.
+    let joinWaitlistInstead = false;
+    if (event.phases.length > 0) {
+      const eligibility = await resolvePhaseEligibility(prisma, event, userId, now);
+      if (!eligibility.eligibleNow) {
+        if (!slot.waitlistEnabled) {
+          return {
+            success: false,
+            error: eligibility.nextOpensAt
+              ? `Registration isn't open for you yet — the next window opens ${formatDateTime(eligibility.nextOpensAt)}.`
+              : "Registration isn't open for you for this event.",
+          };
+        }
+        joinWaitlistInstead = true;
+      }
+    } else if (event.registrationOpensAt && now < event.registrationOpensAt) {
+      return { success: false, error: "Registration hasn't opened yet for this event." };
     }
 
     const unitAmount = slot.priceAmount ?? 0;
@@ -171,7 +204,7 @@ export async function registerForSignupEvent(
       return { success: false, error: "Each participant can only be registered once per slot." };
     }
 
-    const registrationIds = await prisma.$transaction(
+    const { registrationIds, waitlisted } = await prisma.$transaction(
       async (tx) => {
         // Duplicate guard: same registrant + same participant name + same slot,
         // considering only active registrations.
@@ -193,10 +226,16 @@ export async function registerForSignupEvent(
           throw new DuplicateParticipantError(duplicate.name);
         }
 
-        if (slot.capacity != null) {
+        // Full slots fall through to the waitlist (whole batch — never a
+        // partial confirm) when the slot allows it.
+        let toWaitlist = joinWaitlistInstead;
+        if (!toWaitlist && slot.capacity != null) {
           const taken = await countCommittedSlotSpots(tx, slot.id);
           if (taken + validated.participants.length > slot.capacity) {
-            throw new SlotCapacityError(Math.max(0, slot.capacity - taken));
+            if (!slot.waitlistEnabled) {
+              throw new SlotCapacityError(Math.max(0, slot.capacity - taken));
+            }
+            toWaitlist = true;
           }
         }
 
@@ -212,20 +251,30 @@ export async function registerForSignupEvent(
               participantPhone: participant.phone || null,
               notes: participant.notes || null,
               playerId: participant.playerId || null,
-              status: "CONFIRMED",
-              confirmedAt: now,
+              status: toWaitlist ? "WAITLISTED" : "CONFIRMED",
+              confirmedAt: toWaitlist ? null : now,
+              waitlistJoinedAt: toWaitlist ? now : null,
               unitAmount,
               currency: slot.priceCurrency,
-              manualPaymentStatus: isPaid ? "UNPAID" : "NOT_REQUIRED",
+              // Manual payment is owed on confirmation, not while waitlisted.
+              manualPaymentStatus: !toWaitlist && isPaid ? "UNPAID" : "NOT_REQUIRED",
             },
             select: { id: true },
           });
           created.push(registration.id);
         }
-        return created;
+        return { registrationIds: created, waitlisted: toWaitlist };
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
     );
+
+    if (waitlisted) {
+      revalidateEventRegistrationPaths(event);
+      return {
+        success: true,
+        data: { registrationIds, status: "WAITLISTED", requiresPayment: false },
+      };
+    }
 
     // Best-effort confirmation email — a mail failure must not fail the
     // committed registration.
@@ -308,6 +357,7 @@ export async function cancelMyEventRegistration(
       select: {
         id: true,
         status: true,
+        slotId: true,
         unitAmount: true,
         payment: { select: { status: true } },
         event: {
@@ -348,6 +398,15 @@ export async function cancelMyEventRegistration(
       data: { status: "CANCELED", canceledAt: now, canceledById: userId },
     });
 
+    // A canceled confirmation/hold frees a committed spot — cascade an offer.
+    if (["CONFIRMED", "PENDING_PAYMENT", "OFFERED"].includes(registration.status)) {
+      try {
+        await promoteNextWaitlistEntriesForSlot(registration.slotId);
+      } catch (promotionError) {
+        console.error("Waitlist promotion after cancel failed:", promotionError);
+      }
+    }
+
     revalidateEventRegistrationPaths(registration.event);
     return { success: true, data: { registrationId: registration.id, status: "CANCELED" } };
   } catch (error) {
@@ -359,10 +418,13 @@ export async function cancelMyEventRegistration(
   }
 }
 
-/** The current user's signup-event registrations across all hosts. */
+/**
+ * The current user's signup-event registrations across all hosts, with the
+ * live queue position attached to waitlisted entries.
+ */
 export async function getMyEventRegistrations() {
   const userId = await requireUserId();
-  return prisma.eventRegistration.findMany({
+  const registrations = await prisma.eventRegistration.findMany({
     where: { registrantId: userId },
     orderBy: { createdAt: "desc" },
     take: 200,
@@ -374,6 +436,8 @@ export async function getMyEventRegistrations() {
       currency: true,
       manualPaymentStatus: true,
       checkedInAt: true,
+      waitlistJoinedAt: true,
+      offerExpiresAt: true,
       createdAt: true,
       slot: { select: { id: true, name: true } },
       event: {
@@ -394,6 +458,22 @@ export async function getMyEventRegistrations() {
       payment: { select: { status: true, receiptUrl: true } },
     },
   });
+
+  return Promise.all(
+    registrations.map(async (registration) => {
+      if (registration.status !== "WAITLISTED" || !registration.waitlistJoinedAt) {
+        return { ...registration, waitlistPosition: null };
+      }
+      const ahead = await prisma.eventRegistration.count({
+        where: {
+          slotId: registration.slot.id,
+          status: "WAITLISTED",
+          waitlistJoinedAt: { lt: registration.waitlistJoinedAt },
+        },
+      });
+      return { ...registration, waitlistPosition: ahead + 1 };
+    })
+  );
 }
 
 export type EventRoster = Awaited<ReturnType<typeof getEventRoster>>;
@@ -511,6 +591,7 @@ export async function removeEventRegistration(
       select: {
         id: true,
         eventId: true,
+        slotId: true,
         status: true,
         participantName: true,
         registrant: { select: { email: true } },
@@ -551,6 +632,14 @@ export async function removeEventRegistration(
       console.error("Failed to send registration removal email:", emailError);
     }
 
+    if (["CONFIRMED", "PENDING_PAYMENT", "OFFERED"].includes(registration.status)) {
+      try {
+        await promoteNextWaitlistEntriesForSlot(registration.slotId);
+      } catch (promotionError) {
+        console.error("Waitlist promotion after removal failed:", promotionError);
+      }
+    }
+
     revalidateEventRegistrationPaths(registration.event);
     return { success: true, data: { registrationId: registration.id } };
   } catch (error) {
@@ -562,5 +651,266 @@ export async function removeEventRegistration(
     }
     console.error("Failed to remove event registration:", error);
     return { success: false, error: "Failed to remove this registration." };
+  }
+}
+
+/**
+ * Claim a waitlist offer. The OFFERED row already holds the spot (it counts
+ * as committed), so claiming is a conditional status flip — no capacity race.
+ * Priced slots confirm with manual-payment tracking; online checkout arrives
+ * with the payments story.
+ */
+export async function claimWaitlistOffer(
+  input: EventRegistrationCommandInput
+): Promise<ActionResult<{ registrationId: string; status: string }>> {
+  try {
+    const { registrationId } = eventRegistrationCommandSchema.parse(input);
+    const userId = await requireUserId();
+
+    const registration = await prisma.eventRegistration.findFirst({
+      where: { id: registrationId, registrantId: userId },
+      select: {
+        id: true,
+        status: true,
+        offerExpiresAt: true,
+        unitAmount: true,
+        participantName: true,
+        slot: { select: { name: true, priceCurrency: true } },
+        event: {
+          select: {
+            id: true,
+            title: true,
+            startAt: true,
+            acceptsManualPayment: true,
+            venmoHandle: true,
+            zelleHandle: true,
+            cashAppHandle: true,
+            paymentPhone: true,
+            paymentInstructions: true,
+            venue: { select: { slug: true } },
+            hostLeague: { select: { slug: true, name: true } },
+            hostOrganization: { select: { name: true } },
+            hostTeam: { select: { name: true } },
+          },
+        },
+      },
+    });
+    if (!registration) {
+      return { success: false, error: "Registration not found" };
+    }
+    if (registration.status !== "OFFERED") {
+      return { success: false, error: "This offer is no longer available." };
+    }
+
+    const now = new Date();
+    if (!registration.offerExpiresAt || registration.offerExpiresAt <= now) {
+      return { success: false, error: "This offer has expired — you're back on the waitlist queue for the next opening." };
+    }
+
+    const isPaid = registration.unitAmount > 0;
+    const claimed = await prisma.eventRegistration.updateMany({
+      where: { id: registration.id, status: "OFFERED", offerExpiresAt: { gt: now } },
+      data: {
+        status: "CONFIRMED",
+        confirmedAt: now,
+        offerExpiresAt: null,
+        manualPaymentStatus: isPaid ? "UNPAID" : "NOT_REQUIRED",
+      },
+    });
+    if (claimed.count === 0) {
+      return { success: false, error: "This offer is no longer available." };
+    }
+
+    try {
+      const registrant = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { email: true },
+      });
+      if (registrant?.email) {
+        await sendEventRegistrationConfirmationEmail({
+          to: registrant.email,
+          participantNames: [registration.participantName],
+          eventTitle: registration.event.title,
+          slotName: registration.slot.name,
+          hostName:
+            registration.event.hostOrganization?.name ??
+            registration.event.hostLeague?.name ??
+            registration.event.hostTeam?.name ??
+            "the organizer",
+          startAtFormatted: formatDateTime(registration.event.startAt),
+          eventId: registration.event.id,
+          amountTotal: registration.unitAmount,
+          currency: registration.slot.priceCurrency,
+          manualPaymentNote: isPaid ? manualPaymentNote(registration.event) : undefined,
+        });
+      }
+    } catch (emailError) {
+      console.error("Failed to send claim confirmation email:", emailError);
+    }
+
+    revalidateEventRegistrationPaths(registration.event);
+    return { success: true, data: { registrationId: registration.id, status: "CONFIRMED" } };
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("NEXT_REDIRECT")) {
+      throw error;
+    }
+    console.error("Failed to claim waitlist offer:", error);
+    return { success: false, error: "Failed to claim this offer." };
+  }
+}
+
+/** Decline a waitlist offer; the spot cascades to the next entry in order. */
+export async function declineWaitlistOffer(
+  input: EventRegistrationCommandInput
+): Promise<ActionResult<{ registrationId: string }>> {
+  try {
+    const { registrationId } = eventRegistrationCommandSchema.parse(input);
+    const userId = await requireUserId();
+
+    const registration = await prisma.eventRegistration.findFirst({
+      where: { id: registrationId, registrantId: userId },
+      select: {
+        id: true,
+        status: true,
+        slotId: true,
+        event: {
+          select: { id: true, venue: { select: { slug: true } }, hostLeague: { select: { slug: true } } },
+        },
+      },
+    });
+    if (!registration) {
+      return { success: false, error: "Registration not found" };
+    }
+    if (registration.status !== "OFFERED" && registration.status !== "WAITLISTED") {
+      return { success: false, error: "There is no waitlist entry to decline." };
+    }
+
+    const wasOffered = registration.status === "OFFERED";
+    await prisma.eventRegistration.update({
+      where: { id: registration.id },
+      data: { status: "CANCELED", canceledAt: new Date(), canceledById: userId, offerExpiresAt: null },
+    });
+
+    if (wasOffered) {
+      try {
+        await promoteNextWaitlistEntriesForSlot(registration.slotId);
+      } catch (promotionError) {
+        console.error("Waitlist promotion after decline failed:", promotionError);
+      }
+    }
+
+    revalidateEventRegistrationPaths(registration.event);
+    return { success: true, data: { registrationId: registration.id } };
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("NEXT_REDIRECT")) {
+      throw error;
+    }
+    console.error("Failed to decline waitlist offer:", error);
+    return { success: false, error: "Failed to decline this offer." };
+  }
+}
+
+/**
+ * Organizer override: offer a spot to a specific waitlisted entry out of
+ * FIFO order. Capacity is still enforced — no oversell, even manually.
+ */
+export async function promoteWaitlistEntry(
+  input: EventRegistrationCommandInput
+): Promise<ActionResult<{ registrationId: string; offerExpiresAt: Date }>> {
+  try {
+    const { registrationId } = eventRegistrationCommandSchema.parse(input);
+
+    const registration = await prisma.eventRegistration.findUnique({
+      where: { id: registrationId },
+      select: {
+        id: true,
+        eventId: true,
+        status: true,
+        participantName: true,
+        registrant: { select: { email: true } },
+        slot: { select: { id: true, name: true, capacity: true } },
+        event: {
+          select: {
+            id: true,
+            title: true,
+            startAt: true,
+            venue: { select: { slug: true } },
+            hostLeague: { select: { slug: true } },
+          },
+        },
+      },
+    });
+    if (!registration) {
+      return { success: false, error: "Registration not found" };
+    }
+    await requireEventManager(registration.eventId);
+
+    if (registration.status !== "WAITLISTED") {
+      return { success: false, error: "Only waitlisted entries can be offered a spot." };
+    }
+
+    const now = new Date();
+    if (now >= registration.event.startAt) {
+      return { success: false, error: "This event has already started." };
+    }
+    const offerExpiresAt = (() => {
+      const claim = new Date(now.getTime() + EVENT_WAITLIST_CLAIM_HOURS * 60 * 60 * 1000);
+      return claim < registration.event.startAt ? claim : registration.event.startAt;
+    })();
+
+    await prisma.$transaction(
+      async (tx) => {
+        if (registration.slot.capacity != null) {
+          const committed = await countCommittedSlotSpots(tx, registration.slot.id);
+          if (committed >= registration.slot.capacity) {
+            throw new SlotCapacityError(0);
+          }
+        }
+        const claimed = await tx.eventRegistration.updateMany({
+          where: { id: registration.id, status: "WAITLISTED" },
+          data: { status: "OFFERED", offerExpiresAt },
+        });
+        if (claimed.count === 0) {
+          throw new Error("Entry is no longer waitlisted");
+        }
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
+    );
+
+    try {
+      if (registration.registrant.email) {
+        await sendWaitlistOfferEmail({
+          to: registration.registrant.email,
+          participantName: registration.participantName,
+          eventTitle: registration.event.title,
+          slotName: registration.slot.name,
+          claimByFormatted: formatDateTime(offerExpiresAt),
+          eventId: registration.event.id,
+        });
+      }
+    } catch (emailError) {
+      console.error("Failed to send manual offer email:", emailError);
+    }
+
+    revalidateEventRegistrationPaths(registration.event);
+    return { success: true, data: { registrationId: registration.id, offerExpiresAt } };
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("NEXT_REDIRECT")) {
+      throw error;
+    }
+    if (error instanceof Error && error.message.startsWith("Unauthorized")) {
+      return { success: false, error: error.message };
+    }
+    if (error instanceof SlotCapacityError) {
+      return { success: false, error: "This slot is full — increase its capacity before offering more spots." };
+    }
+    if (error instanceof Error && error.message === "Entry is no longer waitlisted") {
+      return { success: false, error: "This entry is no longer on the waitlist." };
+    }
+    if (isSerializationError(error)) {
+      return { success: false, error: "The slot is busy — please try again." };
+    }
+    console.error("Failed to promote waitlist entry:", error);
+    return { success: false, error: "Failed to offer this spot." };
   }
 }

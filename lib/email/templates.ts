@@ -1464,3 +1464,28 @@ export async function sendSignupEventReminders(): Promise<void> {
     }
   }
 }
+
+interface WaitlistOfferEmailData {
+  to: string;
+  participantName: string;
+  eventTitle: string;
+  slotName: string;
+  claimByFormatted: string;
+  eventId: string;
+}
+
+/** A waitlist spot opened up — time-boxed offer to claim it. */
+export async function sendWaitlistOfferEmail(data: WaitlistOfferEmailData): Promise<void> {
+  const mailchimp = getMailchimpClient();
+  const claimLink = `${BASE_URL}/my-registrations`;
+
+  await mailchimp.messages.send({
+    message: {
+      from_email: EMAIL_FROM,
+      subject: `A spot opened up: ${data.eventTitle}`,
+      html: `<p>Good news — a <strong>${data.slotName}</strong> spot opened up for ${data.participantName} at <strong>${data.eventTitle}</strong>.</p><p>Claim it by <strong>${data.claimByFormatted}</strong> or the offer passes to the next person on the waitlist.</p><p><a href="${claimLink}">Claim your spot</a></p>`,
+      text: `A ${data.slotName} spot opened up for ${data.participantName} at ${data.eventTitle}. Claim it by ${data.claimByFormatted} or the offer passes to the next person: ${claimLink}`,
+      to: [{ email: data.to, type: "to" as const }],
+    },
+  });
+}
