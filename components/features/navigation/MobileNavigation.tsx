@@ -20,6 +20,7 @@ import {
   Logout as LogoutIcon,
   MoreVert as MoreVertIcon,
   SportsHockey as SportsHockeyIcon,
+  HowToReg as HowToRegIcon,
 } from '@mui/icons-material';
 import { usePathname, useRouter } from 'next/navigation';
 import { logout } from '@/lib/actions/logout';
@@ -189,6 +190,17 @@ export default function MobileNavigation({ isLeagueMode = false }: MobileNavigat
             <ListItemText>Practice Planner</ListItemText>
           </MenuItem>
         )}
+        <MenuItem
+          onClick={() => {
+            handleMenuClose();
+            handleNavigation('/signup-events');
+          }}
+        >
+          <ListItemIcon>
+            <HowToRegIcon />
+          </ListItemIcon>
+          <ListItemText>Signup Events</ListItemText>
+        </MenuItem>
         {isLeagueMode && (
           <MenuItem
             onClick={() => {

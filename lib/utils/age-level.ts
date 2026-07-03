@@ -1,10 +1,12 @@
 import type { AgeClassification } from "@prisma/client";
-import { STATS_MIN_AGE_LEVEL } from "@/lib/env";
 
 /**
  * Ordered ranks for age/level classifications. Game scores and statistics are
- * only allowed at or above the configured minimum level (USA Hockey ADM:
+ * only allowed at or above the platform's minimum level (USA Hockey ADM:
  * no scores/stats at 8U/mite and below).
+ *
+ * This module is client-safe on purpose (no env access) — server callers pass
+ * the configured threshold (env STATS_MIN_AGE_LEVEL) into isStatsEligible.
  */
 export const AGE_CLASSIFICATION_RANK: Record<AgeClassification, number> = {
   U6: 1,
@@ -36,12 +38,16 @@ export const AGE_CLASSIFICATION_OPTIONS = (
   Object.keys(AGE_CLASSIFICATION_RANK) as AgeClassification[]
 ).sort((left, right) => AGE_CLASSIFICATION_RANK[left] - AGE_CLASSIFICATION_RANK[right]);
 
+export const DEFAULT_STATS_MIN_AGE_LEVEL: AgeClassification = "SQUIRT_U10";
+
 /**
  * Whether game scores/outcomes/statistics may be recorded and displayed for an
- * event at the given classification. The threshold is platform-configurable via
- * STATS_MIN_AGE_LEVEL (default SQUIRT_U10 — blocks 8U/mite and below).
+ * event at the given classification. Server callers pass the configured
+ * STATS_MIN_AGE_LEVEL; the default blocks 8U/mite and below.
  */
-export function isStatsEligible(classification: AgeClassification): boolean {
-  const minimum = STATS_MIN_AGE_LEVEL as AgeClassification;
-  return AGE_CLASSIFICATION_RANK[classification] >= AGE_CLASSIFICATION_RANK[minimum];
+export function isStatsEligible(
+  classification: AgeClassification,
+  minimumLevel: AgeClassification = DEFAULT_STATS_MIN_AGE_LEVEL
+): boolean {
+  return AGE_CLASSIFICATION_RANK[classification] >= AGE_CLASSIFICATION_RANK[minimumLevel];
 }

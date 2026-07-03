@@ -846,3 +846,59 @@ export async function getManagedSignupEvent(eventId: string) {
   const availability = await computeSlotAvailability(event.slots);
   return { ...event, availability };
 }
+
+export type HostOption = {
+  kind: "organization" | "league" | "team";
+  id: string;
+  name: string;
+};
+
+/** Hosting entities the current user may create events for. */
+export async function listMyHostOptions(): Promise<HostOption[]> {
+  const userId = await requireUserId();
+
+  const [orgStaff, leagueAdminRoles, teamAdminRoles] = await Promise.all([
+    prisma.venueStaff.findMany({
+      where: { userId, status: "ACTIVE", role: { in: ["OWNER", "MANAGER", "SCHEDULER"] } },
+      select: { organization: { select: { id: true, name: true } } },
+      distinct: ["organizationId"],
+    }),
+    prisma.leagueUser.findMany({
+      where: { userId, role: "LEAGUE_ADMIN", league: { isActive: true } },
+      select: { league: { select: { id: true, name: true } } },
+    }),
+    prisma.teamMember.findMany({
+      where: { userId, role: "ADMIN", team: { isActive: true } },
+      select: { team: { select: { id: true, name: true } } },
+    }),
+  ]);
+
+  return [
+    ...orgStaff.map((staff) => ({
+      kind: "organization" as const,
+      id: staff.organization.id,
+      name: staff.organization.name,
+    })),
+    ...leagueAdminRoles.map((role) => ({
+      kind: "league" as const,
+      id: role.league.id,
+      name: role.league.name,
+    })),
+    ...teamAdminRoles.map((role) => ({
+      kind: "team" as const,
+      id: role.team.id,
+      name: role.team.name,
+    })),
+  ];
+}
+
+/** Active venues for the event form's venue picker. */
+export async function listVenueOptions() {
+  await requireUserId();
+  return prisma.venue.findMany({
+    where: { isActive: true },
+    orderBy: { name: "asc" },
+    take: 300,
+    select: { id: true, name: true, city: true, state: true, timezone: true },
+  });
+}

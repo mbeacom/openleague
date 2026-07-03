@@ -31,6 +31,7 @@ import {
   DateRange as DateRangeIcon,
   Storefront as StorefrontIcon,
   ConfirmationNumber as ConfirmationNumberIcon,
+  HowToReg as HowToRegIcon,
 } from "@mui/icons-material";
 import { logout } from "@/lib/actions/logout";
 import { useLeague } from "@/components/providers/LeagueProvider";
@@ -70,6 +71,7 @@ export default function DashboardNav({ mobile = false, isLeagueMode = false }: D
         { label: "Roster", path: "/roster", icon: <PeopleIcon /> },
         { label: "Calendar", path: "/calendar", icon: <CalendarIcon /> },
         { label: "Events", path: "/events", icon: <EventIcon /> },
+        { label: "Signup Events", path: "/signup-events", icon: <HowToRegIcon /> },
         { label: "Venues", path: "/venues", icon: <PlaceIcon /> },
         { label: "Venue Admin", path: "/venue-admin", icon: <StorefrontIcon /> },
         { label: "My Registrations", path: "/my-registrations", icon: <ConfirmationNumberIcon /> },
@@ -84,6 +86,7 @@ export default function DashboardNav({ mobile = false, isLeagueMode = false }: D
       { label: "Dashboard", path: `${leaguePrefix}/dashboard`, icon: <DashboardIcon /> },
       { label: "Teams", path: `${leaguePrefix}/teams`, icon: <GroupsIcon /> },
       { label: "Schedule", path: `${leaguePrefix}/schedule`, icon: <CalendarIcon /> },
+      { label: "Signup Events", path: "/signup-events", icon: <HowToRegIcon /> },
       { label: "Venues", path: `${leaguePrefix}/venues`, icon: <PlaceIcon /> },
       { label: "Venue Admin", path: "/venue-admin", icon: <StorefrontIcon /> },
       { label: "My Registrations", path: "/my-registrations", icon: <ConfirmationNumberIcon /> },

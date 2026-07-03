@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { sendRSVPReminders } from "@/lib/email/templates";
+import { sendRSVPReminders, sendSignupEventReminders } from "@/lib/email/templates";
 
 /**
  * Constant-time string comparison to prevent timing attacks
@@ -53,6 +53,9 @@ export async function GET(request: Request) {
 
     // Send RSVP reminders
     await sendRSVPReminders();
+
+    // Send 48-hour signup-event reminders (same hourly cadence)
+    await sendSignupEventReminders();
 
     return NextResponse.json({
       success: true,

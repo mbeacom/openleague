@@ -18,8 +18,8 @@ independently implementable and testable. US1+US2 together are the MVP.
 
 ## Phase 1: Setup
 
-- [ ] T001 Add `@vercel/blob` dependency via `bun add @vercel/blob` and commit lockfile
-- [ ] T002 [P] Add optional env vars `BLOB_READ_WRITE_TOKEN`, `EVENT_WAITLIST_CLAIM_HOURS` (default 24), `STATS_MIN_AGE_LEVEL` (default `SQUIRT_U10`) with helpers `isBlobConfigured`, `EVENT_WAITLIST_CLAIM_HOURS`, `STATS_MIN_AGE_LEVEL` in lib/env.ts; document in scripts/validate-env if applicable
+- [X] T001 Add `@vercel/blob` dependency via `bun add @vercel/blob` and commit lockfile
+- [X] T002 [P] Add optional env vars `BLOB_READ_WRITE_TOKEN`, `EVENT_WAITLIST_CLAIM_HOURS` (default 24), `STATS_MIN_AGE_LEVEL` (default `SQUIRT_U10`) with helpers `isBlobConfigured`, `EVENT_WAITLIST_CLAIM_HOURS`, `STATS_MIN_AGE_LEVEL` in lib/env.ts; document in scripts/validate-env if applicable
 
 ---
 
@@ -27,13 +27,13 @@ independently implementable and testable. US1+US2 together are the MVP.
 
 **⚠️ CRITICAL**: complete before any user story work.
 
-- [ ] T003 Add all new enums and 12 models (SignupEvent, SignupSlot, EventRegistrationPhase, EventRegistration, EventInvitation, EventManager, EventTeam, EventTeamAssignment, EventGame, EventGameParticipant, PlayerGameStat, EventMediaItem) plus League extensions (slug, Stripe columns) and Payment generalization (optional registrationId/venueId/organizationId; new eventRegistrationId, leagueId) to prisma/schema.prisma per data-model.md, including all User/Team/Division/Venue/IceSurface/Player back-relations
-- [ ] T004 Create migration `add_signup_events` via `bun run db:migrate`, then append raw-SQL CHECK constraints (payments exactly-one registration link, exactly-one merchant, venue-implies-org; signup_events exactly-one host) to the generated migration.sql and re-apply; run `bun run db:generate`; commit schema + migration together
-- [ ] T005 [P] Create lib/utils/age-level.ts with ordered `AgeClassification` ranks, `isStatsEligible(classification)` honoring `STATS_MIN_AGE_LEVEL`, and display labels
-- [ ] T006 [P] Add host/manager auth helpers to lib/auth/session.ts: `getSignupEventAccess(eventId, userId)`, `requireEventManager(eventId)` (host org staff via VENUE_SCHEDULE_ROLES, LEAGUE_ADMIN, team ADMIN, or EventManager row), `requireHostAdmin(host)` for event creation/manager grants
-- [ ] T007 [P] Create lib/utils/public-signup-events.ts exporting `publicSignupEventSelect` whitelist + `toPublicRosterName(fullName)` (first name + last initial) per data-model.md public data boundaries
-- [ ] T008 [P] Add base Zod schemas to lib/utils/validation.ts: signupEventSchema (create/update, host XOR check, time sanity), signupSlotSchema, registrationPhaseSchema, eventRegistrationSchema, plus shared enums; export inferred types
-- [ ] T009 [P] Unit tests for age-level ranks/threshold and public-roster name formatting in __tests__/lib/utils/age-level.test.ts and __tests__/lib/utils/public-signup-events.test.ts
+- [X] T003 Add all new enums and 12 models (SignupEvent, SignupSlot, EventRegistrationPhase, EventRegistration, EventInvitation, EventManager, EventTeam, EventTeamAssignment, EventGame, EventGameParticipant, PlayerGameStat, EventMediaItem) plus League extensions (slug, Stripe columns) and Payment generalization (optional registrationId/venueId/organizationId; new eventRegistrationId, leagueId) to prisma/schema.prisma per data-model.md, including all User/Team/Division/Venue/IceSurface/Player back-relations
+- [X] T004 Create migration `add_signup_events` via `bun run db:migrate`, then append raw-SQL CHECK constraints (payments exactly-one registration link, exactly-one merchant, venue-implies-org; signup_events exactly-one host) to the generated migration.sql and re-apply; run `bun run db:generate`; commit schema + migration together
+- [X] T005 [P] Create lib/utils/age-level.ts with ordered `AgeClassification` ranks, `isStatsEligible(classification)` honoring `STATS_MIN_AGE_LEVEL`, and display labels
+- [X] T006 [P] Add host/manager auth helpers to lib/auth/session.ts: `getSignupEventAccess(eventId, userId)`, `requireEventManager(eventId)` (host org staff via VENUE_SCHEDULE_ROLES, LEAGUE_ADMIN, team ADMIN, or EventManager row), `requireHostAdmin(host)` for event creation/manager grants
+- [X] T007 [P] Create lib/utils/public-signup-events.ts exporting `publicSignupEventSelect` whitelist + `toPublicRosterName(fullName)` (first name + last initial) per data-model.md public data boundaries
+- [X] T008 [P] Add base Zod schemas to lib/utils/validation.ts: signupEventSchema (create/update, host XOR check, time sanity), signupSlotSchema, registrationPhaseSchema, eventRegistrationSchema, plus shared enums; export inferred types
+- [X] T009 [P] Unit tests for age-level ranks/threshold and public-roster name formatting in __tests__/lib/utils/age-level.test.ts and __tests__/lib/utils/public-signup-events.test.ts
 
 **Checkpoint**: schema migrated, helpers/tests in place — story phases may begin.
 
@@ -46,14 +46,14 @@ independently implementable and testable. US1+US2 together are the MVP.
 **Independent Test**: create a 4-slot event as league admin, publish PUBLIC, see it on
 public listings with per-slot capacities; non-admin creation refused.
 
-- [ ] T010 [US1] Implement lib/actions/signup-events.ts: `createSignupEvent`, `updateSignupEvent` (material-change notification queue), `publishSignupEvent` (≥1 slot; merchant check when online payments on; league slug generation on first PUBLIC publish), `cancelSignupEvent`, `duplicateSignupEvent`, `regenerateEventLink`, `getSignupEvent`, `listHostSignupEvents`, `listPublicSignupEvents` per contracts/server-actions.md
-- [ ] T011 [P] [US1] Add event lifecycle email templates (created→registrants n/a, updated-material-change, canceled) to lib/email/templates.ts
-- [ ] T012 [P] [US1] Build components/features/signup-events/EventForm.tsx, SlotEditor.tsx, PaymentConfigCard.tsx (manual handles fields; online toggle disabled until merchant onboarded), VisibilityPicker.tsx
-- [ ] T013 [US1] Build dashboard pages app/(dashboard)/signup-events/page.tsx (host-scoped list), new/page.tsx, [eventId]/page.tsx (overview + settings tabs, publish/cancel/duplicate actions)
-- [ ] T014 [US1] Build public pages app/(marketing)/events/page.tsx (PUBLIC discovery with host/venue/date/category filters) and app/(marketing)/events/[eventId]/page.tsx using `publicSignupEventSelect`
-- [ ] T015 [P] [US1] Roll PUBLIC venue-tied events into the rink public schedule page (app/(marketing)/rinks/[slug]/schedule/page.tsx section) and add a signup-events section to internal league/team calendar views
-- [ ] T016 [P] [US1] Add "Signup Events" navigation entries to components/features/dashboard/DashboardNav.tsx and the mobile More menu in components/features/navigation/MobileNavigation.tsx
-- [ ] T017 [P] [US1] Action tests (mocked Prisma) for create/publish/cancel authorization and host-XOR validation in __tests__/lib/actions/signup-events.test.ts
+- [X] T010 [US1] Implement lib/actions/signup-events.ts: `createSignupEvent`, `updateSignupEvent` (material-change notification queue), `publishSignupEvent` (≥1 slot; merchant check when online payments on; league slug generation on first PUBLIC publish), `cancelSignupEvent`, `duplicateSignupEvent`, `regenerateEventLink`, `getSignupEvent`, `listHostSignupEvents`, `listPublicSignupEvents` per contracts/server-actions.md
+- [X] T011 [P] [US1] Add event lifecycle email templates (created→registrants n/a, updated-material-change, canceled) to lib/email/templates.ts
+- [X] T012 [P] [US1] Build components/features/signup-events/EventForm.tsx, SlotEditor.tsx, PaymentConfigCard.tsx (manual handles fields; online toggle disabled until merchant onboarded), VisibilityPicker.tsx
+- [X] T013 [US1] Build dashboard pages app/(dashboard)/signup-events/page.tsx (host-scoped list), new/page.tsx, [eventId]/page.tsx (overview + settings tabs, publish/cancel/duplicate actions)
+- [X] T014 [US1] Build public pages app/(marketing)/events/page.tsx (PUBLIC discovery with host/venue/date/category filters) and app/(marketing)/events/[eventId]/page.tsx using `publicSignupEventSelect`
+- [X] T015 [P] [US1] Roll PUBLIC venue-tied events into the rink public schedule page (app/(marketing)/rinks/[slug]/schedule/page.tsx section) and add a signup-events section to internal league/team calendar views
+- [X] T016 [P] [US1] Add "Signup Events" navigation entries to components/features/dashboard/DashboardNav.tsx and the mobile More menu in components/features/navigation/MobileNavigation.tsx
+- [X] T017 [P] [US1] Action tests (mocked Prisma) for create/publish/cancel authorization and host-XOR validation in __tests__/lib/actions/signup-events.test.ts
 
 **Checkpoint**: events publishable & visible — no registration yet.
 
@@ -66,16 +66,24 @@ public listings with per-slot capacities; non-admin creation refused.
 **Independent Test**: register participants into slots until one fills; verify per-slot
 enforcement, confirmation email, self-cancel, roster view + export.
 
-- [ ] T018 [US2] Implement the slot reservation engine in lib/actions/event-registrations.ts: Serializable `reserveEventRegistration` counting CONFIRMED + held PENDING_PAYMENT + un-expired OFFERED, typed CapacityError, duplicate guard (slot + registrant + normalized participant name), P2034/P2028 friendly error (research R4/R11)
-- [ ] T019 [US2] Implement `registerForSignupEvent` (free path → CONFIRMED + email; visibility + window gate), `cancelMyEventRegistration` (cutoff enforced), `getMyEventRegistrations`, `getEventRoster` in lib/actions/event-registrations.ts
-- [ ] T020 [US2] Implement organizer roster mutations `setCheckIn`, `removeEventRegistration` (notify + free spot) in lib/actions/event-registrations.ts
-- [ ] T021 [P] [US2] Registration/confirmation/cancellation email templates in lib/email/templates.ts; 48 h reminder branch in app/api/cron/rsvp-reminders route honoring NotificationPreference
-- [ ] T022 [P] [US2] CSV export route app/api/signup-events/[eventId]/roster/export/route.ts (GET, `requireEventManager`, lib/utils/csv.ts)
-- [ ] T023 [P] [US2] Build RegisterDialog.tsx (slot pick, participant name(s), notes) and RosterTable.tsx (per-slot tabs, status/payment/check-in chips, remove/check-in actions, export button) in components/features/signup-events/
-- [ ] T024 [US2] Wire registration CTA into public event pages; add roster tab to dashboard [eventId] page; extend app/(dashboard)/my-registrations page with event registrations + cancel
-- [ ] T025 [P] [US2] Tests: concurrency-shaped capacity engine tests (mocked serializable conflicts + committed-count math) and duplicate-guard tests in __tests__/lib/actions/event-registrations.test.ts
+- [X] T018 [US2] Implement the slot reservation engine in lib/actions/event-registrations.ts: Serializable `reserveEventRegistration` counting CONFIRMED + held PENDING_PAYMENT + un-expired OFFERED, typed CapacityError, duplicate guard (slot + registrant + normalized participant name), P2034/P2028 friendly error (research R4/R11)
+- [X] T019 [US2] Implement `registerForSignupEvent` (free path → CONFIRMED + email; visibility + window gate), `cancelMyEventRegistration` (cutoff enforced), `getMyEventRegistrations`, `getEventRoster` in lib/actions/event-registrations.ts
+- [X] T020 [US2] Implement organizer roster mutations `setCheckIn`, `removeEventRegistration` (notify + free spot) in lib/actions/event-registrations.ts
+- [X] T021 [P] [US2] Registration/confirmation/cancellation email templates in lib/email/templates.ts; 48 h reminder branch in app/api/cron/rsvp-reminders route honoring NotificationPreference
+- [X] T022 [P] [US2] CSV export route app/api/signup-events/[eventId]/roster/export/route.ts (GET, `requireEventManager`, lib/utils/csv.ts)
+- [X] T023 [P] [US2] Build RegisterDialog.tsx (slot pick, participant name(s), notes) and RosterTable.tsx (per-slot tabs, status/payment/check-in chips, remove/check-in actions, export button) in components/features/signup-events/
+- [X] T024 [US2] Wire registration CTA into public event pages; add roster tab to dashboard [eventId] page; extend app/(dashboard)/my-registrations page with event registrations + cancel
+- [X] T025 [P] [US2] Tests: concurrency-shaped capacity engine tests (mocked serializable conflicts + committed-count math) and duplicate-guard tests in __tests__/lib/actions/event-registrations.test.ts
 
 **Checkpoint**: MVP complete — free SignUpGenius replacement usable end-to-end.
+
+> **Implementation notes (2026-07-03)**: T012's SlotEditor/PaymentConfigCard/
+> VisibilityPicker shipped integrated inside EventForm.tsx rather than as separate
+> files. T015's internal league/team calendar sections are deferred to a follow-up
+> (venue schedule rollup, public discovery, and dashboard nav shipped). Priced slots
+> currently confirm with manual-payment (unpaid) tracking; online checkout arrives
+> with US5. Waitlist joins arrive with US3 per the phase plan — full slots block
+> registration until then.
 
 ---
 

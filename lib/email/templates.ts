@@ -1381,3 +1381,86 @@ export async function sendEventRegistrationRemovedEmail(
     },
   });
 }
+
+/**
+ * Send 48-hour reminders for upcoming signup events. Runs from the hourly
+ * reminders cron; the one-hour window means each event is picked up exactly
+ * once. Honors notification preferences (emailEnabled + rsvpReminders).
+ */
+export async function sendSignupEventReminders(): Promise<void> {
+  const windowStart = new Date(Date.now() + 48 * 60 * 60 * 1000);
+  const windowEnd = new Date(Date.now() + 49 * 60 * 60 * 1000);
+
+  const events = await prisma.signupEvent.findMany({
+    where: {
+      status: "PUBLISHED",
+      startAt: { gte: windowStart, lt: windowEnd },
+    },
+    select: {
+      id: true,
+      title: true,
+      startAt: true,
+      locationText: true,
+      venue: { select: { name: true } },
+      hostOrganization: { select: { name: true } },
+      hostLeague: { select: { name: true } },
+      hostTeam: { select: { name: true } },
+      registrations: {
+        where: { status: "CONFIRMED" },
+        select: {
+          participantName: true,
+          registrant: { select: { id: true, email: true } },
+        },
+      },
+    },
+  });
+
+  for (const event of events) {
+    if (event.registrations.length === 0) continue;
+
+    // Exclude registrants who opted out of reminder emails.
+    const registrantIds = [...new Set(event.registrations.map((reg) => reg.registrant.id))];
+    const optedOut = await prisma.notificationPreference.findMany({
+      where: {
+        userId: { in: registrantIds },
+        OR: [{ emailEnabled: false }, { rsvpReminders: false }],
+      },
+      select: { userId: true },
+    });
+    const optedOutIds = new Set(optedOut.map((preference) => preference.userId));
+
+    const byRegistrant = new Map<string, { email: string; participants: string[] }>();
+    for (const registration of event.registrations) {
+      if (optedOutIds.has(registration.registrant.id)) continue;
+      const entry = byRegistrant.get(registration.registrant.id) ?? {
+        email: registration.registrant.email,
+        participants: [],
+      };
+      entry.participants.push(registration.participantName);
+      byRegistrant.set(registration.registrant.id, entry);
+    }
+    if (byRegistrant.size === 0) continue;
+
+    const hostName =
+      event.hostOrganization?.name ?? event.hostLeague?.name ?? event.hostTeam?.name ?? "the organizer";
+    const location = event.venue?.name ?? event.locationText ?? "";
+    const eventLink = `${BASE_URL}/events/${event.id}`;
+    const mailchimp = getMailchimpClient();
+
+    for (const { email, participants } of byRegistrant.values()) {
+      try {
+        await mailchimp.messages.send({
+          message: {
+            from_email: EMAIL_FROM,
+            subject: `Reminder: ${event.title} is coming up`,
+            html: `<p>Reminder — <strong>${event.title}</strong> (hosted by ${hostName}) starts ${formatDateTime(event.startAt)}${location ? ` at ${location}` : ""}.</p><p>Registered: ${participants.join(", ")}</p><p><a href="${eventLink}">View the event</a></p>`,
+            text: `Reminder — ${event.title} (hosted by ${hostName}) starts ${formatDateTime(event.startAt)}${location ? ` at ${location}` : ""}. Registered: ${participants.join(", ")}. View: ${eventLink}`,
+            to: [{ email, type: "to" as const }],
+          },
+        });
+      } catch (emailError) {
+        console.error(`Failed to send signup-event reminder for ${event.id}:`, emailError);
+      }
+    }
+  }
+}
