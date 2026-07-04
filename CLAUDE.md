@@ -76,7 +76,7 @@ app/                              # Next.js App Router
 │   ├── roster/                  # Roster management
 │   ├── calendar/                # Event calendar views
 │   ├── events/                  # Event creation and details
-│   ├── schedules/               # Game schedule management
+│   ├── seasons/                 # Season & game scheduling (phases, proposals, placement)
 │   ├── venues/                  # Venue CRUD
 │   ├── league/                  # League management (if applicable)
 │   ├── practice-planner/        # Practice session planning with rink board
@@ -95,6 +95,7 @@ components/                      # React components
 │   ├── roster/                  # RosterList, PlayerCard, AddPlayerDialog, TeamOfficialCard
 │   ├── dashboard/               # DashboardNav, DashboardSidebar
 │   ├── events/                  # EventForm, EventCard, RSVPButton
+│   ├── seasons/                 # SeasonList, SeasonForm, GameForm, GenerationWizard, PlacementBoard
 │   ├── practice-planner/        # RinkBoard, DrawingToolbar, PlayEditor, PlayLibrary
 │   └── navigation/              # MobileNavigation, Breadcrumbs
 ├── ui/                          # Generic reusable UI primitives
@@ -120,7 +121,11 @@ lib/                             # Core application logic
 │   ├── plays.ts                 # Play/drill management (practice planner)
 │   ├── practice-sessions.ts     # Practice session management
 │   ├── practice-session-queries.ts # Read-only practice session queries
-│   ├── game-schedules.ts        # Game schedule CRUD
+│   ├── seasons.ts               # Season + phase CRUD
+│   ├── season-games.ts          # Season game scheduling, Event/RSVP fan-out, scores
+│   ├── season-generation.ts     # Opt-in round-robin generation (preview + drafts)
+│   ├── game-proposals.ts        # Team-to-team game proposal threads
+│   ├── placements.ts            # Pre-season skill placement into divisions
 │   └── venues.ts                # Venue management
 ├── auth/                        # Authentication utilities
 │   ├── config.ts                # Auth.js configuration

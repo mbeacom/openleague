@@ -606,6 +606,7 @@ export async function createDivision(
       data: {
         name: validated.name,
         ageGroup: validated.ageGroup || null,
+        ageClassification: validated.ageClassification ?? null,
         skillLevel: validated.skillLevel || null,
         leagueId: validated.leagueId,
       },
@@ -709,6 +710,7 @@ export async function updateDivision(
       data: {
         name: validated.name,
         ageGroup: validated.ageGroup || null,
+        ageClassification: validated.ageClassification ?? null,
         skillLevel: validated.skillLevel || null,
       },
       select: {

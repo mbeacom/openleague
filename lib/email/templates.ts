@@ -1,6 +1,6 @@
 import { getMailchimpClient } from "./client";
 import { prisma } from "@/lib/db/prisma";
-import { formatDateTime } from "@/lib/utils/date";
+import { FALLBACK_TIME_ZONE, formatDateTime } from "@/lib/utils/date";
 import { env, getBaseUrl } from "@/lib/env";
 import { notificationService } from "@/lib/services/notification";
 
@@ -1564,5 +1564,189 @@ export async function sendEventTeamsUpdateEmail(data: EventTeamsUpdateEmailData)
     } catch (emailError) {
       console.error(`Failed to send teams update email to ${recipient.email}:`, emailError);
     }
+  }
+}
+
+// --- Season scheduling: game proposals (feature 005) ---
+
+type GameProposalChange = "created" | "countered" | "accepted" | "declined" | "withdrawn";
+
+/**
+ * Notify the side that did NOT act on a game-proposal state change
+ * (FR-020/023). Recipients are the counterparty team's ADMINs — for
+ * "created"/"countered" that is the side receiving the new terms; for
+ * "accepted"/"declined"/"withdrawn" it is the other side from the acting
+ * entry's actorTeamId. Respects NotificationPreference (emailEnabled +
+ * eventNotifications) the same way sendPracticePlanNotifications does.
+ */
+export async function sendGameProposalNotifications(
+  proposalId: string,
+  change: GameProposalChange
+): Promise<void> {
+  const proposal = await prisma.gameProposal.findUnique({
+    where: { id: proposalId },
+    include: {
+      proposingTeam: { select: { id: true, name: true } },
+      receivingTeam: { select: { id: true, name: true } },
+      entries: {
+        orderBy: { createdAt: "asc" },
+        include: { venue: { select: { name: true, timezone: true } } },
+      },
+    },
+  });
+
+  if (!proposal) {
+    throw new Error("Game proposal not found");
+  }
+
+  // The most recent entry records the action that triggered this
+  // notification; the other side is the one that must hear about it.
+  const lastEntry = proposal.entries[proposal.entries.length - 1];
+  if (!lastEntry) {
+    throw new Error("Game proposal has no entries");
+  }
+  const actingTeam =
+    lastEntry.actorTeamId === proposal.proposingTeam.id
+      ? proposal.proposingTeam
+      : proposal.receivingTeam;
+  const recipientTeam =
+    actingTeam.id === proposal.proposingTeam.id ? proposal.receivingTeam : proposal.proposingTeam;
+
+  // Current terms live on the latest PROPOSE/COUNTER entry; render its times
+  // in the venue's timezone when known, else the platform fallback.
+  const terms = [...proposal.entries]
+    .reverse()
+    .find((entry) => entry.kind === "PROPOSE" || entry.kind === "COUNTER");
+  const timezone = terms?.venue?.timezone || FALLBACK_TIME_ZONE;
+  const startFormatted = terms?.startAt ? formatDateTime(terms.startAt, timezone) : "To be determined";
+  const endFormatted = terms?.endAt ? formatDateTime(terms.endAt, timezone) : null;
+  const venueName = terms?.venue?.name || "To be determined";
+  const latestNote = [...proposal.entries].reverse().find((entry) => entry.note)?.note ?? null;
+
+  // Recipients: ADMINs of the non-acting side, filtered by notification
+  // preferences (no preferences set defaults to sending).
+  const admins = await prisma.teamMember.findMany({
+    where: { teamId: recipientTeam.id, role: "ADMIN" },
+    select: {
+      user: {
+        select: {
+          email: true,
+          notificationPreferences: {
+            select: {
+              eventNotifications: true,
+              emailEnabled: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const emails = admins
+    .filter((member) => {
+      const prefs = member.user.notificationPreferences;
+      // If no preferences set, default to sending
+      if (prefs.length === 0) return true;
+      // Check if any preference disables event notifications or email
+      return prefs.every((p) => p.eventNotifications && p.emailEnabled);
+    })
+    .map((member) => member.user.email);
+
+  // No eligible recipients — skip sending to avoid Mailchimp 400 error
+  if (emails.length === 0) {
+    return;
+  }
+
+  const matchup = `${proposal.proposingTeam.name} vs ${proposal.receivingTeam.name}`;
+  const proposalsLink = `${BASE_URL}/seasons/proposals`;
+
+  const subjects: Record<GameProposalChange, string> = {
+    created: `New game proposal from ${actingTeam.name}`,
+    countered: `${actingTeam.name} countered your game proposal`,
+    accepted: `${actingTeam.name} accepted your game proposal`,
+    declined: `${actingTeam.name} declined your game proposal`,
+    withdrawn: `${actingTeam.name} withdrew the game proposal`,
+  };
+  const headlines: Record<GameProposalChange, string> = {
+    created: "New Game Proposal",
+    countered: "Game Proposal Countered",
+    accepted: "Game Proposal Accepted",
+    declined: "Game Proposal Declined",
+    withdrawn: "Game Proposal Withdrawn",
+  };
+  const leads: Record<GameProposalChange, string> = {
+    created: `${actingTeam.name} has proposed a game with ${recipientTeam.name}.`,
+    countered: `${actingTeam.name} has counter-proposed new terms for your game proposal.`,
+    accepted: `${actingTeam.name} has accepted the game proposal. The game has been added to the schedule.`,
+    declined: `${actingTeam.name} has declined the game proposal.`,
+    withdrawn: `${actingTeam.name} has withdrawn the game proposal.`,
+  };
+  const colors: Record<GameProposalChange, string> = {
+    created: "#1976D2",
+    countered: "#FF9800",
+    accepted: "#43A047",
+    declined: "#D32F2F",
+    withdrawn: "#D32F2F",
+  };
+  const color = colors[change];
+
+  const mailchimp = getMailchimpClient();
+
+  const message: {
+    from_email: string;
+    subject: string;
+    html: string;
+    text: string;
+    to: Array<{ email: string; type: "to" }>;
+  } = {
+    from_email: EMAIL_FROM,
+    subject: subjects[change],
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: ${color};">${headlines[change]}</h2>
+
+        <p>${leads[change]}</p>
+
+        <div style="background-color: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid ${color};">
+          <h3 style="margin-top: 0; color: #333;">${matchup}</h3>
+          <p style="margin: 10px 0;"><strong>Start:</strong> ${startFormatted}</p>
+          ${endFormatted ? `<p style="margin: 10px 0;"><strong>End:</strong> ${endFormatted}</p>` : ""}
+          <p style="margin: 10px 0;"><strong>Venue:</strong> ${venueName}</p>
+          ${latestNote ? `<p style="margin: 10px 0;"><strong>Note:</strong> ${latestNote}</p>` : ""}
+        </div>
+
+        <p style="margin: 30px 0;">
+          <a href="${proposalsLink}"
+             style="background-color: ${color}; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">
+            Review Proposal
+          </a>
+        </p>
+
+        <p style="color: #666; font-size: 14px;">
+          Or copy and paste this link into your browser:<br>
+          <a href="${proposalsLink}">${proposalsLink}</a>
+        </p>
+      </div>
+    `,
+    text: `${headlines[change]}
+
+${leads[change]}
+
+${matchup}
+Start: ${startFormatted}
+${endFormatted ? `End: ${endFormatted}` : ""}
+Venue: ${venueName}
+${latestNote ? `Note: ${latestNote}` : ""}
+
+Review the proposal at:
+${proposalsLink}`,
+    to: emails.map((email) => ({ email, type: "to" as const })),
+  };
+
+  try {
+    await mailchimp.messages.send({ message });
+  } catch (error) {
+    console.error("Error sending game proposal notification email:", error);
+    throw new Error("Failed to send game proposal notification email");
   }
 }
