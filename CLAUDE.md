@@ -532,6 +532,8 @@ Business Source License 1.1 (BUSL-1.1) - converts to Apache 2.0 on October 4, 20
 - PostgreSQL through Prisma; public logo assets require object/file storage integration selected during implementation (002-ice-rink-management)
 - TypeScript, Next.js 16 App Router, React 19 + MUI v7/Emotion, Prisma 7, Neon PostgreSQL adapter, Auth.js v5, (004-signup-events)
 - PostgreSQL via Prisma (amounts in cents); Vercel Blob (private) for media (004-signup-events)
+- TypeScript (strict) on Next.js 16 App Router, React 19 + MUI v7 + Emotion, Prisma 7 (Neon PostgreSQL adapter), Auth.js v5, Zod v4, Bun (005-season-scheduling)
+- PostgreSQL via Prisma; new models `Season`, `SeasonPhase`, `SeasonGame`, `GameProposal`, `GameProposalEntry`, `PlacementDecision`; `Division.ageClassification` added; `GameSchedule`/`ScheduleGame` dropped (005-season-scheduling)
 
 ## Recent Changes
 - 002-ice-rink-management: Added TypeScript with Next.js 16 App Router and React 19 + MUI v7/Emotion, Prisma 7, Neon PostgreSQL adapter, Auth.js v5, Zod v4, Bun
