@@ -37,6 +37,7 @@ interface EventDetailProps {
     type: string;
     title: string;
     startAt: Date;
+    timezone?: string;
     location: string;
     opponent: string | null;
     notes: string | null;
@@ -149,7 +150,7 @@ export default function EventDetail({ event, userRole, currentUserId }: EventDet
                 <Typography variant="body2" color="text.secondary">
                   Date & Time
                 </Typography>
-                <Typography variant="body1">{formatDateTime(event.startAt)}</Typography>
+                <Typography variant="body1">{formatDateTime(event.startAt, event.timezone)}</Typography>
               </Box>
             </Box>
 

@@ -44,7 +44,10 @@ export default async function EditEventPage({ params }: EditEventPageProps) {
               type: event.type as "GAME" | "PRACTICE",
               title: event.title,
               startAt: event.startAt,
+              endAt: event.endAt ?? undefined,
+              timezone: event.timezone,
               location: event.location,
+              venueId: event.venueId ?? undefined,
               opponent: event.opponent || "",
               notes: event.notes || "",
             }}

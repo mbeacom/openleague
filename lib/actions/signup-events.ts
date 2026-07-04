@@ -162,7 +162,7 @@ export async function createSignupEvent(
       teamId: validated.hostTeamId,
     });
 
-    let timezone = "America/New_York";
+    let venueTimezone: string | undefined;
     if (validated.venueId) {
       const venue = await prisma.venue.findUnique({
         where: { id: validated.venueId },
@@ -171,8 +171,11 @@ export async function createSignupEvent(
       if (!venue) {
         return { success: false, error: "Venue not found" };
       }
-      timezone = venue.timezone;
+      venueTimezone = venue.timezone;
     }
+    // Prefer the zone the organizer's form parsed the wall-clock times against so
+    // the stored instant round-trips; fall back to the venue's zone or a default.
+    const timezone = validated.timezone ?? venueTimezone ?? "America/New_York";
 
     const event = await prisma.signupEvent.create({
       data: {
@@ -262,6 +265,11 @@ export async function updateSignupEvent(
         return { success: false, error: "Venue not found" };
       }
       timezoneUpdate = { timezone: venue.timezone };
+    }
+    // A client-supplied zone (what the form parsed times against) wins so the
+    // stored instant round-trips to the wall-clock the organizer entered.
+    if (validated.timezone) {
+      timezoneUpdate = { timezone: validated.timezone };
     }
 
     const warnings: string[] = [];

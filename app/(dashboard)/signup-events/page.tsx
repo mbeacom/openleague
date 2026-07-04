@@ -60,7 +60,7 @@ export default async function SignupEventsPage() {
                         <Stack spacing={0.5}>
                           <Typography variant="h6">{event.title}</Typography>
                           <Typography variant="body2" color="text.secondary">
-                            {formatDateTime(event.startAt)} · {event.venue?.name ?? event.locationText ?? "TBD"} ·{" "}
+                            {formatDateTime(event.startAt, event.timezone)} · {event.venue?.name ?? event.locationText ?? "TBD"} ·{" "}
                             {hostName}
                           </Typography>
                         </Stack>

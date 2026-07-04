@@ -109,7 +109,7 @@ export default async function ManageSignupEventPage({
               <Chip size="small" variant="outlined" label={event.visibility.replace("_", " ").toLowerCase()} />
             </Stack>
             <Typography color="text.secondary">
-              {formatDateTime(event.startAt)} – {formatDateTime(event.endAt)} ·{" "}
+              {formatDateTime(event.startAt, event.timezone)} – {formatDateTime(event.endAt, event.timezone)} ·{" "}
               {event.venue?.name ?? event.locationText ?? "Location TBD"} · {hostName} ·{" "}
               {AGE_CLASSIFICATION_LABELS[event.ageClassification]}
             </Typography>
@@ -167,6 +167,7 @@ export default async function ManageSignupEventPage({
               surfaces={board.event?.venue?.surfaces ?? []}
               participants={rotationParticipants}
               statsEligible={board.statsEligible}
+              timeZone={event.timezone}
             />
           </CardContent>
         </Card>

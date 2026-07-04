@@ -25,7 +25,7 @@ import CloseIcon from "@mui/icons-material/Close";
 import { deleteEventGame, setGameRotation, upsertEventGame } from "@/lib/actions/event-teams";
 import { GameResultForm } from "./GameResultForm";
 import { ICE_USAGES } from "@/lib/utils/validation";
-import { formatDateTime } from "@/lib/utils/date";
+import { formatDateTime, parseDateTimeLocalToUtc, resolveTimeZone } from "@/lib/utils/date";
 
 const ICE_USAGE_LABELS: Record<(typeof ICE_USAGES)[number], string> = {
   FULL_ICE: "Full ice",
@@ -63,12 +63,8 @@ interface GameSchedulerProps {
   participants: Array<{ id: string; participantName: string; isFloater: boolean }>;
   /** Scores/stats allowed for this event's age classification (Squirt+). */
   statsEligible?: boolean;
-}
-
-function toLocalInputValue(date: Date | null): string {
-  if (!date) return "";
-  const pad = (value: number) => String(value).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  /** IANA zone the event's wall-clock times are entered/displayed in. */
+  timeZone?: string;
 }
 
 export function GameScheduler({
@@ -78,8 +74,10 @@ export function GameScheduler({
   surfaces,
   participants,
   statsEligible = false,
+  timeZone,
 }: GameSchedulerProps) {
   const router = useRouter();
+  const tz = resolveTimeZone(timeZone);
   const [message, setMessage] = useState<{ severity: "success" | "error" | "warning"; text: string } | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [rotationTarget, setRotationTarget] = useState<Game | null>(null);
@@ -109,8 +107,8 @@ export function GameScheduler({
         name: text("name") || undefined,
         homeTeamId: text("homeTeamId"),
         awayTeamId: text("awayTeamId"),
-        startAt: new Date(text("startAt")),
-        endAt: new Date(text("endAt")),
+        startAt: parseDateTimeLocalToUtc(text("startAt"), tz) ?? new Date(NaN),
+        endAt: parseDateTimeLocalToUtc(text("endAt"), tz) ?? new Date(NaN),
         surfaceId: text("surfaceId") || undefined,
         iceUsage: (text("iceUsage") || "FULL_ICE") as (typeof ICE_USAGES)[number],
         zoneLabel: text("zoneLabel") || undefined,
@@ -175,7 +173,7 @@ export function GameScheduler({
                     {game.name ? ` — ${game.name}` : ""}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    {formatDateTime(game.startAt)} – {formatDateTime(game.endAt)} ·{" "}
+                    {formatDateTime(game.startAt, tz)} – {formatDateTime(game.endAt, tz)} ·{" "}
                     {ICE_USAGE_LABELS[game.iceUsage]}
                     {game.zoneLabel ? ` (${game.zoneLabel})` : ""}
                     {game.surface ? ` · ${game.surface.name}` : ""}
@@ -268,7 +266,7 @@ export function GameScheduler({
                   type="datetime-local"
                   required
                   fullWidth
-                  defaultValue={toLocalInputValue(null)}
+                  defaultValue=""
                   slotProps={{ inputLabel: { shrink: true } }}
                 />
                 <TextField
@@ -277,6 +275,7 @@ export function GameScheduler({
                   type="datetime-local"
                   required
                   fullWidth
+                  defaultValue=""
                   slotProps={{ inputLabel: { shrink: true } }}
                 />
               </Stack>

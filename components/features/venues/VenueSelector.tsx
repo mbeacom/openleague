@@ -18,11 +18,12 @@ interface VenueOption {
   city: string | null;
   state: string | null;
   surfaceType: string;
+  timezone: string;
 }
 
 interface VenueSelectorProps {
   value: string; // venueId
-  onChange: (venueId: string, venueName: string) => void;
+  onChange: (venueId: string, venueName: string, timezone?: string) => void;
   disabled?: boolean;
   error?: boolean;
   helperText?: string;
@@ -64,6 +65,7 @@ export default function VenueSelector({
               city: v.city,
               state: v.state,
               surfaceType: v.surfaceType,
+              timezone: v.timezone,
             }))
           );
         }
@@ -86,7 +88,7 @@ export default function VenueSelector({
       options={venues}
       value={selectedVenue}
       onChange={(_, newValue) => {
-        onChange(newValue?.id || "", newValue?.name || "");
+        onChange(newValue?.id || "", newValue?.name || "", newValue?.timezone);
       }}
       getOptionLabel={(option) => option.name}
       isOptionEqualToValue={(option, val) => option.id === val.id}

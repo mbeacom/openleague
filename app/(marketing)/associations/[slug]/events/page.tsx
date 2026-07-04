@@ -68,7 +68,7 @@ export default async function AssociationEventsPage({
                         />
                       </Stack>
                       <Typography variant="body2" color="text.secondary">
-                        {formatDateTime(event.startAt)} ·{" "}
+                        {formatDateTime(event.startAt, event.timezone)} ·{" "}
                         {event.venue?.name ?? event.locationText ?? "Location TBD"}
                       </Typography>
                     </Stack>

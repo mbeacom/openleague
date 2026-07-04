@@ -6,6 +6,7 @@ import { requireTeamAdmin, requireTeamMember, requireUserId } from "@/lib/auth/s
 import { revalidatePath } from "next/cache";
 import { sendEventNotifications } from "@/lib/email/templates";
 import { findVenueConflicts, canUserAccessVenue as checkVenueAccess } from "@/lib/actions/venues";
+import { resolveTimeZone } from "@/lib/utils/date";
 import {
   createEventSchema,
   updateEventSchema,
@@ -97,6 +98,7 @@ export async function createEvent(
         title: validated.title,
         startAt: validated.startAt,
         endAt: validated.endAt || null,
+        timezone: resolveTimeZone(validated.timezone),
         location,
         venueId,
         opponent: validated.opponent || null,
@@ -235,6 +237,7 @@ export async function updateEvent(
         title: validated.title,
         startAt: validated.startAt,
         endAt: validated.endAt || null,
+        timezone: resolveTimeZone(validated.timezone),
         location,
         venueId,
         opponent: validated.opponent || null,
@@ -562,6 +565,7 @@ export async function createInterTeamGame(
         type: "GAME",
         title: validated.title,
         startAt: validated.startAt,
+        timezone: resolveTimeZone(validated.timezone),
         location: validated.location,
         notes: validated.notes || null,
         leagueId: validated.leagueId,

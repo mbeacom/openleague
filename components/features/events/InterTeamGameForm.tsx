@@ -19,7 +19,7 @@ import ConflictWarning from "./ConflictWarning";
 import { createInterTeamGame } from "@/lib/actions/events";
 import type { CreateInterTeamGameInput } from "@/lib/utils/validation";
 import { createInterTeamGameSchema } from "@/lib/utils/validation";
-import { formatDateTimeLocal } from "@/lib/utils/date";
+import { formatDateTimeLocalInput, parseDateTimeLocalToUtc, resolveTimeZone } from "@/lib/utils/date";
 
 interface InterTeamGameFormProps {
   leagueId: string;
@@ -73,6 +73,9 @@ export default function InterTeamGameForm({
     Partial<Record<keyof CreateInterTeamGameInput, string>>
   >({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // No venue picker here, so wall-clock times are interpreted in the
+  // organizer's local zone; it is stored on the event for round-tripping.
+  const [timeZone] = useState(() => resolveTimeZone());
 
   // Auto-generate title when teams are selected
   useEffect(() => {
@@ -115,7 +118,8 @@ export default function InterTeamGameForm({
 
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { value } = e.target;
-    setFormData((prev) => ({ ...prev, startAt: new Date(value) }));
+    const parsed = parseDateTimeLocalToUtc(value, timeZone);
+    setFormData((prev) => ({ ...prev, startAt: parsed ?? new Date(NaN) }));
     setError(null);
     setConflicts([]);
     setSuggestions([]);
@@ -139,6 +143,7 @@ export default function InterTeamGameForm({
     try {
       const result = await createInterTeamGame({
         ...formData,
+        timezone: timeZone,
         overrideConflicts: true,
       });
 
@@ -162,7 +167,10 @@ export default function InterTeamGameForm({
     setFieldErrors({});
 
     // Client-side validation
-    const validation = createInterTeamGameSchema.safeParse(formData);
+    const validation = createInterTeamGameSchema.safeParse({
+      ...formData,
+      timezone: timeZone,
+    });
     if (!validation.success) {
       const errors: Partial<Record<keyof CreateInterTeamGameInput, string>> = {};
       validation.error.issues.forEach((issue) => {
@@ -179,7 +187,7 @@ export default function InterTeamGameForm({
     setIsSubmitting(true);
 
     try {
-      const result = await createInterTeamGame(formData);
+      const result = await createInterTeamGame({ ...formData, timezone: timeZone });
 
       if (result.success) {
         // Redirect to league schedule after successful creation
@@ -312,13 +320,13 @@ export default function InterTeamGameForm({
         label="Date & Time"
         name="startAt"
         type="datetime-local"
-        value={formatDateTimeLocal(formData.startAt)}
+        value={formatDateTimeLocalInput(formData.startAt, timeZone)}
         onChange={handleDateChange}
         required
         fullWidth
         disabled={isSubmitting}
         error={!!fieldErrors.startAt}
-        helperText={fieldErrors.startAt || "Select the game date and time"}
+        helperText={fieldErrors.startAt || `Times are in ${timeZone}`}
         InputLabelProps={{
           shrink: true,
         }}

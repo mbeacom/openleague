@@ -3,6 +3,11 @@
 import { type FormEvent, useMemo, useState, useTransition } from "react";
 import { Alert, Button, Stack, TextField, Typography } from "@mui/material";
 import { submitIceTimeRequest } from "@/lib/actions/venue-requests";
+import {
+  formatDateTimeLocalInput,
+  parseDateTimeLocalToUtc,
+  resolveTimeZone,
+} from "@/lib/utils/date";
 
 interface IceTimeRequestFormProps {
   scheduleBlockId: string;
@@ -10,15 +15,18 @@ interface IceTimeRequestFormProps {
   venueName: string;
   startsAt: Date | string;
   endsAt: Date | string;
+  /** The venue's IANA timezone; requested times are interpreted against it. */
+  timezone?: string;
 }
 
 type FormMessage = { severity: "success" | "error"; text: string };
 
-export function IceTimeRequestForm({ scheduleBlockId, venueId, venueName, startsAt, endsAt }: IceTimeRequestFormProps) {
+export function IceTimeRequestForm({ scheduleBlockId, venueId, venueName, startsAt, endsAt, timezone }: IceTimeRequestFormProps) {
   const [message, setMessage] = useState<FormMessage | null>(null);
   const [isPending, startTransition] = useTransition();
-  const defaultStartAt = useMemo(() => formatDateTimeLocal(startsAt), [startsAt]);
-  const defaultEndAt = useMemo(() => formatDateTimeLocal(endsAt), [endsAt]);
+  const tz = useMemo(() => resolveTimeZone(timezone), [timezone]);
+  const defaultStartAt = useMemo(() => formatDateTimeLocalInput(startsAt, tz), [startsAt, tz]);
+  const defaultEndAt = useMemo(() => formatDateTimeLocalInput(endsAt, tz), [endsAt, tz]);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -38,8 +46,8 @@ export function IceTimeRequestForm({ scheduleBlockId, venueId, venueName, starts
         contactName: String(formData.get("contactName") ?? ""),
         contactEmail: String(formData.get("contactEmail") ?? ""),
         contactPhone: optionalString("contactPhone"),
-        requestedStartAt: new Date(String(formData.get("requestedStartAt") ?? "")),
-        requestedEndAt: new Date(String(formData.get("requestedEndAt") ?? "")),
+        requestedStartAt: parseDateTimeLocalToUtc(String(formData.get("requestedStartAt") ?? ""), tz) ?? new Date(NaN),
+        requestedEndAt: parseDateTimeLocalToUtc(String(formData.get("requestedEndAt") ?? ""), tz) ?? new Date(NaN),
         notes: optionalString("notes"),
       });
 
@@ -76,6 +84,7 @@ export function IceTimeRequestForm({ scheduleBlockId, venueId, venueName, starts
         type="datetime-local"
         required
         defaultValue={defaultEndAt}
+        helperText={`Times are in ${tz}`}
         slotProps={{ inputLabel: { shrink: true } }}
       />
       <TextField label="Notes" name="notes" multiline minRows={3} />
@@ -84,14 +93,4 @@ export function IceTimeRequestForm({ scheduleBlockId, venueId, venueName, starts
       </Button>
     </Stack>
   );
-}
-
-function formatDateTimeLocal(value: Date | string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "";
-  }
-
-  const offsetMs = date.getTimezoneOffset() * 60_000;
-  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
 }

@@ -245,6 +245,7 @@ export default async function PublicRinkSchedulePage({ params, searchParams }: P
             venueName={venue.name}
             startsAt={block.startsAt}
             endsAt={block.endsAt}
+            timezone={venue.timezone}
           />
         ))}
       </Stack>

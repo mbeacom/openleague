@@ -208,6 +208,9 @@ model Event {
   title     String
   startAt   DateTime // Combined date and time stored in UTC for proper timezone handling
   endAt     DateTime? // Optional end time for duration tracking and ice time scheduling
+  // IANA timezone the organizer entered the wall-clock times in. Defaults to the
+  // venue's zone when a venue is attached, otherwise the organizer's local zone.
+  timezone  String    @default("America/New_York")
   location  String
   opponent  String?
   notes     String?

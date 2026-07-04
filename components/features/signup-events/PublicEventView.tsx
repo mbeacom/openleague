@@ -88,7 +88,7 @@ export function PublicEventView({
           Hosted by {hostName} · {AGE_CLASSIFICATION_LABELS[event.ageClassification]}
         </Typography>
         <Typography>
-          {formatDateTime(event.startAt)} – {formatDateTime(event.endAt)}
+          {formatDateTime(event.startAt, event.timezone)} – {formatDateTime(event.endAt, event.timezone)}
         </Typography>
         <Typography color="text.secondary">
           {event.venue
@@ -103,7 +103,7 @@ export function PublicEventView({
         <Alert severity="error">This event has been canceled by the organizer.</Alert>
       ) : null}
       {event.status === "PUBLISHED" && !hasPhases && event.registrationOpensAt && now < event.registrationOpensAt ? (
-        <Alert severity="info">Registration opens {formatDateTime(event.registrationOpensAt)}.</Alert>
+        <Alert severity="info">Registration opens {formatDateTime(event.registrationOpensAt, event.timezone)}.</Alert>
       ) : null}
       {event.status === "PUBLISHED" && event.registrationClosesAt && now > event.registrationClosesAt ? (
         <Alert severity="info">Registration is closed for this event.</Alert>
@@ -111,7 +111,7 @@ export function PublicEventView({
       {waitlistJoinable ? (
         <Alert severity="info">
           Registration isn&apos;t open for you yet
-          {viewerPhase.nextOpensAt ? ` — the next window opens ${formatDateTime(viewerPhase.nextOpensAt)}` : ""}.
+          {viewerPhase.nextOpensAt ? ` — the next window opens ${formatDateTime(viewerPhase.nextOpensAt, event.timezone)}` : ""}.
           You can join the waitlist now and you&apos;ll be offered a spot automatically when one is available.
         </Alert>
       ) : null}
@@ -121,7 +121,7 @@ export function PublicEventView({
           <Typography variant="subtitle2">Registration phases</Typography>
           {event.phases.map((phase) => (
             <Typography key={phase.id} variant="body2" color="text.secondary">
-              {phase.name} — opens {formatDateTime(phase.opensAt)}
+              {phase.name} — opens {formatDateTime(phase.opensAt, event.timezone)}
             </Typography>
           ))}
         </Stack>
@@ -228,7 +228,7 @@ export function PublicEventView({
                   </Stack>
                   {assignment.games.map((game) => (
                     <Typography key={`${assignment.registrationId}-${game.id}`} variant="body2" color="text.secondary">
-                      {formatDateTime(game.startAt)} — {game.homeTeamName} vs {game.awayTeamName}
+                      {formatDateTime(game.startAt, event.timezone)} — {game.homeTeamName} vs {game.awayTeamName}
                       {game.playingFor ? ` (playing for ${game.playingFor})` : ""} ·{" "}
                       {ICE_USAGE_LABELS[game.iceUsage] ?? game.iceUsage}
                       {game.zoneLabel ? ` — ${game.zoneLabel}` : ""}
@@ -256,7 +256,7 @@ export function PublicEventView({
                       : ""}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    {formatDateTime(game.startAt)} – {formatDateTime(game.endAt)} ·{" "}
+                    {formatDateTime(game.startAt, event.timezone)} – {formatDateTime(game.endAt, event.timezone)} ·{" "}
                     {ICE_USAGE_LABELS[game.iceUsage] ?? game.iceUsage}
                     {game.zoneLabel ? ` (${game.zoneLabel})` : ""}
                     {game.surface ? ` · ${game.surface.name}` : ""}
