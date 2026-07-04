@@ -100,6 +100,12 @@ export function GameScheduler({
 
   const handleCreate = (formData: FormData) => {
     const text = (name: string) => String(formData.get(name) ?? "").trim();
+    const startAt = parseDateTimeLocalToUtc(text("startAt"), tz);
+    const endAt = parseDateTimeLocalToUtc(text("endAt"), tz);
+    if (!startAt || !endAt) {
+      setMessage({ severity: "error", text: "Enter a valid start and end time." });
+      return;
+    }
     startTransition(async () => {
       setMessage(null);
       const result = await upsertEventGame({
@@ -107,8 +113,8 @@ export function GameScheduler({
         name: text("name") || undefined,
         homeTeamId: text("homeTeamId"),
         awayTeamId: text("awayTeamId"),
-        startAt: parseDateTimeLocalToUtc(text("startAt"), tz) ?? new Date(NaN),
-        endAt: parseDateTimeLocalToUtc(text("endAt"), tz) ?? new Date(NaN),
+        startAt,
+        endAt,
         surfaceId: text("surfaceId") || undefined,
         iceUsage: (text("iceUsage") || "FULL_ICE") as (typeof ICE_USAGES)[number],
         zoneLabel: text("zoneLabel") || undefined,
@@ -267,6 +273,7 @@ export function GameScheduler({
                   required
                   fullWidth
                   defaultValue=""
+                  helperText={`Times are in ${tz}`}
                   slotProps={{ inputLabel: { shrink: true } }}
                 />
                 <TextField
@@ -276,6 +283,7 @@ export function GameScheduler({
                   required
                   fullWidth
                   defaultValue=""
+                  helperText={`Times are in ${tz}`}
                   slotProps={{ inputLabel: { shrink: true } }}
                 />
               </Stack>

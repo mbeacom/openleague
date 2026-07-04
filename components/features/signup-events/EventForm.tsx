@@ -144,9 +144,9 @@ export function EventForm({ hostOptions, venueOptions, initialValues, host }: Ev
   const handleVenueChange = (nextVenueId: string) => {
     setVenueId(nextVenueId);
     const nextVenueTimeZone = venueOptions.find((venue) => venue.id === nextVenueId)?.timezone;
-    if (isValidTimeZone(nextVenueTimeZone)) {
-      setEffectiveTimeZone(nextVenueTimeZone);
-    }
+    // Follow the venue's zone when one is picked; revert to the initial zone
+    // when the venue is cleared so times aren't parsed against a stale zone.
+    setEffectiveTimeZone(isValidTimeZone(nextVenueTimeZone) ? nextVenueTimeZone : initialTimeZone);
   };
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);

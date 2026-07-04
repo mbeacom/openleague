@@ -114,9 +114,12 @@ export default function EventForm({
       venueId: venueId || "",
       location: venueName || prev.location,
     }));
-    // Adopt the venue's zone so wall-clock times are interpreted at the venue.
+    // Adopt the venue's zone so wall-clock times are interpreted at the venue;
+    // revert to the initial zone when the venue is cleared.
     if (isValidTimeZone(venueTimeZone)) {
       setTimeZone(venueTimeZone);
+    } else {
+      setTimeZone(initialTimeZone);
     }
     setError(null);
   };

@@ -4,6 +4,7 @@ import { randomBytes } from "crypto";
 import { revalidatePath } from "next/cache";
 import type { PhaseAudience } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
+import { FALLBACK_TIME_ZONE } from "@/lib/utils/date";
 import {
   getCurrentUserId,
   isEventManager,
@@ -175,7 +176,7 @@ export async function createSignupEvent(
     }
     // Prefer the zone the organizer's form parsed the wall-clock times against so
     // the stored instant round-trips; fall back to the venue's zone or a default.
-    const timezone = validated.timezone ?? venueTimezone ?? "America/New_York";
+    const timezone = validated.timezone ?? venueTimezone ?? FALLBACK_TIME_ZONE;
 
     const event = await prisma.signupEvent.create({
       data: {

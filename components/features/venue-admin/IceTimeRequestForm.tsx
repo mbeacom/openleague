@@ -37,6 +37,13 @@ export function IceTimeRequestForm({ scheduleBlockId, venueId, venueName, starts
       return value.length > 0 ? value : undefined;
     };
 
+    const requestedStartAt = parseDateTimeLocalToUtc(String(formData.get("requestedStartAt") ?? ""), tz);
+    const requestedEndAt = parseDateTimeLocalToUtc(String(formData.get("requestedEndAt") ?? ""), tz);
+    if (!requestedStartAt || !requestedEndAt) {
+      setMessage({ severity: "error", text: "Enter a valid requested start and end time." });
+      return;
+    }
+
     startTransition(async () => {
       setMessage(null);
       const result = await submitIceTimeRequest({
@@ -46,8 +53,8 @@ export function IceTimeRequestForm({ scheduleBlockId, venueId, venueName, starts
         contactName: String(formData.get("contactName") ?? ""),
         contactEmail: String(formData.get("contactEmail") ?? ""),
         contactPhone: optionalString("contactPhone"),
-        requestedStartAt: parseDateTimeLocalToUtc(String(formData.get("requestedStartAt") ?? ""), tz) ?? new Date(NaN),
-        requestedEndAt: parseDateTimeLocalToUtc(String(formData.get("requestedEndAt") ?? ""), tz) ?? new Date(NaN),
+        requestedStartAt,
+        requestedEndAt,
         notes: optionalString("notes"),
       });
 
