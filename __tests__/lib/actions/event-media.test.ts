@@ -46,7 +46,7 @@ import {
 } from "@/lib/actions/event-media";
 
 const EVENT_ID = "cldevent0000000000000001";
-const BLOB_URL = `https://blob.example.com/signup-events/${EVENT_ID}/photo-abc123.jpg`;
+const BLOB_URL = `https://abc123.public.blob.vercel-storage.com/signup-events/${EVENT_ID}/photo-abc123.jpg`;
 
 function galleryEvent(overrides: Record<string, unknown> = {}) {
   return {
@@ -110,7 +110,29 @@ describe("finalizeEventMediaUpload", () => {
   it("rejects blobs stored outside this event's prefix", async () => {
     const result = await finalizeEventMediaUpload({
       eventId: EVENT_ID,
-      url: "https://blob.example.com/signup-events/other-event/photo.jpg",
+      url: "https://abc123.public.blob.vercel-storage.com/signup-events/other-event/photo.jpg",
+      contentType: "image/jpeg",
+      sizeBytes: 1024,
+    });
+
+    expect(result).toEqual({ success: false, error: "That upload doesn't belong to this event." });
+  });
+
+  it("rejects external hosts even when the path contains the event prefix", async () => {
+    const result = await finalizeEventMediaUpload({
+      eventId: EVENT_ID,
+      url: `https://attacker.example/x/signup-events/${EVENT_ID}/fake.png`,
+      contentType: "image/jpeg",
+      sizeBytes: 1024,
+    });
+
+    expect(result).toEqual({ success: false, error: "Invalid media URL." });
+  });
+
+  it("anchors the prefix check to the start of the pathname", async () => {
+    const result = await finalizeEventMediaUpload({
+      eventId: EVENT_ID,
+      url: `https://abc123.public.blob.vercel-storage.com/elsewhere/signup-events/${EVENT_ID}/fake.png`,
       contentType: "image/jpeg",
       sizeBytes: 1024,
     });

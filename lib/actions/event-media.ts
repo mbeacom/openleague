@@ -56,13 +56,23 @@ export async function finalizeEventMediaUpload(
       return { success: false, error: "Only event participants and organizers can share media." };
     }
 
-    let pathname: string;
+    // The URL must be a Vercel Blob object stored under THIS event's prefix —
+    // host-allowlisted and prefix-anchored so a registrant cannot register an
+    // arbitrary external URL as gallery media (stored content injection).
+    let parsedUrl: URL;
     try {
-      pathname = new URL(validated.url).pathname.replace(/^\//, "");
+      parsedUrl = new URL(validated.url);
     } catch {
       return { success: false, error: "Invalid media URL." };
     }
-    if (!pathname.includes(eventMediaPrefix(event.id))) {
+    if (
+      parsedUrl.protocol !== "https:" ||
+      !parsedUrl.hostname.endsWith(".blob.vercel-storage.com")
+    ) {
+      return { success: false, error: "Invalid media URL." };
+    }
+    const pathname = parsedUrl.pathname.replace(/^\//, "");
+    if (!pathname.startsWith(eventMediaPrefix(event.id))) {
       return { success: false, error: "That upload doesn't belong to this event." };
     }
 

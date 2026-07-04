@@ -100,6 +100,13 @@ enforcement, confirmation email, self-cancel, roster view + export.
 > Per-player stat entry is API-complete (recordGameResult accepts stats[]) with
 > score-only UI for v1. T065's mobile pass was a static review (responsive
 > grids/stacks, overflow-x table containers) — no device testing.
+>
+> **Known limitation (post-review)**: the event/game datetime-local forms
+> read and write times in the ORGANIZER'S BROWSER timezone, while display uses
+> the event's stored venue timezone. An organizer editing from a different
+> timezone than the venue will store shifted times. Fix requires timezone-aware
+> form conversion (date-fns-tz/Luxon or Intl-based wall-clock math) in
+> EventForm and GameScheduler — tracked as a follow-up.
 
 ---
 

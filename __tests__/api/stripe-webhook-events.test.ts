@@ -14,7 +14,7 @@ const {
   mockPromote: vi.fn(),
   mockEventConfirmEmail: vi.fn(),
   mockPrisma: {
-    $transaction: vi.fn(async (ops: unknown[]) => Promise.all(ops as Promise<unknown>[])),
+    $transaction: vi.fn(),
     payment: { findUnique: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
     sessionRegistration: { update: vi.fn(), updateMany: vi.fn(), aggregate: vi.fn() },
     eventRegistration: { update: vi.fn(), updateMany: vi.fn(), count: vi.fn() },
@@ -101,7 +101,14 @@ const completedSession = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockPrisma.$transaction.mockImplementation(async (ops: unknown[]) => Promise.all(ops as Promise<unknown>[]));
+  // Support both interactive transactions (callback gets the tx client) and
+  // array form (Promise.all over prepared operations).
+  mockPrisma.$transaction.mockImplementation(async (arg: unknown) =>
+    typeof arg === "function"
+      ? (arg as (tx: typeof mockPrisma) => Promise<unknown>)(mockPrisma)
+      : Promise.all(arg as Promise<unknown>[])
+  );
+  mockPrisma.eventRegistration.updateMany.mockResolvedValue({ count: 1 });
   mockGetStripeClient.mockReturnValue({
     paymentIntents: {
       retrieve: vi.fn().mockResolvedValue({ latest_charge: { receipt_url: "https://receipt" } }),
@@ -127,9 +134,9 @@ describe("checkout.session.completed for event registrations", () => {
     expect(mockPrisma.payment.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ status: "PAID", receiptUrl: "https://receipt" }) })
     );
-    expect(mockPrisma.eventRegistration.update).toHaveBeenCalledWith(
+    expect(mockPrisma.eventRegistration.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: "evreg-1" },
+        where: { id: "evreg-1", status: "PENDING_PAYMENT" },
         data: expect.objectContaining({ status: "CONFIRMED" }),
       })
     );
@@ -174,7 +181,7 @@ describe("checkout.session.completed for event registrations", () => {
 
     expect(response.status).toBe(200);
     expect(mockPrisma.payment.update).not.toHaveBeenCalled();
-    expect(mockPrisma.eventRegistration.update).not.toHaveBeenCalled();
+    expect(mockPrisma.eventRegistration.updateMany).not.toHaveBeenCalled();
   });
 
   it("never revives a canceled registration on a stale checkout", async () => {
@@ -190,7 +197,25 @@ describe("checkout.session.completed for event registrations", () => {
     const response = await POST(webhookRequest({}));
 
     expect(response.status).toBe(200);
-    expect(mockPrisma.eventRegistration.update).not.toHaveBeenCalled();
+    expect(mockPrisma.eventRegistration.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("skips the email when a concurrent delivery already confirmed the hold", async () => {
+    mockConstructEvent.mockReturnValue({
+      type: "checkout.session.completed",
+      account: "acct_league",
+      data: { object: completedSession },
+    });
+    mockPrisma.payment.findUnique.mockResolvedValue(eventRegistrationPayment());
+    mockPrisma.eventRegistration.count.mockResolvedValue(10);
+    // The conditional confirm loses the race: zero rows flipped.
+    mockPrisma.eventRegistration.updateMany.mockResolvedValue({ count: 0 });
+
+    const response = await POST(webhookRequest({}));
+
+    expect(response.status).toBe(200);
+    expect(mockPrisma.payment.update).not.toHaveBeenCalled();
+    expect(mockEventConfirmEmail).not.toHaveBeenCalled();
   });
 });
 

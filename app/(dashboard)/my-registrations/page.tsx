@@ -124,8 +124,13 @@ export default async function MyRegistrationsPage() {
                 reg.event.hostLeague?.name ??
                 reg.event.hostTeam?.name ??
                 "";
+              // Mirror the server's cancellation rule so the button never
+              // renders as a dead end after the cutoff passes.
+              const cancelCutoff = reg.event.cancellationCutoffAt ?? reg.event.startAt;
               const cancelable =
-                ACTIVE_EVENT_STATUSES.includes(reg.status) && reg.payment?.status !== "PAID";
+                ACTIVE_EVENT_STATUSES.includes(reg.status) &&
+                reg.payment?.status !== "PAID" &&
+                new Date() <= cancelCutoff;
               return (
                 <Card key={reg.id} variant="outlined">
                   <CardContent>

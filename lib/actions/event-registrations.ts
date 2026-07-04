@@ -640,6 +640,7 @@ export async function getMyEventRegistrations() {
           endAt: true,
           timezone: true,
           locationText: true,
+          cancellationCutoffAt: true,
           venue: { select: { name: true } },
           hostOrganization: { select: { name: true } },
           hostLeague: { select: { name: true } },
@@ -939,9 +940,14 @@ export async function claimWaitlistOffer(
 
       const originalOfferExpiresAt = registration.offerExpiresAt;
       const applicationFeeAmount = computeApplicationFee(registration.unitAmount, merchant.platformFeeBps);
+      // This row's createdAt is the WAITLIST JOIN time, so the count's
+      // createdAt-based hold window would lapse immediately. Keep the payment
+      // hold committed by carrying the deadline in offerExpiresAt (see
+      // countCommittedSlotSpots), matched to the checkout expiry below.
+      const paymentHoldDeadline = new Date(now.getTime() + EVENT_HOLD_WINDOW_MS);
       const held = await prisma.eventRegistration.updateMany({
         where: { id: registration.id, status: "OFFERED", offerExpiresAt: { gt: now } },
-        data: { status: "PENDING_PAYMENT", offerExpiresAt: null },
+        data: { status: "PENDING_PAYMENT", offerExpiresAt: paymentHoldDeadline },
       });
       if (held.count === 0) {
         return { success: false, error: "This offer is no longer available." };

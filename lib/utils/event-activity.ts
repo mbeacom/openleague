@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
+import { requireEventManager } from "@/lib/auth/session";
 
 /**
  * Record a signup-event management action in the audit log (FR-029).
@@ -36,8 +37,12 @@ export async function logSignupEventActivity(input: {
   }
 }
 
-/** Recent management activity for one event (host-admin/manager view). */
+/**
+ * Recent management activity for one event. Self-gated (defense in depth):
+ * callers must be event managers regardless of their own checks.
+ */
 export async function getSignupEventActivity(eventId: string, limit = 25) {
+  await requireEventManager(eventId);
   return prisma.auditLog.findMany({
     where: { resourceId: eventId, resourceType: "SignupEvent" },
     orderBy: { createdAt: "desc" },

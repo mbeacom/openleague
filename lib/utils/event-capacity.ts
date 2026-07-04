@@ -33,6 +33,12 @@ export function isSerializationError(error: unknown): boolean {
  * (inside the hold window), and un-expired OFFERED waitlist promotions. Lazy
  * expiry: lapsed holds/offers stop counting even before the cron sweep flips
  * their status.
+ *
+ * PENDING_PAYMENT holds count when EITHER the row was created inside the hold
+ * window (fresh registrations) OR `offerExpiresAt` is in the future — claimed
+ * waitlist offers re-use their original row (whose `createdAt` is the waitlist
+ * join time, long past), so their payment-hold deadline lives in
+ * `offerExpiresAt` instead.
  */
 export async function countCommittedSlotSpots(
   client: PrismaClientLike,
@@ -47,7 +53,10 @@ export async function countCommittedSlotSpots(
       id: excludeRegistrationId ? { not: excludeRegistrationId } : undefined,
       OR: [
         { status: "CONFIRMED" },
-        { status: "PENDING_PAYMENT", createdAt: { gte: holdCutoff } },
+        {
+          status: "PENDING_PAYMENT",
+          OR: [{ createdAt: { gte: holdCutoff } }, { offerExpiresAt: { gt: now } }],
+        },
         { status: "OFFERED", offerExpiresAt: { gt: now } },
       ],
     },

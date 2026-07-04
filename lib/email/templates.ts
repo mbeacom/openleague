@@ -1287,15 +1287,23 @@ export async function sendSignupEventUpdatedEmail(data: SignupEventUpdatedEmailD
   const mailchimp = getMailchimpClient();
   const eventLink = `${BASE_URL}/events/${data.eventId}`;
 
-  await mailchimp.messages.send({
-    message: {
-      from_email: EMAIL_FROM,
-      subject: `Updated: ${data.eventTitle}`,
-      html: `<p><strong>${data.eventTitle}</strong> (hosted by ${data.hostName}) has been updated.</p><p>${data.changeSummary}</p><p><a href="${eventLink}">View the event</a></p>`,
-      text: `${data.eventTitle} (hosted by ${data.hostName}) has been updated. ${data.changeSummary} View: ${eventLink}`,
-      to: data.recipients.map((recipient) => ({ email: recipient.email, type: "bcc" as const })),
-    },
-  });
+  // One message per family — recipients must never see each other's addresses
+  // (same pattern as sendSignupEventReminders/sendLeagueMessageEmail).
+  for (const recipient of data.recipients) {
+    try {
+      await mailchimp.messages.send({
+        message: {
+          from_email: EMAIL_FROM,
+          subject: `Updated: ${data.eventTitle}`,
+          html: `<p><strong>${data.eventTitle}</strong> (hosted by ${data.hostName}) has been updated.</p><p>${data.changeSummary}</p><p><a href="${eventLink}">View the event</a></p>`,
+          text: `${data.eventTitle} (hosted by ${data.hostName}) has been updated. ${data.changeSummary} View: ${eventLink}`,
+          to: [{ email: recipient.email, type: "to" as const }],
+        },
+      });
+    } catch (emailError) {
+      console.error(`Failed to send event update email to ${recipient.email}:`, emailError);
+    }
+  }
 }
 
 interface SignupEventCanceledEmailData {
@@ -1311,15 +1319,22 @@ export async function sendSignupEventCanceledEmail(data: SignupEventCanceledEmai
   const mailchimp = getMailchimpClient();
   const reasonHtml = data.reason ? `<p>Reason: ${data.reason}</p>` : "";
 
-  await mailchimp.messages.send({
-    message: {
-      from_email: EMAIL_FROM,
-      subject: `Canceled: ${data.eventTitle}`,
-      html: `<p><strong>${data.eventTitle}</strong> (hosted by ${data.hostName}) has been canceled.</p>${reasonHtml}<p>If you paid online, the organizer will process refunds.</p>`,
-      text: `${data.eventTitle} (hosted by ${data.hostName}) has been canceled.${data.reason ? ` Reason: ${data.reason}` : ""} If you paid online, the organizer will process refunds.`,
-      to: data.recipients.map((recipient) => ({ email: recipient.email, type: "bcc" as const })),
-    },
-  });
+  // One message per family — recipients must never see each other's addresses.
+  for (const recipient of data.recipients) {
+    try {
+      await mailchimp.messages.send({
+        message: {
+          from_email: EMAIL_FROM,
+          subject: `Canceled: ${data.eventTitle}`,
+          html: `<p><strong>${data.eventTitle}</strong> (hosted by ${data.hostName}) has been canceled.</p>${reasonHtml}<p>If you paid online, the organizer will process refunds.</p>`,
+          text: `${data.eventTitle} (hosted by ${data.hostName}) has been canceled.${data.reason ? ` Reason: ${data.reason}` : ""} If you paid online, the organizer will process refunds.`,
+          to: [{ email: recipient.email, type: "to" as const }],
+        },
+      });
+    } catch (emailError) {
+      console.error(`Failed to send event cancellation email to ${recipient.email}:`, emailError);
+    }
+  }
 }
 
 interface EventRegistrationConfirmationEmailData {
@@ -1534,13 +1549,20 @@ export async function sendEventTeamsUpdateEmail(data: EventTeamsUpdateEmailData)
     ? `Teams are posted for ${data.eventTitle}`
     : `Team assignments updated for ${data.eventTitle}`;
 
-  await mailchimp.messages.send({
-    message: {
-      from_email: EMAIL_FROM,
-      subject: headline,
-      html: `<p>${headline}.</p><p><a href="${eventLink}">See your team and game times</a></p>`,
-      text: `${headline}. See your team and game times: ${eventLink}`,
-      to: data.recipients.map((recipient) => ({ email: recipient.email, type: "bcc" as const })),
-    },
-  });
+  // One message per family — recipients must never see each other's addresses.
+  for (const recipient of data.recipients) {
+    try {
+      await mailchimp.messages.send({
+        message: {
+          from_email: EMAIL_FROM,
+          subject: headline,
+          html: `<p>${headline}.</p><p><a href="${eventLink}">See your team and game times</a></p>`,
+          text: `${headline}. See your team and game times: ${eventLink}`,
+          to: [{ email: recipient.email, type: "to" as const }],
+        },
+      });
+    } catch (emailError) {
+      console.error(`Failed to send teams update email to ${recipient.email}:`, emailError);
+    }
+  }
 }

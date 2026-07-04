@@ -30,6 +30,7 @@ const {
         findUnique: vi.fn(),
         findMany: vi.fn(),
         update: vi.fn(),
+        updateMany: vi.fn(),
         count: vi.fn(),
       },
       payment: { update: vi.fn(), updateMany: vi.fn(), create: vi.fn(), deleteMany: vi.fn() },
@@ -66,6 +67,7 @@ vi.mock("@/lib/actions/venue-organizations", () => ({}));
 import {
   registerForSignupEvent,
   cancelMyEventRegistration,
+  claimWaitlistOffer,
   setManualPaymentStatus,
 } from "@/lib/actions/event-registrations";
 
@@ -523,6 +525,50 @@ describe("registerForSignupEvent online checkout", () => {
         data: expect.objectContaining({ status: "EXPIRED" }),
       })
     );
+  });
+
+  it("keeps a claimed offer counting as committed by carrying the hold deadline in offerExpiresAt", async () => {
+    // The claimed row's createdAt is the WAITLIST JOIN time (long past), so
+    // the createdAt-based hold window would lapse instantly — the payment
+    // hold must live in offerExpiresAt instead (oversell regression).
+    mockPrisma.eventRegistration.findFirst.mockResolvedValue({
+      id: "creg000000001",
+      status: "OFFERED",
+      offerExpiresAt: futureDate(12),
+      unitAmount: 2500,
+      participantName: "Liam Beacom",
+      slot: { name: "Skater", priceCurrency: "USD" },
+      event: {
+        id: EVENT_ID,
+        title: "Mite Night",
+        startAt: futureDate(24 * 7),
+        acceptsOnlinePayment: true,
+        acceptsManualPayment: false,
+        venmoHandle: null,
+        zelleHandle: null,
+        cashAppHandle: null,
+        paymentPhone: null,
+        paymentInstructions: null,
+        venue: null,
+        hostLeague: onboardedLeague,
+        hostOrganization: null,
+        hostTeam: null,
+      },
+    });
+    mockPrisma.eventRegistration.updateMany.mockResolvedValue({ count: 1 });
+    mockPrisma.payment.create.mockResolvedValue({});
+
+    const result = await claimWaitlistOffer({ registrationId: "creg000000001" });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.status).toBe("PENDING_PAYMENT");
+      expect(result.data.checkoutUrl).toBe("https://checkout.stripe.test/cs_1");
+    }
+    const holdData = mockPrisma.eventRegistration.updateMany.mock.calls[0][0].data;
+    expect(holdData.status).toBe("PENDING_PAYMENT");
+    expect(holdData.offerExpiresAt).toBeInstanceOf(Date);
+    expect(holdData.offerExpiresAt.getTime()).toBeGreaterThan(Date.now());
   });
 
   it("refuses online payment when the merchant is not onboarded", async () => {
