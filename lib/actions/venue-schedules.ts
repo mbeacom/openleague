@@ -17,7 +17,7 @@ import {
   type VenueOperatingHourInput,
   type VenueScheduleBlockInput,
 } from "@/lib/utils/validation";
-import { findBookingConflicts } from "@/lib/utils/availability";
+import { findBookingConflicts, getVenueBookings } from "@/lib/utils/availability";
 import { expandRecurrenceWindow } from "@/lib/utils/venue-schedule";
 import type { BookingConflict, VenueBookingView } from "@/types/segments";
 
@@ -1108,6 +1108,189 @@ function scheduleBlockUpdateData(
     registrationMode: validated.registrationMode,
     externalRegistrationUrl: validated.externalRegistrationUrl || null,
   };
+}
+
+/**
+ * Data for the venue schedule board (FR-021/SC-006): every booking at the
+ * venue over [from, to) from the five availability sources, plus the venue's
+ * surfaces (with their active segments) and its non-archived schedule blocks
+ * for the block CRUD dialogs.
+ *
+ * DRAFT blocks hold no availability, so `getVenueBookings` never returns
+ * them; their occurrences overlapping the window are appended here so staff
+ * can see, edit, and publish what they drafted (the client distinguishes
+ * drafts via the returned `blocks` list). Recurring occurrences share the
+ * block's id — key rows by id + startAt.
+ */
+export async function getVenueScheduleBoard(input: {
+  organizationId: string;
+  venueId: string;
+  from: Date | string;
+  to: Date | string;
+}): Promise<
+  ActionResult<{
+    bookings: VenueBookingView[];
+    surfaces: Array<{
+      id: string;
+      name: string;
+      isActive: boolean;
+      segments: Array<{ id: string; name: string }>;
+    }>;
+    blocks: Array<{
+      id: string;
+      title: string;
+      description: string | null;
+      activityType: string;
+      audience: string;
+      visibility: string;
+      status: string;
+      startsAt: Date;
+      endsAt: Date;
+      recurrenceRule: string | null;
+      recurrenceStartDate: Date | null;
+      recurrenceEndDate: Date | null;
+      capacity: number | null;
+      priceAmount: number | null;
+      priceCurrency: string;
+      priceLabel: string | null;
+      registrationMode: string;
+      externalRegistrationUrl: string | null;
+      surfaceId: string | null;
+      segmentId: string | null;
+      segmentName: string | null;
+    }>;
+  }>
+> {
+  try {
+    const validated = scheduleBlockCommandSchema
+      .pick({ organizationId: true, venueId: true })
+      .extend({
+        from: z.coerce.date({ message: "Valid window start is required" }),
+        to: z.coerce.date({ message: "Valid window end is required" }),
+      })
+      .refine((data) => data.to > data.from, { message: "Window end must be after start" })
+      .parse(input);
+
+    // Board windows are a week; cap generously so a bad caller can't request
+    // an unbounded expansion of every recurring block at the venue.
+    if (validated.to.getTime() - validated.from.getTime() > 35 * 24 * 60 * 60 * 1000) {
+      return { success: false, error: "Schedule window is limited to 35 days." };
+    }
+
+    await requireVenueScheduleManager(validated.organizationId, validated.venueId);
+    await ensureVenueContext(validated.organizationId, validated.venueId);
+
+    const [bookings, surfaces, blockRows] = await Promise.all([
+      getVenueBookings({
+        venueId: validated.venueId,
+        from: validated.from,
+        to: validated.to,
+      }),
+      prisma.iceSurface.findMany({
+        where: { venueId: validated.venueId },
+        select: {
+          id: true,
+          name: true,
+          isActive: true,
+          segments: {
+            where: { isActive: true },
+            select: { id: true, name: true },
+            orderBy: [{ createdAt: "asc" }, { name: "asc" }],
+          },
+        },
+        orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
+      }),
+      prisma.venueScheduleBlock.findMany({
+        where: { venueId: validated.venueId, status: { not: "ARCHIVED" } },
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          activityType: true,
+          audience: true,
+          visibility: true,
+          status: true,
+          startsAt: true,
+          endsAt: true,
+          recurrenceRule: true,
+          recurrenceStartDate: true,
+          recurrenceEndDate: true,
+          capacity: true,
+          priceAmount: true,
+          priceCurrency: true,
+          priceLabel: true,
+          registrationMode: true,
+          externalRegistrationUrl: true,
+          surfaceId: true,
+          segmentId: true,
+          segment: { select: { name: true } },
+        },
+        orderBy: { startsAt: "asc" },
+      }),
+    ]);
+
+    // Append DRAFT block occurrences overlapping the window (strict overlap,
+    // matching the availability engine's semantics for published blocks).
+    const draftViews: VenueBookingView[] = [];
+    for (const block of blockRows) {
+      if (block.status !== "DRAFT") continue;
+      const base = {
+        id: block.id,
+        source: "scheduleBlock" as const,
+        title: block.title,
+        surfaceId: block.surfaceId,
+        segmentId: block.segmentId,
+        segmentName: block.segment?.name ?? null,
+      };
+      let occurrences: Array<{ startAt: Date; endAt: Date }>;
+      if (block.recurrenceRule) {
+        try {
+          occurrences = expandRecurrenceWindow(
+            {
+              startAt: block.startsAt,
+              endAt: block.endsAt,
+              recurrenceRule: block.recurrenceRule,
+              recurrenceEndAt: block.recurrenceEndDate,
+            },
+            validated.from,
+            validated.to
+          );
+        } catch {
+          // Unsupported free-text rule: fall back to the base range so the
+          // draft never silently vanishes from the board.
+          occurrences = [{ startAt: block.startsAt, endAt: block.endsAt }];
+        }
+      } else {
+        occurrences = [{ startAt: block.startsAt, endAt: block.endsAt }];
+      }
+      for (const occurrence of occurrences) {
+        if (occurrence.startAt < validated.to && occurrence.endAt > validated.from) {
+          draftViews.push({ ...base, startAt: occurrence.startAt, endAt: occurrence.endAt });
+        }
+      }
+    }
+
+    const allBookings = [...bookings, ...draftViews].sort(
+      (a, b) => a.startAt.getTime() - b.startAt.getTime()
+    );
+
+    return {
+      success: true,
+      data: {
+        bookings: allBookings,
+        surfaces,
+        blocks: blockRows.map(({ segment, ...block }) => ({
+          ...block,
+          segmentName: segment?.name ?? null,
+        })),
+      },
+    };
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("NEXT_REDIRECT")) {
+      throw error;
+    }
+    return { success: false, error: "Failed to load the venue schedule." };
+  }
 }
 
 function revalidateVenueSchedule(organizationId: string, venueId: string) {

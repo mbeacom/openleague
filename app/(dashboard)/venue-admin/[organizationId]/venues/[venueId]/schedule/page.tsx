@@ -1,12 +1,11 @@
 import { notFound } from "next/navigation";
 import { Container, Stack, Typography } from "@mui/material";
-import { getVenueScheduleAdminData } from "@/lib/actions/venue-schedules";
 import {
-  IceSurfaceManager,
-  OperatingHoursEditor,
-  ScheduleBlockEditor,
-  VenueScheduleCalendar,
-} from "@/components/features/venue-admin";
+  getVenueScheduleAdminData,
+  getVenueScheduleBoard,
+} from "@/lib/actions/venue-schedules";
+import { IceSurfaceManager, OperatingHoursEditor } from "@/components/features/venue-admin";
+import { VenueScheduleBoard } from "@/components/features/venue-admin/VenueScheduleBoard";
 
 interface VenueSchedulePageProps {
   params: Promise<{
@@ -31,15 +30,6 @@ interface OperatingHourSummary {
   status: string;
 }
 
-interface ScheduleBlockSummary {
-  id: string;
-  title: string;
-  startsAt: Date;
-  endsAt: Date;
-  activityType: string;
-  status: string;
-}
-
 export default async function VenueSchedulePage({ params }: VenueSchedulePageProps) {
   const { organizationId, venueId } = await params;
   const result = await getVenueScheduleAdminData(organizationId, venueId);
@@ -50,7 +40,21 @@ export default async function VenueSchedulePage({ params }: VenueSchedulePagePro
 
   const surfaces = result.data.surfaces as SurfaceSummary[];
   const operatingHours = result.data.operatingHours as OperatingHourSummary[];
-  const scheduleBlocks = result.data.scheduleBlocks as ScheduleBlockSummary[];
+
+  // Initial board window: the current week, starting Sunday at local midnight
+  // (the client owns week navigation from here).
+  const weekStart = new Date();
+  weekStart.setHours(0, 0, 0, 0);
+  weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekEnd.getDate() + 7);
+
+  const board = await getVenueScheduleBoard({
+    organizationId,
+    venueId,
+    from: weekStart,
+    to: weekEnd,
+  });
 
   return (
     <Container maxWidth="lg">
@@ -60,8 +64,14 @@ export default async function VenueSchedulePage({ params }: VenueSchedulePagePro
         </Typography>
         <IceSurfaceManager organizationId={organizationId} venueId={venueId} surfaces={surfaces} />
         <OperatingHoursEditor organizationId={organizationId} venueId={venueId} operatingHours={operatingHours} />
-        <ScheduleBlockEditor organizationId={organizationId} venueId={venueId} />
-        <VenueScheduleCalendar blocks={scheduleBlocks} />
+        <VenueScheduleBoard
+          organizationId={organizationId}
+          venueId={venueId}
+          initialFrom={weekStart}
+          initialBookings={board.success ? board.data.bookings : []}
+          initialSurfaces={board.success ? board.data.surfaces : []}
+          initialBlocks={board.success ? board.data.blocks : []}
+        />
       </Stack>
     </Container>
   );

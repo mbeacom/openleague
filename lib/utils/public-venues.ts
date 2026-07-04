@@ -21,6 +21,8 @@ export const publicVenueProfileSelect = {
   publicPhone: true,
   profileStatus: true,
   publishedAt: true,
+  // Optional schematic facility map (feature 006, FR-017).
+  layout: true,
   organization: {
     select: {
       id: true,

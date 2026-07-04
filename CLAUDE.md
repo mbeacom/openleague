@@ -126,6 +126,8 @@ lib/                             # Core application logic
 │   ├── season-generation.ts     # Opt-in round-robin generation (preview + drafts)
 │   ├── game-proposals.ts        # Team-to-team game proposal threads
 │   ├── placements.ts            # Pre-season skill placement into divisions
+│   ├── venue-surfaces.ts        # Surface segmentation (drawn zones, coexistence)
+│   ├── venue-layout.ts          # Venue schematic layout (public facility map)
 │   └── venues.ts                # Venue management
 ├── auth/                        # Authentication utilities
 │   ├── config.ts                # Auth.js configuration
