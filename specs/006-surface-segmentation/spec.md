@@ -29,10 +29,11 @@ A venue staff member with scheduling rights manages the venue's surfaces from th
 
 1. **Given** a venue with staff scheduling rights, **When** the staff member creates a surface with a name and type, **Then** it appears in the venue's surface list and in scheduling pickers, and its whole-surface segment exists implicitly (the whole-surface segment always exists and can never be deactivated).
 2. **Given** an ice-type surface (new or pre-existing), **When** the staff member applies the ice preset, **Then** two half-ice and four cross-ice segments are created with correct coexistence relationships (the two halves coexist with each other; all four cross zones coexist with one another and with the opposite half, but conflict with their containing half; nothing coexists with the whole surface). The preset's "full ice" is the surface's implicit whole-surface segment (renameable), never a duplicate entry.
-3. **Given** any surface, **When** the staff member adds a custom zone, **Then** they name it and declare which existing segments it can operate alongside; unless declared otherwise, a custom zone is treated as conflicting with everything on that surface (safe default). Declarations are symmetric pair-level facts — if A coexists with B, B coexists with A.
-4. **Given** a segment with no future bookings, **When** the staff member deactivates it, **Then** it disappears from booking pickers while historical bookings still display it.
-5. **Given** a segment with future bookings, **When** the staff member attempts to deactivate it, **Then** the system lists the affected bookings and requires them to be moved or canceled first.
-6. **Given** a surface or the venue as a whole, **When** the staff member edits per-surface or venue-wide operating hours, **Then** bookings outside those hours produce a warning at scheduling time (not a hard block).
+3. **Given** any surface, **When** the staff member adds a custom zone, **Then** they name it and draw it on a schematic of the surface; the system suggests coexistence relationships from the drawn geometry (zones that don't visually overlap are suggested to coexist; overlapping zones default to conflict), and the staff member confirms or overrides each suggestion before saving — because physical coexistence isn't purely spatial (noise, shared boards, skater flow). Declarations are symmetric pair-level facts — if A coexists with B, B coexists with A — and remain the stored source of truth.
+4. **Given** preset segments, **When** the staff member views a surface's segmentation, **Then** each preset segment appears pre-drawn in its standard position on the surface schematic (halves, cross zones), making the scheme visually self-explanatory; dragging or redrawing a zone re-runs the coexistence suggestions for confirmation.
+5. **Given** a segment with no future bookings, **When** the staff member deactivates it, **Then** it disappears from booking pickers while historical bookings still display it.
+6. **Given** a segment with future bookings, **When** the staff member attempts to deactivate it, **Then** the system lists the affected bookings and requires them to be moved or canceled first.
+7. **Given** a surface or the venue as a whole, **When** the staff member edits per-surface or venue-wide operating hours, **Then** bookings outside those hours produce a warning at scheduling time (not a hard block).
 
 ---
 
@@ -134,7 +135,7 @@ A coach planning practice in the practice planner can optionally attach a venue,
 
 - **FR-003**: Each surface MUST support a set of named segments; the whole surface is always bookable and conflicts with every segment of that surface.
 - **FR-004**: The system MUST provide segmentation presets by surface type — ice: two halves and four cross-ice zones (the preset's "full ice" is the implicit whole-surface segment, renameable, never duplicated); court: two halves; all other types: whole surface only — applied in one action to new or existing surfaces and individually renameable afterward. Preset segments retain their preset role, so re-application matches by role (adding only missing segments) regardless of renames.
-- **FR-005**: Venue staff MUST be able to define custom named zones on any surface, declaring which other segments each zone can operate alongside. Coexistence declarations are symmetric pair-level facts; undeclared relationships default to conflicting (safe default).
+- **FR-005**: Venue staff MUST be able to define custom named zones on any surface by drawing them on a schematic of that surface. The system MUST derive suggested coexistence relationships from the drawn geometry — non-overlapping zones suggested to coexist, overlapping zones defaulting to conflict — and staff MUST confirm or override each suggestion before saving ("geometry proposes, declarations decide"). Confirmed declarations are symmetric pair-level facts and the stored source of truth for conflict math; relationships never silently follow later geometry edits without reconfirmation. Undeclared relationships default to conflicting (safe default). Preset segments ship pre-drawn in standard positions.
 - **FR-006**: Two segments of the same surface either coexist (bookable at overlapping times without conflict) or physically overlap (conflict), as defined by the preset or staff declarations. Ice preset relationships: the two halves coexist with each other; all four cross zones coexist with one another and with the opposite half; every cross zone conflicts with its containing half; the whole-surface segment conflicts with every segment.
 - **FR-007**: Deactivating or archiving a segment (or surface) with future bookings MUST be refused with a list of the affected bookings; without future bookings it MUST succeed and hide the segment from pickers while preserving historical display. The whole-surface segment can never be deactivated. Editing a zone's coexistence declarations MUST show any future bookings that become conflicting and require confirmation; saved bookings are never automatically invalidated.
 
@@ -171,13 +172,14 @@ A coach planning practice in the practice planner can optionally attach a venue,
 
 - **Surface** (existing): a bookable sheet/court/field/room at a venue; gains manageability from the UI and an optional place in the venue layout.
 - **Segment**: a named, bookable subdivision of a surface — preset kinds (half, cross) or custom zones — with declared coexistence relationships to other segments of the same surface, and an active flag. The whole-surface segment always exists implicitly and can never be deactivated.
-- **Coexistence relationship**: the symmetric pair-level declaration of which segments can operate simultaneously; undeclared pairs conflict. The basis of conflict math (FR-006/009).
+- **Coexistence relationship**: the symmetric pair-level declaration of which segments can operate simultaneously; undeclared pairs conflict. The basis of conflict math (FR-006/009). Suggested by drawn zone geometry, confirmed by staff.
+- **Zone geometry**: each segment's drawn position/shape on its surface's schematic — the authoring input for coexistence suggestions and the visual explanation of the scheme; never itself the source of conflict decisions.
 - **Booking source** (conceptual): any of venue schedule block, signup-event game, season game, team calendar event, practice session — all answering to one availability model with a surface/segment reference and a time range.
 - **Venue layout**: an optional schematic per venue — placed surfaces (position/size/rotation) and landmark labels — rendered on the public profile.
 
 ## Assumptions
 
-- **Coexistence is declared, not geometric**: segments carry explicit symmetric "can operate alongside" declarations (presets encode the correct ice/court relationships; custom zones default to conflicting with everything). No availability or conflict math derives from layout geometry — the layout is presentational (the editor merely warns on visually overlapping placements).
+- **Geometry proposes, declarations decide**: zones are authored by drawing on a surface schematic, and drawn geometry generates suggested coexistence relationships — but the stored, explicit, symmetric declarations are the sole source of truth for conflict math (physical coexistence isn't purely spatial: noise, shared boards, skater flow). Presets encode correct ice/court relationships with standard pre-drawn geometry. The venue-level layout (US4) remains purely presentational.
 - The whole-surface booking remains the default everywhere; segmentation never adds required inputs to any flow.
 - Pre-launch replacement: the existing display-only usage enum and free-text zone label fields are removed without data migration (consistent with the 005 decision); signup-events' half/cross display data is superseded by segments.
 - Practice sessions gain a start time only when venue-attached (attachment requires it; slot = start time + existing duration); the practice planner's existing non-venue behavior is unchanged.
@@ -188,7 +190,7 @@ A coach planning practice in the practice planner can optionally attach a venue,
 ## Out of Scope
 
 - Paid or exclusive segment rentals, pricing, and public self-booking of segments — planned as spec 007 (this feature builds the inventory and availability it requires).
-- Geometric/spatial conflict detection derived from layout positions.
+- Fully automatic geometric conflict resolution (drawn geometry only *suggests* relationships; it never decides conflicts without staff confirmation).
 - Floor-plan image upload or to-scale facility maps.
 - Capacity-based (headcount) booking limits per segment.
 - Automatic schedule optimization or slot suggestion.
@@ -201,6 +203,7 @@ A coach planning practice in the practice planner can optionally attach a venue,
 
 - **SC-001**: Two half-surface bookings on the same surface and hour save with zero conflict warnings, and a subsequent whole-surface booking attempt warns against both — 100% of the time across all five booking sources.
 - **SC-002**: A venue staff member can create a surface, apply a segmentation preset, and set hours in under 2 minutes from the venue admin UI (no developer involvement).
+- **SC-009**: A venue staff member can add a custom zone — drawing it, reviewing the suggested relationships, and saving — in under 2 minutes, without ever hand-authoring a relationship matrix from scratch.
 - **SC-003**: 100% of partial-surface bookings are expressed through structured segments; zero free-text zone inputs remain in any scheduling flow.
 - **SC-004**: Cross-source conflict coverage is complete: every ordered pair of booking sources (blocks, signup-event games, season games, team events, attached practices) produces a warning when overlapping on shared space — verified by an availability test matrix.
 - **SC-005**: A staff member can lay out a three-surface facility with landmark labels in under 5 minutes, and the schematic renders on the public profile on mobile.
