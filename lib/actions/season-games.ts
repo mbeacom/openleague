@@ -184,6 +184,7 @@ export async function createSeasonGame(
 
     const venueId = validated.venueId || null;
     const surfaceId = validated.surfaceId || null;
+    const segmentId = validated.segmentId || null;
     const phaseId = validated.phaseId || null;
 
     if (surfaceId) {
@@ -193,6 +194,20 @@ export async function createSeasonGame(
       });
       if (!surface) {
         return { success: false, error: "Select an active surface at the chosen venue" };
+      }
+    }
+
+    // Segments must be active and belong to the selected surface (006 FR).
+    if (segmentId) {
+      if (!surfaceId) {
+        return { success: false, error: "Pick a surface before choosing a segment" };
+      }
+      const segment = await prisma.surfaceSegment.findFirst({
+        where: { id: segmentId, surfaceId, isActive: true },
+        select: { id: true },
+      });
+      if (!segment) {
+        return { success: false, error: "Select an active segment on the chosen surface" };
       }
     }
 
@@ -225,8 +240,7 @@ export async function createSeasonGame(
           timezone,
           venueId,
           surfaceId,
-          surfaceUsage: validated.surfaceUsage ?? null,
-          zoneLabel: validated.zoneLabel || null,
+          segmentId,
           locationText: validated.locationText || null,
           notes: validated.notes || null,
           homeTeamId: validated.homeTeamId,
@@ -302,6 +316,8 @@ export async function updateSeasonGame(
       validated.venueId === undefined ? existing.venueId : validated.venueId || null;
     const surfaceId =
       validated.surfaceId === undefined ? existing.surfaceId : validated.surfaceId || null;
+    const segmentId =
+      validated.segmentId === undefined ? existing.segmentId : validated.segmentId || null;
 
     if (surfaceId && surfaceId !== existing.surfaceId) {
       const surface = await prisma.iceSurface.findFirst({
@@ -310,6 +326,20 @@ export async function updateSeasonGame(
       });
       if (!surface) {
         return { success: false, error: "Select an active surface at the chosen venue" };
+      }
+    }
+
+    // Segments must be active and belong to the selected surface (006 FR).
+    if (segmentId && (segmentId !== existing.segmentId || surfaceId !== existing.surfaceId)) {
+      if (!surfaceId) {
+        return { success: false, error: "Pick a surface before choosing a segment" };
+      }
+      const segment = await prisma.surfaceSegment.findFirst({
+        where: { id: segmentId, surfaceId, isActive: true },
+        select: { id: true },
+      });
+      if (!segment) {
+        return { success: false, error: "Select an active segment on the chosen surface" };
       }
     }
 
@@ -340,9 +370,8 @@ export async function updateSeasonGame(
           timezone,
           venueId,
           surfaceId,
+          segmentId,
           ...(validated.phaseId !== undefined && { phaseId: validated.phaseId || null }),
-          ...(validated.surfaceUsage !== undefined && { surfaceUsage: validated.surfaceUsage }),
-          ...(validated.zoneLabel !== undefined && { zoneLabel: validated.zoneLabel || null }),
           ...(validated.locationText !== undefined && {
             locationText: validated.locationText || null,
           }),

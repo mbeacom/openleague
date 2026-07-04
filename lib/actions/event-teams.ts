@@ -266,8 +266,9 @@ export async function setFloater(
 
 /**
  * Create or update a game between two event teams, optionally on a venue
- * surface (full ice, half ice, or a cross-ice zone). Returns soft warnings —
- * e.g. a game outside the event window — rather than blocking.
+ * surface or one of its named segments (e.g. a half or cross-ice zone).
+ * Returns soft warnings — e.g. a game outside the event window — rather
+ * than blocking.
  */
 export async function upsertEventGame(
   input: EventGameInput
@@ -292,13 +293,30 @@ export async function upsertEventGame(
       return { success: false, error: "Both teams must belong to this event." };
     }
 
-    if (validated.surfaceId) {
+    const surfaceId = validated.surfaceId || null;
+    const segmentId = validated.segmentId || null;
+
+    if (surfaceId) {
       const surface = await prisma.iceSurface.findFirst({
-        where: { id: validated.surfaceId, venueId: event.venueId ?? undefined },
+        where: { id: surfaceId, venueId: event.venueId ?? undefined },
         select: { id: true },
       });
       if (!surface) {
         return { success: false, error: "That surface doesn't belong to this event's venue." };
+      }
+    }
+
+    // Segments must be active and belong to the selected surface (006 FR).
+    if (segmentId) {
+      if (!surfaceId) {
+        return { success: false, error: "Pick a surface before choosing a segment." };
+      }
+      const segment = await prisma.surfaceSegment.findFirst({
+        where: { id: segmentId, surfaceId, isActive: true },
+        select: { id: true },
+      });
+      if (!segment) {
+        return { success: false, error: "Select an active segment on the chosen surface." };
       }
     }
 
@@ -313,9 +331,8 @@ export async function upsertEventGame(
       awayTeamId: validated.awayTeamId,
       startAt: validated.startAt,
       endAt: validated.endAt,
-      surfaceId: validated.surfaceId || null,
-      iceUsage: validated.iceUsage,
-      zoneLabel: validated.zoneLabel || null,
+      surfaceId,
+      segmentId,
       notes: validated.notes || null,
     };
 
@@ -552,7 +569,26 @@ export async function getEventTeamsBoard(eventId: string) {
         teamsPublishedAt: true,
         ageClassification: true,
         category: true,
-        venue: { select: { id: true, name: true, surfaces: { select: { id: true, name: true } } } },
+        venue: {
+          select: {
+            id: true,
+            name: true,
+            surfaces: {
+              where: { isActive: true },
+              orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
+              select: {
+                id: true,
+                name: true,
+                wholeLabel: true,
+                segments: {
+                  where: { isActive: true },
+                  orderBy: { name: "asc" },
+                  select: { id: true, name: true },
+                },
+              },
+            },
+          },
+        },
       },
     }),
     prisma.eventTeam.findMany({
@@ -598,11 +634,10 @@ export async function getEventTeamsBoard(eventId: string) {
         status: true,
         startAt: true,
         endAt: true,
-        iceUsage: true,
-        zoneLabel: true,
         homeScore: true,
         awayScore: true,
         surface: { select: { id: true, name: true } },
+        segment: { select: { id: true, name: true } },
         homeTeam: { select: { id: true, name: true } },
         awayTeam: { select: { id: true, name: true } },
         participants: {
@@ -671,8 +706,7 @@ export async function getMyEventAssignments(eventId: string) {
               name: true,
               startAt: true,
               endAt: true,
-              iceUsage: true,
-              zoneLabel: true,
+              segment: { select: { id: true, name: true } },
               homeTeam: { select: { name: true } },
               awayTeam: { select: { name: true } },
             },
@@ -701,8 +735,7 @@ export async function getMyEventAssignments(eventId: string) {
           name: true,
           startAt: true,
           endAt: true,
-          iceUsage: true,
-          zoneLabel: true,
+          segment: { select: { id: true, name: true } },
           homeTeamId: true,
           awayTeamId: true,
           homeTeam: { select: { name: true } },
@@ -723,8 +756,7 @@ export async function getMyEventAssignments(eventId: string) {
       name: participation.game.name,
       startAt: participation.game.startAt,
       endAt: participation.game.endAt,
-      iceUsage: participation.game.iceUsage,
-      zoneLabel: participation.game.zoneLabel,
+      segment: participation.game.segment,
       homeTeamName: participation.game.homeTeam.name,
       awayTeamName: participation.game.awayTeam.name,
       playingFor: participation.eventTeam.name,
@@ -735,8 +767,7 @@ export async function getMyEventAssignments(eventId: string) {
         name: game.name,
         startAt: game.startAt,
         endAt: game.endAt,
-        iceUsage: game.iceUsage,
-        zoneLabel: game.zoneLabel,
+        segment: game.segment,
         homeTeamName: game.homeTeam.name,
         awayTeamName: game.awayTeam.name,
         playingFor: primaryTeam?.name ?? "",
@@ -793,11 +824,10 @@ export async function getPublicEventGames(eventId: string, linkToken?: string) {
       status: true,
       startAt: true,
       endAt: true,
-      iceUsage: true,
-      zoneLabel: true,
       homeScore: true,
       awayScore: true,
       surface: { select: { name: true } },
+      segment: { select: { id: true, name: true } },
       homeTeam: { select: { name: true, colorHex: true } },
       awayTeam: { select: { name: true, colorHex: true } },
     },
@@ -836,10 +866,9 @@ export async function listPublicVenueEventGames(venueId: string) {
       id: true,
       startAt: true,
       endAt: true,
-      iceUsage: true,
-      zoneLabel: true,
       eventId: true,
       surface: { select: { name: true } },
+      segment: { select: { id: true, name: true } },
       homeTeam: { select: { name: true } },
       awayTeam: { select: { name: true } },
     },

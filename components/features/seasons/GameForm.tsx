@@ -15,7 +15,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import type { IceUsage, Sport } from "@prisma/client";
+import type { Sport } from "@prisma/client";
 import { createSeasonGame, updateSeasonGame } from "@/lib/actions/season-games";
 import { getSportCapabilities } from "@/lib/utils/sport-catalog";
 import {
@@ -31,12 +31,16 @@ interface GameFormProps {
   open: boolean;
   onClose: () => void;
   seasonId: string;
-  /** Owning league/team sport — drives surface terminology and usage options. */
+  /** Owning league/team sport — drives surface terminology. */
   sport: Sport;
   teams: Array<{ id: string; name: string }>;
   venues: Array<{ id: string; name: string; timezone: string }>;
   /** Active surfaces per venue (already filtered server-side — FR-014). */
   surfacesByVenue: Record<string, Array<{ id: string; name: string }>>;
+  /** Active segments per surface (006) — the select renders only when the chosen surface has some. */
+  segmentsBySurface?: Record<string, Array<{ id: string; name: string }>>;
+  /** Display name of the implicit whole-surface option per surface ("Full ice"). */
+  wholeLabelBySurface?: Record<string, string>;
   /** Present in edit mode; teams are fixed after creation. */
   game?: SeasonGameView | null;
 }
@@ -50,8 +54,7 @@ type GamePayload = {
   timezone: string;
   venueId: string;
   surfaceId: string;
-  surfaceUsage: IceUsage | "";
-  zoneLabel: string;
+  segmentId: string;
   locationText: string;
   notes: string;
 };
@@ -90,6 +93,8 @@ function GameFormBody({
   teams,
   venues,
   surfacesByVenue,
+  segmentsBySurface = {},
+  wholeLabelBySurface = {},
   game,
 }: Omit<GameFormProps, "open">) {
   const router = useRouter();
@@ -101,6 +106,7 @@ function GameFormBody({
   const [pendingPayload, setPendingPayload] = useState<GamePayload | null>(null);
   const [venueId, setVenueId] = useState(game?.venue?.id ?? "");
   const [surfaceId, setSurfaceId] = useState(game?.surface?.id ?? "");
+  const [segmentId, setSegmentId] = useState(game?.segment?.id ?? "");
   // Zone the wall-clock inputs are interpreted in: the game's stored zone
   // (edit) or the scheduler's local zone (create); follows the venue once one
   // is actively picked. datetime-local values stay as wall-clock text and are
@@ -112,13 +118,22 @@ function GameFormBody({
     setVenueId(nextVenueId);
     // Surfaces belong to a venue — a stale selection would be rejected server-side.
     setSurfaceId("");
+    setSegmentId("");
     const nextVenueTimeZone = venues.find((venue) => venue.id === nextVenueId)?.timezone;
     setEffectiveTimeZone(
       isValidTimeZone(nextVenueTimeZone) ? nextVenueTimeZone : resolveTimeZone(game?.timezone)
     );
   };
 
+  const handleSurfaceChange = (nextSurfaceId: string) => {
+    setSurfaceId(nextSurfaceId);
+    // Segments belong to a surface — a stale selection would be rejected server-side.
+    setSegmentId("");
+  };
+
   const venueSurfaces = venueId ? (surfacesByVenue[venueId] ?? []) : [];
+  const surfaceSegments = surfaceId ? (segmentsBySurface[surfaceId] ?? []) : [];
+  const wholeSurfaceLabel = (surfaceId && wholeLabelBySurface[surfaceId]) || "Whole surface";
   const surfaceLabel = capabilities.surfaceLabel;
 
   const submitPayload = (payload: GamePayload, overrideConflicts: boolean) => {
@@ -132,8 +147,7 @@ function GameFormBody({
             timezone: payload.timezone,
             venueId: payload.venueId || null,
             surfaceId: payload.surfaceId || null,
-            surfaceUsage: payload.surfaceUsage === "" ? null : payload.surfaceUsage,
-            zoneLabel: payload.zoneLabel,
+            segmentId: payload.segmentId || null,
             locationText: payload.locationText,
             notes: payload.notes,
             overrideConflicts,
@@ -147,8 +161,7 @@ function GameFormBody({
             timezone: payload.timezone,
             venueId: payload.venueId || undefined,
             surfaceId: payload.surfaceId || undefined,
-            surfaceUsage: payload.surfaceUsage === "" ? undefined : payload.surfaceUsage,
-            zoneLabel: payload.zoneLabel,
+            segmentId: payload.segmentId || undefined,
             locationText: payload.locationText,
             notes: payload.notes,
             publish: true,
@@ -204,8 +217,7 @@ function GameFormBody({
         timezone: effectiveTimeZone,
         venueId,
         surfaceId,
-        surfaceUsage: text("surfaceUsage") as IceUsage | "",
-        zoneLabel: text("zoneLabel"),
+        segmentId,
         locationText: text("locationText"),
         notes: text("notes"),
       },
@@ -329,14 +341,14 @@ function GameFormBody({
               />
             </Stack>
 
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-              {venueSurfaces.length > 0 ? (
+            {venueSurfaces.length > 0 ? (
+              <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
                 <TextField
                   select
                   label={`${surfaceLabel} (optional)`}
                   fullWidth
                   value={surfaceId}
-                  onChange={(event) => setSurfaceId(event.target.value)}
+                  onChange={(event) => handleSurfaceChange(event.target.value)}
                 >
                   <MenuItem value="">Any {surfaceLabel.toLowerCase()}</MenuItem>
                   {venueSurfaces.map((surface) => (
@@ -345,32 +357,24 @@ function GameFormBody({
                     </MenuItem>
                   ))}
                 </TextField>
-              ) : null}
-              {capabilities.surfaceUsageOptions ? (
-                <TextField
-                  select
-                  name="surfaceUsage"
-                  label={`${surfaceLabel} usage (optional)`}
-                  fullWidth
-                  defaultValue={game?.surfaceUsage ?? ""}
-                >
-                  <MenuItem value="">Not specified</MenuItem>
-                  {capabilities.surfaceUsageOptions.map((option) => (
-                    <MenuItem key={option.value} value={option.value}>
-                      {option.label}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              ) : null}
-              <TextField
-                name="zoneLabel"
-                label="Zone (optional)"
-                fullWidth
-                defaultValue={game?.zoneLabel ?? ""}
-                placeholder="North half"
-                slotProps={{ htmlInput: { maxLength: 120 } }}
-              />
-            </Stack>
+                {surfaceSegments.length > 0 ? (
+                  <TextField
+                    select
+                    label="Segment (optional)"
+                    fullWidth
+                    value={segmentId}
+                    onChange={(event) => setSegmentId(event.target.value)}
+                  >
+                    <MenuItem value="">{wholeSurfaceLabel}</MenuItem>
+                    {surfaceSegments.map((segment) => (
+                      <MenuItem key={segment.id} value={segment.id}>
+                        {segment.name}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                ) : null}
+              </Stack>
+            ) : null}
 
             <TextField
               name="notes"

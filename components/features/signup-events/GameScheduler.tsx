@@ -24,14 +24,7 @@ import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import CloseIcon from "@mui/icons-material/Close";
 import { deleteEventGame, setGameRotation, upsertEventGame } from "@/lib/actions/event-teams";
 import { GameResultForm } from "./GameResultForm";
-import { ICE_USAGES } from "@/lib/utils/validation";
 import { formatDateTime, parseDateTimeLocalToUtc, resolveTimeZone } from "@/lib/utils/date";
-
-const ICE_USAGE_LABELS: Record<(typeof ICE_USAGES)[number], string> = {
-  FULL_ICE: "Full ice",
-  HALF_ICE: "Half ice",
-  CROSS_ICE: "Cross-ice",
-};
 
 type GameParticipant = {
   registrationId: string;
@@ -44,11 +37,11 @@ type Game = {
   name: string | null;
   startAt: Date;
   endAt: Date;
-  iceUsage: (typeof ICE_USAGES)[number];
-  zoneLabel: string | null;
   homeScore: number | null;
   awayScore: number | null;
   surface: { id: string; name: string } | null;
+  /** null = whole surface (or no surface selected). */
+  segment: { id: string; name: string } | null;
   homeTeam: { id: string; name: string };
   awayTeam: { id: string; name: string };
   participants: GameParticipant[];
@@ -59,6 +52,10 @@ interface GameSchedulerProps {
   teams: Array<{ id: string; name: string }>;
   games: Game[];
   surfaces: Array<{ id: string; name: string }>;
+  /** Active segments per surface (006) — the select renders only when the chosen surface has some. */
+  segmentsBySurface?: Record<string, Array<{ id: string; name: string }>>;
+  /** Display name of the implicit whole-surface option per surface ("Full ice"). */
+  wholeLabelBySurface?: Record<string, string>;
   /** Confirmed participants selectable for rotations. */
   participants: Array<{ id: string; participantName: string; isFloater: boolean }>;
   /** Scores/stats allowed for this event's age classification (Squirt+). */
@@ -72,6 +69,8 @@ export function GameScheduler({
   teams,
   games,
   surfaces,
+  segmentsBySurface = {},
+  wholeLabelBySurface = {},
   participants,
   statsEligible = false,
   timeZone,
@@ -80,11 +79,16 @@ export function GameScheduler({
   const tz = resolveTimeZone(timeZone);
   const [message, setMessage] = useState<{ severity: "success" | "error" | "warning"; text: string } | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [surfaceId, setSurfaceId] = useState("");
+  const [segmentId, setSegmentId] = useState("");
   const [rotationTarget, setRotationTarget] = useState<Game | null>(null);
   const [rotationDraft, setRotationDraft] = useState<Array<{ registrationId: string; eventTeamId: string }>>([]);
   const [addParticipantId, setAddParticipantId] = useState("");
   const [addSideId, setAddSideId] = useState("");
   const [isPending, startTransition] = useTransition();
+
+  const surfaceSegments = surfaceId ? (segmentsBySurface[surfaceId] ?? []) : [];
+  const wholeSurfaceLabel = (surfaceId && wholeLabelBySurface[surfaceId]) || "Whole surface";
 
   const openRotation = (game: Game) => {
     setRotationTarget(game);
@@ -115,9 +119,8 @@ export function GameScheduler({
         awayTeamId: text("awayTeamId"),
         startAt,
         endAt,
-        surfaceId: text("surfaceId") || undefined,
-        iceUsage: (text("iceUsage") || "FULL_ICE") as (typeof ICE_USAGES)[number],
-        zoneLabel: text("zoneLabel") || undefined,
+        surfaceId: surfaceId || undefined,
+        segmentId: segmentId || undefined,
       });
       if (!result.success) {
         setMessage({ severity: "error", text: result.error });
@@ -152,7 +155,15 @@ export function GameScheduler({
     <Stack spacing={2}>
       <Stack direction="row" alignItems="center" justifyContent="space-between">
         <Typography variant="h6">Games</Typography>
-        <Button startIcon={<AddIcon />} disabled={teams.length < 2} onClick={() => setDialogOpen(true)}>
+        <Button
+          startIcon={<AddIcon />}
+          disabled={teams.length < 2}
+          onClick={() => {
+            setSurfaceId("");
+            setSegmentId("");
+            setDialogOpen(true);
+          }}
+        >
           Schedule game
         </Button>
       </Stack>
@@ -179,10 +190,9 @@ export function GameScheduler({
                     {game.name ? ` — ${game.name}` : ""}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    {formatDateTime(game.startAt, tz)} – {formatDateTime(game.endAt, tz)} ·{" "}
-                    {ICE_USAGE_LABELS[game.iceUsage]}
-                    {game.zoneLabel ? ` (${game.zoneLabel})` : ""}
+                    {formatDateTime(game.startAt, tz)} – {formatDateTime(game.endAt, tz)}
                     {game.surface ? ` · ${game.surface.name}` : ""}
+                    {game.segment ? ` · ${game.segment.name}` : ""}
                   </Typography>
                 </Stack>
                 <Stack direction="row" spacing={1}>
@@ -288,21 +298,17 @@ export function GameScheduler({
                 />
               </Stack>
               <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-                <TextField select name="iceUsage" label="Ice usage" fullWidth defaultValue="HALF_ICE">
-                  {ICE_USAGES.map((usage) => (
-                    <MenuItem key={usage} value={usage}>
-                      {ICE_USAGE_LABELS[usage]}
-                    </MenuItem>
-                  ))}
-                </TextField>
                 <TextField
-                  name="zoneLabel"
-                  label="Zone (optional)"
-                  placeholder="North half"
+                  select
+                  label="Surface (optional)"
                   fullWidth
-                  slotProps={{ htmlInput: { maxLength: 60 } }}
-                />
-                <TextField select name="surfaceId" label="Surface (optional)" fullWidth defaultValue="">
+                  value={surfaceId}
+                  onChange={(event) => {
+                    setSurfaceId(event.target.value);
+                    // Segments belong to a surface — reset on change.
+                    setSegmentId("");
+                  }}
+                >
                   <MenuItem value="">No surface</MenuItem>
                   {surfaces.map((surface) => (
                     <MenuItem key={surface.id} value={surface.id}>
@@ -310,6 +316,22 @@ export function GameScheduler({
                     </MenuItem>
                   ))}
                 </TextField>
+                {surfaceSegments.length > 0 ? (
+                  <TextField
+                    select
+                    label="Segment (optional)"
+                    fullWidth
+                    value={segmentId}
+                    onChange={(event) => setSegmentId(event.target.value)}
+                  >
+                    <MenuItem value="">{wholeSurfaceLabel}</MenuItem>
+                    {surfaceSegments.map((segment) => (
+                      <MenuItem key={segment.id} value={segment.id}>
+                        {segment.name}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                ) : null}
               </Stack>
               <TextField name="name" label="Game label (optional)" placeholder="Game 1" slotProps={{ htmlInput: { maxLength: 100 } }} />
             </Stack>

@@ -1,7 +1,6 @@
 import type {
   GameProposalEntryKind,
   GameProposalStatus,
-  IceUsage,
   ScheduleFormat,
   SeasonGameStatus,
   SeasonPhaseType,
@@ -45,8 +44,8 @@ export interface SeasonGameView {
   awayTeam: { id: string; name: string };
   venue: { id: string; name: string } | null;
   surface: { id: string; name: string } | null;
-  surfaceUsage: IceUsage | null;
-  zoneLabel: string | null;
+  /** null = whole surface (or no surface selected). */
+  segment: { id: string; name: string } | null;
   locationText: string | null;
   homeScore: number | null;
   awayScore: number | null;

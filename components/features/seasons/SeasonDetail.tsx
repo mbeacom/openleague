@@ -45,6 +45,10 @@ interface SeasonDetailProps {
   teams: Array<{ id: string; name: string }>;
   venues: Array<{ id: string; name: string; timezone: string }>;
   surfacesByVenue: Record<string, Array<{ id: string; name: string }>>;
+  /** Active segments per surface for the game form's segment picker (006). */
+  segmentsBySurface?: Record<string, Array<{ id: string; name: string }>>;
+  /** Whole-surface display label per surface ("Full ice"). */
+  wholeLabelBySurface?: Record<string, string>;
   sport: Sport;
   canManage: boolean;
   /**
@@ -68,6 +72,8 @@ export function SeasonDetail({
   teams,
   venues,
   surfacesByVenue,
+  segmentsBySurface,
+  wholeLabelBySurface,
   sport,
   canManage,
   extraSections,
@@ -206,6 +212,8 @@ export function SeasonDetail({
         teams={teams}
         venues={venues}
         surfacesByVenue={surfacesByVenue}
+        segmentsBySurface={segmentsBySurface}
+        wholeLabelBySurface={wholeLabelBySurface}
         game={editingGame}
       />
 

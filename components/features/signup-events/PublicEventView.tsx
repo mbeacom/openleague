@@ -15,12 +15,6 @@ import { AGE_CLASSIFICATION_LABELS } from "@/lib/utils/age-level";
 import { formatCurrencyFromCents } from "@/lib/utils/currency";
 import { formatDateTime } from "@/lib/utils/date";
 
-const ICE_USAGE_LABELS: Record<string, string> = {
-  FULL_ICE: "Full ice",
-  HALF_ICE: "Half ice",
-  CROSS_ICE: "Cross-ice",
-};
-
 interface PublicEventViewProps {
   view: PublicSignupEventView;
   isAuthenticated: boolean;
@@ -229,9 +223,8 @@ export function PublicEventView({
                   {assignment.games.map((game) => (
                     <Typography key={`${assignment.registrationId}-${game.id}`} variant="body2" color="text.secondary">
                       {formatDateTime(game.startAt, event.timezone)} — {game.homeTeamName} vs {game.awayTeamName}
-                      {game.playingFor ? ` (playing for ${game.playingFor})` : ""} ·{" "}
-                      {ICE_USAGE_LABELS[game.iceUsage] ?? game.iceUsage}
-                      {game.zoneLabel ? ` — ${game.zoneLabel}` : ""}
+                      {game.playingFor ? ` (playing for ${game.playingFor})` : ""}
+                      {game.segment ? ` · ${game.segment.name}` : ""}
                     </Typography>
                   ))}
                 </Stack>
@@ -256,10 +249,9 @@ export function PublicEventView({
                       : ""}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    {formatDateTime(game.startAt, event.timezone)} – {formatDateTime(game.endAt, event.timezone)} ·{" "}
-                    {ICE_USAGE_LABELS[game.iceUsage] ?? game.iceUsage}
-                    {game.zoneLabel ? ` (${game.zoneLabel})` : ""}
+                    {formatDateTime(game.startAt, event.timezone)} – {formatDateTime(game.endAt, event.timezone)}
                     {game.surface ? ` · ${game.surface.name}` : ""}
+                    {game.segment ? ` · ${game.segment.name}` : ""}
                   </Typography>
                 </Stack>
               ))}

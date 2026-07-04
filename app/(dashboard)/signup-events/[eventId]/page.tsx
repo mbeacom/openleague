@@ -75,6 +75,18 @@ export default async function ManageSignupEventPage({
     })),
   ].sort((left, right) => left.participantName.localeCompare(right.participantName));
 
+  // Active surfaces (with their active segments) at the event's venue feed the
+  // game scheduler's surface + segment pickers (006).
+  const boardSurfaces = board.event?.venue?.surfaces ?? [];
+  const segmentsBySurface = Object.fromEntries(
+    boardSurfaces.map((surface) => [surface.id, surface.segments])
+  );
+  const wholeLabelBySurface = Object.fromEntries(
+    boardSurfaces.flatMap((surface) =>
+      surface.wholeLabel ? [[surface.id, surface.wholeLabel] as const] : []
+    )
+  );
+
   const isHostAdmin = await isSignupEventHostAdmin(userId, {
     organizationId: event.hostOrganization?.id ?? null,
     leagueId: event.hostLeague?.id ?? null,
@@ -164,7 +176,9 @@ export default async function ManageSignupEventPage({
               eventId={event.id}
               teams={board.teams.map((team) => ({ id: team.id, name: team.name }))}
               games={board.games}
-              surfaces={board.event?.venue?.surfaces ?? []}
+              surfaces={boardSurfaces.map((surface) => ({ id: surface.id, name: surface.name }))}
+              segmentsBySurface={segmentsBySurface}
+              wholeLabelBySurface={wholeLabelBySurface}
               participants={rotationParticipants}
               statsEligible={board.statsEligible}
               timeZone={event.timezone}

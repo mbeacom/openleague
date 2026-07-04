@@ -219,7 +219,7 @@ export default async function PublicRinkSchedulePage({ params, searchParams }: P
                           .map((game) => (
                             <Typography key={game.id} variant="caption" color="text.secondary">
                               {formatDateTime(game.startAt)} — {game.homeTeam.name} vs {game.awayTeam.name}
-                              {game.zoneLabel ? ` (${game.zoneLabel})` : ""}
+                              {game.segment ? ` (${game.segment.name})` : ""}
                               {game.surface ? ` · ${game.surface.name}` : ""}
                             </Typography>
                           ))}

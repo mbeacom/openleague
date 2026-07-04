@@ -359,6 +359,7 @@ export async function getSeasonDetail(seasonId: string) {
           awayTeam: { select: { id: true, name: true } },
           venue: { select: { id: true, name: true } },
           surface: { select: { id: true, name: true } },
+          segment: { select: { id: true, name: true } },
         },
         orderBy: { startAt: "asc" },
       },

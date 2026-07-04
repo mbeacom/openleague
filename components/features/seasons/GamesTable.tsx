@@ -25,14 +25,13 @@ import {
   Typography,
 } from "@mui/material";
 import PublishIcon from "@mui/icons-material/Publish";
-import type { IceUsage, SeasonGameStatus, Sport } from "@prisma/client";
+import type { SeasonGameStatus, Sport } from "@prisma/client";
 import {
   cancelSeasonGame,
   deleteDraftGame,
   publishSeasonGames,
   recordSeasonGameScore,
 } from "@/lib/actions/season-games";
-import { getSportCapabilities } from "@/lib/utils/sport-catalog";
 import { formatDateTimeInZone, isValidTimeZone } from "@/lib/utils/date";
 import type { SeasonGameView } from "@/types/seasons";
 
@@ -51,8 +50,8 @@ interface GamesTableProps {
   games: SeasonGameView[];
   /** League admin or team admin for this season — gates all mutations. */
   canManage: boolean;
-  /** Owning league/team sport — labels surface usage via the sport catalog. */
-  sport: Sport;
+  /** Owning league/team sport — kept for parity with GameForm; display is segment-based (006). */
+  sport?: Sport;
   /** Opens the shared GameForm dialog in edit mode (wired by SeasonDetail). */
   onEditGame?: (game: SeasonGameView) => void;
 }
@@ -71,9 +70,8 @@ const formatEndTime = (date: Date, timeZone: string) =>
  * Cancel keeps history (never deletes); only drafts can be hard-deleted; the
  * score dialog surfaces the server's age-gating message verbatim (FR-040).
  */
-export function GamesTable({ seasonId, games, canManage, sport, onEditGame }: GamesTableProps) {
+export function GamesTable({ seasonId, games, canManage, onEditGame }: GamesTableProps) {
   const router = useRouter();
-  const capabilities = getSportCapabilities(sport);
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<{
     severity: "success" | "error" | "warning";
@@ -90,13 +88,8 @@ export function GamesTable({ seasonId, games, canManage, sport, onEditGame }: Ga
   );
   const draftCount = sorted.filter((game) => game.status === "DRAFT").length;
 
-  const usageLabel = (usage: IceUsage | null) =>
-    usage
-      ? (capabilities.surfaceUsageOptions?.find((option) => option.value === usage)?.label ?? null)
-      : null;
-
   const whereText = (game: SeasonGameView) =>
-    [game.venue?.name ?? game.locationText, game.surface?.name, usageLabel(game.surfaceUsage), game.zoneLabel]
+    [game.venue?.name ?? game.locationText, game.surface?.name, game.segment?.name]
       .filter(Boolean)
       .join(" · ") || "TBD";
 
