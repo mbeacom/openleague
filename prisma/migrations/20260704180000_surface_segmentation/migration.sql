@@ -6,7 +6,9 @@ ALTER TABLE "Event" ADD COLUMN     "conflictOverriddenAt" TIMESTAMP(3),
 ADD COLUMN     "conflictOverriddenById" TEXT;
 
 -- AlterTable
-ALTER TABLE "practice_sessions" ADD COLUMN     "segmentId" TEXT,
+ALTER TABLE "practice_sessions" ADD COLUMN     "conflictOverriddenAt" TIMESTAMP(3),
+ADD COLUMN     "conflictOverriddenById" TEXT,
+ADD COLUMN     "segmentId" TEXT,
 ADD COLUMN     "startAt" TIMESTAMP(3),
 ADD COLUMN     "surfaceId" TEXT,
 ADD COLUMN     "venueId" TEXT;
@@ -88,6 +90,9 @@ ALTER TABLE "practice_sessions" ADD CONSTRAINT "practice_sessions_surfaceId_fkey
 
 -- AddForeignKey
 ALTER TABLE "practice_sessions" ADD CONSTRAINT "practice_sessions_segmentId_fkey" FOREIGN KEY ("segmentId") REFERENCES "surface_segments"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "practice_sessions" ADD CONSTRAINT "practice_sessions_conflictOverriddenById_fkey" FOREIGN KEY ("conflictOverriddenById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "surface_segments" ADD CONSTRAINT "surface_segments_surfaceId_fkey" FOREIGN KEY ("surfaceId") REFERENCES "ice_surfaces"("id") ON DELETE CASCADE ON UPDATE CASCADE;

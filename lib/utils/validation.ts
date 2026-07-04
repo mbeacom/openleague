@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { isValidTimeZone } from "@/lib/utils/date";
+import { MIN_SEGMENT_DIMENSION } from "@/lib/utils/segment-geometry";
 
 /**
  * Optional IANA timezone string (e.g. "America/New_York"). Validated against the
@@ -1770,6 +1771,13 @@ const normalizedCoordinate = z.coerce
   .min(0, "Coordinates must be between 0 and 1")
   .max(1, "Coordinates must be between 0 and 1");
 
+// Normalized width/height: zero-size (invisible, unclickable) rects are
+// rejected, matching the floor `normalizeGeometry` clamps drawn zones to.
+const normalizedDimension = z.coerce
+  .number()
+  .min(MIN_SEGMENT_DIMENSION, `Dimensions must be at least ${MIN_SEGMENT_DIMENSION}`)
+  .max(1, "Dimensions must be at most 1");
+
 const rotationDegrees = z.coerce
   .number()
   .min(0, "Rotation must be at least 0 degrees")
@@ -1779,8 +1787,8 @@ const rotationDegrees = z.coerce
 export const segmentGeometrySchema = z.object({
   x: normalizedCoordinate,
   y: normalizedCoordinate,
-  w: normalizedCoordinate,
-  h: normalizedCoordinate,
+  w: normalizedDimension,
+  h: normalizedDimension,
   rotation: rotationDegrees,
 });
 

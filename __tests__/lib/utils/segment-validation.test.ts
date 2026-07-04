@@ -29,8 +29,14 @@ describe("segmentGeometrySchema", () => {
     expect(result.success).toBe(true);
   });
 
-  it("accepts boundary values (0 and 1, rotation just below 360)", () => {
-    const result = segmentGeometrySchema.safeParse({ x: 1, y: 1, w: 0, h: 0, rotation: 359.99 });
+  it("accepts boundary values (coordinates at 1, dimensions at the 0.05 minimum, rotation just below 360)", () => {
+    const result = segmentGeometrySchema.safeParse({
+      x: 1,
+      y: 1,
+      w: 0.05,
+      h: 0.05,
+      rotation: 359.99,
+    });
     expect(result.success).toBe(true);
   });
 
@@ -53,6 +59,10 @@ describe("segmentGeometrySchema", () => {
     ["y above 1", { ...geometry, y: 1.01 }],
     ["w above 1", { ...geometry, w: 1.5 }],
     ["h below 0", { ...geometry, h: -1 }],
+    ["w of 0 (zero-size rects are invalid)", { ...geometry, w: 0 }],
+    ["h of 0 (zero-size rects are invalid)", { ...geometry, h: 0 }],
+    ["w below the 0.05 minimum", { ...geometry, w: 0.04 }],
+    ["h below the 0.05 minimum", { ...geometry, h: 0.04 }],
   ])("rejects %s", (_label, input) => {
     expect(segmentGeometrySchema.safeParse(input).success).toBe(false);
   });
@@ -302,6 +312,17 @@ describe("saveVenueLayoutSchema", () => {
     const result = saveVenueLayoutSchema.safeParse({
       venueId: VENUE_ID,
       layout: { surfaces: [{ ...surfaceEntry, rotation: 360 }], labels: [] },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it.each([
+    ["a zero width", { w: 0 }],
+    ["a height below the 0.05 minimum", { h: 0.04 }],
+  ])("rejects a surface entry with %s", (_label, override) => {
+    const result = saveVenueLayoutSchema.safeParse({
+      venueId: VENUE_ID,
+      layout: { surfaces: [{ ...surfaceEntry, ...override }], labels: [] },
     });
     expect(result.success).toBe(false);
   });

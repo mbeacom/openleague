@@ -25,6 +25,7 @@ type VenueContext = {
   id: string;
   organizationId: string | null;
   slug: string | null;
+  timezone: string;
 };
 
 /**
@@ -81,6 +82,8 @@ export async function getVenueScheduleAdminData(
 ): Promise<
   ActionResult<{
     venueId: string;
+    /** IANA zone the venue's schedule is displayed in. */
+    timezone: string;
     surfaces: Array<{
       id: string;
       name: string;
@@ -110,7 +113,7 @@ export async function getVenueScheduleAdminData(
 > {
   try {
     await requireVenueScheduleManager(organizationId, venueId);
-    await ensureVenueContext(organizationId, venueId);
+    const venue = await ensureVenueContext(organizationId, venueId);
 
     const [surfaces, operatingHours, scheduleBlocks] = await Promise.all([
       prisma.iceSurface.findMany({
@@ -152,7 +155,10 @@ export async function getVenueScheduleAdminData(
       }),
     ]);
 
-    return { success: true, data: { venueId, surfaces, operatingHours, scheduleBlocks } };
+    return {
+      success: true,
+      data: { venueId, timezone: venue.timezone, surfaces, operatingHours, scheduleBlocks },
+    };
   } catch (error) {
     if (error instanceof Error && error.message.includes("NEXT_REDIRECT")) {
       throw error;
@@ -755,6 +761,7 @@ async function ensureVenueContext(organizationId: string, venueId: string): Prom
       id: true,
       organizationId: true,
       slug: true,
+      timezone: true,
     },
   });
 

@@ -23,6 +23,7 @@ import {
 import AddIcon from "@mui/icons-material/Add";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import { TZDate } from "@date-fns/tz";
 import {
   createScheduleBlock,
   getVenueScheduleBoard,
@@ -33,7 +34,7 @@ import {
   VENUE_SCHEDULE_ACTIVITY_TYPES,
   type VenueScheduleBlockInput,
 } from "@/lib/utils/validation";
-import { formatDateTimeLocal } from "@/lib/utils/date";
+import { formatDateTimeLocalInput, parseDateTimeLocalToUtc } from "@/lib/utils/date";
 import type { BookingConflict, VenueBookingView } from "@/types/segments";
 
 /** Surface option (with its active segments) for the block dialogs. */
@@ -72,7 +73,9 @@ export interface ScheduleBoardBlock {
 interface VenueScheduleBoardProps {
   organizationId: string;
   venueId: string;
-  /** Local-midnight start of the initially displayed week (server-computed). */
+  /** IANA zone all board days and times render in (the venue's timezone). */
+  timeZone: string;
+  /** Venue-timezone Sunday-midnight start of the initially displayed week (server-computed). */
   initialFrom: Date;
   initialBookings: VenueBookingView[];
   initialSurfaces: ScheduleBoardSurface[];
@@ -94,18 +97,40 @@ const SOURCE_CHIPS: Record<
   practice: { label: "Practice", color: "success" },
 };
 
-function addDays(date: Date, days: number): Date {
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
-  return next;
+/**
+ * Add whole days in the venue's timezone, preserving the midnight anchor
+ * across DST transitions (a fixed-milliseconds step would drift by an hour).
+ */
+function addDaysInZone(date: Date, days: number, timeZone: string): Date {
+  const zoned = new TZDate(date.getTime(), timeZone);
+  return new Date(
+    new TZDate(
+      zoned.getFullYear(),
+      zoned.getMonth(),
+      zoned.getDate() + days,
+      zoned.getHours(),
+      zoned.getMinutes(),
+      zoned.getSeconds(),
+      timeZone
+    ).getTime()
+  );
 }
 
-function formatTime(date: Date): string {
-  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+/** YYYY-MM-DD calendar-day key of an instant in the venue's timezone. */
+function dateKeyInZone(date: Date, timeZone: string): string {
+  const zoned = new TZDate(date.getTime(), timeZone);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${zoned.getFullYear()}-${pad(zoned.getMonth() + 1)}-${pad(zoned.getDate())}`;
 }
 
-function formatTimeRange(startAt: Date, endAt: Date | null): string {
-  return endAt ? `${formatTime(startAt)} – ${formatTime(endAt)}` : formatTime(startAt);
+function formatTime(date: Date, timeZone: string): string {
+  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", timeZone });
+}
+
+function formatTimeRange(startAt: Date, endAt: Date | null, timeZone: string): string {
+  return endAt
+    ? `${formatTime(startAt, timeZone)} – ${formatTime(endAt, timeZone)}`
+    : formatTime(startAt, timeZone);
 }
 
 /** "OPEN_SKATE" -> "Open skate" for enum selects and conflict lines. */
@@ -136,6 +161,7 @@ function extractConflicts(details: unknown): BookingConflict[] | null {
 export function VenueScheduleBoard({
   organizationId,
   venueId,
+  timeZone,
   initialFrom,
   initialBookings,
   initialSurfaces,
@@ -158,27 +184,25 @@ export function VenueScheduleBoard({
   );
   const blocksById = useMemo(() => new Map(blocks.map((block) => [block.id, block])), [blocks]);
 
-  // Bucket by calendar day (bucket dates are true local midnights, so DST
-  // shifts don't mis-file rows). Rows arrive sorted by startAt, and stable
-  // pushes keep each day chronological. Bookings that started before the
-  // window (overlapping in from last week) clamp into the first day.
+  // Bucket by the booking's YYYY-MM-DD calendar day in the VENUE timezone,
+  // so viewers in other zones see rows filed under the rink's wall-clock day
+  // (and DST shifts can't mis-file rows). Rows arrive sorted by startAt, and
+  // stable pushes keep each day chronological. Bookings that started before
+  // the window (overlapping in from last week) clamp into the first day.
   const days = useMemo(() => {
     const buckets = Array.from({ length: 7 }, (_, index) => ({
-      date: addDays(weekStart, index),
+      date: addDaysInZone(weekStart, index, timeZone),
       bookings: [] as VenueBookingView[],
     }));
+    const bucketsByKey = new Map(
+      buckets.map((bucket) => [dateKeyInZone(bucket.date, timeZone), bucket])
+    );
     for (const booking of bookings) {
-      let index = 0;
-      for (let i = 6; i >= 0; i -= 1) {
-        if (booking.startAt >= buckets[i].date) {
-          index = i;
-          break;
-        }
-      }
-      buckets[index].bookings.push(booking);
+      const bucket = bucketsByKey.get(dateKeyInZone(booking.startAt, timeZone)) ?? buckets[0];
+      bucket.bookings.push(booking);
     }
     return buckets;
-  }, [weekStart, bookings]);
+  }, [weekStart, bookings, timeZone]);
 
   const loadWeek = (nextStart: Date) => {
     startTransition(async () => {
@@ -187,7 +211,7 @@ export function VenueScheduleBoard({
         organizationId,
         venueId,
         from: nextStart,
-        to: addDays(nextStart, 7),
+        to: addDaysInZone(nextStart, 7, timeZone),
       });
       if (!result.success) {
         setLoadError(result.error);
@@ -200,10 +224,16 @@ export function VenueScheduleBoard({
     });
   };
 
-  const weekLabel = `${weekStart.toLocaleDateString([], { month: "short", day: "numeric" })} – ${addDays(
-    weekStart,
-    6
-  ).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" })}`;
+  const weekLabel = `${weekStart.toLocaleDateString([], {
+    month: "short",
+    day: "numeric",
+    timeZone,
+  })} – ${addDaysInZone(weekStart, 6, timeZone).toLocaleDateString([], {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone,
+  })}`;
 
   return (
     <Card aria-labelledby="venue-schedule-board-heading">
@@ -222,7 +252,7 @@ export function VenueScheduleBoard({
             <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
               <IconButton
                 aria-label="Previous week"
-                onClick={() => loadWeek(addDays(weekStart, -7))}
+                onClick={() => loadWeek(addDaysInZone(weekStart, -7, timeZone))}
                 disabled={isLoading}
                 sx={{ minWidth: 44, minHeight: 44 }}
               >
@@ -233,7 +263,7 @@ export function VenueScheduleBoard({
               </Typography>
               <IconButton
                 aria-label="Next week"
-                onClick={() => loadWeek(addDays(weekStart, 7))}
+                onClick={() => loadWeek(addDaysInZone(weekStart, 7, timeZone))}
                 disabled={isLoading}
                 sx={{ minWidth: 44, minHeight: 44 }}
               >
@@ -261,7 +291,12 @@ export function VenueScheduleBoard({
                   color="text.secondary"
                   sx={{ textTransform: "uppercase", letterSpacing: 0.5 }}
                 >
-                  {day.date.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })}
+                  {day.date.toLocaleDateString([], {
+                    weekday: "short",
+                    month: "short",
+                    day: "numeric",
+                    timeZone,
+                  })}
                 </Typography>
                 {day.bookings.length > 0 ? (
                   <Stack spacing={1} sx={{ mt: 1 }}>
@@ -286,7 +321,7 @@ export function VenueScheduleBoard({
                             variant="body2"
                             sx={{ fontVariantNumeric: "tabular-nums", minWidth: { sm: 148 } }}
                           >
-                            {formatTimeRange(booking.startAt, booking.endAt)}
+                            {formatTimeRange(booking.startAt, booking.endAt, timeZone)}
                           </Typography>
                           <Typography variant="body2" fontWeight={600}>
                             {booking.title}
@@ -328,6 +363,7 @@ export function VenueScheduleBoard({
         onClose={() => setDialog({ open: false, block: null })}
         organizationId={organizationId}
         venueId={venueId}
+        timeZone={timeZone}
         surfaces={surfaces}
         block={dialog.block}
         onSaved={() => loadWeek(weekStart)}
@@ -341,6 +377,8 @@ interface BlockDialogProps {
   onClose: () => void;
   organizationId: string;
   venueId: string;
+  /** IANA zone the dialog's wall-clock times are entered/displayed in. */
+  timeZone: string;
   surfaces: ScheduleBoardSurface[];
   /** null = create a new block. */
   block: ScheduleBoardBlock | null;
@@ -364,6 +402,7 @@ function BlockDialogBody({
   onClose,
   organizationId,
   venueId,
+  timeZone,
   surfaces,
   block,
   onSaved,
@@ -404,9 +443,11 @@ function BlockDialogBody({
 
   const handleSubmit = (formData: FormData) => {
     const text = (name: string) => String(formData.get(name) ?? "").trim();
-    const startsAt = new Date(text("startsAt"));
-    const endsAt = new Date(text("endsAt"));
-    if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime())) {
+    // Wall-clock inputs are interpreted in the VENUE's timezone, matching how
+    // the board renders every booking.
+    const startsAt = parseDateTimeLocalToUtc(text("startsAt"), timeZone);
+    const endsAt = parseDateTimeLocalToUtc(text("endsAt"), timeZone);
+    if (!startsAt || !endsAt) {
       setError("Enter a valid start and end time.");
       return;
     }
@@ -494,8 +535,9 @@ function BlockDialogBody({
                       day: "numeric",
                       hour: "numeric",
                       minute: "2-digit",
+                      timeZone,
                     })}
-                    {conflict.endAt ? ` – ${formatTime(conflict.endAt)}` : ""}
+                    {conflict.endAt ? ` – ${formatTime(conflict.endAt, timeZone)}` : ""}
                   </Typography>
                 ))}
                 <Typography variant="body2" sx={{ mt: 1 }}>
@@ -574,7 +616,8 @@ function BlockDialogBody({
                 type="datetime-local"
                 required
                 fullWidth
-                defaultValue={block ? formatDateTimeLocal(block.startsAt) : ""}
+                defaultValue={block ? formatDateTimeLocalInput(block.startsAt, timeZone) : ""}
+                helperText={`Times are in ${timeZone}`}
                 slotProps={{ inputLabel: { shrink: true } }}
               />
               <TextField
@@ -583,7 +626,8 @@ function BlockDialogBody({
                 type="datetime-local"
                 required
                 fullWidth
-                defaultValue={block ? formatDateTimeLocal(block.endsAt) : ""}
+                defaultValue={block ? formatDateTimeLocalInput(block.endsAt, timeZone) : ""}
+                helperText={`Times are in ${timeZone}`}
                 slotProps={{ inputLabel: { shrink: true } }}
               />
             </Stack>

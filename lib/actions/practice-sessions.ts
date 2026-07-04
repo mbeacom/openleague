@@ -20,6 +20,7 @@ import {
     type SharePracticeSessionInput,
 } from "@/lib/utils/validation";
 import { findBookingConflicts } from "@/lib/utils/availability";
+import { canUserAccessVenue } from "@/lib/actions/venues";
 import type { BookingConflict } from "@/types/segments";
 import type { PlayData } from "@/types/practice-planner";
 
@@ -128,11 +129,14 @@ function normalizePracticeAttachment(validated: {
 }
 
 /**
- * Verify attachment references: the venue exists, the surface is active and
- * belongs to the venue, and the segment is active and belongs to the surface
- * (same checks as season-games, 006 FR). Returns an error message or null.
+ * Verify attachment references: the venue is active and accessible to this
+ * user (visibility rules — public, or scoped to a team/league the user
+ * belongs to), the surface is active and belongs to the venue, and the
+ * segment is active and belongs to the surface (same checks as events and
+ * season-games, 006 FR). Returns an error message or null.
  */
 async function validatePracticeAttachment(
+    userId: string,
     attachment: PracticeAttachment
 ): Promise<string | null> {
     const { venueId, surfaceId, segmentId } = attachment;
@@ -140,10 +144,10 @@ async function validatePracticeAttachment(
 
     const venue = await prisma.venue.findUnique({
         where: { id: venueId },
-        select: { id: true },
+        select: { id: true, isActive: true, visibility: true, teamId: true, leagueId: true },
     });
-    if (!venue) {
-        return "Venue not found";
+    if (!venue || !venue.isActive || !(await canUserAccessVenue(userId, venue))) {
+        return "Venue not found or unavailable";
     }
 
     if (surfaceId) {
@@ -223,7 +227,7 @@ export async function createPracticeSession(
 
         // Optional venue attachment (FR-019, feature 006)
         const attachment = normalizePracticeAttachment(validated);
-        const attachmentError = await validatePracticeAttachment(attachment);
+        const attachmentError = await validatePracticeAttachment(userId, attachment);
         if (attachmentError) {
             return { success: false, error: attachmentError };
         }
@@ -266,9 +270,8 @@ export async function createPracticeSession(
         }
 
         // Venue availability (FR-019): warn on conflicts and require an
-        // explicit override to proceed. PracticeSession has no
-        // conflictOverriddenBy/At columns (unlike SeasonGame/EventGame), so
-        // the override is applied without being recorded on the row.
+        // explicit override to proceed; the override is recorded on the row
+        // (conflictOverriddenBy/At), matching SeasonGame/EventGame.
         const conflicts = await findPracticeConflicts(attachment, validated.duration);
         if (conflicts.length > 0 && !validated.overrideConflicts) {
             return practiceConflictFailure(conflicts);
@@ -288,6 +291,10 @@ export async function createPracticeSession(
                 surfaceId: attachment.surfaceId,
                 segmentId: attachment.segmentId,
                 startAt: attachment.startAt,
+                ...(conflictsOverridden && {
+                    conflictOverriddenById: userId,
+                    conflictOverriddenAt: new Date(),
+                }),
                 plays: validated.plays && validated.plays.length > 0 ? {
                     create: validated.plays.map(play => ({
                         playId: play.playId,
@@ -361,7 +368,7 @@ export async function updatePracticeSession(
         }
 
         // Authorize against the session's actual teamId
-        await requireTeamAdmin(existingSession.teamId);
+        const userId = await requireTeamAdmin(existingSession.teamId);
 
         // Verify the teamId in the request matches the session's actual teamId
         if (existingSession.teamId !== validated.teamId) {
@@ -376,16 +383,15 @@ export async function updatePracticeSession(
         // omitting/clearing venueId detaches the practice (clears surface,
         // segment, and startAt — no availability footprint).
         const attachment = normalizePracticeAttachment(validated);
-        const attachmentError = await validatePracticeAttachment(attachment);
+        const attachmentError = await validatePracticeAttachment(userId, attachment);
         if (attachmentError) {
             return { success: false, error: attachmentError };
         }
 
         // Venue availability (FR-019): warn on conflicts and require an
-        // explicit override to proceed, excluding this practice's own slot.
-        // PracticeSession has no conflictOverriddenBy/At columns (unlike
-        // SeasonGame/EventGame), so the override is applied without being
-        // recorded on the row.
+        // explicit override to proceed, excluding this practice's own slot;
+        // the override is recorded on the row (conflictOverriddenBy/At),
+        // matching SeasonGame/EventGame.
         const conflicts = await findPracticeConflicts(
             attachment,
             validated.duration,
@@ -451,6 +457,12 @@ export async function updatePracticeSession(
                     surfaceId: attachment.surfaceId,
                     segmentId: attachment.segmentId,
                     startAt: attachment.startAt,
+                    // The conflict check re-ran above whenever a venue is
+                    // attached (and a detached practice has no footprint), so
+                    // always write the override audit fields: stale metadata
+                    // must not survive a reschedule to a clean slot.
+                    conflictOverriddenById: conflictsOverridden ? userId : null,
+                    conflictOverriddenAt: conflictsOverridden ? new Date() : null,
                     plays: validated.plays && validated.plays.length > 0 ? {
                         create: validated.plays.map(play => ({
                             playId: play.playId,

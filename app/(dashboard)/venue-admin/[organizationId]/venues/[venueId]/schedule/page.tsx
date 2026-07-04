@@ -1,9 +1,11 @@
 import { notFound } from "next/navigation";
+import { TZDate } from "@date-fns/tz";
 import { Container, Stack, Typography } from "@mui/material";
 import {
   getVenueScheduleAdminData,
   getVenueScheduleBoard,
 } from "@/lib/actions/venue-schedules";
+import { resolveTimeZone } from "@/lib/utils/date";
 import { IceSurfaceManager, OperatingHoursEditor } from "@/components/features/venue-admin";
 import { VenueScheduleBoard } from "@/components/features/venue-admin/VenueScheduleBoard";
 
@@ -40,14 +42,36 @@ export default async function VenueSchedulePage({ params }: VenueSchedulePagePro
 
   const surfaces = result.data.surfaces as SurfaceSummary[];
   const operatingHours = result.data.operatingHours as OperatingHourSummary[];
+  const timeZone = resolveTimeZone(result.data.timezone);
 
-  // Initial board window: the current week, starting Sunday at local midnight
-  // (the client owns week navigation from here).
-  const weekStart = new Date();
-  weekStart.setHours(0, 0, 0, 0);
-  weekStart.setDate(weekStart.getDate() - weekStart.getDay());
-  const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekEnd.getDate() + 7);
+  // Initial board window: the current week, starting Sunday at midnight in
+  // the VENUE's timezone — not the server's local zone (UTC on Vercel) — so
+  // the board's days line up with the rink's wall clock. The client owns week
+  // navigation from here, stepping in the same zone.
+  const nowZoned = new TZDate(new Date().getTime(), timeZone);
+  const weekStart = new Date(
+    new TZDate(
+      nowZoned.getFullYear(),
+      nowZoned.getMonth(),
+      nowZoned.getDate() - nowZoned.getDay(),
+      0,
+      0,
+      0,
+      timeZone
+    ).getTime()
+  );
+  const weekStartZoned = new TZDate(weekStart.getTime(), timeZone);
+  const weekEnd = new Date(
+    new TZDate(
+      weekStartZoned.getFullYear(),
+      weekStartZoned.getMonth(),
+      weekStartZoned.getDate() + 7,
+      0,
+      0,
+      0,
+      timeZone
+    ).getTime()
+  );
 
   const board = await getVenueScheduleBoard({
     organizationId,
@@ -67,6 +91,7 @@ export default async function VenueSchedulePage({ params }: VenueSchedulePagePro
         <VenueScheduleBoard
           organizationId={organizationId}
           venueId={venueId}
+          timeZone={timeZone}
           initialFrom={weekStart}
           initialBookings={board.success ? board.data.bookings : []}
           initialSurfaces={board.success ? board.data.surfaces : []}

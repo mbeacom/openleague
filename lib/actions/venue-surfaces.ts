@@ -57,6 +57,12 @@ const getSurfaceSegmentationSchema = z.object({
 const FUTURE_BOOKING_HORIZON_MS = 366 * 24 * 60 * 60 * 1000;
 
 /**
+ * Cap on expanded occurrences per recurring block in the pair-overlap
+ * analysis (matches venue-schedules' MAX_RECURRENCE_CONFLICT_OCCURRENCES).
+ */
+const MAX_RECURRENCE_CONFLICT_OCCURRENCES = 8;
+
+/**
  * Friendly, user-facing failure raised inside actions; its message is safe to
  * return to the client (unlike arbitrary thrown errors, which map to a
  * generic fallback).
@@ -712,11 +718,15 @@ async function requireSegmentManager(segmentId: string): Promise<SegmentContext>
  * PracticeSession). Calendar Events are always venue-wide — they can never
  * reference a segment, so they never pin one. Inclusion filters mirror the
  * availability engine; recurring blocks are expanded and only future
- * occurrences count (each block reported once, at its next occurrence).
+ * occurrences count, capped at `maxOccurrencesPerBlock`. The default of 1
+ * (each block reported once, at its next occurrence) is sufficient for pure
+ * existence guards; the pair-overlap analysis passes a higher cap because
+ * later occurrences can overlap where the first does not.
  */
 async function findFutureSegmentBookings(
   segmentIds: string[],
-  now: Date = new Date()
+  now: Date = new Date(),
+  maxOccurrencesPerBlock: number = 1
 ): Promise<VenueBookingView[]> {
   if (segmentIds.length === 0) return [];
   const horizon = new Date(now.getTime() + FUTURE_BOOKING_HORIZON_MS);
@@ -824,18 +834,18 @@ async function findFutureSegmentBookings(
   }
 
   for (const block of blocks) {
-    const occurrence = nextFutureBlockOccurrence(block, now, horizon);
-    if (!occurrence) continue;
-    bookings.push({
-      id: block.id,
-      source: "scheduleBlock",
-      title: block.title,
-      startAt: occurrence.startAt,
-      endAt: occurrence.endAt,
-      surfaceId: block.surfaceId,
-      segmentId: block.segmentId,
-      segmentName: block.segment?.name ?? null,
-    });
+    for (const occurrence of futureBlockOccurrences(block, now, horizon, maxOccurrencesPerBlock)) {
+      bookings.push({
+        id: block.id,
+        source: "scheduleBlock",
+        title: block.title,
+        startAt: occurrence.startAt,
+        endAt: occurrence.endAt,
+        surfaceId: block.surfaceId,
+        segmentId: block.segmentId,
+        segmentName: block.segment?.name ?? null,
+      });
+    }
   }
 
   for (const practice of practices) {
@@ -856,11 +866,11 @@ async function findFutureSegmentBookings(
 }
 
 /**
- * The first occurrence of a block that ends after `now` (non-recurring blocks
- * are their own single occurrence). Unsupported recurrence rules fall back to
- * the base range.
+ * The first `limit` occurrences of a block that end after `now`
+ * (non-recurring blocks are their own single occurrence). Unsupported
+ * recurrence rules fall back to the base range.
  */
-function nextFutureBlockOccurrence(
+function futureBlockOccurrences(
   block: {
     startsAt: Date;
     endsAt: Date;
@@ -868,10 +878,11 @@ function nextFutureBlockOccurrence(
     recurrenceEndDate: Date | null;
   },
   now: Date,
-  horizon: Date
-): { startAt: Date; endAt: Date } | null {
+  horizon: Date,
+  limit: number
+): Array<{ startAt: Date; endAt: Date }> {
   if (!block.recurrenceRule) {
-    return block.endsAt > now ? { startAt: block.startsAt, endAt: block.endsAt } : null;
+    return block.endsAt > now ? [{ startAt: block.startsAt, endAt: block.endsAt }] : [];
   }
   try {
     const occurrences = expandRecurrenceWindow(
@@ -884,17 +895,19 @@ function nextFutureBlockOccurrence(
       now,
       horizon
     );
-    return occurrences[0] ?? null;
+    return occurrences.slice(0, limit);
   } catch {
-    return block.endsAt > now ? { startAt: block.startsAt, endAt: block.endsAt } : null;
+    return block.endsAt > now ? [{ startAt: block.startsAt, endAt: block.endsAt }] : [];
   }
 }
 
 /**
  * Future bookings that would become conflicts if the given coexistence pairs
  * were removed: for each removed pair, bookings on the two segments whose
- * times overlap each other (FR-007). Returns a flat, deduped list sorted by
- * start time.
+ * times overlap each other (FR-007). Recurring blocks are expanded (capped)
+ * because a block's later occurrences can overlap another booking even when
+ * its first future occurrence does not. Returns a flat, deduped list sorted
+ * by start time.
  */
 async function findNewlyConflictingBookings(
   removedPairs: CoexistencePair[],
@@ -905,7 +918,11 @@ async function findNewlyConflictingBookings(
   const segmentIds = [
     ...new Set(removedPairs.flatMap((pair) => [pair.segmentAId, pair.segmentBId])),
   ];
-  const bookings = await findFutureSegmentBookings(segmentIds, now);
+  const bookings = await findFutureSegmentBookings(
+    segmentIds,
+    now,
+    MAX_RECURRENCE_CONFLICT_OCCURRENCES
+  );
 
   const bySegment = new Map<string, VenueBookingView[]>();
   for (const booking of bookings) {

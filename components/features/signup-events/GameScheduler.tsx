@@ -115,6 +115,13 @@ export function GameScheduler({
   const surfaceSegments = surfaceId ? (segmentsBySurface[surfaceId] ?? []) : [];
   const wholeSurfaceLabel = (surfaceId && wholeLabelBySurface[surfaceId]) || "Whole surface";
 
+  // Any edit invalidates a pending conflict override: "Schedule anyway" must
+  // resubmit exactly the payload that was warned about (matching EventForm).
+  const clearStaleConflicts = () => {
+    setConflicts(null);
+    setPendingPayload(null);
+  };
+
   const openRotation = (game: Game) => {
     setRotationTarget(game);
     setRotationDraft(
@@ -331,14 +338,30 @@ export function GameScheduler({
                 </Alert>
               ) : null}
               <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-                <TextField select name="homeTeamId" label="Home team" required fullWidth defaultValue="">
+                <TextField
+                  select
+                  name="homeTeamId"
+                  label="Home team"
+                  required
+                  fullWidth
+                  defaultValue=""
+                  onChange={clearStaleConflicts}
+                >
                   {teams.map((team) => (
                     <MenuItem key={team.id} value={team.id}>
                       {team.name}
                     </MenuItem>
                   ))}
                 </TextField>
-                <TextField select name="awayTeamId" label="Away team" required fullWidth defaultValue="">
+                <TextField
+                  select
+                  name="awayTeamId"
+                  label="Away team"
+                  required
+                  fullWidth
+                  defaultValue=""
+                  onChange={clearStaleConflicts}
+                >
                   {teams.map((team) => (
                     <MenuItem key={team.id} value={team.id}>
                       {team.name}
@@ -355,6 +378,7 @@ export function GameScheduler({
                   fullWidth
                   defaultValue=""
                   helperText={`Times are in ${tz}`}
+                  onChange={clearStaleConflicts}
                   slotProps={{ inputLabel: { shrink: true } }}
                 />
                 <TextField
@@ -365,6 +389,7 @@ export function GameScheduler({
                   fullWidth
                   defaultValue=""
                   helperText={`Times are in ${tz}`}
+                  onChange={clearStaleConflicts}
                   slotProps={{ inputLabel: { shrink: true } }}
                 />
               </Stack>
@@ -378,6 +403,7 @@ export function GameScheduler({
                     setSurfaceId(event.target.value);
                     // Segments belong to a surface — reset on change.
                     setSegmentId("");
+                    clearStaleConflicts();
                   }}
                 >
                   <MenuItem value="">No surface</MenuItem>
@@ -393,7 +419,10 @@ export function GameScheduler({
                     label="Segment (optional)"
                     fullWidth
                     value={segmentId}
-                    onChange={(event) => setSegmentId(event.target.value)}
+                    onChange={(event) => {
+                      setSegmentId(event.target.value);
+                      clearStaleConflicts();
+                    }}
                   >
                     <MenuItem value="">{wholeSurfaceLabel}</MenuItem>
                     {surfaceSegments.map((segment) => (
@@ -404,7 +433,13 @@ export function GameScheduler({
                   </TextField>
                 ) : null}
               </Stack>
-              <TextField name="name" label="Game label (optional)" placeholder="Game 1" slotProps={{ htmlInput: { maxLength: 100 } }} />
+              <TextField
+                name="name"
+                label="Game label (optional)"
+                placeholder="Game 1"
+                onChange={clearStaleConflicts}
+                slotProps={{ htmlInput: { maxLength: 100 } }}
+              />
             </Stack>
           </DialogContent>
           <DialogActions>

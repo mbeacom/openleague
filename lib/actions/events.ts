@@ -291,10 +291,12 @@ export async function updateEvent(
         venueId,
         opponent: validated.opponent || null,
         notes: validated.notes || null,
-        ...(conflictsOverridden && {
-          conflictOverriddenById: currentUserId,
-          conflictOverriddenAt: new Date(),
-        }),
+        // The conflict check re-ran above whenever it could (venue + endAt);
+        // without a venue or an end time the event has no bookable footprint,
+        // so no conflicts are possible either way. Always write the override
+        // audit fields: stale metadata must not survive a conflict-free save.
+        conflictOverriddenById: conflictsOverridden ? currentUserId : null,
+        conflictOverriddenAt: conflictsOverridden ? new Date() : null,
       },
       select: {
         id: true,

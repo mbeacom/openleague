@@ -39,6 +39,7 @@ model User {
   seasonGameConflictOverrides  SeasonGame[]             @relation("SeasonGameConflictOverride")
   eventGameConflictOverrides   EventGame[]              @relation("EventGameConflictOverride")
   eventConflictOverrides       Event[]                  @relation("EventConflictOverride")
+  practiceConflictOverrides    PracticeSession[]        @relation("PracticeConflictOverride")
   createdGameProposals         GameProposal[]           @relation("GameProposalCreator")
   gameProposalEntries          GameProposalEntry[]      @relation("GameProposalActor")
   placementDecisions           PlacementDecision[]      @relation("PlacementDecider")
@@ -606,6 +607,12 @@ model PracticeSession {
   segmentId String?
   segment   SurfaceSegment? @relation(fields: [segmentId], references: [id], onDelete: SetNull)
   startAt   DateTime?
+
+  // Audit trail for explicitly overridden venue booking conflicts (FR-011),
+  // matching SeasonGame/EventGame/Event. Cleared on conflict-free saves.
+  conflictOverriddenById String?
+  conflictOverriddenBy   User?     @relation("PracticeConflictOverride", fields: [conflictOverriddenById], references: [id], onDelete: SetNull)
+  conflictOverriddenAt   DateTime?
 
   plays PracticeSessionPlay[]
 

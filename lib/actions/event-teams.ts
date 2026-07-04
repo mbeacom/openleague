@@ -361,10 +361,6 @@ export async function upsertEventGame(
       surfaceId,
       segmentId,
       notes: validated.notes || null,
-      ...(conflictsOverridden && {
-        conflictOverriddenById: userId,
-        conflictOverriddenAt: new Date(),
-      }),
     };
 
     let gameId: string;
@@ -376,11 +372,29 @@ export async function upsertEventGame(
       if (!existing) {
         return { success: false, error: "Game not found for this event" };
       }
-      await prisma.eventGame.update({ where: { id: existing.id }, data });
+      await prisma.eventGame.update({
+        where: { id: existing.id },
+        data: {
+          ...data,
+          // The conflict check re-ran above whenever the event has a venue
+          // (no venue means no booking footprint), so always write the
+          // override audit fields: stale metadata must not survive a
+          // reschedule to a clean slot.
+          conflictOverriddenById: conflictsOverridden ? userId : null,
+          conflictOverriddenAt: conflictsOverridden ? new Date() : null,
+        },
+      });
       gameId = existing.id;
     } else {
       const game = await prisma.eventGame.create({
-        data: { ...data, eventId: validated.eventId },
+        data: {
+          ...data,
+          eventId: validated.eventId,
+          ...(conflictsOverridden && {
+            conflictOverriddenById: userId,
+            conflictOverriddenAt: new Date(),
+          }),
+        },
         select: { id: true },
       });
       gameId = game.id;
