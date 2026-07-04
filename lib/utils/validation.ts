@@ -171,6 +171,21 @@ const optionalPositiveInt = (message: string, max?: number) =>
       .optional()
   );
 
+// Ordered age ranks shared by signup events, divisions, and season scheduling
+// (mirrors the Prisma AgeClassification enum).
+export const AGE_CLASSIFICATIONS = [
+  "U6",
+  "U8",
+  "SQUIRT_U10",
+  "PEEWEE_U12",
+  "BANTAM_U14",
+  "U16",
+  "U18",
+  "JUNIOR",
+  "ADULT",
+  "OPEN",
+] as const;
+
 // Auth validation schemas
 export const signupSchema = z.object({
   email: z
@@ -435,6 +450,8 @@ export const createDivisionSchema = z.object({
   leagueId: z.string().cuid("Invalid league ID format"),
   name: sanitizedStringWithMin(1, 100),
   ageGroup: optionalSanitizedString(50),
+  // Structured age level driving score/standings gating for season games
+  ageClassification: z.enum(AGE_CLASSIFICATIONS).optional(),
   skillLevel: optionalSanitizedString(50),
 });
 
@@ -443,6 +460,7 @@ export const updateDivisionSchema = z.object({
   leagueId: z.string().cuid("Invalid league ID format"),
   name: sanitizedStringWithMin(1, 100),
   ageGroup: optionalSanitizedString(50),
+  ageClassification: z.enum(AGE_CLASSIFICATIONS).optional().nullable(),
   skillLevel: optionalSanitizedString(50),
 });
 
@@ -1116,19 +1134,6 @@ export const SIGNUP_EVENT_CATEGORIES = [
 
 export const SIGNUP_EVENT_VISIBILITIES = ["PRIVATE", "INVITE_ONLY", "LINK", "PUBLIC"] as const;
 
-export const AGE_CLASSIFICATIONS = [
-  "U6",
-  "U8",
-  "SQUIRT_U10",
-  "PEEWEE_U12",
-  "BANTAM_U14",
-  "U16",
-  "U18",
-  "JUNIOR",
-  "ADULT",
-  "OPEN",
-] as const;
-
 export const PHASE_AUDIENCES = ["HOST_MEMBERS", "SELECTED_GROUPS", "INVITEES", "EVERYONE"] as const;
 
 export const MANUAL_PAYMENT_STATUSES = ["NOT_REQUIRED", "UNPAID", "PAID", "WAIVED"] as const;
@@ -1468,3 +1473,262 @@ export const recordGameResultSchema = z.object({
 });
 
 export type RecordGameResultInput = z.input<typeof recordGameResultSchema>;
+
+// ============================================================================
+// Season & game scheduling validation schemas (005-season-scheduling)
+// ============================================================================
+
+export const SCHEDULE_FORMATS = [
+  "ROUND_ROBIN",
+  "SINGLE_ELIMINATION",
+  "DOUBLE_ELIMINATION",
+  "POOL_PLAY",
+  "LADDER",
+  "CUSTOM",
+] as const;
+
+export const SEASON_PHASE_TYPES = ["PRE_SEASON", "REGULAR_SEASON", "PLAYOFFS", "CUSTOM"] as const;
+
+// Owner is resolved and authorized server-side; exactly one of leagueId/teamId.
+export const createSeasonSchema = z
+  .object({
+    name: sanitizedStringWithMin(1, 120),
+    description: optionalSanitizedString(1000),
+    startDate: z.coerce.date({ message: "Valid start date is required" }),
+    endDate: z.coerce.date({ message: "Valid end date is required" }),
+    leagueId: optionalCuid("Invalid league ID format"),
+    teamId: optionalCuid("Invalid team ID format"),
+  })
+  .refine((data) => data.endDate >= data.startDate, {
+    message: "End date must be on or after the start date",
+    path: ["endDate"],
+  })
+  .refine((data) => Boolean(data.leagueId) !== Boolean(data.teamId), {
+    message: "A season belongs to exactly one league or team",
+    path: ["leagueId"],
+  });
+
+// Format is an optional label — never required (FR-004).
+export const updateSeasonSchema = z
+  .object({
+    seasonId: z.string().cuid("Invalid season ID format"),
+    name: sanitizedStringWithMin(1, 120).optional(),
+    description: optionalSanitizedString(1000),
+    startDate: z.coerce.date().optional(),
+    endDate: z.coerce.date().optional(),
+    format: z.enum(SCHEDULE_FORMATS).nullable().optional(),
+    formatRounds: z.coerce.number().int().min(1).max(4).nullable().optional(),
+  })
+  .refine((data) => !data.startDate || !data.endDate || data.endDate >= data.startDate, {
+    message: "End date must be on or after the start date",
+    path: ["endDate"],
+  });
+
+export const seasonCommandSchema = z.object({
+  seasonId: z.string().cuid("Invalid season ID format"),
+});
+
+export const createSeasonPhaseSchema = z
+  .object({
+    seasonId: z.string().cuid("Invalid season ID format"),
+    name: sanitizedStringWithMin(1, 100),
+    type: z.enum(SEASON_PHASE_TYPES).default("CUSTOM"),
+    sortOrder: z.coerce.number().int().min(0).default(0),
+    startDate: z.coerce.date({ message: "Valid start date is required" }),
+    endDate: z.coerce.date({ message: "Valid end date is required" }),
+    format: z.enum(SCHEDULE_FORMATS).nullable().optional(),
+    formatRounds: z.coerce.number().int().min(1).max(4).nullable().optional(),
+  })
+  .refine((data) => data.endDate >= data.startDate, {
+    message: "End date must be on or after the start date",
+    path: ["endDate"],
+  });
+
+export const updateSeasonPhaseSchema = z
+  .object({
+    phaseId: z.string().cuid("Invalid phase ID format"),
+    name: sanitizedStringWithMin(1, 100).optional(),
+    type: z.enum(SEASON_PHASE_TYPES).optional(),
+    sortOrder: z.coerce.number().int().min(0).optional(),
+    startDate: z.coerce.date().optional(),
+    endDate: z.coerce.date().optional(),
+    format: z.enum(SCHEDULE_FORMATS).nullable().optional(),
+    formatRounds: z.coerce.number().int().min(1).max(4).nullable().optional(),
+  })
+  .refine((data) => !data.startDate || !data.endDate || data.endDate >= data.startDate, {
+    message: "End date must be on or after the start date",
+    path: ["endDate"],
+  });
+
+export const phaseCommandSchema = z.object({
+  phaseId: z.string().cuid("Invalid phase ID format"),
+});
+
+const seasonGameFields = {
+  phaseId: optionalCuid("Invalid phase ID format"),
+  homeTeamId: z.string().cuid("Invalid home team ID format"),
+  awayTeamId: z.string().cuid("Invalid away team ID format"),
+  startAt: z.coerce.date({ message: "Valid start time is required" }),
+  endAt: z.coerce.date({ message: "Valid end time is required" }),
+  timezone: optionalTimeZoneSchema,
+  venueId: optionalCuid("Invalid venue ID format"),
+  surfaceId: optionalCuid("Invalid surface ID format"),
+  surfaceUsage: z.enum(ICE_USAGES).optional(),
+  zoneLabel: optionalSanitizedString(120),
+  locationText: optionalSanitizedString(255),
+  notes: optionalSanitizedString(1000),
+};
+
+export const createSeasonGameSchema = z
+  .object({
+    seasonId: z.string().cuid("Invalid season ID format"),
+    ...seasonGameFields,
+    publish: z.boolean().default(true),
+    overrideConflicts: z.boolean().default(false),
+  })
+  .refine((data) => data.endAt > data.startAt, {
+    message: "End time must be after the start time",
+    path: ["endAt"],
+  })
+  .refine((data) => data.homeTeamId !== data.awayTeamId, {
+    message: "Home and away teams must be different",
+    path: ["awayTeamId"],
+  });
+
+export const updateSeasonGameSchema = z
+  .object({
+    gameId: z.string().cuid("Invalid game ID format"),
+    phaseId: optionalCuid("Invalid phase ID format").nullable(),
+    startAt: z.coerce.date().optional(),
+    endAt: z.coerce.date().optional(),
+    timezone: optionalTimeZoneSchema,
+    venueId: optionalCuid("Invalid venue ID format").nullable(),
+    surfaceId: optionalCuid("Invalid surface ID format").nullable(),
+    surfaceUsage: z.enum(ICE_USAGES).nullable().optional(),
+    zoneLabel: optionalSanitizedString(120),
+    locationText: optionalSanitizedString(255),
+    notes: optionalSanitizedString(1000),
+    overrideConflicts: z.boolean().default(false),
+  })
+  .refine((data) => !data.startAt || !data.endAt || data.endAt > data.startAt, {
+    message: "End time must be after the start time",
+    path: ["endAt"],
+  });
+
+export const seasonGameCommandSchema = z.object({
+  gameId: z.string().cuid("Invalid game ID format"),
+});
+
+export const publishSeasonGamesSchema = z.object({
+  seasonId: z.string().cuid("Invalid season ID format"),
+  gameIds: z.array(z.string().cuid("Invalid game ID format")).max(200).optional(),
+});
+
+export const recordSeasonGameScoreSchema = z.object({
+  gameId: z.string().cuid("Invalid game ID format"),
+  homeScore: z.coerce.number().int().min(0).max(99),
+  awayScore: z.coerce.number().int().min(0).max(99),
+});
+
+export const checkGameConflictsSchema = z
+  .object({
+    venueId: z.string().cuid("Invalid venue ID format"),
+    surfaceId: optionalCuid("Invalid surface ID format"),
+    startAt: z.coerce.date(),
+    endAt: z.coerce.date(),
+    excludeGameId: optionalCuid("Invalid game ID format"),
+  })
+  .refine((data) => data.endAt > data.startAt, {
+    message: "End time must be after the start time",
+    path: ["endAt"],
+  });
+
+export const generateRoundRobinSchema = z
+  .object({
+    seasonId: z.string().cuid("Invalid season ID format"),
+    phaseId: optionalCuid("Invalid phase ID format"),
+    teamIds: z
+      .array(z.string().cuid("Invalid team ID format"))
+      .min(2, "At least 2 teams are required")
+      .max(20, "Maximum 20 teams")
+      .refine((ids) => new Set(ids).size === ids.length, "Teams must be distinct"),
+    rounds: z.coerce.number().int().min(1, "At least 1 round required").max(4, "Maximum 4 rounds").default(1),
+    startDate: z.coerce.date({ message: "Valid start date is required" }),
+    endDate: z.coerce.date({ message: "Valid end date is required" }),
+    eligibleDays: z
+      .array(z.coerce.number().int().min(0).max(6))
+      .min(1, "Select at least one game day"),
+    startTime: timeStringSchema,
+    gameDurationMinutes: z.coerce.number().int().min(30).max(300).default(90),
+    defaultVenueId: optionalCuid("Invalid venue ID format"),
+  })
+  .refine((data) => data.endDate >= data.startDate, {
+    message: "End date must be on or after the start date",
+    path: ["endDate"],
+  });
+
+export const createGameProposalSchema = z
+  .object({
+    proposingTeamId: z.string().cuid("Invalid team ID format"),
+    receivingTeamId: z.string().cuid("Invalid team ID format"),
+    seasonId: optionalCuid("Invalid season ID format"),
+    startAt: z.coerce.date({ message: "Valid start time is required" }),
+    endAt: z.coerce.date({ message: "Valid end time is required" }),
+    venueId: optionalCuid("Invalid venue ID format"),
+    note: optionalSanitizedString(1000),
+  })
+  .refine((data) => data.endAt > data.startAt, {
+    message: "End time must be after the start time",
+    path: ["endAt"],
+  })
+  .refine((data) => data.proposingTeamId !== data.receivingTeamId, {
+    message: "A team cannot propose a game against itself",
+    path: ["receivingTeamId"],
+  });
+
+export const counterGameProposalSchema = z
+  .object({
+    proposalId: z.string().cuid("Invalid proposal ID format"),
+    startAt: z.coerce.date({ message: "Valid start time is required" }),
+    endAt: z.coerce.date({ message: "Valid end time is required" }),
+    venueId: optionalCuid("Invalid venue ID format"),
+    note: optionalSanitizedString(1000),
+  })
+  .refine((data) => data.endAt > data.startAt, {
+    message: "End time must be after the start time",
+    path: ["endAt"],
+  });
+
+export const acceptGameProposalSchema = z.object({
+  proposalId: z.string().cuid("Invalid proposal ID format"),
+  overrideConflicts: z.boolean().default(false),
+});
+
+export const declineGameProposalSchema = z.object({
+  proposalId: z.string().cuid("Invalid proposal ID format"),
+  reason: optionalSanitizedString(500),
+});
+
+export const recordPlacementSchema = z.object({
+  seasonId: z.string().cuid("Invalid season ID format"),
+  teamId: z.string().cuid("Invalid team ID format"),
+  divisionId: optionalCuid("Invalid division ID format").nullable(),
+  rank: optionalPositiveInt("Rank must be a positive number", 999),
+  privateNote: optionalSanitizedString(2000),
+});
+
+export type CreateSeasonInput = z.input<typeof createSeasonSchema>;
+export type UpdateSeasonInput = z.input<typeof updateSeasonSchema>;
+export type CreateSeasonPhaseInput = z.input<typeof createSeasonPhaseSchema>;
+export type UpdateSeasonPhaseInput = z.input<typeof updateSeasonPhaseSchema>;
+export type CreateSeasonGameInput = z.input<typeof createSeasonGameSchema>;
+export type UpdateSeasonGameInput = z.input<typeof updateSeasonGameSchema>;
+export type PublishSeasonGamesInput = z.input<typeof publishSeasonGamesSchema>;
+export type RecordSeasonGameScoreInput = z.input<typeof recordSeasonGameScoreSchema>;
+export type CheckGameConflictsInput = z.input<typeof checkGameConflictsSchema>;
+export type GenerateRoundRobinInput = z.input<typeof generateRoundRobinSchema>;
+export type CreateGameProposalInput = z.input<typeof createGameProposalSchema>;
+export type CounterGameProposalInput = z.input<typeof counterGameProposalSchema>;
+export type AcceptGameProposalInput = z.input<typeof acceptGameProposalSchema>;
+export type DeclineGameProposalInput = z.input<typeof declineGameProposalSchema>;
+export type RecordPlacementInput = z.input<typeof recordPlacementSchema>;
