@@ -66,9 +66,12 @@ export default async function ProposalsPage() {
 
   // Proposals sent or received by any of the viewer's teams, deduped — a
   // proposal between two of the viewer's own teams would otherwise repeat.
+  // Fetched in parallel; Promise.all preserves team order for the dedupe.
   const teamProposals = new Map<string, GameProposalView>();
-  for (const team of myTeams) {
-    const proposals = await getProposalsForTeam(team.id);
+  const proposalsByTeam = await Promise.all(
+    myTeams.map((team) => getProposalsForTeam(team.id))
+  );
+  for (const proposals of proposalsByTeam) {
     for (const proposal of proposals) {
       teamProposals.set(proposal.id, proposal);
     }
@@ -85,8 +88,10 @@ export default async function ProposalsPage() {
   let leagueView: ProposalInboxItem[] | undefined;
   if (leagueAdminRoles.length > 0) {
     const leagueProposals = new Map<string, GameProposalView>();
-    for (const { leagueId } of leagueAdminRoles) {
-      const proposals = await getProposalsForLeague(leagueId);
+    const proposalsByLeague = await Promise.all(
+      leagueAdminRoles.map(({ leagueId }) => getProposalsForLeague(leagueId))
+    );
+    for (const proposals of proposalsByLeague) {
       for (const proposal of proposals) {
         leagueProposals.set(proposal.id, proposal);
       }

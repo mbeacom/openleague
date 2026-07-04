@@ -275,5 +275,16 @@ describe("buildRoundRobin", () => {
     it("rejects invalid timezones", () => {
       expect(() => buildRoundRobin(roomyInput({ timezone: "Not/AZone" }))).toThrow();
     });
+
+    it("rejects an inverted date range instead of silently slotting nothing", () => {
+      expect(() =>
+        buildRoundRobin(
+          roomyInput({
+            startDate: new Date("2026-06-30T12:00:00Z"),
+            endDate: new Date("2026-01-01T12:00:00Z"),
+          })
+        )
+      ).toThrow("endDate must be on or after startDate");
+    });
   });
 });

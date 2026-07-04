@@ -35,18 +35,32 @@ async function computeGeneration(input: GenerateRoundRobinInput): Promise<{
   proposed: ProposedGame[];
   timezone: string;
   validated: ReturnType<typeof generateRoundRobinSchema.parse>;
+  userId: string;
 }> {
   const validated = generateRoundRobinSchema.parse(input);
-  const { season } = await requireSeasonManager(validated.seasonId);
+  const { season, userId } = await requireSeasonManager(validated.seasonId);
 
-  // Teams must belong to the season's scope (league teams, or the owning
-  // standalone team's administered set is enforced at game level).
+  // Teams must belong to the season's scope: league seasons require every
+  // team to belong to the league; team-owned seasons mirror the game-level
+  // rule (requireGameScheduler) — the owning team must participate and the
+  // caller must administer every participating team.
   if (season.leagueId) {
     const count = await prisma.team.count({
       where: { id: { in: validated.teamIds }, leagueId: season.leagueId },
     });
     if (count !== validated.teamIds.length) {
       throw new Error("All teams must belong to this season's league");
+    }
+  } else {
+    if (!season.teamId || !validated.teamIds.includes(season.teamId)) {
+      throw new Error("The season's owning team must be included in the schedule");
+    }
+    // teamIds are schema-validated as distinct, so a count comparison is exact.
+    const adminCount = await prisma.teamMember.count({
+      where: { userId, role: "ADMIN", teamId: { in: validated.teamIds } },
+    });
+    if (adminCount !== validated.teamIds.length) {
+      throw new Error("Unauthorized: you must be an admin of every participating team");
     }
   }
 
@@ -102,6 +116,7 @@ async function computeGeneration(input: GenerateRoundRobinInput): Promise<{
     proposed: result.games,
     timezone,
     validated,
+    userId,
   };
 }
 
@@ -131,8 +146,7 @@ export async function generateRoundRobin(
   input: GenerateRoundRobinInput
 ): Promise<ActionResult<{ createdIds: string[]; unslottedCount: number }>> {
   try {
-    const { preview, proposed, timezone, validated } = await computeGeneration(input);
-    const { userId } = await requireSeasonManager(validated.seasonId);
+    const { preview, proposed, timezone, validated, userId } = await computeGeneration(input);
     const phaseId = validated.phaseId || null;
 
     const createdIds = await prisma.$transaction(async (tx) => {

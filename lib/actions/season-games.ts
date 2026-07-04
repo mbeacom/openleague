@@ -187,8 +187,11 @@ export async function createSeasonGame(
     const phaseId = validated.phaseId || null;
 
     if (surfaceId) {
+      if (!venueId) {
+        return { success: false, error: "Pick a venue before choosing a surface" };
+      }
       const surface = await prisma.iceSurface.findFirst({
-        where: { id: surfaceId, venueId: venueId ?? undefined, isActive: true },
+        where: { id: surfaceId, venueId, isActive: true },
         select: { id: true },
       });
       if (!surface) {
@@ -303,13 +306,20 @@ export async function updateSeasonGame(
     const surfaceId =
       validated.surfaceId === undefined ? existing.surfaceId : validated.surfaceId || null;
 
-    if (surfaceId && surfaceId !== existing.surfaceId) {
-      const surface = await prisma.iceSurface.findFirst({
-        where: { id: surfaceId, venueId: venueId ?? undefined, isActive: true },
-        select: { id: true },
-      });
-      if (!surface) {
-        return { success: false, error: "Select an active surface at the chosen venue" };
+    if (surfaceId) {
+      if (!venueId) {
+        return { success: false, error: "Pick a venue before choosing a surface" };
+      }
+      // Re-validate the pairing against the resolved venue whenever either
+      // side changed — a new surface, or a new venue under a kept surface.
+      if (surfaceId !== existing.surfaceId || venueId !== existing.venueId) {
+        const surface = await prisma.iceSurface.findFirst({
+          where: { id: surfaceId, venueId, isActive: true },
+          select: { id: true },
+        });
+        if (!surface) {
+          return { success: false, error: "Select an active surface at the chosen venue" };
+        }
       }
     }
 
@@ -347,10 +357,12 @@ export async function updateSeasonGame(
             locationText: validated.locationText || null,
           }),
           ...(validated.notes !== undefined && { notes: validated.notes || null }),
-          ...(conflictsOverridden && {
-            conflictOverriddenById: userId,
-            conflictOverriddenAt: new Date(),
-          }),
+          // The conflict check re-ran above whenever a venue is set (and no
+          // venue means no conflicts are possible), so always write the
+          // override audit fields: stale metadata must not survive a
+          // reschedule to a clean slot.
+          conflictOverriddenById: conflictsOverridden ? userId : null,
+          conflictOverriddenAt: conflictsOverridden ? new Date() : null,
         },
       });
 

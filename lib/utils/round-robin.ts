@@ -72,6 +72,9 @@ function assertValidInput(input: RoundRobinInput): void {
   if (Number.isNaN(input.startDate.getTime()) || Number.isNaN(input.endDate.getTime())) {
     throw new Error("Start and end dates must be valid dates");
   }
+  if (input.endDate.getTime() < input.startDate.getTime()) {
+    throw new Error("endDate must be on or after startDate");
+  }
 }
 
 /**
@@ -175,7 +178,8 @@ export function buildRoundRobin(input: RoundRobinInput): RoundRobinResult {
         day.getUTCDate(),
         hours,
         minutes,
-        0,
+        0, // seconds
+        0, // milliseconds
         timezone
       );
       const startAt = new Date(zoned.getTime());
