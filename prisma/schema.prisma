@@ -34,7 +34,12 @@ model User {
   practiceSessions             PracticeSession[]
   plays                        Play[]
   venues                       Venue[]
-  gameSchedules                GameSchedule[]
+  createdSeasons               Season[]                 @relation("SeasonCreator")
+  createdSeasonGames           SeasonGame[]             @relation("SeasonGameCreator")
+  seasonGameConflictOverrides  SeasonGame[]             @relation("SeasonGameConflictOverride")
+  createdGameProposals         GameProposal[]           @relation("GameProposalCreator")
+  gameProposalEntries          GameProposalEntry[]      @relation("GameProposalActor")
+  placementDecisions           PlacementDecision[]      @relation("PlacementDecider")
   createdVenueOrganizations    VenueOrganization[]      @relation("VenueOrganizationCreator")
   venueStaffMemberships        VenueStaff[]             @relation("VenueStaffUser")
   sentVenueStaffInvites        VenueStaff[]             @relation("VenueStaffInviter")
@@ -132,7 +137,12 @@ model Team {
   practiceSessions   PracticeSession[]
   plays              Play[]
   venues             Venue[]
-  gameSchedules      GameSchedule[]
+  seasons            Season[]
+  homeSeasonGames    SeasonGame[]             @relation("SeasonGameHome")
+  awaySeasonGames    SeasonGame[]             @relation("SeasonGameAway")
+  proposalsSent      GameProposal[]           @relation("ProposalsSent")
+  proposalsReceived  GameProposal[]           @relation("ProposalsReceived")
+  placementDecisions PlacementDecision[]
   venueRelationships VenueRelationship[]
   iceTimeRequests    IceTimeRequest[]
   hostedSignupEvents SignupEvent[]
@@ -237,8 +247,8 @@ model Event {
   awayTeamId String?
   awayTeam   Team?   @relation("AwayTeam", fields: [awayTeamId], references: [id])
 
-  rsvps        RSVP[]
-  scheduleGame ScheduleGame?
+  rsvps      RSVP[]
+  seasonGame SeasonGame?
 
   @@index([teamId, startAt]) // Optimize queries for team events sorted by date
   @@index([startAt]) // Optimize queries for upcoming events across teams
@@ -334,7 +344,8 @@ model League {
   notificationBatches     NotificationBatch[]
   auditLogs               AuditLog[]
   venues                  Venue[]
-  gameSchedules           GameSchedule[]
+  seasons                 Season[]
+  gameProposals           GameProposal[]
   venueRelationships      VenueRelationship[]
   iceTimeRequests         IceTimeRequest[]
   hostedSignupEvents      SignupEvent[]
@@ -345,19 +356,22 @@ model League {
 
 // Basic Division model for team organization
 model Division {
-  id         String   @id @default(cuid())
-  name       String
-  ageGroup   String? // U8, U10, Adult, etc.
-  skillLevel String? // Recreational, Competitive
-  isActive   Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id                String             @id @default(cuid())
+  name              String
+  ageGroup          String? // U8, U10, Adult, etc. (display)
+  // Structured age level driving score/standings gating for season games.
+  ageClassification AgeClassification?
+  skillLevel        String? // Recreational, Competitive
+  isActive          Boolean            @default(true)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
 
-  leagueId         String
-  league           League                   @relation(fields: [leagueId], references: [id], onDelete: Restrict)
-  teams            Team[]
-  messageTargeting MessageTargeting[]
-  signupPhases     EventRegistrationPhase[] @relation("PhaseDivisions")
+  leagueId           String
+  league             League                   @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  teams              Team[]
+  messageTargeting   MessageTargeting[]
+  signupPhases       EventRegistrationPhase[] @relation("PhaseDivisions")
+  placementDecisions PlacementDecision[]
 
   @@map("divisions")
 }
@@ -934,6 +948,8 @@ model Venue {
   registrations   SessionRegistration[]
   payments        Payment[]
   signupEvents    SignupEvent[]
+  seasonGames     SeasonGame[]
+  proposalEntries GameProposalEntry[]
 
   @@index([visibility])
   @@index([teamId])
@@ -964,6 +980,7 @@ model IceSurface {
   lessonOfferings LessonOffering[]
   signupEvents    SignupEvent[]        @relation("SignupEventSurfaces")
   eventGames      EventGame[]
+  seasonGames     SeasonGame[]
 
   @@unique([venueId, name])
   @@index([venueId, isActive])
@@ -1295,27 +1312,64 @@ model Payment {
   @@map("payments")
 }
 
-// Game schedule for season management
-enum ScheduleStatus {
-  DRAFT
-  PUBLISHED
-  ARCHIVED
+// ============================================================================
+// Season & Game Scheduling (feature 005-season-scheduling)
+// ============================================================================
+
+// Optional descriptive schedule format. Only ROUND_ROBIN has a generator;
+// all other values are labels — the system never pretends to generate them.
+enum ScheduleFormat {
+  ROUND_ROBIN
+  SINGLE_ELIMINATION
+  DOUBLE_ELIMINATION
+  POOL_PLAY
+  LADDER
+  CUSTOM
 }
 
-model GameSchedule {
-  id         String         @id @default(cuid())
-  name       String
-  seasonName String? // e.g., "Fall 2026"
-  startDate  DateTime
-  endDate    DateTime
-  status     ScheduleStatus @default(DRAFT)
-  roundRobin Boolean        @default(true)
-  rounds     Int            @default(1) // How many times each team plays each other
-  notes      String?
-  createdAt  DateTime       @default(now())
-  updatedAt  DateTime       @updatedAt
+enum SeasonPhaseType {
+  PRE_SEASON
+  REGULAR_SEASON
+  PLAYOFFS
+  CUSTOM
+}
 
-  // Owner — league or team
+enum SeasonGameStatus {
+  DRAFT // unpublished; no calendar Event exists yet
+  SCHEDULED
+  COMPLETED
+  CANCELED
+}
+
+enum GameProposalStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  WITHDRAWN
+  EXPIRED // latest proposed start passed without acceptance
+}
+
+enum GameProposalEntryKind {
+  PROPOSE
+  COUNTER
+  ACCEPT
+  DECLINE
+  WITHDRAW
+}
+
+// A scheduling container ("Fall 2026") owned by a league or a standalone
+// team (exactly one — DB CHECK constraint). Format is never required.
+model Season {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  startDate   DateTime
+  endDate     DateTime
+  archivedAt  DateTime? // hides from default views; games untouched
+
+  format       ScheduleFormat?
+  formatRounds Int?
+
   leagueId String?
   league   League? @relation(fields: [leagueId], references: [id], onDelete: Cascade)
 
@@ -1323,30 +1377,182 @@ model GameSchedule {
   team   Team?   @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   createdById String
-  createdBy   User   @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  createdBy   User     @relation("SeasonCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  games ScheduleGame[]
+  phases     SeasonPhase[]
+  games      SeasonGame[]
+  placements PlacementDecision[]
+  proposals  GameProposal[]
 
-  @@index([leagueId, status])
-  @@index([teamId, status])
-  @@map("game_schedules")
+  @@index([leagueId, startDate])
+  @@index([teamId, startDate])
+  @@map("seasons")
 }
 
-// Individual game within a schedule, linking to an Event
-model ScheduleGame {
-  id          String   @id @default(cuid())
-  roundNumber Int // Round / matchday number
-  gameNumber  Int // Game number within the round
+// Ordered subdivision of a season (pre-season, regular season, playoffs).
+// A season without phases behaves as a single implicit phase.
+model SeasonPhase {
+  id        String          @id @default(cuid())
+  name      String
+  type      SeasonPhaseType @default(CUSTOM)
+  sortOrder Int             @default(0)
+  startDate DateTime
+  endDate   DateTime
+
+  format       ScheduleFormat?
+  formatRounds Int?
+
+  seasonId String
+  season   Season @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+
+  games SeasonGame[]
+
+  @@index([seasonId, sortOrder])
+  @@map("season_phases")
+}
+
+// A scheduled matchup between two real teams. Publishing creates a calendar
+// Event (home-team anchored) with RSVPs for both rosters; DRAFT games have
+// no calendar presence.
+model SeasonGame {
+  id       String           @id @default(cuid())
+  status   SeasonGameStatus @default(DRAFT)
+  startAt  DateTime
+  endAt    DateTime
+  timezone String           @default("America/New_York")
+
+  venueId      String?
+  venue        Venue?      @relation(fields: [venueId], references: [id], onDelete: SetNull)
+  surfaceId    String?
+  surface      IceSurface? @relation(fields: [surfaceId], references: [id], onDelete: SetNull)
+  // null when the sport's capability catalog defines no surface-usage options
+  surfaceUsage IceUsage?
+  zoneLabel    String? // "North half"
+  locationText String? // free text when no venue selected
+
+  homeTeamId String
+  homeTeam   Team   @relation("SeasonGameHome", fields: [homeTeamId], references: [id], onDelete: Cascade)
+  awayTeamId String
+  awayTeam   Team   @relation("SeasonGameAway", fields: [awayTeamId], references: [id], onDelete: Cascade)
+
+  // Writable only when the derived age level is stats-eligible (division-based)
+  homeScore Int?
+  awayScore Int?
+  notes     String?
+
+  // Recorded venue-conflict override
+  conflictOverriddenById String?
+  conflictOverriddenBy   User?     @relation("SeasonGameConflictOverride", fields: [conflictOverriddenById], references: [id], onDelete: SetNull)
+  conflictOverriddenAt   DateTime?
+
+  seasonId String
+  season   Season       @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  phaseId  String?
+  phase    SeasonPhase? @relation(fields: [phaseId], references: [id], onDelete: SetNull)
+
+  eventId String? @unique
+  event   Event?  @relation(fields: [eventId], references: [id], onDelete: SetNull)
+
+  proposalId String?       @unique
+  proposal   GameProposal? @relation(fields: [proposalId], references: [id])
+
+  createdById String
+  createdBy   User     @relation("SeasonGameCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([seasonId, startAt])
+  @@index([phaseId, startAt])
+  @@index([homeTeamId, startAt])
+  @@index([awayTeamId, startAt])
+  @@index([venueId, startAt])
+  @@index([surfaceId, startAt])
+  @@map("season_games")
+}
+
+// A same-league negotiation thread between two teams for a prospective game.
+// Current terms live on the latest PROPOSE/COUNTER entry; that entry's
+// startAt drives expiry.
+model GameProposal {
+  id     String             @id @default(cuid())
+  status GameProposalStatus @default(PENDING)
+
+  leagueId String
+  league   League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  proposingTeamId String
+  proposingTeam   Team   @relation("ProposalsSent", fields: [proposingTeamId], references: [id], onDelete: Cascade)
+  receivingTeamId String
+  receivingTeam   Team   @relation("ProposalsReceived", fields: [receivingTeamId], references: [id], onDelete: Cascade)
+
+  seasonId String?
+  season   Season? @relation(fields: [seasonId], references: [id], onDelete: SetNull)
+  phaseId  String? // resolved at accept time
+
+  createdById String
+  createdBy   User      @relation("GameProposalCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  resolvedAt  DateTime?
+
+  entries       GameProposalEntry[]
+  resultingGame SeasonGame?
+
+  @@index([receivingTeamId, status])
+  @@index([proposingTeamId, status])
+  @@index([leagueId, status])
+  @@map("game_proposals")
+}
+
+// Append-only negotiation log entry. Terms are set on PROPOSE/COUNTER and
+// null on ACCEPT/DECLINE/WITHDRAW.
+model GameProposalEntry {
+  id   String                @id @default(cuid())
+  kind GameProposalEntryKind
+
+  startAt DateTime?
+  endAt   DateTime?
+  venueId String?
+  venue   Venue?    @relation(fields: [venueId], references: [id], onDelete: SetNull)
+  note    String?
+
+  proposalId String
+  proposal   GameProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  actorTeamId String
+  actorUserId String
+  actorUser   User     @relation("GameProposalActor", fields: [actorUserId], references: [id], onDelete: Restrict)
   createdAt   DateTime @default(now())
 
-  gameScheduleId String
-  gameSchedule   GameSchedule @relation(fields: [gameScheduleId], references: [id], onDelete: Cascade)
+  @@index([proposalId, createdAt])
+  @@map("game_proposal_entries")
+}
 
-  eventId String @unique
-  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+// A recorded league-admin placement action. Append-only; the latest decision
+// per (seasonId, teamId) is current. Team.divisionId is updated in the same
+// transaction. privateNote is visible to league admins only.
+model PlacementDecision {
+  id String @id @default(cuid())
 
-  @@index([gameScheduleId, roundNumber])
-  @@map("schedule_games")
+  seasonId String
+  season   Season @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  teamId   String
+  team     Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  divisionId String?
+  division   Division? @relation(fields: [divisionId], references: [id], onDelete: SetNull)
+
+  rank        Int? // manual ordering for sub-threshold age levels
+  privateNote String?
+
+  decidedById String
+  decidedBy   User     @relation("PlacementDecider", fields: [decidedById], references: [id], onDelete: Restrict)
+  createdAt   DateTime @default(now())
+
+  @@index([seasonId, teamId, createdAt])
+  @@map("placement_decisions")
 }
 
 // ============================================================================
@@ -1494,13 +1700,13 @@ model SignupEvent {
   // Opt-in public roster (first name + last initial only on public views).
   publicRoster      Boolean           @default(false)
 
-  publishedAt DateTime?
-  canceledAt  DateTime?
+  publishedAt      DateTime?
+  canceledAt       DateTime?
   // When set, event teams/games are visible to participants (organizers can
   // build rosters privately before posting them).
   teamsPublishedAt DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   // Exactly one hosting entity is set (DB CHECK constraint).
   hostOrganizationId String?

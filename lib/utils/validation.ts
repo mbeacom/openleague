@@ -973,58 +973,10 @@ export type ConnectOnboardingInput = z.input<typeof connectOnboardingSchema>;
 export type RegistrationCommandInput = z.input<typeof registrationCommandSchema>;
 export type RefundRegistrationInput = z.input<typeof refundRegistrationSchema>;
 
-// Game schedule validation schemas
-export const createGameScheduleSchema = z.object({
-  name: sanitizedStringWithMin(1, 100),
-  seasonName: optionalSanitizedString(100),
-  startDate: z.coerce.date({ message: "Valid start date is required" }),
-  endDate: z.coerce.date({ message: "Valid end date is required" }),
-  roundRobin: z.boolean().default(true),
-  rounds: z.number().int().min(1, "At least 1 round required").max(4, "Maximum 4 rounds").default(1),
-  notes: optionalSanitizedString(1000),
-  leagueId: z.string().cuid("Invalid league ID format").optional().or(z.literal("")),
-  teamId: z.string().cuid("Invalid team ID format").optional().or(z.literal("")),
-  // Teams participating in the schedule
-  teamIds: z.array(z.string().cuid("Invalid team ID format")).min(2, "At least 2 teams are required"),
-  // Venues to rotate through
-  venueIds: z.array(z.string().cuid("Invalid venue ID format")).min(1, "At least 1 venue is required"),
-  // Scheduling preferences
-  dayOfWeek: z.number().int().min(0).max(6).optional(), // 0=Sunday, 6=Saturday
-  preferredStartTime: z.string().regex(/^\d{2}:\d{2}$/, "Time format must be HH:MM").optional(),
-  gameDurationMinutes: z.number().int().min(30).max(300).default(90),
-}).refine(
-  (data) => data.endDate > data.startDate,
-  {
-    message: "End date must be after start date",
-    path: ["endDate"],
-  }
-);
-
-export const generateScheduleGamesSchema = z.object({
-  gameScheduleId: z.string().cuid("Invalid schedule ID format"),
-  overrideConflicts: z.boolean().default(false),
-});
-
-export const publishScheduleSchema = z.object({
-  gameScheduleId: z.string().cuid("Invalid schedule ID format"),
-});
-
-export const updateScheduleGameSchema = z.object({
-  scheduleGameId: z.string().cuid("Invalid schedule game ID format"),
-  startAt: z.coerce.date({ message: "Valid start date is required" }).optional(),
-  endAt: z.coerce.date({ message: "Valid end date is required" }).optional(),
-  venueId: z.string().cuid("Invalid venue ID format").optional(),
-  overrideConflicts: z.boolean().default(false),
-});
-
-// Venue & schedule type exports
+// Venue type exports
 export type CreateVenueInput = z.infer<typeof createVenueSchema>;
 export type UpdateVenueInput = z.infer<typeof updateVenueSchema>;
 export type VenueAvailabilityInput = z.infer<typeof venueAvailabilitySchema>;
-export type CreateGameScheduleInput = z.infer<typeof createGameScheduleSchema>;
-export type GenerateScheduleGamesInput = z.infer<typeof generateScheduleGamesSchema>;
-export type PublishScheduleInput = z.infer<typeof publishScheduleSchema>;
-export type UpdateScheduleGameInput = z.infer<typeof updateScheduleGameSchema>;
 
 // Practice planner validation schemas
 
