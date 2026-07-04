@@ -1265,3 +1265,304 @@ export async function sendPracticePlanNotifications(
     await sendPracticePlanUpdatedEmail(sessionData);
   }
 }
+
+// --- Signup events (feature 004) ---
+
+interface SignupEventRecipient {
+  email: string;
+  name?: string | null;
+}
+
+interface SignupEventUpdatedEmailData {
+  recipients: SignupEventRecipient[];
+  eventTitle: string;
+  hostName: string;
+  changeSummary: string;
+  eventId: string;
+}
+
+/** Material-change notification (time/venue/details) to all active registrants. */
+export async function sendSignupEventUpdatedEmail(data: SignupEventUpdatedEmailData): Promise<void> {
+  if (data.recipients.length === 0) return;
+  const mailchimp = getMailchimpClient();
+  const eventLink = `${BASE_URL}/signups/${data.eventId}`;
+
+  // One message per family — recipients must never see each other's addresses
+  // (same pattern as sendSignupEventReminders/sendLeagueMessageEmail).
+  for (const recipient of data.recipients) {
+    try {
+      await mailchimp.messages.send({
+        message: {
+          from_email: EMAIL_FROM,
+          subject: `Updated: ${data.eventTitle}`,
+          html: `<p><strong>${data.eventTitle}</strong> (hosted by ${data.hostName}) has been updated.</p><p>${data.changeSummary}</p><p><a href="${eventLink}">View the event</a></p>`,
+          text: `${data.eventTitle} (hosted by ${data.hostName}) has been updated. ${data.changeSummary} View: ${eventLink}`,
+          to: [{ email: recipient.email, type: "to" as const }],
+        },
+      });
+    } catch (emailError) {
+      console.error(`Failed to send event update email to ${recipient.email}:`, emailError);
+    }
+  }
+}
+
+interface SignupEventCanceledEmailData {
+  recipients: SignupEventRecipient[];
+  eventTitle: string;
+  hostName: string;
+  reason?: string;
+}
+
+/** Cancellation notice to all active registrants. */
+export async function sendSignupEventCanceledEmail(data: SignupEventCanceledEmailData): Promise<void> {
+  if (data.recipients.length === 0) return;
+  const mailchimp = getMailchimpClient();
+  const reasonHtml = data.reason ? `<p>Reason: ${data.reason}</p>` : "";
+
+  // One message per family — recipients must never see each other's addresses.
+  for (const recipient of data.recipients) {
+    try {
+      await mailchimp.messages.send({
+        message: {
+          from_email: EMAIL_FROM,
+          subject: `Canceled: ${data.eventTitle}`,
+          html: `<p><strong>${data.eventTitle}</strong> (hosted by ${data.hostName}) has been canceled.</p>${reasonHtml}<p>If you paid online, the organizer will process refunds.</p>`,
+          text: `${data.eventTitle} (hosted by ${data.hostName}) has been canceled.${data.reason ? ` Reason: ${data.reason}` : ""} If you paid online, the organizer will process refunds.`,
+          to: [{ email: recipient.email, type: "to" as const }],
+        },
+      });
+    } catch (emailError) {
+      console.error(`Failed to send event cancellation email to ${recipient.email}:`, emailError);
+    }
+  }
+}
+
+interface EventRegistrationConfirmationEmailData {
+  to: string;
+  participantNames: string[];
+  eventTitle: string;
+  slotName: string;
+  hostName: string;
+  startAtFormatted: string;
+  eventId: string;
+  amountTotal: number;
+  currency: string;
+  manualPaymentNote?: string;
+}
+
+/** Registration confirmation to the registrant (contact of record). */
+export async function sendEventRegistrationConfirmationEmail(
+  data: EventRegistrationConfirmationEmailData
+): Promise<void> {
+  const mailchimp = getMailchimpClient();
+  const eventLink = `${BASE_URL}/signups/${data.eventId}`;
+  const names = data.participantNames.join(", ");
+  const paymentHtml =
+    data.amountTotal > 0
+      ? `<p>Amount due: <strong>${formatMoney(data.amountTotal, data.currency)}</strong>${data.manualPaymentNote ? ` — ${data.manualPaymentNote}` : ""}</p>`
+      : "";
+
+  await mailchimp.messages.send({
+    message: {
+      from_email: EMAIL_FROM,
+      subject: `You're in: ${data.eventTitle}`,
+      html: `<p>${names} ${data.participantNames.length === 1 ? "is" : "are"} confirmed for <strong>${data.slotName}</strong> at <strong>${data.eventTitle}</strong> (hosted by ${data.hostName}) on ${data.startAtFormatted}.</p>${paymentHtml}<p><a href="${eventLink}">View the event</a></p>`,
+      text: `${names} confirmed for ${data.slotName} at ${data.eventTitle} (hosted by ${data.hostName}) on ${data.startAtFormatted}.${data.amountTotal > 0 ? ` Amount due: ${formatMoney(data.amountTotal, data.currency)}.` : ""} View: ${eventLink}`,
+      to: [{ email: data.to, type: "to" as const }],
+    },
+  });
+}
+
+interface EventRegistrationRemovedEmailData {
+  to: string;
+  participantName: string;
+  eventTitle: string;
+  reason?: string;
+}
+
+/** Notice that an organizer removed a registration. */
+export async function sendEventRegistrationRemovedEmail(
+  data: EventRegistrationRemovedEmailData
+): Promise<void> {
+  const mailchimp = getMailchimpClient();
+
+  await mailchimp.messages.send({
+    message: {
+      from_email: EMAIL_FROM,
+      subject: `Registration removed: ${data.eventTitle}`,
+      html: `<p>${data.participantName}'s registration for <strong>${data.eventTitle}</strong> was removed by an organizer.</p>${data.reason ? `<p>Reason: ${data.reason}</p>` : ""}`,
+      text: `${data.participantName}'s registration for ${data.eventTitle} was removed by an organizer.${data.reason ? ` Reason: ${data.reason}` : ""}`,
+      to: [{ email: data.to, type: "to" as const }],
+    },
+  });
+}
+
+/**
+ * Send 48-hour reminders for upcoming signup events. Runs from the hourly
+ * reminders cron; the one-hour window means each event is picked up exactly
+ * once. Honors notification preferences (emailEnabled + rsvpReminders).
+ */
+export async function sendSignupEventReminders(): Promise<void> {
+  const windowStart = new Date(Date.now() + 48 * 60 * 60 * 1000);
+  const windowEnd = new Date(Date.now() + 49 * 60 * 60 * 1000);
+
+  const events = await prisma.signupEvent.findMany({
+    where: {
+      status: "PUBLISHED",
+      startAt: { gte: windowStart, lt: windowEnd },
+    },
+    select: {
+      id: true,
+      title: true,
+      startAt: true,
+      locationText: true,
+      venue: { select: { name: true } },
+      hostOrganization: { select: { name: true } },
+      hostLeague: { select: { name: true } },
+      hostTeam: { select: { name: true } },
+      registrations: {
+        where: { status: "CONFIRMED" },
+        select: {
+          participantName: true,
+          registrant: { select: { id: true, email: true } },
+        },
+      },
+    },
+  });
+
+  for (const event of events) {
+    if (event.registrations.length === 0) continue;
+
+    // Exclude registrants who opted out of reminder emails.
+    const registrantIds = [...new Set(event.registrations.map((reg) => reg.registrant.id))];
+    const optedOut = await prisma.notificationPreference.findMany({
+      where: {
+        userId: { in: registrantIds },
+        OR: [{ emailEnabled: false }, { rsvpReminders: false }],
+      },
+      select: { userId: true },
+    });
+    const optedOutIds = new Set(optedOut.map((preference) => preference.userId));
+
+    const byRegistrant = new Map<string, { email: string; participants: string[] }>();
+    for (const registration of event.registrations) {
+      if (optedOutIds.has(registration.registrant.id)) continue;
+      const entry = byRegistrant.get(registration.registrant.id) ?? {
+        email: registration.registrant.email,
+        participants: [],
+      };
+      entry.participants.push(registration.participantName);
+      byRegistrant.set(registration.registrant.id, entry);
+    }
+    if (byRegistrant.size === 0) continue;
+
+    const hostName =
+      event.hostOrganization?.name ?? event.hostLeague?.name ?? event.hostTeam?.name ?? "the organizer";
+    const location = event.venue?.name ?? event.locationText ?? "";
+    const eventLink = `${BASE_URL}/signups/${event.id}`;
+    const mailchimp = getMailchimpClient();
+
+    for (const { email, participants } of byRegistrant.values()) {
+      try {
+        await mailchimp.messages.send({
+          message: {
+            from_email: EMAIL_FROM,
+            subject: `Reminder: ${event.title} is coming up`,
+            html: `<p>Reminder — <strong>${event.title}</strong> (hosted by ${hostName}) starts ${formatDateTime(event.startAt)}${location ? ` at ${location}` : ""}.</p><p>Registered: ${participants.join(", ")}</p><p><a href="${eventLink}">View the event</a></p>`,
+            text: `Reminder — ${event.title} (hosted by ${hostName}) starts ${formatDateTime(event.startAt)}${location ? ` at ${location}` : ""}. Registered: ${participants.join(", ")}. View: ${eventLink}`,
+            to: [{ email, type: "to" as const }],
+          },
+        });
+      } catch (emailError) {
+        console.error(`Failed to send signup-event reminder for ${event.id}:`, emailError);
+      }
+    }
+  }
+}
+
+interface WaitlistOfferEmailData {
+  to: string;
+  participantName: string;
+  eventTitle: string;
+  slotName: string;
+  claimByFormatted: string;
+  eventId: string;
+}
+
+/** A waitlist spot opened up — time-boxed offer to claim it. */
+export async function sendWaitlistOfferEmail(data: WaitlistOfferEmailData): Promise<void> {
+  const mailchimp = getMailchimpClient();
+  const claimLink = `${BASE_URL}/my-registrations`;
+
+  await mailchimp.messages.send({
+    message: {
+      from_email: EMAIL_FROM,
+      subject: `A spot opened up: ${data.eventTitle}`,
+      html: `<p>Good news — a <strong>${data.slotName}</strong> spot opened up for ${data.participantName} at <strong>${data.eventTitle}</strong>.</p><p>Claim it by <strong>${data.claimByFormatted}</strong> or the offer passes to the next person on the waitlist.</p><p><a href="${claimLink}">Claim your spot</a></p>`,
+      text: `A ${data.slotName} spot opened up for ${data.participantName} at ${data.eventTitle}. Claim it by ${data.claimByFormatted} or the offer passes to the next person: ${claimLink}`,
+      to: [{ email: data.to, type: "to" as const }],
+    },
+  });
+}
+
+interface EventInvitationEmailData {
+  to: string;
+  eventTitle: string;
+  hostName: string;
+  startAtFormatted: string;
+  token: string;
+  isExistingUser: boolean;
+}
+
+/** Invitation to view/register for a signup event (access list for invite-only events). */
+export async function sendEventInvitationEmail(data: EventInvitationEmailData): Promise<void> {
+  const mailchimp = getMailchimpClient();
+  const inviteLink = `${BASE_URL}/api/event-invitations/${data.token}`;
+  const cta = data.isExistingUser
+    ? "View the event and sign up"
+    : "Create your free account and sign up";
+
+  await mailchimp.messages.send({
+    message: {
+      from_email: EMAIL_FROM,
+      subject: `You're invited: ${data.eventTitle}`,
+      html: `<p>${data.hostName} invited you to <strong>${data.eventTitle}</strong> on ${data.startAtFormatted}.</p><p><a href="${inviteLink}">${cta}</a></p>`,
+      text: `${data.hostName} invited you to ${data.eventTitle} on ${data.startAtFormatted}. ${cta}: ${inviteLink}`,
+      to: [{ email: data.to, type: "to" as const }],
+    },
+  });
+}
+
+interface EventTeamsUpdateEmailData {
+  recipients: SignupEventRecipient[];
+  eventTitle: string;
+  eventId: string;
+  isInitialPublish: boolean;
+}
+
+/** Teams/rosters posted (or updated after posting) for a signup event. */
+export async function sendEventTeamsUpdateEmail(data: EventTeamsUpdateEmailData): Promise<void> {
+  if (data.recipients.length === 0) return;
+  const mailchimp = getMailchimpClient();
+  const eventLink = `${BASE_URL}/signups/${data.eventId}`;
+  const headline = data.isInitialPublish
+    ? `Teams are posted for ${data.eventTitle}`
+    : `Team assignments updated for ${data.eventTitle}`;
+
+  // One message per family — recipients must never see each other's addresses.
+  for (const recipient of data.recipients) {
+    try {
+      await mailchimp.messages.send({
+        message: {
+          from_email: EMAIL_FROM,
+          subject: headline,
+          html: `<p>${headline}.</p><p><a href="${eventLink}">See your team and game times</a></p>`,
+          text: `${headline}. See your team and game times: ${eventLink}`,
+          to: [{ email: recipient.email, type: "to" as const }],
+        },
+      });
+    } catch (emailError) {
+      console.error(`Failed to send teams update email to ${recipient.email}:`, emailError);
+    }
+  }
+}

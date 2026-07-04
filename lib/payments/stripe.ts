@@ -80,6 +80,31 @@ export async function createConnectAccount(input: ConnectAccountInput): Promise<
 }
 
 /**
+ * Create an Express connected account for a league/association hosting signup
+ * events. Mirrors {@link createConnectAccount} with league-appropriate metadata.
+ */
+export async function createLeagueConnectAccount(input: {
+  leagueId: string;
+  leagueName: string;
+  email?: string | null;
+}): Promise<Stripe.Account> {
+  const stripe = getStripeClient();
+  return stripe.accounts.create({
+    type: "express",
+    email: input.email ?? undefined,
+    business_profile: {
+      name: input.leagueName,
+      product_description: "Youth sports events, clinics, and programs",
+    },
+    capabilities: {
+      card_payments: { requested: true },
+      transfers: { requested: true },
+    },
+    metadata: { leagueId: input.leagueId },
+  });
+}
+
+/**
  * Create an onboarding/account-management link the rink owner uses to complete
  * Stripe Connect verification.
  */

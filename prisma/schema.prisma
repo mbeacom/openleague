@@ -49,6 +49,19 @@ model User {
   venueActivityLogs            VenueActivityLog[]       @relation("VenueActivityActor")
   sessionRegistrations         SessionRegistration[]    @relation("SessionRegistrant")
   canceledSessionRegistrations SessionRegistration[]    @relation("SessionRegistrationCanceler")
+  createdSignupEvents          SignupEvent[]            @relation("SignupEventCreator")
+  updatedSignupEvents          SignupEvent[]            @relation("SignupEventUpdater")
+  eventRegistrations           EventRegistration[]      @relation("EventRegistrant")
+  canceledEventRegistrations   EventRegistration[]      @relation("EventRegistrationCanceler")
+  eventCheckIns                EventRegistration[]      @relation("EventCheckInActor")
+  markedManualPayments         EventRegistration[]      @relation("ManualPaymentMarker")
+  eventInvitationsReceived     EventInvitation[]        @relation("EventInvitee")
+  eventInvitationsSent         EventInvitation[]        @relation("EventInviter")
+  eventManagerRoles            EventManager[]           @relation("EventManagerUser")
+  grantedEventManagerRoles     EventManager[]           @relation("EventManagerGrantor")
+  eventTeamAssignmentsMade     EventTeamAssignment[]    @relation("EventTeamAssigner")
+  uploadedEventMedia           EventMediaItem[]         @relation("EventMediaUploader")
+  removedEventMedia            EventMediaItem[]         @relation("EventMediaRemover")
 }
 
 // Audit log model for tracking administrative actions and security events
@@ -110,10 +123,10 @@ model Team {
   players            Player[]
   events             Event[]
   invitations        Invitation[]
-  homeEvents         Event[]             @relation("HomeTeam")
-  awayEvents         Event[]             @relation("AwayTeam")
-  transfersFrom      PlayerTransfer[]    @relation("TransferFromTeam")
-  transfersTo        PlayerTransfer[]    @relation("TransferToTeam")
+  homeEvents         Event[]                  @relation("HomeTeam")
+  awayEvents         Event[]                  @relation("AwayTeam")
+  transfersFrom      PlayerTransfer[]         @relation("TransferFromTeam")
+  transfersTo        PlayerTransfer[]         @relation("TransferToTeam")
   messageTargeting   MessageTargeting[]
   auditLogs          AuditLog[]
   practiceSessions   PracticeSession[]
@@ -122,6 +135,8 @@ model Team {
   gameSchedules      GameSchedule[]
   venueRelationships VenueRelationship[]
   iceTimeRequests    IceTimeRequest[]
+  hostedSignupEvents SignupEvent[]
+  signupPhases       EventRegistrationPhase[] @relation("PhaseTeams")
 
   @@index([leagueId]) // Optimize league-team queries
   @@index([divisionId]) // Optimize division-team queries
@@ -180,6 +195,8 @@ model Player {
 
   // Transfer history
   transfers PlayerTransfer[]
+
+  eventRegistrations EventRegistration[]
 
   @@index([leagueId]) // Optimize league-wide roster queries
 }
@@ -278,14 +295,27 @@ enum InvitationStatus {
 
 // League model - simplified version for MVP
 model League {
-  id           String   @id @default(cuid())
+  id           String  @id @default(cuid())
   name         String
-  sport        Sport    @default(HOCKEY)
+  sport        Sport   @default(HOCKEY)
   contactEmail String
   contactPhone String?
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  isActive     Boolean @default(true)
+  // Public URL slug for the association events page; generated when the league
+  // first publishes a PUBLIC signup event, editable by league admins.
+  slug         String? @unique
+
+  // Stripe Connect (direct charges) — the league/association is the merchant of
+  // record for its hosted signup events. Mirrors VenueOrganization.
+  stripeAccountId        String? @unique
+  stripeChargesEnabled   Boolean @default(false)
+  stripePayoutsEnabled   Boolean @default(false)
+  stripeDetailsSubmitted Boolean @default(false)
+  // Optional platform application fee in basis points (e.g. 250 = 2.5%). Falls back to env default.
+  platformFeeBps         Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Essential relationships only
   divisions               Division[]
@@ -302,6 +332,8 @@ model League {
   gameSchedules           GameSchedule[]
   venueRelationships      VenueRelationship[]
   iceTimeRequests         IceTimeRequest[]
+  hostedSignupEvents      SignupEvent[]
+  payments                Payment[]
 
   @@map("leagues")
 }
@@ -317,9 +349,10 @@ model Division {
   updatedAt  DateTime @updatedAt
 
   leagueId         String
-  league           League             @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  league           League                   @relation(fields: [leagueId], references: [id], onDelete: Restrict)
   teams            Team[]
   messageTargeting MessageTargeting[]
+  signupPhases     EventRegistrationPhase[] @relation("PhaseDivisions")
 
   @@map("divisions")
 }
@@ -804,9 +837,10 @@ model VenueOrganization {
   createdById String
   createdBy   User   @relation("VenueOrganizationCreator", fields: [createdById], references: [id], onDelete: Restrict)
 
-  venues   Venue[]
-  staff    VenueStaff[]
-  payments Payment[]
+  venues             Venue[]
+  staff              VenueStaff[]
+  payments           Payment[]
+  hostedSignupEvents SignupEvent[]
 
   @@index([createdById])
   @@index([status])
@@ -894,6 +928,7 @@ model Venue {
   activityLogs    VenueActivityLog[]
   registrations   SessionRegistration[]
   payments        Payment[]
+  signupEvents    SignupEvent[]
 
   @@index([visibility])
   @@index([teamId])
@@ -922,6 +957,8 @@ model IceSurface {
   operatingHours  VenueOperatingHour[]
   scheduleBlocks  VenueScheduleBlock[]
   lessonOfferings LessonOffering[]
+  signupEvents    SignupEvent[]        @relation("SignupEventSurfaces")
+  eventGames      EventGame[]
 
   @@unique([venueId, name])
   @@index([venueId, isActive])
@@ -1228,17 +1265,27 @@ model Payment {
   createdAt               DateTime      @default(now())
   updatedAt               DateTime      @updatedAt
 
-  registrationId String              @unique
-  registration   SessionRegistration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  // Exactly one of registrationId / eventRegistrationId is set (DB CHECK constraint).
+  registrationId String?              @unique
+  registration   SessionRegistration? @relation(fields: [registrationId], references: [id], onDelete: Cascade)
 
-  venueId String
-  venue   Venue  @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  eventRegistrationId String?            @unique
+  eventRegistration   EventRegistration? @relation(fields: [eventRegistrationId], references: [id], onDelete: Cascade)
 
-  organizationId String
-  organization   VenueOrganization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // Merchant of record — exactly one of organizationId / leagueId is set (DB CHECK
+  // constraint); venueId only accompanies organizationId.
+  venueId String?
+  venue   Venue?  @relation(fields: [venueId], references: [id], onDelete: Cascade)
+
+  organizationId String?
+  organization   VenueOrganization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  leagueId String?
+  league   League? @relation(fields: [leagueId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, status])
   @@index([venueId, status])
+  @@index([leagueId, status])
   @@index([stripePaymentIntentId])
   @@map("payments")
 }
@@ -1295,4 +1342,492 @@ model ScheduleGame {
 
   @@index([gameScheduleId, roundNumber])
   @@map("schedule_games")
+}
+
+// ============================================================================
+// Signup Events & Event Day Management (feature 004-signup-events)
+// ============================================================================
+
+enum SignupEventStatus {
+  DRAFT
+  PUBLISHED
+  CANCELED
+  COMPLETED
+}
+
+enum SignupEventVisibility {
+  PRIVATE // host organizers/managers only
+  INVITE_ONLY // invitees (EventInvitation) only
+  LINK // anyone holding linkToken
+  PUBLIC // listed on host/venue pages and discovery
+}
+
+enum SignupEventCategory {
+  CLINIC
+  SCRIMMAGE
+  TRYOUT
+  VOLUNTEER
+  FUNDRAISER
+  TOURNAMENT
+  SOCIAL
+  OTHER
+}
+
+// Ordered ranks; game scores/stats allowed at/above STATS_MIN_AGE_LEVEL
+// (default SQUIRT_U10 per USA Hockey ADM — no stats at 8U/mite and below).
+enum AgeClassification {
+  U6
+  U8
+  SQUIRT_U10
+  PEEWEE_U12
+  BANTAM_U14
+  U16
+  U18
+  JUNIOR
+  ADULT
+  OPEN
+}
+
+enum EventRegistrationStatus {
+  PENDING_PAYMENT // held spot awaiting online payment (30-min hold window)
+  CONFIRMED
+  WAITLISTED // ordered by waitlistJoinedAt
+  OFFERED // promoted from waitlist; holds a spot until offerExpiresAt
+  CANCELED
+  EXPIRED // lapsed payment hold or lapsed waitlist offer
+  REFUNDED
+}
+
+enum ManualPaymentStatus {
+  NOT_REQUIRED
+  UNPAID
+  PAID
+  WAIVED
+}
+
+enum PhaseAudience {
+  HOST_MEMBERS // members of the hosting league/team/organization
+  SELECTED_GROUPS // linked divisions/teams
+  INVITEES // EventInvitation holders
+  EVERYONE // anyone with view access
+}
+
+enum EventInvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+}
+
+enum EventGameStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELED
+}
+
+enum IceUsage {
+  FULL_ICE
+  HALF_ICE
+  CROSS_ICE
+}
+
+enum EventMediaKind {
+  PHOTO
+  VIDEO
+}
+
+enum EventMediaStatus {
+  ACTIVE
+  FLAGGED // reported, pending organizer review; hidden from non-organizers
+  REMOVED
+}
+
+enum GalleryVisibility {
+  PARTICIPANTS // registrants + organizers (default)
+  EVENT_AUDIENCE // whoever can view the event (per visibility tier)
+}
+
+// A hosted signup event (Mite Night, clinic, tryout, tournament, volunteer
+// signup…) with capacity-limited role slots. Distinct from team calendar
+// Events (roster RSVPs) and VenueScheduleBlocks (venue schedule).
+model SignupEvent {
+  id                String                @id @default(cuid())
+  title             String
+  description       String?
+  category          SignupEventCategory   @default(OTHER)
+  ageClassification AgeClassification     @default(OPEN)
+  status            SignupEventStatus     @default(DRAFT)
+  visibility        SignupEventVisibility @default(PRIVATE)
+  // 32-byte crypto-random hex; set while visibility = LINK; regenerable.
+  linkToken         String?               @unique
+
+  startAt      DateTime
+  endAt        DateTime
+  // Display timezone, copied from the venue (or host default) when set.
+  timezone     String   @default("America/New_York")
+  locationText String?
+
+  registrationOpensAt  DateTime?
+  registrationClosesAt DateTime?
+  // Self-service cancellation cutoff for registrants (managers are exempt).
+  cancellationCutoffAt DateTime?
+
+  contactName  String?
+  contactEmail String?
+  contactPhone String?
+
+  // Payment configuration. Online requires the host merchant to be onboarded.
+  acceptsOnlinePayment Boolean @default(false)
+  acceptsManualPayment Boolean @default(true)
+  venmoHandle          String?
+  zelleHandle          String?
+  cashAppHandle        String?
+  paymentPhone         String?
+  paymentInstructions  String?
+
+  galleryEnabled    Boolean           @default(true)
+  galleryVisibility GalleryVisibility @default(PARTICIPANTS)
+  // Opt-in public roster (first name + last initial only on public views).
+  publicRoster      Boolean           @default(false)
+
+  publishedAt DateTime?
+  canceledAt  DateTime?
+  // When set, event teams/games are visible to participants (organizers can
+  // build rosters privately before posting them).
+  teamsPublishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Exactly one hosting entity is set (DB CHECK constraint).
+  hostOrganizationId String?
+  hostOrganization   VenueOrganization? @relation(fields: [hostOrganizationId], references: [id], onDelete: Cascade)
+
+  hostLeagueId String?
+  hostLeague   League? @relation(fields: [hostLeagueId], references: [id], onDelete: Cascade)
+
+  hostTeamId String?
+  hostTeam   Team?   @relation(fields: [hostTeamId], references: [id], onDelete: Cascade)
+
+  venueId String?
+  venue   Venue?  @relation(fields: [venueId], references: [id], onDelete: SetNull)
+
+  surfaces IceSurface[] @relation("SignupEventSurfaces")
+
+  createdById String
+  createdBy   User   @relation("SignupEventCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  updatedById String?
+  updatedBy   User?   @relation("SignupEventUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  slots         SignupSlot[]
+  phases        EventRegistrationPhase[]
+  registrations EventRegistration[]
+  invitations   EventInvitation[]
+  managers      EventManager[]
+  teams         EventTeam[]
+  games         EventGame[]
+  media         EventMediaItem[]
+
+  @@index([hostOrganizationId, startAt])
+  @@index([hostLeagueId, startAt])
+  @@index([hostTeamId, startAt])
+  @@index([venueId, startAt])
+  @@index([status, visibility, startAt])
+  @@map("signup_events")
+}
+
+// A named, capacity-limited role within an event (Goalie, Skater, Referee,
+// Coach, Volunteer…). Capacity is enforced per slot at confirmation time.
+model SignupSlot {
+  id              String   @id @default(cuid())
+  name            String
+  description     String?
+  sortOrder       Int      @default(0)
+  // null = unlimited. Reducing below the confirmed count never revokes
+  // registrations; it only blocks new ones.
+  capacity        Int?
+  // Price in cents; null or 0 = free.
+  priceAmount     Int?
+  priceCurrency   String   @default("USD")
+  waitlistEnabled Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  eventId String
+  event   SignupEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  registrations EventRegistration[]
+
+  @@index([eventId, sortOrder])
+  @@map("signup_slots")
+}
+
+// Ordered access window controlling when a given audience may register.
+// Eligibility is evaluated at request time; no scheduler mutates phases.
+model EventRegistrationPhase {
+  id        String        @id @default(cuid())
+  name      String
+  opensAt   DateTime
+  audience  PhaseAudience
+  sortOrder Int           @default(0)
+  createdAt DateTime      @default(now())
+
+  eventId String
+  event   SignupEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  // Populated when audience = SELECTED_GROUPS.
+  divisions Division[] @relation("PhaseDivisions")
+  teams     Team[]     @relation("PhaseTeams")
+
+  @@index([eventId, opensAt])
+  @@map("event_registration_phases")
+}
+
+// One named participant's claim on one slot — including waitlist entries and
+// offers. The registrant (User) is the contact of record; participants (e.g.
+// children) need no account.
+model EventRegistration {
+  id     String                  @id @default(cuid())
+  status EventRegistrationStatus @default(CONFIRMED)
+
+  // Participant snapshot at registration time.
+  participantName  String
+  participantEmail String?
+  participantPhone String?
+  notes            String?
+  // Organizer-set: may rotate through multiple games regardless of team.
+  isFloater        Boolean @default(false)
+
+  // Price snapshot in cents at registration time (never from the client).
+  unitAmount Int    @default(0)
+  currency   String @default("USD")
+
+  manualPaymentStatus     ManualPaymentStatus @default(NOT_REQUIRED)
+  manualPaymentMarkedById String?
+  manualPaymentMarkedBy   User?               @relation("ManualPaymentMarker", fields: [manualPaymentMarkedById], references: [id], onDelete: SetNull)
+
+  waitlistJoinedAt DateTime? // FIFO ordering key while WAITLISTED
+  offerExpiresAt   DateTime? // set while OFFERED
+
+  confirmedAt DateTime?
+  canceledAt  DateTime?
+  checkedInAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  eventId String
+  event   SignupEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  slotId String
+  slot   SignupSlot @relation(fields: [slotId], references: [id], onDelete: Cascade)
+
+  registrantId String
+  registrant   User   @relation("EventRegistrant", fields: [registrantId], references: [id], onDelete: Cascade)
+
+  // Optional link to a roster player (origin team/level context for team formation).
+  playerId String?
+  player   Player? @relation(fields: [playerId], references: [id], onDelete: SetNull)
+
+  checkedInById String?
+  checkedInBy   User?   @relation("EventCheckInActor", fields: [checkedInById], references: [id], onDelete: SetNull)
+
+  canceledById String?
+  canceledBy   User?   @relation("EventRegistrationCanceler", fields: [canceledById], references: [id], onDelete: SetNull)
+
+  payment            Payment?
+  teamAssignment     EventTeamAssignment?
+  gameParticipations EventGameParticipant[]
+  gameStats          PlayerGameStat[]
+
+  @@index([eventId, status])
+  @@index([slotId, status, waitlistJoinedAt])
+  @@index([registrantId])
+  @@map("event_registrations")
+}
+
+// Email-bound invitation to view/register; the access mechanism for
+// INVITE_ONLY events.
+model EventInvitation {
+  id         String                @id @default(cuid())
+  email      String
+  token      String                @unique
+  status     EventInvitationStatus @default(PENDING)
+  expiresAt  DateTime // event startAt
+  sentAt     DateTime              @default(now())
+  acceptedAt DateTime?
+  revokedAt  DateTime?
+
+  eventId String
+  event   SignupEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  invitedUserId String?
+  invitedUser   User?   @relation("EventInvitee", fields: [invitedUserId], references: [id], onDelete: SetNull)
+
+  invitedById String
+  invitedBy   User   @relation("EventInviter", fields: [invitedById], references: [id], onDelete: Restrict)
+
+  @@unique([eventId, email])
+  @@index([invitedUserId])
+  @@map("event_invitations")
+}
+
+// Per-event management grant (mite delegate, event coordinator…). Host-entity
+// admins are implicit managers and need no row.
+model EventManager {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  eventId String
+  event   SignupEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation("EventManagerUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  grantedById String
+  grantedBy   User   @relation("EventManagerGrantor", fields: [grantedById], references: [id], onDelete: Restrict)
+
+  @@unique([eventId, userId])
+  @@map("event_managers")
+}
+
+// Organizer-created team within an event (Red, White, House Gold…).
+model EventTeam {
+  id        String   @id @default(cuid())
+  name      String
+  colorHex  String?
+  sortOrder Int      @default(0)
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  eventId String
+  event   SignupEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  assignments        EventTeamAssignment[]
+  homeGames          EventGame[]            @relation("EventGameHome")
+  awayGames          EventGame[]            @relation("EventGameAway")
+  gameParticipations EventGameParticipant[]
+
+  @@unique([eventId, name])
+  @@map("event_teams")
+}
+
+// A participant's primary team assignment (at most one per event).
+model EventTeamAssignment {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  eventTeamId String
+  eventTeam   EventTeam @relation(fields: [eventTeamId], references: [id], onDelete: Cascade)
+
+  registrationId String            @unique
+  registration   EventRegistration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  assignedById String
+  assignedBy   User   @relation("EventTeamAssigner", fields: [assignedById], references: [id], onDelete: Restrict)
+
+  @@index([eventTeamId])
+  @@map("event_team_assignments")
+}
+
+// A scheduled matchup of two event teams within the event.
+model EventGame {
+  id        String          @id @default(cuid())
+  name      String?
+  status    EventGameStatus @default(SCHEDULED)
+  startAt   DateTime
+  endAt     DateTime
+  iceUsage  IceUsage        @default(FULL_ICE)
+  zoneLabel String? // "North half", "Cross-ice zone 2"
+  // Writable only when isStatsEligible(event.ageClassification).
+  homeScore Int?
+  awayScore Int?
+  notes     String?
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  eventId String
+  event   SignupEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  surfaceId String?
+  surface   IceSurface? @relation(fields: [surfaceId], references: [id], onDelete: SetNull)
+
+  homeTeamId String
+  homeTeam   EventTeam @relation("EventGameHome", fields: [homeTeamId], references: [id], onDelete: Cascade)
+
+  awayTeamId String
+  awayTeam   EventTeam @relation("EventGameAway", fields: [awayTeamId], references: [id], onDelete: Cascade)
+
+  participants EventGameParticipant[]
+  stats        PlayerGameStat[]
+
+  @@index([eventId, startAt])
+  @@index([surfaceId, startAt])
+  @@map("event_games")
+}
+
+// A participant's inclusion in a specific game's rotation, including which
+// side they skate for in this game (floaters may differ from primary team).
+model EventGameParticipant {
+  id String @id @default(cuid())
+
+  gameId String
+  game   EventGame @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  registrationId String
+  registration   EventRegistration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  eventTeamId String
+  eventTeam   EventTeam @relation(fields: [eventTeamId], references: [id], onDelete: Cascade)
+
+  @@unique([gameId, registrationId])
+  @@map("event_game_participants")
+}
+
+// Basic per-player statistics for age-eligible games.
+model PlayerGameStat {
+  id        String   @id @default(cuid())
+  goals     Int      @default(0)
+  assists   Int      @default(0)
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  gameId String
+  game   EventGame @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  registrationId String
+  registration   EventRegistration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  @@unique([gameId, registrationId])
+  @@map("player_game_stats")
+}
+
+// Uploaded photo/video attached to an event gallery (private Vercel Blob;
+// delivery via short-lived signed URLs after an authorization check).
+model EventMediaItem {
+  id              String           @id @default(cuid())
+  kind            EventMediaKind
+  blobPathname    String
+  contentType     String
+  sizeBytes       Int
+  width           Int?
+  height          Int?
+  durationSeconds Int?
+  caption         String?
+  status          EventMediaStatus @default(ACTIVE)
+  reportCount     Int              @default(0)
+  removedAt       DateTime?
+  createdAt       DateTime         @default(now())
+
+  eventId String
+  event   SignupEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  uploaderId String
+  uploader   User   @relation("EventMediaUploader", fields: [uploaderId], references: [id], onDelete: Cascade)
+
+  removedById String?
+  removedBy   User?   @relation("EventMediaRemover", fields: [removedById], references: [id], onDelete: SetNull)
+
+  @@index([eventId, status, createdAt])
+  @@map("event_media_items")
 }

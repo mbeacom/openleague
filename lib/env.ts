@@ -74,6 +74,15 @@ const envSchema = z.object({
     NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: z.string().optional(),
     // Default platform application fee in basis points (e.g. 250 = 2.5%). Overridable per organization.
     STRIPE_PLATFORM_FEE_BPS: z.coerce.number().int().min(0).max(10000).optional(),
+
+    // Media storage — Vercel Blob (optional; event media galleries hidden when unset)
+    BLOB_READ_WRITE_TOKEN: z.string().optional(),
+    // Signup-event waitlist offer claim window in hours (clamped to event start at runtime)
+    EVENT_WAITLIST_CLAIM_HOURS: z.coerce.number().int().min(1).max(168).optional(),
+    // Minimum age classification allowing game scores/statistics (USA Hockey ADM: no stats at 8U and below)
+    STATS_MIN_AGE_LEVEL: z
+        .enum(['U6', 'U8', 'SQUIRT_U10', 'PEEWEE_U12', 'BANTAM_U14', 'U16', 'U18', 'JUNIOR', 'ADULT', 'OPEN'])
+        .optional(),
 })
 
 // Validate environment variables
@@ -108,6 +117,11 @@ function validateEnv() {
             STRIPE_PLATFORM_FEE_BPS: process.env.STRIPE_PLATFORM_FEE_BPS
                 ? Number(process.env.STRIPE_PLATFORM_FEE_BPS)
                 : undefined,
+            BLOB_READ_WRITE_TOKEN: process.env.BLOB_READ_WRITE_TOKEN,
+            EVENT_WAITLIST_CLAIM_HOURS: process.env.EVENT_WAITLIST_CLAIM_HOURS
+                ? Number(process.env.EVENT_WAITLIST_CLAIM_HOURS)
+                : undefined,
+            STATS_MIN_AGE_LEVEL: process.env.STATS_MIN_AGE_LEVEL as Env['STATS_MIN_AGE_LEVEL'],
         }
     }
 
@@ -162,3 +176,10 @@ export const getBaseUrl = () => {
 // Payments helpers
 export const isStripeConfigured = Boolean(env.STRIPE_SECRET_KEY)
 export const DEFAULT_PLATFORM_FEE_BPS = env.STRIPE_PLATFORM_FEE_BPS ?? 0
+
+// Media storage helpers
+export const isBlobConfigured = Boolean(env.BLOB_READ_WRITE_TOKEN)
+
+// Signup-event helpers
+export const EVENT_WAITLIST_CLAIM_HOURS = env.EVENT_WAITLIST_CLAIM_HOURS ?? 24
+export const STATS_MIN_AGE_LEVEL = env.STATS_MIN_AGE_LEVEL ?? 'SQUIRT_U10'

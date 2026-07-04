@@ -48,6 +48,7 @@
     "@next/mdx": "^16.2.9",
     "@prisma/adapter-neon": "^7.8.0",
     "@prisma/client": "^7.8.0",
+    "@vercel/blob": "^2.5.0",
     "bcryptjs": "^3.0.3",
     "date-fns": "^4.4.0",
     "next": "16.2.6",

@@ -405,3 +405,91 @@ export async function requireVenueContentManager(
 ): Promise<string> {
   return requireVenueStaffRole(organizationId, VENUE_CONTENT_ROLES, venueId);
 }
+
+/**
+ * The hosting entity of a signup event — exactly one id is set.
+ */
+export type SignupEventHost = {
+  organizationId?: string | null;
+  leagueId?: string | null;
+  teamId?: string | null;
+};
+
+/**
+ * Check whether a user is an admin of a signup event's hosting entity:
+ * venue organization staff with scheduling rights, league admin, or team admin.
+ */
+export async function isSignupEventHostAdmin(userId: string, host: SignupEventHost): Promise<boolean> {
+  if (host.organizationId) {
+    return hasVenueStaffRole(userId, host.organizationId, VENUE_SCHEDULE_ROLES);
+  }
+  if (host.leagueId) {
+    const role = await getUserLeagueRole(userId, host.leagueId);
+    return role === "LEAGUE_ADMIN";
+  }
+  if (host.teamId) {
+    return isTeamAdmin(userId, host.teamId);
+  }
+  return false;
+}
+
+/**
+ * Require the user to be an admin of the hosting entity (used for event
+ * creation and manager grants — stricter than per-event management).
+ */
+export async function requireSignupEventHostAdmin(host: SignupEventHost): Promise<string> {
+  const userId = await requireUserId();
+  const allowed = await isSignupEventHostAdmin(userId, host);
+
+  if (!allowed) {
+    throw new Error("Unauthorized: You do not have permission to manage events for this host");
+  }
+
+  return userId;
+}
+
+/**
+ * Check whether a user can manage a signup event: host-entity admin (implicit)
+ * or holder of a per-event EventManager grant.
+ */
+export async function isEventManager(userId: string, eventId: string): Promise<boolean> {
+  const event = await prisma.signupEvent.findUnique({
+    where: { id: eventId },
+    select: { hostOrganizationId: true, hostLeagueId: true, hostTeamId: true },
+  });
+
+  if (!event) {
+    return false;
+  }
+
+  const hostAdmin = await isSignupEventHostAdmin(userId, {
+    organizationId: event.hostOrganizationId,
+    leagueId: event.hostLeagueId,
+    teamId: event.hostTeamId,
+  });
+  if (hostAdmin) {
+    return true;
+  }
+
+  const grant = await prisma.eventManager.findUnique({
+    where: { eventId_userId: { eventId, userId } },
+    select: { id: true },
+  });
+
+  return !!grant;
+}
+
+/**
+ * Require event management rights for a signup event.
+ * Returns the authenticated user's id.
+ */
+export async function requireEventManager(eventId: string): Promise<string> {
+  const userId = await requireUserId();
+  const allowed = await isEventManager(userId, eventId);
+
+  if (!allowed) {
+    throw new Error("Unauthorized: You do not have permission to manage this event");
+  }
+
+  return userId;
+}

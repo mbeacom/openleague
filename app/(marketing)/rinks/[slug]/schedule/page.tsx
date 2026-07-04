@@ -1,8 +1,11 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Alert, Card, CardContent, Chip, Container, Divider, Stack, Typography } from "@mui/material";
+import { Alert, Button, Card, CardContent, Chip, Container, Divider, Stack, Typography } from "@mui/material";
 import { auth } from "@/auth";
 import { getSkillLevelReferences } from "@/lib/actions/venue-content";
 import { getPublicVenueSchedule } from "@/lib/actions/venue-schedules";
+import { listPublicSignupEvents } from "@/lib/actions/signup-events";
+import { listPublicVenueEventGames } from "@/lib/actions/event-teams";
 import {
   AvailableIceBrowser,
   IceTimeRequestForm,
@@ -11,7 +14,7 @@ import {
   VenueScheduleCalendar,
 } from "@/components/features/venue-admin";
 import { formatCurrencyFromCents } from "@/lib/utils/currency";
-import { formatDateTimeInZone } from "@/lib/utils/date";
+import { formatDateTime, formatDateTimeInZone } from "@/lib/utils/date";
 
 export const dynamic = "force-dynamic";
 
@@ -46,6 +49,11 @@ export default async function PublicRinkSchedulePage({ params, searchParams }: P
   if (!venue) {
     notFound();
   }
+
+  const [signupEvents, signupEventGames] = await Promise.all([
+    listPublicSignupEvents({ venueId: venue.id }),
+    listPublicVenueEventGames(venue.id),
+  ]);
 
   const isAuthenticated = Boolean(session?.user);
   const defaultName = session?.user?.name ?? undefined;
@@ -177,6 +185,48 @@ export default async function PublicRinkSchedulePage({ params, searchParams }: P
                         defaultEmail={defaultEmail}
                         loginRedirect={loginRedirect}
                       />
+                    </Stack>
+                  </CardContent>
+                </Card>
+              ))}
+            </Stack>
+          </Stack>
+        ) : null}
+
+        {signupEvents.length > 0 ? (
+          <Stack spacing={2} component="section" aria-labelledby="signup-events-heading">
+            <Typography id="signup-events-heading" variant="h5" component="h2">
+              Signup events
+            </Typography>
+            <Stack spacing={2}>
+              {signupEvents.map((event) => (
+                <Card key={event.id}>
+                  <CardContent>
+                    <Stack
+                      direction={{ xs: "column", sm: "row" }}
+                      spacing={1}
+                      justifyContent="space-between"
+                      alignItems={{ sm: "center" }}
+                    >
+                      <Stack spacing={0.5}>
+                        <Typography variant="h6">{event.title}</Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          {formatDateTime(event.startAt)} ·{" "}
+                          {event.hostOrganization?.name ?? event.hostLeague?.name ?? event.hostTeam?.name ?? ""}
+                        </Typography>
+                        {signupEventGames
+                          .filter((game) => game.eventId === event.id)
+                          .map((game) => (
+                            <Typography key={game.id} variant="caption" color="text.secondary">
+                              {formatDateTime(game.startAt)} — {game.homeTeam.name} vs {game.awayTeam.name}
+                              {game.zoneLabel ? ` (${game.zoneLabel})` : ""}
+                              {game.surface ? ` · ${game.surface.name}` : ""}
+                            </Typography>
+                          ))}
+                      </Stack>
+                      <Button component={Link} href={`/signups/${event.id}`} variant="outlined" size="small">
+                        View & sign up
+                      </Button>
                     </Stack>
                   </CardContent>
                 </Card>
