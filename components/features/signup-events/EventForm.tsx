@@ -33,6 +33,12 @@ import {
   SIGNUP_EVENT_CATEGORIES,
   SIGNUP_EVENT_VISIBILITIES,
 } from "@/lib/utils/validation";
+import {
+  formatDateTimeLocalInput,
+  parseDateTimeLocalToUtc,
+  resolveTimeZone,
+  isValidTimeZone,
+} from "@/lib/utils/date";
 
 const CATEGORY_LABELS: Record<(typeof SIGNUP_EVENT_CATEGORIES)[number], string> = {
   CLINIC: "Clinic / skills",
@@ -71,6 +77,7 @@ export type EventFormInitialValues = {
   visibility: (typeof SIGNUP_EVENT_VISIBILITIES)[number];
   startAt: Date;
   endAt: Date;
+  timezone?: string | null;
   venueId: string | null;
   locationText: string | null;
   registrationOpensAt: Date | null;
@@ -109,16 +116,10 @@ export type EventFormInitialValues = {
 
 interface EventFormProps {
   hostOptions: HostOption[];
-  venueOptions: Array<{ id: string; name: string; city: string | null; state: string | null }>;
+  venueOptions: Array<{ id: string; name: string; city: string | null; state: string | null; timezone: string }>;
   initialValues?: EventFormInitialValues;
   /** Fixed host in edit mode (host cannot change after creation). */
   host?: { kind: "organization" | "league" | "team"; id: string };
-}
-
-function toLocalInputValue(date: Date | null): string {
-  if (!date) return "";
-  const pad = (value: number) => String(value).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 const DEFAULT_SLOTS: SlotRow[] = [
@@ -129,6 +130,24 @@ const DEFAULT_SLOTS: SlotRow[] = [
 export function EventForm({ hostOptions, venueOptions, initialValues, host }: EventFormProps) {
   const router = useRouter();
   const isEdit = Boolean(initialValues);
+  // Zone the wall-clock inputs are interpreted in. On mount it is the event's
+  // stored zone (edit) or the organizer's local zone (create); once a venue is
+  // selected it follows the venue's zone. datetime-local values stay as
+  // wall-clock text and are parsed against `effectiveTimeZone` only on submit.
+  const initialTimeZone = resolveTimeZone(initialValues?.timezone);
+  const [venueId, setVenueId] = useState(initialValues?.venueId ?? "");
+  // Starts from the stored/local zone and follows the venue only when the
+  // organizer actively picks one (so an unrelated venue tz edit never silently
+  // shifts already-saved times).
+  const [effectiveTimeZone, setEffectiveTimeZone] = useState(initialTimeZone);
+  const selectedVenueTimeZone = venueOptions.find((venue) => venue.id === venueId)?.timezone;
+  const handleVenueChange = (nextVenueId: string) => {
+    setVenueId(nextVenueId);
+    const nextVenueTimeZone = venueOptions.find((venue) => venue.id === nextVenueId)?.timezone;
+    // Follow the venue's zone when one is picked; revert to the initial zone
+    // when the venue is cleared so times aren't parsed against a stale zone.
+    setEffectiveTimeZone(isValidTimeZone(nextVenueTimeZone) ? nextVenueTimeZone : initialTimeZone);
+  };
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
@@ -141,7 +160,7 @@ export function EventForm({ hostOptions, venueOptions, initialValues, host }: Ev
       ? initialValues.phases.map((phase) => ({
           id: phase.id,
           name: phase.name,
-          opensAt: toLocalInputValue(phase.opensAt),
+          opensAt: formatDateTimeLocalInput(phase.opensAt, initialTimeZone),
           audience: phase.audience,
           divisionIds: phase.divisionIds,
           teamIds: phase.teamIds,
@@ -193,7 +212,9 @@ export function EventForm({ hostOptions, venueOptions, initialValues, host }: Ev
     const formData = new FormData(event.currentTarget);
     const text = (name: string) => String(formData.get(name) ?? "").trim();
     const optional = (name: string) => (text(name).length > 0 ? text(name) : undefined);
-    const optionalDate = (name: string) => (text(name).length > 0 ? new Date(text(name)) : undefined);
+    const parseLocal = (name: string) =>
+      parseDateTimeLocalToUtc(text(name), effectiveTimeZone) ?? new Date(NaN);
+    const optionalDate = (name: string) => (text(name).length > 0 ? parseLocal(name) : undefined);
 
     const slotInputs = slots
       .filter((slot) => slot.name.trim().length > 0)
@@ -220,9 +241,10 @@ export function EventForm({ hostOptions, venueOptions, initialValues, host }: Ev
       category: text("category") as (typeof SIGNUP_EVENT_CATEGORIES)[number],
       ageClassification: text("ageClassification") as (typeof AGE_CLASSIFICATION_OPTIONS)[number],
       visibility: text("visibility") as (typeof SIGNUP_EVENT_VISIBILITIES)[number],
-      startAt: new Date(text("startAt")),
-      endAt: new Date(text("endAt")),
-      venueId: optional("venueId"),
+      startAt: parseLocal("startAt"),
+      endAt: parseLocal("endAt"),
+      timezone: effectiveTimeZone,
+      venueId: venueId || undefined,
       locationText: optional("locationText"),
       registrationOpensAt: optionalDate("registrationOpensAt"),
       registrationClosesAt: optionalDate("registrationClosesAt"),
@@ -245,7 +267,7 @@ export function EventForm({ hostOptions, venueOptions, initialValues, host }: Ev
         .map((phase, index) => ({
           id: phase.id,
           name: phase.name.trim(),
-          opensAt: new Date(phase.opensAt),
+          opensAt: parseDateTimeLocalToUtc(phase.opensAt, effectiveTimeZone) ?? new Date(NaN),
           audience: phase.audience,
           sortOrder: index,
           divisionIds: phase.audience === "SELECTED_GROUPS" ? phase.divisionIds : [],
@@ -366,7 +388,7 @@ export function EventForm({ hostOptions, venueOptions, initialValues, host }: Ev
                 type="datetime-local"
                 required
                 fullWidth
-                defaultValue={toLocalInputValue(initialValues?.startAt ?? null)}
+                defaultValue={formatDateTimeLocalInput(initialValues?.startAt, initialTimeZone)}
                 slotProps={{ inputLabel: { shrink: true } }}
               />
               <TextField
@@ -375,17 +397,22 @@ export function EventForm({ hostOptions, venueOptions, initialValues, host }: Ev
                 type="datetime-local"
                 required
                 fullWidth
-                defaultValue={toLocalInputValue(initialValues?.endAt ?? null)}
+                defaultValue={formatDateTimeLocalInput(initialValues?.endAt, initialTimeZone)}
                 slotProps={{ inputLabel: { shrink: true } }}
               />
             </Stack>
+            <Typography variant="caption" color="text.secondary">
+              Times are entered in {effectiveTimeZone}
+              {effectiveTimeZone === selectedVenueTimeZone ? " (the venue's timezone)" : ""}.
+            </Typography>
             <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
               <TextField
                 select
                 name="venueId"
                 label="Venue (optional)"
                 fullWidth
-                defaultValue={initialValues?.venueId ?? ""}
+                value={venueId}
+                onChange={(event) => handleVenueChange(event.target.value)}
               >
                 <MenuItem value="">No venue / enter location below</MenuItem>
                 {venueOptions.map((venue) => (
@@ -508,7 +535,7 @@ export function EventForm({ hostOptions, venueOptions, initialValues, host }: Ev
                 label="Registration opens (optional)"
                 type="datetime-local"
                 fullWidth
-                defaultValue={toLocalInputValue(initialValues?.registrationOpensAt ?? null)}
+                defaultValue={formatDateTimeLocalInput(initialValues?.registrationOpensAt, initialTimeZone)}
                 slotProps={{ inputLabel: { shrink: true } }}
               />
               <TextField
@@ -516,7 +543,7 @@ export function EventForm({ hostOptions, venueOptions, initialValues, host }: Ev
                 label="Registration closes (optional)"
                 type="datetime-local"
                 fullWidth
-                defaultValue={toLocalInputValue(initialValues?.registrationClosesAt ?? null)}
+                defaultValue={formatDateTimeLocalInput(initialValues?.registrationClosesAt, initialTimeZone)}
                 slotProps={{ inputLabel: { shrink: true } }}
               />
               <TextField
@@ -524,7 +551,7 @@ export function EventForm({ hostOptions, venueOptions, initialValues, host }: Ev
                 label="Cancellation cutoff (optional)"
                 type="datetime-local"
                 fullWidth
-                defaultValue={toLocalInputValue(initialValues?.cancellationCutoffAt ?? null)}
+                defaultValue={formatDateTimeLocalInput(initialValues?.cancellationCutoffAt, initialTimeZone)}
                 slotProps={{ inputLabel: { shrink: true } }}
               />
             </Stack>

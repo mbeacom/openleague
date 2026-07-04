@@ -6,6 +6,7 @@ import { requireTeamAdmin, requireTeamMember, requireUserId } from "@/lib/auth/s
 import { revalidatePath } from "next/cache";
 import { sendEventNotifications } from "@/lib/email/templates";
 import { findVenueConflicts, canUserAccessVenue as checkVenueAccess } from "@/lib/actions/venues";
+import { FALLBACK_TIME_ZONE } from "@/lib/utils/date";
 import {
   createEventSchema,
   updateEventSchema,
@@ -85,10 +86,18 @@ export async function createEvent(
 
     // If venueId provided, auto-populate location from venue name
     let location = validated.location;
+    let venueTimezone: string | undefined;
     if (venueId) {
-      const venue = await prisma.venue.findUnique({ where: { id: venueId }, select: { name: true } });
-      if (venue) location = venue.name;
+      const venue = await prisma.venue.findUnique({ where: { id: venueId }, select: { name: true, timezone: true } });
+      if (venue) {
+        location = venue.name;
+        venueTimezone = venue.timezone;
+      }
     }
+    // Prefer the zone the client parsed the wall-clock times against so the
+    // stored instant round-trips; fall back to the venue's zone, then the
+    // schema default (never the server runtime zone, which is UTC on Vercel).
+    const timezone = validated.timezone ?? venueTimezone ?? FALLBACK_TIME_ZONE;
 
     // Create event with RSVPs for all team members
     const event = await prisma.event.create({
@@ -97,6 +106,7 @@ export async function createEvent(
         title: validated.title,
         startAt: validated.startAt,
         endAt: validated.endAt || null,
+        timezone,
         location,
         venueId,
         opponent: validated.opponent || null,
@@ -222,10 +232,15 @@ export async function updateEvent(
 
     // If venueId provided, auto-populate location from venue name
     let location = validated.location;
+    let venueTimezone: string | undefined;
     if (venueId) {
-      const venue = await prisma.venue.findUnique({ where: { id: venueId }, select: { name: true } });
-      if (venue) location = venue.name;
+      const venue = await prisma.venue.findUnique({ where: { id: venueId }, select: { name: true, timezone: true } });
+      if (venue) {
+        location = venue.name;
+        venueTimezone = venue.timezone;
+      }
     }
+    const timezone = validated.timezone ?? venueTimezone ?? FALLBACK_TIME_ZONE;
 
     // Update the event
     const event = await prisma.event.update({
@@ -235,6 +250,7 @@ export async function updateEvent(
         title: validated.title,
         startAt: validated.startAt,
         endAt: validated.endAt || null,
+        timezone,
         location,
         venueId,
         opponent: validated.opponent || null,
@@ -562,6 +578,7 @@ export async function createInterTeamGame(
         type: "GAME",
         title: validated.title,
         startAt: validated.startAt,
+        timezone: validated.timezone ?? FALLBACK_TIME_ZONE,
         location: validated.location,
         notes: validated.notes || null,
         leagueId: validated.leagueId,

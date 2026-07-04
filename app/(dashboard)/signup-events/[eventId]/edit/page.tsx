@@ -41,6 +41,7 @@ export default async function EditSignupEventPage({
             visibility: event.visibility,
             startAt: event.startAt,
             endAt: event.endAt,
+            timezone: event.timezone,
             venueId: event.venueId,
             locationText: event.locationText,
             registrationOpensAt: event.registrationOpensAt,

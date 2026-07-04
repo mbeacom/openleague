@@ -1,4 +1,15 @@
 import { z } from "zod";
+import { isValidTimeZone } from "@/lib/utils/date";
+
+/**
+ * Optional IANA timezone string (e.g. "America/New_York"). Validated against the
+ * runtime's timezone database so we only ever persist zones we can format back.
+ */
+export const optionalTimeZoneSchema = z
+  .string()
+  .max(100)
+  .refine((value) => isValidTimeZone(value), "Invalid timezone")
+  .optional();
 
 // Sport enum — must match the Prisma Sport enum exactly
 export const SPORTS = [
@@ -265,6 +276,7 @@ const baseEventSchema = z.object({
   }).optional(),
   location: sanitizedStringWithMin(1, 200).refine(val => val.length > 0, "Location is required"),
   venueId: z.string().cuid("Invalid venue ID format").optional().or(z.literal("")),
+  timezone: optionalTimeZoneSchema,
   opponent: optionalSanitizedString(100),
   notes: optionalSanitizedString(1000),
   teamId: z.string().cuid("Invalid team ID format"),
@@ -485,6 +497,7 @@ export const createInterTeamGameSchema = z.object({
   homeTeamId: z.string().min(1, "Home team is required").cuid("Invalid home team ID format"),
   awayTeamId: z.string().min(1, "Away team is required").cuid("Invalid away team ID format"),
   overrideConflicts: z.boolean().optional().default(false),
+  timezone: optionalTimeZoneSchema,
 })
   .refine(
     (data) => {
@@ -1203,6 +1216,7 @@ const signupEventBaseSchema = z.object({
   visibility: z.enum(SIGNUP_EVENT_VISIBILITIES).default("PRIVATE"),
   startAt: z.coerce.date({ message: "Valid start time is required" }),
   endAt: z.coerce.date({ message: "Valid end time is required" }),
+  timezone: optionalTimeZoneSchema,
   venueId: optionalCuid("Invalid venue ID format"),
   locationText: optionalSanitizedString(300),
   registrationOpensAt: z.coerce.date().optional(),

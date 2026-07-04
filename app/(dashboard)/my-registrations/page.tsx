@@ -163,7 +163,7 @@ export default async function MyRegistrationsPage() {
                       </Stack>
 
                       <Typography variant="body2" color="text.secondary">
-                        {reg.participantName} · {formatDateTime(reg.event.startAt)} ·{" "}
+                        {reg.participantName} · {formatDateTime(reg.event.startAt, reg.event.timezone)} ·{" "}
                         {reg.event.venue?.name ?? reg.event.locationText ?? "Location TBD"}
                         {hostName ? ` · ${hostName}` : ""}
                       </Typography>

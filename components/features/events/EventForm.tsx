@@ -18,7 +18,7 @@ import {
 import { createEvent, updateEvent } from "@/lib/actions/events";
 import type { CreateEventInput } from "@/lib/utils/validation";
 import { createEventSchema, updateEventSchema } from "@/lib/utils/validation";
-import { formatDateTimeLocal } from "@/lib/utils/date";
+import { formatDateTimeLocalInput, parseDateTimeLocalToUtc, resolveTimeZone, isValidTimeZone } from "@/lib/utils/date";
 import { trackEventAction } from "@/lib/analytics/umami";
 import VenueSelector from "@/components/features/venues/VenueSelector";
 
@@ -30,6 +30,7 @@ interface EventFormProps {
     title: string;
     startAt: Date;
     endAt?: Date;
+    timezone?: string;
     location: string;
     venueId?: string;
     opponent: string;
@@ -62,6 +63,19 @@ export default function EventForm({
   >({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Timezone the wall-clock times are entered in. Defaults to the event's stored
+  // zone (edit), else the selected venue's zone, else the organizer's local zone.
+  // datetime-local values are kept as wall-clock strings and only converted to a
+  // UTC instant on submit, parsed against this zone.
+  const initialTimeZone = resolveTimeZone(initialData?.timezone);
+  const [timeZone, setTimeZone] = useState(initialTimeZone);
+  const [startAtLocal, setStartAtLocal] = useState(() =>
+    formatDateTimeLocalInput(initialData?.startAt ?? new Date(), initialTimeZone)
+  );
+  const [endAtLocal, setEndAtLocal] = useState(() =>
+    initialData?.endAt ? formatDateTimeLocalInput(initialData.endAt, initialTimeZone) : ""
+  );
+
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
@@ -81,21 +95,32 @@ export default function EventForm({
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     if (name === "endAt") {
-      setFormData((prev) => ({ ...prev, endAt: value ? new Date(value) : undefined }));
+      setEndAtLocal(value);
       setFieldErrors((prev) => ({ ...prev, endAt: undefined }));
     } else {
-      setFormData((prev) => ({ ...prev, startAt: new Date(value) }));
+      setStartAtLocal(value);
       setFieldErrors((prev) => ({ ...prev, startAt: undefined }));
     }
     setError(null);
   };
 
-  const handleVenueChange = (venueId: string, venueName: string) => {
+  const handleVenueChange = (
+    venueId: string,
+    venueName: string,
+    venueTimeZone?: string
+  ) => {
     setFormData((prev) => ({
       ...prev,
       venueId: venueId || "",
       location: venueName || prev.location,
     }));
+    // Adopt the venue's zone so wall-clock times are interpreted at the venue;
+    // revert to the initial zone when the venue is cleared.
+    if (isValidTimeZone(venueTimeZone)) {
+      setTimeZone(venueTimeZone);
+    } else {
+      setTimeZone(initialTimeZone);
+    }
     setError(null);
   };
 
@@ -105,10 +130,31 @@ export default function EventForm({
     setFieldErrors({});
 
     // Client-side validation
+    const startAt = parseDateTimeLocalToUtc(startAtLocal, timeZone);
+    const endAt = endAtLocal ? parseDateTimeLocalToUtc(endAtLocal, timeZone) : undefined;
+
+    if (!startAt) {
+      setFieldErrors((prev) => ({ ...prev, startAt: "Valid date and time is required" }));
+      setError("Please fix the errors below.");
+      return;
+    }
+    if (endAtLocal && !endAt) {
+      setFieldErrors((prev) => ({ ...prev, endAt: "Valid end date and time is required" }));
+      setError("Please fix the errors below.");
+      return;
+    }
+
+    const payload: CreateEventInput = {
+      ...formData,
+      startAt,
+      endAt: endAt ?? undefined,
+      timezone: timeZone,
+    };
+
     const validationSchema = isEditMode ? updateEventSchema : createEventSchema;
     const dataToValidate = isEditMode
-      ? { ...formData, id: eventId! }
-      : formData;
+      ? { ...payload, id: eventId! }
+      : payload;
 
     const validation = validationSchema.safeParse(dataToValidate);
     if (!validation.success) {
@@ -128,8 +174,8 @@ export default function EventForm({
 
     try {
       const result = isEditMode
-        ? await updateEvent({ ...formData, id: eventId! })
-        : await createEvent(formData);
+        ? await updateEvent({ ...payload, id: eventId! })
+        : await createEvent(payload);
 
       if (result.success) {
         // Track event action
@@ -217,13 +263,13 @@ export default function EventForm({
         label="Start Date & Time"
         name="startAt"
         type="datetime-local"
-        value={formatDateTimeLocal(formData.startAt)}
+        value={startAtLocal}
         onChange={handleDateChange}
         required
         fullWidth
         disabled={isSubmitting}
         error={!!fieldErrors.startAt}
-        helperText={fieldErrors.startAt || "Select the event start time"}
+        helperText={fieldErrors.startAt || `Times are in ${timeZone}`}
         slotProps={{ inputLabel: { shrink: true } }}
       />
 
@@ -231,12 +277,12 @@ export default function EventForm({
         label="End Date & Time (optional)"
         name="endAt"
         type="datetime-local"
-        value={formData.endAt ? formatDateTimeLocal(formData.endAt) : ""}
+        value={endAtLocal}
         onChange={handleDateChange}
         fullWidth
         disabled={isSubmitting}
         error={!!fieldErrors.endAt}
-        helperText={fieldErrors.endAt || "Set an end time for ice time scheduling"}
+        helperText={fieldErrors.endAt || `Times are in ${timeZone}`}
         slotProps={{ inputLabel: { shrink: true } }}
       />
 

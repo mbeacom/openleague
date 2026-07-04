@@ -60,7 +60,7 @@ export default async function PublicEventsPage() {
                           />
                         </Stack>
                         <Typography variant="body2" color="text.secondary">
-                          {formatDateTime(event.startAt)} ·{" "}
+                          {formatDateTime(event.startAt, event.timezone)} ·{" "}
                           {event.venue?.name ?? event.locationText ?? "Location TBD"} · {hostName}
                         </Typography>
                         <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
