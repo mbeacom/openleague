@@ -84,6 +84,22 @@ enforcement, confirmation email, self-cancel, roster view + export.
 > currently confirm with manual-payment (unpaid) tracking; online checkout arrives
 > with US5. Waitlist joins arrive with US3 per the phase plan — full slots block
 > registration until then.
+>
+> **US5**: online checkout is limited to one participant per Checkout Session so
+> Payment stays 1:1 with a registration (the proven 003 state machine) — multi-kid
+> online payers check out per child or use manual methods. Waitlist claims on
+> events accepting manual payment confirm as unpaid; online-only events collect
+> payment inside the claim window.
+>
+> **US8 (research R1 deviation)**: media is stored on Vercel Blob as
+> web-accessible objects under server-randomized unguessable pathnames
+> (capability URLs) rather than private blobs with signed URLs — the installed
+> SDK's client-upload flow issues public-access tokens. Gallery LISTING
+> authorization (participants-only default, manager moderation) is enforced as
+> designed; migrating to private blobs + per-request signed URLs is a follow-up.
+> Per-player stat entry is API-complete (recordGameResult accepts stats[]) with
+> score-only UI for v1. T065's mobile pass was a static review (responsive
+> grids/stacks, overflow-x table containers) — no device testing.
 
 ---
 
@@ -214,10 +230,10 @@ records results; TOURNAMENT category rolls standings; downgrade hides stats.
 
 ## Phase 12: Polish & verification
 
-- [ ] T064 [P] Public data boundary audit test: assert `publicSignupEventSelect` output contains no registrant/participant PII fields in __tests__/lib/utils/public-signup-events.test.ts
-- [ ] T065 [P] Mobile pass over all new UI (bottom-nav reachability, 44px touch targets, card layouts for roster/waitlist tables on xs)
-- [ ] T066 [P] Update README.md feature list and docs/ (env vars, cron, Blob setup); note new vercel.json cron
-- [ ] T067 Run `bun run type-check && bun run lint && bun run test` and fix regressions (pre-existing failures in theme-marketing.test.ts and DragDropTeams.test.tsx excluded)
+- [X] T064 [P] Public data boundary audit test: assert `publicSignupEventSelect` output contains no registrant/participant PII fields in __tests__/lib/utils/public-signup-events.test.ts
+- [X] T065 [P] Mobile pass over all new UI (bottom-nav reachability, 44px touch targets, card layouts for roster/waitlist tables on xs)
+- [X] T066 [P] Update README.md feature list and docs/ (env vars, cron, Blob setup); note new vercel.json cron
+- [X] T067 Run `bun run type-check && bun run lint && bun run test` and fix regressions (pre-existing failures in theme-marketing.test.ts and DragDropTeams.test.tsx excluded)
 
 ---
 

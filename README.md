@@ -108,6 +108,10 @@ AWS_REGION="us-east-1"
 - `NEXT_PUBLIC_GOOGLE_ADSENSE_CLIENT` - Google AdSense publisher/client ID used only when ads are enabled
 - `NEXT_PUBLIC_GOOGLE_ADSENSE_MARKETING_SLOT` - AdSense slot ID for the public marketing layout
 - `NEXT_PUBLIC_GOOGLE_ADSENSE_DASHBOARD_SLOT` - Reserved AdSense slot ID for future dashboard placements
+- `STRIPE_SECRET_KEY` / `STRIPE_CONNECT_WEBHOOK_SECRET` / `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` / `STRIPE_PLATFORM_FEE_BPS` - Stripe Connect for rink session and signup-event payments (unset = free/manual-payment mode)
+- `BLOB_READ_WRITE_TOKEN` - Vercel Blob token enabling event photo/video galleries (unset = galleries hidden)
+- `EVENT_WAITLIST_CLAIM_HOURS` - Waitlist offer claim window in hours (default 24)
+- `STATS_MIN_AGE_LEVEL` - Minimum age classification allowing game scores/stats (default `SQUIRT_U10`)
 
 ## Development Workflow
 
@@ -156,6 +160,22 @@ bun run validate-env        # Validate environment variables
 - **Attendance Tracking**: Admins view attendance summaries and member responses
 - **Email Notifications**: Automatic emails for events, invitations, and RSVP reminders
 - **Mobile-First Design**: Optimized for mobile with touch-friendly interface
+
+### Signup Events (SignUpGenius replacement)
+
+Rinks, leagues/associations, and teams can host signup events — Mite Nights, clinics,
+tryouts, volunteer signups, and tournaments — with:
+
+- **Role-limited slots**: per-slot capacities (e.g. 4 goalies / 40 skaters / 4 refs / 8 coaches), never oversold under concurrent registration
+- **Visibility tiers**: private, invite-only (email invitations), link-only (regenerable unguessable links), or public with rollup onto rink/association pages and `/events` discovery
+- **Priority windows & waitlists**: members-first registration phases with automatic FIFO waitlist offers (time-boxed claim windows, cron backstop at `/api/cron/event-waitlist`)
+- **Payments**: Venmo/Zelle/Cash App/cash instructions with organizer paid/unpaid/waived tracking, or online card payment via Stripe Connect (rink orgs and leagues as merchants of record) with refunds
+- **Delegated managers**: per-event grants (mite delegates, coordinators) with audit-logged actions
+- **Event day**: team formation from signups with floaters, half-ice/cross-ice games, rotations, and posted rosters with family notifications
+- **Media galleries**: participant photo/video sharing on Vercel Blob (participants-only by default, organizer moderation) — requires `BLOB_READ_WRITE_TOKEN`
+- **Age-gated stats**: scores/standings only at Squirt (10U) and above per USA Hockey ADM (`STATS_MIN_AGE_LEVEL`); tournament standings derived from results
+
+See `specs/004-signup-events/quickstart.md` for setup and an end-to-end walkthrough.
 
 ### Security & Performance
 
