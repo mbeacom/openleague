@@ -75,7 +75,7 @@ export default function DashboardNav({ mobile = false, isLeagueMode = false }: D
         { label: "Venues", path: "/venues", icon: <PlaceIcon /> },
         { label: "Venue Admin", path: "/venue-admin", icon: <StorefrontIcon /> },
         { label: "My Registrations", path: "/my-registrations", icon: <ConfirmationNumberIcon /> },
-        { label: "Schedules", path: "/schedules", icon: <DateRangeIcon /> },
+        { label: "Seasons", path: "/seasons", icon: <DateRangeIcon /> },
         { label: "Practice Planner", path: "/practice-planner", icon: <SportsHockeyIcon /> },
       ];
     }

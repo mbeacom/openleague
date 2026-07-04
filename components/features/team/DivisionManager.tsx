@@ -29,11 +29,16 @@ import {
   Delete as DeleteIcon,
   People as PeopleIcon,
 } from "@mui/icons-material";
+import type { AgeClassification } from "@prisma/client";
 import {
   createDivision,
   updateDivision,
   deleteDivision
 } from "@/lib/actions/league";
+import {
+  AGE_CLASSIFICATION_LABELS,
+  AGE_CLASSIFICATION_OPTIONS,
+} from "@/lib/utils/age-level";
 import {
   createDivisionSchema,
   updateDivisionSchema,
@@ -46,6 +51,7 @@ interface Division {
   id: string;
   name: string;
   ageGroup: string | null;
+  ageClassification?: AgeClassification | null;
   skillLevel: string | null;
   _count?: {
     teams: number;
@@ -71,6 +77,7 @@ export default function DivisionManager({
   const [formData, setFormData] = useState({
     name: "",
     ageGroup: "",
+    ageClassification: "",
     skillLevel: "",
   });
   const [error, setError] = useState<string | null>(null);
@@ -94,12 +101,14 @@ export default function DivisionManager({
       setFormData({
         name: division.name,
         ageGroup: division.ageGroup || "",
+        ageClassification: division.ageClassification || "",
         skillLevel: division.skillLevel || "",
       });
     } else if (mode === 'create') {
       setFormData({
         name: "",
         ageGroup: "",
+        ageClassification: "",
         skillLevel: "",
       });
     } else if (mode === 'delete' && division) {
@@ -116,6 +125,7 @@ export default function DivisionManager({
     setFormData({
       name: "",
       ageGroup: "",
+      ageClassification: "",
       skillLevel: "",
     });
     setError(null);
@@ -164,6 +174,9 @@ export default function DivisionManager({
           leagueId,
           name: formData.name,
           ageGroup: formData.ageGroup || undefined,
+          ageClassification: formData.ageClassification
+            ? (formData.ageClassification as AgeClassification)
+            : undefined,
           skillLevel: formData.skillLevel || undefined,
         };
 
@@ -193,6 +206,9 @@ export default function DivisionManager({
           leagueId,
           name: formData.name,
           ageGroup: formData.ageGroup || undefined,
+          ageClassification: formData.ageClassification
+            ? (formData.ageClassification as AgeClassification)
+            : null,
           skillLevel: formData.skillLevel || undefined,
         };
 
@@ -386,6 +402,26 @@ export default function DivisionManager({
               error={!!fieldErrors.ageGroup}
               helperText={fieldErrors.ageGroup}
             />
+
+            <TextField
+              select
+              label="Age Classification (Optional)"
+              name="ageClassification"
+              value={formData.ageClassification}
+              onChange={handleChange}
+              fullWidth
+              margin="normal"
+              disabled={isSubmitting}
+              helperText={fieldErrors.ageClassification || "Drives score/standings gating for season games"}
+              error={!!fieldErrors.ageClassification}
+            >
+              <MenuItem value="">Not specified</MenuItem>
+              {AGE_CLASSIFICATION_OPTIONS.map((option) => (
+                <MenuItem key={option} value={option}>
+                  {AGE_CLASSIFICATION_LABELS[option]}
+                </MenuItem>
+              ))}
+            </TextField>
 
             <TextField
               label="Skill Level (Optional)"

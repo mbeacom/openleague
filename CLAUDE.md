@@ -76,7 +76,7 @@ app/                              # Next.js App Router
 │   ├── roster/                  # Roster management
 │   ├── calendar/                # Event calendar views
 │   ├── events/                  # Event creation and details
-│   ├── schedules/               # Game schedule management
+│   ├── seasons/                 # Season & game scheduling (phases, proposals, placement)
 │   ├── venues/                  # Venue CRUD
 │   ├── league/                  # League management (if applicable)
 │   ├── practice-planner/        # Practice session planning with rink board
@@ -95,6 +95,7 @@ components/                      # React components
 │   ├── roster/                  # RosterList, PlayerCard, AddPlayerDialog, TeamOfficialCard
 │   ├── dashboard/               # DashboardNav, DashboardSidebar
 │   ├── events/                  # EventForm, EventCard, RSVPButton
+│   ├── seasons/                 # SeasonList, SeasonForm, GameForm, GenerationWizard, PlacementBoard
 │   ├── practice-planner/        # RinkBoard, DrawingToolbar, PlayEditor, PlayLibrary
 │   └── navigation/              # MobileNavigation, Breadcrumbs
 ├── ui/                          # Generic reusable UI primitives
@@ -120,7 +121,11 @@ lib/                             # Core application logic
 │   ├── plays.ts                 # Play/drill management (practice planner)
 │   ├── practice-sessions.ts     # Practice session management
 │   ├── practice-session-queries.ts # Read-only practice session queries
-│   ├── game-schedules.ts        # Game schedule CRUD
+│   ├── seasons.ts               # Season + phase CRUD
+│   ├── season-games.ts          # Season game scheduling, Event/RSVP fan-out, scores
+│   ├── season-generation.ts     # Opt-in round-robin generation (preview + drafts)
+│   ├── game-proposals.ts        # Team-to-team game proposal threads
+│   ├── placements.ts            # Pre-season skill placement into divisions
 │   └── venues.ts                # Venue management
 ├── auth/                        # Authentication utilities
 │   ├── config.ts                # Auth.js configuration
@@ -532,6 +537,8 @@ Business Source License 1.1 (BUSL-1.1) - converts to Apache 2.0 on October 4, 20
 - PostgreSQL through Prisma; public logo assets require object/file storage integration selected during implementation (002-ice-rink-management)
 - TypeScript, Next.js 16 App Router, React 19 + MUI v7/Emotion, Prisma 7, Neon PostgreSQL adapter, Auth.js v5, (004-signup-events)
 - PostgreSQL via Prisma (amounts in cents); Vercel Blob (private) for media (004-signup-events)
+- TypeScript (strict) on Next.js 16 App Router, React 19 + MUI v7 + Emotion, Prisma 7 (Neon PostgreSQL adapter), Auth.js v5, Zod v4, Bun (005-season-scheduling)
+- PostgreSQL via Prisma; new models `Season`, `SeasonPhase`, `SeasonGame`, `GameProposal`, `GameProposalEntry`, `PlacementDecision`; `Division.ageClassification` added; `GameSchedule`/`ScheduleGame` dropped (005-season-scheduling)
 
 ## Recent Changes
 - 002-ice-rink-management: Added TypeScript with Next.js 16 App Router and React 19 + MUI v7/Emotion, Prisma 7, Neon PostgreSQL adapter, Auth.js v5, Zod v4, Bun
