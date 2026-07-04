@@ -1384,3 +1384,81 @@ export const eventManagerCommandSchema = z.object({
 
 export type AddEventManagerInput = z.input<typeof addEventManagerSchema>;
 export type EventManagerCommandInput = z.input<typeof eventManagerCommandSchema>;
+
+// --- Event teams, games & rotations (US7) ---
+
+export const ICE_USAGES = ["FULL_ICE", "HALF_ICE", "CROSS_ICE"] as const;
+
+export const eventTeamSchema = z.object({
+  eventId: z.string().cuid("Invalid event ID format"),
+  teamId: optionalCuid("Invalid team ID format"),
+  name: sanitizedStringWithMin(1, 60),
+  colorHex: hexColorSchema,
+  notes: optionalSanitizedString(500),
+});
+
+export const eventTeamCommandSchema = z.object({
+  teamId: z.string().cuid("Invalid team ID format"),
+});
+
+export const assignToEventTeamSchema = z.object({
+  eventTeamId: z.string().cuid("Invalid team ID format"),
+  registrationIds: z.array(z.string().cuid("Invalid registration ID format")).min(1).max(200),
+});
+
+export const removeTeamAssignmentSchema = z.object({
+  registrationId: z.string().cuid("Invalid registration ID format"),
+});
+
+export const setFloaterSchema = z.object({
+  registrationId: z.string().cuid("Invalid registration ID format"),
+  isFloater: z.boolean(),
+});
+
+export const eventGameSchema = z
+  .object({
+    eventId: z.string().cuid("Invalid event ID format"),
+    gameId: optionalCuid("Invalid game ID format"),
+    name: optionalSanitizedString(100),
+    homeTeamId: z.string().cuid("Invalid team ID format"),
+    awayTeamId: z.string().cuid("Invalid team ID format"),
+    startAt: z.coerce.date({ message: "Valid game start time is required" }),
+    endAt: z.coerce.date({ message: "Valid game end time is required" }),
+    surfaceId: optionalCuid("Invalid surface ID format"),
+    iceUsage: z.enum(ICE_USAGES).default("FULL_ICE"),
+    zoneLabel: optionalSanitizedString(60),
+    notes: optionalSanitizedString(500),
+  })
+  .refine((data) => data.endAt > data.startAt, {
+    message: "Game end must be after game start",
+    path: ["endAt"],
+  })
+  .refine((data) => data.homeTeamId !== data.awayTeamId, {
+    message: "A team cannot play itself",
+    path: ["awayTeamId"],
+  });
+
+export const eventGameCommandSchema = z.object({
+  gameId: z.string().cuid("Invalid game ID format"),
+});
+
+export const setGameRotationSchema = z.object({
+  gameId: z.string().cuid("Invalid game ID format"),
+  entries: z
+    .array(
+      z.object({
+        registrationId: z.string().cuid("Invalid registration ID format"),
+        eventTeamId: z.string().cuid("Invalid team ID format"),
+      })
+    )
+    .max(100),
+});
+
+export type EventTeamInput = z.input<typeof eventTeamSchema>;
+export type EventTeamCommandInput = z.input<typeof eventTeamCommandSchema>;
+export type AssignToEventTeamInput = z.input<typeof assignToEventTeamSchema>;
+export type RemoveTeamAssignmentInput = z.input<typeof removeTeamAssignmentSchema>;
+export type SetFloaterInput = z.input<typeof setFloaterSchema>;
+export type EventGameInput = z.input<typeof eventGameSchema>;
+export type EventGameCommandInput = z.input<typeof eventGameCommandSchema>;
+export type SetGameRotationInput = z.input<typeof setGameRotationSchema>;

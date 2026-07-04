@@ -5,6 +5,7 @@ import { auth } from "@/auth";
 import { getSkillLevelReferences } from "@/lib/actions/venue-content";
 import { getPublicVenueSchedule } from "@/lib/actions/venue-schedules";
 import { listPublicSignupEvents } from "@/lib/actions/signup-events";
+import { listPublicVenueEventGames } from "@/lib/actions/event-teams";
 import {
   AvailableIceBrowser,
   IceTimeRequestForm,
@@ -49,7 +50,10 @@ export default async function PublicRinkSchedulePage({ params, searchParams }: P
     notFound();
   }
 
-  const signupEvents = await listPublicSignupEvents({ venueId: venue.id });
+  const [signupEvents, signupEventGames] = await Promise.all([
+    listPublicSignupEvents({ venueId: venue.id }),
+    listPublicVenueEventGames(venue.id),
+  ]);
 
   const isAuthenticated = Boolean(session?.user);
   const defaultName = session?.user?.name ?? undefined;
@@ -210,6 +214,15 @@ export default async function PublicRinkSchedulePage({ params, searchParams }: P
                           {formatDateTime(event.startAt)} ·{" "}
                           {event.hostOrganization?.name ?? event.hostLeague?.name ?? event.hostTeam?.name ?? ""}
                         </Typography>
+                        {signupEventGames
+                          .filter((game) => game.eventId === event.id)
+                          .map((game) => (
+                            <Typography key={game.id} variant="caption" color="text.secondary">
+                              {formatDateTime(game.startAt)} — {game.homeTeam.name} vs {game.awayTeam.name}
+                              {game.zoneLabel ? ` (${game.zoneLabel})` : ""}
+                              {game.surface ? ` · ${game.surface.name}` : ""}
+                            </Typography>
+                          ))}
                       </Stack>
                       <Button component={Link} href={`/events/${event.id}`} variant="outlined" size="small">
                         View & sign up

@@ -168,12 +168,12 @@ revocation immediate.
 two overlapping half-ice games on different zones, assign floaters to both, publish,
 participants see assignments; non-floater double-booking warns.
 
-- [ ] T049 [US7] Implement lib/actions/event-teams.ts: team CRUD (`createEventTeam`/`updateEventTeam`/`deleteEventTeam`), `assignToEventTeam` (primary assignment upsert + per-team position counts from slot names), `setFloater`
-- [ ] T050 [US7] Implement game scheduling in lib/actions/event-teams.ts: `createEventGame`/`updateEventGame`/`deleteEventGame` (two event teams, window inside event, surface + iceUsage/zoneLabel), `setGameRotation` (replace participation list; non-floater overlap → warnings[]), `publishEventTeams` (+assignment-change notifications)
-- [ ] T051 [P] [US7] Schemas for teams/games/rotations in lib/utils/validation.ts; team-published + assignment-change email templates in lib/email/templates.ts
-- [ ] T052 [P] [US7] TeamBoard.tsx (assign confirmed participants, origin club team via linked Player, position counts, floater flags) and GameScheduler.tsx (matchups, time, surface/zone, rotation editor with conflict warnings) in components/features/signup-events/; teams & games tab on dashboard [eventId] page; participant-facing "My team/games" section on event page
-- [ ] T053 [P] [US7] Surface event games on the venue schedule view where venue is on-platform (FR-032)
-- [ ] T054 [P] [US7] Tests: assignment uniqueness, floater multi-game rotation, overlap warning logic in __tests__/lib/actions/event-teams.test.ts
+- [X] T049 [US7] Implement lib/actions/event-teams.ts: team CRUD (`createEventTeam`/`updateEventTeam`/`deleteEventTeam`), `assignToEventTeam` (primary assignment upsert + per-team position counts from slot names), `setFloater`
+- [X] T050 [US7] Implement game scheduling in lib/actions/event-teams.ts: `createEventGame`/`updateEventGame`/`deleteEventGame` (two event teams, window inside event, surface + iceUsage/zoneLabel), `setGameRotation` (replace participation list; non-floater overlap → warnings[]), `publishEventTeams` (+assignment-change notifications)
+- [X] T051 [P] [US7] Schemas for teams/games/rotations in lib/utils/validation.ts; team-published + assignment-change email templates in lib/email/templates.ts
+- [X] T052 [P] [US7] TeamBoard.tsx (assign confirmed participants, origin club team via linked Player, position counts, floater flags) and GameScheduler.tsx (matchups, time, surface/zone, rotation editor with conflict warnings) in components/features/signup-events/; teams & games tab on dashboard [eventId] page; participant-facing "My team/games" section on event page
+- [X] T053 [P] [US7] Surface event games on the venue schedule view where venue is on-platform (FR-032)
+- [X] T054 [P] [US7] Tests: assignment uniqueness, floater multi-game rotation, overlap warning logic in __tests__/lib/actions/event-teams.test.ts
 
 **Checkpoint**: event-day workflow complete.
 

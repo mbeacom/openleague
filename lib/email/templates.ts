@@ -1517,3 +1517,30 @@ export async function sendEventInvitationEmail(data: EventInvitationEmailData): 
     },
   });
 }
+
+interface EventTeamsUpdateEmailData {
+  recipients: SignupEventRecipient[];
+  eventTitle: string;
+  eventId: string;
+  isInitialPublish: boolean;
+}
+
+/** Teams/rosters posted (or updated after posting) for a signup event. */
+export async function sendEventTeamsUpdateEmail(data: EventTeamsUpdateEmailData): Promise<void> {
+  if (data.recipients.length === 0) return;
+  const mailchimp = getMailchimpClient();
+  const eventLink = `${BASE_URL}/events/${data.eventId}`;
+  const headline = data.isInitialPublish
+    ? `Teams are posted for ${data.eventTitle}`
+    : `Team assignments updated for ${data.eventTitle}`;
+
+  await mailchimp.messages.send({
+    message: {
+      from_email: EMAIL_FROM,
+      subject: headline,
+      html: `<p>${headline}.</p><p><a href="${eventLink}">See your team and game times</a></p>`,
+      text: `${headline}. See your team and game times: ${eventLink}`,
+      to: data.recipients.map((recipient) => ({ email: recipient.email, type: "bcc" as const })),
+    },
+  });
+}

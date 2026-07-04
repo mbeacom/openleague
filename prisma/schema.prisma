@@ -1491,6 +1491,9 @@ model SignupEvent {
 
   publishedAt DateTime?
   canceledAt  DateTime?
+  // When set, event teams/games are visible to participants (organizers can
+  // build rosters privately before posting them).
+  teamsPublishedAt DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 

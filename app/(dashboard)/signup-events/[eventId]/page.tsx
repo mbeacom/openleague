@@ -16,6 +16,9 @@ import { getManagedSignupEvent } from "@/lib/actions/signup-events";
 import { getEventRoster } from "@/lib/actions/event-registrations";
 import { listEventInvitations } from "@/lib/actions/event-invitations";
 import { listEventManagers } from "@/lib/actions/event-managers";
+import { getEventTeamsBoard } from "@/lib/actions/event-teams";
+import { TeamBoard } from "@/components/features/signup-events/TeamBoard";
+import { GameScheduler } from "@/components/features/signup-events/GameScheduler";
 import { getSignupEventActivity } from "@/lib/utils/event-activity";
 import { isSignupEventHostAdmin, requireUserId } from "@/lib/auth/session";
 import { EventStatusActions, RosterTable } from "@/components/features/signup-events";
@@ -40,16 +43,32 @@ export default async function ManageSignupEventPage({
   params: Promise<{ eventId: string }>;
 }) {
   const { eventId } = await params;
-  const [event, roster, invitations, managers, userId] = await Promise.all([
+  const [event, roster, invitations, managers, board, userId] = await Promise.all([
     getManagedSignupEvent(eventId),
     getEventRoster({ eventId }),
     listEventInvitations(eventId),
     listEventManagers(eventId),
+    getEventTeamsBoard(eventId),
     requireUserId(),
   ]);
   if (!event) {
     notFound();
   }
+
+  const rotationParticipants = [
+    ...board.teams.flatMap((team) =>
+      team.assignments.map((assignment) => ({
+        id: assignment.registration.id,
+        participantName: assignment.registration.participantName,
+        isFloater: assignment.registration.isFloater,
+      }))
+    ),
+    ...board.unassigned.map((registration) => ({
+      id: registration.id,
+      participantName: registration.participantName,
+      isFloater: registration.isFloater,
+    })),
+  ].sort((left, right) => left.participantName.localeCompare(right.participantName));
 
   const isHostAdmin = await isSignupEventHostAdmin(userId, {
     organizationId: event.hostOrganization?.id ?? null,
@@ -120,6 +139,29 @@ export default async function ManageSignupEventPage({
               <Typography variant="h6">Roster</Typography>
               <RosterTable eventId={event.id} slots={roster} />
             </Stack>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent>
+            <TeamBoard
+              eventId={event.id}
+              teams={board.teams}
+              unassigned={board.unassigned}
+              teamsPublishedAt={board.event?.teamsPublishedAt ?? null}
+            />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent>
+            <GameScheduler
+              eventId={event.id}
+              teams={board.teams.map((team) => ({ id: team.id, name: team.name }))}
+              games={board.games}
+              surfaces={board.event?.venue?.surfaces ?? []}
+              participants={rotationParticipants}
+            />
           </CardContent>
         </Card>
 

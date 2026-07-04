@@ -550,3 +550,6 @@ ALTER TABLE "signup_events" ADD CONSTRAINT "signup_events_exactly_one_host"
       + ("hostLeagueId" IS NOT NULL)::int
       + ("hostTeamId" IS NOT NULL)::int) = 1
   );
+
+-- Organizers build teams privately; participants see them once posted.
+ALTER TABLE "signup_events" ADD COLUMN "teamsPublishedAt" TIMESTAMP(3);

@@ -9,16 +9,27 @@ import {
   Typography,
 } from "@mui/material";
 import type { PublicSignupEventView } from "@/lib/actions/signup-events";
+import type { MyEventAssignments, PublicEventGames } from "@/lib/actions/event-teams";
 import { RegisterDialog } from "./RegisterDialog";
 import { AGE_CLASSIFICATION_LABELS } from "@/lib/utils/age-level";
 import { formatCurrencyFromCents } from "@/lib/utils/currency";
 import { formatDateTime } from "@/lib/utils/date";
+
+const ICE_USAGE_LABELS: Record<string, string> = {
+  FULL_ICE: "Full ice",
+  HALF_ICE: "Half ice",
+  CROSS_ICE: "Cross-ice",
+};
 
 interface PublicEventViewProps {
   view: PublicSignupEventView;
   isAuthenticated: boolean;
   loginRedirect: string;
   linkToken?: string;
+  /** Games agenda, present once organizers post teams. */
+  games?: PublicEventGames | null;
+  /** The signed-in family's team/game assignments. */
+  myAssignments?: MyEventAssignments | null;
 }
 
 function paymentNote(event: PublicSignupEventView["event"]): string | null {
@@ -35,7 +46,14 @@ function paymentNote(event: PublicSignupEventView["event"]): string | null {
   return parts.length > 0 ? parts.join(". ") : null;
 }
 
-export function PublicEventView({ view, isAuthenticated, loginRedirect, linkToken }: PublicEventViewProps) {
+export function PublicEventView({
+  view,
+  isAuthenticated,
+  loginRedirect,
+  linkToken,
+  games,
+  myAssignments,
+}: PublicEventViewProps) {
   const { event, availability, viewerPhase, onlinePaymentReady } = view;
   const hostName =
     event.hostOrganization?.name ?? event.hostLeague?.name ?? event.hostTeam?.name ?? "Organizer";
@@ -187,6 +205,65 @@ export function PublicEventView({ view, isAuthenticated, loginRedirect, linkToke
           </Stack>
         </CardContent>
       </Card>
+
+      {myAssignments && myAssignments.length > 0 ? (
+        <Card>
+          <CardContent>
+            <Stack spacing={1.5}>
+              <Typography variant="h6">Your team &amp; games</Typography>
+              {myAssignments.map((assignment) => (
+                <Stack key={assignment.registrationId} spacing={0.5}>
+                  <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                    <Typography variant="subtitle2">{assignment.participantName}</Typography>
+                    {assignment.teamName ? (
+                      <Chip
+                        size="small"
+                        label={assignment.teamName}
+                        sx={assignment.teamColorHex ? { bgcolor: assignment.teamColorHex, color: "#fff" } : undefined}
+                      />
+                    ) : (
+                      <Chip size="small" variant="outlined" label="No team yet" />
+                    )}
+                    {assignment.isFloater ? <Chip size="small" variant="outlined" label="Floater ↻" /> : null}
+                  </Stack>
+                  {assignment.games.map((game) => (
+                    <Typography key={`${assignment.registrationId}-${game.id}`} variant="body2" color="text.secondary">
+                      {formatDateTime(game.startAt)} — {game.homeTeamName} vs {game.awayTeamName}
+                      {game.playingFor ? ` (playing for ${game.playingFor})` : ""} ·{" "}
+                      {ICE_USAGE_LABELS[game.iceUsage] ?? game.iceUsage}
+                      {game.zoneLabel ? ` — ${game.zoneLabel}` : ""}
+                    </Typography>
+                  ))}
+                </Stack>
+              ))}
+            </Stack>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {games && games.length > 0 ? (
+        <Card>
+          <CardContent>
+            <Stack spacing={1.5}>
+              <Typography variant="h6">Game schedule</Typography>
+              {games.map((game) => (
+                <Stack key={game.id} spacing={0.25}>
+                  <Typography variant="subtitle2">
+                    {game.homeTeam.name} vs {game.awayTeam.name}
+                    {game.name ? ` — ${game.name}` : ""}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {formatDateTime(game.startAt)} – {formatDateTime(game.endAt)} ·{" "}
+                    {ICE_USAGE_LABELS[game.iceUsage] ?? game.iceUsage}
+                    {game.zoneLabel ? ` (${game.zoneLabel})` : ""}
+                    {game.surface ? ` · ${game.surface.name}` : ""}
+                  </Typography>
+                </Stack>
+              ))}
+            </Stack>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {(event.contactName || event.contactEmail || event.contactPhone) && (
         <Typography variant="body2" color="text.secondary">

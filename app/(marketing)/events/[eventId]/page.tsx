@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { Alert, Container, Stack } from "@mui/material";
 import { getPublicSignupEvent } from "@/lib/actions/signup-events";
+import { getMyEventAssignments, getPublicEventGames } from "@/lib/actions/event-teams";
 import { PublicEventView } from "@/components/features/signup-events/PublicEventView";
 import { getCurrentUserId } from "@/lib/auth/session";
 
@@ -14,7 +15,12 @@ export default async function PublicEventPage({
   searchParams: Promise<{ registration?: string }>;
 }) {
   const [{ eventId }, { registration }] = await Promise.all([params, searchParams]);
-  const [view, userId] = await Promise.all([getPublicSignupEvent({ eventId }), getCurrentUserId()]);
+  const [view, userId, games, myAssignments] = await Promise.all([
+    getPublicSignupEvent({ eventId }),
+    getCurrentUserId(),
+    getPublicEventGames(eventId),
+    getMyEventAssignments(eventId),
+  ]);
   if (!view) {
     notFound();
   }
@@ -35,6 +41,8 @@ export default async function PublicEventPage({
           view={view}
           isAuthenticated={Boolean(userId)}
           loginRedirect={`/events/${eventId}`}
+          games={games}
+          myAssignments={myAssignments}
         />
       </Stack>
     </Container>
