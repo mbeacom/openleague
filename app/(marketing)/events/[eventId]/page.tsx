@@ -1,8 +1,11 @@
 import { notFound } from "next/navigation";
 import { Alert, Container, Stack } from "@mui/material";
 import { getPublicSignupEvent } from "@/lib/actions/signup-events";
-import { getMyEventAssignments, getPublicEventGames } from "@/lib/actions/event-teams";
+import { getEventStandings, getMyEventAssignments, getPublicEventGames } from "@/lib/actions/event-teams";
+import { listEventMedia } from "@/lib/actions/event-media";
 import { PublicEventView } from "@/components/features/signup-events/PublicEventView";
+import { MediaGallery } from "@/components/features/signup-events/MediaGallery";
+import { StandingsTable } from "@/components/features/signup-events/StandingsTable";
 import { getCurrentUserId } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
@@ -15,11 +18,13 @@ export default async function PublicEventPage({
   searchParams: Promise<{ registration?: string }>;
 }) {
   const [{ eventId }, { registration }] = await Promise.all([params, searchParams]);
-  const [view, userId, games, myAssignments] = await Promise.all([
+  const [view, userId, games, myAssignments, gallery, standings] = await Promise.all([
     getPublicSignupEvent({ eventId }),
     getCurrentUserId(),
     getPublicEventGames(eventId),
     getMyEventAssignments(eventId),
+    listEventMedia({ eventId }),
+    getEventStandings(eventId),
   ]);
   if (!view) {
     notFound();
@@ -44,6 +49,15 @@ export default async function PublicEventPage({
           games={games}
           myAssignments={myAssignments}
         />
+        {standings ? <StandingsTable standings={standings} /> : null}
+        {gallery ? (
+          <MediaGallery
+            eventId={eventId}
+            items={gallery.items}
+            canUpload={gallery.canUpload}
+            canModerate={gallery.canModerate}
+          />
+        ) : null}
       </Stack>
     </Container>
   );

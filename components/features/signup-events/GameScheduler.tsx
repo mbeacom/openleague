@@ -23,6 +23,7 @@ import AddIcon from "@mui/icons-material/Add";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import CloseIcon from "@mui/icons-material/Close";
 import { deleteEventGame, setGameRotation, upsertEventGame } from "@/lib/actions/event-teams";
+import { GameResultForm } from "./GameResultForm";
 import { ICE_USAGES } from "@/lib/utils/validation";
 import { formatDateTime } from "@/lib/utils/date";
 
@@ -45,6 +46,8 @@ type Game = {
   endAt: Date;
   iceUsage: (typeof ICE_USAGES)[number];
   zoneLabel: string | null;
+  homeScore: number | null;
+  awayScore: number | null;
   surface: { id: string; name: string } | null;
   homeTeam: { id: string; name: string };
   awayTeam: { id: string; name: string };
@@ -58,6 +61,8 @@ interface GameSchedulerProps {
   surfaces: Array<{ id: string; name: string }>;
   /** Confirmed participants selectable for rotations. */
   participants: Array<{ id: string; participantName: string; isFloater: boolean }>;
+  /** Scores/stats allowed for this event's age classification (Squirt+). */
+  statsEligible?: boolean;
 }
 
 function toLocalInputValue(date: Date | null): string {
@@ -66,7 +71,14 @@ function toLocalInputValue(date: Date | null): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-export function GameScheduler({ eventId, teams, games, surfaces, participants }: GameSchedulerProps) {
+export function GameScheduler({
+  eventId,
+  teams,
+  games,
+  surfaces,
+  participants,
+  statsEligible = false,
+}: GameSchedulerProps) {
   const router = useRouter();
   const [message, setMessage] = useState<{ severity: "success" | "error" | "warning"; text: string } | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -170,6 +182,15 @@ export function GameScheduler({ eventId, teams, games, surfaces, participants }:
                   </Typography>
                 </Stack>
                 <Stack direction="row" spacing={1}>
+                  {statsEligible ? (
+                    <GameResultForm
+                      gameId={game.id}
+                      homeTeamName={game.homeTeam.name}
+                      awayTeamName={game.awayTeam.name}
+                      homeScore={game.homeScore}
+                      awayScore={game.awayScore}
+                    />
+                  ) : null}
                   <Button size="small" onClick={() => openRotation(game)}>
                     Rotation ({game.participants.length})
                   </Button>

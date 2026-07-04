@@ -1462,3 +1462,43 @@ export type SetFloaterInput = z.input<typeof setFloaterSchema>;
 export type EventGameInput = z.input<typeof eventGameSchema>;
 export type EventGameCommandInput = z.input<typeof eventGameCommandSchema>;
 export type SetGameRotationInput = z.input<typeof setGameRotationSchema>;
+
+// --- Event media galleries (US8) ---
+
+export const finalizeEventMediaSchema = z.object({
+  eventId: z.string().cuid("Invalid event ID format"),
+  url: z.string().url("Invalid media URL").max(1000),
+  contentType: sanitizedStringWithMin(1, 100),
+  sizeBytes: z.coerce.number().int().min(1).max(500 * 1024 * 1024),
+  width: z.coerce.number().int().min(1).max(20000).optional(),
+  height: z.coerce.number().int().min(1).max(20000).optional(),
+  durationSeconds: z.coerce.number().int().min(1).max(3600).optional(),
+  caption: optionalSanitizedString(300),
+});
+
+export const eventMediaCommandSchema = z.object({
+  mediaItemId: z.string().cuid("Invalid media item ID format"),
+});
+
+export type FinalizeEventMediaInput = z.input<typeof finalizeEventMediaSchema>;
+export type EventMediaCommandInput = z.input<typeof eventMediaCommandSchema>;
+
+// --- Age-gated game results & stats (US9) ---
+
+export const recordGameResultSchema = z.object({
+  gameId: z.string().cuid("Invalid game ID format"),
+  homeScore: z.coerce.number().int().min(0).max(99),
+  awayScore: z.coerce.number().int().min(0).max(99),
+  stats: z
+    .array(
+      z.object({
+        registrationId: z.string().cuid("Invalid registration ID format"),
+        goals: z.coerce.number().int().min(0).max(50).default(0),
+        assists: z.coerce.number().int().min(0).max(50).default(0),
+      })
+    )
+    .max(60)
+    .default([]),
+});
+
+export type RecordGameResultInput = z.input<typeof recordGameResultSchema>;

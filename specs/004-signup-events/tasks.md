@@ -186,11 +186,11 @@ participants see assignments; non-floater double-booking warns.
 **Independent Test**: participant uploads photo+video within limits; non-participant
 blocked by default; organizer removes item/disables gallery; uploader deletes own.
 
-- [ ] T055 [US8] Create lib/media/blob.ts (Vercel Blob client, `isBlobEnabled()`, private put/delete, short-lived signed URL helper, size/type/duration limit constants per research R1)
-- [ ] T056 [US8] Upload token route app/api/signup-events/[eventId]/media/upload/route.ts (client-upload token exchange; authorize registrant/manager; enforce caps server-side)
-- [ ] T057 [US8] Implement lib/actions/event-media.ts: `finalizeEventMediaUpload`, `listEventMedia` (gallery-visibility check → signed URLs), `removeEventMediaItem` (organizer any/uploader own, best-effort blob delete, logged), `reportEventMediaItem` (→ FLAGGED at first report)
-- [ ] T058 [P] [US8] MediaGallery.tsx (upload with progress, grid, video playback, report/remove) in components/features/signup-events/; media tab + gallery settings (enable/visibility) on dashboard; gallery section on event page; hide feature entirely when `!isBlobEnabled()`
-- [ ] T059 [P] [US8] Tests: upload authorization + gallery visibility matrix (mocked Blob) in __tests__/lib/actions/event-media.test.ts
+- [X] T055 [US8] Create lib/media/blob.ts (Vercel Blob client, `isBlobEnabled()`, private put/delete, short-lived signed URL helper, size/type/duration limit constants per research R1)
+- [X] T056 [US8] Upload token route app/api/signup-events/[eventId]/media/upload/route.ts (client-upload token exchange; authorize registrant/manager; enforce caps server-side)
+- [X] T057 [US8] Implement lib/actions/event-media.ts: `finalizeEventMediaUpload`, `listEventMedia` (gallery-visibility check → signed URLs), `removeEventMediaItem` (organizer any/uploader own, best-effort blob delete, logged), `reportEventMediaItem` (→ FLAGGED at first report)
+- [X] T058 [P] [US8] MediaGallery.tsx (upload with progress, grid, video playback, report/remove) in components/features/signup-events/; media tab + gallery settings (enable/visibility) on dashboard; gallery section on event page; hide feature entirely when `!isBlobEnabled()`
+- [X] T059 [P] [US8] Tests: upload authorization + gallery visibility matrix (mocked Blob) in __tests__/lib/actions/event-media.test.ts
 
 **Checkpoint**: media shipping; galleries hidden when Blob unconfigured.
 
@@ -203,10 +203,10 @@ blocked by default; organizer removes item/disables gallery; uploader deletes ow
 **Independent Test**: U8 event exposes no score entry anywhere; SQUIRT_U10 event
 records results; TOURNAMENT category rolls standings; downgrade hides stats.
 
-- [ ] T060 [US9] Implement `recordGameResult` (scores + optional per-player stats; Zod refinement **and** action-level `isStatsEligible` rejection; game → COMPLETED) in lib/actions/event-teams.ts; hide-on-downgrade behavior in all reads
-- [ ] T061 [P] [US9] Standings derivation for TOURNAMENT events (read-time from COMPLETED games) in lib/actions/event-teams.ts; results/standings sections on event page + dashboard (never rendered when ineligible)
-- [ ] T062 [P] [US9] GameResultForm.tsx + StandingsTable.tsx in components/features/signup-events/
-- [ ] T063 [P] [US9] Tests: age-gate refusal at schema and action level, downgrade hiding, standings math in __tests__/lib/actions/event-stats.test.ts
+- [X] T060 [US9] Implement `recordGameResult` (scores + optional per-player stats; Zod refinement **and** action-level `isStatsEligible` rejection; game → COMPLETED) in lib/actions/event-teams.ts; hide-on-downgrade behavior in all reads
+- [X] T061 [P] [US9] Standings derivation for TOURNAMENT events (read-time from COMPLETED games) in lib/actions/event-teams.ts; results/standings sections on event page + dashboard (never rendered when ineligible)
+- [X] T062 [P] [US9] GameResultForm.tsx + StandingsTable.tsx in components/features/signup-events/
+- [X] T063 [P] [US9] Tests: age-gate refusal at schema and action level, downgrade hiding, standings math in __tests__/lib/actions/event-stats.test.ts
 
 **Checkpoint**: all nine stories delivered.
 

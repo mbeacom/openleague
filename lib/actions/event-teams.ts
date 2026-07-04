@@ -24,8 +24,14 @@ import {
   type EventGameCommandInput,
   type SetGameRotationInput,
   type SignupEventCommandInput,
+  recordGameResultSchema,
+  type RecordGameResultInput,
 } from "@/lib/utils/validation";
 import { sendEventTeamsUpdateEmail } from "@/lib/email/templates";
+import { isStatsEligible } from "@/lib/utils/age-level";
+import { computeStandings } from "@/lib/utils/event-standings";
+import { STATS_MIN_AGE_LEVEL } from "@/lib/env";
+import type { AgeClassification } from "@prisma/client";
 import { logSignupEventActivity } from "@/lib/utils/event-activity";
 
 function overlaps(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date): boolean {
@@ -539,6 +545,8 @@ export async function getEventTeamsBoard(eventId: string) {
         startAt: true,
         endAt: true,
         teamsPublishedAt: true,
+        ageClassification: true,
+        category: true,
         venue: { select: { id: true, name: true, surfaces: { select: { id: true, name: true } } } },
       },
     }),
@@ -612,7 +620,16 @@ export async function getEventTeamsBoard(eventId: string) {
     }, {}),
   }));
 
-  return { event, teams: teamsWithCounts, unassigned, games };
+  const statsEligible = event
+    ? isStatsEligible(event.ageClassification, STATS_MIN_AGE_LEVEL as AgeClassification)
+    : false;
+  const gatedGames = games.map((game) => ({
+    ...game,
+    homeScore: statsEligible ? game.homeScore : null,
+    awayScore: statsEligible ? game.awayScore : null,
+  }));
+
+  return { event, teams: teamsWithCounts, unassigned, games: gatedGames, statsEligible };
 }
 
 export type MyEventAssignments = Awaited<ReturnType<typeof getMyEventAssignments>>;
@@ -745,7 +762,14 @@ export type PublicEventGames = Awaited<ReturnType<typeof getPublicEventGames>>;
 export async function getPublicEventGames(eventId: string, linkToken?: string) {
   const gate = await prisma.signupEvent.findUnique({
     where: { id: eventId },
-    select: { id: true, status: true, visibility: true, linkToken: true, teamsPublishedAt: true },
+    select: {
+      id: true,
+      status: true,
+      visibility: true,
+      linkToken: true,
+      teamsPublishedAt: true,
+      ageClassification: true,
+    },
   });
   if (!gate?.teamsPublishedAt) return null;
 
@@ -755,7 +779,7 @@ export async function getPublicEventGames(eventId: string, linkToken?: string) {
     (await canViewSignupEvent(gate, { userId, linkToken }));
   if (!allowed) return null;
 
-  return prisma.eventGame.findMany({
+  const games = await prisma.eventGame.findMany({
     where: { eventId },
     orderBy: { startAt: "asc" },
     select: {
@@ -766,11 +790,25 @@ export async function getPublicEventGames(eventId: string, linkToken?: string) {
       endAt: true,
       iceUsage: true,
       zoneLabel: true,
+      homeScore: true,
+      awayScore: true,
       surface: { select: { name: true } },
       homeTeam: { select: { name: true, colorHex: true } },
       awayTeam: { select: { name: true, colorHex: true } },
     },
   });
+
+  // Age gate on display: below the threshold, scores are never shown even if
+  // rows somehow carry them (e.g. after a classification downgrade).
+  const statsEligible = isStatsEligible(
+    gate.ageClassification,
+    STATS_MIN_AGE_LEVEL as AgeClassification
+  );
+  return games.map((game) => ({
+    ...game,
+    homeScore: statsEligible ? game.homeScore : null,
+    awayScore: statsEligible ? game.awayScore : null,
+  }));
 }
 
 /**
@@ -801,4 +839,136 @@ export async function listPublicVenueEventGames(venueId: string) {
       awayTeam: { select: { name: true } },
     },
   });
+}
+
+/**
+ * Record a game's score (and optional basic player stats) — ONLY for events
+ * at or above the configured age threshold. USA Hockey ADM: no scores or
+ * statistics at 8U/mite and below; the gate is enforced here and again in
+ * every read (FR-036).
+ */
+export async function recordGameResult(
+  input: RecordGameResultInput
+): Promise<ActionResult<{ gameId: string }>> {
+  try {
+    const validated = recordGameResultSchema.parse(input);
+
+    const game = await prisma.eventGame.findUnique({
+      where: { id: validated.gameId },
+      select: {
+        id: true,
+        eventId: true,
+        event: { select: { ageClassification: true } },
+      },
+    });
+    if (!game) {
+      return { success: false, error: "Game not found" };
+    }
+    const userId = await requireEventManager(game.eventId);
+
+    if (!isStatsEligible(game.event.ageClassification, STATS_MIN_AGE_LEVEL as AgeClassification)) {
+      return {
+        success: false,
+        error:
+          "Scores and statistics are not recorded at this age level (development-first play — no standings for mites).",
+      };
+    }
+
+    if (validated.stats.length > 0) {
+      const registrationIds = validated.stats.map((stat) => stat.registrationId);
+      const count = await prisma.eventRegistration.count({
+        where: { id: { in: registrationIds }, eventId: game.eventId },
+      });
+      if (count !== registrationIds.length) {
+        return { success: false, error: "Stats can only be recorded for this event's participants." };
+      }
+    }
+
+    await prisma.$transaction([
+      prisma.eventGame.update({
+        where: { id: game.id },
+        data: {
+          homeScore: validated.homeScore,
+          awayScore: validated.awayScore,
+          status: "COMPLETED",
+        },
+      }),
+      ...validated.stats.map((stat) =>
+        prisma.playerGameStat.upsert({
+          where: { gameId_registrationId: { gameId: game.id, registrationId: stat.registrationId } },
+          create: {
+            gameId: game.id,
+            registrationId: stat.registrationId,
+            goals: stat.goals,
+            assists: stat.assists,
+          },
+          update: { goals: stat.goals, assists: stat.assists },
+        })
+      ),
+    ]);
+
+    await logSignupEventActivity({
+      eventId: game.eventId,
+      actorId: userId,
+      action: "game.result",
+      summary: `Recorded a game result ${validated.homeScore}–${validated.awayScore}`,
+      details: { gameId: game.id },
+    });
+
+    revalidatePath(`/signup-events/${game.eventId}`);
+    revalidatePath(`/events/${game.eventId}`);
+    return { success: true, data: { gameId: game.id } };
+  } catch (error) {
+    return handleActionError(error, "Failed to record the result.");
+  }
+}
+
+export type EventStandings = Awaited<ReturnType<typeof getEventStandings>>;
+
+/**
+ * Tournament standings, derived at read time from COMPLETED games. Returns
+ * null unless the event is a TOURNAMENT, age-eligible for scores, has posted
+ * teams, and the viewer passes the visibility gate.
+ */
+export async function getEventStandings(eventId: string, linkToken?: string) {
+  const gate = await prisma.signupEvent.findUnique({
+    where: { id: eventId },
+    select: {
+      id: true,
+      status: true,
+      visibility: true,
+      linkToken: true,
+      category: true,
+      ageClassification: true,
+      teamsPublishedAt: true,
+    },
+  });
+  if (
+    !gate ||
+    gate.category !== "TOURNAMENT" ||
+    !gate.teamsPublishedAt ||
+    !isStatsEligible(gate.ageClassification, STATS_MIN_AGE_LEVEL as AgeClassification)
+  ) {
+    return null;
+  }
+
+  const userId = await getCurrentUserId();
+  const allowed =
+    (userId && (await isEventManager(userId, gate.id))) ||
+    (await canViewSignupEvent(gate, { userId, linkToken }));
+  if (!allowed) return null;
+
+  const [teams, games] = await Promise.all([
+    prisma.eventTeam.findMany({
+      where: { eventId },
+      select: { id: true, name: true },
+    }),
+    prisma.eventGame.findMany({
+      where: { eventId },
+      select: { status: true, homeTeamId: true, awayTeamId: true, homeScore: true, awayScore: true },
+    }),
+  ]);
+  if (teams.length === 0) return null;
+
+  return computeStandings(teams, games);
 }

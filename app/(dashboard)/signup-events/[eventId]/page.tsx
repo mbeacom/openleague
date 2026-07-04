@@ -16,9 +16,12 @@ import { getManagedSignupEvent } from "@/lib/actions/signup-events";
 import { getEventRoster } from "@/lib/actions/event-registrations";
 import { listEventInvitations } from "@/lib/actions/event-invitations";
 import { listEventManagers } from "@/lib/actions/event-managers";
-import { getEventTeamsBoard } from "@/lib/actions/event-teams";
+import { getEventTeamsBoard, getEventStandings } from "@/lib/actions/event-teams";
+import { listEventMedia } from "@/lib/actions/event-media";
 import { TeamBoard } from "@/components/features/signup-events/TeamBoard";
 import { GameScheduler } from "@/components/features/signup-events/GameScheduler";
+import { MediaGallery } from "@/components/features/signup-events/MediaGallery";
+import { StandingsTable } from "@/components/features/signup-events/StandingsTable";
 import { getSignupEventActivity } from "@/lib/utils/event-activity";
 import { isSignupEventHostAdmin, requireUserId } from "@/lib/auth/session";
 import { EventStatusActions, RosterTable } from "@/components/features/signup-events";
@@ -43,12 +46,14 @@ export default async function ManageSignupEventPage({
   params: Promise<{ eventId: string }>;
 }) {
   const { eventId } = await params;
-  const [event, roster, invitations, managers, board, userId] = await Promise.all([
+  const [event, roster, invitations, managers, board, gallery, standings, userId] = await Promise.all([
     getManagedSignupEvent(eventId),
     getEventRoster({ eventId }),
     listEventInvitations(eventId),
     listEventManagers(eventId),
     getEventTeamsBoard(eventId),
+    listEventMedia({ eventId }),
+    getEventStandings(eventId),
     requireUserId(),
   ]);
   if (!event) {
@@ -161,9 +166,18 @@ export default async function ManageSignupEventPage({
               games={board.games}
               surfaces={board.event?.venue?.surfaces ?? []}
               participants={rotationParticipants}
+              statsEligible={board.statsEligible}
             />
           </CardContent>
         </Card>
+
+        {standings ? (
+          <Card>
+            <CardContent>
+              <StandingsTable standings={standings} />
+            </CardContent>
+          </Card>
+        ) : null}
 
         <Card>
           <CardContent>
@@ -174,6 +188,19 @@ export default async function ManageSignupEventPage({
             />
           </CardContent>
         </Card>
+
+        {gallery ? (
+          <Card>
+            <CardContent>
+              <MediaGallery
+                eventId={event.id}
+                items={gallery.items}
+                canUpload={gallery.canUpload}
+                canModerate={gallery.canModerate}
+              />
+            </CardContent>
+          </Card>
+        ) : null}
 
         <Card>
           <CardContent>

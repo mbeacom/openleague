@@ -55,3 +55,34 @@ export async function canViewSignupEvent(
       return false;
   }
 }
+
+/** Confirmed registrant (contact of record) on the event — gallery contributor. */
+export async function isConfirmedEventRegistrant(eventId: string, userId: string): Promise<boolean> {
+  const count = await prisma.eventRegistration.count({
+    where: { eventId, registrantId: userId, status: "CONFIRMED" },
+  });
+  return count > 0;
+}
+
+export type GalleryGate = SignupEventGate & {
+  galleryEnabled: boolean;
+  galleryVisibility: "PARTICIPANTS" | "EVENT_AUDIENCE";
+};
+
+/**
+ * Gallery viewing gate. Managers are handled by callers and bypass this.
+ * - PARTICIPANTS (default): confirmed registrants only — protects images of
+ *   minors from non-participants.
+ * - EVENT_AUDIENCE: whoever can view the event per its visibility tier.
+ */
+export async function canViewEventGallery(
+  gate: GalleryGate,
+  viewer: { userId: string | null; linkToken?: string }
+): Promise<boolean> {
+  if (!gate.galleryEnabled) return false;
+  if (gate.galleryVisibility === "PARTICIPANTS") {
+    if (!viewer.userId) return false;
+    return isConfirmedEventRegistrant(gate.id, viewer.userId);
+  }
+  return canViewSignupEvent(gate, viewer);
+}

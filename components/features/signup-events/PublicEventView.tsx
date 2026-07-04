@@ -251,6 +251,9 @@ export function PublicEventView({
                   <Typography variant="subtitle2">
                     {game.homeTeam.name} vs {game.awayTeam.name}
                     {game.name ? ` — ${game.name}` : ""}
+                    {game.homeScore != null && game.awayScore != null
+                      ? ` · Final ${game.homeScore}–${game.awayScore}`
+                      : ""}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
                     {formatDateTime(game.startAt)} – {formatDateTime(game.endAt)} ·{" "}
