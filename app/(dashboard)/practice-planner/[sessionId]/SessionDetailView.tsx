@@ -39,6 +39,7 @@ import {
   CalendarToday as CalendarIcon,
   Person as PersonIcon,
   PlayArrow as PlayIcon,
+  Place as PlaceIcon,
 } from "@mui/icons-material";
 import {
   deletePracticeSession,
@@ -67,6 +68,14 @@ interface SessionData {
   createdByName: string;
   teamId: string;
   teamName: string;
+  // Optional venue attachment (feature 006, FR-019)
+  venueId?: string | null;
+  venueName?: string | null;
+  surfaceId?: string | null;
+  surfaceName?: string | null;
+  segmentId?: string | null;
+  segmentName?: string | null;
+  startAt?: string | null;
   plays: SessionPlay[];
 }
 
@@ -243,6 +252,24 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
                 <PersonIcon sx={{ fontSize: 16 }} />
                 <Typography variant="body2">{session.createdByName}</Typography>
               </Stack>
+              {/* Ice booking (feature 006, FR-019): venue · surface · segment · time */}
+              {session.venueName && (
+                <Stack direction="row" alignItems="center" spacing={0.5}>
+                  <PlaceIcon sx={{ fontSize: 16 }} />
+                  <Typography variant="body2">
+                    {[
+                      session.venueName,
+                      session.surfaceName,
+                      session.segmentName,
+                      session.startAt
+                        ? formatTime(new Date(session.startAt))
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </Typography>
+                </Stack>
+              )}
             </Stack>
           </Box>
 

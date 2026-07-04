@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   Alert,
+  AlertTitle,
   Button,
   Card,
   CardContent,
@@ -24,14 +25,8 @@ import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import CloseIcon from "@mui/icons-material/Close";
 import { deleteEventGame, setGameRotation, upsertEventGame } from "@/lib/actions/event-teams";
 import { GameResultForm } from "./GameResultForm";
-import { ICE_USAGES } from "@/lib/utils/validation";
 import { formatDateTime, parseDateTimeLocalToUtc, resolveTimeZone } from "@/lib/utils/date";
-
-const ICE_USAGE_LABELS: Record<(typeof ICE_USAGES)[number], string> = {
-  FULL_ICE: "Full ice",
-  HALF_ICE: "Half ice",
-  CROSS_ICE: "Cross-ice",
-};
+import type { BookingConflict } from "@/types/segments";
 
 type GameParticipant = {
   registrationId: string;
@@ -44,11 +39,11 @@ type Game = {
   name: string | null;
   startAt: Date;
   endAt: Date;
-  iceUsage: (typeof ICE_USAGES)[number];
-  zoneLabel: string | null;
   homeScore: number | null;
   awayScore: number | null;
   surface: { id: string; name: string } | null;
+  /** null = whole surface (or no surface selected). */
+  segment: { id: string; name: string } | null;
   homeTeam: { id: string; name: string };
   awayTeam: { id: string; name: string };
   participants: GameParticipant[];
@@ -59,6 +54,10 @@ interface GameSchedulerProps {
   teams: Array<{ id: string; name: string }>;
   games: Game[];
   surfaces: Array<{ id: string; name: string }>;
+  /** Active segments per surface (006) — the select renders only when the chosen surface has some. */
+  segmentsBySurface?: Record<string, Array<{ id: string; name: string }>>;
+  /** Display name of the implicit whole-surface option per surface ("Full ice"). */
+  wholeLabelBySurface?: Record<string, string>;
   /** Confirmed participants selectable for rotations. */
   participants: Array<{ id: string; participantName: string; isFloater: boolean }>;
   /** Scores/stats allowed for this event's age classification (Squirt+). */
@@ -67,11 +66,34 @@ interface GameSchedulerProps {
   timeZone?: string;
 }
 
+/** Wall-clock-parsed game values, kept so "Schedule anyway" resubmits them. */
+type GamePayload = {
+  name?: string;
+  homeTeamId: string;
+  awayTeamId: string;
+  startAt: Date;
+  endAt: Date;
+  surfaceId?: string;
+  segmentId?: string;
+};
+
+function extractConflicts(details: unknown): BookingConflict[] | null {
+  if (details && typeof details === "object" && "conflicts" in details) {
+    const conflicts = (details as { conflicts: unknown }).conflicts;
+    if (Array.isArray(conflicts) && conflicts.length > 0) {
+      return conflicts as BookingConflict[];
+    }
+  }
+  return null;
+}
+
 export function GameScheduler({
   eventId,
   teams,
   games,
   surfaces,
+  segmentsBySurface = {},
+  wholeLabelBySurface = {},
   participants,
   statsEligible = false,
   timeZone,
@@ -80,11 +102,25 @@ export function GameScheduler({
   const tz = resolveTimeZone(timeZone);
   const [message, setMessage] = useState<{ severity: "success" | "error" | "warning"; text: string } | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [surfaceId, setSurfaceId] = useState("");
+  const [segmentId, setSegmentId] = useState("");
+  const [conflicts, setConflicts] = useState<BookingConflict[] | null>(null);
+  const [pendingPayload, setPendingPayload] = useState<GamePayload | null>(null);
   const [rotationTarget, setRotationTarget] = useState<Game | null>(null);
   const [rotationDraft, setRotationDraft] = useState<Array<{ registrationId: string; eventTeamId: string }>>([]);
   const [addParticipantId, setAddParticipantId] = useState("");
   const [addSideId, setAddSideId] = useState("");
   const [isPending, startTransition] = useTransition();
+
+  const surfaceSegments = surfaceId ? (segmentsBySurface[surfaceId] ?? []) : [];
+  const wholeSurfaceLabel = (surfaceId && wholeLabelBySurface[surfaceId]) || "Whole surface";
+
+  // Any edit invalidates a pending conflict override: "Schedule anyway" must
+  // resubmit exactly the payload that was warned about (matching EventForm).
+  const clearStaleConflicts = () => {
+    setConflicts(null);
+    setPendingPayload(null);
+  };
 
   const openRotation = (game: Game) => {
     setRotationTarget(game);
@@ -98,6 +134,34 @@ export function GameScheduler({
     setAddSideId(game.homeTeam.id);
   };
 
+  const submitGame = (payload: GamePayload, overrideConflicts: boolean) => {
+    startTransition(async () => {
+      setMessage(null);
+      const result = await upsertEventGame({ eventId, ...payload, overrideConflicts });
+      if (!result.success) {
+        const detected = extractConflicts(result.details);
+        if (detected) {
+          // FR-011: warn before saving; keep the payload so "Schedule anyway"
+          // resubmits the exact same game with an explicit recorded override.
+          setConflicts(detected);
+          setPendingPayload(payload);
+          return;
+        }
+        setConflicts(null);
+        setPendingPayload(null);
+        setMessage({ severity: "error", text: result.error });
+        return;
+      }
+      setConflicts(null);
+      setPendingPayload(null);
+      setDialogOpen(false);
+      if (result.data.warnings.length > 0) {
+        setMessage({ severity: "warning", text: result.data.warnings.join(" ") });
+      }
+      router.refresh();
+    });
+  };
+
   const handleCreate = (formData: FormData) => {
     const text = (name: string) => String(formData.get(name) ?? "").trim();
     const startAt = parseDateTimeLocalToUtc(text("startAt"), tz);
@@ -106,29 +170,18 @@ export function GameScheduler({
       setMessage({ severity: "error", text: "Enter a valid start and end time." });
       return;
     }
-    startTransition(async () => {
-      setMessage(null);
-      const result = await upsertEventGame({
-        eventId,
+    submitGame(
+      {
         name: text("name") || undefined,
         homeTeamId: text("homeTeamId"),
         awayTeamId: text("awayTeamId"),
         startAt,
         endAt,
-        surfaceId: text("surfaceId") || undefined,
-        iceUsage: (text("iceUsage") || "FULL_ICE") as (typeof ICE_USAGES)[number],
-        zoneLabel: text("zoneLabel") || undefined,
-      });
-      if (!result.success) {
-        setMessage({ severity: "error", text: result.error });
-        return;
-      }
-      setDialogOpen(false);
-      if (result.data.warnings.length > 0) {
-        setMessage({ severity: "warning", text: result.data.warnings.join(" ") });
-      }
-      router.refresh();
-    });
+        surfaceId: surfaceId || undefined,
+        segmentId: segmentId || undefined,
+      },
+      false
+    );
   };
 
   const saveRotation = () => {
@@ -152,7 +205,17 @@ export function GameScheduler({
     <Stack spacing={2}>
       <Stack direction="row" alignItems="center" justifyContent="space-between">
         <Typography variant="h6">Games</Typography>
-        <Button startIcon={<AddIcon />} disabled={teams.length < 2} onClick={() => setDialogOpen(true)}>
+        <Button
+          startIcon={<AddIcon />}
+          disabled={teams.length < 2}
+          onClick={() => {
+            setSurfaceId("");
+            setSegmentId("");
+            setConflicts(null);
+            setPendingPayload(null);
+            setDialogOpen(true);
+          }}
+        >
           Schedule game
         </Button>
       </Stack>
@@ -179,10 +242,9 @@ export function GameScheduler({
                     {game.name ? ` — ${game.name}` : ""}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    {formatDateTime(game.startAt, tz)} – {formatDateTime(game.endAt, tz)} ·{" "}
-                    {ICE_USAGE_LABELS[game.iceUsage]}
-                    {game.zoneLabel ? ` (${game.zoneLabel})` : ""}
+                    {formatDateTime(game.startAt, tz)} – {formatDateTime(game.endAt, tz)}
                     {game.surface ? ` · ${game.surface.name}` : ""}
+                    {game.segment ? ` · ${game.segment.name}` : ""}
                   </Typography>
                 </Stack>
                 <Stack direction="row" spacing={1}>
@@ -249,15 +311,57 @@ export function GameScheduler({
         >
           <DialogContent>
             <Stack spacing={2}>
+              {conflicts ? (
+                <Alert
+                  severity="warning"
+                  action={
+                    <Button
+                      color="inherit"
+                      size="small"
+                      disabled={isPending || !pendingPayload}
+                      onClick={() => pendingPayload && submitGame(pendingPayload, true)}
+                    >
+                      Schedule anyway
+                    </Button>
+                  }
+                >
+                  <AlertTitle>
+                    This time overlaps {conflicts.length} existing booking
+                    {conflicts.length === 1 ? "" : "s"} at the venue
+                  </AlertTitle>
+                  {conflicts.map((conflict, index) => (
+                    <Typography key={`${conflict.title}-${index}`} variant="body2">
+                      {conflict.title} — {formatDateTime(conflict.startAt, tz)}
+                      {conflict.endAt ? ` – ${formatDateTime(conflict.endAt, tz)}` : ""}
+                    </Typography>
+                  ))}
+                </Alert>
+              ) : null}
               <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-                <TextField select name="homeTeamId" label="Home team" required fullWidth defaultValue="">
+                <TextField
+                  select
+                  name="homeTeamId"
+                  label="Home team"
+                  required
+                  fullWidth
+                  defaultValue=""
+                  onChange={clearStaleConflicts}
+                >
                   {teams.map((team) => (
                     <MenuItem key={team.id} value={team.id}>
                       {team.name}
                     </MenuItem>
                   ))}
                 </TextField>
-                <TextField select name="awayTeamId" label="Away team" required fullWidth defaultValue="">
+                <TextField
+                  select
+                  name="awayTeamId"
+                  label="Away team"
+                  required
+                  fullWidth
+                  defaultValue=""
+                  onChange={clearStaleConflicts}
+                >
                   {teams.map((team) => (
                     <MenuItem key={team.id} value={team.id}>
                       {team.name}
@@ -274,6 +378,7 @@ export function GameScheduler({
                   fullWidth
                   defaultValue=""
                   helperText={`Times are in ${tz}`}
+                  onChange={clearStaleConflicts}
                   slotProps={{ inputLabel: { shrink: true } }}
                 />
                 <TextField
@@ -284,25 +389,23 @@ export function GameScheduler({
                   fullWidth
                   defaultValue=""
                   helperText={`Times are in ${tz}`}
+                  onChange={clearStaleConflicts}
                   slotProps={{ inputLabel: { shrink: true } }}
                 />
               </Stack>
               <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-                <TextField select name="iceUsage" label="Ice usage" fullWidth defaultValue="HALF_ICE">
-                  {ICE_USAGES.map((usage) => (
-                    <MenuItem key={usage} value={usage}>
-                      {ICE_USAGE_LABELS[usage]}
-                    </MenuItem>
-                  ))}
-                </TextField>
                 <TextField
-                  name="zoneLabel"
-                  label="Zone (optional)"
-                  placeholder="North half"
+                  select
+                  label="Surface (optional)"
                   fullWidth
-                  slotProps={{ htmlInput: { maxLength: 60 } }}
-                />
-                <TextField select name="surfaceId" label="Surface (optional)" fullWidth defaultValue="">
+                  value={surfaceId}
+                  onChange={(event) => {
+                    setSurfaceId(event.target.value);
+                    // Segments belong to a surface — reset on change.
+                    setSegmentId("");
+                    clearStaleConflicts();
+                  }}
+                >
                   <MenuItem value="">No surface</MenuItem>
                   {surfaces.map((surface) => (
                     <MenuItem key={surface.id} value={surface.id}>
@@ -310,8 +413,33 @@ export function GameScheduler({
                     </MenuItem>
                   ))}
                 </TextField>
+                {surfaceSegments.length > 0 ? (
+                  <TextField
+                    select
+                    label="Segment (optional)"
+                    fullWidth
+                    value={segmentId}
+                    onChange={(event) => {
+                      setSegmentId(event.target.value);
+                      clearStaleConflicts();
+                    }}
+                  >
+                    <MenuItem value="">{wholeSurfaceLabel}</MenuItem>
+                    {surfaceSegments.map((segment) => (
+                      <MenuItem key={segment.id} value={segment.id}>
+                        {segment.name}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                ) : null}
               </Stack>
-              <TextField name="name" label="Game label (optional)" placeholder="Game 1" slotProps={{ htmlInput: { maxLength: 100 } }} />
+              <TextField
+                name="name"
+                label="Game label (optional)"
+                placeholder="Game 1"
+                onChange={clearStaleConflicts}
+                slotProps={{ htmlInput: { maxLength: 100 } }}
+              />
             </Stack>
           </DialogContent>
           <DialogActions>

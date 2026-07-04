@@ -8,6 +8,7 @@ import {
   Button,
   Typography,
   Alert,
+  AlertTitle,
   CircularProgress,
   MenuItem,
   FormControl,
@@ -18,9 +19,16 @@ import {
 import { createEvent, updateEvent } from "@/lib/actions/events";
 import type { CreateEventInput } from "@/lib/utils/validation";
 import { createEventSchema, updateEventSchema } from "@/lib/utils/validation";
-import { formatDateTimeLocalInput, parseDateTimeLocalToUtc, resolveTimeZone, isValidTimeZone } from "@/lib/utils/date";
+import {
+  formatDateTimeInZone,
+  formatDateTimeLocalInput,
+  parseDateTimeLocalToUtc,
+  resolveTimeZone,
+  isValidTimeZone,
+} from "@/lib/utils/date";
 import { trackEventAction } from "@/lib/analytics/umami";
 import VenueSelector from "@/components/features/venues/VenueSelector";
+import type { BookingConflict } from "@/types/segments";
 
 interface EventFormProps {
   teamId: string;
@@ -36,6 +44,16 @@ interface EventFormProps {
     opponent: string;
     notes: string;
   };
+}
+
+function extractConflicts(details: unknown): BookingConflict[] | null {
+  if (details && typeof details === "object" && "conflicts" in details) {
+    const conflicts = (details as { conflicts: unknown }).conflicts;
+    if (Array.isArray(conflicts) && conflicts.length > 0) {
+      return conflicts as BookingConflict[];
+    }
+  }
+  return null;
 }
 
 export default function EventForm({
@@ -56,8 +74,14 @@ export default function EventForm({
     opponent: initialData?.opponent || "",
     notes: initialData?.notes || "",
     teamId,
+    overrideConflicts: false,
   });
   const [error, setError] = useState<string | null>(null);
+  // Venue booking conflicts returned by the server (006 FR-010/011): shown as
+  // a warning with an explicit "Schedule anyway" override that the server
+  // records; the payload is kept so the override resubmits the same event.
+  const [conflicts, setConflicts] = useState<BookingConflict[] | null>(null);
+  const [pendingPayload, setPendingPayload] = useState<CreateEventInput | null>(null);
   const [fieldErrors, setFieldErrors] = useState<
     Partial<Record<keyof CreateEventInput, string>>
   >({});
@@ -76,12 +100,20 @@ export default function EventForm({
     initialData?.endAt ? formatDateTimeLocalInput(initialData.endAt, initialTimeZone) : ""
   );
 
+  // Any edit invalidates a pending conflict override: "Schedule anyway"
+  // must resubmit exactly the payload that was warned about.
+  const clearConflicts = () => {
+    setConflicts(null);
+    setPendingPayload(null);
+  };
+
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
     setError(null);
+    clearConflicts();
     setFieldErrors((prev) => ({ ...prev, [name]: undefined }));
   };
 
@@ -89,6 +121,7 @@ export default function EventForm({
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
     setError(null);
+    clearConflicts();
     setFieldErrors((prev) => ({ ...prev, [name]: undefined }));
   };
 
@@ -102,6 +135,7 @@ export default function EventForm({
       setFieldErrors((prev) => ({ ...prev, startAt: undefined }));
     }
     setError(null);
+    clearConflicts();
   };
 
   const handleVenueChange = (
@@ -122,6 +156,7 @@ export default function EventForm({
       setTimeZone(initialTimeZone);
     }
     setError(null);
+    clearConflicts();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -170,6 +205,10 @@ export default function EventForm({
       return;
     }
 
+    await submitEvent(payload);
+  };
+
+  const submitEvent = async (payload: CreateEventInput) => {
     setIsSubmitting(true);
 
     try {
@@ -191,6 +230,16 @@ export default function EventForm({
         // Redirect to event detail page after successful update, calendar after create
         router.push(isEditMode ? `/events/${eventId}` : "/calendar");
       } else {
+        // Venue booking conflicts warn instead of blocking (006 FR-010/011):
+        // keep the payload so "Schedule anyway" resubmits the exact same
+        // event with an explicit recorded override.
+        const detectedConflicts = extractConflicts(result.details);
+        if (detectedConflicts) {
+          setConflicts(detectedConflicts);
+          setPendingPayload(payload);
+          return;
+        }
+        clearConflicts();
         setError(result.error);
       }
     } catch (err) {
@@ -223,6 +272,38 @@ export default function EventForm({
       {error && (
         <Alert severity="error" onClose={() => setError(null)}>
           {error}
+        </Alert>
+      )}
+
+      {conflicts && (
+        <Alert
+          severity="warning"
+          action={
+            <Button
+              color="inherit"
+              size="small"
+              disabled={isSubmitting || !pendingPayload}
+              onClick={() =>
+                pendingPayload &&
+                submitEvent({ ...pendingPayload, overrideConflicts: true })
+              }
+            >
+              Schedule anyway
+            </Button>
+          }
+        >
+          <AlertTitle>
+            This time overlaps {conflicts.length} existing booking
+            {conflicts.length === 1 ? "" : "s"} at the venue
+          </AlertTitle>
+          {conflicts.map((conflict, index) => (
+            <Typography key={`${conflict.title}-${index}`} variant="body2">
+              {conflict.title} — {formatDateTimeInZone(conflict.startAt, timeZone)}
+              {conflict.endAt
+                ? ` – ${formatDateTimeInZone(conflict.endAt, timeZone)}`
+                : ""}
+            </Typography>
+          ))}
         </Alert>
       )}
 

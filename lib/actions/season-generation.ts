@@ -4,7 +4,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
 import { revalidatePath } from "next/cache";
 import { buildRoundRobin, type ProposedGame } from "@/lib/utils/round-robin";
-import { findGameConflicts } from "@/lib/utils/game-conflicts";
+import { findBookingConflicts } from "@/lib/utils/availability";
 import { FALLBACK_TIME_ZONE } from "@/lib/utils/date";
 import {
   generateRoundRobinSchema,
@@ -98,8 +98,10 @@ async function computeGeneration(input: GenerateRoundRobinInput): Promise<{
       awayTeamName: nameById.get(game.awayTeamId) ?? "Away",
       // Conflicts are surfaced in the review step, never silently discarded
       // (US2 scenario 6 — fixes the legacy behavior).
+      // Generated games carry no surface/segment: the candidate is
+      // venue-wide, so any booking at the venue conflicts.
       conflicts: game.venueId
-        ? await findGameConflicts({
+        ? await findBookingConflicts({
             venueId: game.venueId,
             startAt: game.startAt,
             endAt: game.endAt,

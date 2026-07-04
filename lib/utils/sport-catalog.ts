@@ -1,15 +1,17 @@
-import type { AgeClassification, IceUsage, ScheduleFormat, Sport } from "@prisma/client";
+import type { AgeClassification, ScheduleFormat, Sport } from "@prisma/client";
 import { AGE_CLASSIFICATION_LABELS, AGE_CLASSIFICATION_OPTIONS } from "@/lib/utils/age-level";
 
 /**
  * Per-sport capability catalog keyed by the Prisma `Sport` enum.
  *
  * Hockey is first-class (FR-032): its entry carries USA Hockey age labels,
- * rink terminology, ice-usage options, and a fuller set of suggested schedule
- * formats. Every other sport degrades gracefully (FR-031/033) to a neutral
- * entry — correct sport label, generic "Surface" terminology, plain age
- * labels, and no surface-usage options (`surfaceUsageOptions` undefined tells
- * the UI to hide the field entirely).
+ * rink terminology, and a fuller set of suggested schedule formats. Every
+ * other sport degrades gracefully (FR-031/033) to a neutral entry — correct
+ * sport label, generic "Surface" terminology, and plain age labels.
+ *
+ * Surface subdivision is a property of the physical surface, not the sport:
+ * segmentation presets key off `SurfaceType` in `lib/utils/segment-presets.ts`
+ * (feature 006, research R7) and games reference `SurfaceSegment` rows.
  *
  * The catalog is code, not data: type-safe, testable, and liftable to the
  * database later without changing call sites (research R3).
@@ -18,7 +20,6 @@ export type SportCapabilities = {
   sport: Sport;
   sportLabel: string;
   surfaceLabel: string;
-  surfaceUsageOptions?: { value: IceUsage; label: string }[];
   ageClassifications: { value: AgeClassification; label: string }[];
   suggestedFormats: ScheduleFormat[];
 };
@@ -83,11 +84,6 @@ const HOCKEY_CAPABILITIES: SportCapabilities = {
   sport: "HOCKEY",
   sportLabel: SPORT_LABELS.HOCKEY,
   surfaceLabel: "Rink",
-  surfaceUsageOptions: [
-    { value: "FULL_ICE", label: "Full ice" },
-    { value: "HALF_ICE", label: "Half ice" },
-    { value: "CROSS_ICE", label: "Cross ice" },
-  ],
   ageClassifications: ageClassificationOptions(AGE_CLASSIFICATION_LABELS),
   suggestedFormats: ["ROUND_ROBIN", "SINGLE_ELIMINATION", "POOL_PLAY"],
 };

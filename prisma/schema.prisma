@@ -37,6 +37,9 @@ model User {
   createdSeasons               Season[]                 @relation("SeasonCreator")
   createdSeasonGames           SeasonGame[]             @relation("SeasonGameCreator")
   seasonGameConflictOverrides  SeasonGame[]             @relation("SeasonGameConflictOverride")
+  eventGameConflictOverrides   EventGame[]              @relation("EventGameConflictOverride")
+  eventConflictOverrides       Event[]                  @relation("EventConflictOverride")
+  practiceConflictOverrides    PracticeSession[]        @relation("PracticeConflictOverride")
   createdGameProposals         GameProposal[]           @relation("GameProposalCreator")
   gameProposalEntries          GameProposalEntry[]      @relation("GameProposalActor")
   placementDecisions           PlacementDecision[]      @relation("PlacementDecider")
@@ -246,6 +249,11 @@ model Event {
 
   awayTeamId String?
   awayTeam   Team?   @relation("AwayTeam", fields: [awayTeamId], references: [id])
+
+  // Recorded venue-conflict override (unified availability, feature 006)
+  conflictOverriddenById String?
+  conflictOverriddenBy   User?     @relation("EventConflictOverride", fields: [conflictOverriddenById], references: [id], onDelete: SetNull)
+  conflictOverriddenAt   DateTime?
 
   rsvps      RSVP[]
   seasonGame SeasonGame?
@@ -589,9 +597,28 @@ model PracticeSession {
   createdById String
   createdBy   User   @relation(fields: [createdById], references: [id], onDelete: Restrict)
 
+  // Optional venue booking (FR-019, feature 006). startAt is REQUIRED when
+  // venueId is set (application invariant); the slot is startAt + duration.
+  // Unattached practices have no availability footprint.
+  venueId   String?
+  venue     Venue?          @relation(fields: [venueId], references: [id], onDelete: SetNull)
+  surfaceId String?
+  surface   IceSurface?     @relation(fields: [surfaceId], references: [id], onDelete: SetNull)
+  segmentId String?
+  segment   SurfaceSegment? @relation(fields: [segmentId], references: [id], onDelete: SetNull)
+  startAt   DateTime?
+
+  // Audit trail for explicitly overridden venue booking conflicts (FR-011),
+  // matching SeasonGame/EventGame/Event. Cleared on conflict-free saves.
+  conflictOverriddenById String?
+  conflictOverriddenBy   User?     @relation("PracticeConflictOverride", fields: [conflictOverriddenById], references: [id], onDelete: SetNull)
+  conflictOverriddenAt   DateTime?
+
   plays PracticeSessionPlay[]
 
   @@index([teamId, date])
+  @@index([venueId, startAt])
+  @@index([surfaceId, startAt])
   @@map("practice_sessions")
 }
 
@@ -917,6 +944,9 @@ model Venue {
   publicEmail         String?
   publicPhone         String?
   privateManagerNotes String?
+  // Optional schematic layout (feature 006): { surfaces: [{surfaceId,x,y,w,h,rotation}],
+  // labels: [{text,x,y}] }. Presentational only — never drives availability.
+  layout              Json?
   profileStatus       VenueProfileStatus @default(DRAFT)
   publishedAt         DateTime?
   createdAt           DateTime           @default(now())
@@ -935,21 +965,22 @@ model Venue {
   createdById String
   createdBy   User   @relation(fields: [createdById], references: [id], onDelete: Restrict)
 
-  events          Event[]
-  staff           VenueStaff[]
-  surfaces        IceSurface[]
-  operatingHours  VenueOperatingHour[]
-  scheduleBlocks  VenueScheduleBlock[]
-  iceTimeRequests IceTimeRequest[]
-  lessonOfferings LessonOffering[]
-  contentPosts    VenueContentPost[]
-  relationships   VenueRelationship[]
-  activityLogs    VenueActivityLog[]
-  registrations   SessionRegistration[]
-  payments        Payment[]
-  signupEvents    SignupEvent[]
-  seasonGames     SeasonGame[]
-  proposalEntries GameProposalEntry[]
+  events           Event[]
+  staff            VenueStaff[]
+  surfaces         IceSurface[]
+  operatingHours   VenueOperatingHour[]
+  scheduleBlocks   VenueScheduleBlock[]
+  iceTimeRequests  IceTimeRequest[]
+  lessonOfferings  LessonOffering[]
+  contentPosts     VenueContentPost[]
+  relationships    VenueRelationship[]
+  activityLogs     VenueActivityLog[]
+  registrations    SessionRegistration[]
+  payments         Payment[]
+  signupEvents     SignupEvent[]
+  seasonGames      SeasonGame[]
+  proposalEntries  GameProposalEntry[]
+  practiceSessions PracticeSession[]
 
   @@index([visibility])
   @@index([teamId])
@@ -969,22 +1000,83 @@ model IceSurface {
   isActive     Boolean     @default(true)
   displayOrder Int         @default(0)
   notes        String?
+  // Display name for the implicit whole-surface segment ("Full ice");
+  // null = surface-type default. Bookings with segmentId null are whole-surface.
+  wholeLabel   String?
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
   venueId String
   venue   Venue  @relation(fields: [venueId], references: [id], onDelete: Cascade)
 
-  operatingHours  VenueOperatingHour[]
-  scheduleBlocks  VenueScheduleBlock[]
-  lessonOfferings LessonOffering[]
-  signupEvents    SignupEvent[]        @relation("SignupEventSurfaces")
-  eventGames      EventGame[]
-  seasonGames     SeasonGame[]
+  operatingHours   VenueOperatingHour[]
+  scheduleBlocks   VenueScheduleBlock[]
+  lessonOfferings  LessonOffering[]
+  signupEvents     SignupEvent[]        @relation("SignupEventSurfaces")
+  eventGames       EventGame[]
+  seasonGames      SeasonGame[]
+  segments         SurfaceSegment[]
+  practiceSessions PracticeSession[]
 
   @@unique([venueId, name])
   @@index([venueId, isActive])
   @@map("ice_surfaces")
+}
+
+enum SegmentKind {
+  HALF
+  CROSS
+  CUSTOM
+}
+
+// A named, bookable subdivision of a surface, authored by drawing on the
+// surface schematic. Geometry is authoring input + display only; the
+// SegmentCoexistence rows are the sole source of conflict truth
+// ("geometry proposes, declarations decide"). Whole-surface bookings use
+// segmentId: null — there is no WHOLE segment row.
+model SurfaceSegment {
+  id         String      @id @default(cuid())
+  name       String
+  kind       SegmentKind @default(CUSTOM)
+  // Stable preset identity ("HALF_A", "CROSS_3"); null for custom zones.
+  // Preset re-application matches by role, so renames never duplicate.
+  presetRole String?
+  isActive   Boolean     @default(true)
+  // Normalized (0-1) rect on the surface schematic: {x, y, w, h, rotation}.
+  geometry   Json
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  surfaceId String
+  surface   IceSurface @relation(fields: [surfaceId], references: [id], onDelete: Cascade)
+
+  coexistenceA SegmentCoexistence[] @relation("CoexistA")
+  coexistenceB SegmentCoexistence[] @relation("CoexistB")
+
+  seasonGames      SeasonGame[]
+  eventGames       EventGame[]
+  scheduleBlocks   VenueScheduleBlock[]
+  practiceSessions PracticeSession[]
+
+  @@unique([surfaceId, name])
+  @@unique([surfaceId, presetRole])
+  @@index([surfaceId, isActive])
+  @@map("surface_segments")
+}
+
+// Presence-only symmetric coexistence: a row means the pair may operate
+// simultaneously; absence means conflict (safe default). Canonical ordering
+// segmentAId < segmentBId (application code + DB CHECK).
+model SegmentCoexistence {
+  id String @id @default(cuid())
+
+  segmentAId String
+  segmentA   SurfaceSegment @relation("CoexistA", fields: [segmentAId], references: [id], onDelete: Cascade)
+  segmentBId String
+  segmentB   SurfaceSegment @relation("CoexistB", fields: [segmentBId], references: [id], onDelete: Cascade)
+
+  @@unique([segmentAId, segmentBId])
+  @@map("segment_coexistences")
 }
 
 model VenueOperatingHour {
@@ -1038,6 +1130,10 @@ model VenueScheduleBlock {
 
   surfaceId String?
   surface   IceSurface? @relation(fields: [surfaceId], references: [id], onDelete: SetNull)
+
+  // null = whole surface (or venue-wide when surfaceId is also null).
+  segmentId String?
+  segment   SurfaceSegment? @relation(fields: [segmentId], references: [id], onDelete: SetNull)
 
   createdById String
   createdBy   User   @relation("VenueScheduleBlockCreator", fields: [createdById], references: [id], onDelete: Restrict)
@@ -1424,12 +1520,13 @@ model SeasonGame {
   timezone String           @default("America/New_York")
 
   venueId      String?
-  venue        Venue?      @relation(fields: [venueId], references: [id], onDelete: SetNull)
+  venue        Venue?          @relation(fields: [venueId], references: [id], onDelete: SetNull)
   surfaceId    String?
-  surface      IceSurface? @relation(fields: [surfaceId], references: [id], onDelete: SetNull)
+  surface      IceSurface?     @relation(fields: [surfaceId], references: [id], onDelete: SetNull)
   // null when the sport's capability catalog defines no surface-usage options
-  surfaceUsage IceUsage?
-  zoneLabel    String? // "North half"
+  // null = whole surface; segment must belong to the selected surface.
+  segmentId    String?
+  segment      SurfaceSegment? @relation(fields: [segmentId], references: [id], onDelete: SetNull)
   locationText String? // free text when no venue selected
 
   homeTeamId String
@@ -1633,12 +1730,6 @@ enum EventGameStatus {
   SCHEDULED
   COMPLETED
   CANCELED
-}
-
-enum IceUsage {
-  FULL_ICE
-  HALF_ICE
-  CROSS_ICE
 }
 
 enum EventMediaKind {
@@ -1947,8 +2038,6 @@ model EventGame {
   status    EventGameStatus @default(SCHEDULED)
   startAt   DateTime
   endAt     DateTime
-  iceUsage  IceUsage        @default(FULL_ICE)
-  zoneLabel String? // "North half", "Cross-ice zone 2"
   // Writable only when isStatsEligible(event.ageClassification).
   homeScore Int?
   awayScore Int?
@@ -1956,11 +2045,20 @@ model EventGame {
   createdAt DateTime        @default(now())
   updatedAt DateTime        @updatedAt
 
+  // Recorded venue-conflict override (unified availability, feature 006)
+  conflictOverriddenById String?
+  conflictOverriddenBy   User?     @relation("EventGameConflictOverride", fields: [conflictOverriddenById], references: [id], onDelete: SetNull)
+  conflictOverriddenAt   DateTime?
+
   eventId String
   event   SignupEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
   surfaceId String?
   surface   IceSurface? @relation(fields: [surfaceId], references: [id], onDelete: SetNull)
+
+  // null = whole surface; segment must belong to the selected surface.
+  segmentId String?
+  segment   SurfaceSegment? @relation(fields: [segmentId], references: [id], onDelete: SetNull)
 
   homeTeamId String
   homeTeam   EventTeam @relation("EventGameHome", fields: [homeTeamId], references: [id], onDelete: Cascade)

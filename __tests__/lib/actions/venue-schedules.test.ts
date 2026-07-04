@@ -4,9 +4,15 @@ vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
 }));
 
-const { mockRequireVenueScheduleManager, mockPrisma, mockLogVenueActivity } = vi.hoisted(() => ({
+const {
+  mockRequireVenueScheduleManager,
+  mockPrisma,
+  mockLogVenueActivity,
+  mockFindBookingConflicts,
+} = vi.hoisted(() => ({
   mockRequireVenueScheduleManager: vi.fn(),
   mockLogVenueActivity: vi.fn(),
+  mockFindBookingConflicts: vi.fn(),
   mockPrisma: {
     venue: {
       findFirst: vi.fn(),
@@ -17,11 +23,21 @@ const { mockRequireVenueScheduleManager, mockPrisma, mockLogVenueActivity } = vi
       findFirst: vi.fn(),
       findMany: vi.fn(),
     },
+    surfaceSegment: {
+      findFirst: vi.fn(),
+    },
   },
 }));
 
 vi.mock("@/lib/auth/session", () => ({
   requireVenueScheduleManager: (...args: unknown[]) => mockRequireVenueScheduleManager(...args),
+}));
+
+// Block conflict checks are delegated to the unified availability engine
+// (feature 006); its five-source semantics are covered by
+// __tests__/lib/utils/availability.test.ts.
+vi.mock("@/lib/utils/availability", () => ({
+  findBookingConflicts: (...args: unknown[]) => mockFindBookingConflicts(...args),
 }));
 
 vi.mock("@/lib/db/prisma", () => ({
@@ -56,6 +72,7 @@ beforeEach(() => {
   mockRequireVenueScheduleManager.mockResolvedValue(USER_ID);
   mockPrisma.venue.findFirst.mockResolvedValue({ id: VENUE_ID, organizationId: ORGANIZATION_ID });
   mockPrisma.venueScheduleBlock.findMany.mockResolvedValue([]);
+  mockFindBookingConflicts.mockResolvedValue([]);
   mockLogVenueActivity.mockResolvedValue({ id: "cllogxxxxxxxxxxxxxxxxxxxxxxx" });
 });
 
@@ -80,7 +97,13 @@ describe("schedule block actions", () => {
     const result = await createScheduleBlock(scheduleInput);
 
     expect(result.success).toBe(true);
-    expect(mockPrisma.venueScheduleBlock.findMany).toHaveBeenCalled();
+    expect(mockFindBookingConflicts).toHaveBeenCalledWith(
+      expect.objectContaining({
+        venueId: VENUE_ID,
+        surfaceId: null,
+        segmentId: null,
+      })
+    );
     expect(mockPrisma.venueScheduleBlock.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
@@ -92,21 +115,107 @@ describe("schedule block actions", () => {
     );
   });
 
-  it("rejects overlapping published blocks", async () => {
-    mockPrisma.venueScheduleBlock.findMany.mockResolvedValue([
+  it("rejects publishing over conflicting bookings from any source", async () => {
+    mockFindBookingConflicts.mockResolvedValue([
       {
-        id: "existing",
-          startsAt: new Date("2026-02-01T19:00:00Z"),
-          endsAt: new Date("2026-02-01T21:00:00Z"),
-        status: "PUBLISHED",
-        activityType: "OPEN_SKATE",
+        source: "seasonGame",
+        title: "Sharks vs Jets",
+        startAt: new Date("2026-02-01T19:00:00Z"),
+        endAt: new Date("2026-02-01T21:00:00Z"),
+        surfaceId: null,
+        segmentId: null,
+        segmentName: null,
       },
     ]);
 
     const result = await createScheduleBlock({ ...scheduleInput, status: "PUBLISHED" });
 
     expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.details).toEqual(
+        expect.objectContaining({
+          conflicts: expect.arrayContaining([
+            expect.objectContaining({ source: "seasonGame" }),
+          ]),
+        })
+      );
+    }
     expect(mockPrisma.venueScheduleBlock.create).not.toHaveBeenCalled();
+  });
+
+  it("still saves drafts when conflicts exist", async () => {
+    mockFindBookingConflicts.mockResolvedValue([
+      {
+        source: "practice",
+        title: "Practice — Tuesday skills",
+        startAt: new Date("2026-02-01T19:00:00Z"),
+        endAt: new Date("2026-02-01T20:00:00Z"),
+        surfaceId: null,
+        segmentId: null,
+        segmentName: null,
+      },
+    ]);
+    mockPrisma.venueScheduleBlock.create.mockResolvedValue({
+      id: BLOCK_ID,
+      venueId: VENUE_ID,
+      status: "DRAFT",
+    });
+
+    const result = await createScheduleBlock(scheduleInput);
+
+    expect(result.success).toBe(true);
+    expect(mockPrisma.venueScheduleBlock.create).toHaveBeenCalled();
+  });
+
+  it("validates that a segment belongs to the selected surface and is active", async () => {
+    mockPrisma.surfaceSegment.findFirst.mockResolvedValue(null);
+
+    const result = await createScheduleBlock({
+      ...scheduleInput,
+      surfaceId: "clsurxxxxxxxxxxxxxxxxxxxxxxx",
+      segmentId: "clsegxxxxxxxxxxxxxxxxxxxxxxx",
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error).toMatch(/segment/i);
+    }
+    expect(mockPrisma.venueScheduleBlock.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects a segment without a surface selection", async () => {
+    const result = await createScheduleBlock({
+      ...scheduleInput,
+      segmentId: "clsegxxxxxxxxxxxxxxxxxxxxxxx",
+    });
+
+    expect(result.success).toBe(false);
+    expect(mockPrisma.venueScheduleBlock.create).not.toHaveBeenCalled();
+  });
+
+  it("persists the segment when it is active on the selected surface", async () => {
+    mockPrisma.surfaceSegment.findFirst.mockResolvedValue({
+      id: "clsegxxxxxxxxxxxxxxxxxxxxxxx",
+      isActive: true,
+    });
+    mockPrisma.venueScheduleBlock.create.mockResolvedValue({
+      id: BLOCK_ID,
+      venueId: VENUE_ID,
+      status: "DRAFT",
+    });
+
+    const result = await createScheduleBlock({
+      ...scheduleInput,
+      surfaceId: "clsurxxxxxxxxxxxxxxxxxxxxxxx",
+      segmentId: "clsegxxxxxxxxxxxxxxxxxxxxxxx",
+    });
+
+    expect(result.success).toBe(true);
+    expect(mockPrisma.venueScheduleBlock.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ segmentId: "clsegxxxxxxxxxxxxxxxxxxxxxxx" }),
+      })
+    );
   });
 
   it("updates, publishes, and cancels schedule blocks", async () => {

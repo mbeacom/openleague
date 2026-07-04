@@ -126,6 +126,8 @@ lib/                             # Core application logic
 │   ├── season-generation.ts     # Opt-in round-robin generation (preview + drafts)
 │   ├── game-proposals.ts        # Team-to-team game proposal threads
 │   ├── placements.ts            # Pre-season skill placement into divisions
+│   ├── venue-surfaces.ts        # Surface segmentation (drawn zones, coexistence)
+│   ├── venue-layout.ts          # Venue schematic layout (public facility map)
 │   └── venues.ts                # Venue management
 ├── auth/                        # Authentication utilities
 │   ├── config.ts                # Auth.js configuration
@@ -539,6 +541,8 @@ Business Source License 1.1 (BUSL-1.1) - converts to Apache 2.0 on October 4, 20
 - PostgreSQL via Prisma (amounts in cents); Vercel Blob (private) for media (004-signup-events)
 - TypeScript (strict) on Next.js 16 App Router, React 19 + MUI v7 + Emotion, Prisma 7 (Neon PostgreSQL adapter), Auth.js v5, Zod v4, Bun (005-season-scheduling)
 - PostgreSQL via Prisma; new models `Season`, `SeasonPhase`, `SeasonGame`, `GameProposal`, `GameProposalEntry`, `PlacementDecision`; `Division.ageClassification` added; `GameSchedule`/`ScheduleGame` dropped (005-season-scheduling)
+- TypeScript (strict), Next.js 16 App Router, React 19 + MUI v7 + Emotion, Prisma 7 (Neon), Auth.js v5, Zod v4, Bun; SVG-based editors (no new deps) (006-surface-segmentation)
+- PostgreSQL via Prisma; new `SurfaceSegment` + `SegmentCoexistence` models; `segmentId` on SeasonGame/EventGame/VenueScheduleBlock; `venueId/surfaceId/segmentId/startAt` on PracticeSession; `Venue.layout Json?`; `IceSurface.wholeLabel`; REMOVE `IceUsage` enum + `surfaceUsage`/`zoneLabel` (SeasonGame) + `iceUsage`/`zoneLabel` (EventGame) (006-surface-segmentation)
 
 ## Recent Changes
 - 002-ice-rink-management: Added TypeScript with Next.js 16 App Router and React 19 + MUI v7/Emotion, Prisma 7, Neon PostgreSQL adapter, Auth.js v5, Zod v4, Bun

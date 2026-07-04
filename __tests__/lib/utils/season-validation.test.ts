@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
-  ICE_USAGES,
   createSeasonSchema,
   createSeasonPhaseSchema,
   createSeasonGameSchema,
+  updateSeasonGameSchema,
   generateRoundRobinSchema,
   createGameProposalSchema,
   recordPlacementSchema,
@@ -17,6 +17,8 @@ const TEAM_A = "clteama00000000000000001";
 const TEAM_B = "clteamb00000000000000001";
 const DIVISION_ID = "cldivision00000000000001";
 const VENUE_ID = "clvenue00000000000000001";
+const GAME_ID = "clgame000000000000000001";
+const SEGMENT_ID = "clsegment000000000000001";
 
 const manyTeamIds = (count: number) =>
   Array.from({ length: count }, (_, i) => `clteam${String(i).padStart(18, "0")}`);
@@ -176,27 +178,52 @@ describe("createSeasonGameSchema", () => {
     }
   });
 
-  describe("surfaceUsage", () => {
-    it.each(ICE_USAGES)("accepts %s", (usage) => {
-      const result = createSeasonGameSchema.safeParse({ ...base, surfaceUsage: usage });
+  describe("segmentId (structured segment reference, 006)", () => {
+    it("accepts a valid segment cuid", () => {
+      const result = createSeasonGameSchema.safeParse({ ...base, segmentId: SEGMENT_ID });
       expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.segmentId).toBe(SEGMENT_ID);
+      }
     });
 
     it("is optional", () => {
       const result = createSeasonGameSchema.safeParse(base);
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.data.surfaceUsage).toBeUndefined();
+        expect(result.data.segmentId).toBeUndefined();
       }
     });
 
-    it("rejects values outside the ice usage enum", () => {
-      const result = createSeasonGameSchema.safeParse({
-        ...base,
-        surfaceUsage: "QUARTER_ICE",
-      });
+    it("accepts an empty string (whole surface)", () => {
+      const result = createSeasonGameSchema.safeParse({ ...base, segmentId: "" });
+      expect(result.success).toBe(true);
+    });
+
+    it("rejects a malformed segment ID", () => {
+      const result = createSeasonGameSchema.safeParse({ ...base, segmentId: "not-a-cuid" });
       expect(result.success).toBe(false);
     });
+  });
+});
+
+describe("updateSeasonGameSchema segmentId", () => {
+  it("accepts null to clear the segment (back to whole surface)", () => {
+    const result = updateSeasonGameSchema.safeParse({ gameId: GAME_ID, segmentId: null });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.segmentId).toBeNull();
+    }
+  });
+
+  it("accepts a valid segment cuid", () => {
+    const result = updateSeasonGameSchema.safeParse({ gameId: GAME_ID, segmentId: SEGMENT_ID });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects a malformed segment ID", () => {
+    const result = updateSeasonGameSchema.safeParse({ gameId: GAME_ID, segmentId: "half-ice" });
+    expect(result.success).toBe(false);
   });
 });
 

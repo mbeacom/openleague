@@ -5,7 +5,9 @@ import { prisma } from "@/lib/db/prisma";
 import { requireTeamAdmin, requireTeamMember, requireUserId } from "@/lib/auth/session";
 import { revalidatePath } from "next/cache";
 import { sendEventNotifications } from "@/lib/email/templates";
-import { findVenueConflicts, canUserAccessVenue as checkVenueAccess } from "@/lib/actions/venues";
+import { canUserAccessVenue as checkVenueAccess } from "@/lib/actions/venues";
+import { findBookingConflicts } from "@/lib/utils/availability";
+import type { BookingConflict } from "@/types/segments";
 import { FALLBACK_TIME_ZONE } from "@/lib/utils/date";
 import {
   createEventSchema,
@@ -19,6 +21,22 @@ import {
 export type ActionResult<T> =
   | { success: true; data: T }
   | { success: false; error: string; details?: unknown };
+
+/**
+ * Standard venue-conflict warning (006 FR-011): same shape season scheduling
+ * returns, so the "Schedule anyway" override flow works identically in the UI.
+ */
+function bookingConflictFailure(conflicts: BookingConflict[]): {
+  success: false;
+  error: string;
+  details: { conflicts: BookingConflict[] };
+} {
+  return {
+    success: false,
+    error: `This time overlaps ${conflicts.length} existing booking${conflicts.length > 1 ? "s" : ""} at the venue`,
+    details: { conflicts },
+  };
+}
 
 
 /**
@@ -54,8 +72,12 @@ export async function createEvent(
       },
     });
 
-    // Check venue availability if venueId and endAt are provided
+    // Check venue availability if venueId and endAt are provided. Team
+    // calendar events are venue-wide claims (US2 scenario 4), so the unified
+    // engine is asked with no surface/segment; conflicts warn rather than
+    // block, and proceeding requires the recorded override (FR-010/011).
     const venueId = validated.venueId || null;
+    let conflictsOverridden = false;
     if (venueId) {
       const venue = await prisma.venue.findUnique({
         where: { id: venueId },
@@ -73,14 +95,17 @@ export async function createEvent(
         return { success: false, error: "Your team does not have access to this venue" };
       }
       if (validated.endAt) {
-        const conflicts = await findVenueConflicts(venueId, validated.startAt, validated.endAt);
-        if (conflicts.length > 0) {
-          return {
-            success: false,
-            error: `Venue is already booked at this time by ${conflicts[0].teamName} (${conflicts[0].title})`,
-            details: conflicts,
-          };
+        const conflicts = await findBookingConflicts({
+          venueId,
+          surfaceId: null,
+          segmentId: null,
+          startAt: validated.startAt,
+          endAt: validated.endAt,
+        });
+        if (conflicts.length > 0 && !validated.overrideConflicts) {
+          return bookingConflictFailure(conflicts);
         }
+        conflictsOverridden = conflicts.length > 0;
       }
     }
 
@@ -112,6 +137,10 @@ export async function createEvent(
         opponent: validated.opponent || null,
         notes: validated.notes || null,
         teamId: validated.teamId,
+        ...(conflictsOverridden && {
+          conflictOverriddenById: currentUserId,
+          conflictOverriddenAt: new Date(),
+        }),
         rsvps: {
           create: allTeamMembers.map((member: { userId: string }) => ({
             userId: member.userId,
@@ -200,8 +229,11 @@ export async function updateEvent(
     // Check authentication and authorization - only ADMIN can update events
     const currentUserId = await requireTeamAdmin(existingEvent.teamId);
 
-    // Check venue availability if venueId and endAt are provided
+    // Check venue availability if venueId and endAt are provided. Venue-wide
+    // candidate (team events carry no surface); the event itself is excluded
+    // so a reschedule never conflicts with its own booking (FR-010/011).
     const venueId = validated.venueId || null;
+    let conflictsOverridden = false;
     if (venueId) {
       const venue = await prisma.venue.findUnique({
         where: { id: venueId },
@@ -219,14 +251,18 @@ export async function updateEvent(
         return { success: false, error: "Your team does not have access to this venue" };
       }
       if (validated.endAt) {
-        const conflicts = await findVenueConflicts(venueId, validated.startAt, validated.endAt, validated.id);
-        if (conflicts.length > 0) {
-          return {
-            success: false,
-            error: `Venue is already booked at this time by ${conflicts[0].teamName} (${conflicts[0].title})`,
-            details: conflicts,
-          };
+        const conflicts = await findBookingConflicts({
+          venueId,
+          surfaceId: null,
+          segmentId: null,
+          startAt: validated.startAt,
+          endAt: validated.endAt,
+          excludeEventId: validated.id,
+        });
+        if (conflicts.length > 0 && !validated.overrideConflicts) {
+          return bookingConflictFailure(conflicts);
         }
+        conflictsOverridden = conflicts.length > 0;
       }
     }
 
@@ -255,6 +291,12 @@ export async function updateEvent(
         venueId,
         opponent: validated.opponent || null,
         notes: validated.notes || null,
+        // The conflict check re-ran above whenever it could (venue + endAt);
+        // without a venue or an end time the event has no bookable footprint,
+        // so no conflicts are possible either way. Always write the override
+        // audit fields: stale metadata must not survive a conflict-free save.
+        conflictOverriddenById: conflictsOverridden ? currentUserId : null,
+        conflictOverriddenAt: conflictsOverridden ? new Date() : null,
       },
       select: {
         id: true,

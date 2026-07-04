@@ -20,15 +20,6 @@ describe("sport-catalog", () => {
       expect(hockey.surfaceLabel).toBe("Rink");
     });
 
-    it("offers exactly three ice usage options", () => {
-      expect(hockey.surfaceUsageOptions).toHaveLength(3);
-      expect(hockey.surfaceUsageOptions).toEqual([
-        { value: "FULL_ICE", label: "Full ice" },
-        { value: "HALF_ICE", label: "Half ice" },
-        { value: "CROSS_ICE", label: "Cross ice" },
-      ]);
-    });
-
     it("uses USA Hockey age labels", () => {
       const labels = hockey.ageClassifications.map((option) => option.label);
       expect(labels).toContain("10U (Squirt)");
@@ -57,10 +48,6 @@ describe("sport-catalog", () => {
   });
 
   describe("non-hockey sports degrade to neutral terminology", () => {
-    it.each(NON_HOCKEY_SPORTS)("%s hides surface usage", (sport) => {
-      expect(getSportCapabilities(sport).surfaceUsageOptions).toBeUndefined();
-    });
-
     it.each(NON_HOCKEY_SPORTS)("%s has no hockey vocabulary in labels", (sport) => {
       const capabilities = getSportCapabilities(sport);
       const labels = [
@@ -78,7 +65,7 @@ describe("sport-catalog", () => {
     it("returns the neutral OTHER entry for null", () => {
       const capabilities = getSportCapabilities(null);
       expect(capabilities.sport).toBe("OTHER");
-      expect(capabilities.surfaceUsageOptions).toBeUndefined();
+      expect(capabilities.surfaceLabel).toBe("Surface");
     });
 
     it("returns the neutral OTHER entry for undefined", () => {

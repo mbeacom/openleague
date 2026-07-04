@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { isValidTimeZone } from "@/lib/utils/date";
+import { MIN_SEGMENT_DIMENSION } from "@/lib/utils/segment-geometry";
 
 /**
  * Optional IANA timezone string (e.g. "America/New_York"). Validated against the
@@ -295,6 +296,9 @@ const baseEventSchema = z.object({
   opponent: optionalSanitizedString(100),
   notes: optionalSanitizedString(1000),
   teamId: z.string().cuid("Invalid team ID format"),
+  // Proceed despite venue booking conflicts; the override is recorded on the
+  // event (conflictOverriddenBy/At — 006 FR-011).
+  overrideConflicts: z.boolean().default(false),
 });
 
 export const createEventSchema = baseEventSchema
@@ -1049,6 +1053,29 @@ export const getPlaysByTeamSchema = z.object({
   dateFilter: z.enum(["all", "today", "week", "month"]).optional().default("all"),
 });
 
+// Optional venue booking for a practice session (FR-019, feature 006). All
+// fields nullable/optional; startAt is REQUIRED when a venue is attached —
+// enforced by practiceStartAtRefinement on both schemas below. Unattached
+// practices have no availability footprint.
+const practiceVenueAttachmentFields = {
+  venueId: optionalCuid("Invalid venue ID format"),
+  surfaceId: optionalCuid("Invalid surface ID format"),
+  segmentId: optionalCuid("Invalid segment ID format"),
+  startAt: z.coerce.date().optional(),
+  overrideConflicts: z.boolean().default(false),
+};
+
+const practiceHasStartAtWhenVenueSet = (data: { venueId?: string; startAt?: Date }) =>
+  !data.venueId || Boolean(data.startAt);
+const practiceStartAtRequiredIssue = {
+  message: "A start time is required when booking a venue",
+  path: ["startAt"],
+};
+
+export const practiceVenueAttachmentSchema = z
+  .object(practiceVenueAttachmentFields)
+  .refine(practiceHasStartAtWhenVenueSet, practiceStartAtRequiredIssue);
+
 // Practice session validation schemas
 export const createPracticeSessionSchema = z.object({
   title: sanitizedStringWithMin(1, 100),
@@ -1063,7 +1090,8 @@ export const createPracticeSessionSchema = z.object({
     duration: z.number().int().min(1, "Play duration must be at least 1 minute").max(300, "Play duration must be less than 300 minutes"),
     instructions: optionalSanitizedString(2000),
   })).optional().default([]),
-});
+  ...practiceVenueAttachmentFields,
+}).refine(practiceHasStartAtWhenVenueSet, practiceStartAtRequiredIssue);
 
 export const updatePracticeSessionSchema = z.object({
   id: z.string().cuid("Invalid session ID format"),
@@ -1079,7 +1107,8 @@ export const updatePracticeSessionSchema = z.object({
     duration: z.number().int().min(1, "Play duration must be at least 1 minute").max(300, "Play duration must be less than 300 minutes"),
     instructions: optionalSanitizedString(2000),
   })).optional().default([]),
-});
+  ...practiceVenueAttachmentFields,
+}).refine(practiceHasStartAtWhenVenueSet, practiceStartAtRequiredIssue);
 
 export const deletePracticeSessionSchema = z.object({
   id: z.string().cuid("Invalid session ID format"),
@@ -1112,8 +1141,11 @@ export type DeletePlayInput = z.infer<typeof deletePlaySchema>;
 export type GetPlayByIdInput = z.infer<typeof getPlayByIdSchema>;
 export type GetPlaysByTeamInput = z.infer<typeof getPlaysByTeamSchema>;
 
-export type CreatePracticeSessionInput = z.infer<typeof createPracticeSessionSchema>;
-export type UpdatePracticeSessionInput = z.infer<typeof updatePracticeSessionSchema>;
+// Input types (z.input) so defaulted fields (plays, overrideConflicts) stay
+// optional for callers.
+export type CreatePracticeSessionInput = z.input<typeof createPracticeSessionSchema>;
+export type UpdatePracticeSessionInput = z.input<typeof updatePracticeSessionSchema>;
+export type PracticeVenueAttachmentInput = z.input<typeof practiceVenueAttachmentSchema>;
 export type DeletePracticeSessionInput = z.infer<typeof deletePracticeSessionSchema>;
 export type GetPracticeSessionByIdInput = z.infer<typeof getPracticeSessionByIdSchema>;
 export type GetPracticeSessionsByTeamInput = z.infer<typeof getPracticeSessionsByTeamSchema>;
@@ -1358,8 +1390,6 @@ export type EventManagerCommandInput = z.input<typeof eventManagerCommandSchema>
 
 // --- Event teams, games & rotations (US7) ---
 
-export const ICE_USAGES = ["FULL_ICE", "HALF_ICE", "CROSS_ICE"] as const;
-
 export const eventTeamSchema = z.object({
   eventId: z.string().cuid("Invalid event ID format"),
   teamId: optionalCuid("Invalid team ID format"),
@@ -1396,9 +1426,11 @@ export const eventGameSchema = z
     startAt: z.coerce.date({ message: "Valid game start time is required" }),
     endAt: z.coerce.date({ message: "Valid game end time is required" }),
     surfaceId: optionalCuid("Invalid surface ID format"),
-    iceUsage: z.enum(ICE_USAGES).default("FULL_ICE"),
-    zoneLabel: optionalSanitizedString(60),
+    segmentId: optionalCuid("Invalid segment ID format"),
     notes: optionalSanitizedString(500),
+    // Proceed despite venue booking conflicts; the override is recorded on
+    // the game (conflictOverriddenBy/At — 006 FR-011).
+    overrideConflicts: z.boolean().default(false),
   })
   .refine((data) => data.endAt > data.startAt, {
     message: "Game end must be after game start",
@@ -1573,8 +1605,7 @@ const seasonGameFields = {
   timezone: optionalTimeZoneSchema,
   venueId: optionalCuid("Invalid venue ID format"),
   surfaceId: optionalCuid("Invalid surface ID format"),
-  surfaceUsage: z.enum(ICE_USAGES).optional(),
-  zoneLabel: optionalSanitizedString(120),
+  segmentId: optionalCuid("Invalid segment ID format"),
   locationText: optionalSanitizedString(255),
   notes: optionalSanitizedString(1000),
 };
@@ -1604,8 +1635,7 @@ export const updateSeasonGameSchema = z
     timezone: optionalTimeZoneSchema,
     venueId: optionalCuid("Invalid venue ID format").nullable(),
     surfaceId: optionalCuid("Invalid surface ID format").nullable(),
-    surfaceUsage: z.enum(ICE_USAGES).nullable().optional(),
-    zoneLabel: optionalSanitizedString(120),
+    segmentId: optionalCuid("Invalid segment ID format").nullable(),
     locationText: optionalSanitizedString(255),
     notes: optionalSanitizedString(1000),
     overrideConflicts: z.boolean().default(false),
@@ -1732,3 +1762,108 @@ export type CounterGameProposalInput = z.input<typeof counterGameProposalSchema>
 export type AcceptGameProposalInput = z.input<typeof acceptGameProposalSchema>;
 export type DeclineGameProposalInput = z.input<typeof declineGameProposalSchema>;
 export type RecordPlacementInput = z.input<typeof recordPlacementSchema>;
+
+// --- Surface segmentation & venue layout (feature 006) ---
+
+// Normalized (0-1) coordinate on a surface or venue schematic.
+const normalizedCoordinate = z.coerce
+  .number()
+  .min(0, "Coordinates must be between 0 and 1")
+  .max(1, "Coordinates must be between 0 and 1");
+
+// Normalized width/height: zero-size (invisible, unclickable) rects are
+// rejected, matching the floor `normalizeGeometry` clamps drawn zones to.
+const normalizedDimension = z.coerce
+  .number()
+  .min(MIN_SEGMENT_DIMENSION, `Dimensions must be at least ${MIN_SEGMENT_DIMENSION}`)
+  .max(1, "Dimensions must be at most 1");
+
+const rotationDegrees = z.coerce
+  .number()
+  .min(0, "Rotation must be at least 0 degrees")
+  .lt(360, "Rotation must be less than 360 degrees");
+
+/** Normalized rect on the schematic: {x, y, w, h, rotation} (data-model 006). */
+export const segmentGeometrySchema = z.object({
+  x: normalizedCoordinate,
+  y: normalizedCoordinate,
+  w: normalizedDimension,
+  h: normalizedDimension,
+  rotation: rotationDegrees,
+});
+
+/** Staff-confirmed coexistence pair; canonicalized (A < B) server-side. */
+const coexistencePairSchema = z.object({
+  segmentAId: z.string().cuid("Invalid segment ID format"),
+  segmentBId: z.string().cuid("Invalid segment ID format"),
+});
+
+export const createSegmentSchema = z.object({
+  surfaceId: z.string().cuid("Invalid surface ID format"),
+  name: sanitizedStringWithMin(1, 80),
+  geometry: segmentGeometrySchema,
+  // Only confirmed pairs coexist; undeclared pairs conflict (safe default).
+  confirmedCoexistence: z.array(coexistencePairSchema).default([]),
+});
+
+export const updateSegmentSchema = z.object({
+  segmentId: z.string().cuid("Invalid segment ID format"),
+  name: sanitizedStringWithMin(1, 80).optional(),
+  geometry: segmentGeometrySchema.optional(),
+  confirmedCoexistence: z.array(coexistencePairSchema).optional(),
+  // Coexistence edits that create new conflicts require explicit confirmation
+  // after the server returns the newly conflicting bookings (FR-007).
+  confirm: z.boolean().default(false),
+});
+
+export const applySegmentationPresetSchema = z.object({
+  surfaceId: z.string().cuid("Invalid surface ID format"),
+});
+
+export const setSegmentActiveSchema = z.object({
+  segmentId: z.string().cuid("Invalid segment ID format"),
+  isActive: z.boolean(),
+});
+
+/** Rename the implicit whole-surface segment; empty resets to the type default. */
+export const setWholeSurfaceLabelSchema = z.object({
+  surfaceId: z.string().cuid("Invalid surface ID format"),
+  wholeLabel: optionalSanitizedString(60),
+});
+
+/** Pure read: drawn geometry → suggested coexistence pairs for staff review. */
+export const suggestCoexistenceSchema = z.object({
+  surfaceId: z.string().cuid("Invalid surface ID format"),
+  geometry: segmentGeometrySchema,
+  excludeSegmentId: optionalCuid("Invalid segment ID format"),
+});
+
+/** Venue schematic layout (FR-016-018). Presentational only. */
+export const saveVenueLayoutSchema = z.object({
+  venueId: z.string().cuid("Invalid venue ID format"),
+  layout: z.object({
+    surfaces: z.array(
+      segmentGeometrySchema.extend({
+        surfaceId: z.string().cuid("Invalid surface ID format"),
+      })
+    ),
+    labels: z
+      .array(
+        z.object({
+          text: sanitizedStringWithMin(1, 40),
+          x: normalizedCoordinate,
+          y: normalizedCoordinate,
+        })
+      )
+      .max(20, "A layout can have at most 20 labels"),
+  }),
+});
+
+export type SegmentGeometryInput = z.input<typeof segmentGeometrySchema>;
+export type CreateSegmentInput = z.input<typeof createSegmentSchema>;
+export type UpdateSegmentInput = z.input<typeof updateSegmentSchema>;
+export type ApplySegmentationPresetInput = z.input<typeof applySegmentationPresetSchema>;
+export type SetSegmentActiveInput = z.input<typeof setSegmentActiveSchema>;
+export type SetWholeSurfaceLabelInput = z.input<typeof setWholeSurfaceLabelSchema>;
+export type SuggestCoexistenceInput = z.input<typeof suggestCoexistenceSchema>;
+export type SaveVenueLayoutInput = z.input<typeof saveVenueLayoutSchema>;

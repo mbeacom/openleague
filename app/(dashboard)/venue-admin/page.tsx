@@ -67,6 +67,13 @@ export default async function VenueAdminPage() {
                             </Button>
                             <Button
                               component={Link}
+                              href={`/venue-admin/${organization.id}/venues/${venue.id}/layout`}
+                              variant="text"
+                            >
+                              Layout
+                            </Button>
+                            <Button
+                              component={Link}
                               href={`/venue-admin/${organization.id}/venues/${venue.id}/registrations`}
                               variant="text"
                             >

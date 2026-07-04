@@ -1,7 +1,6 @@
 import type {
   GameProposalEntryKind,
   GameProposalStatus,
-  IceUsage,
   ScheduleFormat,
   SeasonGameStatus,
   SeasonPhaseType,
@@ -45,8 +44,8 @@ export interface SeasonGameView {
   awayTeam: { id: string; name: string };
   venue: { id: string; name: string } | null;
   surface: { id: string; name: string } | null;
-  surfaceUsage: IceUsage | null;
-  zoneLabel: string | null;
+  /** null = whole surface (or no surface selected). */
+  segment: { id: string; name: string } | null;
   locationText: string | null;
   homeScore: number | null;
   awayScore: number | null;
@@ -56,14 +55,11 @@ export interface SeasonGameView {
   conflictOverriddenAt: Date | null;
 }
 
-/** A detected booking conflict surfaced to the scheduler before saving. */
-export interface GameConflictView {
-  source: "event" | "seasonGame" | "scheduleBlock";
-  title: string;
-  startAt: Date;
-  endAt: Date | null;
-  surfaceId: string | null;
-}
+/**
+ * A detected booking conflict surfaced to the scheduler before saving.
+ * Alias of the unified availability engine's result shape (feature 006).
+ */
+export type { BookingConflict as GameConflictView } from "@/types/segments";
 
 export interface GameProposalEntryView {
   id: string;

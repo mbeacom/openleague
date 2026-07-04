@@ -18,6 +18,8 @@ import {
     Button,
     CircularProgress,
     Alert,
+    AlertTitle,
+    MenuItem,
     Stack,
     Card,
     CardContent,
@@ -50,6 +52,13 @@ import {
     validateSessionDuration,
     VALIDATION_CONSTRAINTS,
 } from "@/types/practice-planner";
+import type { BookingConflict } from "@/types/segments";
+import {
+    formatDateTimeInZone,
+    formatDateTimeLocalInput,
+    parseDateTimeLocalToUtc,
+    resolveTimeZone,
+} from "@/lib/utils/date";
 import { PlayLibrary } from "./PlayLibrary";
 import {
     Add as AddIcon,
@@ -58,13 +67,71 @@ import {
 } from "@mui/icons-material";
 
 /**
+ * A venue the coach can book ice at (feature 006, FR-019).
+ * Loaded server-side by the new/edit pages via getVenueBookingOptions.
+ */
+export interface VenueBookingOption {
+    id: string;
+    name: string;
+    timezone: string;
+}
+
+/**
+ * Optional venue attachment fields carried alongside the session data
+ * on save (feature 006, FR-019). All null when the practice is unbooked.
+ */
+export interface PracticeVenueAttachment {
+    venueId: string | null;
+    surfaceId: string | null;
+    segmentId: string | null;
+    startAt: Date | null;
+}
+
+/** Full payload handed to onSave: session data + booking + override flag. */
+export interface PracticeSessionSubmitData
+    extends PracticeSessionData,
+        PracticeVenueAttachment {
+    overrideConflicts: boolean;
+}
+
+/**
+ * Structured save outcome so the editor can distinguish venue booking
+ * conflicts (warn + "Book anyway", FR-019/US5) from ordinary errors.
+ */
+export type PracticeSessionSaveResult =
+    | { success: true }
+    | { success: false; error: string; conflicts?: BookingConflict[] };
+
+/**
+ * Pull booking conflicts out of an ActionResult's `details` payload
+ * (same shape season games return — details.conflicts).
+ */
+export function extractBookingConflicts(details: unknown): BookingConflict[] | undefined {
+    if (details && typeof details === "object" && "conflicts" in details) {
+        const conflicts = (details as { conflicts: unknown }).conflicts;
+        if (Array.isArray(conflicts) && conflicts.length > 0) {
+            return conflicts as BookingConflict[];
+        }
+    }
+    return undefined;
+}
+
+/**
  * Props for the PracticeSessionEditor component
  */
 export interface PracticeSessionEditorProps {
     sessionId?: string;
     teamId: string;
-    initialData?: Partial<PracticeSessionData>;
-    onSave?: (session: PracticeSessionData) => Promise<void>;
+    initialData?: Partial<PracticeSessionData> & Partial<PracticeVenueAttachment>;
+    /** Venues available for the optional ice booking (feature 006). */
+    venues?: VenueBookingOption[];
+    /** Active surfaces per venue id. */
+    surfacesByVenue?: Record<string, Array<{ id: string; name: string }>>;
+    /** Active segments per surface id. */
+    segmentsBySurface?: Record<string, Array<{ id: string; name: string }>>;
+    /** Display name of the implicit whole-surface option per surface ("Full ice"). */
+    wholeLabelBySurface?: Record<string, string>;
+    onSave?: (session: PracticeSessionSubmitData) => Promise<PracticeSessionSaveResult>;
     onShare?: (sessionId: string) => Promise<void>;
     onCancel?: () => void;
 }
@@ -314,6 +381,10 @@ export function PracticeSessionEditor({
     sessionId,
     teamId,
     initialData,
+    venues = [],
+    surfacesByVenue = {},
+    segmentsBySurface = {},
+    wholeLabelBySurface = {},
     onSave,
     onShare,
     onCancel,
@@ -329,6 +400,21 @@ export function PracticeSessionEditor({
     const [plays, setPlays] = useState<PlayInSession[]>(initialData?.plays || []);
     const [isShared, setIsShared] = useState(initialData?.isShared || false);
 
+    // Ice booking state (feature 006, FR-019): optional venue attachment.
+    // startTime is a wall-clock HH:MM interpreted in the venue's timezone.
+    const [venueId, setVenueId] = useState(initialData?.venueId ?? "");
+    const [surfaceId, setSurfaceId] = useState(initialData?.surfaceId ?? "");
+    const [segmentId, setSegmentId] = useState(initialData?.segmentId ?? "");
+    const [startTime, setStartTime] = useState(() => {
+        if (!initialData?.startAt) return "";
+        const initialZone = resolveTimeZone(
+            venues.find((venue) => venue.id === initialData.venueId)?.timezone
+        );
+        // formatDateTimeLocalInput returns YYYY-MM-DDTHH:MM — keep the time part.
+        return formatDateTimeLocalInput(initialData.startAt, initialZone).slice(11, 16);
+    });
+    const [bookingConflicts, setBookingConflicts] = useState<BookingConflict[] | null>(null);
+
     // UI state
     const [isSaving, setIsSaving] = useState(false);
     const [isSharing, setIsSharing] = useState(false);
@@ -343,7 +429,13 @@ export function PracticeSessionEditor({
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
     const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
     const successTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-    const handleSaveRef = useRef<(() => Promise<void>) | undefined>(undefined);
+    const handleSaveRef = useRef<((overrideConflicts?: boolean) => Promise<void>) | undefined>(undefined);
+
+    // Timezone the booking start time is entered in (the venue's zone,
+    // matching GameForm's wall-clock handling).
+    const selectedVenueTimeZone = resolveTimeZone(
+        venues.find((venue) => venue.id === venueId)?.timezone
+    );
 
     /**
      * Validate form fields
@@ -373,9 +465,15 @@ export function PracticeSessionEditor({
             errors.duration = durationValidation.errors[0]?.message || "Invalid duration";
         }
 
+        // Booking a venue requires a start time (FR-019): the slot is the
+        // practice date + start time, running for the session duration.
+        if (venueId && !startTime) {
+            errors.startTime = "Start time is required when booking a venue";
+        }
+
         setValidationErrors(errors);
         return Object.keys(errors).length === 0;
-    }, [title, date, duration]);
+    }, [title, date, duration, venueId, startTime]);
 
     /**
      * Handle title change
@@ -399,6 +497,8 @@ export function PracticeSessionEditor({
         setDate(newDate);
         setHasUnsavedChanges(true);
         setSaveSuccess(false);
+        // The booking slot follows the practice date — stale conflicts no longer apply.
+        setBookingConflicts(null);
         // Clear date error when user changes date
         if (validationErrors.date) {
             setValidationErrors((prev) =>
@@ -416,6 +516,8 @@ export function PracticeSessionEditor({
             setDuration(value);
             setHasUnsavedChanges(true);
             setSaveSuccess(false);
+            // The booking slot length follows the duration — stale conflicts no longer apply.
+            setBookingConflicts(null);
             // Clear duration error when user changes duration
             if (validationErrors.duration) {
                 setValidationErrors((prev) =>
@@ -426,10 +528,73 @@ export function PracticeSessionEditor({
     };
 
     /**
+     * Ice booking handlers (feature 006, FR-019).
+     * Changing the venue resets surface/segment (they belong to a venue —
+     * stale selections would be rejected server-side, matching GameForm).
+     */
+    const handleVenueChange = (nextVenueId: string) => {
+        setVenueId(nextVenueId);
+        setSurfaceId("");
+        setSegmentId("");
+        setBookingConflicts(null);
+        setHasUnsavedChanges(true);
+        setSaveSuccess(false);
+    };
+
+    const handleSurfaceChange = (nextSurfaceId: string) => {
+        setSurfaceId(nextSurfaceId);
+        // Segments belong to a surface — reset on surface change.
+        setSegmentId("");
+        setBookingConflicts(null);
+        setHasUnsavedChanges(true);
+        setSaveSuccess(false);
+    };
+
+    const handleSegmentChange = (nextSegmentId: string) => {
+        setSegmentId(nextSegmentId);
+        setBookingConflicts(null);
+        setHasUnsavedChanges(true);
+        setSaveSuccess(false);
+    };
+
+    const handleStartTimeChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+        setStartTime(event.target.value);
+        setBookingConflicts(null);
+        setHasUnsavedChanges(true);
+        setSaveSuccess(false);
+        if (validationErrors.startTime) {
+            setValidationErrors((prev) =>
+                Object.fromEntries(Object.entries(prev).filter(([key]) => key !== "startTime"))
+            );
+        }
+    };
+
+    /**
+     * Detach the practice from the venue entirely: on save the practice
+     * loses its availability footprint and behaves exactly as before.
+     */
+    const handleClearBooking = () => {
+        setVenueId("");
+        setSurfaceId("");
+        setSegmentId("");
+        setStartTime("");
+        setBookingConflicts(null);
+        setHasUnsavedChanges(true);
+        setSaveSuccess(false);
+        if (validationErrors.startTime) {
+            setValidationErrors((prev) =>
+                Object.fromEntries(Object.entries(prev).filter(([key]) => key !== "startTime"))
+            );
+        }
+    };
+
+    /**
      * Handle save action
      * Requirements: 2.1 - Save session metadata
+     * FR-019: pass `overrideConflicts: true` (via "Book anyway") to save
+     * despite venue booking conflicts.
      */
-    const handleSave = useCallback(async () => {
+    const handleSave = useCallback(async (overrideConflicts: boolean = false) => {
         // Validate form (includes date validation)
         if (!validateForm()) {
             setSaveError("Please fix the validation errors");
@@ -439,24 +604,57 @@ export function PracticeSessionEditor({
         // TypeScript narrowing: after validateForm() passes, date is guaranteed to be non-null
         if (!date) return;
 
+        // Combine the practice date with the entered wall-clock start time in
+        // the venue's timezone to form the booking instant (FR-019).
+        let startAt: Date | null = null;
+        if (venueId) {
+            const pad = (value: number) => String(value).padStart(2, "0");
+            const dateStr = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+            startAt = parseDateTimeLocalToUtc(`${dateStr}T${startTime}`, selectedVenueTimeZone);
+            if (!startAt) {
+                setValidationErrors((prev) => ({
+                    ...prev,
+                    startTime: "Enter a valid start time",
+                }));
+                setSaveError("Please fix the validation errors");
+                return;
+            }
+        }
+
         setIsSaving(true);
         setSaveError(null);
         setSaveSuccess(false);
+        setBookingConflicts(null);
 
         try {
-            // Create session data object
-            const sessionData: PracticeSessionData = {
+            // Create session data object (plus optional venue booking)
+            const sessionData: PracticeSessionSubmitData = {
                 id: sessionId,
                 title: title.trim(),
                 date,
                 duration,
                 plays,
                 isShared,
+                venueId: venueId || null,
+                surfaceId: venueId ? surfaceId || null : null,
+                segmentId: venueId && surfaceId ? segmentId || null : null,
+                startAt,
+                overrideConflicts,
             };
 
             // Call onSave callback if provided
-            if (onSave) {
-                await onSave(sessionData);
+            const result: PracticeSessionSaveResult = onSave
+                ? await onSave(sessionData)
+                : { success: true };
+
+            if (!result.success) {
+                if (result.conflicts && result.conflicts.length > 0) {
+                    // FR-019/US5: warn and let the coach explicitly book anyway.
+                    setBookingConflicts(result.conflicts);
+                } else {
+                    setSaveError(result.error);
+                }
+                return;
             }
 
             setHasUnsavedChanges(false);
@@ -477,7 +675,21 @@ export function PracticeSessionEditor({
         } finally {
             setIsSaving(false);
         }
-    }, [title, date, duration, plays, isShared, sessionId, onSave, validateForm]);
+    }, [
+        title,
+        date,
+        duration,
+        plays,
+        isShared,
+        sessionId,
+        venueId,
+        surfaceId,
+        segmentId,
+        startTime,
+        selectedVenueTimeZone,
+        onSave,
+        validateForm,
+    ]);
 
     // Keep handleSaveRef updated with latest handleSave function
     useEffect(() => {
@@ -714,6 +926,11 @@ export function PracticeSessionEditor({
         };
     }, []);
 
+    // Ice booking option lists for the currently selected venue/surface (006).
+    const venueSurfaces = venueId ? (surfacesByVenue[venueId] ?? []) : [];
+    const surfaceSegments = surfaceId ? (segmentsBySurface[surfaceId] ?? []) : [];
+    const wholeSurfaceLabel = (surfaceId && wholeLabelBySurface[surfaceId]) || "Whole surface";
+
     return (
         <LocalizationProvider dateAdapter={AdapterDateFns}>
             <Box
@@ -799,6 +1016,104 @@ export function PracticeSessionEditor({
                         )}
                     </Stack>
                 </Paper>
+
+                {/* Ice Booking (feature 006, FR-019) */}
+                {/* Optional venue attachment: venue → surface → segment + start time. */}
+                {venues.length > 0 && (
+                    <Paper elevation={2} sx={{ p: 2 }}>
+                        <Stack spacing={2}>
+                            <Stack
+                                direction="row"
+                                justifyContent="space-between"
+                                alignItems="center"
+                            >
+                                <Typography variant="h6" component="h2">
+                                    Ice Booking (optional)
+                                </Typography>
+                                {venueId && (
+                                    <Button
+                                        size="small"
+                                        color="inherit"
+                                        onClick={handleClearBooking}
+                                        disabled={isSaving || isSharing}
+                                    >
+                                        Clear booking
+                                    </Button>
+                                )}
+                            </Stack>
+                            <Typography variant="body2" color="text.secondary">
+                                Book a venue for this practice so it appears on the venue&apos;s
+                                schedule and other bookings warn against it.
+                            </Typography>
+                            <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+                                <TextField
+                                    select
+                                    label="Venue"
+                                    fullWidth
+                                    value={venueId}
+                                    onChange={(event) => handleVenueChange(event.target.value)}
+                                >
+                                    <MenuItem value="">No venue booking</MenuItem>
+                                    {venues.map((venue) => (
+                                        <MenuItem key={venue.id} value={venue.id}>
+                                            {venue.name}
+                                        </MenuItem>
+                                    ))}
+                                </TextField>
+                                {venueId && (
+                                    <TextField
+                                        label="Start time"
+                                        type="time"
+                                        required
+                                        fullWidth
+                                        value={startTime}
+                                        onChange={handleStartTimeChange}
+                                        error={!!validationErrors.startTime}
+                                        helperText={
+                                            validationErrors.startTime ||
+                                            `On the practice date, in ${selectedVenueTimeZone} (the venue's timezone); runs ${duration} min`
+                                        }
+                                        slotProps={{ inputLabel: { shrink: true } }}
+                                    />
+                                )}
+                            </Stack>
+                            {venueId && venueSurfaces.length > 0 && (
+                                <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+                                    <TextField
+                                        select
+                                        label="Surface (optional)"
+                                        fullWidth
+                                        value={surfaceId}
+                                        onChange={(event) => handleSurfaceChange(event.target.value)}
+                                    >
+                                        <MenuItem value="">Any surface</MenuItem>
+                                        {venueSurfaces.map((surface) => (
+                                            <MenuItem key={surface.id} value={surface.id}>
+                                                {surface.name}
+                                            </MenuItem>
+                                        ))}
+                                    </TextField>
+                                    {surfaceId && surfaceSegments.length > 0 && (
+                                        <TextField
+                                            select
+                                            label="Segment (optional)"
+                                            fullWidth
+                                            value={segmentId}
+                                            onChange={(event) => handleSegmentChange(event.target.value)}
+                                        >
+                                            <MenuItem value="">{wholeSurfaceLabel}</MenuItem>
+                                            {surfaceSegments.map((segment) => (
+                                                <MenuItem key={segment.id} value={segment.id}>
+                                                    {segment.name}
+                                                </MenuItem>
+                                            ))}
+                                        </TextField>
+                                    )}
+                                </Stack>
+                            )}
+                        </Stack>
+                    </Paper>
+                )}
 
                 {/* Play List Management */}
                 {/* Requirements: 2.2, 2.3 - List view for plays in session */}
@@ -901,6 +1216,38 @@ export function PracticeSessionEditor({
                             </Alert>
                         )}
 
+                        {/* Venue booking conflicts (FR-019/US5): warn and allow an
+                            explicit override that resubmits with overrideConflicts. */}
+                        {bookingConflicts && (
+                            <Alert
+                                severity="warning"
+                                action={
+                                    <Button
+                                        color="inherit"
+                                        size="small"
+                                        disabled={isSaving || isSharing}
+                                        onClick={() => handleSave(true)}
+                                    >
+                                        Book anyway
+                                    </Button>
+                                }
+                            >
+                                <AlertTitle>
+                                    This time overlaps {bookingConflicts.length} existing booking
+                                    {bookingConflicts.length === 1 ? "" : "s"} at the venue
+                                </AlertTitle>
+                                {bookingConflicts.map((conflict, index) => (
+                                    <Typography key={`${conflict.title}-${index}`} variant="body2">
+                                        {conflict.title} —{" "}
+                                        {formatDateTimeInZone(conflict.startAt, selectedVenueTimeZone)}
+                                        {conflict.endAt
+                                            ? ` – ${formatDateTimeInZone(conflict.endAt, selectedVenueTimeZone)}`
+                                            : ""}
+                                    </Typography>
+                                ))}
+                            </Alert>
+                        )}
+
                         {/* Success Message */}
                         {saveSuccess && (
                             <Alert severity="success" onClose={() => setSaveSuccess(false)}>
@@ -940,7 +1287,7 @@ export function PracticeSessionEditor({
                             <Button
                                 variant="contained"
                                 color="primary"
-                                onClick={handleSave}
+                                onClick={() => handleSave()}
                                 disabled={isSaving || isSharing || !title.trim()}
                                 startIcon={
                                     isSaving ? (

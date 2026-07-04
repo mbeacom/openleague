@@ -6,7 +6,7 @@ import { prisma } from "@/lib/db/prisma";
 import { requireUserId } from "@/lib/auth/session";
 import { revalidatePath } from "next/cache";
 import { sendEventNotifications } from "@/lib/email/templates";
-import { findGameConflicts } from "@/lib/utils/game-conflicts";
+import { findBookingConflicts } from "@/lib/utils/availability";
 import { AGE_CLASSIFICATION_RANK, isStatsEligible } from "@/lib/utils/age-level";
 import { FALLBACK_TIME_ZONE } from "@/lib/utils/date";
 import {
@@ -184,6 +184,7 @@ export async function createSeasonGame(
 
     const venueId = validated.venueId || null;
     const surfaceId = validated.surfaceId || null;
+    const segmentId = validated.segmentId || null;
     const phaseId = validated.phaseId || null;
 
     if (surfaceId) {
@@ -199,13 +200,28 @@ export async function createSeasonGame(
       }
     }
 
+    // Segments must be active and belong to the selected surface (006 FR).
+    if (segmentId) {
+      if (!surfaceId) {
+        return { success: false, error: "Pick a surface before choosing a segment" };
+      }
+      const segment = await prisma.surfaceSegment.findFirst({
+        where: { id: segmentId, surfaceId, isActive: true },
+        select: { id: true },
+      });
+      if (!segment) {
+        return { success: false, error: "Select an active segment on the chosen surface" };
+      }
+    }
+
     // Venue availability (FR-012/013): warn and require an explicit,
     // recorded override to proceed.
     let conflictsOverridden = false;
     if (venueId) {
-      const conflicts = await findGameConflicts({
+      const conflicts = await findBookingConflicts({
         venueId,
         surfaceId,
+        segmentId,
         startAt: validated.startAt,
         endAt: validated.endAt,
       });
@@ -228,8 +244,7 @@ export async function createSeasonGame(
           timezone,
           venueId,
           surfaceId,
-          surfaceUsage: validated.surfaceUsage ?? null,
-          zoneLabel: validated.zoneLabel || null,
+          segmentId,
           locationText: validated.locationText || null,
           notes: validated.notes || null,
           homeTeamId: validated.homeTeamId,
@@ -305,6 +320,8 @@ export async function updateSeasonGame(
       validated.venueId === undefined ? existing.venueId : validated.venueId || null;
     const surfaceId =
       validated.surfaceId === undefined ? existing.surfaceId : validated.surfaceId || null;
+    const segmentId =
+      validated.segmentId === undefined ? existing.segmentId : validated.segmentId || null;
 
     if (surfaceId) {
       if (!venueId) {
@@ -323,11 +340,26 @@ export async function updateSeasonGame(
       }
     }
 
+    // Segments must be active and belong to the selected surface (006 FR).
+    if (segmentId && (segmentId !== existing.segmentId || surfaceId !== existing.surfaceId)) {
+      if (!surfaceId) {
+        return { success: false, error: "Pick a surface before choosing a segment" };
+      }
+      const segment = await prisma.surfaceSegment.findFirst({
+        where: { id: segmentId, surfaceId, isActive: true },
+        select: { id: true },
+      });
+      if (!segment) {
+        return { success: false, error: "Select an active segment on the chosen surface" };
+      }
+    }
+
     let conflictsOverridden = false;
     if (venueId) {
-      const conflicts = await findGameConflicts({
+      const conflicts = await findBookingConflicts({
         venueId,
         surfaceId,
+        segmentId,
         startAt,
         endAt,
         excludeSeasonGameId: existing.id,
@@ -350,9 +382,8 @@ export async function updateSeasonGame(
           timezone,
           venueId,
           surfaceId,
+          segmentId,
           ...(validated.phaseId !== undefined && { phaseId: validated.phaseId || null }),
-          ...(validated.surfaceUsage !== undefined && { surfaceUsage: validated.surfaceUsage }),
-          ...(validated.zoneLabel !== undefined && { zoneLabel: validated.zoneLabel || null }),
           ...(validated.locationText !== undefined && {
             locationText: validated.locationText || null,
           }),
@@ -622,7 +653,7 @@ export async function checkGameConflicts(
   try {
     const validated = checkGameConflictsSchema.parse(input);
     await requireUserId();
-    const conflicts = await findGameConflicts({
+    const conflicts = await findBookingConflicts({
       venueId: validated.venueId,
       surfaceId: validated.surfaceId || null,
       startAt: validated.startAt,

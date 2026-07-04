@@ -84,13 +84,30 @@ export default async function SeasonDetailPage({
   const surfaces = venues.length
     ? await prisma.iceSurface.findMany({
         where: { venueId: { in: venues.map((venue) => venue.id) }, isActive: true },
-        select: { id: true, name: true, venueId: true },
+        select: { id: true, name: true, venueId: true, wholeLabel: true },
         orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
       })
     : [];
   const surfacesByVenue: Record<string, Array<{ id: string; name: string }>> = {};
+  const wholeLabelBySurface: Record<string, string> = {};
   for (const surface of surfaces) {
     (surfacesByVenue[surface.venueId] ??= []).push({ id: surface.id, name: surface.name });
+    if (surface.wholeLabel) {
+      wholeLabelBySurface[surface.id] = surface.wholeLabel;
+    }
+  }
+
+  // Active segments per surface feed the game form's segment picker (006).
+  const segments = venues.length
+    ? await prisma.surfaceSegment.findMany({
+        where: { surface: { venueId: { in: venues.map((venue) => venue.id) } }, isActive: true },
+        select: { id: true, name: true, surfaceId: true },
+        orderBy: { name: "asc" },
+      })
+    : [];
+  const segmentsBySurface: Record<string, Array<{ id: string; name: string }>> = {};
+  for (const segment of segments) {
+    (segmentsBySurface[segment.surfaceId] ??= []).push({ id: segment.id, name: segment.name });
   }
 
   const sport: Sport = season.league?.sport ?? season.team?.sport ?? "OTHER";
@@ -168,8 +185,7 @@ export default async function SeasonDetailPage({
     awayTeam: game.awayTeam,
     venue: game.venue,
     surface: game.surface,
-    surfaceUsage: game.surfaceUsage,
-    zoneLabel: game.zoneLabel,
+    segment: game.segment,
     locationText: game.locationText,
     homeScore: game.homeScore,
     awayScore: game.awayScore,
@@ -198,6 +214,8 @@ export default async function SeasonDetailPage({
           teams={teams}
           venues={venues}
           surfacesByVenue={surfacesByVenue}
+          segmentsBySurface={segmentsBySurface}
+          wholeLabelBySurface={wholeLabelBySurface}
           sport={sport}
           canManage={canManage}
           extraSections={
