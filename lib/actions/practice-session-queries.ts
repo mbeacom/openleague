@@ -84,6 +84,14 @@ export async function getPracticeSessionDetail(sessionId: string): Promise<{
     createdByName: string;
     teamId: string;
     teamName: string;
+    // Optional venue attachment (FR-019, feature 006)
+    venueId: string | null;
+    venueName: string | null;
+    surfaceId: string | null;
+    surfaceName: string | null;
+    segmentId: string | null;
+    segmentName: string | null;
+    startAt: string | null;
     plays: Array<{
       id: string;
       sequence: number;
@@ -127,6 +135,9 @@ export async function getPracticeSessionDetail(sessionId: string): Promise<{
         },
       },
       team: { select: { id: true, name: true } },
+      venue: { select: { name: true } },
+      surface: { select: { name: true } },
+      segment: { select: { name: true } },
     },
   });
 
@@ -151,6 +162,13 @@ export async function getPracticeSessionDetail(sessionId: string): Promise<{
       createdByName: session.createdBy.name || "Unknown",
       teamId: session.team.id,
       teamName: session.team.name,
+      venueId: session.venueId,
+      venueName: session.venue?.name ?? null,
+      surfaceId: session.surfaceId,
+      surfaceName: session.surface?.name ?? null,
+      segmentId: session.segmentId,
+      segmentName: session.segment?.name ?? null,
+      startAt: session.startAt ? session.startAt.toISOString() : null,
       plays: session.plays.map((sp) => ({
         id: sp.id,
         sequence: sp.sequence,
@@ -180,6 +198,11 @@ export async function getPracticeSessionForEdit(sessionId: string): Promise<{
     date: Date;
     duration: number;
     isShared: boolean;
+    // Optional venue attachment (FR-019, feature 006)
+    venueId: string | null;
+    surfaceId: string | null;
+    segmentId: string | null;
+    startAt: Date | null;
     plays: Array<{
       id: string;
       playId: string;
@@ -229,6 +252,10 @@ export async function getPracticeSessionForEdit(sessionId: string): Promise<{
       date: session.date,
       duration: session.duration,
       isShared: session.isShared,
+      venueId: session.venueId,
+      surfaceId: session.surfaceId,
+      segmentId: session.segmentId,
+      startAt: session.startAt,
       plays: session.plays.map((sp) => ({
         id: sp.id,
         playId: sp.play.id,

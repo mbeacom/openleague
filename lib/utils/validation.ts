@@ -295,6 +295,9 @@ const baseEventSchema = z.object({
   opponent: optionalSanitizedString(100),
   notes: optionalSanitizedString(1000),
   teamId: z.string().cuid("Invalid team ID format"),
+  // Proceed despite venue booking conflicts; the override is recorded on the
+  // event (conflictOverriddenBy/At — 006 FR-011).
+  overrideConflicts: z.boolean().default(false),
 });
 
 export const createEventSchema = baseEventSchema
@@ -1424,6 +1427,9 @@ export const eventGameSchema = z
     surfaceId: optionalCuid("Invalid surface ID format"),
     segmentId: optionalCuid("Invalid segment ID format"),
     notes: optionalSanitizedString(500),
+    // Proceed despite venue booking conflicts; the override is recorded on
+    // the game (conflictOverriddenBy/At — 006 FR-011).
+    overrideConflicts: z.boolean().default(false),
   })
   .refine((data) => data.endAt > data.startAt, {
     message: "Game end must be after game start",

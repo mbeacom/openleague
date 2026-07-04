@@ -28,6 +28,7 @@ import {
   type RecordGameResultInput,
 } from "@/lib/utils/validation";
 import { sendEventTeamsUpdateEmail } from "@/lib/email/templates";
+import { findBookingConflicts } from "@/lib/utils/availability";
 import { isStatsEligible } from "@/lib/utils/age-level";
 import { computeStandings } from "@/lib/utils/event-standings";
 import { STATS_MIN_AGE_LEVEL } from "@/lib/env";
@@ -268,14 +269,16 @@ export async function setFloater(
  * Create or update a game between two event teams, optionally on a venue
  * surface or one of its named segments (e.g. a half or cross-ice zone).
  * Returns soft warnings — e.g. a game outside the event window — rather
- * than blocking.
+ * than blocking. Venue booking conflicts (unified availability, 006
+ * FR-010/011) also warn: saving over them requires overrideConflicts, which
+ * is recorded on the game (conflictOverriddenBy/At).
  */
 export async function upsertEventGame(
   input: EventGameInput
 ): Promise<ActionResult<{ gameId: string; warnings: string[] }>> {
   try {
     const validated = eventGameSchema.parse(input);
-    await requireEventManager(validated.eventId);
+    const userId = await requireEventManager(validated.eventId);
 
     const event = await prisma.signupEvent.findUnique({
       where: { id: validated.eventId },
@@ -325,6 +328,30 @@ export async function upsertEventGame(
       warnings.push("This game falls outside the event's scheduled time window.");
     }
 
+    // Unified venue availability (006 FR-010/011). Events without a venue
+    // have no booking footprint, so there is nothing to check; with one, the
+    // candidate is scoped to the chosen surface/segment (null surface =
+    // venue-wide claim) and the game itself is excluded on update.
+    let conflictsOverridden = false;
+    if (event.venueId) {
+      const conflicts = await findBookingConflicts({
+        venueId: event.venueId,
+        surfaceId,
+        segmentId,
+        startAt: validated.startAt,
+        endAt: validated.endAt,
+        excludeEventGameId: validated.gameId || undefined,
+      });
+      if (conflicts.length > 0 && !validated.overrideConflicts) {
+        return {
+          success: false,
+          error: `This time overlaps ${conflicts.length} existing booking${conflicts.length > 1 ? "s" : ""} at the venue`,
+          details: { conflicts },
+        };
+      }
+      conflictsOverridden = conflicts.length > 0;
+    }
+
     const data = {
       name: validated.name || null,
       homeTeamId: validated.homeTeamId,
@@ -334,6 +361,10 @@ export async function upsertEventGame(
       surfaceId,
       segmentId,
       notes: validated.notes || null,
+      ...(conflictsOverridden && {
+        conflictOverriddenById: userId,
+        conflictOverriddenAt: new Date(),
+      }),
     };
 
     let gameId: string;

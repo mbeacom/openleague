@@ -6,7 +6,7 @@ import { prisma } from "@/lib/db/prisma";
 import { requireUserId } from "@/lib/auth/session";
 import { revalidatePath } from "next/cache";
 import { sendEventNotifications } from "@/lib/email/templates";
-import { findGameConflicts } from "@/lib/utils/game-conflicts";
+import { findBookingConflicts } from "@/lib/utils/availability";
 import { AGE_CLASSIFICATION_RANK, isStatsEligible } from "@/lib/utils/age-level";
 import { FALLBACK_TIME_ZONE } from "@/lib/utils/date";
 import {
@@ -215,9 +215,10 @@ export async function createSeasonGame(
     // recorded override to proceed.
     let conflictsOverridden = false;
     if (venueId) {
-      const conflicts = await findGameConflicts({
+      const conflicts = await findBookingConflicts({
         venueId,
         surfaceId,
+        segmentId,
         startAt: validated.startAt,
         endAt: validated.endAt,
       });
@@ -345,9 +346,10 @@ export async function updateSeasonGame(
 
     let conflictsOverridden = false;
     if (venueId) {
-      const conflicts = await findGameConflicts({
+      const conflicts = await findBookingConflicts({
         venueId,
         surfaceId,
+        segmentId,
         startAt,
         endAt,
         excludeSeasonGameId: existing.id,
@@ -639,7 +641,7 @@ export async function checkGameConflicts(
   try {
     const validated = checkGameConflictsSchema.parse(input);
     await requireUserId();
-    const conflicts = await findGameConflicts({
+    const conflicts = await findBookingConflicts({
       venueId: validated.venueId,
       surfaceId: validated.surfaceId || null,
       startAt: validated.startAt,

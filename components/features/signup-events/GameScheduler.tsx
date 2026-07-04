@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   Alert,
+  AlertTitle,
   Button,
   Card,
   CardContent,
@@ -25,6 +26,7 @@ import CloseIcon from "@mui/icons-material/Close";
 import { deleteEventGame, setGameRotation, upsertEventGame } from "@/lib/actions/event-teams";
 import { GameResultForm } from "./GameResultForm";
 import { formatDateTime, parseDateTimeLocalToUtc, resolveTimeZone } from "@/lib/utils/date";
+import type { BookingConflict } from "@/types/segments";
 
 type GameParticipant = {
   registrationId: string;
@@ -64,6 +66,27 @@ interface GameSchedulerProps {
   timeZone?: string;
 }
 
+/** Wall-clock-parsed game values, kept so "Schedule anyway" resubmits them. */
+type GamePayload = {
+  name?: string;
+  homeTeamId: string;
+  awayTeamId: string;
+  startAt: Date;
+  endAt: Date;
+  surfaceId?: string;
+  segmentId?: string;
+};
+
+function extractConflicts(details: unknown): BookingConflict[] | null {
+  if (details && typeof details === "object" && "conflicts" in details) {
+    const conflicts = (details as { conflicts: unknown }).conflicts;
+    if (Array.isArray(conflicts) && conflicts.length > 0) {
+      return conflicts as BookingConflict[];
+    }
+  }
+  return null;
+}
+
 export function GameScheduler({
   eventId,
   teams,
@@ -81,6 +104,8 @@ export function GameScheduler({
   const [dialogOpen, setDialogOpen] = useState(false);
   const [surfaceId, setSurfaceId] = useState("");
   const [segmentId, setSegmentId] = useState("");
+  const [conflicts, setConflicts] = useState<BookingConflict[] | null>(null);
+  const [pendingPayload, setPendingPayload] = useState<GamePayload | null>(null);
   const [rotationTarget, setRotationTarget] = useState<Game | null>(null);
   const [rotationDraft, setRotationDraft] = useState<Array<{ registrationId: string; eventTeamId: string }>>([]);
   const [addParticipantId, setAddParticipantId] = useState("");
@@ -102,6 +127,34 @@ export function GameScheduler({
     setAddSideId(game.homeTeam.id);
   };
 
+  const submitGame = (payload: GamePayload, overrideConflicts: boolean) => {
+    startTransition(async () => {
+      setMessage(null);
+      const result = await upsertEventGame({ eventId, ...payload, overrideConflicts });
+      if (!result.success) {
+        const detected = extractConflicts(result.details);
+        if (detected) {
+          // FR-011: warn before saving; keep the payload so "Schedule anyway"
+          // resubmits the exact same game with an explicit recorded override.
+          setConflicts(detected);
+          setPendingPayload(payload);
+          return;
+        }
+        setConflicts(null);
+        setPendingPayload(null);
+        setMessage({ severity: "error", text: result.error });
+        return;
+      }
+      setConflicts(null);
+      setPendingPayload(null);
+      setDialogOpen(false);
+      if (result.data.warnings.length > 0) {
+        setMessage({ severity: "warning", text: result.data.warnings.join(" ") });
+      }
+      router.refresh();
+    });
+  };
+
   const handleCreate = (formData: FormData) => {
     const text = (name: string) => String(formData.get(name) ?? "").trim();
     const startAt = parseDateTimeLocalToUtc(text("startAt"), tz);
@@ -110,10 +163,8 @@ export function GameScheduler({
       setMessage({ severity: "error", text: "Enter a valid start and end time." });
       return;
     }
-    startTransition(async () => {
-      setMessage(null);
-      const result = await upsertEventGame({
-        eventId,
+    submitGame(
+      {
         name: text("name") || undefined,
         homeTeamId: text("homeTeamId"),
         awayTeamId: text("awayTeamId"),
@@ -121,17 +172,9 @@ export function GameScheduler({
         endAt,
         surfaceId: surfaceId || undefined,
         segmentId: segmentId || undefined,
-      });
-      if (!result.success) {
-        setMessage({ severity: "error", text: result.error });
-        return;
-      }
-      setDialogOpen(false);
-      if (result.data.warnings.length > 0) {
-        setMessage({ severity: "warning", text: result.data.warnings.join(" ") });
-      }
-      router.refresh();
-    });
+      },
+      false
+    );
   };
 
   const saveRotation = () => {
@@ -161,6 +204,8 @@ export function GameScheduler({
           onClick={() => {
             setSurfaceId("");
             setSegmentId("");
+            setConflicts(null);
+            setPendingPayload(null);
             setDialogOpen(true);
           }}
         >
@@ -259,6 +304,32 @@ export function GameScheduler({
         >
           <DialogContent>
             <Stack spacing={2}>
+              {conflicts ? (
+                <Alert
+                  severity="warning"
+                  action={
+                    <Button
+                      color="inherit"
+                      size="small"
+                      disabled={isPending || !pendingPayload}
+                      onClick={() => pendingPayload && submitGame(pendingPayload, true)}
+                    >
+                      Schedule anyway
+                    </Button>
+                  }
+                >
+                  <AlertTitle>
+                    This time overlaps {conflicts.length} existing booking
+                    {conflicts.length === 1 ? "" : "s"} at the venue
+                  </AlertTitle>
+                  {conflicts.map((conflict, index) => (
+                    <Typography key={`${conflict.title}-${index}`} variant="body2">
+                      {conflict.title} — {formatDateTime(conflict.startAt, tz)}
+                      {conflict.endAt ? ` – ${formatDateTime(conflict.endAt, tz)}` : ""}
+                    </Typography>
+                  ))}
+                </Alert>
+              ) : null}
               <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
                 <TextField select name="homeTeamId" label="Home team" required fullWidth defaultValue="">
                   {teams.map((team) => (

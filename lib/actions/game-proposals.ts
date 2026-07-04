@@ -7,7 +7,7 @@ import { requireLeagueRole, requireTeamAdmin, requireUserId } from "@/lib/auth/s
 import { revalidatePath } from "next/cache";
 import { sendEventNotifications, sendGameProposalNotifications } from "@/lib/email/templates";
 import { FALLBACK_TIME_ZONE } from "@/lib/utils/date";
-import { findGameConflicts } from "@/lib/utils/game-conflicts";
+import { findBookingConflicts } from "@/lib/utils/availability";
 import { createGameEventWithRsvps } from "@/lib/actions/season-games";
 import {
   createGameProposalSchema,
@@ -238,7 +238,9 @@ export async function acceptGameProposal(
     // scheduling path (FR-012/013): warn, and require an explicit override.
     let conflictsOverridden = false;
     if (termsVenueId) {
-      const conflicts = await findGameConflicts({
+      // Proposal terms carry a venue only (no surface/segment), so the
+      // candidate is venue-wide and conflicts with any booking there.
+      const conflicts = await findBookingConflicts({
         venueId: termsVenueId,
         startAt: termsStartAt,
         endAt: termsEndAt,

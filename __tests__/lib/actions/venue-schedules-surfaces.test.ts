@@ -22,6 +22,19 @@ const { mockRequireVenueScheduleManager, mockPrisma, mockLogVenueActivity } = vi
       delete: vi.fn(),
       findFirst: vi.fn(),
     },
+    // Surface-capable booking sources checked by the FR-007 archive guard.
+    seasonGame: {
+      findMany: vi.fn(),
+    },
+    eventGame: {
+      findMany: vi.fn(),
+    },
+    venueScheduleBlock: {
+      findMany: vi.fn(),
+    },
+    practiceSession: {
+      findMany: vi.fn(),
+    },
   },
 }));
 
@@ -54,6 +67,10 @@ beforeEach(() => {
   mockRequireVenueScheduleManager.mockResolvedValue(USER_ID);
   mockPrisma.venue.findFirst.mockResolvedValue({ id: VENUE_ID, organizationId: ORGANIZATION_ID });
     mockPrisma.iceSurface.findFirst.mockResolvedValue({ id: SURFACE_ID });
+  mockPrisma.seasonGame.findMany.mockResolvedValue([]);
+  mockPrisma.eventGame.findMany.mockResolvedValue([]);
+  mockPrisma.venueScheduleBlock.findMany.mockResolvedValue([]);
+  mockPrisma.practiceSession.findMany.mockResolvedValue([]);
   mockLogVenueActivity.mockResolvedValue({ id: "cllogxxxxxxxxxxxxxxxxxxxxxxx" });
 });
 
@@ -113,6 +130,42 @@ describe("ice surface actions", () => {
         data: { isActive: false },
       })
     );
+  });
+
+  it("refuses to archive a surface with future bookings (FR-007)", async () => {
+    mockPrisma.seasonGame.findMany.mockResolvedValue([
+      {
+        id: "clgamxxxxxxxxxxxxxxxxxxxxxxx",
+        startAt: new Date("2027-01-10T18:00:00Z"),
+        endAt: new Date("2027-01-10T19:30:00Z"),
+        surfaceId: SURFACE_ID,
+        segmentId: null,
+        segment: null,
+        homeTeam: { name: "Sharks" },
+        awayTeam: { name: "Jets" },
+      },
+    ]);
+
+    const result = await archiveIceSurface({
+      organizationId: ORGANIZATION_ID,
+      venueId: VENUE_ID,
+      surfaceId: SURFACE_ID,
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.details).toEqual(
+        expect.objectContaining({
+          futureBookings: expect.arrayContaining([
+            expect.objectContaining({
+              source: "seasonGame",
+              title: "Sharks vs Jets",
+            }),
+          ]),
+        })
+      );
+    }
+    expect(mockPrisma.iceSurface.update).not.toHaveBeenCalled();
   });
 });
 

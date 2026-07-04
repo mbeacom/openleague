@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import type { Prisma } from "@prisma/client";
+import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
 import { requireVenueScheduleManager } from "@/lib/auth/session";
 import { logVenueActivity, type ActionResult } from "@/lib/actions/venue-organizations";
@@ -16,13 +17,38 @@ import {
   type VenueOperatingHourInput,
   type VenueScheduleBlockInput,
 } from "@/lib/utils/validation";
-import { findScheduleConflicts, type ScheduleBlockRange } from "@/lib/utils/venue-schedule";
+import { findBookingConflicts } from "@/lib/utils/availability";
+import { expandRecurrenceWindow } from "@/lib/utils/venue-schedule";
+import type { BookingConflict, VenueBookingView } from "@/types/segments";
 
 type VenueContext = {
   id: string;
   organizationId: string | null;
   slug: string | null;
 };
+
+/**
+ * Friendly, user-facing failure raised inside actions; its message is safe
+ * to return to the client (arbitrary thrown errors map to a generic
+ * fallback instead).
+ */
+class ScheduleActionError extends Error {}
+
+/**
+ * Optional segment reference for schedule blocks (feature 006). Kept
+ * alongside — not inside — `venueScheduleBlockSchema` so existing callers
+ * without a segment keep working; empty string and null both mean
+ * "whole surface".
+ */
+const blockSegmentInputSchema = z.object({
+  segmentId: z
+    .union([z.string().cuid("Invalid segment ID format"), z.literal(""), z.null()])
+    .optional(),
+});
+
+/** Conservative expansion caps for recurring-block conflict checks. */
+const MAX_RECURRENCE_CONFLICT_OCCURRENCES = 8;
+const RECURRENCE_HORIZON_MS = 366 * 24 * 60 * 60 * 1000;
 
 const scheduleBlockIdSchema = venueScheduleBlockSchema.extend({
   scheduleBlockId: createIceSurfaceSchema.shape.venueId,
@@ -227,6 +253,27 @@ export async function archiveIceSurface(input: {
     const userId = await requireVenueScheduleManager(validated.organizationId, validated.venueId);
     await ensureVenueContext(validated.organizationId, validated.venueId);
 
+    const existing = await prisma.iceSurface.findFirst({
+      where: { id: validated.surfaceId, venueId: validated.venueId },
+      select: { id: true },
+    });
+    if (!existing) {
+      return { success: false, error: "Surface not found" };
+    }
+
+    // FR-007: archiving a surface with future bookings is refused with the
+    // list. Calendar Events are venue-wide (they never reference a surface),
+    // so the four surface-capable sources are checked.
+    const futureBookings = await findFutureSurfaceBookings(validated.surfaceId);
+    if (futureBookings.length > 0) {
+      return {
+        success: false,
+        error:
+          "This surface has upcoming bookings and cannot be archived. Move or cancel them first.",
+        details: { futureBookings },
+      };
+    }
+
     const surface = await prisma.iceSurface.update({
       where: { id: validated.surfaceId, venueId: validated.venueId },
       data: { isActive: false },
@@ -393,25 +440,38 @@ export async function deleteOperatingHours(input: {
 }
 
 export async function createScheduleBlock(
-  input: VenueScheduleBlockInput
+  input: VenueScheduleBlockInput & { segmentId?: string | null }
 ): Promise<ActionResult<{ scheduleBlockId: string; status: string }>> {
   try {
     const validated = venueScheduleBlockSchema.parse(input);
+    const rawSegment = blockSegmentInputSchema.parse(input);
     const userId = await requireVenueScheduleManager(validated.organizationId, validated.venueId);
     const venue = await ensureVenueContext(validated.organizationId, validated.venueId);
-    const conflicts = await getScheduleConflicts(validated.venueId, {
-      startAt: validated.startsAt,
-      endAt: validated.endsAt,
+    const segmentId = await resolveBlockSegment(
+      validated.venueId,
+      validated.surfaceId || null,
+      rawSegment.segmentId || null
+    );
+    const conflicts = await getBlockConflicts({
+      venueId: validated.venueId,
       surfaceId: validated.surfaceId || null,
-      activityType: validated.activityType,
+      segmentId,
+      startsAt: validated.startsAt,
+      endsAt: validated.endsAt,
+      recurrenceRule: validated.recurrenceRule || null,
+      recurrenceEndDate: validated.recurrenceEndDate ?? null,
     });
 
     if (validated.status !== "DRAFT" && conflicts.length > 0) {
-      return { success: false, error: "Schedule block conflicts with an existing published block." };
+      return {
+        success: false,
+        error: "Schedule block conflicts with existing bookings at this venue.",
+        details: { conflicts },
+      };
     }
 
     const block = await prisma.venueScheduleBlock.create({
-      data: scheduleBlockData(validated, userId),
+      data: { ...scheduleBlockData(validated, userId), segmentId },
       select: { id: true, status: true },
     });
 
@@ -430,37 +490,53 @@ export async function createScheduleBlock(
     if (error instanceof Error && error.message.includes("NEXT_REDIRECT")) {
       throw error;
     }
+    if (error instanceof ScheduleActionError) {
+      return { success: false, error: error.message };
+    }
     return { success: false, error: "Failed to create schedule block." };
   }
 }
 
 export async function updateScheduleBlock(
-  input: VenueScheduleBlockInput & { scheduleBlockId: string }
+  input: VenueScheduleBlockInput & { scheduleBlockId: string; segmentId?: string | null }
 ): Promise<ActionResult<{ scheduleBlockId: string; status: string }>> {
   try {
     const command = scheduleBlockIdSchema.parse(input);
     const validated = venueScheduleBlockSchema.parse(input);
+    const rawSegment = blockSegmentInputSchema.parse(input);
     const userId = await requireVenueScheduleManager(validated.organizationId, validated.venueId);
     const venue = await ensureVenueContext(validated.organizationId, validated.venueId);
-    const conflicts = await getScheduleConflicts(
+    const segmentId = await resolveBlockSegment(
       validated.venueId,
+      validated.surfaceId || null,
+      rawSegment.segmentId || null
+    );
+    const conflicts = await getBlockConflicts(
       {
-        startAt: validated.startsAt,
-        endAt: validated.endsAt,
+        venueId: validated.venueId,
         surfaceId: validated.surfaceId || null,
-        activityType: validated.activityType,
+        segmentId,
+        startsAt: validated.startsAt,
+        endsAt: validated.endsAt,
+        recurrenceRule: validated.recurrenceRule || null,
+        recurrenceEndDate: validated.recurrenceEndDate ?? null,
       },
       command.scheduleBlockId
     );
 
     if (validated.status !== "DRAFT" && conflicts.length > 0) {
-      return { success: false, error: "Schedule block conflicts with an existing published block." };
+      return {
+        success: false,
+        error: "Schedule block conflicts with existing bookings at this venue.",
+        details: { conflicts },
+      };
     }
 
     const block = await prisma.venueScheduleBlock.update({
       where: { id: command.scheduleBlockId, venueId: validated.venueId },
       data: {
         ...scheduleBlockUpdateData(validated),
+        segmentId,
         updatedById: userId,
       },
       select: { id: true, status: true },
@@ -480,6 +556,9 @@ export async function updateScheduleBlock(
   } catch (error) {
     if (error instanceof Error && error.message.includes("NEXT_REDIRECT")) {
       throw error;
+    }
+    if (error instanceof ScheduleActionError) {
+      return { success: false, error: error.message };
     }
     return { success: false, error: "Failed to update schedule block." };
   }
@@ -608,6 +687,9 @@ async function setScheduleBlockStatus(
         status: true,
         activityType: true,
         surfaceId: true,
+        segmentId: true,
+        recurrenceRule: true,
+        recurrenceEndDate: true,
         venue: { select: { organizationId: true, slug: true } },
       },
     });
@@ -617,18 +699,24 @@ async function setScheduleBlockStatus(
     }
 
     if (status === "PUBLISHED") {
-      const conflicts = await getScheduleConflicts(
-        validated.venueId,
+      const conflicts = await getBlockConflicts(
         {
-          startAt: block.startsAt,
-          endAt: block.endsAt,
+          venueId: validated.venueId,
           surfaceId: block.surfaceId,
-          activityType: block.activityType,
+          segmentId: block.segmentId,
+          startsAt: block.startsAt,
+          endsAt: block.endsAt,
+          recurrenceRule: block.recurrenceRule,
+          recurrenceEndDate: block.recurrenceEndDate,
         },
         block.id
       );
       if (conflicts.length > 0) {
-        return { success: false, error: "Schedule block conflicts with an existing published block." };
+        return {
+          success: false,
+          error: "Schedule block conflicts with existing bookings at this venue.",
+          details: { conflicts },
+        };
       }
     }
 
@@ -677,38 +765,295 @@ async function ensureVenueContext(organizationId: string, venueId: string): Prom
   return venue;
 }
 
-async function getScheduleConflicts(
+/**
+ * Validate an optional block segment reference: the segment must exist on
+ * the selected surface (which must belong to the venue) and be active.
+ * Returns the persisted `segmentId` (null = whole surface / venue-wide).
+ */
+async function resolveBlockSegment(
   venueId: string,
-  candidate: ScheduleBlockRange,
-  excludeId?: string
-) {
-  const ranges = await prisma.venueScheduleBlock.findMany({
-    where: {
-      venueId,
-      ...(candidate.surfaceId ? { OR: [{ surfaceId: candidate.surfaceId }, { surfaceId: null }] } : {}),
-      status: { in: ["PUBLISHED"] },
-      ...(excludeId ? { id: { not: excludeId } } : {}),
-      startsAt: { lt: candidate.endAt },
-      endsAt: { gt: candidate.startAt },
-    },
-    select: {
-      id: true,
-      startsAt: true,
-      endsAt: true,
-      status: true,
-      activityType: true,
-      surfaceId: true,
-    },
+  surfaceId: string | null,
+  segmentId: string | null
+): Promise<string | null> {
+  if (!segmentId) return null;
+  if (!surfaceId) {
+    throw new ScheduleActionError("Select a surface before choosing a segment.");
+  }
+
+  const segment = await prisma.surfaceSegment.findFirst({
+    where: { id: segmentId, surfaceId, surface: { venueId } },
+    select: { id: true, isActive: true },
   });
 
-  return findScheduleConflicts(candidate, ranges.map((range) => ({
-    id: range.id,
-    startAt: range.startsAt,
-    endAt: range.endsAt,
-    status: range.status,
-    activityType: range.activityType,
-    surfaceId: range.surfaceId,
-  })));
+  if (!segment) {
+    throw new ScheduleActionError("Segment not found on the selected surface.");
+  }
+  if (!segment.isActive) {
+    throw new ScheduleActionError("That segment is deactivated and cannot be booked.");
+  }
+  return segment.id;
+}
+
+type BlockConflictCandidate = {
+  venueId: string;
+  surfaceId: string | null;
+  segmentId: string | null;
+  startsAt: Date;
+  endsAt: Date;
+  recurrenceRule: string | null;
+  recurrenceEndDate: Date | null;
+};
+
+/**
+ * Unified conflict check for a schedule block (FR-010): every occurrence is
+ * run through the five-source availability engine. Recurring blocks check
+ * their first MAX_RECURRENCE_CONFLICT_OCCURRENCES expanded occurrences and
+ * the results are aggregated/deduped. Hard-block semantics are preserved by
+ * the callers: drafts save freely; publishing (or saving as published)
+ * refuses while conflicts exist.
+ */
+async function getBlockConflicts(
+  candidate: BlockConflictCandidate,
+  excludeBlockId?: string
+): Promise<BookingConflict[]> {
+  const occurrences = expandCandidateOccurrences(candidate);
+
+  const conflictLists = await Promise.all(
+    occurrences.map((occurrence) =>
+      findBookingConflicts({
+        venueId: candidate.venueId,
+        surfaceId: candidate.surfaceId,
+        segmentId: candidate.segmentId,
+        startAt: occurrence.startAt,
+        endAt: occurrence.endAt,
+        excludeBlockId,
+      })
+    )
+  );
+
+  const seen = new Set<string>();
+  const conflicts: BookingConflict[] = [];
+  for (const list of conflictLists) {
+    for (const conflict of list) {
+      const key = `${conflict.source}:${conflict.title}:${conflict.startAt.getTime()}:${conflict.endAt?.getTime() ?? ""}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      conflicts.push(conflict);
+    }
+  }
+  return conflicts.sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
+}
+
+/**
+ * Candidate occurrences to conflict-check. Non-recurring blocks are their
+ * own single occurrence; recurring blocks expand within the recurrence
+ * window (capped). Unsupported recurrence rules fall back to the base range
+ * so block creation never regresses on free-text rules.
+ */
+function expandCandidateOccurrences(
+  candidate: BlockConflictCandidate
+): Array<{ startAt: Date; endAt: Date }> {
+  const base = { startAt: candidate.startsAt, endAt: candidate.endsAt };
+  if (!candidate.recurrenceRule) return [base];
+
+  try {
+    const horizon = new Date(candidate.startsAt.getTime() + RECURRENCE_HORIZON_MS);
+    const occurrences = expandRecurrenceWindow(
+      {
+        startAt: candidate.startsAt,
+        endAt: candidate.endsAt,
+        recurrenceRule: candidate.recurrenceRule,
+        recurrenceEndAt: candidate.recurrenceEndDate,
+      },
+      candidate.startsAt,
+      horizon
+    ).slice(0, MAX_RECURRENCE_CONFLICT_OCCURRENCES);
+    return occurrences.length > 0 ? occurrences : [base];
+  } catch {
+    return [base];
+  }
+}
+
+/**
+ * Future bookings that reference a surface, across the four surface-capable
+ * sources (SeasonGame, EventGame, VenueScheduleBlock, PracticeSession) —
+ * calendar Events are venue-wide and never reference a surface. Inclusion
+ * filters mirror the availability engine; recurring blocks count only while
+ * they still have a future occurrence (reported once, at that occurrence).
+ */
+async function findFutureSurfaceBookings(
+  surfaceId: string,
+  now: Date = new Date()
+): Promise<VenueBookingView[]> {
+  const horizon = new Date(now.getTime() + RECURRENCE_HORIZON_MS);
+
+  const [seasonGames, eventGames, blocks, practices] = await Promise.all([
+    prisma.seasonGame.findMany({
+      where: {
+        surfaceId,
+        status: { in: ["SCHEDULED", "COMPLETED"] },
+        endAt: { gt: now },
+      },
+      select: {
+        id: true,
+        startAt: true,
+        endAt: true,
+        surfaceId: true,
+        segmentId: true,
+        segment: { select: { name: true } },
+        homeTeam: { select: { name: true } },
+        awayTeam: { select: { name: true } },
+      },
+    }),
+    prisma.eventGame.findMany({
+      where: {
+        surfaceId,
+        status: { not: "CANCELED" },
+        event: { status: "PUBLISHED" },
+        endAt: { gt: now },
+      },
+      select: {
+        id: true,
+        name: true,
+        startAt: true,
+        endAt: true,
+        surfaceId: true,
+        segmentId: true,
+        segment: { select: { name: true } },
+        event: { select: { title: true } },
+      },
+    }),
+    prisma.venueScheduleBlock.findMany({
+      where: {
+        surfaceId,
+        status: "PUBLISHED",
+        OR: [
+          { endsAt: { gt: now } },
+          {
+            recurrenceRule: { not: null },
+            OR: [{ recurrenceEndDate: null }, { recurrenceEndDate: { gt: now } }],
+          },
+        ],
+      },
+      select: {
+        id: true,
+        title: true,
+        startsAt: true,
+        endsAt: true,
+        surfaceId: true,
+        segmentId: true,
+        segment: { select: { name: true } },
+        recurrenceRule: true,
+        recurrenceEndDate: true,
+      },
+    }),
+    prisma.practiceSession.findMany({
+      where: { surfaceId, startAt: { gte: now } },
+      select: {
+        id: true,
+        title: true,
+        startAt: true,
+        duration: true,
+        surfaceId: true,
+        segmentId: true,
+        segment: { select: { name: true } },
+      },
+    }),
+  ]);
+
+  const bookings: VenueBookingView[] = [];
+
+  for (const game of seasonGames) {
+    bookings.push({
+      id: game.id,
+      source: "seasonGame",
+      title: `${game.homeTeam.name} vs ${game.awayTeam.name}`,
+      startAt: game.startAt,
+      endAt: game.endAt,
+      surfaceId: game.surfaceId,
+      segmentId: game.segmentId,
+      segmentName: game.segment?.name ?? null,
+    });
+  }
+
+  for (const game of eventGames) {
+    bookings.push({
+      id: game.id,
+      source: "eventGame",
+      title: `${game.name ?? "Game"} — ${game.event.title}`,
+      startAt: game.startAt,
+      endAt: game.endAt,
+      surfaceId: game.surfaceId,
+      segmentId: game.segmentId,
+      segmentName: game.segment?.name ?? null,
+    });
+  }
+
+  for (const block of blocks) {
+    const occurrence = nextFutureBlockOccurrence(block, now, horizon);
+    if (!occurrence) continue;
+    bookings.push({
+      id: block.id,
+      source: "scheduleBlock",
+      title: block.title,
+      startAt: occurrence.startAt,
+      endAt: occurrence.endAt,
+      surfaceId: block.surfaceId,
+      segmentId: block.segmentId,
+      segmentName: block.segment?.name ?? null,
+    });
+  }
+
+  for (const practice of practices) {
+    if (!practice.startAt) continue; // narrows nullable column; query excludes
+    bookings.push({
+      id: practice.id,
+      source: "practice",
+      title: `Practice — ${practice.title}`,
+      startAt: practice.startAt,
+      endAt: new Date(practice.startAt.getTime() + practice.duration * 60_000),
+      surfaceId: practice.surfaceId,
+      segmentId: practice.segmentId,
+      segmentName: practice.segment?.name ?? null,
+    });
+  }
+
+  return bookings.sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
+}
+
+/**
+ * The first occurrence of a block that ends after `now` (non-recurring
+ * blocks are their own single occurrence). Unsupported recurrence rules
+ * fall back to the base range.
+ */
+function nextFutureBlockOccurrence(
+  block: {
+    startsAt: Date;
+    endsAt: Date;
+    recurrenceRule: string | null;
+    recurrenceEndDate: Date | null;
+  },
+  now: Date,
+  horizon: Date
+): { startAt: Date; endAt: Date } | null {
+  if (!block.recurrenceRule) {
+    return block.endsAt > now ? { startAt: block.startsAt, endAt: block.endsAt } : null;
+  }
+  try {
+    const occurrences = expandRecurrenceWindow(
+      {
+        startAt: block.startsAt,
+        endAt: block.endsAt,
+        recurrenceRule: block.recurrenceRule,
+        recurrenceEndAt: block.recurrenceEndDate,
+      },
+      now,
+      horizon
+    );
+    return occurrences[0] ?? null;
+  } catch {
+    return block.endsAt > now ? { startAt: block.startsAt, endAt: block.endsAt } : null;
+  }
 }
 
 function scheduleBlockData(
