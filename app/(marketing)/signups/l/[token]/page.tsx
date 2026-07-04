@@ -37,7 +37,7 @@ export default async function LinkAccessEventPage({
         <PublicEventView
           view={view}
           isAuthenticated={Boolean(userId)}
-          loginRedirect={`/events/l/${token}`}
+          loginRedirect={`/signups/l/${token}`}
           linkToken={token}
           games={games}
           myAssignments={myAssignments}

@@ -28,13 +28,13 @@ export async function GET(
   });
 
   if (!invitation || invitation.status === "REVOKED") {
-    return NextResponse.redirect(`${baseUrl}/events?invitation=invalid`);
+    return NextResponse.redirect(`${baseUrl}/signups?invitation=invalid`);
   }
   if (invitation.expiresAt <= new Date() || invitation.event.status === "CANCELED") {
-    return NextResponse.redirect(`${baseUrl}/events?invitation=expired`);
+    return NextResponse.redirect(`${baseUrl}/signups?invitation=expired`);
   }
 
-  const eventUrl = `${baseUrl}/events/${invitation.event.id}`;
+  const eventUrl = `${baseUrl}/signups/${invitation.event.id}`;
   const session = await auth();
   const sessionEmail = session?.user?.email?.toLowerCase() ?? null;
 

@@ -1285,7 +1285,7 @@ interface SignupEventUpdatedEmailData {
 export async function sendSignupEventUpdatedEmail(data: SignupEventUpdatedEmailData): Promise<void> {
   if (data.recipients.length === 0) return;
   const mailchimp = getMailchimpClient();
-  const eventLink = `${BASE_URL}/events/${data.eventId}`;
+  const eventLink = `${BASE_URL}/signups/${data.eventId}`;
 
   // One message per family — recipients must never see each other's addresses
   // (same pattern as sendSignupEventReminders/sendLeagueMessageEmail).
@@ -1355,7 +1355,7 @@ export async function sendEventRegistrationConfirmationEmail(
   data: EventRegistrationConfirmationEmailData
 ): Promise<void> {
   const mailchimp = getMailchimpClient();
-  const eventLink = `${BASE_URL}/events/${data.eventId}`;
+  const eventLink = `${BASE_URL}/signups/${data.eventId}`;
   const names = data.participantNames.join(", ");
   const paymentHtml =
     data.amountTotal > 0
@@ -1459,7 +1459,7 @@ export async function sendSignupEventReminders(): Promise<void> {
     const hostName =
       event.hostOrganization?.name ?? event.hostLeague?.name ?? event.hostTeam?.name ?? "the organizer";
     const location = event.venue?.name ?? event.locationText ?? "";
-    const eventLink = `${BASE_URL}/events/${event.id}`;
+    const eventLink = `${BASE_URL}/signups/${event.id}`;
     const mailchimp = getMailchimpClient();
 
     for (const { email, participants } of byRegistrant.values()) {
@@ -1544,7 +1544,7 @@ interface EventTeamsUpdateEmailData {
 export async function sendEventTeamsUpdateEmail(data: EventTeamsUpdateEmailData): Promise<void> {
   if (data.recipients.length === 0) return;
   const mailchimp = getMailchimpClient();
-  const eventLink = `${BASE_URL}/events/${data.eventId}`;
+  const eventLink = `${BASE_URL}/signups/${data.eventId}`;
   const headline = data.isInitialPublish
     ? `Teams are posted for ${data.eventTitle}`
     : `Team assignments updated for ${data.eventTitle}`;

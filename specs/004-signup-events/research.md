@@ -161,13 +161,23 @@ capability).
 
 ## R8. Route namespaces (avoiding the existing `/events` collision)
 
-**Decision**: `app/(dashboard)/events/` already belongs to team calendar events, so:
+**Decision**: `/events` (both the list and `/events/[id]`) already belongs to team
+calendar events. Route groups like `(dashboard)`/`(marketing)` do **not** change the
+URL, so public signup pages placed under `(marketing)/events/…` collide with the
+existing `(dashboard)/events/…` (Next.js errors on `/events/[id]` vs `/events/[eventId]`,
+and even identical slugs would be duplicate pages). The public signup pages therefore
+live under a **distinct** `/signups` namespace:
 
 - **Management UI**: `app/(dashboard)/signup-events/…` (list, new, `[eventId]` detail
   with roster/waitlist/teams/games/media/settings tabs).
-- **Public pages**: `app/(marketing)/events/page.tsx` (discovery of PUBLIC events,
-  filterable by host/venue/date), `app/(marketing)/events/[eventId]/page.tsx`
-  (public event page), `app/(marketing)/events/l/[token]/page.tsx` (LINK access).
+- **Public pages**: `app/(marketing)/signups/page.tsx` (discovery of PUBLIC events,
+  filterable by host/venue/date), `app/(marketing)/signups/[eventId]/page.tsx`
+  (public event page), `app/(marketing)/signups/l/[token]/page.tsx` (LINK access).
+
+> **Correction (post-implementation)**: the original plan put these public pages under
+> `(marketing)/events/…`, assuming the route group isolated them from the team
+> `(dashboard)/events/…`. It does not — the collision surfaced only at `next build`
+> (not `type-check`/`test`). Public signup routes were moved to `/signups`.
 - **Rollups**: PUBLIC venue-tied events render on the existing rink schedule page;
   league/association public events render at
   `app/(marketing)/associations/[slug]/events` (see R9); internal league/team

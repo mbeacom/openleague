@@ -109,7 +109,7 @@ export async function finalizeEventMediaUpload(
       select: { id: true },
     });
 
-    revalidatePath(`/events/${event.id}`);
+    revalidatePath(`/signups/${event.id}`);
     revalidatePath(`/signup-events/${event.id}`);
     return { success: true, data: { mediaItemId: item.id } };
   } catch (error) {
@@ -238,7 +238,7 @@ export async function removeEventMediaItem(
       });
     }
 
-    revalidatePath(`/events/${item.eventId}`);
+    revalidatePath(`/signups/${item.eventId}`);
     revalidatePath(`/signup-events/${item.eventId}`);
     return { success: true, data: { mediaItemId: item.id } };
   } catch (error) {
@@ -294,7 +294,7 @@ export async function reportEventMediaItem(
       data: { status: "FLAGGED", reportCount: { increment: 1 } },
     });
 
-    revalidatePath(`/events/${item.eventId}`);
+    revalidatePath(`/signups/${item.eventId}`);
     revalidatePath(`/signup-events/${item.eventId}`);
     return { success: true, data: { mediaItemId: item.id } };
   } catch (error) {

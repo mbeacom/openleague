@@ -45,7 +45,7 @@ export default async function PublicEventPage({
         <PublicEventView
           view={view}
           isAuthenticated={Boolean(userId)}
-          loginRedirect={`/events/${eventId}`}
+          loginRedirect={`/signups/${eventId}`}
           games={games}
           myAssignments={myAssignments}
         />

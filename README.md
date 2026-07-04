@@ -167,7 +167,7 @@ Rinks, leagues/associations, and teams can host signup events — Mite Nights, c
 tryouts, volunteer signups, and tournaments — with:
 
 - **Role-limited slots**: per-slot capacities (e.g. 4 goalies / 40 skaters / 4 refs / 8 coaches), never oversold under concurrent registration
-- **Visibility tiers**: private, invite-only (email invitations), link-only (regenerable unguessable links), or public with rollup onto rink/association pages and `/events` discovery
+- **Visibility tiers**: private, invite-only (email invitations), link-only (regenerable unguessable links), or public with rollup onto rink/association pages and `/signups` discovery
 - **Priority windows & waitlists**: members-first registration phases with automatic FIFO waitlist offers (time-boxed claim windows, cron backstop at `/api/cron/event-waitlist`)
 - **Payments**: Venmo/Zelle/Cash App/cash instructions with organizer paid/unpaid/waived tracking, or online card payment via Stripe Connect (rink orgs and leagues as merchants of record) with refunds
 - **Delegated managers**: per-event grants (mite delegates, coordinators) with audit-logged actions

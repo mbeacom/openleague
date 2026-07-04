@@ -202,7 +202,7 @@ export async function assignToEventTeam(
     }
 
     revalidatePath(`/signup-events/${team.eventId}`);
-    revalidatePath(`/events/${team.eventId}`);
+    revalidatePath(`/signups/${team.eventId}`);
     return { success: true, data: { assigned: registrations.length } };
   } catch (error) {
     return handleActionError(error, "Failed to assign participants.");
@@ -339,7 +339,7 @@ export async function upsertEventGame(
     }
 
     revalidatePath(`/signup-events/${validated.eventId}`);
-    revalidatePath(`/events/${validated.eventId}`);
+    revalidatePath(`/signups/${validated.eventId}`);
     return { success: true, data: { gameId, warnings } };
   } catch (error) {
     return handleActionError(error, "Failed to save the game.");
@@ -463,7 +463,7 @@ export async function setGameRotation(
     ]);
 
     revalidatePath(`/signup-events/${game.eventId}`);
-    revalidatePath(`/events/${game.eventId}`);
+    revalidatePath(`/signups/${game.eventId}`);
     return { success: true, data: { gameId: game.id, warnings } };
   } catch (error) {
     return handleActionError(error, "Failed to update the rotation.");
@@ -529,7 +529,7 @@ export async function publishEventTeams(
     });
 
     revalidatePath(`/signup-events/${eventId}`);
-    revalidatePath(`/events/${eventId}`);
+    revalidatePath(`/signups/${eventId}`);
     return { success: true, data: { eventId, notified: recipients.length } };
   } catch (error) {
     return handleActionError(error, "Failed to post teams.");
@@ -921,7 +921,7 @@ export async function recordGameResult(
     });
 
     revalidatePath(`/signup-events/${game.eventId}`);
-    revalidatePath(`/events/${game.eventId}`);
+    revalidatePath(`/signups/${game.eventId}`);
     return { success: true, data: { gameId: game.id } };
   } catch (error) {
     return handleActionError(error, "Failed to record the result.");

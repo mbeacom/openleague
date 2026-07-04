@@ -45,7 +45,7 @@ export default async function PublicEventsPage() {
                 event.hostOrganization?.name ?? event.hostLeague?.name ?? event.hostTeam?.name ?? "";
               return (
                 <Card key={event.id}>
-                  <CardActionArea component={Link} href={`/events/${event.id}`}>
+                  <CardActionArea component={Link} href={`/signups/${event.id}`}>
                     <CardContent>
                       <Stack spacing={0.5}>
                         <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>

@@ -114,7 +114,7 @@ export default async function MyRegistrationsPage() {
         </Typography>
         {eventRegistrations.length === 0 ? (
           <Typography color="text.secondary">
-            No event signups yet. Browse <Link href="/events">upcoming events</Link> to join one.
+            No event signups yet. Browse <Link href="/signups">upcoming events</Link> to join one.
           </Typography>
         ) : (
           <Stack spacing={2}>
@@ -137,7 +137,7 @@ export default async function MyRegistrationsPage() {
                     <Stack spacing={1}>
                       <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
                         <Typography fontWeight={700}>
-                          <Link href={`/events/${reg.event.id}`}>{reg.event.title}</Link>
+                          <Link href={`/signups/${reg.event.id}`}>{reg.event.title}</Link>
                         </Typography>
                         <Chip
                           size="small"

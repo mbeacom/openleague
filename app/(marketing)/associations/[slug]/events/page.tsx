@@ -53,7 +53,7 @@ export default async function AssociationEventsPage({
           <Stack spacing={2}>
             {events.map((event) => (
               <Card key={event.id}>
-                <CardActionArea component={Link} href={`/events/${event.id}`}>
+                <CardActionArea component={Link} href={`/signups/${event.id}`}>
                   <CardContent>
                     <Stack spacing={0.5}>
                       <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>

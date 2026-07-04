@@ -69,8 +69,10 @@ Full rationale in [research.md](./research.md); load-bearing choices:
 8. **Age gate as ordered enum + env threshold** — enforced in schema refinement,
    action, and UI; stats hidden (not deleted) on downgrade (R10).
 9. **Routes**: dashboard `signup-events/` (existing `/events` belongs to team events);
-   public `(marketing)/events/…`, `/events/l/[token]`, `/associations/[slug]/events`
-   (League gains a nullable unique `slug`) (R8/R9).
+   public `(marketing)/signups/…`, `/signups/l/[token]`, `/associations/[slug]/events`
+   (League gains a nullable unique `slug`) (R8/R9). Public pages use `/signups`, not
+   `/events` — route groups do not change the URL, so `(marketing)/events` collides
+   with the team `(dashboard)/events`.
 
 ## Project Structure
 
@@ -121,9 +123,9 @@ app/api/event-invitations/[token]/route.ts    # invitation accept redirect
 app/api/signup-events/[eventId]/media/upload/route.ts   # Blob client-upload token exchange
 app/api/signup-events/[eventId]/roster/export/route.ts  # CSV download
 
-app/(marketing)/events/page.tsx               # public discovery
-app/(marketing)/events/[eventId]/page.tsx     # public event page (+register CTA)
-app/(marketing)/events/l/[token]/page.tsx     # LINK access
+app/(marketing)/signups/page.tsx              # public discovery
+app/(marketing)/signups/[eventId]/page.tsx    # public event page (+register CTA)
+app/(marketing)/signups/l/[token]/page.tsx    # LINK access
 app/(marketing)/associations/[slug]/events/page.tsx     # league rollup
 app/(marketing)/rinks/[slug]/…                # venue schedule page gains PUBLIC signup events
 

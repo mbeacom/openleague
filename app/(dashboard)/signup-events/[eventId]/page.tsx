@@ -86,9 +86,9 @@ export default async function ManageSignupEventPage({
     event.hostOrganization?.name ?? event.hostLeague?.name ?? event.hostTeam?.name ?? "";
   const shareUrl =
     event.visibility === "LINK" && event.linkToken
-      ? `${getBaseUrl()}/events/l/${event.linkToken}`
+      ? `${getBaseUrl()}/signups/l/${event.linkToken}`
       : event.visibility === "PUBLIC"
-        ? `${getBaseUrl()}/events/${event.id}`
+        ? `${getBaseUrl()}/signups/${event.id}`
         : null;
 
   return (
@@ -121,7 +121,7 @@ export default async function ManageSignupEventPage({
             {event.status === "PUBLISHED" && (event.visibility === "PUBLIC" || event.visibility === "LINK") ? (
               <Button
                 component={Link}
-                href={event.visibility === "LINK" && event.linkToken ? `/events/l/${event.linkToken}` : `/events/${event.id}`}
+                href={event.visibility === "LINK" && event.linkToken ? `/signups/l/${event.linkToken}` : `/signups/${event.id}`}
                 startIcon={<OpenInNewIcon />}
               >
                 View page

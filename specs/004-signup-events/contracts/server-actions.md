@@ -152,9 +152,11 @@ new `requireEventManager(eventId)` helper in `lib/auth/session.ts`.
 
 ## Public routes
 
-- `GET /events` — PUBLIC event discovery (filter: host, venue, date, category).
-- `GET /events/[eventId]` — public event page (visibility-gated; register CTA).
-- `GET /events/l/[token]` — LINK-visibility access; same page, token-gated.
+- `GET /signups` — PUBLIC event discovery (filter: host, venue, date, category). Uses
+  `/signups`, not `/events` (which belongs to team calendar events; route groups do not
+  change the URL).
+- `GET /signups/[eventId]` — public event page (visibility-gated; register CTA).
+- `GET /signups/l/[token]` — LINK-visibility access; same page, token-gated.
 - `GET /associations/[slug]/events` — league/association public event rollup (R9).
 - `GET /rinks/[slug]` + `/schedule` — extended to include the venue's PUBLIC signup
   events alongside schedule blocks (FR-010).

@@ -224,7 +224,7 @@ export default async function PublicRinkSchedulePage({ params, searchParams }: P
                             </Typography>
                           ))}
                       </Stack>
-                      <Button component={Link} href={`/events/${event.id}`} variant="outlined" size="small">
+                      <Button component={Link} href={`/signups/${event.id}`} variant="outlined" size="small">
                         View & sign up
                       </Button>
                     </Stack>

@@ -126,7 +126,7 @@ function revalidateEventRegistrationPaths(event: {
   venue?: { slug: string | null } | null;
   hostLeague?: { slug: string | null } | null;
 }) {
-  revalidatePath(`/events/${event.id}`);
+  revalidatePath(`/signups/${event.id}`);
   revalidatePath(`/signup-events/${event.id}`);
   revalidatePath("/my-registrations");
   if (event.venue?.slug) {
@@ -415,8 +415,8 @@ export async function registerForSignupEvent(
           quantity: 1,
           applicationFeeAmount,
           customerEmail: registrant?.email,
-          successPath: `/events/${event.id}?registration=success`,
-          cancelPath: `/events/${event.id}?registration=canceled`,
+          successPath: `/signups/${event.id}?registration=success`,
+          cancelPath: `/signups/${event.id}?registration=canceled`,
           // Match the app-level hold window so late payments cannot overbook.
           expiresInSeconds: Math.floor(EVENT_HOLD_WINDOW_MS / 1000),
           metadata: { eventRegistrationId: registrationId, eventId: event.id },
@@ -980,7 +980,7 @@ export async function claimWaitlistOffer(
           quantity: 1,
           applicationFeeAmount,
           customerEmail: registrant?.email,
-          successPath: `/events/${registration.event.id}?registration=success`,
+          successPath: `/signups/${registration.event.id}?registration=success`,
           cancelPath: `/my-registrations?registration=canceled`,
           expiresInSeconds: Math.floor(EVENT_HOLD_WINDOW_MS / 1000),
           metadata: { eventRegistrationId: registration.id, eventId: registration.event.id },

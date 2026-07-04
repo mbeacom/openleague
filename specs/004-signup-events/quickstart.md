@@ -39,7 +39,7 @@ stripe listen --forward-to localhost:3000/api/webhooks/stripe
    (free), Skater ×40 ($25), Referee ×4, Coach ×8. Phases: "Association members"
    opens Mon, "Open registration" opens Fri. Visibility: Public. Payments: online +
    Venmo handle. Save draft → Publish.
-2. **Rollup** — event appears at `/events`, `/associations/<slug>/events`, and the
+2. **Rollup** — event appears at `/signups`, `/associations/<slug>/events`, and the
    rink's public schedule page.
 3. **Priority window** — register as a league member (confirmed). As a non-member
    before Friday: only "Join waitlist" is offered.
