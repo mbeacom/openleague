@@ -73,11 +73,19 @@ export async function sendEventInvitations(
     const skipped: string[] = [];
     let sent = 0;
 
+    // Resolve all existing accounts in one query rather than a lookup per email
+    // (up to 100). Emails are sent sequentially — matching how the app's other
+    // bulk sends behave, to respect provider rate limits.
+    const existingUsers = await prisma.user.findMany({
+      where: { email: { in: uniqueEmails, mode: "insensitive" } },
+      select: { id: true, email: true },
+    });
+    const existingUserIdByEmail = new Map(
+      existingUsers.map((user) => [user.email.toLowerCase(), user.id])
+    );
+
     for (const email of uniqueEmails) {
-      const existingUser = await prisma.user.findFirst({
-        where: { email: { equals: email, mode: "insensitive" } },
-        select: { id: true },
-      });
+      const existingUserId = existingUserIdByEmail.get(email.toLowerCase()) ?? null;
 
       const token = generateInvitationToken();
       const invitation = await prisma.eventInvitation.upsert({
@@ -88,7 +96,7 @@ export async function sendEventInvitations(
           token,
           status: "PENDING",
           expiresAt: event.startAt,
-          invitedUserId: existingUser?.id ?? null,
+          invitedUserId: existingUserId,
           invitedById: userId,
         },
         update: {
@@ -97,7 +105,7 @@ export async function sendEventInvitations(
           expiresAt: event.startAt,
           sentAt: new Date(),
           revokedAt: null,
-          invitedUserId: existingUser?.id ?? null,
+          invitedUserId: existingUserId,
         },
         select: { id: true, token: true },
       });
@@ -109,7 +117,7 @@ export async function sendEventInvitations(
           hostName,
           startAtFormatted: formatDateTime(event.startAt),
           token: invitation.token,
-          isExistingUser: Boolean(existingUser),
+          isExistingUser: Boolean(existingUserId),
         });
         sent += 1;
       } catch (emailError) {

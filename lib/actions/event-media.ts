@@ -256,13 +256,36 @@ export async function reportEventMediaItem(
 ): Promise<ActionResult<{ mediaItemId: string }>> {
   try {
     const { mediaItemId } = eventMediaCommandSchema.parse(input);
-    await requireUserId();
+    const userId = await requireUserId();
 
     const item = await prisma.eventMediaItem.findUnique({
       where: { id: mediaItemId },
-      select: { id: true, eventId: true, status: true },
+      select: {
+        id: true,
+        eventId: true,
+        status: true,
+        event: {
+          select: {
+            id: true,
+            status: true,
+            visibility: true,
+            linkToken: true,
+            galleryEnabled: true,
+            galleryVisibility: true,
+          },
+        },
+      },
     });
     if (!item || item.status === "REMOVED") {
+      return { success: false, error: "Media item not found" };
+    }
+
+    // Only someone who can actually see this gallery may flag its contents —
+    // otherwise any signed-in user knowing a mediaItemId could mass-flag media
+    // on private or invite-only events (same gate listEventMedia enforces).
+    const canModerate = await isEventManager(userId, item.eventId);
+    const allowed = canModerate || (await canViewEventGallery(item.event, { userId }));
+    if (!allowed) {
       return { success: false, error: "Media item not found" };
     }
 

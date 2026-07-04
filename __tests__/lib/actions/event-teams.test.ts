@@ -10,7 +10,7 @@ const { mockRequireEventManager, mockGetCurrentUserId, mockTeamsEmail, mockPrism
     $transaction: vi.fn(async (ops: unknown[]) => Promise.all(ops as Promise<unknown>[])),
     signupEvent: { findUnique: vi.fn(), update: vi.fn() },
     eventTeam: { findUnique: vi.fn(), findFirst: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn(), delete: vi.fn() },
-    eventTeamAssignment: { upsert: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), delete: vi.fn() },
+    eventTeamAssignment: { upsert: vi.fn(), deleteMany: vi.fn(), createMany: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), delete: vi.fn() },
     eventRegistration: { findMany: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
     eventGame: { findUnique: vi.fn(), findFirst: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn(), delete: vi.fn() },
     eventGameParticipant: { deleteMany: vi.fn(), createMany: vi.fn() },
@@ -59,12 +59,11 @@ describe("assignToEventTeam", () => {
     });
   });
 
-  it("upserts one primary assignment per participant (reassignment moves them)", async () => {
+  it("reassigns participants in a single delete-then-create transaction (moves them)", async () => {
     mockPrisma.eventRegistration.findMany.mockResolvedValue([
       { id: "creg000000001", registrant: { email: "a@example.com", name: "A" } },
       { id: "creg000000002", registrant: { email: "b@example.com", name: "B" } },
     ]);
-    mockPrisma.eventTeamAssignment.upsert.mockResolvedValue({});
 
     const result = await assignToEventTeam({
       eventTeamId: TEAM_RED,
@@ -72,12 +71,18 @@ describe("assignToEventTeam", () => {
     });
 
     expect(result).toEqual({ success: true, data: { assigned: 2 } });
-    expect(mockPrisma.eventTeamAssignment.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { registrationId: "creg000000001" },
-        update: { eventTeamId: TEAM_RED, assignedById: "admin-1" },
-      })
-    );
+    // Old assignments are cleared, then the new team's rows created in bulk —
+    // no per-registration upsert roundtrips.
+    expect(mockPrisma.eventTeamAssignment.upsert).not.toHaveBeenCalled();
+    expect(mockPrisma.eventTeamAssignment.deleteMany).toHaveBeenCalledWith({
+      where: { registrationId: { in: ["creg000000001", "creg000000002"] } },
+    });
+    expect(mockPrisma.eventTeamAssignment.createMany).toHaveBeenCalledWith({
+      data: [
+        { registrationId: "creg000000001", eventTeamId: TEAM_RED, assignedById: "admin-1" },
+        { registrationId: "creg000000002", eventTeamId: TEAM_RED, assignedById: "admin-1" },
+      ],
+    });
     // Teams not posted yet — no notifications.
     expect(mockTeamsEmail).not.toHaveBeenCalled();
   });
@@ -93,7 +98,7 @@ describe("assignToEventTeam", () => {
     });
 
     expect(result.success).toBe(false);
-    expect(mockPrisma.eventTeamAssignment.upsert).not.toHaveBeenCalled();
+    expect(mockPrisma.eventTeamAssignment.createMany).not.toHaveBeenCalled();
   });
 
   it("notifies affected families when teams are already posted", async () => {
@@ -106,7 +111,6 @@ describe("assignToEventTeam", () => {
     mockPrisma.eventRegistration.findMany.mockResolvedValue([
       { id: "creg000000001", registrant: { email: "a@example.com", name: "A" } },
     ]);
-    mockPrisma.eventTeamAssignment.upsert.mockResolvedValue({});
 
     await assignToEventTeam({ eventTeamId: TEAM_RED, registrationIds: ["creg000000001"] });
 

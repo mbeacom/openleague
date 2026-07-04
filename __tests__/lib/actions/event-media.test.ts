@@ -43,6 +43,7 @@ import {
   finalizeEventMediaUpload,
   listEventMedia,
   removeEventMediaItem,
+  reportEventMediaItem,
 } from "@/lib/actions/event-media";
 
 const EVENT_ID = "cldevent0000000000000001";
@@ -282,5 +283,56 @@ describe("removeEventMediaItem", () => {
 
     expect(result).toEqual({ success: false, error: "You can only remove your own uploads." });
     expect(mockDel).not.toHaveBeenCalled();
+  });
+});
+
+describe("reportEventMediaItem", () => {
+  const MEDIA_ID = "cldmedia0000000000000001";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPrisma.eventMediaItem.findUnique.mockResolvedValue({
+      id: MEDIA_ID,
+      eventId: EVENT_ID,
+      status: "ACTIVE",
+      event: galleryEvent(),
+    });
+    mockPrisma.eventMediaItem.update.mockResolvedValue({});
+    mockIsEventManager.mockResolvedValue(false);
+  });
+
+  it("blocks users who cannot see the gallery from flagging (IDOR)", async () => {
+    mockRequireUserId.mockResolvedValue("stranger");
+    mockPrisma.eventRegistration.count.mockResolvedValue(0); // not a participant
+
+    const result = await reportEventMediaItem({ mediaItemId: MEDIA_ID });
+
+    expect(result).toEqual({ success: false, error: "Media item not found" });
+    expect(mockPrisma.eventMediaItem.update).not.toHaveBeenCalled();
+  });
+
+  it("lets a confirmed participant flag an item pending review", async () => {
+    mockRequireUserId.mockResolvedValue("parent-1");
+    mockPrisma.eventRegistration.count.mockResolvedValue(1); // confirmed registrant
+
+    const result = await reportEventMediaItem({ mediaItemId: MEDIA_ID });
+
+    expect(result).toEqual({ success: true, data: { mediaItemId: MEDIA_ID } });
+    expect(mockPrisma.eventMediaItem.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: { status: "FLAGGED", reportCount: { increment: 1 } },
+      })
+    );
+  });
+
+  it("lets managers flag even when they are not registrants", async () => {
+    mockRequireUserId.mockResolvedValue("admin-1");
+    mockIsEventManager.mockResolvedValue(true);
+    mockPrisma.eventRegistration.count.mockResolvedValue(0);
+
+    const result = await reportEventMediaItem({ mediaItemId: MEDIA_ID });
+
+    expect(result.success).toBe(true);
+    expect(mockPrisma.eventMediaItem.update).toHaveBeenCalled();
   });
 });

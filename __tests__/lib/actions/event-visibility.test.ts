@@ -6,7 +6,7 @@ const { mockRequireEventManager, mockInviteEmail, mockPrisma } = vi.hoisted(() =
   mockRequireEventManager: vi.fn(),
   mockInviteEmail: vi.fn(),
   mockPrisma: {
-    user: { findUnique: vi.fn(), findFirst: vi.fn() },
+    user: { findUnique: vi.fn(), findFirst: vi.fn(), findMany: vi.fn() },
     eventInvitation: { findFirst: vi.fn(), findUnique: vi.fn(), upsert: vi.fn(), update: vi.fn(), findMany: vi.fn() },
     signupEvent: { findUnique: vi.fn() },
   },
@@ -91,7 +91,7 @@ describe("sendEventInvitations", () => {
       hostLeague: { name: "GFHA" },
       hostTeam: null,
     });
-    mockPrisma.user.findFirst.mockResolvedValue(null);
+    mockPrisma.user.findMany.mockResolvedValue([]);
     mockPrisma.eventInvitation.upsert.mockResolvedValue({ id: "inv-1", token: "tok" });
   });
 
@@ -113,7 +113,7 @@ describe("sendEventInvitations", () => {
   });
 
   it("binds invitations to existing accounts", async () => {
-    mockPrisma.user.findFirst.mockResolvedValue({ id: "user-9" });
+    mockPrisma.user.findMany.mockResolvedValue([{ id: "user-9", email: "member@example.com" }]);
     mockInviteEmail.mockResolvedValue(undefined);
 
     await sendEventInvitations({ eventId: EVENT_ID, emails: ["member@example.com"] });

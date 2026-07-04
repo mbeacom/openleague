@@ -1,19 +1,7 @@
 import { NextResponse } from "next/server";
+import { timingSafeEqual } from "crypto";
 import { sweepEventWaitlists } from "@/lib/utils/event-waitlist";
-
-/**
- * Constant-time string comparison to prevent timing attacks
- */
-function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) {
-    return false;
-  }
-  let result = 0;
-  for (let i = 0; i < a.length; i++) {
-    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  }
-  return result === 0;
-}
+import { env } from "@/lib/env";
 
 /**
  * Waitlist sweep for signup events, called by Vercel Cron every 10 minutes:
@@ -21,18 +9,29 @@ function timingSafeEqual(a: string, b: string): boolean {
  * when a registration phase has opened with capacity remaining. This is the
  * backstop — cancellations already cascade offers synchronously, and expired
  * offers stop counting against capacity lazily.
+ *
+ * Auth mirrors /api/cron/notification-batches: CRON_SECRET is required (the
+ * sweep sends offer emails, so it must not run for unauthenticated callers)
+ * and the token is compared with Node's constant-time timingSafeEqual.
  */
 export async function GET(request: Request) {
   try {
     const authHeader = request.headers.get("authorization");
-    const cronSecret = process.env.CRON_SECRET;
+    const cronSecret = env.CRON_SECRET;
 
-    if (cronSecret && authHeader) {
-      const expectedAuth = `Bearer ${cronSecret}`;
-      if (!timingSafeEqual(authHeader, expectedAuth)) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-      }
-    } else if (cronSecret && !authHeader) {
+    if (!cronSecret) {
+      console.error("CRON_SECRET not configured");
+      return NextResponse.json({ error: "Cron secret not configured" }, { status: 500 });
+    }
+
+    const providedToken = authHeader?.split("Bearer ")[1];
+    if (!providedToken) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const expected = Buffer.from(cronSecret);
+    const actual = Buffer.from(providedToken);
+    if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

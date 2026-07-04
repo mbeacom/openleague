@@ -162,17 +162,22 @@ export async function assignToEventTeam(
       };
     }
 
-    for (const registration of registrations) {
-      await prisma.eventTeamAssignment.upsert({
-        where: { registrationId: registration.id },
-        create: {
-          registrationId: registration.id,
+    // Reassign in two statements instead of one upsert per registration (up to
+    // 200 roundtrips). registrationId is @unique, and the length check above
+    // guarantees the ids are distinct and all confirmed, so delete-then-create
+    // cannot collide.
+    await prisma.$transaction([
+      prisma.eventTeamAssignment.deleteMany({
+        where: { registrationId: { in: validated.registrationIds } },
+      }),
+      prisma.eventTeamAssignment.createMany({
+        data: validated.registrationIds.map((registrationId) => ({
+          registrationId,
           eventTeamId: team.id,
           assignedById: userId,
-        },
-        update: { eventTeamId: team.id, assignedById: userId },
-      });
-    }
+        })),
+      }),
+    ]);
 
     // Post-publish roster changes notify the affected families (FR-033).
     if (team.event.teamsPublishedAt) {
