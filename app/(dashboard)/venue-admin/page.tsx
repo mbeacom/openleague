@@ -1,5 +1,5 @@
-import { Box, Button, Card, CardContent, Container, Stack, Typography } from "@mui/material";
-import Link from "next/link";
+import { Box, Card, CardContent, Container, Stack, Typography } from "@mui/material";
+import { LinkButton } from "@/components/ui/NextLinkComposites";
 import { getVenueAdminDashboard } from "@/lib/actions/venue-organizations";
 
 export default async function VenueAdminPage() {
@@ -22,9 +22,9 @@ export default async function VenueAdminPage() {
             <Typography variant="body1">
               Create a rink or venue organization to publish a branded profile and manage ice time.
             </Typography>
-            <Button component={Link} href="/venue-admin/new" variant="contained">
+            <LinkButton href="/venue-admin/new" variant="contained">
               Create Venue Organization
-            </Button>
+            </LinkButton>
           </Stack>
         ) : (
           <Stack spacing={2}>
@@ -39,46 +39,41 @@ export default async function VenueAdminPage() {
                       </Typography>
                     </Box>
                     <Box>
-                      <Button
-                        component={Link}
+                      <LinkButton
                         href={`/venue-admin/${organization.id}/payments`}
                         variant="text"
                         size="small"
                       >
                         Payments &amp; payouts
-                      </Button>
+                      </LinkButton>
                     </Box>
                       <Stack spacing={1}>
                       {organization.venues.map((venue) => (
                           <Stack key={venue.id} direction={{ xs: "column", sm: "row" }} spacing={1}>
-                            <Button
-                              component={Link}
+                            <LinkButton
                               href={`/venue-admin/${organization.id}/venues/${venue.id}/profile`}
                               variant="outlined"
                             >
                               Manage {venue.name}
-                            </Button>
-                            <Button
-                              component={Link}
+                            </LinkButton>
+                            <LinkButton
                               href={`/venue-admin/${organization.id}/venues/${venue.id}/schedule`}
                               variant="text"
                             >
                               Schedule
-                            </Button>
-                            <Button
-                              component={Link}
+                            </LinkButton>
+                            <LinkButton
                               href={`/venue-admin/${organization.id}/venues/${venue.id}/layout`}
                               variant="text"
                             >
                               Layout
-                            </Button>
-                            <Button
-                              component={Link}
+                            </LinkButton>
+                            <LinkButton
                               href={`/venue-admin/${organization.id}/venues/${venue.id}/registrations`}
                               variant="text"
                             >
                               Registrations
-                            </Button>
+                            </LinkButton>
                           </Stack>
                       ))}
                     </Stack>

@@ -1,5 +1,5 @@
-import { Box, Container, Typography, Card, CardContent, Chip, Stack, Button } from "@mui/material";
-import Link from "next/link";
+import { Box, Container, Typography, Card, CardContent, Chip, Stack } from "@mui/material";
+import { LinkButton, LinkCard } from "@/components/ui/NextLinkComposites";
 import {
   SportsHockey as SportsHockeyIcon,
   AccessTime as ClockIcon,
@@ -141,21 +141,19 @@ export default async function DashboardPage() {
               <Typography variant="h5" component="h2">
                 Upcoming Practices
               </Typography>
-              <Button
-                component={Link}
+              <LinkButton
                 href="/practice-planner"
                 endIcon={<ArrowForwardIcon />}
                 size="small"
               >
                 View All
-              </Button>
+              </LinkButton>
             </Stack>
             <Stack spacing={1.5}>
               {upcomingPractices.map((practice) => (
-                <Card
+                <LinkCard
                   key={practice.id}
                   variant="outlined"
-                  component={Link}
                   href={`/practice-planner/${practice.id}`}
                   sx={{
                     textDecoration: "none",
@@ -200,7 +198,7 @@ export default async function DashboardPage() {
                       </Stack>
                     </Stack>
                   </CardContent>
-                </Card>
+                </LinkCard>
               ))}
             </Stack>
           </Box>
@@ -219,9 +217,9 @@ export default async function DashboardPage() {
                       <Typography variant="subtitle1">{relationship.venue.name}</Typography>
                       <Chip size="small" label={relationship.relationshipType} />
                       {relationship.venue.slug ? (
-                        <Button component={Link} href={`/rinks/${relationship.venue.slug}`} size="small">
+                        <LinkButton href={`/rinks/${relationship.venue.slug}`} size="small">
                           View rink
-                        </Button>
+                        </LinkButton>
                       ) : null}
                     </Stack>
                   </CardContent>

@@ -1,8 +1,5 @@
-import Link from "next/link";
 import {
-  Button,
   Card,
-  CardActionArea,
   CardContent,
   Chip,
   Container,
@@ -10,6 +7,7 @@ import {
   Typography,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
+import { LinkButton, LinkCardActionArea } from "@/components/ui/NextLinkComposites";
 import { listMySignupEvents } from "@/lib/actions/signup-events";
 import { formatDateTime } from "@/lib/utils/date";
 
@@ -32,9 +30,9 @@ export default async function SignupEventsPage() {
           <Typography variant="h4" component="h1">
             Signup events
           </Typography>
-          <Button component={Link} href="/signup-events/new" variant="contained" startIcon={<AddIcon />}>
+          <LinkButton href="/signup-events/new" variant="contained" startIcon={<AddIcon />}>
             New event
-          </Button>
+          </LinkButton>
         </Stack>
 
         {events.length === 0 ? (
@@ -49,7 +47,7 @@ export default async function SignupEventsPage() {
                 event.hostOrganization?.name ?? event.hostLeague?.name ?? event.hostTeam?.name ?? "";
               return (
                 <Card key={event.id}>
-                  <CardActionArea component={Link} href={`/signup-events/${event.id}`}>
+                  <LinkCardActionArea href={`/signup-events/${event.id}`}>
                     <CardContent>
                       <Stack
                         direction={{ xs: "column", sm: "row" }}
@@ -78,7 +76,7 @@ export default async function SignupEventsPage() {
                         </Stack>
                       </Stack>
                     </CardContent>
-                  </CardActionArea>
+                  </LinkCardActionArea>
                 </Card>
               );
             })}

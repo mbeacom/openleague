@@ -1,5 +1,5 @@
-import Link from "next/link";
-import { Box, Button, Card, CardContent, Chip, Stack, Typography } from "@mui/material";
+import { Box, Card, CardContent, Chip, Stack, Typography } from "@mui/material";
+import { LinkButton } from "@/components/ui/NextLinkComposites";
 import type { PublicVenueProfile, PublicVenueSummary } from "@/lib/utils/public-venues";
 
 interface PublicVenueRelationship {
@@ -28,9 +28,9 @@ export function PublicRinkProfileCard({ venue }: { venue: PublicVenueSummary }) 
             <Typography variant="body2">{venue.publicDescription}</Typography>
           ) : null}
           {venue.slug ? (
-            <Button component={Link} href={`/rinks/${venue.slug}`} variant="outlined">
+            <LinkButton href={`/rinks/${venue.slug}`} variant="outlined">
               View rink profile
-            </Button>
+            </LinkButton>
           ) : null}
         </Stack>
       </CardContent>
@@ -74,9 +74,9 @@ export function PublicRinkProfile({
             {venue.publicEmail ? <Typography>{venue.publicEmail}</Typography> : null}
             {venue.publicPhone ? <Typography>{venue.publicPhone}</Typography> : null}
             {venue.website ? (
-              <Button component={Link} href={venue.website} target="_blank" rel="noopener noreferrer">
+              <LinkButton href={venue.website} target="_blank" rel="noopener noreferrer">
                 Visit website
-              </Button>
+              </LinkButton>
             ) : null}
           </CardContent>
         </Card>
@@ -132,9 +132,9 @@ export function PublicRinkProfile({
               ))
             )}
             {venue.slug ? (
-              <Button component={Link} href={`/rinks/${venue.slug}/schedule`} variant="outlined">
+              <LinkButton href={`/rinks/${venue.slug}/schedule`} variant="outlined">
                 View full schedule
-              </Button>
+              </LinkButton>
             ) : null}
           </Stack>
         </CardContent>

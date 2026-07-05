@@ -1,14 +1,13 @@
-import Link from "next/link";
 import type { Metadata } from "next";
 import {
   Card,
-  CardActionArea,
   CardContent,
   Chip,
   Container,
   Stack,
   Typography,
 } from "@mui/material";
+import { LinkCardActionArea } from "@/components/ui/NextLinkComposites";
 import { listPublicSignupEvents } from "@/lib/actions/signup-events";
 import { AGE_CLASSIFICATION_LABELS } from "@/lib/utils/age-level";
 import { formatDateTime } from "@/lib/utils/date";
@@ -45,7 +44,7 @@ export default async function PublicEventsPage() {
                 event.hostOrganization?.name ?? event.hostLeague?.name ?? event.hostTeam?.name ?? "";
               return (
                 <Card key={event.id}>
-                  <CardActionArea component={Link} href={`/signups/${event.id}`}>
+                  <LinkCardActionArea href={`/signups/${event.id}`}>
                     <CardContent>
                       <Stack spacing={0.5}>
                         <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
@@ -70,7 +69,7 @@ export default async function PublicEventsPage() {
                         </Stack>
                       </Stack>
                     </CardContent>
-                  </CardActionArea>
+                  </LinkCardActionArea>
                 </Card>
               );
             })}

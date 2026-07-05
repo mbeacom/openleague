@@ -1,14 +1,13 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   Card,
-  CardActionArea,
   CardContent,
   Chip,
   Container,
   Stack,
   Typography,
 } from "@mui/material";
+import { LinkCardActionArea } from "@/components/ui/NextLinkComposites";
 import { prisma } from "@/lib/db/prisma";
 import { listPublicSignupEvents } from "@/lib/actions/signup-events";
 import { AGE_CLASSIFICATION_LABELS } from "@/lib/utils/age-level";
@@ -53,7 +52,7 @@ export default async function AssociationEventsPage({
           <Stack spacing={2}>
             {events.map((event) => (
               <Card key={event.id}>
-                <CardActionArea component={Link} href={`/signups/${event.id}`}>
+                <LinkCardActionArea href={`/signups/${event.id}`}>
                   <CardContent>
                     <Stack spacing={0.5}>
                       <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
@@ -73,7 +72,7 @@ export default async function AssociationEventsPage({
                       </Typography>
                     </Stack>
                   </CardContent>
-                </CardActionArea>
+                </LinkCardActionArea>
               </Card>
             ))}
           </Stack>

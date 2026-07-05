@@ -1,6 +1,6 @@
-import Link from "next/link";
-import { Alert, Button, Chip, Container, Stack, Typography } from "@mui/material";
+import { Alert, Container, Stack, Typography } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import { LinkButton, LinkChip } from "@/components/ui/NextLinkComposites";
 import { prisma } from "@/lib/db/prisma";
 import { requireUserId } from "@/lib/auth/session";
 import { getPlacementBoard } from "@/lib/actions/placements";
@@ -31,14 +31,13 @@ export default async function PlacementPage({
 
   const backLink = (
     <Stack direction="row">
-      <Button
-        component={Link}
+      <LinkButton
         href={`/seasons/${seasonId}`}
         startIcon={<ArrowBackIcon />}
         sx={{ minHeight: 44 }}
       >
         Back to season
-      </Button>
+      </LinkButton>
     </Stack>
   );
 
@@ -93,8 +92,7 @@ export default async function PlacementPage({
 
         {phases.length > 0 ? (
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-            <Chip
-              component={Link}
+            <LinkChip
               href={`/seasons/${seasonId}/placement`}
               clickable
               label="All games"
@@ -102,9 +100,8 @@ export default async function PlacementPage({
               variant={phaseId ? "outlined" : "filled"}
             />
             {phases.map((phase) => (
-              <Chip
+              <LinkChip
                 key={phase.id}
-                component={Link}
                 href={`/seasons/${seasonId}/placement?phaseId=${phase.id}`}
                 clickable
                 label={phase.name}

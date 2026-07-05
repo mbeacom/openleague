@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Alert, Button, Card, CardContent, Chip, Container, Divider, Stack, Typography } from "@mui/material";
+import { Alert, Card, CardContent, Chip, Container, Divider, Stack, Typography } from "@mui/material";
+import { LinkButton } from "@/components/ui/NextLinkComposites";
 import { auth } from "@/auth";
 import { getSkillLevelReferences } from "@/lib/actions/venue-content";
 import { getPublicVenueSchedule } from "@/lib/actions/venue-schedules";
@@ -224,9 +224,9 @@ export default async function PublicRinkSchedulePage({ params, searchParams }: P
                             </Typography>
                           ))}
                       </Stack>
-                      <Button component={Link} href={`/signups/${event.id}`} variant="outlined" size="small">
+                      <LinkButton href={`/signups/${event.id}`} variant="outlined" size="small">
                         View & sign up
-                      </Button>
+                      </LinkButton>
                     </Stack>
                   </CardContent>
                 </Card>

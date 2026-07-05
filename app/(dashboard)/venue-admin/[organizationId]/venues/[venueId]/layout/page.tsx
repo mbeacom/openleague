@@ -1,7 +1,7 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Box, Button, Container, Stack, Typography } from "@mui/material";
+import { Box, Container, Stack, Typography } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import { LinkButton } from "@/components/ui/NextLinkComposites";
 import { prisma } from "@/lib/db/prisma";
 import { requireVenueProfileManager } from "@/lib/auth/session";
 import { getVenueLayout } from "@/lib/actions/venue-layout";
@@ -35,14 +35,13 @@ export default async function VenueLayoutPage({ params }: VenueLayoutPageProps) 
     <Container maxWidth="lg">
       <Stack spacing={3} sx={{ py: 4 }}>
         <Box>
-          <Button
-            component={Link}
+          <LinkButton
             href={`/venue-admin/${organizationId}/venues/${venueId}/profile`}
             startIcon={<ArrowBackIcon />}
             size="small"
           >
             Back to venue profile
-          </Button>
+          </LinkButton>
           <Typography variant="h4" component="h1" sx={{ mt: 1 }}>
             Facility Layout — {venue.name}
           </Typography>

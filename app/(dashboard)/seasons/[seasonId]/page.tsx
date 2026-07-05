@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Button, Container, Stack } from "@mui/material";
+import { Container, Stack } from "@mui/material";
+import { LinkButton } from "@/components/ui/NextLinkComposites";
 import { getSeasonDetail } from "@/lib/actions/seasons";
 import { getAvailableVenues } from "@/lib/actions/venues";
 import { prisma } from "@/lib/db/prisma";
@@ -222,13 +222,12 @@ export default async function SeasonDetailPage({
             <>
               {canManage && season.leagueId ? (
                 <Stack direction="row" justifyContent="flex-end">
-                  <Button
-                    component={Link}
+                  <LinkButton
                     href={`/seasons/${season.id}/placement`}
                     sx={{ minHeight: 44 }}
                   >
                     Pre-season placement
-                  </Button>
+                  </LinkButton>
                 </Stack>
               ) : null}
               {canManage ? (
