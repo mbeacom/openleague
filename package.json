@@ -28,6 +28,7 @@
     "docs:build-pages": "tsx scripts/build-docs-pages.ts",
     "uptime:check": "tsx scripts/check-uptime.ts",
     "validate-deployment-config": "tsx scripts/validate-deployment-config.ts",
+    "smoke": "bun scripts/smoke-test.ts",
     "deployment:check": "bun run validate-deployment-config && bun run docs:build-pages"
   },
   "dependencies": {
@@ -48,6 +49,7 @@
     "@neondatabase/serverless": "^1.1.0",
     "@next/mdx": "^16.2.9",
     "@prisma/adapter-neon": "^7.8.0",
+    "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
     "@vercel/blob": "^2.5.0",
     "bcryptjs": "^3.0.3",

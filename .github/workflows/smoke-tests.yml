@@ -1,0 +1,73 @@
+name: Runtime Smoke Tests
+
+# Boots the real production build against a throwaway Postgres, signs in, and
+# loads every critical page — failing on Server Components render errors.
+# This is the only gate that catches RSC-boundary bugs (e.g. passing next/link
+# as component={Link} from a Server Component, the 2026-07-05 outage / PR
+# #259): dynamic routes never prerender, so type-check and `next build` are
+# structurally blind to them.
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smoke-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Boot, sign in, render critical pages
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: openleague_smoke
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/openleague_smoke
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: smoke-test-secret-0123456789abcdef0123456789abcdef
+      MAILCHIMP_API_KEY: smoke-test-dummy-key
+      EMAIL_FROM: smoke@example.com
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Push schema to smoke database
+        run: bunx prisma db push --config prisma/prisma.config.ts --skip-generate
+
+      - name: Build production bundle
+        run: bun run build
+
+      - name: Run smoke tests
+        run: bun run smoke
