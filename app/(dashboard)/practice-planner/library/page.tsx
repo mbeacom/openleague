@@ -1,7 +1,7 @@
-import { Box, Container, Typography, Button, Stack, Alert } from "@mui/material";
+import { Box, Container, Typography, Stack, Alert } from "@mui/material";
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import { LinkButton } from "@/components/ui/NextLinkComposites";
 import { PlayLibrary } from "@/components/features/practice-planner/PlayLibrary";
 import { getPlayLibraryContext } from "@/lib/actions/practice-session-queries";
 import type { Metadata } from "next";
@@ -25,14 +25,13 @@ export default async function PlayLibraryPage() {
           <Alert severity="warning">
             Only team admins can access the play library.
           </Alert>
-          <Button
-            component={Link}
+          <LinkButton
             href="/practice-planner"
             startIcon={<ArrowBackIcon />}
             sx={{ mt: 2 }}
           >
             Back to Practice Planner
-          </Button>
+          </LinkButton>
         </Box>
       </Container>
     );
@@ -48,14 +47,13 @@ export default async function PlayLibraryPage() {
           sx={{ mb: 3 }}
         >
           <Stack direction="row" alignItems="center" spacing={2}>
-            <Button
-              component={Link}
+            <LinkButton
               href="/practice-planner"
               startIcon={<ArrowBackIcon />}
               size="small"
             >
               Back
-            </Button>
+            </LinkButton>
             <Typography variant="h4" component="h1">
               Play Library
             </Typography>

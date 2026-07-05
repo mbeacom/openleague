@@ -1,6 +1,6 @@
-import Link from "next/link";
-import { Button, Container, Stack, Typography } from "@mui/material";
+import { Container, Stack, Typography } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
+import { LinkButton } from "@/components/ui/NextLinkComposites";
 import { getSeasons } from "@/lib/actions/seasons";
 import { SeasonList, type SeasonListItem } from "@/components/features/seasons/SeasonList";
 
@@ -35,18 +35,17 @@ export default async function SeasonsPage({
             Seasons
           </Typography>
           <Stack direction="row" spacing={1}>
-            <Button component={Link} href="/seasons/proposals" sx={{ minHeight: 44 }}>
+            <LinkButton href="/seasons/proposals" sx={{ minHeight: 44 }}>
               Game proposals
-            </Button>
-            <Button
-              component={Link}
+            </LinkButton>
+            <LinkButton
               href="/seasons/new"
               variant="contained"
               startIcon={<AddIcon />}
               sx={{ minHeight: 44 }}
             >
               New season
-            </Button>
+            </LinkButton>
           </Stack>
         </Stack>
 

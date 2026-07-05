@@ -1,8 +1,6 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   Alert,
-  Button,
   Card,
   CardContent,
   Chip,
@@ -10,6 +8,7 @@ import {
   Stack,
   Typography,
 } from "@mui/material";
+import { LinkButton } from "@/components/ui/NextLinkComposites";
 import EditIcon from "@mui/icons-material/Edit";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import { getManagedSignupEvent } from "@/lib/actions/signup-events";
@@ -127,17 +126,16 @@ export default async function ManageSignupEventPage({
             </Typography>
           </Stack>
           <Stack direction="row" spacing={1}>
-            <Button component={Link} href={`/signup-events/${event.id}/edit`} startIcon={<EditIcon />}>
+            <LinkButton href={`/signup-events/${event.id}/edit`} startIcon={<EditIcon />}>
               Edit
-            </Button>
+            </LinkButton>
             {event.status === "PUBLISHED" && (event.visibility === "PUBLIC" || event.visibility === "LINK") ? (
-              <Button
-                component={Link}
+              <LinkButton
                 href={event.visibility === "LINK" && event.linkToken ? `/signups/l/${event.linkToken}` : `/signups/${event.id}`}
                 startIcon={<OpenInNewIcon />}
               >
                 View page
-              </Button>
+              </LinkButton>
             ) : null}
           </Stack>
         </Stack>

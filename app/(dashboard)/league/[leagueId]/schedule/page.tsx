@@ -1,7 +1,7 @@
-import { Container, Box, Typography, Button } from "@mui/material";
+import { Container, Box, Typography } from "@mui/material";
 import { Add } from "@mui/icons-material";
-import Link from "next/link";
 import { notFound } from "next/navigation";
+import { LinkButton } from "@/components/ui/NextLinkComposites";
 import LeagueCalendar from "@/components/features/calendar/LeagueCalendar";
 import { getLeagueScheduleData } from "@/lib/actions/league-context";
 import { formatSport } from "@/lib/utils/validation";
@@ -39,14 +39,13 @@ export default async function LeagueSchedulePage({ params }: LeagueSchedulePageP
           </Box>
 
           {data.canCreateGames && (
-            <Button
-              component={Link}
+            <LinkButton
               href={`/league/${leagueId}/schedule/new-game`}
               variant="contained"
               startIcon={<Add />}
             >
               Schedule Game
-            </Button>
+            </LinkButton>
           )}
         </Box>
 

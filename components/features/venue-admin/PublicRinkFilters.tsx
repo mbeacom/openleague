@@ -1,5 +1,5 @@
-import Link from "next/link";
-import { Button, Card, CardContent, Stack, Typography } from "@mui/material";
+import { Card, CardContent, Stack, Typography } from "@mui/material";
+import { LinkButton } from "@/components/ui/NextLinkComposites";
 
 interface PublicRinkFilterOption {
   id: string;
@@ -18,9 +18,9 @@ export function PublicRinkFilters({ skillLevels, basePath }: { skillLevels: Publ
           <Typography variant="h6">Filter by level</Typography>
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
             {skillLevels.map((level) => (
-              <Button key={level.id} component={Link} href={`${basePath}?level=${level.id}`} variant="outlined" size="small">
+              <LinkButton key={level.id} href={`${basePath}?level=${level.id}`} variant="outlined" size="small">
                 {level.label}
-              </Button>
+              </LinkButton>
             ))}
           </Stack>
         </Stack>
