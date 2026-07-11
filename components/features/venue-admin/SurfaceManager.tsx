@@ -45,6 +45,7 @@ import {
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import { TimeField } from "@/components/ui/date";
 import {
   archiveIceSurface,
   createIceSurface,
@@ -735,22 +736,10 @@ function HoursSection({ organizationId, venueId, surfaceId, rows }: HoursSection
             </MenuItem>
           ))}
         </TextField>
-        <TextField
-          name="opensAt"
-          label="Opens"
-          type="time"
-          required
-          size="small"
-          slotProps={{ inputLabel: { shrink: true } }}
-        />
-        <TextField
-          name="closesAt"
-          label="Closes"
-          type="time"
-          required
-          size="small"
-          slotProps={{ inputLabel: { shrink: true } }}
-        />
+        {/* TimeField has no `size` prop — fullWidth={false} keeps the inline
+            wrap-row layout; the pickers render at medium height. */}
+        <TimeField name="opensAt" label="Opens" required fullWidth={false} />
+        <TimeField name="closesAt" label="Closes" required fullWidth={false} />
         <Button type="submit" variant="outlined" disabled={pending} sx={{ minHeight: 44 }}>
           Add hours
         </Button>

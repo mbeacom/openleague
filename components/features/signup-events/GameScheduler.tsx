@@ -26,6 +26,7 @@ import CloseIcon from "@mui/icons-material/Close";
 import { deleteEventGame, setGameRotation, upsertEventGame } from "@/lib/actions/event-teams";
 import { GameResultForm } from "./GameResultForm";
 import { formatDateTime, parseDateTimeLocalToUtc, resolveTimeZone } from "@/lib/utils/date";
+import { DateTimeField } from "@/components/ui/date";
 import type { BookingConflict } from "@/types/segments";
 
 type GameParticipant = {
@@ -370,27 +371,23 @@ export function GameScheduler({
                 </TextField>
               </Stack>
               <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-                <TextField
+                <DateTimeField
                   name="startAt"
                   label="Starts"
-                  type="datetime-local"
                   required
                   fullWidth
                   defaultValue=""
                   helperText={`Times are in ${tz}`}
                   onChange={clearStaleConflicts}
-                  slotProps={{ inputLabel: { shrink: true } }}
                 />
-                <TextField
+                <DateTimeField
                   name="endAt"
                   label="Ends"
-                  type="datetime-local"
                   required
                   fullWidth
                   defaultValue=""
                   helperText={`Times are in ${tz}`}
                   onChange={clearStaleConflicts}
-                  slotProps={{ inputLabel: { shrink: true } }}
                 />
               </Stack>
               <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>

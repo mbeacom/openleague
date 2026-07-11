@@ -1,6 +1,7 @@
 "use client";
 
-import { usePathname, useRouter } from "next/navigation";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   List,
   ListItem,
@@ -39,7 +40,6 @@ interface DashboardNavProps {
 
 export default function DashboardNav({ isLeagueMode = false }: DashboardNavProps) {
   const pathname = usePathname();
-  const router = useRouter();
 
   // Use league context if available
   let currentLeague = null;
@@ -86,10 +86,6 @@ export default function DashboardNav({ isLeagueMode = false }: DashboardNavProps
 
   const navItems = getNavItems();
 
-  const handleNavigation = (path: string) => {
-    router.push(path);
-  };
-
   const handleLogout = async () => {
     await logout();
   };
@@ -100,8 +96,9 @@ export default function DashboardNav({ isLeagueMode = false }: DashboardNavProps
       {navItems.map((item) => (
         <ListItem key={item.path} disablePadding>
           <ListItemButton
+            component={Link}
+            href={item.path}
             selected={pathname === item.path || pathname.startsWith(`${item.path}/`)}
-            onClick={() => handleNavigation(item.path)}
           >
             <ListItemIcon>{item.icon}</ListItemIcon>
             <ListItemText primary={item.label} />

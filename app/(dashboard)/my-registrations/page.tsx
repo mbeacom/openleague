@@ -1,5 +1,11 @@
 import Link from "next/link";
-import { Card, CardContent, Chip, Container, Divider, Stack, Typography } from "@mui/material";
+import { Card, CardContent, Chip, Divider, Stack, Typography } from "@mui/material";
+import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
+import EventAvailableIcon from "@mui/icons-material/EventAvailable";
+import { LinkButton } from "@/components/ui/NextLinkComposites";
+import { PageContainer } from "@/components/ui/PageContainer";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { getMyRegistrations } from "@/lib/actions/session-registrations";
 import { getMyEventRegistrations } from "@/lib/actions/event-registrations";
 import { CancelRegistrationButton } from "@/components/features/venue-admin";
@@ -44,19 +50,23 @@ export default async function MyRegistrationsPage() {
   ]);
 
   return (
-    <Container maxWidth="md">
-      <Stack spacing={3} sx={{ py: { xs: 4, md: 6 } }}>
-        <Typography variant="h4" component="h1">
-          My registrations
-        </Typography>
-
+    <PageContainer maxWidth="md">
+      <PageHeader title="My registrations" />
+      <Stack spacing={3}>
         <Typography variant="h5" component="h2">
           Rink sessions &amp; lessons
         </Typography>
         {registrations.length === 0 ? (
-          <Typography color="text.secondary">
-            You haven&apos;t registered for any sessions yet. Browse a rink&apos;s schedule to get started.
-          </Typography>
+          <EmptyState
+            icon={<ReceiptLongIcon />}
+            title="No session registrations yet"
+            description="Browse a rink's schedule to register for public sessions and lessons."
+            action={
+              <LinkButton href="/rinks" variant="outlined">
+                Browse rinks
+              </LinkButton>
+            }
+          />
         ) : (
           <Stack spacing={2}>
             {registrations.map((reg) => {
@@ -113,9 +123,16 @@ export default async function MyRegistrationsPage() {
           Event signups
         </Typography>
         {eventRegistrations.length === 0 ? (
-          <Typography color="text.secondary">
-            No event signups yet. Browse <Link href="/signups">upcoming events</Link> to join one.
-          </Typography>
+          <EmptyState
+            icon={<EventAvailableIcon />}
+            title="No event signups yet"
+            description="Browse upcoming events to join one."
+            action={
+              <LinkButton href="/signups" variant="outlined">
+                Browse upcoming events
+              </LinkButton>
+            }
+          />
         ) : (
           <Stack spacing={2}>
             {eventRegistrations.map((reg) => {
@@ -213,6 +230,6 @@ export default async function MyRegistrationsPage() {
           </Stack>
         )}
       </Stack>
-    </Container>
+    </PageContainer>
   );
 }

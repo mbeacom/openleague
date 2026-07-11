@@ -2,7 +2,8 @@ import { requireUserId } from "@/lib/auth/session";
 import { notFound } from "next/navigation";
 import { hasLeagueAccess, getLeagueStatisticsData } from "@/lib/actions/league";
 import LeagueStatisticsDashboard from "@/components/features/dashboard/LeagueStatisticsDashboard";
-import { Box, Alert } from "@mui/material";
+import { Alert } from "@mui/material";
+import { PageContainer } from "@/components/ui/PageContainer";
 
 interface LeagueStatisticsPageProps {
     params: Promise<{
@@ -25,11 +26,11 @@ export default async function LeagueStatisticsPage({ params }: LeagueStatisticsP
 
     if (!result.success) {
         return (
-            <Box sx={{ p: 3 }}>
+            <PageContainer>
                 <Alert severity="error">
                     {result.error}
                 </Alert>
-            </Box>
+            </PageContainer>
         );
     }
 

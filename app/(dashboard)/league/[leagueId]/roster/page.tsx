@@ -1,5 +1,7 @@
-import { Box, Container, Typography, Divider } from "@mui/material";
+import { Divider } from "@mui/material";
 import { notFound } from "next/navigation";
+import { PageContainer } from "@/components/ui/PageContainer";
+import { PageHeader } from "@/components/ui/PageHeader";
 import LeagueRosterView from "@/components/features/roster/LeagueRosterView";
 import LeagueInvitationManager from "@/components/features/roster/LeagueInvitationManager";
 import { getLeagueRosterData } from "@/lib/actions/league-context";
@@ -17,41 +19,28 @@ export default async function LeagueRosterPage({ params }: LeagueRosterPageProps
   }
 
   return (
-    <Container maxWidth="lg">
-      <Box sx={{ py: 4 }}>
-        <Box
-          sx={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            mb: 3,
-          }}
-        >
-          <Typography variant="h4" component="h1">
-            League Roster - {data.league.name}
-          </Typography>
-        </Box>
+    <PageContainer>
+      <PageHeader title="League Roster" subtitle={data.league.name} />
 
-        {data.isLeagueAdmin && (
-          <>
-            <LeagueInvitationManager
-              teams={data.teams}
-              invitations={data.invitations}
-              leagueId={leagueId}
-              isLeagueAdmin={data.isLeagueAdmin}
-            />
-            <Divider sx={{ my: 4 }} />
-          </>
-        )}
+      {data.isLeagueAdmin && (
+        <>
+          <LeagueInvitationManager
+            teams={data.teams}
+            invitations={data.invitations}
+            leagueId={leagueId}
+            isLeagueAdmin={data.isLeagueAdmin}
+          />
+          <Divider sx={{ my: 4 }} />
+        </>
+      )}
 
-        <LeagueRosterView
-          players={data.players}
-          teams={data.teams}
-          divisions={data.divisions}
-          leagueId={leagueId}
-          isLeagueAdmin={data.isLeagueAdmin}
-        />
-      </Box>
-    </Container>
+      <LeagueRosterView
+        players={data.players}
+        teams={data.teams}
+        divisions={data.divisions}
+        leagueId={leagueId}
+        isLeagueAdmin={data.isLeagueAdmin}
+      />
+    </PageContainer>
   );
 }

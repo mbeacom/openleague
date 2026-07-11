@@ -1,4 +1,8 @@
-import { Box, Card, CardContent, Chip, Container, Divider, Stack, Typography } from "@mui/material";
+import { Box, Card, CardContent, Chip, Divider, Stack, Typography } from "@mui/material";
+import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
+import { PageContainer } from "@/components/ui/PageContainer";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { getVenueRegistrations } from "@/lib/actions/session-registrations";
 import { RefundRegistrationButton } from "@/components/features/venue-admin";
 import { formatCurrencyFromCents } from "@/lib/utils/currency";
@@ -34,12 +38,9 @@ export default async function VenueRegistrationsPage({ params }: VenueRegistrati
   const { registrations, summary } = await getVenueRegistrations({ organizationId, venueId });
 
   return (
-    <Container maxWidth="lg">
-      <Stack spacing={3} sx={{ py: 4 }}>
-        <Typography variant="h4" component="h1">
-          Registrations
-        </Typography>
-
+    <PageContainer>
+      <PageHeader title="Registrations" />
+      <Stack spacing={3}>
         <Card variant="outlined">
           <CardContent>
             <Stack direction="row" spacing={4} flexWrap="wrap" useFlexGap>
@@ -52,7 +53,11 @@ export default async function VenueRegistrationsPage({ params }: VenueRegistrati
         </Card>
 
         {registrations.length === 0 ? (
-          <Typography color="text.secondary">No registrations yet.</Typography>
+          <EmptyState
+            icon={<ReceiptLongIcon />}
+            title="No registrations yet"
+            description="Registrations appear here once skaters sign up for your sessions and lessons."
+          />
         ) : (
           <Stack spacing={1.5}>
             {registrations.map((reg) => {
@@ -105,6 +110,6 @@ export default async function VenueRegistrationsPage({ params }: VenueRegistrati
           </Stack>
         )}
       </Stack>
-    </Container>
+    </PageContainer>
   );
 }

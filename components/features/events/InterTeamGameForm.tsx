@@ -20,6 +20,7 @@ import { createInterTeamGame } from "@/lib/actions/events";
 import type { CreateInterTeamGameInput } from "@/lib/utils/validation";
 import { createInterTeamGameSchema } from "@/lib/utils/validation";
 import { formatDateTimeLocalInput, parseDateTimeLocalToUtc, resolveTimeZone } from "@/lib/utils/date";
+import { DateTimeField } from "@/components/ui/date";
 
 interface InterTeamGameFormProps {
   leagueId: string;
@@ -116,8 +117,7 @@ export default function InterTeamGameForm({
     setFieldErrors((prev) => ({ ...prev, [name]: undefined }));
   };
 
-  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { value } = e.target;
+  const handleDateChange = (value: string) => {
     const parsed = parseDateTimeLocalToUtc(value, timeZone);
     setFormData((prev) => ({ ...prev, startAt: parsed ?? new Date(NaN) }));
     setError(null);
@@ -316,10 +316,9 @@ export default function InterTeamGameForm({
         helperText={fieldErrors.title || "Auto-generated when teams are selected"}
       />
 
-      <TextField
+      <DateTimeField
         label="Date & Time"
         name="startAt"
-        type="datetime-local"
         value={formatDateTimeLocalInput(formData.startAt, timeZone)}
         onChange={handleDateChange}
         required
@@ -327,9 +326,6 @@ export default function InterTeamGameForm({
         disabled={isSubmitting}
         error={!!fieldErrors.startAt}
         helperText={fieldErrors.startAt || `Times are in ${timeZone}`}
-        InputLabelProps={{
-          shrink: true,
-        }}
       />
 
       <TextField

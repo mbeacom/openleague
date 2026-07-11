@@ -14,6 +14,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
+import { DateTimeField } from "@/components/ui/date";
 import { createGameProposal } from "@/lib/actions/game-proposals";
 import {
   isValidTimeZone,
@@ -175,22 +176,8 @@ function ProposalFormBody({
             </Stack>
 
             <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-              <TextField
-                name="startAt"
-                label="Proposed start"
-                type="datetime-local"
-                required
-                fullWidth
-                slotProps={{ inputLabel: { shrink: true } }}
-              />
-              <TextField
-                name="endAt"
-                label="Proposed end"
-                type="datetime-local"
-                required
-                fullWidth
-                slotProps={{ inputLabel: { shrink: true } }}
-              />
+              <DateTimeField name="startAt" label="Proposed start" required fullWidth />
+              <DateTimeField name="endAt" label="Proposed end" required fullWidth />
             </Stack>
             <Typography variant="caption" color="text.secondary">
               Times are entered in {effectiveTimeZone}

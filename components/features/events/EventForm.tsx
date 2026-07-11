@@ -28,6 +28,7 @@ import {
 } from "@/lib/utils/date";
 import { trackEventAction } from "@/lib/analytics/umami";
 import VenueSelector from "@/components/features/venues/VenueSelector";
+import { DateTimeField } from "@/components/ui/date";
 import type { BookingConflict } from "@/types/segments";
 
 interface EventFormProps {
@@ -125,8 +126,7 @@ export default function EventForm({
     setFieldErrors((prev) => ({ ...prev, [name]: undefined }));
   };
 
-  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
+  const handleDateChange = (name: "startAt" | "endAt") => (value: string) => {
     if (name === "endAt") {
       setEndAtLocal(value);
       setFieldErrors((prev) => ({ ...prev, endAt: undefined }));
@@ -340,31 +340,27 @@ export default function EventForm({
         helperText={fieldErrors.title}
       />
 
-      <TextField
+      <DateTimeField
         label="Start Date & Time"
         name="startAt"
-        type="datetime-local"
         value={startAtLocal}
-        onChange={handleDateChange}
+        onChange={handleDateChange("startAt")}
         required
         fullWidth
         disabled={isSubmitting}
         error={!!fieldErrors.startAt}
         helperText={fieldErrors.startAt || `Times are in ${timeZone}`}
-        slotProps={{ inputLabel: { shrink: true } }}
       />
 
-      <TextField
+      <DateTimeField
         label="End Date & Time (optional)"
         name="endAt"
-        type="datetime-local"
         value={endAtLocal}
-        onChange={handleDateChange}
+        onChange={handleDateChange("endAt")}
         fullWidth
         disabled={isSubmitting}
         error={!!fieldErrors.endAt}
         helperText={fieldErrors.endAt || `Times are in ${timeZone}`}
-        slotProps={{ inputLabel: { shrink: true } }}
       />
 
       <VenueSelector

@@ -1,6 +1,6 @@
-import { Container, Box } from "@mui/material";
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
+import { PageContainer } from "@/components/ui/PageContainer";
 import PracticePlannerList from "@/app/(dashboard)/practice-planner/PracticePlannerList";
 import { getPracticePlannerListData } from "@/lib/actions/practice-session-queries";
 
@@ -17,14 +17,12 @@ export default async function PracticePlannerPage() {
   }
 
   return (
-    <Container maxWidth="lg">
-      <Box sx={{ py: 4 }}>
-        <PracticePlannerList
-          sessions={data.sessions}
-          isAdmin={data.isAdmin}
-          teamName={data.teamName}
-        />
-      </Box>
-    </Container>
+    <PageContainer>
+      <PracticePlannerList
+        sessions={data.sessions}
+        isAdmin={data.isAdmin}
+        teamName={data.teamName}
+      />
+    </PageContainer>
   );
 }

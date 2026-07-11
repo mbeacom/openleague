@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
-import { Container, Stack, Typography } from "@mui/material";
+import { PageContainer } from "@/components/ui/PageContainer";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { prisma } from "@/lib/db/prisma";
 import { requireVenueProfileManager } from "@/lib/auth/session";
 import { VenueProfileEditor } from "@/components/features/venue-admin";
@@ -46,13 +47,9 @@ export default async function VenueProfilePage({ params }: VenueProfilePageProps
   }
 
   return (
-    <Container maxWidth="lg">
-      <Stack spacing={3} sx={{ py: 4 }}>
-        <Typography variant="h4" component="h1">
-          Manage Venue Profile
-        </Typography>
-        <VenueProfileEditor organizationId={organizationId} venue={venue} />
-      </Stack>
-    </Container>
+    <PageContainer>
+      <PageHeader title="Manage Venue Profile" />
+      <VenueProfileEditor organizationId={organizationId} venue={venue} />
+    </PageContainer>
   );
 }

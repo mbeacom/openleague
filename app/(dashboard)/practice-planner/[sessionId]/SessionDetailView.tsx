@@ -41,6 +41,7 @@ import {
   PlayArrow as PlayIcon,
   Place as PlaceIcon,
 } from "@mui/icons-material";
+import { EmptyState } from "@/components/ui/EmptyState";
 import {
   deletePracticeSession,
   sharePracticeSession,
@@ -340,26 +341,28 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
 
       {/* Content area */}
       {session.plays.length === 0 ? (
-        <Paper sx={{ p: 6, textAlign: "center" }}>
-          <HockeyIcon sx={{ fontSize: 56, color: "grey.300", mb: 2 }} />
-          <Typography variant="h6" color="text.secondary" gutterBottom>
-            No plays in this session
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            {isAdmin
-              ? "Edit the session to add plays from the library."
-              : "The coach hasn't added any plays yet."}
-          </Typography>
-          {isAdmin && (
-            <Button
-              component={Link}
-              href={`/practice-planner/${session.id}/edit`}
-              variant="contained"
-              startIcon={<EditIcon />}
-            >
-              Edit Session
-            </Button>
-          )}
+        <Paper>
+          <EmptyState
+            icon={<HockeyIcon />}
+            title="No plays in this session"
+            description={
+              isAdmin
+                ? "Edit the session to add plays from the library."
+                : "The coach hasn't added any plays yet."
+            }
+            action={
+              isAdmin ? (
+                <Button
+                  component={Link}
+                  href={`/practice-planner/${session.id}/edit`}
+                  variant="contained"
+                  startIcon={<EditIcon />}
+                >
+                  Edit Session
+                </Button>
+              ) : undefined
+            }
+          />
         </Paper>
       ) : (
         <Stack direction={{ xs: "column", md: "row" }} spacing={3}>

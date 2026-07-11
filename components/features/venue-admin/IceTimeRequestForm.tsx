@@ -2,6 +2,7 @@
 
 import { type FormEvent, useMemo, useState, useTransition } from "react";
 import { Alert, Button, Stack, TextField, Typography } from "@mui/material";
+import { DateTimeField } from "@/components/ui/date";
 import { submitIceTimeRequest } from "@/lib/actions/venue-requests";
 import {
   formatDateTimeLocalInput,
@@ -77,22 +78,18 @@ export function IceTimeRequestForm({ scheduleBlockId, venueId, venueName, starts
       <TextField label="Contact name" name="contactName" required />
       <TextField label="Contact email" name="contactEmail" type="email" required />
       <TextField label="Contact phone" name="contactPhone" type="tel" autoComplete="tel" />
-      <TextField
+      <DateTimeField
         label="Requested start"
         name="requestedStartAt"
-        type="datetime-local"
         required
         defaultValue={defaultStartAt}
-        slotProps={{ inputLabel: { shrink: true } }}
       />
-      <TextField
+      <DateTimeField
         label="Requested end"
         name="requestedEndAt"
-        type="datetime-local"
         required
         defaultValue={defaultEndAt}
         helperText={`Times are in ${tz}`}
-        slotProps={{ inputLabel: { shrink: true } }}
       />
       <TextField label="Notes" name="notes" multiline minRows={3} />
       <Button type="submit" variant="contained" disabled={isPending}>

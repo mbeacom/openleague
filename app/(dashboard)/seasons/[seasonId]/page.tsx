@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
-import { Container, Stack } from "@mui/material";
+import { Stack } from "@mui/material";
 import { LinkButton } from "@/components/ui/NextLinkComposites";
+import { PageContainer } from "@/components/ui/PageContainer";
 import { getSeasonDetail } from "@/lib/actions/seasons";
 import { getAvailableVenues } from "@/lib/actions/venues";
 import { prisma } from "@/lib/db/prisma";
@@ -196,64 +197,62 @@ export default async function SeasonDetailPage({
   }));
 
   return (
-    <Container maxWidth="lg">
-      <Stack sx={{ py: { xs: 3, md: 5 } }}>
-        <SeasonDetail
-          season={{
-            id: season.id,
-            name: season.name,
-            description: season.description,
-            startDate: season.startDate,
-            endDate: season.endDate,
-            archivedAt: season.archivedAt,
-            format: season.format,
-            formatRounds: season.formatRounds,
-            ownerName: season.league?.name ?? season.team?.name ?? "",
-          }}
-          games={games}
-          teams={teams}
-          venues={venues}
-          surfacesByVenue={surfacesByVenue}
-          segmentsBySurface={segmentsBySurface}
-          wholeLabelBySurface={wholeLabelBySurface}
-          sport={sport}
-          canManage={canManage}
-          extraSections={
-            <>
-              {canManage && season.leagueId ? (
-                <Stack direction="row" justifyContent="flex-end">
-                  <LinkButton
-                    href={`/seasons/${season.id}/placement`}
-                    sx={{ minHeight: 44 }}
-                  >
-                    Pre-season placement
-                  </LinkButton>
-                </Stack>
-              ) : null}
-              {canManage ? (
-                <PhaseEditor
-                  seasonId={season.id}
-                  seasonStartDate={season.startDate}
-                  seasonEndDate={season.endDate}
-                  phases={phases}
-                />
-              ) : null}
-              {canManage ? (
-                <GenerationWizard
-                  seasonId={season.id}
-                  seasonStartDate={season.startDate}
-                  seasonEndDate={season.endDate}
-                  phases={phases.map((phase) => ({ id: phase.id, name: phase.name }))}
-                  teams={teams}
-                  divisions={divisions}
-                  venues={venues}
-                />
-              ) : null}
-              <SeasonStandingsTable rows={standingsRows} gated={standingsGated} />
-            </>
-          }
-        />
-      </Stack>
-    </Container>
+    <PageContainer>
+      <SeasonDetail
+        season={{
+          id: season.id,
+          name: season.name,
+          description: season.description,
+          startDate: season.startDate,
+          endDate: season.endDate,
+          archivedAt: season.archivedAt,
+          format: season.format,
+          formatRounds: season.formatRounds,
+          ownerName: season.league?.name ?? season.team?.name ?? "",
+        }}
+        games={games}
+        teams={teams}
+        venues={venues}
+        surfacesByVenue={surfacesByVenue}
+        segmentsBySurface={segmentsBySurface}
+        wholeLabelBySurface={wholeLabelBySurface}
+        sport={sport}
+        canManage={canManage}
+        extraSections={
+          <>
+            {canManage && season.leagueId ? (
+              <Stack direction="row" justifyContent="flex-end">
+                <LinkButton
+                  href={`/seasons/${season.id}/placement`}
+                  sx={{ minHeight: 44 }}
+                >
+                  Pre-season placement
+                </LinkButton>
+              </Stack>
+            ) : null}
+            {canManage ? (
+              <PhaseEditor
+                seasonId={season.id}
+                seasonStartDate={season.startDate}
+                seasonEndDate={season.endDate}
+                phases={phases}
+              />
+            ) : null}
+            {canManage ? (
+              <GenerationWizard
+                seasonId={season.id}
+                seasonStartDate={season.startDate}
+                seasonEndDate={season.endDate}
+                phases={phases.map((phase) => ({ id: phase.id, name: phase.name }))}
+                teams={teams}
+                divisions={divisions}
+                venues={venues}
+              />
+            ) : null}
+            <SeasonStandingsTable rows={standingsRows} gated={standingsGated} />
+          </>
+        }
+      />
+    </PageContainer>
   );
 }

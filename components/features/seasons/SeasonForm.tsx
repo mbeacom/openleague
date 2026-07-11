@@ -4,6 +4,7 @@ import { type FormEvent, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Alert, Button, MenuItem, Stack, TextField } from "@mui/material";
 import type { ScheduleFormat } from "@prisma/client";
+import { DateField } from "@/components/ui/date";
 import { createSeason, updateSeason } from "@/lib/actions/seasons";
 import { SCHEDULE_FORMAT_LABELS } from "@/lib/utils/sport-catalog";
 import { SCHEDULE_FORMATS } from "@/lib/utils/validation";
@@ -156,23 +157,19 @@ export function SeasonForm({ ownerOptions = [], initialValues, onSaved, onCancel
         slotProps={{ htmlInput: { maxLength: 1000 } }}
       />
       <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-        <TextField
+        <DateField
           name="startDate"
           label="Starts"
-          type="date"
           required
           fullWidth
           defaultValue={initialValues ? dateInputValue(initialValues.startDate) : ""}
-          slotProps={{ inputLabel: { shrink: true } }}
         />
-        <TextField
+        <DateField
           name="endDate"
           label="Ends"
-          type="date"
           required
           fullWidth
           defaultValue={initialValues ? dateInputValue(initialValues.endDate) : ""}
-          slotProps={{ inputLabel: { shrink: true } }}
         />
       </Stack>
 

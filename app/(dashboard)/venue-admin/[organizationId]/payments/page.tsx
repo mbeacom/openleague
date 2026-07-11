@@ -1,5 +1,7 @@
 import { notFound } from "next/navigation";
-import { Box, Card, CardContent, Container, Stack, Typography } from "@mui/material";
+import { Box, Card, CardContent, Stack, Typography } from "@mui/material";
+import { PageContainer } from "@/components/ui/PageContainer";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { getOrganizationPaymentsOverview } from "@/lib/actions/venue-payments";
 import { StripeConnectCard } from "@/components/features/venue-admin";
 import { formatCurrencyFromCents } from "@/lib/utils/currency";
@@ -34,17 +36,12 @@ export default async function VenuePaymentsPage({ params, searchParams }: VenueP
   const { status, revenue } = result.data;
 
   return (
-    <Container maxWidth="md">
-      <Stack spacing={3} sx={{ py: 4 }}>
-        <Box>
-          <Typography variant="h4" component="h1" gutterBottom>
-            Payments
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Accept payments for sessions and lessons through your connected Stripe account.
-          </Typography>
-        </Box>
-
+    <PageContainer maxWidth="md">
+      <PageHeader
+        title="Payments"
+        subtitle="Accept payments for sessions and lessons through your connected Stripe account."
+      />
+      <Stack spacing={3}>
         <StripeConnectCard
           organizationId={organizationId}
           status={status}
@@ -68,6 +65,6 @@ export default async function VenuePaymentsPage({ params, searchParams }: VenueP
           </CardContent>
         </Card>
       </Stack>
-    </Container>
+    </PageContainer>
   );
 }

@@ -39,6 +39,7 @@ import {
   resolveTimeZone,
   isValidTimeZone,
 } from "@/lib/utils/date";
+import { DateTimeField } from "@/components/ui/date";
 
 const CATEGORY_LABELS: Record<(typeof SIGNUP_EVENT_CATEGORIES)[number], string> = {
   CLINIC: "Clinic / skills",
@@ -382,23 +383,19 @@ export function EventForm({ hostOptions, venueOptions, initialValues, host }: Ev
               </TextField>
             </Stack>
             <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-              <TextField
+              <DateTimeField
                 name="startAt"
                 label="Starts"
-                type="datetime-local"
                 required
                 fullWidth
                 defaultValue={formatDateTimeLocalInput(initialValues?.startAt, initialTimeZone)}
-                slotProps={{ inputLabel: { shrink: true } }}
               />
-              <TextField
+              <DateTimeField
                 name="endAt"
                 label="Ends"
-                type="datetime-local"
                 required
                 fullWidth
                 defaultValue={formatDateTimeLocalInput(initialValues?.endAt, initialTimeZone)}
-                slotProps={{ inputLabel: { shrink: true } }}
               />
             </Stack>
             <Typography variant="caption" color="text.secondary">
@@ -530,29 +527,23 @@ export function EventForm({ hostOptions, venueOptions, initialValues, host }: Ev
               ))}
             </TextField>
             <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-              <TextField
+              <DateTimeField
                 name="registrationOpensAt"
                 label="Registration opens (optional)"
-                type="datetime-local"
                 fullWidth
                 defaultValue={formatDateTimeLocalInput(initialValues?.registrationOpensAt, initialTimeZone)}
-                slotProps={{ inputLabel: { shrink: true } }}
               />
-              <TextField
+              <DateTimeField
                 name="registrationClosesAt"
                 label="Registration closes (optional)"
-                type="datetime-local"
                 fullWidth
                 defaultValue={formatDateTimeLocalInput(initialValues?.registrationClosesAt, initialTimeZone)}
-                slotProps={{ inputLabel: { shrink: true } }}
               />
-              <TextField
+              <DateTimeField
                 name="cancellationCutoffAt"
                 label="Cancellation cutoff (optional)"
-                type="datetime-local"
                 fullWidth
                 defaultValue={formatDateTimeLocalInput(initialValues?.cancellationCutoffAt, initialTimeZone)}
-                slotProps={{ inputLabel: { shrink: true } }}
               />
             </Stack>
             <FormControlLabel

@@ -1,5 +1,7 @@
-import { Box, Typography, Card, CardContent } from "@mui/material";
+import { Card, CardContent, Typography } from "@mui/material";
 import { notFound } from "next/navigation";
+import { PageContainer } from "@/components/ui/PageContainer";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { LeagueMessagesView } from "@/components/features/communication/LeagueMessagesView";
 import { getLeagueMessagesData } from "@/lib/actions/league-context";
 
@@ -16,16 +18,11 @@ export default async function LeagueMessagesPage({ params }: LeagueMessagesPageP
   }
 
   return (
-    <Box>
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h4" component="h1">
-          League Messages
-        </Typography>
-      </Box>
-
-      <Typography variant="body1" color="text.secondary" mb={3}>
-        Send targeted messages and announcements to league members, divisions, or specific teams.
-      </Typography>
+    <PageContainer>
+      <PageHeader
+        title="League Messages"
+        subtitle="Send targeted messages and announcements to league members, divisions, or specific teams."
+      />
 
       {!data.canSendMessages && (
         <Card sx={{ mb: 3 }}>
@@ -41,6 +38,6 @@ export default async function LeagueMessagesPage({ params }: LeagueMessagesPageP
         leagueData={data.leagueData}
         canSendMessages={data.canSendMessages}
       />
-    </Box>
+    </PageContainer>
   );
 }

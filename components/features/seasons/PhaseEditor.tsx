@@ -21,6 +21,7 @@ import {
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import type { ScheduleFormat, SeasonPhaseType } from "@prisma/client";
+import { DateField } from "@/components/ui/date";
 import {
   createSeasonPhase,
   deleteSeasonPhase,
@@ -353,36 +354,24 @@ function PhaseFormBody({
                 </MenuItem>
               ))}
             </TextField>
+            {/* The season-end upper bound (former native `max`) is enforced by
+                handleSubmit and the server; DateField exposes only `min`. */}
             <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-              <TextField
+              <DateField
                 name="startDate"
                 label="Starts"
-                type="date"
                 required
                 fullWidth
                 defaultValue={phase ? dateInputValue(phase.startDate) : ""}
-                slotProps={{
-                  inputLabel: { shrink: true },
-                  htmlInput: {
-                    min: dateInputValue(seasonStartDate),
-                    max: dateInputValue(seasonEndDate),
-                  },
-                }}
+                min={dateInputValue(seasonStartDate)}
               />
-              <TextField
+              <DateField
                 name="endDate"
                 label="Ends"
-                type="date"
                 required
                 fullWidth
                 defaultValue={phase ? dateInputValue(phase.endDate) : ""}
-                slotProps={{
-                  inputLabel: { shrink: true },
-                  htmlInput: {
-                    min: dateInputValue(seasonStartDate),
-                    max: dateInputValue(seasonEndDate),
-                  },
-                }}
+                min={dateInputValue(seasonStartDate)}
               />
             </Stack>
             <TextField

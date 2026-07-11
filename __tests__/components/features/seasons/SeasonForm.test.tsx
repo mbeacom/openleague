@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SeasonForm } from "@/components/features/seasons/SeasonForm";
 import { createSeason } from "@/lib/actions/seasons";
@@ -35,8 +35,9 @@ describe("SeasonForm", () => {
 
       expect(screen.getByLabelText(/season name/i)).toBeInTheDocument();
       expect(screen.getByLabelText(/description/i)).toBeInTheDocument();
-      expect(screen.getByLabelText(/starts/i)).toBeInTheDocument();
-      expect(screen.getByLabelText(/ends/i)).toBeInTheDocument();
+      // MUI X pickers render an accessible group per date field
+      expect(screen.getByRole("group", { name: /starts/i })).toBeInTheDocument();
+      expect(screen.getByRole("group", { name: /ends/i })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /create season/i })).toBeInTheDocument();
     });
 
@@ -76,8 +77,14 @@ describe("SeasonForm", () => {
       render(<SeasonForm ownerOptions={singleOwner} />);
 
       await user.type(screen.getByLabelText(/season name/i), "Fall 2026");
-      fireEvent.change(screen.getByLabelText(/starts/i), { target: { value: "2026-09-01" } });
-      fireEvent.change(screen.getByLabelText(/ends/i), { target: { value: "2026-12-01" } });
+      // Type into the picker sections (MM/DD/YYYY) — auto-advances per section
+      // and flows through DateField state into the hidden form input.
+      const starts = screen.getByRole("group", { name: /starts/i });
+      await user.click(within(starts).getAllByRole("spinbutton")[0]);
+      await user.keyboard("09012026");
+      const ends = screen.getByRole("group", { name: /ends/i });
+      await user.click(within(ends).getAllByRole("spinbutton")[0]);
+      await user.keyboard("12012026");
       await user.click(screen.getByRole("button", { name: /create season/i }));
 
       await waitFor(() => {
@@ -127,8 +134,9 @@ describe("SeasonForm", () => {
 
       expect(screen.getByLabelText(/season name/i)).toHaveValue("Fall 2026");
       expect(screen.getByLabelText(/description/i)).toHaveValue("Our fall season");
-      expect(screen.getByLabelText(/starts/i)).toHaveValue("2026-09-01");
-      expect(screen.getByLabelText(/ends/i)).toHaveValue("2026-12-01");
+      // Canonical values live in the DateField hidden inputs the form submits
+      expect(document.querySelector('input[name="startDate"]')).toHaveValue("2026-09-01");
+      expect(document.querySelector('input[name="endDate"]')).toHaveValue("2026-12-01");
       expect(screen.getByRole("button", { name: /save changes/i })).toBeInTheDocument();
     });
   });

@@ -1,5 +1,6 @@
-import { Box, Container, Typography } from "@mui/material";
 import { notFound } from "next/navigation";
+import { PageContainer } from "@/components/ui/PageContainer";
+import { PageHeader } from "@/components/ui/PageHeader";
 import LeagueInvitationManager from "@/components/features/roster/LeagueInvitationManager";
 import { getLeagueInvitationsData } from "@/lib/actions/league-context";
 
@@ -16,28 +17,15 @@ export default async function LeagueInvitationsPage({ params }: LeagueInvitation
   }
 
   return (
-    <Container maxWidth="lg">
-      <Box sx={{ py: 4 }}>
-        <Box
-          sx={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            mb: 3,
-          }}
-        >
-          <Typography variant="h4" component="h1">
-            Invitations - {data.league.name}
-          </Typography>
-        </Box>
+    <PageContainer>
+      <PageHeader title="Invitations" subtitle={data.league.name} />
 
-        <LeagueInvitationManager
-          teams={data.teams}
-          invitations={data.invitations}
-          leagueId={leagueId}
-          isLeagueAdmin={data.isLeagueAdmin}
-        />
-      </Box>
-    </Container>
+      <LeagueInvitationManager
+        teams={data.teams}
+        invitations={data.invitations}
+        leagueId={leagueId}
+        isLeagueAdmin={data.isLeagueAdmin}
+      />
+    </PageContainer>
   );
 }

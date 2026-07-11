@@ -1,6 +1,8 @@
-import { Alert, Card, CardContent, Container, Stack, Typography } from "@mui/material";
+import { Alert, Card, CardContent } from "@mui/material";
 import { prisma } from "@/lib/db/prisma";
 import { requireUserId } from "@/lib/auth/session";
+import { PageContainer } from "@/components/ui/PageContainer";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { SeasonForm, type SeasonOwnerOption } from "@/components/features/seasons/SeasonForm";
 
 export const dynamic = "force-dynamic";
@@ -35,31 +37,24 @@ export default async function NewSeasonPage() {
   ];
 
   return (
-    <Container maxWidth="sm">
-      <Stack spacing={3} sx={{ py: { xs: 3, md: 5 } }}>
-        <Stack spacing={0.5}>
-          <Typography variant="h4" component="h1">
-            New season
-          </Typography>
-          <Typography color="text.secondary">
-            Just a name and dates — you can schedule games one at a time. No format or rotation
-            scheme is ever required.
-          </Typography>
-        </Stack>
+    <PageContainer maxWidth="sm">
+      <PageHeader
+        title="New season"
+        subtitle="Just a name and dates — you can schedule games one at a time. No format or rotation scheme is ever required."
+      />
 
-        {ownerOptions.length === 0 ? (
-          <Alert severity="info">
-            You need to be a league administrator or a standalone team&apos;s administrator to
-            create seasons.
-          </Alert>
-        ) : (
-          <Card>
-            <CardContent>
-              <SeasonForm ownerOptions={ownerOptions} />
-            </CardContent>
-          </Card>
-        )}
-      </Stack>
-    </Container>
+      {ownerOptions.length === 0 ? (
+        <Alert severity="info">
+          You need to be a league administrator or a standalone team&apos;s administrator to
+          create seasons.
+        </Alert>
+      ) : (
+        <Card>
+          <CardContent>
+            <SeasonForm ownerOptions={ownerOptions} />
+          </CardContent>
+        </Card>
+      )}
+    </PageContainer>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { Card, CardContent, Typography, Box, Chip } from "@mui/material";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import type { Event } from "@/types/events";
 
 // EventCard can accept either simple Event or extended with league/team info
@@ -29,8 +29,6 @@ export default function EventCard({
   awayTeam,
   teamName,
 }: EventCardProps) {
-  const router = useRouter();
-
   // Convert UTC date to local timezone
   const localDate = new Date(startAt);
   const dateStr = localDate.toLocaleDateString(undefined, {
@@ -46,16 +44,16 @@ export default function EventCard({
   // Event type badge colors
   const badgeColor = type === "GAME" ? "primary" : "secondary";
 
-  const handleClick = () => {
+  return (
     // Always use the team event detail route; repoint league events to
     // /league/[leagueId]/events/[id] when that route ships (roadmap D1)
-    router.push(`/events/${id}`);
-  };
-
-  return (
     <Card
-      onClick={handleClick}
+      component={Link}
+      href={`/events/${id}`}
       sx={{
+        display: "block",
+        color: "inherit",
+        textDecoration: "none",
         cursor: "pointer",
         minHeight: 44,
         transition: "all 0.2s ease-in-out",

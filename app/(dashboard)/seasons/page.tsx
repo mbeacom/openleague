@@ -1,6 +1,9 @@
-import { Container, Stack, Typography } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
+import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
 import { LinkButton } from "@/components/ui/NextLinkComposites";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { PageContainer } from "@/components/ui/PageContainer";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { getSeasons } from "@/lib/actions/seasons";
 import { SeasonList, type SeasonListItem } from "@/components/features/seasons/SeasonList";
 
@@ -28,13 +31,11 @@ export default async function SeasonsPage({
   }));
 
   return (
-    <Container maxWidth="md">
-      <Stack spacing={3} sx={{ py: { xs: 3, md: 5 } }}>
-        <Stack direction="row" alignItems="center" justifyContent="space-between">
-          <Typography variant="h4" component="h1">
-            Seasons
-          </Typography>
-          <Stack direction="row" spacing={1}>
+    <PageContainer maxWidth="md">
+      <PageHeader
+        title="Seasons"
+        actions={
+          <>
             <LinkButton href="/seasons/proposals" sx={{ minHeight: 44 }}>
               Game proposals
             </LinkButton>
@@ -46,19 +47,24 @@ export default async function SeasonsPage({
             >
               New season
             </LinkButton>
-          </Stack>
-        </Stack>
+          </>
+        }
+      />
 
-        {items.length === 0 ? (
-          <Typography color="text.secondary">
-            No seasons yet. Create one with just a name and dates — no format or rotation scheme
-            required — then schedule games one at a time. Each game lands on both teams&apos;
-            calendars with RSVP requests.
-          </Typography>
-        ) : null}
+      {items.length === 0 ? (
+        <EmptyState
+          icon={<CalendarMonthIcon />}
+          title="No seasons yet"
+          description="Create one with just a name and dates — no format or rotation scheme required — then schedule games one at a time. Each game lands on both teams' calendars with RSVP requests."
+          action={
+            <LinkButton href="/seasons/new" variant="contained" startIcon={<AddIcon />}>
+              New season
+            </LinkButton>
+          }
+        />
+      ) : null}
 
-        <SeasonList seasons={items} showArchived={showArchived} />
-      </Stack>
-    </Container>
+      <SeasonList seasons={items} showArchived={showArchived} />
+    </PageContainer>
   );
 }

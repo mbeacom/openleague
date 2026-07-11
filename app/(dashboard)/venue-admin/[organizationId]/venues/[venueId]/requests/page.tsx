@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
-import { Container, Stack, Typography } from "@mui/material";
+import { PageContainer } from "@/components/ui/PageContainer";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { getVenueRequestQueue } from "@/lib/actions/venue-requests";
 import { IceTimeRequestQueue } from "@/components/features/venue-admin";
 
@@ -19,13 +20,9 @@ export default async function VenueRequestsPage({ params }: VenueRequestsPagePro
   }
 
   return (
-    <Container maxWidth="lg">
-      <Stack spacing={4} sx={{ py: 4 }}>
-        <Typography variant="h4" component="h1">
-          Ice Time Requests
-        </Typography>
-        <IceTimeRequestQueue requests={result.data.requests} />
-      </Stack>
-    </Container>
+    <PageContainer>
+      <PageHeader title="Ice Time Requests" />
+      <IceTimeRequestQueue requests={result.data.requests} />
+    </PageContainer>
   );
 }

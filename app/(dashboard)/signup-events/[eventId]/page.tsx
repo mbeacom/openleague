@@ -4,11 +4,11 @@ import {
   Card,
   CardContent,
   Chip,
-  Container,
   Stack,
   Typography,
 } from "@mui/material";
 import { LinkButton } from "@/components/ui/NextLinkComposites";
+import { PageContainer } from "@/components/ui/PageContainer";
 import EditIcon from "@mui/icons-material/Edit";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import { getManagedSignupEvent } from "@/lib/actions/signup-events";
@@ -103,8 +103,8 @@ export default async function ManageSignupEventPage({
         : null;
 
   return (
-    <Container maxWidth="lg">
-      <Stack spacing={3} sx={{ py: { xs: 3, md: 5 } }}>
+    <PageContainer>
+      <Stack spacing={3}>
         <Stack
           direction={{ xs: "column", sm: "row" }}
           spacing={2}
@@ -243,6 +243,6 @@ export default async function ManageSignupEventPage({
           </Card>
         ) : null}
       </Stack>
-    </Container>
+    </PageContainer>
   );
 }
