@@ -52,7 +52,8 @@ interface VenueStaffInviteEmailData {
   organizationId: string;
 }
 
-function formatVenueStaffRoleLabel(role: string): string {
+/** "CONTENT_EDITOR" -> "content editor", "HEAD_COACH" -> "head coach". */
+function formatRoleLabel(role: string): string {
   return role.toLowerCase().split("_").join(" ");
 }
 
@@ -63,7 +64,7 @@ function formatVenueStaffRoleLabel(role: string): string {
 export async function sendVenueStaffInviteEmail(data: VenueStaffInviteEmailData): Promise<void> {
   const mailchimp = getMailchimpClient();
   const staffLink = `${BASE_URL}/venue-admin/${data.organizationId}/staff`;
-  const roleLabel = formatVenueStaffRoleLabel(data.role);
+  const roleLabel = formatRoleLabel(data.role);
 
   await mailchimp.messages.send({
     message: {
@@ -71,6 +72,70 @@ export async function sendVenueStaffInviteEmail(data: VenueStaffInviteEmailData)
       subject: `${data.inviterName} invited you to help manage ${data.organizationName}`,
       html: `<p>${data.inviterName} invited you to join the staff of <strong>${data.organizationName}</strong> on OpenLeague with the ${roleLabel} role.</p><p><a href="${staffLink}">Review invitation</a></p><p>If you didn't expect this invitation, you can safely ignore this email.</p>`,
       text: `${data.inviterName} invited you to join the staff of ${data.organizationName} on OpenLeague with the ${roleLabel} role. Review: ${staffLink}\n\nIf you didn't expect this invitation, you can safely ignore this email.`,
+      to: [{ email: data.email, type: "to" as const }],
+    },
+  });
+}
+
+interface VenueStaffSignupInviteEmailData {
+  email: string;
+  organizationName: string;
+  inviterName: string;
+  /** VenueStaffRole enum value, e.g. "CONTENT_EDITOR". */
+  role: string;
+  /** Unified Invitation token — links through /api/invitations/[token]. */
+  token: string;
+}
+
+/**
+ * Invite someone WITHOUT an OpenLeague account to a venue organization's
+ * staff. The link routes through the unified invitation endpoint, which sends
+ * them to signup; the staff membership is created when they accept.
+ */
+export async function sendVenueStaffSignupInviteEmail(
+  data: VenueStaffSignupInviteEmailData
+): Promise<void> {
+  const mailchimp = getMailchimpClient();
+  const invitationLink = `${BASE_URL}/api/invitations/${data.token}`;
+  const roleLabel = formatRoleLabel(data.role);
+
+  await mailchimp.messages.send({
+    message: {
+      from_email: EMAIL_FROM,
+      subject: `${data.inviterName} invited you to help manage ${data.organizationName}`,
+      html: `<p>${data.inviterName} invited you to join the staff of <strong>${data.organizationName}</strong> on OpenLeague with the ${roleLabel} role.</p><p>Create a free account to accept the invitation:</p><p><a href="${invitationLink}">Accept invitation</a></p><p style="color: #666; font-size: 14px;">This invitation will expire in 7 days. If you didn't expect it, you can safely ignore this email.</p>`,
+      text: `${data.inviterName} invited you to join the staff of ${data.organizationName} on OpenLeague with the ${roleLabel} role. Create a free account to accept the invitation: ${invitationLink}\n\nThis invitation will expire in 7 days. If you didn't expect it, you can safely ignore this email.`,
+      to: [{ email: data.email, type: "to" as const }],
+    },
+  });
+}
+
+interface TeamOfficialInviteEmailData {
+  email: string;
+  teamName: string;
+  inviterName: string;
+  /** TeamOfficialRole enum value, e.g. "HEAD_COACH". */
+  role: string;
+  /** Unified Invitation token — links through /api/invitations/[token]. */
+  token: string;
+}
+
+/**
+ * Invite someone WITHOUT an OpenLeague account to join a team as an official
+ * (coach, manager, treasurer, ...). Their TeamOfficial entry is linked to the
+ * account they create when accepting.
+ */
+export async function sendTeamOfficialInviteEmail(data: TeamOfficialInviteEmailData): Promise<void> {
+  const mailchimp = getMailchimpClient();
+  const invitationLink = `${BASE_URL}/api/invitations/${data.token}`;
+  const roleLabel = formatRoleLabel(data.role);
+
+  await mailchimp.messages.send({
+    message: {
+      from_email: EMAIL_FROM,
+      subject: `${data.inviterName} invited you to join ${data.teamName} as ${roleLabel}`,
+      html: `<p>${data.inviterName} invited you to join <strong>${data.teamName}</strong> on OpenLeague as ${roleLabel}.</p><p>Create a free account to accept the invitation:</p><p><a href="${invitationLink}">Accept invitation</a></p><p style="color: #666; font-size: 14px;">This invitation will expire in 7 days. If you didn't expect it, you can safely ignore this email.</p>`,
+      text: `${data.inviterName} invited you to join ${data.teamName} on OpenLeague as ${roleLabel}. Create a free account to accept the invitation: ${invitationLink}\n\nThis invitation will expire in 7 days. If you didn't expect it, you can safely ignore this email.`,
       to: [{ email: data.email, type: "to" as const }],
     },
   });
@@ -345,6 +410,106 @@ Log in at: ${loginLink}`,
     console.error("Error sending existing user notification:", error);
     throw new Error("Failed to send notification email");
   }
+}
+
+interface LeagueInvitationEmailData {
+  email: string;
+  leagueName: string;
+  inviterName: string;
+  /** Unified Invitation token — links through /api/invitations/[token]. */
+  token: string;
+}
+
+/**
+ * Invite someone WITHOUT an OpenLeague account to join a league. Their
+ * LeagueUser membership is created when they accept at signup.
+ */
+export async function sendLeagueInvitationEmail(data: LeagueInvitationEmailData): Promise<void> {
+  const mailchimp = getMailchimpClient();
+  const invitationLink = `${BASE_URL}/api/invitations/${data.token}`;
+
+  const message = {
+    from_email: EMAIL_FROM,
+    subject: `You've been invited to join the ${data.leagueName} league`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #1976D2;">You've been invited to join ${data.leagueName}</h2>
+
+        <p>Hi there,</p>
+
+        <p>${data.inviterName} has invited you to join the <strong>${data.leagueName}</strong> league on openleague.</p>
+
+        <p style="margin: 30px 0;">
+          <a href="${invitationLink}"
+             style="background-color: #1976D2; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">
+            Accept Invitation
+          </a>
+        </p>
+
+        <p style="color: #666; font-size: 14px;">
+          Or copy and paste this link into your browser:<br>
+          <a href="${invitationLink}">${invitationLink}</a>
+        </p>
+
+        <p style="color: #666; font-size: 14px; margin-top: 30px;">
+          This invitation will expire in 7 days.
+        </p>
+
+        <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+
+        <p style="color: #999; font-size: 12px;">
+          If you didn't expect this invitation, you can safely ignore this email.
+        </p>
+      </div>
+    `,
+    text: `You've been invited to join the ${data.leagueName} league
+
+${data.inviterName} has invited you to join the ${data.leagueName} league on openleague.
+
+Accept your invitation by visiting:
+${invitationLink}
+
+This invitation will expire in 7 days.
+
+If you didn't expect this invitation, you can safely ignore this email.`,
+    to: [{ email: data.email, type: "to" as const }],
+  };
+
+  try {
+    await mailchimp.messages.send({ message });
+  } catch (error) {
+    console.error("Error sending league invitation email:", error);
+    throw new Error("Failed to send league invitation email");
+  }
+}
+
+interface LeagueMemberAddedEmailData {
+  email: string;
+  leagueName: string;
+  inviterName: string;
+  /** LeagueRole enum value, e.g. "TEAM_ADMIN". */
+  role: string;
+}
+
+/**
+ * Notify an existing user that they were added to a league.
+ */
+export async function sendLeagueMemberAddedNotification(
+  data: LeagueMemberAddedEmailData
+): Promise<void> {
+  const mailchimp = getMailchimpClient();
+  const loginLink = `${BASE_URL}/login`;
+  const roleLabel = formatRoleLabel(data.role);
+
+  await mailchimp.messages.send({
+    message: {
+      from_email: EMAIL_FROM,
+      subject: `You've been added to the ${data.leagueName} league`,
+      html: `<p>${data.inviterName} added you to the <strong>${data.leagueName}</strong> league on openleague as ${roleLabel}.</p><p><a href="${loginLink}">Log in</a> to see your league.</p><p style="color: #666; font-size: 14px;">If you didn't expect this, contact the league administrator.</p>`,
+      text: `${data.inviterName} added you to the ${data.leagueName} league on openleague as ${roleLabel}. Log in to see your league: ${loginLink}\n\nIf you didn't expect this, contact the league administrator.`,
+      to: [{ email: data.email, type: "to" as const }],
+    },
+  });
 }
 
 interface EventCreatedEmailData {

@@ -277,13 +277,13 @@ export async function isUserApproved(userId: string): Promise<boolean> {
 }
 
 /**
- * Check if a user has admin privileges (system-wide)
- * For now, this checks if user is a LEAGUE_ADMIN in any league
- * In future, could add a separate system admin role
+ * Check if a user is a LEAGUE_ADMIN of ANY league.
+ * This is not a system-wide admin role — it grants the broadest privilege the
+ * app currently has (formerly misnamed `isSystemAdmin`).
  *
  * Uses findFirst for better performance than count
  */
-export async function isSystemAdmin(userId: string): Promise<boolean> {
+export async function isAnyLeagueAdmin(userId: string): Promise<boolean> {
   const admin = await prisma.leagueUser.findFirst({
     where: {
       userId,
@@ -298,15 +298,16 @@ export async function isSystemAdmin(userId: string): Promise<boolean> {
 }
 
 /**
- * Require system admin privileges
- * Returns the session if user is a system admin
+ * Require "system admin" privileges (currently: LEAGUE_ADMIN of any league —
+ * see isAnyLeagueAdmin).
+ * Returns the session if the check passes.
  * Throws an error if not authenticated or not an admin
  */
 export async function requireSystemAdmin() {
   const session = await requireAuth();
   const userId = await requireUserIdFromSession(session);
 
-  const isAdmin = await isSystemAdmin(userId);
+  const isAdmin = await isAnyLeagueAdmin(userId);
   if (!isAdmin) {
     throw new Error("Unauthorized: Admin access required");
   }

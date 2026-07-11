@@ -1,7 +1,9 @@
 "use server";
 
 import { hash } from "bcryptjs";
+import type { Invitation, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
+import { ensureLeagueUser } from "@/lib/actions/league";
 import { signupSchema, type SignupInput } from "@/lib/utils/validation";
 import { ZodError } from "zod";
 
@@ -50,40 +52,20 @@ export async function signup(data: SignupWithInvitationInput) {
         });
 
         if (invitation && invitation.status === "PENDING" && invitation.expiresAt > new Date()) {
-          // Use transaction to ensure atomicity
-          await prisma.$transaction([
-            // Add user to team as MEMBER
-            prisma.teamMember.create({
-              data: {
-                userId: user.id,
-                teamId: invitation.teamId,
-                role: "MEMBER",
-              },
-            }),
-            // Link unclaimed roster entries matching the invitation email to the new account
-            prisma.player.updateMany({
-              where: {
-                teamId: invitation.teamId,
-                email: { equals: invitation.email, mode: "insensitive" },
-                userId: null,
-              },
-              data: { userId: user.id },
-            }),
-            // Link unclaimed team official entries the same way
-            prisma.teamOfficial.updateMany({
-              where: {
-                teamId: invitation.teamId,
-                email: { equals: invitation.email, mode: "insensitive" },
-                userId: null,
-              },
-              data: { userId: user.id },
-            }),
+          // Use transaction to ensure atomicity. The unified Invitation model
+          // targets exactly one of team / league / venue organization.
+          await prisma.$transaction(async (tx) => {
+            await acceptInvitationMemberships(tx, invitation, {
+              id: user.id,
+              name: user.name,
+            });
+
             // Update invitation status to ACCEPTED
-            prisma.invitation.update({
+            await tx.invitation.update({
               where: { id: invitation.id },
               data: { status: "ACCEPTED" },
-            }),
-          ]);
+            });
+          });
         }
       } catch (inviteError) {
         console.error("Error processing invitation during signup:", inviteError);
@@ -119,5 +101,127 @@ export async function signup(data: SignupWithInvitationInput) {
     // Return a clean, serializable error response
     const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred during signup";
     return { error: errorMessage };
+  }
+}
+
+/**
+ * Create the membership rows an accepted invitation grants, inside the
+ * caller's transaction. The unified Invitation model targets exactly one of:
+ * - team: TeamMember MEMBER + link unclaimed Player/TeamOfficial rows;
+ *   creates-or-links a TeamOfficial when the invite carries an officialRole;
+ *   syncs the LeagueUser row for league-linked teams.
+ * - league: LeagueUser MEMBER row.
+ * - venue organization: ACTIVE VenueStaff row with the invited venueRole.
+ */
+async function acceptInvitationMemberships(
+  tx: Prisma.TransactionClient,
+  invitation: Invitation,
+  user: { id: string; name: string | null }
+): Promise<void> {
+  if (invitation.teamId) {
+    // Add user to team as MEMBER
+    await tx.teamMember.create({
+      data: {
+        userId: user.id,
+        teamId: invitation.teamId,
+        role: "MEMBER",
+      },
+    });
+
+    // Link unclaimed roster entries matching the invitation email to the new account
+    await tx.player.updateMany({
+      where: {
+        teamId: invitation.teamId,
+        email: { equals: invitation.email, mode: "insensitive" },
+        userId: null,
+      },
+      data: { userId: user.id },
+    });
+
+    // Link unclaimed team official entries the same way
+    await tx.teamOfficial.updateMany({
+      where: {
+        teamId: invitation.teamId,
+        email: { equals: invitation.email, mode: "insensitive" },
+        userId: null,
+      },
+      data: { userId: user.id },
+    });
+
+    if (invitation.officialRole) {
+      // Official invite: activate the pending TeamOfficial entry for this
+      // role, or create one if it no longer exists.
+      const official = await tx.teamOfficial.findFirst({
+        where: {
+          teamId: invitation.teamId,
+          email: { equals: invitation.email, mode: "insensitive" },
+          role: invitation.officialRole,
+        },
+        select: { id: true },
+      });
+
+      if (official) {
+        await tx.teamOfficial.update({
+          where: { id: official.id },
+          data: { userId: user.id, status: "ACTIVE" },
+        });
+      } else {
+        await tx.teamOfficial.create({
+          data: {
+            teamId: invitation.teamId,
+            name: user.name || invitation.email,
+            email: invitation.email.toLowerCase(),
+            role: invitation.officialRole,
+            status: "ACTIVE",
+            userId: user.id,
+          },
+        });
+      }
+    }
+
+    // League-identity sync: members of league-linked teams get an explicit
+    // LeagueUser row.
+    const team = await tx.team.findUnique({
+      where: { id: invitation.teamId },
+      select: { leagueId: true },
+    });
+    if (team?.leagueId) {
+      await ensureLeagueUser(tx, user.id, team.leagueId, "MEMBER");
+    }
+  } else if (invitation.leagueId) {
+    await ensureLeagueUser(tx, user.id, invitation.leagueId, "MEMBER");
+  } else if (invitation.organizationId) {
+    // Org-wide staff rows use a null venueId; Postgres treats NULLs as
+    // distinct in the composite unique, so look up any existing row manually.
+    const existing = await tx.venueStaff.findFirst({
+      where: {
+        organizationId: invitation.organizationId,
+        userId: user.id,
+        venueId: null,
+      },
+      select: { id: true },
+    });
+
+    if (existing) {
+      await tx.venueStaff.update({
+        where: { id: existing.id },
+        data: {
+          role: invitation.venueRole ?? "VIEWER",
+          status: "ACTIVE",
+          joinedAt: new Date(),
+        },
+      });
+    } else {
+      await tx.venueStaff.create({
+        data: {
+          organizationId: invitation.organizationId,
+          userId: user.id,
+          role: invitation.venueRole ?? "VIEWER",
+          status: "ACTIVE",
+          joinedAt: new Date(),
+          invitedById: invitation.invitedById,
+        },
+      });
+    }
   }
 }

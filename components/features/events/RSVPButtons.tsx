@@ -5,7 +5,7 @@ import { Box, Button, Stack } from "@mui/material";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import CancelIcon from "@mui/icons-material/Cancel";
 import HelpIcon from "@mui/icons-material/Help";
-import { updateRSVP } from "@/lib/actions/rsvp";
+import { submitRSVP } from "@/lib/actions/rsvp";
 import { trackRSVP } from "@/lib/analytics/umami";
 
 type RSVPStatus = "GOING" | "NOT_GOING" | "MAYBE" | "NO_RESPONSE";
@@ -13,12 +13,19 @@ type RSVPStatus = "GOING" | "NOT_GOING" | "MAYBE" | "NO_RESPONSE";
 interface RSVPButtonsProps {
   eventId: string;
   currentStatus: RSVPStatus;
+  /**
+   * When set, responses are recorded for this guarded player (per-child
+   * RSVP row, identity graph Tier 3). Omit/null for the viewer's own
+   * self/household response — the default, unchanged behavior.
+   */
+  playerId?: string | null;
   onStatusChange?: (status: RSVPStatus) => void;
 }
 
 export function RSVPButtons({
   eventId,
   currentStatus,
+  playerId,
   onStatusChange,
 }: RSVPButtonsProps) {
   const [isPending, startTransition] = useTransition();
@@ -30,10 +37,12 @@ export function RSVPButtons({
       // Optimistically update the UI
       setOptimisticStatus(status);
 
-      // Call the server action
-      const result = await updateRSVP({
+      // Call the server action (playerId present → answer on behalf of a
+      // guarded player; absent → the viewer's own self/household response)
+      const result = await submitRSVP({
         eventId,
         status,
+        ...(playerId ? { playerId } : {}),
       });
 
       if (result.success) {

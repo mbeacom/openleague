@@ -8,7 +8,8 @@ export async function GET(
   try {
     const { token } = await params;
 
-    // Find the invitation by token
+    // Find the invitation by token. Unified invitations target exactly one
+    // of team / league / venue organization.
     const invitation = await prisma.invitation.findUnique({
       where: { token },
       include: {
@@ -18,6 +19,18 @@ export async function GET(
             name: true,
             sport: true,
             season: true,
+          },
+        },
+        league: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        organization: {
+          select: {
+            id: true,
+            name: true,
           },
         },
       },
@@ -50,12 +63,19 @@ export async function GET(
       );
     }
 
-    // Redirect to signup page with pre-filled team information
+    // Redirect to signup page with pre-filled invitation context
     const signupUrl = new URL("/signup", request.url);
     signupUrl.searchParams.set("email", invitation.email);
-    signupUrl.searchParams.set("teamId", invitation.team.id);
-    signupUrl.searchParams.set("teamName", invitation.team.name);
     signupUrl.searchParams.set("invitationToken", token);
+
+    if (invitation.team) {
+      signupUrl.searchParams.set("teamId", invitation.team.id);
+      signupUrl.searchParams.set("teamName", invitation.team.name);
+    } else if (invitation.league) {
+      signupUrl.searchParams.set("leagueName", invitation.league.name);
+    } else if (invitation.organization) {
+      signupUrl.searchParams.set("organizationName", invitation.organization.name);
+    }
 
     return NextResponse.redirect(signupUrl);
   } catch (error) {

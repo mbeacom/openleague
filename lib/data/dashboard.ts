@@ -6,6 +6,7 @@ import { cache } from "react";
 import { addDays } from "date-fns";
 import { prisma } from "@/lib/db/prisma";
 import type { EventType, LeagueRole, Role, RSVPStatus } from "@prisma/client";
+import type { RsvpTarget } from "@/types/events";
 
 const SCHEDULE_WINDOW_DAYS = 14;
 const SCHEDULE_LIMIT = 10;
@@ -212,37 +213,39 @@ export type NeedsRsvpItem = {
   location: string;
   opponent: string | null;
   teamName: string;
+  /** Which identity the pending response is for: self or a guarded player. */
+  target: RsvpTarget;
 };
 
-/**
- * The viewer's own NO_RESPONSE RSVPs on future events (soonest first, max 5).
- */
-export async function getNeedsRsvp(userId: string): Promise<NeedsRsvpItem[]> {
-  const rsvps = await prisma.rSVP.findMany({
-    where: {
-      userId,
-      status: "NO_RESPONSE",
-      event: { startAt: { gte: new Date() } },
-    },
-    orderBy: { event: { startAt: "asc" } },
-    take: NEEDS_RSVP_LIMIT,
-    select: {
-      event: {
-        select: {
-          id: true,
-          type: true,
-          title: true,
-          startAt: true,
-          timezone: true,
-          location: true,
-          opponent: true,
-          team: { select: { name: true } },
-        },
-      },
-    },
-  });
+// Shared select for the event fields a NeedsRsvpItem carries.
+const needsRsvpEventSelect = {
+  id: true,
+  type: true,
+  title: true,
+  startAt: true,
+  timezone: true,
+  location: true,
+  opponent: true,
+  team: { select: { name: true } },
+} as const;
 
-  return rsvps.map(({ event }) => ({
+type NeedsRsvpEventRow = {
+  id: string;
+  type: EventType;
+  title: string;
+  startAt: Date;
+  timezone: string;
+  location: string;
+  opponent: string | null;
+  team: { name: string };
+};
+
+// Upper bound on upcoming guarded-team events scanned for missing per-child
+// rows (each event can yield several player rows; final list is capped below).
+const NEEDS_RSVP_EVENT_SCAN_LIMIT = 25;
+
+function toNeedsRsvpItem(event: NeedsRsvpEventRow, target: RsvpTarget): NeedsRsvpItem {
+  return {
     eventId: event.id,
     eventType: event.type,
     title: event.title,
@@ -251,7 +254,89 @@ export async function getNeedsRsvp(userId: string): Promise<NeedsRsvpItem[]> {
     location: event.location,
     opponent: event.opponent,
     teamName: event.team.name,
-  }));
+    target,
+  };
+}
+
+/**
+ * The viewer's pending RSVPs on future events, per identity (soonest first,
+ * max 5):
+ * - self rows: the viewer's own NO_RESPONSE rows (playerId null — per-child
+ *   rows are answered separately and never count against "you");
+ * - player rows: players the viewer guards (canRsvp) that have no per-child
+ *   RSVP row yet for an upcoming event of their team (event fan-out only
+ *   creates per-user rows; per-child rows appear on first response).
+ */
+export async function getNeedsRsvp(userId: string): Promise<NeedsRsvpItem[]> {
+  const now = new Date();
+
+  const [selfRsvps, guardians] = await Promise.all([
+    prisma.rSVP.findMany({
+      where: {
+        userId,
+        playerId: null,
+        status: "NO_RESPONSE",
+        event: { startAt: { gte: now } },
+      },
+      orderBy: { event: { startAt: "asc" } },
+      take: NEEDS_RSVP_LIMIT,
+      select: { event: { select: needsRsvpEventSelect } },
+    }),
+    prisma.playerGuardian.findMany({
+      where: { userId, canRsvp: true, player: { team: { isActive: true } } },
+      select: {
+        playerId: true,
+        player: { select: { name: true, teamId: true } },
+      },
+    }),
+  ]);
+
+  const items: NeedsRsvpItem[] = selfRsvps.map(({ event }) =>
+    toNeedsRsvpItem(event, { kind: "self" })
+  );
+
+  if (guardians.length > 0) {
+    const guardedPlayerIds = guardians.map((guardian) => guardian.playerId);
+    const teamIds = [...new Set(guardians.map((guardian) => guardian.player.teamId))];
+
+    const events = await prisma.event.findMany({
+      where: { teamId: { in: teamIds }, startAt: { gte: now } },
+      orderBy: { startAt: "asc" },
+      take: NEEDS_RSVP_EVENT_SCAN_LIMIT,
+      select: {
+        ...needsRsvpEventSelect,
+        teamId: true,
+        rsvps: {
+          where: { playerId: { in: guardedPlayerIds } },
+          select: { playerId: true },
+        },
+      },
+    });
+
+    for (const event of events) {
+      const answeredPlayerIds = new Set(event.rsvps.map((rsvp) => rsvp.playerId));
+      for (const guardian of guardians) {
+        if (
+          guardian.player.teamId !== event.teamId ||
+          answeredPlayerIds.has(guardian.playerId)
+        ) {
+          continue;
+        }
+        items.push(
+          toNeedsRsvpItem(event, {
+            kind: "player",
+            playerId: guardian.playerId,
+            playerName: guardian.player.name,
+          })
+        );
+      }
+    }
+  }
+
+  // ISO-8601 UTC strings sort correctly lexicographically.
+  return items
+    .sort((a, b) => a.startAt.localeCompare(b.startAt))
+    .slice(0, NEEDS_RSVP_LIMIT);
 }
 
 export type RecentMessageItem = {
@@ -381,10 +466,19 @@ export async function getAdminAttention(userId: string): Promise<AdminAttentionD
       teamName: teamNames.get(event.teamId) ?? "",
       noResponseCount: event._count.rsvps,
     })),
-    pendingInvitations: invitationGroups.map((group) => ({
-      teamId: group.teamId,
-      teamName: teamNames.get(group.teamId) ?? "",
-      count: group._count._all,
-    })),
+    // Invitation.teamId is nullable since the unified-target migration; the
+    // where clause restricts to the viewer's admin teams, so null groups
+    // cannot occur — the flatMap only narrows the type.
+    pendingInvitations: invitationGroups.flatMap((group) =>
+      group.teamId === null
+        ? []
+        : [
+            {
+              teamId: group.teamId,
+              teamName: teamNames.get(group.teamId) ?? "",
+              count: group._count._all,
+            },
+          ]
+    ),
   };
 }

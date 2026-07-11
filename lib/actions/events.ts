@@ -457,6 +457,15 @@ export async function getEvent(eventId: string) {
                 email: true,
               },
             },
+            // Per-child rows (identity graph): playerId is a scalar on the
+            // row; include the player so attendance UIs can render the
+            // child's name with "answered by" attribution.
+            player: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
           },
         },
       },

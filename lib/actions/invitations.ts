@@ -2,17 +2,42 @@
 
 import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
-import { requireTeamAdmin, requireUserId } from "@/lib/auth/session";
+import {
+  hasVenueStaffRole,
+  requireTeamAdmin,
+  requireUserId,
+  VENUE_STAFF_ADMIN_ROLES,
+} from "@/lib/auth/session";
+import { ensureLeagueUser } from "@/lib/actions/league";
 import { revalidatePath } from "next/cache";
 import { randomBytes } from "crypto";
-import { sendInvitationEmail, sendExistingUserNotification } from "@/lib/email/templates";
+import {
+  sendInvitationEmail,
+  sendExistingUserNotification,
+  sendLeagueInvitationEmail,
+  sendLeagueMemberAddedNotification,
+  sendVenueStaffSignupInviteEmail,
+} from "@/lib/email/templates";
 import { sendInvitationSchema, sendLeagueInvitationSchema, type SendInvitationInput, type SendLeagueInvitationInput } from "@/lib/utils/validation";
 
 export type ActionResult<T> =
   | { success: true; data: T }
   | { success: false; error: string; details?: unknown };
 
+// Local schema: lib/utils/validation.ts is owned by a concurrent workstream
+// this tier.
+const sendLeagueMemberInvitationSchema = z.object({
+  leagueId: z.string().cuid("Invalid league ID format"),
+  email: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .email("Invalid email address")
+    .max(254, "Email must be less than 254 characters"),
+  role: z.enum(["LEAGUE_ADMIN", "TEAM_ADMIN", "MEMBER"]).default("MEMBER"),
+});
 
+export type SendLeagueMemberInvitationInput = z.input<typeof sendLeagueMemberInvitationSchema>;
 
 /**
  * Generate a cryptographically secure random token
@@ -40,7 +65,7 @@ export async function sendInvitation(
     const [team, inviter] = await Promise.all([
       prisma.team.findUnique({
         where: { id: validated.teamId },
-        select: { name: true },
+        select: { name: true, leagueId: true },
       }),
       prisma.user.findUnique({
         where: { id: userId },
@@ -79,33 +104,41 @@ export async function sendInvitation(
       }
 
       // Add user directly to team as MEMBER
-      await prisma.$transaction([
-        prisma.teamMember.create({
+      await prisma.$transaction(async (tx) => {
+        await tx.teamMember.create({
           data: {
             userId: existingUser.id,
             teamId: validated.teamId,
             role: "MEMBER",
           },
-        }),
+        });
+
         // Link unclaimed roster entries matching the invited email to the account
-        prisma.player.updateMany({
+        await tx.player.updateMany({
           where: {
             teamId: validated.teamId,
             email: { equals: validated.email, mode: "insensitive" },
             userId: null,
           },
           data: { userId: existingUser.id },
-        }),
+        });
+
         // Link unclaimed team official entries the same way
-        prisma.teamOfficial.updateMany({
+        await tx.teamOfficial.updateMany({
           where: {
             teamId: validated.teamId,
             email: { equals: validated.email, mode: "insensitive" },
             userId: null,
           },
           data: { userId: existingUser.id },
-        }),
-      ]);
+        });
+
+        // League-identity sync: members of league-linked teams get an
+        // explicit LeagueUser row.
+        if (team.leagueId) {
+          await ensureLeagueUser(tx, existingUser.id, team.leagueId, "MEMBER");
+        }
+      });
 
       // Send notification email to existing user
       try {
@@ -319,23 +352,8 @@ export async function sendLeagueInvitation(
           data: { userId: existingUser.id },
         });
 
-        // Add to league if not already a member
-        const existingLeagueUser = await tx.leagueUser.findFirst({
-          where: {
-            userId: existingUser.id,
-            leagueId: validated.leagueId,
-          },
-        });
-
-        if (!existingLeagueUser) {
-          await tx.leagueUser.create({
-            data: {
-              userId: existingUser.id,
-              leagueId: validated.leagueId,
-              role: "MEMBER",
-            },
-          });
-        }
+        // League-identity sync: add to league if not already a member
+        await ensureLeagueUser(tx, existingUser.id, validated.leagueId, "MEMBER");
       });
 
       // Send notification email to existing user
@@ -441,24 +459,197 @@ export async function sendLeagueInvitation(
 }
 
 /**
- * Resend an expired invitation
+ * Invite someone to a league directly (not to a specific team).
+ * Only LEAGUE_ADMINs of the league may invite.
+ *
+ * Existing accounts are added immediately with the requested role. Emails
+ * without an account get a unified Invitation (league target) and join as
+ * MEMBER at signup acceptance — elevated roles can only be granted to
+ * existing accounts (the invitation carries no league-role payload).
+ */
+export async function sendLeagueMemberInvitation(
+  input: SendLeagueMemberInvitationInput
+): Promise<ActionResult<{ invited: boolean; addedDirectly: boolean }>> {
+  try {
+    const validated = sendLeagueMemberInvitationSchema.parse(input);
+
+    const userId = await requireUserId();
+    const requesterMembership = await prisma.leagueUser.findFirst({
+      where: {
+        userId,
+        leagueId: validated.leagueId,
+        role: "LEAGUE_ADMIN",
+      },
+    });
+
+    if (!requesterMembership) {
+      return {
+        success: false,
+        error: "Unauthorized: Only league admins can invite league members",
+      };
+    }
+
+    const [league, inviter] = await Promise.all([
+      prisma.league.findFirst({
+        where: { id: validated.leagueId, isActive: true },
+        select: { name: true },
+      }),
+      prisma.user.findUnique({
+        where: { id: userId },
+        select: { name: true, email: true },
+      }),
+    ]);
+
+    if (!league || !inviter) {
+      return { success: false, error: "League not found or inactive" };
+    }
+
+    const existingUser = await prisma.user.findUnique({
+      where: { email: validated.email },
+      select: { id: true },
+    });
+
+    if (existingUser) {
+      const existingMembership = await prisma.leagueUser.findUnique({
+        where: {
+          userId_leagueId: {
+            userId: existingUser.id,
+            leagueId: validated.leagueId,
+          },
+        },
+        select: { id: true },
+      });
+
+      if (existingMembership) {
+        return {
+          success: false,
+          error: "User is already a member of this league",
+        };
+      }
+
+      await ensureLeagueUser(prisma, existingUser.id, validated.leagueId, validated.role);
+
+      try {
+        await sendLeagueMemberAddedNotification({
+          email: validated.email,
+          leagueName: league.name,
+          inviterName: inviter.name || inviter.email,
+          role: validated.role,
+        });
+      } catch (error) {
+        console.error("Failed to send league notification email:", error);
+        // Don't fail the entire operation if email fails
+      }
+
+      revalidatePath(`/league/${validated.leagueId}`);
+      revalidatePath(`/league/${validated.leagueId}/roster`);
+
+      return { success: true, data: { invited: true, addedDirectly: true } };
+    }
+
+    // The Invitation row has no league-role payload, so account-less invites
+    // can only grant the default MEMBER role at acceptance.
+    if (validated.role !== "MEMBER") {
+      return {
+        success: false,
+        error:
+          "Elevated league roles can only be granted to existing accounts. Invite them as a member, or ask them to sign up first.",
+      };
+    }
+
+    const existingInvitation = await prisma.invitation.findFirst({
+      where: {
+        email: validated.email,
+        leagueId: validated.leagueId,
+        status: "PENDING",
+        expiresAt: { gt: new Date() },
+      },
+    });
+
+    if (existingInvitation) {
+      return {
+        success: false,
+        error: "An invitation has already been sent to this email",
+      };
+    }
+
+    const token = generateInvitationToken();
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7);
+
+    await prisma.invitation.create({
+      data: {
+        email: validated.email,
+        token,
+        status: "PENDING",
+        expiresAt,
+        leagueId: validated.leagueId,
+        invitedById: userId,
+      },
+    });
+
+    try {
+      await sendLeagueInvitationEmail({
+        email: validated.email,
+        leagueName: league.name,
+        inviterName: inviter.name || inviter.email,
+        token,
+      });
+    } catch (error) {
+      console.error("Failed to send league invitation email:", error);
+      // Don't fail the entire operation if email fails
+    }
+
+    revalidatePath(`/league/${validated.leagueId}`);
+    revalidatePath(`/league/${validated.leagueId}/roster`);
+
+    return { success: true, data: { invited: true, addedDirectly: false } };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return {
+        success: false,
+        error: "Invalid input",
+        details: error.issues,
+      };
+    }
+
+    console.error("Error sending league member invitation:", error);
+    return {
+      success: false,
+      error: "Failed to send invitation. Please try again.",
+    };
+  }
+}
+
+/**
+ * Resend an expired invitation (team, league, or venue-organization target).
  */
 export async function resendInvitation(
   invitationId: string
 ): Promise<ActionResult<{ invited: boolean }>> {
   try {
-    // Get the invitation first to get the teamId
+    // Get the invitation first to resolve its target
     const invitation = await prisma.invitation.findUnique({
       where: { id: invitationId },
       select: {
         id: true,
         email: true,
         teamId: true,
+        leagueId: true,
+        organizationId: true,
+        venueRole: true,
+        officialRole: true,
         team: {
           select: {
             name: true,
             leagueId: true,
           },
+        },
+        league: {
+          select: { name: true },
+        },
+        organization: {
+          select: { name: true },
         },
       },
     });
@@ -470,29 +661,50 @@ export async function resendInvitation(
       };
     }
 
-    // Check authentication and authorization
+    // Check authentication and authorization against the invitation's target
     const userId = await requireUserId();
 
-    // Check if user is team admin OR league admin
-    const isTeamAdmin = await prisma.teamMember.findFirst({
-      where: { userId, teamId: invitation.teamId, role: "ADMIN" },
-    });
+    let authorized = false;
+    if (invitation.teamId && invitation.team) {
+      // Team target: team admin OR admin of the team's league
+      const isTeamAdmin = await prisma.teamMember.findFirst({
+        where: { userId, teamId: invitation.teamId, role: "ADMIN" },
+      });
+      authorized = !!isTeamAdmin;
 
-    let isLeagueAdmin = null;
-    if (!isTeamAdmin && invitation.team.leagueId) {
-      isLeagueAdmin = await prisma.leagueUser.findFirst({
+      if (!authorized && invitation.team.leagueId) {
+        const isLeagueAdmin = await prisma.leagueUser.findFirst({
+          where: {
+            userId,
+            leagueId: invitation.team.leagueId,
+            role: "LEAGUE_ADMIN",
+          },
+        });
+        authorized = !!isLeagueAdmin;
+      }
+    } else if (invitation.leagueId) {
+      // League target: league admin
+      const isLeagueAdmin = await prisma.leagueUser.findFirst({
         where: {
           userId,
-          leagueId: invitation.team.leagueId,
+          leagueId: invitation.leagueId,
           role: "LEAGUE_ADMIN",
         },
       });
+      authorized = !!isLeagueAdmin;
+    } else if (invitation.organizationId) {
+      // Venue-organization target: active OWNER/MANAGER staff
+      authorized = await hasVenueStaffRole(
+        userId,
+        invitation.organizationId,
+        VENUE_STAFF_ADMIN_ROLES
+      );
     }
 
-    if (!isTeamAdmin && !isLeagueAdmin) {
+    if (!authorized) {
       return {
         success: false,
-        error: "Unauthorized: Only team or league admins can resend invitations",
+        error: "Unauthorized: Only admins of the invitation's target can resend it",
       };
     }
 
@@ -517,24 +729,48 @@ export async function resendInvitation(
       select: { name: true, email: true },
     });
 
-    // Send invitation email
+    // Send invitation email matching the target
     if (inviter) {
+      const inviterName = inviter.name || inviter.email;
       try {
-        await sendInvitationEmail({
-          email: invitation.email,
-          teamName: invitation.team.name,
-          inviterName: inviter.name || inviter.email,
-          token,
-        });
+        if (invitation.team) {
+          await sendInvitationEmail({
+            email: invitation.email,
+            teamName: invitation.team.name,
+            inviterName,
+            token,
+          });
+        } else if (invitation.league) {
+          await sendLeagueInvitationEmail({
+            email: invitation.email,
+            leagueName: invitation.league.name,
+            inviterName,
+            token,
+          });
+        } else if (invitation.organization) {
+          await sendVenueStaffSignupInviteEmail({
+            email: invitation.email,
+            organizationName: invitation.organization.name,
+            inviterName,
+            role: invitation.venueRole ?? "VIEWER",
+            token,
+          });
+        }
       } catch (error) {
         console.error("Failed to send invitation email:", error);
         // Don't fail the entire operation if email fails
       }
     }
 
-    revalidatePath("/roster");
-    if (invitation.team.leagueId) {
-      revalidatePath(`/league/${invitation.team.leagueId}/roster`);
+    if (invitation.teamId) {
+      revalidatePath("/roster");
+      if (invitation.team?.leagueId) {
+        revalidatePath(`/league/${invitation.team.leagueId}/roster`);
+      }
+    } else if (invitation.leagueId) {
+      revalidatePath(`/league/${invitation.leagueId}/roster`);
+    } else if (invitation.organizationId) {
+      revalidatePath(`/venue-admin/${invitation.organizationId}/staff`);
     }
 
     return {

@@ -41,12 +41,49 @@ export interface EventWithRSVPs extends LeagueEvent {
       name: string | null;
       email: string;
     };
+    // Per-child response (identity graph, Tier 3). Absent/null on
+    // self/household rows — existing consumers are unaffected.
+    playerId?: string | null;
+    player?: {
+      id: string;
+      name: string;
+    } | null;
   }>;
 }
 
 export type EventType = "GAME" | "PRACTICE";
 
 export type RSVPStatus = "GOING" | "NOT_GOING" | "MAYBE" | "NO_RESPONSE";
+
+// ---------------------------------------------------------------------------
+// Identity graph (Tier 3) — per-identity RSVP shapes.
+// Shared contracts between lib/actions/rsvp.ts (X2), lib/data/dashboard.ts and
+// the RSVP UI (X3). See docs/superpowers/specs/2026-07-11-tier3-identity-design.md.
+// ---------------------------------------------------------------------------
+
+/**
+ * Who a pending/submitted RSVP is for: the viewer themself (self/household row,
+ * RSVP.playerId null) or a linked player answered per child (RSVP.playerId set).
+ */
+export type RsvpTarget =
+  | { kind: "self" }
+  | { kind: "player"; playerId: string; playerName: string };
+
+/**
+ * One row in an event's attendance view. Player-level responses are listed
+ * where they exist and user-level otherwise; a user row and their child rows
+ * are distinct entries.
+ */
+export interface AttendanceEntry {
+  kind: "user" | "player";
+  name: string;
+  status: RSVPStatus;
+  /** Set on player entries: display name of the guardian/admin who answered. */
+  respondedByName?: string;
+}
+
+/** Attendance counts keyed by status, deduplicated per entry (not per user). */
+export type AttendanceCounts = Record<RSVPStatus, number>;
 
 // Team type for calendar filtering
 export interface TeamWithDivision {
