@@ -43,6 +43,39 @@ export async function sendVenueRelationshipInvitationEmail(
   });
 }
 
+interface VenueStaffInviteEmailData {
+  email: string;
+  organizationName: string;
+  inviterName: string;
+  /** VenueStaffRole enum value, e.g. "CONTENT_EDITOR". */
+  role: string;
+  organizationId: string;
+}
+
+function formatVenueStaffRoleLabel(role: string): string {
+  return role.toLowerCase().split("_").join(" ");
+}
+
+/**
+ * Notify an existing user that they were invited to a venue organization's
+ * staff, linking to the staff page where they can accept or decline.
+ */
+export async function sendVenueStaffInviteEmail(data: VenueStaffInviteEmailData): Promise<void> {
+  const mailchimp = getMailchimpClient();
+  const staffLink = `${BASE_URL}/venue-admin/${data.organizationId}/staff`;
+  const roleLabel = formatVenueStaffRoleLabel(data.role);
+
+  await mailchimp.messages.send({
+    message: {
+      from_email: EMAIL_FROM,
+      subject: `${data.inviterName} invited you to help manage ${data.organizationName}`,
+      html: `<p>${data.inviterName} invited you to join the staff of <strong>${data.organizationName}</strong> on OpenLeague with the ${roleLabel} role.</p><p><a href="${staffLink}">Review invitation</a></p><p>If you didn't expect this invitation, you can safely ignore this email.</p>`,
+      text: `${data.inviterName} invited you to join the staff of ${data.organizationName} on OpenLeague with the ${roleLabel} role. Review: ${staffLink}\n\nIf you didn't expect this invitation, you can safely ignore this email.`,
+      to: [{ email: data.email, type: "to" as const }],
+    },
+  });
+}
+
 export async function sendIceTimeRequestSubmittedEmail(
   data: IceTimeRequestSubmittedEmailData
 ): Promise<void> {

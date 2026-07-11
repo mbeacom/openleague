@@ -8,188 +8,160 @@ import {
   Box,
   IconButton,
   Chip,
-  TextField,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
   Button,
-  CircularProgress,
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
-import CheckIcon from "@mui/icons-material/Check";
-import CloseIcon from "@mui/icons-material/Close";
-import { updateTeamMemberUsahId } from "@/lib/actions/roster";
+import DeleteIcon from "@mui/icons-material/Delete";
+import EmailIcon from "@mui/icons-material/Email";
+import LinkIcon from "@mui/icons-material/Link";
+import { removeTeamOfficial } from "@/lib/actions/team-officials";
+import { TEAM_OFFICIAL_ROLE_LABELS } from "@/lib/utils/validation";
 import { useToast } from "@/components/ui/Toast";
-
-type TeamOfficial = {
-  id: string;
-  role: string;
-  usahMemberId: string | null;
-  user: { id: string; name: string | null; email: string };
-};
+import type { TeamOfficial } from "@/types/roster";
 
 type TeamOfficialCardProps = {
   official: TeamOfficial;
   isAdmin: boolean;
   teamId: string;
+  onEdit: () => void;
 };
 
 export default function TeamOfficialCard({
   official,
   isAdmin,
   teamId,
+  onEdit,
 }: TeamOfficialCardProps) {
-  const [editing, setEditing] = useState(false);
-  const [usahId, setUsahId] = useState(official.usahMemberId ?? "");
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
+  const [removing, setRemoving] = useState(false);
   const { showSuccess, showError } = useToast();
 
-  const displayName = official.user.name || official.user.email;
+  const roleLabel = TEAM_OFFICIAL_ROLE_LABELS[official.role];
 
-  const handleEditClick = () => {
-    setUsahId(official.usahMemberId ?? "");
-    setError(null);
-    setEditing(true);
-  };
-
-  const handleCancel = () => {
-    setEditing(false);
-    setError(null);
-  };
-
-  const validate = (val: string) => {
-    if (val.length > 20) return "USA Hockey Member ID must be 20 characters or fewer";
-    if (val && !/^[a-zA-Z0-9]+$/.test(val)) return "USA Hockey Member ID must be alphanumeric";
-    return null;
-  };
-
-  const handleSave = async () => {
-    const validationError = validate(usahId);
-    if (validationError) {
-      setError(validationError);
-      return;
-    }
-
-    setSaving(true);
-    const result = await updateTeamMemberUsahId({
-      teamMemberId: official.id,
+  const handleRemoveConfirm = async () => {
+    setRemoving(true);
+    const result = await removeTeamOfficial({
       teamId,
-      usahMemberId: usahId || null,
+      officialId: official.id,
     });
-    setSaving(false);
+    setRemoving(false);
+    setRemoveDialogOpen(false);
 
     if (!result.success) {
       showError(result.error);
     } else {
-      showSuccess("USA Hockey ID updated");
-      setEditing(false);
+      showSuccess("Official removed");
+      // revalidatePath in server action handles the update
     }
   };
 
   return (
-    <Card sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
-      <CardContent sx={{ flex: 1 }}>
-        <Box
-          sx={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "flex-start",
-            mb: 1,
-          }}
-        >
-          <Box>
-            <Typography variant="h6" component="h2">
-              {displayName}
+    <>
+      <Card sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
+        <CardContent sx={{ flex: 1 }}>
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "flex-start",
+              mb: 1,
+            }}
+          >
+            <Typography variant="h6" component="h3">
+              {official.name}
             </Typography>
-            {official.user.name && (
-              <Typography variant="body2" color="text.secondary">
-                {official.user.email}
-              </Typography>
+
+            {/* Edit/Remove Buttons (Admin only) */}
+            {isAdmin && (
+              <Box sx={{ display: "flex", gap: 0.5 }}>
+                <IconButton
+                  size="small"
+                  onClick={onEdit}
+                  aria-label="Edit official"
+                  sx={{ minWidth: 44, minHeight: 44 }}
+                >
+                  <EditIcon fontSize="small" />
+                </IconButton>
+                <IconButton
+                  size="small"
+                  onClick={() => setRemoveDialogOpen(true)}
+                  aria-label="Remove official"
+                  color="error"
+                  sx={{ minWidth: 44, minHeight: 44 }}
+                >
+                  <DeleteIcon fontSize="small" />
+                </IconButton>
+              </Box>
             )}
           </Box>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+
+          {/* Role + status chips */}
+          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, mb: 1 }}>
             <Chip
-              label={official.role === "ADMIN" ? "Admin" : "Member"}
+              label={roleLabel}
               size="small"
-              color={official.role === "ADMIN" ? "primary" : "default"}
+              color="primary"
               variant="outlined"
             />
-            {isAdmin && !editing && (
-              <IconButton
+            {official.status === "INVITED" && (
+              <Chip label="Invited" size="small" color="warning" variant="outlined" />
+            )}
+            {official.userId && (
+              <Chip
+                icon={<LinkIcon />}
+                label="Linked account"
                 size="small"
-                onClick={handleEditClick}
-                aria-label="Edit USA Hockey ID"
-                sx={{ minWidth: 44, minHeight: 44 }}
-              >
-                <EditIcon fontSize="small" />
-              </IconButton>
+                color="success"
+                variant="outlined"
+              />
             )}
           </Box>
-        </Box>
 
-        {/* USA Hockey ID — view or edit */}
-        {isAdmin && (
-          <Box sx={{ mt: 2, pt: 2, borderTop: 1, borderColor: "divider" }}>
-            <Typography
-              variant="caption"
-              color="text.secondary"
-              sx={{ fontWeight: 600, display: "block", mb: 1 }}
-            >
-              USA Hockey ID
+          {/* Free-text detail (always set for OTHER) */}
+          {official.roleDetail && (
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+              {official.roleDetail}
             </Typography>
+          )}
 
-            {editing ? (
-              <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1 }}>
-                <TextField
-                  value={usahId}
-                  onChange={(e) => {
-                    setUsahId(e.target.value);
-                    setError(validate(e.target.value));
-                  }}
-                  error={!!error}
-                  helperText={error || "Alphanumeric, up to 20 characters"}
-                  size="small"
-                  slotProps={{ htmlInput: { maxLength: 20 } }}
-                  sx={{ flex: 1 }}
-                  autoFocus
-                />
-                <Button
-                  size="small"
-                  variant="contained"
-                  onClick={handleSave}
-                  disabled={saving || !!error}
-                  sx={{ minWidth: 44, minHeight: 40, mt: 0.25 }}
-                >
-                  {saving ? (
-                    <CircularProgress size={16} color="inherit" />
-                  ) : (
-                    <CheckIcon fontSize="small" />
-                  )}
-                </Button>
-                <Button
-                  size="small"
-                  onClick={handleCancel}
-                  disabled={saving}
-                  sx={{ minWidth: 44, minHeight: 40, mt: 0.25 }}
-                >
-                  <CloseIcon fontSize="small" />
-                </Button>
-              </Box>
-            ) : (
+          {official.email && (
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <EmailIcon fontSize="small" color="action" />
               <Typography variant="body2" color="text.secondary">
-                {official.usahMemberId || (
-                  <Typography
-                    component="span"
-                    variant="body2"
-                    color="text.disabled"
-                    sx={{ fontStyle: "italic" }}
-                  >
-                    Not set
-                  </Typography>
-                )}
+                {official.email}
               </Typography>
-            )}
-          </Box>
-        )}
-      </CardContent>
-    </Card>
+            </Box>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Remove Confirmation Dialog */}
+      <Dialog open={removeDialogOpen} onClose={() => setRemoveDialogOpen(false)}>
+        <DialogTitle>Remove Official</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Remove {official.name} ({roleLabel}) from the officials list? Any
+            team admin access they have is not affected.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRemoveDialogOpen(false)} disabled={removing}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleRemoveConfirm}
+            color="error"
+            variant="contained"
+            disabled={removing}
+          >
+            {removing ? "Removing..." : "Remove"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
   );
 }

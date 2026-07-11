@@ -24,6 +24,7 @@ model User {
   rsvps                        RSVP[]
   invitations                  Invitation[]
   players                      Player[]
+  teamOfficials                TeamOfficial[]
   leagueUsers                  LeagueUser[]
   playerTransfers              PlayerTransfer[]
   sentMessages                 LeagueMessage[]
@@ -129,6 +130,7 @@ model Team {
 
   members            TeamMember[]
   players            Player[]
+  officials          TeamOfficial[]
   events             Event[]
   invitations        Invitation[]
   homeEvents         Event[]                  @relation("HomeTeam")
@@ -177,6 +179,48 @@ enum Role {
   MEMBER
 }
 
+// Team official taxonomy (coaches, managers, treasurers, volunteers).
+// Descriptive only — permissions stay on TeamMember.role; granting team admin
+// access is an explicit, separate step (decision D4).
+model TeamOfficial {
+  id         String             @id @default(cuid())
+  name       String
+  email      String?
+  role       TeamOfficialRole
+  roleDetail String? // App-level validation requires this when role is OTHER
+  status     TeamOfficialStatus @default(ACTIVE)
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+
+  teamId String
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  userId String? // Linked when the email matches a User (at create or invitation acceptance)
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  // Postgres treats NULLs as distinct, so email-less entries never collide here
+  @@unique([teamId, email, role])
+  @@index([teamId])
+  @@index([userId])
+  @@map("team_officials")
+}
+
+enum TeamOfficialRole {
+  HEAD_COACH
+  ASSISTANT_COACH
+  MANAGER
+  TREASURER
+  VOLUNTEER_COORDINATOR
+  PARENT_VOLUNTEER
+  OTHER
+}
+
+enum TeamOfficialStatus {
+  ACTIVE
+  INVITED
+  REMOVED
+}
+
 // Player model (roster information)
 // NOTE: Player represents roster entries for team members who may or may not have user accounts.
 // - Players can exist without User accounts (e.g., youth players whose parents manage RSVPs)
@@ -212,6 +256,7 @@ model Player {
   eventRegistrations EventRegistration[]
 
   @@index([leagueId]) // Optimize league-wide roster queries
+  @@index([userId]) // Optimize "my roster entries" lookups
 }
 
 // Event model
@@ -496,6 +541,7 @@ model MessageRecipient {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([messageId, userId])
+  @@index([userId, sentAt]) // Recent-messages widget: viewer's messages newest-first
   @@map("message_recipients")
 }
 

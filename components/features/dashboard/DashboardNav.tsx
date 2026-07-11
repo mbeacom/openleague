@@ -20,6 +20,7 @@ import {
   Assessment as ReportsIcon,
   SportsHockey as SportsHockeyIcon,
   Place as PlaceIcon,
+  Settings as SettingsIcon,
   DateRange as DateRangeIcon,
   Storefront as StorefrontIcon,
   ConfirmationNumber as ConfirmationNumberIcon,
@@ -74,13 +75,20 @@ export default function DashboardNav({ isLeagueMode = false }: DashboardNavProps
       { label: "Teams", path: `${leaguePrefix}/teams`, icon: <GroupsIcon /> },
       { label: "Schedule", path: `${leaguePrefix}/schedule`, icon: <CalendarIcon /> },
       { label: "Signup Events", path: "/signup-events", icon: <HowToRegIcon /> },
-      // Points to the global venues page until /league/[id]/venues ships (roadmap D1)
-      { label: "Venues", path: "/venues", icon: <PlaceIcon /> },
+      // League-scoped venues; falls back to the global page without league context
+      {
+        label: "Venues",
+        path: currentLeague ? `${leaguePrefix}/venues` : "/venues",
+        icon: <PlaceIcon />,
+      },
       { label: "Venue Admin", path: "/venue-admin", icon: <StorefrontIcon /> },
       { label: "My Registrations", path: "/my-registrations", icon: <ConfirmationNumberIcon /> },
       { label: "Roster", path: `${leaguePrefix}/roster`, icon: <PeopleIcon /> },
       { label: "Statistics", path: `${leaguePrefix}/statistics`, icon: <AnalyticsIcon /> },
       { label: "Reports", path: `${leaguePrefix}/reports`, icon: <ReportsIcon /> },
+      ...(currentLeague
+        ? [{ label: "Settings", path: `${leaguePrefix}/settings`, icon: <SettingsIcon /> }]
+        : []),
     ];
   };
 

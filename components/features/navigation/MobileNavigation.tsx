@@ -17,6 +17,7 @@ import {
   Groups as GroupsIcon,
   Logout as LogoutIcon,
   MoreVert as MoreVertIcon,
+  Settings as SettingsIcon,
   SportsHockey as SportsHockeyIcon,
   HowToReg as HowToRegIcon,
 } from '@mui/icons-material';
@@ -189,7 +190,18 @@ export default function MobileNavigation({ isLeagueMode = false }: MobileNavigat
           </ListItemIcon>
           <ListItemText>Signup Events</ListItemText>
         </MenuItem>
-        {/* Restore a Settings item when /league/[id]/settings ships (roadmap D1) */}
+        {isLeagueMode && currentLeague && (
+          <MenuItem
+            component={Link}
+            href={`/league/${currentLeague.id}/settings`}
+            onClick={handleMenuClose}
+          >
+            <ListItemIcon>
+              <SettingsIcon />
+            </ListItemIcon>
+            <ListItemText>League Settings</ListItemText>
+          </MenuItem>
+        )}
         <MenuItem onClick={handleLogout}>
           <ListItemIcon>
             <LogoutIcon />

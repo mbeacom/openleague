@@ -1,11 +1,13 @@
 import { createTheme, responsiveFontSizes } from '@mui/material/styles';
+import type { PaletteOptions } from '@mui/material/styles';
 import type { CSSProperties } from 'react';
 
 // OpenLeague "Digital Playbook" Theme
 // Inspired by athletic aesthetics and the OpenLeague brand
 // Typography: Cabinet Grotesk (distinctive geometric sans) + JetBrains Mono (data)
 // Colors: "Team Colors" from the logo - League Blue, Action Blue, Fresh Ice
-// Avoiding generic AI aesthetics - bold, athletic, purposeful design
+// Light + dark color schemes via MUI CSS theme variables (no SSR flash; toggled
+// through the data-mui-color-scheme attribute set by InitColorSchemeScript).
 
 // Custom typography style type for marketing variants
 type TypographyStyleOptions = CSSProperties & {
@@ -14,6 +16,11 @@ type TypographyStyleOptions = CSSProperties & {
 
 // Extend MUI theme interface for marketing colors
 declare module '@mui/material/styles' {
+  // Opt in to CSS theme variables typing (theme.vars, theme.colorSchemes, ...)
+  interface CssThemeVariables {
+    enabled: true;
+  }
+
   interface Palette {
     marketing: {
       primary: string;
@@ -84,54 +91,119 @@ declare module '@mui/material/Card' {
   }
 }
 
-// Create base theme with Digital Playbook color palette
+// Matches what theme.applyStyles('dark', ...) emits for our colorSchemeSelector.
+// Used inside static styleOverrides objects (kept static so theme tests can
+// assert on the light values directly).
+const DARK_SCHEME = '*:where([data-mui-color-scheme="dark"]) &';
+
+// Light scheme: the original Digital Playbook palette
+const lightPalette: PaletteOptions = {
+  primary: {
+    main: '#0D47A1', // League Blue - deep, trustworthy
+    light: '#1976D2', // Action Blue
+    dark: '#01579B',
+    contrastText: '#FFFFFF',
+  },
+  secondary: {
+    main: '#1976D2', // Action Blue - bright, energetic
+    light: '#42A5F5',
+    dark: '#1565C0',
+    contrastText: '#FFFFFF',
+  },
+  error: {
+    main: '#C62828', // Penalty Box Red
+    light: '#EF5350',
+    dark: '#B71C1C',
+  },
+  warning: {
+    main: '#F57C00',
+    light: '#FF9800',
+    dark: '#E65100',
+  },
+  success: {
+    main: '#2E7D32', // Scoreboard Green
+    light: '#4CAF50',
+    dark: '#1B5E20',
+  },
+  background: {
+    default: '#F8FAFB', // Fresh Ice - clean, crisp
+    paper: '#FFFFFF',
+  },
+  text: {
+    primary: 'rgba(0, 0, 0, 0.87)',
+    secondary: 'rgba(0, 0, 0, 0.60)',
+    disabled: 'rgba(0, 0, 0, 0.38)',
+  },
+  // Marketing-specific colors
+  marketing: {
+    primary: '#0D47A1', // League Blue
+    secondary: '#1976D2', // Action Blue
+    accent: '#2E7D32', // Scoreboard Green
+    gradient: 'linear-gradient(135deg, #0D47A1 0%, #1976D2 50%, #42A5F5 100%)',
+    hero: '#F8FAFB', // Fresh Ice
+  },
+};
+
+// Dark scheme: "Night Rink" - deep blue-gray surfaces (not pure black) that
+// suit League Blue, with the blues lightened for WCAG AA contrast on dark
+// backgrounds. Scoreboard Green / Penalty Box Red semantics preserved.
+const darkPalette: PaletteOptions = {
+  primary: {
+    main: '#64B5F6', // League Blue, lightened for contrast on dark surfaces
+    light: '#90CAF9',
+    dark: '#42A5F5',
+    contrastText: '#0A1929',
+  },
+  secondary: {
+    main: '#42A5F5', // Action Blue, lightened
+    light: '#64B5F6',
+    dark: '#1E88E5',
+    contrastText: '#0A1929',
+  },
+  error: {
+    main: '#EF5350', // Penalty Box Red, lightened
+    light: '#E57373',
+    dark: '#C62828',
+  },
+  warning: {
+    main: '#FFA726',
+    light: '#FFB74D',
+    dark: '#F57C00',
+  },
+  success: {
+    main: '#66BB6A', // Scoreboard Green, lightened
+    light: '#81C784',
+    dark: '#388E3C',
+  },
+  background: {
+    default: '#0A1929', // Night Rink - deep blue-gray
+    paper: '#102A43',
+  },
+  divider: 'rgba(144, 202, 249, 0.16)',
+  text: {
+    primary: 'rgba(236, 242, 248, 0.92)',
+    secondary: 'rgba(214, 226, 238, 0.64)',
+    disabled: 'rgba(214, 226, 238, 0.38)',
+  },
+  marketing: {
+    primary: '#64B5F6',
+    secondary: '#42A5F5',
+    accent: '#66BB6A',
+    gradient: 'linear-gradient(135deg, #0D47A1 0%, #1976D2 50%, #42A5F5 100%)',
+    hero: '#0A1929',
+  },
+};
+
+// Create base theme with Digital Playbook color schemes + CSS variables
 const baseTheme = createTheme({
-  palette: {
-    mode: 'light',
-    primary: {
-      main: '#0D47A1', // League Blue - deep, trustworthy
-      light: '#1976D2', // Action Blue
-      dark: '#01579B',
-      contrastText: '#FFFFFF',
-    },
-    secondary: {
-      main: '#1976D2', // Action Blue - bright, energetic
-      light: '#42A5F5',
-      dark: '#1565C0',
-      contrastText: '#FFFFFF',
-    },
-    error: {
-      main: '#C62828', // Penalty Box Red
-      light: '#EF5350',
-      dark: '#B71C1C',
-    },
-    warning: {
-      main: '#F57C00',
-      light: '#FF9800',
-      dark: '#E65100',
-    },
-    success: {
-      main: '#2E7D32', // Scoreboard Green
-      light: '#4CAF50',
-      dark: '#1B5E20',
-    },
-    background: {
-      default: '#F8FAFB', // Fresh Ice - clean, crisp
-      paper: '#FFFFFF',
-    },
-    text: {
-      primary: 'rgba(0, 0, 0, 0.87)',
-      secondary: 'rgba(0, 0, 0, 0.60)',
-      disabled: 'rgba(0, 0, 0, 0.38)',
-    },
-    // Marketing-specific colors
-    marketing: {
-      primary: '#0D47A1', // League Blue
-      secondary: '#1976D2', // Action Blue
-      accent: '#2E7D32', // Scoreboard Green
-      gradient: 'linear-gradient(135deg, #0D47A1 0%, #1976D2 50%, #42A5F5 100%)',
-      hero: '#F8FAFB', // Fresh Ice
-    },
+  cssVariables: {
+    // Emits [data-mui-color-scheme="light|dark"] selectors; must match the
+    // attribute set by InitColorSchemeScript (its default) in ThemeProvider.
+    colorSchemeSelector: 'data-mui-color-scheme',
+  },
+  colorSchemes: {
+    light: { palette: lightPalette },
+    dark: { palette: darkPalette },
   },
   typography: {
     // Cabinet Grotesk for headlines and UI (loaded via globals.css from Fontshare)
@@ -221,13 +293,13 @@ const baseTheme = createTheme({
   components: {
     MuiTextField: {
       styleOverrides: {
-        root: {
+        root: ({ theme }) => ({
           // Ensure adequate touch targets on mobile (48px meets WCAG 2.1 AA)
           '& .MuiInputBase-root': {
             minHeight: 48,
           },
           '& .MuiOutlinedInput-root': {
-            backgroundColor: '#FFFFFF',
+            backgroundColor: (theme.vars || theme).palette.background.paper,
             '& fieldset': {
               borderColor: 'rgba(13, 71, 161, 0.2)',
               borderWidth: 2,
@@ -236,17 +308,25 @@ const baseTheme = createTheme({
               borderColor: 'rgba(13, 71, 161, 0.5)',
             },
             '&.Mui-focused fieldset': {
-              borderColor: '#1976D2',
+              borderColor: (theme.vars || theme).palette.secondary.main,
             },
+            ...theme.applyStyles('dark', {
+              '& fieldset': {
+                borderColor: 'rgba(100, 181, 246, 0.28)',
+              },
+              '&:hover fieldset': {
+                borderColor: 'rgba(100, 181, 246, 0.56)',
+              },
+            }),
           },
           '& .MuiInputLabel-root': {
-            color: 'rgba(0, 0, 0, 0.6)',
+            color: (theme.vars || theme).palette.text.secondary,
             fontWeight: 500,
           },
           '& .MuiInputBase-input': {
-            color: 'rgba(0, 0, 0, 0.87)',
+            color: (theme.vars || theme).palette.text.primary,
           },
-        },
+        }),
       },
     },
     MuiSelect: {
@@ -295,6 +375,7 @@ const baseTheme = createTheme({
       },
       variants: [
         // Marketing CTA button variant - Action Blue with motion
+        // (marketing pages commit to the light "Fresh Ice" look)
         {
           props: { variant: 'marketing' },
           style: {
@@ -369,6 +450,16 @@ const baseTheme = createTheme({
             boxShadow: '0px 8px 32px rgba(13, 71, 161, 0.16)',
             transform: 'translateY(-4px)',
             borderColor: 'rgba(13, 71, 161, 0.15)',
+          },
+          // Blue-tinted shadows/borders vanish on dark surfaces; swap for
+          // neutral shadows and a lightened-blue hairline in dark scheme.
+          [DARK_SCHEME]: {
+            boxShadow: '0px 4px 24px rgba(0, 0, 0, 0.45)',
+            border: '1px solid rgba(144, 202, 249, 0.12)',
+            '&:hover': {
+              boxShadow: '0px 8px 32px rgba(0, 0, 0, 0.6)',
+              borderColor: 'rgba(144, 202, 249, 0.24)',
+            },
           },
         },
       },

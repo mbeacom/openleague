@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db/prisma";
 import { requireUserId, canUserCreateLeagueGames } from "@/lib/auth/session";
+import type { LeagueEvent } from "@/types/events";
 
 /**
  * Get league membership and access info for the messages page.
@@ -78,18 +79,7 @@ export async function getLeagueMessagesData(leagueId: string): Promise<{
 export async function getLeagueScheduleData(leagueId: string): Promise<{
   league: { id: string; name: string; sport: string };
   canCreateGames: boolean;
-  events: Array<{
-    id: string;
-    type: "GAME" | "PRACTICE";
-    title: string;
-    startAt: string;
-    endAt: string | null;
-    location: string;
-    opponent: string | null;
-    team: { id: string; name: string };
-    homeTeam: { id: string; name: string } | null;
-    awayTeam: { id: string; name: string } | null;
-  }>;
+  events: LeagueEvent[];
   teams: Awaited<
     ReturnType<
       typeof prisma.team.findMany<{

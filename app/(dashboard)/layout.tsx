@@ -7,6 +7,7 @@ import { LeagueProvider } from "@/components/providers/LeagueProvider";
 import BreadcrumbNav from "@/components/features/navigation/BreadcrumbNav";
 import { KeyboardShortcutsProvider } from "@/components/features/navigation/KeyboardShortcutsProvider";
 import DashboardShell from "@/components/features/dashboard/DashboardShell";
+import ThemeToggle from "@/components/ui/ThemeToggle";
 
 export default async function DashboardLayout({
   children,
@@ -33,9 +34,12 @@ export default async function DashboardLayout({
               bgcolor: "background.default",
             }}
           >
-            {/* Breadcrumb Navigation */}
-            <Box sx={{ px: 3, pt: 2 }}>
-              <BreadcrumbNav />
+            {/* Breadcrumb Navigation + theme toggle */}
+            <Box sx={{ px: 3, pt: 2, display: "flex", alignItems: "center", gap: 1 }}>
+              <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                <BreadcrumbNav />
+              </Box>
+              <ThemeToggle />
             </Box>
 
             <ErrorBoundary>

@@ -16,6 +16,9 @@ import AdminAttentionWidget, {
 import MyLeaguesWidget, {
   MyLeaguesWidgetSkeleton,
 } from "@/components/features/dashboard/widgets/MyLeaguesWidget";
+import RecentMessagesWidget, {
+  RecentMessagesWidgetSkeleton,
+} from "@/components/features/dashboard/widgets/RecentMessagesWidget";
 import { getViewerMemberships } from "@/lib/data/dashboard";
 import { getTeamVenueRelationships } from "@/lib/actions/venue-relationships";
 import { requireUserId } from "@/lib/auth/session";
@@ -89,6 +92,11 @@ export default async function DashboardPage() {
           <Suspense fallback={<MyLeaguesWidgetSkeleton />}>
             <MyLeaguesWidget userId={userId} />
           </Suspense>
+          {isLeagueMode && (
+            <Suspense fallback={<RecentMessagesWidgetSkeleton />}>
+              <RecentMessagesWidget userId={userId} />
+            </Suspense>
+          )}
           <Suspense fallback={null}>
             <VenueRelationshipsSection teamIds={teamIds} />
           </Suspense>

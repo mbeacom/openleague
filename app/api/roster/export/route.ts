@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db/prisma";
 import { getCurrentUserId, isTeamAdmin } from "@/lib/auth/session";
 import { toCsvContent } from "@/lib/utils/csv";
+import { TEAM_OFFICIAL_ROLE_LABELS } from "@/lib/utils/validation";
 
 export async function GET(request: Request) {
   try {
@@ -47,13 +48,14 @@ export async function GET(request: Request) {
           emergencyPhone: true,
         },
       }),
-      prisma.teamMember.findMany({
-        where: { teamId, role: "ADMIN" },
-        orderBy: { user: { name: "asc" } },
+      prisma.teamOfficial.findMany({
+        where: { teamId, status: { not: "REMOVED" } },
+        orderBy: [{ role: "asc" }, { name: "asc" }],
         select: {
+          name: true,
+          email: true,
           role: true,
-          usahMemberId: true,
-          user: { select: { name: true, email: true } },
+          roleDetail: true,
         },
       }),
     ]);
@@ -83,13 +85,16 @@ export async function GET(request: Request) {
     ]);
 
     const officialRows = officials.map((o) => [
-      "Team Official",
-      o.user.name || o.user.email,
-      o.user.email,
+      o.roleDetail
+        ? `${TEAM_OFFICIAL_ROLE_LABELS[o.role]} (${o.roleDetail})`
+        : TEAM_OFFICIAL_ROLE_LABELS[o.role],
+      o.name,
+      o.email,
       null,
       null,
       null,
-      o.usahMemberId,
+      // USA Hockey ID is tracked for players only
+      null,
       null,
       null,
     ]);

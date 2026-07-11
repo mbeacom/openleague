@@ -17,13 +17,17 @@
   --scoreboard-green-rgb: 46, 125, 50;
   --penalty-red: #C62828;
   --penalty-red-rgb: 198, 40, 40;
+
+  /* MUI's InitColorSchemeScript stamps data-mui-color-scheme on <html> before
+     first paint; native controls/scrollbars follow the active scheme. */
+  color-scheme: light;
 }
 
-/* Temporary until MUI colorSchemes dark mode ships: MUI surfaces are locked to
-   light, so force light native controls/scrollbars and skip the dark variable
-   flips (--background: #0a0a0a; --foreground: #ededed) for dark-OS users. */
-html {
-  color-scheme: light;
+/* Dark scheme ("Night Rink"): keep in sync with colorSchemes.dark in lib/theme.ts */
+[data-mui-color-scheme="dark"] {
+  --background: #0A1929;
+  --foreground: #EDF3F8;
+  color-scheme: dark;
 }
 
 html,
