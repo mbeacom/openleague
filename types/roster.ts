@@ -63,6 +63,25 @@ export type {
   TeamOfficialStatus,
 } from '@prisma/client';
 
+// Guardian edge (identity graph, Tier 3): a User who manages a roster Player.
+// Guardians with canRsvp answer per child via RSVP rows carrying playerId.
+// Re-exported from the Prisma model so action results and UI props stay in sync.
+export type { PlayerGuardian } from '@prisma/client';
+
+// Guardian row with the linked user's display fields (guardian chips,
+// manage dialogs, attendance attribution).
+export type GuardianWithUser = Prisma.PlayerGuardianGetPayload<{
+  include: {
+    user: {
+      select: {
+        id: true;
+        name: true;
+        email: true;
+      };
+    };
+  };
+}>;
+
 // Team member with user info (for admin views — includes usahMemberId)
 export type TeamMemberWithUser = {
   id: string;

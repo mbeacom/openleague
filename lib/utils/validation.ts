@@ -453,6 +453,25 @@ export const updateRSVPSchema = z.object({
   status: z.enum(["GOING", "NOT_GOING", "MAYBE"], {
     message: "RSVP status must be GOING, NOT_GOING, or MAYBE",
   }),
+  // Per-child response (identity graph, Tier 3): omitted = self/household row
+  // (RSVP.playerId null); set = guardian/admin answering for a roster player.
+  playerId: z.string().cuid("Invalid player ID format").optional(),
+});
+
+// Guardian validation schemas (identity graph, Tier 3)
+export const addGuardianSchema = z.object({
+  playerId: z.string().cuid("Invalid player ID format"),
+  email: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .email("Invalid email address")
+    .max(254, "Email must be less than 254 characters"),
+  relationship: optionalSanitizedString(50),
+});
+
+export const removeGuardianSchema = z.object({
+  guardianId: z.string().cuid("Invalid guardian ID format"),
 });
 
 // Invitation validation schemas
@@ -651,6 +670,10 @@ export type CreateEventInput = z.infer<typeof createEventSchema>;
 export type UpdateEventInput = z.infer<typeof updateEventSchema>;
 export type CreateInterTeamGameInput = z.infer<typeof createInterTeamGameSchema>;
 export type UpdateRSVPInput = z.infer<typeof updateRSVPSchema>;
+// Contract alias (spec: submitRSVP consumes { eventId, status, playerId? }).
+export type SubmitRSVPInput = z.infer<typeof updateRSVPSchema>;
+export type AddGuardianInput = z.infer<typeof addGuardianSchema>;
+export type RemoveGuardianInput = z.infer<typeof removeGuardianSchema>;
 export type SendInvitationInput = z.infer<typeof sendInvitationSchema>;
 export type SendLeagueInvitationInput = z.infer<typeof sendLeagueInvitationSchema>;
 export type CreateLeagueInput = z.infer<typeof createLeagueSchema>;

@@ -1,6 +1,7 @@
 "use server";
 
 import { z } from "zod";
+import type { LeagueRole, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { requireUserId } from "@/lib/auth/session";
 import { revalidatePath } from "next/cache";
@@ -40,6 +41,50 @@ import { rethrowIfNextRedirectError } from "@/lib/utils/next-errors";
 export type ActionResult<T> =
   | { success: true; data: T }
   | { success: false; error: string; details?: unknown };
+
+const LEAGUE_ROLE_RANK: Record<LeagueRole, number> = {
+  MEMBER: 1,
+  TEAM_ADMIN: 2,
+  LEAGUE_ADMIN: 3,
+};
+
+/**
+ * League-identity sync (Tier 3 canonical rule): every TeamMember of a
+ * league-linked team must have an explicit LeagueUser row. Call this wherever
+ * a TeamMember row is created for a league team (invitation acceptance,
+ * migrateTeamToLeague, team-joins-league transitions).
+ *
+ * Idempotent: creates the row when missing, upgrades the role when the
+ * requested role outranks the existing one, and never downgrades.
+ *
+ * Not a client-callable action — it must run inside a caller-owned Prisma
+ * transaction (any client invocation fails because `tx` is not serializable).
+ */
+export async function ensureLeagueUser(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  leagueId: string,
+  role: LeagueRole = "MEMBER"
+): Promise<void> {
+  const existing = await tx.leagueUser.findUnique({
+    where: { userId_leagueId: { userId, leagueId } },
+    select: { id: true, role: true },
+  });
+
+  if (!existing) {
+    await tx.leagueUser.create({
+      data: { userId, leagueId, role },
+    });
+    return;
+  }
+
+  if (LEAGUE_ROLE_RANK[role] > LEAGUE_ROLE_RANK[existing.role]) {
+    await tx.leagueUser.update({
+      where: { id: existing.id },
+      data: { role },
+    });
+  }
+}
 
 /**
  * Create a new league and assign the creator as LEAGUE_ADMIN
@@ -217,6 +262,23 @@ export async function migrateTeamToLeague(
         data: { leagueId: league.id },
       });
 
+      // League-identity sync: every existing team member gets an explicit
+      // LeagueUser row (TEAM_ADMIN for team ADMINs, MEMBER otherwise). The
+      // acting user already holds LEAGUE_ADMIN from the league create above;
+      // ensureLeagueUser never downgrades, so this is safe for them too.
+      const members = await tx.teamMember.findMany({
+        where: { teamId: validated.teamId },
+        select: { userId: true, role: true },
+      });
+      for (const member of members) {
+        await ensureLeagueUser(
+          tx,
+          member.userId,
+          league.id,
+          member.role === "ADMIN" ? "TEAM_ADMIN" : "MEMBER"
+        );
+      }
+
       return {
         league,
         team,
@@ -354,6 +416,11 @@ export async function addTeamToLeague(
         season: true,
       },
     });
+
+    // League-identity sync: the creator becomes a TeamMember ADMIN of a
+    // league-linked team, so guarantee their LeagueUser row (no-op for the
+    // league admins this action requires, but keeps the invariant explicit).
+    await ensureLeagueUser(prisma, userId, validated.leagueId, "TEAM_ADMIN");
 
     // Log audit event
     await logAuditEvent({

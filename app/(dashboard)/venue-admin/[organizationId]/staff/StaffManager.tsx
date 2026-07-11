@@ -166,7 +166,7 @@ export function StaffManager({
         <EmptyState
           icon={<PersonAddAltIcon />}
           title="No staff members yet"
-          description="Invite a colleague with an OpenLeague account to help manage this organization."
+          description="Invite a colleague by email to help manage this organization."
         />
       ) : (
         <Stack spacing={1.5}>
@@ -250,8 +250,9 @@ export function StaffManager({
           <Dialog.Content>
             <Stack spacing={2} sx={{ mt: 0.5 }}>
               <Typography variant="body2" color="text.secondary">
-                The person must already have an OpenLeague account. They&apos;ll get an email and
-                can accept the invitation from this page.
+                They&apos;ll get an email invitation. Existing OpenLeague users accept it from this
+                page; anyone else can create a free account through the invitation link and join
+                automatically.
               </Typography>
               {inviteError ? <Alert severity="error">{inviteError}</Alert> : null}
               <TextField label="Email" name="email" type="email" required autoFocus />

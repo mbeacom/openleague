@@ -22,10 +22,21 @@ function SignupForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // Get invitation parameters from URL
+  // Get invitation parameters from URL (unified invitations target exactly
+  // one of team / league / venue organization)
   const invitationEmail = searchParams.get("email");
   const invitationToken = searchParams.get("invitationToken");
   const teamName = searchParams.get("teamName");
+  const leagueName = searchParams.get("leagueName");
+  const organizationName = searchParams.get("organizationName");
+
+  const invitationSubtitle = teamName
+    ? `Join ${teamName} on openleague`
+    : leagueName
+      ? `Join the ${leagueName} league on openleague`
+      : organizationName
+        ? `Join ${organizationName}'s staff on openleague`
+        : null;
 
   const [formData, setFormData] = useState({
     email: invitationEmail || "",
@@ -160,9 +171,7 @@ function SignupForm() {
           Create Account
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-          {teamName
-            ? `Join ${teamName} on openleague`
-            : "Sign up to start managing your team"}
+          {invitationSubtitle ?? "Sign up to start managing your team"}
         </Typography>
 
         {generalError && (

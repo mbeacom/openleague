@@ -2,15 +2,15 @@ import { Suspense } from "react";
 import { Typography, Box, CircularProgress } from "@mui/material";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { isSystemAdmin, requireUserId } from "@/lib/auth/session";
+import { isAnyLeagueAdmin, requireUserId } from "@/lib/auth/session";
 import { getAllUsers } from "@/lib/actions/admin";
 import UserApprovalList from "@/components/features/admin/UserApprovalList";
 
 async function UserManagementContent() {
   const userId = await requireUserId();
 
-  // Check if user is system admin
-  const isAdmin = await isSystemAdmin(userId);
+  // Check if user is an admin (LEAGUE_ADMIN of any league)
+  const isAdmin = await isAnyLeagueAdmin(userId);
 
   if (!isAdmin) {
     return (

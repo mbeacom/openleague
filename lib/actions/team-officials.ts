@@ -1,10 +1,16 @@
 "use server";
 
 import { z } from "zod";
+import { randomBytes } from "crypto";
 import { Prisma, type TeamOfficial } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { requireTeamAdmin, requireTeamMember } from "@/lib/auth/session";
+import { ensureLeagueUser } from "@/lib/actions/league";
 import { revalidatePath } from "next/cache";
+import {
+  sendExistingUserNotification,
+  sendTeamOfficialInviteEmail,
+} from "@/lib/email/templates";
 import {
   createTeamOfficialSchema,
   updateTeamOfficialSchema,
@@ -17,6 +23,36 @@ import {
 export type ActionResult<T> =
   | { success: true; data: T }
   | { success: false; error: string; details?: unknown };
+
+// Local schema: lib/utils/validation.ts is owned by a concurrent workstream
+// this tier. Mirrors teamOfficialBaseSchema's constraints.
+const inviteTeamOfficialSchema = z
+  .object({
+    teamId: z.string().cuid("Invalid team ID format"),
+    email: z
+      .string()
+      .trim()
+      .toLowerCase()
+      .email("Invalid email address")
+      .max(254, "Email must be less than 254 characters"),
+    name: z.string().trim().min(1, "Name is required").max(100),
+    role: z.enum([
+      "HEAD_COACH",
+      "ASSISTANT_COACH",
+      "MANAGER",
+      "TREASURER",
+      "VOLUNTEER_COORDINATOR",
+      "PARENT_VOLUNTEER",
+      "OTHER",
+    ]),
+    roleDetail: z.string().trim().max(100).optional(),
+  })
+  .refine((data) => data.role !== "OTHER" || !!data.roleDetail, {
+    message: "Please describe the role when selecting Other",
+    path: ["roleDetail"],
+  });
+
+export type InviteTeamOfficialInput = z.input<typeof inviteTeamOfficialSchema>;
 
 function revalidateRosterPaths(teamId: string) {
   revalidatePath("/roster");
@@ -118,6 +154,16 @@ export async function createTeamOfficial(
             role: "ADMIN",
           },
         });
+
+        // League-identity sync: team admins of league-linked teams get an
+        // explicit LeagueUser TEAM_ADMIN row.
+        const team = await tx.team.findUnique({
+          where: { id: validated.teamId },
+          select: { leagueId: true },
+        });
+        if (team?.leagueId) {
+          await ensureLeagueUser(tx, linkedUser.id, team.leagueId, "TEAM_ADMIN");
+        }
       }
 
       return row;
@@ -142,6 +188,202 @@ export async function createTeamOfficial(
     return {
       success: false,
       error: "Failed to add official. Please try again.",
+    };
+  }
+}
+
+/**
+ * Invite someone to join the team as an official (coach, manager, ...).
+ * Only ADMIN role can invite.
+ *
+ * Existing OpenLeague users are linked immediately (ACTIVE entry, fast path).
+ * Emails without an account get an INVITED TeamOfficial entry plus a unified
+ * Invitation carrying the officialRole payload — at signup acceptance the
+ * entry is linked to the new account, they join the team as MEMBER, and
+ * league-linked teams also get their LeagueUser row.
+ */
+export async function inviteTeamOfficial(
+  input: InviteTeamOfficialInput
+): Promise<ActionResult<{ official: TeamOfficial; invited: boolean; addedDirectly: boolean }>> {
+  try {
+    const validated = inviteTeamOfficialSchema.parse(input);
+    const inviterId = await requireTeamAdmin(validated.teamId);
+
+    const [team, inviter, linkedUser] = await Promise.all([
+      prisma.team.findUnique({
+        where: { id: validated.teamId },
+        select: { name: true },
+      }),
+      prisma.user.findUnique({
+        where: { id: inviterId },
+        select: { name: true, email: true },
+      }),
+      findUserByEmail(validated.email),
+    ]);
+
+    if (!team || !inviter) {
+      return {
+        success: false,
+        error: "Internal server error: Team or inviter not found.",
+      };
+    }
+
+    const roleDetail = validated.roleDetail || null;
+
+    // The [teamId, email, role] slot may be held by a live entry (conflict)
+    // or a soft-removed one (reactivate below).
+    const existingOfficial = await prisma.teamOfficial.findFirst({
+      where: {
+        teamId: validated.teamId,
+        email: { equals: validated.email, mode: "insensitive" },
+        role: validated.role,
+      },
+      select: { id: true, status: true },
+    });
+
+    if (existingOfficial && existingOfficial.status !== "REMOVED") {
+      return {
+        success: false,
+        error: "An official with this email and role already exists",
+      };
+    }
+
+    const inviterName = inviter.name || inviter.email;
+
+    if (linkedUser) {
+      // Fast path: existing account — link the official entry immediately.
+      const official = existingOfficial
+        ? await prisma.teamOfficial.update({
+            where: { id: existingOfficial.id },
+            data: {
+              name: validated.name,
+              roleDetail,
+              status: "ACTIVE",
+              userId: linkedUser.id,
+            },
+          })
+        : await prisma.teamOfficial.create({
+            data: {
+              teamId: validated.teamId,
+              name: validated.name,
+              email: validated.email,
+              role: validated.role,
+              roleDetail,
+              status: "ACTIVE",
+              userId: linkedUser.id,
+            },
+          });
+
+      try {
+        await sendExistingUserNotification({
+          email: validated.email,
+          teamName: team.name,
+          inviterName,
+        });
+      } catch (emailError) {
+        console.error("Failed to send official notification email:", emailError);
+      }
+
+      revalidateRosterPaths(validated.teamId);
+      return {
+        success: true,
+        data: { official, invited: true, addedDirectly: true },
+      };
+    }
+
+    // Account-less path: INVITED entry + unified Invitation with the
+    // officialRole payload.
+    const pendingInvitation = await prisma.invitation.findFirst({
+      where: {
+        email: validated.email,
+        teamId: validated.teamId,
+        status: "PENDING",
+        expiresAt: { gt: new Date() },
+      },
+      select: { id: true },
+    });
+
+    if (pendingInvitation) {
+      return {
+        success: false,
+        error: "An invitation has already been sent to this email",
+      };
+    }
+
+    const token = randomBytes(32).toString("hex");
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7);
+
+    const official = await prisma.$transaction(async (tx) => {
+      const row = existingOfficial
+        ? await tx.teamOfficial.update({
+            where: { id: existingOfficial.id },
+            data: {
+              name: validated.name,
+              roleDetail,
+              status: "INVITED",
+              userId: null,
+            },
+          })
+        : await tx.teamOfficial.create({
+            data: {
+              teamId: validated.teamId,
+              name: validated.name,
+              email: validated.email,
+              role: validated.role,
+              roleDetail,
+              status: "INVITED",
+            },
+          });
+
+      await tx.invitation.create({
+        data: {
+          email: validated.email,
+          token,
+          status: "PENDING",
+          expiresAt,
+          teamId: validated.teamId,
+          officialRole: validated.role,
+          invitedById: inviterId,
+        },
+      });
+
+      return row;
+    });
+
+    try {
+      await sendTeamOfficialInviteEmail({
+        email: validated.email,
+        teamName: team.name,
+        inviterName,
+        role: validated.role,
+        token,
+      });
+    } catch (emailError) {
+      console.error("Failed to send official invite email:", emailError);
+    }
+
+    revalidateRosterPaths(validated.teamId);
+    return {
+      success: true,
+      data: { official, invited: true, addedDirectly: false },
+    };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return { success: false, error: "Invalid input", details: error.issues };
+    }
+
+    if (isUniqueConstraintError(error)) {
+      return {
+        success: false,
+        error: "An official with this email and role already exists",
+      };
+    }
+
+    console.error("Error inviting team official:", error);
+    return {
+      success: false,
+      error: "Failed to invite official. Please try again.",
     };
   }
 }
@@ -209,6 +451,16 @@ export async function updateTeamOfficial(
           update: { role: "ADMIN" },
           create: { userId, teamId: validated.teamId, role: "ADMIN" },
         });
+
+        // League-identity sync: team admins of league-linked teams get an
+        // explicit LeagueUser TEAM_ADMIN row.
+        const team = await tx.team.findUnique({
+          where: { id: validated.teamId },
+          select: { leagueId: true },
+        });
+        if (team?.leagueId) {
+          await ensureLeagueUser(tx, userId, team.leagueId, "TEAM_ADMIN");
+        }
       }
 
       return row;

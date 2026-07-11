@@ -21,12 +21,20 @@ const {
     league: {
       create: vi.fn(),
     },
+    leagueUser: {
+      findUnique: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+    },
     player: {
       updateMany: vi.fn(),
     },
     team: {
       update: vi.fn(),
       updateMany: vi.fn(),
+    },
+    teamMember: {
+      findMany: vi.fn(),
     },
   };
 
@@ -54,6 +62,9 @@ const {
       },
       leagueUser: {
         findFirst: vi.fn(),
+        findUnique: vi.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
       },
       player: {
         count: vi.fn(),
@@ -122,10 +133,12 @@ import {
   createDivision,
   createLeague,
   deleteDivision,
+  ensureLeagueUser,
   getLeagueStatisticsData,
   getLeagueTeamsPaginated,
   migrateTeamToLeague,
 } from "@/lib/actions/league";
+import type { Prisma } from "@prisma/client";
 
 const USER_ID = "user-1";
 const LEAGUE_ID = "clleague00000000000000000";
@@ -148,6 +161,14 @@ beforeEach(() => {
     hasAccess: true,
     userId: USER_ID,
     accessLevel: 3,
+  });
+  // League-identity sync defaults: no team members to backfill, and the
+  // acting league admin already has a LeagueUser row.
+  mockTx.teamMember.findMany.mockResolvedValue([]);
+  mockTx.leagueUser.findUnique.mockResolvedValue(null);
+  mockPrisma.leagueUser.findUnique.mockResolvedValue({
+    id: "league-user-admin",
+    role: "LEAGUE_ADMIN",
   });
 });
 
@@ -243,6 +264,19 @@ describe("league Server Actions", () => {
       mockTx.team.update.mockResolvedValue({ id: TEAM_ID, name: "Sharks" });
       mockTx.event.updateMany.mockResolvedValue({ count: 12 });
       mockTx.player.updateMany.mockResolvedValue({ count: 18 });
+      mockTx.teamMember.findMany.mockResolvedValue([
+        { userId: USER_ID, role: "ADMIN" },
+        { userId: "user-2", role: "ADMIN" },
+        { userId: "user-3", role: "MEMBER" },
+      ]);
+      // The acting admin already got LEAGUE_ADMIN from the league create;
+      // the other members have no LeagueUser row yet.
+      mockTx.leagueUser.findUnique.mockImplementation(
+        async ({ where }: { where: { userId_leagueId: { userId: string } } }) =>
+          where.userId_leagueId.userId === USER_ID
+            ? { id: "league-user-1", role: "LEAGUE_ADMIN" }
+            : null
+      );
 
       const result = await migrateTeamToLeague({
         teamId: TEAM_ID,
@@ -278,6 +312,17 @@ describe("league Server Actions", () => {
         where: { teamId: TEAM_ID },
         data: { leagueId: LEAGUE_ID },
       });
+      // League-identity sync: every existing member gets a LeagueUser row
+      // (TEAM_ADMIN for team ADMINs, MEMBER otherwise); the acting admin's
+      // LEAGUE_ADMIN row is never downgraded.
+      expect(mockTx.leagueUser.create).toHaveBeenCalledWith({
+        data: { userId: "user-2", leagueId: LEAGUE_ID, role: "TEAM_ADMIN" },
+      });
+      expect(mockTx.leagueUser.create).toHaveBeenCalledWith({
+        data: { userId: "user-3", leagueId: LEAGUE_ID, role: "MEMBER" },
+      });
+      expect(mockTx.leagueUser.create).toHaveBeenCalledTimes(2);
+      expect(mockTx.leagueUser.update).not.toHaveBeenCalled();
       expect(mockLogAuditEvent).toHaveBeenCalledWith(
         expect.objectContaining({
           action: "team_migrated",
@@ -577,6 +622,46 @@ describe("league Server Actions", () => {
         error: "Unauthorized - you are not a member of this league",
       });
       expect(mockGetLeagueStatistics).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("ensureLeagueUser", () => {
+    const tx = mockTx as unknown as Prisma.TransactionClient;
+
+    it("creates a MEMBER row (default role) when none exists", async () => {
+      mockTx.leagueUser.findUnique.mockResolvedValue(null);
+
+      await ensureLeagueUser(tx, USER_ID, LEAGUE_ID);
+
+      expect(mockTx.leagueUser.findUnique).toHaveBeenCalledWith({
+        where: { userId_leagueId: { userId: USER_ID, leagueId: LEAGUE_ID } },
+        select: { id: true, role: true },
+      });
+      expect(mockTx.leagueUser.create).toHaveBeenCalledWith({
+        data: { userId: USER_ID, leagueId: LEAGUE_ID, role: "MEMBER" },
+      });
+      expect(mockTx.leagueUser.update).not.toHaveBeenCalled();
+    });
+
+    it("upgrades an existing row when the requested role outranks it", async () => {
+      mockTx.leagueUser.findUnique.mockResolvedValue({ id: "lu-1", role: "MEMBER" });
+
+      await ensureLeagueUser(tx, USER_ID, LEAGUE_ID, "TEAM_ADMIN");
+
+      expect(mockTx.leagueUser.create).not.toHaveBeenCalled();
+      expect(mockTx.leagueUser.update).toHaveBeenCalledWith({
+        where: { id: "lu-1" },
+        data: { role: "TEAM_ADMIN" },
+      });
+    });
+
+    it("never downgrades an existing higher role", async () => {
+      mockTx.leagueUser.findUnique.mockResolvedValue({ id: "lu-1", role: "LEAGUE_ADMIN" });
+
+      await ensureLeagueUser(tx, USER_ID, LEAGUE_ID, "MEMBER");
+
+      expect(mockTx.leagueUser.create).not.toHaveBeenCalled();
+      expect(mockTx.leagueUser.update).not.toHaveBeenCalled();
     });
   });
 });

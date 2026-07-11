@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { randomBytes } from "crypto";
 import { Prisma, type VenueStaffRole } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
@@ -11,7 +12,10 @@ import {
   VENUE_STAFF_ADMIN_ROLES,
 } from "@/lib/auth/session";
 import type { ActionResult } from "@/lib/actions/venue-organizations";
-import { sendVenueStaffInviteEmail } from "@/lib/email/templates";
+import {
+  sendVenueStaffInviteEmail,
+  sendVenueStaffSignupInviteEmail,
+} from "@/lib/email/templates";
 import { rethrowIfNextRedirectError } from "@/lib/utils/next-errors";
 
 // Schemas are local to this module: lib/utils/validation.ts is owned by a
@@ -62,14 +66,17 @@ function revalidateStaffPaths(organizationId: string) {
 }
 
 /**
- * Invite an existing OpenLeague user to an organization's staff (org-wide row,
- * venueId null). OWNER/MANAGER may invite; only an OWNER can grant OWNER.
- * Account-less invites are deferred to the unified Invitation model (Tier 3)
- * because VenueStaff.userId is required.
+ * Invite someone to an organization's staff (org-wide row, venueId null).
+ * OWNER/MANAGER may invite; only an OWNER can grant OWNER.
+ *
+ * Existing OpenLeague users get an INVITED VenueStaff row they accept in-app.
+ * Emails without an account get a unified Invitation (organization target,
+ * venueRole payload); the ACTIVE VenueStaff row is created when they sign up
+ * through the invitation link. `staffId` is null on that account-less path.
  */
 export async function inviteVenueStaff(
   input: InviteVenueStaffInput
-): Promise<ActionResult<{ staffId: string }>> {
+): Promise<ActionResult<{ staffId: string | null }>> {
   try {
     const validated = inviteVenueStaffSchema.parse(input);
     const inviterId = await requireVenueStaffRole(validated.organizationId, VENUE_STAFF_ADMIN_ROLES);
@@ -99,12 +106,54 @@ export async function inviteVenueStaff(
     if (!organization) {
       return { success: false, error: "Venue organization not found" };
     }
+
     if (!invitee) {
-      return {
-        success: false,
-        error:
-          "No OpenLeague account matches that email yet. Ask them to sign up first, then send the invitation.",
-      };
+      // Account-less invite: create a unified Invitation row carrying the
+      // venueRole payload; the VenueStaff row is created at signup acceptance.
+      const pendingInvitation = await prisma.invitation.findFirst({
+        where: {
+          email: validated.email,
+          organizationId: validated.organizationId,
+          status: "PENDING",
+          expiresAt: { gt: new Date() },
+        },
+        select: { id: true },
+      });
+
+      if (pendingInvitation) {
+        return { success: false, error: "That person already has a pending invitation." };
+      }
+
+      const token = randomBytes(32).toString("hex");
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 7);
+
+      await prisma.invitation.create({
+        data: {
+          email: validated.email,
+          token,
+          status: "PENDING",
+          expiresAt,
+          organizationId: validated.organizationId,
+          venueRole: validated.role,
+          invitedById: inviterId,
+        },
+      });
+
+      try {
+        await sendVenueStaffSignupInviteEmail({
+          email: validated.email,
+          organizationName: organization.name,
+          inviterName: inviter?.name || inviter?.email || "A venue administrator",
+          role: validated.role,
+          token,
+        });
+      } catch (emailError) {
+        console.error("Failed to send venue staff signup invite email:", emailError);
+      }
+
+      revalidateStaffPaths(validated.organizationId);
+      return { success: true, data: { staffId: null } };
     }
 
     // Org-wide staff rows use a null venueId; Postgres treats NULLs as

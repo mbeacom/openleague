@@ -7,15 +7,21 @@ const {
   mockRequireVenueStaffRole,
   mockGetUserVenueStaffRole,
   mockSendVenueStaffInviteEmail,
+  mockSendVenueStaffSignupInviteEmail,
   mockPrisma,
 } = vi.hoisted(() => ({
   mockRequireUserId: vi.fn(),
   mockRequireVenueStaffRole: vi.fn(),
   mockGetUserVenueStaffRole: vi.fn(),
   mockSendVenueStaffInviteEmail: vi.fn(),
+  mockSendVenueStaffSignupInviteEmail: vi.fn(),
   mockPrisma: {
     venueOrganization: { findFirst: vi.fn() },
     user: { findUnique: vi.fn() },
+    invitation: {
+      findFirst: vi.fn(),
+      create: vi.fn(),
+    },
     venueStaff: {
       findFirst: vi.fn(),
       findMany: vi.fn(),
@@ -36,6 +42,8 @@ vi.mock("@/lib/auth/session", () => ({
 vi.mock("@/lib/db/prisma", () => ({ prisma: mockPrisma }));
 vi.mock("@/lib/email/templates", () => ({
   sendVenueStaffInviteEmail: (...args: unknown[]) => mockSendVenueStaffInviteEmail(...args),
+  sendVenueStaffSignupInviteEmail: (...args: unknown[]) =>
+    mockSendVenueStaffSignupInviteEmail(...args),
 }));
 
 import {
@@ -70,6 +78,8 @@ beforeEach(() => {
   mockPrisma.venueStaff.findFirst.mockResolvedValue(null);
   mockPrisma.venueStaff.create.mockResolvedValue({ id: STAFF_ID });
   mockPrisma.venueStaff.update.mockResolvedValue({ id: STAFF_ID, role: "MANAGER" });
+  mockPrisma.invitation.findFirst.mockResolvedValue(null);
+  mockPrisma.invitation.create.mockResolvedValue({ id: "invitation-1" });
   // Transactions run against the same mock client.
   mockPrisma.$transaction.mockImplementation(async (fn: (tx: typeof mockPrisma) => unknown) =>
     fn(mockPrisma)
@@ -106,19 +116,54 @@ describe("inviteVenueStaff", () => {
     );
   });
 
-  it("returns a friendly error when no account matches the email", async () => {
+  it("creates a unified Invitation with the venueRole payload when no account matches", async () => {
+    const result = await inviteVenueStaff({
+      organizationId: ORG_ID,
+      email: "nobody@example.com",
+      role: "SCHEDULER",
+    });
+
+    expect(result).toEqual({ success: true, data: { staffId: null } });
+    expect(mockPrisma.venueStaff.create).not.toHaveBeenCalled();
+    expect(mockPrisma.invitation.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          email: "nobody@example.com",
+          status: "PENDING",
+          organizationId: ORG_ID,
+          venueRole: "SCHEDULER",
+          invitedById: INVITER_ID,
+          token: expect.any(String),
+          expiresAt: expect.any(Date),
+        }),
+      })
+    );
+    expect(mockSendVenueStaffSignupInviteEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        email: "nobody@example.com",
+        organizationName: "North Rink",
+        role: "SCHEDULER",
+        token: expect.any(String),
+      })
+    );
+    expect(mockSendVenueStaffInviteEmail).not.toHaveBeenCalled();
+  });
+
+  it("dedupes a still-pending account-less invitation", async () => {
+    mockPrisma.invitation.findFirst.mockResolvedValue({ id: "invitation-1" });
+
     const result = await inviteVenueStaff({
       organizationId: ORG_ID,
       email: "nobody@example.com",
       role: "VIEWER",
     });
 
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      expect(result.error).toContain("sign up first");
-    }
-    expect(mockPrisma.venueStaff.create).not.toHaveBeenCalled();
-    expect(mockSendVenueStaffInviteEmail).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      success: false,
+      error: "That person already has a pending invitation.",
+    });
+    expect(mockPrisma.invitation.create).not.toHaveBeenCalled();
+    expect(mockSendVenueStaffSignupInviteEmail).not.toHaveBeenCalled();
   });
 
   it("blocks a MANAGER from granting the OWNER role", async () => {

@@ -19,9 +19,11 @@ import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EmailIcon from "@mui/icons-material/Email";
 import PhoneIcon from "@mui/icons-material/Phone";
+import SupervisorAccountIcon from "@mui/icons-material/SupervisorAccount";
 import Chip from "@mui/material/Chip";
 import { deletePlayer } from "@/lib/actions/roster";
-import type { Player } from "@/types/roster";
+import ManageGuardiansDialog from "./ManageGuardiansDialog";
+import type { GuardianWithUser, Player } from "@/types/roster";
 
 type PlayerCardProps = {
   player: Player;
@@ -37,6 +39,10 @@ export default function PlayerCard({
   onEdit,
 }: PlayerCardProps) {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [guardiansDialogOpen, setGuardiansDialogOpen] = useState(false);
+  // Guardian names for the chips row. null = not loaded yet — guardians load
+  // lazily inside the manage dialog to keep the roster query lean.
+  const [guardians, setGuardians] = useState<GuardianWithUser[] | null>(null);
   const [snackbar, setSnackbar] = useState<{
     open: boolean;
     message: string;
@@ -214,8 +220,70 @@ export default function PlayerCard({
               )}
             </Box>
           )}
+
+          {/* Guardians (Admin only) */}
+          {isAdmin && (
+            <Box
+              sx={{
+                mt: 2,
+                pt: 1,
+                borderTop: 1,
+                borderColor: "divider",
+              }}
+            >
+              <Box
+                sx={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: 1,
+                }}
+              >
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ fontWeight: 600 }}
+                >
+                  Guardians
+                </Typography>
+                <Button
+                  size="small"
+                  startIcon={<SupervisorAccountIcon />}
+                  onClick={() => setGuardiansDialogOpen(true)}
+                  aria-label={`Manage guardians for ${player.name}`}
+                  sx={{ minHeight: 44 }}
+                >
+                  Manage guardians
+                </Button>
+              </Box>
+              {guardians && guardians.length > 0 && (
+                <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, mt: 0.5 }}>
+                  {guardians.map((guardian) => (
+                    <Chip
+                      key={guardian.id}
+                      size="small"
+                      variant="outlined"
+                      icon={<SupervisorAccountIcon />}
+                      label={guardian.user.name || guardian.user.email}
+                    />
+                  ))}
+                </Box>
+              )}
+            </Box>
+          )}
         </CardContent>
       </Card>
+
+      {/* Manage Guardians Dialog (Admin only) */}
+      {isAdmin && (
+        <ManageGuardiansDialog
+          open={guardiansDialogOpen}
+          onClose={() => setGuardiansDialogOpen(false)}
+          playerId={player.id}
+          playerName={player.name}
+          onGuardiansChange={setGuardians}
+        />
+      )}
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onClose={handleDeleteCancel}>

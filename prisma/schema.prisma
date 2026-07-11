@@ -24,6 +24,7 @@ model User {
   rsvps                        RSVP[]
   invitations                  Invitation[]
   players                      Player[]
+  playerGuardians              PlayerGuardian[]
   teamOfficials                TeamOfficial[]
   leagueUsers                  LeagueUser[]
   playerTransfers              PlayerTransfer[]
@@ -254,9 +255,31 @@ model Player {
   transfers PlayerTransfer[]
 
   eventRegistrations EventRegistration[]
+  guardians          PlayerGuardian[]
+  rsvps              RSVP[]
 
   @@index([leagueId]) // Optimize league-wide roster queries
   @@index([userId]) // Optimize "my roster entries" lookups
+}
+
+// Guardian edge: a User who manages a roster Player (parent/guardian household
+// link). Identity graph (Tier 3) — User remains the hub; this is an edge, not
+// a Person refactor. Guardians with canRsvp answer per child via RSVP.playerId.
+model PlayerGuardian {
+  id           String   @id @default(cuid())
+  relationship String? // Display-only free text (e.g. "Mother", "Guardian")
+  canRsvp      Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  playerId String
+  player   Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([playerId, userId])
+  @@index([userId])
+  @@map("player_guardians")
 }
 
 // Event model
@@ -328,7 +351,17 @@ model RSVP {
   eventId String
   event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, eventId])
+  // Per-child response (identity graph, decision D5): null keeps the row a
+  // "self/household" response; guardians and admins answer per child via rows
+  // carrying playerId. Event fan-out stays user-level (playerId null).
+  playerId String?
+  player   Player? @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  // Postgres treats NULLs as distinct in composite uniques, so a raw-SQL
+  // partial unique index "RSVP_userId_eventId_self_key" ON (userId, eventId)
+  // WHERE playerId IS NULL backs this up (see identity_graph migration).
+  @@unique([userId, eventId, playerId])
+  @@index([playerId])
 }
 
 enum RSVPStatus {
@@ -338,7 +371,11 @@ enum RSVPStatus {
   NO_RESPONSE
 }
 
-// Invitation model
+// Invitation model — unified target (identity graph): exactly one of
+// teamId / leagueId / organizationId is set, enforced by the raw-SQL CHECK
+// constraint "Invitation_exactly_one_target" (not expressible in Prisma DSL).
+// Optional role payloads are applied at acceptance (TeamOfficial / VenueStaff
+// row created or userId-linked inside the acceptance transaction).
 model Invitation {
   id        String           @id @default(cuid())
   email     String
@@ -348,11 +385,25 @@ model Invitation {
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
 
-  teamId String
-  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  teamId String?
+  team   Team?   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  leagueId String?
+  league   League? @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  organizationId String?
+  organization   VenueOrganization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // Role payloads applied at acceptance (team target → TeamOfficial link,
+  // organization target → VenueStaff membership).
+  officialRole TeamOfficialRole?
+  venueRole    VenueStaffRole?
 
   invitedById String
   invitedBy   User   @relation(fields: [invitedById], references: [id])
+
+  @@index([leagueId])
+  @@index([organizationId])
 }
 
 enum InvitationStatus {
@@ -391,6 +442,7 @@ model League {
   events                  Event[]
   players                 Player[]
   users                   LeagueUser[]
+  invitations             Invitation[]
   playerTransfers         PlayerTransfer[]
   messages                LeagueMessage[]
   notificationPreferences NotificationPreference[]
@@ -933,6 +985,7 @@ model VenueOrganization {
   staff              VenueStaff[]
   payments           Payment[]
   hostedSignupEvents SignupEvent[]
+  invitations        Invitation[]
 
   @@index([createdById])
   @@index([status])

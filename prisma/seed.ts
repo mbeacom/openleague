@@ -30,6 +30,26 @@ function hoursAfter(date: Date, hours: number): Date {
   return new Date(date.getTime() + hours * HOUR_MS)
 }
 
+type SeedRsvpStatus = 'GOING' | 'NOT_GOING' | 'MAYBE' | 'NO_RESPONSE'
+
+/**
+ * Idempotently ensure a self/household RSVP row (playerId null). The composite
+ * unique (userId, eventId, playerId) rejects null members, so upsert can't
+ * target these rows — integrity comes from the partial unique index
+ * "RSVP_userId_eventId_self_key"; existing rows are left untouched (matches
+ * the old `update: {}` upsert semantics).
+ */
+async function ensureSelfRsvp(userId: string, eventId: string, status: SeedRsvpStatus) {
+  const existing = await prisma.rSVP.findFirst({
+    where: { userId, eventId, playerId: null },
+    select: { id: true },
+  })
+  if (existing) return
+  await prisma.rSVP.create({
+    data: { userId, eventId, status },
+  })
+}
+
 /**
  * Refuse to seed anything that doesn't look like a local/dev database.
  * Neon hostnames are identical between production and dev branches, so
@@ -664,34 +684,76 @@ async function main() {
     },
   })
 
-  // Create test RSVPs for hockey game
-  await prisma.rSVP.upsert({
-    where: {
-      userId_eventId: {
-        userId: adminUser.id,
-        eventId: hockeyGame.id,
-      },
-    },
-    update: {},
+  // Create test RSVPs for hockey game (self/household rows, playerId null)
+  await ensureSelfRsvp(adminUser.id, hockeyGame.id, 'GOING')
+  await ensureSelfRsvp(memberUser.id, hockeyGame.id, 'MAYBE')
+
+  // Guardian fixtures (identity graph, Tier 3): parent@test.com guards the two
+  // hockey players without linked accounts. One per-child RSVP is answered
+  // (Dylan GOING on the hockey game); the other (Sam) has no per-child row —
+  // per-child rows are only created on response, so Sam shows as pending.
+  const parentUser = await prisma.user.upsert({
+    where: { email: 'parent@test.com' },
+    update: { approved: true },
     create: {
-      userId: adminUser.id,
-      eventId: hockeyGame.id,
-      status: 'GOING',
+      email: 'parent@test.com',
+      passwordHash: memberPassword,
+      name: 'Test Parent',
+      approved: true,
     },
   })
 
-  await prisma.rSVP.upsert({
+  await prisma.teamMember.upsert({
     where: {
-      userId_eventId: {
-        userId: memberUser.id,
-        eventId: hockeyGame.id,
+      userId_teamId: {
+        userId: parentUser.id,
+        teamId: hockeyTeam.id,
       },
     },
     update: {},
     create: {
-      userId: memberUser.id,
+      userId: parentUser.id,
+      teamId: hockeyTeam.id,
+      role: 'MEMBER',
+    },
+  })
+
+  const dylanPlayerId = 'cseedplayer00000000000003' // Dylan Bouchard (no linked user)
+  const samPlayerId = 'cseedplayer00000000000004' // Sam Kowalski (no linked user)
+
+  for (const playerId of [dylanPlayerId, samPlayerId]) {
+    await prisma.playerGuardian.upsert({
+      where: {
+        playerId_userId: {
+          playerId,
+          userId: parentUser.id,
+        },
+      },
+      update: {},
+      create: {
+        playerId,
+        userId: parentUser.id,
+        relationship: 'Parent',
+      },
+    })
+  }
+
+  // Per-child response: upsert on the composite unique works here because
+  // playerId is non-null.
+  await prisma.rSVP.upsert({
+    where: {
+      userId_eventId_playerId: {
+        userId: parentUser.id,
+        eventId: hockeyGame.id,
+        playerId: dylanPlayerId,
+      },
+    },
+    update: {},
+    create: {
+      userId: parentUser.id,
       eventId: hockeyGame.id,
-      status: 'MAYBE',
+      playerId: dylanPlayerId,
+      status: 'GOING',
     },
   })
 
@@ -716,9 +778,11 @@ async function main() {
   console.log('📧 Standalone-team accounts:')
   console.log('   Admin: admin@test.com / admin123 — ADMIN of both standalone teams')
   console.log('   Member: member@test.com / member123 — MEMBER of Northside Ice Hawks')
+  console.log('   Parent: parent@test.com / member123 — MEMBER of Northside Ice Hawks + guardian of Dylan Bouchard & Sam Kowalski')
   console.log('🏒 Hockey: Northside Ice Hawks (Winter 2026-27) — 4 players')
   console.log('🥍 Lacrosse: Eastside Thunder (Spring 2026) — 2 players')
   console.log('📅 Events: 2 games + 2 practices scheduled')
+  console.log('👨‍👧 Guardians: parent@test.com answered per child for the hockey game (Dylan GOING); Sam has no per-child row yet (pending)')
   console.log('')
   console.log('🏆 Metro Hockey League (HOCKEY)')
   console.log('   Divisions: U12 Recreational, Adult Competitive')
