@@ -5,9 +5,18 @@ import { PageContainer } from "@/components/ui/PageContainer";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { getVenueAdminDashboard } from "@/lib/actions/venue-organizations";
+import { getMyPendingVenueStaffInvites } from "@/lib/actions/venue-staff";
+import { InviteResponseButtons } from "./InviteResponseButtons";
+
+function formatVenueStaffRoleLabel(role: string): string {
+  return role.toLowerCase().split("_").join(" ");
+}
 
 export default async function VenueAdminPage() {
-  const { organizations } = await getVenueAdminDashboard();
+  const [{ organizations }, pendingInvites] = await Promise.all([
+    getVenueAdminDashboard(),
+    getMyPendingVenueStaffInvites(),
+  ]);
 
   return (
     <PageContainer>
@@ -22,6 +31,38 @@ export default async function VenueAdminPage() {
           ) : undefined
         }
       />
+
+      {pendingInvites.length > 0 ? (
+        <Stack spacing={2} sx={{ mb: 3 }}>
+          <Typography variant="h6" component="h2">
+            Venue staff invitations
+          </Typography>
+          {pendingInvites.map((invite) => {
+            const invitedByName = invite.invitedBy?.name ?? invite.invitedBy?.email;
+            return (
+              <Card key={invite.id}>
+                <CardContent>
+                  <Stack
+                    direction={{ xs: "column", sm: "row" }}
+                    spacing={2}
+                    alignItems={{ sm: "center" }}
+                    justifyContent="space-between"
+                  >
+                    <Box>
+                      <Typography variant="subtitle1">{invite.organization.name}</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {invitedByName ? `${invitedByName} invited you` : "You were invited"} to
+                        join as {formatVenueStaffRoleLabel(invite.role)}.
+                      </Typography>
+                    </Box>
+                    <InviteResponseButtons staffId={invite.id} />
+                  </Stack>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </Stack>
+      ) : null}
 
       {organizations.length === 0 ? (
         <EmptyState
@@ -51,7 +92,14 @@ export default async function VenueAdminPage() {
                       {organization.type} - {organization.status}
                     </Typography>
                   </Box>
-                  <Box>
+                  <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                    <LinkButton
+                      href={`/venue-admin/${organization.id}/staff`}
+                      variant="text"
+                      size="small"
+                    >
+                      Staff
+                    </LinkButton>
                     <LinkButton
                       href={`/venue-admin/${organization.id}/payments`}
                       variant="text"
@@ -59,7 +107,7 @@ export default async function VenueAdminPage() {
                     >
                       Payments &amp; payouts
                     </LinkButton>
-                  </Box>
+                  </Stack>
                   <Stack spacing={1}>
                     {organization.venues.map((venue) => (
                       <Stack key={venue.id} direction={{ xs: "column", sm: "row" }} spacing={1}>

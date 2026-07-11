@@ -11,6 +11,8 @@ const SCHEDULE_WINDOW_DAYS = 14;
 const SCHEDULE_LIMIT = 10;
 const NEEDS_RSVP_LIMIT = 5;
 const ADMIN_EVENTS_LIMIT = 5;
+const RECENT_MESSAGES_LIMIT = 5;
+const MESSAGE_SNIPPET_LENGTH = 140;
 
 export type ViewerTeamMembership = {
   role: Role;
@@ -249,6 +251,62 @@ export async function getNeedsRsvp(userId: string): Promise<NeedsRsvpItem[]> {
     location: event.location,
     opponent: event.opponent,
     teamName: event.team.name,
+  }));
+}
+
+export type RecentMessageItem = {
+  id: string; // LeagueMessage id
+  subject: string;
+  snippet: string;
+  sentAt: string; // ISO string
+  leagueId: string;
+  leagueName: string;
+  senderName: string;
+};
+
+/** Collapse whitespace and truncate message content to a one-line teaser. */
+function toSnippet(content: string): string {
+  const collapsed = content.replace(/\s+/g, " ").trim();
+  return collapsed.length > MESSAGE_SNIPPET_LENGTH
+    ? `${collapsed.slice(0, MESSAGE_SNIPPET_LENGTH).trimEnd()}…`
+    : collapsed;
+}
+
+/**
+ * The viewer's most recently received league messages (newest first, max 5).
+ * Reads MessageRecipient rows scoped to the viewer — relies on the
+ * MessageRecipient @@index([userId, sentAt]) added alongside TeamOfficial.
+ */
+export async function getRecentMessages(
+  userId: string,
+  limit: number = RECENT_MESSAGES_LIMIT
+): Promise<RecentMessageItem[]> {
+  const recipients = await prisma.messageRecipient.findMany({
+    where: { userId },
+    orderBy: { sentAt: "desc" },
+    take: limit,
+    select: {
+      sentAt: true,
+      message: {
+        select: {
+          id: true,
+          subject: true,
+          content: true,
+          league: { select: { id: true, name: true } },
+          sender: { select: { name: true, email: true } },
+        },
+      },
+    },
+  });
+
+  return recipients.map(({ sentAt, message }) => ({
+    id: message.id,
+    subject: message.subject,
+    snippet: toSnippet(message.content),
+    sentAt: sentAt.toISOString(),
+    leagueId: message.league.id,
+    leagueName: message.league.name,
+    senderName: message.sender.name ?? message.sender.email,
   }));
 }
 

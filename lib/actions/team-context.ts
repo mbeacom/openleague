@@ -63,44 +63,80 @@ export async function getUserAdminTeamContext(): Promise<TeamContext | null> {
   };
 }
 
-/**
- * Get the calendar events for the user's primary team.
- */
-export async function getCalendarData(): Promise<{
+// Default calendar window: recent past through the next year, so the query is
+// always bounded even without an explicit window.
+const CALENDAR_PAST_WINDOW_DAYS = 90;
+const CALENDAR_FUTURE_WINDOW_DAYS = 365;
+// Hard cap on a caller-supplied window (this is a Server Action, so the
+// arguments are client input).
+const CALENDAR_MAX_WINDOW_DAYS = 550;
+
+export type CalendarEventItem = {
+  id: string;
+  type: "GAME" | "PRACTICE";
+  title: string;
+  startAt: string;
+  location: string;
+  opponent: string | null;
   teamId: string;
   teamName: string;
-  upcomingEvents: Array<{
-    id: string;
-    type: "GAME" | "PRACTICE";
-    title: string;
-    startAt: string;
-    location: string;
-    opponent: string | null;
-  }>;
-  pastEvents: Array<{
-    id: string;
-    type: "GAME" | "PRACTICE";
-    title: string;
-    startAt: string;
-    location: string;
-    opponent: string | null;
-  }>;
+};
+
+function parseWindowDate(value: Date | string | undefined): Date | null {
+  if (value === undefined) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+/**
+ * Get the calendar events across ALL of the user's teams within a bounded
+ * date window. `teamId`/`teamName` remain the primary (most recently joined)
+ * team for backward compatibility; `teams` lists every membership.
+ */
+export async function getCalendarData(window?: {
+  from?: Date | string;
+  to?: Date | string;
+}): Promise<{
+  teamId: string;
+  teamName: string;
+  teams: Array<{ id: string; name: string }>;
+  upcomingEvents: CalendarEventItem[];
+  pastEvents: CalendarEventItem[];
 } | null> {
   const userId = await requireUserId();
 
-  const teamMember = await prisma.teamMember.findFirst({
-    where: { userId },
+  const memberships = await prisma.teamMember.findMany({
+    where: { userId, team: { isActive: true } },
     select: {
       team: { select: { id: true, name: true } },
     },
     orderBy: { joinedAt: "desc" },
   });
 
-  if (!teamMember) return null;
+  if (memberships.length === 0) return null;
 
+  const teams = memberships.map((membership) => membership.team);
   const now = new Date();
+
+  let from =
+    parseWindowDate(window?.from) ??
+    new Date(now.getTime() - CALENDAR_PAST_WINDOW_DAYS * 86_400_000);
+  let to =
+    parseWindowDate(window?.to) ??
+    new Date(now.getTime() + CALENDAR_FUTURE_WINDOW_DAYS * 86_400_000);
+  // Reversed windows are invalid client input — fall back to the defaults.
+  if (to <= from) {
+    from = new Date(now.getTime() - CALENDAR_PAST_WINDOW_DAYS * 86_400_000);
+    to = new Date(now.getTime() + CALENDAR_FUTURE_WINDOW_DAYS * 86_400_000);
+  }
+  const maxTo = new Date(from.getTime() + CALENDAR_MAX_WINDOW_DAYS * 86_400_000);
+  if (to > maxTo) to = maxTo;
+
   const allEvents = await prisma.event.findMany({
-    where: { teamId: teamMember.team.id },
+    where: {
+      teamId: { in: teams.map((team) => team.id) },
+      startAt: { gte: from, lt: to },
+    },
     orderBy: { startAt: "asc" },
     select: {
       id: true,
@@ -109,21 +145,31 @@ export async function getCalendarData(): Promise<{
       startAt: true,
       location: true,
       opponent: true,
+      team: { select: { id: true, name: true } },
     },
   });
 
-  const upcomingEvents = allEvents
-    .filter((e) => e.startAt >= now)
-    .map((e) => ({ ...e, type: e.type as "GAME" | "PRACTICE", startAt: e.startAt.toISOString() }));
+  const serialize = (event: (typeof allEvents)[number]): CalendarEventItem => ({
+    id: event.id,
+    type: event.type as "GAME" | "PRACTICE",
+    title: event.title,
+    startAt: event.startAt.toISOString(),
+    location: event.location,
+    opponent: event.opponent,
+    teamId: event.team.id,
+    teamName: event.team.name,
+  });
 
+  const upcomingEvents = allEvents.filter((e) => e.startAt >= now).map(serialize);
   const pastEvents = allEvents
     .filter((e) => e.startAt < now)
     .reverse()
-    .map((e) => ({ ...e, type: e.type as "GAME" | "PRACTICE", startAt: e.startAt.toISOString() }));
+    .map(serialize);
 
   return {
-    teamId: teamMember.team.id,
-    teamName: teamMember.team.name,
+    teamId: teams[0].id,
+    teamName: teams[0].name,
+    teams,
     upcomingEvents,
     pastEvents,
   };

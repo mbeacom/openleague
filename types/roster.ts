@@ -54,6 +54,15 @@ export type TeamWithDivision = {
   } | null;
 };
 
+// Team official entry (coaches, managers, treasurers, volunteers).
+// Role is descriptive taxonomy only — permissions live on TeamMember.role.
+// Re-exported from the Prisma model so action results and UI props stay in sync.
+export type {
+  TeamOfficial,
+  TeamOfficialRole,
+  TeamOfficialStatus,
+} from '@prisma/client';
+
 // Team member with user info (for admin views — includes usahMemberId)
 export type TeamMemberWithUser = {
   id: string;

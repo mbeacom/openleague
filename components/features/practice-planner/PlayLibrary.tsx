@@ -9,7 +9,7 @@
  * Requirements: 4.2, 4.3, 4.5
  */
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
     Box,
     Grid,
@@ -29,6 +29,7 @@ import {
     DialogContent,
     DialogContentText,
     DialogActions,
+    Divider,
     Pagination,
     Stack,
     Chip,
@@ -49,7 +50,9 @@ import {
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { SavedPlay } from "@/types/practice-planner";
-import { getPlaysByTeam, getPlayById, deletePlay } from "@/lib/actions/plays";
+import { getPlaysByTeam, getPlayById, deletePlay, createPlay } from "@/lib/actions/plays";
+import { STARTER_PLAYS, type StarterPlay } from "@/lib/data/starter-plays";
+import { generateThumbnail } from "@/lib/utils/canvas/thumbnail-generator";
 import { formatDistanceToNow } from "date-fns";
 import { useDebouncedCallback } from "use-debounce";
 
@@ -217,6 +220,114 @@ function PlayCard({
 }
 
 /**
+ * Props for the StarterPlayCard component
+ */
+interface StarterPlayCardProps {
+    starter: StarterPlay;
+    thumbnail?: string;
+    isAdding: boolean;
+    disabled: boolean;
+    onAdd: (starter: StarterPlay) => void;
+}
+
+/**
+ * StarterPlayCard Component
+ *
+ * Card for a curated starter play that can be copied into the team's library
+ */
+function StarterPlayCard({
+    starter,
+    thumbnail,
+    isAdding,
+    disabled,
+    onAdd,
+}: StarterPlayCardProps) {
+    return (
+        <Card
+            sx={{
+                height: "100%",
+                display: "flex",
+                flexDirection: "column",
+                border: "1px dashed",
+                borderColor: "divider",
+                opacity: isAdding ? 0.7 : 1,
+            }}
+        >
+            <CardMedia
+                component="div"
+                sx={{
+                    height: 200,
+                    bgcolor: "grey.100",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    position: "relative",
+                }}
+            >
+                {thumbnail ? (
+                    <Image
+                        src={thumbnail}
+                        alt={starter.name}
+                        fill
+                        style={{ objectFit: "contain" }}
+                        unoptimized // Base64 images don't need optimization
+                    />
+                ) : (
+                    <Typography variant="body2" color="text.secondary">
+                        No preview
+                    </Typography>
+                )}
+                <Chip
+                    label="Starter"
+                    color="secondary"
+                    size="small"
+                    sx={{
+                        position: "absolute",
+                        top: 8,
+                        right: 8,
+                    }}
+                />
+            </CardMedia>
+
+            <CardContent sx={{ flexGrow: 1 }}>
+                <Typography variant="h6" component="h3" gutterBottom noWrap>
+                    {starter.name}
+                </Typography>
+                <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{
+                        display: "-webkit-box",
+                        WebkitLineClamp: 3,
+                        WebkitBoxOrient: "vertical",
+                        overflow: "hidden",
+                    }}
+                >
+                    {starter.description}
+                </Typography>
+            </CardContent>
+
+            <CardActions sx={{ justifyContent: "flex-end", pt: 0 }}>
+                <Button
+                    size="small"
+                    disabled={disabled}
+                    onClick={() => onAdd(starter)}
+                    startIcon={
+                        isAdding ? (
+                            <CircularProgress size={16} color="inherit" />
+                        ) : (
+                            <AddIcon />
+                        )
+                    }
+                >
+                    {isAdding ? "Adding..." : "Add to my library"}
+                </Button>
+            </CardActions>
+        </Card>
+    );
+}
+
+/**
  * PlayLibrary Component
  *
  * Main library component with grid layout, search, and filtering
@@ -243,6 +354,11 @@ export function PlayLibrary({
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [playToDelete, setPlayToDelete] = useState<string | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
+
+    // Starter pack state (manage mode only)
+    const [starterThumbnails, setStarterThumbnails] = useState<Record<string, string>>({});
+    const [addingStarterId, setAddingStarterId] = useState<string | null>(null);
+    const [copiedStarterNames, setCopiedStarterNames] = useState<Set<string>>(new Set());
 
     // Pagination state
     // Requirements: 4.2 - Pagination for large libraries (20 per page)
@@ -302,6 +418,85 @@ export function PlayLibrary({
     useEffect(() => {
         loadPlays(searchQuery, dateFilter);
     }, [currentPage, dateFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Render starter play thumbnails client-side once (manage mode only)
+    useEffect(() => {
+        if (mode !== "manage") return;
+
+        const thumbnails: Record<string, string> = {};
+        for (const starter of STARTER_PLAYS) {
+            try {
+                thumbnails[starter.id] = generateThumbnail(starter.playData);
+            } catch (err) {
+                // Card falls back to "No preview"; play still saves without a thumbnail
+                console.error(`Error generating thumbnail for ${starter.name}:`, err);
+            }
+        }
+        setStarterThumbnails(thumbnails);
+    }, [mode]);
+
+    /**
+     * Starter plays not yet copied into the team's library.
+     * Name matching is a simple client-side check against the currently
+     * loaded plays plus starters added during this session.
+     */
+    const visibleStarters = useMemo(() => {
+        if (mode !== "manage") return [];
+
+        const existingNames = new Set(plays.map((play) => play.name.trim().toLowerCase()));
+        const query = searchQuery.trim().toLowerCase();
+
+        return STARTER_PLAYS.filter((starter) => {
+            const name = starter.name.toLowerCase();
+            if (existingNames.has(name) || copiedStarterNames.has(name)) return false;
+            if (
+                query &&
+                !name.includes(query) &&
+                !starter.description.toLowerCase().includes(query)
+            ) {
+                return false;
+            }
+            return true;
+        });
+    }, [mode, plays, copiedStarterNames, searchQuery]);
+
+    /**
+     * Copy a starter play into the team's library as an editable template
+     */
+    const handleAddStarter = useCallback(
+        async (starter: StarterPlay) => {
+            setAddingStarterId(starter.id);
+            setError(null);
+
+            try {
+                const result = await createPlay({
+                    name: starter.name,
+                    description: starter.description,
+                    thumbnail: starterThumbnails[starter.id] || undefined,
+                    playData: starter.playData,
+                    isTemplate: true,
+                    teamId,
+                });
+
+                if (result.success) {
+                    setCopiedStarterNames((prev) => {
+                        const next = new Set(prev);
+                        next.add(starter.name.toLowerCase());
+                        return next;
+                    });
+                    await loadPlays(searchQuery, dateFilter);
+                } else {
+                    setError(result.error);
+                }
+            } catch (err) {
+                console.error("Error adding starter play:", err);
+                setError("Failed to add starter play. Please try again.");
+            } finally {
+                setAddingStarterId(null);
+            }
+        },
+        [starterThumbnails, teamId, loadPlays, searchQuery, dateFilter]
+    );
 
     /**
      * Handle search input change
@@ -597,6 +792,34 @@ export function PlayLibrary({
                         </Box>
                     )}
                 </>
+            )}
+
+            {/* Starter Plays */}
+            {/* Curated pack of common drills/plays that can be copied into the library */}
+            {mode === "manage" && !isLoading && visibleStarters.length > 0 && (
+                <Box sx={{ mt: 5 }}>
+                    <Divider sx={{ mb: 3 }} />
+                    <Typography variant="h6" component="h3" gutterBottom>
+                        Starter plays
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" mb={2}>
+                        Curated drills and set plays to seed your library. Adding one
+                        creates an editable copy for your team.
+                    </Typography>
+                    <Grid container spacing={3}>
+                        {visibleStarters.map((starter) => (
+                            <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }} key={starter.id}>
+                                <StarterPlayCard
+                                    starter={starter}
+                                    thumbnail={starterThumbnails[starter.id]}
+                                    isAdding={addingStarterId === starter.id}
+                                    disabled={addingStarterId !== null}
+                                    onAdd={handleAddStarter}
+                                />
+                            </Grid>
+                        ))}
+                    </Grid>
+                </Box>
             )}
 
             {/* Delete Confirmation Dialog */}

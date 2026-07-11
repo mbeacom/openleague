@@ -3,13 +3,13 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const {
   mockPrismaPlayer,
   mockPrismaTeam,
-  mockPrismaTeamMember,
+  mockPrismaTeamOfficial,
   mockGetCurrentUserId,
   mockIsTeamAdmin,
 } = vi.hoisted(() => ({
   mockPrismaPlayer: { findMany: vi.fn() },
   mockPrismaTeam: { findUnique: vi.fn() },
-  mockPrismaTeamMember: { findMany: vi.fn() },
+  mockPrismaTeamOfficial: { findMany: vi.fn() },
   mockGetCurrentUserId: vi.fn(),
   mockIsTeamAdmin: vi.fn(),
 }));
@@ -25,7 +25,7 @@ vi.mock("@/lib/db/prisma", () => ({
   prisma: {
     team: mockPrismaTeam,
     player: mockPrismaPlayer,
-    teamMember: mockPrismaTeamMember,
+    teamOfficial: mockPrismaTeamOfficial,
   },
 }));
 
@@ -76,7 +76,7 @@ describe("GET /api/roster/export", () => {
   it("returns valid CSV with header row only for empty roster", async () => {
     mockPrismaTeam.findUnique.mockResolvedValue({ name: "Test Team" });
     mockPrismaPlayer.findMany.mockResolvedValue([]);
-    mockPrismaTeamMember.findMany.mockResolvedValue([]);
+    mockPrismaTeamOfficial.findMany.mockResolvedValue([]);
 
     const response = await GET(makeRequest(TEAM_ID));
     expect(response.status).toBe(200);
@@ -109,7 +109,7 @@ describe("GET /api/roster/export", () => {
         emergencyPhone: null,
       },
     ]);
-    mockPrismaTeamMember.findMany.mockResolvedValue([]);
+    mockPrismaTeamOfficial.findMany.mockResolvedValue([]);
 
     const response = await GET(makeRequest(TEAM_ID));
     const body = await response.text();
@@ -130,7 +130,7 @@ describe("GET /api/roster/export", () => {
         emergencyPhone: null,
       },
     ]);
-    mockPrismaTeamMember.findMany.mockResolvedValue([]);
+    mockPrismaTeamOfficial.findMany.mockResolvedValue([]);
 
     const response = await GET(makeRequest(TEAM_ID));
     const body = await response.text();
@@ -151,11 +151,12 @@ describe("GET /api/roster/export", () => {
         emergencyPhone: null,
       },
     ]);
-    mockPrismaTeamMember.findMany.mockResolvedValue([
+    mockPrismaTeamOfficial.findMany.mockResolvedValue([
       {
-        role: "ADMIN",
-        usahMemberId: "COACH1",
-        user: { name: "Coach Bob", email: "bob@test.com" },
+        name: "Coach Bob",
+        email: "bob@test.com",
+        role: "HEAD_COACH",
+        roleDetail: null,
       },
     ]);
 
@@ -163,10 +164,28 @@ describe("GET /api/roster/export", () => {
     const body = await response.text();
     const lines = body.slice(1).split("\r\n");
     // Line 0: header, Line 1: official, Line 2: player
-    expect(lines[1]).toContain("Team Official");
+    expect(lines[1]).toContain("Head Coach");
     expect(lines[1]).toContain("Coach Bob");
     expect(lines[2]).toContain("Player");
     expect(lines[2]).toContain("Alice Player");
+  });
+
+  it("appends roleDetail to the role label for OTHER officials", async () => {
+    mockPrismaTeam.findUnique.mockResolvedValue({ name: "Test Team" });
+    mockPrismaPlayer.findMany.mockResolvedValue([]);
+    mockPrismaTeamOfficial.findMany.mockResolvedValue([
+      {
+        name: "Pat Volunteer",
+        email: null,
+        role: "OTHER",
+        roleDetail: "Equipment Manager",
+      },
+    ]);
+
+    const response = await GET(makeRequest(TEAM_ID));
+    const body = await response.text();
+    expect(body).toContain("Other (Equipment Manager)");
+    expect(body).toContain("Pat Volunteer");
   });
 
   it("sets Content-Disposition header with team name slug", async () => {
@@ -174,7 +193,7 @@ describe("GET /api/roster/export", () => {
       name: "My Awesome Team!",
     });
     mockPrismaPlayer.findMany.mockResolvedValue([]);
-    mockPrismaTeamMember.findMany.mockResolvedValue([]);
+    mockPrismaTeamOfficial.findMany.mockResolvedValue([]);
 
     const response = await GET(makeRequest(TEAM_ID));
     const disposition = response.headers.get("Content-Disposition");

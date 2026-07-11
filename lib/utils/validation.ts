@@ -98,6 +98,29 @@ export const VENUE_RELATIONSHIP_TARGET_TYPES = ["TEAM", "LEAGUE", "COACH", "ORGA
 export const SKILL_LEVEL_SOURCES = ["USA_HOCKEY", "US_FIGURE_SKATING", "RINK_CUSTOM", "OTHER"] as const;
 export const SKILL_LEVEL_DISCIPLINES = ["HOCKEY", "FIGURE_SKATING", "SKATING", "GOALIE", "OTHER"] as const;
 
+// Team official taxonomy — must match the Prisma TeamOfficialRole enum exactly
+export const TEAM_OFFICIAL_ROLES = [
+  "HEAD_COACH",
+  "ASSISTANT_COACH",
+  "MANAGER",
+  "TREASURER",
+  "VOLUNTEER_COORDINATOR",
+  "PARENT_VOLUNTEER",
+  "OTHER",
+] as const;
+
+export type TeamOfficialRoleValue = (typeof TEAM_OFFICIAL_ROLES)[number];
+
+export const TEAM_OFFICIAL_ROLE_LABELS: Record<TeamOfficialRoleValue, string> = {
+  HEAD_COACH: "Head Coach",
+  ASSISTANT_COACH: "Assistant Coach",
+  MANAGER: "Manager",
+  TREASURER: "Treasurer",
+  VOLUNTEER_COORDINATOR: "Volunteer Coordinator",
+  PARENT_VOLUNTEER: "Parent Volunteer",
+  OTHER: "Other",
+};
+
 /**
  * Type-safe wrapper for Zod .pick() with computed property names.
  *
@@ -278,6 +301,49 @@ export const updateTeamMemberUsahIdSchema = z.object({
 });
 
 export type UpdateTeamMemberUsahIdInput = z.infer<typeof updateTeamMemberUsahIdSchema>;
+
+// Team official validation schemas
+// Role is descriptive taxonomy only; grantTeamAdmin explicitly opts into a
+// TeamMember ADMIN grant for officials with existing accounts (decision D4).
+const requireRoleDetailForOther = {
+  check: (data: { role: TeamOfficialRoleValue; roleDetail?: string }) =>
+    data.role !== "OTHER" || (typeof data.roleDetail === "string" && data.roleDetail.length > 0),
+  options: {
+    message: "Please describe the role when selecting Other",
+    path: ["roleDetail"],
+  },
+};
+
+const teamOfficialBaseSchema = z.object({
+  teamId: z.string().cuid("Invalid team ID format"),
+  name: sanitizedStringWithMin(1, 100),
+  email: optionalEmailSchema,
+  role: z.enum(TEAM_OFFICIAL_ROLES, {
+    message: "Please select a valid role",
+  }),
+  roleDetail: optionalSanitizedString(100),
+  grantTeamAdmin: z.boolean().optional(),
+});
+
+export const createTeamOfficialSchema = teamOfficialBaseSchema.refine(
+  requireRoleDetailForOther.check,
+  requireRoleDetailForOther.options
+);
+
+export const updateTeamOfficialSchema = teamOfficialBaseSchema
+  .extend({
+    officialId: z.string().cuid("Invalid official ID format"),
+  })
+  .refine(requireRoleDetailForOther.check, requireRoleDetailForOther.options);
+
+export const removeTeamOfficialSchema = z.object({
+  teamId: z.string().cuid("Invalid team ID format"),
+  officialId: z.string().cuid("Invalid official ID format"),
+});
+
+export type CreateTeamOfficialInput = z.infer<typeof createTeamOfficialSchema>;
+export type UpdateTeamOfficialInput = z.infer<typeof updateTeamOfficialSchema>;
+export type RemoveTeamOfficialInput = z.infer<typeof removeTeamOfficialSchema>;
 
 // Event validation schemas
 const baseEventSchema = z.object({

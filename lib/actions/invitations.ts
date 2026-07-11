@@ -96,6 +96,15 @@ export async function sendInvitation(
           },
           data: { userId: existingUser.id },
         }),
+        // Link unclaimed team official entries the same way
+        prisma.teamOfficial.updateMany({
+          where: {
+            teamId: validated.teamId,
+            email: { equals: validated.email, mode: "insensitive" },
+            userId: null,
+          },
+          data: { userId: existingUser.id },
+        }),
       ]);
 
       // Send notification email to existing user
@@ -292,6 +301,16 @@ export async function sendLeagueInvitation(
 
         // Link unclaimed roster entries matching the invited email to the account
         await tx.player.updateMany({
+          where: {
+            teamId: validated.teamId,
+            email: { equals: validated.email, mode: "insensitive" },
+            userId: null,
+          },
+          data: { userId: existingUser.id },
+        });
+
+        // Link unclaimed team official entries the same way
+        await tx.teamOfficial.updateMany({
           where: {
             teamId: validated.teamId,
             email: { equals: validated.email, mode: "insensitive" },

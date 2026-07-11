@@ -69,6 +69,15 @@ export async function signup(data: SignupWithInvitationInput) {
               },
               data: { userId: user.id },
             }),
+            // Link unclaimed team official entries the same way
+            prisma.teamOfficial.updateMany({
+              where: {
+                teamId: invitation.teamId,
+                email: { equals: invitation.email, mode: "insensitive" },
+                userId: null,
+              },
+              data: { userId: user.id },
+            }),
             // Update invitation status to ACCEPTED
             prisma.invitation.update({
               where: { id: invitation.id },
