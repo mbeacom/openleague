@@ -83,6 +83,7 @@ export async function getLeagueScheduleData(leagueId: string): Promise<{
     type: "GAME" | "PRACTICE";
     title: string;
     startAt: string;
+    endAt: string | null;
     location: string;
     opponent: string | null;
     team: { id: string; name: string };
@@ -139,6 +140,7 @@ export async function getLeagueScheduleData(leagueId: string): Promise<{
     type: event.type as "GAME" | "PRACTICE",
     title: event.title,
     startAt: event.startAt.toISOString(),
+    endAt: event.endAt ? event.endAt.toISOString() : null,
     location: event.location ?? "",
     opponent: event.opponent,
     team: event.team ?? { id: "", name: "" },

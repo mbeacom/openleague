@@ -38,6 +38,8 @@ export interface PlayEditorProps {
     teamId: string;
     playId?: string;
     initialData?: Partial<SavedPlay>;
+    /** Hide the "save to library" checkbox and keep isTemplate at its initial value. */
+    lockTemplate?: boolean;
     onSave?: (play: SavedPlay) => Promise<void>;
     onCancel?: () => void;
 }
@@ -51,6 +53,7 @@ export interface PlayEditorProps {
 export function PlayEditor({
     playId,
     initialData,
+    lockTemplate = false,
     onSave,
     onCancel,
 }: PlayEditorProps) {
@@ -314,15 +317,17 @@ export function PlayEditor({
 
                     {/* Save to Library Checkbox */}
                     {/* Requirements: 4.1 */}
-                    <FormControlLabel
-                        control={
-                            <Checkbox
-                                checked={isTemplate}
-                                onChange={handleTemplateChange}
-                            />
-                        }
-                        label="Save to play library (reusable template)"
-                    />
+                    {!lockTemplate && (
+                        <FormControlLabel
+                            control={
+                                <Checkbox
+                                    checked={isTemplate}
+                                    onChange={handleTemplateChange}
+                                />
+                            }
+                            label="Save to play library (reusable template)"
+                        />
+                    )}
                 </Stack>
             </Paper>
 

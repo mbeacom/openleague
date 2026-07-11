@@ -46,6 +46,7 @@ export async function addPlayer(input: AddPlayerInput) {
         emergencyPhone: validated.emergencyPhone || null,
         teamId: validated.teamId,
         jerseyNumber: validated.jerseyNumber ?? null,
+        position: validated.position || null,
         usahMemberId: validated.usahMemberId || null,
       },
     });
@@ -131,6 +132,7 @@ export async function updatePlayer(input: UpdatePlayerInput) {
         emergencyContact: validated.emergencyContact || null,
         emergencyPhone: validated.emergencyPhone || null,
         ...(validated.jerseyNumber !== undefined && { jerseyNumber: validated.jerseyNumber }),
+        ...(validated.position !== undefined && { position: validated.position || null }),
         ...(validated.usahMemberId !== undefined && { usahMemberId: validated.usahMemberId || null }),
       },
     });
@@ -461,6 +463,7 @@ export async function exportLeagueRoster(leagueId: string) {
       "Player Name",
       "Email",
       "Phone",
+      "Position",
       "Team",
       "Division",
       "Age Group",
@@ -488,6 +491,7 @@ export async function exportLeagueRoster(leagueId: string) {
         escapeCSVField(player.name),
         escapeCSVField(player.email),
         escapeCSVField(player.phone),
+        escapeCSVField(player.position),
         escapeCSVField(player.team.name),
         escapeCSVField(player.team.division?.name),
         escapeCSVField(player.team.division?.ageGroup),

@@ -14,9 +14,7 @@ import {
   Dashboard as DashboardIcon,
   People as PeopleIcon,
   CalendarMonth as CalendarIcon,
-  Event as EventIcon,
   Groups as GroupsIcon,
-  Settings as SettingsIcon,
   Logout as LogoutIcon,
   MoreVert as MoreVertIcon,
   SportsHockey as SportsHockeyIcon,
@@ -60,7 +58,6 @@ export default function MobileNavigation({ isLeagueMode = false }: MobileNavigat
         { label: "Dashboard", path: "/dashboard", icon: <DashboardIcon /> },
         { label: "Roster", path: "/roster", icon: <PeopleIcon /> },
         { label: "Calendar", path: "/calendar", icon: <CalendarIcon /> },
-        { label: "Events", path: "/events", icon: <EventIcon /> },
       ];
     }
 
@@ -118,7 +115,7 @@ export default function MobileNavigation({ isLeagueMode = false }: MobileNavigat
       >
         <BottomNavigation
           value={getCurrentValue()}
-          onChange={(event, newValue) => {
+          onChange={(_event, newValue) => {
             if (newValue !== "more") {
               handleNavigation(newValue);
             }
@@ -201,20 +198,7 @@ export default function MobileNavigation({ isLeagueMode = false }: MobileNavigat
           </ListItemIcon>
           <ListItemText>Signup Events</ListItemText>
         </MenuItem>
-        {isLeagueMode && (
-          <MenuItem
-            onClick={() => {
-              handleMenuClose();
-              const settingsPath = currentLeague ? `/league/${currentLeague.id}/settings` : '/settings';
-              handleNavigation(settingsPath);
-            }}
-          >
-            <ListItemIcon>
-              <SettingsIcon />
-            </ListItemIcon>
-            <ListItemText>Settings</ListItemText>
-          </MenuItem>
-        )}
+        {/* Restore a Settings item when /league/[id]/settings ships (roadmap D1) */}
         <MenuItem onClick={handleLogout}>
           <ListItemIcon>
             <LogoutIcon />

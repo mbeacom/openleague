@@ -40,6 +40,7 @@ export default function AddPlayerDialog({
     emergencyPhone: "",
     teamId,
     jerseyNumber: null,
+    position: "",
     usahMemberId: null,
   });
 
@@ -57,6 +58,7 @@ export default function AddPlayerDialog({
         emergencyPhone: player?.emergencyPhone || "",
         teamId,
         jerseyNumber: player?.jerseyNumber ?? null,
+        position: player?.position || "",
         usahMemberId: player?.usahMemberId ?? null,
       });
       setErrors({});
@@ -279,6 +281,18 @@ export default function AddPlayerDialog({
               helperText={errors.jerseyNumber || "Optional — 1 to 99"}
               fullWidth
               inputProps={{ min: 1, max: 99, step: 1 }}
+            />
+
+            {/* Position */}
+            <TextField
+              label="Position"
+              value={formData.position ?? ""}
+              onChange={handleChange("position")}
+              onBlur={handleBlur("position")}
+              error={!!errors.position}
+              helperText={errors.position || "Optional — e.g. Center, Goalie, Midfielder"}
+              fullWidth
+              inputProps={{ maxLength: 50 }}
             />
 
             {/* USA Hockey Member ID */}

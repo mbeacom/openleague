@@ -60,6 +60,15 @@ export async function signup(data: SignupWithInvitationInput) {
                 role: "MEMBER",
               },
             }),
+            // Link unclaimed roster entries matching the invitation email to the new account
+            prisma.player.updateMany({
+              where: {
+                teamId: invitation.teamId,
+                email: { equals: invitation.email, mode: "insensitive" },
+                userId: null,
+              },
+              data: { userId: user.id },
+            }),
             // Update invitation status to ACCEPTED
             prisma.invitation.update({
               where: { id: invitation.id },

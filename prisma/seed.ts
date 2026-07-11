@@ -32,12 +32,16 @@ async function main() {
     },
   })
 
+  // Fixed IDs below must pass Zod v4's cuid check (/^[cC][0-9a-z]{6,}$/) so
+  // seeded rows can be exercised through Server Action schemas. They stay
+  // deterministic and human-decodable to keep upserts idempotent.
+
   // Create hockey team (primary sport)
   const hockeyTeam = await prisma.team.upsert({
-    where: { id: 'test-hockey-team' },
+    where: { id: 'cseedhockeyteam0000000001' },
     update: {},
     create: {
-      id: 'test-hockey-team',
+      id: 'cseedhockeyteam0000000001',
       name: 'Northside Ice Hawks',
       sport: 'HOCKEY',
       season: 'Winter 2026-27',
@@ -46,10 +50,10 @@ async function main() {
 
   // Create lacrosse team
   const lacrosseTeam = await prisma.team.upsert({
-    where: { id: 'test-lacrosse-team' },
+    where: { id: 'cseedlacrosseteam00000001' },
     update: {},
     create: {
-      id: 'test-lacrosse-team',
+      id: 'cseedlacrosseteam00000001',
       name: 'Eastside Thunder',
       sport: 'LACROSSE',
       season: 'Spring 2026',
@@ -105,10 +109,10 @@ async function main() {
 
   // Create hockey players
   await prisma.player.upsert({
-    where: { id: 'test-player-1' },
+    where: { id: 'cseedplayer00000000000001' },
     update: {},
     create: {
-      id: 'test-player-1',
+      id: 'cseedplayer00000000000001',
       name: 'Connor MacTavish',
       email: 'connor@test.com',
       phone: '555-0101',
@@ -122,10 +126,10 @@ async function main() {
   })
 
   await prisma.player.upsert({
-    where: { id: 'test-player-2' },
+    where: { id: 'cseedplayer00000000000002' },
     update: {},
     create: {
-      id: 'test-player-2',
+      id: 'cseedplayer00000000000002',
       name: 'Jake Sullivan',
       email: 'jake@test.com',
       phone: '555-0201',
@@ -139,10 +143,10 @@ async function main() {
   })
 
   await prisma.player.upsert({
-    where: { id: 'test-player-3' },
+    where: { id: 'cseedplayer00000000000003' },
     update: {},
     create: {
-      id: 'test-player-3',
+      id: 'cseedplayer00000000000003',
       name: 'Dylan Bouchard',
       email: 'dylan@test.com',
       phone: '555-0301',
@@ -155,10 +159,10 @@ async function main() {
   })
 
   await prisma.player.upsert({
-    where: { id: 'test-player-4' },
+    where: { id: 'cseedplayer00000000000004' },
     update: {},
     create: {
-      id: 'test-player-4',
+      id: 'cseedplayer00000000000004',
       name: 'Sam Kowalski',
       email: 'sam@test.com',
       phone: '555-0401',
@@ -172,10 +176,10 @@ async function main() {
 
   // Create lacrosse players
   await prisma.player.upsert({
-    where: { id: 'test-player-5' },
+    where: { id: 'cseedplayer00000000000005' },
     update: {},
     create: {
-      id: 'test-player-5',
+      id: 'cseedplayer00000000000005',
       name: 'Marcus Rivera',
       email: 'marcus@test.com',
       phone: '555-0501',
@@ -188,10 +192,10 @@ async function main() {
   })
 
   await prisma.player.upsert({
-    where: { id: 'test-player-6' },
+    where: { id: 'cseedplayer00000000000006' },
     update: {},
     create: {
-      id: 'test-player-6',
+      id: 'cseedplayer00000000000006',
       name: 'Tyler Brennan',
       email: 'tyler@test.com',
       phone: '555-0601',
@@ -211,10 +215,10 @@ async function main() {
   hockeyPracticeDate.setDate(hockeyPracticeDate.getDate() + 3)
 
   const hockeyGame = await prisma.event.upsert({
-    where: { id: 'test-game-1' },
+    where: { id: 'cseedgame0000000000000001' },
     update: {},
     create: {
-      id: 'test-game-1',
+      id: 'cseedgame0000000000000001',
       type: 'GAME',
       title: 'vs Westside Wolves',
       startAt: hockeyGameDate,
@@ -226,10 +230,10 @@ async function main() {
   })
 
   await prisma.event.upsert({
-    where: { id: 'test-practice-1' },
+    where: { id: 'cseedpractice000000000001' },
     update: {},
     create: {
-      id: 'test-practice-1',
+      id: 'cseedpractice000000000001',
       type: 'PRACTICE',
       title: 'Stick Handling & Power Play Drills',
       startAt: hockeyPracticeDate,
@@ -247,10 +251,10 @@ async function main() {
   lacrossePracticeDate.setDate(lacrossePracticeDate.getDate() + 4)
 
   await prisma.event.upsert({
-    where: { id: 'test-game-2' },
+    where: { id: 'cseedgame0000000000000002' },
     update: {},
     create: {
-      id: 'test-game-2',
+      id: 'cseedgame0000000000000002',
       type: 'GAME',
       title: 'vs Southside Scorpions',
       startAt: lacrosseGameDate,
@@ -262,10 +266,10 @@ async function main() {
   })
 
   await prisma.event.upsert({
-    where: { id: 'test-practice-2' },
+    where: { id: 'cseedpractice000000000002' },
     update: {},
     create: {
-      id: 'test-practice-2',
+      id: 'cseedpractice000000000002',
       type: 'PRACTICE',
       title: 'Ground Balls & Clearing Drills',
       startAt: lacrossePracticeDate,

@@ -1,13 +1,16 @@
+import { cache } from "react";
+import type { LeagueRole } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 
 /**
- * Determine if a user is in league mode or single-team mode
+ * Determine if a user is in league mode or single-team mode.
+ * Wrapped in React cache() so layout and page share one query per request.
  */
-export async function getUserMode(userId: string): Promise<{
+export const getUserMode = cache(async (userId: string): Promise<{
   isLeagueMode: boolean;
-  leagues: Array<{ id: string; name: string; sport: string }>;
+  leagues: Array<{ id: string; name: string; sport: string; role: LeagueRole }>;
   teams: Array<{ id: string; name: string; sport: string; season: string; leagueId: string | null }>;
-}> {
+}> => {
   // Get user's league memberships
   const leagueUsers = await prisma.leagueUser.findMany({
     where: { userId },
@@ -32,6 +35,7 @@ export async function getUserMode(userId: string): Promise<{
       id: lu.league.id,
       name: lu.league.name,
       sport: lu.league.sport,
+      role: lu.role,
     }));
 
   // Get user's team memberships
@@ -72,7 +76,7 @@ export async function getUserMode(userId: string): Promise<{
     leagues: activeLeagues,
     teams: activeTeams,
   };
-}
+});
 
 /**
  * Get the primary context for a user (either their main league or main team)

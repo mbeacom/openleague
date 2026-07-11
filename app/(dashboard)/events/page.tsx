@@ -1,16 +1,6 @@
-import { Container, Typography, Box } from "@mui/material";
+import { redirect } from "next/navigation";
 
 export default function EventsPage() {
-  return (
-    <Container maxWidth="lg">
-      <Box sx={{ py: 4 }}>
-        <Typography variant="h4" component="h1" gutterBottom>
-          Events
-        </Typography>
-        <Typography variant="body1" color="text.secondary">
-          Events management coming soon...
-        </Typography>
-      </Box>
-    </Container>
-  );
+  // Event browsing lives on the calendar; creation lives at /events/new.
+  redirect("/calendar");
 }

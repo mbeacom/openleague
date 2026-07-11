@@ -20,14 +20,29 @@ export default async function VenueAdminPage() {
         {organizations.length === 0 ? (
           <Stack spacing={2} sx={{ maxWidth: 560 }}>
             <Typography variant="body1">
-              Create a rink or venue organization to publish a branded profile and manage ice time.
+              Venue Admin is for rink and venue operators who run facilities: publish a branded
+              public profile, manage staff, and schedule ice time across your surfaces.
             </Typography>
-            <LinkButton href="/venue-admin/new" variant="contained">
-              Create Venue Organization
-            </LinkButton>
+            <Typography variant="body2" color="text.secondary">
+              Managing a facility your team or league books for games and practices? Those are
+              handled under Venues instead.
+            </Typography>
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+              <LinkButton href="/venue-admin/new" variant="contained">
+                Create Venue Organization
+              </LinkButton>
+              <LinkButton href="/venues" variant="outlined">
+                Go to Venues
+              </LinkButton>
+            </Stack>
           </Stack>
         ) : (
           <Stack spacing={2}>
+            <Box>
+              <LinkButton href="/venue-admin/new" variant="outlined" size="small">
+                New organization
+              </LinkButton>
+            </Box>
             {organizations.map((organization) => (
               <Card key={organization.id}>
                 <CardContent>

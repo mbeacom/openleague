@@ -20,7 +20,12 @@ import EventCard from "./EventCard";
 import type { LeagueEvent, TeamWithDivision, Division } from "@/types/events";
 
 interface LeagueCalendarProps {
-  events: LeagueEvent[];
+  /**
+   * endAt (ISO string, nullable) is always serialized by getLeagueScheduleData.
+   * Required here so a consumer that forgets to serialize it fails type-check;
+   * promoting it onto the shared LeagueEvent type is deferred to the Tier 1 type cleanup.
+   */
+  events: Array<LeagueEvent & { endAt: string | null }>;
   teams: TeamWithDivision[];
   divisions: Division[];
   leagueId: string;
@@ -120,7 +125,9 @@ export default function LeagueCalendar({
     // Generate iCal format
     const icalEvents = filteredEvents.map(event => {
       const startDate = new Date(event.startAt);
-      const endDate = new Date(startDate.getTime() + 2 * 60 * 60 * 1000); // Assume 2 hour duration
+      const endDate = event.endAt
+        ? new Date(event.endAt)
+        : new Date(startDate.getTime() + 2 * 60 * 60 * 1000); // Fall back to 2 hours when no end time is set
 
       const formatDate = (date: Date) => {
         return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';

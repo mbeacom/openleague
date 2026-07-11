@@ -7,22 +7,39 @@ import {
   ArrowForward as ArrowForwardIcon,
 } from "@mui/icons-material";
 import OnboardingFlow from "@/components/features/onboarding/OnboardingFlow";
-import CreateTeamForm from "@/components/features/team/CreateTeamForm";
+import CreateTeamDisclosure from "@/components/features/dashboard/CreateTeamDisclosure";
 import TeamCard from "@/components/features/dashboard/TeamCard";
 import { getUserMode } from "@/lib/utils/league-mode";
 import { getDashboardData } from "@/lib/actions/team-context";
 import { getTeamVenueRelationships } from "@/lib/actions/venue-relationships";
 import { requireUserId } from "@/lib/auth/session";
 import { formatSport } from "@/lib/utils/validation";
+import type { LeagueRole } from "@prisma/client";
+
+const LEAGUE_ROLE_LABELS: Record<LeagueRole, string> = {
+  LEAGUE_ADMIN: "League Admin",
+  TEAM_ADMIN: "Team Admin",
+  MEMBER: "Member",
+};
+
+const LEAGUE_ROLE_COLORS: Record<LeagueRole, "primary" | "secondary" | "default"> = {
+  LEAGUE_ADMIN: "primary",
+  TEAM_ADMIN: "secondary",
+  MEMBER: "default",
+};
 
 export default async function DashboardPage() {
   const userId = await requireUserId();
 
-  const [userMode, { teams, upcomingPractices }] = await Promise.all([
+  const [userMode, { teams, upcomingPractices, venueRelationships }] = await Promise.all([
     getUserMode(userId),
-    getDashboardData(),
+    getDashboardData().then(async (data) => ({
+      ...data,
+      venueRelationships: await getTeamVenueRelationships(
+        data.teams.map((teamMember) => teamMember.team.id)
+      ),
+    })),
   ]);
-  const venueRelationships = await getTeamVenueRelationships(teams.map((teamMember) => teamMember.team.id));
 
   if (teams.length === 0 && userMode.leagues.length === 0) {
     return (
@@ -59,7 +76,20 @@ export default async function DashboardPage() {
                   }}
                 >
                   {userMode.leagues.map((league) => (
-                    <Card key={league.id} variant="outlined">
+                    <LinkCard
+                      key={league.id}
+                      variant="outlined"
+                      href={`/league/${league.id}/dashboard`}
+                      sx={{
+                        textDecoration: "none",
+                        color: "inherit",
+                        transition: "all 0.2s",
+                        "&:hover": {
+                          borderColor: "primary.main",
+                          boxShadow: 1,
+                        },
+                      }}
+                    >
                       <CardContent>
                         <Typography variant="h6" component="h3" gutterBottom>
                           {league.name}
@@ -68,13 +98,13 @@ export default async function DashboardPage() {
                           {formatSport(league.sport)}
                         </Typography>
                         <Chip
-                          label="League Admin"
+                          label={LEAGUE_ROLE_LABELS[league.role]}
                           size="small"
-                          color="primary"
+                          color={LEAGUE_ROLE_COLORS[league.role]}
                           sx={{ mt: 1 }}
                         />
                       </CardContent>
-                    </Card>
+                    </LinkCard>
                   ))}
                 </Box>
               </Box>
@@ -230,10 +260,9 @@ export default async function DashboardPage() {
         )}
 
         <Box sx={{ mt: 4 }}>
-          <Typography variant="h5" component="h2" gutterBottom>
-            {userMode.isLeagueMode ? "Create New Team" : "Create Another Team"}
-          </Typography>
-          <CreateTeamForm title={null} />
+          <CreateTeamDisclosure
+            label={teams.length > 0 ? "Create Another Team" : "Create Team"}
+          />
         </Box>
       </Box>
     </Container>
