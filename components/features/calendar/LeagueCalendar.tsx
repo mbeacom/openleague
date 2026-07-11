@@ -20,8 +20,12 @@ import EventCard from "./EventCard";
 import type { LeagueEvent, TeamWithDivision, Division } from "@/types/events";
 
 interface LeagueCalendarProps {
-  /** endAt (ISO string) is serialized by getLeagueScheduleData but not yet on the shared LeagueEvent type. */
-  events: Array<LeagueEvent & { endAt?: string | null }>;
+  /**
+   * endAt (ISO string, nullable) is always serialized by getLeagueScheduleData.
+   * Required here so a consumer that forgets to serialize it fails type-check;
+   * promoting it onto the shared LeagueEvent type is deferred to the Tier 1 type cleanup.
+   */
+  events: Array<LeagueEvent & { endAt: string | null }>;
   teams: TeamWithDivision[];
   divisions: Division[];
   leagueId: string;

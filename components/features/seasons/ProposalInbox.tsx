@@ -147,8 +147,8 @@ export function ProposalInbox({
         <Typography variant="body2" color="text.secondary">
           Game proposals are a league workflow: to propose or receive games, you
           need to be an admin of a team that belongs to an active league. Visit{" "}
-          <MuiLink component={Link} href="/league">
-            League
+          <MuiLink component={Link} href="/dashboard">
+            the dashboard
           </MuiLink>{" "}
           to join or create one.
         </Typography>

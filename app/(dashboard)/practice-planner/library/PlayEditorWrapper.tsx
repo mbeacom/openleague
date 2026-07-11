@@ -17,6 +17,9 @@ export function PlayEditorWrapper({ teamId, play }: PlayEditorWrapperProps) {
 
   const handleSave = useCallback(
     async (saved: SavedPlay) => {
+      // Empty strings are normalized to undefined: the thumbnail Zod schema
+      // rejects "", and createPlay/updatePlay both store falsy description/
+      // thumbnail values as null — so clearing a description still persists.
       const result = play
         ? await updatePlay({
             id: play.id,
