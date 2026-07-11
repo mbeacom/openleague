@@ -15,6 +15,7 @@ import AddIcon from "@mui/icons-material/Add";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import type { HostGroupOptions } from "@/lib/actions/signup-events";
 import { PHASE_AUDIENCES } from "@/lib/utils/validation";
+import { DateTimeField } from "@/components/ui/date";
 
 export type PhaseRow = {
   id?: string;
@@ -85,15 +86,15 @@ export function PhaseEditor({ phases, onChange, groupOptions }: PhaseEditorProps
                 sx={{ flex: 1 }}
                 slotProps={{ htmlInput: { maxLength: 100 } }}
               />
-              <TextField
-                label="Opens at"
-                type="datetime-local"
-                required
-                value={phase.opensAt}
-                onChange={(event) => updatePhase(index, { opensAt: event.target.value })}
-                sx={{ flex: 1 }}
-                slotProps={{ inputLabel: { shrink: true } }}
-              />
+              {/* The shared field takes no sx; a Box carries the row's flex sizing. */}
+              <Box sx={{ flex: 1 }}>
+                <DateTimeField
+                  label="Opens at"
+                  required
+                  value={phase.opensAt}
+                  onChange={(value) => updatePhase(index, { opensAt: value })}
+                />
+              </Box>
               <IconButton
                 aria-label={`Remove phase ${phase.name || index + 1}`}
                 onClick={() => onChange(phases.filter((_, i) => i !== index))}

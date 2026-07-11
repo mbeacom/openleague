@@ -64,58 +64,6 @@ export async function getUserAdminTeamContext(): Promise<TeamContext | null> {
 }
 
 /**
- * Get the user's dashboard data: all team memberships and upcoming practice sessions.
- */
-export async function getDashboardData() {
-  const userId = await requireUserId();
-
-  const teams = await prisma.teamMember.findMany({
-    where: { userId },
-    select: {
-      id: true,
-      role: true,
-      joinedAt: true,
-      team: {
-        select: {
-          id: true,
-          name: true,
-          sport: true,
-          season: true,
-          leagueId: true,
-          league: { select: { id: true, name: true } },
-          division: { select: { id: true, name: true } },
-        },
-      },
-    },
-    orderBy: { joinedAt: "desc" },
-  });
-
-  const firstTeam = teams[0]?.team;
-  const upcomingPractices = firstTeam
-    ? await prisma.practiceSession.findMany({
-        where: {
-          teamId: firstTeam.id,
-          date: { gte: new Date() },
-          OR: [{ isShared: true }, { createdById: userId }],
-        },
-        orderBy: { date: "asc" },
-        take: 3,
-        include: { _count: { select: { plays: true } } },
-      })
-    : [];
-
-  const serializedPractices = upcomingPractices.map((p) => ({
-    id: p.id,
-    title: p.title,
-    date: p.date.toISOString(),
-    duration: p.duration,
-    playCount: p._count.plays,
-  }));
-
-  return { teams, upcomingPractices: serializedPractices };
-}
-
-/**
  * Get the calendar events for the user's primary team.
  */
 export async function getCalendarData(): Promise<{

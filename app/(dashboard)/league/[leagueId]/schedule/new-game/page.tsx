@@ -1,5 +1,9 @@
-import { Container, Box, Typography } from "@mui/material";
+import GroupsIcon from "@mui/icons-material/Groups";
 import { notFound } from "next/navigation";
+import { LinkButton } from "@/components/ui/NextLinkComposites";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { PageContainer } from "@/components/ui/PageContainer";
+import { PageHeader } from "@/components/ui/PageHeader";
 import InterTeamGameForm from "@/components/features/events/InterTeamGameForm";
 import { getNewLeagueGameContext } from "@/lib/actions/league-context";
 
@@ -18,34 +22,33 @@ export default async function NewGamePage({ params }: NewGamePageProps) {
 
   if (data.teams.length < 2) {
     return (
-      <Container maxWidth="md">
-        <Box sx={{ py: 4 }}>
-          <Typography variant="h4" component="h1" gutterBottom>
-            Schedule Inter-Team Game
-          </Typography>
-          <Typography variant="body1" color="text.secondary">
-            You need at least 2 teams in the league to schedule inter-team games.
-          </Typography>
-        </Box>
-      </Container>
+      <PageContainer maxWidth="md">
+        <PageHeader title="Schedule Inter-Team Game" />
+        <EmptyState
+          icon={<GroupsIcon />}
+          title="Not enough teams"
+          description="You need at least 2 teams in the league to schedule inter-team games."
+          action={
+            <LinkButton href={`/league/${leagueId}/teams/new`} variant="contained">
+              Add a team
+            </LinkButton>
+          }
+        />
+      </PageContainer>
     );
   }
 
   return (
-    <Container maxWidth="md">
-      <Box sx={{ py: 4 }}>
-        <Typography variant="h4" component="h1" gutterBottom>
-          Schedule Inter-Team Game
-        </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 4 }}>
-          {data.league.name} • Create a game between two teams
-        </Typography>
+    <PageContainer maxWidth="md">
+      <PageHeader
+        title="Schedule Inter-Team Game"
+        subtitle={`${data.league.name} • Create a game between two teams`}
+      />
 
-        <InterTeamGameForm
-          leagueId={leagueId}
-          teams={data.teams}
-        />
-      </Box>
-    </Container>
+      <InterTeamGameForm
+        leagueId={leagueId}
+        teams={data.teams}
+      />
+    </PageContainer>
   );
 }

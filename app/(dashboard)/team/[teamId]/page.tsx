@@ -5,7 +5,6 @@ import {
   Card,
   CardContent,
   Chip,
-  Container,
   Stack,
   Typography,
 } from "@mui/material";
@@ -19,7 +18,9 @@ import {
 } from "@mui/icons-material";
 import { getTeamOverviewData } from "@/lib/actions/team-context";
 import { formatSport } from "@/lib/utils/validation";
-import { NextLinkButton, NextLinkCard } from "@/components/ui/NextLinkComponents";
+import { LinkButton, LinkCard } from "@/components/ui/NextLinkComposites";
+import { PageContainer } from "@/components/ui/PageContainer";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 interface TeamPageProps {
   params: Promise<{ teamId: string }>;
@@ -65,172 +66,172 @@ export default async function TeamPage({ params }: TeamPageProps) {
   }
 
   return (
-    <Container maxWidth="lg">
-      <Box sx={{ py: 4 }}>
-        <NextLinkButton
-          href="/dashboard"
-          startIcon={<ArrowBackIcon />}
-          sx={{ mb: 3 }}
-        >
-          Back to dashboard
-        </NextLinkButton>
+    <PageContainer>
+      <LinkButton
+        href="/dashboard"
+        startIcon={<ArrowBackIcon />}
+        sx={{ mb: 3 }}
+      >
+        Back to dashboard
+      </LinkButton>
 
-        <Card
-          sx={{
-            mb: 3,
-            overflow: "hidden",
-            border: "1px solid",
-            borderColor: "divider",
-          }}
-        >
-          <CardContent sx={{ p: { xs: 3, md: 4 } }}>
-            <Stack
-              direction={{ xs: "column", md: "row" }}
-              justifyContent="space-between"
-              alignItems={{ xs: "flex-start", md: "center" }}
-              spacing={3}
-            >
-              <Stack direction="row" spacing={2} alignItems="center">
-                <Avatar
-                  sx={{
-                    width: 64,
-                    height: 64,
-                    bgcolor: "primary.main",
-                    fontSize: "1.25rem",
-                    fontWeight: 800,
-                  }}
-                >
-                  {getTeamInitials(team.name)}
-                </Avatar>
-                <Box>
-                  <Typography variant="h4" component="h1" fontWeight={800} gutterBottom>
-                    {team.name}
-                  </Typography>
-                  <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                    <Chip icon={<SportsIcon />} label={formatSport(team.sport)} />
-                    <Chip label={team.season} variant="outlined" />
-                    <Chip
-                      label={formatAccessRole(team.role, team.isAdmin)}
-                      color={team.isAdmin ? "primary" : "default"}
-                      variant={team.isAdmin ? "filled" : "outlined"}
-                    />
-                    {team.league ? <Chip label={team.league.name} color="secondary" variant="outlined" /> : null}
-                    {team.division ? <Chip label={`Division: ${team.division.name}`} variant="outlined" /> : null}
-                  </Stack>
-                </Box>
-              </Stack>
+      <Card
+        sx={{
+          mb: 3,
+          overflow: "hidden",
+          border: "1px solid",
+          borderColor: "divider",
+        }}
+      >
+        <CardContent sx={{ p: { xs: 3, md: 4 } }}>
+          <Stack
+            direction={{ xs: "column", md: "row" }}
+            justifyContent="space-between"
+            alignItems={{ xs: "flex-start", md: "center" }}
+            spacing={3}
+          >
+            <Stack direction="row" spacing={2} alignItems="center">
+              <Avatar
+                sx={{
+                  width: 64,
+                  height: 64,
+                  bgcolor: "primary.main",
+                  fontSize: "1.25rem",
+                  fontWeight: 800,
+                }}
+              >
+                {getTeamInitials(team.name)}
+              </Avatar>
+              <Box>
+                <Typography variant="h4" component="h1" fontWeight={800} gutterBottom>
+                  {team.name}
+                </Typography>
+                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                  <Chip icon={<SportsIcon />} label={formatSport(team.sport)} />
+                  <Chip label={team.season} variant="outlined" />
+                  <Chip
+                    label={formatAccessRole(team.role, team.isAdmin)}
+                    color={team.isAdmin ? "primary" : "default"}
+                    variant={team.isAdmin ? "filled" : "outlined"}
+                  />
+                  {team.league ? <Chip label={team.league.name} color="secondary" variant="outlined" /> : null}
+                  {team.division ? <Chip label={`Division: ${team.division.name}`} variant="outlined" /> : null}
+                </Stack>
+              </Box>
+            </Stack>
 
-              <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ width: { xs: "100%", md: "auto" } }}>
-                <NextLinkButton
-                  href={`/team/${team.id}/roster`}
-                  variant="contained"
-                  startIcon={<PeopleIcon />}
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ width: { xs: "100%", md: "auto" } }}>
+              <LinkButton
+                href={`/team/${team.id}/roster`}
+                variant="contained"
+                startIcon={<PeopleIcon />}
+                fullWidth
+              >
+                {team.isAdmin ? "Manage roster" : "View roster"}
+              </LinkButton>
+              {team.league ? (
+                <LinkButton
+                  href={`/league/${team.league.id}/teams`}
+                  variant="outlined"
+                  startIcon={<GroupsIcon />}
                   fullWidth
                 >
-                  {team.isAdmin ? "Manage roster" : "View roster"}
-                </NextLinkButton>
-                {team.league ? (
-                  <NextLinkButton
-                    href={`/league/${team.league.id}/teams`}
-                    variant="outlined"
-                    startIcon={<GroupsIcon />}
-                    fullWidth
-                  >
-                    League teams
-                  </NextLinkButton>
-                ) : null}
-              </Stack>
+                  League teams
+                </LinkButton>
+              ) : null}
             </Stack>
-          </CardContent>
-        </Card>
+          </Stack>
+        </CardContent>
+      </Card>
 
-        <Box
-          sx={{
-            display: "grid",
-            gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" },
-            gap: 2,
-            mb: 3,
-          }}
-        >
-          <StatCard icon={<PeopleIcon color="primary" />} label="Players" value={team.stats.players} />
-          <StatCard icon={<EventIcon color="primary" />} label="Events" value={team.stats.events} />
-          <StatCard icon={<GroupsIcon color="primary" />} label="Members" value={team.stats.members} />
-        </Box>
-
-        <Card variant="outlined">
-          <CardContent>
-            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
-              <CalendarIcon color="primary" />
-              <Typography variant="h5" component="h2" fontWeight={700}>
-                Upcoming events
-              </Typography>
-            </Stack>
-
-            {team.upcomingEvents.length === 0 ? (
-              <Typography variant="body2" color="text.secondary">
-                No upcoming games or practices are scheduled for this team yet.
-              </Typography>
-            ) : (
-              <Stack spacing={1.5}>
-                {team.upcomingEvents.map((event) => {
-                  const eventCardProps = {
-                    variant: "outlined" as const,
-                    sx: {
-                      color: "inherit",
-                      textDecoration: "none",
-                      transition: "border-color 0.2s, box-shadow 0.2s",
-                      ...(team.canOpenEventDetails && {
-                        cursor: "pointer",
-                      }),
-                      "&:hover": team.canOpenEventDetails ? {
-                        borderColor: "primary.main",
-                        boxShadow: 1,
-                      } : undefined,
-                    },
-                  };
-
-                  const eventCardContent = (
-                    <CardContent sx={{ py: 1.5, "&:last-child": { pb: 1.5 } }}>
-                      <Stack
-                        direction={{ xs: "column", sm: "row" }}
-                        justifyContent="space-between"
-                        spacing={1}
-                      >
-                        <Box>
-                          <Typography variant="subtitle1" fontWeight={700}>
-                            {event.title}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary">
-                            {event.location || "Location TBD"}
-                            {event.opponent ? ` • vs. ${event.opponent}` : ""}
-                          </Typography>
-                        </Box>
-                        <Stack direction="row" spacing={1} alignItems="center">
-                          <Chip size="small" label={event.type === "GAME" ? "Game" : "Practice"} />
-                          <Typography variant="body2" color="text.secondary">
-                            {formatEventDate(event.startAt)}
-                          </Typography>
-                        </Stack>
-                      </Stack>
-                    </CardContent>
-                  );
-
-                  return team.canOpenEventDetails ? (
-                    <NextLinkCard key={event.id} href={`/events/${event.id}`} {...eventCardProps}>
-                      {eventCardContent}
-                    </NextLinkCard>
-                  ) : (
-                    <Card key={event.id} {...eventCardProps}>
-                      {eventCardContent}
-                    </Card>
-                  );
-                })}
-              </Stack>
-            )}
-          </CardContent>
-        </Card>
+      <Box
+        sx={{
+          display: "grid",
+          gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" },
+          gap: 2,
+          mb: 3,
+        }}
+      >
+        <StatCard icon={<PeopleIcon color="primary" />} label="Players" value={team.stats.players} />
+        <StatCard icon={<EventIcon color="primary" />} label="Events" value={team.stats.events} />
+        <StatCard icon={<GroupsIcon color="primary" />} label="Members" value={team.stats.members} />
       </Box>
-    </Container>
+
+      <Card variant="outlined">
+        <CardContent>
+          <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
+            <CalendarIcon color="primary" />
+            <Typography variant="h5" component="h2" fontWeight={700}>
+              Upcoming events
+            </Typography>
+          </Stack>
+
+          {team.upcomingEvents.length === 0 ? (
+            <EmptyState
+              icon={<EventIcon />}
+              title="No upcoming events"
+              description="No upcoming games or practices are scheduled for this team yet."
+            />
+          ) : (
+            <Stack spacing={1.5}>
+              {team.upcomingEvents.map((event) => {
+                const eventCardProps = {
+                  variant: "outlined" as const,
+                  sx: {
+                    color: "inherit",
+                    textDecoration: "none",
+                    transition: "border-color 0.2s, box-shadow 0.2s",
+                    ...(team.canOpenEventDetails && {
+                      cursor: "pointer",
+                    }),
+                    "&:hover": team.canOpenEventDetails ? {
+                      borderColor: "primary.main",
+                      boxShadow: 1,
+                    } : undefined,
+                  },
+                };
+
+                const eventCardContent = (
+                  <CardContent sx={{ py: 1.5, "&:last-child": { pb: 1.5 } }}>
+                    <Stack
+                      direction={{ xs: "column", sm: "row" }}
+                      justifyContent="space-between"
+                      spacing={1}
+                    >
+                      <Box>
+                        <Typography variant="subtitle1" fontWeight={700}>
+                          {event.title}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          {event.location || "Location TBD"}
+                          {event.opponent ? ` • vs. ${event.opponent}` : ""}
+                        </Typography>
+                      </Box>
+                      <Stack direction="row" spacing={1} alignItems="center">
+                        <Chip size="small" label={event.type === "GAME" ? "Game" : "Practice"} />
+                        <Typography variant="body2" color="text.secondary">
+                          {formatEventDate(event.startAt)}
+                        </Typography>
+                      </Stack>
+                    </Stack>
+                  </CardContent>
+                );
+
+                return team.canOpenEventDetails ? (
+                  <LinkCard key={event.id} href={`/events/${event.id}`} {...eventCardProps}>
+                    {eventCardContent}
+                  </LinkCard>
+                ) : (
+                  <Card key={event.id} {...eventCardProps}>
+                    {eventCardContent}
+                  </Card>
+                );
+              })}
+            </Stack>
+          )}
+        </CardContent>
+      </Card>
+    </PageContainer>
   );
 }
 

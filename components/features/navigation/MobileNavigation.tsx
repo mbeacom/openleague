@@ -20,7 +20,8 @@ import {
   SportsHockey as SportsHockeyIcon,
   HowToReg as HowToRegIcon,
 } from '@mui/icons-material';
-import { usePathname, useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { logout } from '@/lib/actions/logout';
 import { useLeague } from '@/components/providers/LeagueProvider';
 
@@ -30,7 +31,6 @@ interface MobileNavigationProps {
 
 export default function MobileNavigation({ isLeagueMode = false }: MobileNavigationProps) {
   const pathname = usePathname();
-  const router = useRouter();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const menuOpen = Boolean(anchorEl);
 
@@ -72,10 +72,6 @@ export default function MobileNavigation({ isLeagueMode = false }: MobileNavigat
 
   const navItems = getNavItems();
 
-  const handleNavigation = (path: string) => {
-    router.push(path);
-  };
-
   const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
   };
@@ -115,11 +111,6 @@ export default function MobileNavigation({ isLeagueMode = false }: MobileNavigat
       >
         <BottomNavigation
           value={getCurrentValue()}
-          onChange={(_event, newValue) => {
-            if (newValue !== "more") {
-              handleNavigation(newValue);
-            }
-          }}
           showLabels
           sx={{
             '& .MuiBottomNavigationAction-root': {
@@ -134,6 +125,8 @@ export default function MobileNavigation({ isLeagueMode = false }: MobileNavigat
           {navItems.map((item) => (
             <BottomNavigationAction
               key={item.path}
+              component={Link}
+              href={item.path}
               label={item.label}
               value={item.path}
               icon={item.icon}
@@ -176,10 +169,9 @@ export default function MobileNavigation({ isLeagueMode = false }: MobileNavigat
       >
         {!isLeagueMode && (
           <MenuItem
-            onClick={() => {
-              handleMenuClose();
-              handleNavigation('/practice-planner');
-            }}
+            component={Link}
+            href="/practice-planner"
+            onClick={handleMenuClose}
           >
             <ListItemIcon>
               <SportsHockeyIcon />
@@ -188,10 +180,9 @@ export default function MobileNavigation({ isLeagueMode = false }: MobileNavigat
           </MenuItem>
         )}
         <MenuItem
-          onClick={() => {
-            handleMenuClose();
-            handleNavigation('/signup-events');
-          }}
+          component={Link}
+          href="/signup-events"
+          onClick={handleMenuClose}
         >
           <ListItemIcon>
             <HowToRegIcon />

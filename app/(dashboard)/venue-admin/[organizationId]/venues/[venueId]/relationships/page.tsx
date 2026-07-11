@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
-import { Container, Stack, Typography } from "@mui/material";
+import { PageContainer } from "@/components/ui/PageContainer";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { getVenueRelationshipAdminData } from "@/lib/actions/venue-relationships";
 import { VenueRelationshipManager } from "@/components/features/venue-admin";
 
@@ -19,13 +20,9 @@ export default async function VenueRelationshipsAdminPage({ params }: VenueRelat
   }
 
   return (
-    <Container maxWidth="lg">
-      <Stack spacing={4} sx={{ py: 4 }}>
-        <Typography variant="h4" component="h1">
-          Venue Relationships
-        </Typography>
-        <VenueRelationshipManager relationships={result.data.relationships} />
-      </Stack>
-    </Container>
+    <PageContainer>
+      <PageHeader title="Venue Relationships" />
+      <VenueRelationshipManager relationships={result.data.relationships} />
+    </PageContainer>
   );
 }

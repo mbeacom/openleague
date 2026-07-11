@@ -24,6 +24,7 @@ import AddIcon from "@mui/icons-material/Add";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import { TZDate } from "@date-fns/tz";
+import { DateTimeField } from "@/components/ui/date";
 import {
   createScheduleBlock,
   getVenueScheduleBoard,
@@ -610,25 +611,21 @@ function BlockDialogBody({
             </Stack>
 
             <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-              <TextField
+              <DateTimeField
                 name="startsAt"
                 label="Starts"
-                type="datetime-local"
                 required
                 fullWidth
                 defaultValue={block ? formatDateTimeLocalInput(block.startsAt, timeZone) : ""}
                 helperText={`Times are in ${timeZone}`}
-                slotProps={{ inputLabel: { shrink: true } }}
               />
-              <TextField
+              <DateTimeField
                 name="endsAt"
                 label="Ends"
-                type="datetime-local"
                 required
                 fullWidth
                 defaultValue={block ? formatDateTimeLocalInput(block.endsAt, timeZone) : ""}
                 helperText={`Times are in ${timeZone}`}
-                slotProps={{ inputLabel: { shrink: true } }}
               />
             </Stack>
 

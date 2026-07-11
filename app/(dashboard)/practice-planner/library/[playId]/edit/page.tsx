@@ -1,7 +1,8 @@
-import { Box, Container, Alert } from "@mui/material";
+import { Alert } from "@mui/material";
 import { notFound, redirect } from "next/navigation";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { LinkButton } from "@/components/ui/NextLinkComposites";
+import { PageContainer } from "@/components/ui/PageContainer";
 import { getPlayLibraryContext } from "@/lib/actions/practice-session-queries";
 import { getPlayById } from "@/lib/actions/plays";
 import { PlayEditorWrapper } from "../../PlayEditorWrapper";
@@ -27,20 +28,18 @@ export default async function EditPlayPage({ params }: PageProps) {
 
   if (!context.isAdmin) {
     return (
-      <Container maxWidth="lg">
-        <Box sx={{ py: 4 }}>
-          <Alert severity="warning">
-            Only team admins can edit plays.
-          </Alert>
-          <LinkButton
-            href="/practice-planner/library"
-            startIcon={<ArrowBackIcon />}
-            sx={{ mt: 2 }}
-          >
-            Back to Play Library
-          </LinkButton>
-        </Box>
-      </Container>
+      <PageContainer>
+        <Alert severity="warning">
+          Only team admins can edit plays.
+        </Alert>
+        <LinkButton
+          href="/practice-planner/library"
+          startIcon={<ArrowBackIcon />}
+          sx={{ mt: 2 }}
+        >
+          Back to Play Library
+        </LinkButton>
+      </PageContainer>
     );
   }
 
@@ -62,10 +61,8 @@ export default async function EditPlayPage({ params }: PageProps) {
   };
 
   return (
-    <Container maxWidth="lg">
-      <Box sx={{ py: 4 }}>
-        <PlayEditorWrapper teamId={context.teamId} play={play} />
-      </Box>
-    </Container>
+    <PageContainer>
+      <PlayEditorWrapper teamId={context.teamId} play={play} />
+    </PageContainer>
   );
 }

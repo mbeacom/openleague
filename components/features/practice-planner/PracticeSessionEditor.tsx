@@ -42,8 +42,6 @@ import {
     Edit as EditIcon,
 } from "@mui/icons-material";
 import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker";
-import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
-import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
 import Image from "next/image";
 import {
     PracticeSessionData,
@@ -608,8 +606,10 @@ export function PracticeSessionEditor({
         // the venue's timezone to form the booking instant (FR-019).
         let startAt: Date | null = null;
         if (venueId) {
-            const pad = (value: number) => String(value).padStart(2, "0");
-            const dateStr = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+            // Derive the booking day in the venue's zone — not via browser-local
+            // getFullYear/getMonth/getDate — so the day doesn't shift across
+            // midnight between zones (matches the initial startTime derivation).
+            const dateStr = formatDateTimeLocalInput(date, selectedVenueTimeZone).slice(0, 10);
             startAt = parseDateTimeLocalToUtc(`${dateStr}T${startTime}`, selectedVenueTimeZone);
             if (!startAt) {
                 setValidationErrors((prev) => ({
@@ -932,191 +932,93 @@ export function PracticeSessionEditor({
     const wholeSurfaceLabel = (surfaceId && wholeLabelBySurface[surfaceId]) || "Whole surface";
 
     return (
-        <LocalizationProvider dateAdapter={AdapterDateFns}>
-            <Box
-                sx={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 2,
-                    p: isMobile ? 2 : 3,
-                    maxWidth: "1400px",
-                    margin: "0 auto",
-                }}
-            >
-                {/* Header */}
-                <Typography variant="h4" component="h1">
-                    {sessionId ? "Edit Practice Session" : "Create New Practice Session"}
-                </Typography>
+        <Box
+            sx={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 2,
+                p: isMobile ? 2 : 3,
+                maxWidth: "1400px",
+                margin: "0 auto",
+            }}
+        >
+            {/* Header */}
+            <Typography variant="h4" component="h1">
+                {sessionId ? "Edit Practice Session" : "Create New Practice Session"}
+            </Typography>
 
-                {/* Session Metadata Form */}
-                {/* Requirements: 2.1 - Form fields for title, date, and duration */}
-                <Paper elevation={2} sx={{ p: 2 }}>
-                    <Stack spacing={2}>
-                        <Typography variant="h6" component="h2">
-                            Session Details
-                        </Typography>
+            {/* Session Metadata Form */}
+            {/* Requirements: 2.1 - Form fields for title, date, and duration */}
+            <Paper elevation={2} sx={{ p: 2 }}>
+                <Stack spacing={2}>
+                    <Typography variant="h6" component="h2">
+                        Session Details
+                    </Typography>
 
-                        {/* Title Field */}
-                        <TextField
-                            label="Session Title"
-                            value={title}
-                            onChange={handleTitleChange}
-                            fullWidth
-                            required
-                            placeholder="Enter session title"
-                            inputProps={{ maxLength: 100 }}
-                            helperText={
-                                validationErrors.title ||
-                                `${title.length}/100 characters`
-                            }
-                            error={!!validationErrors.title}
-                        />
+                    {/* Title Field */}
+                    <TextField
+                        label="Session Title"
+                        value={title}
+                        onChange={handleTitleChange}
+                        fullWidth
+                        required
+                        placeholder="Enter session title"
+                        inputProps={{ maxLength: 100 }}
+                        helperText={
+                            validationErrors.title ||
+                            `${title.length}/100 characters`
+                        }
+                        error={!!validationErrors.title}
+                    />
 
-                        {/* Date Field */}
-                        <DateTimePicker
-                            label="Practice Date & Time"
-                            value={date}
-                            onChange={handleDateChange}
-                            slotProps={{
-                                textField: {
-                                    fullWidth: true,
-                                    required: true,
-                                    error: !!validationErrors.date,
-                                    helperText: validationErrors.date,
-                                },
-                            }}
-                        />
+                    {/* Date Field */}
+                    <DateTimePicker
+                        label="Practice Date & Time"
+                        value={date}
+                        onChange={handleDateChange}
+                        slotProps={{
+                            textField: {
+                                fullWidth: true,
+                                required: true,
+                                error: !!validationErrors.date,
+                                helperText: validationErrors.date,
+                            },
+                        }}
+                    />
 
-                        {/* Duration Field */}
-                        {/* Requirements: 2.1 - Duration validation (1-300 minutes) */}
-                        <TextField
-                            label="Session Duration (minutes)"
-                            type="number"
-                            value={duration}
-                            onChange={handleDurationChange}
-                            fullWidth
-                            required
-                            inputProps={{
-                                min: VALIDATION_CONSTRAINTS.MIN_DURATION,
-                                max: VALIDATION_CONSTRAINTS.MAX_DURATION,
-                            }}
-                            helperText={
-                                validationErrors.duration ||
-                                `Duration must be between ${VALIDATION_CONSTRAINTS.MIN_DURATION} and ${VALIDATION_CONSTRAINTS.MAX_DURATION} minutes`
-                            }
-                            error={!!validationErrors.duration}
-                        />
+                    {/* Duration Field */}
+                    {/* Requirements: 2.1 - Duration validation (1-300 minutes) */}
+                    <TextField
+                        label="Session Duration (minutes)"
+                        type="number"
+                        value={duration}
+                        onChange={handleDurationChange}
+                        fullWidth
+                        required
+                        inputProps={{
+                            min: VALIDATION_CONSTRAINTS.MIN_DURATION,
+                            max: VALIDATION_CONSTRAINTS.MAX_DURATION,
+                        }}
+                        helperText={
+                            validationErrors.duration ||
+                            `Duration must be between ${VALIDATION_CONSTRAINTS.MIN_DURATION} and ${VALIDATION_CONSTRAINTS.MAX_DURATION} minutes`
+                        }
+                        error={!!validationErrors.duration}
+                    />
 
-                        {/* Shared Status Indicator */}
-                        {/* Requirements: 3.1 - Show shared status indicator */}
-                        {isShared && (
-                            <Alert severity="info">
-                                This session is shared with your team members
-                            </Alert>
-                        )}
-                    </Stack>
-                </Paper>
+                    {/* Shared Status Indicator */}
+                    {/* Requirements: 3.1 - Show shared status indicator */}
+                    {isShared && (
+                        <Alert severity="info">
+                            This session is shared with your team members
+                        </Alert>
+                    )}
+                </Stack>
+            </Paper>
 
-                {/* Ice Booking (feature 006, FR-019) */}
-                {/* Optional venue attachment: venue → surface → segment + start time. */}
-                {venues.length > 0 && (
-                    <Paper elevation={2} sx={{ p: 2 }}>
-                        <Stack spacing={2}>
-                            <Stack
-                                direction="row"
-                                justifyContent="space-between"
-                                alignItems="center"
-                            >
-                                <Typography variant="h6" component="h2">
-                                    Ice Booking (optional)
-                                </Typography>
-                                {venueId && (
-                                    <Button
-                                        size="small"
-                                        color="inherit"
-                                        onClick={handleClearBooking}
-                                        disabled={isSaving || isSharing}
-                                    >
-                                        Clear booking
-                                    </Button>
-                                )}
-                            </Stack>
-                            <Typography variant="body2" color="text.secondary">
-                                Book a venue for this practice so it appears on the venue&apos;s
-                                schedule and other bookings warn against it.
-                            </Typography>
-                            <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-                                <TextField
-                                    select
-                                    label="Venue"
-                                    fullWidth
-                                    value={venueId}
-                                    onChange={(event) => handleVenueChange(event.target.value)}
-                                >
-                                    <MenuItem value="">No venue booking</MenuItem>
-                                    {venues.map((venue) => (
-                                        <MenuItem key={venue.id} value={venue.id}>
-                                            {venue.name}
-                                        </MenuItem>
-                                    ))}
-                                </TextField>
-                                {venueId && (
-                                    <TextField
-                                        label="Start time"
-                                        type="time"
-                                        required
-                                        fullWidth
-                                        value={startTime}
-                                        onChange={handleStartTimeChange}
-                                        error={!!validationErrors.startTime}
-                                        helperText={
-                                            validationErrors.startTime ||
-                                            `On the practice date, in ${selectedVenueTimeZone} (the venue's timezone); runs ${duration} min`
-                                        }
-                                        slotProps={{ inputLabel: { shrink: true } }}
-                                    />
-                                )}
-                            </Stack>
-                            {venueId && venueSurfaces.length > 0 && (
-                                <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-                                    <TextField
-                                        select
-                                        label="Surface (optional)"
-                                        fullWidth
-                                        value={surfaceId}
-                                        onChange={(event) => handleSurfaceChange(event.target.value)}
-                                    >
-                                        <MenuItem value="">Any surface</MenuItem>
-                                        {venueSurfaces.map((surface) => (
-                                            <MenuItem key={surface.id} value={surface.id}>
-                                                {surface.name}
-                                            </MenuItem>
-                                        ))}
-                                    </TextField>
-                                    {surfaceId && surfaceSegments.length > 0 && (
-                                        <TextField
-                                            select
-                                            label="Segment (optional)"
-                                            fullWidth
-                                            value={segmentId}
-                                            onChange={(event) => handleSegmentChange(event.target.value)}
-                                        >
-                                            <MenuItem value="">{wholeSurfaceLabel}</MenuItem>
-                                            {surfaceSegments.map((segment) => (
-                                                <MenuItem key={segment.id} value={segment.id}>
-                                                    {segment.name}
-                                                </MenuItem>
-                                            ))}
-                                        </TextField>
-                                    )}
-                                </Stack>
-                            )}
-                        </Stack>
-                    </Paper>
-                )}
-
-                {/* Play List Management */}
-                {/* Requirements: 2.2, 2.3 - List view for plays in session */}
+            {/* Ice Booking (feature 006, FR-019) */}
+            {/* Optional venue attachment: venue → surface → segment + start time. */}
+            {venues.length > 0 && (
                 <Paper elevation={2} sx={{ p: 2 }}>
                     <Stack spacing={2}>
                         <Stack
@@ -1125,288 +1027,384 @@ export function PracticeSessionEditor({
                             alignItems="center"
                         >
                             <Typography variant="h6" component="h2">
-                                Plays in Session
+                                Ice Booking (optional)
                             </Typography>
-                            {/* Requirements: 4.3 - Add play button to open library */}
-                            <Button
-                                variant="outlined"
-                                startIcon={<AddIcon />}
-                                onClick={handleOpenLibrary}
-                                disabled={isSaving || isSharing}
-                            >
-                                Add Play
-                            </Button>
-                        </Stack>
-
-                        {/* Total Session Time */}
-                        {/* Requirements: 2.3 - Display total session time with validation */}
-                        {plays.length > 0 && (
-                            <Box>
-                                <Stack direction="row" spacing={2} alignItems="center">
-                                    <Typography variant="body2" color="text.secondary">
-                                        Total Play Time: {calculateTotalPlayTime()} minutes
-                                    </Typography>
-                                    <Typography variant="body2" color="text.secondary">
-                                        Session Duration: {duration} minutes
-                                    </Typography>
-                                </Stack>
-                                {/* Requirements: 2.3 - Show warning when total exceeds session duration */}
-                                {calculateTotalPlayTime() > duration && (
-                                    <Alert severity="warning" sx={{ mt: 1 }}>
-                                        Total play time ({calculateTotalPlayTime()} min) exceeds
-                                        session duration ({duration} min)
-                                    </Alert>
-                                )}
-                            </Box>
-                        )}
-
-                        {/* Empty State */}
-                        {plays.length === 0 && (
-                            <Box
-                                sx={{
-                                    display: "flex",
-                                    flexDirection: "column",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                    minHeight: 200,
-                                    textAlign: "center",
-                                    p: 3,
-                                }}
-                            >
-                                <Typography variant="h6" color="text.secondary" gutterBottom>
-                                    No plays added yet
-                                </Typography>
-                                <Typography variant="body2" color="text.secondary">
-                                    Add plays from your library to build your practice session
-                                </Typography>
-                            </Box>
-                        )}
-
-                        {/* Play Cards */}
-                        {/* Requirements: 2.2 - Play card showing thumbnail, duration, and instructions */}
-                        {plays.length > 0 && (
-                            <Stack spacing={2}>
-                                {plays.map((play, index) => (
-                                    <PlayCard
-                                        key={play.id}
-                                        play={play}
-                                        index={index}
-                                        totalPlays={plays.length}
-                                        isEditing={editingPlayId === play.id}
-                                        onDelete={handleDeletePlay}
-                                        onEdit={handleEditPlay}
-                                        onUpdate={handleUpdatePlayInSession}
-                                        onCancelEdit={handleCancelEdit}
-                                        onMoveUp={handleMovePlayUp}
-                                        onMoveDown={handleMovePlayDown}
-                                    />
-                                ))}
-                            </Stack>
-                        )}
-                    </Stack>
-                </Paper>
-
-                {/* Save Status and Actions */}
-                <Paper elevation={2} sx={{ p: 2 }}>
-                    <Stack spacing={2}>
-                        {/* Error Message */}
-                        {saveError && (
-                            <Alert severity="error" onClose={() => setSaveError(null)}>
-                                {saveError}
-                            </Alert>
-                        )}
-
-                        {/* Venue booking conflicts (FR-019/US5): warn and allow an
-                            explicit override that resubmits with overrideConflicts. */}
-                        {bookingConflicts && (
-                            <Alert
-                                severity="warning"
-                                action={
-                                    <Button
-                                        color="inherit"
-                                        size="small"
-                                        disabled={isSaving || isSharing}
-                                        onClick={() => handleSave(true)}
-                                    >
-                                        Book anyway
-                                    </Button>
-                                }
-                            >
-                                <AlertTitle>
-                                    This time overlaps {bookingConflicts.length} existing booking
-                                    {bookingConflicts.length === 1 ? "" : "s"} at the venue
-                                </AlertTitle>
-                                {bookingConflicts.map((conflict, index) => (
-                                    <Typography key={`${conflict.title}-${index}`} variant="body2">
-                                        {conflict.title} —{" "}
-                                        {formatDateTimeInZone(conflict.startAt, selectedVenueTimeZone)}
-                                        {conflict.endAt
-                                            ? ` – ${formatDateTimeInZone(conflict.endAt, selectedVenueTimeZone)}`
-                                            : ""}
-                                    </Typography>
-                                ))}
-                            </Alert>
-                        )}
-
-                        {/* Success Message */}
-                        {saveSuccess && (
-                            <Alert severity="success" onClose={() => setSaveSuccess(false)}>
-                                {isShared
-                                    ? "Session shared successfully!"
-                                    : "Session saved successfully!"}
-                            </Alert>
-                        )}
-
-                        {/* Save Status Indicator */}
-                        {isSaving && (
-                            <Stack direction="row" spacing={1} alignItems="center">
-                                <CircularProgress size={16} />
-                                <Typography variant="body2" color="text.secondary">
-                                    Saving...
-                                </Typography>
-                            </Stack>
-                        )}
-                        {hasUnsavedChanges && !isSaving && (
-                            <Typography variant="body2" color="text.secondary">
-                                Unsaved changes
-                            </Typography>
-                        )}
-
-                        {/* Action Buttons */}
-                        <Stack direction="row" spacing={2} justifyContent="flex-end">
-                            {onCancel && (
+                            {venueId && (
                                 <Button
-                                    variant="outlined"
-                                    onClick={onCancel}
+                                    size="small"
+                                    color="inherit"
+                                    onClick={handleClearBooking}
                                     disabled={isSaving || isSharing}
                                 >
-                                    Cancel
-                                </Button>
-                            )}
-
-                            <Button
-                                variant="contained"
-                                color="primary"
-                                onClick={() => handleSave()}
-                                disabled={isSaving || isSharing || !title.trim()}
-                                startIcon={
-                                    isSaving ? (
-                                        <CircularProgress size={20} color="inherit" />
-                                    ) : (
-                                        <SaveIcon />
-                                    )
-                                }
-                            >
-                                {isSaving ? "Saving..." : "Save Session"}
-                            </Button>
-
-                            {/* Share Button */}
-                            {/* Requirements: 3.1 - Share button with confirmation */}
-                            {sessionId && (
-                                <Button
-                                    variant="contained"
-                                    color="secondary"
-                                    onClick={handleOpenShareDialog}
-                                    disabled={isSaving || isSharing || hasUnsavedChanges}
-                                    startIcon={
-                                        isSharing ? (
-                                            <CircularProgress size={20} color="inherit" />
-                                        ) : (
-                                            <ShareIcon />
-                                        )
-                                    }
-                                >
-                                    {isSharing ? "Sharing..." : isShared ? "Shared" : "Share with Team"}
+                                    Clear booking
                                 </Button>
                             )}
                         </Stack>
+                        <Typography variant="body2" color="text.secondary">
+                            Book a venue for this practice so it appears on the venue&apos;s
+                            schedule and other bookings warn against it.
+                        </Typography>
+                        <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+                            <TextField
+                                select
+                                label="Venue"
+                                fullWidth
+                                value={venueId}
+                                onChange={(event) => handleVenueChange(event.target.value)}
+                            >
+                                <MenuItem value="">No venue booking</MenuItem>
+                                {venues.map((venue) => (
+                                    <MenuItem key={venue.id} value={venue.id}>
+                                        {venue.name}
+                                    </MenuItem>
+                                ))}
+                            </TextField>
+                            {venueId && (
+                                <TextField
+                                    label="Start time"
+                                    type="time"
+                                    required
+                                    fullWidth
+                                    value={startTime}
+                                    onChange={handleStartTimeChange}
+                                    error={!!validationErrors.startTime}
+                                    helperText={
+                                        validationErrors.startTime ||
+                                        `On the practice date, in ${selectedVenueTimeZone} (the venue's timezone); runs ${duration} min`
+                                    }
+                                    slotProps={{ inputLabel: { shrink: true } }}
+                                />
+                            )}
+                        </Stack>
+                        {venueId && venueSurfaces.length > 0 && (
+                            <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+                                <TextField
+                                    select
+                                    label="Surface (optional)"
+                                    fullWidth
+                                    value={surfaceId}
+                                    onChange={(event) => handleSurfaceChange(event.target.value)}
+                                >
+                                    <MenuItem value="">Any surface</MenuItem>
+                                    {venueSurfaces.map((surface) => (
+                                        <MenuItem key={surface.id} value={surface.id}>
+                                            {surface.name}
+                                        </MenuItem>
+                                    ))}
+                                </TextField>
+                                {surfaceId && surfaceSegments.length > 0 && (
+                                    <TextField
+                                        select
+                                        label="Segment (optional)"
+                                        fullWidth
+                                        value={segmentId}
+                                        onChange={(event) => handleSegmentChange(event.target.value)}
+                                    >
+                                        <MenuItem value="">{wholeSurfaceLabel}</MenuItem>
+                                        {surfaceSegments.map((segment) => (
+                                            <MenuItem key={segment.id} value={segment.id}>
+                                                {segment.name}
+                                            </MenuItem>
+                                        ))}
+                                    </TextField>
+                                )}
+                            </Stack>
+                        )}
                     </Stack>
                 </Paper>
+            )}
 
-                {/* Play Library Dialog */}
-                {/* Requirements: 4.3 - Integrate PlayLibrary component in selection mode */}
-                {/* Using MUI Dialog for accessibility: focus trapping, scroll locking, Escape key handling */}
-                <Dialog
-                    open={showLibrary}
-                    onClose={handleCloseLibrary}
-                    fullScreen={isMobile}
-                    maxWidth="lg"
-                    fullWidth
-                    aria-labelledby="play-library-dialog-title"
-                >
-                    <DialogTitle id="play-library-dialog-title">
-                        <Stack
-                            direction="row"
-                            justifyContent="space-between"
-                            alignItems="center"
-                        >
-                            <Typography variant="h5" component="span">
-                                Select Play from Library
-                            </Typography>
-                            <Button variant="outlined" onClick={handleCloseLibrary}>
-                                Close
-                            </Button>
-                        </Stack>
-                    </DialogTitle>
-                    <DialogContent dividers>
-                        <PlayLibrary
-                            teamId={teamId}
-                            onSelectPlay={handleAddPlayFromLibrary}
-                            mode="select"
-                        />
-                    </DialogContent>
-                </Dialog>
-
-                {/* Share Confirmation Dialog */}
-                {/* Requirements: 3.1 - Share button with confirmation */}
-                <Dialog
-                    open={showShareDialog}
-                    onClose={handleCloseShareDialog}
-                    aria-labelledby="share-dialog-title"
-                    aria-describedby="share-dialog-description"
-                >
-                    <DialogTitle id="share-dialog-title">
-                        Share Practice Session?
-                    </DialogTitle>
-                    <DialogContent>
-                        <DialogContentText id="share-dialog-description">
-                            This will share the practice session with all team members. They
-                            will receive an email notification with a link to view the
-                            session.
-                            {isShared && (
-                                <>
-                                    <br />
-                                    <br />
-                                    <strong>
-                                        Note: This session is already shared. Sharing again will
-                                        send update notifications to team members.
-                                    </strong>
-                                </>
-                            )}
-                        </DialogContentText>
-                    </DialogContent>
-                    <DialogActions>
-                        <Button onClick={handleCloseShareDialog} disabled={isSharing}>
-                            Cancel
-                        </Button>
+            {/* Play List Management */}
+            {/* Requirements: 2.2, 2.3 - List view for plays in session */}
+            <Paper elevation={2} sx={{ p: 2 }}>
+                <Stack spacing={2}>
+                    <Stack
+                        direction="row"
+                        justifyContent="space-between"
+                        alignItems="center"
+                    >
+                        <Typography variant="h6" component="h2">
+                            Plays in Session
+                        </Typography>
+                        {/* Requirements: 4.3 - Add play button to open library */}
                         <Button
-                            onClick={handleShare}
-                            color="primary"
+                            variant="outlined"
+                            startIcon={<AddIcon />}
+                            onClick={handleOpenLibrary}
+                            disabled={isSaving || isSharing}
+                        >
+                            Add Play
+                        </Button>
+                    </Stack>
+
+                    {/* Total Session Time */}
+                    {/* Requirements: 2.3 - Display total session time with validation */}
+                    {plays.length > 0 && (
+                        <Box>
+                            <Stack direction="row" spacing={2} alignItems="center">
+                                <Typography variant="body2" color="text.secondary">
+                                    Total Play Time: {calculateTotalPlayTime()} minutes
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                    Session Duration: {duration} minutes
+                                </Typography>
+                            </Stack>
+                            {/* Requirements: 2.3 - Show warning when total exceeds session duration */}
+                            {calculateTotalPlayTime() > duration && (
+                                <Alert severity="warning" sx={{ mt: 1 }}>
+                                    Total play time ({calculateTotalPlayTime()} min) exceeds
+                                    session duration ({duration} min)
+                                </Alert>
+                            )}
+                        </Box>
+                    )}
+
+                    {/* Empty State */}
+                    {plays.length === 0 && (
+                        <Box
+                            sx={{
+                                display: "flex",
+                                flexDirection: "column",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                minHeight: 200,
+                                textAlign: "center",
+                                p: 3,
+                            }}
+                        >
+                            <Typography variant="h6" color="text.secondary" gutterBottom>
+                                No plays added yet
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                                Add plays from your library to build your practice session
+                            </Typography>
+                        </Box>
+                    )}
+
+                    {/* Play Cards */}
+                    {/* Requirements: 2.2 - Play card showing thumbnail, duration, and instructions */}
+                    {plays.length > 0 && (
+                        <Stack spacing={2}>
+                            {plays.map((play, index) => (
+                                <PlayCard
+                                    key={play.id}
+                                    play={play}
+                                    index={index}
+                                    totalPlays={plays.length}
+                                    isEditing={editingPlayId === play.id}
+                                    onDelete={handleDeletePlay}
+                                    onEdit={handleEditPlay}
+                                    onUpdate={handleUpdatePlayInSession}
+                                    onCancelEdit={handleCancelEdit}
+                                    onMoveUp={handleMovePlayUp}
+                                    onMoveDown={handleMovePlayDown}
+                                />
+                            ))}
+                        </Stack>
+                    )}
+                </Stack>
+            </Paper>
+
+            {/* Save Status and Actions */}
+            <Paper elevation={2} sx={{ p: 2 }}>
+                <Stack spacing={2}>
+                    {/* Error Message */}
+                    {saveError && (
+                        <Alert severity="error" onClose={() => setSaveError(null)}>
+                            {saveError}
+                        </Alert>
+                    )}
+
+                    {/* Venue booking conflicts (FR-019/US5): warn and allow an
+                        explicit override that resubmits with overrideConflicts. */}
+                    {bookingConflicts && (
+                        <Alert
+                            severity="warning"
+                            action={
+                                <Button
+                                    color="inherit"
+                                    size="small"
+                                    disabled={isSaving || isSharing}
+                                    onClick={() => handleSave(true)}
+                                >
+                                    Book anyway
+                                </Button>
+                            }
+                        >
+                            <AlertTitle>
+                                This time overlaps {bookingConflicts.length} existing booking
+                                {bookingConflicts.length === 1 ? "" : "s"} at the venue
+                            </AlertTitle>
+                            {bookingConflicts.map((conflict, index) => (
+                                <Typography key={`${conflict.title}-${index}`} variant="body2">
+                                    {conflict.title} —{" "}
+                                    {formatDateTimeInZone(conflict.startAt, selectedVenueTimeZone)}
+                                    {conflict.endAt
+                                        ? ` – ${formatDateTimeInZone(conflict.endAt, selectedVenueTimeZone)}`
+                                        : ""}
+                                </Typography>
+                            ))}
+                        </Alert>
+                    )}
+
+                    {/* Success Message */}
+                    {saveSuccess && (
+                        <Alert severity="success" onClose={() => setSaveSuccess(false)}>
+                            {isShared
+                                ? "Session shared successfully!"
+                                : "Session saved successfully!"}
+                        </Alert>
+                    )}
+
+                    {/* Save Status Indicator */}
+                    {isSaving && (
+                        <Stack direction="row" spacing={1} alignItems="center">
+                            <CircularProgress size={16} />
+                            <Typography variant="body2" color="text.secondary">
+                                Saving...
+                            </Typography>
+                        </Stack>
+                    )}
+                    {hasUnsavedChanges && !isSaving && (
+                        <Typography variant="body2" color="text.secondary">
+                            Unsaved changes
+                        </Typography>
+                    )}
+
+                    {/* Action Buttons */}
+                    <Stack direction="row" spacing={2} justifyContent="flex-end">
+                        {onCancel && (
+                            <Button
+                                variant="outlined"
+                                onClick={onCancel}
+                                disabled={isSaving || isSharing}
+                            >
+                                Cancel
+                            </Button>
+                        )}
+
+                        <Button
                             variant="contained"
-                            disabled={isSharing}
+                            color="primary"
+                            onClick={() => handleSave()}
+                            disabled={isSaving || isSharing || !title.trim()}
                             startIcon={
-                                isSharing ? (
+                                isSaving ? (
                                     <CircularProgress size={20} color="inherit" />
                                 ) : (
-                                    <ShareIcon />
+                                    <SaveIcon />
                                 )
                             }
                         >
-                            {isSharing ? "Sharing..." : "Share"}
+                            {isSaving ? "Saving..." : "Save Session"}
                         </Button>
-                    </DialogActions>
-                </Dialog>
-            </Box>
-        </LocalizationProvider>
+
+                        {/* Share Button */}
+                        {/* Requirements: 3.1 - Share button with confirmation */}
+                        {sessionId && (
+                            <Button
+                                variant="contained"
+                                color="secondary"
+                                onClick={handleOpenShareDialog}
+                                disabled={isSaving || isSharing || hasUnsavedChanges}
+                                startIcon={
+                                    isSharing ? (
+                                        <CircularProgress size={20} color="inherit" />
+                                    ) : (
+                                        <ShareIcon />
+                                    )
+                                }
+                            >
+                                {isSharing ? "Sharing..." : isShared ? "Shared" : "Share with Team"}
+                            </Button>
+                        )}
+                    </Stack>
+                </Stack>
+            </Paper>
+
+            {/* Play Library Dialog */}
+            {/* Requirements: 4.3 - Integrate PlayLibrary component in selection mode */}
+            {/* Using MUI Dialog for accessibility: focus trapping, scroll locking, Escape key handling */}
+            <Dialog
+                open={showLibrary}
+                onClose={handleCloseLibrary}
+                fullScreen={isMobile}
+                maxWidth="lg"
+                fullWidth
+                aria-labelledby="play-library-dialog-title"
+            >
+                <DialogTitle id="play-library-dialog-title">
+                    <Stack
+                        direction="row"
+                        justifyContent="space-between"
+                        alignItems="center"
+                    >
+                        <Typography variant="h5" component="span">
+                            Select Play from Library
+                        </Typography>
+                        <Button variant="outlined" onClick={handleCloseLibrary}>
+                            Close
+                        </Button>
+                    </Stack>
+                </DialogTitle>
+                <DialogContent dividers>
+                    <PlayLibrary
+                        teamId={teamId}
+                        onSelectPlay={handleAddPlayFromLibrary}
+                        mode="select"
+                    />
+                </DialogContent>
+            </Dialog>
+
+            {/* Share Confirmation Dialog */}
+            {/* Requirements: 3.1 - Share button with confirmation */}
+            <Dialog
+                open={showShareDialog}
+                onClose={handleCloseShareDialog}
+                aria-labelledby="share-dialog-title"
+                aria-describedby="share-dialog-description"
+            >
+                <DialogTitle id="share-dialog-title">
+                    Share Practice Session?
+                </DialogTitle>
+                <DialogContent>
+                    <DialogContentText id="share-dialog-description">
+                        This will share the practice session with all team members. They
+                        will receive an email notification with a link to view the
+                        session.
+                        {isShared && (
+                            <>
+                                <br />
+                                <br />
+                                <strong>
+                                    Note: This session is already shared. Sharing again will
+                                    send update notifications to team members.
+                                </strong>
+                            </>
+                        )}
+                    </DialogContentText>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleCloseShareDialog} disabled={isSharing}>
+                        Cancel
+                    </Button>
+                    <Button
+                        onClick={handleShare}
+                        color="primary"
+                        variant="contained"
+                        disabled={isSharing}
+                        startIcon={
+                            isSharing ? (
+                                <CircularProgress size={20} color="inherit" />
+                            ) : (
+                                <ShareIcon />
+                            )
+                        }
+                    >
+                        {isSharing ? "Sharing..." : "Share"}
+                    </Button>
+                </DialogActions>
+            </Dialog>
+        </Box>
     );
 }

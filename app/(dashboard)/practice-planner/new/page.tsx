@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { Container, Box } from "@mui/material";
+import { PageContainer } from "@/components/ui/PageContainer";
 import { PracticeSessionEditorWrapper } from "./PracticeSessionEditorWrapper";
 import { getUserAdminTeamContext } from "@/lib/actions/team-context";
 import { getVenueBookingOptions } from "../venue-booking-options";
@@ -21,13 +21,11 @@ export default async function NewPracticeSessionPage() {
   const bookingOptions = await getVenueBookingOptions();
 
   return (
-    <Container maxWidth="lg">
-      <Box sx={{ py: 4 }}>
-        <PracticeSessionEditorWrapper
-          teamId={context.teamId}
-          bookingOptions={bookingOptions}
-        />
-      </Box>
-    </Container>
+    <PageContainer>
+      <PracticeSessionEditorWrapper
+        teamId={context.teamId}
+        bookingOptions={bookingOptions}
+      />
+    </PageContainer>
   );
 }

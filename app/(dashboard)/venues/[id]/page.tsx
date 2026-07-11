@@ -1,7 +1,7 @@
-import { Container, Box } from "@mui/material";
 import { notFound } from "next/navigation";
 import { getVenuePageData } from "@/lib/actions/venues";
 import VenueDetail from "@/components/features/venues/VenueDetail";
+import { PageContainer } from "@/components/ui/PageContainer";
 
 export default async function VenueDetailPage({
   params,
@@ -16,14 +16,12 @@ export default async function VenueDetailPage({
   }
 
   return (
-    <Container maxWidth="md">
-      <Box sx={{ py: 4 }}>
-        <VenueDetail
-          venue={data.venue!}
-          canEdit={data.canEdit}
-          upcomingEvents={data.upcomingEvents}
-        />
-      </Box>
-    </Container>
+    <PageContainer maxWidth="md">
+      <VenueDetail
+        venue={data.venue!}
+        canEdit={data.canEdit}
+        upcomingEvents={data.upcomingEvents}
+      />
+    </PageContainer>
   );
 }

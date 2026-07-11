@@ -34,6 +34,7 @@ import {
 } from "@mui/material";
 import AutoFixHighIcon from "@mui/icons-material/AutoFixHigh";
 import type { ScheduleFormat } from "@prisma/client";
+import { DateField, TimeField } from "@/components/ui/date";
 import {
   generateRoundRobin,
   previewRoundRobin,
@@ -458,23 +459,19 @@ function WizardBody({
                     </MenuItem>
                   ))}
                 </TextField>
-                <TextField
+                <DateField
                   label="First game day"
-                  type="date"
                   required
                   fullWidth
                   value={startDateText}
-                  onChange={(event) => setStartDateText(event.target.value)}
-                  slotProps={{ inputLabel: { shrink: true } }}
+                  onChange={setStartDateText}
                 />
-                <TextField
+                <DateField
                   label="Last game day"
-                  type="date"
                   required
                   fullWidth
                   value={endDateText}
-                  onChange={(event) => setEndDateText(event.target.value)}
-                  slotProps={{ inputLabel: { shrink: true } }}
+                  onChange={setEndDateText}
                 />
               </Stack>
 
@@ -498,14 +495,12 @@ function WizardBody({
               </Stack>
 
               <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-                <TextField
+                <TimeField
                   label="Start time"
-                  type="time"
                   required
                   fullWidth
                   value={startTime}
-                  onChange={(event) => setStartTime(event.target.value)}
-                  slotProps={{ inputLabel: { shrink: true } }}
+                  onChange={setStartTime}
                 />
                 <TextField
                   label="Game duration (minutes)"

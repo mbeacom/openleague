@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
 import { TZDate } from "@date-fns/tz";
-import { Container, Stack, Typography } from "@mui/material";
+import { Stack } from "@mui/material";
+import { PageContainer } from "@/components/ui/PageContainer";
+import { PageHeader } from "@/components/ui/PageHeader";
 import {
   getVenueScheduleAdminData,
   getVenueScheduleBoard,
@@ -81,11 +83,9 @@ export default async function VenueSchedulePage({ params }: VenueSchedulePagePro
   });
 
   return (
-    <Container maxWidth="lg">
-      <Stack spacing={3} sx={{ py: 4 }}>
-        <Typography variant="h4" component="h1">
-          Manage Venue Schedule
-        </Typography>
+    <PageContainer>
+      <PageHeader title="Manage Venue Schedule" />
+      <Stack spacing={3}>
         <IceSurfaceManager organizationId={organizationId} venueId={venueId} surfaces={surfaces} />
         <OperatingHoursEditor organizationId={organizationId} venueId={venueId} operatingHours={operatingHours} />
         <VenueScheduleBoard
@@ -98,6 +98,6 @@ export default async function VenueSchedulePage({ params }: VenueSchedulePagePro
           initialBlocks={board.success ? board.data.blocks : []}
         />
       </Stack>
-    </Container>
+    </PageContainer>
   );
 }

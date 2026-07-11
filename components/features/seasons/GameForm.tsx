@@ -16,6 +16,7 @@ import {
   Typography,
 } from "@mui/material";
 import type { Sport } from "@prisma/client";
+import { DateTimeField } from "@/components/ui/date";
 import { createSeasonGame, updateSeasonGame } from "@/lib/actions/season-games";
 import { getSportCapabilities } from "@/lib/utils/sport-catalog";
 import {
@@ -290,25 +291,21 @@ function GameFormBody({
             </Stack>
 
             <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-              <TextField
+              <DateTimeField
                 name="startAt"
                 label="Starts"
-                type="datetime-local"
                 required
                 fullWidth
                 defaultValue={
                   game ? formatDateTimeLocalInput(game.startAt, initialTimeZone) : ""
                 }
-                slotProps={{ inputLabel: { shrink: true } }}
               />
-              <TextField
+              <DateTimeField
                 name="endAt"
                 label="Ends"
-                type="datetime-local"
                 required
                 fullWidth
                 defaultValue={game ? formatDateTimeLocalInput(game.endAt, initialTimeZone) : ""}
-                slotProps={{ inputLabel: { shrink: true } }}
               />
             </Stack>
             <Typography variant="caption" color="text.secondary">

@@ -1,8 +1,9 @@
 import { requireUserId } from "@/lib/auth/session";
 import { getEvent } from "@/lib/actions/events";
-import { Box, Container } from "@mui/material";
+import { Box } from "@mui/material";
 import { redirect, notFound } from "next/navigation";
 import EventForm from "@/components/features/events/EventForm";
+import { PageContainer } from "@/components/ui/PageContainer";
 
 interface EditEventPageProps {
   params: Promise<{
@@ -27,32 +28,31 @@ export default async function EditEventPage({ params }: EditEventPageProps) {
     redirect(`/events/${id}`);
   }
 
-    return (
-      <Container maxWidth="md">
-        <Box
-          sx={{
-            py: 4,
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
+  return (
+    <PageContainer maxWidth="md">
+      <Box
+        sx={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+        }}
+      >
+        <EventForm
+          teamId={event.teamId}
+          eventId={event.id}
+          initialData={{
+            type: event.type as "GAME" | "PRACTICE",
+            title: event.title,
+            startAt: event.startAt,
+            endAt: event.endAt ?? undefined,
+            timezone: event.timezone,
+            location: event.location,
+            venueId: event.venueId ?? undefined,
+            opponent: event.opponent || "",
+            notes: event.notes || "",
           }}
-        >
-          <EventForm
-            teamId={event.teamId}
-            eventId={event.id}
-            initialData={{
-              type: event.type as "GAME" | "PRACTICE",
-              title: event.title,
-              startAt: event.startAt,
-              endAt: event.endAt ?? undefined,
-              timezone: event.timezone,
-              location: event.location,
-              venueId: event.venueId ?? undefined,
-              opponent: event.opponent || "",
-              notes: event.notes || "",
-            }}
-          />
-        </Box>
-      </Container>
-    );
+        />
+      </Box>
+    </PageContainer>
+  );
 }

@@ -46,7 +46,8 @@ export default function LeagueOverviewCard({
   const router = useRouter();
 
   const handleViewLeague = () => {
-    router.push(`/league/${league.id}`);
+    // No /league/[leagueId] index route exists — dashboard is the canonical view.
+    router.push(`/league/${league.id}/dashboard`);
   };
 
   const handleManageLeague = () => {

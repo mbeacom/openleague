@@ -19,6 +19,7 @@ import {
   Typography,
 } from "@mui/material";
 import type { GameProposalEntryKind, GameProposalStatus } from "@prisma/client";
+import { DateTimeField } from "@/components/ui/date";
 import {
   acceptGameProposal,
   counterGameProposal,
@@ -323,22 +324,8 @@ export function ProposalThread({ proposal, canAct, canWithdraw, venues }: Propos
         >
           <Typography variant="subtitle2">Counter-propose new terms</Typography>
           <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-            <TextField
-              name="startAt"
-              label="New start"
-              type="datetime-local"
-              required
-              fullWidth
-              slotProps={{ inputLabel: { shrink: true } }}
-            />
-            <TextField
-              name="endAt"
-              label="New end"
-              type="datetime-local"
-              required
-              fullWidth
-              slotProps={{ inputLabel: { shrink: true } }}
-            />
+            <DateTimeField name="startAt" label="New start" required fullWidth />
+            <DateTimeField name="endAt" label="New end" required fullWidth />
           </Stack>
           <TextField
             select

@@ -1,6 +1,8 @@
-import { Alert, Container, Stack, Typography } from "@mui/material";
+import { Alert, Stack } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { LinkButton, LinkChip } from "@/components/ui/NextLinkComposites";
+import { PageContainer } from "@/components/ui/PageContainer";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { prisma } from "@/lib/db/prisma";
 import { requireUserId } from "@/lib/auth/session";
 import { getPlacementBoard } from "@/lib/actions/placements";
@@ -30,28 +32,21 @@ export default async function PlacementPage({
   const board = await getPlacementBoard({ seasonId, ...(phaseId ? { phaseId } : {}) });
 
   const backLink = (
-    <Stack direction="row">
-      <LinkButton
-        href={`/seasons/${seasonId}`}
-        startIcon={<ArrowBackIcon />}
-        sx={{ minHeight: 44 }}
-      >
-        Back to season
-      </LinkButton>
-    </Stack>
+    <LinkButton
+      href={`/seasons/${seasonId}`}
+      startIcon={<ArrowBackIcon />}
+      sx={{ minHeight: 44 }}
+    >
+      Back to season
+    </LinkButton>
   );
 
   if (!board.success) {
     return (
-      <Container maxWidth="lg">
-        <Stack spacing={3} sx={{ py: { xs: 3, md: 5 } }}>
-          {backLink}
-          <Typography variant="h4" component="h1">
-            Pre-season placement
-          </Typography>
-          <Alert severity="error">{board.error}</Alert>
-        </Stack>
-      </Container>
+      <PageContainer>
+        <PageHeader title="Pre-season placement" breadcrumbs={backLink} />
+        <Alert severity="error">{board.error}</Alert>
+      </PageContainer>
     );
   }
 
@@ -79,17 +74,14 @@ export default async function PlacementPage({
   ]);
 
   return (
-    <Container maxWidth="lg">
-      <Stack spacing={3} sx={{ py: { xs: 3, md: 5 } }}>
-        {backLink}
+    <PageContainer>
+      <PageHeader
+        title="Pre-season placement"
+        subtitle={season?.name}
+        breadcrumbs={backLink}
+      />
 
-        <Stack spacing={0.5}>
-          <Typography variant="h4" component="h1">
-            Pre-season placement
-          </Typography>
-          {season ? <Typography color="text.secondary">{season.name}</Typography> : null}
-        </Stack>
-
+      <Stack spacing={3}>
         {phases.length > 0 ? (
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
             <LinkChip
@@ -123,6 +115,6 @@ export default async function PlacementPage({
           <Alert severity="error">Placement is available for league seasons</Alert>
         )}
       </Stack>
-    </Container>
+    </PageContainer>
   );
 }

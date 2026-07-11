@@ -1,0 +1,332 @@
+// Server-only read layer for the dashboard. These are RSC data-fetching
+// helpers (NOT Server Actions — no "use server"): they must never be imported
+// from Client Components. Every query scopes strictly to the viewer's own
+// memberships, which come from one cache()-deduped fetch per request.
+import { cache } from "react";
+import { addDays } from "date-fns";
+import { prisma } from "@/lib/db/prisma";
+import type { EventType, LeagueRole, Role, RSVPStatus } from "@prisma/client";
+
+const SCHEDULE_WINDOW_DAYS = 14;
+const SCHEDULE_LIMIT = 10;
+const NEEDS_RSVP_LIMIT = 5;
+const ADMIN_EVENTS_LIMIT = 5;
+
+export type ViewerTeamMembership = {
+  role: Role;
+  team: {
+    id: string;
+    name: string;
+    sport: string;
+    season: string;
+    leagueId: string | null;
+    league: { id: string; name: string } | null;
+    division: { id: string; name: string } | null;
+    _count: { players: number; events: number };
+  };
+};
+
+export type ViewerLeagueMembership = {
+  role: LeagueRole;
+  league: {
+    id: string;
+    name: string;
+    sport: string;
+    _count: { teams: number; players: number; events: number; divisions: number };
+  };
+};
+
+export type ViewerMemberships = {
+  teams: ViewerTeamMembership[];
+  leagues: ViewerLeagueMembership[];
+};
+
+/**
+ * The viewer's active team + league memberships (with roles). Deduped with
+ * React cache() so the page shell and every widget share one fetch per request.
+ */
+export const getViewerMemberships = cache(
+  async (userId: string): Promise<ViewerMemberships> => {
+    const [teams, leagues] = await Promise.all([
+      prisma.teamMember.findMany({
+        where: { userId, team: { isActive: true } },
+        select: {
+          role: true,
+          team: {
+            select: {
+              id: true,
+              name: true,
+              sport: true,
+              season: true,
+              leagueId: true,
+              league: { select: { id: true, name: true } },
+              division: { select: { id: true, name: true } },
+              _count: { select: { players: true, events: true } },
+            },
+          },
+        },
+        orderBy: { joinedAt: "desc" },
+      }),
+      prisma.leagueUser.findMany({
+        where: { userId, league: { isActive: true } },
+        select: {
+          role: true,
+          league: {
+            select: {
+              id: true,
+              name: true,
+              sport: true,
+              _count: {
+                select: { teams: true, players: true, events: true, divisions: true },
+              },
+            },
+          },
+        },
+        orderBy: { joinedAt: "desc" },
+      }),
+    ]);
+
+    return { teams, leagues };
+  }
+);
+
+export type UpcomingEventItem = {
+  kind: "event";
+  id: string;
+  eventType: EventType;
+  title: string;
+  startAt: string; // ISO string — serialized before crossing to any client leaf
+  timezone: string;
+  location: string;
+  opponent: string | null;
+  teamId: string;
+  teamName: string;
+  rsvpStatus: RSVPStatus;
+};
+
+export type UpcomingPracticeItem = {
+  kind: "practice";
+  id: string;
+  title: string;
+  startAt: string; // ISO string
+  duration: number;
+  playCount: number;
+  teamId: string;
+  teamName: string;
+};
+
+export type ScheduleItem = UpcomingEventItem | UpcomingPracticeItem;
+
+/**
+ * Events across ALL the viewer's teams (next 14 days, with the viewer's own
+ * RSVP status) merged with upcoming shared/own practice sessions, sorted by
+ * start and capped at 10 items.
+ */
+export async function getUpcomingSchedule(userId: string): Promise<ScheduleItem[]> {
+  const { teams } = await getViewerMemberships(userId);
+  const teamIds = teams.map((membership) => membership.team.id);
+  if (teamIds.length === 0) return [];
+
+  const now = new Date();
+  const horizon = addDays(now, SCHEDULE_WINDOW_DAYS);
+
+  const [events, practices] = await Promise.all([
+    prisma.event.findMany({
+      where: { teamId: { in: teamIds }, startAt: { gte: now, lte: horizon } },
+      orderBy: { startAt: "asc" },
+      take: SCHEDULE_LIMIT,
+      select: {
+        id: true,
+        type: true,
+        title: true,
+        startAt: true,
+        timezone: true,
+        location: true,
+        opponent: true,
+        team: { select: { id: true, name: true } },
+        rsvps: { where: { userId }, select: { status: true } },
+      },
+    }),
+    prisma.practiceSession.findMany({
+      where: {
+        teamId: { in: teamIds },
+        date: { gte: now, lte: horizon },
+        OR: [{ isShared: true }, { createdById: userId }],
+      },
+      orderBy: { date: "asc" },
+      take: SCHEDULE_LIMIT,
+      select: {
+        id: true,
+        title: true,
+        date: true,
+        duration: true,
+        teamId: true,
+        team: { select: { name: true } },
+        _count: { select: { plays: true } },
+      },
+    }),
+  ]);
+
+  const items: ScheduleItem[] = [
+    ...events.map(
+      (event): UpcomingEventItem => ({
+        kind: "event",
+        id: event.id,
+        eventType: event.type,
+        title: event.title,
+        startAt: event.startAt.toISOString(),
+        timezone: event.timezone,
+        location: event.location,
+        opponent: event.opponent,
+        teamId: event.team.id,
+        teamName: event.team.name,
+        rsvpStatus: event.rsvps[0]?.status ?? "NO_RESPONSE",
+      })
+    ),
+    ...practices.map(
+      (practice): UpcomingPracticeItem => ({
+        kind: "practice",
+        id: practice.id,
+        title: practice.title,
+        startAt: practice.date.toISOString(),
+        duration: practice.duration,
+        playCount: practice._count.plays,
+        teamId: practice.teamId,
+        teamName: practice.team.name,
+      })
+    ),
+  ];
+
+  // ISO-8601 UTC strings sort correctly lexicographically.
+  return items.sort((a, b) => a.startAt.localeCompare(b.startAt)).slice(0, SCHEDULE_LIMIT);
+}
+
+export type NeedsRsvpItem = {
+  eventId: string;
+  eventType: EventType;
+  title: string;
+  startAt: string; // ISO string
+  timezone: string;
+  location: string;
+  opponent: string | null;
+  teamName: string;
+};
+
+/**
+ * The viewer's own NO_RESPONSE RSVPs on future events (soonest first, max 5).
+ */
+export async function getNeedsRsvp(userId: string): Promise<NeedsRsvpItem[]> {
+  const rsvps = await prisma.rSVP.findMany({
+    where: {
+      userId,
+      status: "NO_RESPONSE",
+      event: { startAt: { gte: new Date() } },
+    },
+    orderBy: { event: { startAt: "asc" } },
+    take: NEEDS_RSVP_LIMIT,
+    select: {
+      event: {
+        select: {
+          id: true,
+          type: true,
+          title: true,
+          startAt: true,
+          timezone: true,
+          location: true,
+          opponent: true,
+          team: { select: { name: true } },
+        },
+      },
+    },
+  });
+
+  return rsvps.map(({ event }) => ({
+    eventId: event.id,
+    eventType: event.type,
+    title: event.title,
+    startAt: event.startAt.toISOString(),
+    timezone: event.timezone,
+    location: event.location,
+    opponent: event.opponent,
+    teamName: event.team.name,
+  }));
+}
+
+export type AdminAttentionData = {
+  events: Array<{
+    id: string;
+    eventType: EventType;
+    title: string;
+    startAt: string; // ISO string
+    timezone: string;
+    teamId: string;
+    teamName: string;
+    noResponseCount: number;
+  }>;
+  pendingInvitations: Array<{ teamId: string; teamName: string; count: number }>;
+};
+
+/**
+ * Admin-only attention items for teams the viewer administers: upcoming events
+ * with unanswered RSVPs and pending (non-expired) invitations per team.
+ * Returns null when the viewer administers no teams.
+ */
+export async function getAdminAttention(userId: string): Promise<AdminAttentionData | null> {
+  const { teams } = await getViewerMemberships(userId);
+  const adminTeams = teams.filter((membership) => membership.role === "ADMIN");
+  if (adminTeams.length === 0) return null;
+
+  const adminTeamIds = adminTeams.map((membership) => membership.team.id);
+  const teamNames = new Map(
+    adminTeams.map((membership) => [membership.team.id, membership.team.name])
+  );
+  const now = new Date();
+
+  const [events, invitationGroups] = await Promise.all([
+    prisma.event.findMany({
+      where: {
+        teamId: { in: adminTeamIds },
+        startAt: { gte: now },
+        rsvps: { some: { status: "NO_RESPONSE" } },
+      },
+      orderBy: { startAt: "asc" },
+      take: ADMIN_EVENTS_LIMIT,
+      select: {
+        id: true,
+        type: true,
+        title: true,
+        startAt: true,
+        timezone: true,
+        teamId: true,
+        _count: { select: { rsvps: { where: { status: "NO_RESPONSE" } } } },
+      },
+    }),
+    prisma.invitation.groupBy({
+      by: ["teamId"],
+      where: {
+        teamId: { in: adminTeamIds },
+        status: "PENDING",
+        expiresAt: { gt: now },
+      },
+      _count: { _all: true },
+    }),
+  ]);
+
+  return {
+    events: events.map((event) => ({
+      id: event.id,
+      eventType: event.type,
+      title: event.title,
+      startAt: event.startAt.toISOString(),
+      timezone: event.timezone,
+      teamId: event.teamId,
+      teamName: teamNames.get(event.teamId) ?? "",
+      noResponseCount: event._count.rsvps,
+    })),
+    pendingInvitations: invitationGroups.map((group) => ({
+      teamId: group.teamId,
+      teamName: teamNames.get(group.teamId) ?? "",
+      count: group._count._all,
+    })),
+  };
+}

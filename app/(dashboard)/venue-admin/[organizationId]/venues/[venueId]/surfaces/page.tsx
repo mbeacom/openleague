@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
-import { Container, Stack, Typography } from "@mui/material";
+import { PageContainer } from "@/components/ui/PageContainer";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { getVenueScheduleAdminData } from "@/lib/actions/venue-schedules";
 import { prisma } from "@/lib/db/prisma";
 import { getWholeSurfaceDefaultLabel } from "@/lib/utils/segment-presets";
@@ -124,18 +125,14 @@ export default async function VenueSurfacesPage({ params }: VenueSurfacesPagePro
   const operatingHours: OperatingHourView[] = hourRows;
 
   return (
-    <Container maxWidth="lg">
-      <Stack spacing={4} sx={{ py: 4 }}>
-        <Typography variant="h4" component="h1">
-          Surfaces and Operating Hours
-        </Typography>
-        <SurfaceManager
-          organizationId={organizationId}
-          venueId={venueId}
-          surfaces={surfaces}
-          operatingHours={operatingHours}
-        />
-      </Stack>
-    </Container>
+    <PageContainer>
+      <PageHeader title="Surfaces and Operating Hours" />
+      <SurfaceManager
+        organizationId={organizationId}
+        venueId={venueId}
+        surfaces={surfaces}
+        operatingHours={operatingHours}
+      />
+    </PageContainer>
   );
 }

@@ -23,6 +23,8 @@ import { useTheme } from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import Link from "next/link";
 import Image from "next/image";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { EmptyState } from "@/components/ui/EmptyState";
 import AddIcon from "@mui/icons-material/Add";
 import LibraryBooksIcon from "@mui/icons-material/LibraryBooks";
 import SearchIcon from "@mui/icons-material/Search";
@@ -121,44 +123,34 @@ export default function PracticePlannerList({
   return (
     <>
       {/* Header */}
-      <Stack
-        direction={{ xs: "column", sm: "row" }}
-        justifyContent="space-between"
-        alignItems={{ xs: "stretch", sm: "center" }}
-        spacing={2}
-        sx={{ mb: 3 }}
-      >
-        <Box>
-          <Typography variant="h4" component="h1" sx={{ fontWeight: 800 }}>
-            Practice Planner
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            {teamName}
-          </Typography>
-        </Box>
-        {isAdmin && (
-          <Stack direction="row" spacing={1.5}>
-            <Button
-              component={Link}
-              href="/practice-planner/library"
-              variant="outlined"
-              startIcon={<LibraryBooksIcon />}
-              size={isMobile ? "small" : "medium"}
-            >
-              Play Library
-            </Button>
-            <Button
-              component={Link}
-              href="/practice-planner/new"
-              variant="contained"
-              startIcon={<AddIcon />}
-              size={isMobile ? "small" : "medium"}
-            >
-              New Session
-            </Button>
-          </Stack>
-        )}
-      </Stack>
+      <PageHeader
+        title="Practice Planner"
+        subtitle={teamName}
+        actions={
+          isAdmin ? (
+            <>
+              <Button
+                component={Link}
+                href="/practice-planner/library"
+                variant="outlined"
+                startIcon={<LibraryBooksIcon />}
+                size={isMobile ? "small" : "medium"}
+              >
+                Play Library
+              </Button>
+              <Button
+                component={Link}
+                href="/practice-planner/new"
+                variant="contained"
+                startIcon={<AddIcon />}
+                size={isMobile ? "small" : "medium"}
+              >
+                New Session
+              </Button>
+            </>
+          ) : undefined
+        }
+      />
 
       {!isAdmin && (
         <Alert
@@ -250,7 +242,7 @@ export default function PracticePlannerList({
 
       {/* Session Grid */}
       {filteredSessions.length === 0 ? (
-        <EmptyState
+        <SessionsEmptyState
           isAdmin={isAdmin}
           hasSearch={!!search.trim()}
           timeFilter={timeFilter}
@@ -419,7 +411,7 @@ function SessionCard({
   );
 }
 
-function EmptyState({
+function SessionsEmptyState({
   isAdmin,
   hasSearch,
   timeFilter,
@@ -430,21 +422,11 @@ function EmptyState({
 }) {
   if (hasSearch) {
     return (
-      <Box
-        sx={{
-          textAlign: "center",
-          py: 8,
-          px: 3,
-        }}
-      >
-        <SearchIcon sx={{ fontSize: 56, color: "grey.300", mb: 2 }} />
-        <Typography variant="h6" color="text.secondary" gutterBottom>
-          No matching sessions
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          Try a different search term or adjust your filters.
-        </Typography>
-      </Box>
+      <EmptyState
+        icon={<SearchIcon />}
+        title="No matching sessions"
+        description="Try a different search term or adjust your filters."
+      />
     );
   }
 
@@ -464,36 +446,26 @@ function EmptyState({
   };
 
   return (
-    <Box
-      sx={{
-        textAlign: "center",
-        py: 8,
-        px: 3,
-        bgcolor: "background.paper",
-        borderRadius: 3,
-        border: "2px dashed",
-        borderColor: "divider",
-      }}
-    >
-      <SportsHockeyIcon sx={{ fontSize: 56, color: "grey.300", mb: 2 }} />
-      <Typography variant="h6" color="text.secondary" gutterBottom>
-        {timeFilter === "all"
+    <EmptyState
+      icon={<SportsHockeyIcon />}
+      title={
+        timeFilter === "all"
           ? "No practice sessions yet"
-          : `No ${timeFilter} sessions`}
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        {messages[timeFilter][isAdmin ? "admin" : "member"]}
-      </Typography>
-      {isAdmin && timeFilter !== "past" && (
-        <Button
-          component={Link}
-          href="/practice-planner/new"
-          variant="contained"
-          startIcon={<AddIcon />}
-        >
-          Create Practice Session
-        </Button>
-      )}
-    </Box>
+          : `No ${timeFilter} sessions`
+      }
+      description={messages[timeFilter][isAdmin ? "admin" : "member"]}
+      action={
+        isAdmin && timeFilter !== "past" ? (
+          <Button
+            component={Link}
+            href="/practice-planner/new"
+            variant="contained"
+            startIcon={<AddIcon />}
+          >
+            Create Practice Session
+          </Button>
+        ) : undefined
+      }
+    />
   );
 }

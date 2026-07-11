@@ -1,8 +1,9 @@
-import { Container, Stack, Typography } from "@mui/material";
 import { prisma } from "@/lib/db/prisma";
 import { requireUserId } from "@/lib/auth/session";
 import { getProposalsForLeague, getProposalsForTeam } from "@/lib/actions/game-proposals";
 import { getAvailableVenues } from "@/lib/actions/venues";
+import { PageContainer } from "@/components/ui/PageContainer";
+import { PageHeader } from "@/components/ui/PageHeader";
 import {
   ProposalInbox,
   type ProposalInboxItem,
@@ -125,19 +126,15 @@ export default async function ProposalsPage() {
   }));
 
   return (
-    <Container maxWidth="md">
-      <Stack spacing={3} sx={{ py: { xs: 3, md: 5 } }}>
-        <Typography variant="h4" component="h1">
-          Game proposals
-        </Typography>
-        <ProposalInbox
-          items={items}
-          leagueView={leagueView}
-          myTeams={myTeams}
-          leagueTeams={leagueTeams}
-          venues={venues}
-        />
-      </Stack>
-    </Container>
+    <PageContainer maxWidth="md">
+      <PageHeader title="Game proposals" />
+      <ProposalInbox
+        items={items}
+        leagueView={leagueView}
+        myTeams={myTeams}
+        leagueTeams={leagueTeams}
+        venues={venues}
+      />
+    </PageContainer>
   );
 }

@@ -1,5 +1,7 @@
 import { notFound } from "next/navigation";
-import { Container, Stack, Typography } from "@mui/material";
+import { Stack } from "@mui/material";
+import { PageContainer } from "@/components/ui/PageContainer";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { getVenueContentAdminData } from "@/lib/actions/venue-content";
 import { LessonOfferingEditor, SpecialtyEventEditor, VenueContentManager } from "@/components/features/venue-admin";
 
@@ -19,15 +21,13 @@ export default async function VenueContentAdminPage({ params }: VenueContentAdmi
   }
 
   return (
-    <Container maxWidth="lg">
-      <Stack spacing={4} sx={{ py: 4 }}>
-        <Typography variant="h4" component="h1">
-          Venue Content
-        </Typography>
+    <PageContainer>
+      <PageHeader title="Venue Content" />
+      <Stack spacing={4}>
         <LessonOfferingEditor organizationId={organizationId} venueId={venueId} />
         <SpecialtyEventEditor organizationId={organizationId} venueId={venueId} />
         <VenueContentManager posts={result.data.posts} />
       </Stack>
-    </Container>
+    </PageContainer>
   );
 }

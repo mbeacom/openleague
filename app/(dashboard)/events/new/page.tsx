@@ -1,7 +1,8 @@
-import { Box, Container } from "@mui/material";
+import { Box } from "@mui/material";
 import { redirect } from "next/navigation";
 import EventForm from "@/components/features/events/EventForm";
 import { getUserTeamContext } from "@/lib/actions/team-context";
+import { PageContainer } from "@/components/ui/PageContainer";
 
 export default async function NewEventPage() {
   const context = await getUserTeamContext();
@@ -15,10 +16,9 @@ export default async function NewEventPage() {
   }
 
   return (
-    <Container maxWidth="md">
+    <PageContainer maxWidth="md">
       <Box
         sx={{
-          py: 4,
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
@@ -26,6 +26,6 @@ export default async function NewEventPage() {
       >
         <EventForm teamId={context.teamId} />
       </Box>
-    </Container>
+    </PageContainer>
   );
 }

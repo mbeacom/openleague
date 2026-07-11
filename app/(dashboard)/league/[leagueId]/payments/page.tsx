@@ -1,4 +1,6 @@
-import { Alert, Card, CardContent, Container, Stack, Typography } from "@mui/material";
+import { Alert, Card, CardContent, Stack, Typography } from "@mui/material";
+import { PageContainer } from "@/components/ui/PageContainer";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { getLeaguePaymentsOverview } from "@/lib/actions/league-payments";
 import { LeagueStripeConnectCard } from "@/components/features/signup-events/LeagueStripeConnectCard";
 import { formatCurrencyFromCents } from "@/lib/utils/currency";
@@ -16,12 +18,10 @@ export default async function LeaguePaymentsPage({
   const overview = await getLeaguePaymentsOverview(leagueId);
 
   return (
-    <Container maxWidth="md">
-      <Stack spacing={3} sx={{ py: { xs: 3, md: 5 } }}>
-        <Typography variant="h4" component="h1">
-          Payments
-        </Typography>
+    <PageContainer maxWidth="md">
+      <PageHeader title="Payments" />
 
+      <Stack spacing={3}>
         {onboarding === "complete" ? (
           <Alert severity="success">Welcome back — checking your Stripe account status…</Alert>
         ) : null}
@@ -87,6 +87,6 @@ export default async function LeaguePaymentsPage({
           </>
         )}
       </Stack>
-    </Container>
+    </PageContainer>
   );
 }

@@ -1,8 +1,10 @@
-import { Box, Container, Typography, Divider } from "@mui/material";
+import { Divider } from "@mui/material";
 import { redirect } from "next/navigation";
 import RosterList from "@/components/features/roster/RosterList";
 import InvitationManager from "@/components/features/roster/InvitationManager";
 import { getRosterData } from "@/lib/actions/team-context";
+import { PageContainer } from "@/components/ui/PageContainer";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 export default async function RosterPage() {
   const data = await getRosterData();
@@ -12,35 +14,22 @@ export default async function RosterPage() {
   }
 
   return (
-    <Container maxWidth="lg">
-      <Box sx={{ py: 4 }}>
-        <Box
-          sx={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            mb: 3,
-          }}
-        >
-          <Typography variant="h4" component="h1">
-            Roster
-          </Typography>
-        </Box>
+    <PageContainer>
+      <PageHeader title="Roster" />
 
-        {data.isAdmin && (
-          <>
-            <InvitationManager invitations={data.invitations} teamId={data.teamId} />
-            <Divider sx={{ my: 4 }} />
-          </>
-        )}
+      {data.isAdmin && (
+        <>
+          <InvitationManager invitations={data.invitations} teamId={data.teamId} />
+          <Divider sx={{ my: 4 }} />
+        </>
+      )}
 
-        <RosterList
-          players={data.players}
-          teamMembers={data.teamMembers}
-          teamId={data.teamId}
-          isAdmin={data.isAdmin}
-        />
-      </Box>
-    </Container>
+      <RosterList
+        players={data.players}
+        teamMembers={data.teamMembers}
+        teamId={data.teamId}
+        isAdmin={data.isAdmin}
+      />
+    </PageContainer>
   );
 }

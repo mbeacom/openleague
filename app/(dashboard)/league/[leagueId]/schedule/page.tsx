@@ -1,7 +1,8 @@
-import { Container, Box, Typography } from "@mui/material";
 import { Add } from "@mui/icons-material";
 import { notFound } from "next/navigation";
 import { LinkButton } from "@/components/ui/NextLinkComposites";
+import { PageContainer } from "@/components/ui/PageContainer";
+import { PageHeader } from "@/components/ui/PageHeader";
 import LeagueCalendar from "@/components/features/calendar/LeagueCalendar";
 import { getLeagueScheduleData } from "@/lib/actions/league-context";
 import { formatSport } from "@/lib/utils/validation";
@@ -19,26 +20,12 @@ export default async function LeagueSchedulePage({ params }: LeagueSchedulePageP
   }
 
   return (
-    <Container maxWidth="lg">
-      <Box sx={{ py: 4 }}>
-        <Box sx={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "flex-start",
-          mb: 3,
-          flexWrap: "wrap",
-          gap: 2,
-        }}>
-          <Box>
-            <Typography variant="h4" component="h1" gutterBottom>
-              League Schedule
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              {data.league.name} • {formatSport(data.league.sport)}
-            </Typography>
-          </Box>
-
-          {data.canCreateGames && (
+    <PageContainer>
+      <PageHeader
+        title="League Schedule"
+        subtitle={`${data.league.name} • ${formatSport(data.league.sport)}`}
+        actions={
+          data.canCreateGames ? (
             <LinkButton
               href={`/league/${leagueId}/schedule/new-game`}
               variant="contained"
@@ -46,17 +33,17 @@ export default async function LeagueSchedulePage({ params }: LeagueSchedulePageP
             >
               Schedule Game
             </LinkButton>
-          )}
-        </Box>
+          ) : undefined
+        }
+      />
 
-        <LeagueCalendar
-          events={data.events}
-          teams={data.teams}
-          divisions={data.divisions}
-          leagueId={leagueId}
-          leagueName={data.league.name}
-        />
-      </Box>
-    </Container>
+      <LeagueCalendar
+        events={data.events}
+        teams={data.teams}
+        divisions={data.divisions}
+        leagueId={leagueId}
+        leagueName={data.league.name}
+      />
+    </PageContainer>
   );
 }
