@@ -29,15 +29,21 @@ export function parseDateTimeValue(value: string | null | undefined): Date | nul
   if (!value) return null;
   const match = DATETIME_VALUE_RE.exec(value.trim());
   if (!match) return null;
-  const [, year, month, day, hour, minute] = match;
-  const date = new Date(
-    Number(year),
-    Number(month) - 1,
-    Number(day),
-    Number(hour),
-    Number(minute)
-  );
-  return Number.isNaN(date.getTime()) ? null : date;
+  const [, year, month, day, hour, minute] = match.map(Number);
+  const date = new Date(year, month - 1, day, hour, minute);
+  // The Date constructor silently rolls invalid components over (Feb 31 →
+  // Mar 3, 25:00 → the next day); reject anything that doesn't round-trip
+  // rather than display — and later re-serialize — a shifted value.
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day ||
+    date.getHours() !== hour ||
+    date.getMinutes() !== minute
+  ) {
+    return null;
+  }
+  return date;
 }
 
 /** Display Date → 'YYYY-MM-DDTHH:MM'. Null/invalid → ''. */
@@ -53,9 +59,15 @@ export function parseDateValue(value: string | null | undefined): Date | null {
   if (!value) return null;
   const match = DATE_VALUE_RE.exec(value.trim());
   if (!match) return null;
-  const [, year, month, day] = match;
-  const date = new Date(Number(year), Number(month) - 1, Number(day));
-  return Number.isNaN(date.getTime()) ? null : date;
+  const [, year, month, day] = match.map(Number);
+  const date = new Date(year, month - 1, day);
+  // Reject constructor rollover (Feb 31 → Mar 3). Only the date components
+  // are checked: in zones where DST skips midnight the constructor
+  // legitimately lands on 01:00 of the same (valid) day.
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+    return null;
+  }
+  return date;
 }
 
 /** Display Date → 'YYYY-MM-DD'. Null/invalid → ''. */

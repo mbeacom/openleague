@@ -107,6 +107,20 @@ describe("canonical string ↔ display Date conversion", () => {
     expect(parseTimeValue("12:75")).toBeNull();
   });
 
+  it("rejects rolled-over dates and times instead of silently shifting them", () => {
+    // The Date constructor would roll these into March / the next day.
+    expect(parseDateTimeValue("2026-02-31T14:30")).toBeNull();
+    expect(parseDateTimeValue("2026-07-11T25:00")).toBeNull();
+    expect(parseDateTimeValue("2026-07-11T14:61")).toBeNull();
+    expect(parseDateTimeValue("2026-13-01T14:30")).toBeNull();
+    expect(parseDateValue("2026-02-31")).toBeNull();
+    expect(parseDateValue("2026-13-01")).toBeNull();
+    expect(parseDateValue("2026-04-31")).toBeNull();
+    // Leap-day handling stays correct in both directions.
+    expect(parseDateValue("2024-02-29")).toEqual(new Date(2024, 1, 29));
+    expect(parseDateValue("2026-02-29")).toBeNull();
+  });
+
   it("formats null and Invalid Date as ''", () => {
     for (const format of [formatDateTimeValue, formatDateValue, formatTimeValue]) {
       expect(format(null)).toBe("");
