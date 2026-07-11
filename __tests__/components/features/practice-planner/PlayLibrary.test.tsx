@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { PlayLibrary, PlayLibraryProps } from "@/components/features/practice-planner/PlayLibrary";
@@ -798,7 +798,10 @@ describe("PlayLibrary", () => {
             renderWithTheme(createDefaultProps());
 
             await waitFor(() => {
-                expect(screen.getByText("No preview")).toBeInTheDocument();
+                // Starter-pack cards also render "No preview" — scope to the team play's card
+                const card = screen.getByText("No Thumbnail Play").closest(".MuiCard-root");
+                expect(card).not.toBeNull();
+                expect(within(card as HTMLElement).getByText("No preview")).toBeInTheDocument();
             });
         });
 
