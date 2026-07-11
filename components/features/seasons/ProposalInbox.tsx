@@ -1,12 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import {
   Accordion,
   AccordionDetails,
   AccordionSummary,
   Button,
   Chip,
+  Link as MuiLink,
   Stack,
   Tab,
   Tabs,
@@ -143,7 +145,12 @@ export function ProposalInbox({
 
       {myTeams.length === 0 ? (
         <Typography variant="body2" color="text.secondary">
-          Proposing a game requires being an admin of a team that belongs to a league.
+          Game proposals are a league workflow: to propose or receive games, you
+          need to be an admin of a team that belongs to an active league. Visit{" "}
+          <MuiLink component={Link} href="/league">
+            League
+          </MuiLink>{" "}
+          to join or create one.
         </Typography>
       ) : null}
 

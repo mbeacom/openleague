@@ -13,6 +13,7 @@ export type Player = {
   emergencyContact: string | null;
   emergencyPhone: string | null;
   jerseyNumber: number | null;
+  position?: string | null; // Free-text position (e.g., Center, Goalie). Varies by sport.
   usahMemberId: string | null; // admin-only — must not appear in non-admin query selects
 };
 

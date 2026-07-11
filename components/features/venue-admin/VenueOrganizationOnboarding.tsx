@@ -1,11 +1,13 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Alert, Button, MenuItem, Stack, TextField, Typography } from "@mui/material";
 import { createVenueOrganization } from "@/lib/actions/venue-organizations";
 import { createVenueOrganizationSchema, VENUE_ORGANIZATION_TYPES } from "@/lib/utils/validation";
 
 export function VenueOrganizationOnboarding() {
+  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -39,6 +41,8 @@ export function VenueOrganizationOnboarding() {
       const result = await createVenueOrganization(parsed.data);
       if (result.success) {
         setSuccess("Venue organization created.");
+        router.push("/venue-admin");
+        router.refresh();
       } else {
         setError(result.error);
       }

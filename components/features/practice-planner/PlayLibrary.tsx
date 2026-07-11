@@ -44,8 +44,10 @@ import {
     Search as SearchIcon,
     Delete as DeleteIcon,
     Edit as EditIcon,
+    Add as AddIcon,
 } from "@mui/icons-material";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { SavedPlay } from "@/types/practice-planner";
 import { getPlaysByTeam, getPlayById, deletePlay } from "@/lib/actions/plays";
 import { formatDistanceToNow } from "date-fns";
@@ -228,6 +230,7 @@ export function PlayLibrary({
 }: PlayLibraryProps) {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+    const router = useRouter();
 
     // State
     const [plays, setPlays] = useState<SavedPlay[]>([]);
@@ -361,6 +364,22 @@ export function PlayLibrary({
     );
 
     /**
+     * Handle edit button click - delegate to onEditPlay when provided,
+     * otherwise navigate to the library edit page
+     * Requirements: 4.5
+     */
+    const handleEditPlay = useCallback(
+        (playId: string) => {
+            if (onEditPlay) {
+                onEditPlay(playId);
+            } else {
+                router.push(`/practice-planner/library/${playId}/edit`);
+            }
+        },
+        [onEditPlay, router]
+    );
+
+    /**
      * Handle delete button click
      * Requirements: 4.5
      */
@@ -432,6 +451,15 @@ export function PlayLibrary({
                 <Typography variant="h5" component="h2">
                     Play Library
                 </Typography>
+                {mode === "manage" && (
+                    <Button
+                        variant="contained"
+                        startIcon={<AddIcon />}
+                        onClick={() => router.push("/practice-planner/library/new")}
+                    >
+                        New Play
+                    </Button>
+                )}
             </Stack>
 
             {/* Search and Filter Bar */}
@@ -517,6 +545,15 @@ export function PlayLibrary({
                             ? "Try adjusting your search or filter settings"
                             : "Create your first play to get started"}
                     </Typography>
+                    {mode === "manage" && !searchQuery && dateFilter === "all" && (
+                        <Button
+                            variant="contained"
+                            startIcon={<AddIcon />}
+                            onClick={() => router.push("/practice-planner/library/new")}
+                        >
+                            Create Play
+                        </Button>
+                    )}
                 </Box>
             )}
 
@@ -533,7 +570,7 @@ export function PlayLibrary({
                                     isSelected={selectedPlayId === play.id}
                                     isLoading={selectedPlayId === play.id && isSelecting}
                                     onSelect={handleSelectPlay}
-                                    onEdit={onEditPlay}
+                                    onEdit={handleEditPlay}
                                     onDelete={handleDeleteClick}
                                 />
                             </Grid>

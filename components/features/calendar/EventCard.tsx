@@ -25,7 +25,6 @@ export default function EventCard({
   startAt,
   location,
   opponent,
-  leagueId,
   homeTeam,
   awayTeam,
   teamName,
@@ -48,12 +47,9 @@ export default function EventCard({
   const badgeColor = type === "GAME" ? "primary" : "secondary";
 
   const handleClick = () => {
-    // Navigate to league-specific event page if in league context
-    if (leagueId) {
-      router.push(`/league/${leagueId}/events/${id}`);
-    } else {
-      router.push(`/events/${id}`);
-    }
+    // Always use the team event detail route; repoint league events to
+    // /league/[leagueId]/events/[id] when that route ships (roadmap D1)
+    router.push(`/events/${id}`);
   };
 
   return (

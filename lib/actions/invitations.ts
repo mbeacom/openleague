@@ -79,13 +79,24 @@ export async function sendInvitation(
       }
 
       // Add user directly to team as MEMBER
-      await prisma.teamMember.create({
-        data: {
-          userId: existingUser.id,
-          teamId: validated.teamId,
-          role: "MEMBER",
-        },
-      });
+      await prisma.$transaction([
+        prisma.teamMember.create({
+          data: {
+            userId: existingUser.id,
+            teamId: validated.teamId,
+            role: "MEMBER",
+          },
+        }),
+        // Link unclaimed roster entries matching the invited email to the account
+        prisma.player.updateMany({
+          where: {
+            teamId: validated.teamId,
+            email: { equals: validated.email, mode: "insensitive" },
+            userId: null,
+          },
+          data: { userId: existingUser.id },
+        }),
+      ]);
 
       // Send notification email to existing user
       try {
@@ -277,6 +288,16 @@ export async function sendLeagueInvitation(
             teamId: validated.teamId,
             role: "MEMBER",
           },
+        });
+
+        // Link unclaimed roster entries matching the invited email to the account
+        await tx.player.updateMany({
+          where: {
+            teamId: validated.teamId,
+            email: { equals: validated.email, mode: "insensitive" },
+            userId: null,
+          },
+          data: { userId: existingUser.id },
         });
 
         // Add to league if not already a member

@@ -112,6 +112,14 @@ export default function PlayerCard({
               <Typography variant="h6" component="h2">
                 {player.name}
               </Typography>
+              {player.position && (
+                <Chip
+                  label={player.position}
+                  size="small"
+                  variant="outlined"
+                  sx={{ fontSize: "0.75rem" }}
+                />
+              )}
             </Box>
 
             {/* Edit/Delete Buttons (Admin only) */}

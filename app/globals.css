@@ -19,11 +19,11 @@
   --penalty-red-rgb: 198, 40, 40;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* Temporary until MUI colorSchemes dark mode ships: MUI surfaces are locked to
+   light, so force light native controls/scrollbars and skip the dark variable
+   flips (--background: #0a0a0a; --foreground: #ededed) for dark-OS users. */
+html {
+  color-scheme: light;
 }
 
 html,
@@ -49,10 +49,4 @@ body {
 a {
   color: inherit;
   text-decoration: none;
-}
-
-@media (prefers-color-scheme: dark) {
-  html {
-    color-scheme: dark;
-  }
 }

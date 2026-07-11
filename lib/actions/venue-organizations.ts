@@ -369,39 +369,49 @@ export async function publishVenueProfile(
 export async function getVenueAdminDashboard() {
   const userId = await requireUserId();
 
-  const organizations = await prisma.venueOrganization.findMany({
-    where: {
-      staff: {
-        some: {
-          userId,
-          status: "ACTIVE",
+  try {
+    const organizations = await prisma.venueOrganization.findMany({
+      where: {
+        staff: {
+          some: {
+            userId,
+            status: "ACTIVE",
+          },
+        },
+        status: { in: ["DRAFT", "ACTIVE"] },
+      },
+      select: {
+        id: true,
+        name: true,
+        type: true,
+        status: true,
+        venues: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            profileStatus: true,
+            city: true,
+            state: true,
+          },
+          orderBy: { name: "asc" },
         },
       },
-      status: { in: ["DRAFT", "ACTIVE"] },
-    },
-    select: {
-      id: true,
-      name: true,
-      type: true,
-      status: true,
-      venues: {
-        select: {
-          id: true,
-          name: true,
-          slug: true,
-          profileStatus: true,
-          city: true,
-          state: true,
-        },
-        orderBy: { name: "asc" },
-      },
-    },
-    orderBy: { name: "asc" },
-  });
+      orderBy: { name: "asc" },
+    });
 
-  return {
-    organizations,
-  };
+    return {
+      organizations,
+    };
+  } catch (error) {
+    if (isMissingVenueManagementSchemaError(error)) {
+      console.warn("Venue admin dashboard unavailable until venue management migration is applied", {
+        code: error.code,
+      });
+      return { organizations: [] };
+    }
+    throw error;
+  }
 }
 
 export async function getPublicRinkSummaries() {

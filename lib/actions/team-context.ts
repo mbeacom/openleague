@@ -241,6 +241,7 @@ async function getRosterPayload({
         emergencyContact: isAdmin,
         emergencyPhone: isAdmin,
         jerseyNumber: true,
+        position: true,
         // FR-008: USAH Member IDs are admin-only — must not appear in non-admin queries
         usahMemberId: isAdmin,
       },

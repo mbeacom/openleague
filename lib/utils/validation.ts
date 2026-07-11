@@ -250,6 +250,7 @@ export const addPlayerSchema = z.object({
     .max(99, "Jersey number must be between 1 and 99")
     .nullable()
     .optional(),
+  position: optionalSanitizedString(50),
   usahMemberId: z
     .string()
     .trim()

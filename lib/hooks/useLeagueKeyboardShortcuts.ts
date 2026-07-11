@@ -90,7 +90,7 @@ export function useLeagueKeyboardShortcuts() {
               path = isLeagueMode ? `${leaguePrefix}/roster` : '/roster';
               break;
             case 'm':
-              path = isLeagueMode ? `${leaguePrefix}/messages` : '/events';
+              path = isLeagueMode ? `${leaguePrefix}/messages` : '/calendar';
               break;
           }
         }
@@ -105,7 +105,9 @@ export function useLeagueKeyboardShortcuts() {
               path = `${leaguePrefix}/schedule/new-game`;
               break;
             case 'm':
-              path = `${leaguePrefix}/messages/new`;
+              // Messages page hosts composition; repoint to
+              // /messages/new when that route ships (roadmap D1)
+              path = `${leaguePrefix}/messages`;
               break;
           }
         }
