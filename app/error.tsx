@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import * as Sentry from "@sentry/nextjs";
 import { Alert, AlertTitle, Button, Container } from "@mui/material";
 
-export default function DashboardError({
+export default function RootError({
   error,
   reset,
 }: {
@@ -12,12 +12,12 @@ export default function DashboardError({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error("Dashboard route error:", error);
+    console.error("Route error:", error);
     Sentry.captureException(error);
   }, [error]);
 
   return (
-    <Container maxWidth="md" sx={{ py: 4 }}>
+    <Container maxWidth="md" sx={{ py: 8 }}>
       <Alert
         severity="error"
         action={
