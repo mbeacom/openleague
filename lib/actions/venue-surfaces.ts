@@ -16,7 +16,8 @@ import { Prisma, type SurfaceType } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
 import { requireVenueScheduleManager } from "@/lib/auth/session";
-import { logVenueActivity, type ActionResult } from "@/lib/actions/venue-organizations";
+import { type ActionResult } from "@/lib/actions/venue-organizations";
+import { logVenueActivity } from "@/lib/services/venue-activity";
 import {
   applySegmentationPresetSchema,
   createSegmentSchema,

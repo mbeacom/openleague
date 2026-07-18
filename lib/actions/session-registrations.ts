@@ -5,7 +5,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { requireUserId, requireVenueRequestManager, requireVenueStaffRole, VENUE_STAFF_ADMIN_ROLES } from "@/lib/auth/session";
 import type { ActionResult } from "@/lib/actions/venue-organizations";
-import { logVenueActivity } from "@/lib/actions/venue-organizations";
+import { logVenueActivity } from "@/lib/services/venue-activity";
 import {
   sessionRegistrationSchema,
   registrationCommandSchema,

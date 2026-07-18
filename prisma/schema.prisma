@@ -17,6 +17,7 @@ model User {
   passwordHash String
   name         String?
   approved     Boolean  @default(false) // Require admin approval for new signups
+  isPlatformAdmin Boolean @default(false) // Platform-wide admin (user approval/enumeration). NOT self-grantable; see lib/auth/session.ts isPlatformAdmin()
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

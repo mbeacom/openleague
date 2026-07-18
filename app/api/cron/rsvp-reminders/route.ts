@@ -32,19 +32,23 @@ function timingSafeEqual(a: string, b: string): boolean {
  */
 export async function GET(request: Request) {
   try {
-    // Optional: Add authorization header check for security
+    // Require a configured cron secret AND a matching Bearer token. Fail CLOSED:
+    // if CRON_SECRET is unset, refuse rather than sending mass reminder emails,
+    // matching the notification-batches and event-waitlist crons. (Previously
+    // this endpoint sent emails to anyone when CRON_SECRET happened to be unset.)
     const authHeader = request.headers.get("authorization");
     const cronSecret = process.env.CRON_SECRET;
 
-    if (cronSecret && authHeader) {
-      const expectedAuth = `Bearer ${cronSecret}`;
-      if (!timingSafeEqual(authHeader, expectedAuth)) {
-        return NextResponse.json(
-          { error: "Unauthorized" },
-          { status: 401 }
-        );
-      }
-    } else if (cronSecret && !authHeader) {
+    if (!cronSecret) {
+      console.error("CRON_SECRET not configured");
+      return NextResponse.json(
+        { error: "Cron secret not configured" },
+        { status: 500 }
+      );
+    }
+
+    const expectedAuth = `Bearer ${cronSecret}`;
+    if (!authHeader || !timingSafeEqual(authHeader, expectedAuth)) {
       return NextResponse.json(
         { error: "Unauthorized" },
         { status: 401 }

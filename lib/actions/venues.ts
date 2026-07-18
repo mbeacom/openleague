@@ -392,8 +392,13 @@ export async function checkVenueAvailability(
 /**
  * Find conflicting events at a venue for a given time range.
  * Two events conflict when: newStart < existingEnd AND newEnd > existingStart
+ *
+ * Module-private: NOT exported. In a "use server" file every exported async
+ * function is a client-callable RPC endpoint; exporting this leaked private
+ * venue schedules (event titles, team names, times) to anyone. The only
+ * caller is checkVenueAvailability below, which authenticates + authorizes.
  */
-export async function findVenueConflicts(
+async function findVenueConflicts(
   venueId: string,
   startAt: Date,
   endAt: Date,

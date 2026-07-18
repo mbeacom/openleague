@@ -44,6 +44,13 @@ vi.mock("@/lib/db/prisma", () => ({
   prisma: mockPrisma,
 }));
 
+// logVenueActivity moved to lib/services/venue-activity (out of the "use server"
+// file). Mock it at its new home; the venue-organizations mock below remains for
+// its other exports.
+vi.mock("@/lib/services/venue-activity", () => ({
+  logVenueActivity: (...args: unknown[]) => mockLogVenueActivity(...args),
+}));
+
 vi.mock("@/lib/actions/venue-organizations", () => ({
   logVenueActivity: (...args: unknown[]) => mockLogVenueActivity(...args),
   publicPublishedVenueWhere: {

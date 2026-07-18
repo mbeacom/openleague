@@ -328,7 +328,26 @@ export async function getLeagueRosterData(leagueId: string): Promise<{
   const [players, teams, divisions, rawInvitations] = await Promise.all([
     prisma.player.findMany({
       where: { leagueId },
-      include: {
+      // Explicit select (not include) so admin-only PII is field-gated on the
+      // caller's league role. A bare `include` returns every scalar column,
+      // which leaked emergency contacts + USAH IDs to any league MEMBER.
+      // Convention mirrors getRosterPayload in team-context.ts (FR-008).
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        emergencyContact: isLeagueAdmin,
+        emergencyPhone: isLeagueAdmin,
+        jerseyNumber: true,
+        position: true,
+        // FR-008: USAH Member IDs are admin-only
+        usahMemberId: isLeagueAdmin,
+        teamId: true,
+        leagueId: true,
+        userId: true,
+        createdAt: true,
+        updatedAt: true,
         team: {
           select: {
             id: true,
