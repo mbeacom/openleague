@@ -298,16 +298,43 @@ export async function isAnyLeagueAdmin(userId: string): Promise<boolean> {
 }
 
 /**
- * Require "system admin" privileges (currently: LEAGUE_ADMIN of any league —
- * see isAnyLeagueAdmin).
+ * Check whether a user is a PLATFORM administrator — the true system-wide role
+ * used to gate cross-tenant operations (approving/rejecting signups, listing
+ * every user). This is deliberately NOT "LEAGUE_ADMIN of any league": that was
+ * self-grantable by creating a throwaway league (privilege escalation).
+ *
+ * A user is a platform admin if either:
+ *  - their User.isPlatformAdmin column is true, or
+ *  - their email is in the PLATFORM_ADMIN_EMAILS allowlist (comma-separated).
+ *
+ * The env allowlist is a non-self-grantable bootstrap so a self-hosted operator
+ * can designate the first platform admin(s) without a manual DB write.
+ */
+export async function isPlatformAdmin(userId: string): Promise<boolean> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { isPlatformAdmin: true, email: true },
+  });
+  if (!user) return false;
+  if (user.isPlatformAdmin) return true;
+
+  const allowlist = (process.env.PLATFORM_ADMIN_EMAILS ?? "")
+    .split(",")
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean);
+  return allowlist.includes(user.email.toLowerCase());
+}
+
+/**
+ * Require PLATFORM admin privileges (see isPlatformAdmin).
  * Returns the session if the check passes.
- * Throws an error if not authenticated or not an admin
+ * Throws an error if not authenticated or not a platform admin.
  */
 export async function requireSystemAdmin() {
   const session = await requireAuth();
   const userId = await requireUserIdFromSession(session);
 
-  const isAdmin = await isAnyLeagueAdmin(userId);
+  const isAdmin = await isPlatformAdmin(userId);
   if (!isAdmin) {
     throw new Error("Unauthorized: Admin access required");
   }

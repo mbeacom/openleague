@@ -177,6 +177,10 @@ export async function assignSkillLevelsToLesson(
   try {
     const validated = lessonSkillLevelAssignmentSchema.parse(input);
     await requireVenueContentManager(validated.organizationId, validated.venueId);
+    // Bind venue -> org. Org-wide staff roles satisfy requireVenueContentManager
+    // for ANY venueId, so without this an OWNER of their own org could pass a
+    // victim's venueId + lessonOfferingId and rewrite its skill-level tags (IDOR).
+    await ensureVenue(validated.organizationId, validated.venueId);
 
     const lesson = await prisma.lessonOffering.update({
       where: { id: validated.lessonOfferingId, venueId: validated.venueId },
@@ -199,6 +203,9 @@ export async function assignSkillLevelsToScheduleBlock(
   try {
     const validated = scheduleBlockSkillLevelAssignmentSchema.parse(input);
     await requireVenueContentManager(validated.organizationId, validated.venueId);
+    // Bind venue -> org (see assignSkillLevelsToLesson): closes the same IDOR
+    // where an org-wide role satisfies the check for a foreign venueId.
+    await ensureVenue(validated.organizationId, validated.venueId);
 
     const block = await prisma.venueScheduleBlock.update({
       where: { id: validated.scheduleBlockId, venueId: validated.venueId },

@@ -8,7 +8,15 @@
  */
 export function escapeCsvField(value: string | number | null | undefined): string {
   if (value === null || value === undefined) return "";
-  const str = String(value);
+  let str = String(value);
+  // Formula-injection guard (CSV/Excel/Sheets): a cell beginning with =, +, -,
+  // @, tab, or CR can be executed as a formula when the file is opened. Prefix
+  // such values with a single quote so they render as literal text. Applied only
+  // to string inputs — a numeric value like -5 is a legitimate number, not a
+  // formula, and must not be altered.
+  if (typeof value === "string" && /^[=+\-@\t\r]/.test(str)) {
+    str = `'${str}`;
+  }
   // Escape embedded double quotes by doubling them
   const escaped = str.replace(/"/g, '""');
   // Wrap in quotes if field contains comma, quote, newline, or carriage return

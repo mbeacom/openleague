@@ -7,6 +7,20 @@ import { notificationService } from "@/lib/services/notification";
 const EMAIL_FROM = env.EMAIL_FROM;
 const BASE_URL = getBaseUrl();
 
+/**
+ * Escape a string for safe interpolation into HTML email bodies. Prevents
+ * HTML/script injection from user-controlled values (event titles, names,
+ * messages, locations, notes, etc.) rendered in recipients' emails.
+ */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 interface IceTimeRequestSubmittedEmailData {
   managerEmails: string[];
   venueName: string;
@@ -36,7 +50,7 @@ export async function sendVenueRelationshipInvitationEmail(
     message: {
       from_email: EMAIL_FROM,
       subject: `${data.venueName} invited you to add a ${relationshipLabel}`,
-      html: `<p>${data.venueName} invited you to add them as a ${relationshipLabel}.</p><p><a href="${invitationLink}">Review invitation</a></p>`,
+      html: `<p>${escapeHtml(data.venueName)} invited you to add them as a ${relationshipLabel}.</p><p><a href="${invitationLink}">Review invitation</a></p>`,
       text: `${data.venueName} invited you to add them as a ${relationshipLabel}. Review: ${invitationLink}`,
       to: [{ email: data.email, type: "to" as const }],
     },
@@ -70,7 +84,7 @@ export async function sendVenueStaffInviteEmail(data: VenueStaffInviteEmailData)
     message: {
       from_email: EMAIL_FROM,
       subject: `${data.inviterName} invited you to help manage ${data.organizationName}`,
-      html: `<p>${data.inviterName} invited you to join the staff of <strong>${data.organizationName}</strong> on OpenLeague with the ${roleLabel} role.</p><p><a href="${staffLink}">Review invitation</a></p><p>If you didn't expect this invitation, you can safely ignore this email.</p>`,
+      html: `<p>${escapeHtml(data.inviterName)} invited you to join the staff of <strong>${escapeHtml(data.organizationName)}</strong> on OpenLeague with the ${roleLabel} role.</p><p><a href="${staffLink}">Review invitation</a></p><p>If you didn't expect this invitation, you can safely ignore this email.</p>`,
       text: `${data.inviterName} invited you to join the staff of ${data.organizationName} on OpenLeague with the ${roleLabel} role. Review: ${staffLink}\n\nIf you didn't expect this invitation, you can safely ignore this email.`,
       to: [{ email: data.email, type: "to" as const }],
     },
@@ -103,7 +117,7 @@ export async function sendVenueStaffSignupInviteEmail(
     message: {
       from_email: EMAIL_FROM,
       subject: `${data.inviterName} invited you to help manage ${data.organizationName}`,
-      html: `<p>${data.inviterName} invited you to join the staff of <strong>${data.organizationName}</strong> on OpenLeague with the ${roleLabel} role.</p><p>Create a free account to accept the invitation:</p><p><a href="${invitationLink}">Accept invitation</a></p><p style="color: #666; font-size: 14px;">This invitation will expire in 7 days. If you didn't expect it, you can safely ignore this email.</p>`,
+      html: `<p>${escapeHtml(data.inviterName)} invited you to join the staff of <strong>${escapeHtml(data.organizationName)}</strong> on OpenLeague with the ${roleLabel} role.</p><p>Create a free account to accept the invitation:</p><p><a href="${invitationLink}">Accept invitation</a></p><p style="color: #666; font-size: 14px;">This invitation will expire in 7 days. If you didn't expect it, you can safely ignore this email.</p>`,
       text: `${data.inviterName} invited you to join the staff of ${data.organizationName} on OpenLeague with the ${roleLabel} role. Create a free account to accept the invitation: ${invitationLink}\n\nThis invitation will expire in 7 days. If you didn't expect it, you can safely ignore this email.`,
       to: [{ email: data.email, type: "to" as const }],
     },
@@ -134,7 +148,7 @@ export async function sendTeamOfficialInviteEmail(data: TeamOfficialInviteEmailD
     message: {
       from_email: EMAIL_FROM,
       subject: `${data.inviterName} invited you to join ${data.teamName} as ${roleLabel}`,
-      html: `<p>${data.inviterName} invited you to join <strong>${data.teamName}</strong> on OpenLeague as ${roleLabel}.</p><p>Create a free account to accept the invitation:</p><p><a href="${invitationLink}">Accept invitation</a></p><p style="color: #666; font-size: 14px;">This invitation will expire in 7 days. If you didn't expect it, you can safely ignore this email.</p>`,
+      html: `<p>${escapeHtml(data.inviterName)} invited you to join <strong>${escapeHtml(data.teamName)}</strong> on OpenLeague as ${roleLabel}.</p><p>Create a free account to accept the invitation:</p><p><a href="${invitationLink}">Accept invitation</a></p><p style="color: #666; font-size: 14px;">This invitation will expire in 7 days. If you didn't expect it, you can safely ignore this email.</p>`,
       text: `${data.inviterName} invited you to join ${data.teamName} on OpenLeague as ${roleLabel}. Create a free account to accept the invitation: ${invitationLink}\n\nThis invitation will expire in 7 days. If you didn't expect it, you can safely ignore this email.`,
       to: [{ email: data.email, type: "to" as const }],
     },
@@ -151,7 +165,7 @@ export async function sendIceTimeRequestSubmittedEmail(
     message: {
       from_email: EMAIL_FROM,
       subject: `New ice time request for ${data.venueName}`,
-      html: `<p>${data.contactName} (${data.contactEmail}) requested ${data.scheduleTitle}.</p><p><a href="${requestLink}">Review request</a></p>`,
+      html: `<p>${escapeHtml(data.contactName)} (${escapeHtml(data.contactEmail)}) requested ${escapeHtml(data.scheduleTitle)}.</p><p><a href="${requestLink}">Review request</a></p>`,
       text: `${data.contactName} (${data.contactEmail}) requested ${data.scheduleTitle}. Review: ${requestLink}`,
       to: data.managerEmails.map((email) => ({ email, type: "to" as const })),
     },
@@ -175,7 +189,7 @@ export async function sendIceTimeRequestDecisionEmail(
     message: {
       from_email: EMAIL_FROM,
       subject: `Your ice time request was ${statusLabel}`,
-      html: `<p>${data.venueName} ${statusLabel} your ice time request.</p>${data.decisionMessage ? `<p>${data.decisionMessage}</p>` : ""}`,
+      html: `<p>${escapeHtml(data.venueName)} ${statusLabel} your ice time request.</p>${data.decisionMessage ? `<p>${escapeHtml(data.decisionMessage)}</p>` : ""}`,
       text: `${data.venueName} ${statusLabel} your ice time request.${data.decisionMessage ? `\n\n${data.decisionMessage}` : ""}`,
       to: [{ email: data.contactEmail, type: "to" as const }],
     },
@@ -217,7 +231,7 @@ export async function sendSessionRegistrationConfirmationEmail(
     message: {
       from_email: EMAIL_FROM,
       subject: `You're registered for ${data.offeringTitle}`,
-      html: `<p>Hi ${data.participantName},</p><p>You're registered for <strong>${data.offeringTitle}</strong> at ${data.venueName} (${data.quantity} spot${data.quantity === 1 ? "" : "s"}).${priceLine}</p>${receiptLine}<p><a href="${registrationsLink}">View your registrations</a></p>`,
+      html: `<p>Hi ${escapeHtml(data.participantName)},</p><p>You're registered for <strong>${escapeHtml(data.offeringTitle)}</strong> at ${escapeHtml(data.venueName)} (${data.quantity} spot${data.quantity === 1 ? "" : "s"}).${priceLine}</p>${receiptLine}<p><a href="${registrationsLink}">View your registrations</a></p>`,
       text: `Hi ${data.participantName}, you're registered for ${data.offeringTitle} at ${data.venueName} (${data.quantity} spot(s)).${priceLine} View your registrations: ${registrationsLink}`,
       to: [{ email: data.to, type: "to" as const }],
     },
@@ -245,7 +259,7 @@ export async function sendSessionRegistrationManagerEmail(
     message: {
       from_email: EMAIL_FROM,
       subject: `New registration for ${data.offeringTitle}`,
-      html: `<p>${data.participantName} registered for <strong>${data.offeringTitle}</strong> at ${data.venueName} (${data.quantity} spot${data.quantity === 1 ? "" : "s"}).</p>`,
+      html: `<p>${escapeHtml(data.participantName)} registered for <strong>${escapeHtml(data.offeringTitle)}</strong> at ${escapeHtml(data.venueName)} (${data.quantity} spot${data.quantity === 1 ? "" : "s"}).</p>`,
       text: `${data.participantName} registered for ${data.offeringTitle} at ${data.venueName} (${data.quantity} spot(s)).`,
       to: data.managerEmails.map((email) => ({ email, type: "to" as const })),
     },
@@ -277,11 +291,11 @@ export async function sendInvitationEmail(data: InvitationEmailData): Promise<vo
     subject: `You've been invited to join ${data.teamName}`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #1976D2;">You've been invited to join ${data.teamName}</h2>
+        <h2 style="color: #1976D2;">You've been invited to join ${escapeHtml(data.teamName)}</h2>
 
         <p>Hi there,</p>
 
-        <p>${data.inviterName} has invited you to join <strong>${data.teamName}</strong> on openleague.</p>
+        <p>${escapeHtml(data.inviterName)} has invited you to join <strong>${escapeHtml(data.teamName)}</strong> on openleague.</p>
 
         <p>openleague is a free platform for managing sports teams. You'll be able to:</p>
         <ul>
@@ -368,11 +382,11 @@ export async function sendExistingUserNotification(
     subject: `You've been added to ${data.teamName}`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #1976D2;">You've been added to ${data.teamName}</h2>
+        <h2 style="color: #1976D2;">You've been added to ${escapeHtml(data.teamName)}</h2>
 
         <p>Hi there,</p>
 
-        <p>${data.inviterName} has added you to <strong>${data.teamName}</strong> on openleague.</p>
+        <p>${escapeHtml(data.inviterName)} has added you to <strong>${escapeHtml(data.teamName)}</strong> on openleague.</p>
 
         <p>You can now view the team roster, see upcoming games and practices, and RSVP to events.</p>
 
@@ -433,11 +447,11 @@ export async function sendLeagueInvitationEmail(data: LeagueInvitationEmailData)
     subject: `You've been invited to join the ${data.leagueName} league`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #1976D2;">You've been invited to join ${data.leagueName}</h2>
+        <h2 style="color: #1976D2;">You've been invited to join ${escapeHtml(data.leagueName)}</h2>
 
         <p>Hi there,</p>
 
-        <p>${data.inviterName} has invited you to join the <strong>${data.leagueName}</strong> league on openleague.</p>
+        <p>${escapeHtml(data.inviterName)} has invited you to join the <strong>${escapeHtml(data.leagueName)}</strong> league on openleague.</p>
 
         <p style="margin: 30px 0;">
           <a href="${invitationLink}"
@@ -505,7 +519,7 @@ export async function sendLeagueMemberAddedNotification(
     message: {
       from_email: EMAIL_FROM,
       subject: `You've been added to the ${data.leagueName} league`,
-      html: `<p>${data.inviterName} added you to the <strong>${data.leagueName}</strong> league on openleague as ${roleLabel}.</p><p><a href="${loginLink}">Log in</a> to see your league.</p><p style="color: #666; font-size: 14px;">If you didn't expect this, contact the league administrator.</p>`,
+      html: `<p>${escapeHtml(data.inviterName)} added you to the <strong>${escapeHtml(data.leagueName)}</strong> league on openleague as ${roleLabel}.</p><p><a href="${loginLink}">Log in</a> to see your league.</p><p style="color: #666; font-size: 14px;">If you didn't expect this, contact the league administrator.</p>`,
       text: `${data.inviterName} added you to the ${data.leagueName} league on openleague as ${roleLabel}. Log in to see your league: ${loginLink}\n\nIf you didn't expect this, contact the league administrator.`,
       to: [{ email: data.email, type: "to" as const }],
     },
@@ -544,13 +558,13 @@ export async function sendEventCreatedEmail(data: EventCreatedEmailData): Promis
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #1976D2;">New ${eventTypeLabel} Scheduled</h2>
 
-        <p>A new ${eventTypeLabel.toLowerCase()} has been added to <strong>${data.teamName}</strong>'s calendar.</p>
+        <p>A new ${eventTypeLabel.toLowerCase()} has been added to <strong>${escapeHtml(data.teamName)}</strong>'s calendar.</p>
 
         <div style="background-color: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
-          <h3 style="margin-top: 0; color: #333;">${data.eventTitle}</h3>
+          <h3 style="margin-top: 0; color: #333;">${escapeHtml(data.eventTitle)}</h3>
           <p style="margin: 10px 0;"><strong>Date & Time:</strong> ${data.eventDate}</p>
-          <p style="margin: 10px 0;"><strong>Location:</strong> ${data.eventLocation}</p>
-          ${data.opponent ? `<p style="margin: 10px 0;"><strong>Opponent:</strong> ${data.opponent}</p>` : ""}
+          <p style="margin: 10px 0;"><strong>Location:</strong> ${escapeHtml(data.eventLocation)}</p>
+          ${data.opponent ? `<p style="margin: 10px 0;"><strong>Opponent:</strong> ${escapeHtml(data.opponent)}</p>` : ""}
         </div>
 
         <p style="margin: 30px 0;">
@@ -626,14 +640,14 @@ export async function sendEventUpdatedEmail(data: EventUpdatedEmailData): Promis
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #FF9800;">Event Updated</h2>
 
-        <p>An event for <strong>${data.teamName}</strong> has been updated.</p>
+        <p>An event for <strong>${escapeHtml(data.teamName)}</strong> has been updated.</p>
 
         <div style="background-color: #fff3e0; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #FF9800;">
-          <h3 style="margin-top: 0; color: #333;">${data.eventTitle}</h3>
+          <h3 style="margin-top: 0; color: #333;">${escapeHtml(data.eventTitle)}</h3>
           <p style="margin: 10px 0;"><strong>Type:</strong> ${eventTypeLabel}</p>
           <p style="margin: 10px 0;"><strong>Date & Time:</strong> ${data.eventDate}</p>
-          <p style="margin: 10px 0;"><strong>Location:</strong> ${data.eventLocation}</p>
-          ${data.opponent ? `<p style="margin: 10px 0;"><strong>Opponent:</strong> ${data.opponent}</p>` : ""}
+          <p style="margin: 10px 0;"><strong>Location:</strong> ${escapeHtml(data.eventLocation)}</p>
+          ${data.opponent ? `<p style="margin: 10px 0;"><strong>Opponent:</strong> ${escapeHtml(data.opponent)}</p>` : ""}
         </div>
 
         <p style="margin: 30px 0;">
@@ -707,10 +721,10 @@ export async function sendEventCancelledEmail(data: EventCancelledEmailData): Pr
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #D32F2F;">Event Cancelled</h2>
 
-        <p>An event for <strong>${data.teamName}</strong> has been cancelled.</p>
+        <p>An event for <strong>${escapeHtml(data.teamName)}</strong> has been cancelled.</p>
 
         <div style="background-color: #ffebee; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #D32F2F;">
-          <h3 style="margin-top: 0; color: #333;">${data.eventTitle}</h3>
+          <h3 style="margin-top: 0; color: #333;">${escapeHtml(data.eventTitle)}</h3>
           <p style="margin: 10px 0;"><strong>Type:</strong> ${eventTypeLabel}</p>
           <p style="margin: 10px 0;"><strong>Was scheduled for:</strong> ${data.eventDate}</p>
           <p style="margin: 10px 0; color: #D32F2F; font-weight: bold;">This event has been cancelled.</p>
@@ -786,16 +800,16 @@ export async function sendRSVPReminderEmail(data: RSVPReminderEmailData): Promis
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #1976D2;">RSVP Reminder</h2>
 
-        <p>${greeting},</p>
+        <p>${escapeHtml(greeting)},</p>
 
-        <p>This is a friendly reminder to RSVP for an upcoming ${eventTypeLabel.toLowerCase()} with <strong>${data.teamName}</strong>.</p>
+        <p>This is a friendly reminder to RSVP for an upcoming ${eventTypeLabel.toLowerCase()} with <strong>${escapeHtml(data.teamName)}</strong>.</p>
 
         <div style="background-color: #e3f2fd; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #1976D2;">
-          <h3 style="margin-top: 0; color: #333;">${data.eventTitle}</h3>
+          <h3 style="margin-top: 0; color: #333;">${escapeHtml(data.eventTitle)}</h3>
           <p style="margin: 10px 0;"><strong>Type:</strong> ${eventTypeLabel}</p>
           <p style="margin: 10px 0;"><strong>Date & Time:</strong> ${data.eventDate}</p>
-          <p style="margin: 10px 0;"><strong>Location:</strong> ${data.eventLocation}</p>
-          ${data.opponent ? `<p style="margin: 10px 0;"><strong>Opponent:</strong> ${data.opponent}</p>` : ""}
+          <p style="margin: 10px 0;"><strong>Location:</strong> ${escapeHtml(data.eventLocation)}</p>
+          ${data.opponent ? `<p style="margin: 10px 0;"><strong>Opponent:</strong> ${escapeHtml(data.opponent)}</p>` : ""}
         </div>
 
         <p>Your team is counting on you! Please let us know if you can make it.</p>
@@ -1036,14 +1050,14 @@ export async function sendLeagueMessageEmail(data: LeagueMessageEmailData): Prom
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <div style="background-color: ${priorityColor}; color: white; padding: 20px; border-radius: 8px 8px 0 0;">
             <h2 style="margin: 0; color: white;">League Message</h2>
-            <p style="margin: 10px 0 0 0; color: white; opacity: 0.9;">From ${data.senderName} • ${data.leagueName}</p>
+            <p style="margin: 10px 0 0 0; color: white; opacity: 0.9;">From ${escapeHtml(data.senderName)} • ${escapeHtml(data.leagueName)}</p>
           </div>
 
           <div style="background-color: #f5f5f5; padding: 20px; border-radius: 0 0 8px 8px;">
-            <h3 style="margin-top: 0; color: #333;">${data.subject}</h3>
+            <h3 style="margin-top: 0; color: #333;">${escapeHtml(data.subject)}</h3>
 
             <div style="background-color: white; padding: 20px; border-radius: 4px; margin: 20px 0;">
-              ${data.content.replace(/\n/g, '<br>')}
+              ${escapeHtml(data.content).replace(/\n/g, '<br>')}
             </div>
 
             ${data.priority === "URGENT" || data.priority === "HIGH" ? `
@@ -1151,14 +1165,14 @@ export async function sendLeagueAnnouncementEmail(data: LeagueAnnouncementEmailD
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <div style="background-color: ${priorityColor}; color: white; padding: 20px; border-radius: 8px 8px 0 0;">
             <h2 style="margin: 0; color: white;">📢 League Announcement</h2>
-            <p style="margin: 10px 0 0 0; color: white; opacity: 0.9;">From ${data.senderName} • ${data.leagueName}</p>
+            <p style="margin: 10px 0 0 0; color: white; opacity: 0.9;">From ${escapeHtml(data.senderName)} • ${escapeHtml(data.leagueName)}</p>
           </div>
 
           <div style="background-color: #f5f5f5; padding: 20px; border-radius: 0 0 8px 8px;">
-            <h3 style="margin-top: 0; color: #333;">${data.subject}</h3>
+            <h3 style="margin-top: 0; color: #333;">${escapeHtml(data.subject)}</h3>
 
             <div style="background-color: white; padding: 20px; border-radius: 4px; margin: 20px 0; border-left: 4px solid ${priorityColor};">
-              ${data.content.replace(/\n/g, '<br>')}
+              ${escapeHtml(data.content).replace(/\n/g, '<br>')}
             </div>
 
             ${data.priority === "URGENT" ? `
@@ -1257,10 +1271,10 @@ export async function sendPracticePlanSharedEmail(data: PracticePlanSharedEmailD
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #1976D2;">New Practice Plan Available</h2>
 
-        <p>A new practice plan has been shared with <strong>${data.teamName}</strong>.</p>
+        <p>A new practice plan has been shared with <strong>${escapeHtml(data.teamName)}</strong>.</p>
 
         <div style="background-color: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
-          <h3 style="margin-top: 0; color: #333;">${data.sessionTitle}</h3>
+          <h3 style="margin-top: 0; color: #333;">${escapeHtml(data.sessionTitle)}</h3>
           <p style="margin: 10px 0;"><strong>Date:</strong> ${data.sessionDate}</p>
           <p style="margin: 10px 0;"><strong>Duration:</strong> ${data.duration} minutes</p>
           <p style="margin: 10px 0;"><strong>Number of Drills:</strong> ${data.playCount}</p>
@@ -1337,10 +1351,10 @@ export async function sendPracticePlanUpdatedEmail(data: PracticePlanUpdatedEmai
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #FF9800;">Practice Plan Updated</h2>
 
-        <p>A practice plan for <strong>${data.teamName}</strong> has been updated.</p>
+        <p>A practice plan for <strong>${escapeHtml(data.teamName)}</strong> has been updated.</p>
 
         <div style="background-color: #fff3e0; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #FF9800;">
-          <h3 style="margin-top: 0; color: #333;">${data.sessionTitle}</h3>
+          <h3 style="margin-top: 0; color: #333;">${escapeHtml(data.sessionTitle)}</h3>
           <p style="margin: 10px 0;"><strong>Date:</strong> ${data.sessionDate}</p>
           <p style="margin: 10px 0;"><strong>Duration:</strong> ${data.duration} minutes</p>
           <p style="margin: 10px 0;"><strong>Number of Drills:</strong> ${data.playCount}</p>
@@ -1493,7 +1507,7 @@ export async function sendSignupEventUpdatedEmail(data: SignupEventUpdatedEmailD
         message: {
           from_email: EMAIL_FROM,
           subject: `Updated: ${data.eventTitle}`,
-          html: `<p><strong>${data.eventTitle}</strong> (hosted by ${data.hostName}) has been updated.</p><p>${data.changeSummary}</p><p><a href="${eventLink}">View the event</a></p>`,
+          html: `<p><strong>${escapeHtml(data.eventTitle)}</strong> (hosted by ${escapeHtml(data.hostName)}) has been updated.</p><p>${escapeHtml(data.changeSummary)}</p><p><a href="${eventLink}">View the event</a></p>`,
           text: `${data.eventTitle} (hosted by ${data.hostName}) has been updated. ${data.changeSummary} View: ${eventLink}`,
           to: [{ email: recipient.email, type: "to" as const }],
         },
@@ -1515,7 +1529,7 @@ interface SignupEventCanceledEmailData {
 export async function sendSignupEventCanceledEmail(data: SignupEventCanceledEmailData): Promise<void> {
   if (data.recipients.length === 0) return;
   const mailchimp = getMailchimpClient();
-  const reasonHtml = data.reason ? `<p>Reason: ${data.reason}</p>` : "";
+  const reasonHtml = data.reason ? `<p>Reason: ${escapeHtml(data.reason)}</p>` : "";
 
   // One message per family — recipients must never see each other's addresses.
   for (const recipient of data.recipients) {
@@ -1524,7 +1538,7 @@ export async function sendSignupEventCanceledEmail(data: SignupEventCanceledEmai
         message: {
           from_email: EMAIL_FROM,
           subject: `Canceled: ${data.eventTitle}`,
-          html: `<p><strong>${data.eventTitle}</strong> (hosted by ${data.hostName}) has been canceled.</p>${reasonHtml}<p>If you paid online, the organizer will process refunds.</p>`,
+          html: `<p><strong>${escapeHtml(data.eventTitle)}</strong> (hosted by ${escapeHtml(data.hostName)}) has been canceled.</p>${reasonHtml}<p>If you paid online, the organizer will process refunds.</p>`,
           text: `${data.eventTitle} (hosted by ${data.hostName}) has been canceled.${data.reason ? ` Reason: ${data.reason}` : ""} If you paid online, the organizer will process refunds.`,
           to: [{ email: recipient.email, type: "to" as const }],
         },
@@ -1557,14 +1571,14 @@ export async function sendEventRegistrationConfirmationEmail(
   const names = data.participantNames.join(", ");
   const paymentHtml =
     data.amountTotal > 0
-      ? `<p>Amount due: <strong>${formatMoney(data.amountTotal, data.currency)}</strong>${data.manualPaymentNote ? ` — ${data.manualPaymentNote}` : ""}</p>`
+      ? `<p>Amount due: <strong>${formatMoney(data.amountTotal, data.currency)}</strong>${data.manualPaymentNote ? ` — ${escapeHtml(data.manualPaymentNote)}` : ""}</p>`
       : "";
 
   await mailchimp.messages.send({
     message: {
       from_email: EMAIL_FROM,
       subject: `You're in: ${data.eventTitle}`,
-      html: `<p>${names} ${data.participantNames.length === 1 ? "is" : "are"} confirmed for <strong>${data.slotName}</strong> at <strong>${data.eventTitle}</strong> (hosted by ${data.hostName}) on ${data.startAtFormatted}.</p>${paymentHtml}<p><a href="${eventLink}">View the event</a></p>`,
+      html: `<p>${escapeHtml(names)} ${data.participantNames.length === 1 ? "is" : "are"} confirmed for <strong>${escapeHtml(data.slotName)}</strong> at <strong>${escapeHtml(data.eventTitle)}</strong> (hosted by ${escapeHtml(data.hostName)}) on ${data.startAtFormatted}.</p>${paymentHtml}<p><a href="${eventLink}">View the event</a></p>`,
       text: `${names} confirmed for ${data.slotName} at ${data.eventTitle} (hosted by ${data.hostName}) on ${data.startAtFormatted}.${data.amountTotal > 0 ? ` Amount due: ${formatMoney(data.amountTotal, data.currency)}.` : ""} View: ${eventLink}`,
       to: [{ email: data.to, type: "to" as const }],
     },
@@ -1588,7 +1602,7 @@ export async function sendEventRegistrationRemovedEmail(
     message: {
       from_email: EMAIL_FROM,
       subject: `Registration removed: ${data.eventTitle}`,
-      html: `<p>${data.participantName}'s registration for <strong>${data.eventTitle}</strong> was removed by an organizer.</p>${data.reason ? `<p>Reason: ${data.reason}</p>` : ""}`,
+      html: `<p>${escapeHtml(data.participantName)}'s registration for <strong>${escapeHtml(data.eventTitle)}</strong> was removed by an organizer.</p>${data.reason ? `<p>Reason: ${escapeHtml(data.reason)}</p>` : ""}`,
       text: `${data.participantName}'s registration for ${data.eventTitle} was removed by an organizer.${data.reason ? ` Reason: ${data.reason}` : ""}`,
       to: [{ email: data.to, type: "to" as const }],
     },
@@ -1666,7 +1680,7 @@ export async function sendSignupEventReminders(): Promise<void> {
           message: {
             from_email: EMAIL_FROM,
             subject: `Reminder: ${event.title} is coming up`,
-            html: `<p>Reminder — <strong>${event.title}</strong> (hosted by ${hostName}) starts ${formatDateTime(event.startAt)}${location ? ` at ${location}` : ""}.</p><p>Registered: ${participants.join(", ")}</p><p><a href="${eventLink}">View the event</a></p>`,
+            html: `<p>Reminder — <strong>${escapeHtml(event.title)}</strong> (hosted by ${escapeHtml(hostName)}) starts ${formatDateTime(event.startAt)}${location ? ` at ${escapeHtml(location)}` : ""}.</p><p>Registered: ${escapeHtml(participants.join(", "))}</p><p><a href="${eventLink}">View the event</a></p>`,
             text: `Reminder — ${event.title} (hosted by ${hostName}) starts ${formatDateTime(event.startAt)}${location ? ` at ${location}` : ""}. Registered: ${participants.join(", ")}. View: ${eventLink}`,
             to: [{ email, type: "to" as const }],
           },
@@ -1696,7 +1710,7 @@ export async function sendWaitlistOfferEmail(data: WaitlistOfferEmailData): Prom
     message: {
       from_email: EMAIL_FROM,
       subject: `A spot opened up: ${data.eventTitle}`,
-      html: `<p>Good news — a <strong>${data.slotName}</strong> spot opened up for ${data.participantName} at <strong>${data.eventTitle}</strong>.</p><p>Claim it by <strong>${data.claimByFormatted}</strong> or the offer passes to the next person on the waitlist.</p><p><a href="${claimLink}">Claim your spot</a></p>`,
+      html: `<p>Good news — a <strong>${escapeHtml(data.slotName)}</strong> spot opened up for ${escapeHtml(data.participantName)} at <strong>${escapeHtml(data.eventTitle)}</strong>.</p><p>Claim it by <strong>${data.claimByFormatted}</strong> or the offer passes to the next person on the waitlist.</p><p><a href="${claimLink}">Claim your spot</a></p>`,
       text: `A ${data.slotName} spot opened up for ${data.participantName} at ${data.eventTitle}. Claim it by ${data.claimByFormatted} or the offer passes to the next person: ${claimLink}`,
       to: [{ email: data.to, type: "to" as const }],
     },
@@ -1724,7 +1738,7 @@ export async function sendEventInvitationEmail(data: EventInvitationEmailData): 
     message: {
       from_email: EMAIL_FROM,
       subject: `You're invited: ${data.eventTitle}`,
-      html: `<p>${data.hostName} invited you to <strong>${data.eventTitle}</strong> on ${data.startAtFormatted}.</p><p><a href="${inviteLink}">${cta}</a></p>`,
+      html: `<p>${escapeHtml(data.hostName)} invited you to <strong>${escapeHtml(data.eventTitle)}</strong> on ${data.startAtFormatted}.</p><p><a href="${inviteLink}">${cta}</a></p>`,
       text: `${data.hostName} invited you to ${data.eventTitle} on ${data.startAtFormatted}. ${cta}: ${inviteLink}`,
       to: [{ email: data.to, type: "to" as const }],
     },
@@ -1754,7 +1768,7 @@ export async function sendEventTeamsUpdateEmail(data: EventTeamsUpdateEmailData)
         message: {
           from_email: EMAIL_FROM,
           subject: headline,
-          html: `<p>${headline}.</p><p><a href="${eventLink}">See your team and game times</a></p>`,
+          html: `<p>${escapeHtml(headline)}.</p><p><a href="${eventLink}">See your team and game times</a></p>`,
           text: `${headline}. See your team and game times: ${eventLink}`,
           to: [{ email: recipient.email, type: "to" as const }],
         },
@@ -1903,14 +1917,14 @@ export async function sendGameProposalNotifications(
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: ${color};">${headlines[change]}</h2>
 
-        <p>${leads[change]}</p>
+        <p>${escapeHtml(leads[change])}</p>
 
         <div style="background-color: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid ${color};">
-          <h3 style="margin-top: 0; color: #333;">${matchup}</h3>
+          <h3 style="margin-top: 0; color: #333;">${escapeHtml(matchup)}</h3>
           <p style="margin: 10px 0;"><strong>Start:</strong> ${startFormatted}</p>
           ${endFormatted ? `<p style="margin: 10px 0;"><strong>End:</strong> ${endFormatted}</p>` : ""}
-          <p style="margin: 10px 0;"><strong>Venue:</strong> ${venueName}</p>
-          ${latestNote ? `<p style="margin: 10px 0;"><strong>Note:</strong> ${latestNote}</p>` : ""}
+          <p style="margin: 10px 0;"><strong>Venue:</strong> ${escapeHtml(venueName)}</p>
+          ${latestNote ? `<p style="margin: 10px 0;"><strong>Note:</strong> ${escapeHtml(latestNote)}</p>` : ""}
         </div>
 
         <p style="margin: 30px 0;">

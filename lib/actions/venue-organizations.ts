@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/db/prisma";
+import { createVenueActivityLog } from "@/lib/services/venue-activity";
 import { requireUserId, requireVenueProfileManager } from "@/lib/auth/session";
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
@@ -463,37 +464,8 @@ function isMissingVenueManagementSchemaError(
   );
 }
 
-export interface VenueActivityLogInput {
-  venueId: string;
-  actorId: string;
-  action: string;
-  resourceType: string;
-  resourceId?: string | null;
-  summary: string;
-  details?: Prisma.InputJsonValue;
-}
-
-function createVenueActivityLog(client: Pick<typeof prisma, "venueActivityLog">, input: VenueActivityLogInput) {
-  return client.venueActivityLog.create({
-    data: {
-      venueId: input.venueId,
-      actorId: input.actorId,
-      action: input.action,
-      resourceType: input.resourceType,
-      resourceId: input.resourceId ?? null,
-      summary: input.summary,
-      details: input.details ?? undefined,
-    },
-  });
-}
-
-export async function logVenueActivity(input: VenueActivityLogInput) {
-  return createVenueActivityLog(prisma, input);
-}
-
-export async function logCurrentUserVenueActivity(
-  input: Omit<VenueActivityLogInput, "actorId">
-) {
-  const actorId = await requireUserId();
-  return logVenueActivity({ ...input, actorId });
-}
+// Venue activity-log helpers moved to lib/services/venue-activity.ts (a plain,
+// non-"use server" module) so they are importable by actions but not exposed
+// as forgeable client-callable RPC endpoints. createVenueActivityLog is
+// imported at the top of this file for the transaction-scoped log writes below.
+// The former logCurrentUserVenueActivity was unused and removed.

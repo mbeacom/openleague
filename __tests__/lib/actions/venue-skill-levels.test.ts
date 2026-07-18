@@ -8,6 +8,7 @@ const { mockRequireVenueContentManager, mockPrisma } = vi.hoisted(() => ({
     skillLevelReference: { upsert: vi.fn(), findMany: vi.fn() },
     lessonOffering: { update: vi.fn() },
     venueScheduleBlock: { update: vi.fn() },
+    venue: { findFirst: vi.fn() },
   },
 }));
 
@@ -42,6 +43,9 @@ describe("venue skill levels", () => {
   });
 
   it("assigns level references to lessons and schedule blocks", async () => {
+    // assign* now calls ensureVenue() to bind the venue to the org (IDOR fix),
+    // which reads prisma.venue.findFirst.
+    mockPrisma.venue.findFirst.mockResolvedValue({ id: VENUE_ID, slug: "venue-slug" });
     mockPrisma.lessonOffering.update.mockResolvedValue({ id: "lesson-1" });
     mockPrisma.venueScheduleBlock.update.mockResolvedValue({ id: "block-1" });
 

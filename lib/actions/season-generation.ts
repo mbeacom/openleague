@@ -151,6 +151,20 @@ export async function generateRoundRobin(
     const { preview, proposed, timezone, validated, userId } = await computeGeneration(input);
     const phaseId = validated.phaseId || null;
 
+    // Object-level authz: requireSeasonManager (in computeGeneration) authorizes
+    // the seasonId, but the caller-supplied phaseId is not covered by that check.
+    // Without this, a legitimate admin of season A could pass a phaseId belonging
+    // to another league's season B and overwrite its format/formatRounds.
+    if (phaseId) {
+      const phase = await prisma.seasonPhase.findUnique({
+        where: { id: phaseId },
+        select: { seasonId: true },
+      });
+      if (!phase || phase.seasonId !== validated.seasonId) {
+        return { success: false, error: "Invalid phase for this season" };
+      }
+    }
+
     const createdIds = await prisma.$transaction(async (tx) => {
       const ids: string[] = [];
       for (const game of proposed) {

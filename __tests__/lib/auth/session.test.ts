@@ -27,7 +27,7 @@ vi.mock("next/navigation", () => ({
   redirect: (path: string) => mockRedirect(path),
 }));
 
-import { getCurrentUserId, requireSystemAdmin, requireUserId } from "@/lib/auth/session";
+import { getCurrentUserId, isPlatformAdmin, requireSystemAdmin, requireUserId } from "@/lib/auth/session";
 
 describe("auth session helpers", () => {
   beforeEach(() => {
@@ -69,22 +69,49 @@ describe("auth session helpers", () => {
     expect(mockRedirect).toHaveBeenCalledWith("/login");
   });
 
-  it("resolves stale JWT sessions before checking system admin status", async () => {
+  it("resolves stale JWT sessions before granting platform admin access", async () => {
     const session = { user: { email: "admin@example.com" } };
     mockAuth.mockResolvedValue(session);
-    mockPrisma.user.findUnique.mockResolvedValue({ id: "user-from-email" });
-    mockPrisma.leagueUser.findFirst.mockResolvedValue({ id: "league-user-1" });
+    // First findUnique resolves the stale-JWT id; the second (isPlatformAdmin)
+    // reads the platform-admin flag for that resolved id.
+    mockPrisma.user.findUnique.mockResolvedValue({
+      id: "user-from-email",
+      isPlatformAdmin: true,
+      email: "admin@example.com",
+    });
 
     await expect(requireSystemAdmin()).resolves.toBe(session);
 
-    expect(mockPrisma.leagueUser.findFirst).toHaveBeenCalledWith({
-      where: {
-        userId: "user-from-email",
-        role: "LEAGUE_ADMIN",
-      },
-      select: {
-        id: true,
-      },
+    expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
+      where: { email: "admin@example.com" },
+      select: { id: true },
     });
+    expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
+      where: { id: "user-from-email" },
+      select: { isPlatformAdmin: true, email: true },
+    });
+  });
+
+  it("rejects a signed-in user who is not a platform admin", async () => {
+    mockAuth.mockResolvedValue({ user: { id: "user-1", email: "member@example.com" } });
+    mockPrisma.user.findUnique.mockResolvedValue({
+      isPlatformAdmin: false,
+      email: "member@example.com",
+    });
+
+    await expect(requireSystemAdmin()).rejects.toThrow("Unauthorized");
+  });
+
+  it("honors the PLATFORM_ADMIN_EMAILS allowlist (case-insensitive)", async () => {
+    const original = process.env.PLATFORM_ADMIN_EMAILS;
+    process.env.PLATFORM_ADMIN_EMAILS = "boss@example.com, admin@example.com";
+    mockPrisma.user.findUnique.mockResolvedValue({
+      isPlatformAdmin: false,
+      email: "Admin@Example.com",
+    });
+
+    await expect(isPlatformAdmin("user-1")).resolves.toBe(true);
+
+    process.env.PLATFORM_ADMIN_EMAILS = original;
   });
 });

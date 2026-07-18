@@ -2,15 +2,17 @@ import { Suspense } from "react";
 import { Typography, Box, CircularProgress } from "@mui/material";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { isAnyLeagueAdmin, requireUserId } from "@/lib/auth/session";
+import { isPlatformAdmin, requireUserId } from "@/lib/auth/session";
 import { getAllUsers } from "@/lib/actions/admin";
 import UserApprovalList from "@/components/features/admin/UserApprovalList";
 
 async function UserManagementContent() {
   const userId = await requireUserId();
 
-  // Check if user is an admin (LEAGUE_ADMIN of any league)
-  const isAdmin = await isAnyLeagueAdmin(userId);
+  // Gate on the real platform-admin role (matches requireSystemAdmin used by
+  // the admin actions). Previously this used isAnyLeagueAdmin, which was
+  // self-grantable by creating a league.
+  const isAdmin = await isPlatformAdmin(userId);
 
   if (!isAdmin) {
     return (

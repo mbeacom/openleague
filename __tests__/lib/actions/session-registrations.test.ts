@@ -57,6 +57,12 @@ vi.mock("@/lib/email/templates", () => ({
   sendSessionRegistrationManagerEmail: (...args: unknown[]) => mockManagerEmail(...args),
 }));
 
+// logVenueActivity moved to lib/services/venue-activity (out of the "use server"
+// file); mock it at its new module home.
+vi.mock("@/lib/services/venue-activity", () => ({
+  logVenueActivity: (...args: unknown[]) => mockLogActivity(...args),
+}));
+
 vi.mock("@/lib/actions/venue-organizations", () => ({
   logVenueActivity: (...args: unknown[]) => mockLogActivity(...args),
 }));

@@ -1205,6 +1205,12 @@ export async function getLeagueWithStats(leagueId: string): Promise<{
   }>;
 } | null> {
   try {
+    // Authorization: league contact info + activity feed (incl. child names)
+    // must not be readable by unauthenticated callers of this server action.
+    const userId = await requireUserId();
+    const hasAccess = await hasLeagueAccess(userId, leagueId);
+    if (!hasAccess) return null;
+
     // Get basic league info
     const league = await prisma.league.findFirst({
       where: {
@@ -1458,6 +1464,11 @@ export async function getLeagueTeamsWithDivisions(leagueId: string): Promise<{
   };
 } | null> {
   try {
+    // Authorization: only league members may enumerate teams/divisions.
+    const userId = await requireUserId();
+    const hasAccess = await hasLeagueAccess(userId, leagueId);
+    if (!hasAccess) return null;
+
     // Get basic league info
     const league = await prisma.league.findFirst({
       where: {
@@ -1564,6 +1575,11 @@ export async function getLeagueDivisions(leagueId: string): Promise<Array<{
   skillLevel: string | null;
 }>> {
   try {
+    // Authorization: only league members may enumerate divisions.
+    const userId = await requireUserId();
+    const hasAccess = await hasLeagueAccess(userId, leagueId);
+    if (!hasAccess) return [];
+
     const divisions = await prisma.division.findMany({
       where: {
         leagueId,
