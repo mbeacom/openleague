@@ -22,8 +22,16 @@ import PhoneIcon from "@mui/icons-material/Phone";
 import SupervisorAccountIcon from "@mui/icons-material/SupervisorAccount";
 import Chip from "@mui/material/Chip";
 import { deletePlayer } from "@/lib/actions/roster";
+import { isUnder13 } from "@/lib/utils/coppa";
 import ManageGuardiansDialog from "./ManageGuardiansDialog";
 import type { GuardianWithUser, Player } from "@/types/roster";
+
+// Date-only values come back as UTC midnight — format in UTC so the
+// birthday doesn't shift a day for viewers west of Greenwich.
+const dobFormatter = new Intl.DateTimeFormat(undefined, {
+  timeZone: "UTC",
+  dateStyle: "medium",
+});
 
 type PlayerCardProps = {
   player: Player;
@@ -40,6 +48,10 @@ export default function PlayerCard({
 }: PlayerCardProps) {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [guardiansDialogOpen, setGuardiansDialogOpen] = useState(false);
+
+  const dateOfBirth = player.dateOfBirth ? new Date(player.dateOfBirth) : null;
+  const activeConsent = player.parentalConsents?.[0] ?? null;
+  const isMinorUnder13 = dateOfBirth ? isUnder13(dateOfBirth) : false;
   // Guardian names for the chips row. null = not loaded yet — guardians load
   // lazily inside the manage dialog to keep the roster query lean.
   const [guardians, setGuardians] = useState<GuardianWithUser[] | null>(null);
@@ -174,6 +186,47 @@ export default function PlayerCard({
           </Box>
 
           {/* Admin-only fields */}
+          {isAdmin && dateOfBirth && (
+            <Box
+              sx={{
+                mt: 2,
+                pt: 2,
+                borderTop: 1,
+                borderColor: "divider",
+              }}
+            >
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ fontWeight: 600, display: "block" }}
+              >
+                Date of Birth
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {dobFormatter.format(dateOfBirth)}
+              </Typography>
+              {isMinorUnder13 && (
+                <Box sx={{ mt: 0.5 }}>
+                  {activeConsent ? (
+                    <Chip
+                      size="small"
+                      color="success"
+                      variant="outlined"
+                      label={`Parental consent on file · ${dobFormatter.format(new Date(activeConsent.grantedAt))}`}
+                    />
+                  ) : (
+                    <Chip
+                      size="small"
+                      color="warning"
+                      variant="outlined"
+                      label="Parental consent missing"
+                    />
+                  )}
+                </Box>
+              )}
+            </Box>
+          )}
+
           {isAdmin && (player.emergencyContact || player.emergencyPhone || player.usahMemberId) && (
             <Box
               sx={{

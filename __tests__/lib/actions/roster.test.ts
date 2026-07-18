@@ -3,6 +3,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const {
   mockPrismaPlayer,
   mockPrismaTeamMember,
+  mockPrismaParentalConsent,
+  mockTransaction,
   mockRequireTeamAdmin,
   mockRequireUserId,
 } = vi.hoisted(() => ({
@@ -20,6 +22,11 @@ const {
     findFirst: vi.fn(),
     findMany: vi.fn(),
   },
+  mockPrismaParentalConsent: {
+    findFirst: vi.fn(),
+    create: vi.fn(),
+  },
+  mockTransaction: vi.fn(),
   mockRequireTeamAdmin: vi.fn(),
   mockRequireUserId: vi.fn(),
 }));
@@ -35,11 +42,15 @@ vi.mock("@/lib/auth/session", () => ({
   requireUserId: (...args: unknown[]) => mockRequireUserId(...args),
 }));
 
-// Mock Prisma client
+// Mock Prisma client. $transaction runs its callback against the same mocks
+// so per-test create/update expectations keep working (COPPA consent rows are
+// written in the same transaction as the player).
 vi.mock("@/lib/db/prisma", () => ({
   prisma: {
     player: mockPrismaPlayer,
     teamMember: mockPrismaTeamMember,
+    parentalConsent: mockPrismaParentalConsent,
+    $transaction: mockTransaction,
   },
 }));
 
@@ -53,6 +64,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockRequireTeamAdmin.mockResolvedValue(USER_ID);
   mockRequireUserId.mockResolvedValue(USER_ID);
+  mockTransaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) =>
+    fn({ player: mockPrismaPlayer, parentalConsent: mockPrismaParentalConsent })
+  );
 });
 
 describe("addPlayer", () => {
