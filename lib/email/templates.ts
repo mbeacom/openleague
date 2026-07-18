@@ -139,6 +139,117 @@ If you didn't request a password reset, you can safely ignore this email - your 
   });
 }
 
+interface EmailChangeVerificationEmailData {
+  /** The NEW address the account wants to move to. */
+  newEmail: string;
+  name?: string | null;
+  /** Raw EMAIL_CHANGE token — linked through /api/auth/confirm-email-change/[token]. */
+  token: string;
+}
+
+/**
+ * Sent to the NEW address during an email change; the account's email only
+ * changes when this link is clicked. Token expires in 24 hours.
+ */
+export async function sendEmailChangeVerificationEmail(
+  data: EmailChangeVerificationEmailData
+): Promise<void> {
+  const confirmLink = `${BASE_URL}/api/auth/confirm-email-change/${data.token}`;
+  const greeting = data.name ? `Hi ${escapeHtml(data.name)},` : "Hi there,";
+
+  await sendEmail({
+    subject: "Confirm your new email address",
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #1976D2;">Confirm your new email address</h2>
+
+        <p>${greeting}</p>
+
+        <p>You asked to move your openleague account to this email address. Confirm the change below.</p>
+
+        <p style="margin: 30px 0;">
+          <a href="${confirmLink}"
+             style="background-color: #1976D2; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">
+            Confirm Email Change
+          </a>
+        </p>
+
+        <p style="color: #666; font-size: 14px;">
+          Or copy and paste this link into your browser:<br>
+          <a href="${confirmLink}">${confirmLink}</a>
+        </p>
+
+        <p style="color: #666; font-size: 14px; margin-top: 30px;">
+          This link expires in 24 hours. Until you confirm, your account keeps its current address.
+        </p>
+
+        <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+
+        <p style="color: #999; font-size: 12px;">
+          If you didn't request this change, you can safely ignore this email.
+        </p>
+      </div>
+    `,
+    text: `Confirm your new email address
+
+You asked to move your openleague account to this email address. Confirm the change here:
+${confirmLink}
+
+This link expires in 24 hours. Until you confirm, your account keeps its current address.
+
+If you didn't request this change, you can safely ignore this email.`,
+    to: [{ email: data.newEmail }],
+  });
+}
+
+interface EmailChangedNoticeEmailData {
+  /** The OLD address, notified that the account moved away from it. */
+  oldEmail: string;
+  newEmail: string;
+  name?: string | null;
+}
+
+/**
+ * Security notice to the OLD address after an email change completes, so a
+ * hijacked-session change can't happen silently.
+ */
+export async function sendEmailChangedNoticeEmail(
+  data: EmailChangedNoticeEmailData
+): Promise<void> {
+  const greeting = data.name ? `Hi ${escapeHtml(data.name)},` : "Hi there,";
+
+  await sendEmail({
+    subject: "Your openleague email address was changed",
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #1976D2;">Your email address was changed</h2>
+
+        <p>${greeting}</p>
+
+        <p>The email address on your openleague account was just changed to <strong>${escapeHtml(data.newEmail)}</strong>. This address no longer receives account email.</p>
+
+        <p style="color: #666; font-size: 14px; margin-top: 30px;">
+          If you made this change, no action is needed.
+        </p>
+
+        <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+
+        <p style="color: #999; font-size: 12px;">
+          If you did NOT make this change, your account may be compromised — reset your password immediately from the login page and contact support.
+        </p>
+      </div>
+    `,
+    text: `Your email address was changed
+
+The email address on your openleague account was just changed to ${data.newEmail}. This address no longer receives account email.
+
+If you made this change, no action is needed.
+
+If you did NOT make this change, your account may be compromised - reset your password immediately from the login page and contact support.`,
+    to: [{ email: data.oldEmail }],
+  });
+}
+
 interface IceTimeRequestSubmittedEmailData {
   managerEmails: string[];
   venueName: string;

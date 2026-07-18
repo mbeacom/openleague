@@ -48,6 +48,8 @@ function LoginForm() {
       setInfoMessage(AUTH_MESSAGES.SIGNUP_READY_MESSAGE);
     } else if (message === AUTH_MESSAGES.PASSWORD_RESET_SUCCESS) {
       setInfoMessage(AUTH_MESSAGES.PASSWORD_RESET_SUCCESS_MESSAGE);
+    } else if (message === AUTH_MESSAGES.EMAIL_CHANGED) {
+      setInfoMessage(AUTH_MESSAGES.EMAIL_CHANGED_MESSAGE);
     } else if (verified === "1") {
       setInfoMessage(AUTH_MESSAGES.EMAIL_VERIFIED_MESSAGE);
     }

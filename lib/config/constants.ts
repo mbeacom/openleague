@@ -45,6 +45,8 @@ export const AUTH_MESSAGES = {
   SIGNUP_CHECK_EMAIL: "signup_check_email",
   SIGNUP_READY: "signup_ready",
   PASSWORD_RESET_SUCCESS: "password_reset_success",
+  EMAIL_CHANGED: "email_changed",
+  EMAIL_CHANGED_MESSAGE: "Email address updated — log in with your new email.",
   CHECK_EMAIL_MESSAGE: "Account created! We've sent you a verification link — check your email, then log in.",
   SIGNUP_READY_MESSAGE: "Account created! You can log in now.",
   EMAIL_VERIFIED_MESSAGE: "Email verified — you can now log in.",
