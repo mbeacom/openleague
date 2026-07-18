@@ -75,6 +75,7 @@ model User {
   eventTeamAssignmentsMade     EventTeamAssignment[]    @relation("EventTeamAssigner")
   uploadedEventMedia           EventMediaItem[]         @relation("EventMediaUploader")
   removedEventMedia            EventMediaItem[]         @relation("EventMediaRemover")
+  grantedParentalConsents      ParentalConsent[]        @relation("ParentalConsentGrantor")
 }
 
 // Single-use, hashed account-lifecycle tokens (email verification, password
@@ -268,6 +269,7 @@ model Player {
   jerseyNumber     Int? // Optional jersey number (1–99). No unique constraint; duplicates trigger warning only.
   position         String? // Free-text position (e.g., Center, Goalie, Midfielder). Varies by sport.
   usahMemberId     String?  @db.VarChar(20) // USA Hockey Member ID. Admin-only.
+  dateOfBirth      DateTime? @db.Date // Admin-only, like emergencyContact. COPPA: under-13 requires an active ParentalConsent row.
   userId           String? // Optional link to User account if player has registered
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -286,6 +288,7 @@ model Player {
   eventRegistrations EventRegistration[]
   guardians          PlayerGuardian[]
   rsvps              RSVP[]
+  parentalConsents   ParentalConsent[]
 
   @@index([leagueId]) // Optimize league-wide roster queries
   @@index([userId]) // Optimize "my roster entries" lookups
@@ -309,6 +312,27 @@ model PlayerGuardian {
   @@unique([playerId, userId])
   @@index([userId])
   @@map("player_guardians")
+}
+
+// COPPA parental-consent audit record for players under 13. One row per grant;
+// revocation sets revokedAt (never delete) so the audit trail survives.
+// grantedByUserId is SetNull on user deletion for the same reason — the
+// consent record must outlive the granting account.
+model ParentalConsent {
+  id             String    @id @default(cuid())
+  method         String // How consent was captured (e.g. "ACCOUNT_ATTESTATION")
+  consentVersion String // Which consent-language version was agreed to (counsel-versioned)
+  grantedAt      DateTime  @default(now())
+  revokedAt      DateTime?
+
+  playerId String
+  player   Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  grantedByUserId String?
+  grantedBy       User?   @relation("ParentalConsentGrantor", fields: [grantedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([playerId])
+  @@map("parental_consents")
 }
 
 // Event model

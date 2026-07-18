@@ -331,6 +331,28 @@ export const addPlayerSchema = z.object({
     .regex(/^[a-zA-Z0-9]*$/, "USA Hockey Member ID must be alphanumeric")
     .nullable()
     .optional(),
+  // Date-only string (YYYY-MM-DD) from the form's date input; the server
+  // action converts to a UTC-midnight Date. Admin-only field like
+  // emergencyContact. COPPA under-13 consent is enforced in the action
+  // (cross-field with parentalConsent), not here.
+  dateOfBirth: z
+    .string()
+    .trim()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Date of birth must be in YYYY-MM-DD format")
+    .refine((val) => {
+      const date = new Date(`${val}T00:00:00.000Z`);
+      return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === val;
+    }, "Invalid date of birth")
+    .refine((val) => val >= "1900-01-01", "Date of birth must be after 1900")
+    .refine(
+      (val) => val <= new Date().toISOString().slice(0, 10),
+      "Date of birth cannot be in the future"
+    )
+    .nullable()
+    .optional(),
+  // Guardian/admin attestation that parental consent exists for an under-13
+  // player. Recorded as a ParentalConsent row by the server action.
+  parentalConsent: z.boolean().optional(),
 });
 
 export const updatePlayerSchema = addPlayerSchema.extend({

@@ -14,6 +14,20 @@ import {
   type TransferPlayerInput,
   type UpdateTeamMemberUsahIdInput,
 } from "@/lib/utils/validation";
+import {
+  parseDateOfBirth,
+  isUnder13,
+  COPPA_CONSENT_VERSION,
+  CONSENT_METHOD_ACCOUNT_ATTESTATION,
+} from "@/lib/utils/coppa";
+
+const PARENTAL_CONSENT_REQUIRED_ERROR =
+  "Parental consent attestation is required for players under 13.";
+
+const parentalConsentIssue = {
+  path: ["parentalConsent"],
+  message: PARENTAL_CONSENT_REQUIRED_ERROR,
+};
 
 function revalidateRosterPaths(...teamIds: string[]) {
   revalidatePath("/roster");
@@ -34,21 +48,48 @@ export async function addPlayer(input: AddPlayerInput) {
     const validated = addPlayerSchema.parse(input);
 
     // Check authentication and authorization - only ADMIN can add players
-    await requireTeamAdmin(validated.teamId);
+    const userId = await requireTeamAdmin(validated.teamId);
 
-    // Create player
-    const player = await prisma.player.create({
-      data: {
-        name: validated.name,
-        email: validated.email || null,
-        phone: validated.phone || null,
-        emergencyContact: validated.emergencyContact || null,
-        emergencyPhone: validated.emergencyPhone || null,
-        teamId: validated.teamId,
-        jerseyNumber: validated.jerseyNumber ?? null,
-        position: validated.position || null,
-        usahMemberId: validated.usahMemberId || null,
-      },
+    // COPPA: an under-13 date of birth requires a parental-consent attestation,
+    // recorded as an auditable ParentalConsent row in the same transaction.
+    const dateOfBirth = parseDateOfBirth(validated.dateOfBirth) ?? null;
+    const requiresConsent = dateOfBirth !== null && isUnder13(dateOfBirth);
+    if (requiresConsent && !validated.parentalConsent) {
+      return {
+        error: PARENTAL_CONSENT_REQUIRED_ERROR,
+        details: [parentalConsentIssue],
+      };
+    }
+
+    // Create player (+ consent record when required)
+    const player = await prisma.$transaction(async (tx) => {
+      const created = await tx.player.create({
+        data: {
+          name: validated.name,
+          email: validated.email || null,
+          phone: validated.phone || null,
+          emergencyContact: validated.emergencyContact || null,
+          emergencyPhone: validated.emergencyPhone || null,
+          teamId: validated.teamId,
+          jerseyNumber: validated.jerseyNumber ?? null,
+          position: validated.position || null,
+          usahMemberId: validated.usahMemberId || null,
+          dateOfBirth,
+        },
+      });
+
+      if (requiresConsent) {
+        await tx.parentalConsent.create({
+          data: {
+            playerId: created.id,
+            grantedByUserId: userId,
+            method: CONSENT_METHOD_ACCOUNT_ATTESTATION,
+            consentVersion: COPPA_CONSENT_VERSION,
+          },
+        });
+      }
+
+      return created;
     });
 
     // Check for duplicate jersey number on same team
@@ -100,7 +141,7 @@ export async function updatePlayer(input: UpdatePlayerInput) {
     const validated = updatePlayerSchema.parse(input);
 
     // Check authentication and authorization - only ADMIN can update players
-    await requireTeamAdmin(validated.teamId);
+    const userId = await requireTeamAdmin(validated.teamId);
 
     // Verify player belongs to the team before updating
     const existingPlayer = await prisma.player.findUnique({
@@ -120,21 +161,59 @@ export async function updatePlayer(input: UpdatePlayerInput) {
       };
     }
 
-    // Update player
-    const player = await prisma.player.update({
-      where: {
-        id: validated.id,
-      },
-      data: {
-        name: validated.name,
-        email: validated.email || null,
-        phone: validated.phone || null,
-        emergencyContact: validated.emergencyContact || null,
-        emergencyPhone: validated.emergencyPhone || null,
-        ...(validated.jerseyNumber !== undefined && { jerseyNumber: validated.jerseyNumber }),
-        ...(validated.position !== undefined && { position: validated.position || null }),
-        ...(validated.usahMemberId !== undefined && { usahMemberId: validated.usahMemberId || null }),
-      },
+    // COPPA: setting an under-13 date of birth requires an active parental
+    // consent (existing row, or a fresh attestation recorded here). Moving a
+    // DOB to 13+ leaves existing consent rows untouched (audit trail).
+    const touchesDob = validated.dateOfBirth !== undefined;
+    const dateOfBirth = touchesDob ? parseDateOfBirth(validated.dateOfBirth) ?? null : null;
+    let needsConsentRow = false;
+    if (touchesDob && dateOfBirth !== null && isUnder13(dateOfBirth)) {
+      const activeConsent = await prisma.parentalConsent.findFirst({
+        where: { playerId: validated.id, revokedAt: null },
+        select: { id: true },
+      });
+      if (!activeConsent) {
+        if (!validated.parentalConsent) {
+          return {
+            error: PARENTAL_CONSENT_REQUIRED_ERROR,
+            details: [parentalConsentIssue],
+          };
+        }
+        needsConsentRow = true;
+      }
+    }
+
+    // Update player (+ consent record when a new attestation was given)
+    const player = await prisma.$transaction(async (tx) => {
+      const updated = await tx.player.update({
+        where: {
+          id: validated.id,
+        },
+        data: {
+          name: validated.name,
+          email: validated.email || null,
+          phone: validated.phone || null,
+          emergencyContact: validated.emergencyContact || null,
+          emergencyPhone: validated.emergencyPhone || null,
+          ...(validated.jerseyNumber !== undefined && { jerseyNumber: validated.jerseyNumber }),
+          ...(validated.position !== undefined && { position: validated.position || null }),
+          ...(validated.usahMemberId !== undefined && { usahMemberId: validated.usahMemberId || null }),
+          ...(touchesDob && { dateOfBirth }),
+        },
+      });
+
+      if (needsConsentRow) {
+        await tx.parentalConsent.create({
+          data: {
+            playerId: validated.id,
+            grantedByUserId: userId,
+            method: CONSENT_METHOD_ACCOUNT_ATTESTATION,
+            consentVersion: COPPA_CONSENT_VERSION,
+          },
+        });
+      }
+
+      return updated;
     });
 
     // Check for duplicate jersey number on same team (excluding the updated player)

@@ -9,12 +9,16 @@ import {
   Button,
   TextField,
   Box,
+  Checkbox,
+  FormControlLabel,
+  FormHelperText,
+  Typography,
 } from "@mui/material";
 import { addPlayer, updatePlayer } from "@/lib/actions/roster";
+import { isUnder13, parseDateOfBirth } from "@/lib/utils/coppa";
 import { addPlayerSchema, pickField, type AddPlayerInput } from "@/lib/utils/validation";
 import { useToast } from "@/components/ui/Toast";
 import type { Player } from "@/types/roster";
-import type { z } from "zod";
 
 type AddPlayerDialogProps = {
   open: boolean;
@@ -42,6 +46,8 @@ export default function AddPlayerDialog({
     jerseyNumber: null,
     position: "",
     usahMemberId: null,
+    dateOfBirth: null,
+    parentalConsent: false,
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -60,10 +66,20 @@ export default function AddPlayerDialog({
         jerseyNumber: player?.jerseyNumber ?? null,
         position: player?.position || "",
         usahMemberId: player?.usahMemberId ?? null,
+        dateOfBirth: player?.dateOfBirth
+          ? new Date(player.dateOfBirth).toISOString().slice(0, 10)
+          : null,
+        parentalConsent: false,
       });
       setErrors({});
     }
   }, [open, player, teamId]);
+
+  // COPPA: an under-13 DOB needs a parental-consent attestation unless the
+  // player already has an active consent row on file.
+  const parsedDob = parseDateOfBirth(formData.dateOfBirth ?? null);
+  const requiresConsentPrompt = !!parsedDob && isUnder13(parsedDob);
+  const hasConsentOnFile = (player?.parentalConsents?.length ?? 0) > 0;
 
   const handleChange = (field: keyof AddPlayerInput) => (
     e: React.ChangeEvent<HTMLInputElement>
@@ -116,8 +132,14 @@ export default function AddPlayerDialog({
     setIsSubmitting(true);
     setErrors({});
 
+    // Empty date input means "no DOB", not an invalid date string
+    const payload: AddPlayerInput = {
+      ...formData,
+      dateOfBirth: formData.dateOfBirth || null,
+    };
+
     // Client-side validation
-    const validationResult = addPlayerSchema.safeParse(formData);
+    const validationResult = addPlayerSchema.safeParse(payload);
     if (!validationResult.success) {
       const fieldErrors: Record<string, string> = {};
       validationResult.error.issues.forEach((issue) => {
@@ -130,16 +152,26 @@ export default function AddPlayerDialog({
       return;
     }
 
+    // COPPA: under-13 DOB requires the attestation unless consent is on file
+    if (requiresConsentPrompt && !hasConsentOnFile && !payload.parentalConsent) {
+      setErrors({
+        parentalConsent:
+          "Parental consent attestation is required for players under 13.",
+      });
+      setIsSubmitting(false);
+      return;
+    }
+
     try {
       const result = isEditing
-        ? await updatePlayer({ ...formData, id: player.id })
-        : await addPlayer(formData);
+        ? await updatePlayer({ ...payload, id: player.id })
+        : await addPlayer(payload);
 
       if (result.error) {
         if (result.details) {
-          // Zod validation errors
+          // Zod validation errors, or the action's structured COPPA issue
           const fieldErrors: Record<string, string> = {};
-          result.details.forEach((error: z.ZodIssue) => {
+          result.details.forEach((error: { path?: PropertyKey[]; message: string }) => {
             if (error.path && error.path.length > 0) {
               const fieldName = String(error.path[0]);
               fieldErrors[fieldName] = error.message;
@@ -315,6 +347,68 @@ export default function AddPlayerDialog({
               fullWidth
               inputProps={{ maxLength: 20 }}
             />
+
+            {/* Date of Birth (admin-only field, like emergency contact) */}
+            <TextField
+              label="Date of Birth"
+              type="date"
+              value={formData.dateOfBirth ?? ""}
+              onChange={(e) => {
+                const val = e.target.value;
+                setFormData((prev) => ({
+                  ...prev,
+                  dateOfBirth: val === "" ? null : val,
+                  // Re-attest if the DOB changes
+                  parentalConsent: false,
+                }));
+                if (errors.dateOfBirth || errors.parentalConsent) {
+                  setErrors((prev) => {
+                    const n = { ...prev };
+                    delete n.dateOfBirth;
+                    delete n.parentalConsent;
+                    return n;
+                  });
+                }
+              }}
+              error={!!errors.dateOfBirth}
+              helperText={errors.dateOfBirth || "Optional — visible to team admins only"}
+              fullWidth
+              InputLabelProps={{ shrink: true }}
+            />
+
+            {/* COPPA parental-consent attestation for under-13 players */}
+            {requiresConsentPrompt && (
+              hasConsentOnFile ? (
+                <Typography variant="body2" color="text.secondary">
+                  Parental consent is on file for this player.
+                </Typography>
+              ) : (
+                <Box>
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={!!formData.parentalConsent}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setFormData((prev) => ({ ...prev, parentalConsent: checked }));
+                          if (errors.parentalConsent) {
+                            setErrors((prev) => {
+                              const n = { ...prev };
+                              delete n.parentalConsent;
+                              return n;
+                            });
+                          }
+                        }}
+                      />
+                    }
+                    label="I am this child's parent/legal guardian, or I confirm the parent/legal guardian has provided consent — [full consent language to be provided by counsel]"
+                  />
+                  {errors.parentalConsent && (
+                    <FormHelperText error>{errors.parentalConsent}</FormHelperText>
+                  )}
+                </Box>
+              )
+            )}
           </Box>
         </DialogContent>
 

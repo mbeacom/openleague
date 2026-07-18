@@ -238,6 +238,16 @@ async function getRosterPayload({
         position: true,
         // FR-008: USAH Member IDs are admin-only — must not appear in non-admin queries
         usahMemberId: isAdmin,
+        // Date of birth is admin-only, like emergencyContact (COPPA surface)
+        dateOfBirth: isAdmin,
+        // Active consent rows so admins see COPPA status next to DOB
+        parentalConsents: isAdmin
+          ? {
+              where: { revokedAt: null },
+              select: { id: true, grantedAt: true },
+              orderBy: { grantedAt: "desc" as const },
+            }
+          : false,
       },
     }),
     prisma.teamMember.findMany({

@@ -281,6 +281,7 @@ export async function getLeagueRosterData(leagueId: string): Promise<{
     jerseyNumber: number | null;
     position: string | null;
     usahMemberId: string | null;
+    dateOfBirth: Date | null;
     teamId: string;
     leagueId: string | null;
     userId: string | null;
@@ -343,6 +344,8 @@ export async function getLeagueRosterData(leagueId: string): Promise<{
         position: true,
         // FR-008: USAH Member IDs are admin-only
         usahMemberId: isLeagueAdmin,
+        // Date of birth is admin-only, like emergencyContact (COPPA surface)
+        dateOfBirth: isLeagueAdmin,
         teamId: true,
         leagueId: true,
         userId: true,
