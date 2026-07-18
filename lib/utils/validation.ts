@@ -305,6 +305,15 @@ export const createTeamSchema = z.object({
   season: sanitizedStringWithMin(1, 50),
 });
 
+// Update an existing team's editable profile fields (name, sport, season).
+// Logo upload is intentionally excluded — that requires Blob storage.
+export const updateTeamSchema = z.object({
+  id: z.string().cuid("Invalid team ID format"),
+  name: sanitizedStringWithMin(1, 100),
+  sport: sportSchema,
+  season: sanitizedStringWithMin(1, 50),
+});
+
 // Player validation schemas
 export const addPlayerSchema = z.object({
   name: sanitizedStringWithMin(1, 100).refine(val => val.length > 0, "Name is required"),
@@ -736,6 +745,7 @@ export const getLeagueMessagesSchema = z.object({
 export type SignupInput = z.infer<typeof signupSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type CreateTeamInput = z.infer<typeof createTeamSchema>;
+export type UpdateTeamInput = z.infer<typeof updateTeamSchema>;
 export type AddPlayerInput = z.infer<typeof addPlayerSchema>;
 export type UpdatePlayerInput = z.infer<typeof updatePlayerSchema>;
 export type CreateEventInput = z.infer<typeof createEventSchema>;

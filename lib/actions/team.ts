@@ -3,9 +3,14 @@
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
-import { requireUserId } from "@/lib/auth/session";
+import { requireUserId, requireTeamAdmin } from "@/lib/auth/session";
 import { revalidatePath } from "next/cache";
-import { createTeamSchema, type CreateTeamInput } from "@/lib/utils/validation";
+import {
+  createTeamSchema,
+  updateTeamSchema,
+  type CreateTeamInput,
+  type UpdateTeamInput,
+} from "@/lib/utils/validation";
 import { sanitizeErrorForLogging } from "@/lib/utils/error-handling";
 
 export type ActionResult<T> =
@@ -90,6 +95,89 @@ export async function createTeam(
     return {
       success: false,
       error: "Failed to create team. Please try again.",
+    };
+  }
+}
+
+/**
+ * Update an existing team's editable profile fields (name, sport, season).
+ * Only team admins may make changes.
+ */
+export async function updateTeam(
+  input: UpdateTeamInput
+): Promise<ActionResult<{ id: string; name: string; sport: string; season: string }>> {
+  try {
+    // 1. Authenticate the caller.
+    await requireUserId();
+
+    // 2. Validate input before it touches the database or the auth check.
+    const validated = updateTeamSchema.parse(input);
+
+    // 3. Authorize — only team admins can edit team settings.
+    await requireTeamAdmin(validated.id);
+
+    // 4. Persist the change (Prisma parameterized query — no raw SQL).
+    const team = await prisma.team.update({
+      where: { id: validated.id },
+      data: {
+        name: validated.name,
+        sport: validated.sport,
+        season: validated.season,
+      },
+      select: {
+        id: true,
+        name: true,
+        sport: true,
+        season: true,
+      },
+    });
+
+    // 5. Revalidate pages that surface the team name/details.
+    revalidatePath("/");
+    revalidatePath("/dashboard");
+    revalidatePath("/settings");
+    revalidatePath(`/team/${team.id}`);
+
+    return {
+      success: true,
+      data: team,
+    };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      const fieldErrors = error.issues.map(issue =>
+        `${issue.path.join('.')}: ${issue.message}`
+      ).join(', ');
+      return {
+        success: false,
+        error: `Validation failed: ${fieldErrors}`,
+        details: error.issues,
+      };
+    }
+
+    // requireTeamAdmin throws a plain "Unauthorized: ..." error for non-admins.
+    if (error instanceof Error && error.message.includes("Unauthorized")) {
+      return {
+        success: false,
+        error: "You do not have permission to update this team.",
+      };
+    }
+
+    console.error("Error updating team:", sanitizeErrorForLogging(error));
+
+    // Team was deleted between load and save.
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2025"
+    ) {
+      return {
+        success: false,
+        error: "Team not found.",
+      };
+    }
+
+    return {
+      success: false,
+      error: "Failed to update team. Please try again.",
     };
   }
 }
