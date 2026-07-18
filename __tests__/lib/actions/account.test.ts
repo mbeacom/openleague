@@ -188,4 +188,19 @@ describe("deleteAccount", () => {
     expect(result.success).toBe(true);
     expect(mocks.user.delete).toHaveBeenCalledWith({ where: { id: "user-1" } });
   });
+
+  it("returns an actionable error (not a silent failure) when the user owns RESTRICT-referenced content", async () => {
+    const { Prisma } = await import("@prisma/client");
+    mocks.user.delete.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError("FK violation", {
+        code: "P2003",
+        clientVersion: "test",
+      })
+    );
+    const result = await deleteAccount({ password: "correct" });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error).toMatch(/owns content|Transfer or remove/i);
+    }
+  });
 });

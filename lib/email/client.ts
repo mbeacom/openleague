@@ -115,19 +115,25 @@ async function sendViaMailchimp(message: EmailMessage): Promise<void> {
       })),
     },
   });
-  // Mailchimp resolves (does not reject) per-recipient failures; surface them.
-  if (Array.isArray(response)) {
-    response.forEach((result) => {
-      if (result.status === "rejected" || result.status === "invalid") {
-        console.error(
-          `Mailchimp did not deliver to ${result.email}: ${result.status}` +
-            ("reject_reason" in result && result.reject_reason
-              ? ` (${result.reject_reason})`
-              : "")
-        );
-      }
-    });
+  // The @mailchimp/mailchimp_transactional client NEVER rejects: its ApiClient
+  // resolves the axios error object on transport/API failure (bad key, network,
+  // Mandrill 5xx). A successful send resolves to an array of per-recipient
+  // statuses; anything else is a failure we must surface, or account-lifecycle
+  // mail (verification, reset) would silently vanish and lock users out.
+  if (!Array.isArray(response)) {
+    console.error("Mailchimp send failed (non-array response):", response);
+    throw new Error("Mailchimp transport failure — email not sent");
   }
+  response.forEach((result) => {
+    if (result.status === "rejected" || result.status === "invalid") {
+      console.error(
+        `Mailchimp did not deliver to ${result.email}: ${result.status}` +
+          ("reject_reason" in result && result.reject_reason
+            ? ` (${result.reject_reason})`
+            : "")
+      );
+    }
+  });
 }
 
 function sendViaLog(message: EmailMessage): void {

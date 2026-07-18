@@ -1,6 +1,7 @@
 "use server";
 
 import { compare, hash } from "bcryptjs";
+import { Prisma } from "@prisma/client";
 import { ZodError } from "zod";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
@@ -171,7 +172,28 @@ export async function deleteAccount(
       return { success: false, error: "Password is incorrect" };
     }
 
-    await prisma.user.delete({ where: { id: userId } });
+    // Personal data (memberships, RSVPs, tokens, guardianships, players) is
+    // removed by ON DELETE CASCADE. Authored/audit rows (created seasons,
+    // venues, plays, sent invitations, etc.) reference the user via ON DELETE
+    // RESTRICT, so if the caller owns any of that content the delete raises a
+    // Postgres FK violation (Prisma P2003). Surface that as an actionable
+    // message rather than a silent generic failure. (Anonymizing those
+    // authorship pointers so admins can also self-delete is Track 2 work.)
+    try {
+      await prisma.user.delete({ where: { id: userId } });
+    } catch (deleteError) {
+      if (
+        deleteError instanceof Prisma.PrismaClientKnownRequestError &&
+        deleteError.code === "P2003"
+      ) {
+        return {
+          success: false,
+          error:
+            "Your account owns content that others depend on (teams, seasons, venues, or sent invitations). Transfer or remove it first, then try again — or contact support to complete deletion.",
+        };
+      }
+      throw deleteError;
+    }
 
     return { success: true, data: { message: "Account deleted" } };
   } catch (error) {

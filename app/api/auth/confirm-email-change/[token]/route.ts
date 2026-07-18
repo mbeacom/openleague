@@ -48,6 +48,14 @@ export async function GET(
       data: { email: consumed.newEmail, emailVerified: new Date() },
     });
 
+    // Moving to a new address must not leave live tokens (password reset,
+    // verification) sitting in the OLD inbox — otherwise an attacker who
+    // triggered the move away from a compromised mailbox could still redeem
+    // them. Revoke every outstanding unused token for this user.
+    await prisma.verificationToken.deleteMany({
+      where: { userId: consumed.userId, usedAt: null },
+    });
+
     try {
       await sendEmailChangedNoticeEmail({
         oldEmail: user.email,

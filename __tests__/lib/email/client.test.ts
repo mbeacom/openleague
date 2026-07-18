@@ -193,6 +193,18 @@ describe("sendEmail via Mailchimp", () => {
       sendEmail({ to: [{ email: "one@example.com" }], subject: "S", html: "<p>H</p>" })
     ).rejects.toThrow("MAILCHIMP_API_KEY is not set");
   });
+
+  it("throws on a non-array (transport-failure) response instead of silently succeeding", async () => {
+    // The Mailchimp client resolves an axios error object on transport failure
+    // rather than rejecting; a non-array response must be treated as a failure.
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    state.mailchimpSend.mockResolvedValue({ isAxiosError: true, message: "bad key" });
+    const { sendEmail } = await loadClient();
+    await expect(
+      sendEmail({ to: [{ email: "one@example.com" }], subject: "S", html: "<p>H</p>" })
+    ).rejects.toThrow("Mailchimp transport failure");
+    expect(consoleError).toHaveBeenCalled();
+  });
 });
 
 describe("sendEmail via log provider", () => {

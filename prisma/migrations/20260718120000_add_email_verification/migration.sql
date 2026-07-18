@@ -3,19 +3,23 @@
 -- "approved" becomes a pure moderation kill-switch (false = suspended) and
 -- now defaults to true; the thing that gates login for new accounts is
 -- "emailVerified", proven via single-use hashed tokens in
--- verification_tokens (see lib/auth/tokens.ts). Existing users are
--- grandfathered: everyone present before this migration is marked verified
--- (previously-approved users demonstrably receive mail at their address;
--- previously-pending users were stuck in the manual-approval dead end and
--- are unblocked the same way).
+-- verification_tokens (see lib/auth/tokens.ts).
+--
+-- Grandfathering rule: only accounts that were ALREADY approved (an admin
+-- vetted them and they had been logging in) are marked verified. Accounts
+-- still pending approval never proved inbox ownership — auto-verifying them
+-- would let a signup with someone else's address permanently squat it. They
+-- are un-suspended (approved=true) but left emailVerified=NULL, so the login
+-- gate routes them through real verification via the resend flow on their
+-- next attempt.
 
 -- AlterTable
 ALTER TABLE "User" ADD COLUMN "emailVerified" TIMESTAMP(3);
 ALTER TABLE "User" ALTER COLUMN "approved" SET DEFAULT true;
 
--- Grandfather existing accounts: verified as of migration time, and clear
--- the manual-approval backlog so "approved" only means "not suspended".
-UPDATE "User" SET "emailVerified" = CURRENT_TIMESTAMP;
+-- Grandfather ONLY previously-approved accounts as verified (order matters:
+-- stamp verified before flipping the pending backlog to un-suspended).
+UPDATE "User" SET "emailVerified" = CURRENT_TIMESTAMP WHERE "approved" = true;
 UPDATE "User" SET "approved" = true WHERE "approved" = false;
 
 -- CreateEnum
