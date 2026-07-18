@@ -1,13 +1,34 @@
-import { Container, Box, Typography } from '@mui/material';
+import { Container, Box, Typography, Divider, Stack } from '@mui/material';
 import { generatePageMetadata, getBreadcrumbSchema } from '@/lib/config/seo';
 import StructuredData from '@/components/ui/StructuredData';
+import {
+  DraftNotice,
+  CounselPlaceholder,
+  LegalSection,
+  LegalToc,
+} from '@/components/features/legal/LegalScaffold';
 
 export const metadata = generatePageMetadata({
   title: 'Terms of Service',
   description: 'Understand the basic terms for using the OpenLeague platform. Your rights and responsibilities as a user.',
   path: '/terms',
-  noIndex: true, // Don't index placeholder legal pages
+  noIndex: true, // Don't index draft legal pages until counsel-approved
 });
+
+const SECTIONS = [
+  { id: 'acceptance', title: 'Acceptance of Terms' },
+  { id: 'eligibility-accounts', title: 'Eligibility & Accounts' },
+  { id: 'acceptable-use', title: 'Acceptable Use' },
+  { id: 'user-content', title: 'User Content' },
+  { id: 'payments-refunds', title: 'Payments & Refunds' },
+  { id: 'intellectual-property', title: 'Intellectual Property' },
+  { id: 'service-changes', title: 'Service Availability & Changes' },
+  { id: 'disclaimers', title: 'Disclaimers' },
+  { id: 'limitation-of-liability', title: 'Limitation of Liability' },
+  { id: 'termination', title: 'Termination' },
+  { id: 'governing-law', title: 'Governing Law & Disputes' },
+  { id: 'contact', title: 'Contact Us' },
+];
 
 export default function TermsPage() {
   const breadcrumbSchema = getBreadcrumbSchema([
@@ -24,59 +45,93 @@ export default function TermsPage() {
             Terms of Service
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 4 }}>
-            Last updated: May 2026
-          </Typography>
-          <Typography variant="body1" paragraph>
-            We&apos;re preparing the formal Terms of Service for OpenLeague. Until those are finalized, here&apos;s what you can expect:
+            Draft structure — July 2026 · final text pending legal review
           </Typography>
 
-          <Box component="ul" sx={{ listStyleType: 'disc', pl: 3, mt: 2, '& li': { pl: 1, mb: 1.5 } }}>
-            <li>
-              <Typography variant="body1" color="text.secondary">
-                You retain ownership of the content you add to OpenLeague.
-              </Typography>
-            </li>
-            <li>
-              <Typography variant="body1" color="text.secondary">
-                You agree to use the platform responsibly and respect other members of your teams and leagues.
-              </Typography>
-            </li>
-            <li>
-              <Typography variant="body1" color="text.secondary">
-                We provide OpenLeague as-is while the service is in early access. When practical, we&apos;ll communicate material changes in advance.
-              </Typography>
-            </li>
-          </Box>
+          <DraftNotice />
+          <LegalToc items={SECTIONS} />
 
-          <Box sx={{ mt: 5 }}>
-            <Typography variant="h4" component="h2" gutterBottom>
-              Current Free Access
-            </Typography>
-            <Typography variant="body1" color="text.secondary" paragraph>
-              OpenLeague is currently offered without subscription billing or paid feature tiers. This current free access is not a promise that the hosted service, any particular feature, or any future release will remain free indefinitely.
-            </Typography>
-            <Typography variant="body1" color="text.secondary" paragraph>
-              We will not retroactively charge you for prior free use. If we introduce paid subscriptions, paid add-ons, usage limits, sponsored placements, advertising, or feature gates in the future, those changes will apply prospectively according to the terms presented at that time.
-            </Typography>
-          </Box>
+          <Stack spacing={5}>
+            <LegalSection
+              id="acceptance"
+              title="Acceptance of Terms"
+              covers="Will describe how using OpenLeague constitutes agreement to these terms and who may accept them on behalf of an organization."
+            />
 
-          <Box sx={{ mt: 5 }}>
-            <Typography variant="h4" component="h2" gutterBottom>
-              Service and Feature Changes
-            </Typography>
-            <Typography variant="body1" color="text.secondary" paragraph>
-              OpenLeague is an early-stage service. We reserve the right to modify, limit, suspend, discontinue, or shut down the hosted service or any feature at any time, with or without notice where permitted by law.
-            </Typography>
-            <Typography variant="body1" color="text.secondary" paragraph>
-              We may also change which features are available for free, move features into paid plans, introduce new paid features, change usage limits, or change access requirements as the platform matures. Continuing to use OpenLeague after changes take effect means you accept the updated terms.
-            </Typography>
-            <Typography variant="body1" color="text.secondary" paragraph>
-              When practical, we will try to provide reasonable advance notice for material changes and an opportunity to export your team data before discontinuing hosted access. That said, OpenLeague is provided as-is during early access and should not be treated as a guaranteed permanent free service.
-            </Typography>
-          </Box>
+            <LegalSection
+              id="eligibility-accounts"
+              title="Eligibility & Accounts"
+              covers="Will describe minimum-age requirements for account holders, account registration and email verification, and the account owner's responsibility for credentials and accurate information."
+            />
 
-          <Typography variant="body1" color="text.secondary" sx={{ mt: 4 }}>
-            The detailed terms—including acceptable use, service availability, and dispute resolution—are coming soon. Contact support@openl.app if you need specifics before then.
+            <LegalSection
+              id="acceptable-use"
+              title="Acceptable Use"
+              covers="Will describe prohibited behavior: unlawful use, harassment, unauthorized access attempts, abuse of messaging features, and misuse of other members' personal information."
+            />
+
+            <LegalSection
+              id="user-content"
+              title="User Content"
+              covers="Will describe ownership of content users add (rosters, schedules, messages, media), the license OpenLeague needs to operate the service, and responsibility for having permission to add other people's information."
+            />
+
+            <LegalSection
+              id="payments-refunds"
+              title="Payments & Refunds"
+              covers="Will describe paid registrations processed through Stripe, refund handling, and the current free access to platform features (subject to prospective change)."
+            />
+
+            <LegalSection
+              id="intellectual-property"
+              title="Intellectual Property"
+              covers="Will describe OpenLeague's rights in the software and branding, and the open-source license terms (Business Source License 1.1) that apply to the source code."
+            />
+
+            <LegalSection
+              id="service-changes"
+              title="Service Availability & Changes"
+              covers="Will describe that OpenLeague is an early-stage service that may be modified, limited, or discontinued, how material changes will be communicated when practical, and the opportunity to export data before hosted access is discontinued."
+            />
+
+            <LegalSection
+              id="disclaimers"
+              title="Disclaimers"
+              covers="Will describe the as-is basis of the service and disclaimers of warranties."
+            />
+
+            <LegalSection
+              id="limitation-of-liability"
+              title="Limitation of Liability"
+              covers="Will describe the limits on OpenLeague's liability."
+            />
+
+            <LegalSection
+              id="termination"
+              title="Termination"
+              covers="Will describe when accounts may be suspended or terminated, self-serve account deletion, and what happens to data on termination."
+            />
+
+            <LegalSection
+              id="governing-law"
+              title="Governing Law & Disputes"
+              covers="Will describe the governing law and how disputes are resolved."
+            />
+
+            <LegalSection
+              id="contact"
+              title="Contact Us"
+              covers="Questions about these terms can be sent to support@openl.app."
+            >
+              <CounselPlaceholder note="Formal notice/contact provisions to be provided by counsel" />
+            </LegalSection>
+          </Stack>
+
+          <Divider sx={{ my: 6 }} />
+
+          <Typography variant="body2" color="text.secondary">
+            This page is a structural draft and does not constitute legal advice. The finalized,
+            counsel-reviewed terms will replace it before public launch.
           </Typography>
         </Box>
       </Container>
