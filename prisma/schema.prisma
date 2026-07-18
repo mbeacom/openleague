@@ -169,6 +169,7 @@ model Team {
   transfersFrom      PlayerTransfer[]         @relation("TransferFromTeam")
   transfersTo        PlayerTransfer[]         @relation("TransferToTeam")
   messageTargeting   MessageTargeting[]
+  messages           LeagueMessage[]
   auditLogs          AuditLog[]
   practiceSessions   PracticeSession[]
   plays              Play[]
@@ -589,8 +590,14 @@ model LeagueMessage {
   priority    MessagePriority   @default(NORMAL)
   createdAt   DateTime          @default(now())
 
-  leagueId String
-  league   League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  // A message is scoped to EITHER a league OR a standalone team (exactly one;
+  // enforced by a DB CHECK constraint). Standalone teams have no league, so
+  // team-scoped messages let a team admin announce to their own members.
+  leagueId String?
+  league   League? @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  teamId String?
+  team   Team?   @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   senderId String
   sender   User   @relation(fields: [senderId], references: [id])
@@ -601,6 +608,7 @@ model LeagueMessage {
   batchedMessages BatchedMessage[]
 
   @@index([leagueId, createdAt])
+  @@index([teamId, createdAt])
   @@map("league_messages")
 }
 

@@ -2,9 +2,18 @@
 
 import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
-import { requireUserId } from "@/lib/auth/session";
+import { requireUserId, isTeamAdmin } from "@/lib/auth/session";
 import { revalidatePath } from "next/cache";
-import { sendLeagueMessageSchema, getLeagueMessagesSchema, type SendLeagueMessageInput, type GetLeagueMessagesInput } from "@/lib/utils/validation";
+import {
+  sendLeagueMessageSchema,
+  getLeagueMessagesSchema,
+  sendTeamMessageSchema,
+  getTeamMessagesSchema,
+  type SendLeagueMessageInput,
+  type GetLeagueMessagesInput,
+  type SendTeamMessageInput,
+  type GetTeamMessagesInput,
+} from "@/lib/utils/validation";
 import { notificationService } from "@/lib/services/notification";
 
 export type ActionResult<T> =
@@ -193,6 +202,193 @@ export async function sendLeagueMessage(
       success: false,
       error: "Failed to send message. Please try again.",
     };
+  }
+}
+
+/**
+ * Send a message to every member of a standalone (non-league) team. Reuses the
+ * LeagueMessage pipeline with leagueId=null and a team scope, so team messages
+ * get the same history, recent-messages widget, and notification-preference
+ * handling as league messages.
+ */
+export async function sendTeamMessage(
+  input: SendTeamMessageInput
+): Promise<ActionResult<{ messageId: string; recipientCount: number }>> {
+  try {
+    const validated = sendTeamMessageSchema.parse(input);
+    const userId = await requireUserId();
+
+    // Only a team ADMIN may message their own team.
+    if (!(await isTeamAdmin(userId, validated.teamId))) {
+      return {
+        success: false,
+        error: "Unauthorized: Only team admins can send messages to their team",
+      };
+    }
+
+    // Recipients: every member of this team (users with accounts).
+    const recipients = await prisma.user.findMany({
+      where: { teamMembers: { some: { teamId: validated.teamId } } },
+      select: { id: true, email: true, name: true },
+      distinct: ["id"],
+    });
+
+    if (recipients.length === 0) {
+      return {
+        success: false,
+        error: "No team members to message yet",
+      };
+    }
+
+    const message = await prisma.leagueMessage.create({
+      data: {
+        subject: validated.subject,
+        content: validated.content,
+        messageType: validated.messageType,
+        priority: validated.priority,
+        teamId: validated.teamId,
+        senderId: userId,
+      },
+    });
+
+    await prisma.messageTargeting.create({
+      data: {
+        messageId: message.id,
+        entireLeague: false,
+        teamId: validated.teamId,
+      },
+    });
+
+    await prisma.messageRecipient.createMany({
+      data: recipients.map((recipient) => ({
+        messageId: message.id,
+        userId: recipient.id,
+        deliveryStatus: "PENDING",
+      })),
+    });
+
+    // Deliver per-recipient so notification preferences are respected. A
+    // team message has no league, so leagueId is omitted (the notification
+    // service resolves the user's league-less preference row).
+    const notificationType =
+      validated.messageType === "ANNOUNCEMENT" ? "leagueAnnouncements" : "leagueMessages";
+    try {
+      for (const recipient of recipients) {
+        try {
+          await notificationService.sendOrBatchNotification(
+            recipient.id,
+            validated.subject,
+            validated.content,
+            validated.priority,
+            notificationType,
+            undefined,
+            message.id
+          );
+        } catch (error) {
+          console.error(`Failed to send team notification to user ${recipient.id}:`, error);
+          await prisma.messageRecipient.updateMany({
+            where: { messageId: message.id, userId: recipient.id },
+            data: { deliveryStatus: "FAILED" },
+          });
+        }
+      }
+
+      await prisma.messageRecipient.updateMany({
+        where: { messageId: message.id, deliveryStatus: "PENDING" },
+        data: { deliveryStatus: "SENT" },
+      });
+    } catch (error) {
+      console.error("Failed to send team message notifications:", error);
+      await prisma.messageRecipient.updateMany({
+        where: { messageId: message.id },
+        data: { deliveryStatus: "FAILED" },
+      });
+    }
+
+    revalidatePath(`/team/${validated.teamId}/messages`);
+
+    return {
+      success: true,
+      data: { messageId: message.id, recipientCount: recipients.length },
+    };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return { success: false, error: "Invalid input", details: error.issues };
+    }
+    console.error("Error sending team message:", error);
+    return { success: false, error: "Failed to send message. Please try again." };
+  }
+}
+
+/**
+ * List a standalone team's messages (any team member may read their team's
+ * message history).
+ */
+export async function getTeamMessages(input: GetTeamMessagesInput): Promise<
+  ActionResult<{
+    messages: Array<{
+      id: string;
+      subject: string;
+      content: string;
+      messageType: string;
+      priority: string;
+      createdAt: Date;
+      sender: { name: string | null; email: string };
+      recipientCount: number;
+    }>;
+    pagination: { page: number; limit: number; total: number; totalPages: number };
+  }>
+> {
+  try {
+    const validated = getTeamMessagesSchema.parse(input);
+    const userId = await requireUserId();
+
+    const membership = await prisma.teamMember.findFirst({
+      where: { userId, teamId: validated.teamId },
+      select: { id: true },
+    });
+    if (!membership) {
+      return { success: false, error: "Unauthorized: You don't have access to this team" };
+    }
+
+    const whereClause = { teamId: validated.teamId };
+    const total = await prisma.leagueMessage.count({ where: whereClause });
+    const totalPages = Math.ceil(total / validated.limit);
+    const skip = (validated.page - 1) * validated.limit;
+
+    const messages = await prisma.leagueMessage.findMany({
+      where: whereClause,
+      include: {
+        sender: { select: { name: true, email: true } },
+        _count: { select: { recipients: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      skip,
+      take: validated.limit,
+    });
+
+    return {
+      success: true,
+      data: {
+        messages: messages.map((message) => ({
+          id: message.id,
+          subject: message.subject,
+          content: message.content,
+          messageType: message.messageType,
+          priority: message.priority,
+          createdAt: message.createdAt,
+          sender: { name: message.sender.name, email: message.sender.email },
+          recipientCount: message._count.recipients,
+        })),
+        pagination: { page: validated.page, limit: validated.limit, total, totalPages },
+      },
+    };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return { success: false, error: "Invalid input", details: error.issues };
+    }
+    console.error("Error getting team messages:", error);
+    return { success: false, error: "Failed to get messages. Please try again." };
   }
 }
 
