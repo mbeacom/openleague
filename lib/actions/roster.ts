@@ -85,6 +85,10 @@ export async function addPlayer(input: AddPlayerInput) {
             grantedByUserId: userId,
             method: CONSENT_METHOD_ACCOUNT_ATTESTATION,
             consentVersion: COPPA_CONSENT_VERSION,
+            // Denormalized child snapshot so the audit row survives player deletion
+            childName: validated.name,
+            childDateOfBirth: dateOfBirth,
+            teamId: validated.teamId,
           },
         });
       }
@@ -209,6 +213,10 @@ export async function updatePlayer(input: UpdatePlayerInput) {
             grantedByUserId: userId,
             method: CONSENT_METHOD_ACCOUNT_ATTESTATION,
             consentVersion: COPPA_CONSENT_VERSION,
+            // Denormalized child snapshot so the audit row survives player deletion
+            childName: validated.name,
+            childDateOfBirth: dateOfBirth,
+            teamId: validated.teamId,
           },
         });
       }

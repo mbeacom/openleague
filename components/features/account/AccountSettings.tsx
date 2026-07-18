@@ -28,6 +28,7 @@ import {
   requestEmailChange,
   updateProfile,
 } from "@/lib/actions/account";
+import { AUTH_MESSAGES } from "@/lib/config/constants";
 
 interface AccountSettingsProps {
   email: string;
@@ -89,10 +90,10 @@ export default function AccountSettings({
     setPasswordState({ ...idleSection, loading: true });
     const result = await changePassword({ currentPassword, newPassword });
     if (result.success) {
-      setPasswordState({ ...idleSection, success: result.data.message });
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmNewPassword("");
+      // Changing the password evicts all sessions (server-side sessionVersion
+      // bump), so sign out and send the user to log in with the new password.
+      setPasswordState({ ...idleSection, success: "Password updated — signing you out…" });
+      await signOut({ callbackUrl: `/login?message=${AUTH_MESSAGES.PASSWORD_RESET_SUCCESS}` });
     } else {
       setPasswordState({ ...idleSection, error: result.error });
     }

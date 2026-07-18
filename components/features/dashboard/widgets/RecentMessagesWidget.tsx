@@ -38,7 +38,11 @@ export default async function RecentMessagesWidget({ userId }: { userId: string 
                     useFlexGap
                   >
                     <LinkMuiLink
-                      href={`/league/${message.leagueId}/messages`}
+                      href={
+                        message.scope.kind === "league"
+                          ? `/league/${message.scope.id}/messages`
+                          : `/team/${message.scope.id}/messages`
+                      }
                       variant="subtitle2"
                       color="inherit"
                       underline="hover"
@@ -46,7 +50,7 @@ export default async function RecentMessagesWidget({ userId }: { userId: string 
                     >
                       {message.subject}
                     </LinkMuiLink>
-                    <Chip size="small" label={message.leagueName} />
+                    <Chip size="small" label={message.scope.name} />
                   </Stack>
                   <Stack
                     direction="row"

@@ -14,11 +14,16 @@ declare module "next-auth" {
     id: string;
     email: string;
     name?: string | null;
+    sessionVersion?: number;
   }
 }
 
 declare module "next-auth/jwt" {
   interface JWT {
     id?: string;
+    /** Session-revocation counter, mirrored from User.sessionVersion. */
+    sv?: number;
+    /** Epoch ms of the last sessionVersion re-check (throttles the DB hit). */
+    svCheckedAt?: number;
   }
 }

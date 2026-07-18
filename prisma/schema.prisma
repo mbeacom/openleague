@@ -19,6 +19,7 @@ model User {
   approved      Boolean   @default(true) // Moderation kill-switch: false = suspended (signup gate is email verification)
   emailVerified DateTime? // Set when the user proves inbox ownership (verification link, invite match, or password reset)
   isPlatformAdmin Boolean @default(false) // Platform-wide admin (user approval/enumeration). NOT self-grantable; see lib/auth/session.ts isPlatformAdmin()
+  sessionVersion Int     @default(0) // Bumped on password reset/change + email change to evict existing JWT sessions; checked in the auth jwt callback
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -169,6 +170,7 @@ model Team {
   transfersFrom      PlayerTransfer[]         @relation("TransferFromTeam")
   transfersTo        PlayerTransfer[]         @relation("TransferToTeam")
   messageTargeting   MessageTargeting[]
+  messages           LeagueMessage[]
   auditLogs          AuditLog[]
   practiceSessions   PracticeSession[]
   plays              Play[]
@@ -316,8 +318,10 @@ model PlayerGuardian {
 
 // COPPA parental-consent audit record for players under 13. One row per grant;
 // revocation sets revokedAt (never delete) so the audit trail survives.
-// grantedByUserId is SetNull on user deletion for the same reason — the
-// consent record must outlive the granting account.
+// The consent record must outlive BOTH the granting account and the child's
+// roster entry, so playerId and grantedByUserId are both nullable + SetNull.
+// A denormalized snapshot of the child (name, DOB, team) is captured at
+// consent-write time so a detached row (playerId → null) stays auditable.
 model ParentalConsent {
   id             String    @id @default(cuid())
   method         String // How consent was captured (e.g. "ACCOUNT_ATTESTATION")
@@ -325,8 +329,17 @@ model ParentalConsent {
   grantedAt      DateTime  @default(now())
   revokedAt      DateTime?
 
-  playerId String
-  player   Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  // Denormalized child snapshot at consent-capture time. Retention-preserving:
+  // these outlive Player deletion so the audit record identifies who consent
+  // covered even after playerId is nulled out.
+  childName        String? // Player.name at capture time
+  childDateOfBirth DateTime? @db.Date // Player.dateOfBirth at capture time
+  teamId           String? // Player.teamId at capture time (plain snapshot, not an FK)
+
+  // Nullable + SetNull (mirrors grantedByUserId): deleting the child's roster
+  // entry must NOT destroy the consent/revocation audit trail.
+  playerId String?
+  player   Player? @relation(fields: [playerId], references: [id], onDelete: SetNull)
 
   grantedByUserId String?
   grantedBy       User?   @relation("ParentalConsentGrantor", fields: [grantedByUserId], references: [id], onDelete: SetNull)
@@ -589,8 +602,14 @@ model LeagueMessage {
   priority    MessagePriority   @default(NORMAL)
   createdAt   DateTime          @default(now())
 
-  leagueId String
-  league   League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  // A message is scoped to EITHER a league OR a standalone team (exactly one;
+  // enforced by a DB CHECK constraint). Standalone teams have no league, so
+  // team-scoped messages let a team admin announce to their own members.
+  leagueId String?
+  league   League? @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  teamId String?
+  team   Team?   @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   senderId String
   sender   User   @relation(fields: [senderId], references: [id])
@@ -601,6 +620,7 @@ model LeagueMessage {
   batchedMessages BatchedMessage[]
 
   @@index([leagueId, createdAt])
+  @@index([teamId, createdAt])
   @@map("league_messages")
 }
 

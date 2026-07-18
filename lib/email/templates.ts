@@ -23,7 +23,7 @@ function escapeHtml(value: string): string {
 interface VerificationEmailData {
   email: string;
   name?: string | null;
-  /** Raw verification token — linked through /api/auth/verify-email/[token]. */
+  /** Raw verification token — linked through the /verify-email/[token] page. */
   token: string;
 }
 
@@ -32,7 +32,7 @@ interface VerificationEmailData {
  * must click before logging in. Token expires in 24 hours.
  */
 export async function sendVerificationEmail(data: VerificationEmailData): Promise<void> {
-  const verifyLink = `${BASE_URL}/api/auth/verify-email/${data.token}`;
+  const verifyLink = `${BASE_URL}/verify-email/${data.token}`;
   const greeting = data.name ? `Hi ${escapeHtml(data.name)},` : "Hi there,";
 
   await sendEmail({
@@ -143,7 +143,7 @@ interface EmailChangeVerificationEmailData {
   /** The NEW address the account wants to move to. */
   newEmail: string;
   name?: string | null;
-  /** Raw EMAIL_CHANGE token — linked through /api/auth/confirm-email-change/[token]. */
+  /** Raw EMAIL_CHANGE token — linked through the /confirm-email-change/[token] page. */
   token: string;
 }
 
@@ -154,7 +154,7 @@ interface EmailChangeVerificationEmailData {
 export async function sendEmailChangeVerificationEmail(
   data: EmailChangeVerificationEmailData
 ): Promise<void> {
-  const confirmLink = `${BASE_URL}/api/auth/confirm-email-change/${data.token}`;
+  const confirmLink = `${BASE_URL}/confirm-email-change/${data.token}`;
   const greeting = data.name ? `Hi ${escapeHtml(data.name)},` : "Hi there,";
 
   await sendEmail({

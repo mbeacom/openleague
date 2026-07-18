@@ -741,6 +741,24 @@ export const getLeagueMessagesSchema = z.object({
   priority: z.enum(["LOW", "NORMAL", "HIGH", "URGENT"]).optional(),
 });
 
+// Standalone-team messaging: a team admin announces to their own members.
+// No targeting picker — the whole team is the audience.
+export const sendTeamMessageSchema = z.object({
+  teamId: z.string().cuid("Invalid team ID format"),
+  subject: sanitizedStringWithMin(1, 200),
+  content: sanitizedStringWithMin(1, 5000),
+  messageType: z.enum(["MESSAGE", "ANNOUNCEMENT"]).default("MESSAGE"),
+  priority: z.enum(["LOW", "NORMAL", "HIGH", "URGENT"]).default("NORMAL"),
+});
+export type SendTeamMessageInput = z.infer<typeof sendTeamMessageSchema>;
+
+export const getTeamMessagesSchema = z.object({
+  teamId: z.string().cuid("Invalid team ID format"),
+  page: z.number().int().min(1).default(1),
+  limit: z.number().int().min(1).max(50).default(20),
+});
+export type GetTeamMessagesInput = z.infer<typeof getTeamMessagesSchema>;
+
 // Type exports
 export type SignupInput = z.infer<typeof signupSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
