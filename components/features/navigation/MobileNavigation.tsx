@@ -190,6 +190,18 @@ export default function MobileNavigation({ isLeagueMode = false }: MobileNavigat
           </ListItemIcon>
           <ListItemText>Signup Events</ListItemText>
         </MenuItem>
+        {!isLeagueMode && (
+          <MenuItem
+            component={Link}
+            href="/settings"
+            onClick={handleMenuClose}
+          >
+            <ListItemIcon>
+              <SettingsIcon />
+            </ListItemIcon>
+            <ListItemText>Team Settings</ListItemText>
+          </MenuItem>
+        )}
         {isLeagueMode && currentLeague && (
           <MenuItem
             component={Link}

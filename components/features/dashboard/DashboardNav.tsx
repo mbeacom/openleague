@@ -66,6 +66,7 @@ export default function DashboardNav({ isLeagueMode = false }: DashboardNavProps
         { label: "My Registrations", path: "/my-registrations", icon: <ConfirmationNumberIcon /> },
         { label: "Seasons", path: "/seasons", icon: <DateRangeIcon /> },
         { label: "Practice Planner", path: "/practice-planner", icon: <SportsHockeyIcon /> },
+        { label: "Team Settings", path: "/settings", icon: <SettingsIcon /> },
         { label: "Account", path: "/account", icon: <ManageAccountsIcon /> },
       ];
     }
