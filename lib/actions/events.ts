@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
-import { requireTeamAdmin, requireTeamMember, requireUserId } from "@/lib/auth/session";
+import { getViewableTeamIds, requireTeamAdmin, requireTeamMember, requireUserId } from "@/lib/auth/session";
 import { revalidatePath } from "next/cache";
 import { sendEventNotifications } from "@/lib/email/templates";
 import { canUserAccessVenue as checkVenueAccess } from "@/lib/actions/venues";
@@ -502,15 +502,26 @@ export async function getEvent(eventId: string) {
         })
       : null;
 
+    // Guardian-only viewers (a parent linked to a rostered Player via
+    // PlayerGuardian, but NOT a TeamMember) may VIEW their child's team events
+    // at MEMBER-level detail. Since the direct-member lookup above already
+    // failed, inclusion in the viewable set can only come from a guardian link.
+    // They never get self-RSVP or management controls here — per-child RSVP
+    // stays on its own guarded flow.
+    const isGuardianViewer =
+      !teamMember && !leagueAdmin
+        ? (await getViewableTeamIds(userId)).includes(event.teamId)
+        : false;
+
     // Direct team members can RSVP; league admins can inspect league events
     // without receiving broken RSVP/edit/delete controls for teams they do not belong to.
-    if (!teamMember && !leagueAdmin) {
+    if (!teamMember && !leagueAdmin && !isGuardianViewer) {
       return null;
     }
 
     return {
       ...event,
-      userRole: teamMember?.role ?? "LEAGUE_ADMIN",
+      userRole: teamMember?.role ?? (leagueAdmin ? "LEAGUE_ADMIN" : "MEMBER"),
       canRSVP: !!teamMember,
       canManageEvent: teamMember?.role === "ADMIN",
     };

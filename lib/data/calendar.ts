@@ -7,7 +7,7 @@
 import { differenceInCalendarDays, addDays } from "date-fns";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
-import { requireUserId } from "@/lib/auth/session";
+import { getViewableTeamIds, requireUserId } from "@/lib/auth/session";
 import { getViewerMemberships } from "@/lib/data/dashboard";
 import { expandRecurrenceWindow } from "@/lib/utils/venue-schedule";
 import type { CalendarItem } from "@/types/events";
@@ -39,16 +39,23 @@ export async function getUserCalendarItems(window: CalendarWindow): Promise<Cale
   const { from, to } = normalizeWindow(window);
 
   const { teams, leagues } = await getViewerMemberships(userId);
-  const teamIds = teams.map((membership) => membership.team.id);
+  const memberTeamIds = teams.map((membership) => membership.team.id);
   const adminTeamIds = new Set(
     teams.filter((membership) => membership.role === "ADMIN").map((membership) => membership.team.id)
   );
   const leagueIds = leagues.map((membership) => membership.league.id);
 
+  // Events also surface teams the viewer can see via guardianship (a parent of
+  // a rostered player who is not a TeamMember), so a guardian-only parent sees
+  // their child's team schedule here just like a member. Practices and signups
+  // stay scoped to direct memberships — guardian view access is for the games
+  // and practices their child's team runs, not team-internal planning tools.
+  const viewableTeamIds = await getViewableTeamIds(userId);
+
   const [events, practices, signups, venueBlocks] = await Promise.all([
-    fetchTeamAndLeagueEvents({ teamIds, leagueIds, from, to }),
-    fetchPracticeSessions({ userId, teamIds, from, to }),
-    fetchSignupEvents({ userId, teamIds, adminTeamIds, from, to }),
+    fetchTeamAndLeagueEvents({ teamIds: viewableTeamIds, leagueIds, from, to }),
+    fetchPracticeSessions({ userId, teamIds: memberTeamIds, from, to }),
+    fetchSignupEvents({ userId, teamIds: memberTeamIds, adminTeamIds, from, to }),
     fetchVenueScheduleBlocks({ userId, from, to }),
   ]);
 

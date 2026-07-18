@@ -9,6 +9,12 @@ const { mockAuth, mockPrisma, mockRedirect } = vi.hoisted(() => ({
     user: {
       findUnique: vi.fn(),
     },
+    teamMember: {
+      findMany: vi.fn(),
+    },
+    playerGuardian: {
+      findMany: vi.fn(),
+    },
   },
   mockRedirect: vi.fn((path: string) => {
     throw new Error(`NEXT_REDIRECT:${path}`);
@@ -27,7 +33,13 @@ vi.mock("next/navigation", () => ({
   redirect: (path: string) => mockRedirect(path),
 }));
 
-import { getCurrentUserId, isPlatformAdmin, requireSystemAdmin, requireUserId } from "@/lib/auth/session";
+import {
+  getCurrentUserId,
+  getViewableTeamIds,
+  isPlatformAdmin,
+  requireSystemAdmin,
+  requireUserId,
+} from "@/lib/auth/session";
 
 describe("auth session helpers", () => {
   beforeEach(() => {
@@ -113,5 +125,54 @@ describe("auth session helpers", () => {
     await expect(isPlatformAdmin("user-1")).resolves.toBe(true);
 
     process.env.PLATFORM_ADMIN_EMAILS = original;
+  });
+});
+
+describe("getViewableTeamIds", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("unions direct memberships with guardian-linked teams and excludes unrelated teams", async () => {
+    mockPrisma.teamMember.findMany.mockResolvedValue([{ teamId: "team-member" }]);
+    mockPrisma.playerGuardian.findMany.mockResolvedValue([
+      { player: { teamId: "team-guardian" } },
+    ]);
+
+    const teamIds = await getViewableTeamIds("user-1");
+
+    expect(teamIds).toContain("team-member");
+    expect(teamIds).toContain("team-guardian");
+    // Nothing the user has no membership or guardian link to leaks in.
+    expect(teamIds).not.toContain("team-unrelated");
+    expect(teamIds).toHaveLength(2);
+
+    // Both links are scoped to active teams.
+    expect(mockPrisma.teamMember.findMany).toHaveBeenCalledWith({
+      where: { userId: "user-1", team: { isActive: true } },
+      select: { teamId: true },
+    });
+    expect(mockPrisma.playerGuardian.findMany).toHaveBeenCalledWith({
+      where: { userId: "user-1", player: { team: { isActive: true } } },
+      select: { player: { select: { teamId: true } } },
+    });
+  });
+
+  it("returns guardian-linked teams even when the user is not a direct member", async () => {
+    mockPrisma.teamMember.findMany.mockResolvedValue([]);
+    mockPrisma.playerGuardian.findMany.mockResolvedValue([
+      { player: { teamId: "team-guardian" } },
+    ]);
+
+    await expect(getViewableTeamIds("guardian-only")).resolves.toEqual(["team-guardian"]);
+  });
+
+  it("dedupes a team reachable via both membership and guardianship", async () => {
+    mockPrisma.teamMember.findMany.mockResolvedValue([{ teamId: "team-shared" }]);
+    mockPrisma.playerGuardian.findMany.mockResolvedValue([
+      { player: { teamId: "team-shared" } },
+    ]);
+
+    await expect(getViewableTeamIds("user-1")).resolves.toEqual(["team-shared"]);
   });
 });
