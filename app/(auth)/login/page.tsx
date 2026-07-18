@@ -18,6 +18,7 @@ import Link from "next/link";
 import Logo from "@/components/ui/Logo";
 import { loginSchema, pickField } from "@/lib/utils/validation";
 import { AUTH_MESSAGES, AUTH_ERROR_CODES } from "@/lib/config/constants";
+import { resendVerificationEmail } from "@/lib/actions/account-lifecycle";
 import { trackAuth } from "@/lib/analytics/umami";
 
 function LoginForm() {
@@ -25,6 +26,8 @@ function LoginForm() {
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") || "/";
   const message = searchParams.get("message");
+  const verified = searchParams.get("verified");
+  const urlError = searchParams.get("error");
 
   const [formData, setFormData] = useState({
     email: "",
@@ -34,13 +37,46 @@ function LoginForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [generalError, setGeneralError] = useState("");
   const [infoMessage, setInfoMessage] = useState("");
+  const [showResend, setShowResend] = useState(false);
+  const [isResending, setIsResending] = useState(false);
 
-  // Set info message based on query parameter
+  // Set info message based on query parameters
   useEffect(() => {
-    if (message === AUTH_MESSAGES.SIGNUP_PENDING_APPROVAL) {
-      setInfoMessage(AUTH_MESSAGES.ACCOUNT_PENDING_MESSAGE);
+    if (message === AUTH_MESSAGES.SIGNUP_CHECK_EMAIL) {
+      setInfoMessage(AUTH_MESSAGES.CHECK_EMAIL_MESSAGE);
+    } else if (message === AUTH_MESSAGES.SIGNUP_READY) {
+      setInfoMessage(AUTH_MESSAGES.SIGNUP_READY_MESSAGE);
+    } else if (message === AUTH_MESSAGES.PASSWORD_RESET_SUCCESS) {
+      setInfoMessage(AUTH_MESSAGES.PASSWORD_RESET_SUCCESS_MESSAGE);
+    } else if (verified === "1") {
+      setInfoMessage(AUTH_MESSAGES.EMAIL_VERIFIED_MESSAGE);
     }
-  }, [message]);
+    if (urlError === "verification_invalid") {
+      setGeneralError(AUTH_MESSAGES.VERIFICATION_INVALID_MESSAGE);
+      setShowResend(true);
+    }
+  }, [message, verified, urlError]);
+
+  const handleResendVerification = async () => {
+    if (!formData.email) {
+      setErrors((prev) => ({ ...prev, email: "Enter your email above first" }));
+      return;
+    }
+    setIsResending(true);
+    try {
+      const result = await resendVerificationEmail({ email: formData.email });
+      setGeneralError("");
+      setShowResend(false);
+      setInfoMessage(
+        result.success ? result.data.message : "Unable to resend right now. Please try again later."
+      );
+    } catch (error) {
+      console.error("Resend verification error:", error);
+      setInfoMessage("Unable to resend right now. Please try again later.");
+    } finally {
+      setIsResending(false);
+    }
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -114,7 +150,10 @@ function LoginForm() {
         // Auth.js v5 may pass the custom code via result.code or embed it in result.error
         const errorCode = result.code || result.error;
 
-        if (errorCode?.includes(AUTH_ERROR_CODES.ACCOUNT_NOT_APPROVED)) {
+        if (errorCode?.includes(AUTH_ERROR_CODES.EMAIL_NOT_VERIFIED)) {
+          setGeneralError(AUTH_MESSAGES.EMAIL_NOT_VERIFIED);
+          setShowResend(true);
+        } else if (errorCode?.includes(AUTH_ERROR_CODES.ACCOUNT_NOT_APPROVED)) {
           setGeneralError(AUTH_MESSAGES.ACCOUNT_NOT_APPROVED);
         } else if (errorCode?.includes(AUTH_ERROR_CODES.INVALID_CREDENTIALS)) {
           setGeneralError("Invalid email or password");
@@ -221,6 +260,19 @@ function LoginForm() {
                 }}
               >
                 {generalError}
+                {showResend && (
+                  <Box sx={{ mt: 1 }}>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      color="inherit"
+                      onClick={handleResendVerification}
+                      disabled={isResending}
+                    >
+                      {isResending ? "Sending..." : "Resend verification email"}
+                    </Button>
+                  </Box>
+                )}
               </Alert>
             )}
 
@@ -285,6 +337,22 @@ function LoginForm() {
                 {isLoading ? "Logging in..." : "Log In"}
               </Button>
               <Box sx={{ textAlign: "center" }}>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                  <MuiLink
+                    component={Link}
+                    href="/forgot-password"
+                    underline="hover"
+                    sx={{
+                      color: 'primary.main',
+                      fontWeight: 600,
+                      '&:hover': {
+                        color: 'primary.dark',
+                      },
+                    }}
+                  >
+                    Forgot your password?
+                  </MuiLink>
+                </Typography>
                 <Typography variant="body2" color="text.secondary">
                   Don&apos;t have an account?{" "}
                   <MuiLink

@@ -35,13 +35,21 @@ export const DOCS_URL = "https://openleague.dev";
 export const AUTH_ERROR_CODES = {
   INVALID_CREDENTIALS: "invalid_credentials",
   ACCOUNT_NOT_APPROVED: "account_not_approved",
+  EMAIL_NOT_VERIFIED: "email_not_verified",
 } as const;
 
 /**
  * Authentication and authorization messages
  */
 export const AUTH_MESSAGES = {
-  SIGNUP_PENDING_APPROVAL: "signup_pending_approval",
-  ACCOUNT_PENDING_MESSAGE: "Account created successfully! Your account is pending approval. You'll be able to log in once an administrator approves your account.",
-  ACCOUNT_NOT_APPROVED: "Your account is pending approval. Please contact an administrator.",
+  SIGNUP_CHECK_EMAIL: "signup_check_email",
+  SIGNUP_READY: "signup_ready",
+  PASSWORD_RESET_SUCCESS: "password_reset_success",
+  CHECK_EMAIL_MESSAGE: "Account created! We've sent you a verification link — check your email, then log in.",
+  SIGNUP_READY_MESSAGE: "Account created! You can log in now.",
+  EMAIL_VERIFIED_MESSAGE: "Email verified — you can now log in.",
+  VERIFICATION_INVALID_MESSAGE: "That verification link is invalid or has expired. Log in to request a new one.",
+  PASSWORD_RESET_SUCCESS_MESSAGE: "Password updated! Log in with your new password.",
+  EMAIL_NOT_VERIFIED: "Please verify your email address first. Check your inbox for the verification link, or resend it below.",
+  ACCOUNT_NOT_APPROVED: "This account has been suspended. Please contact support.",
 } as const;

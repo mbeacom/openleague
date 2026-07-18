@@ -129,11 +129,12 @@ function SignupForm() {
         return;
       }
 
-      // Signup successful - account pending approval
+      // Signup successful — invitation matches skip verification, everyone
+      // else gets a "check your email" prompt on the login page.
       if (result.success) {
         setGeneralError(""); // Clear any previous errors
-        // Show success message instead of trying to sign in
         setErrors({});
+        const emailVerified = result.data?.emailVerified === true;
         setFormData({ email: "", password: "", name: "", invitationToken: undefined });
 
         // Track signup event
@@ -142,8 +143,9 @@ function SignupForm() {
           teamName: teamName || undefined,
         });
 
-        // Redirect to login with a success message
-        router.push(`/login?message=${AUTH_MESSAGES.SIGNUP_PENDING_APPROVAL}`);
+        router.push(
+          `/login?message=${emailVerified ? AUTH_MESSAGES.SIGNUP_READY : AUTH_MESSAGES.SIGNUP_CHECK_EMAIL}`
+        );
         return;
       }
     } catch (error) {

@@ -235,6 +235,25 @@ export const loginSchema = z.object({
   password: z.string().min(1, "Password is required").max(128),
 });
 
+export const forgotPasswordSchema = z.object({
+  email: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .email("Invalid email address")
+    .max(254, "Email must be less than 254 characters"),
+});
+export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
+
+export const resetPasswordSchema = z.object({
+  token: z.string().min(1, "Reset token is required").max(256),
+  password: z
+    .string()
+    .min(8, "Password must be at least 8 characters")
+    .max(128, "Password must be less than 128 characters"),
+});
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
+
 /**
  * Format a sport enum value into a user-friendly label.
  *

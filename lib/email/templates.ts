@@ -20,6 +20,125 @@ function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
+interface VerificationEmailData {
+  email: string;
+  name?: string | null;
+  /** Raw verification token — linked through /api/auth/verify-email/[token]. */
+  token: string;
+}
+
+/**
+ * Send the email-address verification link a new (or email-changing) account
+ * must click before logging in. Token expires in 24 hours.
+ */
+export async function sendVerificationEmail(data: VerificationEmailData): Promise<void> {
+  const verifyLink = `${BASE_URL}/api/auth/verify-email/${data.token}`;
+  const greeting = data.name ? `Hi ${escapeHtml(data.name)},` : "Hi there,";
+
+  await sendEmail({
+    subject: "Verify your email address",
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #1976D2;">Verify your email address</h2>
+
+        <p>${greeting}</p>
+
+        <p>Thanks for signing up for openleague. Please confirm this email address to activate your account.</p>
+
+        <p style="margin: 30px 0;">
+          <a href="${verifyLink}"
+             style="background-color: #1976D2; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">
+            Verify Email
+          </a>
+        </p>
+
+        <p style="color: #666; font-size: 14px;">
+          Or copy and paste this link into your browser:<br>
+          <a href="${verifyLink}">${verifyLink}</a>
+        </p>
+
+        <p style="color: #666; font-size: 14px; margin-top: 30px;">
+          This link expires in 24 hours. You can request a new one from the login page.
+        </p>
+
+        <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+
+        <p style="color: #999; font-size: 12px;">
+          If you didn't create an openleague account, you can safely ignore this email.
+        </p>
+      </div>
+    `,
+    text: `Verify your email address
+
+Thanks for signing up for openleague. Please confirm this email address to activate your account:
+${verifyLink}
+
+This link expires in 24 hours. You can request a new one from the login page.
+
+If you didn't create an openleague account, you can safely ignore this email.`,
+    to: [{ email: data.email }],
+  });
+}
+
+interface PasswordResetEmailData {
+  email: string;
+  name?: string | null;
+  /** Raw reset token — linked through /reset-password/[token]. */
+  token: string;
+}
+
+/**
+ * Send a password-reset link. Token expires in 1 hour and is single-use.
+ */
+export async function sendPasswordResetEmail(data: PasswordResetEmailData): Promise<void> {
+  const resetLink = `${BASE_URL}/reset-password/${data.token}`;
+  const greeting = data.name ? `Hi ${escapeHtml(data.name)},` : "Hi there,";
+
+  await sendEmail({
+    subject: "Reset your openleague password",
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #1976D2;">Reset your password</h2>
+
+        <p>${greeting}</p>
+
+        <p>We received a request to reset the password for your openleague account. Click the button below to choose a new password.</p>
+
+        <p style="margin: 30px 0;">
+          <a href="${resetLink}"
+             style="background-color: #1976D2; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">
+            Reset Password
+          </a>
+        </p>
+
+        <p style="color: #666; font-size: 14px;">
+          Or copy and paste this link into your browser:<br>
+          <a href="${resetLink}">${resetLink}</a>
+        </p>
+
+        <p style="color: #666; font-size: 14px; margin-top: 30px;">
+          This link expires in 1 hour and can be used once.
+        </p>
+
+        <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+
+        <p style="color: #999; font-size: 12px;">
+          If you didn't request a password reset, you can safely ignore this email — your password will not change.
+        </p>
+      </div>
+    `,
+    text: `Reset your password
+
+We received a request to reset the password for your openleague account. Choose a new password here:
+${resetLink}
+
+This link expires in 1 hour and can be used once.
+
+If you didn't request a password reset, you can safely ignore this email - your password will not change.`,
+    to: [{ email: data.email }],
+  });
+}
+
 interface IceTimeRequestSubmittedEmailData {
   managerEmails: string[];
   venueName: string;
