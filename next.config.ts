@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import createMDX from "@next/mdx";
+import { withSentryConfig } from "@sentry/nextjs";
 
 const parseBooleanFlag = (value: string | undefined) => {
   if (!value) {
@@ -13,6 +14,7 @@ const adsEnabled =
   parseBooleanFlag(process.env.NEXT_PUBLIC_ADS_ENABLED) &&
   Boolean(process.env.NEXT_PUBLIC_GOOGLE_ADSENSE_CLIENT?.trim());
 const gaEnabled = Boolean(process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID?.trim());
+const sentryEnabled = Boolean(process.env.NEXT_PUBLIC_SENTRY_DSN?.trim());
 
 const scriptSrc = [
   "'self'",
@@ -36,6 +38,7 @@ const connectSrc = [
   "'self'",
   "https://cloud.umami.is",
   "https://api-gateway.umami.dev",
+  ...(sentryEnabled ? ["https://*.ingest.sentry.io", "https://*.ingest.us.sentry.io", "https://*.ingest.de.sentry.io"] : []),
   ...(gaEnabled ? ["https://www.google-analytics.com", "https://*.google-analytics.com", "https://region1.google-analytics.com"] : []),
   ...(adsEnabled ? ["https://pagead2.googlesyndication.com", "https://googleads.g.doubleclick.net", "https://fundingchoicesmessages.google.com"] : []),
 ];
@@ -158,4 +161,17 @@ const nextConfig: NextConfig = {
 
 const withMDX = createMDX({});
 
-export default withMDX(nextConfig);
+// Sentry is fully inert without env config: no DSN → no runtime init (see
+// sentry.*.config.ts / instrumentation-client.ts), no auth token → no source-map
+// upload. The wrapper itself is safe to apply unconditionally.
+export default withSentryConfig(withMDX(nextConfig), {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  silent: true,
+  telemetry: false,
+  disableLogger: true,
+  sourcemaps: {
+    disable: !process.env.SENTRY_AUTH_TOKEN,
+  },
+});
