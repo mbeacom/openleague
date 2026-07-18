@@ -12,6 +12,7 @@ import {
   ArrowBack as ArrowBackIcon,
   CalendarToday as CalendarIcon,
   Event as EventIcon,
+  Forum as ForumIcon,
   Groups as GroupsIcon,
   People as PeopleIcon,
   SportsSoccer as SportsIcon,
@@ -128,6 +129,14 @@ export default async function TeamPage({ params }: TeamPageProps) {
                 fullWidth
               >
                 {team.isAdmin ? "Manage roster" : "View roster"}
+              </LinkButton>
+              <LinkButton
+                href={`/team/${team.id}/messages`}
+                variant="outlined"
+                startIcon={<ForumIcon />}
+                fullWidth
+              >
+                {team.isAdmin ? "Message team" : "Team messages"}
               </LinkButton>
               {team.league ? (
                 <LinkButton

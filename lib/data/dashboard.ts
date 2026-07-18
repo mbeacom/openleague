@@ -344,8 +344,8 @@ export type RecentMessageItem = {
   subject: string;
   snippet: string;
   sentAt: string; // ISO string
-  leagueId: string;
-  leagueName: string;
+  // A message is scoped to exactly one of a league or a standalone team.
+  scope: { kind: "league"; id: string; name: string } | { kind: "team"; id: string; name: string };
   senderName: string;
 };
 
@@ -378,21 +378,32 @@ export async function getRecentMessages(
           subject: true,
           content: true,
           league: { select: { id: true, name: true } },
+          team: { select: { id: true, name: true } },
           sender: { select: { name: true, email: true } },
         },
       },
     },
   });
 
-  return recipients.map(({ sentAt, message }) => ({
-    id: message.id,
-    subject: message.subject,
-    snippet: toSnippet(message.content),
-    sentAt: sentAt.toISOString(),
-    leagueId: message.league.id,
-    leagueName: message.league.name,
-    senderName: message.sender.name ?? message.sender.email,
-  }));
+  return recipients.flatMap(({ sentAt, message }) => {
+    // Exactly one of league/team is set (DB CHECK). Skip defensively if neither.
+    const scope: RecentMessageItem["scope"] | null = message.league
+      ? { kind: "league", id: message.league.id, name: message.league.name }
+      : message.team
+        ? { kind: "team", id: message.team.id, name: message.team.name }
+        : null;
+    if (!scope) return [];
+    return [
+      {
+        id: message.id,
+        subject: message.subject,
+        snippet: toSnippet(message.content),
+        sentAt: sentAt.toISOString(),
+        scope,
+        senderName: message.sender.name ?? message.sender.email,
+      },
+    ];
+  });
 }
 
 export type AdminAttentionData = {
