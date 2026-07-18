@@ -73,9 +73,11 @@ export async function changePassword(
     }
 
     const passwordHash = await hash(validated.newPassword, 12);
+    // Changing the password evicts every existing session (sessionVersion);
+    // the caller's own client signs out and re-authenticates afterward.
     await prisma.user.update({
       where: { id: userId },
-      data: { passwordHash },
+      data: { passwordHash, sessionVersion: { increment: 1 } },
     });
 
     return { success: true, data: { message: "Password updated" } };

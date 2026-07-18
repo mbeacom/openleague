@@ -6,15 +6,19 @@ const mocks = vi.hoisted(() => ({
     update: vi.fn(),
     updateMany: vi.fn(),
   },
+  verificationToken: {
+    deleteMany: vi.fn(),
+  },
   issueVerificationToken: vi.fn(),
   consumeVerificationToken: vi.fn(),
   sendPasswordResetEmail: vi.fn(),
   sendVerificationEmail: vi.fn(),
+  sendEmailChangedNoticeEmail: vi.fn(),
   hash: vi.fn(),
 }));
 
 vi.mock("@/lib/db/prisma", () => ({
-  prisma: { user: mocks.user },
+  prisma: { user: mocks.user, verificationToken: mocks.verificationToken },
 }));
 
 vi.mock("@/lib/auth/tokens", () => ({
@@ -25,6 +29,7 @@ vi.mock("@/lib/auth/tokens", () => ({
 vi.mock("@/lib/email/templates", () => ({
   sendPasswordResetEmail: mocks.sendPasswordResetEmail,
   sendVerificationEmail: mocks.sendVerificationEmail,
+  sendEmailChangedNoticeEmail: mocks.sendEmailChangedNoticeEmail,
 }));
 
 vi.mock("bcryptjs", () => ({
@@ -35,6 +40,8 @@ import {
   requestPasswordReset,
   resetPassword,
   resendVerificationEmail,
+  confirmEmailVerification,
+  confirmEmailChange,
 } from "@/lib/actions/account-lifecycle";
 
 beforeEach(() => {
@@ -42,10 +49,12 @@ beforeEach(() => {
   mocks.user.findUnique.mockResolvedValue(null);
   mocks.user.update.mockResolvedValue({});
   mocks.user.updateMany.mockResolvedValue({ count: 0 });
+  mocks.verificationToken.deleteMany.mockResolvedValue({ count: 0 });
   mocks.issueVerificationToken.mockResolvedValue({ raw: "raw-token" });
   mocks.consumeVerificationToken.mockResolvedValue(null);
   mocks.sendPasswordResetEmail.mockResolvedValue(undefined);
   mocks.sendVerificationEmail.mockResolvedValue(undefined);
+  mocks.sendEmailChangedNoticeEmail.mockResolvedValue(undefined);
   mocks.hash.mockResolvedValue("hashed-password");
 });
 
@@ -119,9 +128,10 @@ describe("resetPassword", () => {
 
     expect(mocks.consumeVerificationToken).toHaveBeenCalledWith("good-token", "PASSWORD_RESET");
     expect(mocks.hash).toHaveBeenCalledWith("new-password-1", 12);
+    // Also bumps sessionVersion to evict outstanding sessions on recovery.
     expect(mocks.user.update).toHaveBeenCalledWith({
       where: { id: "user-1" },
-      data: { passwordHash: "hashed-password" },
+      data: { passwordHash: "hashed-password", sessionVersion: { increment: 1 } },
     });
     expect(mocks.user.updateMany).toHaveBeenCalledWith({
       where: { id: "user-1", emailVerified: null },
@@ -168,6 +178,76 @@ describe("resendVerificationEmail", () => {
       email: "someone@example.com",
       name: "Someone",
       token: "raw-token",
+    });
+  });
+});
+
+describe("confirmEmailVerification", () => {
+  it("rejects an invalid or expired token without mutating", async () => {
+    mocks.consumeVerificationToken.mockResolvedValue(null);
+    const result = await confirmEmailVerification("bad-token");
+    expect(result.success).toBe(false);
+    expect(mocks.user.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("marks the account verified on a valid token", async () => {
+    mocks.consumeVerificationToken.mockResolvedValue({ userId: "user-1", newEmail: null });
+    const result = await confirmEmailVerification("good-token");
+    expect(result.success).toBe(true);
+    expect(mocks.consumeVerificationToken).toHaveBeenCalledWith("good-token", "EMAIL_VERIFICATION");
+    expect(mocks.user.updateMany).toHaveBeenCalledWith({
+      where: { id: "user-1", emailVerified: null },
+      data: { emailVerified: expect.any(Date) },
+    });
+  });
+});
+
+describe("confirmEmailChange", () => {
+  it("rejects an invalid token", async () => {
+    mocks.consumeVerificationToken.mockResolvedValue(null);
+    const result = await confirmEmailChange("bad-token");
+    expect(result.success).toBe(false);
+    expect(mocks.user.update).not.toHaveBeenCalled();
+  });
+
+  it("rejects when the new address was claimed by someone else since the request", async () => {
+    mocks.consumeVerificationToken.mockResolvedValue({
+      userId: "user-1",
+      newEmail: "new@example.com",
+    });
+    mocks.user.findUnique.mockResolvedValueOnce({ id: "someone-else" }); // taken check
+    const result = await confirmEmailChange("good-token");
+    expect(result.success).toBe(false);
+    expect(mocks.user.update).not.toHaveBeenCalled();
+  });
+
+  it("applies the change, evicts sessions, revokes tokens, and notifies the old address", async () => {
+    mocks.consumeVerificationToken.mockResolvedValue({
+      userId: "user-1",
+      newEmail: "new@example.com",
+    });
+    mocks.user.findUnique
+      .mockResolvedValueOnce(null) // taken check: available
+      .mockResolvedValueOnce({ email: "old@example.com", name: "Someone" }); // current user
+
+    const result = await confirmEmailChange("good-token");
+    expect(result.success).toBe(true);
+
+    expect(mocks.user.update).toHaveBeenCalledWith({
+      where: { id: "user-1" },
+      data: {
+        email: "new@example.com",
+        emailVerified: expect.any(Date),
+        sessionVersion: { increment: 1 },
+      },
+    });
+    expect(mocks.verificationToken.deleteMany).toHaveBeenCalledWith({
+      where: { userId: "user-1", usedAt: null },
+    });
+    expect(mocks.sendEmailChangedNoticeEmail).toHaveBeenCalledWith({
+      oldEmail: "old@example.com",
+      newEmail: "new@example.com",
+      name: "Someone",
     });
   });
 });

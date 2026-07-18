@@ -5,6 +5,7 @@ import { compare } from "bcryptjs";
 import { prisma } from "@/lib/db/prisma";
 import { env, isProduction, isDevelopment } from "@/lib/env";
 import { AUTH_ERROR_CODES } from "@/lib/config/constants";
+import { revalidateSessionToken, seedSessionToken } from "@/lib/auth/session-version";
 
 function throwCredentialsError(code: string): never {
   const err = new CredentialsSignin();
@@ -54,11 +55,14 @@ export const authOptions: NextAuthConfig = {
           throwCredentialsError(AUTH_ERROR_CODES.EMAIL_NOT_VERIFIED);
         }
 
-        // Return user object (will be stored in JWT)
+        // Return user object (will be stored in JWT). sessionVersion is
+        // captured here and re-validated in the jwt callback so password
+        // reset / change / email change can evict this session.
         return {
           id: user.id,
           email: user.email,
           name: user.name,
+          sessionVersion: user.sessionVersion,
         };
       },
     }),
@@ -102,12 +106,14 @@ export const authOptions: NextAuthConfig = {
     error: "/login",
   },
   callbacks: {
-    async jwt({ token, user }) {
-      // Add user ID to token on sign in
+    async jwt({ token, user, trigger }) {
+      // Sign-in / sign-up: seed identity + the session-version snapshot.
       if (user) {
-        token.id = user.id;
+        return seedSessionToken(token, user.id, user.sessionVersion ?? 0);
       }
-      return token;
+      // Subsequent requests: throttled re-validation so a bumped
+      // sessionVersion (password reset/change, email change) evicts the token.
+      return revalidateSessionToken(token, { force: trigger === "update" });
     },
     async session({ session, token }) {
       // Add user ID to session from token

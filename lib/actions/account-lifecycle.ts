@@ -4,7 +4,11 @@ import { hash } from "bcryptjs";
 import { ZodError } from "zod";
 import { prisma } from "@/lib/db/prisma";
 import { consumeVerificationToken, issueVerificationToken } from "@/lib/auth/tokens";
-import { sendPasswordResetEmail, sendVerificationEmail } from "@/lib/email/templates";
+import {
+  sendEmailChangedNoticeEmail,
+  sendPasswordResetEmail,
+  sendVerificationEmail,
+} from "@/lib/email/templates";
 import {
   forgotPasswordSchema,
   resetPasswordSchema,
@@ -72,9 +76,15 @@ export async function resetPassword(
     }
 
     const passwordHash = await hash(validated.password, 12);
+    // Resetting the password proves inbox ownership (verifies email) and must
+    // evict any outstanding sessions — this flow exists to recover a
+    // compromised account, so bump sessionVersion to invalidate them.
     await prisma.user.update({
       where: { id: consumed.userId },
-      data: { passwordHash },
+      data: {
+        passwordHash,
+        sessionVersion: { increment: 1 },
+      },
     });
     await prisma.user.updateMany({
       where: { id: consumed.userId, emailVerified: null },
@@ -123,5 +133,105 @@ export async function resendVerificationEmail(
     }
     console.error("Error resending verification email:", error);
     return { success: true, data: { message } };
+  }
+}
+
+/**
+ * Confirm an email-verification token. Invoked by an explicit user action on
+ * the /verify-email/[token] page (a POST-style Server Action), NOT a plain GET
+ * — so email-security scanners that prefetch the link cannot consume the
+ * single-use token before the human clicks.
+ */
+export async function confirmEmailVerification(
+  token: string
+): Promise<ActionResult<{ message: string }>> {
+  try {
+    const consumed = await consumeVerificationToken(token, "EMAIL_VERIFICATION");
+    if (!consumed) {
+      return {
+        success: false,
+        error: "This verification link is invalid or has expired. Request a new one from the login page.",
+      };
+    }
+    // Guarded update: never regress an already-verified timestamp.
+    await prisma.user.updateMany({
+      where: { id: consumed.userId, emailVerified: null },
+      data: { emailVerified: new Date() },
+    });
+    return { success: true, data: { message: "Email verified" } };
+  } catch (error) {
+    console.error("Error verifying email:", error);
+    return { success: false, error: "Something went wrong. Please try again." };
+  }
+}
+
+/**
+ * Confirm a pending email change. Invoked by an explicit user action on the
+ * /confirm-email-change/[token] page (scanner-safe, like verification). Applies
+ * the new address, evicts existing sessions, revokes the user's other
+ * outstanding tokens, and notifies the OLD address.
+ */
+export async function confirmEmailChange(
+  token: string
+): Promise<ActionResult<{ message: string }>> {
+  try {
+    const consumed = await consumeVerificationToken(token, "EMAIL_CHANGE");
+    if (!consumed || !consumed.newEmail) {
+      return {
+        success: false,
+        error: "This confirmation link is invalid or has expired.",
+      };
+    }
+
+    // The address may have been claimed since the request was made.
+    const taken = await prisma.user.findUnique({
+      where: { email: consumed.newEmail },
+      select: { id: true },
+    });
+    if (taken && taken.id !== consumed.userId) {
+      return {
+        success: false,
+        error: "That email address is no longer available.",
+      };
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: consumed.userId },
+      select: { email: true, name: true },
+    });
+    if (!user) {
+      return { success: false, error: "Account not found." };
+    }
+
+    await prisma.user.update({
+      where: { id: consumed.userId },
+      // Changing the login identity evicts existing sessions (sessionVersion).
+      data: {
+        email: consumed.newEmail,
+        emailVerified: new Date(),
+        sessionVersion: { increment: 1 },
+      },
+    });
+
+    // Don't leave live tokens (password reset, verification) sitting in the OLD
+    // inbox — revoke every outstanding unused token for this user.
+    await prisma.verificationToken.deleteMany({
+      where: { userId: consumed.userId, usedAt: null },
+    });
+
+    try {
+      await sendEmailChangedNoticeEmail({
+        oldEmail: user.email,
+        newEmail: consumed.newEmail,
+        name: user.name,
+      });
+    } catch (noticeError) {
+      console.error("Error sending email-changed notice:", noticeError);
+    }
+
+    return { success: true, data: { message: "Email address updated" } };
+  } catch (error) {
+    console.error("Error confirming email change:", error);
+    return { success: false, error: "Something went wrong. Please try again." };
   }
 }
