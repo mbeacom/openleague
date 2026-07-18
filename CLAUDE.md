@@ -458,9 +458,7 @@ describe('Feature Name', () => {
 - React components (Testing Library)
 - Integration tests for critical flows
 
-**Pre-existing test failures** (not regressions — do not attempt to fix):
-- `theme-marketing.test.ts` — marketing theme variant tests
-- `DragDropTeams.test.tsx` — DnD context issues
+**Test suite status**: the full suite passes on `main` — treat any failure as a regression. (Historical note: `theme-marketing.test.ts` and `DragDropTeams.test.tsx` were flaky in early 2026 but have been green since July 2026.)
 
 ### Common Gotchas
 
