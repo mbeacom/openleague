@@ -117,8 +117,28 @@ describe("addPlayer COPPA enforcement", () => {
         grantedByUserId: USER_ID,
         method: CONSENT_METHOD_ACCOUNT_ATTESTATION,
         consentVersion: COPPA_CONSENT_VERSION,
+        childName: baseInput.name,
+        childDateOfBirth: new Date(`${under13Dob()}T00:00:00.000Z`),
+        teamId: TEAM_ID,
       },
     });
+  });
+
+  it("captures the child snapshot (name/DOB/team) so the audit row survives player deletion", async () => {
+    const dob = under13Dob();
+    await addPlayer({ ...baseInput, dateOfBirth: dob, parentalConsent: true });
+
+    const data = mockTxParentalConsent.create.mock.calls[0][0].data as {
+      childName: string;
+      childDateOfBirth: Date;
+      teamId: string;
+      playerId: string;
+    };
+    expect(data.childName).toBe(baseInput.name);
+    expect(data.childDateOfBirth).toBeInstanceOf(Date);
+    expect(data.childDateOfBirth.toISOString()).toBe(`${dob}T00:00:00.000Z`);
+    expect(data.teamId).toBe(TEAM_ID);
+    expect(data.playerId).toBe(PLAYER_ID);
   });
 
   it("does not require consent for a 13+ DOB", async () => {
@@ -192,6 +212,9 @@ describe("updatePlayer COPPA enforcement", () => {
         grantedByUserId: USER_ID,
         method: CONSENT_METHOD_ACCOUNT_ATTESTATION,
         consentVersion: COPPA_CONSENT_VERSION,
+        childName: baseInput.name,
+        childDateOfBirth: new Date(`${under13Dob()}T00:00:00.000Z`),
+        teamId: TEAM_ID,
       },
     });
   });
