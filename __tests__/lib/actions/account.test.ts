@@ -103,9 +103,10 @@ describe("changePassword", () => {
     expect(result.success).toBe(true);
     expect(mocks.compare).toHaveBeenCalledWith("correct", "stored-hash");
     expect(mocks.hash).toHaveBeenCalledWith("new-password-1", 12);
+    // Also bumps sessionVersion so the change evicts existing sessions.
     expect(mocks.user.update).toHaveBeenCalledWith({
       where: { id: "user-1" },
-      data: { passwordHash: "new-hash" },
+      data: { passwordHash: "new-hash", sessionVersion: { increment: 1 } },
     });
   });
 
