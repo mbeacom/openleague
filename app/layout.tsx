@@ -104,7 +104,12 @@ export default function RootLayout({
   const gaDisableKey = gaMeasurementId ? `ga-disable-${gaMeasurementId}` : undefined;
 
   return (
-    <html lang="en">
+    // suppressHydrationWarning: InitColorSchemeScript (in ThemeProvider) stamps
+    // data-mui-color-scheme on <html> before hydration to avoid a theme flash;
+    // that intentional pre-hydration mutation would otherwise trip React's
+    // attribute-mismatch warning on <html>. Scoped one level deep — real
+    // mismatches in descendants are still reported.
+    <html lang="en" suppressHydrationWarning>
       <body className={jetbrainsMono.variable}>
         <StructuredData
           data={[getOrganizationSchema(), getSoftwareApplicationSchema()]}
