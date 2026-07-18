@@ -162,6 +162,36 @@ export async function requireTeamMember(teamId: string): Promise<string> {
 }
 
 /**
+ * The set of team IDs a user may VIEW, unioned from two links:
+ *  - TeamMember rows (the user belongs to the team directly), and
+ *  - PlayerGuardian rows (the user guards a Player rostered on the team).
+ *
+ * A guardian of a Player on team T may view team T's events and calendar at
+ * MEMBER-level detail even without a TeamMember row. This is strictly additive
+ * to direct membership and never widens beyond the guarded child's own team(s).
+ *
+ * Both links are scoped to active teams, mirroring getViewerMemberships and
+ * getNeedsRsvp: view access is only granted while the team is active.
+ */
+export async function getViewableTeamIds(userId: string): Promise<string[]> {
+  const [memberships, guardianships] = await Promise.all([
+    prisma.teamMember.findMany({
+      where: { userId, team: { isActive: true } },
+      select: { teamId: true },
+    }),
+    prisma.playerGuardian.findMany({
+      where: { userId, player: { team: { isActive: true } } },
+      select: { player: { select: { teamId: true } } },
+    }),
+  ]);
+
+  const teamIds = new Set<string>();
+  for (const membership of memberships) teamIds.add(membership.teamId);
+  for (const guardianship of guardianships) teamIds.add(guardianship.player.teamId);
+  return [...teamIds];
+}
+
+/**
  * Get user's role in a specific team
  * Returns null if user is not a member of the team
  */
