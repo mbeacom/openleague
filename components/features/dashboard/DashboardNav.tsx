@@ -25,6 +25,7 @@ import {
   Storefront as StorefrontIcon,
   ConfirmationNumber as ConfirmationNumberIcon,
   HowToReg as HowToRegIcon,
+  ManageAccounts as ManageAccountsIcon,
 } from "@mui/icons-material";
 import { logout } from "@/lib/actions/logout";
 import { useLeague } from "@/components/providers/LeagueProvider";
@@ -65,6 +66,7 @@ export default function DashboardNav({ isLeagueMode = false }: DashboardNavProps
         { label: "My Registrations", path: "/my-registrations", icon: <ConfirmationNumberIcon /> },
         { label: "Seasons", path: "/seasons", icon: <DateRangeIcon /> },
         { label: "Practice Planner", path: "/practice-planner", icon: <SportsHockeyIcon /> },
+        { label: "Account", path: "/account", icon: <ManageAccountsIcon /> },
       ];
     }
 
@@ -89,6 +91,7 @@ export default function DashboardNav({ isLeagueMode = false }: DashboardNavProps
       ...(currentLeague
         ? [{ label: "Settings", path: `${leaguePrefix}/settings`, icon: <SettingsIcon /> }]
         : []),
+      { label: "Account", path: "/account", icon: <ManageAccountsIcon /> },
     ];
   };
 

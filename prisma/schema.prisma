@@ -12,15 +12,17 @@ datasource db {
 
 // User model
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  passwordHash String
-  name         String?
-  approved     Boolean  @default(false) // Require admin approval for new signups
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String
+  name          String?
+  approved      Boolean   @default(true) // Moderation kill-switch: false = suspended (signup gate is email verification)
+  emailVerified DateTime? // Set when the user proves inbox ownership (verification link, invite match, or password reset)
   isPlatformAdmin Boolean @default(false) // Platform-wide admin (user approval/enumeration). NOT self-grantable; see lib/auth/session.ts isPlatformAdmin()
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  verificationTokens           VerificationToken[]
   teamMembers                  TeamMember[]
   rsvps                        RSVP[]
   invitations                  Invitation[]
@@ -74,6 +76,32 @@ model User {
   uploadedEventMedia           EventMediaItem[]         @relation("EventMediaUploader")
   removedEventMedia            EventMediaItem[]         @relation("EventMediaRemover")
   grantedParentalConsents      ParentalConsent[]        @relation("ParentalConsentGrantor")
+}
+
+// Single-use, hashed account-lifecycle tokens (email verification, password
+// reset, email change). Only the SHA-256 hash is stored; the raw value exists
+// solely in the emailed link. See lib/auth/tokens.ts.
+model VerificationToken {
+  id        String                @id @default(cuid())
+  tokenHash String                @unique
+  type      VerificationTokenType
+  newEmail  String? // EMAIL_CHANGE target address, applied on confirmation
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime              @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+  @@index([expiresAt])
+  @@map("verification_tokens")
+}
+
+enum VerificationTokenType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+  EMAIL_CHANGE
 }
 
 // Audit log model for tracking administrative actions and security events

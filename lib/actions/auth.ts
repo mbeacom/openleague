@@ -4,6 +4,8 @@ import { hash } from "bcryptjs";
 import type { Invitation, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { ensureLeagueUser } from "@/lib/actions/league";
+import { issueVerificationToken } from "@/lib/auth/tokens";
+import { sendVerificationEmail } from "@/lib/email/templates";
 import { signupSchema, type SignupInput } from "@/lib/utils/validation";
 import { ZodError } from "zod";
 
@@ -28,48 +30,63 @@ export async function signup(data: SignupWithInvitationInput) {
     // Hash password with bcrypt (cost factor 12)
     const passwordHash = await hash(validated.password, 12);
 
-    // Create user with approved: false (pending approval)
+    // A valid invitation sent to this exact address already proves inbox
+    // ownership (the signup link arrived in that inbox), so those accounts
+    // start verified. Everyone else must click an emailed verification link.
+    const invitation = data.invitationToken
+      ? await prisma.invitation.findUnique({ where: { token: data.invitationToken } })
+      : null;
+    const invitationValid =
+      invitation !== null && invitation.status === "PENDING" && invitation.expiresAt > new Date();
+    const verifiedByInvitation =
+      invitationValid && invitation.email.toLowerCase() === validated.email;
+
     const user = await prisma.user.create({
       data: {
         email: validated.email,
         passwordHash,
         name: validated.name,
-        approved: false, // Require admin approval
+        emailVerified: verifiedByInvitation ? new Date() : null,
       },
       select: {
         id: true,
         email: true,
         name: true,
-        approved: true,
+        emailVerified: true,
       },
     });
 
-    // If there's an invitation token, process it
-    if (data.invitationToken) {
+    if (invitationValid && invitation) {
       try {
-        const invitation = await prisma.invitation.findUnique({
-          where: { token: data.invitationToken },
-        });
-
-        if (invitation && invitation.status === "PENDING" && invitation.expiresAt > new Date()) {
-          // Use transaction to ensure atomicity. The unified Invitation model
-          // targets exactly one of team / league / venue organization.
-          await prisma.$transaction(async (tx) => {
-            await acceptInvitationMemberships(tx, invitation, {
-              id: user.id,
-              name: user.name,
-            });
-
-            // Update invitation status to ACCEPTED
-            await tx.invitation.update({
-              where: { id: invitation.id },
-              data: { status: "ACCEPTED" },
-            });
+        // Use transaction to ensure atomicity. The unified Invitation model
+        // targets exactly one of team / league / venue organization.
+        await prisma.$transaction(async (tx) => {
+          await acceptInvitationMemberships(tx, invitation, {
+            id: user.id,
+            name: user.name,
           });
-        }
+
+          // Update invitation status to ACCEPTED
+          await tx.invitation.update({
+            where: { id: invitation.id },
+            data: { status: "ACCEPTED" },
+          });
+        });
       } catch (inviteError) {
         console.error("Error processing invitation during signup:", inviteError);
         // Don't fail signup if invitation processing fails
+      }
+    }
+
+    if (!user.emailVerified) {
+      try {
+        const issued = await issueVerificationToken(user.id, "EMAIL_VERIFICATION");
+        if ("raw" in issued) {
+          await sendVerificationEmail({ email: user.email, name: user.name, token: issued.raw });
+        }
+      } catch (emailError) {
+        // Signup still succeeds — the login page offers a resend.
+        console.error("Error sending verification email during signup:", emailError);
       }
     }
 
@@ -80,7 +97,7 @@ export async function signup(data: SignupWithInvitationInput) {
         id: user.id,
         email: user.email,
         name: user.name,
-        approved: user.approved,
+        emailVerified: user.emailVerified !== null,
       }
     };
   } catch (error) {
