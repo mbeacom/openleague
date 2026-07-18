@@ -44,9 +44,14 @@ export const authOptions: NextAuthConfig = {
           throwCredentialsError(AUTH_ERROR_CODES.INVALID_CREDENTIALS);
         }
 
-        // Check if user is approved
+        // approved is a moderation kill-switch (false = suspended)
         if (!user.approved) {
           throwCredentialsError(AUTH_ERROR_CODES.ACCOUNT_NOT_APPROVED);
+        }
+
+        // New accounts must prove inbox ownership before logging in
+        if (!user.emailVerified) {
+          throwCredentialsError(AUTH_ERROR_CODES.EMAIL_NOT_VERIFIED);
         }
 
         // Return user object (will be stored in JWT)

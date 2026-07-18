@@ -15,6 +15,10 @@ export type Player = {
   jerseyNumber: number | null;
   position?: string | null; // Free-text position (e.g., Center, Goalie). Varies by sport.
   usahMemberId: string | null; // admin-only — must not appear in non-admin query selects
+  dateOfBirth?: Date | string | null; // admin-only — must not appear in non-admin query selects
+  // Active (unrevoked) COPPA consent rows, newest first. Admin-only; only
+  // populated where dateOfBirth is (consent status renders next to DOB).
+  parentalConsents?: Array<{ id: string; grantedAt: Date | string }>;
 };
 
 // Player with team and division relations (for league roster views)

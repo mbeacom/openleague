@@ -235,6 +235,56 @@ export const loginSchema = z.object({
   password: z.string().min(1, "Password is required").max(128),
 });
 
+export const forgotPasswordSchema = z.object({
+  email: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .email("Invalid email address")
+    .max(254, "Email must be less than 254 characters"),
+});
+export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
+
+export const resetPasswordSchema = z.object({
+  token: z.string().min(1, "Reset token is required").max(256),
+  password: z
+    .string()
+    .min(8, "Password must be at least 8 characters")
+    .max(128, "Password must be less than 128 characters"),
+});
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
+
+// Account settings schemas
+export const updateProfileSchema = z.object({
+  name: optionalSanitizedString(100),
+});
+export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
+
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, "Current password is required").max(128),
+  newPassword: z
+    .string()
+    .min(8, "Password must be at least 8 characters")
+    .max(128, "Password must be less than 128 characters"),
+});
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
+
+export const requestEmailChangeSchema = z.object({
+  newEmail: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .email("Invalid email address")
+    .max(254, "Email must be less than 254 characters"),
+  password: z.string().min(1, "Password is required").max(128),
+});
+export type RequestEmailChangeInput = z.infer<typeof requestEmailChangeSchema>;
+
+export const deleteAccountSchema = z.object({
+  password: z.string().min(1, "Password is required").max(128),
+});
+export type DeleteAccountInput = z.infer<typeof deleteAccountSchema>;
+
 /**
  * Format a sport enum value into a user-friendly label.
  *
@@ -281,6 +331,28 @@ export const addPlayerSchema = z.object({
     .regex(/^[a-zA-Z0-9]*$/, "USA Hockey Member ID must be alphanumeric")
     .nullable()
     .optional(),
+  // Date-only string (YYYY-MM-DD) from the form's date input; the server
+  // action converts to a UTC-midnight Date. Admin-only field like
+  // emergencyContact. COPPA under-13 consent is enforced in the action
+  // (cross-field with parentalConsent), not here.
+  dateOfBirth: z
+    .string()
+    .trim()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Date of birth must be in YYYY-MM-DD format")
+    .refine((val) => {
+      const date = new Date(`${val}T00:00:00.000Z`);
+      return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === val;
+    }, "Invalid date of birth")
+    .refine((val) => val >= "1900-01-01", "Date of birth must be after 1900")
+    .refine(
+      (val) => val <= new Date().toISOString().slice(0, 10),
+      "Date of birth cannot be in the future"
+    )
+    .nullable()
+    .optional(),
+  // Guardian/admin attestation that parental consent exists for an under-13
+  // player. Recorded as a ParentalConsent row by the server action.
+  parentalConsent: z.boolean().optional(),
 });
 
 export const updatePlayerSchema = addPlayerSchema.extend({

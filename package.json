@@ -1,6 +1,6 @@
 {
   "name": "openleague",
-  "version": "0.62.3",
+  "version": "0.63.0",
   "private": true,
   "scripts": {
     "dev": "bun --bun next dev --turbopack",
@@ -32,6 +32,7 @@
     "deployment:check": "bun run validate-deployment-config && bun run docs:build-pages"
   },
   "dependencies": {
+    "@aws-sdk/client-sesv2": "^3.1085.0",
     "@date-fns/tz": "^1.5.0",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",

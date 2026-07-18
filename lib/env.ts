@@ -36,8 +36,11 @@ const envSchema = z.object({
     NEXTAUTH_URL: z.string().url('NEXTAUTH_URL must be a valid URL'),
     NEXTAUTH_SECRET: z.string().min(32, 'NEXTAUTH_SECRET must be at least 32 characters long'),
 
-    // Email Service
-    MAILCHIMP_API_KEY: z.string().min(1, 'MAILCHIMP_API_KEY is required'),
+    // Email Service — provider is optional; when unset it is inferred from
+    // credentials (MAILCHIMP_API_KEY -> mailchimp, AWS_REGION -> ses) and
+    // falls back to a log-only provider so the app boots without email creds.
+    EMAIL_PROVIDER: z.enum(['ses', 'mailchimp', 'log']).optional(),
+    MAILCHIMP_API_KEY: z.string().optional(),
     EMAIL_FROM: z.string().email('EMAIL_FROM must be a valid email address'),
 
     // Node Environment
@@ -94,7 +97,8 @@ function validateEnv() {
             DATABASE_URL: process.env.DATABASE_URL || '',
             NEXTAUTH_URL: process.env.NEXTAUTH_URL || '',
             NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET || '',
-            MAILCHIMP_API_KEY: process.env.MAILCHIMP_API_KEY || '',
+            EMAIL_PROVIDER: process.env.EMAIL_PROVIDER as Env['EMAIL_PROVIDER'],
+            MAILCHIMP_API_KEY: process.env.MAILCHIMP_API_KEY,
             EMAIL_FROM: process.env.EMAIL_FROM || '',
             NODE_ENV: (process.env.NODE_ENV || 'development') as 'development' | 'production' | 'test',
             CRON_SECRET: process.env.CRON_SECRET,
@@ -129,6 +133,7 @@ function validateEnv() {
 
     try {
         const env = envSchema.parse(process.env)
+        assertEmailProviderConfig(env)
         return env
     } catch (error) {
         if (error instanceof z.ZodError) {
@@ -143,13 +148,31 @@ function validateEnv() {
             console.error('   DATABASE_URL - PostgreSQL connection string')
             console.error('   NEXTAUTH_URL - Application URL (e.g., http://localhost:3000)')
             console.error('   NEXTAUTH_SECRET - Random secret (generate with: openssl rand -base64 32)')
-            console.error('   MAILCHIMP_API_KEY - Mailchimp Transactional API key')
             console.error('   EMAIL_FROM - Sender email address')
+            console.error('\n📧 Email provider (optional — emails are logged, not sent, when unconfigured):')
+            console.error('   EMAIL_PROVIDER=ses       requires AWS_REGION (+ AWS credentials)')
+            console.error('   EMAIL_PROVIDER=mailchimp requires MAILCHIMP_API_KEY')
             console.error('\n💡 Copy .env.example to .env.local and fill in the values')
 
             process.exit(1)
         }
         throw error
+    }
+}
+
+/**
+ * An explicitly selected email provider must have its credentials present.
+ * (When EMAIL_PROVIDER is unset the provider is inferred at send time and no
+ * credentials are required — sends fall back to the log provider.)
+ */
+function assertEmailProviderConfig(env: z.infer<typeof envSchema>): void {
+    if (env.EMAIL_PROVIDER === 'mailchimp' && !env.MAILCHIMP_API_KEY) {
+        console.error('🚨 EMAIL_PROVIDER=mailchimp requires MAILCHIMP_API_KEY to be set')
+        process.exit(1)
+    }
+    if (env.EMAIL_PROVIDER === 'ses' && !env.AWS_REGION) {
+        console.error('🚨 EMAIL_PROVIDER=ses requires AWS_REGION to be set (credentials via AWS env vars or Vercel OIDC)')
+        process.exit(1)
     }
 }
 

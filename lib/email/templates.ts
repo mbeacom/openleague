@@ -1,10 +1,9 @@
-import { getMailchimpClient } from "./client";
+import { sendEmail, type EmailMessage } from "./client";
 import { prisma } from "@/lib/db/prisma";
 import { FALLBACK_TIME_ZONE, formatDateTime } from "@/lib/utils/date";
-import { env, getBaseUrl } from "@/lib/env";
+import { getBaseUrl } from "@/lib/env";
 import { notificationService } from "@/lib/services/notification";
 
-const EMAIL_FROM = env.EMAIL_FROM;
 const BASE_URL = getBaseUrl();
 
 /**
@@ -19,6 +18,236 @@ function escapeHtml(value: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+interface VerificationEmailData {
+  email: string;
+  name?: string | null;
+  /** Raw verification token — linked through /api/auth/verify-email/[token]. */
+  token: string;
+}
+
+/**
+ * Send the email-address verification link a new (or email-changing) account
+ * must click before logging in. Token expires in 24 hours.
+ */
+export async function sendVerificationEmail(data: VerificationEmailData): Promise<void> {
+  const verifyLink = `${BASE_URL}/api/auth/verify-email/${data.token}`;
+  const greeting = data.name ? `Hi ${escapeHtml(data.name)},` : "Hi there,";
+
+  await sendEmail({
+    subject: "Verify your email address",
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #1976D2;">Verify your email address</h2>
+
+        <p>${greeting}</p>
+
+        <p>Thanks for signing up for openleague. Please confirm this email address to activate your account.</p>
+
+        <p style="margin: 30px 0;">
+          <a href="${verifyLink}"
+             style="background-color: #1976D2; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">
+            Verify Email
+          </a>
+        </p>
+
+        <p style="color: #666; font-size: 14px;">
+          Or copy and paste this link into your browser:<br>
+          <a href="${verifyLink}">${verifyLink}</a>
+        </p>
+
+        <p style="color: #666; font-size: 14px; margin-top: 30px;">
+          This link expires in 24 hours. You can request a new one from the login page.
+        </p>
+
+        <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+
+        <p style="color: #999; font-size: 12px;">
+          If you didn't create an openleague account, you can safely ignore this email.
+        </p>
+      </div>
+    `,
+    text: `Verify your email address
+
+Thanks for signing up for openleague. Please confirm this email address to activate your account:
+${verifyLink}
+
+This link expires in 24 hours. You can request a new one from the login page.
+
+If you didn't create an openleague account, you can safely ignore this email.`,
+    to: [{ email: data.email }],
+  });
+}
+
+interface PasswordResetEmailData {
+  email: string;
+  name?: string | null;
+  /** Raw reset token — linked through /reset-password/[token]. */
+  token: string;
+}
+
+/**
+ * Send a password-reset link. Token expires in 1 hour and is single-use.
+ */
+export async function sendPasswordResetEmail(data: PasswordResetEmailData): Promise<void> {
+  const resetLink = `${BASE_URL}/reset-password/${data.token}`;
+  const greeting = data.name ? `Hi ${escapeHtml(data.name)},` : "Hi there,";
+
+  await sendEmail({
+    subject: "Reset your openleague password",
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #1976D2;">Reset your password</h2>
+
+        <p>${greeting}</p>
+
+        <p>We received a request to reset the password for your openleague account. Click the button below to choose a new password.</p>
+
+        <p style="margin: 30px 0;">
+          <a href="${resetLink}"
+             style="background-color: #1976D2; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">
+            Reset Password
+          </a>
+        </p>
+
+        <p style="color: #666; font-size: 14px;">
+          Or copy and paste this link into your browser:<br>
+          <a href="${resetLink}">${resetLink}</a>
+        </p>
+
+        <p style="color: #666; font-size: 14px; margin-top: 30px;">
+          This link expires in 1 hour and can be used once.
+        </p>
+
+        <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+
+        <p style="color: #999; font-size: 12px;">
+          If you didn't request a password reset, you can safely ignore this email — your password will not change.
+        </p>
+      </div>
+    `,
+    text: `Reset your password
+
+We received a request to reset the password for your openleague account. Choose a new password here:
+${resetLink}
+
+This link expires in 1 hour and can be used once.
+
+If you didn't request a password reset, you can safely ignore this email - your password will not change.`,
+    to: [{ email: data.email }],
+  });
+}
+
+interface EmailChangeVerificationEmailData {
+  /** The NEW address the account wants to move to. */
+  newEmail: string;
+  name?: string | null;
+  /** Raw EMAIL_CHANGE token — linked through /api/auth/confirm-email-change/[token]. */
+  token: string;
+}
+
+/**
+ * Sent to the NEW address during an email change; the account's email only
+ * changes when this link is clicked. Token expires in 24 hours.
+ */
+export async function sendEmailChangeVerificationEmail(
+  data: EmailChangeVerificationEmailData
+): Promise<void> {
+  const confirmLink = `${BASE_URL}/api/auth/confirm-email-change/${data.token}`;
+  const greeting = data.name ? `Hi ${escapeHtml(data.name)},` : "Hi there,";
+
+  await sendEmail({
+    subject: "Confirm your new email address",
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #1976D2;">Confirm your new email address</h2>
+
+        <p>${greeting}</p>
+
+        <p>You asked to move your openleague account to this email address. Confirm the change below.</p>
+
+        <p style="margin: 30px 0;">
+          <a href="${confirmLink}"
+             style="background-color: #1976D2; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">
+            Confirm Email Change
+          </a>
+        </p>
+
+        <p style="color: #666; font-size: 14px;">
+          Or copy and paste this link into your browser:<br>
+          <a href="${confirmLink}">${confirmLink}</a>
+        </p>
+
+        <p style="color: #666; font-size: 14px; margin-top: 30px;">
+          This link expires in 24 hours. Until you confirm, your account keeps its current address.
+        </p>
+
+        <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+
+        <p style="color: #999; font-size: 12px;">
+          If you didn't request this change, you can safely ignore this email.
+        </p>
+      </div>
+    `,
+    text: `Confirm your new email address
+
+You asked to move your openleague account to this email address. Confirm the change here:
+${confirmLink}
+
+This link expires in 24 hours. Until you confirm, your account keeps its current address.
+
+If you didn't request this change, you can safely ignore this email.`,
+    to: [{ email: data.newEmail }],
+  });
+}
+
+interface EmailChangedNoticeEmailData {
+  /** The OLD address, notified that the account moved away from it. */
+  oldEmail: string;
+  newEmail: string;
+  name?: string | null;
+}
+
+/**
+ * Security notice to the OLD address after an email change completes, so a
+ * hijacked-session change can't happen silently.
+ */
+export async function sendEmailChangedNoticeEmail(
+  data: EmailChangedNoticeEmailData
+): Promise<void> {
+  const greeting = data.name ? `Hi ${escapeHtml(data.name)},` : "Hi there,";
+
+  await sendEmail({
+    subject: "Your openleague email address was changed",
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #1976D2;">Your email address was changed</h2>
+
+        <p>${greeting}</p>
+
+        <p>The email address on your openleague account was just changed to <strong>${escapeHtml(data.newEmail)}</strong>. This address no longer receives account email.</p>
+
+        <p style="color: #666; font-size: 14px; margin-top: 30px;">
+          If you made this change, no action is needed.
+        </p>
+
+        <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+
+        <p style="color: #999; font-size: 12px;">
+          If you did NOT make this change, your account may be compromised — reset your password immediately from the login page and contact support.
+        </p>
+      </div>
+    `,
+    text: `Your email address was changed
+
+The email address on your openleague account was just changed to ${data.newEmail}. This address no longer receives account email.
+
+If you made this change, no action is needed.
+
+If you did NOT make this change, your account may be compromised - reset your password immediately from the login page and contact support.`,
+    to: [{ email: data.oldEmail }],
+  });
 }
 
 interface IceTimeRequestSubmittedEmailData {
@@ -42,18 +271,14 @@ interface VenueRelationshipInvitationEmailData {
 export async function sendVenueRelationshipInvitationEmail(
   data: VenueRelationshipInvitationEmailData
 ): Promise<void> {
-  const mailchimp = getMailchimpClient();
   const invitationLink = `${BASE_URL}/venue-relationships/${data.relationshipId}`;
   const relationshipLabel = data.relationshipType === "HOME" ? "home rink" : "preferred rink";
 
-  await mailchimp.messages.send({
-    message: {
-      from_email: EMAIL_FROM,
-      subject: `${data.venueName} invited you to add a ${relationshipLabel}`,
-      html: `<p>${escapeHtml(data.venueName)} invited you to add them as a ${relationshipLabel}.</p><p><a href="${invitationLink}">Review invitation</a></p>`,
-      text: `${data.venueName} invited you to add them as a ${relationshipLabel}. Review: ${invitationLink}`,
-      to: [{ email: data.email, type: "to" as const }],
-    },
+  await sendEmail({
+    subject: `${data.venueName} invited you to add a ${relationshipLabel}`,
+    html: `<p>${escapeHtml(data.venueName)} invited you to add them as a ${relationshipLabel}.</p><p><a href="${invitationLink}">Review invitation</a></p>`,
+    text: `${data.venueName} invited you to add them as a ${relationshipLabel}. Review: ${invitationLink}`,
+    to: [{ email: data.email }]
   });
 }
 
@@ -76,18 +301,14 @@ function formatRoleLabel(role: string): string {
  * staff, linking to the staff page where they can accept or decline.
  */
 export async function sendVenueStaffInviteEmail(data: VenueStaffInviteEmailData): Promise<void> {
-  const mailchimp = getMailchimpClient();
   const staffLink = `${BASE_URL}/venue-admin/${data.organizationId}/staff`;
   const roleLabel = formatRoleLabel(data.role);
 
-  await mailchimp.messages.send({
-    message: {
-      from_email: EMAIL_FROM,
-      subject: `${data.inviterName} invited you to help manage ${data.organizationName}`,
-      html: `<p>${escapeHtml(data.inviterName)} invited you to join the staff of <strong>${escapeHtml(data.organizationName)}</strong> on OpenLeague with the ${roleLabel} role.</p><p><a href="${staffLink}">Review invitation</a></p><p>If you didn't expect this invitation, you can safely ignore this email.</p>`,
-      text: `${data.inviterName} invited you to join the staff of ${data.organizationName} on OpenLeague with the ${roleLabel} role. Review: ${staffLink}\n\nIf you didn't expect this invitation, you can safely ignore this email.`,
-      to: [{ email: data.email, type: "to" as const }],
-    },
+  await sendEmail({
+    subject: `${data.inviterName} invited you to help manage ${data.organizationName}`,
+    html: `<p>${escapeHtml(data.inviterName)} invited you to join the staff of <strong>${escapeHtml(data.organizationName)}</strong> on OpenLeague with the ${roleLabel} role.</p><p><a href="${staffLink}">Review invitation</a></p><p>If you didn't expect this invitation, you can safely ignore this email.</p>`,
+    text: `${data.inviterName} invited you to join the staff of ${data.organizationName} on OpenLeague with the ${roleLabel} role. Review: ${staffLink}\n\nIf you didn't expect this invitation, you can safely ignore this email.`,
+    to: [{ email: data.email }]
   });
 }
 
@@ -109,18 +330,14 @@ interface VenueStaffSignupInviteEmailData {
 export async function sendVenueStaffSignupInviteEmail(
   data: VenueStaffSignupInviteEmailData
 ): Promise<void> {
-  const mailchimp = getMailchimpClient();
   const invitationLink = `${BASE_URL}/api/invitations/${data.token}`;
   const roleLabel = formatRoleLabel(data.role);
 
-  await mailchimp.messages.send({
-    message: {
-      from_email: EMAIL_FROM,
-      subject: `${data.inviterName} invited you to help manage ${data.organizationName}`,
-      html: `<p>${escapeHtml(data.inviterName)} invited you to join the staff of <strong>${escapeHtml(data.organizationName)}</strong> on OpenLeague with the ${roleLabel} role.</p><p>Create a free account to accept the invitation:</p><p><a href="${invitationLink}">Accept invitation</a></p><p style="color: #666; font-size: 14px;">This invitation will expire in 7 days. If you didn't expect it, you can safely ignore this email.</p>`,
-      text: `${data.inviterName} invited you to join the staff of ${data.organizationName} on OpenLeague with the ${roleLabel} role. Create a free account to accept the invitation: ${invitationLink}\n\nThis invitation will expire in 7 days. If you didn't expect it, you can safely ignore this email.`,
-      to: [{ email: data.email, type: "to" as const }],
-    },
+  await sendEmail({
+    subject: `${data.inviterName} invited you to help manage ${data.organizationName}`,
+    html: `<p>${escapeHtml(data.inviterName)} invited you to join the staff of <strong>${escapeHtml(data.organizationName)}</strong> on OpenLeague with the ${roleLabel} role.</p><p>Create a free account to accept the invitation:</p><p><a href="${invitationLink}">Accept invitation</a></p><p style="color: #666; font-size: 14px;">This invitation will expire in 7 days. If you didn't expect it, you can safely ignore this email.</p>`,
+    text: `${data.inviterName} invited you to join the staff of ${data.organizationName} on OpenLeague with the ${roleLabel} role. Create a free account to accept the invitation: ${invitationLink}\n\nThis invitation will expire in 7 days. If you didn't expect it, you can safely ignore this email.`,
+    to: [{ email: data.email }]
   });
 }
 
@@ -140,35 +357,27 @@ interface TeamOfficialInviteEmailData {
  * account they create when accepting.
  */
 export async function sendTeamOfficialInviteEmail(data: TeamOfficialInviteEmailData): Promise<void> {
-  const mailchimp = getMailchimpClient();
   const invitationLink = `${BASE_URL}/api/invitations/${data.token}`;
   const roleLabel = formatRoleLabel(data.role);
 
-  await mailchimp.messages.send({
-    message: {
-      from_email: EMAIL_FROM,
-      subject: `${data.inviterName} invited you to join ${data.teamName} as ${roleLabel}`,
-      html: `<p>${escapeHtml(data.inviterName)} invited you to join <strong>${escapeHtml(data.teamName)}</strong> on OpenLeague as ${roleLabel}.</p><p>Create a free account to accept the invitation:</p><p><a href="${invitationLink}">Accept invitation</a></p><p style="color: #666; font-size: 14px;">This invitation will expire in 7 days. If you didn't expect it, you can safely ignore this email.</p>`,
-      text: `${data.inviterName} invited you to join ${data.teamName} on OpenLeague as ${roleLabel}. Create a free account to accept the invitation: ${invitationLink}\n\nThis invitation will expire in 7 days. If you didn't expect it, you can safely ignore this email.`,
-      to: [{ email: data.email, type: "to" as const }],
-    },
+  await sendEmail({
+    subject: `${data.inviterName} invited you to join ${data.teamName} as ${roleLabel}`,
+    html: `<p>${escapeHtml(data.inviterName)} invited you to join <strong>${escapeHtml(data.teamName)}</strong> on OpenLeague as ${roleLabel}.</p><p>Create a free account to accept the invitation:</p><p><a href="${invitationLink}">Accept invitation</a></p><p style="color: #666; font-size: 14px;">This invitation will expire in 7 days. If you didn't expect it, you can safely ignore this email.</p>`,
+    text: `${data.inviterName} invited you to join ${data.teamName} on OpenLeague as ${roleLabel}. Create a free account to accept the invitation: ${invitationLink}\n\nThis invitation will expire in 7 days. If you didn't expect it, you can safely ignore this email.`,
+    to: [{ email: data.email }]
   });
 }
 
 export async function sendIceTimeRequestSubmittedEmail(
   data: IceTimeRequestSubmittedEmailData
 ): Promise<void> {
-  const mailchimp = getMailchimpClient();
   const requestLink = `${BASE_URL}/venue-admin/${data.organizationId}/venues/${data.venueId}/requests?requestId=${encodeURIComponent(data.requestId)}`;
 
-  await mailchimp.messages.send({
-    message: {
-      from_email: EMAIL_FROM,
-      subject: `New ice time request for ${data.venueName}`,
-      html: `<p>${escapeHtml(data.contactName)} (${escapeHtml(data.contactEmail)}) requested ${escapeHtml(data.scheduleTitle)}.</p><p><a href="${requestLink}">Review request</a></p>`,
-      text: `${data.contactName} (${data.contactEmail}) requested ${data.scheduleTitle}. Review: ${requestLink}`,
-      to: data.managerEmails.map((email) => ({ email, type: "to" as const })),
-    },
+  await sendEmail({
+    subject: `New ice time request for ${data.venueName}`,
+    html: `<p>${escapeHtml(data.contactName)} (${escapeHtml(data.contactEmail)}) requested ${escapeHtml(data.scheduleTitle)}.</p><p><a href="${requestLink}">Review request</a></p>`,
+    text: `${data.contactName} (${data.contactEmail}) requested ${data.scheduleTitle}. Review: ${requestLink}`,
+    to: data.managerEmails.map((email) => ({ email }))
   });
 }
 
@@ -182,17 +391,13 @@ interface IceTimeRequestDecisionEmailData {
 export async function sendIceTimeRequestDecisionEmail(
   data: IceTimeRequestDecisionEmailData
 ): Promise<void> {
-  const mailchimp = getMailchimpClient();
   const statusLabel = data.status === "ACCEPTED" ? "accepted" : "declined";
 
-  await mailchimp.messages.send({
-    message: {
-      from_email: EMAIL_FROM,
-      subject: `Your ice time request was ${statusLabel}`,
-      html: `<p>${escapeHtml(data.venueName)} ${statusLabel} your ice time request.</p>${data.decisionMessage ? `<p>${escapeHtml(data.decisionMessage)}</p>` : ""}`,
-      text: `${data.venueName} ${statusLabel} your ice time request.${data.decisionMessage ? `\n\n${data.decisionMessage}` : ""}`,
-      to: [{ email: data.contactEmail, type: "to" as const }],
-    },
+  await sendEmail({
+    subject: `Your ice time request was ${statusLabel}`,
+    html: `<p>${escapeHtml(data.venueName)} ${statusLabel} your ice time request.</p>${data.decisionMessage ? `<p>${escapeHtml(data.decisionMessage)}</p>` : ""}`,
+    text: `${data.venueName} ${statusLabel} your ice time request.${data.decisionMessage ? `\n\n${data.decisionMessage}` : ""}`,
+    to: [{ email: data.contactEmail }]
   });
 }
 
@@ -221,20 +426,16 @@ function formatMoney(amountCents: number, currency: string): string {
 export async function sendSessionRegistrationConfirmationEmail(
   data: SessionRegistrationConfirmationEmailData
 ): Promise<void> {
-  const mailchimp = getMailchimpClient();
   const registrationsLink = `${BASE_URL}/my-registrations`;
   const priceLine =
     data.amountTotal > 0 ? ` Amount paid: ${formatMoney(data.amountTotal, data.currency)}.` : " This session is free.";
   const receiptLine = data.receiptUrl ? `<p><a href="${data.receiptUrl}">View your receipt</a></p>` : "";
 
-  await mailchimp.messages.send({
-    message: {
-      from_email: EMAIL_FROM,
-      subject: `You're registered for ${data.offeringTitle}`,
-      html: `<p>Hi ${escapeHtml(data.participantName)},</p><p>You're registered for <strong>${escapeHtml(data.offeringTitle)}</strong> at ${escapeHtml(data.venueName)} (${data.quantity} spot${data.quantity === 1 ? "" : "s"}).${priceLine}</p>${receiptLine}<p><a href="${registrationsLink}">View your registrations</a></p>`,
-      text: `Hi ${data.participantName}, you're registered for ${data.offeringTitle} at ${data.venueName} (${data.quantity} spot(s)).${priceLine} View your registrations: ${registrationsLink}`,
-      to: [{ email: data.to, type: "to" as const }],
-    },
+  await sendEmail({
+    subject: `You're registered for ${data.offeringTitle}`,
+    html: `<p>Hi ${escapeHtml(data.participantName)},</p><p>You're registered for <strong>${escapeHtml(data.offeringTitle)}</strong> at ${escapeHtml(data.venueName)} (${data.quantity} spot${data.quantity === 1 ? "" : "s"}).${priceLine}</p>${receiptLine}<p><a href="${registrationsLink}">View your registrations</a></p>`,
+    text: `Hi ${data.participantName}, you're registered for ${data.offeringTitle} at ${data.venueName} (${data.quantity} spot(s)).${priceLine} View your registrations: ${registrationsLink}`,
+    to: [{ email: data.to }]
   });
 }
 
@@ -253,16 +454,12 @@ export async function sendSessionRegistrationManagerEmail(
   data: SessionRegistrationManagerEmailData
 ): Promise<void> {
   if (data.managerEmails.length === 0) return;
-  const mailchimp = getMailchimpClient();
 
-  await mailchimp.messages.send({
-    message: {
-      from_email: EMAIL_FROM,
-      subject: `New registration for ${data.offeringTitle}`,
-      html: `<p>${escapeHtml(data.participantName)} registered for <strong>${escapeHtml(data.offeringTitle)}</strong> at ${escapeHtml(data.venueName)} (${data.quantity} spot${data.quantity === 1 ? "" : "s"}).</p>`,
-      text: `${data.participantName} registered for ${data.offeringTitle} at ${data.venueName} (${data.quantity} spot(s)).`,
-      to: data.managerEmails.map((email) => ({ email, type: "to" as const })),
-    },
+  await sendEmail({
+    subject: `New registration for ${data.offeringTitle}`,
+    html: `<p>${escapeHtml(data.participantName)} registered for <strong>${escapeHtml(data.offeringTitle)}</strong> at ${escapeHtml(data.venueName)} (${data.quantity} spot${data.quantity === 1 ? "" : "s"}).</p>`,
+    text: `${data.participantName} registered for ${data.offeringTitle} at ${data.venueName} (${data.quantity} spot(s)).`,
+    to: data.managerEmails.map((email) => ({ email }))
   });
 }
 
@@ -277,17 +474,9 @@ interface InvitationEmailData {
  * Send an invitation email to join a team
  */
 export async function sendInvitationEmail(data: InvitationEmailData): Promise<void> {
-  const mailchimp = getMailchimpClient();
   const invitationLink = `${BASE_URL}/api/invitations/${data.token}`;
 
-  const message: {
-    from_email: string;
-    subject: string;
-    html: string;
-    text: string;
-    to: Array<{ email: string; type: "to" }>;
-  } = {
-    from_email: EMAIL_FROM,
+  const message: EmailMessage = {
     subject: `You've been invited to join ${data.teamName}`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -343,13 +532,12 @@ If you didn't expect this invitation, you can safely ignore this email.`,
     to: [
       {
         email: data.email,
-        type: "to",
       },
     ],
   };
 
   try {
-    await mailchimp.messages.send({ message });
+    await sendEmail(message);
   } catch (error) {
     console.error("Error sending invitation email:", error);
     throw new Error("Failed to send invitation email");
@@ -368,17 +556,9 @@ interface ExistingUserNotificationData {
 export async function sendExistingUserNotification(
   data: ExistingUserNotificationData
 ): Promise<void> {
-  const mailchimp = getMailchimpClient();
   const loginLink = `${BASE_URL}/login`;
 
-  const message: {
-    from_email: string;
-    subject: string;
-    html: string;
-    text: string;
-    to: Array<{ email: string; type: "to" }>;
-  } = {
-    from_email: EMAIL_FROM,
+  const message: EmailMessage = {
     subject: `You've been added to ${data.teamName}`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -413,13 +593,12 @@ Log in at: ${loginLink}`,
     to: [
       {
         email: data.email,
-        type: "to",
       },
     ],
   };
 
   try {
-    await mailchimp.messages.send({ message });
+    await sendEmail(message);
   } catch (error) {
     console.error("Error sending existing user notification:", error);
     throw new Error("Failed to send notification email");
@@ -439,11 +618,9 @@ interface LeagueInvitationEmailData {
  * LeagueUser membership is created when they accept at signup.
  */
 export async function sendLeagueInvitationEmail(data: LeagueInvitationEmailData): Promise<void> {
-  const mailchimp = getMailchimpClient();
   const invitationLink = `${BASE_URL}/api/invitations/${data.token}`;
 
   const message = {
-    from_email: EMAIL_FROM,
     subject: `You've been invited to join the ${data.leagueName} league`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -486,11 +663,11 @@ ${invitationLink}
 This invitation will expire in 7 days.
 
 If you didn't expect this invitation, you can safely ignore this email.`,
-    to: [{ email: data.email, type: "to" as const }],
+    to: [{ email: data.email }],
   };
 
   try {
-    await mailchimp.messages.send({ message });
+    await sendEmail(message);
   } catch (error) {
     console.error("Error sending league invitation email:", error);
     throw new Error("Failed to send league invitation email");
@@ -511,18 +688,14 @@ interface LeagueMemberAddedEmailData {
 export async function sendLeagueMemberAddedNotification(
   data: LeagueMemberAddedEmailData
 ): Promise<void> {
-  const mailchimp = getMailchimpClient();
   const loginLink = `${BASE_URL}/login`;
   const roleLabel = formatRoleLabel(data.role);
 
-  await mailchimp.messages.send({
-    message: {
-      from_email: EMAIL_FROM,
-      subject: `You've been added to the ${data.leagueName} league`,
-      html: `<p>${escapeHtml(data.inviterName)} added you to the <strong>${escapeHtml(data.leagueName)}</strong> league on openleague as ${roleLabel}.</p><p><a href="${loginLink}">Log in</a> to see your league.</p><p style="color: #666; font-size: 14px;">If you didn't expect this, contact the league administrator.</p>`,
-      text: `${data.inviterName} added you to the ${data.leagueName} league on openleague as ${roleLabel}. Log in to see your league: ${loginLink}\n\nIf you didn't expect this, contact the league administrator.`,
-      to: [{ email: data.email, type: "to" as const }],
-    },
+  await sendEmail({
+    subject: `You've been added to the ${data.leagueName} league`,
+    html: `<p>${escapeHtml(data.inviterName)} added you to the <strong>${escapeHtml(data.leagueName)}</strong> league on openleague as ${roleLabel}.</p><p><a href="${loginLink}">Log in</a> to see your league.</p><p style="color: #666; font-size: 14px;">If you didn't expect this, contact the league administrator.</p>`,
+    text: `${data.inviterName} added you to the ${data.leagueName} league on openleague as ${roleLabel}. Log in to see your league: ${loginLink}\n\nIf you didn't expect this, contact the league administrator.`,
+    to: [{ email: data.email }]
   });
 }
 
@@ -541,18 +714,10 @@ interface EventCreatedEmailData {
  * Send notification emails when a new event is created
  */
 export async function sendEventCreatedEmail(data: EventCreatedEmailData): Promise<void> {
-  const mailchimp = getMailchimpClient();
   const eventLink = `${BASE_URL}/events/${data.eventId}`;
   const eventTypeLabel = data.eventType === "GAME" ? "Game" : "Practice";
 
-  const message: {
-    from_email: string;
-    subject: string;
-    html: string;
-    text: string;
-    to: Array<{ email: string; type: "to" }>;
-  } = {
-    from_email: EMAIL_FROM,
+  const message: EmailMessage = {
     subject: `New ${eventTypeLabel}: ${data.eventTitle}`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -597,11 +762,11 @@ View event and RSVP at:
 ${eventLink}
 
 Please RSVP to let your team know if you can attend.`,
-    to: data.emails.map((email) => ({ email, type: "to" as const })),
+    to: data.emails.map((email) => ({ email })),
   };
 
   try {
-    await mailchimp.messages.send({ message });
+    await sendEmail(message);
   } catch (error) {
     console.error("Error sending event created email:", error);
     throw new Error("Failed to send event notification email");
@@ -623,18 +788,10 @@ interface EventUpdatedEmailData {
  * Send notification emails when an event is updated
  */
 export async function sendEventUpdatedEmail(data: EventUpdatedEmailData): Promise<void> {
-  const mailchimp = getMailchimpClient();
   const eventLink = `${BASE_URL}/events/${data.eventId}`;
   const eventTypeLabel = data.eventType === "GAME" ? "Game" : "Practice";
 
-  const message: {
-    from_email: string;
-    subject: string;
-    html: string;
-    text: string;
-    to: Array<{ email: string; type: "to" }>;
-  } = {
-    from_email: EMAIL_FROM,
+  const message: EmailMessage = {
     subject: `Event Updated: ${data.eventTitle}`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -681,11 +838,11 @@ View updated event at:
 ${eventLink}
 
 Please review the updated details and confirm your RSVP if needed.`,
-    to: data.emails.map((email) => ({ email, type: "to" as const })),
+    to: data.emails.map((email) => ({ email })),
   };
 
   try {
-    await mailchimp.messages.send({ message });
+    await sendEmail(message);
   } catch (error) {
     console.error("Error sending event updated email:", error);
     throw new Error("Failed to send event update notification email");
@@ -704,18 +861,10 @@ interface EventCancelledEmailData {
  * Send notification emails when an event is cancelled
  */
 export async function sendEventCancelledEmail(data: EventCancelledEmailData): Promise<void> {
-  const mailchimp = getMailchimpClient();
   const calendarLink = `${BASE_URL}/calendar`;
   const eventTypeLabel = data.eventType === "GAME" ? "Game" : "Practice";
 
-  const message: {
-    from_email: string;
-    subject: string;
-    html: string;
-    text: string;
-    to: Array<{ email: string; type: "to" }>;
-  } = {
-    from_email: EMAIL_FROM,
+  const message: EmailMessage = {
     subject: `Event Cancelled: ${data.eventTitle}`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -755,11 +904,11 @@ This event has been cancelled.
 
 View calendar at:
 ${calendarLink}`,
-    to: data.emails.map((email) => ({ email, type: "to" as const })),
+    to: data.emails.map((email) => ({ email })),
   };
 
   try {
-    await mailchimp.messages.send({ message });
+    await sendEmail(message);
   } catch (error) {
     console.error("Error sending event cancelled email:", error);
     throw new Error("Failed to send event cancellation notification email");
@@ -782,19 +931,11 @@ interface RSVPReminderEmailData {
  * Send RSVP reminder email to a member who hasn't responded
  */
 export async function sendRSVPReminderEmail(data: RSVPReminderEmailData): Promise<void> {
-  const mailchimp = getMailchimpClient();
   const eventLink = `${BASE_URL}/events/${data.eventId}`;
   const eventTypeLabel = data.eventType === "GAME" ? "Game" : "Practice";
   const greeting = data.userName ? `Hi ${data.userName}` : "Hi there";
 
-  const message: {
-    from_email: string;
-    subject: string;
-    html: string;
-    text: string;
-    to: Array<{ email: string; type: "to" }>;
-  } = {
-    from_email: EMAIL_FROM,
+  const message: EmailMessage = {
     subject: `RSVP Reminder: ${data.eventTitle}`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -852,13 +993,12 @@ This event is coming up in less than 48 hours.`,
     to: [
       {
         email: data.email,
-        type: "to",
       },
     ],
   };
 
   try {
-    await mailchimp.messages.send({ message });
+    await sendEmail(message);
   } catch (error) {
     console.error("Error sending RSVP reminder email:", error);
     throw new Error("Failed to send RSVP reminder email");
@@ -1017,7 +1157,6 @@ interface LeagueMessageEmailData {
  * Send a targeted league message email
  */
 export async function sendLeagueMessageEmail(data: LeagueMessageEmailData): Promise<void> {
-  const mailchimp = getMailchimpClient();
   const priorityLabel = data.priority === "URGENT" ? "URGENT: " : data.priority === "HIGH" ? "Important: " : "";
   const priorityColor = data.priority === "URGENT" ? "#D32F2F" : data.priority === "HIGH" ? "#FF9800" : "#1976D2";
 
@@ -1037,14 +1176,7 @@ export async function sendLeagueMessageEmail(data: LeagueMessageEmailData): Prom
       unsubscribeLink = `${BASE_URL}/unsubscribe?token=${token}`;
     }
 
-    const message: {
-      from_email: string;
-      subject: string;
-      html: string;
-      text: string;
-      to: Array<{ email: string; name?: string; type: "to" }>;
-    } = {
-      from_email: EMAIL_FROM,
+    const message: EmailMessage = {
       subject: `${priorityLabel}${data.subject}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -1105,12 +1237,11 @@ ${unsubscribeLink ? `\nDon't want to receive these emails? Unsubscribe: ${unsubs
       to: [{
         email: recipient.email,
         name: recipient.name || undefined,
-        type: "to" as const,
       }],
     };
 
     try {
-      await mailchimp.messages.send({ message });
+      await sendEmail(message);
     } catch (error) {
       console.error(`Error sending league message email to ${recipient.email}:`, error);
       // Continue with other recipients
@@ -1132,7 +1263,6 @@ interface LeagueAnnouncementEmailData {
  * Send a league announcement email
  */
 export async function sendLeagueAnnouncementEmail(data: LeagueAnnouncementEmailData): Promise<void> {
-  const mailchimp = getMailchimpClient();
   const priorityLabel = data.priority === "URGENT" ? "URGENT: " : data.priority === "HIGH" ? "Important: " : "";
   const priorityColor = data.priority === "URGENT" ? "#D32F2F" : data.priority === "HIGH" ? "#FF9800" : "#43A047";
 
@@ -1152,14 +1282,7 @@ export async function sendLeagueAnnouncementEmail(data: LeagueAnnouncementEmailD
       unsubscribeLink = `${BASE_URL}/unsubscribe?token=${token}`;
     }
 
-    const message: {
-      from_email: string;
-      subject: string;
-      html: string;
-      text: string;
-      to: Array<{ email: string; name?: string; type: "to" }>;
-    } = {
-      from_email: EMAIL_FROM,
+    const message: EmailMessage = {
       subject: `${priorityLabel}${data.subject}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -1226,12 +1349,11 @@ ${unsubscribeLink ? `\nDon't want to receive these emails? Unsubscribe: ${unsubs
       to: [{
         email: recipient.email,
         name: recipient.name || undefined,
-        type: "to" as const,
       }],
     };
 
     try {
-      await mailchimp.messages.send({ message });
+      await sendEmail(message);
     } catch (error) {
       console.error(`Error sending league announcement email to ${recipient.email}:`, error);
       // Continue with other recipients
@@ -1255,17 +1377,9 @@ interface PracticePlanSharedEmailData {
  * Requirements: 6.1, 6.2
  */
 export async function sendPracticePlanSharedEmail(data: PracticePlanSharedEmailData): Promise<void> {
-  const mailchimp = getMailchimpClient();
   const sessionLink = `${BASE_URL}/practice-planner/${data.sessionId}`;
 
-  const message: {
-    from_email: string;
-    subject: string;
-    html: string;
-    text: string;
-    to: Array<{ email: string; type: "to" }>;
-  } = {
-    from_email: EMAIL_FROM,
+  const message: EmailMessage = {
     subject: `Practice Plan Shared: ${data.sessionTitle}`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -1308,11 +1422,11 @@ Review the practice plan to see the drills and prepare for the upcoming practice
 
 View practice plan at:
 ${sessionLink}`,
-    to: data.emails.map((email) => ({ email, type: "to" as const })),
+    to: data.emails.map((email) => ({ email })),
   };
 
   try {
-    await mailchimp.messages.send({ message });
+    await sendEmail(message);
   } catch (error) {
     console.error("Error sending practice plan shared email:", error);
     throw new Error("Failed to send practice plan notification email");
@@ -1335,17 +1449,9 @@ interface PracticePlanUpdatedEmailData {
  * Requirements: 6.3
  */
 export async function sendPracticePlanUpdatedEmail(data: PracticePlanUpdatedEmailData): Promise<void> {
-  const mailchimp = getMailchimpClient();
   const sessionLink = `${BASE_URL}/practice-planner/${data.sessionId}`;
 
-  const message: {
-    from_email: string;
-    subject: string;
-    html: string;
-    text: string;
-    to: Array<{ email: string; type: "to" }>;
-  } = {
-    from_email: EMAIL_FROM,
+  const message: EmailMessage = {
     subject: `Practice Plan Updated: ${data.sessionTitle}`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -1388,11 +1494,11 @@ The practice plan has been modified. Please review the updated drills and instru
 
 View updated practice plan at:
 ${sessionLink}`,
-    to: data.emails.map((email) => ({ email, type: "to" as const })),
+    to: data.emails.map((email) => ({ email })),
   };
 
   try {
-    await mailchimp.messages.send({ message });
+    await sendEmail(message);
   } catch (error) {
     console.error("Error sending practice plan updated email:", error);
     throw new Error("Failed to send practice plan update notification email");
@@ -1496,22 +1602,18 @@ interface SignupEventUpdatedEmailData {
 /** Material-change notification (time/venue/details) to all active registrants. */
 export async function sendSignupEventUpdatedEmail(data: SignupEventUpdatedEmailData): Promise<void> {
   if (data.recipients.length === 0) return;
-  const mailchimp = getMailchimpClient();
   const eventLink = `${BASE_URL}/signups/${data.eventId}`;
 
   // One message per family — recipients must never see each other's addresses
   // (same pattern as sendSignupEventReminders/sendLeagueMessageEmail).
   for (const recipient of data.recipients) {
     try {
-      await mailchimp.messages.send({
-        message: {
-          from_email: EMAIL_FROM,
-          subject: `Updated: ${data.eventTitle}`,
-          html: `<p><strong>${escapeHtml(data.eventTitle)}</strong> (hosted by ${escapeHtml(data.hostName)}) has been updated.</p><p>${escapeHtml(data.changeSummary)}</p><p><a href="${eventLink}">View the event</a></p>`,
-          text: `${data.eventTitle} (hosted by ${data.hostName}) has been updated. ${data.changeSummary} View: ${eventLink}`,
-          to: [{ email: recipient.email, type: "to" as const }],
-        },
-      });
+      await sendEmail({
+        subject: `Updated: ${data.eventTitle}`,
+        html: `<p><strong>${escapeHtml(data.eventTitle)}</strong> (hosted by ${escapeHtml(data.hostName)}) has been updated.</p><p>${escapeHtml(data.changeSummary)}</p><p><a href="${eventLink}">View the event</a></p>`,
+        text: `${data.eventTitle} (hosted by ${data.hostName}) has been updated. ${data.changeSummary} View: ${eventLink}`,
+        to: [{ email: recipient.email }]
+  });
     } catch (emailError) {
       console.error(`Failed to send event update email to ${recipient.email}:`, emailError);
     }
@@ -1528,21 +1630,17 @@ interface SignupEventCanceledEmailData {
 /** Cancellation notice to all active registrants. */
 export async function sendSignupEventCanceledEmail(data: SignupEventCanceledEmailData): Promise<void> {
   if (data.recipients.length === 0) return;
-  const mailchimp = getMailchimpClient();
   const reasonHtml = data.reason ? `<p>Reason: ${escapeHtml(data.reason)}</p>` : "";
 
   // One message per family — recipients must never see each other's addresses.
   for (const recipient of data.recipients) {
     try {
-      await mailchimp.messages.send({
-        message: {
-          from_email: EMAIL_FROM,
-          subject: `Canceled: ${data.eventTitle}`,
-          html: `<p><strong>${escapeHtml(data.eventTitle)}</strong> (hosted by ${escapeHtml(data.hostName)}) has been canceled.</p>${reasonHtml}<p>If you paid online, the organizer will process refunds.</p>`,
-          text: `${data.eventTitle} (hosted by ${data.hostName}) has been canceled.${data.reason ? ` Reason: ${data.reason}` : ""} If you paid online, the organizer will process refunds.`,
-          to: [{ email: recipient.email, type: "to" as const }],
-        },
-      });
+      await sendEmail({
+        subject: `Canceled: ${data.eventTitle}`,
+        html: `<p><strong>${escapeHtml(data.eventTitle)}</strong> (hosted by ${escapeHtml(data.hostName)}) has been canceled.</p>${reasonHtml}<p>If you paid online, the organizer will process refunds.</p>`,
+        text: `${data.eventTitle} (hosted by ${data.hostName}) has been canceled.${data.reason ? ` Reason: ${data.reason}` : ""} If you paid online, the organizer will process refunds.`,
+        to: [{ email: recipient.email }]
+  });
     } catch (emailError) {
       console.error(`Failed to send event cancellation email to ${recipient.email}:`, emailError);
     }
@@ -1566,7 +1664,6 @@ interface EventRegistrationConfirmationEmailData {
 export async function sendEventRegistrationConfirmationEmail(
   data: EventRegistrationConfirmationEmailData
 ): Promise<void> {
-  const mailchimp = getMailchimpClient();
   const eventLink = `${BASE_URL}/signups/${data.eventId}`;
   const names = data.participantNames.join(", ");
   const paymentHtml =
@@ -1574,14 +1671,11 @@ export async function sendEventRegistrationConfirmationEmail(
       ? `<p>Amount due: <strong>${formatMoney(data.amountTotal, data.currency)}</strong>${data.manualPaymentNote ? ` — ${escapeHtml(data.manualPaymentNote)}` : ""}</p>`
       : "";
 
-  await mailchimp.messages.send({
-    message: {
-      from_email: EMAIL_FROM,
-      subject: `You're in: ${data.eventTitle}`,
-      html: `<p>${escapeHtml(names)} ${data.participantNames.length === 1 ? "is" : "are"} confirmed for <strong>${escapeHtml(data.slotName)}</strong> at <strong>${escapeHtml(data.eventTitle)}</strong> (hosted by ${escapeHtml(data.hostName)}) on ${data.startAtFormatted}.</p>${paymentHtml}<p><a href="${eventLink}">View the event</a></p>`,
-      text: `${names} confirmed for ${data.slotName} at ${data.eventTitle} (hosted by ${data.hostName}) on ${data.startAtFormatted}.${data.amountTotal > 0 ? ` Amount due: ${formatMoney(data.amountTotal, data.currency)}.` : ""} View: ${eventLink}`,
-      to: [{ email: data.to, type: "to" as const }],
-    },
+  await sendEmail({
+    subject: `You're in: ${data.eventTitle}`,
+    html: `<p>${escapeHtml(names)} ${data.participantNames.length === 1 ? "is" : "are"} confirmed for <strong>${escapeHtml(data.slotName)}</strong> at <strong>${escapeHtml(data.eventTitle)}</strong> (hosted by ${escapeHtml(data.hostName)}) on ${data.startAtFormatted}.</p>${paymentHtml}<p><a href="${eventLink}">View the event</a></p>`,
+    text: `${names} confirmed for ${data.slotName} at ${data.eventTitle} (hosted by ${data.hostName}) on ${data.startAtFormatted}.${data.amountTotal > 0 ? ` Amount due: ${formatMoney(data.amountTotal, data.currency)}.` : ""} View: ${eventLink}`,
+    to: [{ email: data.to }]
   });
 }
 
@@ -1596,16 +1690,12 @@ interface EventRegistrationRemovedEmailData {
 export async function sendEventRegistrationRemovedEmail(
   data: EventRegistrationRemovedEmailData
 ): Promise<void> {
-  const mailchimp = getMailchimpClient();
 
-  await mailchimp.messages.send({
-    message: {
-      from_email: EMAIL_FROM,
-      subject: `Registration removed: ${data.eventTitle}`,
-      html: `<p>${escapeHtml(data.participantName)}'s registration for <strong>${escapeHtml(data.eventTitle)}</strong> was removed by an organizer.</p>${data.reason ? `<p>Reason: ${escapeHtml(data.reason)}</p>` : ""}`,
-      text: `${data.participantName}'s registration for ${data.eventTitle} was removed by an organizer.${data.reason ? ` Reason: ${data.reason}` : ""}`,
-      to: [{ email: data.to, type: "to" as const }],
-    },
+  await sendEmail({
+    subject: `Registration removed: ${data.eventTitle}`,
+    html: `<p>${escapeHtml(data.participantName)}'s registration for <strong>${escapeHtml(data.eventTitle)}</strong> was removed by an organizer.</p>${data.reason ? `<p>Reason: ${escapeHtml(data.reason)}</p>` : ""}`,
+    text: `${data.participantName}'s registration for ${data.eventTitle} was removed by an organizer.${data.reason ? ` Reason: ${data.reason}` : ""}`,
+    to: [{ email: data.to }]
   });
 }
 
@@ -1672,19 +1762,15 @@ export async function sendSignupEventReminders(): Promise<void> {
       event.hostOrganization?.name ?? event.hostLeague?.name ?? event.hostTeam?.name ?? "the organizer";
     const location = event.venue?.name ?? event.locationText ?? "";
     const eventLink = `${BASE_URL}/signups/${event.id}`;
-    const mailchimp = getMailchimpClient();
 
     for (const { email, participants } of byRegistrant.values()) {
       try {
-        await mailchimp.messages.send({
-          message: {
-            from_email: EMAIL_FROM,
-            subject: `Reminder: ${event.title} is coming up`,
-            html: `<p>Reminder — <strong>${escapeHtml(event.title)}</strong> (hosted by ${escapeHtml(hostName)}) starts ${formatDateTime(event.startAt)}${location ? ` at ${escapeHtml(location)}` : ""}.</p><p>Registered: ${escapeHtml(participants.join(", "))}</p><p><a href="${eventLink}">View the event</a></p>`,
-            text: `Reminder — ${event.title} (hosted by ${hostName}) starts ${formatDateTime(event.startAt)}${location ? ` at ${location}` : ""}. Registered: ${participants.join(", ")}. View: ${eventLink}`,
-            to: [{ email, type: "to" as const }],
-          },
-        });
+        await sendEmail({
+          subject: `Reminder: ${event.title} is coming up`,
+          html: `<p>Reminder — <strong>${escapeHtml(event.title)}</strong> (hosted by ${escapeHtml(hostName)}) starts ${formatDateTime(event.startAt)}${location ? ` at ${escapeHtml(location)}` : ""}.</p><p>Registered: ${escapeHtml(participants.join(", "))}</p><p><a href="${eventLink}">View the event</a></p>`,
+          text: `Reminder — ${event.title} (hosted by ${hostName}) starts ${formatDateTime(event.startAt)}${location ? ` at ${location}` : ""}. Registered: ${participants.join(", ")}. View: ${eventLink}`,
+          to: [{ email }]
+  });
       } catch (emailError) {
         console.error(`Failed to send signup-event reminder for ${event.id}:`, emailError);
       }
@@ -1703,17 +1789,13 @@ interface WaitlistOfferEmailData {
 
 /** A waitlist spot opened up — time-boxed offer to claim it. */
 export async function sendWaitlistOfferEmail(data: WaitlistOfferEmailData): Promise<void> {
-  const mailchimp = getMailchimpClient();
   const claimLink = `${BASE_URL}/my-registrations`;
 
-  await mailchimp.messages.send({
-    message: {
-      from_email: EMAIL_FROM,
-      subject: `A spot opened up: ${data.eventTitle}`,
-      html: `<p>Good news — a <strong>${escapeHtml(data.slotName)}</strong> spot opened up for ${escapeHtml(data.participantName)} at <strong>${escapeHtml(data.eventTitle)}</strong>.</p><p>Claim it by <strong>${data.claimByFormatted}</strong> or the offer passes to the next person on the waitlist.</p><p><a href="${claimLink}">Claim your spot</a></p>`,
-      text: `A ${data.slotName} spot opened up for ${data.participantName} at ${data.eventTitle}. Claim it by ${data.claimByFormatted} or the offer passes to the next person: ${claimLink}`,
-      to: [{ email: data.to, type: "to" as const }],
-    },
+  await sendEmail({
+    subject: `A spot opened up: ${data.eventTitle}`,
+    html: `<p>Good news — a <strong>${escapeHtml(data.slotName)}</strong> spot opened up for ${escapeHtml(data.participantName)} at <strong>${escapeHtml(data.eventTitle)}</strong>.</p><p>Claim it by <strong>${data.claimByFormatted}</strong> or the offer passes to the next person on the waitlist.</p><p><a href="${claimLink}">Claim your spot</a></p>`,
+    text: `A ${data.slotName} spot opened up for ${data.participantName} at ${data.eventTitle}. Claim it by ${data.claimByFormatted} or the offer passes to the next person: ${claimLink}`,
+    to: [{ email: data.to }]
   });
 }
 
@@ -1728,20 +1810,16 @@ interface EventInvitationEmailData {
 
 /** Invitation to view/register for a signup event (access list for invite-only events). */
 export async function sendEventInvitationEmail(data: EventInvitationEmailData): Promise<void> {
-  const mailchimp = getMailchimpClient();
   const inviteLink = `${BASE_URL}/api/event-invitations/${data.token}`;
   const cta = data.isExistingUser
     ? "View the event and sign up"
     : "Create your free account and sign up";
 
-  await mailchimp.messages.send({
-    message: {
-      from_email: EMAIL_FROM,
-      subject: `You're invited: ${data.eventTitle}`,
-      html: `<p>${escapeHtml(data.hostName)} invited you to <strong>${escapeHtml(data.eventTitle)}</strong> on ${data.startAtFormatted}.</p><p><a href="${inviteLink}">${cta}</a></p>`,
-      text: `${data.hostName} invited you to ${data.eventTitle} on ${data.startAtFormatted}. ${cta}: ${inviteLink}`,
-      to: [{ email: data.to, type: "to" as const }],
-    },
+  await sendEmail({
+    subject: `You're invited: ${data.eventTitle}`,
+    html: `<p>${escapeHtml(data.hostName)} invited you to <strong>${escapeHtml(data.eventTitle)}</strong> on ${data.startAtFormatted}.</p><p><a href="${inviteLink}">${cta}</a></p>`,
+    text: `${data.hostName} invited you to ${data.eventTitle} on ${data.startAtFormatted}. ${cta}: ${inviteLink}`,
+    to: [{ email: data.to }]
   });
 }
 
@@ -1755,7 +1833,6 @@ interface EventTeamsUpdateEmailData {
 /** Teams/rosters posted (or updated after posting) for a signup event. */
 export async function sendEventTeamsUpdateEmail(data: EventTeamsUpdateEmailData): Promise<void> {
   if (data.recipients.length === 0) return;
-  const mailchimp = getMailchimpClient();
   const eventLink = `${BASE_URL}/signups/${data.eventId}`;
   const headline = data.isInitialPublish
     ? `Teams are posted for ${data.eventTitle}`
@@ -1764,15 +1841,12 @@ export async function sendEventTeamsUpdateEmail(data: EventTeamsUpdateEmailData)
   // One message per family — recipients must never see each other's addresses.
   for (const recipient of data.recipients) {
     try {
-      await mailchimp.messages.send({
-        message: {
-          from_email: EMAIL_FROM,
-          subject: headline,
-          html: `<p>${escapeHtml(headline)}.</p><p><a href="${eventLink}">See your team and game times</a></p>`,
-          text: `${headline}. See your team and game times: ${eventLink}`,
-          to: [{ email: recipient.email, type: "to" as const }],
-        },
-      });
+      await sendEmail({
+        subject: headline,
+        html: `<p>${escapeHtml(headline)}.</p><p><a href="${eventLink}">See your team and game times</a></p>`,
+        text: `${headline}. See your team and game times: ${eventLink}`,
+        to: [{ email: recipient.email }]
+  });
     } catch (emailError) {
       console.error(`Failed to send teams update email to ${recipient.email}:`, emailError);
     }
@@ -1902,16 +1976,7 @@ export async function sendGameProposalNotifications(
   };
   const color = colors[change];
 
-  const mailchimp = getMailchimpClient();
-
-  const message: {
-    from_email: string;
-    subject: string;
-    html: string;
-    text: string;
-    to: Array<{ email: string; type: "to" }>;
-  } = {
-    from_email: EMAIL_FROM,
+  const message: EmailMessage = {
     subject: subjects[change],
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -1952,11 +2017,11 @@ ${latestNote ? `Note: ${latestNote}` : ""}
 
 Review the proposal at:
 ${proposalsLink}`,
-    to: emails.map((email) => ({ email, type: "to" as const })),
+    to: emails.map((email) => ({ email })),
   };
 
   try {
-    await mailchimp.messages.send({ message });
+    await sendEmail(message);
   } catch (error) {
     console.error("Error sending game proposal notification email:", error);
     throw new Error("Failed to send game proposal notification email");
