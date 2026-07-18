@@ -139,7 +139,7 @@ export async function validateDeploymentConfig(rootDir = process.cwd()): Promise
     }
   }
 
-  for (const envName of ['DATABASE_URL', 'NEXTAUTH_URL', 'NEXTAUTH_SECRET', 'MAILCHIMP_API_KEY', 'EMAIL_FROM', 'CRON_SECRET']) {
+  for (const envName of ['DATABASE_URL', 'NEXTAUTH_URL', 'NEXTAUTH_SECRET', 'EMAIL_PROVIDER', 'MAILCHIMP_API_KEY', 'EMAIL_FROM', 'CRON_SECRET']) {
     requireCondition(failures, envExample.includes(`${envName}=`), `.env.example must document ${envName}.`);
   }
 

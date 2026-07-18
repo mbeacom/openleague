@@ -235,6 +235,56 @@ export const loginSchema = z.object({
   password: z.string().min(1, "Password is required").max(128),
 });
 
+export const forgotPasswordSchema = z.object({
+  email: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .email("Invalid email address")
+    .max(254, "Email must be less than 254 characters"),
+});
+export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
+
+export const resetPasswordSchema = z.object({
+  token: z.string().min(1, "Reset token is required").max(256),
+  password: z
+    .string()
+    .min(8, "Password must be at least 8 characters")
+    .max(128, "Password must be less than 128 characters"),
+});
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
+
+// Account settings schemas
+export const updateProfileSchema = z.object({
+  name: optionalSanitizedString(100),
+});
+export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
+
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, "Current password is required").max(128),
+  newPassword: z
+    .string()
+    .min(8, "Password must be at least 8 characters")
+    .max(128, "Password must be less than 128 characters"),
+});
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
+
+export const requestEmailChangeSchema = z.object({
+  newEmail: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .email("Invalid email address")
+    .max(254, "Email must be less than 254 characters"),
+  password: z.string().min(1, "Password is required").max(128),
+});
+export type RequestEmailChangeInput = z.infer<typeof requestEmailChangeSchema>;
+
+export const deleteAccountSchema = z.object({
+  password: z.string().min(1, "Password is required").max(128),
+});
+export type DeleteAccountInput = z.infer<typeof deleteAccountSchema>;
+
 /**
  * Format a sport enum value into a user-friendly label.
  *

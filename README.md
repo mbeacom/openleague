@@ -23,7 +23,7 @@ The MVP includes user authentication, team creation, roster management with emai
 - **UI**: MUI v7 with Emotion styling
 - **Database**: PostgreSQL (Neon) via Prisma ORM
 - **Auth**: Auth.js (NextAuth.js) v5 with credentials provider
-- **Email**: Mailchimp Transactional Email (future: AWS SES migration)
+- **Email**: Provider-agnostic — AWS SES (recommended) or Mailchimp Transactional via `EMAIL_PROVIDER`
 - **Deployment**: Vercel with automatic migrations
 - **Package Manager**: Bun (faster than npm/yarn)
 
@@ -34,7 +34,7 @@ The MVP includes user authentication, team creation, roster management with emai
 - **Node.js 22+** - Required for Next.js 15 and React 19
 - **Bun** - Package manager (faster than npm/yarn)
 - **PostgreSQL Database** - Neon recommended for serverless PostgreSQL
-- **Email Service** - Mailchimp Transactional Email account
+- **Email Service** (optional for local dev) - AWS SES or Mailchimp Transactional account; without one, emails are logged to the console instead of sent
 
 ### Quick Setup
 
@@ -76,8 +76,10 @@ DATABASE_URL="postgresql://user:password@ep-xxx.us-east-2.aws.neon.tech/dbname?s
 NEXTAUTH_URL="http://localhost:3000"  # Use your domain in production
 NEXTAUTH_SECRET=""  # Generate with: openssl rand -base64 32
 
-# Email Service (Mailchimp Transactional)
-MAILCHIMP_API_KEY=""  # Get from Mailchimp Transactional dashboard
+# Email Service — "ses" (recommended), "mailchimp", or "log" (dev default when unset)
+# EMAIL_PROVIDER="ses"
+# AWS_REGION="us-east-1"  # SES region; AWS credentials via standard env vars
+MAILCHIMP_API_KEY=""  # Only for EMAIL_PROVIDER="mailchimp"
 EMAIL_FROM="noreply@yourdomain.com"  # Your sender email address
 
 # Optional: Analytics (Umami - privacy-friendly)
@@ -98,7 +100,6 @@ AWS_REGION="us-east-1"
 - `DATABASE_URL` - PostgreSQL connection string with SSL
 - `NEXTAUTH_URL` - Your application URL (localhost for dev, your domain for production)
 - `NEXTAUTH_SECRET` - Random 32+ character secret for JWT signing
-- `MAILCHIMP_API_KEY` - API key for sending emails
 - `EMAIL_FROM` - Verified sender email address
 
 **Optional Environment Variables:**
@@ -270,9 +271,23 @@ bun run db:studio
 
 **Future Migration Path:** The application is designed to easily migrate to AWS RDS when you need more advanced features or want to consolidate AWS services.
 
-### Email Setup (Mailchimp Transactional)
+### Email Setup
 
-**Why Mailchimp Transactional?** Reliable delivery, good free tier, and simple API for transactional emails.
+OpenLeague sends through a provider-agnostic `sendEmail()` seam (`lib/email/client.ts`). Pick a provider with `EMAIL_PROVIDER`; with none configured, dev builds log emails to the console and production sends fail loudly at send time (the app still boots).
+
+**Option A — AWS SES (recommended)**:
+
+1. Verify your sending domain (or sender address) in the [SES console](https://console.aws.amazon.com/ses/) and move out of the SES sandbox for production sending
+2. Provide credentials via the standard AWS env vars (`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`) or Vercel's AWS integration (OIDC)
+3. Set environment variables:
+
+   ```bash
+   EMAIL_PROVIDER="ses"
+   AWS_REGION="us-east-1"
+   EMAIL_FROM="noreply@yourdomain.com"  # Must be SES-verified
+   ```
+
+**Option B — Mailchimp Transactional (legacy)**:
 
 1. **Create Account**:
    - Sign up at [mailchimp.com](https://mailchimp.com)
@@ -708,15 +723,14 @@ The application code requires no changes - only the connection string changes.
 
 ### Email Migration (Mailchimp → AWS SES)
 
-When you need higher email volume or AWS consolidation:
+SES is built in — migrating is configuration only, no code changes:
 
-1. **Set up AWS SES** and verify domains
-2. **Update email client** in `lib/email/client.ts`
-3. **Replace MAILCHIMP_API_KEY** with AWS credentials
-4. **Test email templates** with new service
-5. **Monitor delivery rates** during transition
+1. **Set up AWS SES** and verify your sending domain
+2. **Set `EMAIL_PROVIDER="ses"` and `AWS_REGION`**, and provide AWS credentials (env vars or Vercel AWS integration)
+3. **Remove `MAILCHIMP_API_KEY`** once cut over
+4. **Monitor delivery rates** during transition
 
-The email templates and logic remain the same - only the sending mechanism changes.
+The email templates and logic remain the same - only the configured provider changes.
 
 ## Contributing
 

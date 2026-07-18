@@ -155,8 +155,8 @@ async function seedLeagueRoleMatrix(leagueId: string, bladesTeamId: string, hawk
   const upsertUser = (email: string, name: string, passwordHash: string) =>
     prisma.user.upsert({
       where: { email },
-      update: { approved: true }, // Ensure existing users are approved
-      create: { email, passwordHash, name, approved: true },
+      update: { approved: true, emailVerified: new Date() }, // Test accounts can always log in
+      create: { email, passwordHash, name, approved: true, emailVerified: new Date() },
     })
 
   const leagueAdmin = await upsertUser('league-admin@test.com', 'Test League Admin', adminPassword)
@@ -417,23 +417,25 @@ async function main() {
 
   const adminUser = await prisma.user.upsert({
     where: { email: 'admin@test.com' },
-    update: { approved: true }, // Ensure existing users are approved
+    update: { approved: true, emailVerified: new Date() }, // Test accounts can always log in
     create: {
       email: 'admin@test.com',
       passwordHash: adminPassword,
       name: 'Test Admin',
-      approved: true, // Pre-approve test accounts
+      approved: true,
+      emailVerified: new Date(), // Pre-verify test accounts
     },
   })
 
   const memberUser = await prisma.user.upsert({
     where: { email: 'member@test.com' },
-    update: { approved: true }, // Ensure existing users are approved
+    update: { approved: true, emailVerified: new Date() }, // Test accounts can always log in
     create: {
       email: 'member@test.com',
       passwordHash: memberPassword,
       name: 'Test Member',
-      approved: true, // Pre-approve test accounts
+      approved: true,
+      emailVerified: new Date(), // Pre-verify test accounts
     },
   })
 

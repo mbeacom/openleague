@@ -62,7 +62,7 @@ bun run test:watch __tests__/lib/utils/validation.test.ts
 - **Database**: Prisma 7 ORM with PostgreSQL - parameterized queries prevent SQL injection; config in `prisma/prisma.config.ts`
 - **Validation**: Zod v4 (API differs from v3 — check schemas carefully)
 - **Authentication**: Auth.js v5 with credential provider, bcrypt password hashing
-- **Email**: Mailchimp Transactional Email (abstracted for future AWS SES migration)
+- **Email**: Provider-agnostic `sendEmail()` seam — AWS SES (recommended) or Mailchimp Transactional, selected via `EMAIL_PROVIDER`
 
 ### Application Structure
 
@@ -135,7 +135,7 @@ lib/                             # Core application logic
 ├── db/
 │   └── prisma.ts                # Prisma Client singleton
 ├── email/                       # Email service abstraction
-│   ├── client.ts                # Mailchimp client
+│   ├── client.ts                # sendEmail() seam (SES / Mailchimp / log providers)
 │   └── templates.ts             # Email templates
 ├── utils/                       # Shared utilities
 │   ├── validation.ts            # Zod schemas
@@ -338,9 +338,12 @@ export default async function RosterPage({ params }: { params: { teamId: string 
 
 ### Email Service Architecture
 
-Email service is abstracted (`lib/email/`) for future AWS SES migration:
-- Current: Mailchimp Transactional Email
-- Future: Easy migration to AWS SES by updating `client.ts`
+Email is provider-agnostic behind `sendEmail()` in `lib/email/client.ts`:
+- Providers: AWS SES (`@aws-sdk/client-sesv2`, recommended), Mailchimp Transactional (legacy), and a dev-only `log` provider
+- Selection: `EMAIL_PROVIDER` env var, or inferred from credentials (`MAILCHIMP_API_KEY` → mailchimp, `AWS_REGION` → ses), else `log`
+- The app boots without email credentials; in production an unconfigured send throws at send time (never at boot)
+- SES sends one API call per recipient so recipients never see each other's addresses (matches Mailchimp's `preserve_recipients: false` default)
+- All templates in `lib/email/templates.ts` call `sendEmail()` — never import a provider SDK directly
 
 **Email Templates** (`lib/email/templates.ts`):
 - Team invitations with signup links
@@ -360,14 +363,15 @@ Email service is abstracted (`lib/email/`) for future AWS SES migration:
 DATABASE_URL           # PostgreSQL connection string (must include ?sslmode=require for Neon)
 NEXTAUTH_URL           # Application URL (http://localhost:3000 for dev)
 NEXTAUTH_SECRET        # Generate with: openssl rand -base64 32
-MAILCHIMP_API_KEY      # Mailchimp Transactional API key
 EMAIL_FROM             # Verified sender email address
 ```
 
 **Optional Variables**:
 ```bash
+EMAIL_PROVIDER                # ses | mailchimp | log (inferred from credentials when unset)
+AWS_REGION                     # SES region (EMAIL_PROVIDER=ses; credentials via AWS env vars)
+MAILCHIMP_API_KEY              # Mailchimp Transactional API key (EMAIL_PROVIDER=mailchimp)
 NEXT_PUBLIC_UMAMI_WEBSITE_ID  # Umami analytics (privacy-friendly)
-AWS_REGION                     # For future AWS migration
 ```
 
 ## Working with the Codebase

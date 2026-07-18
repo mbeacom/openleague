@@ -152,6 +152,7 @@ async function createSmokeUser(): Promise<{ email: string; password: string }> {
       name: "Smoke Test",
       passwordHash: await bcrypt.hash(password, 10),
       approved: true,
+      emailVerified: new Date(), // Login requires a verified email
     },
     select: { id: true },
   });
