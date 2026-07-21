@@ -8,11 +8,6 @@ import { AUTH_ERROR_CODES } from "@/lib/config/constants";
 import { revalidateSessionToken, seedSessionToken } from "@/lib/auth/session-version";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/durable-rate-limit";
 
-// Not yet in AUTH_ERROR_CODES (lib/config/constants.ts belongs to another
-// workstream); the login page shows its generic "Unable to sign in" message
-// for codes it does not recognize, which is acceptable for a throttle.
-const RATE_LIMITED_ERROR_CODE = "rate_limited";
-
 function throwCredentialsError(code: string): never {
   const err = new CredentialsSignin();
   err.code = code;
@@ -45,7 +40,7 @@ export const authOptions: NextAuthConfig = {
           RATE_LIMITS.LOGIN_PER_EMAIL
         );
         if (!rl.allowed) {
-          throwCredentialsError(RATE_LIMITED_ERROR_CODE);
+          throwCredentialsError(AUTH_ERROR_CODES.RATE_LIMITED);
         }
 
         // Find user by email

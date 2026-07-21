@@ -157,6 +157,8 @@ function LoginForm() {
           setShowResend(true);
         } else if (errorCode?.includes(AUTH_ERROR_CODES.ACCOUNT_NOT_APPROVED)) {
           setGeneralError(AUTH_MESSAGES.ACCOUNT_NOT_APPROVED);
+        } else if (errorCode?.includes(AUTH_ERROR_CODES.RATE_LIMITED)) {
+          setGeneralError(AUTH_MESSAGES.RATE_LIMITED);
         } else if (errorCode?.includes(AUTH_ERROR_CODES.INVALID_CREDENTIALS)) {
           setGeneralError("Invalid email or password");
         } else {
