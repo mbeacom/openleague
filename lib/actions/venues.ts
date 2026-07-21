@@ -160,7 +160,13 @@ export async function updateVenue(
         visibility: validated.visibility,
         teamId: validated.visibility === "TEAM" ? (validated.teamId || null) : null,
         leagueId: validated.visibility === "LEAGUE" ? (validated.leagueId || null) : null,
-        organizationId: validated.organizationId || null,
+        // Only write organizationId when the caller explicitly provided it.
+        // The standard edit form never sends the field; writing
+        // `validated.organizationId || null` unconditionally silently
+        // detached org-owned venues from their organization on every save.
+        ...(Object.prototype.hasOwnProperty.call(input, "organizationId")
+          ? { organizationId: validated.organizationId || null }
+          : {}),
       },
     });
 

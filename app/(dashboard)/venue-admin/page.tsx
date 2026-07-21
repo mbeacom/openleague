@@ -94,6 +94,13 @@ export default async function VenueAdminPage() {
                   </Box>
                   <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                     <LinkButton
+                      href={`/venue-admin/${organization.id}`}
+                      variant="text"
+                      size="small"
+                    >
+                      Venues
+                    </LinkButton>
+                    <LinkButton
                       href={`/venue-admin/${organization.id}/staff`}
                       variant="text"
                       size="small"
@@ -107,6 +114,15 @@ export default async function VenueAdminPage() {
                     >
                       Payments &amp; payouts
                     </LinkButton>
+                    {organization.viewerCanManageVenues && (
+                      <LinkButton
+                        href={`/venue-admin/${organization.id}/venues/new`}
+                        variant="outlined"
+                        size="small"
+                      >
+                        Add venue
+                      </LinkButton>
+                    )}
                   </Stack>
                   <Stack spacing={1}>
                     {organization.venues.map((venue) => (

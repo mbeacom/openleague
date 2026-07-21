@@ -1,3 +1,4 @@
+export { AddOrganizationVenueForm } from "./AddOrganizationVenueForm";
 export { AvailableIceBrowser } from "./AvailableIceBrowser";
 export { VenueBrandingEditor } from "./VenueBrandingEditor";
 export { IceTimeRequestForm } from "./IceTimeRequestForm";
