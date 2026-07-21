@@ -19,6 +19,7 @@ const updateNotificationPreferencesSchema = z.object({
     eventNotifications: z.boolean().optional(),
     rsvpReminders: z.boolean().optional(),
     teamInvitations: z.boolean().optional(),
+    practicePlanNotifications: z.boolean().optional(),
     emailEnabled: z.boolean().optional(),
     urgentOnly: z.boolean().optional(),
     batchDelivery: z.boolean().optional(),
@@ -86,7 +87,7 @@ export async function updateNotificationPreferences(
       validated.leagueId
     );
 
-    revalidatePath("/settings");
+    revalidatePath("/account");
     if (validated.leagueId) {
       revalidatePath(`/league/${validated.leagueId}/settings`);
     }
@@ -169,6 +170,7 @@ export async function getAllNotificationPreferences(): Promise<ActionResult<{
             eventNotifications: pref.eventNotifications,
             rsvpReminders: pref.rsvpReminders,
             teamInvitations: pref.teamInvitations,
+            practicePlanNotifications: pref.practicePlanNotifications,
             emailEnabled: pref.emailEnabled,
             urgentOnly: pref.urgentOnly,
             batchDelivery: pref.batchDelivery,
@@ -180,6 +182,7 @@ export async function getAllNotificationPreferences(): Promise<ActionResult<{
             eventNotifications: true,
             rsvpReminders: true,
             teamInvitations: true,
+            practicePlanNotifications: true,
             emailEnabled: true,
             urgentOnly: false,
             batchDelivery: false,
