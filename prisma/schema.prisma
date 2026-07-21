@@ -105,6 +105,21 @@ enum VerificationTokenType {
   EMAIL_CHANGE
 }
 
+// Durable fixed-window rate-limit counters for Server Actions, which POST to
+// page URLs and therefore bypass the in-memory /api/* limiter in proxy.ts.
+// One row per (key, window), incremented atomically via upsert. See
+// lib/utils/durable-rate-limit.ts.
+model RateLimitBucket {
+  key         String // scope + identifier, e.g. "signup:ip:1.2.3.4"
+  windowStart DateTime // request time truncated to the window boundary
+  count       Int      @default(1)
+  expiresAt   DateTime // windowStart + window; drives opportunistic cleanup
+
+  @@id([key, windowStart])
+  @@index([expiresAt])
+  @@map("rate_limit_buckets")
+}
+
 // Audit log model for tracking administrative actions and security events
 model AuditLog {
   id           String   @id @default(cuid())

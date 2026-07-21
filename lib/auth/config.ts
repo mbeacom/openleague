@@ -6,6 +6,12 @@ import { prisma } from "@/lib/db/prisma";
 import { env, isProduction, isDevelopment } from "@/lib/env";
 import { AUTH_ERROR_CODES } from "@/lib/config/constants";
 import { revalidateSessionToken, seedSessionToken } from "@/lib/auth/session-version";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/durable-rate-limit";
+
+// Not yet in AUTH_ERROR_CODES (lib/config/constants.ts belongs to another
+// workstream); the login page shows its generic "Unable to sign in" message
+// for codes it does not recognize, which is acceptable for a throttle.
+const RATE_LIMITED_ERROR_CODE = "rate_limited";
 
 function throwCredentialsError(code: string): never {
   const err = new CredentialsSignin();
@@ -28,6 +34,19 @@ export const authOptions: NextAuthConfig = {
 
         const email = credentials.email as string;
         const password = credentials.password as string;
+
+        // Durable per-email attempt throttle before any DB lookup or bcrypt
+        // work. The in-memory proxy limiter resets on every cold start, so
+        // this is the only brute-force protection that survives serverless
+        // scale-out. checkRateLimit fails open on DB errors, and rejection
+        // goes through CredentialsSignin like every other authorize failure.
+        const rl = await checkRateLimit(
+          `login:email:${email.trim().toLowerCase()}`,
+          RATE_LIMITS.LOGIN_PER_EMAIL
+        );
+        if (!rl.allowed) {
+          throwCredentialsError(RATE_LIMITED_ERROR_CODE);
+        }
 
         // Find user by email
         const user = await prisma.user.findUnique({
