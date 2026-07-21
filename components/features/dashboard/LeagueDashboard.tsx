@@ -30,6 +30,7 @@ import {
   LocationOn as LocationIcon,
   Assessment as AssessmentIcon,
   Download as DownloadIcon,
+  Payments as PaymentsIcon,
 } from '@mui/icons-material';
 import { formatDistanceToNow, format } from 'date-fns';
 import Link from 'next/link';
@@ -213,7 +214,7 @@ export default function LeagueDashboard({ league }: LeagueDashboardProps) {
           </Typography>
           <Box sx={{
             display: 'grid',
-            gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)', md: 'repeat(6, 1fr)' },
+            gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)', md: 'repeat(4, 1fr)' },
             gap: { xs: 1, sm: 2 }
           }}>
             <Button
@@ -245,7 +246,7 @@ export default function LeagueDashboard({ league }: LeagueDashboardProps) {
               variant="outlined"
               startIcon={<AnnouncementIcon sx={{ display: { xs: 'none', sm: 'inline-flex' } }} />}
               component={Link}
-              href={`/league/${league.id}/messages/new`}
+              href={`/league/${league.id}/messages`}
               fullWidth
               size="small"
               sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
@@ -256,7 +257,7 @@ export default function LeagueDashboard({ league }: LeagueDashboardProps) {
               variant="outlined"
               startIcon={<DivisionIcon sx={{ display: { xs: 'none', sm: 'inline-flex' } }} />}
               component={Link}
-              href={`/league/${league.id}/divisions/new`}
+              href={`/league/${league.id}/divisions`}
               fullWidth
               size="small"
               sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
@@ -284,6 +285,17 @@ export default function LeagueDashboard({ league }: LeagueDashboardProps) {
               sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
             >
               Reports
+            </Button>
+            <Button
+              variant="outlined"
+              startIcon={<PaymentsIcon sx={{ display: { xs: 'none', sm: 'inline-flex' } }} />}
+              component={Link}
+              href={`/league/${league.id}/payments`}
+              fullWidth
+              size="small"
+              sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
+            >
+              Payments
             </Button>
           </Box>
         </CardContent>
