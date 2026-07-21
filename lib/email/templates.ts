@@ -551,11 +551,41 @@ interface ExistingUserNotificationData {
 }
 
 /**
+ * Courtesy "you've been added" notifications to EXISTING users honor the
+ * recipient's teamInvitations preference (emailEnabled + teamInvitations).
+ * Actual invitation emails to new users are transactional and are never
+ * gated — they have no account, so no preferences exist to consult.
+ */
+async function shouldSendMembershipNotification(email: string): Promise<boolean> {
+  const recipient = await prisma.user.findUnique({
+    where: { email },
+    select: {
+      notificationPreferences: {
+        select: {
+          teamInvitations: true,
+          emailEnabled: true,
+        },
+      },
+    },
+  });
+
+  const prefs = recipient?.notificationPreferences ?? [];
+  // If no preferences set, default to sending
+  if (prefs.length === 0) return true;
+  // Check if any preference disables team invitations or email
+  return prefs.every((p) => p.teamInvitations && p.emailEnabled);
+}
+
+/**
  * Send a notification email to an existing user who was added to a team
  */
 export async function sendExistingUserNotification(
   data: ExistingUserNotificationData
 ): Promise<void> {
+  if (!(await shouldSendMembershipNotification(data.email))) {
+    return;
+  }
+
   const loginLink = `${BASE_URL}/login`;
 
   const message: EmailMessage = {
@@ -688,6 +718,10 @@ interface LeagueMemberAddedEmailData {
 export async function sendLeagueMemberAddedNotification(
   data: LeagueMemberAddedEmailData
 ): Promise<void> {
+  if (!(await shouldSendMembershipNotification(data.email))) {
+    return;
+  }
+
   const loginLink = `${BASE_URL}/login`;
   const roleLabel = formatRoleLabel(data.role);
 
@@ -1046,9 +1080,27 @@ export async function sendRSVPReminders(): Promise<void> {
     },
   });
 
+  // Exclude users who opted out of reminder emails (same pattern as
+  // sendSignupEventReminders: any preference row with emailEnabled=false
+  // or rsvpReminders=false opts the user out).
+  const userIds = [
+    ...new Set(upcomingEvents.flatMap((event) => event.rsvps.map((rsvp) => rsvp.user.id))),
+  ];
+  const optedOut = userIds.length > 0
+    ? await prisma.notificationPreference.findMany({
+        where: {
+          userId: { in: userIds },
+          OR: [{ emailEnabled: false }, { rsvpReminders: false }],
+        },
+        select: { userId: true },
+      })
+    : [];
+  const optedOutIds = new Set(optedOut.map((preference) => preference.userId));
+
   // Send reminders for each event
   for (const event of upcomingEvents) {
     for (const rsvp of event.rsvps) {
+      if (optedOutIds.has(rsvp.user.id)) continue;
       try {
         await sendRSVPReminderEmail({
           email: rsvp.user.email,
@@ -1079,7 +1131,7 @@ export async function sendEventNotifications(
   eventId: string,
   type: "created" | "updated" | "cancelled"
 ): Promise<void> {
-  // Fetch event with team members
+  // Fetch event with team members and their notification preferences
   const event = await prisma.event.findUnique({
     where: { id: eventId },
     include: {
@@ -1091,6 +1143,12 @@ export async function sendEventNotifications(
               user: {
                 select: {
                   email: true,
+                  notificationPreferences: {
+                    select: {
+                      eventNotifications: true,
+                      emailEnabled: true,
+                    },
+                  },
                 },
               },
             },
@@ -1104,9 +1162,21 @@ export async function sendEventNotifications(
     throw new Error("Event not found");
   }
 
-  const emails = event.team.members.map(
-    (member: { user: { email: string } }) => member.user.email
-  );
+  // Filter team members based on notification preferences
+  const emails = event.team.members
+    .filter((member: { user: { notificationPreferences: Array<{ eventNotifications: boolean; emailEnabled: boolean }> } }) => {
+      const prefs = member.user.notificationPreferences;
+      // If no preferences set, default to sending
+      if (prefs.length === 0) return true;
+      // Check if any preference disables event notifications or email
+      return prefs.every((p) => p.eventNotifications && p.emailEnabled);
+    })
+    .map((member: { user: { email: string } }) => member.user.email);
+
+  // No eligible recipients — skip sending to avoid Mailchimp 400 error
+  if (emails.length === 0) {
+    return;
+  }
 
   // Build location string with venue address if available
   let eventLocation = event.location;

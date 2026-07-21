@@ -29,6 +29,7 @@ import {
   updateProfile,
 } from "@/lib/actions/account";
 import { AUTH_MESSAGES } from "@/lib/config/constants";
+import { NotificationPreferencesComponent } from "@/components/features/settings/NotificationPreferences";
 
 interface AccountSettingsProps {
   email: string;
@@ -275,6 +276,9 @@ export default function AccountSettings({
             </Button>
           </CardContent>
         </Card>
+
+        {/* Renders its own outlined cards (global prefs + per-league accordions) */}
+        <NotificationPreferencesComponent />
 
         <Card variant="outlined" sx={{ borderColor: "error.main" }}>
           <CardContent>
