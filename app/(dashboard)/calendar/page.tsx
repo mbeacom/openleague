@@ -77,6 +77,7 @@ export default async function CalendarPage({
   ]);
 
   const scopes = mergeScopes(deriveCalendarScopes(items), memberships);
+  const isTeamAdmin = memberships.teams.some((membership) => membership.role === "ADMIN");
 
   if (scopes.length === 0) {
     return (
@@ -101,6 +102,13 @@ export default async function CalendarPage({
       <PageHeader
         title="Calendar"
         subtitle="Games, practices, signups, and venue schedules across your memberships"
+        actions={
+          isTeamAdmin ? (
+            <LinkButton href="/events/new" variant="contained">
+              New Event
+            </LinkButton>
+          ) : undefined
+        }
       />
       <CalendarView items={items} scopes={scopes} initialMonth={month} />
     </PageContainer>

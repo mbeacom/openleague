@@ -1,5 +1,5 @@
 import { ReactNode } from "react";
-import { requireAuth, requireUserId } from "@/lib/auth/session";
+import { requireAuth, requireUserId, isPlatformAdmin } from "@/lib/auth/session";
 import { Box } from "@mui/material";
 import ErrorBoundary from "@/components/ui/ErrorBoundary";
 import { getUserMode } from "@/lib/utils/league-mode";
@@ -19,12 +19,15 @@ export default async function DashboardLayout({
 
   // Get user mode for adaptive navigation
   const userId = await requireUserId();
-  const userMode = await getUserMode(userId);
+  const [userMode, platformAdmin] = await Promise.all([
+    getUserMode(userId),
+    isPlatformAdmin(userId),
+  ]);
 
   return (
     <LeagueProvider initialData={userMode}>
       <KeyboardShortcutsProvider>
-        <DashboardShell isLeagueMode={userMode.isLeagueMode}>
+        <DashboardShell isLeagueMode={userMode.isLeagueMode} isPlatformAdmin={platformAdmin}>
           {/* Main Content */}
           <Box
             component="main"

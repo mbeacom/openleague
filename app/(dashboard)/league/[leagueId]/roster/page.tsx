@@ -2,6 +2,7 @@ import { Divider } from "@mui/material";
 import { notFound } from "next/navigation";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { LinkButton } from "@/components/ui/NextLinkComposites";
 import LeagueRosterView from "@/components/features/roster/LeagueRosterView";
 import LeagueInvitationManager from "@/components/features/roster/LeagueInvitationManager";
 import { getLeagueRosterData } from "@/lib/actions/league-context";
@@ -20,7 +21,17 @@ export default async function LeagueRosterPage({ params }: LeagueRosterPageProps
 
   return (
     <PageContainer>
-      <PageHeader title="League Roster" subtitle={data.league.name} />
+      <PageHeader
+        title="League Roster"
+        subtitle={data.league.name}
+        actions={
+          data.isLeagueAdmin ? (
+            <LinkButton href={`/league/${leagueId}/invitations`} variant="outlined">
+              Manage Invitations
+            </LinkButton>
+          ) : undefined
+        }
+      />
 
       {data.isLeagueAdmin && (
         <>

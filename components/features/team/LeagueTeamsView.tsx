@@ -392,9 +392,9 @@ export default function LeagueTeamsView({ league }: LeagueTeamsViewProps) {
               variant="outlined"
               startIcon={<DivisionIcon />}
               component={Link}
-              href={`/league/${league.id}/divisions/new`}
+              href={`/league/${league.id}/divisions`}
             >
-              Create Division
+              Manage Divisions
             </Button>
           </Box>
 
@@ -444,9 +444,9 @@ export default function LeagueTeamsView({ league }: LeagueTeamsViewProps) {
                   <Button
                     size="small"
                     component={Link}
-                    href={`/league/${league.id}/divisions/${division.id}/edit`}
+                    href={`/league/${league.id}/divisions`}
                   >
-                    Edit Division
+                    Manage Divisions
                   </Button>
                 </Box>
 

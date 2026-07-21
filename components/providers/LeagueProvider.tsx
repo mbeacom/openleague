@@ -29,6 +29,61 @@ interface LeagueContextType {
 
 const LeagueContext = createContext<LeagueContextType | undefined>(undefined);
 
+// Top-level dashboard routes (segment -> label) shared by both modes.
+const SECTION_LABELS: Record<string, string> = {
+  roster: 'Roster',
+  calendar: 'Calendar',
+  events: 'Events',
+  seasons: 'Seasons',
+  venues: 'Venues',
+  'venue-admin': 'Venue Admin',
+  'signup-events': 'Signup Events',
+  'my-registrations': 'My Registrations',
+  settings: 'Team Settings',
+  account: 'Account',
+};
+
+// League-scoped routes (/league/[leagueId]/<segment> -> label).
+const LEAGUE_SECTION_LABELS: Record<string, string> = {
+  dashboard: 'Dashboard',
+  schedule: 'Schedule',
+  roster: 'All Players',
+  settings: 'Settings',
+  statistics: 'Statistics',
+  reports: 'Reports',
+  venues: 'Venues',
+  messages: 'Messages',
+  divisions: 'Divisions',
+  invitations: 'Invitations',
+  payments: 'Payments',
+};
+
+// Well-known nested segments; unknown tails (ids) render as 'Details'.
+const SUBPAGE_LABELS: Record<string, string> = {
+  new: 'New',
+  edit: 'Edit',
+  'new-game': 'New Game',
+  proposals: 'Proposals',
+  placement: 'Placement',
+};
+
+/** Push "Section" or "Section > Subpage" crumbs for a top-level route. */
+function pushSectionCrumbs(
+  breadcrumbs: Array<{ label: string; href?: string }>,
+  segments: string[],
+  label: string,
+  sectionHref: string,
+  sectionDepth: number
+) {
+  if (segments.length === sectionDepth) {
+    breadcrumbs.push({ label });
+    return;
+  }
+  breadcrumbs.push({ label, href: sectionHref });
+  const tail = segments[segments.length - 1];
+  breadcrumbs.push({ label: SUBPAGE_LABELS[tail] ?? 'Details' });
+}
+
 interface LeagueProviderProps {
   children: React.ReactNode;
   initialData: {
@@ -95,15 +150,6 @@ export const LeagueProvider: React.FC<LeagueProviderProps> = ({
       // Single team mode - simple breadcrumbs
       if (pathname === '/dashboard' || pathname === '/') {
         breadcrumbs.push({ label: 'Dashboard' });
-      } else if (pathname === '/roster') {
-        breadcrumbs.push({ label: 'Dashboard', href: '/dashboard' });
-        breadcrumbs.push({ label: 'Roster' });
-      } else if (pathname === '/calendar') {
-        breadcrumbs.push({ label: 'Dashboard', href: '/dashboard' });
-        breadcrumbs.push({ label: 'Calendar' });
-      } else if (segments[0] === 'events') {
-        breadcrumbs.push({ label: 'Dashboard', href: '/dashboard' });
-        breadcrumbs.push({ label: 'Events' });
       } else if (segments[0] === 'practice-planner') {
         breadcrumbs.push({ label: 'Dashboard', href: '/dashboard' });
         if (segments.length === 1) {
@@ -122,6 +168,9 @@ export const LeagueProvider: React.FC<LeagueProviderProps> = ({
           breadcrumbs.push({ label: 'Practice Planner', href: '/practice-planner' });
           breadcrumbs.push({ label: 'Session' });
         }
+      } else if (SECTION_LABELS[segments[0]]) {
+        breadcrumbs.push({ label: 'Dashboard', href: '/dashboard' });
+        pushSectionCrumbs(breadcrumbs, segments, SECTION_LABELS[segments[0]], `/${segments[0]}`, 1);
       }
       return breadcrumbs;
     }
@@ -134,7 +183,7 @@ export const LeagueProvider: React.FC<LeagueProviderProps> = ({
       });
 
       // Parse segments to determine page
-      const pageSegment = segments[2]; // e.g., 'teams', 'schedule', 'roster', 'settings', 'dashboard'
+      const pageSegment = segments[2]; // e.g., 'teams', 'schedule', 'divisions', 'messages'
 
       if (pageSegment === 'teams') {
         breadcrumbs.push({
@@ -147,15 +196,22 @@ export const LeagueProvider: React.FC<LeagueProviderProps> = ({
         } else if (segments[3]) {
           breadcrumbs.push({ label: 'Team Details' });
         }
-      } else if (pageSegment === 'schedule') {
-        breadcrumbs.push({ label: 'Schedule' });
-      } else if (pageSegment === 'roster') {
-        breadcrumbs.push({ label: 'All Players' });
-      } else if (pageSegment === 'settings') {
-        breadcrumbs.push({ label: 'Settings' });
-      } else if (pageSegment === 'dashboard') {
-        breadcrumbs.push({ label: 'Dashboard' });
+      } else if (LEAGUE_SECTION_LABELS[pageSegment]) {
+        pushSectionCrumbs(
+          breadcrumbs,
+          segments,
+          LEAGUE_SECTION_LABELS[pageSegment],
+          `/league/${currentLeague.id}/${pageSegment}`,
+          3
+        );
       }
+    } else if (SECTION_LABELS[segments[0]]) {
+      // Global (non-league-scoped) pages reached while in league mode.
+      breadcrumbs.push({
+        label: 'Dashboard',
+        href: currentLeague ? `/league/${currentLeague.id}/dashboard` : '/dashboard',
+      });
+      pushSectionCrumbs(breadcrumbs, segments, SECTION_LABELS[segments[0]], `/${segments[0]}`, 1);
     }
 
     return breadcrumbs;

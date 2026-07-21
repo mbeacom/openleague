@@ -1,18 +1,17 @@
 import { Box } from "@mui/material";
 import { redirect } from "next/navigation";
 import EventForm from "@/components/features/events/EventForm";
-import { getUserTeamContext } from "@/lib/actions/team-context";
+import { getUserAdminTeamContext, getUserTeamContext } from "@/lib/actions/team-context";
 import { PageContainer } from "@/components/ui/PageContainer";
 
 export default async function NewEventPage() {
-  const context = await getUserTeamContext();
+  // Prefer any team the user administers so admins of a non-primary team
+  // are not bounced back to the calendar.
+  const context = await getUserAdminTeamContext();
 
   if (!context) {
-    redirect("/");
-  }
-
-  if (!context.isAdmin) {
-    redirect("/calendar");
+    const memberContext = await getUserTeamContext();
+    redirect(memberContext ? "/calendar" : "/");
   }
 
   return (
