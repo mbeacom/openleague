@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   requireUserId: vi.fn(),
   isTeamAdmin: vi.fn(),
   sendOrBatchNotification: vi.fn(),
+  checkRateLimit: vi.fn(),
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -34,6 +35,17 @@ vi.mock("@/lib/services/notification", () => ({
   },
 }));
 
+vi.mock("@/lib/utils/durable-rate-limit", () => ({
+  checkRateLimit: (...a: unknown[]) => mocks.checkRateLimit(...a),
+  rateLimitMessage: (retryAfterSec?: number) => {
+    const minutes = Math.max(1, Math.ceil((retryAfterSec ?? 60) / 60));
+    return `Too many requests — try again in ${minutes} minute${minutes === 1 ? "" : "s"}.`;
+  },
+  RATE_LIMITS: {
+    MESSAGE_SEND_PER_USER: { limit: 20, windowSec: 3600 },
+  },
+}));
+
 import { sendTeamMessage, getTeamMessages } from "@/lib/actions/communication";
 
 const TEAM_ID = "cjld2cjxh0000qzrmn831i7rn";
@@ -53,6 +65,7 @@ beforeEach(() => {
   mocks.messageRecipient.updateMany.mockResolvedValue({ count: 2 });
   mocks.sendOrBatchNotification.mockResolvedValue(undefined);
   mocks.teamMember.findFirst.mockResolvedValue({ id: "member-1" });
+  mocks.checkRateLimit.mockResolvedValue({ allowed: true });
 });
 
 const validInput = {
@@ -103,6 +116,23 @@ describe("sendTeamMessage", () => {
     expect(result.success).toBe(false);
     if (!result.success) expect(result.error).toMatch(/no team members/i);
     expect(mocks.leagueMessage.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects when the per-sender rate limit is exceeded, before any fan-out", async () => {
+    mocks.checkRateLimit.mockResolvedValue({ allowed: false, retryAfterSec: 600 });
+
+    const result = await sendTeamMessage(validInput);
+    expect(result).toEqual({
+      success: false,
+      error: "Too many requests — try again in 10 minutes.",
+    });
+
+    expect(mocks.checkRateLimit).toHaveBeenCalledWith("message:user:user-admin-1", {
+      limit: 20,
+      windowSec: 3600,
+    });
+    expect(mocks.leagueMessage.create).not.toHaveBeenCalled();
+    expect(mocks.sendOrBatchNotification).not.toHaveBeenCalled();
   });
 });
 

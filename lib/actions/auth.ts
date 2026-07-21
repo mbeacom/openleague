@@ -6,6 +6,12 @@ import { prisma } from "@/lib/db/prisma";
 import { ensureLeagueUser } from "@/lib/actions/league";
 import { issueVerificationToken } from "@/lib/auth/tokens";
 import { sendVerificationEmail } from "@/lib/email/templates";
+import {
+  checkRateLimit,
+  getClientIp,
+  rateLimitMessage,
+  RATE_LIMITS,
+} from "@/lib/utils/durable-rate-limit";
 import { signupSchema, type SignupInput } from "@/lib/utils/validation";
 import { ZodError } from "zod";
 
@@ -17,6 +23,24 @@ export async function signup(data: SignupWithInvitationInput) {
   try {
     // Validate input
     const validated = signupSchema.parse(data);
+
+    // Durable throttle before any expensive work (bcrypt cost 12 + a
+    // verification email per new account). Per-IP first, then per-email so a
+    // distributed attacker cannot burn one address's budget from many IPs.
+    const ip = await getClientIp();
+    if (ip) {
+      const ipLimit = await checkRateLimit(`signup:ip:${ip}`, RATE_LIMITS.SIGNUP_PER_IP);
+      if (!ipLimit.allowed) {
+        return { error: rateLimitMessage(ipLimit.retryAfterSec) };
+      }
+    }
+    const emailLimit = await checkRateLimit(
+      `signup:email:${validated.email}`,
+      RATE_LIMITS.SIGNUP_PER_EMAIL
+    );
+    if (!emailLimit.allowed) {
+      return { error: rateLimitMessage(emailLimit.retryAfterSec) };
+    }
 
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({
