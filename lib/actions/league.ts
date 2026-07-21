@@ -687,6 +687,7 @@ export async function createDivision(
 
     revalidatePath(`/league/${validated.leagueId}`);
     revalidatePath(`/league/${validated.leagueId}/teams`);
+    revalidatePath(`/league/${validated.leagueId}/divisions`);
 
     return {
       success: true,
@@ -790,6 +791,7 @@ export async function updateDivision(
 
     revalidatePath(`/league/${validated.leagueId}`);
     revalidatePath(`/league/${validated.leagueId}/teams`);
+    revalidatePath(`/league/${validated.leagueId}/divisions`);
 
     return {
       success: true,
@@ -885,6 +887,7 @@ export async function deleteDivision(
 
     revalidatePath(`/league/${validated.leagueId}`);
     revalidatePath(`/league/${validated.leagueId}/teams`);
+    revalidatePath(`/league/${validated.leagueId}/divisions`);
 
     return {
       success: true,
