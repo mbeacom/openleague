@@ -10,10 +10,16 @@ import KeyboardShortcutsHelp from "@/components/features/navigation/KeyboardShor
 
 interface DashboardShellProps {
   isLeagueMode: boolean;
+  /** Platform (system) admin — surfaces the /admin nav entry. */
+  isPlatformAdmin?: boolean;
   children: ReactNode;
 }
 
-export default function DashboardShell({ isLeagueMode, children }: DashboardShellProps) {
+export default function DashboardShell({
+  isLeagueMode,
+  isPlatformAdmin = false,
+  children,
+}: DashboardShellProps) {
   return (
     <Box sx={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
       {/* Top App Bar - mobile only */}
@@ -67,7 +73,7 @@ export default function DashboardShell({ isLeagueMode, children }: DashboardShel
           <Box sx={{ px: 2, pb: 2 }}>
             <LeagueContextSwitcher />
           </Box>
-          <DashboardNav isLeagueMode={isLeagueMode} />
+          <DashboardNav isLeagueMode={isLeagueMode} isPlatformAdmin={isPlatformAdmin} />
         </Box>
 
         {/* Main Content */}

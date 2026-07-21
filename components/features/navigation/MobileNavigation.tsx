@@ -20,6 +20,7 @@ import {
   Settings as SettingsIcon,
   SportsHockey as SportsHockeyIcon,
   HowToReg as HowToRegIcon,
+  ManageAccounts as ManageAccountsIcon,
 } from '@mui/icons-material';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -214,6 +215,16 @@ export default function MobileNavigation({ isLeagueMode = false }: MobileNavigat
             <ListItemText>League Settings</ListItemText>
           </MenuItem>
         )}
+        <MenuItem
+          component={Link}
+          href="/account"
+          onClick={handleMenuClose}
+        >
+          <ListItemIcon>
+            <ManageAccountsIcon />
+          </ListItemIcon>
+          <ListItemText>Account</ListItemText>
+        </MenuItem>
         <MenuItem onClick={handleLogout}>
           <ListItemIcon>
             <LogoutIcon />
