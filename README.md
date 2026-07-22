@@ -85,12 +85,6 @@ EMAIL_FROM="noreply@yourdomain.com"  # Your sender email address
 # Optional: Analytics (Umami - privacy-friendly)
 NEXT_PUBLIC_UMAMI_WEBSITE_ID=""  # Get from https://cloud.umami.is
 
-# Optional: Advertising (disabled by default)
-NEXT_PUBLIC_ADS_ENABLED="false"
-NEXT_PUBLIC_GOOGLE_ADSENSE_CLIENT=""
-NEXT_PUBLIC_GOOGLE_ADSENSE_MARKETING_SLOT=""
-NEXT_PUBLIC_GOOGLE_ADSENSE_DASHBOARD_SLOT=""
-
 # Optional: For future AWS migration
 AWS_REGION="us-east-1"
 ```
@@ -105,10 +99,6 @@ AWS_REGION="us-east-1"
 **Optional Environment Variables:**
 
 - `NEXT_PUBLIC_UMAMI_WEBSITE_ID` - Umami analytics website ID (leave empty to disable tracking)
-- `NEXT_PUBLIC_ADS_ENABLED` - Set to `true` to enable configured ad slots; defaults to disabled
-- `NEXT_PUBLIC_GOOGLE_ADSENSE_CLIENT` - Google AdSense publisher/client ID used only when ads are enabled
-- `NEXT_PUBLIC_GOOGLE_ADSENSE_MARKETING_SLOT` - AdSense slot ID for the public marketing layout
-- `NEXT_PUBLIC_GOOGLE_ADSENSE_DASHBOARD_SLOT` - Reserved AdSense slot ID for future dashboard placements
 - `STRIPE_SECRET_KEY` / `STRIPE_CONNECT_WEBHOOK_SECRET` / `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` / `STRIPE_PLATFORM_FEE_BPS` - Stripe Connect for rink session and signup-event payments (unset = free/manual-payment mode)
 - `BLOB_READ_WRITE_TOKEN` - Vercel Blob token enabling event photo/video galleries (unset = galleries hidden)
 - `EVENT_WAITLIST_CLAIM_HOURS` - Waitlist offer claim window in hours (default 24)
@@ -778,10 +768,10 @@ A professionally hosted version is live at [openl.app](https://openl.app), offer
 
 - Zero setup or maintenance
 - Automatic updates and backups
-- Free access for teams as of now
-- No subscription billing or paid tiers currently offered
+- Free forever for teams — no per-player or per-season subscription, ever
+- No third-party ads (especially not on pages containing minors' data)
 
-Hosted access is currently free, but it is not guaranteed to remain free indefinitely. The hosted service may be modified, limited, suspended, discontinued, or shut down, and future releases may introduce paid subscriptions, usage limits, advertising, sponsored placements, or paid feature gates. Any future charges would apply prospectively under the terms presented at that time.
+The free team plan is a commitment, not a trial. Paid tiers exist only for leagues and clubs (multi-team orgs), and revenue comes from those org-level plans and opt-in local sponsorships clubs choose — never from charging teams or serving third-party ads.
 
 📚 **Developer Documentation:** [openleague.dev](https://openleague.dev)
 

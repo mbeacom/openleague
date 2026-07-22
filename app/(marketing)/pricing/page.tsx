@@ -72,7 +72,7 @@ const commitments = [
     icon: CodeIcon,
     title: 'Open-source and self-hostable',
     description:
-      'The source is public under the Business Source License (BSL 1.1) and converts to Apache 2.0 — self-host it for your own organization anytime.',
+      'The source is public under the Apache License 2.0 — fork it, self-host it, or run it commercially, anytime.',
   },
   {
     icon: CloudDownloadIcon,
