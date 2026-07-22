@@ -65,16 +65,21 @@ export class NotificationService {
     preferences: Partial<NotificationPreferences>,
     leagueId?: string
   ): Promise<void> {
-    const unsubscribeToken = randomBytes(32).toString("hex");
+    // Global scope (leagueId=null) cannot use upsert: leagueId is nullable and
+    // part of the @@unique constraint, and Prisma rejects null in the compound-
+    // unique `where` input (PrismaClientValidationError at query build). Only the
+    // league-scoped path — where leagueId is a real string — is upsert-safe.
+    if (leagueId === undefined) {
+      await this.upsertGlobalPreference(userId, {
+        ...preferences,
+        updatedAt: new Date(),
+      });
+      return;
+    }
 
     await prisma.notificationPreference.upsert({
       where: {
-        userId_leagueId: {
-          userId,
-          // WORKAROUND: Prisma's upsert requires this cast for @@unique constraints on nullable fields
-          // See: https://github.com/prisma/prisma/issues/3387
-          leagueId: leagueId ?? (null as unknown as string),
-        },
+        userId_leagueId: { userId, leagueId },
       },
       update: {
         ...preferences,
@@ -82,9 +87,40 @@ export class NotificationService {
       },
       create: {
         userId,
-        leagueId: leagueId ?? null,
-        unsubscribeToken,
+        leagueId,
+        unsubscribeToken: randomBytes(32).toString("hex"),
         ...preferences,
+      },
+    });
+  }
+
+  /**
+   * Find-then-write upsert for the user's global (leagueId=null) preference row.
+   * Used where prisma.upsert() cannot be: null in a compound-unique `where`.
+   */
+  private async upsertGlobalPreference(
+    userId: string,
+    data: Partial<NotificationPreferences> & { updatedAt?: Date; unsubscribeToken?: string }
+  ): Promise<void> {
+    const existing = await prisma.notificationPreference.findFirst({
+      where: { userId, leagueId: null },
+      select: { id: true },
+    });
+
+    if (existing) {
+      await prisma.notificationPreference.update({
+        where: { id: existing.id },
+        data,
+      });
+      return;
+    }
+
+    await prisma.notificationPreference.create({
+      data: {
+        ...data,
+        userId,
+        leagueId: null,
+        unsubscribeToken: data.unsubscribeToken ?? randomBytes(32).toString("hex"),
       },
     });
   }
@@ -347,32 +383,25 @@ export class NotificationService {
   async generateUnsubscribeToken(userId: string, leagueId?: string): Promise<string> {
     const token = randomBytes(32).toString("hex");
 
+    // Global scope cannot use upsert (null in a compound-unique `where`); see
+    // updateNotificationPreferences. Defaults below match a fresh row's schema
+    // defaults and only apply on create.
+    if (leagueId === undefined) {
+      await this.upsertGlobalPreference(userId, { unsubscribeToken: token });
+      return token;
+    }
+
     await prisma.notificationPreference.upsert({
       where: {
-        userId_leagueId: {
-          userId,
-          // WORKAROUND: Prisma's upsert requires this cast for @@unique constraints on nullable fields
-          // See: https://github.com/prisma/prisma/issues/3387
-          leagueId: leagueId ?? (null as unknown as string),
-        },
+        userId_leagueId: { userId, leagueId },
       },
       update: {
         unsubscribeToken: token,
       },
       create: {
         userId,
-        leagueId: leagueId ?? null,
+        leagueId,
         unsubscribeToken: token,
-        // Default preferences
-        leagueMessages: true,
-        leagueAnnouncements: true,
-        eventNotifications: true,
-        rsvpReminders: true,
-        teamInvitations: true,
-        practicePlanNotifications: true,
-        emailEnabled: true,
-        urgentOnly: false,
-        batchDelivery: false,
       },
     });
 

@@ -556,11 +556,35 @@ interface ExistingUserNotificationData {
  * Actual invitation emails to new users are transactional and are never
  * gated — they have no account, so no preferences exist to consult.
  */
+/**
+ * Resolve a user's effective notification preference row for a given context.
+ *
+ * Preferences are hybrid-scoped: a global row (leagueId=null) plus optional
+ * per-league override rows. A notification triggered in a league context uses
+ * that league's override if one exists, otherwise the global row. A context
+ * with no league (standalone team) uses the global row. Returns undefined when
+ * no matching row exists, which callers treat as "send" (schema default is on).
+ *
+ * This intentionally does NOT aggregate across every row: a league-scoped
+ * opt-out must not suppress notifications for unrelated teams/leagues.
+ */
+function pickPreference<T extends { leagueId: string | null }>(
+  rows: T[],
+  contextLeagueId: string | null
+): T | undefined {
+  if (contextLeagueId) {
+    const scoped = rows.find((r) => r.leagueId === contextLeagueId);
+    if (scoped) return scoped;
+  }
+  return rows.find((r) => r.leagueId === null);
+}
+
 async function shouldSendMembershipNotification(email: string): Promise<boolean> {
   const recipient = await prisma.user.findUnique({
     where: { email },
     select: {
       notificationPreferences: {
+        where: { leagueId: null },
         select: {
           teamInvitations: true,
           emailEnabled: true,
@@ -569,11 +593,12 @@ async function shouldSendMembershipNotification(email: string): Promise<boolean>
     },
   });
 
-  const prefs = recipient?.notificationPreferences ?? [];
-  // If no preferences set, default to sending
-  if (prefs.length === 0) return true;
-  // Check if any preference disables team invitations or email
-  return prefs.every((p) => p.teamInvitations && p.emailEnabled);
+  // Membership notices ("you were added to X") are cross-cutting, so they are
+  // governed by the user's global preference row only. A per-league override
+  // must not silence membership emails for unrelated teams/leagues.
+  const globalPref = recipient?.notificationPreferences[0];
+  if (!globalPref) return true;
+  return globalPref.teamInvitations && globalPref.emailEnabled;
 }
 
 /**
@@ -1061,6 +1086,7 @@ export async function sendRSVPReminders(): Promise<void> {
       team: {
         select: {
           name: true,
+          leagueId: true,
         },
       },
       rsvps: {
@@ -1080,27 +1106,31 @@ export async function sendRSVPReminders(): Promise<void> {
     },
   });
 
-  // Exclude users who opted out of reminder emails (same pattern as
-  // sendSignupEventReminders: any preference row with emailEnabled=false
-  // or rsvpReminders=false opts the user out).
+  // Load every candidate's preference rows (global + per-league) so each
+  // reminder can be gated by the preference that applies to its event's league
+  // context. A league-scoped opt-out must not silence reminders for the user's
+  // other teams/leagues.
   const userIds = [
     ...new Set(upcomingEvents.flatMap((event) => event.rsvps.map((rsvp) => rsvp.user.id))),
   ];
-  const optedOut = userIds.length > 0
+  const prefRows = userIds.length > 0
     ? await prisma.notificationPreference.findMany({
-        where: {
-          userId: { in: userIds },
-          OR: [{ emailEnabled: false }, { rsvpReminders: false }],
-        },
-        select: { userId: true },
+        where: { userId: { in: userIds } },
+        select: { userId: true, leagueId: true, emailEnabled: true, rsvpReminders: true },
       })
     : [];
-  const optedOutIds = new Set(optedOut.map((preference) => preference.userId));
+  const prefsByUser = new Map<string, typeof prefRows>();
+  for (const row of prefRows) {
+    const list = prefsByUser.get(row.userId) ?? [];
+    list.push(row);
+    prefsByUser.set(row.userId, list);
+  }
 
   // Send reminders for each event
   for (const event of upcomingEvents) {
     for (const rsvp of event.rsvps) {
-      if (optedOutIds.has(rsvp.user.id)) continue;
+      const pref = pickPreference(prefsByUser.get(rsvp.user.id) ?? [], event.team.leagueId);
+      if (pref && (!pref.emailEnabled || !pref.rsvpReminders)) continue;
       try {
         await sendRSVPReminderEmail({
           email: rsvp.user.email,
@@ -1145,6 +1175,7 @@ export async function sendEventNotifications(
                   email: true,
                   notificationPreferences: {
                     select: {
+                      leagueId: true,
                       eventNotifications: true,
                       emailEnabled: true,
                     },
@@ -1162,14 +1193,16 @@ export async function sendEventNotifications(
     throw new Error("Event not found");
   }
 
-  // Filter team members based on notification preferences
+  // Filter team members by the preference that applies to this event's league
+  // context (league override if present, else global). A league-scoped opt-out
+  // does not suppress notifications for a member's other teams/leagues.
+  const eventLeagueId = event.team.leagueId;
   const emails = event.team.members
-    .filter((member: { user: { notificationPreferences: Array<{ eventNotifications: boolean; emailEnabled: boolean }> } }) => {
-      const prefs = member.user.notificationPreferences;
-      // If no preferences set, default to sending
-      if (prefs.length === 0) return true;
-      // Check if any preference disables event notifications or email
-      return prefs.every((p) => p.eventNotifications && p.emailEnabled);
+    .filter((member: { user: { notificationPreferences: Array<{ leagueId: string | null; eventNotifications: boolean; emailEnabled: boolean }> } }) => {
+      const pref = pickPreference(member.user.notificationPreferences, eventLeagueId);
+      // No applicable preference row → default to sending
+      if (!pref) return true;
+      return pref.eventNotifications && pref.emailEnabled;
     })
     .map((member: { user: { email: string } }) => member.user.email);
 

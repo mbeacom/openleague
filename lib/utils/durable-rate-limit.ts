@@ -36,10 +36,17 @@ export const RATE_LIMITS = {
   PASSWORD_RESET_PER_IP: { limit: 10, windowSec: 15 * 60 },
   VERIFICATION_RESEND_PER_IP: { limit: 10, windowSec: 15 * 60 },
   /**
-   * Credentials-login attempts keyed by target email — unlike the in-memory
-   * proxy limiter, this survives cold starts and scale-out.
+   * Credentials-login attempts keyed by target email — a durable brute-force
+   * BACKSTOP that survives cold starts and scale-out, not the primary defense
+   * (bcrypt cost 12 already makes online guessing slow). The threshold is set
+   * high enough that a real user fat-fingering their password is never locked
+   * out; the tradeoff is that a per-email bucket is, by nature, a lockout
+   * vector — a determined third party spraying a known email can keep the
+   * bucket full. We accept that at this (deliberately high) limit because the
+   * blast radius is a single account and the alternative (a per-IP dimension)
+   * is trivially spoofable via X-Forwarded-For behind our proxy.
    */
-  LOGIN_PER_EMAIL: { limit: 10, windowSec: 15 * 60 },
+  LOGIN_PER_EMAIL: { limit: 50, windowSec: 15 * 60 },
   /** Admin-gated email fan-out (invitations and resends share one bucket). */
   INVITATION_SEND_PER_USER: { limit: 30, windowSec: 60 * 60 },
   /** League/team message fan-out per sender. */

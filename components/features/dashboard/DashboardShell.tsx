@@ -81,7 +81,7 @@ export default function DashboardShell({
       </Box>
 
       {/* Mobile Bottom Navigation */}
-      <MobileNavigation isLeagueMode={isLeagueMode} />
+      <MobileNavigation isLeagueMode={isLeagueMode} isPlatformAdmin={isPlatformAdmin} />
 
       {/* Keyboard Shortcuts Help Button */}
       <KeyboardShortcutsHelp />

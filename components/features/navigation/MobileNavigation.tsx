@@ -21,6 +21,7 @@ import {
   SportsHockey as SportsHockeyIcon,
   HowToReg as HowToRegIcon,
   ManageAccounts as ManageAccountsIcon,
+  AdminPanelSettings as AdminPanelSettingsIcon,
 } from '@mui/icons-material';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -29,9 +30,10 @@ import { useLeague } from '@/components/providers/LeagueProvider';
 
 interface MobileNavigationProps {
   isLeagueMode?: boolean;
+  isPlatformAdmin?: boolean;
 }
 
-export default function MobileNavigation({ isLeagueMode = false }: MobileNavigationProps) {
+export default function MobileNavigation({ isLeagueMode = false, isPlatformAdmin = false }: MobileNavigationProps) {
   const pathname = usePathname();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const menuOpen = Boolean(anchorEl);
@@ -225,6 +227,18 @@ export default function MobileNavigation({ isLeagueMode = false }: MobileNavigat
           </ListItemIcon>
           <ListItemText>Account</ListItemText>
         </MenuItem>
+        {isPlatformAdmin && (
+          <MenuItem
+            component={Link}
+            href="/admin"
+            onClick={handleMenuClose}
+          >
+            <ListItemIcon>
+              <AdminPanelSettingsIcon />
+            </ListItemIcon>
+            <ListItemText>Admin</ListItemText>
+          </MenuItem>
+        )}
         <MenuItem onClick={handleLogout}>
           <ListItemIcon>
             <LogoutIcon />

@@ -52,7 +52,13 @@ import {
   sendLeagueMemberAddedNotification,
 } from "@/lib/email/templates";
 
-function buildEvent(members: Array<{ email: string; prefs: Array<{ eventNotifications: boolean; emailEnabled: boolean }> }>) {
+function buildEvent(
+  members: Array<{
+    email: string;
+    prefs: Array<{ leagueId?: string | null; eventNotifications: boolean; emailEnabled: boolean }>;
+  }>,
+  teamLeagueId: string | null = null
+) {
   return {
     id: "evt1",
     type: "GAME",
@@ -63,8 +69,12 @@ function buildEvent(members: Array<{ email: string; prefs: Array<{ eventNotifica
     venue: null,
     team: {
       name: "Sharks",
+      leagueId: teamLeagueId,
       members: members.map(({ email, prefs }) => ({
-        user: { email, notificationPreferences: prefs },
+        user: {
+          email,
+          notificationPreferences: prefs.map((p) => ({ ...p, leagueId: p.leagueId ?? null })),
+        },
       })),
     },
   };
@@ -111,17 +121,63 @@ describe("sendEventNotifications preference filtering", () => {
     expect(message.to).toEqual([{ email: "keep@example.com" }]);
   });
 
-  it("treats any opted-out preference row (global or league) as an opt-out", async () => {
+  it("does not let a league-scoped opt-out suppress a standalone-team event", async () => {
+    // Standalone team (leagueId=null). Member is opted out only in League A;
+    // their global row is enabled. The League-A row must not apply here.
     mockPrisma.event.findUnique.mockResolvedValue(
       buildEvent([
         {
           email: "mixed@example.com",
           prefs: [
-            { eventNotifications: true, emailEnabled: true },
-            { eventNotifications: false, emailEnabled: true },
+            { leagueId: null, eventNotifications: true, emailEnabled: true },
+            { leagueId: "league-a", eventNotifications: false, emailEnabled: true },
           ],
         },
       ])
+    );
+
+    await sendEventNotifications("evt1", "created");
+
+    expect(mockSendEmail).toHaveBeenCalledTimes(1);
+    expect(mockSendEmail.mock.calls[0][0].to).toEqual([{ email: "mixed@example.com" }]);
+  });
+
+  it("applies a league override for an event in that league", async () => {
+    // Event belongs to League A. Global row enabled, League-A override off →
+    // the override wins and the member is suppressed.
+    mockPrisma.event.findUnique.mockResolvedValue(
+      buildEvent(
+        [
+          {
+            email: "override@example.com",
+            prefs: [
+              { leagueId: null, eventNotifications: true, emailEnabled: true },
+              { leagueId: "league-a", eventNotifications: false, emailEnabled: true },
+            ],
+          },
+        ],
+        "league-a"
+      )
+    );
+
+    await sendEventNotifications("evt1", "updated");
+
+    expect(mockSendEmail).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the global row for a league event with no override", async () => {
+    // Event in League A, member has only a global opt-out (no League-A row) →
+    // the global row applies and suppresses.
+    mockPrisma.event.findUnique.mockResolvedValue(
+      buildEvent(
+        [
+          {
+            email: "global-off@example.com",
+            prefs: [{ leagueId: null, eventNotifications: false, emailEnabled: true }],
+          },
+        ],
+        "league-a"
+      )
     );
 
     await sendEventNotifications("evt1", "created");
@@ -158,29 +214,40 @@ describe("sendRSVPReminders preference filtering", () => {
     startAt: new Date("2026-01-03T15:00:00Z"),
     location: "Rink B",
     opponent: null,
-    team: { name: "Sharks" },
+    team: { name: "Sharks", leagueId: null },
     rsvps: [
       { user: { id: "u1", name: "One", email: "u1@example.com" } },
       { user: { id: "u2", name: "Two", email: "u2@example.com" } },
     ],
   };
 
-  it("queries opt-outs for all pending users and skips opted-out ones", async () => {
+  it("loads preference rows for all pending users and skips opted-out ones", async () => {
     mockPrisma.event.findMany.mockResolvedValue([upcomingEvent]);
-    mockPrisma.notificationPreference.findMany.mockResolvedValue([{ userId: "u2" }]);
+    mockPrisma.notificationPreference.findMany.mockResolvedValue([
+      { userId: "u2", leagueId: null, emailEnabled: true, rsvpReminders: false },
+    ]);
 
     await sendRSVPReminders();
 
     expect(mockPrisma.notificationPreference.findMany).toHaveBeenCalledWith({
-      where: {
-        userId: { in: ["u1", "u2"] },
-        OR: [{ emailEnabled: false }, { rsvpReminders: false }],
-      },
-      select: { userId: true },
+      where: { userId: { in: ["u1", "u2"] } },
+      select: { userId: true, leagueId: true, emailEnabled: true, rsvpReminders: true },
     });
     expect(mockSendEmail).toHaveBeenCalledTimes(1);
     const message = mockSendEmail.mock.calls[0][0];
     expect(message.to).toEqual([{ email: "u1@example.com" }]);
+  });
+
+  it("does not let a league-scoped opt-out skip a standalone-team reminder", async () => {
+    mockPrisma.event.findMany.mockResolvedValue([upcomingEvent]);
+    // u1 is opted out only in League A; the standalone event uses the global row.
+    mockPrisma.notificationPreference.findMany.mockResolvedValue([
+      { userId: "u1", leagueId: "league-a", emailEnabled: true, rsvpReminders: false },
+    ]);
+
+    await sendRSVPReminders();
+
+    expect(mockSendEmail).toHaveBeenCalledTimes(2);
   });
 
   it("sends to everyone when no opt-out rows exist", async () => {
@@ -197,8 +264,8 @@ describe("sendRSVPReminders preference filtering", () => {
   it("sends nothing when every pending user opted out", async () => {
     mockPrisma.event.findMany.mockResolvedValue([upcomingEvent]);
     mockPrisma.notificationPreference.findMany.mockResolvedValue([
-      { userId: "u1" },
-      { userId: "u2" },
+      { userId: "u1", leagueId: null, emailEnabled: true, rsvpReminders: false },
+      { userId: "u2", leagueId: null, emailEnabled: false, rsvpReminders: true },
     ]);
 
     await sendRSVPReminders();
