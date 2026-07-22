@@ -1,7 +1,12 @@
 "use server";
 
+import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
 import { createVenueActivityLog } from "@/lib/services/venue-activity";
+import {
+  createOwnerVenueStaff,
+  ensureVenueStaffCoverage,
+} from "@/lib/services/venue-staff-bootstrap";
 import { requireUserId, requireVenueProfileManager } from "@/lib/auth/session";
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
@@ -12,8 +17,10 @@ import {
 } from "@/lib/utils/public-venues";
 import {
   createVenueOrganizationSchema,
+  createVenueSchema,
   publishVenueProfileSchema,
   updateVenueProfileSchema,
+  type CreateVenueInput,
   type CreateVenueOrganizationInput,
   type UpdateVenueProfileInput,
 } from "@/lib/utils/validation";
@@ -145,14 +152,9 @@ export async function createVenueOrganization(
         select: { id: true, profileStatus: true },
       });
 
-      await tx.venueStaff.create({
-        data: {
-          organizationId: organization.id,
-          userId,
-          role: "OWNER",
-          status: "ACTIVE",
-          joinedAt: new Date(),
-        },
+      await createOwnerVenueStaff(tx, {
+        organizationId: organization.id,
+        userId,
       });
 
       await tx.venueActivityLog.create({
@@ -182,6 +184,176 @@ export async function createVenueOrganization(
       throw error;
     }
     return { success: false, error: "Failed to create venue organization. Please try again." };
+  }
+}
+
+// Kept module-private: schema for the attach action below. Lives here rather
+// than lib/utils/validation.ts to keep the attach contract next to its only
+// consumer; "use server" files may not export non-async values.
+const attachVenueToOrganizationSchema = z.object({
+  organizationId: z.string().cuid("Invalid organization ID format"),
+  venueId: z.string().cuid("Invalid venue ID format"),
+});
+
+/**
+ * Add a new venue to an existing venue organization. Mirrors the venue-create
+ * block of onboarding (PUBLIC visibility, DRAFT profile, activity log) so org
+ * venues always carry audit history, unlike the generic createVenue action.
+ */
+export async function createOrganizationVenue(
+  input: CreateVenueInput
+): Promise<ActionResult<{ venueId: string; name: string; profileStatus: string }>> {
+  try {
+    const validated = createVenueSchema.parse(input);
+    if (!validated.organizationId) {
+      return { success: false, error: "Organization is required" };
+    }
+    const organizationId = validated.organizationId;
+    const userId = await requireVenueProfileManager(organizationId);
+
+    const venue = await prisma.$transaction(async (tx) => {
+      const created = await tx.venue.create({
+        data: {
+          name: validated.name,
+          organizationId,
+          address: validated.address || null,
+          city: validated.city || null,
+          state: validated.state || null,
+          zipCode: validated.zipCode || null,
+          surfaceType: validated.surfaceType,
+          capacity: validated.capacity ?? null,
+          amenities: validated.amenities,
+          phone: validated.phone || null,
+          website: validated.website || null,
+          notes: validated.notes || null,
+          visibility: "PUBLIC",
+          profileStatus: "DRAFT",
+          createdById: userId,
+        },
+        select: { id: true, name: true, profileStatus: true },
+      });
+
+      await ensureVenueStaffCoverage(tx, {
+        organizationId,
+        userId,
+        venueId: created.id,
+      });
+
+      await createVenueActivityLog(tx, {
+        venueId: created.id,
+        actorId: userId,
+        action: "VENUE_CREATED",
+        resourceType: "Venue",
+        resourceId: created.id,
+        summary: "Added venue to organization",
+      });
+
+      return created;
+    });
+
+    revalidatePath("/venue-admin");
+    revalidatePath(`/venue-admin/${organizationId}`);
+    revalidatePath("/rinks");
+
+    return {
+      success: true,
+      data: { venueId: venue.id, name: venue.name, profileStatus: venue.profileStatus },
+    };
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("NEXT_REDIRECT")) {
+      throw error;
+    }
+    return { success: false, error: "Failed to add venue. Please try again." };
+  }
+}
+
+/**
+ * Attach an existing standalone venue to a venue organization. Requires
+ * authorization on both sides: the caller must be an OWNER/MANAGER of the
+ * organization AND the creator of the venue being attached. Team- and
+ * league-owned venues, and venues already in an organization, are rejected.
+ */
+export async function attachVenueToOrganization(
+  input: { organizationId: string; venueId: string }
+): Promise<ActionResult<{ venueId: string }>> {
+  try {
+    const validated = attachVenueToOrganizationSchema.parse(input);
+    const userId = await requireVenueProfileManager(validated.organizationId);
+
+    const venue = await prisma.venue.findUnique({
+      where: { id: validated.venueId },
+      select: {
+        id: true,
+        organizationId: true,
+        teamId: true,
+        leagueId: true,
+        createdById: true,
+      },
+    });
+
+    if (!venue) {
+      return { success: false, error: "Venue not found" };
+    }
+    if (venue.organizationId) {
+      return {
+        success: false,
+        error:
+          venue.organizationId === validated.organizationId
+            ? "This venue already belongs to this organization"
+            : "This venue already belongs to another organization",
+      };
+    }
+    if (venue.teamId || venue.leagueId) {
+      return {
+        success: false,
+        error: "Team- and league-owned venues cannot be attached to a venue organization",
+      };
+    }
+    if (venue.createdById !== userId) {
+      return { success: false, error: "You can only attach venues you created" };
+    }
+
+    await prisma.$transaction(async (tx) => {
+      // Re-check ownership constraints in the write itself so a concurrent
+      // attach or team/league assignment cannot slip between read and update.
+      const attached = await tx.venue.updateMany({
+        where: {
+          id: venue.id,
+          organizationId: null,
+          teamId: null,
+          leagueId: null,
+          createdById: userId,
+        },
+        data: { organizationId: validated.organizationId },
+      });
+      if (attached.count === 0) {
+        throw new Error("VENUE_NOT_ATTACHABLE");
+      }
+
+      await createVenueActivityLog(tx, {
+        venueId: venue.id,
+        actorId: userId,
+        action: "VENUE_ATTACHED_TO_ORGANIZATION",
+        resourceType: "Venue",
+        resourceId: venue.id,
+        summary: "Attached existing venue to organization",
+      });
+    });
+
+    revalidatePath("/venue-admin");
+    revalidatePath(`/venue-admin/${validated.organizationId}`);
+    revalidatePath("/venues");
+    revalidatePath("/rinks");
+
+    return { success: true, data: { venueId: venue.id } };
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("NEXT_REDIRECT")) {
+      throw error;
+    }
+    if (error instanceof Error && error.message === "VENUE_NOT_ATTACHABLE") {
+      return { success: false, error: "This venue can no longer be attached. Please refresh and try again." };
+    }
+    return { success: false, error: "Failed to attach venue. Please try again." };
   }
 }
 
@@ -397,12 +569,22 @@ export async function getVenueAdminDashboard() {
           },
           orderBy: { name: "asc" },
         },
+        staff: {
+          where: { userId, status: "ACTIVE" },
+          select: { role: true },
+        },
       },
       orderBy: { name: "asc" },
     });
 
     return {
-      organizations,
+      organizations: organizations.map(({ staff, ...organization }) => ({
+        ...organization,
+        // Gates management CTAs (e.g. Add venue) in the dashboard UI.
+        viewerCanManageVenues: staff.some(
+          (member) => member.role === "OWNER" || member.role === "MANAGER"
+        ),
+      })),
     };
   } catch (error) {
     if (isMissingVenueManagementSchemaError(error)) {

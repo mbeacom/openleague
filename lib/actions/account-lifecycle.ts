@@ -10,6 +10,12 @@ import {
   sendVerificationEmail,
 } from "@/lib/email/templates";
 import {
+  checkRateLimit,
+  getClientIp,
+  rateLimitMessage,
+  RATE_LIMITS,
+} from "@/lib/utils/durable-rate-limit";
+import {
   forgotPasswordSchema,
   resetPasswordSchema,
   type ForgotPasswordInput,
@@ -32,6 +38,17 @@ export async function requestPasswordReset(
     "If an account exists for that address, we've sent a password reset link. Check your email.";
   try {
     const validated = forgotPasswordSchema.parse(input);
+
+    // Per-IP durable throttle: caps cross-account spraying before identity is
+    // known. Still enumeration-safe — the rejection depends only on request
+    // volume from this IP, never on whether the account exists.
+    const ip = await getClientIp();
+    if (ip) {
+      const rl = await checkRateLimit(`pw-reset:ip:${ip}`, RATE_LIMITS.PASSWORD_RESET_PER_IP);
+      if (!rl.allowed) {
+        return { success: false, error: rateLimitMessage(rl.retryAfterSec) };
+      }
+    }
 
     const user = await prisma.user.findUnique({
       where: { email: validated.email },
@@ -113,6 +130,18 @@ export async function resendVerificationEmail(
     "If an unverified account exists for that address, we've sent a new verification link.";
   try {
     const validated = forgotPasswordSchema.parse(input);
+
+    // Per-IP durable throttle, enumeration-safe (see requestPasswordReset).
+    const ip = await getClientIp();
+    if (ip) {
+      const rl = await checkRateLimit(
+        `verify-resend:ip:${ip}`,
+        RATE_LIMITS.VERIFICATION_RESEND_PER_IP
+      );
+      if (!rl.allowed) {
+        return { success: false, error: rateLimitMessage(rl.retryAfterSec) };
+      }
+    }
 
     const user = await prisma.user.findUnique({
       where: { email: validated.email },

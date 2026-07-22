@@ -19,6 +19,7 @@ import {
   sendVenueStaffSignupInviteEmail,
 } from "@/lib/email/templates";
 import { sendInvitationSchema, sendLeagueInvitationSchema, type SendInvitationInput, type SendLeagueInvitationInput } from "@/lib/utils/validation";
+import { checkRateLimit, rateLimitMessage, RATE_LIMITS } from "@/lib/utils/durable-rate-limit";
 
 export type ActionResult<T> =
   | { success: true; data: T }
@@ -60,6 +61,12 @@ export async function sendInvitation(
 
     // Check authentication and authorization - only ADMIN can send invitations
     const userId = await requireTeamAdmin(validated.teamId);
+
+    // All invitation send/resend actions share one durable per-user bucket.
+    const rl = await checkRateLimit(`invite:user:${userId}`, RATE_LIMITS.INVITATION_SEND_PER_USER);
+    if (!rl.allowed) {
+      return { success: false, error: rateLimitMessage(rl.retryAfterSec) };
+    }
 
     // Fetch team and inviter information once (used in both flows)
     const [team, inviter] = await Promise.all([
@@ -253,6 +260,13 @@ export async function sendLeagueInvitation(
 
     // Check if user is league admin
     const userId = await requireUserId();
+
+    // Shared durable per-user bucket across invitation send/resend actions.
+    const rl = await checkRateLimit(`invite:user:${userId}`, RATE_LIMITS.INVITATION_SEND_PER_USER);
+    if (!rl.allowed) {
+      return { success: false, error: rateLimitMessage(rl.retryAfterSec) };
+    }
+
     const leagueUser = await prisma.leagueUser.findFirst({
       where: {
         userId,
@@ -474,6 +488,13 @@ export async function sendLeagueMemberInvitation(
     const validated = sendLeagueMemberInvitationSchema.parse(input);
 
     const userId = await requireUserId();
+
+    // Shared durable per-user bucket across invitation send/resend actions.
+    const rl = await checkRateLimit(`invite:user:${userId}`, RATE_LIMITS.INVITATION_SEND_PER_USER);
+    if (!rl.allowed) {
+      return { success: false, error: rateLimitMessage(rl.retryAfterSec) };
+    }
+
     const requesterMembership = await prisma.leagueUser.findFirst({
       where: {
         userId,
@@ -663,6 +684,12 @@ export async function resendInvitation(
 
     // Check authentication and authorization against the invitation's target
     const userId = await requireUserId();
+
+    // Shared durable per-user bucket across invitation send/resend actions.
+    const rl = await checkRateLimit(`invite:user:${userId}`, RATE_LIMITS.INVITATION_SEND_PER_USER);
+    if (!rl.allowed) {
+      return { success: false, error: rateLimitMessage(rl.retryAfterSec) };
+    }
 
     let authorized = false;
     if (invitation.teamId && invitation.team) {

@@ -82,21 +82,54 @@ export const NotificationPreferencesComponent: React.FC<NotificationPreferencesP
     return () => { cancelled = true; };
   }, [leagueId]);
 
-  const handlePreferenceChange = (key: keyof NotificationPreferences, value: boolean) => {
+  // Applies a toggle to the right slice of state: a league-scoped change
+  // updates that league's entry in allPreferences; otherwise the global
+  // (or single-league mode) preferences.
+  const applyChange = (
+    key: keyof NotificationPreferences,
+    value: boolean,
+    scopeLeagueId?: string
+  ) => {
+    if (scopeLeagueId) {
+      setAllPreferences((current) =>
+        current
+          ? {
+              ...current,
+              leagues: current.leagues.map((league) =>
+                league.leagueId === scopeLeagueId
+                  ? { ...league, preferences: { ...league.preferences, [key]: value } }
+                  : league
+              ),
+            }
+          : current
+      );
+    } else {
+      setPreferences((current) => (current ? { ...current, [key]: value } : current));
+    }
+  };
+
+  const handlePreferenceChange = (
+    key: keyof NotificationPreferences,
+    value: boolean,
+    scopeLeagueId?: string
+  ) => {
     if (!preferences) return;
 
-    const updatedPreferences = {
-      ...preferences,
-      [key]: value,
-    };
+    // League-accordion toggles carry their own scope so they never clobber
+    // the global row; otherwise fall back to the component-level leagueId.
+    const targetLeagueId = scopeLeagueId ?? leagueId;
+    const previousValue = scopeLeagueId
+      ? allPreferences?.leagues.find((league) => league.leagueId === scopeLeagueId)
+          ?.preferences[key]
+      : preferences[key];
 
-    setPreferences(updatedPreferences);
+    applyChange(key, value, scopeLeagueId);
 
     // Auto-save the change
     startTransition(async () => {
       try {
         const result = await updateNotificationPreferences({
-          leagueId,
+          leagueId: targetLeagueId,
           preferences: { [key]: value },
         });
 
@@ -106,11 +139,11 @@ export const NotificationPreferencesComponent: React.FC<NotificationPreferencesP
         } else {
           setError(result.error);
           // Revert the change on error
-          setPreferences(preferences);
+          if (previousValue !== undefined) applyChange(key, previousValue, scopeLeagueId);
         }
       } catch {
         setError("Failed to update preferences");
-        setPreferences(preferences);
+        if (previousValue !== undefined) applyChange(key, previousValue, scopeLeagueId);
       }
     });
   };
@@ -126,7 +159,7 @@ export const NotificationPreferencesComponent: React.FC<NotificationPreferencesP
         title={
           <Box display="flex" alignItems="center" gap={1}>
             <NotificationsIcon color="primary" />
-            <Typography variant="h6">{title}</Typography>
+            <Typography variant="h6" sx={{ fontWeight: 700 }}>{title}</Typography>
             {leagueContext && (
               <Chip label={leagueContext.leagueName} size="small" variant="outlined" />
             )}
@@ -142,7 +175,7 @@ export const NotificationPreferencesComponent: React.FC<NotificationPreferencesP
               control={
                 <Switch
                   checked={prefs.emailEnabled}
-                  onChange={(e) => handlePreferenceChange("emailEnabled", e.target.checked)}
+                  onChange={(e) => handlePreferenceChange("emailEnabled", e.target.checked, leagueContext?.leagueId)}
                   disabled={isPending}
                 />
               }
@@ -154,7 +187,7 @@ export const NotificationPreferencesComponent: React.FC<NotificationPreferencesP
               }
             />
             <Typography variant="body2" color="text.secondary" sx={{ ml: 4 }}>
-              Receive email notifications for league activities
+              Receive email notifications for team and league activity
             </Typography>
           </Box>
 
@@ -169,7 +202,7 @@ export const NotificationPreferencesComponent: React.FC<NotificationPreferencesP
             control={
               <Switch
                 checked={prefs.leagueMessages}
-                onChange={(e) => handlePreferenceChange("leagueMessages", e.target.checked)}
+                onChange={(e) => handlePreferenceChange("leagueMessages", e.target.checked, leagueContext?.leagueId)}
                 disabled={isPending || !prefs.emailEnabled}
               />
             }
@@ -183,7 +216,7 @@ export const NotificationPreferencesComponent: React.FC<NotificationPreferencesP
             control={
               <Switch
                 checked={prefs.leagueAnnouncements}
-                onChange={(e) => handlePreferenceChange("leagueAnnouncements", e.target.checked)}
+                onChange={(e) => handlePreferenceChange("leagueAnnouncements", e.target.checked, leagueContext?.leagueId)}
                 disabled={isPending || !prefs.emailEnabled}
               />
             }
@@ -197,7 +230,7 @@ export const NotificationPreferencesComponent: React.FC<NotificationPreferencesP
             control={
               <Switch
                 checked={prefs.eventNotifications}
-                onChange={(e) => handlePreferenceChange("eventNotifications", e.target.checked)}
+                onChange={(e) => handlePreferenceChange("eventNotifications", e.target.checked, leagueContext?.leagueId)}
                 disabled={isPending || !prefs.emailEnabled}
               />
             }
@@ -211,7 +244,7 @@ export const NotificationPreferencesComponent: React.FC<NotificationPreferencesP
             control={
               <Switch
                 checked={prefs.rsvpReminders}
-                onChange={(e) => handlePreferenceChange("rsvpReminders", e.target.checked)}
+                onChange={(e) => handlePreferenceChange("rsvpReminders", e.target.checked, leagueContext?.leagueId)}
                 disabled={isPending || !prefs.emailEnabled}
               />
             }
@@ -225,14 +258,28 @@ export const NotificationPreferencesComponent: React.FC<NotificationPreferencesP
             control={
               <Switch
                 checked={prefs.teamInvitations}
-                onChange={(e) => handlePreferenceChange("teamInvitations", e.target.checked)}
+                onChange={(e) => handlePreferenceChange("teamInvitations", e.target.checked, leagueContext?.leagueId)}
                 disabled={isPending || !prefs.emailEnabled}
               />
             }
             label="Team Invitations"
           />
-          <Typography variant="body2" color="text.secondary" sx={{ ml: 4, mb: 2 }}>
+          <Typography variant="body2" color="text.secondary" sx={{ ml: 4, mb: 1 }}>
             Invitations to join teams
+          </Typography>
+
+          <FormControlLabel
+            control={
+              <Switch
+                checked={prefs.practicePlanNotifications}
+                onChange={(e) => handlePreferenceChange("practicePlanNotifications", e.target.checked, leagueContext?.leagueId)}
+                disabled={isPending || !prefs.emailEnabled}
+              />
+            }
+            label="Practice Plan Notifications"
+          />
+          <Typography variant="body2" color="text.secondary" sx={{ ml: 4, mb: 2 }}>
+            Practice plans shared with or updated for your team
           </Typography>
 
           <Divider sx={{ my: 2 }} />
@@ -246,7 +293,7 @@ export const NotificationPreferencesComponent: React.FC<NotificationPreferencesP
             control={
               <Switch
                 checked={prefs.urgentOnly}
-                onChange={(e) => handlePreferenceChange("urgentOnly", e.target.checked)}
+                onChange={(e) => handlePreferenceChange("urgentOnly", e.target.checked, leagueContext?.leagueId)}
                 disabled={isPending || !prefs.emailEnabled}
               />
             }
@@ -265,7 +312,7 @@ export const NotificationPreferencesComponent: React.FC<NotificationPreferencesP
             control={
               <Switch
                 checked={prefs.batchDelivery}
-                onChange={(e) => handlePreferenceChange("batchDelivery", e.target.checked)}
+                onChange={(e) => handlePreferenceChange("batchDelivery", e.target.checked, leagueContext?.leagueId)}
                 disabled={isPending || !prefs.emailEnabled || prefs.urgentOnly}
               />
             }
@@ -318,8 +365,8 @@ export const NotificationPreferencesComponent: React.FC<NotificationPreferencesP
         <Box>
           {/* Global Preferences */}
           {renderPreferenceSection(
-            "Global Notification Preferences",
-            "Default notification preferences that apply across all leagues",
+            "Notification Preferences",
+            "Choose which emails you receive for team and league activity",
             preferences
           )}
 

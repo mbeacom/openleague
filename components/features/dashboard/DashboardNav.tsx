@@ -26,6 +26,8 @@ import {
   ConfirmationNumber as ConfirmationNumberIcon,
   HowToReg as HowToRegIcon,
   ManageAccounts as ManageAccountsIcon,
+  Forum as ForumIcon,
+  AdminPanelSettings as AdminPanelSettingsIcon,
 } from "@mui/icons-material";
 import { logout } from "@/lib/actions/logout";
 import { useLeague } from "@/components/providers/LeagueProvider";
@@ -38,9 +40,14 @@ interface NavItem {
 
 interface DashboardNavProps {
   isLeagueMode?: boolean;
+  /** Platform (system) admin — shows the /admin moderation hub entry. */
+  isPlatformAdmin?: boolean;
 }
 
-export default function DashboardNav({ isLeagueMode = false }: DashboardNavProps) {
+export default function DashboardNav({
+  isLeagueMode = false,
+  isPlatformAdmin = false,
+}: DashboardNavProps) {
   const pathname = usePathname();
 
   // Use league context if available
@@ -54,6 +61,10 @@ export default function DashboardNav({ isLeagueMode = false }: DashboardNavProps
 
   // Generate navigation items based on mode and context
   const getNavItems = (): NavItem[] => {
+    const adminItems: NavItem[] = isPlatformAdmin
+      ? [{ label: "Admin", path: "/admin", icon: <AdminPanelSettingsIcon /> }]
+      : [];
+
     if (!isLeagueMode) {
       // Single-team mode navigation (original)
       return [
@@ -68,6 +79,7 @@ export default function DashboardNav({ isLeagueMode = false }: DashboardNavProps
         { label: "Practice Planner", path: "/practice-planner", icon: <SportsHockeyIcon /> },
         { label: "Team Settings", path: "/settings", icon: <SettingsIcon /> },
         { label: "Account", path: "/account", icon: <ManageAccountsIcon /> },
+        ...adminItems,
       ];
     }
 
@@ -77,6 +89,7 @@ export default function DashboardNav({ isLeagueMode = false }: DashboardNavProps
       { label: "Dashboard", path: `${leaguePrefix}/dashboard`, icon: <DashboardIcon /> },
       { label: "Teams", path: `${leaguePrefix}/teams`, icon: <GroupsIcon /> },
       { label: "Schedule", path: `${leaguePrefix}/schedule`, icon: <CalendarIcon /> },
+      { label: "Messages", path: `${leaguePrefix}/messages`, icon: <ForumIcon /> },
       { label: "Signup Events", path: "/signup-events", icon: <HowToRegIcon /> },
       // League-scoped venues; falls back to the global page without league context
       {
@@ -86,6 +99,7 @@ export default function DashboardNav({ isLeagueMode = false }: DashboardNavProps
       },
       { label: "Venue Admin", path: "/venue-admin", icon: <StorefrontIcon /> },
       { label: "My Registrations", path: "/my-registrations", icon: <ConfirmationNumberIcon /> },
+      { label: "Seasons", path: "/seasons", icon: <DateRangeIcon /> },
       { label: "Roster", path: `${leaguePrefix}/roster`, icon: <PeopleIcon /> },
       { label: "Statistics", path: `${leaguePrefix}/statistics`, icon: <AnalyticsIcon /> },
       { label: "Reports", path: `${leaguePrefix}/reports`, icon: <ReportsIcon /> },
@@ -93,6 +107,7 @@ export default function DashboardNav({ isLeagueMode = false }: DashboardNavProps
         ? [{ label: "Settings", path: `${leaguePrefix}/settings`, icon: <SettingsIcon /> }]
         : []),
       { label: "Account", path: "/account", icon: <ManageAccountsIcon /> },
+      ...adminItems,
     ];
   };
 

@@ -15,6 +15,7 @@ import {
   type GetTeamMessagesInput,
 } from "@/lib/utils/validation";
 import { notificationService } from "@/lib/services/notification";
+import { checkRateLimit, rateLimitMessage, RATE_LIMITS } from "@/lib/utils/durable-rate-limit";
 
 export type ActionResult<T> =
   | { success: true; data: T }
@@ -32,6 +33,12 @@ export async function sendLeagueMessage(
 
     // Check authentication
     const userId = await requireUserId();
+
+    // League and team messages share one durable per-sender bucket.
+    const rl = await checkRateLimit(`message:user:${userId}`, RATE_LIMITS.MESSAGE_SEND_PER_USER);
+    if (!rl.allowed) {
+      return { success: false, error: rateLimitMessage(rl.retryAfterSec) };
+    }
 
     // Verify user has permission to send messages in this league
     const leagueUser = await prisma.leagueUser.findFirst({
@@ -217,6 +224,12 @@ export async function sendTeamMessage(
   try {
     const validated = sendTeamMessageSchema.parse(input);
     const userId = await requireUserId();
+
+    // League and team messages share one durable per-sender bucket.
+    const rl = await checkRateLimit(`message:user:${userId}`, RATE_LIMITS.MESSAGE_SEND_PER_USER);
+    if (!rl.allowed) {
+      return { success: false, error: rateLimitMessage(rl.retryAfterSec) };
+    }
 
     // Only a team ADMIN may message their own team.
     if (!(await isTeamAdmin(userId, validated.teamId))) {

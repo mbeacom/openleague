@@ -16,7 +16,9 @@ const { mockRequireUserId, mockRequireVenueProfileManager, mockPrisma } = vi.hoi
     venue: {
       create: vi.fn(),
       findFirst: vi.fn(),
+      findUnique: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
     },
     venueStaff: {
       create: vi.fn(),
@@ -31,6 +33,7 @@ const { mockRequireUserId, mockRequireVenueProfileManager, mockPrisma } = vi.hoi
 vi.mock("@/lib/auth/session", () => ({
   requireUserId: (...args: unknown[]) => mockRequireUserId(...args),
   requireVenueProfileManager: (...args: unknown[]) => mockRequireVenueProfileManager(...args),
+  VENUE_PROFILE_ROLES: ["OWNER", "MANAGER"],
 }));
 
 vi.mock("@/lib/db/prisma", () => ({
@@ -38,6 +41,8 @@ vi.mock("@/lib/db/prisma", () => ({
 }));
 
 import {
+  attachVenueToOrganization,
+  createOrganizationVenue,
   createVenueOrganization,
   publishVenueProfile,
   updateVenueProfile,
@@ -97,6 +102,194 @@ describe("createVenueOrganization", () => {
         }),
       })
     );
+  });
+});
+
+describe("createOrganizationVenue", () => {
+  const input = {
+    organizationId: ORGANIZATION_ID,
+    name: "Practice Rink",
+    surfaceType: "ICE" as const,
+    amenities: [],
+    visibility: "PUBLIC" as const,
+  };
+
+  it("creates a draft org venue with an activity log after profile-manager authorization", async () => {
+    mockPrisma.venue.create.mockResolvedValue({
+      id: VENUE_ID,
+      name: "Practice Rink",
+      profileStatus: "DRAFT",
+    });
+    mockPrisma.venueActivityLog.create.mockResolvedValue({ id: "cllogxxxxxxxxxxxxxxxxxxxxxxx" });
+
+    const result = await createOrganizationVenue(input);
+
+    expect(result.success).toBe(true);
+    expect(mockRequireVenueProfileManager).toHaveBeenCalledWith(ORGANIZATION_ID);
+    expect(mockPrisma.venue.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          organizationId: ORGANIZATION_ID,
+          name: "Practice Rink",
+          visibility: "PUBLIC",
+          profileStatus: "DRAFT",
+          createdById: USER_ID,
+        }),
+      })
+    );
+    expect(mockPrisma.venueActivityLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          action: "VENUE_CREATED",
+          actorId: USER_ID,
+          venueId: VENUE_ID,
+        }),
+      })
+    );
+    // Org-wide OWNER/MANAGER coverage exists (default findFirst mock), so no
+    // per-venue staff row is bootstrapped.
+    expect(mockPrisma.venueStaff.create).not.toHaveBeenCalled();
+  });
+
+  it("bootstraps a per-venue OWNER staff row when the creator has no org-wide coverage", async () => {
+    mockPrisma.venueStaff.findFirst.mockResolvedValueOnce(null);
+    mockPrisma.venue.create.mockResolvedValue({
+      id: VENUE_ID,
+      name: "Practice Rink",
+      profileStatus: "DRAFT",
+    });
+    mockPrisma.venueActivityLog.create.mockResolvedValue({ id: "cllogxxxxxxxxxxxxxxxxxxxxxxx" });
+
+    const result = await createOrganizationVenue(input);
+
+    expect(result.success).toBe(true);
+    expect(mockPrisma.venueStaff.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          organizationId: ORGANIZATION_ID,
+          userId: USER_ID,
+          venueId: VENUE_ID,
+          role: "OWNER",
+          status: "ACTIVE",
+        }),
+      })
+    );
+  });
+
+  it("rejects input without an organizationId before any authorization", async () => {
+    const result = await createOrganizationVenue({
+      name: "Practice Rink",
+      surfaceType: "ICE",
+      amenities: [],
+      visibility: "PUBLIC",
+    });
+
+    expect(result.success).toBe(false);
+    expect(mockRequireVenueProfileManager).not.toHaveBeenCalled();
+    expect(mockPrisma.venue.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("attachVenueToOrganization", () => {
+  const standaloneVenue = {
+    id: VENUE_ID,
+    organizationId: null,
+    teamId: null,
+    leagueId: null,
+    createdById: USER_ID,
+  };
+
+  it("attaches a standalone venue the caller created and logs activity", async () => {
+    mockPrisma.venue.findUnique.mockResolvedValue(standaloneVenue);
+    mockPrisma.venue.updateMany.mockResolvedValue({ count: 1 });
+    mockPrisma.venueActivityLog.create.mockResolvedValue({ id: "cllogxxxxxxxxxxxxxxxxxxxxxxx" });
+
+    const result = await attachVenueToOrganization({
+      organizationId: ORGANIZATION_ID,
+      venueId: VENUE_ID,
+    });
+
+    expect(result.success).toBe(true);
+    expect(mockRequireVenueProfileManager).toHaveBeenCalledWith(ORGANIZATION_ID);
+    expect(mockPrisma.venue.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          id: VENUE_ID,
+          organizationId: null,
+          teamId: null,
+          leagueId: null,
+          createdById: USER_ID,
+        }),
+        data: { organizationId: ORGANIZATION_ID },
+      })
+    );
+    expect(mockPrisma.venueActivityLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          action: "VENUE_ATTACHED_TO_ORGANIZATION",
+          actorId: USER_ID,
+          venueId: VENUE_ID,
+        }),
+      })
+    );
+  });
+
+  it("rejects venues created by someone else", async () => {
+    mockPrisma.venue.findUnique.mockResolvedValue({
+      ...standaloneVenue,
+      createdById: "clusrzzzzzzzzzzzzzzzzzzzzzzz",
+    });
+
+    const result = await attachVenueToOrganization({
+      organizationId: ORGANIZATION_ID,
+      venueId: VENUE_ID,
+    });
+
+    expect(result.success).toBe(false);
+    expect(mockPrisma.venue.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("rejects venues that already belong to an organization", async () => {
+    mockPrisma.venue.findUnique.mockResolvedValue({
+      ...standaloneVenue,
+      organizationId: "clorgyyyyyyyyyyyyyyyyyyyyyyy",
+    });
+
+    const result = await attachVenueToOrganization({
+      organizationId: ORGANIZATION_ID,
+      venueId: VENUE_ID,
+    });
+
+    expect(result.success).toBe(false);
+    expect(mockPrisma.venue.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("rejects team-owned venues", async () => {
+    mockPrisma.venue.findUnique.mockResolvedValue({
+      ...standaloneVenue,
+      teamId: "clteamxxxxxxxxxxxxxxxxxxxxxx",
+    });
+
+    const result = await attachVenueToOrganization({
+      organizationId: ORGANIZATION_ID,
+      venueId: VENUE_ID,
+    });
+
+    expect(result.success).toBe(false);
+    expect(mockPrisma.venue.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("returns a friendly error when a concurrent write makes the venue unattachable", async () => {
+    mockPrisma.venue.findUnique.mockResolvedValue(standaloneVenue);
+    mockPrisma.venue.updateMany.mockResolvedValue({ count: 0 });
+
+    const result = await attachVenueToOrganization({
+      organizationId: ORGANIZATION_ID,
+      venueId: VENUE_ID,
+    });
+
+    expect(result.success).toBe(false);
+    expect(mockPrisma.venueActivityLog.create).not.toHaveBeenCalled();
   });
 });
 

@@ -36,6 +36,7 @@ export const AUTH_ERROR_CODES = {
   INVALID_CREDENTIALS: "invalid_credentials",
   ACCOUNT_NOT_APPROVED: "account_not_approved",
   EMAIL_NOT_VERIFIED: "email_not_verified",
+  RATE_LIMITED: "rate_limited",
 } as const;
 
 /**
@@ -54,4 +55,5 @@ export const AUTH_MESSAGES = {
   PASSWORD_RESET_SUCCESS_MESSAGE: "Password updated! Log in with your new password.",
   EMAIL_NOT_VERIFIED: "Please verify your email address first. Check your inbox for the verification link, or resend it below.",
   ACCOUNT_NOT_APPROVED: "This account has been suspended. Please contact support.",
+  RATE_LIMITED: "Too many sign-in attempts. Please wait a few minutes and try again.",
 } as const;

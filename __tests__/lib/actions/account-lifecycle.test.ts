@@ -15,6 +15,8 @@ const mocks = vi.hoisted(() => ({
   sendVerificationEmail: vi.fn(),
   sendEmailChangedNoticeEmail: vi.fn(),
   hash: vi.fn(),
+  checkRateLimit: vi.fn(),
+  getClientIp: vi.fn(),
 }));
 
 vi.mock("@/lib/db/prisma", () => ({
@@ -34,6 +36,19 @@ vi.mock("@/lib/email/templates", () => ({
 
 vi.mock("bcryptjs", () => ({
   hash: mocks.hash,
+}));
+
+vi.mock("@/lib/utils/durable-rate-limit", () => ({
+  checkRateLimit: mocks.checkRateLimit,
+  getClientIp: mocks.getClientIp,
+  rateLimitMessage: (retryAfterSec?: number) => {
+    const minutes = Math.max(1, Math.ceil((retryAfterSec ?? 60) / 60));
+    return `Too many requests — try again in ${minutes} minute${minutes === 1 ? "" : "s"}.`;
+  },
+  RATE_LIMITS: {
+    PASSWORD_RESET_PER_IP: { limit: 10, windowSec: 900 },
+    VERIFICATION_RESEND_PER_IP: { limit: 10, windowSec: 900 },
+  },
 }));
 
 import {
@@ -56,6 +71,8 @@ beforeEach(() => {
   mocks.sendVerificationEmail.mockResolvedValue(undefined);
   mocks.sendEmailChangedNoticeEmail.mockResolvedValue(undefined);
   mocks.hash.mockResolvedValue("hashed-password");
+  mocks.checkRateLimit.mockResolvedValue({ allowed: true });
+  mocks.getClientIp.mockResolvedValue("1.2.3.4");
 });
 
 describe("requestPasswordReset", () => {
@@ -107,6 +124,31 @@ describe("requestPasswordReset", () => {
   it("rejects an invalid email shape", async () => {
     const result = await requestPasswordReset({ email: "not-an-email" });
     expect(result).toEqual({ success: false, error: "Please enter a valid email address" });
+  });
+
+  it("rejects when the per-IP rate limit is exceeded, before any user lookup", async () => {
+    mocks.checkRateLimit.mockResolvedValue({ allowed: false, retryAfterSec: 900 });
+
+    const result = await requestPasswordReset({ email: "someone@example.com" });
+    expect(result).toEqual({
+      success: false,
+      error: "Too many requests — try again in 15 minutes.",
+    });
+
+    expect(mocks.checkRateLimit).toHaveBeenCalledWith("pw-reset:ip:1.2.3.4", {
+      limit: 10,
+      windowSec: 900,
+    });
+    expect(mocks.user.findUnique).not.toHaveBeenCalled();
+    expect(mocks.sendPasswordResetEmail).not.toHaveBeenCalled();
+  });
+
+  it("skips the per-IP check when no client IP is available", async () => {
+    mocks.getClientIp.mockResolvedValue(null);
+
+    const result = await requestPasswordReset({ email: "someone@example.com" });
+    expect(result.success).toBe(true);
+    expect(mocks.checkRateLimit).not.toHaveBeenCalled();
   });
 });
 
@@ -179,6 +221,23 @@ describe("resendVerificationEmail", () => {
       name: "Someone",
       token: "raw-token",
     });
+  });
+
+  it("rejects when the per-IP rate limit is exceeded, before any user lookup", async () => {
+    mocks.checkRateLimit.mockResolvedValue({ allowed: false, retryAfterSec: 120 });
+
+    const result = await resendVerificationEmail({ email: "someone@example.com" });
+    expect(result).toEqual({
+      success: false,
+      error: "Too many requests — try again in 2 minutes.",
+    });
+
+    expect(mocks.checkRateLimit).toHaveBeenCalledWith("verify-resend:ip:1.2.3.4", {
+      limit: 10,
+      windowSec: 900,
+    });
+    expect(mocks.user.findUnique).not.toHaveBeenCalled();
+    expect(mocks.sendVerificationEmail).not.toHaveBeenCalled();
   });
 });
 
