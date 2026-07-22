@@ -85,7 +85,7 @@ export default function TermsPage() {
             <LegalSection
               id="intellectual-property"
               title="Intellectual Property"
-              covers="Will describe OpenLeague's rights in the software and branding, and the open-source license terms (Business Source License 1.1) that apply to the source code."
+              covers="Will describe OpenLeague's rights in the software and branding, the open-source license terms (Apache License 2.0) that apply to the source code, and the trademark policy covering the OpenLeague name and logo (see TRADEMARKS.md)."
             />
 
             <LegalSection

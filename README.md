@@ -4,7 +4,7 @@
   # OpenLeague
 
   [![Release](https://github.com/mbeacom/openleague/workflows/Release/badge.svg)](https://github.com/mbeacom/openleague/actions/workflows/release.yml)
-  [![License](https://img.shields.io/badge/license-BUSL--1.1-blue.svg)](./LICENSE)
+  [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](./LICENSE)
   [![Version](https://img.shields.io/github/package-json/v/mbeacom/openleague)](./package.json)
 </div>
 
@@ -14,11 +14,11 @@ A free, open-source platform for managing sports teams. Simplify your season wit
 
 ✅ **MVP Complete** - Ready for production use with core team management features.
 
-The MVP includes user authentication, team creation, roster management with email invitations, event scheduling, calendar views, and RSVP tracking. See [implementation plan](./.kiro/specs/team-management-mvp/) for detailed feature documentation.
+The MVP includes user authentication, team creation, roster management with email invitations, event scheduling, calendar views, and RSVP tracking. See [feature specifications](./specs/) for detailed feature documentation.
 
 ## Tech Stack
 
-- **Framework**: Next.js 15 with App Router and React 19
+- **Framework**: Next.js 16 with App Router and React 19
 - **Language**: TypeScript (required for type safety)
 - **UI**: MUI v7 with Emotion styling
 - **Database**: PostgreSQL (Neon) via Prisma ORM
@@ -31,7 +31,7 @@ The MVP includes user authentication, team creation, roster management with emai
 
 ### Prerequisites
 
-- **Node.js 22+** - Required for Next.js 15 and React 19
+- **Node.js 22+** - Required for Next.js 16 and React 19
 - **Bun** - Package manager (faster than npm/yarn)
 - **PostgreSQL Database** - Neon recommended for serverless PostgreSQL
 - **Email Service** (optional for local dev) - AWS SES or Mailchimp Transactional account; without one, emails are logged to the console instead of sent
@@ -422,7 +422,7 @@ openleague/
 
 ### Key Architecture Decisions
 
-- **App Router**: Uses Next.js 15 App Router for better performance and developer experience
+- **App Router**: Uses Next.js 16 App Router for better performance and developer experience
 - **Server Actions**: Primary method for mutations, reducing API route complexity
 - **Server Components**: Default for data fetching, Client Components only when needed
 - **Prisma ORM**: Type-safe database operations with automatic migrations
@@ -746,38 +746,35 @@ This project follows [Conventional Commits](https://www.conventionalcommits.org/
 
 ## License & Usage
 
-### Business Source License 1.1
+### Apache License 2.0
 
-OpenLeague is licensed under the **Business Source License 1.1** - see [LICENSE](./LICENSE) for full details.
+OpenLeague's source code is licensed under the **Apache License 2.0** - see [LICENSE](./LICENSE) for full details.
 
 #### What This Means
 
-**✅ You CAN (No License Needed):**
+**✅ You are free to (No Permission Needed):**
 
 - Use OpenLeague for your league/organization's internal management
 - Self-host on your own infrastructure for your own use
-- Fork, modify, and customize for your organization
-- Share improvements back to the community
+- Fork, modify, and customize it however you like
+- Use it commercially, including offering it as a hosted or SaaS service
+- Redistribute it, as long as you keep the `LICENSE` and `NOTICE` files intact
 - Study the code and learn from it
 
-**⚠️ You Need a Commercial License To:**
+**™️ The code is open, the brand is not:**
 
-- Offer OpenLeague as a SaaS to multiple third-party organizations
-- Sell OpenLeague-based hosting services commercially
-- Build a competing business using OpenLeague code
-- Provide OpenLeague as a managed service for profit
-
-**🔄 Future License Change:**
-
-- On **October 4, 2029**, this license automatically converts to **Apache 2.0**
-- After that date, all usage restrictions are removed
-- This ensures long-term openness while protecting early development
+The Apache 2.0 license covers the *code*. It does **not** grant rights to the
+**"OpenLeague" name or logo**, which are trademarks of Mark Beacom. You're welcome
+to make honest, factual references (for example, "a fork of OpenLeague" or
+"compatible with OpenLeague"), but please don't name your fork "OpenLeague" or use
+the marks in a way that implies official affiliation. See [TRADEMARKS.md](./TRADEMARKS.md)
+for the full, plain-English trademark policy.
 
 ### Deployment Options
 
 #### 1. **Hosted Service (Recommended for Most Users)**
 
-Coming soon - we'll offer a professionally hosted version at [openl.app](https://openl.app) with:
+A professionally hosted version is live at [openl.app](https://openl.app), offering:
 
 - Zero setup or maintenance
 - Automatic updates and backups
@@ -817,24 +814,25 @@ See [SETUP.md](./SETUP.md) for detailed deployment instructions.
 - Teams requiring custom modifications
 - Development and testing environments
 
-### Commercial Licensing
+### Commercial & Hosted Use
 
-Interested in offering OpenLeague as a commercial service to multiple organizations?
+Under Apache 2.0 you're free to use OpenLeague commercially — including building
+and selling OpenLeague-based products or running your own managed/SaaS hosting —
+at no charge and with no separate license to purchase.
 
-We offer commercial licenses that allow you to:
+The one thing the code license does **not** grant is the **OpenLeague name and
+logo**. If you offer a service based on OpenLeague, give it your own name and
+brand (see [TRADEMARKS.md](./TRADEMARKS.md)). You can still describe it factually,
+e.g. "built on OpenLeague."
 
-- Build and sell OpenLeague-based SaaS products
-- Offer managed hosting services commercially
-- White-label OpenLeague for your customers
-- Receive priority support and partnership opportunities
-
-**Contact:** [mark@openl.app](mailto:mark@openl.app) for commercial licensing inquiries.
+Questions about the trademark policy, partnerships, or the hosted service?
+**Contact:** [mark@openl.app](mailto:mark@openl.app).
 
 ## Documentation
 
 ### Project Documentation
 
-- **[Feature Specifications](./.kiro/specs/team-management-mvp/)** - Detailed requirements, design, and implementation plan
+- **[Feature Specifications](./specs/)** - Detailed requirements, design, and implementation plans
 - **[Setup Progress](./SETUP.md)** - Development setup and progress tracking
 - **[Contributing Guide](./.github/CONTRIBUTING.md)** - How to contribute to the project
 - **[Release Process](./.github/RELEASE_TEMPLATE.md)** - Release workflow and versioning
@@ -868,7 +866,7 @@ See `prisma/schema.prisma` for complete schema definition.
 
 ### External Documentation
 
-- **[Next.js 15 Documentation](https://nextjs.org/docs)** - App Router, Server Actions, React 19
+- **[Next.js 16 Documentation](https://nextjs.org/docs)** - App Router, Server Actions, React 19
 - **[MUI v7 Documentation](https://mui.com/material-ui/)** - Components, theming, customization
 - **[Prisma Documentation](https://www.prisma.io/docs)** - ORM, migrations, client usage
 - **[Auth.js Documentation](https://authjs.dev/)** - Authentication configuration and providers

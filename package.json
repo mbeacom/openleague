@@ -1,6 +1,7 @@
 {
   "name": "openleague",
   "version": "0.67.2",
+  "license": "Apache-2.0",
   "private": true,
   "scripts": {
     "dev": "bun --bun next dev --turbopack",

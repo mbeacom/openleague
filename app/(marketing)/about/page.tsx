@@ -54,9 +54,10 @@ export default function AboutPage() {
             Open Source & Community
           </Typography>
           <Typography variant="body1" paragraph>
-            OpenLeague is open-source software under the Business Source License (BSL 1.1),
+            OpenLeague is open-source software under the Apache License 2.0,
             built by the community, for the community. The source code is publicly available,
             and we welcome contributions, feedback, and ideas from users and developers alike.
+            The OpenLeague name and logo are trademarks of Mark Beacom (see TRADEMARKS.md).
           </Typography>
           <Typography variant="body1" paragraph>
             Visit our{' '}
