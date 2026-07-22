@@ -28,8 +28,8 @@ export default function AboutPage() {
           </Typography>
           <Typography variant="body1" paragraph>
             We believe that managing a sports team shouldn&apos;t require expensive software, complex
-            tools, or paid subscriptions. OpenLeague currently offers free hosted access for teams,
-            with no subscription billing or paid feature gates as of now.
+            tools, or paid subscriptions. OpenLeague is free forever for teams — no subscription
+            billing, no per-player fees, and no third-party ads.
           </Typography>
         </Box>
 
@@ -54,9 +54,10 @@ export default function AboutPage() {
             Open Source & Community
           </Typography>
           <Typography variant="body1" paragraph>
-            OpenLeague is open-source software under the Business Source License (BSL 1.1),
+            OpenLeague is open-source software under the Apache License 2.0,
             built by the community, for the community. The source code is publicly available,
             and we welcome contributions, feedback, and ideas from users and developers alike.
+            The OpenLeague name and logo are trademarks of Mark Beacom (see TRADEMARKS.md).
           </Typography>
           <Typography variant="body1" paragraph>
             Visit our{' '}
@@ -83,7 +84,7 @@ export default function AboutPage() {
                 Free & Transparent
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Free hosted access as of now, with clear communication before material service or monetization changes where practical.
+                Free forever for teams. Paid tiers exist only for leagues and clubs, and we never charge teams or serve third-party ads.
               </Typography>
             </Box>
             <Box>

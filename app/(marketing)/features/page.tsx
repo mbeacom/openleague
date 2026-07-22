@@ -119,8 +119,8 @@ export default function FeaturesPage() {
               Free Team Management, Open Source
             </Typography>
             <Typography variant="body1" textAlign="center" paragraph>
-              OpenLeague currently offers free hosted access with no subscriptions, paid tiers, or feature gates.
-              It remains open-source (BSL 1.1) and community-driven.
+              OpenLeague is free forever for teams — no subscriptions, per-player fees, or feature gates.
+              It is open-source under the Apache License 2.0 and community-driven, so you can self-host it anytime.
             </Typography>
             <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2, mt: 3 }}>
               <Chip

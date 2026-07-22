@@ -125,7 +125,6 @@ describe('MarketingFooter', () => {
         expect(screen.getByRole('link', { name: 'About' })).toHaveAttribute('href', '/about');
         expect(screen.getByRole('link', { name: 'Contact' })).toHaveAttribute('href', '/contact');
         expect(screen.getByRole('link', { name: 'Blog' })).toHaveAttribute('href', '/blog');
-        expect(screen.getByRole('link', { name: 'Careers' })).toHaveAttribute('href', '/careers');
       });
     });
 
@@ -156,7 +155,7 @@ describe('MarketingFooter', () => {
     it('renders feature highlights', () => {
       renderWithTheme(<MarketingFooter />);
 
-      expect(screen.getByText('🌟 Free for Now')).toBeInTheDocument();
+      expect(screen.getByText('🌟 Free forever for teams')).toBeInTheDocument();
       expect(screen.getByText('🔒 Privacy First')).toBeInTheDocument();
       expect(screen.getByText('📱 Mobile Ready')).toBeInTheDocument();
     });
@@ -254,7 +253,6 @@ describe('MarketingFooter', () => {
       { name: 'About', href: '/about' },
       { name: 'Contact', href: '/contact' },
       { name: 'Blog', href: '/blog' },
-      { name: 'Careers', href: '/careers' },
       // Legal
       { name: 'Privacy Policy', href: '/privacy' },
       { name: 'Terms of Service', href: '/terms' },

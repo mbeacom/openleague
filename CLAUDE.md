@@ -536,7 +536,7 @@ See `.github/AUTOMATION.md` for full CI/CD details.
 
 ## License
 
-Business Source License 1.1 (BUSL-1.1) - converts to Apache 2.0 on October 4, 2029. Commercial use as a service to third parties requires a commercial license. Self-hosting for your own organization is freely permitted.
+Apache License 2.0 - see [LICENSE](./LICENSE). The source code is free to use, fork, modify, self-host, and use commercially (including as a hosted/SaaS service). The "OpenLeague" name and logo are trademarks of Mark Beacom and are NOT granted by the code license - see [TRADEMARKS.md](./TRADEMARKS.md) (nominative/factual references like "a fork of OpenLeague" are fine).
 
 ## Active Technologies
 - TypeScript with Next.js 16 App Router and React 19 + MUI v7/Emotion, Prisma 7, Neon PostgreSQL adapter, Auth.js v5, Zod v4, Bun (002-ice-rink-management)
