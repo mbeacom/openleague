@@ -39,7 +39,6 @@ const footerSections = [
       { label: 'About', href: '/about' },
       { label: 'Contact', href: '/contact' },
       { label: 'Blog', href: '/blog' },
-      { label: 'Careers', href: '/careers' },
     ],
   },
   {
@@ -220,7 +219,7 @@ export default function MarketingFooter() {
               color="text.secondary"
               sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
             >
-              🌟 Free for Now
+              🌟 Free forever for teams
             </Typography>
             <Typography
               variant="body2"

@@ -82,7 +82,7 @@ describe('HeroSection', () => {
     it('renders trust indicators', () => {
       renderWithTheme(<HeroSection />);
 
-      expect(screen.getByText('Free for Now')).toBeInTheDocument();
+      expect(screen.getByText('Free forever for teams')).toBeInTheDocument();
       expect(screen.getByText('No Credit Card')).toBeInTheDocument();
       expect(screen.getByText('Mobile-First')).toBeInTheDocument();
     });
@@ -193,7 +193,7 @@ describe('HeroSection', () => {
       renderWithTheme(<HeroSection />);
 
       const trustIndicators = [
-        'Free for Now',
+        'Free forever for teams',
         'No Credit Card',
         'Mobile-First'
       ];
@@ -241,7 +241,7 @@ describe('HeroSection', () => {
       renderWithTheme(<HeroSection />);
 
       const trustIndicators = [
-        'Free for Now',
+        'Free forever for teams',
         'No Credit Card',
         'Mobile-First'
       ];
@@ -293,7 +293,7 @@ describe('HeroSection', () => {
       renderWithTheme(<HeroSection />);
 
       // Each trust indicator should have a visual structure
-      const freeToUse = screen.getByText('Free for Now');
+      const freeToUse = screen.getByText('Free forever for teams');
       const noCreditCard = screen.getByText('No Credit Card');
       const mobileFirst = screen.getByText('Mobile-First');
 
@@ -318,7 +318,7 @@ describe('HeroSection', () => {
       // All critical text should be immediately available
       expect(screen.getByText('Get Started Free')).toBeInTheDocument();
       expect(screen.getByText('Explore Features')).toBeInTheDocument();
-      expect(screen.getByText('Free for Now')).toBeInTheDocument();
+      expect(screen.getByText('Free forever for teams')).toBeInTheDocument();
     });
 
     it('component structure supports lazy loading patterns', () => {

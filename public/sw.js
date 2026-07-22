@@ -24,7 +24,6 @@ const PUBLIC_NAVIGATION_PREFIXES = [
   '/',
   '/about',
   '/blog',
-  '/careers',
   '/contact',
   '/cookies',
   '/docs',

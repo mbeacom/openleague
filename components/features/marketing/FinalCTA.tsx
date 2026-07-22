@@ -260,7 +260,7 @@ export default function FinalCTA() {
                     fontWeight: 600,
                   }}
                 >
-                  Free for Now
+                  Free forever for teams
                 </Typography>
               </Box>
               <Box
