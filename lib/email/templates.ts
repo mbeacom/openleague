@@ -1631,6 +1631,7 @@ export async function sendPracticePlanNotifications(
                   email: true,
                   notificationPreferences: {
                     select: {
+                      leagueId: true,
                       practicePlanNotifications: true,
                       emailEnabled: true,
                     },
@@ -1653,14 +1654,14 @@ export async function sendPracticePlanNotifications(
     throw new Error("Practice session not found");
   }
 
-  // Filter team members based on notification preferences (Requirements: 6.4)
+  // Filter members by the preference for this team's league context (league
+  // override else global); an unrelated league opt-out must not suppress here.
+  const teamLeagueId = session.team.leagueId;
   const emails = session.team.members
-    .filter((member: { user: { notificationPreferences: Array<{ practicePlanNotifications: boolean; emailEnabled: boolean }> } }) => {
-      const prefs = member.user.notificationPreferences;
-      // If no preferences set, default to sending
-      if (prefs.length === 0) return true;
-      // Check if any preference disables practice plan notifications or email
-      return prefs.every(p => p.practicePlanNotifications && p.emailEnabled);
+    .filter((member: { user: { notificationPreferences: Array<{ leagueId: string | null; practicePlanNotifications: boolean; emailEnabled: boolean }> } }) => {
+      const pref = pickPreference(member.user.notificationPreferences, teamLeagueId);
+      if (!pref) return true;
+      return pref.practicePlanNotifications && pref.emailEnabled;
     })
     .map((member: { user: { email: string } }) => member.user.email);
 
@@ -1823,7 +1824,7 @@ export async function sendSignupEventReminders(): Promise<void> {
       locationText: true,
       venue: { select: { name: true } },
       hostOrganization: { select: { name: true } },
-      hostLeague: { select: { name: true } },
+      hostLeague: { select: { id: true, name: true } },
       hostTeam: { select: { name: true } },
       registrations: {
         where: { status: "CONFIRMED" },
@@ -1838,20 +1839,26 @@ export async function sendSignupEventReminders(): Promise<void> {
   for (const event of events) {
     if (event.registrations.length === 0) continue;
 
-    // Exclude registrants who opted out of reminder emails.
+    // Exclude registrants who opted out of reminders for this event's host
+    // league context (league override else global); an unrelated league
+    // opt-out must not silence reminders for a different host.
     const registrantIds = [...new Set(event.registrations.map((reg) => reg.registrant.id))];
-    const optedOut = await prisma.notificationPreference.findMany({
-      where: {
-        userId: { in: registrantIds },
-        OR: [{ emailEnabled: false }, { rsvpReminders: false }],
-      },
-      select: { userId: true },
+    const prefRows = await prisma.notificationPreference.findMany({
+      where: { userId: { in: registrantIds } },
+      select: { userId: true, leagueId: true, emailEnabled: true, rsvpReminders: true },
     });
-    const optedOutIds = new Set(optedOut.map((preference) => preference.userId));
+    const prefsByUser = new Map<string, typeof prefRows>();
+    for (const row of prefRows) {
+      const list = prefsByUser.get(row.userId) ?? [];
+      list.push(row);
+      prefsByUser.set(row.userId, list);
+    }
+    const hostLeagueId = event.hostLeague?.id ?? null;
 
     const byRegistrant = new Map<string, { email: string; participants: string[] }>();
     for (const registration of event.registrations) {
-      if (optedOutIds.has(registration.registrant.id)) continue;
+      const pref = pickPreference(prefsByUser.get(registration.registrant.id) ?? [], hostLeagueId);
+      if (pref && (!pref.emailEnabled || !pref.rsvpReminders)) continue;
       const entry = byRegistrant.get(registration.registrant.id) ?? {
         email: registration.registrant.email,
         participants: [],
@@ -2022,6 +2029,7 @@ export async function sendGameProposalNotifications(
           email: true,
           notificationPreferences: {
             select: {
+              leagueId: true,
               eventNotifications: true,
               emailEnabled: true,
             },
@@ -2031,13 +2039,13 @@ export async function sendGameProposalNotifications(
     },
   });
 
+  // Proposals are league-scoped; gate on the preference for this proposal's
+  // league (league override else global), not any unrelated league's row.
   const emails = admins
     .filter((member) => {
-      const prefs = member.user.notificationPreferences;
-      // If no preferences set, default to sending
-      if (prefs.length === 0) return true;
-      // Check if any preference disables event notifications or email
-      return prefs.every((p) => p.eventNotifications && p.emailEnabled);
+      const pref = pickPreference(member.user.notificationPreferences, proposal.leagueId);
+      if (!pref) return true;
+      return pref.eventNotifications && pref.emailEnabled;
     })
     .map((member) => member.user.email);
 
