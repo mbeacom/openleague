@@ -5,6 +5,7 @@ import { Box } from '@mui/material';
 import MarketingHeader from '@/components/features/navigation/MarketingHeader';
 import MarketingFooter from '@/components/features/navigation/MarketingFooter';
 import SkipLink from '@/components/ui/SkipLink';
+import LightThemeScope from '@/components/ui/LightThemeScope';
 import './marketing.css';
 
 interface MarketingLayoutProps {
@@ -13,7 +14,9 @@ interface MarketingLayoutProps {
 
 export default function MarketingLayout({ children }: MarketingLayoutProps) {
   return (
-    <Box
+    // Marketing pages are designed light-only (baked-light backgrounds); pin the
+    // light scheme so scheme-aware text stays legible even in dark mode.
+    <LightThemeScope
       className="marketing-layout"
       sx={{
         display: 'flex',
@@ -38,6 +41,6 @@ export default function MarketingLayout({ children }: MarketingLayoutProps) {
         {children}
       </Box>
       <MarketingFooter />
-    </Box>
+    </LightThemeScope>
   );
 }

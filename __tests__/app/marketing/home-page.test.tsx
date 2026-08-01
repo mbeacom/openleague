@@ -124,6 +124,24 @@ describe('HomePage landing integration', () => {
     expect(mocks.push).not.toHaveBeenCalled();
   });
 
+  it('pins the landing funnel to the light color scheme so it stays legible in dark mode', () => {
+    // The marketing sections bake in light backgrounds while their text uses
+    // scheme-aware tokens; without this pin, dark mode renders light text on
+    // white blocks (illegible). Guard the wrapper that re-scopes MUI's palette
+    // vars to light for the whole funnel.
+    const { container } = renderWithTheme(<HomePage />);
+
+    const scope = container.querySelector<HTMLElement>('[data-mui-color-scheme="light"]');
+    expect(scope).not.toBeNull();
+    // The funnel's named regions must live inside the light-pinned scope.
+    expect(scope).toContainElement(
+      screen.getByRole('region', { name: /see the season run from one playbook/i })
+    );
+    expect(scope).toContainElement(
+      screen.getByRole('region', { name: /get started in 3 simple steps/i })
+    );
+  });
+
   it('shows an accessible loading state while auth status is resolving', () => {
     mocks.useSession.mockReturnValue({ data: null, status: 'loading' });
 
