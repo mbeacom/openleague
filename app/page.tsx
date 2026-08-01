@@ -4,6 +4,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Box, Container, CircularProgress } from "@mui/material";
+import LightThemeScope from "@/components/ui/LightThemeScope";
 import HeroSection from "@/components/features/marketing/HeroSection";
 import FeaturesPreview from "@/components/features/marketing/FeaturesPreview";
 import ProblemSolutionSection from "@/components/features/marketing/ProblemSolutionSection";
@@ -65,14 +66,17 @@ export default function HomePage() {
   return (
     <>
       <StructuredData data={breadcrumbSchema} />
-      <Box>
+      {/* Public landing page is designed light-only; pin the light scheme so its
+          scheme-aware text stays legible on the baked-light backgrounds even
+          when the visitor's system/app theme is dark. */}
+      <LightThemeScope>
         <HeroSection />
         <ProblemSolutionSection />
         <FeaturesPreview />
         <HowItWorks />
         <SocialProofSection />
         <FinalCTA />
-      </Box>
+      </LightThemeScope>
     </>
   );
 }
