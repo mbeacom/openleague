@@ -296,6 +296,25 @@ If you're unsure, ask first!
 - Focus on the code, not the person
 - Help others learn and grow
 
+## License
+
+OpenLeague is dual-licensed: source code under the
+[Apache License 2.0](../LICENSE), and the published documentation
+(`docs/*.md`, `app/docs/**/*.mdx`) under [CC BY 4.0](../LICENSE-DOCS).
+
+By submitting a contribution, you agree that:
+
+- **Code contributions** are licensed under the Apache License 2.0. This is the
+  default in Section 5 of that license - no separate CLA is required.
+- **Published documentation contributions** (`docs/*.md`,
+  `app/docs/**/*.mdx`) are licensed under CC BY 4.0.
+- You have the right to submit the work under these terms (it's your own work,
+  or you have permission to contribute it).
+
+You retain copyright in your contributions. The "OpenLeague" name and logo are
+trademarks of Mark Beacom and are not covered by either license - see
+[TRADEMARKS.md](../TRADEMARKS.md).
+
 ## Recognition
 
 Contributors will be recognized in:

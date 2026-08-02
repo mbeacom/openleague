@@ -121,7 +121,10 @@ function wrapPage(page: StaticPage, navItems: DocsNavItem[]): string {
 <body>
   <header><div><p class="muted" style="color:#bfdbfe;margin:0">OpenLeague</p><h1>${escapeHtml(page.title)}</h1><p>${escapeHtml(page.description)}</p><nav>${navLinks}</nav></div></header>
   <main>${page.html}</main>
-  <footer>Generated from the OpenLeague repository docs. Main application: <a href="https://openl.app">openl.app</a>.</footer>
+  <footer>
+    <p style="margin:0 0 .5rem">Generated from the OpenLeague repository docs. Main application: <a href="https://openl.app">openl.app</a>.</p>
+    <p style="margin:0">&copy; 2025 Mark Beacom. This documentation is licensed under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>; OpenLeague source code is licensed under <a href="https://github.com/mbeacom/openleague/blob/main/LICENSE">Apache 2.0</a>. &quot;OpenLeague&quot; and the OpenLeague logo are <a href="https://github.com/mbeacom/openleague/blob/main/TRADEMARKS.md">trademarks</a> of Mark Beacom.</p>
+  </footer>
 </body>
 </html>
 `;
