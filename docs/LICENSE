@@ -1,0 +1,13 @@
+The top-level Markdown files in this directory (docs/*.md) are licensed under
+the Creative Commons Attribution 4.0 International License (CC BY 4.0), not the
+Apache License 2.0 that covers OpenLeague's source code.
+
+The same applies to the MDX documentation under app/docs/**/*.mdx.
+
+This does NOT extend to subdirectories of docs/ — files under docs/superpowers/
+are internal design documents and remain under the Apache License 2.0.
+
+Full text, exact scope, and attribution details: ../LICENSE-DOCS
+Canonical license URL: https://creativecommons.org/licenses/by/4.0/
+
+Copyright 2025 Mark Beacom

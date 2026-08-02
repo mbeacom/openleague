@@ -4,7 +4,8 @@
   # OpenLeague
 
   [![Release](https://github.com/mbeacom/openleague/workflows/Release/badge.svg)](https://github.com/mbeacom/openleague/actions/workflows/release.yml)
-  [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](./LICENSE)
+  [![Code License](https://img.shields.io/badge/code-Apache--2.0-blue.svg)](./LICENSE)
+  [![Docs License](https://img.shields.io/badge/docs-CC%20BY%204.0-blue.svg)](./LICENSE-DOCS)
   [![Version](https://img.shields.io/github/package-json/v/mbeacom/openleague)](./package.json)
 </div>
 
@@ -759,6 +760,31 @@ to make honest, factual references (for example, "a fork of OpenLeague" or
 "compatible with OpenLeague"), but please don't name your fork "OpenLeague" or use
 the marks in a way that implies official affiliation. See [TRADEMARKS.md](./TRADEMARKS.md)
 for the full, plain-English trademark policy.
+
+### Documentation: CC BY 4.0
+
+OpenLeague's *documentation* is licensed under the
+**[Creative Commons Attribution 4.0 International License](https://creativecommons.org/licenses/by/4.0/)**
+(CC BY 4.0) - see [LICENSE-DOCS](./LICENSE-DOCS) for full details.
+
+This covers the published documentation prose - exactly the files that build
+[openleague.dev](https://openleague.dev):
+
+- `docs/*.md` - top-level repository documentation
+- `app/docs/**/*.mdx` - the MDX documentation content
+
+You may share and adapt that documentation - including commercially - as long as
+you give appropriate credit.
+
+Everything else stays under Apache 2.0, including all source code (the React
+components and build scripts under `app/docs/`) and the internal design
+documents under `docs/superpowers/`.
+
+| What | License |
+| ---- | ------- |
+| Source code | [Apache License 2.0](./LICENSE) |
+| Published docs (`docs/*.md`, `app/docs/**/*.mdx`) | [CC BY 4.0](./LICENSE-DOCS) |
+| "OpenLeague" name & logo | Not licensed - see [TRADEMARKS.md](./TRADEMARKS.md) |
 
 ### Deployment Options
 

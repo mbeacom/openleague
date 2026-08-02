@@ -202,9 +202,44 @@ export default function MarketingFooter() {
             gap: 2,
           }}
         >
-          <Typography variant="body2" color="text.secondary">
-            © {currentYear} OpenLeague. All rights reserved. Made with ❤️ for sports teams everywhere.
-          </Typography>
+          <Stack spacing={0.5}>
+            <Typography variant="body2" color="text.secondary">
+              © {currentYear} OpenLeague. Made with ❤️ for sports teams everywhere.
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Open source: code under{' '}
+              <Box
+                component="a"
+                href="https://github.com/mbeacom/openleague/blob/main/LICENSE"
+                target="_blank"
+                rel="noopener noreferrer"
+                sx={{
+                  color: 'inherit',
+                  textDecoration: 'underline',
+                  transition: 'color 0.2s ease-in-out',
+                  '&:hover': { color: 'marketing.primary' },
+                }}
+              >
+                Apache 2.0
+              </Box>
+              , docs under{' '}
+              <Box
+                component="a"
+                href="https://github.com/mbeacom/openleague/blob/main/LICENSE-DOCS"
+                target="_blank"
+                rel="noopener noreferrer"
+                sx={{
+                  color: 'inherit',
+                  textDecoration: 'underline',
+                  transition: 'color 0.2s ease-in-out',
+                  '&:hover': { color: 'marketing.primary' },
+                }}
+              >
+                CC BY 4.0
+              </Box>
+              .
+            </Typography>
+          </Stack>
 
           <Stack
             direction="row"
