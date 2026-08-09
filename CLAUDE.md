@@ -515,6 +515,7 @@ the authority.
 bun run adr:lint                      # validate the whole corpus
 bun run adr:check-integrity           # non-empty corpus, discoverable filenames,
                                       # and agreeing adrkit version pins
+bun run adr:review-dates              # decisions past, or near, their reviewBy
 bun run adr:explain lib/actions/x.ts  # which decisions govern this file?
 bun run adr:check <changed files...>  # decisions governing a change set
 bun run adr:new "Use X for Y"         # scaffold a new record

@@ -44,6 +44,8 @@ considered" sections are honest reconstructions rather than transcripts.
 bun run adr:lint                        # validate every record
 bun run adr:check-integrity             # corpus is non-empty, filenames are
                                         # discoverable, version pins agree
+bun run adr:review-dates                # which decisions are past, or near,
+                                        # their reviewBy date?
 bun run adr:explain lib/actions/team.ts # what governs this file?
 bun run adr:check <changed files...>    # what governs a change set?
 bun run adr:new "Use X for Y"           # scaffold the next record
@@ -85,9 +87,10 @@ the graveyard is the valuable part.
 
 An `accepted` record may still carry unchecked action items. `accepted` means
 the decision is binding, not that every consequence of it has been implemented;
-the open items are tracked obligations. `reviewBy` is advisory — nothing
-surfaces it when it expires, so treat it as a note to the next reader rather
-than a scheduled gate.
+the open items are tracked obligations. `reviewBy` **is** surfaced: a monthly
+workflow opens a single tracking issue when a date has passed, or is within 30
+days of passing, and closes it again once the dates are moved forward. See
+[CI](#ci) below.
 
 ## CI
 
@@ -97,6 +100,25 @@ than a scheduled gate.
   duplicate ids, or dangling references.
 - **governing-decisions** — comments the decisions governing the PR's changed
   files. Read-only and comment-only; it never approves or blocks anything.
+
+`.github/workflows/adr-review.yml` runs monthly, and on demand via
+`workflow_dispatch`:
+
+- **review-dates** — reads `reviewBy` from every `accepted` and `proposed`
+  record and opens **one** tracking issue, labelled `adr-review`, listing the
+  decisions that are past their date or within 30 days of it. Re-running updates
+  that issue rather than opening another; once the dates move forward it comments
+  and closes itself.
+
+  This closes a real gap: `adr queue` only projects `proposed` records, so an
+  `accepted` one never appears there, and `adr lint` does not read `reviewBy` at
+  all. It is deliberately **not** a pull-request check — a decision falling due
+  is a notification, not a defect, and must never block unrelated work. The
+  script exits 0 even when records are expired.
+
+  Run it locally with `bun run adr:review-dates`. Without `GITHUB_TOKEN` it
+  prints the report and a preview of the issue body instead of writing anything.
+  Use `--as-of YYYY-MM-DD` to check a future date without editing any record.
 
 The corpus is excluded from the docs-site path filters, because only top-level
 `docs/*.md` files are published — an ADR change cannot alter the built site.
