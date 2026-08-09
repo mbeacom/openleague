@@ -83,6 +83,12 @@ Superseding a decision is a new record with `supersedes: ["NNNN"]`, plus
 `status: superseded` and `supersededBy` on the old one. Do not delete records —
 the graveyard is the valuable part.
 
+An `accepted` record may still carry unchecked action items. `accepted` means
+the decision is binding, not that every consequence of it has been implemented;
+the open items are tracked obligations. `reviewBy` is advisory — nothing
+surfaces it when it expires, so treat it as a note to the next reader rather
+than a scheduled gate.
+
 ## CI
 
 `.github/workflows/adr.yml` runs on every pull request:
