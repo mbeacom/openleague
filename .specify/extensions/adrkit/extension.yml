@@ -1,0 +1,63 @@
+# adrkit — Spec Kit extension manifest (schema v1).
+#
+# The upper bound is a verification boundary, not a guess. The extension has been
+# installed and rendered against Spec Kit 0.13.0 (spike 008), 0.14.4, and 0.15.1;
+# `extensions/EXTENSION-API-REFERENCE.md` is byte-identical across that whole
+# range, and the loader's changes over it are additive. Widening past 0.16 is a
+# re-verification, not a version bump — per ADR-0007 an adapter's semver contract
+# is with its upstream, so breaking loudly on an unverified minor is the intended
+# behavior, not a defect.
+schema_version: "1.0"
+
+extension:
+  id: "adrkit"
+  name: "adrkit — decision memory for spec-driven development"
+  version: "0.1.2"
+  description: "Pulls the decisions governing this work into agent context, checks produced plans against them, and drafts an ADR from a plan artifact."
+  author: "Mark Beacom (@mbeacom)"
+  repository: "https://github.com/mbeacom/adrkit"
+  license: "Apache-2.0"
+  homepage: "https://adrkit.dev"
+  # Consumed by `specify extension info` and the community catalog. `effect` is
+  # `read-write` because `draft` writes one record — even though the hook surface
+  # and two of three commands write nothing. Claiming `read-only` for the
+  # majority case would be the convenient answer, not the true one.
+  category: "process"
+  effect: "read-write"
+
+requires:
+  speckit_version: ">=0.13.0,<0.16.0"
+  tools:
+    - name: "adr"
+      version: ">=0.3.0"
+      required: true
+
+provides:
+  commands:
+    - name: "speckit.adrkit.context"
+      file: "commands/context.md"
+      description: "Retrieve the decisions governing this work, before planning against them. Read-only."
+    - name: "speckit.adrkit.check"
+      file: "commands/check.md"
+      description: "Check a produced plan against the governing decision corpus. Read-only."
+    - name: "speckit.adrkit.draft"
+      file: "commands/draft.md"
+      description: "Draft one new ADR from the current plan artifact. Writes a single new record."
+
+# Exactly one hook, and it is optional.
+#
+# `optional: true` is not a default being restated — it is the load-bearing
+# field. A mandatory hook renders as `**Automatic Hook**` / `EXECUTE_COMMAND:`
+# and fires without consent; this one renders as `**Optional Hook**` and asks.
+# A governance tool that seizes the plan loop is a governance tool people
+# uninstall.
+#
+# The hook targets `speckit.adrkit.check`, which writes nothing. `draft` is the
+# only command that writes, and it is deliberately unreachable from any hook —
+# see test/hook-boundary.test.ts, which fails if a hook is ever pointed at it.
+hooks:
+  after_plan:
+    command: "speckit.adrkit.check"
+    optional: true
+    prompt: "Check this plan against the decisions that govern it?"
+    description: "Runs adrkit's read-only check of this plan against the ADR corpus."

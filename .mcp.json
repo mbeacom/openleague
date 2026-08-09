@@ -1,5 +1,17 @@
 {
   "mcpServers": {
+    "adrkit": {
+      "command": "bunx",
+      "args": [
+        "--bun",
+        "-y",
+        "@adrkit/mcp@0.4.0",
+        "--cwd",
+        ".",
+        "--dir",
+        "docs/adr"
+      ]
+    },
     "context7": {
       "command": "bunx",
       "args": ["--bun", "-y", "@upstash/context7-mcp@^2"]

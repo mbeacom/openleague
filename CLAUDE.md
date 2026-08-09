@@ -499,6 +499,59 @@ describe('Feature Name', () => {
 5. `bun run lint` passes
 6. `bun run test` passes
 
+### Architecture Decision Records
+
+Architectural decisions are recorded as machine-readable ADRs in `docs/adr/`,
+managed by [adrkit](https://github.com/mbeacom/adrkit) (`@adrkit/cli`, pinned to
+0.4.0). See [ADR-0001](./docs/adr/0001-record-architecture-decisions-as-versioned-markdown-in-git.md)
+for why.
+
+`CLAUDE.md` describes *how to work here*; ADRs record *why the conventions are
+what they are*, what alternatives were rejected, and what would make each
+decision wrong. When a convention in this file has a governing ADR, the ADR is
+the authority.
+
+```bash
+bun run adr:lint                      # validate the whole corpus
+bun run adr:check-integrity           # non-empty corpus, discoverable filenames,
+                                      # and agreeing adrkit version pins
+bun run adr:explain lib/actions/x.ts  # which decisions govern this file?
+bun run adr:check <changed files...>  # decisions governing a change set
+bun run adr:new "Use X for Y"         # scaffold a new record
+bun run adr:graph -- --format dot     # supersession/relationship graph
+```
+
+**Before making an architectural change**, check what governs the paths you are
+about to touch — `adr explain` (or the `adrkit` MCP server, registered in
+`.mcp.json` and `.vscode/mcp.json`) surfaces `rejected` and `superseded`
+decisions too, so a previously-tried approach is not re-proposed.
+
+The Copilot cloud agent and Copilot code review use a repository-level MCP
+setting that is not a file in this repo; the value to paste into repository
+settings is documented in `.github/copilot-cloud-agent-mcp.md`.
+
+**Write a new ADR when** a change alters one of the decisions in `docs/adr/`, or
+introduces a new one that future work should be constrained by. Routine feature
+work does not need one. Fill in `affects` — a record without it is advisory only
+and will not surface in `adr explain` or the CI comment.
+
+Current records:
+
+| ID | Decision |
+|----|----------|
+| 0001 | Record architecture decisions as versioned markdown in git |
+| 0002 | Use Next.js Server Actions as the primary mutation surface |
+| 0003 | Access PostgreSQL exclusively through Prisma on Neon serverless |
+| 0004 | Build the interface on MUI as the primary component library |
+| 0005 | Standardize on Bun as the development and CI toolchain |
+
+Spec Kit users additionally have `/speckit.adrkit.context`,
+`/speckit.adrkit.check`, and `/speckit.adrkit.draft` from the installed adrkit
+extension. `/speckit.plan` offers an optional `after_plan` check.
+
+CI (`.github/workflows/adr.yml`) lints the corpus on every pull request and
+comments the decisions governing the changed files.
+
 ### CI/CD and Releases
 
 OpenLeague uses semantic versioning with conventional commits:
@@ -519,6 +572,7 @@ See `.github/AUTOMATION.md` for full CI/CD details.
 
 **Project Documentation**:
 - `README.md` - Comprehensive setup and feature documentation
+- `docs/adr/` - Architecture decision records (adrkit); the *why* behind the conventions
 - `SETUP.md` - Development setup and implementation progress
 - `DEPLOYMENT.md` - Detailed deployment guide
 - `SECURITY.md` - Security policy and vulnerability reporting

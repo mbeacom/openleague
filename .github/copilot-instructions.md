@@ -19,6 +19,8 @@ bun run test:watch          # Vitest watch mode
 bun run test:coverage       # Vitest coverage
 bun run test:ui             # Vitest UI
 bun run validate-env        # Validate required environment variables
+bun run adr:lint            # Validate the ADR corpus in docs/adr
+bun run adr:explain <path>  # Which architecture decisions govern this file?
 ```
 
 Run a single test file or test name with Vitest:
@@ -75,6 +77,7 @@ bun run db:wake             # Wake Neon database
 - When changing `prisma/schema.prisma`, create a migration with `bun run db:migrate`, regenerate the client with `bun run db:generate`, and commit the schema and migration together. Do not use `db:migrate:reset` without explicit confirmation.
 - Required env vars are validated by `lib/env.ts`: `DATABASE_URL`, `NEXTAUTH_URL`, `NEXTAUTH_SECRET`, `MAILCHIMP_API_KEY`, and `EMAIL_FROM`. `CRON_SECRET` is optional but required for secured cron deployments.
 - Conventional commits drive releases: `feat:` bumps minor, `fix:` bumps patch, and `feat!:` or `BREAKING CHANGE:` bumps major.
+- Architectural decisions live in `docs/adr/` as adrkit records. Before changing an architectural convention, run `bun run adr:explain <path>` (or query the `adrkit` MCP server) to see what governs it — `rejected` and `superseded` records are surfaced too, so a previously-tried approach is not re-proposed. Conventions in this file that have a governing ADR defer to that ADR. Scaffold a new record with `bun run adr:new "<title>"` when a change alters or adds an architectural decision, and always fill in `affects` — a record without it never surfaces in CI or `adr explain`.
 
 **Next.js Initialization**: When starting work on a Next.js project, automatically
 call the `init` tool from the next-devtools-mcp server FIRST. This establishes

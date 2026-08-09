@@ -20,6 +20,9 @@ on:
       - 'app/docs/**'
       - 'docs/**'
       - 'lib/docs/**'
+      # The ADR corpus is not published by the docs build (only top-level
+      # docs/*.md are), so it cannot change deployment output.
+      - '!docs/adr/**'
   push:
     branches:
       - main
@@ -39,6 +42,9 @@ on:
       - 'app/docs/**'
       - 'docs/**'
       - 'lib/docs/**'
+      # The ADR corpus is not published by the docs build (only top-level
+      # docs/*.md are), so it cannot change deployment output.
+      - '!docs/adr/**'
   workflow_dispatch:
 
 permissions:
