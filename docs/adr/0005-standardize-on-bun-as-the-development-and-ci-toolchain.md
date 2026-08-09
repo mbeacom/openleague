@@ -141,4 +141,4 @@ the divergence class this decision exists to eliminate.
 1. [x] `bun.lockb` is the only lockfile in the repository
 2. [x] `bunfig.toml` sets a three-day `minimumReleaseAge`
 3. [x] `vercel.json` pins `bunVersion` and installs `--frozen-lockfile`
-4. [ ] Note the Bun prerequisite in the contributing guide
+4. [x] Note the Bun prerequisite in the contributing guide

@@ -28,6 +28,7 @@
     "validate-env": "tsx scripts/validate-env.js",
     "adr": "adr",
     "adr:lint": "adr lint",
+    "adr:check-integrity": "bun scripts/check-adr-integrity.ts",
     "adr:new": "adr new",
     "adr:check": "adr check",
     "adr:explain": "adr explain",

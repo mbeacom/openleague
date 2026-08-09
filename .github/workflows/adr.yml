@@ -1,6 +1,11 @@
 name: Architecture Decision Records
 
 on:
+  # Must stay `pull_request`. The governing-decisions job below holds
+  # `pull-requests: write`; switching to `pull_request_target` would combine
+  # that write token with a checkout of untrusted fork code. Fork PRs get a
+  # read-only token here, so the comment step degrades to a log notice --
+  # that is the intended behaviour, not a bug to "fix" by changing the trigger.
   pull_request:
     branches:
       - main
@@ -32,6 +37,12 @@ jobs:
 
       - name: Lint ADR corpus
         run: bun run adr:lint
+
+      # `adr lint` exits 0 on an empty corpus and only warns on a record whose
+      # filename stops being discoverable, so either would merge green. This
+      # also holds the four committed adrkit version pins to one value.
+      - name: Check ADR corpus and version-pin integrity
+        run: bun run adr:check-integrity
 
   governing-decisions:
     name: Comment governing decisions

@@ -9,6 +9,20 @@ These records hold **why the conventions are what they are**, which alternatives
 were rejected, and what would make each decision wrong. Where the two disagree,
 the ADR is the authority.
 
+`specs/` is a third surface and a different kind of thing: each folder records
+what was built for one feature. ADRs record constraints that apply across
+features. Where a spec and an ADR conflict, the ADR governs — a spec describes
+one feature's plan, not a licence to depart from a standing decision.
+
+Two ADR-numbering namespaces exist in this repository, and they are unrelated.
+Records under `docs/adr/` are OpenLeague's. The vendored Spec Kit extension
+under `.specify/extensions/adrkit/` is upstream adrkit's own code and
+documentation, and the `ADR-00NN` references inside it point at
+[adrkit's corpus](https://github.com/mbeacom/adrkit/tree/main/docs/adr), not
+this one. Do not edit those files to "fix" a reference: they are vendored
+verbatim and `.specify/extensions/.registry` records a `manifest_hash` over
+them.
+
 ## Records
 
 | ID | Status | Decision |
@@ -28,6 +42,8 @@ considered" sections are honest reconstructions rather than transcripts.
 
 ```bash
 bun run adr:lint                        # validate every record
+bun run adr:check-integrity             # corpus is non-empty, filenames are
+                                        # discoverable, version pins agree
 bun run adr:explain lib/actions/team.ts # what governs this file?
 bun run adr:check <changed files...>    # what governs a change set?
 bun run adr:new "Use X for Y"           # scaffold the next record

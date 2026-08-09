@@ -16,6 +16,8 @@ affects:
   - type: path
     pattern: ".github/workflows/adr.yml"
   - type: path
+    pattern: "scripts/check-adr-integrity.ts"
+  - type: path
     pattern: ".github/copilot-cloud-agent-mcp.md"
   - type: path
     pattern: "package.json"

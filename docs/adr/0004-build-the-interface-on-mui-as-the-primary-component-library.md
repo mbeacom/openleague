@@ -113,9 +113,12 @@ this configuration-enforced rather than a matter of discipline.
   option evaluated, and it runs on the client. For a mobile-first app used on
   rink wifi, this is a genuine cost paid on every page.
 - **Client Components are pushed wider than ideal.** MUI's interactive
-  components require `'use client'`, so 157 of 292 `.tsx` files carry the
-  directive. Some of that is inherent to the features, but MUI raises the
-  floor and limits how much of the tree can stay a Server Component.
+  components require `'use client'`, so 157 of the 292 `.tsx` files under
+  `app/` and `components/` open with the directive (counted as a leading
+  directive, not a substring match — one file contains the string only in a
+  comment explaining that it deliberately has none). Some of that is inherent
+  to the features, but MUI raises the floor and limits how much of the tree can
+  stay a Server Component.
 - **Escaping Material's visual defaults takes deliberate work.** The 497-line
   theme is what that work looks like.
 - **This is effectively a one-way door.** MUI's layout and styling idioms are
