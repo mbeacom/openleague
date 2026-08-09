@@ -30,6 +30,7 @@
     "adr": "adr",
     "adr:lint": "adr lint",
     "adr:check-integrity": "bun scripts/check-adr-integrity.ts",
+    "adr:review-dates": "bun scripts/check-adr-review-dates.ts",
     "adr:new": "adr new",
     "adr:check": "adr check",
     "adr:explain": "adr explain",
@@ -98,6 +99,7 @@
     "tailwindcss": "^4.3.1",
     "tsx": "^4.22.4",
     "typescript": "^5.9.3",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.9",
+    "yaml": "^2.9.0"
   }
 }

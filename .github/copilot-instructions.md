@@ -20,6 +20,7 @@ bun run test:coverage       # Vitest coverage
 bun run test:ui             # Vitest UI
 bun run validate-env        # Validate required environment variables
 bun run adr:lint            # Validate the ADR corpus in docs/adr
+bun run adr:review-dates    # Which decisions are past, or near, their reviewBy date?
 bun run check:raw-sql       # Enforce the ADR-0003 raw-SQL prohibition
 bun run adr:explain <path>  # Which architecture decisions govern this file?
 ```

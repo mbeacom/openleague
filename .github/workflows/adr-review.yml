@@ -1,0 +1,79 @@
+name: Architecture Decision Review Dates
+
+# Deliberately NOT a `pull_request` workflow, and deliberately not a step in
+# `adr.yml`. A decision reaching its `reviewBy` date is a notification, not a
+# defect -- a pull request touching unrelated code must never be blocked
+# because a record is due for reconsideration. The script it runs exits 0 even
+# when records are expired, so this job cannot go red on a finding either.
+on:
+  schedule:
+    # 09:00 UTC on the 1st of each month. Weekly would be noise for dates set a
+    # year out; monthly still catches an expiry within one cycle, and the
+    # script's 30-day lead time means the first notice arrives before the date
+    # actually passes.
+    - cron: '0 9 1 * *'
+  workflow_dispatch:
+    inputs:
+      as_of:
+        description: 'Evaluate as of this YYYY-MM-DD date instead of today'
+        required: false
+        type: string
+      dry_run:
+        description: 'Report findings without creating or updating the issue'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: adr-review-dates
+  cancel-in-progress: false
+
+jobs:
+  review-dates:
+    name: Surface decisions due for review
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      # Sole elevated scope: the job opens, updates, and closes one tracking
+      # issue, and creates the `adr-review` label on first run.
+      issues: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
+        with:
+          bun-version: latest
+
+      # --ignore-scripts skips the Prisma postinstall, which needs a
+      # DATABASE_URL that reading markdown frontmatter has no use for.
+      - name: Install dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      # All of the logic -- parsing, classification, and the issue upsert --
+      # lives in the script so it is unit-testable. This step is plumbing.
+      #
+      # The dispatch inputs are passed as environment variables and quoted in
+      # the shell rather than interpolated into the command with ${{ }}. A
+      # `${{ inputs.as_of }}` spliced straight into `run:` would let anyone who
+      # can dispatch the workflow execute arbitrary shell on the runner.
+      - name: Check ADR review dates
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          ADR_AS_OF: ${{ inputs.as_of }}
+          ADR_DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          args=()
+          if [ -n "$ADR_AS_OF" ]; then
+            args+=(--as-of "$ADR_AS_OF")
+          fi
+          if [ "$ADR_DRY_RUN" = "true" ]; then
+            args+=(--dry-run)
+          fi
+          bun run adr:review-dates -- "${args[@]}"
