@@ -39,6 +39,11 @@ registered in `.mcp.json` and `.vscode/mcp.json`. It surfaces `rejected` and
 `superseded` records by default, which is the point — the decision *not* to do
 something is the one most often re-litigated.
 
+The **Copilot cloud agent** and **Copilot code review** read a separate,
+repository-level MCP setting that cannot be committed as a file. The value to
+paste, and why it differs from the local one, is in
+[`.github/copilot-cloud-agent-mcp.md`](../../.github/copilot-cloud-agent-mcp.md).
+
 ## When to write a record
 
 Write one when a change **alters an existing decision here**, or introduces a

@@ -15,6 +15,8 @@ affects:
     pattern: "docs/adr/**"
   - type: path
     pattern: ".github/workflows/adr.yml"
+  - type: path
+    pattern: ".github/copilot-cloud-agent-mcp.md"
 provenance:
   authoredBy: agent-drafted
   ratifiedBy: "@mbeacom"
@@ -148,3 +150,6 @@ We accept real costs:
 3. [x] `adr lint` in CI on pull requests
 4. [x] adrkit MCP server registered in `.mcp.json` and `.vscode/mcp.json`
 5. [x] `CLAUDE.md` and `.github/copilot-instructions.md` point at the corpus
+6. [ ] Apply the cloud agent / code review MCP setting in repository settings —
+   it is a GitHub web-UI value with no file format and no API, so it cannot be
+   committed; the exact JSON is in `.github/copilot-cloud-agent-mcp.md`

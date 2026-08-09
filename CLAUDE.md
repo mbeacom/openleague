@@ -524,6 +524,10 @@ about to touch — `adr explain` (or the `adrkit` MCP server, registered in
 `.mcp.json` and `.vscode/mcp.json`) surfaces `rejected` and `superseded`
 decisions too, so a previously-tried approach is not re-proposed.
 
+The Copilot cloud agent and Copilot code review use a repository-level MCP
+setting that is not a file in this repo; the value to paste into repository
+settings is documented in `.github/copilot-cloud-agent-mcp.md`.
+
 **Write a new ADR when** a change alters one of the decisions in `docs/adr/`, or
 introduces a new one that future work should be constrained by. Routine feature
 work does not need one. Fill in `affects` — a record without it is advisory only
