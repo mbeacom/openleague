@@ -22,6 +22,12 @@ affects:
   - type: path
     pattern: "app/api/**"
     note: The other surface that queries the database directly.
+  - type: path
+    pattern: "scripts/check-raw-sql.ts"
+    note: The pull-request gate that enforces the raw-SQL prohibition below.
+  - type: path
+    pattern: "eslint.config.mjs"
+    note: Carries the authoring-time half of the same prohibition.
 provenance:
   authoredBy: agent-drafted
   ratifiedBy: "@mbeacom"
@@ -74,6 +80,11 @@ so its interpolations are parameterized rather than concatenated.
 plain string rather than a tagged template, so they do not parameterize
 anything, and no current or foreseen requirement needs them. Introducing one
 requires superseding this record, not a reviewer's judgment call.
+
+Both rules are enforced by tooling rather than by review: `no-restricted-syntax`
+rules in `eslint.config.mjs` while the code is being written, and
+`scripts/check-raw-sql.ts` as a job in the pull-request-triggered ADR workflow.
+Trade-offs records what that pair does and does not catch.
 
 The client is a single instance created in `lib/db/prisma.ts` and cached on
 `globalThis` outside production so hot reload does not accumulate clients. The
@@ -129,12 +140,22 @@ for a schema this relational.
 - **Complex analytical SQL is awkward.** Anything beyond Prisma's query API
   means raw SQL, which this decision otherwise forbids. If reporting features
   arrive, that tension becomes real.
-- **The prohibition is a convention, not a guarantee.** Prisma still exposes
-  `$queryRawUnsafe` and `$executeRawUnsafe`, which interpolate strings directly.
-  Nothing in CI blocks them today — action item 3 is exactly that gap. Until it
-  is closed, "we do not use raw SQL" is enforced by review, not by the tooling,
-  and a reviewer should not read this record as a guarantee that no unsafe query
-  can reach `main`.
+- **The prohibition is enforced now, but it is still not a guarantee.** Prisma
+  still exposes `$queryRawUnsafe` and `$executeRawUnsafe`, which interpolate
+  strings directly. Two gates block them. `no-restricted-syntax` rules in
+  `eslint.config.mjs` are AST-accurate and fire in the editor;
+  `scripts/check-raw-sql.ts` runs as its own job in the ADR workflow. The
+  second exists because the first is not a merge gate here — `bun run lint`
+  runs only in `release.yml` and `tag-release.yml`, both push-triggered, so an
+  ESLint rule alone would let a violation merge and break the release pipeline
+  afterwards (#310) — and because an inline `eslint-disable` can silence a
+  rule where no comment can silence the script. What neither gate catches:
+  both match member access, so a destructured or aliased binding such as
+  `const { $queryRawUnsafe } = prisma` passes both, and the script matches text
+  rather than parsing (it blanks comments first, but it is a filter, not a
+  proof). Closing that gap needs type-aware linting, which this repo does not
+  run. Read the pair as a gate against the lapse this record is actually
+  worried about, not as a proof that no unsafe query can reach `main`.
 - **Cold-start cost.** The generated client is large; `prisma generate` runs on
   every install, and it fails without a `DATABASE_URL` present — a real papercut
   in fresh environments and CI.
@@ -159,7 +180,10 @@ for a schema this relational.
 
 1. [x] `lib/db/prisma.ts` is the only client construction site
 2. [x] Adapter selection covers Neon and plain PostgreSQL
-3. [ ] Add a lint rule or CI grep failing on `$queryRaw`/`$executeRaw` under
-   `app/`, `lib/`, or `components/`, excepting `app/api/health/`, and on
-   `$queryRawUnsafe`/`$executeRawUnsafe` anywhere. Until this lands, the
-   prohibition above is enforced by review only.
+3. [x] `no-restricted-syntax` rules in `eslint.config.mjs` and
+   `scripts/check-raw-sql.ts` — the latter a job in
+   `.github/workflows/adr.yml`, so it gates pull requests — fail on
+   `$queryRaw`/`$executeRaw` under `app/`, `lib/`, or `components/`, excepting
+   `app/api/health/route.ts`, and on `$queryRawUnsafe`/`$executeRawUnsafe`
+   anywhere. Both were watched failing on a seeded violation before landing.
+   The gap they do not close is recorded under Trade-offs.

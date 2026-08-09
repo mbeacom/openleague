@@ -44,6 +44,29 @@ jobs:
       - name: Check ADR corpus and version-pin integrity
         run: bun run adr:check-integrity
 
+  # Enforcement of a decision, not validation of the corpus, so it is a job of
+  # its own rather than a step in `lint`. It lives in this workflow because
+  # this workflow runs on pull requests: `bun run lint` -- which carries the
+  # equivalent ESLint rules -- runs only in release.yml and tag-release.yml,
+  # both push-triggered, so an ESLint rule alone would let a violation merge
+  # green and break the release pipeline afterwards. See #310.
+  raw-sql:
+    name: Enforce the ADR-0003 raw-SQL prohibition
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
+        with:
+          bun-version: latest
+
+      # No `bun install`: the check imports only node: builtins, precisely so
+      # it cannot be defeated by a dependency or install failure.
+      - name: Check for prohibited raw SQL
+        run: bun run check:raw-sql
+
   governing-decisions:
     name: Comment governing decisions
     runs-on: ubuntu-latest

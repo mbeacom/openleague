@@ -1,6 +1,6 @@
 {
   "name": "openleague",
-  "version": "0.69.0",
+  "version": "0.69.1",
   "license": "Apache-2.0",
   "private": true,
   "scripts": {
@@ -10,6 +10,7 @@
     "vercel:build": "bun scripts/vercel-build.mjs",
     "start": "bun --bun next start",
     "lint": "eslint .",
+    "check:raw-sql": "bun scripts/check-raw-sql.ts",
     "type": "tsc --noEmit",
     "type-check": "tsc --noEmit",
     "test": "vitest run",

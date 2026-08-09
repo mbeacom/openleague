@@ -274,7 +274,7 @@ export async function myAction(input: InputType): Promise<ActionResult<OutputTyp
 1. NEVER trust client input - always validate with Zod
 2. ALWAYS check authentication first (`requireUserId()`)
 3. ALWAYS verify authorization (admin role, team membership)
-4. ALWAYS use Prisma (parameterized queries) - NEVER raw SQL
+4. ALWAYS use Prisma (parameterized queries) - NEVER raw SQL (enforced by `bun run check:raw-sql` and ESLint, not just convention - see ADR-0003)
 5. ALWAYS sanitize user input displayed in UI
 6. NEVER expose sensitive data (emergency contacts to non-admins)
 
@@ -520,6 +520,8 @@ bun run adr:explain lib/actions/x.ts  # which decisions govern this file?
 bun run adr:check <changed files...>  # decisions governing a change set
 bun run adr:new "Use X for Y"         # scaffold a new record
 bun run adr:graph -- --format dot     # supersession/relationship graph
+bun run check:raw-sql                 # enforce the ADR-0003 raw-SQL prohibition
+                                      # (also a job in .github/workflows/adr.yml)
 ```
 
 **Before making an architectural change**, check what governs the paths you are
