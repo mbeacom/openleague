@@ -1,0 +1,71 @@
+name: Quality Gates
+
+# Type-check, lint, and the unit test suite. Before this existed, none of the
+# three ran on a pull request: `bun run type-check` and `bun run lint` appeared
+# only in release.yml and tag-release.yml, both push-triggered, and `bun run
+# test` ran in no workflow at all -- so a change that broke a test merged green
+# and surfaced later on main, in the pipeline that cuts releases (#310).
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Type-check, lint, and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Version-bump commits change no source; release.yml skips them the same
+    # way. Scoped to `push` on purpose: `github.event.head_commit` does not
+    # exist on a pull_request event, and an expression that skipped there would
+    # silently disable this gate on exactly the PRs it exists to protect --
+    # a skipped job reports as skipped, not failed, so nobody would notice.
+    if: ${{ github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip ci]') }}
+
+    env:
+      # Prisma client generation runs during bun install. A real secret is used
+      # when available; the fallback only satisfies generate-time URL parsing.
+      DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/openleague_ci' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # Five test files and the type-checker import `@prisma/client`, so the
+      # generated client has to exist before either runs. `bun install` runs
+      # this via postinstall, but only when DATABASE_URL parses -- hence the env
+      # above. Running it explicitly makes the dependency visible rather than
+      # implicit in a lifecycle script.
+      - name: Generate Prisma Client
+        run: bun run db:generate
+
+      - name: Type check
+        run: bun run type-check
+
+      # Fails on errors, not warnings. See the pull request that added this
+      # workflow for why zero-warning enforcement was left as a separate call.
+      - name: Lint
+        run: bun run lint
+
+      - name: Unit tests
+        run: bun run test

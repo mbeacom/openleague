@@ -8,11 +8,16 @@ OpenLeague uses GitHub Actions to automate the entire release lifecycle, from ve
 
 | Workflow | Trigger | Status | Purpose |
 |----------|---------|--------|---------|
+| **Quality Gates** | PR to `main`, push to `main` | ![Quality Gates](https://github.com/mbeacom/openleague/workflows/Quality%20Gates/badge.svg) | Type-check, lint, and the unit test suite |
+| **Runtime Smoke Tests** | PR to `main`, push to `main` | ![Runtime Smoke Tests](https://github.com/mbeacom/openleague/workflows/Runtime%20Smoke%20Tests/badge.svg) | Boot the production build, sign in, render critical pages |
+| **Architecture Decision Records** | PR to `main` | ![Architecture Decision Records](https://github.com/mbeacom/openleague/workflows/Architecture%20Decision%20Records/badge.svg) | Lint the ADR corpus, enforce the raw-SQL ban, comment governing decisions |
+| **Architecture Decision Review Dates** | Monthly schedule | ![Architecture Decision Review Dates](https://github.com/mbeacom/openleague/workflows/Architecture%20Decision%20Review%20Dates/badge.svg) | Track ADRs past their `reviewBy` date |
 | **Release** | Push to `main` | ![Release](https://github.com/mbeacom/openleague/workflows/Release/badge.svg) | Automated releases with semantic versioning |
 | **Tag Release** | Push tag `v*.*.*` | ![Tag Release](https://github.com/mbeacom/openleague/workflows/Tag%20Release/badge.svg) | Release from manual tags |
 | **Version Check** | PR to `main` | ![Version Check](https://github.com/mbeacom/openleague/workflows/Version%20Check/badge.svg) | Validate version bumps in PRs |
 | **Documentation Pages** | Docs changes on `main` | ![Documentation Pages](https://github.com/mbeacom/openleague/workflows/Documentation%20Pages/badge.svg) | Build and deploy static docs to GitHub Pages |
 | **Deployment Checks** | Deployment/docs PR changes | ![Deployment Checks](https://github.com/mbeacom/openleague/workflows/Deployment%20Checks/badge.svg) | Validate deployment config and docs artifact |
+| **Uptime Monitoring** | Scheduled | ![Uptime Monitoring](https://github.com/mbeacom/openleague/workflows/Uptime%20Monitoring/badge.svg) | Probe production endpoints |
 
 ## Quick Start
 
