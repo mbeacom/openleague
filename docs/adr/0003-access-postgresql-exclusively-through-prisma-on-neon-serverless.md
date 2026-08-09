@@ -173,6 +173,15 @@ for a schema this relational.
   regularly — so the "no `$queryRaw`" rule accrues exceptions — the abstraction
   is no longer paying for itself. Equally, if Prisma cold starts become a
   measurable share of serverless response time on the hot paths.
+- **How we would know the *enforcement* has been outgrown:** if either
+  documented gap ever appears in a real diff — a computed name assembled by
+  concatenation (`prisma["$query" + "Raw"]`), or a destructured or aliased
+  binding (`const { $queryRawUnsafe } = prisma`) — then a text-and-selector
+  gate is no longer sufficient, and the answer is type-aware linting rather
+  than another pattern. The concatenation case is the likelier of the two to
+  arrive by accident, since an unlucky refactor reaches it without anyone
+  intending to evade anything; the aliased binding takes deliberate effort.
+  Adding a third regex in response would be treating the symptom.
 - **Revisit if:** reporting or analytics becomes a first-class feature, or the
   deployment target stops being serverless.
 
