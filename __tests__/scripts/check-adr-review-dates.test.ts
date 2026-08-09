@@ -544,13 +544,18 @@ describe('adr-review workflow', () => {
   });
 
   it('pins every action to a full commit SHA with a version comment', () => {
+    const lines = workflow.split('\n');
     const uses = steps.flatMap((step) => (step.uses ? [step.uses] : []));
     expect(uses.length).toBeGreaterThan(0);
+
     for (const ref of uses) {
       expect(ref).toMatch(/@[0-9a-f]{40}$/);
-      expect(workflow).toMatch(
-        new RegExp(`${ref.replace(/[/.]/g, '\\$&')} # v\\d+\\.\\d+\\.\\d+`),
-      );
+      // Locate the declaring line by plain substring match rather than
+      // building a RegExp out of the ref, then assert the trailing version
+      // comment sits on that same line.
+      const line = lines.find((candidate) => candidate.includes(`uses: ${ref}`));
+      expect(line, `no line declares ${ref}`).toBeDefined();
+      expect(line).toMatch(/ # v\d+\.\d+\.\d+\s*$/);
     }
   });
 
