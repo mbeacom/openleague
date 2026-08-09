@@ -16,6 +16,12 @@ affects:
     pattern: "prisma/**"
   - type: path
     pattern: "lib/db/**"
+  - type: path
+    pattern: "lib/actions/**"
+    note: Where most queries are authored, and where user input reaches them.
+  - type: path
+    pattern: "app/api/**"
+    note: The other surface that queries the database directly.
 provenance:
   authoredBy: agent-drafted
   ratifiedBy: "@mbeacom"
@@ -36,7 +42,7 @@ OpenLeague's domain is relational and heavily constrained: teams that may or may
 not belong to a league, divisions, seasons with phases, events with RSVPs,
 venues with ice surfaces and drawn segments, invitations with expiring tokens,
 and an audit log. Referential integrity and cascade behaviour are correctness
-requirements, not conveniences. The schema now holds 60 models across 36
+requirements, not conveniences. The schema now holds 60 models across 35
 migrations.
 
 Two forces shaped the data-access decision at project bootstrap:
@@ -45,10 +51,12 @@ Two forces shaped the data-access decision at project bootstrap:
   function invocation may open its own connection. A conventional connection
   pool held in a long-lived process does not exist; connection exhaustion is the
   default failure mode unless the driver is chosen for it.
-- **SQL injection had to be structurally impossible, not merely avoided.** Most
+- **Parameterization had to be the default, not a thing to remember.** Most
   mutation paths accept user-authored strings, and the roster holds emergency
   contacts, emergency phone numbers, and USA Hockey member IDs. A convention of
   "remember to parameterize" is a convention that eventually is not remembered.
+  Note the goal is a safe *default*, not an impossibility proof: any ORM worth
+  using still exposes a raw escape hatch (see Trade-offs).
 
 ## Decision
 
@@ -62,6 +70,11 @@ outside the deployed application (`scripts/check-cols.ts`) reads
 `information_schema` through `$queryRaw`; it uses Prisma's tagged-template form,
 so its interpolations are parameterized rather than concatenated.
 
+`$queryRawUnsafe` and `$executeRawUnsafe` are prohibited outright. They take a
+plain string rather than a tagged template, so they do not parameterize
+anything, and no current or foreseen requirement needs them. Introducing one
+requires superseding this record, not a reviewer's judgment call.
+
 The client is a single instance created in `lib/db/prisma.ts` and cached on
 `globalThis` outside production so hot reload does not accumulate clients. The
 driver adapter is selected from the connection string: Neon's serverless driver
@@ -74,7 +87,7 @@ self-hosted PostgreSQL and CI service containers work without a code change.
 
 | Dimension | Assessment |
 |---|---|
-| Injection safety | Structural — the query API is parameterized; raw SQL is opt-in and unused |
+| Injection safety | Parameterized by default; the unsafe raw APIs exist but are prohibited by this record |
 | Schema authority | Declarative schema plus generated migrations |
 | Type safety | Generated client types flow into Server Actions and components |
 | Serverless fit | HTTP/WebSocket driver avoids TCP pool exhaustion |
@@ -94,9 +107,10 @@ linear migration history were worth more than the runtime savings.
 
 **Pros:** full SQL expressiveness; no ORM abstraction to fight; minimal
 dependency surface.
-**Cons:** returns injection safety to a matter of discipline, and hands migration
-management to us. The whole point of the choice was to make the unsafe path
-unavailable rather than discouraged.
+**Cons:** makes the *default* path an unparameterized one, so injection safety
+becomes a matter of discipline on every query rather than something you opt out
+of, and hands migration management to us. The point of the choice was to invert
+which path takes effort.
 
 ### Option D: A hosted backend platform (Supabase, Firebase)
 
@@ -115,6 +129,12 @@ for a schema this relational.
 - **Complex analytical SQL is awkward.** Anything beyond Prisma's query API
   means raw SQL, which this decision otherwise forbids. If reporting features
   arrive, that tension becomes real.
+- **The prohibition is a convention, not a guarantee.** Prisma still exposes
+  `$queryRawUnsafe` and `$executeRawUnsafe`, which interpolate strings directly.
+  Nothing in CI blocks them today — action item 3 is exactly that gap. Until it
+  is closed, "we do not use raw SQL" is enforced by review, not by the tooling,
+  and a reviewer should not read this record as a guarantee that no unsafe query
+  can reach `main`.
 - **Cold-start cost.** The generated client is large; `prisma generate` runs on
   every install, and it fails without a `DATABASE_URL` present — a real papercut
   in fresh environments and CI.
@@ -124,8 +144,9 @@ for a schema this relational.
 
 ## Consequences
 
-- **Easier:** schema changes are reviewable diffs; injection is not an available
-  mistake; query results are typed end-to-end into Server Actions.
+- **Easier:** schema changes are reviewable diffs; the safe query path is also
+  the convenient one, so injection takes deliberate effort rather than a lapse;
+  query results are typed end-to-end into Server Actions.
 - **Harder:** analytical queries, and any future migration off Prisma.
 - **How we would know this was wrong:** if features start requiring raw SQL
   regularly — so the "no `$queryRaw`" rule accrues exceptions — the abstraction
@@ -139,4 +160,6 @@ for a schema this relational.
 1. [x] `lib/db/prisma.ts` is the only client construction site
 2. [x] Adapter selection covers Neon and plain PostgreSQL
 3. [ ] Add a lint rule or CI grep failing on `$queryRaw`/`$executeRaw` under
-   `app/`, `lib/`, or `components/`, excepting `app/api/health/`
+   `app/`, `lib/`, or `components/`, excepting `app/api/health/`, and on
+   `$queryRawUnsafe`/`$executeRawUnsafe` anywhere. Until this lands, the
+   prohibition above is enforced by review only.

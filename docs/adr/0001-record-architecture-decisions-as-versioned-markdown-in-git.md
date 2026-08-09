@@ -17,6 +17,25 @@ affects:
     pattern: ".github/workflows/adr.yml"
   - type: path
     pattern: ".github/copilot-cloud-agent-mcp.md"
+  - type: path
+    pattern: "package.json"
+    note: The @adrkit/cli pin and the adr:* scripts live here.
+  - type: path
+    pattern: ".mcp.json"
+  - type: path
+    pattern: ".vscode/mcp.json"
+  - type: path
+    pattern: ".specify/extensions.yml"
+  - type: path
+    pattern: ".specify/extensions/.registry"
+  - type: path
+    pattern: ".specify/extensions/adrkit/**"
+  - type: path
+    pattern: ".github/prompts/speckit.adrkit.*"
+  - type: path
+    pattern: ".github/agents/speckit.adrkit.*"
+  - type: path
+    pattern: ".claude/skills/speckit-adrkit-*/**"
 provenance:
   authoredBy: agent-drafted
   ratifiedBy: "@mbeacom"
@@ -122,6 +141,13 @@ We accept real costs:
   (0003, 0004) carry `async` because the schema refuses `auto` on a one-way
   door. Either way nothing consumes the queue. The fields are unused, not
   zero-cost — they are visible in every record and invite cargo-culting.
+- **Broad `affects` coverage means broad comments.** Matchers are deliberately
+  set wide enough that a decision surfaces wherever it can actually be violated
+  — ADR-0003 covers `lib/actions/**` because that is where queries are written,
+  not just `prisma/**`. The cost is that a wide-ranging pull request can surface
+  four or five records at once. That is the intended trade: a decision that
+  stays silent on the change that breaks it is worse than one line of noise.
+  Narrow the matchers if the comment starts being skimmed rather than read.
 - **A tool dependency on a young project.** `@adrkit/cli` is at 0.4.0 and moves
   quickly. We pin an exact version and pin CI to an immutable ref rather than
   tracking a moving tag.

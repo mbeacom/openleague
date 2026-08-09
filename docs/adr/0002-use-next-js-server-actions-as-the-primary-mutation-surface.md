@@ -53,12 +53,28 @@ different places, which is how insecure-direct-object-reference bugs happen.
 
 ## Decision
 
-We will implement mutations as Server Actions in `lib/actions/`. Every action
-file begins with `"use server"` and follows one shape: authenticate via
-`requireUserId()` (never a client-supplied `userId`), validate input with a Zod
-schema, authorize against the specific team/league/resource, mutate through
-Prisma, call `revalidatePath()` for affected routes, and return a discriminated
-`ActionResult<T>`.
+We will implement mutations as Server Actions in `lib/actions/`. Every file in
+that directory begins with `"use server"`, and every **mutating** action follows
+one shape: authenticate via `requireUserId()` (never a client-supplied
+`userId`), validate input with a Zod schema, authorize against the specific
+team/league/resource, mutate through Prisma, call `revalidatePath()` for
+affected routes, and return a discriminated `ActionResult<T>`.
+
+Two kinds of module in `lib/actions/` deliberately do not follow that sequence,
+because parts of it are meaningless without a write:
+
+- **Read-only query modules** — `practice-session-queries.ts`,
+  `team-context.ts`, and `league-context.ts` load data for a page. They
+  authenticate and authorize, but there is nothing to validate beyond an id,
+  nothing to revalidate, and they return the data shape (or `null`) rather than
+  an `ActionResult<T>`. They live here rather than in `lib/db/` because they are
+  invoked from the component tree like any other action.
+- **Framework/session actions** — `logout.ts` terminates the session and
+  redirects; `auth.ts` runs signup before any session exists, so
+  `requireUserId()` cannot apply to it.
+
+The authenticate-and-authorize half of the sequence is not optional for any of
+them. Only the validate/mutate/revalidate/`ActionResult` half is write-specific.
 
 Route handlers under `app/api/` are reserved for the cases a Server Action
 structurally cannot serve:

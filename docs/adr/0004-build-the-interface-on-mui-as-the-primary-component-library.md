@@ -17,6 +17,9 @@ affects:
     pattern: "components/**"
   - type: path
     pattern: "tailwind.config.ts"
+  - type: path
+    pattern: "app/**/*.tsx"
+    note: Route-level UI, including the Tailwind-scoped marketing and docs trees.
 provenance:
   authoredBy: agent-drafted
   ratifiedBy: "@mbeacom"
