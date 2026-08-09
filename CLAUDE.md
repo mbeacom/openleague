@@ -562,9 +562,16 @@ OpenLeague uses semantic versioning with conventional commits:
 - `fix:` commits trigger patch version bump (0.0.X)
 - `feat!:` or `BREAKING CHANGE:` trigger major version bump (X.0.0)
 
+**What gates a pull request** (`.github/workflows/quality-gates.yml`):
+type-check, lint, and the full Vitest suite. Until #310 these ran nowhere on a
+PR — `type-check` and `lint` only on push to `main`, and `bun run test` in no
+workflow at all — so a change that broke a test merged green and surfaced later
+in the release pipeline. Alongside these run the ADR corpus checks, the runtime
+smoke tests, deployment checks, and CodeQL.
+
 **Release process**:
 1. Merge to `main` branch triggers automated release workflow
-2. GitHub Actions runs type-checking, linting, and tests
+2. GitHub Actions runs type-checking, linting, and the build
 3. Semantic version determined from commit messages
 4. Changelog generated automatically
 5. GitHub release created with assets
