@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0",
+  "extensions": {
+    "adrkit": {
+      "version": "0.1.2",
+      "source": "local",
+      "manifest_hash": "sha256:1abf745bf5ffdd652f9793098ba3f88b880b648883724f9b3e97948226965bc0",
+      "enabled": true,
+      "priority": 10,
+      "registered_commands": {
+        "claude": [
+          "speckit.adrkit.context",
+          "speckit.adrkit.check",
+          "speckit.adrkit.draft"
+        ],
+        "copilot": [
+          "speckit.adrkit.context",
+          "speckit.adrkit.check",
+          "speckit.adrkit.draft"
+        ]
+      },
+      "registered_skills": [],
+      "installed_at": "2026-08-09T04:48:02.373433+00:00"
+    }
+  }
+}

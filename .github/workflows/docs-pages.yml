@@ -9,6 +9,9 @@ on:
       - 'components/features/docs/**'
       - 'docs/**'
       - 'lib/docs/**'
+      # Only top-level docs/*.md are published, so ADR records cannot change
+      # the built site. Excluded to avoid a no-op Pages deploy per record.
+      - '!docs/adr/**'
       - 'scripts/build-docs-pages.ts'
       - '.github/workflows/docs-pages.yml'
       - 'package.json'

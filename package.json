@@ -26,6 +26,12 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:wake": "tsx scripts/wake-db.ts",
     "validate-env": "tsx scripts/validate-env.js",
+    "adr": "adr",
+    "adr:lint": "adr lint",
+    "adr:new": "adr new",
+    "adr:check": "adr check",
+    "adr:explain": "adr explain",
+    "adr:graph": "adr graph",
     "docs:build-pages": "tsx scripts/build-docs-pages.ts",
     "uptime:check": "tsx scripts/check-uptime.ts",
     "validate-deployment-config": "tsx scripts/validate-deployment-config.ts",
@@ -66,6 +72,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@adrkit/cli": "0.4.0",
     "@eslint/eslintrc": "^3.3.5",
     "@tailwindcss/postcss": "^4.3.1",
     "@testing-library/jest-dom": "^6.9.1",

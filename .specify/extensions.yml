@@ -1,0 +1,14 @@
+installed:
+- adrkit
+settings:
+  auto_execute_hooks: true
+hooks:
+  after_plan:
+  - extension: adrkit
+    command: speckit.adrkit.check
+    enabled: true
+    optional: true
+    priority: 10
+    prompt: Check this plan against the decisions that govern it?
+    description: Runs adrkit's read-only check of this plan against the ADR corpus.
+    condition: null

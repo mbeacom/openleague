@@ -145,7 +145,10 @@ local-context/
 .DS_Store
 
 # Editor and temporary files
-.vscode/
+# Contents-glob rather than `.vscode/` so shared project config can be
+# re-included below; git cannot un-ignore a file whose parent dir is excluded.
+.vscode/*
+!.vscode/mcp.json
 .idea/
 *.tmp
 *.swp

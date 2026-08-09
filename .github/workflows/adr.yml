@@ -1,0 +1,52 @@
+name: Architecture Decision Records
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: adr-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Validate the decision corpus
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
+        with:
+          bun-version: latest
+
+      # --ignore-scripts skips the Prisma postinstall, which needs a
+      # DATABASE_URL that linting markdown records has no use for.
+      - name: Install dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Lint ADR corpus
+        run: bun run adr:lint
+
+  governing-decisions:
+    name: Comment governing decisions
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      # Pinned to the immutable v0.4.0 commit rather than the moving @v0 tag,
+      # matching the ADR-0001 decision to pin adrkit exactly.
+      - name: Resolve decisions governing this pull request
+        uses: mbeacom/adrkit/packages/ci@c3dff3a7a9c3df44233809423eb59a3505fcf6f5 # v0.4.0
+        with:
+          dir: docs/adr
+          token: ${{ github.token }}
