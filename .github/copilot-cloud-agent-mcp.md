@@ -79,6 +79,11 @@ session log, set `ADRKIT_MCP_CWD` to a literal path under `env`.
 
 ## Verifying it works
 
+**Saving is not the same as working, and the difference is invisible by
+default.** A server that never loaded and a server that loaded and matched
+nothing both show up as an agent that simply did not mention any decisions. So
+this step is required, not optional.
+
 After saving, start a cloud agent task on any change under `lib/actions/`,
 `prisma/`, `lib/theme.ts`, or `bunfig.toml`, and check the session log for an
 `adrkit` tool call. A working server returns the governing decision; a
@@ -86,7 +91,15 @@ misconfigured one says it could not see the corpus. adrkit deliberately renders
 those two cases as different messages, so "no decisions govern this" and "I was
 looking in the wrong place" cannot be confused.
 
-Locally, the same corpus is reachable with `bun run adr:explain <path>`.
+Expected on a working setup: 5 records in the corpus, `lib/theme.ts` governed by
+ADR-0004, and `lib/actions/**` governed by ADR-0002 and ADR-0003.
+
+This cannot be checked from a local session — the setting only affects the cloud
+agent and Copilot code review, and neither exposes an API for reading it back.
+ADR-0001 carries an open action item until someone has observed the tool call.
+
+Locally, the same corpus is reachable with `bun run adr:explain <path>`. That
+exercises the CLI, not this setting, so it is not a substitute.
 
 ## Related
 
