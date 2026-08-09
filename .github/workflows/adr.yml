@@ -47,6 +47,13 @@ jobs:
       # matching the ADR-0001 decision to pin adrkit exactly.
       - name: Resolve decisions governing this pull request
         uses: mbeacom/adrkit/packages/ci@c3dff3a7a9c3df44233809423eb59a3505fcf6f5 # v0.4.0
+        env:
+          # Required for the action to update its existing comment instead of
+          # posting a new one per push. It only recognises its own comment when
+          # the resolved token equals $GITHUB_TOKEN, and Actions does not export
+          # that variable automatically. Without this the marker lookup is
+          # skipped and every run appends another comment.
+          GITHUB_TOKEN: ${{ github.token }}
         with:
           dir: docs/adr
           token: ${{ github.token }}
