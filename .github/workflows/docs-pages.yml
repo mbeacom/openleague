@@ -15,7 +15,7 @@ on:
       - 'scripts/build-docs-pages.ts'
       - '.github/workflows/docs-pages.yml'
       - 'package.json'
-      - 'bun.lockb'
+      - 'bun.lock'
   workflow_dispatch:
 
 permissions:

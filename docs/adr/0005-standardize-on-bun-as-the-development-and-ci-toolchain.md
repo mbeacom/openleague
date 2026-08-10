@@ -14,7 +14,7 @@ affects:
   - type: path
     pattern: "bunfig.toml"
   - type: path
-    pattern: "bun.lockb"
+    pattern: "bun.lock"
   - type: path
     pattern: "package.json"
   - type: path
@@ -55,7 +55,7 @@ Two forces were specific to this project:
 ## Decision
 
 We will standardize on Bun as the package manager and script runner across
-development, CI, and deployment. `bun.lockb` is the only lockfile; `bun install`
+development, CI, and deployment. `bun.lock` is the only lockfile; `bun install`
 is the only install command; every `package.json` script is invoked with
 `bun run`.
 
@@ -112,9 +112,19 @@ the divergence class this decision exists to eliminate.
 
 ## Trade-offs
 
-- **`bun.lockb` is binary.** It cannot be reviewed in a diff, so a dependency
-  change is only visible through `package.json`. That is a real loss of review
-  signal in the one place supply-chain attacks land.
+- **The lockfile format was wrong at first, and it cost more than review
+  ergonomics.** This record originally chose `bun.lockb`, Bun's binary
+  lockfile, and named its cost as a loss of review signal: a dependency change
+  was visible only through `package.json`, in the one place supply-chain
+  attacks land. The larger cost went unanticipated — Dependabot cannot
+  regenerate a binary lockfile, so every automated update produced a
+  `package.json` change with a stale lockfile, and every workflow's
+  `--frozen-lockfile` install failed. Dependency updates could not merge at
+  all, including a Next.js release fixing DoS and SSRF advisories in Server
+  Actions, this project's primary mutation surface (ADR-0002). Migrating to the
+  text `bun.lock` — Bun's own default since 1.2 — resolved both costs at once
+  (#320). The residual cost is smaller: a text lockfile is large and noisy in
+  diffs, so it is skimmed rather than read.
 - **Bun is the youngest tool in the stack.** Native modules and less common
   build tooling occasionally need workarounds, and the maintainer absorbs that.
 - **Contributors must install Bun.** For an open-source project, that is a small
@@ -127,18 +137,27 @@ the divergence class this decision exists to eliminate.
 
 - **Easier:** fast installs and test runs; one toolchain in local, CI, and
   deploy; supply-chain quarantine configured in one file.
-- **Harder:** reviewing lockfile changes; onboarding a contributor who does not
-  have Bun; debugging the occasional tool that assumes npm.
+- **Harder:** onboarding a contributor who does not have Bun; debugging the
+  occasional tool that assumes npm.
 - **How we would know this was wrong:** if Bun-specific breakage — native
   modules, Next.js compatibility, CI flakiness — starts consuming meaningful
   maintenance time, the speed benefit is being repaid with interest. Equally, if
   a contributor is ever blocked on the toolchain rather than the code.
+- **This has already fired once, and the lesson generalises.** The binary
+  lockfile silently broke Dependabot, and the symptom appeared as ordinary red
+  checks on a dependency pull request rather than as anything pointing at the
+  toolchain. Bun being the youngest tool in the stack means its costs tend to
+  surface as *integration* failures with tools that assume npm conventions, not
+  as Bun itself misbehaving. When something in the supply chain stops working,
+  check whether a Bun-specific artifact is the thing the other tool cannot read
+  before assuming the other tool is at fault.
 - **Revisit if:** Vercel drops or degrades Bun support, or the project gains
   enough contributors that npm familiarity outweighs the speed benefit.
 
 ## Action items
 
-1. [x] `bun.lockb` is the only lockfile in the repository
+1. [x] `bun.lock` is the only lockfile in the repository (migrated from the
+   binary `bun.lockb`, which blocked automated dependency updates — #320)
 2. [x] `bunfig.toml` sets a three-day `minimumReleaseAge`
 3. [x] `vercel.json` pins `bunVersion` and installs `--frozen-lockfile`
 4. [x] Note the Bun prerequisite in the contributing guide
