@@ -45,7 +45,7 @@ describe('deployment configuration', () => {
     expect(vercel.bunVersion).toBe('1.x');
     expect(packageJson.scripts).toEqual(expect.objectContaining({
       dev: 'bun --bun next dev --turbopack',
-      build: 'bun --bun next build',
+      build: 'next build',
       'vercel:build': 'bun scripts/vercel-build.mjs',
       start: 'bun --bun next start',
     }));

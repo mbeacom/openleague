@@ -33,7 +33,7 @@ const REQUIRED_PRISMA_CONFIG_SCRIPTS: Record<string, string> = {
 
 const REQUIRED_BUN_RUNTIME_SCRIPTS: Record<string, string> = {
   dev: 'bun --bun next dev --turbopack',
-  build: 'bun --bun next build',
+  build: 'next build',
   'vercel:build': 'bun scripts/vercel-build.mjs',
   start: 'bun --bun next start',
 };
