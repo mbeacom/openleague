@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "bun --bun next dev --turbopack",
     "dev:wake": "tsx scripts/wake-db.ts && bun run dev",
-    "build": "bun --bun next build",
+    "build": "next build",
     "vercel:build": "bun scripts/vercel-build.mjs",
     "start": "bun --bun next start",
     "lint": "eslint .",
