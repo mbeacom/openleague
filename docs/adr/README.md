@@ -98,8 +98,40 @@ days of passing, and closes it again once the dates are moved forward. See
 
 - **lint** — `adr lint` over the whole corpus; fails the build on schema errors,
   duplicate ids, or dangling references.
+- **raw-sql** — enforces the ADR-0003 raw-SQL prohibition with
+  `bun run check:raw-sql`. It is a job here rather than a lone ESLint rule
+  because the equivalent ESLint rules run only on push, so a violation would
+  otherwise merge green and break the release pipeline afterwards. See #310.
 - **governing-decisions** — comments the decisions governing the PR's changed
-  files. Read-only and comment-only; it never approves or blocks anything.
+  files. It approves nothing and changes no repository content — its only write
+  is the comment itself — but it is **not** unconditionally non-blocking: it
+  fails the job when a record **changed in that pull request** is itself
+  invalid. The decisions it merely reports on never block.
+
+  **On a pull request from a fork, the comment is not posted.** GitHub restricts
+  `GITHUB_TOKEN` to read-only for `pull_request` events raised from a fork,
+  whatever the workflow's `permissions:` block asks for. The action catches the
+  resulting `403`, writes the comment body to a `notice` annotation on the run
+  instead, and returns without failing — the job still passes, and the content
+  is relocated rather than lost. That is accepted behaviour, not a defect, and
+  in particular not one to "fix" by switching to `pull_request_target`, which
+  would pair a write token with a checkout of untrusted fork code.
+
+  `lint` and `raw-sql` need only `contents: read`, so a fork PR is still gated
+  on corpus validity and the raw-SQL prohibition exactly as a branch PR is.
+
+  **Contributing from a fork?** You will not receive the comment. Ask for the
+  same answer locally before you push:
+
+  ```bash
+  bun run adr:check <changed files...>   # decisions governing your change
+  bun run adr:explain <path>             # decisions governing one file
+  ```
+
+  This is read from the pinned action's source and from adrkit's own
+  documentation, which states the Action "degrades (never fails the job) on a
+  read-only fork token". It has **not** been observed here — this repository has
+  had no fork PR since the workflow landed. Tracked as ADR-0001 action item 8.
 
 `.github/workflows/adr-review.yml` runs monthly, and on demand via
 `workflow_dispatch`:

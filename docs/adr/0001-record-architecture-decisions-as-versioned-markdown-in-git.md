@@ -102,7 +102,7 @@ alternatives, and the exit conditions; the instruction files point at them.
 | Adoption cost | Low — one devDependency, no service, no account |
 | Agent legibility | High — markdown in the repo, plus a read-only MCP server |
 | Path→decision mapping | Native, via `affects` matchers and `adr explain` |
-| CI enforcement | `adr lint` and a comment-only GitHub Action |
+| CI enforcement | `adr lint`, plus an Action that comments governing decisions and fails on an invalid changed record |
 | Rejected-option retention | First-class; `rejected` and `superseded` are retained statuses |
 | Schema rigidity | Frontmatter is strict; malformed records fail lint |
 
@@ -192,3 +192,10 @@ We accept real costs:
    different claims: a server that never loaded and one that loaded and found
    nothing both produce silence. Until this is checked, treat cloud-side ADR
    retrieval as unconfirmed rather than working.
+8. [ ] Confirm how the governing-decisions comment behaves on a pull request
+   from a fork, by observing a real one. The pinned action's source and adrkit's
+   own documentation agree that it catches the permission error and degrades to
+   a `notice` annotation without failing the job, but this repository has had no
+   fork PR since the workflow landed, so that is read rather than observed — the
+   same distinction as item 7. Confirming it needs a pull request from an
+   account that can fork this repository. See #306.
