@@ -2,16 +2,8 @@
   "servers": {
     "adrkit": {
       "type": "stdio",
-      "command": "bunx",
-      "args": [
-        "--bun",
-        "-y",
-        "@adrkit/mcp@0.4.0",
-        "--cwd",
-        "${workspaceFolder}",
-        "--dir",
-        "docs/adr"
-      ]
+      "command": "${workspaceFolder}/node_modules/.bin/adrkit-mcp",
+      "args": ["--cwd", "${workspaceFolder}", "--dir", "docs/adr"]
     }
   }
 }

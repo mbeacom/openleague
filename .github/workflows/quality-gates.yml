@@ -69,3 +69,28 @@ jobs:
 
       - name: Unit tests
         run: bun run test
+
+  # A separate job rather than a step in `quality`, and deliberately without
+  # `bun install`: the check imports only node: builtins and makes no network
+  # calls, precisely so it cannot be defeated by a dependency or install
+  # failure -- the same reasoning as the raw-sql job in adr.yml.
+  #
+  # It enforces the ADR-0005 MCP-launch policy: every server in .mcp.json and
+  # .vscode/mcp.json must run a pinned local binary or fetch an exact version.
+  # Nothing else notices a regression to `@latest` -- the config is not
+  # compiled, linted, or type-checked, and a floating tag starts a working
+  # server right up until the day a bad version is published. See #307.
+  mcp-pins:
+    name: Enforce the ADR-0005 MCP pin policy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
+        with:
+          bun-version: latest
+
+      - name: Check MCP server pins
+        run: bun run check:mcp-pins

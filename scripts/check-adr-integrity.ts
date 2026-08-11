@@ -7,6 +7,12 @@
  * view of the version pins scattered across the repo. This covers those three
  * gaps and is deliberately independent of the adrkit version.
  *
+ * Since #307 it also covers the two supply-chain properties that keep the
+ * adrkit MCP server inside the controls ADR-0005 describes: that the local
+ * configs run the pinned local binary rather than fetching from the registry,
+ * and that every first-party adrkit package is exempt from the release
+ * quarantine (without which the next version bump cannot be installed at all).
+ *
  * The checks are exported as a pure function of a repo root so they can be
  * exercised against fixture directories in tests. Nothing here is protected by
  * anything else, so the tests are the only thing standing between a subtle
@@ -28,6 +34,20 @@ export interface IntegrityResult {
   /** Discoverable records found, excluding the template and README. */
   recordCount: number;
 }
+
+/**
+ * The first-party adrkit packages that `bun install` can re-resolve, and so
+ * must each be exempt from the `minimumReleaseAge` quarantine in `bunfig.toml`.
+ * `@adrkit/core` and `@adrkit/evaluator` are transitive, but exclusions do not
+ * propagate to a package's dependencies, so naming only the two direct ones is
+ * not enough.
+ */
+export const ADRKIT_PACKAGES = [
+  '@adrkit/cli',
+  '@adrkit/core',
+  '@adrkit/evaluator',
+  '@adrkit/mcp',
+] as const;
 
 export function runIntegrityChecks(repoRoot: string): IntegrityResult {
   const corpusDir = path.join(repoRoot, CORPUS_DIR);
@@ -72,6 +92,14 @@ export function runIntegrityChecks(repoRoot: string): IntegrityResult {
   // --- 3. The adrkit version pins agree ------------------------------------
   // The version is pinned in four committed places plus one manual GitHub
   // setting. Nothing else notices when a bump updates only some of them.
+  //
+  // Since #307 the two local MCP configs no longer name a version: they run
+  // `adrkit-mcp` out of `node_modules/.bin`, so their version *is* the
+  // package.json pin and lands in bun.lock with an integrity hash. That moves
+  // two of the sites from "a version string in a JSON file" to "a devDependency
+  // plus a launch shape", and both halves are checked below -- a config that
+  // regressed to a registry fetch would otherwise pass while quietly leaving
+  // the quarantine again.
   function checkVersionPins(): void {
     const pkg = JSON.parse(read('package.json')) as {
       devDependencies?: Record<string, string>;
@@ -90,9 +118,28 @@ export function runIntegrityChecks(repoRoot: string): IntegrityResult {
       return;
     }
 
+    // The MCP server is a devDependency rather than a registry fetch, so its
+    // pin lives here and has to match the CLI's.
+    const mcpPin = pkg.devDependencies?.['@adrkit/mcp'];
+    if (!mcpPin) {
+      fail(
+        'package.json does not pin @adrkit/mcp in devDependencies. The local MCP ' +
+          'configs run node_modules/.bin/adrkit-mcp, so without the dependency they ' +
+          'cannot start at all. See #307.',
+      );
+    } else if (!/^\d+\.\d+\.\d+$/.test(mcpPin)) {
+      fail(`@adrkit/mcp is "${mcpPin}"; it must be an exact version, like @adrkit/cli.`);
+    } else if (mcpPin !== expected) {
+      fail(
+        `package.json pins @adrkit/mcp at ${mcpPin} but @adrkit/cli at ${expected}. ` +
+          'The CLI and the MCP server read the same corpus and must be one version.',
+      );
+    }
+
+    checkLocalMcpConfigs();
+    checkQuarantineExclusions();
+
     const sites: { file: string; find: RegExp; label: string }[] = [
-      { file: '.mcp.json', find: /@adrkit\/mcp@(\d+\.\d+\.\d+)/, label: '@adrkit/mcp' },
-      { file: '.vscode/mcp.json', find: /@adrkit\/mcp@(\d+\.\d+\.\d+)/, label: '@adrkit/mcp' },
       {
         file: '.github/copilot-cloud-agent-mcp.md',
         find: /@adrkit\/mcp@(\d+\.\d+\.\d+)/,
@@ -117,6 +164,60 @@ export function runIntegrityChecks(repoRoot: string): IntegrityResult {
         fail(
           `${file} pins ${label} at ${found}, but package.json pins @adrkit/cli at ` +
             `${expected}. Bump every site together.`,
+        );
+      }
+    }
+  }
+
+  // --- 3a. The local MCP configs run the local binary ----------------------
+  // A regression to `bunx -y @adrkit/mcp@x.y.z` would still start a working
+  // server, so nothing else would notice -- it would just be fetching from the
+  // registry again, outside the lockfile and outside the quarantine (#307).
+  function checkLocalMcpConfigs(): void {
+    for (const file of ['.mcp.json', '.vscode/mcp.json']) {
+      if (!existsSync(path.join(repoRoot, file))) {
+        fail(`${file} is missing; it should run node_modules/.bin/adrkit-mcp.`);
+        continue;
+      }
+      const contents = read(file);
+      if (/@adrkit\/mcp@/.test(contents)) {
+        fail(
+          `${file} fetches @adrkit/mcp from the registry. It should run ` +
+            'node_modules/.bin/adrkit-mcp, which is pinned in package.json and ' +
+            'carried in bun.lock. See #307 and ADR-0005.',
+        );
+      } else if (!/node_modules\/\.bin\/adrkit-mcp/.test(contents)) {
+        fail(
+          `${file} does not run node_modules/.bin/adrkit-mcp. If the adrkit server ` +
+            'was removed from this config, remove it from this check too.',
+        );
+      }
+    }
+  }
+
+  // --- 3b. The adrkit packages are exempt from the release quarantine -------
+  // `minimumReleaseAgeExcludes` is not transitive and does not accept globs, so
+  // each first-party package needs its own entry. Miss one and the next
+  // coordinated adrkit release fails every install for three days -- and it
+  // cannot be worked around by bumping one package first, because the check
+  // above requires @adrkit/cli and @adrkit/mcp to move together.
+  function checkQuarantineExclusions(): void {
+    const file = 'bunfig.toml';
+    if (!existsSync(path.join(repoRoot, file))) {
+      fail(`${file} is missing; it should exempt the adrkit packages from the quarantine.`);
+      return;
+    }
+
+    const contents = read(file);
+    if (!/minimumReleaseAge\s*=/.test(contents)) return; // No quarantine, nothing to exempt.
+
+    const block = /minimumReleaseAgeExcludes\s*=\s*\[([\s\S]*?)\]/.exec(contents)?.[1] ?? '';
+    for (const name of ADRKIT_PACKAGES) {
+      if (!block.includes(`"${name}"`)) {
+        fail(
+          `${file} does not list "${name}" in minimumReleaseAgeExcludes. Exclusions ` +
+            'are per-package -- they do not cover a package\'s dependencies -- so the ' +
+            'next adrkit release would fail every install until the quarantine expires.',
         );
       }
     }
