@@ -103,10 +103,10 @@ days of passing, and closes it again once the dates are moved forward. See
   because the equivalent ESLint rules run only on push, so a violation would
   otherwise merge green and break the release pipeline afterwards. See #310.
 - **governing-decisions** — comments the decisions governing the PR's changed
-  files. It approves nothing and writes nothing to the repository, but it is
-  **not** unconditionally non-blocking: it fails the job when a record **changed
-  in that pull request** is itself invalid. The decisions it merely reports on
-  never block.
+  files. It approves nothing and changes no repository content — its only write
+  is the comment itself — but it is **not** unconditionally non-blocking: it
+  fails the job when a record **changed in that pull request** is itself
+  invalid. The decisions it merely reports on never block.
 
   **On a pull request from a fork, the comment is not posted.** GitHub restricts
   `GITHUB_TOKEN` to read-only for `pull_request` events raised from a fork,
