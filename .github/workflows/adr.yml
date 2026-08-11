@@ -4,8 +4,11 @@ on:
   # Must stay `pull_request`. The governing-decisions job below holds
   # `pull-requests: write`; switching to `pull_request_target` would combine
   # that write token with a checkout of untrusted fork code. Fork PRs get a
-  # read-only token here, so the comment step degrades to a log notice --
-  # that is the intended behaviour, not a bug to "fix" by changing the trigger.
+  # read-only token here, so the comment step catches the 403, writes the body
+  # to a notice annotation and returns without failing -- see `comment()` and
+  # `isPermissionError` in the pinned action. That is the intended behaviour,
+  # not a bug to "fix" by changing the trigger. Read from the action's source
+  # and never observed here; see #306 and ADR-0001 action item 8.
   pull_request:
     branches:
       - main
