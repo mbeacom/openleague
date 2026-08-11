@@ -20,23 +20,40 @@ import { runIntegrityChecks } from '@/scripts/check-adr-integrity';
 const ADRKIT_VERSION = '0.4.0';
 const CI_ACTION_SHA = 'c3dff3a7a9c3df44233809423eb59a3505fcf6f5';
 
+/** Matches the real bunfig.toml: every first-party adrkit package exempted. */
+const EXCLUDES = ['@adrkit/cli', '@adrkit/core', '@adrkit/evaluator', '@adrkit/mcp'];
+
 interface FixtureOptions {
   /** Filenames to place in `docs/adr/`. */
   corpus?: string[];
   /** Set false to skip creating `docs/adr/` entirely. */
   withCorpusDir?: boolean;
   cliVersion?: string;
-  mcpVersion?: string;
+  /** devDependencies pin for `@adrkit/mcp`; null omits it entirely. */
+  mcpVersion?: string | null;
   ciActionVersion?: string;
+  cloudDocVersion?: string;
+  /** Raw contents for the two local MCP configs. */
+  localMcpJson?: string;
+  /** Package names to list in `minimumReleaseAgeExcludes`. */
+  excludes?: string[];
   omitFiles?: string[];
 }
+
+/** The compliant launch shape: the local binary, no registry fetch. */
+const LOCAL_MCP_JSON = JSON.stringify({
+  mcpServers: { adrkit: { command: './node_modules/.bin/adrkit-mcp' } },
+});
 
 /** Build a throwaway repo root that the checks can run against. */
 function makeFixture(options: FixtureOptions = {}): string {
   const {
     ciActionVersion = ADRKIT_VERSION,
     cliVersion = ADRKIT_VERSION,
+    cloudDocVersion = ADRKIT_VERSION,
     corpus = ['README.md', '0000-template.md', '0001-a-real-decision.md'],
+    excludes = EXCLUDES,
+    localMcpJson = LOCAL_MCP_JSON,
     mcpVersion = ADRKIT_VERSION,
     omitFiles = [],
     withCorpusDir = true,
@@ -58,15 +75,21 @@ function makeFixture(options: FixtureOptions = {}): string {
     }
   }
 
+  const devDependencies: Record<string, string> = { '@adrkit/cli': cliVersion };
+  if (mcpVersion !== null) devDependencies['@adrkit/mcp'] = mcpVersion;
+
+  write('package.json', JSON.stringify({ devDependencies }, null, 2));
+  write('.mcp.json', localMcpJson);
+  write('.vscode/mcp.json', localMcpJson);
   write(
-    'package.json',
-    JSON.stringify({ devDependencies: { '@adrkit/cli': cliVersion } }, null, 2),
+    'bunfig.toml',
+    '[install]\nminimumReleaseAge = 259200\nminimumReleaseAgeExcludes = [' +
+      excludes.map((name) => `"${name}"`).join(', ') +
+      ']\n',
   );
-  write('.mcp.json', `{"adrkit":{"args":["@adrkit/mcp@${mcpVersion}"]}}`);
-  write('.vscode/mcp.json', `{"adrkit":{"args":["@adrkit/mcp@${mcpVersion}"]}}`);
   write(
     '.github/copilot-cloud-agent-mcp.md',
-    `Paste \`npx @adrkit/mcp@${mcpVersion}\` into repository settings.\n`,
+    `Paste \`npx @adrkit/mcp@${cloudDocVersion}\` into repository settings.\n`,
   );
   write(
     '.github/workflows/adr.yml',
@@ -171,11 +194,27 @@ describe('check-adr-integrity', () => {
   });
 
   describe('version-pin guard', () => {
-    it('fails when the MCP pin drifts from the CLI pin', () => {
+    it('fails when the devDependency MCP pin drifts from the CLI pin', () => {
       withFixture({ mcpVersion: '0.3.0' }, (result) => {
-        const joined = result.failures.join('\n');
-        expect(joined).toContain('.mcp.json pins @adrkit/mcp at 0.3.0');
-        expect(joined).toContain('.vscode/mcp.json');
+        expect(result.failures.join('\n')).toContain(
+          'package.json pins @adrkit/mcp at 0.3.0 but @adrkit/cli at 0.4.0',
+        );
+      });
+    });
+
+    it('fails when @adrkit/mcp is not a devDependency at all', () => {
+      // The local configs run node_modules/.bin/adrkit-mcp, so without the
+      // dependency the server cannot start -- and nothing else would say so.
+      withFixture({ mcpVersion: null }, (result) => {
+        expect(result.failures.join('\n')).toContain(
+          'package.json does not pin @adrkit/mcp in devDependencies',
+        );
+      });
+    });
+
+    it('fails when @adrkit/mcp is a range rather than an exact version', () => {
+      withFixture({ mcpVersion: '^0.4.0' }, (result) => {
+        expect(result.failures.join('\n')).toContain('@adrkit/mcp is "^0.4.0"');
       });
     });
 
@@ -188,19 +227,11 @@ describe('check-adr-integrity', () => {
     });
 
     it('fails when the documented cloud agent config drifts', () => {
-      const root = makeFixture();
-      try {
-        writeFileSync(
-          path.join(root, '.github', 'copilot-cloud-agent-mcp.md'),
-          'Paste `npx @adrkit/mcp@0.1.0` into repository settings.\n',
-          'utf8',
-        );
-        expect(runIntegrityChecks(root).failures.join('\n')).toContain(
+      withFixture({ cloudDocVersion: '0.1.0' }, (result) => {
+        expect(result.failures.join('\n')).toContain(
           'copilot-cloud-agent-mcp.md pins',
         );
-      } finally {
-        rmSync(root, { force: true, recursive: true });
-      }
+      });
     });
 
     it('fails when @adrkit/cli is a range rather than an exact version', () => {
@@ -228,6 +259,89 @@ describe('check-adr-integrity', () => {
     it('fails when a pin site file is missing', () => {
       withFixture({ omitFiles: ['.mcp.json'] }, (result) => {
         expect(result.failures.join('\n')).toContain('.mcp.json is missing');
+      });
+    });
+  });
+
+  describe('local-binary guard (#307)', () => {
+    // A config that went back to `bunx -y @adrkit/mcp@0.4.0` still starts a
+    // working server at the right version, so every other signal stays green.
+    // The only thing that changed is that it is fetching from the registry
+    // again -- outside bun.lock and outside the release quarantine.
+    it('fails when a local config fetches @adrkit/mcp from the registry', () => {
+      withFixture(
+        {
+          localMcpJson: JSON.stringify({
+            mcpServers: { adrkit: { command: 'bunx', args: ['-y', '@adrkit/mcp@0.4.0'] } },
+          }),
+        },
+        (result) => {
+          const joined = result.failures.join('\n');
+          expect(joined).toContain('.mcp.json fetches @adrkit/mcp from the registry');
+          expect(joined).toContain('.vscode/mcp.json fetches');
+        },
+      );
+    });
+
+    it('fails when a local config no longer runs the adrkit binary', () => {
+      withFixture(
+        { localMcpJson: JSON.stringify({ mcpServers: { other: { command: 'true' } } }) },
+        (result) => {
+          expect(result.failures.join('\n')).toContain(
+            'does not run node_modules/.bin/adrkit-mcp',
+          );
+        },
+      );
+    });
+
+    it('accepts the workspace-variable form VS Code uses', () => {
+      withFixture(
+        {
+          localMcpJson: JSON.stringify({
+            mcpServers: {
+              adrkit: { command: '${workspaceFolder}/node_modules/.bin/adrkit-mcp' },
+            },
+          }),
+        },
+        (result) => {
+          expect(result.failures).toEqual([]);
+        },
+      );
+    });
+  });
+
+  describe('quarantine-exclusion guard (#307)', () => {
+    // minimumReleaseAgeExcludes is per-package: it does not cover a package's
+    // dependencies, and it does not accept globs. Miss one and the next adrkit
+    // release cannot be installed for three days -- and it cannot be worked
+    // around by bumping one package first, because the pins must move together.
+    it.each(['@adrkit/core', '@adrkit/evaluator', '@adrkit/mcp', '@adrkit/cli'])(
+      'fails when %s is missing from minimumReleaseAgeExcludes',
+      (missing) => {
+        withFixture(
+          { excludes: EXCLUDES.filter((name) => name !== missing) },
+          (result) => {
+            expect(result.failures.join('\n')).toContain(
+              `does not list "${missing}" in minimumReleaseAgeExcludes`,
+            );
+          },
+        );
+      },
+    );
+
+    it('does not require exclusions when no quarantine is configured', () => {
+      const root = makeFixture();
+      try {
+        writeFileSync(path.join(root, 'bunfig.toml'), '[install]\n', 'utf8');
+        expect(runIntegrityChecks(root).failures).toEqual([]);
+      } finally {
+        rmSync(root, { force: true, recursive: true });
+      }
+    });
+
+    it('fails when bunfig.toml is missing entirely', () => {
+      withFixture({ omitFiles: ['bunfig.toml'] }, (result) => {
+        expect(result.failures.join('\n')).toContain('bunfig.toml is missing');
       });
     });
   });

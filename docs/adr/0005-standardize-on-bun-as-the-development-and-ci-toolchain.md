@@ -18,6 +18,10 @@ affects:
   - type: path
     pattern: "package.json"
   - type: path
+    pattern: ".mcp.json"
+  - type: path
+    pattern: ".vscode/mcp.json"
+  - type: path
     pattern: ".github/workflows/**"
   - type: path
     pattern: "vercel.json"
@@ -63,7 +67,9 @@ Two settings follow from the decision rather than merely accompanying it:
 
 - `bunfig.toml` sets `minimumReleaseAge = 259200` — a three-day quarantine
   before a newly published version is installable, which blunts the window in
-  which a compromised release is picked up automatically.
+  which a compromised release is picked up automatically. It applies to
+  `bun install`, and therefore to what is in `bun.lock` — **not** to anything
+  fetched at runtime by some other mechanism.
 - `vercel.json` pins `bunVersion: "1.x"` and installs with
   `--frozen-lockfile`, so deployment resolves exactly what was committed.
 
@@ -74,6 +80,42 @@ Bun is the *toolchain*, not the *runtime contract*. The application is a Next.js
 app deployed to Vercel's Node-compatible serverless runtime. `bun --bun next
 dev` is used locally for speed, but nothing in the application code may depend
 on Bun-only APIs.
+
+### MCP servers are launched outside the quarantine, so they are pinned instead
+
+The scope limit above turned out to matter. MCP servers are configured in
+`.mcp.json` and `.vscode/mcp.json` and launched with `bunx -y` / `npx -y`, which
+resolves and executes from the registry at *process start*. Nothing about that
+path touches `bun install`, so those packages were in neither the lockfile nor
+the quarantine — and two of the four floated on `@latest`, re-resolving on every
+launch. Agents invoke these tools autonomously with repository access, so there
+is no human in the loop at the moment a fetched version runs (#307).
+
+The response is tiered by measured cost rather than applied uniformly:
+
+- **`@adrkit/mcp` is a pinned devDependency**, launched as
+  `node_modules/.bin/adrkit-mcp`. It adds three packages, because `@adrkit/core`
+  is already present via `@adrkit/cli`. This is the full fix: lockfile integrity
+  *and* the quarantine.
+- **The other three keep `bunx`, at an exact version.** Vendoring them was
+  measured and rejected: `@upstash/context7-mcp` adds 56 packages and
+  `next-devtools-mcp` 63, each an Express subtree paid on every CI run, every
+  Vercel build, and every contributor's install, for a tool only agents use in
+  local sessions; `@playwright/mcp` adds only three, but one is a `playwright`
+  **pre-release**, which does not belong in a production application's lockfile.
+- An exact pin is weaker than vendoring but is the larger share of the benefit.
+  It converts the attack from "publish a malicious version" — executed on the
+  next launch — into "replace an already-published version", which npm forbids.
+- `bun run check:mcp-pins` enforces this on pull requests. Like `check:raw-sql`
+  for ADR-0003, the policy is a gate rather than a convention, because a
+  floating tag starts a perfectly working server right up until the day it
+  does not.
+
+`minimumReleaseAgeExcludes` exempts the first-party `@adrkit/*` packages, whose
+releases come from this repository's own maintainer. Every one of them is listed
+individually: exclusions do not propagate to a package's dependencies and globs
+are not supported, so an incomplete list makes the next adrkit release
+uninstallable for three days.
 
 ## Options considered
 
@@ -132,6 +174,17 @@ the divergence class this decision exists to eliminate.
 - **The three-day quarantine cuts both ways.** It also delays security patches
   by up to three days. That is an accepted trade: unattended compromise is
   judged the likelier risk than a three-day-old known CVE.
+- **Pinning the MCP servers trades drift risk for staleness risk.** Versions in
+  `.mcp.json` are not `package.json` dependencies, so Dependabot cannot see
+  them and nothing will bump them automatically — `@latest` at least stayed
+  current. This is the same shape of trade as the quarantine itself, and it is
+  the reason the pins have to be reviewed by hand rather than assumed fresh.
+- **The cloud agent's MCP configuration cannot be covered at all.** It is a
+  GitHub repository *setting*, evaluated before or independently of
+  `bun install`, so it cannot run a local binary and must keep `npx`. It gets
+  the exact-version pin and nothing else. That gap is recorded in
+  `.github/copilot-cloud-agent-mcp.md` rather than papered over, and it closes
+  only if the agent runner gains a dependable pre-install step.
 
 ## Consequences
 
@@ -151,6 +204,13 @@ the divergence class this decision exists to eliminate.
   as Bun itself misbehaving. When something in the supply chain stops working,
   check whether a Bun-specific artifact is the thing the other tool cannot read
   before assuming the other tool is at fault.
+- **A supply-chain control is only as wide as the mechanism it hooks.**
+  `minimumReleaseAge` reads as "this project quarantines new npm releases", but
+  it hooks `bun install` and so covers only the lockfile. Everything that
+  reaches npm by another route — `bunx`, `npx`, an editor's own tooling, a
+  GitHub repository setting — is outside it by default and looks no different
+  from the inside (#307). Before treating any of these settings as covering a
+  new kind of dependency, check which command actually enforces it.
 - **Revisit if:** Vercel drops or degrades Bun support, or the project gains
   enough contributors that npm familiarity outweighs the speed benefit.
 
@@ -161,3 +221,8 @@ the divergence class this decision exists to eliminate.
 2. [x] `bunfig.toml` sets a three-day `minimumReleaseAge`
 3. [x] `vercel.json` pins `bunVersion` and installs `--frozen-lockfile`
 4. [x] Note the Bun prerequisite in the contributing guide
+5. [x] MCP servers are pinned or vendored, and `bun run check:mcp-pins` enforces
+   it on pull requests (#307)
+6. [ ] Move the cloud agent MCP entry to the local binary if the agent runner
+   ever gains a dependable pre-install step; until then the gap stands as
+   documented in `.github/copilot-cloud-agent-mcp.md`

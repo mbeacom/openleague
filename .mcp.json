@@ -1,28 +1,20 @@
 {
   "mcpServers": {
     "adrkit": {
-      "command": "bunx",
-      "args": [
-        "--bun",
-        "-y",
-        "@adrkit/mcp@0.4.0",
-        "--cwd",
-        ".",
-        "--dir",
-        "docs/adr"
-      ]
+      "command": "./node_modules/.bin/adrkit-mcp",
+      "args": ["--cwd", ".", "--dir", "docs/adr"]
     },
     "context7": {
       "command": "bunx",
-      "args": ["--bun", "-y", "@upstash/context7-mcp@^2"]
+      "args": ["--bun", "-y", "@upstash/context7-mcp@2.3.0"]
     },
     "playwright": {
       "command": "bunx",
-      "args": ["--bun", "-y", "@playwright/mcp@latest"]
+      "args": ["--bun", "-y", "@playwright/mcp@0.0.79"]
     },
     "next-devtools": {
       "command": "bunx",
-      "args": ["--bun", "-y", "next-devtools-mcp@latest"]
+      "args": ["--bun", "-y", "next-devtools-mcp@0.4.0"]
     }
   }
 }
