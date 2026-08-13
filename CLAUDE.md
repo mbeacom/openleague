@@ -503,7 +503,7 @@ describe('Feature Name', () => {
 
 Architectural decisions are recorded as machine-readable ADRs in `docs/adr/`,
 managed by [adrkit](https://github.com/mbeacom/adrkit) (`@adrkit/cli`, pinned to
-0.4.0). See [ADR-0001](./docs/adr/0001-record-architecture-decisions-as-versioned-markdown-in-git.md)
+0.7.0). See [ADR-0001](./docs/adr/0001-record-architecture-decisions-as-versioned-markdown-in-git.md)
 for why.
 
 `CLAUDE.md` describes *how to work here*; ADRs record *why the conventions are
@@ -516,6 +516,8 @@ bun run adr:lint                      # validate the whole corpus
 bun run adr:check-integrity           # non-empty corpus, discoverable filenames,
                                       # and agreeing adrkit version pins
 bun run adr:review-dates              # decisions past, or near, their reviewBy
+bun run adr:queue                     # decisions awaiting review (the ARB queue)
+bun run adr:check-reports             # validate the generated badge reports
 bun run adr:explain lib/actions/x.ts  # which decisions govern this file?
 bun run adr:check <changed files...>  # decisions governing a change set
 bun run adr:new "Use X for Y"         # scaffold a new record
@@ -554,6 +556,15 @@ extension. `/speckit.plan` offers an optional `after_plan` check.
 
 CI (`.github/workflows/adr.yml`) lints the corpus on every pull request and
 comments the decisions governing the changed files.
+
+The two ADR badges in `README.md` — corpus size and ARB queue depth — are a
+recipe over JSON adrkit already emits, not a hosted service. When the corpus
+changes on `main`, `.github/workflows/adr-badges.yml` regenerates
+`.adrkit/lint.json` (`$.checked`) and `.adrkit/queue.json` (`$.totalItems`),
+validates them with `bun run adr:check-reports`, and commits them for
+shields.io to read. A malformed report renders as `no result` rather than
+failing, so it is validated before it is published; regenerate the pair locally
+with the same two commands the workflow runs if you need to inspect them.
 
 ### CI/CD and Releases
 

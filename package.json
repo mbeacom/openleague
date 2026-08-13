@@ -34,6 +34,8 @@
     "adr:review-dates": "bun scripts/check-adr-review-dates.ts",
     "adr:new": "adr new",
     "adr:check": "adr check",
+    "adr:queue": "adr queue",
+    "adr:check-reports": "bun scripts/check-adr-reports.ts",
     "adr:explain": "adr explain",
     "adr:graph": "adr graph",
     "docs:build-pages": "tsx scripts/build-docs-pages.ts",
@@ -76,8 +78,8 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@adrkit/cli": "0.4.0",
-    "@adrkit/mcp": "0.4.0",
+    "@adrkit/cli": "0.7.0",
+    "@adrkit/mcp": "0.7.0",
     "@eslint/eslintrc": "^3.3.6",
     "@tailwindcss/postcss": "^4.3.3",
     "@testing-library/jest-dom": "^6.10.0",
