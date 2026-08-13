@@ -46,6 +46,8 @@ bun run adr:check-integrity             # corpus is non-empty, filenames are
                                         # discoverable, version pins agree
 bun run adr:review-dates                # which decisions are past, or near,
                                         # their reviewBy date?
+bun run adr:queue                       # which decisions await review?
+bun run adr:check-reports               # validate the generated badge reports
 bun run adr:explain lib/actions/team.ts # what governs this file?
 bun run adr:check <changed files...>    # what governs a change set?
 bun run adr:new "Use X for Y"           # scaffold the next record
@@ -154,3 +156,38 @@ days of passing, and closes it again once the dates are moved forward. See
 
 The corpus is excluded from the docs-site path filters, because only top-level
 `docs/*.md` files are published — an ADR change cannot alter the built site.
+
+## Badges
+
+The two ADR badges in the root [`README.md`](../../README.md) report *numbers a
+reader can verify by opening this directory* — corpus size and ARB queue depth.
+Neither is a grade, and neither claims the corpus is healthy.
+
+adrkit ships no badge service and no `adr badge` command. Both badges are a
+recipe over JSON it already emits, served from this repository and rendered by
+shields.io. `.github/workflows/adr-badges.yml` runs on a push to `main` that
+touches `docs/adr/**` and regenerates two files:
+
+| File | Command | Badge reads |
+|------|---------|-------------|
+| `.adrkit/lint.json` | `adr lint --json` | `$.checked` — every record on file, whatever its status |
+| `.adrkit/queue.json` | `adr queue --format json` | `$.totalItems` — records with status `proposed` |
+
+Three things about that workflow are deliberate:
+
+- **It runs the pinned local binary**, not `npx @adrkit/cli@x.y.z` as adrkit's
+  own recipe suggests. A registry fetch inside a job holding `contents: write`
+  gets neither `bun.lock`'s integrity hash nor the `minimumReleaseAge`
+  quarantine (ADR-0005), and it would add a sixth version pin site that nothing
+  would notice going stale.
+- **It validates before publishing.** A truncated write does not break a badge —
+  shields.io renders `no result`, which reads as broken tooling and would go
+  unnoticed indefinitely. `bun run adr:check-reports` fails the run instead.
+- **It commits with `[skip ci]`**, matching `release.yml`'s own convention.
+  `.adrkit/**` is not covered by `release.yml`'s `paths-ignore`, so without the
+  marker a two-file JSON refresh would start a release.
+
+A badge cannot detect its own staleness: if this workflow is disabled or starts
+failing its push, the committed JSON keeps its last value and the badges keep
+rendering it. The signal that covers regeneration is the workflow's own run
+history, not the badges.

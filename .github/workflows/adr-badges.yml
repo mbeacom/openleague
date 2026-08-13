@@ -1,0 +1,126 @@
+name: ADR badge reports
+
+# Publishes the two numbers the README badges render: corpus size, from
+# `adr lint --json`, and ARB queue depth, from `adr queue --format json`.
+# adrkit ships no badge service and no `adr badge` command -- both badges are a
+# recipe over JSON it already emits, served from this repository and rendered by
+# shields.io. See ADR-0001 and adrkit's own ADR-0025.
+#
+# Deliberately NOT a `pull_request` workflow and deliberately not a job in
+# `adr.yml`: it holds `contents: write` and pushes to the default branch, which
+# has no business running against untrusted fork code. `adr.yml` stays read-only
+# apart from its one comment step.
+on:
+  push:
+    branches:
+      - main
+    # Only the corpus can change these numbers. Deliberately NOT `.adrkit/**`,
+    # or the workflow's own commit would re-trigger it forever.
+    paths:
+      - 'docs/adr/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# `cancel-in-progress: false`, unlike adr.yml: a cancelled run here leaves the
+# reports stale rather than merely skipping a comment, and two runs racing to
+# push the same file is the one conflict the rebase below cannot resolve
+# cleanly. Serializing costs a few seconds and removes the case entirely.
+concurrency:
+  group: adr-badge-reports
+  cancel-in-progress: false
+
+jobs:
+  regenerate:
+    name: Regenerate the corpus reports
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      # Sole elevated scope: the job commits the two report files to main.
+      # `write` implies read, so there is no separate `contents: read` here.
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          # Full history: the push step rebases onto main when another workflow
+          # (release.yml also pushes there) landed a commit mid-run, and a
+          # shallow clone makes that rebase unreliable.
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
+        with:
+          bun-version: latest
+
+      # --ignore-scripts skips the Prisma postinstall, which needs a
+      # DATABASE_URL that reading markdown records has no use for.
+      - name: Install dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      # The upstream recipe fetches `npx @adrkit/cli@x.y.z` here. This runs the
+      # devDependency out of node_modules/.bin instead, for the reason recorded
+      # in ADR-0005 and enforced for the MCP servers by `bun run check:mcp-pins`:
+      # a registry fetch inside a write-capable job gets neither bun.lock's
+      # integrity hash nor the `minimumReleaseAge` quarantine. It also means the
+      # version lives in exactly one place -- package.json -- rather than adding
+      # a sixth pin site that nothing would notice going stale.
+      #
+      # Generated into a staging directory so the reports are validated *before*
+      # anything replaces the published files, and never half-written.
+      - name: Generate the reports
+        run: |
+          mkdir -p .adrkit-staging
+          ./node_modules/.bin/adr lint --json > .adrkit-staging/lint.json
+          ./node_modules/.bin/adr queue --format json > .adrkit-staging/queue.json
+
+      # A truncated or malformed report does not break the badge -- it renders
+      # `no result`, which reads as broken tooling and would go unnoticed until
+      # someone looked. Fail here rather than publish it.
+      - name: Validate before publishing
+        run: bun run adr:check-reports .adrkit-staging
+
+      - name: Publish the validated reports
+        run: |
+          mkdir -p .adrkit
+          mv .adrkit-staging/lint.json .adrkit-staging/queue.json .adrkit/
+          rmdir .adrkit-staging
+
+      - name: Commit when the reports changed
+        run: |
+          # `git diff` alone cannot see an untracked file, so on the first run it
+          # would report "no change" and never publish anything. Compare against
+          # the index, and stage the paths explicitly -- `commit -am` does not
+          # stage a new file and would sweep in unrelated tracked edits.
+          git add .adrkit/lint.json .adrkit/queue.json
+          if git diff --cached --quiet -- .adrkit; then
+            echo "Reports unchanged; nothing to commit."
+            exit 0
+          fi
+
+          git config user.name  'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          # `[skip ci]` matches the convention release.yml already uses for its
+          # version-bump commit. Without it this push starts a release run and a
+          # full quality-gates run for a two-file JSON refresh; `.adrkit/**` is
+          # not covered by release.yml's `paths-ignore`, so the marker is what
+          # stops it.
+          git commit -m 'chore(adr): refresh corpus badge reports [skip ci]'
+
+          # release.yml pushes to main too, so a commit can land between the
+          # checkout and this push. The reports touch only .adrkit/*.json, which
+          # no other workflow writes, so the rebase applies cleanly and a plain
+          # retry is enough. No --force: this is a shared branch.
+          for attempt in 1 2 3; do
+            if git push; then
+              echo "Published on attempt $attempt."
+              exit 0
+            fi
+            echo "Push rejected on attempt $attempt; rebasing onto main."
+            git pull --rebase origin main
+          done
+
+          echo "::error::Could not publish the ADR badge reports after 3 attempts."
+          exit 1

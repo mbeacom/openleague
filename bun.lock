@@ -37,8 +37,8 @@
         "zod": "^4.4.3",
       },
       "devDependencies": {
-        "@adrkit/cli": "0.4.0",
-        "@adrkit/mcp": "0.4.0",
+        "@adrkit/cli": "0.7.0",
+        "@adrkit/mcp": "0.7.0",
         "@eslint/eslintrc": "^3.3.6",
         "@tailwindcss/postcss": "^4.3.3",
         "@testing-library/jest-dom": "^6.10.0",
@@ -70,13 +70,13 @@
   "packages": {
     "@adobe/css-tools": ["@adobe/css-tools@4.4.4", "", {}, "sha512-Elp+iwUx5rN5+Y8xLt5/GRoG20WGoDCQ/1Fb+1LiGtvwbDavuSk0jhD/eZdckHAuzcDzccnkv+rEjyWfRx18gg=="],
 
-    "@adrkit/cli": ["@adrkit/cli@0.4.0", "", { "dependencies": { "@adrkit/core": "0.4.0", "@adrkit/evaluator": "0.4.0" }, "bin": { "adr": "dist/index.js" } }, "sha512-kWBezzNtSNE40oBBLkfwmzWPoqW6xE/xw62DaU7X8u70otVOClhI1bwOevmXmYafCR682aRPXQRH7/d+Oa356A=="],
+    "@adrkit/cli": ["@adrkit/cli@0.7.0", "", { "dependencies": { "@adrkit/core": "0.7.0", "@adrkit/evaluator": "0.7.0" }, "bin": { "adr": "dist/index.js" } }, "sha512-gxac7S0KoCnBGwpFYI0HJy0a6nGclLbP5hL5bTMox5WpTk9gC5cD082ZxzdF2ueZNAdeZAIKmCJwFLdAAtQkqg=="],
 
-    "@adrkit/core": ["@adrkit/core@0.4.0", "", { "dependencies": { "picomatch": "^4", "semver": "^7", "yaml": "latest", "zod": "^4" } }, "sha512-gvvyOKyVScl9u/PUpq3EJ34RTvE5zUYr+IXsnwAuhjRcUQXASpxi3LhwQAAfODg8Ar5gkRoqCBaFQscslizx6g=="],
+    "@adrkit/core": ["@adrkit/core@0.7.0", "", { "dependencies": { "picomatch": "^4", "semver": "^7", "yaml": "latest", "zod": "^4" } }, "sha512-fA9z5m5ho4aUtJD7AOlycgyPdL4opzwnvUFVS1Xr2oHzAP+LH/ITgxfVV6FkZNFT8cnYMlMRXgL9ql+Zpt4vlw=="],
 
-    "@adrkit/evaluator": ["@adrkit/evaluator@0.4.0", "", { "dependencies": { "@adrkit/core": "0.4.0", "jsonpath-rfc9535": "1.3.0" } }, "sha512-iadthsNpWTqDZsZg/deNniEaRin7XPHVe1GDYYjwjR9yjJK031oaq6roEpTljrUKRfS1IwIdXMMZ8bTg4UphXg=="],
+    "@adrkit/evaluator": ["@adrkit/evaluator@0.7.0", "", { "dependencies": { "@adrkit/core": "0.7.0", "jsonpath-rfc9535": "1.3.0" } }, "sha512-mKoDv/gqwpCpZQIV3xx0sP4Tmy8Ds2WkLsQB6gXmez34dPsiuSe9NJSpZQ8hp/X0ydN9eOeUflJqgWsxujT1JA=="],
 
-    "@adrkit/mcp": ["@adrkit/mcp@0.4.0", "", { "dependencies": { "@adrkit/core": "0.4.0", "@modelcontextprotocol/server": "2.0.0", "zod": "^4.2.0" }, "bin": { "adrkit-mcp": "dist/bin.js" } }, "sha512-WhoLbC1w4GgAmli3ZO1SesKQYKHWI0P/Eq1QD8apTtaW34JlthXlueql30tJtV9lMuTuIhGs2AAj3qd4LHHwjA=="],
+    "@adrkit/mcp": ["@adrkit/mcp@0.7.0", "", { "dependencies": { "@adrkit/core": "0.7.0", "@modelcontextprotocol/server": "2.0.0", "zod": "^4.2.0" }, "bin": { "adrkit-mcp": "dist/bin.js" } }, "sha512-JbH1X+MXEWf3VNnzwd/suTb7x+L1WQmtXV3DB48UQiXZ+qkoyBOGHzj8YhvXOhTHAwz8T7FEP6Dxx2EKkxmPDQ=="],
 
     "@alloc/quick-lru": ["@alloc/quick-lru@5.2.0", "", {}, "sha512-UrcABB+4bUrFABwbluTIBErXwvbsU/V7TZWfmbgJfbkwiBuziS9gxdODUyuiecfdGQ85jglMW6juS3+z5TsKLw=="],
 
@@ -2100,7 +2100,7 @@
 
     "zwitch": ["zwitch@2.0.4", "", {}, "sha512-bXE4cR/kVZhKZX/RjPEflHaKVhUVl85noU3v6b8apfQEc1x4A+zBxjZ4lN8LqGd6WZ3dl98pY4o717VFmoPp+A=="],
 
-    "@adrkit/core/semver": ["semver@7.7.4", "", { "bin": { "semver": "bin/semver.js" } }, "sha512-vFKC2IEtQnVhpT78h1Yp8wzwrf8CM+MzKMHGJZfBtzhZNycRFnXsHk6E5TxIkkMsgNS7mdX3AGB7x2QM2di4lA=="],
+    "@adrkit/core/semver": ["semver@7.8.5", "", { "bin": { "semver": "bin/semver.js" } }, "sha512-Y7/KDsb8LjooZpwaqGyulO6DQlksgCncchHGk+sZIY4SBvUocMBEFH5Ur1fI4dV+Jvl0w6cjvucaIi40puRioA=="],
 
     "@apm-js-collab/code-transformer/source-map": ["source-map@0.6.1", "", {}, "sha512-UjgapumWlbMhkBgzT7Ykc5YXUT46F0iKu8SGXq0bcwP5dz/h0Plj6enJqjz1Zbq2l5WaqYnrVbwWOWMyF3F47g=="],
 

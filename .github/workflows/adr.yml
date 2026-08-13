@@ -80,10 +80,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
 
-      # Pinned to the immutable v0.4.0 commit rather than the moving @v0 tag,
+      # Pinned to the immutable v0.7.0 commit rather than the moving @v0 tag,
       # matching the ADR-0001 decision to pin adrkit exactly.
       - name: Resolve decisions governing this pull request
-        uses: mbeacom/adrkit/packages/ci@c3dff3a7a9c3df44233809423eb59a3505fcf6f5 # v0.4.0
+        uses: mbeacom/adrkit/packages/ci@e3155eaaf200c9ed7f3ea572d91f0bd4c11c35cc # v0.7.0
         env:
           # Required for the action to update its existing comment instead of
           # posting a new one per push. It only recognises its own comment when

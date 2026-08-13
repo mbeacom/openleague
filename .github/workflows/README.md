@@ -89,6 +89,20 @@ git push origin v1.2.3
 - Verifies required environment variables are documented
 - Builds the GitHub Pages documentation artifact
 
+### 6. ADR Badge Reports Workflow (`adr-badges.yml`)
+
+**Trigger**: Push to `main` that changes `docs/adr/**`, or manual dispatch
+
+**Purpose**: Publishes the two numbers the README's ADR badges render
+
+**Features**:
+- Regenerates `.adrkit/lint.json` and `.adrkit/queue.json` from the pinned local
+  adrkit binary (never a registry fetch — see ADR-0005)
+- Validates both reports with `bun run adr:check-reports` before publishing, so a
+  truncated write fails the run instead of rendering `no result` on the badge
+- Commits with `[skip ci]` so a report refresh does not start a release
+- Rebases and retries the push, since `release.yml` also writes to `main`
+
 ## Release Configuration
 
 ### `release.yml`
