@@ -85,11 +85,17 @@ jobs:
       - name: Resolve decisions governing this pull request
         uses: mbeacom/adrkit/packages/ci@e3155eaaf200c9ed7f3ea572d91f0bd4c11c35cc # v0.7.0
         env:
-          # Required for the action to update its existing comment instead of
-          # posting a new one per push. It only recognises its own comment when
-          # the resolved token equals $GITHUB_TOKEN, and Actions does not export
-          # that variable automatically. Without this the marker lookup is
-          # skipped and every run appends another comment.
+          # Inert as pinned, and safe to delete. Through v0.6.0 the action
+          # recognised its own comment only when the resolved token equalled
+          # $GITHUB_TOKEN, which Actions does not export, so without this block
+          # the marker lookup was skipped and every push appended another
+          # comment (adrkit #107). v0.7.0 deleted that comparison: it now reads
+          # a refused `users.getAuthenticated` call as an app-installation
+          # token and claims its prior comment on `user.type == 'Bot'` plus the
+          # marker leading the body (adrkit ADR-0026). The variable survives
+          # only as a fallback *source* -- `getInput('token') ||
+          # process.env.GITHUB_TOKEN` -- and `with: token:` below is always
+          # set, so this is never read.
           GITHUB_TOKEN: ${{ github.token }}
         with:
           dir: docs/adr
