@@ -217,3 +217,8 @@ We accept real costs:
    `head.repo`, no untrusted-code context. The evidence narrows what is
    unobserved rather than closing it. Only a pull request from an actual fork
    ticks this box.
+
+   The evidence is also scoped to one credential: the default `GITHUB_TOKEN`
+   with its permissions downgraded. A custom GitHub App token reaches the same
+   `app-installation` classification in the action but is a different
+   credential, so the observation does not generalise to it.
