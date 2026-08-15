@@ -199,3 +199,26 @@ We accept real costs:
    fork PR since the workflow landed, so that is read rather than observed — the
    same distinction as item 7. Confirming it needs a pull request from an
    account that can fork this repository. See #306.
+
+   **Partial evidence exists, and it does not discharge this item.**
+   `mbeacom/adrkit-t018-dogfood` run 31773014051 (attempt 2, job
+   `degrade-read-only`) dispatched the action under `pull-requests: read` and
+   observed the degrade: a `notice` carrying the comment body, a green job, and
+   no comment written. That answers #306's first question — the action degrades
+   without blocking the PR, so the `continue-on-error` and `workflow_run`
+   remedies #306 proposed are moot, and the consequence it anticipated is
+   confirmed: an external contributor silently never receives the comment.
+
+   It is nonetheless a **proxy**, and the box stays unticked because the proxy
+   is *provenance-blind*. Its pull request is same-repo — `head.repo.full_name
+   == base.repo.full_name`, so `is_cross_repo` is false. A downgraded token
+   reproduces the *token* condition this item cares about, but not the
+   *provenance* condition the wording asks for: no fork, no cross-repo
+   `head.repo`, no untrusted-code context. The evidence narrows what is
+   unobserved rather than closing it. Only a pull request from an actual fork
+   ticks this box.
+
+   The evidence is also scoped to one credential: the default `GITHUB_TOKEN`
+   with its permissions downgraded. A custom GitHub App token reaches the same
+   `app-installation` classification in the action but is a different
+   credential, so the observation does not generalise to it.
