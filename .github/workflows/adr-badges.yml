@@ -1,10 +1,10 @@
 name: ADR badge reports
 
 # Publishes the two numbers the README badges render: corpus size, from
-# `adr lint --json`, and ARB queue depth, from `adr queue --format json`.
-# adrkit ships no badge service and no `adr badge` command -- both badges are a
-# recipe over JSON it already emits, served from this repository and rendered by
-# shields.io. See ADR-0001 and adrkit's own ADR-0025.
+# `adrkit lint --json`, and ARB queue depth, from `adrkit queue --format json`.
+# adrkit ships no badge service and no `adrkit badge` command -- both badges are
+# a recipe over JSON it already emits, served from this repository and rendered
+# by shields.io. See ADR-0001 and adrkit's own ADR-0025.
 #
 # Deliberately NOT a `pull_request` workflow and deliberately not a job in
 # `adr.yml`: it holds `contents: write` and pushes to the default branch, which
@@ -68,13 +68,17 @@ jobs:
       # version lives in exactly one place -- package.json -- rather than adding
       # a sixth pin site that nothing would notice going stale.
       #
+      # `adrkit`, not the `adr` alias: @adrkit/cli 0.8.0 added the `adrkit` bin
+      # because `adr` on npm belongs to an unrelated package, so a tree that ever
+      # carried both would resolve `.bin/adr` by install order rather than intent.
+      #
       # Generated into a staging directory so the reports are validated *before*
       # anything replaces the published files, and never half-written.
       - name: Generate the reports
         run: |
           mkdir -p .adrkit-staging
-          ./node_modules/.bin/adr lint --json > .adrkit-staging/lint.json
-          ./node_modules/.bin/adr queue --format json > .adrkit-staging/queue.json
+          ./node_modules/.bin/adrkit lint --json > .adrkit-staging/lint.json
+          ./node_modules/.bin/adrkit queue --format json > .adrkit-staging/queue.json
 
       # A truncated or malformed report does not break the badge -- it renders
       # `no result`, which reads as broken tooling and would go unnoticed until

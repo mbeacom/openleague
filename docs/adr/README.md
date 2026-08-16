@@ -59,6 +59,14 @@ registered in `.mcp.json` and `.vscode/mcp.json`. It surfaces `rejected` and
 `superseded` records by default, which is the point — the decision *not* to do
 something is the one most often re-litigated.
 
+Reaching for the CLI directly rather than a script? It is **`adrkit`**. The
+package installs a second bin, `adr`, pointing at the same program, but `adr` on
+npm is an [unrelated package](https://www.npmjs.com/package/adr) that adrkit does
+not control and cannot acquire — so in a tree carrying both, `node_modules/.bin/adr`
+is whichever installed last. `@adrkit/cli` 0.8.0 added the `adrkit` bin precisely
+so nothing here has to depend on that. The `adr:*` script names above are this
+repository's own namespace and are not affected.
+
 The **Copilot cloud agent** and **Copilot code review** read a separate,
 repository-level MCP setting that cannot be committed as a file. The value to
 paste, and why it differs from the local one, is in
@@ -73,7 +81,7 @@ work does not need a record.
 Start from `0000-template.md` or run `bun run adr:new`. Then:
 
 - **Fill in `affects`.** A record with no `affects` matchers is advisory only —
-  it will never appear in `adr explain` or the CI comment. Path matchers are the
+  it will never appear in `adrkit explain` or the CI comment. Path matchers are the
   ones that resolve in this repository; `package` matchers are inert without a
   dependency snapshot and are deliberately not used.
 - **Set `reversibility` honestly.** Under-declaring a one-way door is the
@@ -98,7 +106,7 @@ days of passing, and closes it again once the dates are moved forward. See
 
 `.github/workflows/adr.yml` runs on every pull request:
 
-- **lint** — `adr lint` over the whole corpus; fails the build on schema errors,
+- **lint** — `adrkit lint` over the whole corpus; fails the build on schema errors,
   duplicate ids, or dangling references.
 - **raw-sql** — enforces the ADR-0003 raw-SQL prohibition with
   `bun run check:raw-sql`. It is a job here rather than a lone ESLint rule
@@ -144,8 +152,8 @@ days of passing, and closes it again once the dates are moved forward. See
   that issue rather than opening another; once the dates move forward it comments
   and closes itself.
 
-  This closes a real gap: `adr queue` only projects `proposed` records, so an
-  `accepted` one never appears there, and `adr lint` does not read `reviewBy` at
+  This closes a real gap: `adrkit queue` only projects `proposed` records, so an
+  `accepted` one never appears there, and `adrkit lint` does not read `reviewBy` at
   all. It is deliberately **not** a pull-request check — a decision falling due
   is a notification, not a defect, and must never block unrelated work. The
   script exits 0 even when records are expired.
@@ -163,15 +171,15 @@ The two ADR badges in the root [`README.md`](../../README.md) report *numbers a
 reader can verify by opening this directory* — corpus size and ARB queue depth.
 Neither is a grade, and neither claims the corpus is healthy.
 
-adrkit ships no badge service and no `adr badge` command. Both badges are a
+adrkit ships no badge service and no `adrkit badge` command. Both badges are a
 recipe over JSON it already emits, served from this repository and rendered by
 shields.io. `.github/workflows/adr-badges.yml` runs on a push to `main` that
 touches `docs/adr/**` and regenerates two files:
 
 | File | Command | Badge reads |
 |------|---------|-------------|
-| `.adrkit/lint.json` | `adr lint --json` | `$.checked` — every record on file, whatever its status |
-| `.adrkit/queue.json` | `adr queue --format json` | `$.totalItems` — records with status `proposed` |
+| `.adrkit/lint.json` | `adrkit lint --json` | `$.checked` — every record on file, whatever its status |
+| `.adrkit/queue.json` | `adrkit queue --format json` | `$.totalItems` — records with status `proposed` |
 
 Three things about that workflow are deliberate:
 

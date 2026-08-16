@@ -69,7 +69,7 @@ export function parseFrontmatter(contents: string): RecordFrontmatter {
   try {
     parsed = parseYaml(match[1]);
   } catch {
-    // A record whose frontmatter will not parse is adr lint's problem to
+    // A record whose frontmatter will not parse is adrkit lint's problem to
     // report, not this module's. Treat it as having no readable fields.
     return {};
   }

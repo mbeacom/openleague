@@ -1,7 +1,7 @@
 /**
  * Integrity checks for the ADR corpus and the adrkit version pins.
  *
- * `adr lint` validates the records it can discover, but it exits 0 when it
+ * `adrkit lint` validates the records it can discover, but it exits 0 when it
  * discovers none -- so an emptied corpus, or a record renamed out of the
  * discoverable `NNNN-slug.md` form, passes the gate silently. It also has no
  * view of the version pins scattered across the repo. This covers those three
@@ -59,13 +59,13 @@ export function runIntegrityChecks(repoRoot: string): IntegrityResult {
   }
 
   // --- 1. The corpus is non-empty ------------------------------------------
-  // `adr lint` reports "checked 0 records, 0 errors" and exits 0 on an empty
+  // `adrkit lint` reports "checked 0 records, 0 errors" and exits 0 on an empty
   // directory, so a pull request that deletes every record merges green.
   function checkCorpusNotEmpty(entries: string[]): number {
     const records = filterRecordFiles(entries);
     if (records.length === 0) {
       fail(
-        'docs/adr/ contains no discoverable ADR records. `adr lint` exits 0 on an ' +
+        'docs/adr/ contains no discoverable ADR records. `adrkit lint` exits 0 on an ' +
           'empty corpus, so this check exists to stop a wiped corpus merging green. ' +
           '(0000-template.md is not counted: it matches the record filename pattern ' +
           'but adrkit excludes it, so counting it would let a wipe pass.)',
@@ -76,7 +76,7 @@ export function runIntegrityChecks(repoRoot: string): IntegrityResult {
 
   // --- 2. Every record is discoverable -------------------------------------
   // A record whose filename stops matching is skipped with a warning, and
-  // warnings do not affect adr lint's exit code -- so it silently stops
+  // warnings do not affect adrkit lint's exit code -- so it silently stops
   // governing anything while CI stays green.
   function checkRecordsDiscoverable(entries: string[]): void {
     for (const name of entries) {
@@ -84,7 +84,7 @@ export function runIntegrityChecks(repoRoot: string): IntegrityResult {
       fail(
         `docs/adr/${name} is not a discoverable ADR record. Rename it to ` +
           '`NNNN-kebab-slug.md`, or add it to NON_RECORD_FILES if it is not a record. ' +
-          'adr lint only warns about this, so it would otherwise be skipped silently.',
+          'adrkit lint only warns about this, so it would otherwise be skipped silently.',
       );
     }
   }

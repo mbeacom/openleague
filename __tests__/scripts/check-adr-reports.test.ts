@@ -19,10 +19,10 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { checkReports } from '@/scripts/check-adr-reports';
 
-/** Verbatim shape of `adr lint --json`, trimmed to the field the badge reads. */
+/** Verbatim shape of `adrkit lint --json`, trimmed to the field the badge reads. */
 const VALID_LINT = { checked: 5, findings: [] };
 
-/** Verbatim shape of `adr queue --format json`, trimmed likewise. */
+/** Verbatim shape of `adrkit queue --format json`, trimmed likewise. */
 const VALID_QUEUE = { version: '1', totalItems: 0, items: [] };
 
 interface FixtureOptions {
