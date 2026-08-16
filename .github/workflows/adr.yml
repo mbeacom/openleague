@@ -51,7 +51,7 @@ jobs:
       - name: Lint ADR corpus
         run: bun run adr:lint
 
-      # `adr lint` exits 0 on an empty corpus and only warns on a record whose
+      # `adrkit lint` exits 0 on an empty corpus and only warns on a record whose
       # filename stops being discoverable, so either would merge green. This
       # also holds the four committed adrkit version pins to one value.
       - name: Check ADR corpus and version-pin integrity
@@ -90,10 +90,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
 
-      # Pinned to the immutable v0.7.0 commit rather than the moving @v0 tag,
+      # Pinned to the immutable v0.8.0 commit rather than the moving @v0 tag,
       # matching the ADR-0001 decision to pin adrkit exactly.
       - name: Resolve decisions governing this pull request
-        uses: mbeacom/adrkit/packages/ci@e3155eaaf200c9ed7f3ea572d91f0bd4c11c35cc # v0.7.0
+        uses: mbeacom/adrkit/packages/ci@d9ce9e18fbe95525b4e3b2780bfe33352a5ab7f2 # v0.8.0
         env:
           # Inert as pinned, and safe to delete. Through v0.6.0 the action
           # recognised its own comment only when the resolved token equalled

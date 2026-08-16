@@ -2,8 +2,8 @@
  * Regression tests for `scripts/check-adr-integrity.ts`.
  *
  * This guard is the only thing stopping a wiped ADR corpus from merging green
- * (`adr lint` exits 0 on an empty directory) and the only thing that fails on a
- * record renamed out of the discoverable form (`adr lint` merely warns, and
+ * (`adrkit lint` exits 0 on an empty directory) and the only thing that fails on a
+ * record renamed out of the discoverable form (`adrkit lint` merely warns, and
  * warnings do not affect its exit code). Its behaviour was previously verified
  * by hand and protected by nothing.
  *

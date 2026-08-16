@@ -503,7 +503,7 @@ describe('Feature Name', () => {
 
 Architectural decisions are recorded as machine-readable ADRs in `docs/adr/`,
 managed by [adrkit](https://github.com/mbeacom/adrkit) (`@adrkit/cli`, pinned to
-0.7.0). See [ADR-0001](./docs/adr/0001-record-architecture-decisions-as-versioned-markdown-in-git.md)
+0.8.0). See [ADR-0001](./docs/adr/0001-record-architecture-decisions-as-versioned-markdown-in-git.md)
 for why.
 
 `CLAUDE.md` describes *how to work here*; ADRs record *why the conventions are
@@ -527,9 +527,15 @@ bun run check:raw-sql                 # enforce the ADR-0003 raw-SQL prohibition
 ```
 
 **Before making an architectural change**, check what governs the paths you are
-about to touch — `adr explain` (or the `adrkit` MCP server, registered in
+about to touch — `adrkit explain` (or the `adrkit` MCP server, registered in
 `.mcp.json` and `.vscode/mcp.json`) surfaces `rejected` and `superseded`
 decisions too, so a previously-tried approach is not re-proposed.
+
+The CLI ships two binaries, `adrkit` and `adr`, and they are the same program.
+Invoke it as **`adrkit`**: `adr` on npm belongs to an unrelated package of the
+same name, so a tree carrying both would resolve `node_modules/.bin/adr` by
+install order rather than by intent. The `bun run adr:*` script names above are
+this repository's own namespace and are unaffected.
 
 The Copilot cloud agent and Copilot code review use a repository-level MCP
 setting that is not a file in this repo; the value to paste into repository
@@ -538,7 +544,7 @@ settings is documented in `.github/copilot-cloud-agent-mcp.md`.
 **Write a new ADR when** a change alters one of the decisions in `docs/adr/`, or
 introduces a new one that future work should be constrained by. Routine feature
 work does not need one. Fill in `affects` — a record without it is advisory only
-and will not surface in `adr explain` or the CI comment.
+and will not surface in `adrkit explain` or the CI comment.
 
 Current records:
 

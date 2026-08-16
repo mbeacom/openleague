@@ -16,7 +16,7 @@ provenance:
 ---
 
 <!--
-  Copy to docs/adr/NNNN-kebab-title.md, or run `adr new "<title>"`.
+  Copy to docs/adr/NNNN-kebab-title.md, or run `adrkit new "<title>"`.
 
   Fill in `affects` — it is what makes this decision locatable by CI and
   agents. An ADR with no affects is advisory only.

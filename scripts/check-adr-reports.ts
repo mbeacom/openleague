@@ -2,8 +2,8 @@
  * Validates the ADR badge reports before they are published.
  *
  * `.adrkit/lint.json` and `.adrkit/queue.json` are the verbatim JSON of
- * `adr lint --json` and `adr queue --format json`. They exist only to be read
- * by shields.io, which resolves a JSONPath against them -- `$.checked` and
+ * `adrkit lint --json` and `adrkit queue --format json`. They exist only to be
+ * read by shields.io, which resolves a JSONPath against them -- `$.checked` and
  * `$.totalItems` respectively -- and renders whatever it finds.
  *
  * The failure this guards against is quiet. A truncated or malformed write does
@@ -40,8 +40,8 @@ interface ReportSpec {
 }
 
 export const REPORTS: ReportSpec[] = [
-  { file: 'lint.json', field: 'checked', command: 'adr lint --json' },
-  { file: 'queue.json', field: 'totalItems', command: 'adr queue --format json' },
+  { file: 'lint.json', field: 'checked', command: 'adrkit lint --json' },
+  { file: 'queue.json', field: 'totalItems', command: 'adrkit queue --format json' },
 ];
 
 export interface ReportCheckResult {

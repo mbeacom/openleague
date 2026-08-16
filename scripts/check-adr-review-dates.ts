@@ -2,9 +2,9 @@
  * Surface ADR `reviewBy` dates that have expired, or are about to.
  *
  * Every record carries a `reviewBy` date, and nothing in adrkit reports it:
- * `adr queue` only projects `proposed`-status records, so an `accepted` record
- * never appears there, and `adr lint` does not read the field at all. Neither
- * `adr lint --json` nor `adr graph --format json` emits `reviewBy`, so the CLI
+ * `adrkit queue` only projects `proposed`-status records, so an `accepted` record
+ * never appears there, and `adrkit lint` does not read the field at all. Neither
+ * `adrkit lint --json` nor `adrkit graph --format json` emits `reviewBy`, so the CLI
  * cannot be post-processed into a check either. Left alone, a decision quietly
  * outlives its rationale while CI stays green -- the exact failure mode ADR-0001
  * says the corpus exists to prevent.
