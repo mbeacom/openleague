@@ -6,6 +6,49 @@ import { notificationService } from "@/lib/services/notification";
 
 const BASE_URL = getBaseUrl();
 
+type GearNotificationEmailData = {
+  email: string;
+  name?: string | null;
+  leagueId: string;
+  eventType: string;
+  payload: unknown;
+};
+
+function gearNotificationCopy(eventType: string): { subject: string; body: string } {
+  const copy: Record<string, { subject: string; body: string }> = {
+    "gear.reservation.requested": { subject: "New gear reservation request", body: "A team has requested association gear." },
+    "gear.reservation.approved": { subject: "Gear reservation approved", body: "Your team gear reservation has been approved and allocated." },
+    "gear.reservation.declined": { subject: "Gear reservation update", body: "Your team gear reservation was not approved." },
+    "gear.reservation.picked_up": { subject: "Gear pickup recorded", body: "Association gear pickup has been recorded." },
+    "gear.reservation.returned": { subject: "Gear return recorded", body: "Association gear return has been recorded." },
+    "gear.reservation.due_soon": { subject: "Gear return due soon", body: "Association gear in your team's custody is due soon." },
+    "gear.reservation.overdue": { subject: "Gear return is overdue", body: "Association gear in your team's custody is overdue. Please coordinate its return." },
+    "gear.need.submitted": { subject: "New team gear need", body: "A team submitted a gear need for review." },
+    "gear.need.approved": { subject: "Gear need approved", body: "A team gear need has been approved." },
+    "gear.pledge.created": { subject: "New in-kind gear pledge", body: "A public visitor pledged an in-kind gear item for review." },
+    "gear.pledge.acknowledged": { subject: "Thank you for your gear pledge", body: "Thank you for offering in-kind gear. A league administrator will follow up if needed." },
+    "gear.pledge.received": { subject: "Gear pledge received", body: "An in-kind gear pledge has been received into association inventory." },
+  };
+  return copy[eventType] ?? { subject: "Association gear update", body: "There is an update in your association gear workspace." };
+}
+
+/** Sends a generic, operational gear message. Payload is intentionally not rendered. */
+export async function sendGearNotificationEmail(data: GearNotificationEmailData): Promise<void> {
+  const copy = gearNotificationCopy(data.eventType);
+  const greeting = data.name ? `Hi ${escapeHtml(data.name)},` : "Hi there,";
+  const gearLink = `${BASE_URL}/league/${data.leagueId}/gear`;
+  await sendEmail({
+    to: [{ email: data.email, ...(data.name ? { name: data.name } : {}) }],
+    subject: copy.subject,
+    html: `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2 style="color: #1976D2;">${escapeHtml(copy.subject)}</h2>
+      <p>${greeting}</p><p>${escapeHtml(copy.body)}</p>
+      <p><a href="${gearLink}">Open gear workspace</a></p>
+    </div>`,
+    text: `${copy.subject}\n\n${data.name ? `Hi ${data.name},\n\n` : ""}${copy.body}\n\nOpen gear workspace: ${gearLink}`,
+  });
+}
+
 /**
  * Escape a string for safe interpolation into HTML email bodies. Prevents
  * HTML/script injection from user-controlled values (event titles, names,

@@ -1422,6 +1422,7 @@ model NotificationPreference {
   rsvpReminders             Boolean @default(true) // RSVP reminder emails
   teamInvitations           Boolean @default(true) // Team invitation emails
   practicePlanNotifications Boolean @default(true) // Practice plan share/update notifications
+  gearNotifications         Boolean @default(true) // Gear requests, custody, and in-kind pledge updates
 
   // Delivery preferences
   emailEnabled  Boolean @default(true) // Receive emails

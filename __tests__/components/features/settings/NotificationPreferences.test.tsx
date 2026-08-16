@@ -33,6 +33,7 @@ const basePreferences = {
   rsvpReminders: true,
   teamInvitations: true,
   practicePlanNotifications: true,
+  gearNotifications: true,
   emailEnabled: true,
   urgentOnly: false,
   batchDelivery: false,

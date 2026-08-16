@@ -28,6 +28,7 @@ import {
   ManageAccounts as ManageAccountsIcon,
   Forum as ForumIcon,
   AdminPanelSettings as AdminPanelSettingsIcon,
+  Inventory2 as GearIcon,
 } from "@mui/icons-material";
 import { logout } from "@/lib/actions/logout";
 import { useLeague } from "@/components/providers/LeagueProvider";
@@ -89,6 +90,7 @@ export default function DashboardNav({
       { label: "Dashboard", path: `${leaguePrefix}/dashboard`, icon: <DashboardIcon /> },
       { label: "Teams", path: `${leaguePrefix}/teams`, icon: <GroupsIcon /> },
       { label: "Schedule", path: `${leaguePrefix}/schedule`, icon: <CalendarIcon /> },
+      { label: "Gear", path: `${leaguePrefix}/gear`, icon: <GearIcon /> },
       { label: "Messages", path: `${leaguePrefix}/messages`, icon: <ForumIcon /> },
       { label: "Signup Events", path: "/signup-events", icon: <HowToRegIcon /> },
       // League-scoped venues; falls back to the global page without league context

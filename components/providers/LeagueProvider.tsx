@@ -56,6 +56,7 @@ const LEAGUE_SECTION_LABELS: Record<string, string> = {
   divisions: 'Divisions',
   invitations: 'Invitations',
   payments: 'Payments',
+  gear: 'Gear',
 };
 
 // Well-known nested segments; unknown tails (ids) render as 'Details'.
@@ -65,6 +66,9 @@ const SUBPAGE_LABELS: Record<string, string> = {
   'new-game': 'New Game',
   proposals: 'Proposals',
   placement: 'Placement',
+  needs: 'Needs',
+  reservations: 'Reservations',
+  wishlist: 'Wishlist',
 };
 
 /** Push "Section" or "Section > Subpage" crumbs for a top-level route. */

@@ -269,6 +269,8 @@ export type GearReservationContext = {
   league: { id: string; name: string };
   canManageReservations: boolean;
   teamIds: string[];
+  requestableTeams: Array<{ id: string; name: string }>;
+  catalogItems: Array<{ id: string; name: string; trackingMode: "POOLED" | "INDIVIDUAL" }>;
   reservations: Array<{
     id: string;
     teamId: string;
@@ -329,8 +331,24 @@ export async function getGearReservationContext(leagueId: string): Promise<GearR
         select: { teamId: true },
       });
   const teamIds = teamMemberships.map((membership) => "teamId" in membership ? membership.teamId : membership.id);
+  const requestableTeams = canManageReservations
+    ? await prisma.team.findMany({
+        where: { leagueId, isActive: true },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      })
+    : await prisma.teamMember.findMany({
+        where: { userId, role: "ADMIN", team: { leagueId, isActive: true } },
+        select: { team: { select: { id: true, name: true } } },
+        orderBy: { team: { name: "asc" } },
+      }).then((memberships) => memberships.map((membership) => membership.team));
+  const catalogItems = await prisma.gearCatalogItem.findMany({
+    where: { leagueId, isActive: true },
+    select: { id: true, name: true, trackingMode: true },
+    orderBy: { name: "asc" },
+  });
   if (teamIds.length === 0) {
-    return { league: membership.league, canManageReservations, teamIds, reservations: [] };
+    return { league: membership.league, canManageReservations, teamIds, requestableTeams, catalogItems, reservations: [] };
   }
 
   const reservations = await prisma.gearReservation.findMany({
@@ -401,6 +419,8 @@ export async function getGearReservationContext(leagueId: string): Promise<GearR
     league: membership.league,
     canManageReservations,
     teamIds,
+    requestableTeams,
+    catalogItems,
     reservations: reservations.map((reservation) => {
       const activeAllocations = reservation.lines.flatMap((line) => line.allocations)
         .filter((allocation) => ["PENDING", "ALLOCATED", "PICKED_UP", "PARTIALLY_RETURNED"].includes(allocation.status));

@@ -15,6 +15,10 @@
     {
       "path": "/api/cron/event-waitlist",
       "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/gear-notifications",
+      "schedule": "*/15 * * * *"
     }
   ],
   "functions": {

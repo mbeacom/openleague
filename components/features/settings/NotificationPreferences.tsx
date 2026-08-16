@@ -282,6 +282,20 @@ export const NotificationPreferencesComponent: React.FC<NotificationPreferencesP
             Practice plans shared with or updated for your team
           </Typography>
 
+          <FormControlLabel
+            control={
+              <Switch
+                checked={prefs.gearNotifications}
+                onChange={(e) => handlePreferenceChange("gearNotifications", e.target.checked, leagueContext?.leagueId)}
+                disabled={isPending || !prefs.emailEnabled}
+              />
+            }
+            label="Gear Requests and Custody"
+          />
+          <Typography variant="body2" color="text.secondary" sx={{ ml: 4, mb: 2 }}>
+            Gear requests, decisions, pickup and return reminders, and in-kind pledge updates
+          </Typography>
+
           <Divider sx={{ my: 2 }} />
 
           {/* Delivery Preferences */}

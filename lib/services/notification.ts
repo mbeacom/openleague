@@ -9,6 +9,7 @@ export interface NotificationPreferences {
   rsvpReminders: boolean;
   teamInvitations: boolean;
   practicePlanNotifications: boolean;
+  gearNotifications: boolean;
   emailEnabled: boolean;
   urgentOnly: boolean;
   batchDelivery: boolean;
@@ -37,6 +38,7 @@ export class NotificationService {
         rsvpReminders: preferences.rsvpReminders,
         teamInvitations: preferences.teamInvitations,
         practicePlanNotifications: preferences.practicePlanNotifications,
+        gearNotifications: preferences.gearNotifications,
         emailEnabled: preferences.emailEnabled,
         urgentOnly: preferences.urgentOnly,
         batchDelivery: preferences.batchDelivery,
@@ -51,6 +53,7 @@ export class NotificationService {
       rsvpReminders: true,
       teamInvitations: true,
       practicePlanNotifications: true,
+      gearNotifications: true,
       emailEnabled: true,
       urgentOnly: false,
       batchDelivery: false,
