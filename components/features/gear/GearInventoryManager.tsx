@@ -63,6 +63,10 @@ function conditionLabel(value: string) {
   return value.charAt(0) + value.slice(1).toLowerCase();
 }
 
+function formatActivityTimestamp(value: string) {
+  return `${value.slice(0, 16).replace("T", " ")} UTC`;
+}
+
 function statusColor(status: string) {
   if (status === "AVAILABLE") return "success";
   if (status === "RETIRED" || status === "LOST") return "default";
@@ -153,6 +157,9 @@ export function GearInventoryManager({ data }: Props) {
             <Button variant="outlined" startIcon={<Add />} onClick={() => setDialog({ kind: "catalog" })} sx={{ minHeight: 44 }}>
               Catalog item
             </Button>
+            <Button variant="outlined" startIcon={<Add />} onClick={() => setDialog({ kind: "adjust" })} sx={{ minHeight: 44 }}>
+              Pooled stock
+            </Button>
             <Button variant="contained" startIcon={<Add />} onClick={() => setDialog({ kind: "unit" })} sx={{ minHeight: 44 }}>
               Tagged unit
             </Button>
@@ -234,7 +241,7 @@ export function GearInventoryManager({ data }: Props) {
             ))}
           </InventorySection>
           <InventorySection title="Recent inventory activity" empty="No inventory movements have been recorded.">
-            {data.recentActivity.map((activity) => <Card key={activity.id} variant="outlined"><CardContent><Typography fontWeight={700}>{conditionLabel(activity.type)} · {activity.quantity}</Typography><Typography variant="body2" color="text.secondary">{activity.beforeLocationName ?? "—"} <SwapHoriz fontSize="inherit" /> {activity.afterLocationName ?? "—"} · {new Date(activity.occurredAt).toLocaleString()}</Typography>{activity.notes ? <Typography variant="body2">{activity.notes}</Typography> : null}</CardContent></Card>)}
+            {data.recentActivity.map((activity) => <Card key={activity.id} variant="outlined"><CardContent><Typography fontWeight={700}>{conditionLabel(activity.type)} · {activity.quantity}</Typography><Typography variant="body2" color="text.secondary">{activity.beforeLocationName ?? "—"} <SwapHoriz fontSize="inherit" /> {activity.afterLocationName ?? "—"} · {formatActivityTimestamp(activity.occurredAt)}</Typography>{activity.notes ? <Typography variant="body2">{activity.notes}</Typography> : null}</CardContent></Card>)}
           </InventorySection>
         </>
       ) : null}
@@ -260,7 +267,8 @@ function GearDialog({ dialog, close, data, pending, submit }: {
   if (!dialog) return null;
   const unitCatalog = data.catalogItems.filter((item) => item.trackingMode === "INDIVIDUAL" && item.isActive);
   const pooledCatalog = data.catalogItems.filter((item) => item.trackingMode === "POOLED" && item.isActive);
-  return <Dialog open onClose={close} fullWidth maxWidth="sm" PaperProps={{ component: "form", onSubmit: (event: React.FormEvent<HTMLFormElement>) => {
+  const title = dialog.kind === "location" ? `${dialog.location ? "Edit" : "Add"} storage location` : dialog.kind === "catalog" ? `${dialog.item ? "Edit" : "Add"} catalog item` : dialog.kind === "adjust" ? "Adjust pooled stock" : dialog.kind === "pool-transfer" ? "Transfer pooled stock" : dialog.kind === "unit-transfer" ? "Transfer tagged unit" : dialog.kind === "unit-condition" ? "Change unit condition" : dialog.kind === "unit-retire" ? "Retire tagged unit" : `${dialog.unit ? "Edit" : "Add"} tagged unit`;
+  return <Dialog open onClose={close} fullWidth maxWidth="sm" aria-labelledby="gear-inventory-dialog-title" PaperProps={{ component: "form", onSubmit: (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault(); const form = new FormData(event.currentTarget);
     const value = (key: string) => String(form.get(key) ?? "");
     if (dialog.kind === "location") submit(() => dialog.location ? updateGearStorageLocation({ leagueId: data.league.id, locationId: dialog.location.id, name: value("name"), address: value("address"), privateNotes: value("privateNotes") }) : createGearStorageLocation({ leagueId: data.league.id, name: value("name"), address: value("address"), privateNotes: value("privateNotes") }));
@@ -272,11 +280,11 @@ function GearDialog({ dialog, close, data, pending, submit }: {
     if (dialog.kind === "unit-condition") submit(() => changeGearUnitCondition({ leagueId: data.league.id, unitId: dialog.unit.id, condition: value("condition") as typeof conditions[number], notes: value("notes") }));
     if (dialog.kind === "unit-retire") submit(() => retireGearUnit({ leagueId: data.league.id, unitId: dialog.unit.id, notes: value("notes") }));
   } }}>
-    <DialogTitle>{dialog.kind === "location" ? `${dialog.location ? "Edit" : "Add"} storage location` : dialog.kind === "catalog" ? `${dialog.item ? "Edit" : "Add"} catalog item` : dialog.kind === "adjust" ? "Adjust pooled stock" : dialog.kind === "pool-transfer" ? "Transfer pooled stock" : dialog.kind === "unit-transfer" ? "Transfer tagged unit" : dialog.kind === "unit-condition" ? "Change unit condition" : dialog.kind === "unit-retire" ? "Retire tagged unit" : `${dialog.unit ? "Edit" : "Add"} tagged unit`}</DialogTitle>
+    <DialogTitle id="gear-inventory-dialog-title">{title}</DialogTitle>
     <DialogContent><Stack spacing={2} sx={{ pt: 1 }}>
       {dialog.kind === "location" ? <><TextField required name="name" label="Location name" defaultValue={dialog.location?.name} inputProps={{ maxLength: 120 }} /><TextField name="address" label="Address" defaultValue={dialog.location?.address ?? ""} /><TextField name="privateNotes" label="Admin-only notes" defaultValue={dialog.location?.privateNotes ?? ""} multiline minRows={2} /></> : null}
       {dialog.kind === "catalog" ? <><TextField required name="name" label="Item name" defaultValue={dialog.item?.name} /><TextField required name="category" label="Category" defaultValue={dialog.item?.category} /><TextField name="size" label="Size" defaultValue={dialog.item?.size ?? ""} /><TextField name="brand" label="Brand" defaultValue={dialog.item?.brand ?? ""} /><TextField name="model" label="Model" defaultValue={dialog.item?.model ?? ""} /><TextField name="description" label="Description" defaultValue={dialog.item?.description ?? ""} multiline minRows={2} /><SelectField name="trackingMode" label="Tracking mode" defaultValue={dialog.item?.trackingMode ?? "POOLED"} options={[["POOLED", "Pooled stock"], ["INDIVIDUAL", "Individually tagged"]]} /></> : null}
-      {dialog.kind === "adjust" ? <><SelectField name="catalogItemId" label="Catalog item" defaultValue={dialog.stock?.catalogItemId ?? pooledCatalog[0]?.id ?? ""} options={pooledCatalog.map((item) => [item.id, item.name])} /><SelectField name="locationId" label="Storage location" defaultValue={dialog.stock?.locationId ?? data.locations.find((location) => location.isActive)?.id ?? ""} options={data.locations.filter((location) => location.isActive).map((location) => [location.id, location.name])} /><SelectField name="condition" label="Condition" defaultValue={dialog.stock?.condition ?? "GOOD"} options={conditions.map((condition) => [condition, conditionLabel(condition)])} /><TextField required name="quantityDelta" type="number" label="Adjustment (+/-)" inputProps={{ step: 1 }} /><input type="hidden" name="expectedVersion" value={dialog.stock?.version ?? 0} /><TextField name="notes" label="Reason / notes" multiline minRows={2} /></> : null}
+      {dialog.kind === "adjust" ? <><SelectField name="catalogItemId" label="Catalog item" defaultValue={dialog.stock?.catalogItemId ?? pooledCatalog[0]?.id ?? ""} options={pooledCatalog.map((item) => [item.id, item.name])} /><SelectField name="locationId" label="Storage location" defaultValue={dialog.stock?.locationId ?? data.locations.find((location) => location.isActive)?.id ?? ""} options={data.locations.filter((location) => location.isActive).map((location) => [location.id, location.name])} /><SelectField name="condition" label="Condition" defaultValue={dialog.stock?.condition ?? "GOOD"} options={conditions.map((condition) => [condition, conditionLabel(condition)])} /><TextField required name="quantityDelta" type="number" label={dialog.stock ? "Adjustment (+/-)" : "Initial quantity"} inputProps={{ step: 1, min: dialog.stock ? undefined : 1 }} /><input type="hidden" name="expectedVersion" value={dialog.stock?.version ?? 0} /><TextField name="notes" label="Reason / notes" multiline minRows={2} /></> : null}
       {dialog.kind === "pool-transfer" ? <><Typography>{dialog.stock.catalogName}: {dialog.stock.quantityOnHand} on hand at {dialog.stock.locationName}</Typography><SelectField name="destinationLocationId" label="Destination" defaultValue="" options={data.locations.filter((location) => location.isActive && location.id !== dialog.stock.locationId).map((location) => [location.id, location.name])} /><TextField required name="quantity" type="number" label="Quantity" inputProps={{ min: 1, max: dialog.stock.availableQuantity }} /><TextField name="notes" label="Notes" /></> : null}
       {dialog.kind === "unit" ? <><>{!dialog.unit ? <><SelectField name="catalogItemId" label="Catalog item" defaultValue={unitCatalog[0]?.id ?? ""} options={unitCatalog.map((item) => [item.id, item.name])} /><SelectField name="currentLocationId" label="Storage location" defaultValue={data.locations.find((location) => location.isActive)?.id ?? ""} options={data.locations.filter((location) => location.isActive).map((location) => [location.id, location.name])} /><SelectField name="currentCondition" label="Condition" defaultValue="GOOD" options={conditions.map((condition) => [condition, conditionLabel(condition)])} /></> : null}</><TextField required name="assetTag" label="Asset tag" defaultValue={dialog.unit?.assetTag ?? ""} /><TextField name="serialNumber" label="Serial number" defaultValue={dialog.unit?.serialNumber ?? ""} /><TextField name="acquiredAt" label="Acquired date" type="date" defaultValue={dialog.unit?.acquiredAt?.slice(0, 10) ?? ""} InputLabelProps={{ shrink: true }} /><TextField name="notes" label="Notes" defaultValue={dialog.unit?.notes ?? ""} multiline minRows={2} /></> : null}
       {dialog.kind === "unit-transfer" ? <><Typography>{dialog.unit.catalogName} · {dialog.unit.assetTag}</Typography><SelectField name="destinationLocationId" label="Destination" defaultValue="" options={data.locations.filter((location) => location.isActive && location.id !== dialog.unit.currentLocationId).map((location) => [location.id, location.name])} /><TextField name="notes" label="Notes" /></> : null}

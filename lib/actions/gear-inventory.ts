@@ -143,13 +143,14 @@ async function ensureActiveCatalog(
 
 async function assertNoActiveAllocationsForStock(
   tx: Prisma.TransactionClient,
+  leagueId: string,
   stockId: string,
   onHand: number,
   delta: number,
 ) {
   if (delta >= 0) return;
   const committed = await tx.gearAllocation.aggregate({
-    where: { poolStockId: stockId, status: { in: [...activeAllocationStatuses] } },
+    where: { leagueId, poolStockId: stockId, status: { in: [...activeAllocationStatuses] } },
     _sum: { allocatedQty: true, releasedQty: true },
   });
   const commitment = Math.max(0, (committed._sum.allocatedQty ?? 0) - (committed._sum.releasedQty ?? 0));
@@ -158,9 +159,9 @@ async function assertNoActiveAllocationsForStock(
   }
 }
 
-async function assertUnitCanMove(tx: Prisma.TransactionClient, unitId: string) {
+async function assertUnitCanMove(tx: Prisma.TransactionClient, leagueId: string, unitId: string) {
   const commitments = await tx.gearAllocation.count({
-    where: { gearUnitId: unitId, status: { in: [...activeAllocationStatuses] } },
+    where: { leagueId, gearUnitId: unitId, status: { in: [...activeAllocationStatuses] } },
   });
   if (commitments > 0) invalid("This unit has an active commitment and cannot be changed.");
 }
@@ -389,7 +390,13 @@ export async function adjustGearPoolStock(
       } else {
         if (current.version !== validated.expectedVersion) throw new GearConflictError();
         if (current.quantityOnHand + validated.quantityDelta < 0) invalid("Inventory cannot fall below zero.");
-        await assertNoActiveAllocationsForStock(tx, current.id, current.quantityOnHand, validated.quantityDelta);
+        await assertNoActiveAllocationsForStock(
+          tx,
+          validated.leagueId,
+          current.id,
+          current.quantityOnHand,
+          validated.quantityDelta,
+        );
         const result = await tx.gearPoolStock.updateMany({
           where: { id: current.id, version: current.version },
           data: { quantityOnHand: { increment: validated.quantityDelta }, version: { increment: 1 } },
@@ -399,7 +406,11 @@ export async function adjustGearPoolStock(
       }
       await recordGearInventoryMovement(tx, {
         leagueId: validated.leagueId, type: "ADJUSTMENT", poolStockId: current.id,
-        quantity: validated.quantityDelta, afterLocationId: validated.locationId,
+        // Movements always record a positive physical quantity. A source-only
+        // location is an outbound adjustment; a destination-only one is inbound.
+        quantity: Math.abs(validated.quantityDelta),
+        beforeLocationId: validated.quantityDelta < 0 ? validated.locationId : null,
+        afterLocationId: validated.quantityDelta > 0 ? validated.locationId : null,
         afterCondition: validated.condition, recordedById: userId, notes: validated.notes,
       });
       await recordGearActivity(tx, {
@@ -434,7 +445,13 @@ export async function transferGearPoolStock(input: unknown): Promise<ActionResul
       });
       if (!source || source.version !== validated.expectedSourceVersion) throw new GearConflictError();
       if (source.quantityOnHand < validated.quantity) invalid("Not enough stock is available at the source location.");
-      await assertNoActiveAllocationsForStock(tx, source.id, source.quantityOnHand, -validated.quantity);
+      await assertNoActiveAllocationsForStock(
+        tx,
+        validated.leagueId,
+        source.id,
+        source.quantityOnHand,
+        -validated.quantity,
+      );
       const sourceUpdate = await tx.gearPoolStock.updateMany({
         where: { id: source.id, version: source.version },
         data: { quantityOnHand: { decrement: validated.quantity }, version: { increment: 1 } },
@@ -560,7 +577,7 @@ export async function transferGearUnit(input: unknown): Promise<ActionResult<{ i
       });
       if (!existing) invalid("Tagged unit not found.");
       if (!["AVAILABLE", "MAINTENANCE"].includes(existing.status)) invalid("Only available or maintenance units can be transferred.");
-      await assertUnitCanMove(tx, existing.id);
+      await assertUnitCanMove(tx, validated.leagueId, existing.id);
       await ensureActiveLocation(tx, validated.leagueId, validated.destinationLocationId);
       if (existing.currentLocationId === validated.destinationLocationId) invalid("Choose a different destination location.");
       const updated = await tx.gearUnit.update({
@@ -598,7 +615,7 @@ export async function changeGearUnitCondition(input: unknown): Promise<ActionRes
       });
       if (!existing) invalid("Tagged unit not found.");
       if (!["AVAILABLE", "MAINTENANCE"].includes(existing.status)) invalid("Only available or maintenance units can have their condition changed.");
-      await assertUnitCanMove(tx, existing.id);
+      await assertUnitCanMove(tx, validated.leagueId, existing.id);
       if (existing.currentCondition === validated.condition) invalid("Choose a different condition.");
       const updated = await tx.gearUnit.update({
         where: { id: existing.id },
@@ -635,7 +652,7 @@ export async function retireGearUnit(input: unknown): Promise<ActionResult<{ id:
       });
       if (!existing) invalid("Tagged unit not found.");
       if (!["AVAILABLE", "MAINTENANCE"].includes(existing.status)) invalid("Only available or maintenance units can be retired.");
-      await assertUnitCanMove(tx, existing.id);
+      await assertUnitCanMove(tx, validated.leagueId, existing.id);
       const updated = await tx.gearUnit.update({
         where: { id: existing.id },
         data: { status: "RETIRED", retiredAt: new Date(), currentLocationId: null, version: { increment: 1 } },

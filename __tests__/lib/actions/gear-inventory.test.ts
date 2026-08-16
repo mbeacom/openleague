@@ -116,4 +116,29 @@ describe("gear inventory actions", () => {
     expect(result).toEqual({ success: false, error: "Inventory cannot fall below zero." });
     expect(tx.gearInventoryMovement.create).not.toHaveBeenCalled();
   });
+
+  it("records a valid reduction as a positive outbound movement", async () => {
+    tx.gearCatalogItem.findFirst.mockResolvedValue({ id: CATALOG_ID, trackingMode: "POOLED" });
+    tx.gearPoolStock.findUnique.mockResolvedValue({ id: "cstockkkkkkkkkkkkkkkkkkkkk", quantityOnHand: 5, version: 3 });
+    tx.gearAllocation.aggregate.mockResolvedValue({ _sum: { allocatedQty: 0, releasedQty: 0 } });
+    tx.gearPoolStock.updateMany.mockResolvedValue({ count: 1 });
+
+    const result = await adjustGearPoolStock({
+      leagueId: LEAGUE_ID,
+      catalogItemId: CATALOG_ID,
+      locationId: LOCATION_ID,
+      condition: "GOOD",
+      quantityDelta: -2,
+      expectedVersion: 3,
+    });
+
+    expect(result.success).toBe(true);
+    expect(tx.gearInventoryMovement.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        quantity: 2,
+        beforeLocationId: LOCATION_ID,
+        afterLocationId: null,
+      }),
+    }));
+  });
 });
