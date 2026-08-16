@@ -3,6 +3,8 @@ import {
   allocationIsConsistent,
   allocationRemainingForReturn,
   allocationStatusQuantitiesValid,
+  activeAllocationQuantity,
+  activeAllocationTotal,
   availablePoolQuantity,
   canAllocatePoolStock,
   canTransitionAllocation,
@@ -16,6 +18,8 @@ import {
   normalizeGearAssetTag,
   normalizeGearKey,
   taggedAllocationWindowsConflict,
+  poolAvailabilityConflict,
+  taggedUnitAvailabilityConflict,
 } from "@/lib/utils/gear";
 
 describe("gear utilities", () => {
@@ -45,6 +49,22 @@ describe("gear utilities", () => {
     expect(canAllocatePoolStock(stock, 5)).toBe(true);
     expect(canAllocatePoolStock(stock, 6)).toBe(false);
     expect(canAllocatePoolStock(stock, 0)).toBe(false);
+  });
+
+  it("releases capacity as quantities are returned or released", () => {
+    expect(activeAllocationQuantity({ allocatedQty: 6, pickedUpQty: 6, returnedQty: 2, releasedQty: 0 })).toBe(4);
+    expect(activeAllocationQuantity({ allocatedQty: 6, pickedUpQty: 0, returnedQty: 0, releasedQty: 6 })).toBe(0);
+    expect(activeAllocationTotal([
+      { allocatedQty: 4, pickedUpQty: 4, returnedQty: 1, releasedQty: 0 },
+      { allocatedQty: 2, pickedUpQty: 0, returnedQty: 0, releasedQty: 1 },
+    ])).toBe(4);
+  });
+
+  it("returns user-safe pool, tagged, and overdue availability conflicts", () => {
+    expect(poolAvailabilityConflict({ quantityOnHand: 2, allocatedQuantity: 2 }, 1)?.code).toBe("INSUFFICIENT_POOL_STOCK");
+    expect(taggedUnitAvailabilityConflict("MAINTENANCE", false)?.code).toBe("TAGGED_UNIT_UNAVAILABLE");
+    expect(taggedUnitAvailabilityConflict("CHECKED_OUT", true)?.code).toBe("OVERDUE_CUSTODY");
+    expect(taggedUnitAvailabilityConflict("AVAILABLE", false)).toBeNull();
   });
 
   it("guards allocation quantity accounting", () => {

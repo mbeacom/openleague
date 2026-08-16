@@ -55,6 +55,18 @@ export function availablePoolQuantity(stock: GearPoolAvailability): number {
   return Math.max(0, stock.quantityOnHand - stock.allocatedQuantity);
 }
 
+/**
+ * Allocations continue to exist after a partial return, but only the portion
+ * still outside stock should reserve capacity.
+ */
+export function activeAllocationQuantity(allocation: GearAllocationQuantities): number {
+  return Math.max(0, allocation.allocatedQty - allocation.releasedQty - allocation.returnedQty);
+}
+
+export function activeAllocationTotal(allocations: GearAllocationQuantities[]): number {
+  return allocations.reduce((total, allocation) => total + activeAllocationQuantity(allocation), 0);
+}
+
 export function canAllocatePoolStock(stock: GearPoolAvailability, quantity: number): boolean {
   return Number.isSafeInteger(quantity) && quantity > 0 && quantity <= availablePoolQuantity(stock);
 }
@@ -182,6 +194,45 @@ export function canTransitionUnit(from: GearUnitStatus, to: GearUnitStatus): boo
 
 export function requiresTaggedUnit(mode: GearTrackingMode): boolean {
   return mode === "INDIVIDUAL";
+}
+
+export type GearAvailabilityConflict = {
+  code: "INSUFFICIENT_POOL_STOCK" | "TAGGED_UNIT_UNAVAILABLE" | "OVERDUE_CUSTODY";
+  message: string;
+  entityId?: string;
+};
+
+export function poolAvailabilityConflict(
+  stock: GearPoolAvailability,
+  requestedQuantity: number,
+  entityId?: string,
+): GearAvailabilityConflict | null {
+  if (canAllocatePoolStock(stock, requestedQuantity)) return null;
+  return {
+    code: "INSUFFICIENT_POOL_STOCK",
+    entityId,
+    message: `Only ${availablePoolQuantity(stock)} matching item${availablePoolQuantity(stock) === 1 ? "" : "s"} are available.`,
+  };
+}
+
+export function taggedUnitAvailabilityConflict(
+  status: GearUnitStatus,
+  hasOverdueCheckout: boolean,
+  entityId?: string,
+): GearAvailabilityConflict | null {
+  if (hasOverdueCheckout) {
+    return {
+      code: "OVERDUE_CUSTODY",
+      entityId,
+      message: "This tagged item is still checked out past its due date.",
+    };
+  }
+  if (status === "AVAILABLE" || status === "RESERVED") return null;
+  return {
+    code: "TAGGED_UNIT_UNAVAILABLE",
+    entityId,
+    message: "This tagged item is unavailable for the requested dates.",
+  };
 }
 
 export function isRetryablePrismaConflict(error: unknown): boolean {

@@ -2,6 +2,7 @@
 
 import { requireUserId } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
+import { activeAllocationQuantity } from "@/lib/utils/gear";
 
 export type GearInventoryContext = {
   league: { id: string; name: string };
@@ -143,7 +144,7 @@ export async function getGearInventoryContext(
         location: { select: { name: true } },
         allocations: {
           where: { status: { in: [...activeAllocationStatuses] } },
-          select: { allocatedQty: true, releasedQty: true },
+          select: { allocatedQty: true, releasedQty: true, returnedQty: true, pickedUpQty: true },
         },
       },
       orderBy: [{ catalogItem: { name: "asc" } }, { location: { name: "asc" } }],
@@ -181,7 +182,7 @@ export async function getGearInventoryContext(
 
   const pooledStock = stocks.map((stock) => {
     const committedQuantity = stock.allocations.reduce(
-      (sum, allocation) => sum + Math.max(0, allocation.allocatedQty - allocation.releasedQty),
+      (sum, allocation) => sum + activeAllocationQuantity(allocation),
       0,
     );
     return {
@@ -257,5 +258,169 @@ export async function getGearInventoryContext(
       hasMore: movements.length > 20,
       search: activitySearch,
     },
+  };
+}
+
+export type GearReservationContext = {
+  league: { id: string; name: string };
+  canManageReservations: boolean;
+  teamIds: string[];
+  reservations: Array<{
+    id: string;
+    teamId: string;
+    teamName: string;
+    status: "DRAFT" | "REQUESTED" | "APPROVED" | "DECLINED" | "CANCELED" | "FULFILLED" | "CLOSED";
+    requestedStartDate: string;
+    requestedEndDate: string;
+    custodianName: string;
+    requestNotes: string | null;
+    decisionNotes?: string | null;
+    version: number;
+    overdue: boolean;
+    reallocationWarning: boolean;
+    lines: Array<{
+      id: string;
+      name: string;
+      requestedQty: number;
+      approvedQty: number;
+      allocatedQty: number;
+    }>;
+    allocations: Array<{
+      id: string;
+      status: "PENDING" | "ALLOCATED" | "PICKED_UP" | "PARTIALLY_RETURNED" | "RETURNED" | "RELEASED";
+      allocatedQty: number;
+      pickedUpQty: number;
+      returnedQty: number;
+      releasedQty: number;
+      poolStockId: string | null;
+      gearUnitId: string | null;
+      assetTag: string | null;
+      locationName: string | null;
+      version: number;
+    }>;
+  }>;
+};
+
+/**
+ * Reservation visibility is deliberately narrower than inventory visibility:
+ * members see only teams they belong to, while league administrators see the
+ * association-wide operational queue and decision notes.
+ */
+export async function getGearReservationContext(leagueId: string): Promise<GearReservationContext | null> {
+  const userId = await requireUserId();
+  const membership = await prisma.leagueUser.findFirst({
+    where: { leagueId, userId, league: { isActive: true } },
+    select: { role: true, league: { select: { id: true, name: true } } },
+  });
+  if (!membership) return null;
+
+  const canManageReservations = membership.role === "LEAGUE_ADMIN";
+  const teamMemberships = canManageReservations
+    ? await prisma.team.findMany({
+        where: { leagueId, isActive: true },
+        select: { id: true },
+      })
+    : await prisma.teamMember.findMany({
+        where: { userId, team: { leagueId, isActive: true } },
+        select: { teamId: true },
+      });
+  const teamIds = teamMemberships.map((membership) => "teamId" in membership ? membership.teamId : membership.id);
+  if (teamIds.length === 0) {
+    return { league: membership.league, canManageReservations, teamIds, reservations: [] };
+  }
+
+  const reservations = await prisma.gearReservation.findMany({
+    where: { leagueId, teamId: { in: teamIds } },
+    select: {
+      id: true, teamId: true, status: true, requestedStartDate: true, requestedEndDate: true,
+      custodianNameSnapshot: true, requestNotes: true, decisionNotes: canManageReservations,
+      version: true, team: { select: { name: true } },
+      lines: {
+        select: {
+          id: true, nameSnapshot: true, requestedQty: true, approvedQty: true, allocatedQty: true,
+          allocations: {
+            select: {
+              id: true, status: true, allocatedQty: true, pickedUpQty: true, returnedQty: true,
+              releasedQty: true, poolStockId: true, gearUnitId: true, version: true,
+              poolStock: { select: { location: { select: { name: true } } } },
+              gearUnit: { select: { assetTag: true } },
+            },
+          },
+        },
+      },
+    },
+    orderBy: [{ requestedStartDate: "asc" }, { createdAt: "desc" }],
+  });
+
+  const today = new Date();
+  const poolStocks = await prisma.gearPoolStock.findMany({
+    where: { leagueId },
+    select: {
+      id: true,
+      quantityOnHand: true,
+      allocations: {
+        where: {
+          status: { in: ["PENDING", "ALLOCATED", "PICKED_UP", "PARTIALLY_RETURNED"] },
+          reservationLine: { reservation: { requestedStartDate: { gt: today } } },
+        },
+        select: { allocatedQty: true, pickedUpQty: true, returnedQty: true, releasedQty: true },
+      },
+    },
+  });
+  const reallocationWarningByStockId = new Set(
+    poolStocks
+      .filter((stock) => stock.allocations.reduce(
+        (total, allocation) => total + activeAllocationQuantity(allocation),
+        0,
+      ) > stock.quantityOnHand)
+      .map((stock) => stock.id),
+  );
+  return {
+    league: membership.league,
+    canManageReservations,
+    teamIds,
+    reservations: reservations.map((reservation) => {
+      const activeAllocations = reservation.lines.flatMap((line) => line.allocations)
+        .filter((allocation) => ["PENDING", "ALLOCATED", "PICKED_UP", "PARTIALLY_RETURNED"].includes(allocation.status));
+      const reallocationWarning = activeAllocations.some((allocation) =>
+        allocation.poolStockId !== null
+        && reservation.requestedStartDate > today
+        && reallocationWarningByStockId.has(allocation.poolStockId),
+      );
+      return {
+        id: reservation.id,
+        teamId: reservation.teamId,
+        teamName: reservation.team.name,
+        status: reservation.status,
+        requestedStartDate: reservation.requestedStartDate.toISOString(),
+        requestedEndDate: reservation.requestedEndDate.toISOString(),
+        custodianName: reservation.custodianNameSnapshot,
+        requestNotes: reservation.requestNotes,
+        ...(canManageReservations ? { decisionNotes: reservation.decisionNotes } : {}),
+        version: reservation.version,
+        overdue: ["FULFILLED", "APPROVED"].includes(reservation.status) && reservation.requestedEndDate < today,
+        reallocationWarning,
+        lines: reservation.lines.map((line) => ({
+          id: line.id,
+          name: line.nameSnapshot,
+          requestedQty: line.requestedQty,
+          approvedQty: line.approvedQty,
+          allocatedQty: line.allocatedQty,
+        })),
+        allocations: reservation.lines.flatMap((line) => line.allocations.map((allocation) => ({
+          id: allocation.id,
+          status: allocation.status,
+          allocatedQty: allocation.allocatedQty,
+          pickedUpQty: allocation.pickedUpQty,
+          returnedQty: allocation.returnedQty,
+          releasedQty: allocation.releasedQty,
+          poolStockId: allocation.poolStockId,
+          gearUnitId: allocation.gearUnitId,
+          assetTag: allocation.gearUnit?.assetTag ?? null,
+          locationName: allocation.poolStock?.location.name ?? null,
+          version: allocation.version,
+        }))),
+      };
+    }),
   };
 }

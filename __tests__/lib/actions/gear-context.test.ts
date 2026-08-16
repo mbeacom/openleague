@@ -8,6 +8,7 @@ const { mockRequireUserId, mockPrisma } = vi.hoisted(() => ({
     gearCatalogItem: { findMany: vi.fn() },
     gearPoolStock: { findMany: vi.fn() },
     gearUnit: { findMany: vi.fn() },
+    gearReservation: { findMany: vi.fn() },
     gearInventoryMovement: { findMany: vi.fn() },
   },
 }));
@@ -26,6 +27,7 @@ beforeEach(() => {
   mockPrisma.gearCatalogItem.findMany.mockResolvedValue([]);
   mockPrisma.gearPoolStock.findMany.mockResolvedValue([]);
   mockPrisma.gearUnit.findMany.mockResolvedValue([]);
+  mockPrisma.gearReservation.findMany.mockResolvedValue([]);
   mockPrisma.gearInventoryMovement.findMany.mockResolvedValue([]);
 });
 
