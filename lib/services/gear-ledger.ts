@@ -1,4 +1,5 @@
 import type {
+  GearActivityActorKind,
   GearActivityEntityType,
   GearInventoryDirection,
   GearInventoryMovementType,
@@ -17,7 +18,8 @@ export type GearActivityInput = {
   entityType: GearActivityEntityType;
   entityId: string;
   action: string;
-  actorUserId: string;
+  actorUserId?: string | null;
+  actorKind?: GearActivityActorKind;
   details?: Omit<GearActivityDetails, "action">;
 };
 
@@ -31,6 +33,7 @@ export type GearMovementInput = {
   gearUnitId?: string | null;
   allocationId?: string | null;
   handoffId?: string | null;
+  pledgeReceiptId?: string | null;
   beforeLocationId?: string | null;
   afterLocationId?: string | null;
   beforeCondition?: "NEW" | "EXCELLENT" | "GOOD" | "FAIR" | "POOR" | "DAMAGED" | null;
@@ -43,6 +46,10 @@ export async function recordGearActivity(
   tx: GearTransaction,
   input: GearActivityInput,
 ): Promise<void> {
+  const actorKind = input.actorKind ?? "USER";
+  if (actorKind === "USER" && !input.actorUserId) {
+    throw new Error("User activity requires an actor.");
+  }
   const details = gearActivityDetailsSchema.parse({
     action: input.action,
     ...input.details,
@@ -51,7 +58,7 @@ export async function recordGearActivity(
     data: {
       ...input,
       details,
-      actorKind: "USER",
+      actorKind,
     },
   });
 }

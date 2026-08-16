@@ -51,6 +51,8 @@ export const RATE_LIMITS = {
   INVITATION_SEND_PER_USER: { limit: 30, windowSec: 60 * 60 },
   /** League/team message fan-out per sender. */
   MESSAGE_SEND_PER_USER: { limit: 20, windowSec: 60 * 60 },
+  /** Public wishlist pledges are anonymous and therefore throttled per IP. */
+  GEAR_PLEDGE_PER_IP: { limit: 10, windowSec: 60 * 60 },
 } as const satisfies Record<string, RateLimitOptions>;
 
 /** Fraction of checks that piggyback a delete of expired buckets. */
