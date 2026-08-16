@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { usePathname } from 'next/navigation';
 import Script from 'next/script';
 import { useReportWebVitals } from 'next/web-vitals';
@@ -15,7 +15,7 @@ import { isPublicCapabilityPath } from '@/lib/telemetry/capability-privacy';
 type ReportWebVitalsCallback = Parameters<typeof useReportWebVitals>[0];
 type AnalyticsWindow = Window & {
   gtag?: (...args: unknown[]) => void;
-  umami?: { track: () => void };
+  umami?: { track: (payload: { url: string }) => void };
 };
 
 function trackManualPageView(pathname: string, umamiEnabled: boolean, gaEnabled: boolean): void {
@@ -25,7 +25,7 @@ function trackManualPageView(pathname: string, umamiEnabled: boolean, gaEnabled:
   // A page view is emitted only here, with a pathname that cannot carry a
   // capability token or query-string value.
   const analyticsWindow = window as AnalyticsWindow;
-  if (umamiEnabled) analyticsWindow.umami?.track();
+  if (umamiEnabled) analyticsWindow.umami?.track({ url: pathname });
   if (gaEnabled && typeof analyticsWindow.gtag === 'function') {
     analyticsWindow.gtag('event', 'page_view', {
       page_path: pathname,
@@ -38,12 +38,17 @@ export default function AnalyticsProvider() {
   const pathname = usePathname();
   const publicWishlistRoute = isPublicCapabilityPath(pathname);
   const publicWishlistRouteRef = useRef(publicWishlistRoute);
+  const activePathnameRef = useRef(pathname);
   const umamiWebsiteId = process.env.NEXT_PUBLIC_UMAMI_WEBSITE_ID?.trim();
   const gaMeasurementId = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID?.trim();
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    // A script can finish loading after a client navigation. Keep its callback
+    // bound to the committed active route rather than the pathname that rendered
+    // the tag.
+    activePathnameRef.current = pathname;
     publicWishlistRouteRef.current = publicWishlistRoute;
-  }, [publicWishlistRoute]);
+  }, [pathname, publicWishlistRoute]);
 
   const reportWebVital = useCallback<ReportWebVitalsCallback>((metric) => {
     if (!publicWishlistRouteRef.current) trackWebVital(metric);
@@ -85,7 +90,7 @@ export default function AnalyticsProvider() {
           data-website-id={umamiWebsiteId}
           data-auto-track="false"
           strategy="afterInteractive"
-          onLoad={() => trackManualPageView(pathname, true, false)}
+          onLoad={() => trackManualPageView(activePathnameRef.current, true, false)}
         />
       )}
       {gaMeasurementId && (
@@ -119,7 +124,7 @@ export default function AnalyticsProvider() {
           <Script
             src={`https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(gaMeasurementId)}`}
             strategy="afterInteractive"
-            onLoad={() => trackManualPageView(pathname, false, true)}
+            onLoad={() => trackManualPageView(activePathnameRef.current, false, true)}
           />
         </>
       )}

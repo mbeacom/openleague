@@ -5,6 +5,7 @@ import { trackClientError, trackWebVital } from '@/lib/analytics/tracking';
 
 const useReportWebVitalsMock = vi.hoisted(() => vi.fn());
 const pathnameMock = vi.hoisted(() => vi.fn());
+const scriptLoadCallbacks = vi.hoisted(() => new Map<string, () => void>());
 
 vi.mock('next/web-vitals', () => ({
   useReportWebVitals: useReportWebVitalsMock,
@@ -34,8 +35,11 @@ vi.mock('next/script', async () => {
         element.dataset.autoTrack = attributes['data-auto-track'];
       }
       document.head.appendChild(element);
-      onLoad?.();
-      return () => element.remove();
+      if (src && onLoad) scriptLoadCallbacks.set(src, onLoad);
+      return () => {
+        if (src) scriptLoadCallbacks.delete(src);
+        element.remove();
+      };
     }, [attributes, children, id, onLoad, src]);
     return null;
   }
@@ -54,6 +58,7 @@ type AnalyticsWindow = Window & { gtag?: ReturnType<typeof vi.fn> };
 describe('AnalyticsProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    scriptLoadCallbacks.clear();
     pathnameMock.mockReturnValue('/');
     process.env.NEXT_PUBLIC_UMAMI_WEBSITE_ID = 'umami-site';
     process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID = 'G-TEST';
@@ -82,6 +87,13 @@ describe('AnalyticsProvider', () => {
     expect(document.querySelector('#ga4-privacy-defaults')?.textContent).toContain('send_page_view: false');
   });
 
+  it('sends an explicit pathname-only Umami page view', () => {
+    render(<AnalyticsProvider />);
+    scriptLoadCallbacks.get('https://cloud.umami.is/script.js')?.();
+
+    expect(window.umami?.track).toHaveBeenCalledWith({ url: '/' });
+  });
+
   it('does not initialize or manually track on a direct capability route', () => {
     pathnameMock.mockReturnValue(CAPABILITY_ROUTE);
     render(<AnalyticsProvider />);
@@ -92,20 +104,32 @@ describe('AnalyticsProvider', () => {
     expect((window as AnalyticsWindow).gtag).not.toHaveBeenCalled();
   });
 
-  it('never emits a capability page view after client navigation when localStorage fails', () => {
+  it('never emits a capability page view after delayed analytics initialization when storage fails', () => {
+    const getItem = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new DOMException('blocked', 'SecurityError');
+    });
     const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
       throw new DOMException('blocked', 'SecurityError');
     });
+    window.umami = undefined;
+    (window as AnalyticsWindow).gtag = undefined;
     const { rerender } = render(<AnalyticsProvider />);
-    const initialUmamiCalls = vi.mocked(window.umami!.track).mock.calls.length;
-    const initialGaCalls = (window as AnalyticsWindow).gtag!.mock.calls.length;
+    const loadUmami = scriptLoadCallbacks.get('https://cloud.umami.is/script.js');
+    const loadGa = scriptLoadCallbacks.get('https://www.googletagmanager.com/gtag/js?id=G-TEST');
+    const umamiTrack = vi.fn();
+    const gtagTrack = vi.fn();
+    window.umami = { track: umamiTrack, identify: vi.fn() };
+    (window as AnalyticsWindow).gtag = gtagTrack;
 
     pathnameMock.mockReturnValue(CAPABILITY_ROUTE);
     rerender(<AnalyticsProvider />);
+    loadUmami?.();
+    loadGa?.();
 
-    expect(window.umami?.track).toHaveBeenCalledTimes(initialUmamiCalls);
-    expect((window as AnalyticsWindow).gtag).toHaveBeenCalledTimes(initialGaCalls);
+    expect(umamiTrack).not.toHaveBeenCalled();
+    expect(gtagTrack).not.toHaveBeenCalled();
     expect(document.querySelector('script[src*="cloud.umami.is"]')).toBeNull();
+    getItem.mockRestore();
     setItem.mockRestore();
   });
 
@@ -116,7 +140,7 @@ describe('AnalyticsProvider', () => {
     pathnameMock.mockReturnValue('/dashboard');
     rerender(<AnalyticsProvider />);
 
-    expect(window.umami?.track).toHaveBeenCalled();
+    expect(window.umami?.track).toHaveBeenCalledWith({ url: '/dashboard' });
     expect((window as AnalyticsWindow).gtag).toHaveBeenCalledWith('event', 'page_view', expect.objectContaining({
       page_path: '/dashboard',
       page_location: `${window.location.origin}/dashboard`,

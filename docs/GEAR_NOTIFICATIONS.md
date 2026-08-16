@@ -422,8 +422,12 @@ Migration notes:
   rewriting these rows costs nothing extra. Worst case a producer re-run for a
   still-pending legacy occurrence emits one duplicate — within the at-least-once
   contract.
-- The migration runs after the new writer is deployed, so no writer continues
-  producing address-bearing keys.
+- Vercel applies migrations during the build **before** it serves the new
+  application writer. Roll out the backward-compatible opaque-key writer and
+  legacy-row reader first, then deploy this migration only after every live
+  writer uses opaque keys. The migration can then redact the finite historical
+  set without an older production instance creating new address-bearing rows
+  during the build-to-rollout window.
 
 ## Adding a gear notification
 
