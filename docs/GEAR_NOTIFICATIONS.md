@@ -137,12 +137,17 @@ passed or is approaching, and enqueues `gear.reservation.due_soon` or
 `gear.reservation.overdue`.
 
 It is **paged and budgeted**: it walks by `id` cursor in pages of 100 and stops
-after 500 reservations in a single run, reporting `budgetExhausted: true`. A
-league that has let 10,000 items go overdue cannot make one cron invocation run
-for an unbounded time; the next run resumes the scan. Each reservation is
-processed in its **own** transaction inside its own `try`, so one malformed row
-cannot abort the sweep for everyone else — failures are counted and reported,
-not thrown.
+after 500 reservations in a single run, reporting `truncated: true`. A durable,
+optimistically versioned `GearReminderSweep` cursor records the final id. The
+next cron run starts after that id; reaching the end resets the cursor for the
+next complete pass. This prevents a stable set of earliest overdue reservations
+from starving later reservations indefinitely. Concurrent runs may revisit a
+page, but occurrence keys keep those writes idempotent.
+
+A league that has let 10,000 items go overdue cannot make one cron invocation
+run for an unbounded time. Each reservation is processed in its **own**
+transaction inside its own `try`, so one malformed row cannot abort the sweep
+for everyone else — failures are counted and reported, not thrown.
 
 ### Stale reminders
 
@@ -376,7 +381,7 @@ opaque identifiers from provider and database errors before they are written to
 and its address pattern does not require a dotted domain, because SMTP errors
 quote internal and malformed addresses too.
 
-### Legacy keys and the pending backfill
+### Legacy keys and landed backfill
 
 Keys written before this scheme embedded the address directly
 (`…:${occurrenceKey}:donor@example.com`). Two things follow:
@@ -390,8 +395,9 @@ Keys written before this scheme embedded the address directly
    `anon:[redacted]`. The stored key is left alone — rewriting it in place would
    break the uniqueness guarantee it exists to provide.
 
-Historical rows still hold addresses in the database. Purging them needs a data
-migration, which this service does not own. The desired migration is:
+Historical rows are purged by the landed migration
+`20260817110000_redact_legacy_gear_outbox_dedupe_emails`, which rewrites their
+keys without requiring an application secret:
 
 ```sql
 -- Replace the address in legacy gear dedupe keys with an opaque token.
@@ -403,7 +409,7 @@ WHERE "eventType" LIKE 'gear.%'
   AND "dedupeKey" LIKE '%@%';
 ```
 
-Notes for whoever lands it:
+Migration notes:
 
 - It must **not** recompute the real digest. That would require the application
   secret inside migration history.
@@ -416,8 +422,8 @@ Notes for whoever lands it:
   rewriting these rows costs nothing extra. Worst case a producer re-run for a
   still-pending legacy occurrence emits one duplicate — within the at-least-once
   contract.
-- Run it after the change is deployed, so no writer is still producing
-  address-bearing keys.
+- The migration runs after the new writer is deployed, so no writer continues
+  producing address-bearing keys.
 
 ## Adding a gear notification
 

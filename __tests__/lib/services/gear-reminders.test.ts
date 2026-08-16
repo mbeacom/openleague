@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   transaction: vi.fn(),
   outboxFindMany: vi.fn(),
   outboxUpdateMany: vi.fn(),
+  sweepUpsert: vi.fn(),
+  sweepUpdateMany: vi.fn(),
 }));
 
 vi.mock("@/lib/db/prisma", () => ({
@@ -15,6 +17,10 @@ vi.mock("@/lib/db/prisma", () => ({
     notificationOutbox: {
       findMany: mocks.outboxFindMany,
       updateMany: mocks.outboxUpdateMany,
+    },
+    gearReminderSweep: {
+      upsert: mocks.sweepUpsert,
+      updateMany: mocks.sweepUpdateMany,
     },
     $transaction: (callback: (tx: unknown) => Promise<unknown>) => mocks.transaction(callback),
   },
@@ -45,6 +51,8 @@ beforeEach(() => {
   vi.spyOn(console, "error").mockImplementation(() => {});
   mocks.teamMemberFindMany.mockResolvedValue([{ userId: "cuuuuuuuuuuuuuuuuuuuuuuuu" }]);
   mocks.createMany.mockResolvedValue({ count: 1 });
+  mocks.sweepUpsert.mockResolvedValue({ cursorId: null, version: 0 });
+  mocks.sweepUpdateMany.mockResolvedValue({ count: 1 });
   mocks.transaction.mockImplementation((callback: (tx: unknown) => Promise<unknown>) => callback({
     teamMember: { findMany: mocks.teamMemberFindMany },
     user: {
@@ -145,6 +153,46 @@ describe("gear custody reminders", () => {
     const result = await queueGearCustodyReminders(NOW);
     expect(result.scanned).toBe(GEAR_REMINDER_BUDGET);
     expect(result.truncated).toBe(true);
+    expect(mocks.sweepUpdateMany).toHaveBeenCalledWith({
+      where: { id: "custody-reminders", version: 0 },
+      data: { cursorId: "cbudget-99", version: { increment: 1 } },
+    });
+  });
+
+  it("persists a forward sweep cursor so a second budgeted run reaches later reservations", async () => {
+    const page = (start: number) => Array.from(
+      { length: 100 },
+      (_, index) => reservation({ id: `c${String(start + index).padStart(24, "0")}` }),
+    );
+    const firstRunPages = [page(0), page(100), page(200), page(300), page(400)];
+    const firstCursor = firstRunPages.at(-1)?.at(-1)?.id;
+    mocks.reservationFindMany.mockImplementationOnce(async () => firstRunPages.shift() ?? []);
+
+    // Preserve normal pagination while making each call consume the next page.
+    mocks.reservationFindMany.mockReset();
+    firstRunPages.forEach((entries) => mocks.reservationFindMany.mockResolvedValueOnce(entries));
+    mocks.sweepUpsert
+      .mockResolvedValueOnce({ cursorId: null, version: 0 })
+      .mockResolvedValueOnce({ cursorId: firstCursor, version: 1 });
+    await expect(queueGearCustodyReminders(NOW)).resolves.toMatchObject({
+      scanned: GEAR_REMINDER_BUDGET,
+      truncated: true,
+    });
+    expect(mocks.createMany).toHaveBeenCalledTimes(GEAR_REMINDER_BUDGET);
+
+    const later = reservation({ id: "czlaterxxxxxxxxxxxxxxxxxxx" });
+    mocks.reservationFindMany.mockResolvedValueOnce([later]);
+    await expect(queueGearCustodyReminders(NOW)).resolves.toMatchObject({
+      scanned: 1,
+      truncated: false,
+    });
+    expect(mocks.createMany).toHaveBeenCalledTimes(GEAR_REMINDER_BUDGET + 1);
+    expect(mocks.createMany.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({
+      data: [expect.objectContaining({ aggregateId: later.id })],
+    }));
+    expect(mocks.reservationFindMany.mock.calls.at(-1)?.[0]).toMatchObject({
+      where: expect.objectContaining({ id: { gt: firstCursor } }),
+    });
   });
 });
 

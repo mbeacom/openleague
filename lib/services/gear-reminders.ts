@@ -8,6 +8,7 @@ export const GEAR_REMINDER_PAGE_SIZE = 100;
 export const GEAR_REMINDER_BUDGET = 500;
 /** Pending reminder rows re-examined for staleness per run. */
 export const GEAR_REMINDER_CANCEL_LIMIT = 500;
+const CUSTODY_REMINDER_SWEEP_ID = "custody-reminders";
 
 export type GearReminderResult = {
   dueSoon: number;
@@ -68,7 +69,23 @@ export async function queueGearCustodyReminders(now = new Date()): Promise<GearR
     truncated: false,
   };
 
-  let cursor: string | undefined;
+  // A durable, optimistic cursor gives later reservations a turn on the next
+  // cron run instead of repeatedly spending the budget on the earliest rows.
+  const sweep = await prisma.gearReminderSweep.upsert({
+    where: { id: CUSTODY_REMINDER_SWEEP_ID },
+    create: { id: CUSTODY_REMINDER_SWEEP_ID },
+    update: {},
+    select: { cursorId: true, version: true },
+  });
+  let cursor = sweep.cursorId ?? undefined;
+  let nextCursor: string | null = sweep.cursorId;
+
+  const persistSweep = async (cursorId: string | null) => {
+    await prisma.gearReminderSweep.updateMany({
+      where: { id: CUSTODY_REMINDER_SWEEP_ID, version: sweep.version },
+      data: { cursorId, version: { increment: 1 } },
+    });
+  };
 
   while (result.scanned < GEAR_REMINDER_BUDGET) {
     const take = Math.min(GEAR_REMINDER_PAGE_SIZE, GEAR_REMINDER_BUDGET - result.scanned);
@@ -79,6 +96,7 @@ export async function queueGearCustodyReminders(now = new Date()): Promise<GearR
           { approvedEndDate: { lte: dueSoonEnd } },
           { approvedEndDate: null, requestedEndDate: { lte: dueSoonEnd } },
         ],
+        ...(cursor ? { id: { gt: cursor } } : {}),
       },
       select: {
         id: true,
@@ -93,7 +111,12 @@ export async function queueGearCustodyReminders(now = new Date()): Promise<GearR
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     });
 
-    if (page.length === 0) return result;
+    if (page.length === 0) {
+      // We reached the end of this pass. Reset only with the version captured at
+      // the start so concurrent runs cannot move a newer cursor backwards.
+      if (sweep.cursorId) await persistSweep(null);
+      return result;
+    }
 
     for (const reservation of page) {
       result.scanned += 1;
@@ -138,11 +161,17 @@ export async function queueGearCustodyReminders(now = new Date()): Promise<GearR
     }
 
     cursor = page[page.length - 1]?.id;
-    if (page.length < take) return result;
+    nextCursor = cursor;
+    if (page.length < take) {
+      await persistSweep(null);
+      return result;
+    }
   }
 
-  // The budget ran out with candidates left; the next run resumes from the top
-  // of the same ordering, and the caller can surface the backlog.
+  // The budget ran out with candidates left; persist the forward position for
+  // the next run. A lost optimistic update is harmless: all occurrences are
+  // still idempotent and a later sweep will revisit them.
+  await persistSweep(nextCursor);
   result.truncated = true;
   return result;
 }
