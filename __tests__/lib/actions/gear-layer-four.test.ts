@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -14,17 +15,18 @@ const {
 } = vi.hoisted(() => {
   const tx = {
     teamGearNeed: { create: vi.fn(), findFirst: vi.fn(), updateMany: vi.fn() },
+    teamGearNeedCommand: { findUnique: vi.fn(), create: vi.fn() },
     teamGearNeedLine: { update: vi.fn(), updateMany: vi.fn() },
     gearCatalogItem: { findMany: vi.fn(), findFirst: vi.fn() },
     gearActivity: { create: vi.fn() },
     gearWishlist: { findUnique: vi.fn(), create: vi.fn(), updateMany: vi.fn() },
-    gearWishlistItem: { update: vi.fn(), updateMany: vi.fn(), create: vi.fn() },
+    gearWishlistItem: { findFirst: vi.fn(), update: vi.fn(), updateMany: vi.fn(), create: vi.fn() },
     gearPledge: { findFirst: vi.fn(), findUnique: vi.fn(), create: vi.fn(), updateMany: vi.fn() },
-    gearPledgeReceipt: { aggregate: vi.fn(), create: vi.fn() },
+    gearPledgeReceipt: { aggregate: vi.fn(), findFirst: vi.fn(), create: vi.fn() },
     gearPledgeReceiptCommand: { findUnique: vi.fn(), create: vi.fn() },
-    gearPoolStock: { findFirst: vi.fn(), update: vi.fn() },
+    gearPoolStock: { findFirst: vi.fn(), upsert: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     gearStorageLocation: { findFirst: vi.fn() },
-    gearUnit: { findMany: vi.fn(), create: vi.fn() },
+    gearUnit: { findMany: vi.fn(), create: vi.fn(), updateMany: vi.fn() },
     gearInventoryMovement: { create: vi.fn() },
     notificationOutbox: { createMany: vi.fn() },
     user: { findMany: vi.fn() },
@@ -44,8 +46,9 @@ const {
       team: { findFirst: vi.fn(), findMany: vi.fn() },
       teamMember: { findMany: vi.fn() },
       teamGearNeed: { findFirst: vi.fn(), findMany: vi.fn() },
+      teamGearNeedCommand: { findUnique: vi.fn() },
       gearWishlist: { findFirst: vi.fn() },
-      gearPledge: { findFirst: vi.fn() },
+      gearPledge: { findFirst: vi.fn(), findMany: vi.fn() },
       gearPledgeReceiptCommand: { findUnique: vi.fn() },
     },
   };
@@ -78,6 +81,9 @@ import {
 } from "@/lib/actions/gear-wishlist";
 import {
   createPublicGearPledge,
+  correctGearPledgeReceipt,
+  getGearPledgeAdminContext,
+  redactGearPledgePii,
   receiveGearPledge,
 } from "@/lib/actions/gear-pledges";
 import { queueGearOutboxForRecipients } from "@/lib/services/gear-outbox";
@@ -112,6 +118,7 @@ beforeEach(() => {
   tx.gearPledge.updateMany.mockResolvedValue({ count: 1 });
   tx.gearPledgeReceiptCommand.findUnique.mockResolvedValue(null);
   tx.gearPledgeReceiptCommand.create.mockResolvedValue({ id: "creceipt-command000000001" });
+  tx.teamGearNeedCommand.findUnique.mockResolvedValue(null);
 });
 
 describe("Layer 4 gear actions", () => {
@@ -124,6 +131,7 @@ describe("Layer 4 gear actions", () => {
     const result = await createTeamGearNeed({
       leagueId: LEAGUE_ID,
       teamId: TEAM_ID,
+      idempotencyKey: "n".repeat(16),
       title: "Spring equipment",
       lines: [
         { catalogItemId: CATALOG_ID, nameSnapshot: "Client supplied", requestedQty: 3 },
@@ -142,7 +150,30 @@ describe("Layer 4 gear actions", () => {
         ]) },
       }),
     }));
+    expect(tx.teamGearNeedCommand.create).toHaveBeenCalledWith({
+      data: {
+        leagueId: LEAGUE_ID,
+        teamId: TEAM_ID,
+        idempotencyKey: "n".repeat(16),
+        needId: NEED_ID,
+      },
+    });
     expect((tx as Record<string, unknown>).gearReservation).toBeUndefined();
+  });
+
+  it("replays a persisted league/team-scoped create-need command without creating another draft", async () => {
+    tx.teamGearNeedCommand.findUnique.mockResolvedValue({
+      need: { id: NEED_ID, version: 2 },
+    });
+
+    await expect(createTeamGearNeed({
+      leagueId: LEAGUE_ID,
+      teamId: TEAM_ID,
+      idempotencyKey: "n".repeat(16),
+      title: "Spring equipment",
+      lines: [{ nameSnapshot: "Tape", requestedQty: 1 }],
+    })).resolves.toEqual({ success: true, data: { id: NEED_ID, version: 2 } });
+    expect(tx.teamGearNeed.create).not.toHaveBeenCalled();
   });
 
   it("guards need submission by state and scopes detail reads to the requested league", async () => {
@@ -341,15 +372,15 @@ describe("Layer 4 gear actions", () => {
   it("handles honeypot, idempotency, and rate limits without creating a pledge", async () => {
     const common = {
       wishlistToken: "t".repeat(32), wishlistItemId: WISHLIST_ITEM_ID, donorName: "Donor",
-      quantity: 1, idempotencyKey: "i".repeat(16),
+      donorEmail: "donor@example.com", quantity: 1, idempotencyKey: "i".repeat(16),
     };
     await expect(createPublicGearPledge({ ...common, website: "spam" })).resolves.toEqual({
-      success: true, data: { id: null, status: "PLEDGED" },
+      success: false, error: "Unable to submit the pledge. Please try again.",
     });
     expect(mockPrisma.gearPledge.findFirst).not.toHaveBeenCalled();
 
-    await expect(createPublicGearPledge(common)).resolves.toEqual({
-      success: false, error: "Contact consent is required to submit a pledge.",
+    await expect(createPublicGearPledge({ ...common, donorEmail: "" })).resolves.toMatchObject({
+      success: false, error: "Please correct the highlighted pledge fields.",
     });
 
     mockPrisma.gearPledge.findFirst.mockResolvedValue({ id: PLEDGE_ID, status: "PLEDGED" });
@@ -362,6 +393,61 @@ describe("Layer 4 gear actions", () => {
     await expect(createPublicGearPledge({ ...common, contactConsent: true })).resolves.toEqual({
       success: false, error: "Too many requests — try again in 1 minute.",
     });
+    expect(mockCheckRateLimit.mock.calls.at(-1)?.[0]).not.toContain("t".repeat(32));
+  });
+
+  it("caps public pledges at the current outstanding target in the serializable transaction", async () => {
+    mockPrisma.gearPledge.findFirst.mockResolvedValue(null);
+    tx.gearWishlistItem.findFirst.mockResolvedValue({
+      id: WISHLIST_ITEM_ID,
+      targetQty: 5,
+      pledgedQty: 4,
+      receivedQty: 0,
+      wishlist: { leagueId: LEAGUE_ID },
+    });
+    tx.gearPledge.findUnique.mockResolvedValue(null);
+    tx.gearWishlistItem.update.mockResolvedValue({
+      id: WISHLIST_ITEM_ID,
+      targetQty: 5,
+      pledgedQty: 4,
+      receivedQty: 0,
+      wishlist: { leagueId: LEAGUE_ID },
+    });
+
+    const result = await createPublicGearPledge({
+      wishlistToken: "t".repeat(32),
+      wishlistItemId: WISHLIST_ITEM_ID,
+      donorName: "Donor",
+      donorPhone: "555-0100",
+      contactConsent: true,
+      quantity: 2,
+      idempotencyKey: "q".repeat(16),
+    });
+
+    expect(result).toEqual({ success: false, error: "Pledge quantity exceeds the remaining wishlist target." });
+    expect(tx.gearWishlistItem.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: { pledgedQty: { increment: 0 } },
+    }));
+    expect(tx.gearPledge.create).not.toHaveBeenCalled();
+  });
+
+  it("fails closed for anonymous pledges without a trusted client address", async () => {
+    mockPrisma.gearPledge.findFirst.mockResolvedValue(null);
+    mockGetClientIp.mockResolvedValue(null);
+
+    await expect(createPublicGearPledge({
+      wishlistToken: "t".repeat(32),
+      wishlistItemId: WISHLIST_ITEM_ID,
+      donorName: "Donor",
+      donorPhone: "555-0100",
+      contactConsent: true,
+      quantity: 1,
+      idempotencyKey: "a".repeat(16),
+    })).resolves.toEqual({
+      success: false,
+      error: "Unable to submit the pledge. Please try again.",
+    });
+    expect(mockCheckRateLimit).not.toHaveBeenCalled();
   });
 
   it("records pooled pledge receipt stock, ledger activity, and outbox atomically", async () => {
@@ -395,16 +481,29 @@ describe("Layer 4 gear actions", () => {
   });
 
   it("returns a saved receipt command on retry without touching inventory again", async () => {
+    const input = {
+      leagueId: LEAGUE_ID, pledgeId: PLEDGE_ID, poolStockId: STOCK_ID, quantity: 2,
+      expectedVersion: 2, idempotencyKey: "z".repeat(16),
+    };
     tx.gearPledgeReceiptCommand.findUnique.mockResolvedValue({
+      payloadHash: createHash("sha256").update(JSON.stringify({
+        leagueId: LEAGUE_ID,
+        pledgeId: PLEDGE_ID,
+        expectedVersion: 2,
+        poolStockId: STOCK_ID,
+        catalogItemId: null,
+        locationId: null,
+        condition: null,
+        quantity: 2,
+        notes: null,
+        assetTags: [],
+      })).digest("hex"),
       resultingStatus: "RECEIVED",
       resultingVersion: 3,
       receipts: [{ id: "creceipt00000000000000001" }],
     });
 
-    const result = await receiveGearPledge({
-      leagueId: LEAGUE_ID, pledgeId: PLEDGE_ID, poolStockId: STOCK_ID, quantity: 2,
-      expectedVersion: 2, idempotencyKey: "z".repeat(16),
-    });
+    const result = await receiveGearPledge(input);
 
     expect(result).toEqual({
       success: true,
@@ -417,6 +516,116 @@ describe("Layer 4 gear actions", () => {
     });
     expect(tx.gearPoolStock.update).not.toHaveBeenCalled();
     expect(tx.gearPledgeReceipt.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects a receipt operation key replayed with a different payload", async () => {
+    tx.gearPledgeReceiptCommand.findUnique.mockResolvedValue({
+      payloadHash: "different",
+      resultingStatus: "RECEIVED",
+      resultingVersion: 3,
+      receipts: [{ id: "creceipt00000000000000001" }],
+    });
+
+    await expect(receiveGearPledge({
+      leagueId: LEAGUE_ID, pledgeId: PLEDGE_ID, poolStockId: STOCK_ID, quantity: 2,
+      expectedVersion: 2, idempotencyKey: "z".repeat(16),
+    })).resolves.toEqual({
+      success: false,
+      error: "This receipt operation key was already used with different details.",
+    });
+  });
+
+  it("creates a first pooled stock receipt through its catalog-location-condition composite", async () => {
+    tx.gearPledge.findFirst.mockResolvedValue({
+      id: PLEDGE_ID, version: 0, quantity: 1, wishlistItem: { id: WISHLIST_ITEM_ID, catalogItemId: CATALOG_ID },
+    });
+    tx.gearPledgeReceipt.aggregate.mockResolvedValue({ _sum: { quantity: 0 } });
+    tx.gearCatalogItem.findFirst.mockResolvedValue({ id: CATALOG_ID });
+    tx.gearStorageLocation.findFirst.mockResolvedValue({ id: LOCATION_ID });
+    tx.gearPoolStock.upsert.mockResolvedValue({
+      id: STOCK_ID, catalogItemId: CATALOG_ID, locationId: LOCATION_ID, condition: "FAIR",
+    });
+    tx.gearPledgeReceipt.create.mockResolvedValue({ id: "creceipt00000000000000001" });
+
+    await expect(receiveGearPledge({
+      leagueId: LEAGUE_ID, pledgeId: PLEDGE_ID, catalogItemId: CATALOG_ID,
+      locationId: LOCATION_ID, condition: "FAIR", quantity: 1,
+      expectedVersion: 0, idempotencyKey: "n".repeat(16),
+    })).resolves.toMatchObject({ success: true });
+    expect(tx.gearPoolStock.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: { leagueId_catalogItemId_locationId_condition: {
+        leagueId: LEAGUE_ID, catalogItemId: CATALOG_ID, locationId: LOCATION_ID, condition: "FAIR",
+      } },
+    }));
+  });
+
+  it("compensates a receipt without mutating its history and returns the pledge to pledged", async () => {
+    tx.gearPledgeReceipt.findFirst.mockResolvedValue({
+      id: "creceipt00000000000000001",
+      pledgeId: PLEDGE_ID,
+      catalogItemId: CATALOG_ID,
+      poolStockId: STOCK_ID,
+      gearUnitId: null,
+      quantity: 2,
+      correction: null,
+      pledge: {
+        status: "RECEIVED",
+        version: 3,
+        wishlistItem: { id: WISHLIST_ITEM_ID, receivedQty: 2 },
+      },
+    });
+    tx.gearPoolStock.updateMany.mockResolvedValue({ count: 1 });
+    tx.gearPledgeReceipt.create.mockResolvedValue({ id: "ccorrection000000000000001" });
+
+    const result = await correctGearPledgeReceipt({
+      leagueId: LEAGUE_ID,
+      pledgeId: PLEDGE_ID,
+      receiptId: "creceipt00000000000000001",
+      expectedVersion: 3,
+      reason: "Duplicate entry",
+    });
+
+    expect(result).toMatchObject({ success: true, data: { pledgeStatus: "PLEDGED", pledgeVersion: 4 } });
+    expect(tx.gearPledgeReceipt.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        correctionOfReceiptId: "creceipt00000000000000001",
+        correctionReason: "Duplicate entry",
+      }),
+    }));
+    expect(tx.gearInventoryMovement.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ type: "ADJUSTMENT", direction: "DECREASE" }),
+    }));
+  });
+
+  it("redacts terminal pledge PII and omits redacted values from admin projections", async () => {
+    tx.gearPledge.findFirst.mockResolvedValue({
+      id: PLEDGE_ID,
+      leagueId: LEAGUE_ID,
+      wishlistItemId: WISHLIST_ITEM_ID,
+      status: "RECEIVED",
+      version: 3,
+      piiRedactionStatus: "PENDING",
+    });
+    tx.gearPledge.updateMany.mockResolvedValue({ count: 1 });
+
+    await expect(redactGearPledgePii({
+      leagueId: LEAGUE_ID, pledgeId: PLEDGE_ID, expectedVersion: 3,
+    })).resolves.toEqual({ success: true, data: { id: PLEDGE_ID, version: 4 } });
+    expect(tx.gearPledge.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ donorName: null, donorEmail: null, donorPhone: null, note: null }),
+    }));
+
+    mockPrisma.gearPledge.findMany.mockResolvedValue([{
+      id: PLEDGE_ID, version: 4, wishlistItemId: WISHLIST_ITEM_ID,
+      donorName: "Donor", donorEmail: "donor@example.com", donorPhone: "555-0100",
+      contactConsentAt: new Date(), status: "RECEIVED", quantity: 1, note: "private",
+      expiresAt: null, receivedAt: new Date(), piiRedactionStatus: "REDACTED", piiRedactedAt: new Date(),
+      createdAt: new Date(), wishlistItem: { nameSnapshot: "Helmet", categorySnapshot: null, sizeSnapshot: null },
+      receipts: [],
+    }]);
+    await expect(getGearPledgeAdminContext(LEAGUE_ID)).resolves.toEqual([
+      expect.objectContaining({ donorName: null, donorEmail: null, donorPhone: null, note: null }),
+    ]);
   });
 
   it("creates a tagged unit, receipt, movement, and activity for every unique asset tag", async () => {

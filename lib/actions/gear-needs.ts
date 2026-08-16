@@ -6,6 +6,7 @@ import { z } from "zod";
 import { getUserLeagueRole, isTeamAdmin, requireLeagueRole, requireUserId } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
 import { recordGearActivity } from "@/lib/services/gear-ledger";
+import { reportGearActionFailure } from "@/lib/services/gear-observability";
 import {
   type GearOutboxEvent,
   queueGearOutboxForLeagueAdmins,
@@ -133,6 +134,7 @@ function invalid(message: string): never {
 }
 
 function actionError(error: unknown): ActionResult<never> {
+  reportGearActionFailure({ action: "need", error });
   if (error instanceof GearConflictError) return { success: false, error: error.message };
   if (error instanceof z.ZodError) {
     return { success: false, error: "Please correct the highlighted gear need fields.", details: error.issues };
@@ -296,6 +298,18 @@ export async function createTeamGearNeed(
     await assertNeedAccess(validated.leagueId, validated.teamId, userId);
 
     const created = await withGearSerializableRetry(() => prisma.$transaction(async (tx) => {
+      const priorCommand = await tx.teamGearNeedCommand.findUnique({
+        where: {
+          leagueId_teamId_idempotencyKey: {
+            leagueId: validated.leagueId,
+            teamId: validated.teamId,
+            idempotencyKey: validated.idempotencyKey,
+          },
+        },
+        select: { need: { select: { id: true, version: true } } },
+      });
+      if (priorCommand) return priorCommand.need;
+
       const catalogIds = validated.lines
         .map((line) => line.catalogItemId)
         .filter((id): id is string => Boolean(id));
@@ -335,6 +349,14 @@ export async function createTeamGearNeed(
         },
         select: { id: true, version: true },
       });
+      await tx.teamGearNeedCommand.create({
+        data: {
+          leagueId: validated.leagueId,
+          teamId: validated.teamId,
+          idempotencyKey: validated.idempotencyKey,
+          needId: need.id,
+        },
+      });
       await recordGearActivity(tx, {
         leagueId: validated.leagueId,
         entityType: "NEED",
@@ -350,6 +372,22 @@ export async function createTeamGearNeed(
     revalidatePath(needsPath(validated.leagueId, validated.teamId));
     return { success: true, data: created };
   } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      const parsed = createTeamGearNeedSchema.safeParse(input);
+      if (parsed.success) {
+        const priorCommand = await prisma.teamGearNeedCommand.findUnique({
+          where: {
+            leagueId_teamId_idempotencyKey: {
+              leagueId: parsed.data.leagueId,
+              teamId: parsed.data.teamId,
+              idempotencyKey: parsed.data.idempotencyKey,
+            },
+          },
+          select: { need: { select: { id: true, version: true } } },
+        });
+        if (priorCommand) return { success: true, data: priorCommand.need };
+      }
+    }
     return actionError(error);
   }
 }

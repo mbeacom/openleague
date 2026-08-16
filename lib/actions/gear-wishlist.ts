@@ -7,6 +7,7 @@ import { z } from "zod";
 import { requireLeagueRole, requireUserId } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
 import { recordGearActivity } from "@/lib/services/gear-ledger";
+import { reportGearActionFailure } from "@/lib/services/gear-observability";
 import { queueGearOutboxForLeagueAdmins } from "@/lib/services/gear-outbox";
 import {
   GearConflictError,
@@ -34,6 +35,7 @@ function invalid(message: string): never {
 }
 
 function actionError(error: unknown): ActionResult<never> {
+  reportGearActionFailure({ action: "wishlist", error });
   if (error instanceof GearConflictError) return { success: false, error: error.message };
   if (error instanceof z.ZodError) {
     return { success: false, error: "Please correct the highlighted wishlist fields.", details: error.issues };

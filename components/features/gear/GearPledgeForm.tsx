@@ -24,7 +24,7 @@ type PledgeInput = {
   website: string;
 };
 
-type PledgeResult = { success: boolean; error?: string };
+type PledgeResult = { success: boolean; error?: string; details?: unknown };
 
 export function GearPledgeForm({
   token,
@@ -37,12 +37,14 @@ export function GearPledgeForm({
 }) {
   const [message, setMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
   const formRef = useRef<HTMLFormElement>(null);
 
   async function handleSubmit(formData: FormData) {
     setIsSubmitting(true);
     setMessage(null);
+    setFieldErrors({});
     const result = await submit({
       wishlistToken: token,
       wishlistItemId: String(formData.get("wishlistItemId") ?? ""),
@@ -61,6 +63,7 @@ export function GearPledgeForm({
       setIdempotencyKey(crypto.randomUUID());
       setMessage("Thank you. The association will use your contact details only to coordinate this donation.");
     } else {
+      setFieldErrors(actionFieldErrors(result.details));
       setMessage(result.error ?? "We could not record your pledge. Please try again.");
     }
   }
@@ -77,17 +80,19 @@ export function GearPledgeForm({
             </MenuItem>
           ))}
         </TextField>
-        <TextField name="quantity" label="Quantity" type="number" inputProps={{ min: 1 }} required />
+        <TextField name="quantity" label="Quantity" type="number" inputProps={{ min: 1 }} error={Boolean(fieldErrors.quantity)} helperText={fieldErrors.quantity} required />
         <TextField name="donorName" label="Your name" required autoComplete="name" />
-        <TextField name="donorEmail" label="Email" type="email" autoComplete="email" />
-        <TextField name="donorPhone" label="Phone" type="tel" autoComplete="tel" />
+        <TextField name="donorEmail" label="Email" type="email" autoComplete="email" error={Boolean(fieldErrors.donorEmail)} helperText={fieldErrors.donorEmail} />
+        <TextField name="donorPhone" label="Phone" type="tel" autoComplete="tel" error={Boolean(fieldErrors.donorPhone)} helperText={fieldErrors.donorPhone} />
+        <Typography variant="body2" color="text.secondary">Include at least one contact method: email or phone.</Typography>
         <TextField name="note" label="Donation note" multiline minRows={2} />
-        <TextField
+        <input
           name="website"
-          label="Website"
+          aria-hidden="true"
           tabIndex={-1}
-          autoComplete="off"
-          sx={{ position: "absolute", left: "-10000px", width: 1, height: 1, overflow: "hidden" }}
+          autoComplete="new-password"
+          inert
+          style={{ position: "absolute", left: "-10000px", width: 1, height: 1, overflow: "hidden" }}
         />
         <FormControlLabel
           control={<Checkbox name="contactConsent" required />}
@@ -99,4 +104,20 @@ export function GearPledgeForm({
       </Stack>
     </Card>
   );
+}
+
+function actionFieldErrors(details: unknown): Record<string, string> {
+  if (!Array.isArray(details)) return {};
+  return Object.fromEntries(details.flatMap((issue) => {
+    if (
+      typeof issue !== "object"
+      || issue === null
+      || !("message" in issue)
+      || !("path" in issue)
+      || typeof issue.message !== "string"
+      || !Array.isArray(issue.path)
+      || typeof issue.path[0] !== "string"
+    ) return [];
+    return [[issue.path[0], issue.message]];
+  }));
 }

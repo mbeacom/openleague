@@ -3,6 +3,18 @@ import { describe, expect, it, vi } from "vitest";
 import { GearPledgeForm } from "@/components/features/gear/GearPledgeForm";
 
 describe("GearPledgeForm", () => {
+  it("explains that an email address or phone number is required", () => {
+    render(
+      <GearPledgeForm
+        token="a-valid-share-token"
+        items={[{ id: "item-1", name: "Helmet", targetQty: 2, pledgedQty: 0, receivedQty: 0 }]}
+        submit={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Include at least one contact method: email or phone.")).toBeInTheDocument();
+  });
+
   it("rotates its idempotency key after a successful pledge", async () => {
     const submit = vi.fn().mockResolvedValue({ success: true });
     const { container } = render(

@@ -37,6 +37,11 @@ export default async function GearInventoryPage({ params, searchParams }: GearIn
             <LinkButton href={`/league/${leagueId}/gear/reservations`} variant="outlined" sx={{ minHeight: 44 }}>
               Reservations
             </LinkButton>
+            {data.canManageInventory && (
+              <LinkButton href={`/league/${leagueId}/gear/wishlist`} variant="outlined" sx={{ minHeight: 44 }}>
+                Wishlist
+              </LinkButton>
+            )}
           </>
         }
       />

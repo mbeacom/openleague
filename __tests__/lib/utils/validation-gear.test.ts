@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  createTeamGearNeedSchema,
   createGearPledgeSchema,
   createGearReservationSchema,
   gearActivityDetailsSchema,
@@ -104,6 +105,7 @@ describe("gear validation schemas", () => {
         wishlistToken: "a".repeat(16),
         wishlistItemId: ITEM_ID,
         donorName: "A donor",
+        donorEmail: "donor@example.com",
         quantity: 1,
         idempotencyKey: "b".repeat(16),
       }).success,
@@ -113,9 +115,35 @@ describe("gear validation schemas", () => {
         wishlistToken: "a".repeat(16),
         wishlistItemId: ITEM_ID,
         donorName: "A donor",
+        donorEmail: "donor@example.com",
         quantity: 1,
         idempotencyKey: "short",
       }).success,
     ).toBe(false);
+    expect(
+      createGearPledgeSchema.safeParse({
+        wishlistToken: "a".repeat(16),
+        wishlistItemId: ITEM_ID,
+        donorName: "A donor",
+        quantity: 1,
+        idempotencyKey: "b".repeat(16),
+      }).success,
+    ).toBe(false);
+  });
+
+  it("requires a stable idempotency key for gear-need creation", () => {
+    expect(createTeamGearNeedSchema.safeParse({
+      leagueId: ITEM_ID,
+      teamId: ITEM_ID,
+      idempotencyKey: "n".repeat(16),
+      title: "Equipment",
+      lines: [{ nameSnapshot: "Tape", requestedQty: 1 }],
+    }).success).toBe(true);
+    expect(createTeamGearNeedSchema.safeParse({
+      leagueId: ITEM_ID,
+      teamId: ITEM_ID,
+      title: "Equipment",
+      lines: [{ nameSnapshot: "Tape", requestedQty: 1 }],
+    }).success).toBe(false);
   });
 });

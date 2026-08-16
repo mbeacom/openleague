@@ -2126,6 +2126,7 @@ export const createGearUnitSchema = z.object({
 export const createTeamGearNeedSchema = z.object({
   leagueId: gearCuidSchema,
   teamId: gearCuidSchema,
+  idempotencyKey: z.string().trim().min(16).max(255),
   title: sanitizedStringWithMin(1, 160),
   notes: optionalSanitizedString(2_000),
   lines: z
@@ -2202,9 +2203,12 @@ export const createGearPledgeSchema = z.object({
   donorEmail: optionalEmailSchema,
   donorPhone: optionalSanitizedString(40),
   contactConsent: z.boolean().default(false),
-  quantity: gearQuantitySchema,
+  quantity: gearQuantitySchema.max(100, "A pledge cannot exceed 100 items"),
   note: optionalSanitizedString(1_000),
   idempotencyKey: z.string().trim().min(16).max(255),
+}).refine((value) => Boolean(value.donorEmail || value.donorPhone), {
+  message: "Provide an email address or phone number so we can contact you.",
+  path: ["donorEmail"],
 });
 
 export const receiveGearPledgeSchema = z.object({
@@ -2238,14 +2242,15 @@ export const receiveGearPledgeSchema = z.object({
       path: ["assetTags"],
     });
   }
-  if (!isPoolReceipt && assetTags.length === 0) {
+  const isTaggedReceipt = assetTags.length > 0;
+  if (!isPoolReceipt && !isTaggedReceipt && (!value.catalogItemId || !value.locationId || !value.condition)) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "A tagged receipt requires at least one asset tag",
-      path: ["assetTags"],
+      message: "A pooled receipt needs catalog, storage location, and condition when no stock row is selected",
+      path: ["catalogItemId"],
     });
   }
-  if (!isPoolReceipt) {
+  if (!isPoolReceipt && isTaggedReceipt) {
     if (!value.catalogItemId) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
@@ -2275,6 +2280,14 @@ export const receiveGearPledgeSchema = z.object({
       });
     }
   }
+});
+
+export const correctGearPledgeReceiptSchema = z.object({
+  leagueId: gearCuidSchema,
+  pledgeId: gearCuidSchema,
+  receiptId: gearCuidSchema,
+  expectedVersion: z.coerce.number().int().min(0),
+  reason: sanitizedStringWithMin(1, 1_000),
 });
 
 export const recordGearInventoryMovementSchema = z
@@ -2376,5 +2389,6 @@ export type CreateGearReservationInput = z.input<typeof createGearReservationSch
 export type SaveGearWishlistInput = z.input<typeof saveGearWishlistSchema>;
 export type CreateGearPledgeInput = z.input<typeof createGearPledgeSchema>;
 export type ReceiveGearPledgeInput = z.input<typeof receiveGearPledgeSchema>;
+export type CorrectGearPledgeReceiptInput = z.input<typeof correctGearPledgeReceiptSchema>;
 export type RecordGearInventoryMovementInput = z.input<typeof recordGearInventoryMovementSchema>;
 export type RecordGearHandoffInput = z.input<typeof recordGearHandoffSchema>;

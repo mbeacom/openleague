@@ -1,6 +1,7 @@
 import type {
   GearActivityActorKind,
   GearActivityEntityType,
+  GearCondition,
   GearInventoryDirection,
   GearInventoryMovementType,
   Prisma,
@@ -36,8 +37,8 @@ export type GearMovementInput = {
   pledgeReceiptId?: string | null;
   beforeLocationId?: string | null;
   afterLocationId?: string | null;
-  beforeCondition?: "NEW" | "EXCELLENT" | "GOOD" | "FAIR" | "POOR" | "DAMAGED" | null;
-  afterCondition?: "NEW" | "EXCELLENT" | "GOOD" | "FAIR" | "POOR" | "DAMAGED" | null;
+  beforeCondition?: GearCondition | null;
+  afterCondition?: GearCondition | null;
   notes?: string | null;
 };
 

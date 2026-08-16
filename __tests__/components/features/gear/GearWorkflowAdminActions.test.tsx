@@ -9,6 +9,8 @@ const mocks = vi.hoisted(() => ({
   refresh: vi.fn(),
   cancelNeed: vi.fn().mockResolvedValue({ success: true }),
   declinePledge: vi.fn().mockResolvedValue({ success: true }),
+  expirePledge: vi.fn().mockResolvedValue({ success: true }),
+  correctReceipt: vi.fn().mockResolvedValue({ success: true }),
 }));
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: mocks.refresh }) }));
@@ -21,6 +23,8 @@ vi.mock("@/lib/actions/gear-needs", () => ({
 }));
 vi.mock("@/lib/actions/gear-pledges", () => ({
   declineGearPledge: mocks.declinePledge,
+  expireGearPledge: mocks.expirePledge,
+  correctGearPledgeReceipt: mocks.correctReceipt,
   receiveGearPledge: vi.fn(),
 }));
 vi.mock("@/lib/actions/gear-wishlist", () => ({ saveGearWishlist: vi.fn() }));
@@ -64,8 +68,11 @@ describe("gear workflow admin UI", () => {
         pledgeVersion={4}
         status="PLEDGED"
         catalogItems={[]}
+        pooledCatalogItems={[]}
         locations={[]}
         poolStock={[]}
+        remainingQuantity={1}
+        receipts={[]}
       />,
     );
 

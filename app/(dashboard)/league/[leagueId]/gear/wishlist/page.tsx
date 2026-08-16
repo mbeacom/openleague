@@ -66,6 +66,7 @@ export default async function GearWishlistAdminPage({ params }: { params: Promis
         <Card variant="outlined" sx={{ p: 2 }}>
           <Typography variant="h6" gutterBottom>Private donor pledge queue</Typography>
           <Alert severity="info" sx={{ mb: 1 }}>Donor contact information is visible only to league administrators.</Alert>
+          <Alert severity="warning" sx={{ mb: 1 }}>Automatic pledge expiry is intentionally deferred. Review pledge age and use “Expire pledge” when a donor commitment is no longer active.</Alert>
           <Stack divider={<Divider flexItem />}>
             {pledges.length === 0 ? <Typography color="text.secondary">No pledges yet.</Typography> : pledges.map((pledge) => (
               <Stack key={pledge.id} spacing={0.5} py={1}>
@@ -73,7 +74,16 @@ export default async function GearWishlistAdminPage({ params }: { params: Promis
                   <Typography>{pledge.wishlistItem.nameSnapshot}: {pledge.quantity}</Typography>
                   <Chip size="small" label={pledge.status} />
                 </Stack>
-                <Typography variant="body2">{pledge.donorName}{pledge.donorEmail ? ` · ${pledge.donorEmail}` : ""}{pledge.donorPhone ? ` · ${pledge.donorPhone}` : ""}</Typography>
+                <Typography variant="body2">{pledge.donorName ?? "Donor details redacted"}{pledge.donorEmail ? ` · ${pledge.donorEmail}` : ""}{pledge.donorPhone ? ` · ${pledge.donorPhone}` : ""}</Typography>
+                {pledge.note && <Typography variant="body2" color="text.secondary">Donor note: {pledge.note}</Typography>}
+                <Typography variant="body2" color="text.secondary">
+                  Created {new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(new Date(pledge.createdAt))} · {pledge.receipts.reduce((total, receipt) => total + receipt.quantity, 0)} received · {Math.max(pledge.quantity - pledge.receipts.reduce((total, receipt) => total + receipt.quantity, 0), 0)} remaining
+                </Typography>
+                {pledge.receipts.map((receipt) => (
+                  <Typography key={receipt.id} variant="caption" color="text.secondary">
+                    Receipt {receipt.id} · {receipt.quantity} · {new Date(receipt.receivedAt).toLocaleString()} · {receipt.poolStockId ? `Pooled stock ${receipt.poolStockId}` : `Unit ${receipt.gearUnitId}`}
+                  </Typography>
+                ))}
                 <GearPledgeAdminActions
                   leagueId={leagueId}
                   pledgeId={pledge.id}
@@ -82,12 +92,16 @@ export default async function GearWishlistAdminPage({ params }: { params: Promis
                   catalogItems={inventory.catalogItems
                     .filter((item) => item.isActive && item.trackingMode === "INDIVIDUAL")
                     .map((item) => ({ id: item.id, name: item.name }))}
+                  pooledCatalogItems={inventory.catalogItems
+                    .filter((item) => item.isActive && item.trackingMode === "POOLED")
+                    .map((item) => ({ id: item.id, name: item.name }))}
                   locations={inventory.locations
                     .filter((location) => location.isActive)
                     .map((location) => ({ id: location.id, name: location.name }))}
                   poolStock={inventory.pooledStock
-                    .filter((stock) => stock.availableQuantity > 0)
                     .map((stock) => ({ id: stock.id, catalogName: stock.catalogName, locationName: stock.locationName }))}
+                  remainingQuantity={Math.max(pledge.quantity - pledge.receipts.reduce((total, receipt) => total + receipt.quantity, 0), 0)}
+                  receipts={pledge.receipts}
                 />
               </Stack>
             ))}
