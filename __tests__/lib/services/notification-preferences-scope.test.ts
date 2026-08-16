@@ -16,6 +16,7 @@ vi.mock("@/lib/db/prisma", () => ({
     notificationPreference: {
       upsert: vi.fn(),
       findFirst: vi.fn(),
+      findMany: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
     },
@@ -59,13 +60,47 @@ describe("updateNotificationPreferences scope handling", () => {
 
   it("league scope uses the atomic compound-unique upsert with a string leagueId", async () => {
     vi.mocked(prisma.notificationPreference.upsert).mockResolvedValue({} as never);
+    vi.mocked(prisma.notificationPreference.findFirst).mockResolvedValue({ id: "league-pref" } as never);
 
     await service.updateNotificationPreferences("user-1", { emailEnabled: false }, "league-a");
 
-    expect(prisma.notificationPreference.findFirst).not.toHaveBeenCalled();
     expect(prisma.notificationPreference.upsert).toHaveBeenCalledTimes(1);
     const upsertArg = vi.mocked(prisma.notificationPreference.upsert).mock.calls[0][0];
     expect(upsertArg.where).toEqual({ userId_leagueId: { userId: "user-1", leagueId: "league-a" } });
+  });
+
+  it("seeds a first league override from every resolved global preference before applying its patch", async () => {
+    vi.mocked(prisma.notificationPreference.findFirst).mockResolvedValue(null);
+    vi.mocked(prisma.notificationPreference.findMany).mockResolvedValue([
+      {
+        leagueId: null,
+        leagueMessages: false,
+        leagueAnnouncements: true,
+        eventNotifications: false,
+        rsvpReminders: true,
+        teamInvitations: true,
+        practicePlanNotifications: false,
+        gearNotifications: false,
+        emailEnabled: false,
+        urgentOnly: true,
+        batchDelivery: true,
+      },
+    ] as never);
+    vi.mocked(prisma.notificationPreference.upsert).mockResolvedValue({} as never);
+
+    await service.updateNotificationPreferences("user-1", { eventNotifications: true }, "league-a");
+
+    const upsertArg = vi.mocked(prisma.notificationPreference.upsert).mock.calls[0][0];
+    expect(upsertArg.create).toMatchObject({
+      userId: "user-1",
+      leagueId: "league-a",
+      emailEnabled: false,
+      gearNotifications: false,
+      urgentOnly: true,
+      batchDelivery: true,
+      practicePlanNotifications: false,
+      eventNotifications: true,
+    });
   });
 });
 

@@ -8,6 +8,7 @@ import { prisma } from "@/lib/db/prisma";
 import { requireUserId } from "@/lib/auth/session";
 import { issueVerificationToken } from "@/lib/auth/tokens";
 import { sendEmailChangeVerificationEmail } from "@/lib/email/templates";
+import { cancelGearOutboxForDeletedUser } from "@/lib/services/gear-outbox-retention";
 import {
   changePasswordSchema,
   deleteAccountSchema,
@@ -182,7 +183,10 @@ export async function deleteAccount(
     // message rather than a silent generic failure. (Anonymizing those
     // authorship pointers so admins can also self-delete is Track 2 work.)
     try {
-      await prisma.user.delete({ where: { id: userId } });
+      await prisma.$transaction(async (tx) => {
+        await cancelGearOutboxForDeletedUser(tx, userId);
+        await tx.user.delete({ where: { id: userId } });
+      });
     } catch (deleteError) {
       if (
         deleteError instanceof Prisma.PrismaClientKnownRequestError &&

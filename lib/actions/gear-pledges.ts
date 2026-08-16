@@ -112,7 +112,11 @@ export async function createGearPledge(
     if (!ip) {
       return { success: false, error: "Unable to submit the pledge. Please try again." };
     }
-    const rateLimit = await checkRateLimit(`gear-pledge:ip:${ip}`, RATE_LIMITS.GEAR_PLEDGE_PER_IP);
+    const rateLimit = await checkRateLimit(
+      `gear-pledge:ip:${ip}`,
+      RATE_LIMITS.GEAR_PLEDGE_PER_IP,
+      { failOpen: false },
+    );
     if (!rateLimit.allowed) {
       return { success: false, error: rateLimitMessage(rateLimit.retryAfterSec) };
     }

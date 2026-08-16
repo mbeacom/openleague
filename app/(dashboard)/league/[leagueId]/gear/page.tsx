@@ -7,14 +7,17 @@ import { PageContainer } from "@/components/ui/PageContainer";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { LinkButton } from "@/components/ui/NextLinkComposites";
 import { getGearInventoryContext } from "@/lib/actions/gear-context";
+import { parseGearActivitySearchParams } from "@/lib/utils/gear-activity-query";
 
 interface GearInventoryPageProps {
   params: Promise<{ leagueId: string }>;
+  searchParams: Promise<{ activityPage?: string | string[]; activitySearch?: string | string[] }>;
 }
 
-export default async function GearInventoryPage({ params }: GearInventoryPageProps) {
+export default async function GearInventoryPage({ params, searchParams }: GearInventoryPageProps) {
   const { leagueId } = await params;
-  const data = await getGearInventoryContext(leagueId);
+  const activityOptions = parseGearActivitySearchParams(await searchParams);
+  const data = await getGearInventoryContext(leagueId, activityOptions);
   if (!data) notFound();
 
   const hasInventory = data.catalogItems.length > 0 || data.locations.length > 0 || data.units.length > 0 || data.pooledStock.length > 0;

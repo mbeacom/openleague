@@ -281,3 +281,159 @@ describe("gear inventory context", () => {
       expect(result?.reservations[0]?.reallocationWarning).toBe(true);
   });
 });
+
+describe("gear reservation capabilities", () => {
+  const TEAM_ID = "cteeeeeeeeeeeeeeeeeeeeeee";
+  const RESERVATION_ID = "crrrrrrrrrrrrrrrrrrrrrrrr";
+
+  function reservation(overrides: Record<string, unknown> = {}, allocations: Array<Record<string, unknown>> = []) {
+    return {
+      id: RESERVATION_ID,
+      teamId: TEAM_ID,
+      team: { name: "Owning team" },
+      status: "REQUESTED",
+      requestedStartDate: new Date("2027-01-01"),
+      requestedEndDate: new Date("2027-01-03"),
+      approvedStartDate: null,
+      approvedEndDate: null,
+      custodianNameSnapshot: "Custodian",
+      requestNotes: null,
+      decisionNotes: null,
+      version: 1,
+      lines: [{
+        id: "cliiiiiiiiiiiiiiiiiiiiiiii",
+        catalogItemId: "ccatalogiiiiiiiiiiiiiiiii",
+        nameSnapshot: "Helmet",
+        requestedQty: 1,
+        approvedQty: 1,
+        allocatedQty: allocations.length,
+        allocations: allocations.map((allocation) => ({
+          id: "caaaaaaaaaaaaaaaaaaaaaaaa",
+          status: "ALLOCATED",
+          allocatedQty: 1,
+          pickedUpQty: 0,
+          returnedQty: 0,
+          releasedQty: 0,
+          effectiveStartDate: new Date("2027-01-01"),
+          effectiveEndDate: new Date("2027-01-03"),
+          poolStockId: null,
+          gearUnitId: null,
+          version: 1,
+          poolStock: null,
+          gearUnit: null,
+          ...allocation,
+        })),
+      }],
+      ...overrides,
+    };
+  }
+
+  function asLeagueAdmin() {
+    mockPrisma.leagueUser.findFirst.mockResolvedValue({
+      role: "LEAGUE_ADMIN",
+      league: { id: LEAGUE_ID, name: "Metro" },
+    });
+    mockPrisma.team.findMany.mockResolvedValue([{ id: TEAM_ID, name: "Owning team" }]);
+  }
+
+  it("withholds cancel from administrators when no CANCELED transition exists", async () => {
+    asLeagueAdmin();
+    mockPrisma.gearReservation.findMany.mockResolvedValue([reservation({ status: "CLOSED" })]);
+
+    const result = await getGearReservationContext(LEAGUE_ID);
+
+    expect(result?.reservations[0]?.capabilities).toMatchObject({
+      canCancel: false,
+      canDecline: false,
+      canApproveAndAllocate: false,
+    });
+  });
+
+  it("withholds cancel while gear is still checked out", async () => {
+    asLeagueAdmin();
+    mockPrisma.gearReservation.findMany.mockResolvedValue([reservation({ status: "FULFILLED" }, [{
+      status: "PICKED_UP",
+      pickedUpQty: 1,
+    }])]);
+
+    const result = await getGearReservationContext(LEAGUE_ID);
+
+    expect(result?.reservations[0]?.capabilities.canCancel).toBe(false);
+  });
+
+  it("derives approve, decline, and cancel capabilities for a requested reservation", async () => {
+    asLeagueAdmin();
+    mockPrisma.gearReservation.findMany.mockResolvedValue([reservation()]);
+
+    const result = await getGearReservationContext(LEAGUE_ID);
+
+    expect(result?.reservations[0]?.capabilities).toEqual({
+      canApproveAndAllocate: true,
+      canDecline: true,
+      canReschedule: true,
+      canCancel: true,
+    });
+  });
+
+  it("blocks pickup capability once the allocation due date has passed", async () => {
+    asLeagueAdmin();
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    mockPrisma.gearReservation.findMany.mockResolvedValue([reservation({ status: "APPROVED" }, [{
+      effectiveStartDate: new Date("2020-01-01"),
+      effectiveEndDate: yesterday,
+    }])]);
+
+    const result = await getGearReservationContext(LEAGUE_ID);
+
+    expect(result?.reservations[0]?.allocations[0]?.capabilities).toEqual({
+      canRecordPickup: false,
+      canRecordReturn: false,
+      canRelease: true,
+    });
+  });
+
+  it("exposes return capability and outstanding custody quantity for checked-out gear", async () => {
+    asLeagueAdmin();
+    mockPrisma.gearReservation.findMany.mockResolvedValue([reservation({ status: "FULFILLED" }, [{
+      status: "PICKED_UP",
+      allocatedQty: 3,
+      pickedUpQty: 3,
+      returnedQty: 1,
+    }])]);
+
+    const result = await getGearReservationContext(LEAGUE_ID);
+
+    expect(result?.reservations[0]?.allocations[0]).toMatchObject({
+      outstandingQty: 2,
+      effectiveStartDate: "2027-01-01T00:00:00.000Z",
+      effectiveEndDate: "2027-01-03T00:00:00.000Z",
+      capabilities: { canRecordPickup: false, canRecordReturn: true, canRelease: false },
+    });
+  });
+
+  it("withholds every management capability from a team requester", async () => {
+    mockPrisma.leagueUser.findFirst.mockResolvedValue({
+      role: "MEMBER",
+      league: { id: LEAGUE_ID, name: "Metro" },
+    });
+    mockPrisma.teamMember.findMany
+      .mockResolvedValueOnce([{ teamId: TEAM_ID }])
+      .mockResolvedValueOnce([{ team: { id: TEAM_ID, name: "Owning team" } }]);
+    mockPrisma.gearReservation.findMany.mockResolvedValue([reservation({}, [{}])]);
+
+    const result = await getGearReservationContext(LEAGUE_ID);
+
+    expect(result?.reservations[0]?.capabilities).toEqual({
+      canApproveAndAllocate: false,
+      canDecline: false,
+      canReschedule: true,
+      canCancel: true,
+    });
+    expect(result?.reservations[0]?.allocations[0]?.capabilities).toEqual({
+      canRecordPickup: false,
+      canRecordReturn: false,
+      canRelease: false,
+    });
+  });
+});

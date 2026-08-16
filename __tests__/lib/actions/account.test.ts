@@ -6,6 +6,9 @@ const mocks = vi.hoisted(() => ({
     update: vi.fn(),
     delete: vi.fn(),
   },
+  notificationOutbox: {
+    updateMany: vi.fn(),
+  },
   requireUserId: vi.fn(),
   issueVerificationToken: vi.fn(),
   sendEmailChangeVerificationEmail: vi.fn(),
@@ -15,7 +18,12 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/db/prisma", () => ({
-  prisma: { user: mocks.user },
+  prisma: {
+    user: mocks.user,
+    notificationOutbox: mocks.notificationOutbox,
+    $transaction: vi.fn((callback: (tx: { user: typeof mocks.user; notificationOutbox: typeof mocks.notificationOutbox }) =>
+      unknown) => callback({ user: mocks.user, notificationOutbox: mocks.notificationOutbox })),
+  },
 }));
 
 vi.mock("@/lib/auth/session", () => ({
@@ -59,6 +67,7 @@ beforeEach(() => {
   mocks.user.findUnique.mockResolvedValue(baseUser);
   mocks.user.update.mockResolvedValue({ name: "Me" });
   mocks.user.delete.mockResolvedValue({});
+  mocks.notificationOutbox.updateMany.mockResolvedValue({ count: 0 });
   mocks.compare.mockResolvedValue(true);
   mocks.hash.mockResolvedValue("new-hash");
   mocks.issueVerificationToken.mockResolvedValue({ raw: "raw-token" });
@@ -188,6 +197,17 @@ describe("deleteAccount", () => {
     const result = await deleteAccount({ password: "correct" });
     expect(result.success).toBe(true);
     expect(mocks.user.delete).toHaveBeenCalledWith({ where: { id: "user-1" } });
+    expect(mocks.notificationOutbox.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: {
+        recipientUserId: "user-1",
+        status: { in: ["PENDING", "PROCESSING"] },
+      },
+      data: expect.objectContaining({
+        status: "CANCELED",
+        recipientUserId: null,
+        recipientRedactedAt: expect.any(Date),
+      }),
+    }));
   });
 
   it("returns an actionable error (not a silent failure) when the user owns RESTRICT-referenced content", async () => {

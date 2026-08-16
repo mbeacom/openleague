@@ -2,7 +2,12 @@
 
 import { requireUserId } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
-import { activeAllocationQuantity } from "@/lib/utils/gear";
+import {
+  activeAllocationQuantity,
+  canTransitionAllocation,
+  canTransitionReservation,
+  isOutstandingAllocationOverdue,
+} from "@/lib/utils/gear";
 
 export type GearInventoryContext = {
   league: { id: string; name: string };
@@ -251,6 +256,19 @@ export async function getGearInventoryContext(
   };
 }
 
+export type GearReservationCapabilities = {
+  canApproveAndAllocate: boolean;
+  canDecline: boolean;
+  canReschedule: boolean;
+  canCancel: boolean;
+};
+
+export type GearAllocationCapabilities = {
+  canRecordPickup: boolean;
+  canRecordReturn: boolean;
+  canRelease: boolean;
+};
+
 export type GearReservationContext = {
   league: { id: string; name: string };
   canManageReservations: boolean;
@@ -271,7 +289,7 @@ export type GearReservationContext = {
     requestNotes: string | null;
     decisionNotes?: string | null;
     version: number;
-    canCancel: boolean;
+    capabilities: GearReservationCapabilities;
     overdue: boolean;
     reallocationWarning: boolean;
     lines: Array<{
@@ -289,11 +307,16 @@ export type GearReservationContext = {
       pickedUpQty: number;
       returnedQty: number;
       releasedQty: number;
+      outstandingQty: number;
       poolStockId: string | null;
       gearUnitId: string | null;
       assetTag: string | null;
       locationName: string | null;
+      effectiveStartDate: string | null;
+      effectiveEndDate: string | null;
+      overdue: boolean;
       version: number;
+      capabilities: GearAllocationCapabilities;
     }>;
   }>;
 };
@@ -414,6 +437,12 @@ export async function getGearReservationContext(leagueId: string): Promise<GearR
         && (reservation.approvedStartDate ?? reservation.requestedStartDate) > today
         && reallocationWarningByStockId.has(allocation.poolStockId),
       );
+      const outstandingCustody = activeAllocations.some((allocation) =>
+        ["PICKED_UP", "PARTIALLY_RETURNED"].includes(allocation.status)
+        && allocation.pickedUpQty > allocation.returnedQty,
+      );
+      const isRequester = requestableTeamIds.has(reservation.teamId);
+      const allocatableLines = reservation.lines.some((line) => line.catalogItemId !== null);
       return {
         id: reservation.id,
         teamId: reservation.teamId,
@@ -427,14 +456,19 @@ export async function getGearReservationContext(leagueId: string): Promise<GearR
         requestNotes: reservation.requestNotes,
         ...(canManageReservations ? { decisionNotes: reservation.decisionNotes } : {}),
         version: reservation.version,
-        canCancel: canManageReservations || (
-          requestableTeamIds.has(reservation.teamId)
-          && ["REQUESTED", "APPROVED"].includes(reservation.status)
-        ),
+        capabilities: {
+          canApproveAndAllocate: canManageReservations
+            && allocatableLines
+            && ["REQUESTED", "APPROVED"].includes(reservation.status),
+          canDecline: canManageReservations && canTransitionReservation(reservation.status, "DECLINED"),
+          canReschedule: (canManageReservations || isRequester)
+            && ["DRAFT", "REQUESTED", "APPROVED"].includes(reservation.status),
+          canCancel: (canManageReservations || isRequester)
+            && canTransitionReservation(reservation.status, "CANCELED")
+            && !outstandingCustody,
+        },
         overdue: activeAllocations.some((allocation) =>
-          ["PICKED_UP", "PARTIALLY_RETURNED"].includes(allocation.status)
-          && allocation.effectiveEndDate !== null
-          && allocation.effectiveEndDate < today,
+          isOutstandingAllocationOverdue(allocation, today),
         ),
         reallocationWarning,
         lines: reservation.lines.map((line) => ({
@@ -445,19 +479,44 @@ export async function getGearReservationContext(leagueId: string): Promise<GearR
           approvedQty: line.approvedQty,
           allocatedQty: line.allocatedQty,
         })),
-        allocations: reservation.lines.flatMap((line) => line.allocations.map((allocation) => ({
-          id: allocation.id,
-          status: allocation.status,
-          allocatedQty: allocation.allocatedQty,
-          pickedUpQty: allocation.pickedUpQty,
-          returnedQty: allocation.returnedQty,
-          releasedQty: allocation.releasedQty,
-          poolStockId: allocation.poolStockId,
-          gearUnitId: allocation.gearUnitId,
-          assetTag: allocation.gearUnit?.assetTag ?? null,
-          locationName: allocation.poolStock?.location.name ?? null,
-          version: allocation.version,
-        }))),
+        allocations: reservation.lines.flatMap((line) => line.allocations.map((allocation) => {
+          const outstandingQty = Math.max(0, allocation.pickedUpQty - allocation.returnedQty);
+          // Pickup mirrors the server guard: a due date already in the past
+          // blocks checkout regardless of the allocation's current status.
+          const dueDatePassed = isOutstandingAllocationOverdue(
+            { status: "PICKED_UP", effectiveEndDate: allocation.effectiveEndDate },
+            today,
+          );
+          return {
+            id: allocation.id,
+            status: allocation.status,
+            allocatedQty: allocation.allocatedQty,
+            pickedUpQty: allocation.pickedUpQty,
+            returnedQty: allocation.returnedQty,
+            releasedQty: allocation.releasedQty,
+            outstandingQty,
+            poolStockId: allocation.poolStockId,
+            gearUnitId: allocation.gearUnitId,
+            assetTag: allocation.gearUnit?.assetTag ?? null,
+            locationName: allocation.poolStock?.location.name ?? null,
+            effectiveStartDate: allocation.effectiveStartDate?.toISOString() ?? null,
+            effectiveEndDate: allocation.effectiveEndDate?.toISOString() ?? null,
+            overdue: isOutstandingAllocationOverdue(allocation, today),
+            version: allocation.version,
+            capabilities: {
+              canRecordPickup: canManageReservations
+                && allocation.status === "ALLOCATED"
+                && allocation.pickedUpQty === 0
+                && !dueDatePassed,
+              canRecordReturn: canManageReservations
+                && ["PICKED_UP", "PARTIALLY_RETURNED"].includes(allocation.status)
+                && outstandingQty > 0,
+              canRelease: canManageReservations
+                && canTransitionAllocation(allocation.status, "RELEASED")
+                && allocation.pickedUpQty === 0,
+            },
+          };
+        })),
       };
     }),
   };

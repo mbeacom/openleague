@@ -21,11 +21,21 @@ export function GearReservationList({ data }: { data: GearReservationContext }) 
     );
   }
 
+  const windows = (reservation: GearReservationContext["reservations"][number]) => {
+    const requested = `${reservation.requestedStartDate.slice(0, 10)} to ${reservation.requestedEndDate.slice(0, 10)}`;
+    const approved = reservation.approvedStartDate && reservation.approvedEndDate
+      ? `${reservation.approvedStartDate.slice(0, 10)} to ${reservation.approvedEndDate.slice(0, 10)}`
+      : null;
+    return { requested, approved };
+  };
+
   return (
     <>
       <Box sx={{ display: { xs: "block", md: "none" } }}>
         <Stack spacing={2}>
-          {data.reservations.map((reservation) => (
+          {data.reservations.map((reservation) => {
+            const { requested, approved } = windows(reservation);
+            return (
             <Card key={reservation.id} variant="outlined" sx={{ p: 2 }}>
               <Stack spacing={1}>
                 <Stack direction="row" justifyContent="space-between" alignItems="center">
@@ -33,8 +43,13 @@ export function GearReservationList({ data }: { data: GearReservationContext }) 
                   <Chip size="small" label={reservation.status.replace("_", " ")} color={statusColor[reservation.status]} />
                 </Stack>
                 <Typography variant="body2">
-                  {(reservation.approvedStartDate ?? reservation.requestedStartDate).slice(0, 10)} to {(reservation.approvedEndDate ?? reservation.requestedEndDate).slice(0, 10)}
+                  {approved ? `Approved: ${approved}` : `Requested: ${requested}`}
                 </Typography>
+                {approved && approved !== requested && (
+                  <Typography variant="caption" color="text.secondary">
+                    Requested: {requested}
+                  </Typography>
+                )}
                 <Typography variant="body2">Custodian: {reservation.custodianName}</Typography>
                 {(reservation.overdue || reservation.reallocationWarning) && (
                   <Alert severity="warning">
@@ -46,7 +61,8 @@ export function GearReservationList({ data }: { data: GearReservationContext }) 
                 </LinkButton>
               </Stack>
             </Card>
-          ))}
+            );
+          })}
         </Stack>
       </Box>
       <Table size="small" sx={{ display: { xs: "none", md: "table" } }}>
@@ -60,13 +76,20 @@ export function GearReservationList({ data }: { data: GearReservationContext }) 
           </TableRow>
         </TableHead>
         <TableBody>
-          {data.reservations.map((reservation) => (
+          {data.reservations.map((reservation) => {
+            const { requested, approved } = windows(reservation);
+            return (
             <TableRow key={reservation.id}>
               <TableCell>{reservation.teamName}</TableCell>
               <TableCell>
-                {(reservation.approvedStartDate ?? reservation.requestedStartDate).slice(0, 10)}
-                {" to "}
-                {(reservation.approvedEndDate ?? reservation.requestedEndDate).slice(0, 10)}
+                <Typography variant="body2">
+                  {approved ? `Approved: ${approved}` : `Requested: ${requested}`}
+                </Typography>
+                {approved && approved !== requested && (
+                  <Typography variant="caption" color="text.secondary">
+                    Requested: {requested}
+                  </Typography>
+                )}
               </TableCell>
               <TableCell>
                 <Stack direction="row" spacing={1} alignItems="center">
@@ -81,7 +104,8 @@ export function GearReservationList({ data }: { data: GearReservationContext }) 
                 </LinkButton>
               </TableCell>
             </TableRow>
-          ))}
+            );
+          })}
         </TableBody>
       </Table>
     </>

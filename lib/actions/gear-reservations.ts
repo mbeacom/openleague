@@ -21,7 +21,9 @@ import {
   canTransitionAllocation,
   canTransitionReservation,
   datesOverlap,
+  isOutstandingAllocationOverdue,
 } from "@/lib/utils/gear";
+import type { GearAllocationStatus } from "@/types/gear";
 import { createGearReservationSchema } from "@/lib/utils/validation";
 import type { ActionResult } from "@/lib/actions/gear-inventory";
 
@@ -206,6 +208,124 @@ async function releaseTaggedUnitIfFree(tx: Tx, leagueId: string, gearUnitId: str
       where: { id: gearUnitId, leagueId, status: "RESERVED" },
       data: { status: "AVAILABLE", version: { increment: 1 } },
     });
+  }
+}
+
+type ReleasableAllocation = {
+  id: string;
+  status: GearAllocationStatus;
+  allocatedQty: number;
+  pickedUpQty: number;
+  poolStockId: string | null;
+  gearUnitId: string | null;
+  version: number;
+};
+
+/**
+ * Releasing uncollected inventory always reverses the same three effects:
+ * the allocation row, the tagged unit projection, and the inventory ledger.
+ */
+async function releaseUncollectedAllocation(
+  tx: Tx,
+  leagueId: string,
+  allocation: ReleasableAllocation,
+  actorUserId: string,
+  options: { action: string; notes?: string | null },
+): Promise<void> {
+  if (!canTransitionAllocation(allocation.status, "RELEASED") || allocation.pickedUpQty > 0) {
+    invalid("Only uncollected allocations can be released.");
+  }
+  const release = await tx.gearAllocation.updateMany({
+    where: { id: allocation.id, leagueId, version: allocation.version, status: allocation.status },
+    data: {
+      status: "RELEASED",
+      releasedQty: allocation.allocatedQty,
+      releasedAt: new Date(),
+      version: { increment: 1 },
+    },
+  });
+  if (release.count !== 1) throw new GearConflictError();
+  if (allocation.gearUnitId) await releaseTaggedUnitIfFree(tx, leagueId, allocation.gearUnitId);
+  await recordGearInventoryMovement(tx, {
+    leagueId,
+    type: "RELEASE",
+    direction: "INCREASE",
+    allocationId: allocation.id,
+    poolStockId: allocation.poolStockId,
+    gearUnitId: allocation.gearUnitId,
+    quantity: allocation.allocatedQty,
+    recordedById: actorUserId,
+    notes: options.notes ?? undefined,
+  });
+  await recordGearActivity(tx, {
+    leagueId,
+    entityType: "ALLOCATION",
+    entityId: allocation.id,
+    action: options.action,
+    actorUserId,
+  });
+}
+
+/**
+ * Allocations are the source of truth for custody, so any terminal allocation
+ * change has to re-derive line totals and close the parent reservation once no
+ * inventory remains outstanding.
+ */
+async function reconcileReservationAfterTerminalAllocation(
+  tx: Tx,
+  leagueId: string,
+  reservationId: string,
+): Promise<void> {
+  const reservation = await tx.gearReservation.findFirst({
+    where: { id: reservationId, leagueId },
+    select: {
+      id: true,
+      status: true,
+      version: true,
+      lines: {
+        select: {
+          id: true,
+          allocations: {
+            select: {
+              status: true,
+              allocatedQty: true,
+              pickedUpQty: true,
+              returnedQty: true,
+              releasedQty: true,
+            },
+          },
+        },
+      },
+    },
+  });
+  if (!reservation) invalid("Reservation not found in this league.");
+
+  for (const line of reservation.lines) {
+    await tx.gearReservationLine.updateMany({
+      where: { id: line.id, leagueId, reservationId },
+      data: {
+        allocatedQty: line.allocations.reduce(
+          (total, allocation) => total + activeAllocationQuantity(allocation),
+          0,
+        ),
+      },
+    });
+  }
+
+  const allocations = reservation.lines.flatMap((line) => line.allocations);
+  const hasActiveAllocation = allocations.some((allocation) =>
+    ["PENDING", "ALLOCATED", "PICKED_UP", "PARTIALLY_RETURNED"].includes(allocation.status),
+  );
+  const hasOutstandingCustody = allocations.some((allocation) =>
+    ["PICKED_UP", "PARTIALLY_RETURNED"].includes(allocation.status)
+    && allocation.pickedUpQty > allocation.returnedQty,
+  );
+  if (reservation.status === "FULFILLED" && !hasActiveAllocation && !hasOutstandingCustody) {
+    const closed = await tx.gearReservation.updateMany({
+      where: { id: reservation.id, leagueId, status: "FULFILLED", version: reservation.version },
+      data: { status: "CLOSED", custodyEndedAt: new Date(), version: { increment: 1 } },
+    });
+    if (closed.count !== 1) throw new GearConflictError();
   }
 }
 
@@ -451,41 +571,9 @@ export async function cancelGearReservation(input: unknown): Promise<ActionResul
         invalid("Checked-out gear must be returned before this reservation can be canceled.");
       }
       for (const allocation of activeAllocations) {
-        const release = await tx.gearAllocation.updateMany({
-          where: {
-            id: allocation.id,
-            leagueId: validated.leagueId,
-            version: allocation.version,
-            status: { in: ["PENDING", "ALLOCATED"] },
-          },
-          data: {
-            status: "RELEASED",
-            releasedQty: allocation.allocatedQty,
-            releasedAt: new Date(),
-            version: { increment: 1 },
-          },
-        });
-        if (release.count !== 1) throw new GearConflictError();
-        if (allocation.gearUnitId) {
-          await releaseTaggedUnitIfFree(tx, validated.leagueId, allocation.gearUnitId);
-        }
-        await recordGearInventoryMovement(tx, {
-          leagueId: validated.leagueId,
-          type: "RELEASE",
-          direction: "INCREASE",
-          allocationId: allocation.id,
-          poolStockId: allocation.poolStockId,
-          gearUnitId: allocation.gearUnitId,
-          quantity: allocation.allocatedQty,
-          recordedById: userId,
-          notes: "Reservation canceled before pickup.",
-        });
-        await recordGearActivity(tx, {
-          leagueId: validated.leagueId,
-          entityType: "ALLOCATION",
-          entityId: allocation.id,
+        await releaseUncollectedAllocation(tx, validated.leagueId, allocation, userId, {
           action: "released_by_reservation_cancellation",
-          actorUserId: userId,
+          notes: "Reservation canceled before pickup.",
         });
       }
       for (const line of reservation.lines) {
@@ -768,13 +856,15 @@ export async function releaseGearAllocation(input: unknown): Promise<ActionResul
       if (!allocation) invalid("Allocation not found in this league.");
       if (!canTransitionAllocation(allocation.status, "RELEASED") || allocation.pickedUpQty > 0) invalid("Only uncollected allocations can be released.");
       if (allocation.version !== validated.expectedVersion) throw new GearConflictError();
-      const update = await tx.gearAllocation.updateMany({
-        where: { id: allocation.id, version: allocation.version, status: allocation.status },
-        data: { status: "RELEASED", releasedQty: allocation.allocatedQty, releasedAt: new Date(), version: { increment: 1 } },
+      await releaseUncollectedAllocation(tx, validated.leagueId, allocation, userId, {
+        action: "released",
+        notes: validated.notes,
       });
-      if (update.count !== 1) throw new GearConflictError();
-      if (allocation.gearUnitId) await releaseTaggedUnitIfFree(tx, validated.leagueId, allocation.gearUnitId);
-      await recordGearActivity(tx, { leagueId: validated.leagueId, entityType: "ALLOCATION", entityId: allocation.id, action: "released", actorUserId: userId });
+      await reconcileReservationAfterTerminalAllocation(
+        tx,
+        validated.leagueId,
+        allocation.reservationLine.reservationId,
+      );
       return { id: allocation.id, reservationId: allocation.reservationLine.reservationId };
     }, gearTransactionOptions);
     revalidatePath(reservationPath(validated.leagueId));
@@ -801,6 +891,9 @@ export async function recordGearPickup(input: unknown): Promise<ActionResult<{ i
         || allocation.pickedUpQty !== 0
         || validated.quantity !== allocation.allocatedQty
       ) invalid("This allocation must be picked up in full.");
+      if (isOutstandingAllocationOverdue({ status: "PICKED_UP", effectiveEndDate: allocation.effectiveEndDate })) {
+        invalid("This allocation is past its due date and cannot be checked out.");
+      }
       if (allocation.version !== validated.expectedVersion) throw new GearConflictError();
       const update = await tx.gearAllocation.updateMany({
         where: { id: allocation.id, version: allocation.version, status: "ALLOCATED" },
@@ -966,18 +1059,11 @@ export async function recordGearReturn(input: unknown): Promise<ActionResult<{ i
         leagueId: validated.leagueId, entityType: "HANDOFF", entityId: handoff.id,
         action: "returned", actorUserId: userId, details: { metadata: { quantity: validated.quantity, disposition: validated.returnDisposition } },
       });
-      const openAllocations = await tx.gearAllocation.count({
-        where: {
-          reservationLine: { reservationId: allocation.reservationLine.reservationId },
-          status: { in: ["PENDING", "ALLOCATED", "PICKED_UP", "PARTIALLY_RETURNED"] },
-        },
-      });
-      if (openAllocations === 0) {
-        await tx.gearReservation.updateMany({
-          where: { id: allocation.reservationLine.reservationId, status: "FULFILLED" },
-          data: { status: "CLOSED", custodyEndedAt: new Date(), version: { increment: 1 } },
-        });
-      }
+      await reconcileReservationAfterTerminalAllocation(
+        tx,
+        validated.leagueId,
+        allocation.reservationLine.reservationId,
+      );
       await queueReservationPartyNotification(tx, {
         leagueId: validated.leagueId,
         eventType: "gear.reservation.returned",

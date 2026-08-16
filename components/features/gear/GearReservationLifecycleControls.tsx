@@ -23,11 +23,9 @@ type Reservation = GearReservationContext["reservations"][number];
 export function GearReservationLifecycleControls({
   leagueId,
   reservation,
-  canManage,
 }: {
   leagueId: string;
   reservation: Reservation;
-  canManage: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -99,19 +97,35 @@ export function GearReservationLifecycleControls({
   };
 
   const selectedReturn = reservation.allocations.find((allocation) => allocation.id === returnAllocationId);
+  const pickupAllocations = reservation.allocations.filter((allocation) => allocation.capabilities.canRecordPickup);
+  const releasableAllocations = reservation.allocations.filter((allocation) => allocation.capabilities.canRelease);
+  const returnableAllocations = reservation.allocations.filter((allocation) => allocation.capabilities.canRecordReturn);
+  const blockedPickups = reservation.allocations.filter((allocation) =>
+    allocation.status === "ALLOCATED" && !allocation.capabilities.canRecordPickup && allocation.capabilities.canRelease,
+  );
+  const allocationLabel = (allocation: Reservation["allocations"][number]) =>
+    allocation.assetTag ?? allocation.locationName ?? "pooled";
 
   return (
     <Stack spacing={1}>
       {error && <Alert severity="error" onClose={() => setError(null)}>{error}</Alert>}
-      {canManage && ["REQUESTED", "APPROVED"].includes(reservation.status) && (
+      {blockedPickups.length > 0 && (
+        <Alert severity="warning">
+          {blockedPickups.length === 1 ? "An allocation is" : `${blockedPickups.length} allocations are`}
+          {" "}past the approved return date and can no longer be checked out. Reschedule the reservation or release the gear.
+        </Alert>
+      )}
+      {(reservation.capabilities.canApproveAndAllocate || reservation.capabilities.canDecline) && (
         <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-          <Button variant="contained" onClick={() => {
-            setResource("");
-            setAllocationOpen(true);
-          }} disabled={pending} sx={{ minHeight: 44 }}>
-            Review and allocate
-          </Button>
-          {reservation.status === "REQUESTED" && (
+          {reservation.capabilities.canApproveAndAllocate && (
+            <Button variant="contained" onClick={() => {
+              setResource("");
+              setAllocationOpen(true);
+            }} disabled={pending} sx={{ minHeight: 44 }}>
+              Review and allocate
+            </Button>
+          )}
+          {reservation.capabilities.canDecline && (
             <Button color="error" variant="outlined" disabled={pending} onClick={() => run(() => declineGearReservation({
               leagueId, reservationId: reservation.id, expectedVersion: reservation.version,
             }))} sx={{ minHeight: 44 }}>
@@ -120,34 +134,37 @@ export function GearReservationLifecycleControls({
           )}
         </Stack>
       )}
-      {canManage && reservation.allocations.some((allocation) => allocation.status === "ALLOCATED") && (
-        <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-          {reservation.allocations.filter((allocation) => allocation.status === "ALLOCATED").map((allocation) => (
-            <Stack key={allocation.id} direction="row" spacing={1}>
-              <Button variant="outlined" disabled={pending} onClick={() => run(() => recordGearPickup({
-                leagueId, allocationId: allocation.id, expectedVersion: allocation.version, quantity: allocation.allocatedQty,
-              }))} sx={{ minHeight: 44 }}>
-                Confirm pickup ({allocation.assetTag ?? allocation.locationName ?? "pooled"})
-              </Button>
-              <Button color="inherit" disabled={pending} onClick={() => run(() => releaseGearAllocation({
-                leagueId, allocationId: allocation.id, expectedVersion: allocation.version,
-              }))} sx={{ minHeight: 44 }}>
-                Release
-              </Button>
-            </Stack>
+      {(pickupAllocations.length > 0 || releasableAllocations.length > 0) && (
+        <Stack direction={{ xs: "column", sm: "row" }} spacing={1} flexWrap="wrap" useFlexGap>
+          {pickupAllocations.map((allocation) => (
+            <Button key={`pickup-${allocation.id}`} variant="outlined" disabled={pending} onClick={() => run(() => recordGearPickup({
+              leagueId, allocationId: allocation.id, expectedVersion: allocation.version, quantity: allocation.allocatedQty,
+            }))} sx={{ minHeight: 44 }}>
+              Confirm pickup ({allocationLabel(allocation)})
+            </Button>
           ))}
-        </Stack>
-      )}
-      {canManage && reservation.allocations.some((allocation) => ["PICKED_UP", "PARTIALLY_RETURNED"].includes(allocation.status)) && (
-        <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-          {reservation.allocations.filter((allocation) => ["PICKED_UP", "PARTIALLY_RETURNED"].includes(allocation.status)).map((allocation) => (
-            <Button key={allocation.id} variant="outlined" disabled={pending} onClick={() => setReturnAllocationId(allocation.id)} sx={{ minHeight: 44 }}>
-              Record return ({allocation.assetTag ?? allocation.locationName ?? "pooled"})
+          {releasableAllocations.map((allocation) => (
+            <Button key={`release-${allocation.id}`} color="inherit" disabled={pending} onClick={() => run(() => releaseGearAllocation({
+              leagueId, allocationId: allocation.id, expectedVersion: allocation.version,
+            }))} sx={{ minHeight: 44 }}>
+              Release ({allocationLabel(allocation)})
             </Button>
           ))}
         </Stack>
       )}
-      {reservation.canCancel && (
+      {returnableAllocations.length > 0 && (
+        <Stack direction={{ xs: "column", sm: "row" }} spacing={1} flexWrap="wrap" useFlexGap>
+          {returnableAllocations.map((allocation) => (
+            <Button key={allocation.id} variant="outlined" disabled={pending} onClick={() => {
+              setQuantity(String(allocation.outstandingQty));
+              setReturnAllocationId(allocation.id);
+            }} sx={{ minHeight: 44 }}>
+              Record return ({allocationLabel(allocation)})
+            </Button>
+          ))}
+        </Stack>
+      )}
+      {reservation.capabilities.canCancel && (
         <Button color="inherit" variant="text" disabled={pending} onClick={() => run(() => cancelGearReservation({
           leagueId, reservationId: reservation.id, expectedVersion: reservation.version,
         }))} sx={{ alignSelf: "flex-start", minHeight: 44 }}>
@@ -226,7 +243,7 @@ export function GearReservationLifecycleControls({
         <DialogTitle id="gear-return-title">Record gear return</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ pt: 1 }}>
-            <TextField label="Quantity returned" type="number" inputProps={{ min: 1, max: selectedReturn ? selectedReturn.pickedUpQty - selectedReturn.returnedQty : 1 }} value={quantity} onChange={(event) => setQuantity(event.target.value)} />
+            <TextField label="Quantity returned" type="number" inputProps={{ min: 1, max: selectedReturn?.outstandingQty ?? 1 }} value={quantity} onChange={(event) => setQuantity(event.target.value)} />
             <TextField select label="Disposition" value={disposition} onChange={(event) => setDisposition(event.target.value as typeof disposition)}>
               {["GOOD", "DAMAGED", "LOST", "CONSUMED"].map((value) => <MenuItem key={value} value={value}>{value.replace("_", " ")}</MenuItem>)}
             </TextField>
