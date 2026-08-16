@@ -423,11 +423,14 @@ Migration notes:
   still-pending legacy occurrence emits one duplicate — within the at-least-once
   contract.
 - Vercel applies migrations during the build **before** it serves the new
-  application writer. Roll out the backward-compatible opaque-key writer and
-  legacy-row reader first, then deploy this migration only after every live
-  writer uses opaque keys. The migration can then redact the finite historical
-  set without an older production instance creating new address-bearing rows
-  during the build-to-rollout window.
+  application writer. For the initial greenfield production rollout, this
+  migration may ship with the opaque-key writer because the previously serving
+  application has no gear outbox writer. It normalizes any preview or
+  earlier-iteration rows, while the new worker remains compatible with legacy
+  keys. Use a separate writer-first rollout only if a legacy-key writer has
+  already reached production; then deploy the migration after every live writer
+  uses opaque keys so no address-bearing rows are created during the
+  build-to-rollout window.
 
 ## Adding a gear notification
 
