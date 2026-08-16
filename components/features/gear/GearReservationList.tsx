@@ -1,6 +1,6 @@
-import Link from "next/link";
-import { Alert, Box, Button, Card, Chip, Stack, Table, TableBody, TableCell, TableHead, TableRow, Typography } from "@mui/material";
+import { Alert, Box, Card, Chip, Stack, Table, TableBody, TableCell, TableHead, TableRow, Typography } from "@mui/material";
 import type { GearReservationContext } from "@/lib/actions/gear-context";
+import { LinkButton } from "@/components/ui/NextLinkComposites";
 
 const statusColor = {
   DRAFT: "default",
@@ -41,9 +41,9 @@ export function GearReservationList({ data }: { data: GearReservationContext }) 
                     {reservation.overdue ? "Overdue custody requires attention." : "Inventory changed; review this future allocation."}
                   </Alert>
                 )}
-                <Button component={Link} href={`/league/${data.league.id}/gear/reservations/${reservation.id}`} variant="outlined" sx={{ minHeight: 44 }}>
+                <LinkButton href={`/league/${data.league.id}/gear/reservations/${reservation.id}`} variant="outlined" sx={{ minHeight: 44 }}>
                   View reservation
-                </Button>
+                </LinkButton>
               </Stack>
             </Card>
           ))}
@@ -72,9 +72,9 @@ export function GearReservationList({ data }: { data: GearReservationContext }) 
               </TableCell>
               <TableCell>{reservation.custodianName}</TableCell>
               <TableCell align="right">
-                <Button component={Link} href={`/league/${data.league.id}/gear/reservations/${reservation.id}`} sx={{ minHeight: 44 }}>
+                <LinkButton href={`/league/${data.league.id}/gear/reservations/${reservation.id}`} sx={{ minHeight: 44 }}>
                   Details
-                </Button>
+                </LinkButton>
               </TableCell>
             </TableRow>
           ))}

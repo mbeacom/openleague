@@ -1,7 +1,7 @@
-import Link from "next/link";
 import { ArrowBackOutlined } from "@mui/icons-material";
-import { Alert, Button, Card, Chip, Divider, Stack, Typography } from "@mui/material";
+import { Alert, Card, Chip, Divider, Stack, Typography } from "@mui/material";
 import { notFound } from "next/navigation";
+import { LinkButton } from "@/components/ui/NextLinkComposites";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { getGearReservationContext } from "@/lib/actions/gear-context";
@@ -18,9 +18,9 @@ export default async function GearReservationDetailPage({ params }: GearReservat
 
   return (
     <PageContainer maxWidth="md">
-      <Button component={Link} href={`/league/${leagueId}/gear/reservations`} startIcon={<ArrowBackOutlined />} sx={{ minHeight: 44, mb: 1 }}>
+      <LinkButton href={`/league/${leagueId}/gear/reservations`} startIcon={<ArrowBackOutlined />} sx={{ minHeight: 44, mb: 1 }}>
         All reservations
-      </Button>
+      </LinkButton>
       <PageHeader title={`${reservation.teamName} gear reservation`} subtitle={`${reservation.requestedStartDate.slice(0, 10)} to ${reservation.requestedEndDate.slice(0, 10)}`} />
       <Stack spacing={2}>
         {(reservation.overdue || reservation.reallocationWarning) && (
