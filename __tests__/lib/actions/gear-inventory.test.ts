@@ -136,6 +136,7 @@ describe("gear inventory actions", () => {
     expect(tx.gearInventoryMovement.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         quantity: 2,
+        direction: "DECREASE",
         beforeLocationId: LOCATION_ID,
         afterLocationId: null,
       }),

@@ -179,7 +179,7 @@ export async function createGearStorageLocation(
       });
       await recordGearActivity(tx, {
         leagueId: validated.leagueId, entityType: "STORAGE_LOCATION", entityId: created.id,
-        action: "created", actorUserId: userId, details: { name: validated.name },
+        action: "created", actorUserId: userId,
       });
       return created;
     }, gearTransactionOptions);
@@ -208,7 +208,8 @@ export async function updateGearStorageLocation(input: unknown): Promise<ActionR
       });
       await recordGearActivity(tx, {
         leagueId, entityType: "STORAGE_LOCATION", entityId: updated.id, action: "updated",
-        actorUserId: userId, details: { fields: Object.keys(changes), ...(name ? { name } : {}) },
+        actorUserId: userId,
+        details: { metadata: { updatedFieldCount: Object.keys(changes).length + (name ? 1 : 0) } },
       });
       return updated;
     }, gearTransactionOptions);
@@ -269,7 +270,8 @@ export async function createGearCatalogItem(
       });
       await recordGearActivity(tx, {
         leagueId: validated.leagueId, entityType: "CATALOG_ITEM", entityId: created.id,
-        action: "created", actorUserId: userId, details: { trackingMode: validated.trackingMode },
+        action: "created", actorUserId: userId,
+        details: { metadata: { trackingMode: validated.trackingMode } },
       });
       return created;
     }, gearTransactionOptions);
@@ -322,7 +324,8 @@ export async function updateGearCatalogItem(input: unknown): Promise<ActionResul
       });
       await recordGearActivity(tx, {
         leagueId, entityType: "CATALOG_ITEM", entityId: updated.id, action: "updated",
-        actorUserId: userId, details: { trackingMode: validated.trackingMode ?? existing.trackingMode },
+        actorUserId: userId,
+        details: { metadata: { trackingMode: validated.trackingMode ?? existing.trackingMode } },
       });
       return updated;
     }, gearTransactionOptions);
@@ -409,13 +412,15 @@ export async function adjustGearPoolStock(
         // Movements always record a positive physical quantity. A source-only
         // location is an outbound adjustment; a destination-only one is inbound.
         quantity: Math.abs(validated.quantityDelta),
+        direction: validated.quantityDelta > 0 ? "INCREASE" : "DECREASE",
         beforeLocationId: validated.quantityDelta < 0 ? validated.locationId : null,
         afterLocationId: validated.quantityDelta > 0 ? validated.locationId : null,
         afterCondition: validated.condition, recordedById: userId, notes: validated.notes,
       });
       await recordGearActivity(tx, {
         leagueId: validated.leagueId, entityType: "POOL_STOCK", entityId: current.id,
-        action: "adjusted", actorUserId: userId, details: { quantityDelta: validated.quantityDelta, condition: validated.condition },
+        action: "adjusted", actorUserId: userId,
+        details: { metadata: { quantityDelta: validated.quantityDelta, condition: validated.condition } },
       });
       return current;
     }, gearTransactionOptions));
@@ -472,6 +477,7 @@ export async function transferGearPoolStock(input: unknown): Promise<ActionResul
       });
       await recordGearInventoryMovement(tx, {
         leagueId: validated.leagueId, type: "TRANSFER", poolStockId: source.id, quantity: validated.quantity,
+        direction: "NEUTRAL",
         beforeLocationId: validated.sourceLocationId, afterLocationId: validated.destinationLocationId,
         beforeCondition: validated.condition, afterCondition: validated.condition,
         recordedById: userId, notes: validated.notes,
@@ -479,7 +485,7 @@ export async function transferGearPoolStock(input: unknown): Promise<ActionResul
       await recordGearActivity(tx, {
         leagueId: validated.leagueId, entityType: "POOL_STOCK", entityId: source.id,
         action: "transferred", actorUserId: userId,
-        details: { quantity: validated.quantity, destinationLocationId: validated.destinationLocationId },
+        details: { metadata: { quantity: validated.quantity, destinationLocationId: validated.destinationLocationId } },
       });
       return { sourceId: source.id, destinationId: destination.id };
     }, gearTransactionOptions));
@@ -514,11 +520,13 @@ export async function createGearUnit(
       });
       await recordGearInventoryMovement(tx, {
         leagueId: validated.leagueId, type: "RECEIPT", gearUnitId: created.id, quantity: 1,
+        direction: "INCREASE",
         afterLocationId: locationId, afterCondition: validated.currentCondition, recordedById: userId,
       });
       await recordGearActivity(tx, {
         leagueId: validated.leagueId, entityType: "UNIT", entityId: created.id, action: "created",
-        actorUserId: userId, details: { assetTag },
+        actorUserId: userId,
+        details: { metadata: { condition: validated.currentCondition } },
       });
       return created;
     }, gearTransactionOptions);
@@ -587,13 +595,15 @@ export async function transferGearUnit(input: unknown): Promise<ActionResult<{ i
       });
       await recordGearInventoryMovement(tx, {
         leagueId: validated.leagueId, type: "TRANSFER", gearUnitId: updated.id, quantity: 1,
+        direction: "NEUTRAL",
         beforeLocationId: existing.currentLocationId, afterLocationId: validated.destinationLocationId,
         beforeCondition: existing.currentCondition, afterCondition: existing.currentCondition,
         recordedById: userId, notes: validated.notes,
       });
       await recordGearActivity(tx, {
         leagueId: validated.leagueId, entityType: "UNIT", entityId: updated.id, action: "transferred",
-        actorUserId: userId, details: { destinationLocationId: validated.destinationLocationId },
+        actorUserId: userId,
+        details: { metadata: { destinationLocationId: validated.destinationLocationId } },
       });
       return updated;
     }, gearTransactionOptions);
@@ -624,13 +634,20 @@ export async function changeGearUnitCondition(input: unknown): Promise<ActionRes
       });
       await recordGearInventoryMovement(tx, {
         leagueId: validated.leagueId, type: "ADJUSTMENT", gearUnitId: updated.id, quantity: 1,
-        beforeLocationId: existing.currentLocationId, afterLocationId: existing.currentLocationId,
-        beforeCondition: existing.currentCondition, afterCondition: validated.condition,
+        direction: "DECREASE",
+        beforeLocationId: existing.currentLocationId, beforeCondition: existing.currentCondition,
+        recordedById: userId, notes: validated.notes,
+      });
+      await recordGearInventoryMovement(tx, {
+        leagueId: validated.leagueId, type: "ADJUSTMENT", gearUnitId: updated.id, quantity: 1,
+        direction: "INCREASE",
+        afterLocationId: existing.currentLocationId, afterCondition: validated.condition,
         recordedById: userId, notes: validated.notes,
       });
       await recordGearActivity(tx, {
         leagueId: validated.leagueId, entityType: "UNIT", entityId: updated.id, action: "condition_changed",
-        actorUserId: userId, details: { from: existing.currentCondition, to: validated.condition },
+        actorUserId: userId,
+        details: { metadata: { fromCondition: existing.currentCondition, toCondition: validated.condition } },
       });
       return updated;
     }, gearTransactionOptions);
@@ -660,12 +677,13 @@ export async function retireGearUnit(input: unknown): Promise<ActionResult<{ id:
       });
       await recordGearInventoryMovement(tx, {
         leagueId: validated.leagueId, type: "WRITE_OFF", gearUnitId: updated.id, quantity: 1,
+        direction: "DECREASE",
         beforeLocationId: existing.currentLocationId, beforeCondition: existing.currentCondition,
         afterCondition: existing.currentCondition, recordedById: userId, notes: validated.notes,
       });
       await recordGearActivity(tx, {
         leagueId: validated.leagueId, entityType: "UNIT", entityId: updated.id, action: "retired",
-        actorUserId: userId, details: { reason: validated.notes },
+        actorUserId: userId,
       });
       return updated;
     }, gearTransactionOptions);
