@@ -12,16 +12,16 @@ datasource db {
 
 // User model
 model User {
-  id            String    @id @default(cuid())
-  email         String    @unique
-  passwordHash  String
-  name          String?
-  approved      Boolean   @default(true) // Moderation kill-switch: false = suspended (signup gate is email verification)
-  emailVerified DateTime? // Set when the user proves inbox ownership (verification link, invite match, or password reset)
-  isPlatformAdmin Boolean @default(false) // Platform-wide admin (user approval/enumeration). NOT self-grantable; see lib/auth/session.ts isPlatformAdmin()
-  sessionVersion Int     @default(0) // Bumped on password reset/change + email change to evict existing JWT sessions; checked in the auth jwt callback
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id              String    @id @default(cuid())
+  email           String    @unique
+  passwordHash    String
+  name            String?
+  approved        Boolean   @default(true) // Moderation kill-switch: false = suspended (signup gate is email verification)
+  emailVerified   DateTime? // Set when the user proves inbox ownership (verification link, invite match, or password reset)
+  isPlatformAdmin Boolean   @default(false) // Platform-wide admin (user approval/enumeration). NOT self-grantable; see lib/auth/session.ts isPlatformAdmin()
+  sessionVersion  Int       @default(0) // Bumped on password reset/change + email change to evict existing JWT sessions; checked in the auth jwt callback
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   verificationTokens           VerificationToken[]
   teamMembers                  TeamMember[]
@@ -77,6 +77,14 @@ model User {
   uploadedEventMedia           EventMediaItem[]         @relation("EventMediaUploader")
   removedEventMedia            EventMediaItem[]         @relation("EventMediaRemover")
   grantedParentalConsents      ParentalConsent[]        @relation("ParentalConsentGrantor")
+  createdGearNeeds             TeamGearNeed[]           @relation("GearNeedCreator")
+  requestedGearReservations    GearReservation[]        @relation("GearReservationRequester")
+  decidedGearReservations      GearReservation[]        @relation("GearReservationDecider")
+  gearAllocations              GearAllocation[]         @relation("GearAllocationAllocator")
+  handledGearHandoffs          GearHandoff[]            @relation("GearHandoffHandler")
+  recordedGearMovements        GearInventoryMovement[]  @relation("GearMovementRecorder")
+  gearActivity                 GearActivity[]           @relation("GearActivityActor")
+  notificationOutbox           NotificationOutbox[]     @relation("NotificationOutboxRecipient")
 }
 
 // Single-use, hashed account-lifecycle tokens (email verification, password
@@ -200,6 +208,8 @@ model Team {
   iceTimeRequests    IceTimeRequest[]
   hostedSignupEvents SignupEvent[]
   signupPhases       EventRegistrationPhase[] @relation("PhaseTeams")
+  gearNeeds          TeamGearNeed[]
+  gearReservations   GearReservation[]
 
   @@index([leagueId]) // Optimize league-team queries
   @@index([divisionId]) // Optimize division-team queries
@@ -277,7 +287,7 @@ enum TeamOfficialStatus {
 // - A single person can exist as both a Player (roster entry) and have a User account (TeamMember)
 // - In MVP: Keep Player for roster display, use TeamMember.userId for RSVP and auth operations
 model Player {
-  id               String   @id @default(cuid())
+  id               String    @id @default(cuid())
   name             String
   email            String?
   phone            String?
@@ -285,11 +295,11 @@ model Player {
   emergencyPhone   String? // Admin-only field, not visible to regular members
   jerseyNumber     Int? // Optional jersey number (1–99). No unique constraint; duplicates trigger warning only.
   position         String? // Free-text position (e.g., Center, Goalie, Midfielder). Varies by sport.
-  usahMemberId     String?  @db.VarChar(20) // USA Hockey Member ID. Admin-only.
+  usahMemberId     String?   @db.VarChar(20) // USA Hockey Member ID. Admin-only.
   dateOfBirth      DateTime? @db.Date // Admin-only, like emergencyContact. COPPA: under-13 requires an active ParentalConsent row.
   userId           String? // Optional link to User account if player has registered
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   teamId String
   team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
@@ -536,6 +546,20 @@ model League {
   iceTimeRequests         IceTimeRequest[]
   hostedSignupEvents      SignupEvent[]
   payments                Payment[]
+  gearCatalogItems        GearCatalogItem[]
+  gearStorageLocations    GearStorageLocation[]
+  gearPoolStocks          GearPoolStock[]
+  gearUnits               GearUnit[]
+  gearNeeds               TeamGearNeed[]
+  gearReservations        GearReservation[]
+  gearAllocations         GearAllocation[]
+  gearHandoffs            GearHandoff[]
+  gearInventoryMovements  GearInventoryMovement[]
+  gearWishlist            GearWishlist?
+  gearPledges             GearPledge[]
+  gearPledgeReceipts      GearPledgeReceipt[]
+  gearActivity            GearActivity[]
+  notificationOutbox      NotificationOutbox[]
 
   @@map("leagues")
 }
@@ -582,6 +606,597 @@ enum LeagueRole {
   LEAGUE_ADMIN // Full league control
   TEAM_ADMIN // Team management within league
   MEMBER // Basic member
+}
+
+enum GearTrackingMode {
+  POOLED
+  INDIVIDUAL
+}
+
+enum GearCondition {
+  NEW
+  EXCELLENT
+  GOOD
+  FAIR
+  POOR
+  DAMAGED
+}
+
+enum GearUnitStatus {
+  AVAILABLE
+  RESERVED
+  CHECKED_OUT
+  MAINTENANCE
+  RETIRED
+  LOST
+}
+
+enum GearNeedPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum GearNeedStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  FULFILLED
+  CANCELED
+}
+
+enum GearNeedLineStatus {
+  OPEN
+  PARTIALLY_FULFILLED
+  FULFILLED
+  CANCELED
+}
+
+enum GearReservationStatus {
+  DRAFT
+  REQUESTED
+  APPROVED
+  DECLINED
+  CANCELED
+  FULFILLED
+  CLOSED
+}
+
+enum GearAllocationStatus {
+  PENDING
+  ALLOCATED
+  PICKED_UP
+  PARTIALLY_RETURNED
+  RETURNED
+  RELEASED
+}
+
+enum GearHandoffType {
+  PICKUP
+  RETURN
+  TRANSFER
+  RECEIPT
+  ADJUSTMENT
+}
+
+enum GearReturnDisposition {
+  GOOD
+  DAMAGED
+  LOST
+  CONSUMED
+}
+
+enum GearInventoryMovementType {
+  RECEIPT
+  ALLOCATION
+  RELEASE
+  RETURN
+  TRANSFER
+  ADJUSTMENT
+  WRITE_OFF
+}
+
+enum GearWishlistStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum GearPledgeStatus {
+  PLEDGED
+  RECEIVED
+  DECLINED
+  CANCELED
+  EXPIRED
+}
+
+enum GearActivityEntityType {
+  CATALOG_ITEM
+  STORAGE_LOCATION
+  POOL_STOCK
+  UNIT
+  NEED
+  RESERVATION
+  ALLOCATION
+  HANDOFF
+  MOVEMENT
+  WISHLIST
+  PLEDGE
+}
+
+enum GearActivityActorKind {
+  USER
+  SYSTEM
+  PUBLIC_DONOR
+}
+
+enum NotificationOutboxStatus {
+  PENDING
+  PROCESSING
+  SENT
+  FAILED
+  CANCELED
+}
+
+// League-owned gear catalog and location projections. Tenant consistency across
+// related rows is enforced by future action transactions.
+model GearCatalogItem {
+  id            String           @id @default(cuid())
+  leagueId      String
+  normalizedKey String
+  name          String
+  category      String
+  size          String?
+  brand         String?
+  model         String?
+  description   String?
+  attributes    Json?
+  trackingMode  GearTrackingMode @default(POOLED)
+  isActive      Boolean          @default(true)
+  archivedAt    DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  league           League                @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  poolStocks       GearPoolStock[]
+  units            GearUnit[]
+  needLines        TeamGearNeedLine[]
+  reservationLines GearReservationLine[]
+  wishlistItems    GearWishlistItem[]
+  pledgeReceipts   GearPledgeReceipt[]
+
+  @@unique([leagueId, normalizedKey])
+  @@index([leagueId, isActive])
+  @@map("gear_catalog_items")
+}
+
+model GearStorageLocation {
+  id             String    @id @default(cuid())
+  leagueId       String
+  normalizedName String
+  name           String
+  address        String?
+  privateNotes   String?
+  isActive       Boolean   @default(true)
+  archivedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  league          League                  @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  poolStocks      GearPoolStock[]
+  currentUnits    GearUnit[]              @relation("GearUnitCurrentLocation")
+  movementsBefore GearInventoryMovement[] @relation("GearMovementBeforeLocation")
+  movementsAfter  GearInventoryMovement[] @relation("GearMovementAfterLocation")
+
+  @@unique([leagueId, normalizedName])
+  @@index([leagueId, isActive])
+  @@map("gear_storage_locations")
+}
+
+model GearPoolStock {
+  id             String        @id @default(cuid())
+  leagueId       String
+  catalogItemId  String
+  locationId     String
+  condition      GearCondition @default(GOOD)
+  quantityOnHand Int           @default(0)
+  version        Int           @default(0)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  league             League                  @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  catalogItem        GearCatalogItem         @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
+  location           GearStorageLocation     @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  allocations        GearAllocation[]
+  inventoryMovements GearInventoryMovement[]
+  pledgeReceipts     GearPledgeReceipt[]
+
+  @@unique([leagueId, catalogItemId, locationId, condition])
+  @@index([leagueId, catalogItemId])
+  @@index([leagueId, locationId])
+  @@map("gear_pool_stocks")
+}
+
+model GearUnit {
+  id                String         @id @default(cuid())
+  leagueId          String
+  catalogItemId     String
+  currentLocationId String?
+  assetTag          String?
+  serialNumber      String?
+  status            GearUnitStatus @default(AVAILABLE)
+  currentCondition  GearCondition  @default(GOOD)
+  acquiredAt        DateTime?      @db.Date
+  retiredAt         DateTime?      @db.Date
+  notes             String?
+  version           Int            @default(0)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  league             League                  @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  catalogItem        GearCatalogItem         @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
+  currentLocation    GearStorageLocation?    @relation("GearUnitCurrentLocation", fields: [currentLocationId], references: [id], onDelete: SetNull)
+  allocations        GearAllocation[]
+  inventoryMovements GearInventoryMovement[]
+  pledgeReceipts     GearPledgeReceipt[]
+
+  @@unique([leagueId, assetTag])
+  @@index([leagueId, catalogItemId, status])
+  @@index([currentLocationId])
+  @@map("gear_units")
+}
+
+model TeamGearNeed {
+  id          String         @id @default(cuid())
+  leagueId    String
+  teamId      String
+  title       String
+  status      GearNeedStatus @default(DRAFT)
+  notes       String?
+  version     Int            @default(0)
+  submittedAt DateTime?
+  approvedAt  DateTime?
+  fulfilledAt DateTime?
+  canceledAt  DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  createdById String?
+
+  league    League             @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  team      Team               @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  createdBy User?              @relation("GearNeedCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  lines     TeamGearNeedLine[]
+
+  @@index([leagueId, teamId, status])
+  @@map("team_gear_needs")
+}
+
+model TeamGearNeedLine {
+  id               String             @id @default(cuid())
+  needId           String
+  catalogItemId    String?
+  nameSnapshot     String
+  categorySnapshot String?
+  sizeSnapshot     String?
+  trackingMode     GearTrackingMode?
+  requestedQty     Int
+  fulfilledQty     Int                @default(0)
+  canceledQty      Int                @default(0)
+  priority         GearNeedPriority   @default(NORMAL)
+  status           GearNeedLineStatus @default(OPEN)
+  notes            String?
+  version          Int                @default(0)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  need             TeamGearNeed          @relation(fields: [needId], references: [id], onDelete: Restrict)
+  catalogItem      GearCatalogItem?      @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
+  reservationLines GearReservationLine[]
+
+  @@index([needId, status])
+  @@index([catalogItemId])
+  @@map("team_gear_need_lines")
+}
+
+model GearReservation {
+  id                     String                @id @default(cuid())
+  leagueId               String
+  teamId                 String
+  status                 GearReservationStatus @default(DRAFT)
+  requestedStartDate     DateTime              @db.Date
+  requestedEndDate       DateTime              @db.Date
+  approvedStartDate      DateTime?             @db.Date
+  approvedEndDate        DateTime?             @db.Date
+  custodianNameSnapshot  String
+  custodianEmailSnapshot String?
+  custodianPhoneSnapshot String?
+  requestNotes           String?
+  decisionNotes          String?
+  version                Int                   @default(0)
+  requestedAt            DateTime              @default(now())
+  decidedAt              DateTime?
+  custodyStartedAt       DateTime?
+  custodyEndedAt         DateTime?
+  canceledAt             DateTime?
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
+  requestedById          String?
+  decidedById            String?
+
+  league      League                @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  team        Team                  @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  requestedBy User?                 @relation("GearReservationRequester", fields: [requestedById], references: [id], onDelete: SetNull)
+  decidedBy   User?                 @relation("GearReservationDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+  lines       GearReservationLine[]
+  handoffs    GearHandoff[]
+
+  @@index([leagueId, teamId, status])
+  @@index([leagueId, requestedStartDate, requestedEndDate])
+  @@map("gear_reservations")
+}
+
+model GearReservationLine {
+  id            String   @id @default(cuid())
+  reservationId String
+  catalogItemId String?
+  needLineId    String?
+  nameSnapshot  String
+  requestedQty  Int
+  approvedQty   Int      @default(0)
+  allocatedQty  Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  reservation GearReservation   @relation(fields: [reservationId], references: [id], onDelete: Restrict)
+  catalogItem GearCatalogItem?  @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
+  needLine    TeamGearNeedLine? @relation(fields: [needLineId], references: [id], onDelete: SetNull)
+  allocations GearAllocation[]
+
+  @@index([reservationId])
+  @@index([needLineId])
+  @@map("gear_reservation_lines")
+}
+
+model GearAllocation {
+  id                String               @id @default(cuid())
+  leagueId          String
+  reservationLineId String
+  poolStockId       String?
+  gearUnitId        String?
+  status            GearAllocationStatus @default(PENDING)
+  allocatedQty      Int                  @default(0)
+  pickedUpQty       Int                  @default(0)
+  returnedQty       Int                  @default(0)
+  releasedQty       Int                  @default(0)
+  version           Int                  @default(0)
+  allocatedAt       DateTime?
+  pickedUpAt        DateTime?
+  returnedAt        DateTime?
+  releasedAt        DateTime?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  allocatedById     String?
+
+  league             League                  @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  reservationLine    GearReservationLine     @relation(fields: [reservationLineId], references: [id], onDelete: Restrict)
+  poolStock          GearPoolStock?          @relation(fields: [poolStockId], references: [id], onDelete: Restrict)
+  gearUnit           GearUnit?               @relation(fields: [gearUnitId], references: [id], onDelete: Restrict)
+  allocatedBy        User?                   @relation("GearAllocationAllocator", fields: [allocatedById], references: [id], onDelete: SetNull)
+  handoffs           GearHandoff[]
+  inventoryMovements GearInventoryMovement[]
+
+  @@index([leagueId, status])
+  @@index([reservationLineId])
+  @@index([poolStockId])
+  @@index([gearUnitId])
+  @@map("gear_allocations")
+}
+
+model GearHandoff {
+  id                    String                 @id @default(cuid())
+  leagueId              String
+  reservationId         String?
+  allocationId          String?
+  type                  GearHandoffType
+  returnDisposition     GearReturnDisposition?
+  custodianNameSnapshot String?
+  occurredAt            DateTime               @default(now())
+  notes                 String?
+  createdAt             DateTime               @default(now())
+  handledById           String?
+
+  league             League                  @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  reservation        GearReservation?        @relation(fields: [reservationId], references: [id], onDelete: Restrict)
+  allocation         GearAllocation?         @relation(fields: [allocationId], references: [id], onDelete: Restrict)
+  handledBy          User?                   @relation("GearHandoffHandler", fields: [handledById], references: [id], onDelete: SetNull)
+  inventoryMovements GearInventoryMovement[]
+
+  @@index([leagueId, occurredAt])
+  @@index([reservationId])
+  @@index([allocationId])
+  @@map("gear_handoffs")
+}
+
+model GearWishlist {
+  id          String             @id @default(cuid())
+  leagueId    String             @unique
+  shareToken  String             @unique
+  status      GearWishlistStatus @default(DRAFT)
+  title       String
+  description String?
+  version     Int                @default(0)
+  publishedAt DateTime?
+  archivedAt  DateTime?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  league League             @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  items  GearWishlistItem[]
+
+  @@index([status])
+  @@map("gear_wishlists")
+}
+
+model GearWishlistItem {
+  id               String   @id @default(cuid())
+  wishlistId       String
+  catalogItemId    String?
+  normalizedKey    String
+  nameSnapshot     String
+  categorySnapshot String?
+  sizeSnapshot     String?
+  description      String?
+  targetQty        Int
+  pledgedQty       Int      @default(0)
+  receivedQty      Int      @default(0)
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  wishlist    GearWishlist     @relation(fields: [wishlistId], references: [id], onDelete: Restrict)
+  catalogItem GearCatalogItem? @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
+  pledges     GearPledge[]
+
+  @@index([wishlistId, isActive])
+  @@index([catalogItemId])
+  @@map("gear_wishlist_items")
+}
+
+model GearPledge {
+  id               String           @id @default(cuid())
+  leagueId         String
+  wishlistItemId   String
+  donorName        String
+  donorEmail       String?
+  donorPhone       String?
+  contactConsentAt DateTime?
+  status           GearPledgeStatus @default(PLEDGED)
+  quantity         Int
+  note             String?
+  idempotencyKey   String
+  expiresAt        DateTime?
+  receivedAt       DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  league       League              @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  wishlistItem GearWishlistItem    @relation(fields: [wishlistItemId], references: [id], onDelete: Restrict)
+  receipts     GearPledgeReceipt[]
+
+  @@unique([leagueId, idempotencyKey])
+  @@index([wishlistItemId, status])
+  @@map("gear_pledges")
+}
+
+model GearPledgeReceipt {
+  id            String   @id @default(cuid())
+  leagueId      String
+  pledgeId      String
+  catalogItemId String?
+  poolStockId   String?
+  gearUnitId    String?
+  quantity      Int
+  receivedAt    DateTime @default(now())
+  notes         String?
+  createdAt     DateTime @default(now())
+
+  league             League                  @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  pledge             GearPledge              @relation(fields: [pledgeId], references: [id], onDelete: Restrict)
+  catalogItem        GearCatalogItem?        @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
+  poolStock          GearPoolStock?          @relation(fields: [poolStockId], references: [id], onDelete: Restrict)
+  gearUnit           GearUnit?               @relation(fields: [gearUnitId], references: [id], onDelete: Restrict)
+  inventoryMovements GearInventoryMovement[]
+
+  @@index([leagueId, receivedAt])
+  @@index([pledgeId])
+  @@map("gear_pledge_receipts")
+}
+
+// Immutable operational ledger. `details` deliberately excludes public donor
+// PII; public pledge data remains isolated in GearPledge.
+model GearActivity {
+  id          String                 @id @default(cuid())
+  leagueId    String
+  entityType  GearActivityEntityType
+  entityId    String
+  action      String
+  actorKind   GearActivityActorKind
+  details     Json?
+  occurredAt  DateTime               @default(now())
+  actorUserId String?
+
+  league    League @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  actorUser User?  @relation("GearActivityActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([leagueId, entityType, entityId, occurredAt])
+  @@map("gear_activity")
+}
+
+model GearInventoryMovement {
+  id               String                    @id @default(cuid())
+  leagueId         String
+  type             GearInventoryMovementType
+  poolStockId      String?
+  gearUnitId       String?
+  allocationId     String?
+  handoffId        String?
+  pledgeReceiptId  String?
+  quantity         Int
+  beforeLocationId String?
+  afterLocationId  String?
+  beforeCondition  GearCondition?
+  afterCondition   GearCondition?
+  occurredAt       DateTime                  @default(now())
+  notes            String?
+  createdAt        DateTime                  @default(now())
+  recordedById     String?
+
+  league         League               @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  poolStock      GearPoolStock?       @relation(fields: [poolStockId], references: [id], onDelete: Restrict)
+  gearUnit       GearUnit?            @relation(fields: [gearUnitId], references: [id], onDelete: Restrict)
+  allocation     GearAllocation?      @relation(fields: [allocationId], references: [id], onDelete: Restrict)
+  handoff        GearHandoff?         @relation(fields: [handoffId], references: [id], onDelete: Restrict)
+  pledgeReceipt  GearPledgeReceipt?   @relation(fields: [pledgeReceiptId], references: [id], onDelete: Restrict)
+  beforeLocation GearStorageLocation? @relation("GearMovementBeforeLocation", fields: [beforeLocationId], references: [id], onDelete: SetNull)
+  afterLocation  GearStorageLocation? @relation("GearMovementAfterLocation", fields: [afterLocationId], references: [id], onDelete: SetNull)
+  recordedBy     User?                @relation("GearMovementRecorder", fields: [recordedById], references: [id], onDelete: SetNull)
+
+  @@index([leagueId, occurredAt])
+  @@index([poolStockId])
+  @@index([gearUnitId])
+  @@index([allocationId])
+  @@map("gear_inventory_movements")
+}
+
+model NotificationOutbox {
+  id              String                   @id @default(cuid())
+  leagueId        String
+  recipientUserId String?
+  recipientEmail  String?
+  eventType       String
+  aggregateType   String
+  aggregateId     String
+  payload         Json
+  dedupeKey       String
+  status          NotificationOutboxStatus @default(PENDING)
+  attempts        Int                      @default(0)
+  scheduledAt     DateTime                 @default(now())
+  lockedAt        DateTime?
+  lastAttemptAt   DateTime?
+  sentAt          DateTime?
+  failedAt        DateTime?
+  lastError       String?
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+
+  league        League @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  recipientUser User?  @relation("NotificationOutboxRecipient", fields: [recipientUserId], references: [id], onDelete: SetNull)
+
+  @@unique([leagueId, dedupeKey])
+  @@index([status, scheduledAt])
+  @@index([leagueId, aggregateType, aggregateId])
+  @@map("notification_outbox")
 }
 
 // Player transfer history model for audit trail
