@@ -91,6 +91,9 @@ function invalid(message: string): never {
 
 function actionError(error: unknown): ActionResult<never> {
   if (error instanceof GearConflictError) return { success: false, error: error.message };
+  if (error instanceof Prisma.PrismaClientKnownRequestError && ["P2004", "P2034"].includes(error.code)) {
+    return { success: false, error: "Inventory availability changed. Review the reservation dates and allocations, then try again." };
+  }
   if (error instanceof z.ZodError) return { success: false, error: "Please correct the highlighted reservation fields.", details: error.issues };
   if (error instanceof Error) {
     if (error.message.startsWith("Unauthorized")) return { success: false, error: "You do not have permission to manage this reservation." };
@@ -123,7 +126,11 @@ async function getReservationForMutation(tx: Tx, leagueId: string, reservationId
         include: {
           catalogItem: { select: { trackingMode: true } },
           allocations: {
-            select: { allocatedQty: true, pickedUpQty: true, returnedQty: true, releasedQty: true },
+            select: {
+              id: true, status: true, poolStockId: true, gearUnitId: true,
+              allocatedQty: true, pickedUpQty: true, returnedQty: true, releasedQty: true,
+              effectiveStartDate: true, effectiveEndDate: true, version: true,
+            },
           },
         },
       },
@@ -133,21 +140,31 @@ async function getReservationForMutation(tx: Tx, leagueId: string, reservationId
   return reservation;
 }
 
+function reservationWindow(reservation: {
+  requestedStartDate: Date;
+  requestedEndDate: Date;
+  approvedStartDate: Date | null;
+  approvedEndDate: Date | null;
+}) {
+  return {
+    startDate: reservation.approvedStartDate ?? reservation.requestedStartDate,
+    endDate: reservation.approvedEndDate ?? reservation.requestedEndDate,
+  };
+}
+
 async function activePoolCommitment(
+  leagueId: string,
   tx: Tx,
   poolStockId: string,
   window: { startDate: Date; endDate: Date },
 ) {
   const allocations = await tx.gearAllocation.findMany({
     where: {
+      leagueId,
       poolStockId,
       status: { in: ["PENDING", "ALLOCATED", "PICKED_UP", "PARTIALLY_RETURNED"] },
-      reservationLine: {
-        reservation: {
-          requestedStartDate: { lte: window.endDate },
-          requestedEndDate: { gte: window.startDate },
-        },
-      },
+      effectiveStartDate: { lte: window.endDate },
+      effectiveEndDate: { gte: window.startDate },
     },
     select: { allocatedQty: true, releasedQty: true, returnedQty: true, pickedUpQty: true },
   });
@@ -157,13 +174,13 @@ async function activePoolCommitment(
   );
 }
 
-async function hasOverdueCheckout(tx: Tx, gearUnitId: string) {
+async function hasOverdueCheckout(tx: Tx, leagueId: string, gearUnitId: string) {
   const today = new Date();
   return Boolean(await tx.gearAllocation.findFirst({
     where: {
-      gearUnitId,
+      leagueId, gearUnitId,
       status: { in: ["PICKED_UP", "PARTIALLY_RETURNED"] },
-      reservationLine: { reservation: { requestedEndDate: { lt: today } } },
+      effectiveEndDate: { lt: today },
     },
     select: { id: true },
   }));
@@ -204,6 +221,34 @@ export async function createGearReservation(
       if (validated.lines.some((line) => line.catalogItemId && !itemIds.has(line.catalogItemId))) {
         invalid("A requested catalog item is not available in this league.");
       }
+      const needLineIds = validated.lines
+        .map((line) => line.needLineId)
+        .filter((needLineId): needLineId is string => Boolean(needLineId));
+      const needLines = await tx.teamGearNeedLine.findMany({
+        where: {
+          leagueId: validated.leagueId,
+          id: { in: needLineIds },
+          need: { leagueId: validated.leagueId, teamId: validated.teamId },
+        },
+        select: { id: true, catalogItemId: true, nameSnapshot: true },
+      });
+      const needLineById = new Map(needLines.map((needLine) => [needLine.id, needLine]));
+      if (needLineById.size !== needLineIds.length) {
+        invalid("A selected gear need does not belong to this team in this league.");
+      }
+      const trustedLines = validated.lines.map((line) => {
+        const needLine = line.needLineId ? needLineById.get(line.needLineId) : undefined;
+        if (!needLine) return line;
+        if (line.catalogItemId && line.catalogItemId !== needLine.catalogItemId) {
+          invalid("A selected gear need does not match its catalog item.");
+        }
+        return {
+          ...line,
+          catalogItemId: needLine.catalogItemId ?? "",
+          nameSnapshot: needLine.nameSnapshot,
+          needLineId: needLine.id,
+        };
+      });
       const reservation = await tx.gearReservation.create({
         data: {
           leagueId: validated.leagueId,
@@ -216,7 +261,8 @@ export async function createGearReservation(
           custodianPhoneSnapshot: validated.custodianPhoneSnapshot || null,
           requestNotes: validated.requestNotes || null,
           requestedById: userId,
-          lines: { create: validated.lines.map((line) => ({
+          lines: { create: trustedLines.map((line) => ({
+            leagueId: validated.leagueId,
             catalogItemId: line.catalogItemId || null,
             needLineId: line.needLineId || null,
             nameSnapshot: line.nameSnapshot,
@@ -247,8 +293,56 @@ export async function cancelGearReservation(input: unknown): Promise<ActionResul
       await assertRequestAccess(validated.leagueId, reservation.teamId, userId);
       if (!canTransitionReservation(reservation.status, "CANCELED")) invalid("This reservation can no longer be canceled.");
       if (reservation.version !== validated.expectedVersion) throw new GearConflictError();
+      const activeAllocations = reservation.lines.flatMap((line) => line.allocations)
+        .filter((allocation) => ["PENDING", "ALLOCATED", "PICKED_UP", "PARTIALLY_RETURNED"].includes(allocation.status));
+      if (activeAllocations.some((allocation) => allocation.pickedUpQty > allocation.returnedQty)) {
+        invalid("Checked-out gear must be returned before this reservation can be canceled.");
+      }
+      for (const allocation of activeAllocations) {
+        const release = await tx.gearAllocation.updateMany({
+          where: {
+            id: allocation.id,
+            leagueId: validated.leagueId,
+            version: allocation.version,
+            status: { in: ["PENDING", "ALLOCATED"] },
+          },
+          data: {
+            status: "RELEASED",
+            releasedQty: allocation.allocatedQty,
+            releasedAt: new Date(),
+            version: { increment: 1 },
+          },
+        });
+        if (release.count !== 1) throw new GearConflictError();
+        if (allocation.gearUnitId) {
+          await releaseTaggedUnitIfFree(tx, validated.leagueId, allocation.gearUnitId);
+        }
+        await recordGearInventoryMovement(tx, {
+          leagueId: validated.leagueId,
+          type: "RELEASE",
+          allocationId: allocation.id,
+          poolStockId: allocation.poolStockId,
+          gearUnitId: allocation.gearUnitId,
+          quantity: allocation.allocatedQty,
+          recordedById: userId,
+          notes: "Reservation canceled before pickup.",
+        });
+        await recordGearActivity(tx, {
+          leagueId: validated.leagueId,
+          entityType: "ALLOCATION",
+          entityId: allocation.id,
+          action: "released_by_reservation_cancellation",
+          actorUserId: userId,
+        });
+      }
+      for (const line of reservation.lines) {
+        await tx.gearReservationLine.updateMany({
+          where: { id: line.id, leagueId: validated.leagueId },
+          data: { allocatedQty: 0 },
+        });
+      }
       const update = await tx.gearReservation.updateMany({
-        where: { id: reservation.id, version: reservation.version, status: reservation.status },
+        where: { id: reservation.id, leagueId: validated.leagueId, version: reservation.version, status: reservation.status },
         data: { status: "CANCELED", canceledAt: new Date(), version: { increment: 1 } },
       });
       if (update.count !== 1) throw new GearConflictError();
@@ -326,10 +420,19 @@ export async function approveAndAllocateGearReservation(input: unknown): Promise
       const reservation = await getReservationForMutation(tx, validated.leagueId, validated.reservationId);
       if (!["REQUESTED", "APPROVED"].includes(reservation.status)) invalid("Only requested or approved reservations can receive allocations.");
       if (reservation.version !== validated.expectedVersion) throw new GearConflictError();
+      const currentWindow = reservationWindow(reservation);
       const window = {
-        startDate: new Date(`${validated.approvedStartDate ?? reservation.requestedStartDate.toISOString().slice(0, 10)}T00:00:00.000Z`),
-        endDate: new Date(`${validated.approvedEndDate ?? reservation.requestedEndDate.toISOString().slice(0, 10)}T00:00:00.000Z`),
+        startDate: new Date(`${validated.approvedStartDate ?? currentWindow.startDate.toISOString().slice(0, 10)}T00:00:00.000Z`),
+        endDate: new Date(`${validated.approvedEndDate ?? currentWindow.endDate.toISOString().slice(0, 10)}T00:00:00.000Z`),
       };
+      const activeExistingAllocations = reservation.lines.flatMap((line) => line.allocations)
+        .filter((allocation) => ["PENDING", "ALLOCATED", "PICKED_UP", "PARTIALLY_RETURNED"].includes(allocation.status));
+      if (
+        activeExistingAllocations.length > 0
+        && (window.startDate.getTime() !== currentWindow.startDate.getTime() || window.endDate.getTime() !== currentWindow.endDate.getTime())
+      ) {
+        invalid("Release and reallocate existing inventory before changing approved reservation dates.");
+      }
       if (!datesOverlap(
         { startDate: window.startDate.toISOString().slice(0, 10), endDate: window.endDate.toISOString().slice(0, 10) },
         { startDate: reservation.requestedStartDate.toISOString().slice(0, 10), endDate: reservation.requestedEndDate.toISOString().slice(0, 10) },
@@ -382,7 +485,7 @@ export async function approveAndAllocateGearReservation(input: unknown): Promise
             select: { id: true },
           });
           if (!stock || !location) invalid("The selected pooled stock is not active in this league.");
-          const committed = await activePoolCommitment(tx, stock.id, window);
+          const committed = await activePoolCommitment(validated.leagueId, tx, stock.id, window);
           if (stock.quantityOnHand - committed < (requestedByPoolStock.get(stock.id) ?? 0)) {
             invalid("Not enough matching pooled stock remains for these dates.");
           }
@@ -393,12 +496,14 @@ export async function approveAndAllocateGearReservation(input: unknown): Promise
             select: { id: true, status: true, version: true },
           });
           if (!unit || !["AVAILABLE", "RESERVED"].includes(unit.status)) invalid("The tagged unit is unavailable.");
-          if (await hasOverdueCheckout(tx, unit.id)) invalid("The tagged unit is blocked by an overdue checkout.");
+          if (await hasOverdueCheckout(tx, validated.leagueId, unit.id)) invalid("The tagged unit is blocked by an overdue checkout.");
           const conflicts = await tx.gearAllocation.count({
             where: {
+              leagueId: validated.leagueId,
               gearUnitId: unit.id,
               status: { in: ["PENDING", "ALLOCATED", "PICKED_UP", "PARTIALLY_RETURNED"] },
-              reservationLine: { reservation: { requestedStartDate: { lte: window.endDate }, requestedEndDate: { gte: window.startDate } } },
+              effectiveStartDate: { lte: window.endDate },
+              effectiveEndDate: { gte: window.startDate },
             },
           });
           if (conflicts > 0) invalid("The tagged unit is already allocated for these dates.");
@@ -418,6 +523,8 @@ export async function approveAndAllocateGearReservation(input: unknown): Promise
             gearUnitId: allocation.gearUnitId ?? null,
             status: "ALLOCATED",
             allocatedQty: allocation.quantity,
+            effectiveStartDate: window.startDate,
+            effectiveEndDate: window.endDate,
             allocatedAt: new Date(),
             allocatedById: userId,
           },
