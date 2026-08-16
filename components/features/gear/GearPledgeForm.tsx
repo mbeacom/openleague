@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Alert, Button, Card, Checkbox, FormControlLabel, MenuItem, Stack, TextField, Typography } from "@mui/material";
 
 type PledgeItem = {
@@ -37,7 +37,8 @@ export function GearPledgeForm({
 }) {
   const [message, setMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [key] = useState(() => crypto.randomUUID());
+  const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
+  const formRef = useRef<HTMLFormElement>(null);
 
   async function handleSubmit(formData: FormData) {
     setIsSubmitting(true);
@@ -51,17 +52,21 @@ export function GearPledgeForm({
       contactConsent: formData.get("contactConsent") === "on",
       quantity: Number(formData.get("quantity") ?? 0),
       note: String(formData.get("note") ?? ""),
-      idempotencyKey: key,
+      idempotencyKey,
       website: String(formData.get("website") ?? ""),
     });
     setIsSubmitting(false);
-    setMessage(result.success
-      ? "Thank you. The association will use your contact details only to coordinate this donation."
-      : result.error ?? "We could not record your pledge. Please try again.");
+    if (result.success) {
+      formRef.current?.reset();
+      setIdempotencyKey(crypto.randomUUID());
+      setMessage("Thank you. The association will use your contact details only to coordinate this donation.");
+    } else {
+      setMessage(result.error ?? "We could not record your pledge. Please try again.");
+    }
   }
 
   return (
-    <Card component="form" action={handleSubmit} variant="outlined" sx={{ p: 2 }}>
+    <Card ref={formRef} component="form" action={handleSubmit} variant="outlined" sx={{ p: 2 }}>
       <Stack spacing={2}>
         <Typography variant="h5">Pledge an item</Typography>
         {message && <Alert severity={message.startsWith("Thank") ? "success" : "error"}>{message}</Alert>}

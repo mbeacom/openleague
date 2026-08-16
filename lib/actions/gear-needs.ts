@@ -27,6 +27,13 @@ const needCommandSchema = z.object({
 
 type Tx = Prisma.TransactionClient;
 
+export type GearNeedCapabilities = {
+  canSubmit: boolean;
+  canCancel: boolean;
+  canApprove: boolean;
+  canFulfill: boolean;
+};
+
 export type GearNeedDto = {
   id: string;
   teamId: string;
@@ -40,6 +47,11 @@ export type GearNeedDto = {
   fulfilledAt: string | null;
   canceledAt: string | null;
   createdAt: string;
+  canSubmit: boolean;
+  canCancel: boolean;
+  canApprove: boolean;
+  canFulfill: boolean;
+  capabilities: GearNeedCapabilities;
   lines: Array<{
     id: string;
     catalogItemId: string | null;
@@ -73,7 +85,23 @@ type NeedRecord = {
   lines: GearNeedDto["lines"];
 };
 
-function serializeNeed(need: NeedRecord): GearNeedDto {
+function needCapabilities(
+  need: Pick<NeedRecord, "status">,
+  isLeagueAdmin: boolean,
+  isTeamAdminForNeed: boolean,
+): GearNeedCapabilities {
+  return {
+    canSubmit: isTeamAdminForNeed && need.status === "DRAFT",
+    canCancel: isTeamAdminForNeed && ["DRAFT", "SUBMITTED", "APPROVED"].includes(need.status),
+    canApprove: isLeagueAdmin && need.status === "SUBMITTED",
+    canFulfill: isLeagueAdmin && need.status === "APPROVED",
+  };
+}
+
+function serializeNeed(
+  need: NeedRecord,
+  capabilities: ReturnType<typeof needCapabilities>,
+): GearNeedDto {
   return {
     id: need.id,
     teamId: need.teamId,
@@ -87,6 +115,8 @@ function serializeNeed(need: NeedRecord): GearNeedDto {
     fulfilledAt: need.fulfilledAt?.toISOString() ?? null,
     canceledAt: need.canceledAt?.toISOString() ?? null,
     createdAt: need.createdAt.toISOString(),
+    ...capabilities,
+    capabilities,
     lines: need.lines,
   };
 }
@@ -228,6 +258,7 @@ async function transitionNeed(
       const event = {
         leagueId: validated.leagueId,
         eventType: `gear.need.${target.toLowerCase()}`,
+        occurrenceKey: `v${need.version + 1}`,
         aggregateType: "NEED" as const,
         aggregateId: need.id,
         payload: { needId: need.id, teamId: need.teamId, status: target },
@@ -351,6 +382,7 @@ export async function decideTeamGearNeed(input: unknown) {
 export async function getGearNeedsContext(leagueId: string): Promise<{
   canManageAll: boolean;
   teamIds: string[];
+  teams: Array<{ id: string; name: string }>;
   needs: GearNeedDto[];
 } | null> {
   const userId = await requireUserId();
@@ -358,17 +390,23 @@ export async function getGearNeedsContext(leagueId: string): Promise<{
   if (!leagueRole) return null;
 
   const canManageAll = leagueRole === "LEAGUE_ADMIN";
-  const teamIds = canManageAll
-    ? (await prisma.team.findMany({
+  const [allTeams, teamAdminMemberships] = await Promise.all([
+    canManageAll
+      ? prisma.team.findMany({
         where: { leagueId, isActive: true },
-        select: { id: true },
-      })).map((team) => team.id)
-    : (await prisma.teamMember.findMany({
-        where: { userId, role: "ADMIN", team: { leagueId, isActive: true } },
-        select: { teamId: true },
-      })).map((membership) => membership.teamId);
+        select: { id: true, name: true },
+      })
+      : Promise.resolve([]),
+    prisma.teamMember.findMany({
+      where: { userId, role: "ADMIN", team: { leagueId, isActive: true } },
+      select: { team: { select: { id: true, name: true } } },
+    }),
+  ]);
+  const teamAdminIds = new Set(teamAdminMemberships.map((membership) => membership.team.id));
+  const teams = canManageAll ? allTeams : teamAdminMemberships.map((membership) => membership.team);
+  const teamIds = teams.map((team) => team.id);
 
-  if (teamIds.length === 0) return { canManageAll, teamIds, needs: [] };
+  if (teamIds.length === 0) return { canManageAll, teamIds, teams, needs: [] };
   const needs = await prisma.teamGearNeed.findMany({
     where: { leagueId, teamId: { in: teamIds } },
     select: {
@@ -385,7 +423,15 @@ export async function getGearNeedsContext(leagueId: string): Promise<{
     },
     orderBy: { createdAt: "desc" },
   });
-  return { canManageAll, teamIds, needs: needs.map(serializeNeed) };
+  return {
+    canManageAll,
+    teamIds,
+    teams,
+    needs: needs.map((need) => serializeNeed(
+      need,
+      needCapabilities(need, canManageAll, teamAdminIds.has(need.teamId)),
+    )),
+  };
 }
 
 export async function getGearNeedDetail(leagueId: string, needId: string): Promise<GearNeedDto | null> {
@@ -406,8 +452,14 @@ export async function getGearNeedDetail(leagueId: string, needId: string): Promi
     },
   });
   if (!need) return null;
-  await assertNeedAccess(leagueId, need.teamId, userId);
-  return serializeNeed(need);
+  const [leagueRole, teamAdmin] = await Promise.all([
+    getUserLeagueRole(userId, leagueId),
+    isTeamAdmin(userId, need.teamId),
+  ]);
+  if (leagueRole !== "LEAGUE_ADMIN" && !teamAdmin) {
+    throw new Error("Unauthorized: team admin access is required.");
+  }
+  return serializeNeed(need, needCapabilities(need, leagueRole === "LEAGUE_ADMIN", teamAdmin));
 }
 
 export async function getTeamGearNeeds(leagueId: string, teamId: string): Promise<GearNeedDto[]> {

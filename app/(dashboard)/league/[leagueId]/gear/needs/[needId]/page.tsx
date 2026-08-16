@@ -9,8 +9,8 @@ import { getGearNeedDetail, getGearNeedsContext } from "@/lib/actions/gear-needs
 
 export default async function GearNeedDetailPage({ params }: { params: Promise<{ leagueId: string; needId: string }> }) {
   const { leagueId, needId } = await params;
-  const [need, context] = await Promise.all([getGearNeedDetail(leagueId, needId), getGearNeedsContext(leagueId)]);
-  if (!need || !context) notFound();
+  const need = await getGearNeedDetail(leagueId, needId);
+  if (!need) notFound();
 
   return (
     <PageContainer maxWidth="md">
@@ -27,7 +27,13 @@ export default async function GearNeedDetailPage({ params }: { params: Promise<{
               <Chip label={need.status} />
             </Stack>
             {need.notes && <Typography variant="body2">{need.notes}</Typography>}
-            <GearNeedActions leagueId={leagueId} needId={need.id} expectedVersion={need.version} status={need.status} canManageAll={context.canManageAll} />
+            <GearNeedActions
+              leagueId={leagueId}
+              needId={need.id}
+              expectedVersion={need.version}
+              status={need.status}
+              capabilities={need.capabilities}
+            />
           </Stack>
         </Card>
         <Card variant="outlined" sx={{ p: 2 }}>

@@ -559,6 +559,7 @@ model League {
   gearWishlist            GearWishlist?
   gearPledges             GearPledge[]
   gearPledgeReceipts      GearPledgeReceipt[]
+  gearPledgeReceiptCommands GearPledgeReceiptCommand[]
   gearActivity            GearActivity[]
   notificationOutbox      NotificationOutbox[]
 
@@ -1099,6 +1100,7 @@ model GearPledge {
   quantity         Int
   note             String?
   idempotencyKey   String
+  version          Int              @default(0)
   expiresAt        DateTime?
   receivedAt       DateTime?
   createdAt        DateTime         @default(now())
@@ -1107,6 +1109,7 @@ model GearPledge {
   league       League              @relation(fields: [leagueId], references: [id], onDelete: Restrict)
   wishlistItem GearWishlistItem    @relation(fields: [leagueId, wishlistItemId], references: [leagueId, id], onDelete: Restrict)
   receipts     GearPledgeReceipt[]
+  receiptCommands GearPledgeReceiptCommand[]
 
   @@unique([leagueId, idempotencyKey])
   @@unique([leagueId, id])
@@ -1121,6 +1124,7 @@ model GearPledgeReceipt {
   catalogItemId String?
   poolStockId   String?
   gearUnitId    String?
+  receiptCommandId String?
   quantity      Int
   receivedAt    DateTime @default(now())
   notes         String?
@@ -1131,12 +1135,35 @@ model GearPledgeReceipt {
   catalogItem        GearCatalogItem?        @relation(fields: [leagueId, catalogItemId], references: [leagueId, id], onDelete: Restrict)
   poolStock          GearPoolStock?          @relation(fields: [leagueId, poolStockId], references: [leagueId, id], onDelete: Restrict)
   gearUnit           GearUnit?               @relation(fields: [leagueId, gearUnitId], references: [leagueId, id], onDelete: Restrict)
+  receiptCommand     GearPledgeReceiptCommand? @relation(fields: [leagueId, receiptCommandId], references: [leagueId, id], onDelete: Restrict)
   inventoryMovements GearInventoryMovement[]
 
   @@unique([leagueId, id])
   @@index([leagueId, receivedAt])
   @@index([pledgeId])
   @@map("gear_pledge_receipts")
+}
+
+// A durable receipt-command journal makes receipt retries idempotent even when
+// a command creates multiple tagged-unit receipts.
+model GearPledgeReceiptCommand {
+  id               String           @id @default(cuid())
+  leagueId         String
+  pledgeId         String
+  idempotencyKey   String
+  expectedVersion  Int
+  resultingVersion Int
+  resultingStatus  GearPledgeStatus
+  createdAt        DateTime         @default(now())
+
+  league   League             @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  pledge   GearPledge         @relation(fields: [leagueId, pledgeId], references: [leagueId, id], onDelete: Restrict)
+  receipts GearPledgeReceipt[]
+
+  @@unique([leagueId, id])
+  @@unique([leagueId, pledgeId, idempotencyKey])
+  @@index([leagueId, pledgeId, createdAt])
+  @@map("gear_pledge_receipt_commands")
 }
 
 // Immutable operational ledger. `details` deliberately excludes public donor

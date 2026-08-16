@@ -46,6 +46,8 @@ describe("gear validation schemas", () => {
       leagueId: LEAGUE_ID,
       pledgeId: ITEM_ID,
       quantity: 1,
+      expectedVersion: 0,
+      idempotencyKey: "receipt-command-1",
     };
 
     expect(receiveGearPledgeSchema.safeParse({ ...base, poolStockId: STOCK_ID }).success).toBe(true);

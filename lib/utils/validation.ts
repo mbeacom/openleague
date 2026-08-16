@@ -2210,6 +2210,8 @@ export const createGearPledgeSchema = z.object({
 export const receiveGearPledgeSchema = z.object({
   leagueId: gearCuidSchema,
   pledgeId: gearCuidSchema,
+  expectedVersion: z.coerce.number().int().min(0),
+  idempotencyKey: z.string().trim().min(16).max(255),
   catalogItemId: gearCuidSchema.optional().or(z.literal("")),
   poolStockId: gearCuidSchema.optional().or(z.literal("")),
   /** @deprecated Tagged pledge receipts create new units from assetTags. */

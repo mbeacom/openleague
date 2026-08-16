@@ -21,6 +21,7 @@ const {
     gearWishlistItem: { update: vi.fn(), updateMany: vi.fn(), create: vi.fn() },
     gearPledge: { findFirst: vi.fn(), findUnique: vi.fn(), create: vi.fn(), updateMany: vi.fn() },
     gearPledgeReceipt: { aggregate: vi.fn(), create: vi.fn() },
+    gearPledgeReceiptCommand: { findUnique: vi.fn(), create: vi.fn() },
     gearPoolStock: { findFirst: vi.fn(), update: vi.fn() },
     gearStorageLocation: { findFirst: vi.fn() },
     gearUnit: { findMany: vi.fn(), create: vi.fn() },
@@ -44,6 +45,7 @@ const {
       teamGearNeed: { findFirst: vi.fn(), findMany: vi.fn() },
       gearWishlist: { findFirst: vi.fn() },
       gearPledge: { findFirst: vi.fn() },
+      gearPledgeReceiptCommand: { findUnique: vi.fn() },
     },
   };
 });
@@ -65,16 +67,19 @@ vi.mock("@/lib/utils/durable-rate-limit", () => ({
 import {
   createTeamGearNeed,
   getGearNeedDetail,
+  getGearNeedsContext,
   submitTeamGearNeed,
 } from "@/lib/actions/gear-needs";
 import {
   getPublicGearWishlist,
   rotateGearWishlistShareToken,
+  saveGearWishlist,
 } from "@/lib/actions/gear-wishlist";
 import {
   createPublicGearPledge,
   receiveGearPledge,
 } from "@/lib/actions/gear-pledges";
+import { queueGearOutboxForRecipients } from "@/lib/services/gear-outbox";
 
 const LEAGUE_ID = "cllllllllllllllllllllllll";
 const TEAM_ID = "cttttttttttttttttttttttt";
@@ -94,6 +99,7 @@ beforeEach(() => {
   mockGetUserLeagueRole.mockResolvedValue("TEAM_ADMIN");
   mockIsTeamAdmin.mockResolvedValue(true);
   mockPrisma.team.findFirst.mockResolvedValue({ id: TEAM_ID });
+  mockPrisma.teamMember.findMany.mockResolvedValue([]);
   mockCheckRateLimit.mockResolvedValue({ allowed: true });
   mockGetClientIp.mockResolvedValue("203.0.113.42");
   tx.gearActivity.create.mockResolvedValue({});
@@ -102,6 +108,8 @@ beforeEach(() => {
   tx.teamMember.findMany.mockResolvedValue([{ userId: USER_ID }]);
   tx.gearWishlistItem.update.mockResolvedValue({});
   tx.gearPledge.updateMany.mockResolvedValue({ count: 1 });
+  tx.gearPledgeReceiptCommand.findUnique.mockResolvedValue(null);
+  tx.gearPledgeReceiptCommand.create.mockResolvedValue({ id: "creceipt-command000000001" });
 });
 
 describe("Layer 4 gear actions", () => {
@@ -161,6 +169,40 @@ describe("Layer 4 gear actions", () => {
     }));
   });
 
+  it("derives need operation capabilities from current team and league roles", async () => {
+    mockPrisma.teamMember.findMany.mockResolvedValue([{ team: { id: TEAM_ID, name: "Scoped Team" } }]);
+    mockPrisma.teamGearNeed.findMany.mockResolvedValue([
+      {
+        id: NEED_ID, teamId: TEAM_ID, title: "Need", notes: null, status: "DRAFT", version: 0,
+        submittedAt: null, approvedAt: null, fulfilledAt: null, canceledAt: null, createdAt: new Date("2026-01-01"),
+        team: { name: "Scoped Team" }, lines: [],
+      },
+    ]);
+
+    const teamContext = await getGearNeedsContext(LEAGUE_ID);
+    expect(teamContext?.needs[0]).toMatchObject({
+      canSubmit: true, canCancel: true, canApprove: false, canFulfill: false,
+      capabilities: { canSubmit: true, canCancel: true, canApprove: false, canFulfill: false },
+    });
+
+    mockGetUserLeagueRole.mockResolvedValue("LEAGUE_ADMIN");
+    mockPrisma.team.findMany.mockResolvedValue([{ id: TEAM_ID, name: "Scoped Team" }]);
+    mockPrisma.teamMember.findMany.mockResolvedValue([]);
+    mockPrisma.teamGearNeed.findMany.mockResolvedValue([
+      {
+        id: NEED_ID, teamId: TEAM_ID, title: "Need", notes: null, status: "SUBMITTED", version: 1,
+        submittedAt: new Date("2026-01-02"), approvedAt: null, fulfilledAt: null, canceledAt: null,
+        createdAt: new Date("2026-01-01"), team: { name: "Scoped Team" }, lines: [],
+      },
+    ]);
+
+    const leagueContext = await getGearNeedsContext(LEAGUE_ID);
+    expect(leagueContext?.needs[0]).toMatchObject({
+      canSubmit: false, canCancel: false, canApprove: true, canFulfill: false,
+      capabilities: { canSubmit: false, canCancel: false, canApprove: true, canFulfill: false },
+    });
+  });
+
   it("submits only from draft and atomically queues the league-admin notification", async () => {
     tx.teamGearNeed.findFirst.mockResolvedValue({
       id: NEED_ID, leagueId: LEAGUE_ID, teamId: TEAM_ID, status: "DRAFT", version: 2,
@@ -184,7 +226,7 @@ describe("Layer 4 gear actions", () => {
         eventType: "gear.need.submitted",
         aggregateType: "NEED",
         aggregateId: NEED_ID,
-        dedupeKey: `gear.need.submitted:${NEED_ID}:${USER_ID}`,
+        dedupeKey: `gear.need.submitted:${NEED_ID}:v3:${USER_ID}`,
       })],
     }));
   });
@@ -235,6 +277,64 @@ describe("Layer 4 gear actions", () => {
     expect(tx.leagueUser.findMany).toHaveBeenCalled();
   });
 
+  it("recycles an archived projection into a fresh campaign with a rotated token and reset items", async () => {
+    tx.gearWishlist.findUnique.mockResolvedValue({
+      id: WISHLIST_ID,
+      shareToken: "old-token",
+      status: "ARCHIVED",
+      version: 7,
+      items: [{ id: "colditem00000000000000000", normalizedKey: "old", targetQty: 1, pledgedQty: 1, receivedQty: 1, isActive: false }],
+    });
+    tx.gearCatalogItem.findMany.mockResolvedValue([]);
+    tx.gearWishlist.updateMany.mockResolvedValue({ count: 1 });
+    tx.gearWishlistItem.updateMany.mockResolvedValue({ count: 1 });
+    tx.gearWishlistItem.create.mockResolvedValue({ id: WISHLIST_ITEM_ID });
+
+    const result = await saveGearWishlist({
+      leagueId: LEAGUE_ID,
+      expectedVersion: 7,
+      title: "Autumn drive",
+      description: "New campaign",
+      publish: true,
+      items: [{ nameSnapshot: "New helmet", targetQty: 5 }],
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.success && result.data.shareToken).not.toBe("old-token");
+    expect(tx.gearWishlist.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: WISHLIST_ID, version: 7, status: "ARCHIVED" },
+      data: expect.objectContaining({ status: "PUBLISHED", archivedAt: null }),
+    }));
+    expect(tx.gearWishlistItem.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: { isActive: false },
+    }));
+    expect(tx.gearWishlistItem.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ leagueId: LEAGUE_ID, wishlistId: WISHLIST_ID, nameSnapshot: "New helmet" }),
+    }));
+  });
+
+  it("keeps distinct outbox occurrences while deduplicating recipients within each occurrence", async () => {
+    const outboxTx = {
+      notificationOutbox: { createMany: vi.fn().mockResolvedValue({ count: 1 }) },
+    };
+    const event = {
+      leagueId: LEAGUE_ID,
+      eventType: "gear.wishlist.published",
+      aggregateType: "WISHLIST" as const,
+      aggregateId: WISHLIST_ID,
+      payload: { wishlistId: WISHLIST_ID },
+    };
+    await queueGearOutboxForRecipients(outboxTx as never, { ...event, occurrenceKey: "v1" }, [USER_ID, USER_ID]);
+    await queueGearOutboxForRecipients(outboxTx as never, { ...event, occurrenceKey: "v2" }, [USER_ID]);
+
+    expect(outboxTx.notificationOutbox.createMany).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      data: [expect.objectContaining({ dedupeKey: `gear.wishlist.published:${WISHLIST_ID}:v1:${USER_ID}` })],
+    }));
+    expect(outboxTx.notificationOutbox.createMany).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      data: [expect.objectContaining({ dedupeKey: `gear.wishlist.published:${WISHLIST_ID}:v2:${USER_ID}` })],
+    }));
+  });
+
   it("handles honeypot, idempotency, and rate limits without creating a pledge", async () => {
     const common = {
       wishlistToken: "t".repeat(32), wishlistItemId: WISHLIST_ITEM_ID, donorName: "Donor",
@@ -263,7 +363,7 @@ describe("Layer 4 gear actions", () => {
 
   it("records pooled pledge receipt stock, ledger activity, and outbox atomically", async () => {
     tx.gearPledge.findFirst.mockResolvedValue({
-      id: PLEDGE_ID, quantity: 2, wishlistItem: { id: WISHLIST_ITEM_ID, catalogItemId: CATALOG_ID },
+      id: PLEDGE_ID, version: 0, quantity: 2, wishlistItem: { id: WISHLIST_ITEM_ID, catalogItemId: CATALOG_ID },
     });
     tx.gearPledgeReceipt.aggregate.mockResolvedValue({ _sum: { quantity: 0 } });
     tx.gearPoolStock.findFirst.mockResolvedValue({
@@ -273,6 +373,7 @@ describe("Layer 4 gear actions", () => {
 
     const result = await receiveGearPledge({
       leagueId: LEAGUE_ID, pledgeId: PLEDGE_ID, poolStockId: STOCK_ID, quantity: 2,
+      expectedVersion: 0, idempotencyKey: "r".repeat(16),
     });
     expect(result.success).toBe(true);
     expect(tx.gearPoolStock.update).toHaveBeenCalledWith(expect.objectContaining({
@@ -290,9 +391,34 @@ describe("Layer 4 gear actions", () => {
     }));
   });
 
+  it("returns a saved receipt command on retry without touching inventory again", async () => {
+    tx.gearPledgeReceiptCommand.findUnique.mockResolvedValue({
+      resultingStatus: "RECEIVED",
+      resultingVersion: 3,
+      receipts: [{ id: "creceipt00000000000000001" }],
+    });
+
+    const result = await receiveGearPledge({
+      leagueId: LEAGUE_ID, pledgeId: PLEDGE_ID, poolStockId: STOCK_ID, quantity: 2,
+      expectedVersion: 2, idempotencyKey: "z".repeat(16),
+    });
+
+    expect(result).toEqual({
+      success: true,
+      data: {
+        receiptId: "creceipt00000000000000001",
+        receiptIds: ["creceipt00000000000000001"],
+        pledgeStatus: "RECEIVED",
+        pledgeVersion: 3,
+      },
+    });
+    expect(tx.gearPoolStock.update).not.toHaveBeenCalled();
+    expect(tx.gearPledgeReceipt.create).not.toHaveBeenCalled();
+  });
+
   it("creates a tagged unit, receipt, movement, and activity for every unique asset tag", async () => {
     tx.gearPledge.findFirst.mockResolvedValue({
-      id: PLEDGE_ID, quantity: 2, wishlistItem: { id: WISHLIST_ITEM_ID, catalogItemId: CATALOG_ID },
+      id: PLEDGE_ID, version: 0, quantity: 2, wishlistItem: { id: WISHLIST_ITEM_ID, catalogItemId: CATALOG_ID },
     });
     tx.gearPledgeReceipt.aggregate.mockResolvedValue({ _sum: { quantity: 0 } });
     tx.gearCatalogItem.findFirst.mockResolvedValue({ id: CATALOG_ID });
@@ -308,6 +434,7 @@ describe("Layer 4 gear actions", () => {
     const result = await receiveGearPledge({
       leagueId: LEAGUE_ID, pledgeId: PLEDGE_ID, catalogItemId: CATALOG_ID,
       assetTags: [" tag 1 ", "tag 2"], locationId: LOCATION_ID, condition: "GOOD", quantity: 2,
+      expectedVersion: 0, idempotencyKey: "r".repeat(16),
     });
     expect(result.success).toBe(true);
     expect(tx.gearUnit.create).toHaveBeenCalledTimes(2);
@@ -322,6 +449,7 @@ describe("Layer 4 gear actions", () => {
     const duplicate = await receiveGearPledge({
       leagueId: LEAGUE_ID, pledgeId: PLEDGE_ID, catalogItemId: CATALOG_ID,
       assetTags: ["tag 1", "TAG1"], locationId: LOCATION_ID, condition: "GOOD", quantity: 2,
+      expectedVersion: 0, idempotencyKey: "s".repeat(16),
     });
     expect(duplicate).toEqual({ success: false, error: "Each received asset tag must be unique." });
   });

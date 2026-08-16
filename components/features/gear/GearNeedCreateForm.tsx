@@ -7,7 +7,13 @@ import { createTeamGearNeed } from "@/lib/actions/gear-needs";
 
 type NeedLine = { nameSnapshot: string; requestedQty: number; priority: "LOW" | "NORMAL" | "HIGH" | "URGENT" };
 
-export function GearNeedCreateForm({ leagueId, teamIds }: { leagueId: string; teamIds: string[] }) {
+export function GearNeedCreateForm({
+  leagueId,
+  teams,
+}: {
+  leagueId: string;
+  teams: Array<{ id: string; name: string }>;
+}) {
   const [lines, setLines] = useState<NeedLine[]>([{ nameSnapshot: "", requestedQty: 1, priority: "NORMAL" }]);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -30,8 +36,8 @@ export function GearNeedCreateForm({ leagueId, teamIds }: { leagueId: string; te
     <Card component="form" action={submit} variant="outlined" sx={{ p: 2 }}>
       <Stack spacing={2}>
         {message && <Alert severity={message.startsWith("Draft") ? "success" : "error"}>{message}</Alert>}
-        <TextField name="teamId" select label="Team" required defaultValue={teamIds[0] ?? ""}>
-          {teamIds.map((teamId) => <MenuItem key={teamId} value={teamId}>{teamId}</MenuItem>)}
+        <TextField name="teamId" select label="Team" required defaultValue={teams[0]?.id ?? ""}>
+          {teams.map((team) => <MenuItem key={team.id} value={team.id}>{team.name}</MenuItem>)}
         </TextField>
         <TextField name="title" label="Need title" required />
         <TextField name="notes" label="Team notes" multiline minRows={2} />

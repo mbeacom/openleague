@@ -10,7 +10,7 @@ import { getGearNeedsContext } from "@/lib/actions/gear-needs";
 export default async function NewGearNeedPage({ params }: { params: Promise<{ leagueId: string }> }) {
   const { leagueId } = await params;
   const context = await getGearNeedsContext(leagueId);
-  if (!context || context.teamIds.length === 0) notFound();
+  if (!context || context.teams.length === 0) notFound();
 
   return (
     <PageContainer maxWidth="md">
@@ -18,7 +18,7 @@ export default async function NewGearNeedPage({ params }: { params: Promise<{ le
         All needs
       </Button>
       <PageHeader title="New gear need" subtitle="Describe a team need for association review. This does not reserve equipment." />
-      <GearNeedCreateForm leagueId={leagueId} teamIds={context.teamIds} />
+      <GearNeedCreateForm leagueId={leagueId} teams={context.teams} />
     </PageContainer>
   );
 }

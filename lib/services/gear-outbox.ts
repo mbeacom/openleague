@@ -5,6 +5,8 @@ type GearTransaction = Prisma.TransactionClient;
 export type GearOutboxEvent = {
   leagueId: string;
   eventType: string;
+  /** Stable identifier for this specific occurrence, not merely its aggregate. */
+  occurrenceKey: string;
   aggregateType: "NEED" | "PLEDGE" | "WISHLIST";
   aggregateId: string;
   payload: Prisma.InputJsonValue;
@@ -26,7 +28,7 @@ export async function queueGearOutboxForRecipients(
       aggregateType: event.aggregateType,
       aggregateId: event.aggregateId,
       payload: event.payload,
-      dedupeKey: `${event.eventType}:${event.aggregateId}:${recipientUserId}`,
+      dedupeKey: `${event.eventType}:${event.aggregateId}:${event.occurrenceKey}:${recipientUserId}`,
     })),
     skipDuplicates: true,
   });

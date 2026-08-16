@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Alert, Button, Stack } from "@mui/material";
 import {
   approveTeamGearNeed,
@@ -16,14 +17,20 @@ export function GearNeedActions({
   needId,
   expectedVersion,
   status,
-  canManageAll,
+  capabilities,
 }: {
   leagueId: string;
   needId: string;
   expectedVersion: number;
   status: NeedStatus;
-  canManageAll: boolean;
+  capabilities: {
+    canSubmit: boolean;
+    canCancel: boolean;
+    canApprove: boolean;
+    canFulfill: boolean;
+  };
 }) {
+  const router = useRouter();
   const [message, setMessage] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -38,7 +45,12 @@ export function GearNeedActions({
       cancel: cancelTeamGearNeed,
     })[action](input);
     setPending(false);
-    setMessage(result.success ? "Need updated. Refreshing the latest progress..." : result.error);
+    if (result.success) {
+      setMessage("Need updated.");
+      router.refresh();
+    } else {
+      setMessage(result.error);
+    }
   }
 
   if (status === "FULFILLED" || status === "CANCELED") return null;
@@ -47,24 +59,26 @@ export function GearNeedActions({
     <Stack spacing={1}>
       {message && <Alert severity={message.startsWith("Need updated") ? "success" : "error"}>{message}</Alert>}
       <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-        {status === "DRAFT" && (
+        {capabilities.canSubmit && (
           <Button variant="contained" disabled={pending} onClick={() => transition("submit")} sx={{ minHeight: 44 }}>
             Submit need
           </Button>
         )}
-        {canManageAll && status === "SUBMITTED" && (
+        {capabilities.canApprove && (
           <Button variant="contained" disabled={pending} onClick={() => transition("approve")} sx={{ minHeight: 44 }}>
             Approve need
           </Button>
         )}
-        {canManageAll && status === "APPROVED" && (
+        {capabilities.canFulfill && (
           <Button variant="contained" disabled={pending} onClick={() => transition("fulfill")} sx={{ minHeight: 44 }}>
             Mark fulfilled
           </Button>
         )}
-        <Button color="inherit" disabled={pending} onClick={() => transition("cancel")} sx={{ minHeight: 44 }}>
-          {canManageAll && status === "SUBMITTED" ? "Decline need" : "Cancel need"}
-        </Button>
+        {capabilities.canCancel && (
+          <Button color="inherit" disabled={pending} onClick={() => transition("cancel")} sx={{ minHeight: 44 }}>
+            Cancel need
+          </Button>
+        )}
       </Stack>
     </Stack>
   );

@@ -142,6 +142,7 @@ export async function saveGearWishlist(
         await queueGearOutboxForLeagueAdmins(tx, {
           leagueId: validated.leagueId,
           eventType: validated.publish ? "gear.wishlist.created_and_published" : "gear.wishlist.created",
+          occurrenceKey: `v${created.version}`,
           aggregateType: "WISHLIST",
           aggregateId: created.id,
           payload: { wishlistId: created.id, status: created.status, itemCount: items.length },
@@ -149,11 +150,57 @@ export async function saveGearWishlist(
         return created;
       }
 
-      if (existing.status === "ARCHIVED") {
-        invalid("An archived wishlist cannot be edited. Create a new association wishlist instead.");
-      }
       if (validated.expectedVersion === undefined || existing.version !== validated.expectedVersion) {
         throw new GearConflictError();
+      }
+      if (existing.status === "ARCHIVED") {
+        const now = new Date();
+        const shareToken = newShareToken();
+        const status = validated.publish ? "PUBLISHED" : "DRAFT";
+        const update = await tx.gearWishlist.updateMany({
+          where: { id: existing.id, version: existing.version, status: "ARCHIVED" },
+          data: {
+            shareToken,
+            title: validated.title,
+            description: validated.description || null,
+            status,
+            publishedAt: validated.publish ? now : null,
+            archivedAt: null,
+            version: { increment: 1 },
+          },
+        });
+        if (update.count !== 1) throw new GearConflictError();
+        await tx.gearWishlistItem.updateMany({
+          where: { leagueId: validated.leagueId, wishlistId: existing.id },
+          data: { isActive: false },
+        });
+        for (const item of items) {
+          await tx.gearWishlistItem.create({
+            data: { leagueId: validated.leagueId, wishlistId: existing.id, ...item },
+          });
+        }
+        await recordGearActivity(tx, {
+          leagueId: validated.leagueId,
+          entityType: "WISHLIST",
+          entityId: existing.id,
+          action: "recycled",
+          actorUserId: userId,
+          details: { itemCount: items.length, status },
+        });
+        await queueGearOutboxForLeagueAdmins(tx, {
+          leagueId: validated.leagueId,
+          eventType: "gear.wishlist.recycled",
+          occurrenceKey: `v${existing.version + 1}`,
+          aggregateType: "WISHLIST",
+          aggregateId: existing.id,
+          payload: { wishlistId: existing.id, status, itemCount: items.length },
+        });
+        return {
+          id: existing.id,
+          shareToken,
+          status,
+          version: existing.version + 1,
+        };
       }
 
       const existingByKey = new Map(existing.items.map((item) => [item.normalizedKey, item]));
@@ -192,7 +239,9 @@ export async function saveGearWishlist(
             data: { ...item, isActive: true },
           });
         } else {
-          await tx.gearWishlistItem.create({ data: { wishlistId: existing.id, ...item } });
+          await tx.gearWishlistItem.create({
+            data: { leagueId: validated.leagueId, wishlistId: existing.id, ...item },
+          });
         }
       }
       await tx.gearWishlistItem.updateMany({
@@ -216,6 +265,7 @@ export async function saveGearWishlist(
         await queueGearOutboxForLeagueAdmins(tx, {
           leagueId: validated.leagueId,
           eventType: "gear.wishlist.published",
+          occurrenceKey: `v${existing.version + 1}`,
           aggregateType: "WISHLIST",
           aggregateId: existing.id,
           payload: { wishlistId: existing.id, status: nextStatus, itemCount: items.length },
@@ -257,6 +307,7 @@ export async function archiveGearWishlist(input: unknown): Promise<ActionResult<
       await queueGearOutboxForLeagueAdmins(tx, {
         leagueId: validated.leagueId,
         eventType: "gear.wishlist.archived",
+        occurrenceKey: `v${wishlist.version + 1}`,
         aggregateType: "WISHLIST",
         aggregateId: wishlist.id,
         payload: { wishlistId: wishlist.id, status: "ARCHIVED" },
@@ -297,6 +348,7 @@ export async function rotateGearWishlistShareToken(
       await queueGearOutboxForLeagueAdmins(tx, {
         leagueId: validated.leagueId,
         eventType: "gear.wishlist.share_token_rotated",
+        occurrenceKey: `v${wishlist.version + 1}`,
         aggregateType: "WISHLIST",
         aggregateId: wishlist.id,
         payload: { wishlistId: wishlist.id },
@@ -347,6 +399,7 @@ export async function setGearWishlistStatus(input: unknown): Promise<ActionResul
       await queueGearOutboxForLeagueAdmins(tx, {
         leagueId: validated.leagueId,
         eventType: "gear.wishlist.published",
+        occurrenceKey: `v${wishlist.version + 1}`,
         aggregateType: "WISHLIST",
         aggregateId: wishlist.id,
         payload: { wishlistId: wishlist.id, status: "PUBLISHED", itemCount: wishlist.items.length },
