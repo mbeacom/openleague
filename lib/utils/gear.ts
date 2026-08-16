@@ -67,6 +67,50 @@ export function activeAllocationTotal(allocations: GearAllocationQuantities[]): 
   return allocations.reduce((total, allocation) => total + activeAllocationQuantity(allocation), 0);
 }
 
+type CapacityAllocation = GearAllocationQuantities & {
+  status: GearAllocationStatus;
+  effectiveStartDate?: Date | string | null;
+  effectiveEndDate?: Date | string | null;
+};
+
+function dateOnly(value: Date | string): string {
+  return typeof value === "string" ? value.slice(0, 10) : value.toISOString().slice(0, 10);
+}
+
+/**
+ * Checked-out gear continues to consume capacity until it is reconciled, even
+ * after its planned reservation window. Planned allocations only block overlap.
+ */
+export function allocationConsumesCapacityForWindow(
+  allocation: CapacityAllocation,
+  window: GearReservationWindow,
+): boolean {
+  if (activeAllocationQuantity(allocation) === 0) return false;
+  if (["PICKED_UP", "PARTIALLY_RETURNED"].includes(allocation.status)) return true;
+  if (!["PENDING", "ALLOCATED"].includes(allocation.status)) return false;
+  if (!allocation.effectiveStartDate || !allocation.effectiveEndDate) return false;
+  return datesOverlap(
+    {
+      startDate: dateOnly(allocation.effectiveStartDate),
+      endDate: dateOnly(allocation.effectiveEndDate),
+    },
+    window,
+  );
+}
+
+/** Date-only due dates become overdue only after the final effective date. */
+export function isOutstandingAllocationOverdue(
+  allocation: Pick<CapacityAllocation, "status" | "effectiveEndDate">,
+  today = new Date(),
+): boolean {
+  return (
+    ["PICKED_UP", "PARTIALLY_RETURNED"].includes(allocation.status) &&
+    allocation.effectiveEndDate !== null &&
+    allocation.effectiveEndDate !== undefined &&
+    dateOnly(allocation.effectiveEndDate) < dateOnly(today)
+  );
+}
+
 export function canAllocatePoolStock(stock: GearPoolAvailability, quantity: number): boolean {
   return Number.isSafeInteger(quantity) && quantity > 0 && quantity <= availablePoolQuantity(stock);
 }

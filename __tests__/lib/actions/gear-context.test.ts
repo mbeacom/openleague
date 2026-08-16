@@ -9,6 +9,8 @@ const { mockRequireUserId, mockPrisma } = vi.hoisted(() => ({
     gearPoolStock: { findMany: vi.fn() },
     gearUnit: { findMany: vi.fn() },
     gearReservation: { findMany: vi.fn() },
+    teamMember: { findMany: vi.fn() },
+    team: { findMany: vi.fn() },
     gearInventoryMovement: { findMany: vi.fn() },
   },
 }));
@@ -16,7 +18,7 @@ const { mockRequireUserId, mockPrisma } = vi.hoisted(() => ({
 vi.mock("@/lib/auth/session", () => ({ requireUserId: () => mockRequireUserId() }));
 vi.mock("@/lib/db/prisma", () => ({ prisma: mockPrisma }));
 
-import { getGearInventoryContext } from "@/lib/actions/gear-context";
+import { getGearInventoryContext, getGearReservationContext } from "@/lib/actions/gear-context";
 
 const LEAGUE_ID = "cllllllllllllllllllllllll";
 
@@ -28,6 +30,8 @@ beforeEach(() => {
   mockPrisma.gearPoolStock.findMany.mockResolvedValue([]);
   mockPrisma.gearUnit.findMany.mockResolvedValue([]);
   mockPrisma.gearReservation.findMany.mockResolvedValue([]);
+  mockPrisma.teamMember.findMany.mockResolvedValue([]);
+  mockPrisma.team.findMany.mockResolvedValue([]);
   mockPrisma.gearInventoryMovement.findMany.mockResolvedValue([]);
 });
 
@@ -137,5 +141,143 @@ describe("gear inventory context", () => {
         occurredAt: "2026-03-01T12:34:56.789Z",
       }],
     });
+  });
+
+  it("withholds detailed reservations from ordinary league members", async () => {
+      mockPrisma.leagueUser.findFirst.mockResolvedValue({
+        role: "MEMBER",
+        league: { id: LEAGUE_ID, name: "Metro" },
+      });
+
+      const result = await getGearReservationContext(LEAGUE_ID);
+
+      expect(result?.reservations).toEqual([]);
+      expect(mockPrisma.gearReservation.findMany).not.toHaveBeenCalled();
+      expect(mockPrisma.teamMember.findMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: expect.objectContaining({ role: "ADMIN" }),
+      }));
+  });
+
+  it("projects overdue custody from outstanding allocation dates, not requested dates", async () => {
+      const TEAM_ID = "cteeeeeeeeeeeeeeeeeeeeeee";
+      mockPrisma.leagueUser.findFirst.mockResolvedValue({
+        role: "MEMBER",
+        league: { id: LEAGUE_ID, name: "Metro" },
+      });
+      mockPrisma.teamMember.findMany.mockResolvedValue([{ teamId: TEAM_ID }]);
+      mockPrisma.gearReservation.findMany.mockResolvedValue([{
+        id: "crrrrrrrrrrrrrrrrrrrrrrrr",
+        teamId: TEAM_ID,
+        team: { name: "Owning team" },
+        status: "FULFILLED",
+        requestedStartDate: new Date("2027-01-01"),
+        requestedEndDate: new Date("2027-01-03"),
+        custodianNameSnapshot: "Custodian",
+        requestNotes: "Private to team admins",
+        decisionNotes: "Private to league admins",
+        version: 1,
+        lines: [{
+          id: "cliiiiiiiiiiiiiiiiiiiiiiii",
+          nameSnapshot: "Helmet",
+          requestedQty: 1,
+          approvedQty: 1,
+          allocatedQty: 1,
+          allocations: [{
+            id: "caaaaaaaaaaaaaaaaaaaaaaaa",
+            status: "PICKED_UP",
+            allocatedQty: 1,
+            pickedUpQty: 1,
+            returnedQty: 0,
+            releasedQty: 0,
+            effectiveStartDate: new Date("2026-01-01"),
+            effectiveEndDate: new Date("2026-01-02"),
+            poolStockId: null,
+            gearUnitId: null,
+            version: 1,
+            poolStock: null,
+            gearUnit: null,
+          }],
+        }],
+      }]);
+
+      const result = await getGearReservationContext(LEAGUE_ID);
+
+      expect(result?.reservations[0]).toMatchObject({
+        overdue: true,
+        requestNotes: "Private to team admins",
+      });
+      expect(result?.reservations[0]).not.toHaveProperty("decisionNotes");
+  });
+
+  it("flags future reallocation only when overlapping custody exhausts the same pool window", async () => {
+      mockPrisma.leagueUser.findFirst.mockResolvedValue({
+        role: "LEAGUE_ADMIN",
+        league: { id: LEAGUE_ID, name: "Metro" },
+      });
+      mockPrisma.team.findMany.mockResolvedValue([{ id: "cteeeeeeeeeeeeeeeeeeeeeee" }]);
+      mockPrisma.gearReservation.findMany.mockResolvedValue([{
+        id: "crrrrrrrrrrrrrrrrrrrrrrrr",
+        teamId: "cteeeeeeeeeeeeeeeeeeeeeee",
+        team: { name: "Owning team" },
+        status: "APPROVED",
+        requestedStartDate: new Date("2026-09-10"),
+        requestedEndDate: new Date("2026-09-12"),
+        custodianNameSnapshot: "Custodian",
+        requestNotes: null,
+        decisionNotes: null,
+        version: 1,
+        lines: [{
+          id: "cliiiiiiiiiiiiiiiiiiiiiiii",
+          nameSnapshot: "Helmet",
+          requestedQty: 2,
+          approvedQty: 2,
+          allocatedQty: 2,
+          allocations: [{
+            id: "caaaaaaaaaaaaaaaaaaaaaaaa",
+            status: "ALLOCATED",
+            allocatedQty: 2,
+            pickedUpQty: 0,
+            returnedQty: 0,
+            releasedQty: 0,
+            effectiveStartDate: new Date("2026-09-10"),
+            effectiveEndDate: new Date("2026-09-12"),
+            poolStockId: "cstockkkkkkkkkkkkkkkkkkkk",
+            gearUnitId: null,
+            version: 1,
+            poolStock: { location: { name: "Locker" } },
+            gearUnit: null,
+          }],
+        }],
+      }]);
+      mockPrisma.gearPoolStock.findMany.mockResolvedValue([{
+        id: "cstockkkkkkkkkkkkkkkkkkkk",
+        quantityOnHand: 2,
+        allocations: [
+          {
+            id: "caaaaaaaaaaaaaaaaaaaaaaaa",
+            status: "ALLOCATED",
+            allocatedQty: 2,
+            pickedUpQty: 0,
+            returnedQty: 0,
+            releasedQty: 0,
+            effectiveStartDate: new Date("2026-09-10"),
+            effectiveEndDate: new Date("2026-09-12"),
+          },
+          {
+            id: "cbbbbbbbbbbbbbbbbbbbbbbbb",
+            status: "PICKED_UP",
+            allocatedQty: 1,
+            pickedUpQty: 1,
+            returnedQty: 0,
+            releasedQty: 0,
+            effectiveStartDate: new Date("2026-08-01"),
+            effectiveEndDate: new Date("2026-08-03"),
+          },
+        ],
+      }]);
+
+      const result = await getGearReservationContext(LEAGUE_ID);
+
+      expect(result?.reservations[0]?.reallocationWarning).toBe(true);
   });
 });

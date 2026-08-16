@@ -2,7 +2,11 @@
 
 import { requireUserId } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
-import { activeAllocationQuantity } from "@/lib/utils/gear";
+import {
+  activeAllocationQuantity,
+  allocationConsumesCapacityForWindow,
+  isOutstandingAllocationOverdue,
+} from "@/lib/utils/gear";
 
 export type GearInventoryContext = {
   league: { id: string; name: string };
@@ -303,8 +307,8 @@ export type GearReservationContext = {
 
 /**
  * Reservation visibility is deliberately narrower than inventory visibility:
- * members see only teams they belong to, while league administrators see the
- * association-wide operational queue and decision notes.
+ * only league and owning-team administrators can view custody records, while
+ * league administrators alone see association-wide decision notes.
  */
 export async function getGearReservationContext(leagueId: string): Promise<GearReservationContext | null> {
   const userId = await requireUserId();
@@ -321,7 +325,7 @@ export async function getGearReservationContext(leagueId: string): Promise<GearR
         select: { id: true },
       })
     : await prisma.teamMember.findMany({
-        where: { userId, team: { leagueId, isActive: true } },
+        where: { userId, role: "ADMIN", team: { leagueId, isActive: true } },
         select: { teamId: true },
       });
   const teamIds = teamMemberships.map((membership) => "teamId" in membership ? membership.teamId : membership.id);
@@ -341,7 +345,8 @@ export async function getGearReservationContext(leagueId: string): Promise<GearR
           allocations: {
             select: {
               id: true, status: true, allocatedQty: true, pickedUpQty: true, returnedQty: true,
-              releasedQty: true, poolStockId: true, gearUnitId: true, version: true,
+              releasedQty: true, effectiveStartDate: true, effectiveEndDate: true,
+              poolStockId: true, gearUnitId: true, version: true,
               poolStock: { select: { location: { select: { name: true } } } },
               gearUnit: { select: { assetTag: true } },
             },
@@ -361,20 +366,37 @@ export async function getGearReservationContext(leagueId: string): Promise<GearR
       allocations: {
         where: {
           status: { in: ["PENDING", "ALLOCATED", "PICKED_UP", "PARTIALLY_RETURNED"] },
-          reservationLine: { reservation: { requestedStartDate: { gt: today } } },
         },
-        select: { allocatedQty: true, pickedUpQty: true, returnedQty: true, releasedQty: true },
+        select: {
+          id: true, status: true, allocatedQty: true, pickedUpQty: true, returnedQty: true,
+          releasedQty: true, effectiveStartDate: true, effectiveEndDate: true,
+        },
       },
     },
   });
-  const reallocationWarningByStockId = new Set(
-    poolStocks
-      .filter((stock) => stock.allocations.reduce(
-        (total, allocation) => total + activeAllocationQuantity(allocation),
-        0,
-      ) > stock.quantityOnHand)
-      .map((stock) => stock.id),
-  );
+  const reallocationWarningByAllocationId = new Set<string>();
+  for (const stock of poolStocks) {
+    for (const candidate of stock.allocations) {
+      if (
+        !["PENDING", "ALLOCATED"].includes(candidate.status)
+        || !candidate.effectiveStartDate
+        || !candidate.effectiveEndDate
+      ) continue;
+      const window = {
+        startDate: candidate.effectiveStartDate.toISOString().slice(0, 10),
+        endDate: candidate.effectiveEndDate.toISOString().slice(0, 10),
+      };
+      const otherCommitments = stock.allocations.reduce((total, allocation) => {
+        if (allocation.id === candidate.id || !allocationConsumesCapacityForWindow(allocation, window)) {
+          return total;
+        }
+        return total + activeAllocationQuantity(allocation);
+      }, 0);
+      if (stock.quantityOnHand - otherCommitments < activeAllocationQuantity(candidate)) {
+        reallocationWarningByAllocationId.add(candidate.id);
+      }
+    }
+  }
   return {
     league: membership.league,
     canManageReservations,
@@ -383,9 +405,7 @@ export async function getGearReservationContext(leagueId: string): Promise<GearR
       const activeAllocations = reservation.lines.flatMap((line) => line.allocations)
         .filter((allocation) => ["PENDING", "ALLOCATED", "PICKED_UP", "PARTIALLY_RETURNED"].includes(allocation.status));
       const reallocationWarning = activeAllocations.some((allocation) =>
-        allocation.poolStockId !== null
-        && reservation.requestedStartDate > today
-        && reallocationWarningByStockId.has(allocation.poolStockId),
+        allocation.poolStockId !== null && reallocationWarningByAllocationId.has(allocation.id),
       );
       return {
         id: reservation.id,
@@ -398,7 +418,7 @@ export async function getGearReservationContext(leagueId: string): Promise<GearR
         requestNotes: reservation.requestNotes,
         ...(canManageReservations ? { decisionNotes: reservation.decisionNotes } : {}),
         version: reservation.version,
-        overdue: ["FULFILLED", "APPROVED"].includes(reservation.status) && reservation.requestedEndDate < today,
+        overdue: activeAllocations.some((allocation) => isOutstandingAllocationOverdue(allocation, today)),
         reallocationWarning,
         lines: reservation.lines.map((line) => ({
           id: line.id,

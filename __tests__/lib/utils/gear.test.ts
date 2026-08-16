@@ -5,6 +5,7 @@ import {
   allocationStatusQuantitiesValid,
   activeAllocationQuantity,
   activeAllocationTotal,
+  allocationConsumesCapacityForWindow,
   availablePoolQuantity,
   canAllocatePoolStock,
   canTransitionAllocation,
@@ -15,6 +16,7 @@ import {
   isValidInventoryMovementDirection,
   isRetryablePrismaConflict,
   isActiveTaggedAllocationStatus,
+  isOutstandingAllocationOverdue,
   normalizeGearAssetTag,
   normalizeGearKey,
   taggedAllocationWindowsConflict,
@@ -58,6 +60,39 @@ describe("gear utilities", () => {
       { allocatedQty: 4, pickedUpQty: 4, returnedQty: 1, releasedQty: 0 },
       { allocatedQty: 2, pickedUpQty: 0, returnedQty: 0, releasedQty: 1 },
     ])).toBe(4);
+  });
+
+  it("keeps outstanding custody committed past its planned end date", () => {
+    const window = { startDate: "2026-09-10", endDate: "2026-09-12" };
+    expect(allocationConsumesCapacityForWindow({
+      status: "PICKED_UP",
+      allocatedQty: 2,
+      pickedUpQty: 2,
+      returnedQty: 0,
+      releasedQty: 0,
+      effectiveStartDate: new Date("2026-09-01"),
+      effectiveEndDate: new Date("2026-09-03"),
+    }, window)).toBe(true);
+    expect(allocationConsumesCapacityForWindow({
+      status: "ALLOCATED",
+      allocatedQty: 2,
+      pickedUpQty: 0,
+      returnedQty: 0,
+      releasedQty: 0,
+      effectiveStartDate: new Date("2026-09-01"),
+      effectiveEndDate: new Date("2026-09-03"),
+    }, window)).toBe(false);
+  });
+
+  it("marks only outstanding custody overdue after the effective end date", () => {
+    const finalDay = new Date("2026-09-03T00:00:00.000Z");
+    const allocation = { status: "PICKED_UP" as const, effectiveEndDate: finalDay };
+    expect(isOutstandingAllocationOverdue(allocation, finalDay)).toBe(false);
+    expect(isOutstandingAllocationOverdue(allocation, new Date("2026-09-04T00:00:00.000Z"))).toBe(true);
+    expect(isOutstandingAllocationOverdue({
+      status: "ALLOCATED",
+      effectiveEndDate: finalDay,
+    }, new Date("2026-09-04T00:00:00.000Z"))).toBe(false);
   });
 
   it("returns user-safe pool, tagged, and overdue availability conflicts", () => {
