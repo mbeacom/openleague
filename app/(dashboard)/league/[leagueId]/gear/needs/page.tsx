@@ -40,11 +40,11 @@ export default async function GearNeedsPage({ params, searchParams }: GearNeedsP
       <PageHeader
         title="Gear needs"
         subtitle="Team demand requests. Approving a need never reserves inventory."
-        actions={
+        actions={context.teams.length > 0 ? (
           <LinkButton href={`/league/${leagueId}/gear/needs/new`} startIcon={<AddOutlined />} variant="contained" sx={{ minHeight: 44 }}>
             New need
           </LinkButton>
-        }
+        ) : undefined}
       />
       <Stack component="form" direction={{ xs: "column", sm: "row" }} spacing={1} method="get" sx={{ mb: 2 }}>
         <TextField select name="team" label="Team" defaultValue={filters.team ?? ""} sx={{ minWidth: 180 }}>

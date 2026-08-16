@@ -120,6 +120,10 @@ vi.mock("@/lib/auth/session", () => mockAuth);
 vi.mock("@/lib/db/prisma", () => ({ prisma: mockPrisma }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/services/gear-ledger", () => ({ recordGearActivity, recordGearInventoryMovement }));
+vi.mock("@/lib/services/gear-outbox", () => ({
+  queueGearOutboxForLeagueAdmins: vi.fn(),
+  queueGearOutboxForRecipients: vi.fn(),
+}));
 vi.mock("@/lib/services/gear-transaction", () => ({
   GearConflictError: class GearConflictError extends Error {},
   gearTransactionOptions: {},

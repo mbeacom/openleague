@@ -1,6 +1,7 @@
 import { NotificationOutboxStatus, type NotificationOutbox } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { sendGearNotificationEmail } from "@/lib/email/templates";
+import { notificationService } from "@/lib/services/notification";
 
 export const GEAR_OUTBOX_BATCH_SIZE = 50;
 export const GEAR_OUTBOX_MAX_ATTEMPTS = 5;
@@ -17,6 +18,17 @@ export type GearOutboxRunResult = {
 
 function retryDelayMs(attempts: number): number {
   return Math.min(60 * 60 * 1_000, 60 * 1_000 * 2 ** Math.max(0, attempts - 1));
+}
+
+function priorityForGearEvent(eventType: string): "NORMAL" | "HIGH" {
+  return eventType === "gear.reservation.overdue" ? "HIGH" : "NORMAL";
+}
+
+function digestCopy(eventType: string): { subject: string; content: string } {
+  if (eventType === "gear.reservation.due_soon") {
+    return { subject: "Gear return due soon", content: "Association gear in your team's custody is due soon." };
+  }
+  return { subject: "Association gear update", content: "There is an update in your association gear workspace." };
 }
 
 function sanitizeFailure(error: unknown): string {
@@ -96,9 +108,10 @@ async function recipientFor(row: NotificationOutbox): Promise<{
   email: string;
   name: string | null;
   shouldSend: boolean;
+  batchDelivery: boolean;
 }> {
   if (row.recipientEmail) {
-    return { email: row.recipientEmail, name: null, shouldSend: true };
+    return { email: row.recipientEmail, name: null, shouldSend: true, batchDelivery: false };
   }
   if (!row.recipientUserId) {
     throw new Error("Outbox recipient is missing");
@@ -113,20 +126,18 @@ async function recipientFor(row: NotificationOutbox): Promise<{
   });
   if (!user) throw new Error("Outbox recipient is unavailable");
 
-  const preferences = await prisma.notificationPreference.findMany({
-    where: {
-      userId: row.recipientUserId,
-      OR: [{ leagueId: row.leagueId }, { leagueId: null }],
-    },
-    select: { leagueId: true, emailEnabled: true, gearNotifications: true },
-  });
-  const scoped = preferences.find((preference) => preference.leagueId === row.leagueId);
-  const global = preferences.find((preference) => preference.leagueId === null);
-  const preference = scoped ?? global;
+  const resolution = await notificationService.resolveNotificationPreferences(
+    row.recipientUserId,
+    row.leagueId,
+  );
+  const priority = priorityForGearEvent(row.eventType);
   return {
     email: user.email,
     name: user.name,
-    shouldSend: preference ? preference.emailEnabled && preference.gearNotifications : true,
+    shouldSend: resolution.emailEnabled
+      && resolution.gearNotifications
+      && (!resolution.urgentOnly || priority === "HIGH"),
+    batchDelivery: resolution.batchDelivery && priority !== "HIGH",
   };
 }
 
@@ -183,6 +194,19 @@ export async function processGearOutbox(limit = GEAR_OUTBOX_BATCH_SIZE): Promise
       if (!recipient.shouldSend) {
         await markSent(row, new Date(), true);
         result.suppressed += 1;
+        continue;
+      }
+      if (recipient.batchDelivery && row.recipientUserId) {
+        const copy = digestCopy(row.eventType);
+        await notificationService.queueDigestNotification(
+          row.recipientUserId,
+          row.leagueId,
+          copy.subject,
+          copy.content,
+          priorityForGearEvent(row.eventType),
+        );
+        await markSent(row, new Date());
+        result.sent += 1;
         continue;
       }
       await sendGearNotificationEmail({

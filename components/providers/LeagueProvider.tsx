@@ -200,6 +200,21 @@ export const LeagueProvider: React.FC<LeagueProviderProps> = ({
         } else if (segments[3]) {
           breadcrumbs.push({ label: 'Team Details' });
         }
+      } else if (pageSegment === 'gear') {
+        const gearHref = `/league/${currentLeague.id}/gear`;
+        if (segments.length === 3) {
+          breadcrumbs.push({ label: 'Gear' });
+        } else {
+          breadcrumbs.push({ label: 'Gear', href: gearHref });
+          const workspace = segments[3];
+          const workspaceLabel = SUBPAGE_LABELS[workspace] ?? 'Details';
+          if (segments.length === 4) {
+            breadcrumbs.push({ label: workspaceLabel });
+          } else {
+            breadcrumbs.push({ label: workspaceLabel, href: `${gearHref}/${workspace}` });
+            breadcrumbs.push({ label: SUBPAGE_LABELS[segments[4]] ?? 'Details' });
+          }
+        }
       } else if (LEAGUE_SECTION_LABELS[pageSegment]) {
         pushSectionCrumbs(
           breadcrumbs,

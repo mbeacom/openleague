@@ -4,6 +4,7 @@ import { queueGearOutbox } from "@/lib/services/gear-outbox";
 const event = {
   leagueId: "cllllllllllllllllllllllll",
   eventType: "gear.reservation.approved",
+  occurrenceKey: "v2",
   aggregateType: "RESERVATION",
   aggregateId: "crrrrrrrrrrrrrrrrrrrrrrrr",
   payload: { reservationId: "crrrrrrrrrrrrrrrrrrrrrrrr" },
@@ -23,12 +24,12 @@ describe("gear outbox enqueue", () => {
         expect.objectContaining({
           recipientUserId: "cuuuuuuuuuuuuuuuuuuuuuuuu",
           recipientEmail: null,
-          dedupeKey: "gear.reservation.approved:crrrrrrrrrrrrrrrrrrrrrrrr:cuuuuuuuuuuuuuuuuuuuuuuuu",
+          dedupeKey: "gear.reservation.approved:crrrrrrrrrrrrrrrrrrrrrrrr:v2:cuuuuuuuuuuuuuuuuuuuuuuuu",
         }),
         expect.objectContaining({
           recipientUserId: null,
           recipientEmail: "donor@example.com",
-          dedupeKey: "gear.reservation.approved:crrrrrrrrrrrrrrrrrrrrrrrr:donor@example.com",
+          dedupeKey: "gear.reservation.approved:crrrrrrrrrrrrrrrrrrrrrrrr:v2:donor@example.com",
         }),
       ],
       skipDuplicates: true,

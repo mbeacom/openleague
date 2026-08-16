@@ -8,7 +8,7 @@ function utcDay(date: Date): Date {
 }
 
 /**
- * Materializes reminder rows, not email sends. The date in aggregateId makes
+ * Materializes reminder rows, not email sends. The date in occurrenceKey makes
  * repeat cron invocations idempotent while allowing one overdue reminder per
  * calendar day until a reservation is returned.
  */
@@ -20,16 +20,22 @@ export async function queueGearCustodyReminders(now = new Date()): Promise<GearR
     prisma.gearReservation.findMany({
       where: {
         status: "FULFILLED",
-        requestedEndDate: { gte: today, lte: dueSoonEnd },
+        OR: [
+          { approvedEndDate: { gte: today, lte: dueSoonEnd } },
+          { approvedEndDate: null, requestedEndDate: { gte: today, lte: dueSoonEnd } },
+        ],
       },
-      select: { id: true, leagueId: true, teamId: true, requestedById: true, requestedEndDate: true },
+      select: { id: true, leagueId: true, teamId: true, requestedById: true, requestedEndDate: true, approvedEndDate: true },
     }),
     prisma.gearReservation.findMany({
       where: {
         status: "FULFILLED",
-        requestedEndDate: { lt: today },
+        OR: [
+          { approvedEndDate: { lt: today } },
+          { approvedEndDate: null, requestedEndDate: { lt: today } },
+        ],
       },
-      select: { id: true, leagueId: true, teamId: true, requestedById: true, requestedEndDate: true },
+      select: { id: true, leagueId: true, teamId: true, requestedById: true, requestedEndDate: true, approvedEndDate: true },
     }),
   ]);
 
@@ -39,15 +45,17 @@ export async function queueGearCustodyReminders(now = new Date()): Promise<GearR
         where: { teamId: reservation.teamId, role: "ADMIN" },
         select: { userId: true },
       });
-      const isOverdue = reservation.requestedEndDate < today;
+      const dueDate = reservation.approvedEndDate ?? reservation.requestedEndDate;
+      const isOverdue = dueDate < today;
       const eventType = isOverdue ? "gear.reservation.overdue" : "gear.reservation.due_soon";
-      const reminderDay = isOverdue ? today : reservation.requestedEndDate;
+      const reminderDay = isOverdue ? today : dueDate;
       await queueGearOutboxForRecipients(tx, {
         leagueId: reservation.leagueId,
         eventType,
         aggregateType: "RESERVATION",
-        aggregateId: `${reservation.id}:${reminderDay.toISOString().slice(0, 10)}`,
-        payload: { reservationId: reservation.id, dueDate: reservation.requestedEndDate.toISOString().slice(0, 10) },
+        aggregateId: reservation.id,
+        occurrenceKey: `${eventType}:${reminderDay.toISOString().slice(0, 10)}`,
+        payload: { reservationId: reservation.id, dueDate: dueDate.toISOString().slice(0, 10) },
       }, [
         ...teamAdmins.map((membership) => membership.userId),
         ...(reservation.requestedById ? [reservation.requestedById] : []),

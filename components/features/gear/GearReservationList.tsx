@@ -33,7 +33,7 @@ export function GearReservationList({ data }: { data: GearReservationContext }) 
                   <Chip size="small" label={reservation.status.replace("_", " ")} color={statusColor[reservation.status]} />
                 </Stack>
                 <Typography variant="body2">
-                  {reservation.requestedStartDate.slice(0, 10)} to {reservation.requestedEndDate.slice(0, 10)}
+                  {(reservation.approvedStartDate ?? reservation.requestedStartDate).slice(0, 10)} to {(reservation.approvedEndDate ?? reservation.requestedEndDate).slice(0, 10)}
                 </Typography>
                 <Typography variant="body2">Custodian: {reservation.custodianName}</Typography>
                 {(reservation.overdue || reservation.reallocationWarning) && (
@@ -63,7 +63,11 @@ export function GearReservationList({ data }: { data: GearReservationContext }) 
           {data.reservations.map((reservation) => (
             <TableRow key={reservation.id}>
               <TableCell>{reservation.teamName}</TableCell>
-              <TableCell>{reservation.requestedStartDate.slice(0, 10)} to {reservation.requestedEndDate.slice(0, 10)}</TableCell>
+              <TableCell>
+                {(reservation.approvedStartDate ?? reservation.requestedStartDate).slice(0, 10)}
+                {" to "}
+                {(reservation.approvedEndDate ?? reservation.requestedEndDate).slice(0, 10)}
+              </TableCell>
               <TableCell>
                 <Stack direction="row" spacing={1} alignItems="center">
                   <Chip size="small" label={reservation.status.replace("_", " ")} color={statusColor[reservation.status]} />

@@ -118,6 +118,15 @@ describe('LeagueProvider getBreadcrumbs', () => {
       );
     });
 
+    it.each([
+      ['/league/l1/gear/needs/new', 'League One > Gear > Needs > New'],
+      ['/league/l1/gear/reservations/reservation-1', 'League One > Gear > Reservations > Details'],
+    ])('keeps the gear workflow hierarchy for %s', (pathname, expected) => {
+      mocks.pathname.mockReturnValue(pathname);
+      renderCrumbs(leagueData);
+      expect(screen.getByTestId('crumbs')).toHaveTextContent(expected);
+    });
+
     it('covers global pages while in league mode', () => {
       mocks.pathname.mockReturnValue('/seasons');
       renderCrumbs(leagueData);

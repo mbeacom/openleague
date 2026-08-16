@@ -29,7 +29,7 @@ import {
   updateNotificationPreferences,
   getAllNotificationPreferences,
 } from "@/lib/actions/notifications";
-import type { NotificationPreferences } from "@/lib/services/notification";
+import type { NotificationPreferences, ResolvedNotificationPreferences } from "@/lib/services/notification";
 
 interface NotificationPreferencesProps {
   leagueId?: string;
@@ -43,13 +43,13 @@ export const NotificationPreferencesComponent: React.FC<NotificationPreferencesP
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [preferences, setPreferences] = useState<NotificationPreferences | null>(null);
+  const [preferences, setPreferences] = useState<ResolvedNotificationPreferences | null>(null);
   const [allPreferences, setAllPreferences] = useState<{
-    global: NotificationPreferences;
+    global: ResolvedNotificationPreferences;
     leagues: Array<{
       leagueId: string;
       leagueName: string;
-      preferences: NotificationPreferences;
+      preferences: ResolvedNotificationPreferences;
     }>;
   } | null>(null);
 
@@ -161,7 +161,17 @@ export const NotificationPreferencesComponent: React.FC<NotificationPreferencesP
             <NotificationsIcon color="primary" />
             <Typography variant="h6" sx={{ fontWeight: 700 }}>{title}</Typography>
             {leagueContext && (
-              <Chip label={leagueContext.leagueName} size="small" variant="outlined" />
+              <>
+                <Chip label={leagueContext.leagueName} size="small" variant="outlined" />
+                {"source" in prefs && prefs.source !== "LEAGUE" && (
+                  <Chip
+                    label={prefs.source === "GLOBAL" ? "Using global preference" : "Using defaults"}
+                    size="small"
+                    color="info"
+                    variant="outlined"
+                  />
+                )}
+              </>
             )}
           </Box>
         }

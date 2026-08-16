@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { sendLeagueMessageEmail } from "@/lib/email/templates";
 import { randomBytes } from "crypto";
@@ -15,49 +16,74 @@ export interface NotificationPreferences {
   batchDelivery: boolean;
 }
 
+export type NotificationPreferenceSource = "LEAGUE" | "GLOBAL" | "DEFAULT";
+
+export interface ResolvedNotificationPreferences extends NotificationPreferences {
+  source: NotificationPreferenceSource;
+  hasLeagueOverride: boolean;
+}
+
+const defaultNotificationPreferences: NotificationPreferences = {
+  leagueMessages: true,
+  leagueAnnouncements: true,
+  eventNotifications: true,
+  rsvpReminders: true,
+  teamInvitations: true,
+  practicePlanNotifications: true,
+  gearNotifications: true,
+  emailEnabled: true,
+  urgentOnly: false,
+  batchDelivery: false,
+};
+
+function toNotificationPreferences(preferences: NotificationPreferences): NotificationPreferences {
+  return {
+    leagueMessages: preferences.leagueMessages,
+    leagueAnnouncements: preferences.leagueAnnouncements,
+    eventNotifications: preferences.eventNotifications,
+    rsvpReminders: preferences.rsvpReminders,
+    teamInvitations: preferences.teamInvitations,
+    practicePlanNotifications: preferences.practicePlanNotifications,
+    gearNotifications: preferences.gearNotifications,
+    emailEnabled: preferences.emailEnabled,
+    urgentOnly: preferences.urgentOnly,
+    batchDelivery: preferences.batchDelivery,
+  };
+}
+
 export class NotificationService {
   /**
-   * Get or create notification preferences for a user in a league
+   * League rows override a global row. If neither exists, defaults are used.
+   * This is the single resolver used by delivery workers and account settings.
+   */
+  async resolveNotificationPreferences(
+    userId: string,
+    leagueId?: string,
+  ): Promise<ResolvedNotificationPreferences> {
+    const rows = await prisma.notificationPreference.findMany({
+      where: leagueId === undefined
+        ? { userId, leagueId: null }
+        : { userId, OR: [{ leagueId }, { leagueId: null }] },
+    });
+    const league = leagueId === undefined ? undefined : rows.find((row) => row.leagueId === leagueId);
+    const global = rows.find((row) => row.leagueId === null);
+    if (league) {
+      return { ...toNotificationPreferences(league), source: "LEAGUE", hasLeagueOverride: true };
+    }
+    if (global) {
+      return { ...toNotificationPreferences(global), source: "GLOBAL", hasLeagueOverride: false };
+    }
+    return { ...defaultNotificationPreferences, source: "DEFAULT", hasLeagueOverride: false };
+  }
+
+  /**
+   * Returns the effective preferences without creating a synthetic override.
    */
   async getNotificationPreferences(
     userId: string,
     leagueId?: string
   ): Promise<NotificationPreferences> {
-    const preferences = await prisma.notificationPreference.findFirst({
-      where: {
-        userId,
-        leagueId: leagueId ?? null,
-      },
-    });
-
-    if (preferences) {
-      return {
-        leagueMessages: preferences.leagueMessages,
-        leagueAnnouncements: preferences.leagueAnnouncements,
-        eventNotifications: preferences.eventNotifications,
-        rsvpReminders: preferences.rsvpReminders,
-        teamInvitations: preferences.teamInvitations,
-        practicePlanNotifications: preferences.practicePlanNotifications,
-        gearNotifications: preferences.gearNotifications,
-        emailEnabled: preferences.emailEnabled,
-        urgentOnly: preferences.urgentOnly,
-        batchDelivery: preferences.batchDelivery,
-      };
-    }
-
-    // Return default preferences if none exist
-    return {
-      leagueMessages: true,
-      leagueAnnouncements: true,
-      eventNotifications: true,
-      rsvpReminders: true,
-      teamInvitations: true,
-      practicePlanNotifications: true,
-      gearNotifications: true,
-      emailEnabled: true,
-      urgentOnly: false,
-      batchDelivery: false,
-    };
+    return await this.resolveNotificationPreferences(userId, leagueId);
   }
 
   /**
@@ -111,21 +137,28 @@ export class NotificationService {
     });
 
     if (existing) {
-      await prisma.notificationPreference.update({
-        where: { id: existing.id },
-        data,
-      });
+      await prisma.notificationPreference.update({ where: { id: existing.id }, data });
       return;
     }
 
-    await prisma.notificationPreference.create({
-      data: {
-        ...data,
-        userId,
-        leagueId: null,
-        unsubscribeToken: data.unsubscribeToken ?? randomBytes(32).toString("hex"),
-      },
-    });
+    try {
+      await prisma.notificationPreference.create({
+        data: {
+          ...data,
+          userId,
+          leagueId: null,
+          unsubscribeToken: data.unsubscribeToken ?? randomBytes(32).toString("hex"),
+        },
+      });
+    } catch (error) {
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
+      const concurrent = await prisma.notificationPreference.findFirst({
+        where: { userId, leagueId: null },
+        select: { id: true },
+      });
+      if (!concurrent) throw error;
+      await prisma.notificationPreference.update({ where: { id: concurrent.id }, data });
+    }
   }
 
   /**
@@ -187,6 +220,17 @@ export class NotificationService {
 
     // Add to batch for non-urgent messages
     await this.addToBatch(userId, subject, content, priority, leagueId, messageId);
+  }
+
+  /** Adds an already-durable domain notification to the existing daily digest. */
+  async queueDigestNotification(
+    userId: string,
+    leagueId: string,
+    subject: string,
+    content: string,
+    priority: "LOW" | "NORMAL" | "HIGH" | "URGENT",
+  ): Promise<void> {
+    await this.addToBatch(userId, subject, content, priority, leagueId);
   }
 
   /**
