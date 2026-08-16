@@ -24,11 +24,14 @@ const row = {
   id: "coutboxxxxxxxxxxxxxxxxxxxx",
   leagueId: "cllllllllllllllllllllllll",
   recipientUserId: "cuuuuuuuuuuuuuuuuuuuuuuuu",
-  recipientEmail: null,
+  recipientEmail: "member@example.com",
   eventType: "gear.reservation.approved",
   aggregateType: "RESERVATION",
   aggregateId: "crrrrrrrrrrrrrrrrrrrrrrrr",
-  payload: { reservationId: "crrrrrrrrrrrrrrrrrrrrrrrr" },
+  payload: {
+    kind: "GEAR_RESERVATION",
+    data: { reservationId: "crrrrrrrrrrrrrrrrrrrrrrrr" },
+  },
   dedupeKey: "gear.reservation.approved:crrrrrrrrrrrrrrrrrrrrrrrr:cuuuuuuuuuuuuuuuuuuuuuuuu",
   status: "PROCESSING",
   attempts: 1,
@@ -85,6 +88,33 @@ describe("gear outbox worker", () => {
     await expect(processGearOutbox(1)).resolves.toMatchObject({ claimed: 1, retried: 1, sent: 0 });
     expect(mockPrisma.notificationOutbox.updateMany).toHaveBeenLastCalledWith(expect.objectContaining({
       data: expect.objectContaining({ status: "PENDING", lockedAt: null, lastError: "SMTP failed for [redacted]" }),
+    }));
+  });
+
+  it("applies user notification preferences while delivering to the captured email address", async () => {
+    mockPrisma.notificationOutbox.updateMany.mockResolvedValue({ count: 1 });
+    mockPrisma.notificationOutbox.findMany.mockResolvedValue([{ id: row.id }]);
+    mockPrisma.notificationOutbox.findUnique.mockResolvedValue(row);
+    mockPrisma.user.findUnique.mockResolvedValue({ email: "new-address@example.com", name: "Member" });
+    mockPrisma.notificationPreference.findMany.mockResolvedValue([{
+      leagueId: null,
+      leagueMessages: true,
+      leagueAnnouncements: true,
+      eventNotifications: true,
+      rsvpReminders: true,
+      teamInvitations: true,
+      practicePlanNotifications: true,
+      gearNotifications: false,
+      emailEnabled: true,
+      urgentOnly: false,
+      batchDelivery: false,
+    }]);
+
+    await expect(processGearOutbox(1)).resolves.toMatchObject({ claimed: 1, suppressed: 1, sent: 0 });
+
+    expect(mockSendGearNotificationEmail).not.toHaveBeenCalled();
+    expect(mockPrisma.notificationOutbox.updateMany).toHaveBeenLastCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: "SENT", lastError: "suppressed by notification preference" }),
     }));
   });
 });

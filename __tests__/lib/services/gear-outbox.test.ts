@@ -7,23 +7,30 @@ const event = {
   occurrenceKey: "v2",
   aggregateType: "RESERVATION",
   aggregateId: "crrrrrrrrrrrrrrrrrrrrrrrr",
-  payload: { reservationId: "crrrrrrrrrrrrrrrrrrrrrrrr" },
+  payload: {
+    kind: "GEAR_RESERVATION",
+    data: { reservationId: "crrrrrrrrrrrrrrrrrrrrrrrr" },
+  },
 } as const;
 
 describe("gear outbox enqueue", () => {
-  it("writes one transaction-bound row per unique XOR recipient with stable dedupe keys", async () => {
+  it("writes one transaction-bound row per unique captured recipient with stable dedupe keys", async () => {
     const createMany = vi.fn().mockResolvedValue({ count: 2 });
     await queueGearOutbox(
       { notificationOutbox: { createMany } } as never,
       event,
-      [{ userId: "cuuuuuuuuuuuuuuuuuuuuuuuu" }, { email: "Donor@Example.com" }, { email: "donor@example.com" }],
+      [
+        { userId: "cuuuuuuuuuuuuuuuuuuuuuuuu", email: "Admin@Example.com" },
+        { email: "Donor@Example.com" },
+        { email: "donor@example.com" },
+      ],
     );
 
     expect(createMany).toHaveBeenCalledWith({
       data: [
         expect.objectContaining({
           recipientUserId: "cuuuuuuuuuuuuuuuuuuuuuuuu",
-          recipientEmail: null,
+          recipientEmail: "admin@example.com",
           dedupeKey: "gear.reservation.approved:crrrrrrrrrrrrrrrrrrrrrrrr:v2:cuuuuuuuuuuuuuuuuuuuuuuuu",
         }),
         expect.objectContaining({

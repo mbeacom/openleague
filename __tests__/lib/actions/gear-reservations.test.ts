@@ -6,6 +6,7 @@ const { mockAuth, mockTx, mockPrisma, recordGearActivity, recordGearInventoryMov
     gearAllocation: { findFirst: vi.fn(), updateMany: vi.fn(), count: vi.fn() },
     gearReservationLine: { updateMany: vi.fn() },
     gearUnit: { findFirst: vi.fn(), updateMany: vi.fn() },
+    teamMember: { findMany: vi.fn() },
     gearCatalogItem: { findMany: vi.fn() },
     teamGearNeedLine: { findMany: vi.fn() },
     gearHandoff: { create: vi.fn() },
@@ -152,6 +153,7 @@ beforeEach(() => {
   mockTx.gearCatalogItem.findMany.mockResolvedValue([]);
   mockTx.teamGearNeedLine.findMany.mockResolvedValue([]);
   mockTx.gearHandoff.create.mockResolvedValue({ id: "chhhhhhhhhhhhhhhhhhhhhhhh" });
+  mockTx.teamMember.findMany.mockResolvedValue([]);
   mockTx.gearAllocation.count.mockResolvedValue(0);
   mockTx.gearUnit.updateMany.mockResolvedValue({ count: 1 });
   mockTx.gearUnit.findFirst.mockResolvedValue({
@@ -197,7 +199,10 @@ describe("cancelGearReservation", () => {
       data: expect.objectContaining({ status: "RELEASED", releasedQty: 2 }),
     }));
     expect(mockTx.gearUnit.updateMany).toHaveBeenCalled();
-    expect(recordGearInventoryMovement).not.toHaveBeenCalled();
+    expect(recordGearInventoryMovement).toHaveBeenCalledWith(mockTx, expect.objectContaining({
+      type: "RELEASE",
+      direction: "INCREASE",
+    }));
     expect(recordGearActivity).toHaveBeenCalledWith(mockTx, expect.objectContaining({
       entityType: "ALLOCATION", entityId: ALLOCATION_ID,
     }));

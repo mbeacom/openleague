@@ -55,7 +55,10 @@ export async function queueGearCustodyReminders(now = new Date()): Promise<GearR
         aggregateType: "RESERVATION",
         aggregateId: reservation.id,
         occurrenceKey: `${eventType}:${reminderDay.toISOString().slice(0, 10)}`,
-        payload: { reservationId: reservation.id, dueDate: dueDate.toISOString().slice(0, 10) },
+        payload: {
+          kind: "GEAR_RESERVATION",
+          data: { reservationId: reservation.id, dueDate: dueDate.toISOString().slice(0, 10) },
+        },
       }, [
         ...teamAdmins.map((membership) => membership.userId),
         ...(reservation.requestedById ? [reservation.requestedById] : []),

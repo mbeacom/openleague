@@ -1,5 +1,6 @@
 "use server";
 
+import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -7,6 +8,7 @@ import { requireLeagueRole } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
 import { recordGearActivity, recordGearInventoryMovement } from "@/lib/services/gear-ledger";
 import { queueGearOutboxForEmail, queueGearOutboxForLeagueAdmins } from "@/lib/services/gear-outbox";
+import { redactTerminalGearPledgePii } from "@/lib/services/gear-pledge-retention";
 import {
   GearConflictError,
   gearTransactionOptions,
@@ -19,7 +21,11 @@ import {
   rateLimitMessage,
 } from "@/lib/utils/durable-rate-limit";
 import { normalizeGearAssetTag } from "@/lib/utils/gear";
-import { createGearPledgeSchema, receiveGearPledgeSchema } from "@/lib/utils/validation";
+import {
+  correctGearPledgeReceiptSchema,
+  createGearPledgeSchema,
+  receiveGearPledgeSchema,
+} from "@/lib/utils/validation";
 import type { ActionResult } from "@/lib/actions/gear-inventory";
 
 const gearId = z.string().cuid("Invalid gear identifier");
@@ -30,6 +36,22 @@ const pledgeCommandSchema = z.object({
 });
 
 type Tx = Prisma.TransactionClient;
+
+function receiptPayloadHash(input: ReturnType<typeof receiveGearPledgeSchema.parse>): string {
+  const payload = {
+    leagueId: input.leagueId,
+    pledgeId: input.pledgeId,
+    expectedVersion: input.expectedVersion,
+    poolStockId: input.poolStockId ?? null,
+    catalogItemId: input.catalogItemId ?? null,
+    locationId: input.locationId ?? null,
+    condition: input.condition ?? null,
+    quantity: input.quantity,
+    notes: input.notes ?? null,
+    assetTags: (input.assetTags ?? []).map(normalizeGearAssetTag).sort(),
+  };
+  return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
+}
 
 function wishlistPath(leagueId: string) {
   return `/league/${leagueId}/gear/wishlist`;
@@ -74,7 +96,7 @@ export async function createGearPledge(
     // same generic response, even when they omit consent or other fields.
     if (typeof input === "object" && input !== null && "website" in input
       && typeof input.website === "string" && input.website.trim()) {
-      return { success: true, data: { id: null, status: "PLEDGED" } };
+      return { success: false, error: "Unable to submit the pledge. Please try again." };
     }
     const validated = createGearPledgeSchema.parse(input);
     if (!validated.contactConsent) invalid("Contact consent is required to submit a pledge.");
@@ -87,11 +109,12 @@ export async function createGearPledge(
     if (existing) return { success: true, data: existing };
 
     const ip = await getClientIp();
-    if (ip) {
-      const rateLimit = await checkRateLimit(`gear-pledge:ip:${ip}`, RATE_LIMITS.GEAR_PLEDGE_PER_IP);
-      if (!rateLimit.allowed) {
-        return { success: false, error: rateLimitMessage(rateLimit.retryAfterSec) };
-      }
+    if (!ip) {
+      return { success: false, error: "Unable to submit the pledge. Please try again." };
+    }
+    const rateLimit = await checkRateLimit(`gear-pledge:ip:${ip}`, RATE_LIMITS.GEAR_PLEDGE_PER_IP);
+    if (!rateLimit.allowed) {
+      return { success: false, error: rateLimitMessage(rateLimit.retryAfterSec) };
     }
 
     const pledge = await withGearSerializableRetry(() => prisma.$transaction(async (tx) => {
@@ -113,6 +136,15 @@ export async function createGearPledge(
         select: { id: true, status: true },
       });
       if (duplicate) return duplicate;
+      const remaining = item.targetQty - item.pledgedQty;
+      if (validated.quantity > remaining) {
+        // Retain the transactional row lock even for a rejected over-pledge.
+        await tx.gearWishlistItem.update({
+          where: { id: item.id },
+          data: { pledgedQty: { increment: 0 } },
+        });
+        invalid("Pledge quantity exceeds the remaining wishlist target.");
+      }
 
       const created = await tx.gearPledge.create({
         data: {
@@ -138,7 +170,7 @@ export async function createGearPledge(
         entityId: created.id,
         action: "pledged",
         actorKind: "PUBLIC_DONOR",
-        details: { wishlistItemId: item.id, quantity: validated.quantity },
+        details: { metadata: { wishlistItemId: item.id, quantity: validated.quantity } },
       });
       await queueGearOutboxForLeagueAdmins(tx, {
         leagueId: item.wishlist.leagueId,
@@ -146,7 +178,7 @@ export async function createGearPledge(
         occurrenceKey: created.id,
         aggregateType: "PLEDGE",
         aggregateId: created.id,
-        payload: { pledgeId: created.id, wishlistItemId: item.id, quantity: validated.quantity },
+        payload: { kind: "GEAR_PLEDGE", data: { pledgeId: created.id, wishlistItemId: item.id, quantity: validated.quantity } },
       });
       await queueGearOutboxForEmail(tx, {
         leagueId: item.wishlist.leagueId,
@@ -154,7 +186,7 @@ export async function createGearPledge(
         occurrenceKey: created.id,
         aggregateType: "PLEDGE",
         aggregateId: created.id,
-        payload: { pledgeId: created.id, wishlistItemId: item.id, quantity: validated.quantity },
+        payload: { kind: "GEAR_PLEDGE", data: { pledgeId: created.id, wishlistItemId: item.id, quantity: validated.quantity } },
       }, validated.donorEmail || null);
       return created;
     }, gearTransactionOptions));
@@ -187,6 +219,7 @@ export async function receiveGearPledge(
 ): Promise<ActionResult<{ receiptId: string; receiptIds: string[]; pledgeStatus: string; pledgeVersion: number }>> {
   try {
     const validated = receiveGearPledgeSchema.parse(input);
+    const payloadHash = receiptPayloadHash(validated);
     const userId = await requireLeagueRole(validated.leagueId, "LEAGUE_ADMIN");
     const result = await withGearSerializableRetry(() => prisma.$transaction(async (tx) => {
       const priorCommand = await tx.gearPledgeReceiptCommand.findUnique({
@@ -198,12 +231,16 @@ export async function receiveGearPledge(
           },
         },
         select: {
+          payloadHash: true,
           resultingStatus: true,
           resultingVersion: true,
           receipts: { select: { id: true } },
         },
       });
       if (priorCommand) {
+        if (priorCommand.payloadHash !== payloadHash) {
+          invalid("This receipt operation key was already used with different details.");
+        }
         const receiptIds = priorCommand.receipts.map((receipt) => receipt.id);
         if (receiptIds.length === 0) invalid("The saved receipt command has no receipts.");
         return {
@@ -236,6 +273,7 @@ export async function receiveGearPledge(
           leagueId: validated.leagueId,
           pledgeId: pledge.id,
           idempotencyKey: validated.idempotencyKey,
+          payloadHash,
           expectedVersion: validated.expectedVersion,
           resultingVersion: pledge.version + 1,
           resultingStatus: pledgeStatus,
@@ -280,6 +318,79 @@ export async function receiveGearPledge(
         await recordGearInventoryMovement(tx, {
           leagueId: validated.leagueId,
           type: "RECEIPT",
+          direction: "INCREASE",
+          quantity: validated.quantity,
+          poolStockId: stock.id,
+          pledgeReceiptId: receipt.id,
+          afterLocationId: stock.locationId,
+          afterCondition: stock.condition,
+          recordedById: userId,
+          notes: validated.notes || null,
+        });
+      } else if (!(validated.assetTags?.length)) {
+        if (!validated.catalogItemId || !validated.locationId || !validated.condition) {
+          invalid("Pooled receipts require catalog, location, and condition.");
+        }
+        const [catalogItem, location] = await Promise.all([
+          tx.gearCatalogItem.findFirst({
+            where: {
+              id: validated.catalogItemId,
+              leagueId: validated.leagueId,
+              isActive: true,
+              trackingMode: "POOLED",
+            },
+            select: { id: true },
+          }),
+          tx.gearStorageLocation.findFirst({
+            where: { id: validated.locationId, leagueId: validated.leagueId, isActive: true },
+            select: { id: true },
+          }),
+        ]);
+        if (!catalogItem) invalid("The selected catalog item is not active for pooled inventory.");
+        if (!location) invalid("The selected storage location is not active in this league.");
+        if (pledge.wishlistItem.catalogItemId && pledge.wishlistItem.catalogItemId !== catalogItem.id) {
+          invalid("Received inventory does not match the pledged catalog item.");
+        }
+        const stock = await tx.gearPoolStock.upsert({
+          where: {
+            leagueId_catalogItemId_locationId_condition: {
+              leagueId: validated.leagueId,
+              catalogItemId: catalogItem.id,
+              locationId: location.id,
+              condition: validated.condition,
+            },
+          },
+          create: {
+            leagueId: validated.leagueId,
+            catalogItemId: catalogItem.id,
+            locationId: location.id,
+            condition: validated.condition,
+            quantityOnHand: validated.quantity,
+            version: 1,
+          },
+          update: {
+            quantityOnHand: { increment: validated.quantity },
+            version: { increment: 1 },
+          },
+          select: { id: true, locationId: true, condition: true },
+        });
+        const receipt = await tx.gearPledgeReceipt.create({
+          data: {
+            leagueId: validated.leagueId,
+            pledgeId: pledge.id,
+            receiptCommandId: command.id,
+            catalogItemId: catalogItem.id,
+            poolStockId: stock.id,
+            quantity: validated.quantity,
+            notes: validated.notes || null,
+          },
+          select: { id: true },
+        });
+        receiptIds.push(receipt.id);
+        await recordGearInventoryMovement(tx, {
+          leagueId: validated.leagueId,
+          type: "RECEIPT",
+          direction: "INCREASE",
           quantity: validated.quantity,
           poolStockId: stock.id,
           pledgeReceiptId: receipt.id,
@@ -349,6 +460,7 @@ export async function receiveGearPledge(
           await recordGearInventoryMovement(tx, {
             leagueId: validated.leagueId,
             type: "RECEIPT",
+            direction: "INCREASE",
             quantity: 1,
             gearUnitId: unit.id,
             pledgeReceiptId: receipt.id,
@@ -363,7 +475,7 @@ export async function receiveGearPledge(
             entityId: unit.id,
             action: "received_from_pledge",
             actorUserId: userId,
-            details: { pledgeId: pledge.id, receiptId: receipt.id, assetTag },
+            details: { metadata: { pledgeId: pledge.id, receiptId: receipt.id, assetTag } },
           });
         }
       }
@@ -389,11 +501,11 @@ export async function receiveGearPledge(
         entityId: pledge.id,
         action: pledgeStatus === "RECEIVED" ? "received" : "partially_received",
         actorUserId: userId,
-        details: {
-          receiptIds,
+        details: { metadata: {
+          receiptIds: receiptIds.join(","),
           quantity: validated.quantity,
           inventoryKind: validated.poolStockId ? "POOLED" : "INDIVIDUAL",
-        },
+        } },
       });
       await queueGearOutboxForLeagueAdmins(tx, {
         leagueId: validated.leagueId,
@@ -401,13 +513,13 @@ export async function receiveGearPledge(
         occurrenceKey: command.id,
         aggregateType: "PLEDGE",
         aggregateId: pledge.id,
-        payload: {
+        payload: { kind: "GEAR_PLEDGE", data: {
           pledgeId: pledge.id,
-          receiptIds,
+          receiptIds: receiptIds.join(","),
           wishlistItemId: pledge.wishlistItem.id,
           quantity: validated.quantity,
           status: pledgeStatus,
-        },
+        } },
       });
       return { receiptId: receiptIds[0], receiptIds, pledgeStatus, pledgeVersion: pledge.version + 1 };
     }, gearTransactionOptions));
@@ -428,12 +540,16 @@ export async function receiveGearPledge(
             },
           },
           select: {
+            payloadHash: true,
             resultingStatus: true,
             resultingVersion: true,
             receipts: { select: { id: true } },
           },
         });
         if (priorCommand?.receipts.length) {
+          if (priorCommand.payloadHash !== receiptPayloadHash(parsed.data)) {
+            return { success: false, error: "This receipt operation key was already used with different details." };
+          }
           const receiptIds = priorCommand.receipts.map((receipt) => receipt.id);
           return {
             success: true,
@@ -447,6 +563,174 @@ export async function receiveGearPledge(
         }
       }
     }
+    return actionError(error);
+  }
+}
+
+export async function correctGearPledgeReceipt(
+  input: unknown,
+): Promise<ActionResult<{ receiptId: string; pledgeStatus: string; pledgeVersion: number }>> {
+  try {
+    const validated = correctGearPledgeReceiptSchema.parse(input);
+    const userId = await requireLeagueRole(validated.leagueId, "LEAGUE_ADMIN");
+    const result = await withGearSerializableRetry(() => prisma.$transaction(async (tx) => {
+      const receipt = await tx.gearPledgeReceipt.findFirst({
+        where: {
+          id: validated.receiptId,
+          leagueId: validated.leagueId,
+          pledgeId: validated.pledgeId,
+        },
+        include: {
+          correction: { select: { id: true } },
+          pledge: {
+            select: {
+              id: true,
+              status: true,
+              version: true,
+              wishlistItem: { select: { id: true, receivedQty: true } },
+            },
+          },
+        },
+      });
+      if (!receipt) invalid("Receipt not found for this pledge.");
+      if (receipt.correction) invalid("This receipt has already been corrected.");
+      if (receipt.quantity <= 0) invalid("Only original receipt entries can be corrected.");
+      if (receipt.pledge.version !== validated.expectedVersion) throw new GearConflictError();
+
+      if (receipt.poolStockId) {
+        const stockUpdate = await tx.gearPoolStock.updateMany({
+          where: {
+            id: receipt.poolStockId,
+            leagueId: validated.leagueId,
+            quantityOnHand: { gte: receipt.quantity },
+          },
+          data: { quantityOnHand: { decrement: receipt.quantity }, version: { increment: 1 } },
+        });
+        if (stockUpdate.count !== 1) {
+          throw new GearConflictError("Inventory changed before this receipt correction could be recorded.");
+        }
+      } else if (receipt.gearUnitId) {
+        const unitUpdate = await tx.gearUnit.updateMany({
+          where: { id: receipt.gearUnitId, leagueId: validated.leagueId, status: "AVAILABLE" },
+          data: { status: "RETIRED", retiredAt: new Date(), version: { increment: 1 } },
+        });
+        if (unitUpdate.count !== 1) {
+          throw new GearConflictError("The received tagged unit can no longer be corrected.");
+        }
+      } else {
+        invalid("Receipt has no inventory record to correct.");
+      }
+
+      const correction = await tx.gearPledgeReceipt.create({
+        data: {
+          leagueId: validated.leagueId,
+          pledgeId: receipt.pledgeId,
+          catalogItemId: receipt.catalogItemId,
+          poolStockId: receipt.poolStockId,
+          gearUnitId: receipt.gearUnitId,
+          correctionOfReceiptId: receipt.id,
+          correctionReason: validated.reason,
+          quantity: -receipt.quantity,
+          notes: "Receipt correction",
+        },
+        select: { id: true },
+      });
+      await recordGearInventoryMovement(tx, {
+        leagueId: validated.leagueId,
+        type: "ADJUSTMENT",
+        direction: "DECREASE",
+        quantity: receipt.quantity,
+        poolStockId: receipt.poolStockId,
+        gearUnitId: receipt.gearUnitId,
+        pledgeReceiptId: correction.id,
+        recordedById: userId,
+        notes: validated.reason,
+      });
+      const pledgeStatus = "PLEDGED";
+      const pledgeUpdate = await tx.gearPledge.updateMany({
+        where: {
+          id: validated.pledgeId,
+          leagueId: validated.leagueId,
+          version: receipt.pledge.version,
+        },
+        data: {
+          status: pledgeStatus,
+          receivedAt: null,
+          version: { increment: 1 },
+        },
+      });
+      if (pledgeUpdate.count !== 1) throw new GearConflictError();
+      await tx.gearWishlistItem.update({
+        where: { id: receipt.pledge.wishlistItem.id },
+        data: {
+          pledgedQty: { increment: receipt.quantity },
+          receivedQty: { decrement: receipt.quantity },
+        },
+      });
+      await recordGearActivity(tx, {
+        leagueId: validated.leagueId,
+        entityType: "PLEDGE",
+        entityId: validated.pledgeId,
+        action: "receipt_corrected",
+        actorUserId: userId,
+        details: { metadata: { receiptId: receipt.id, correctionReceiptId: correction.id, quantity: receipt.quantity } },
+      });
+      await queueGearOutboxForLeagueAdmins(tx, {
+        leagueId: validated.leagueId,
+        eventType: "gear.pledge.receipt_corrected",
+        occurrenceKey: correction.id,
+        aggregateType: "PLEDGE",
+        aggregateId: validated.pledgeId,
+        payload: {
+          kind: "GEAR_PLEDGE",
+          data: { pledgeId: validated.pledgeId, receiptId: receipt.id, quantity: receipt.quantity, status: pledgeStatus },
+        },
+      });
+      return {
+        receiptId: correction.id,
+        pledgeStatus,
+        pledgeVersion: receipt.pledge.version + 1,
+      };
+    }, gearTransactionOptions));
+    revalidatePath(wishlistPath(validated.leagueId));
+    revalidatePath(`/league/${validated.leagueId}/gear`);
+    return { success: true, data: result };
+  } catch (error) {
+    return actionError(error);
+  }
+}
+
+export async function redactGearPledgePii(
+  input: unknown,
+): Promise<ActionResult<{ id: string; version: number }>> {
+  try {
+    const validated = pledgeCommandSchema.parse(input);
+    const userId = await requireLeagueRole(validated.leagueId, "LEAGUE_ADMIN");
+    const result = await prisma.$transaction(async (tx) => {
+      const pledge = await tx.gearPledge.findFirst({
+        where: { id: validated.pledgeId, leagueId: validated.leagueId },
+        select: {
+          id: true,
+          leagueId: true,
+          wishlistItemId: true,
+          status: true,
+          version: true,
+          piiRedactionStatus: true,
+        },
+      });
+      if (!pledge) invalid("Pledge not found in this league.");
+      if (!["RECEIVED", "DECLINED", "CANCELED", "EXPIRED"].includes(pledge.status)) {
+        invalid("Only terminal pledges can have contact data redacted.");
+      }
+      if (pledge.version !== validated.expectedVersion) throw new GearConflictError();
+      return redactTerminalGearPledgePii(tx, {
+        ...pledge,
+        status: pledge.status as "RECEIVED" | "DECLINED" | "CANCELED" | "EXPIRED",
+      }, userId);
+    }, gearTransactionOptions);
+    revalidatePath(wishlistPath(validated.leagueId));
+    return { success: true, data: result };
+  } catch (error) {
     return actionError(error);
   }
 }
@@ -488,7 +772,7 @@ async function transitionPledge(
         entityId: pledge.id,
         action: target.toLowerCase(),
         actorUserId: userId,
-        details: { wishlistItemId: pledge.wishlistItemId, outstandingQty },
+        details: { metadata: { wishlistItemId: pledge.wishlistItemId, outstandingQty } },
       });
       await queueGearOutboxForLeagueAdmins(tx, {
         leagueId: validated.leagueId,
@@ -496,7 +780,7 @@ async function transitionPledge(
         occurrenceKey: `v${pledge.version + 1}`,
         aggregateType: "PLEDGE",
         aggregateId: pledge.id,
-        payload: { pledgeId: pledge.id, wishlistItemId: pledge.wishlistItemId, status: target },
+        payload: { kind: "GEAR_PLEDGE", data: { pledgeId: pledge.id, wishlistItemId: pledge.wishlistItemId, status: target } },
       });
       return { id: pledge.id, status: target, version: pledge.version + 1 };
     }, gearTransactionOptions));
@@ -530,7 +814,7 @@ export type GearPledgeAdminContext = Array<{
   id: string;
   version: number;
   wishlistItemId: string;
-  donorName: string;
+  donorName: string | null;
   donorEmail: string | null;
   donorPhone: string | null;
   contactConsentAt: string | null;
@@ -557,7 +841,8 @@ export async function getGearPledgeAdminContext(leagueId: string): Promise<GearP
     where: { leagueId },
     select: {
       id: true, version: true, wishlistItemId: true, donorName: true, donorEmail: true, donorPhone: true, contactConsentAt: true,
-      status: true, quantity: true, note: true, expiresAt: true, receivedAt: true, createdAt: true,
+      status: true, quantity: true, note: true, expiresAt: true, receivedAt: true,
+      piiRedactionStatus: true, createdAt: true,
       wishlistItem: { select: { nameSnapshot: true, categorySnapshot: true, sizeSnapshot: true } },
       receipts: {
         select: { id: true, quantity: true, receivedAt: true, notes: true, poolStockId: true, gearUnitId: true },
@@ -568,6 +853,13 @@ export async function getGearPledgeAdminContext(leagueId: string): Promise<GearP
   });
   return pledges.map((pledge) => ({
     ...pledge,
+    ...(pledge.piiRedactionStatus === "REDACTED" ? {
+      donorName: null,
+      donorEmail: null,
+      donorPhone: null,
+      contactConsentAt: null,
+      note: null,
+    } : {}),
     contactConsentAt: pledge.contactConsentAt?.toISOString() ?? null,
     expiresAt: pledge.expiresAt?.toISOString() ?? null,
     receivedAt: pledge.receivedAt?.toISOString() ?? null,

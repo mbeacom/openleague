@@ -355,9 +355,10 @@ export async function createGearReservation(
               .filter((catalogItemId): catalogItemId is string => Boolean(catalogItemId)),
           },
         },
-        select: { id: true },
+        select: { id: true, name: true },
       });
-      const itemIds = new Set(items.map((item) => item.id));
+      const itemById = new Map(items.map((item) => [item.id, item]));
+      const itemIds = new Set(itemById.keys());
       if (validated.lines.some((line) => line.catalogItemId && !itemIds.has(line.catalogItemId))) {
         invalid("A requested catalog item is not available in this league.");
       }
@@ -378,7 +379,10 @@ export async function createGearReservation(
       }
       const trustedLines = validated.lines.map((line) => {
         const needLine = line.needLineId ? needLineById.get(line.needLineId) : undefined;
-        if (!needLine) return line;
+        if (!needLine) {
+          const catalogItem = line.catalogItemId ? itemById.get(line.catalogItemId) : undefined;
+          return catalogItem ? { ...line, nameSnapshot: catalogItem.name } : line;
+        }
         if (line.catalogItemId && line.catalogItemId !== needLine.catalogItemId) {
           invalid("A selected gear need does not match its catalog item.");
         }
@@ -413,7 +417,7 @@ export async function createGearReservation(
       });
       await recordGearActivity(tx, {
         leagueId: validated.leagueId, entityType: "RESERVATION", entityId: reservation.id,
-        action: "requested", actorUserId: userId, details: { teamId: validated.teamId },
+        action: "requested", actorUserId: userId, details: { metadata: { teamId: validated.teamId } },
       });
       await queueGearOutboxForLeagueAdmins(tx, {
         leagueId: validated.leagueId,
@@ -421,7 +425,7 @@ export async function createGearReservation(
         occurrenceKey: "v1",
         aggregateType: "RESERVATION",
         aggregateId: reservation.id,
-        payload: { reservationId: reservation.id, teamId: validated.teamId },
+        payload: { kind: "GEAR_RESERVATION", data: { reservationId: reservation.id, teamId: validated.teamId } },
       });
       return reservation;
     }, gearTransactionOptions);
@@ -468,6 +472,7 @@ export async function cancelGearReservation(input: unknown): Promise<ActionResul
         await recordGearInventoryMovement(tx, {
           leagueId: validated.leagueId,
           type: "RELEASE",
+          direction: "INCREASE",
           allocationId: allocation.id,
           poolStockId: allocation.poolStockId,
           gearUnitId: allocation.gearUnitId,
@@ -501,7 +506,7 @@ export async function cancelGearReservation(input: unknown): Promise<ActionResul
         occurrenceKey: `v${reservation.version + 1}`,
         aggregateType: "RESERVATION",
         aggregateId: reservation.id,
-        payload: { reservationId: reservation.id, teamId: reservation.teamId },
+        payload: { kind: "GEAR_RESERVATION", data: { reservationId: reservation.id, teamId: reservation.teamId } },
       });
       return { id: reservation.id };
     }, gearTransactionOptions);
@@ -539,7 +544,7 @@ export async function rescheduleGearReservation(input: unknown): Promise<ActionR
         occurrenceKey: `v${reservation.version + 1}`,
         aggregateType: "RESERVATION",
         aggregateId: reservation.id,
-        payload: { reservationId: reservation.id, teamId: reservation.teamId },
+        payload: { kind: "GEAR_RESERVATION", data: { reservationId: reservation.id, teamId: reservation.teamId } },
       });
       return { id: reservation.id };
     }, gearTransactionOptions);
@@ -572,7 +577,7 @@ export async function declineGearReservation(input: unknown): Promise<ActionResu
         occurrenceKey: `v${reservation.version + 1}`,
         aggregateType: "RESERVATION",
         aggregateId: reservation.id,
-        payload: { reservationId: reservation.id, teamId: reservation.teamId },
+        payload: { kind: "GEAR_RESERVATION", data: { reservationId: reservation.id, teamId: reservation.teamId } },
       }, reservation);
       return { id: reservation.id };
     }, gearTransactionOptions);
@@ -731,7 +736,7 @@ export async function approveAndAllocateGearReservation(input: unknown): Promise
       if (update.count !== 1) throw new GearConflictError();
       await recordGearActivity(tx, {
         leagueId: validated.leagueId, entityType: "RESERVATION", entityId: reservation.id,
-        action: "approved_and_allocated", actorUserId: userId, details: { allocationCount: validated.allocations.length },
+        action: "approved_and_allocated", actorUserId: userId, details: { metadata: { allocationCount: validated.allocations.length } },
       });
       await queueReservationPartyNotification(tx, {
         leagueId: validated.leagueId,
@@ -739,7 +744,7 @@ export async function approveAndAllocateGearReservation(input: unknown): Promise
         occurrenceKey: `v${reservation.version + 1}`,
         aggregateType: "RESERVATION",
         aggregateId: reservation.id,
-        payload: { reservationId: reservation.id, teamId: reservation.teamId, allocationCount: validated.allocations.length },
+        payload: { kind: "GEAR_RESERVATION", data: { reservationId: reservation.id, teamId: reservation.teamId, allocationCount: validated.allocations.length } },
       }, reservation);
       return { id: reservation.id };
     }, gearTransactionOptions));
@@ -820,7 +825,7 @@ export async function recordGearPickup(input: unknown): Promise<ActionResult<{ i
         },
       });
       await recordGearInventoryMovement(tx, {
-        leagueId: validated.leagueId, type: "ALLOCATION", quantity: validated.quantity,
+        leagueId: validated.leagueId, type: "ALLOCATION", direction: "DECREASE", quantity: validated.quantity,
         poolStockId: allocation.poolStockId, gearUnitId: allocation.gearUnitId,
         allocationId: allocation.id, handoffId: handoff.id, recordedById: userId, notes: validated.notes,
       });
@@ -836,7 +841,7 @@ export async function recordGearPickup(input: unknown): Promise<ActionResult<{ i
         occurrenceKey: `${allocation.id}:v${allocation.version + 1}`,
         aggregateType: "RESERVATION",
         aggregateId: allocation.reservationLine.reservationId,
-        payload: { reservationId: allocation.reservationLine.reservationId, allocationId: allocation.id, quantity: validated.quantity },
+        payload: { kind: "GEAR_ALLOCATION", data: { reservationId: allocation.reservationLine.reservationId, allocationId: allocation.id, quantity: validated.quantity } },
       }, allocation.reservationLine.reservation);
       return { id: allocation.id, reservationId: allocation.reservationLine.reservationId };
     }, gearTransactionOptions);
@@ -852,6 +857,9 @@ export async function recordGearPickup(input: unknown): Promise<ActionResult<{ i
 export async function recordGearReturn(input: unknown): Promise<ActionResult<{ id: string }>> {
   try {
     const validated = returnSchema.parse(input);
+    if (validated.returnDisposition === "GOOD" && validated.condition === "DAMAGED") {
+      invalid("A damaged disposition is required when the returned condition is damaged.");
+    }
     const userId = await requireLeagueRole(validated.leagueId, "LEAGUE_ADMIN");
     const result = await prisma.$transaction(async (tx) => {
       const allocation = await tx.gearAllocation.findFirst({
@@ -879,6 +887,14 @@ export async function recordGearReturn(input: unknown): Promise<ActionResult<{ i
           ? "DAMAGED"
           : allocation.poolStock?.condition ?? allocation.gearUnit?.currentCondition ?? "GOOD");
       if (allocation.gearUnit) {
+        const remainingActiveAllocations = await tx.gearAllocation.count({
+          where: {
+            leagueId: validated.leagueId,
+            gearUnitId: allocation.gearUnit.id,
+            id: { not: allocation.id },
+            status: { in: ["PENDING", "ALLOCATED", "PICKED_UP", "PARTIALLY_RETURNED"] },
+          },
+        });
         const unitStatus = validated.returnDisposition === "LOST"
           ? "LOST"
           : validated.returnDisposition === "CONSUMED" ? "RETIRED"
@@ -886,7 +902,7 @@ export async function recordGearReturn(input: unknown): Promise<ActionResult<{ i
         const unitUpdate = await tx.gearUnit.updateMany({
           where: { id: allocation.gearUnit.id, leagueId: validated.leagueId, version: allocation.gearUnit.version, status: "CHECKED_OUT" },
           data: {
-            status: unitStatus,
+            status: unitStatus === "AVAILABLE" && remainingActiveAllocations > 0 ? "RESERVED" : unitStatus,
             currentCondition: returnCondition,
             retiredAt: unitStatus === "RETIRED" ? new Date() : undefined,
             version: { increment: 1 },
@@ -939,6 +955,7 @@ export async function recordGearReturn(input: unknown): Promise<ActionResult<{ i
       await recordGearInventoryMovement(tx, {
         leagueId: validated.leagueId,
         type: ["LOST", "CONSUMED"].includes(validated.returnDisposition) ? "WRITE_OFF" : "RETURN",
+        direction: ["LOST", "CONSUMED"].includes(validated.returnDisposition) ? "DECREASE" : "INCREASE",
         quantity: validated.quantity, poolStockId: allocation.poolStockId, gearUnitId: allocation.gearUnitId,
         allocationId: allocation.id, handoffId: handoff.id,
         beforeLocationId: allocation.poolStock?.locationId, afterLocationId: allocation.poolStock?.locationId,
@@ -947,7 +964,7 @@ export async function recordGearReturn(input: unknown): Promise<ActionResult<{ i
       });
       await recordGearActivity(tx, {
         leagueId: validated.leagueId, entityType: "HANDOFF", entityId: handoff.id,
-        action: "returned", actorUserId: userId, details: { quantity: validated.quantity, disposition: validated.returnDisposition },
+        action: "returned", actorUserId: userId, details: { metadata: { quantity: validated.quantity, disposition: validated.returnDisposition } },
       });
       const openAllocations = await tx.gearAllocation.count({
         where: {
@@ -967,12 +984,12 @@ export async function recordGearReturn(input: unknown): Promise<ActionResult<{ i
         occurrenceKey: `${allocation.id}:v${allocation.version + 1}`,
         aggregateType: "RESERVATION",
         aggregateId: allocation.reservationLine.reservationId,
-        payload: {
+        payload: { kind: "GEAR_ALLOCATION", data: {
           reservationId: allocation.reservationLine.reservationId,
           allocationId: allocation.id,
           quantity: validated.quantity,
           disposition: validated.returnDisposition,
-        },
+        } },
       }, allocation.reservationLine.reservation);
       return { id: allocation.id, reservationId: allocation.reservationLine.reservationId };
     }, gearTransactionOptions);

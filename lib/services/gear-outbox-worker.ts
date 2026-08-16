@@ -110,11 +110,8 @@ async function recipientFor(row: NotificationOutbox): Promise<{
   shouldSend: boolean;
   batchDelivery: boolean;
 }> {
-  if (row.recipientEmail) {
-    return { email: row.recipientEmail, name: null, shouldSend: true, batchDelivery: false };
-  }
   if (!row.recipientUserId) {
-    throw new Error("Outbox recipient is missing");
+    return { email: row.recipientEmail, name: null, shouldSend: true, batchDelivery: false };
   }
 
   const user = await prisma.user.findUnique({
@@ -132,7 +129,9 @@ async function recipientFor(row: NotificationOutbox): Promise<{
   );
   const priority = priorityForGearEvent(row.eventType);
   return {
-    email: user.email,
+    // The outbox snapshot survives an account email change or later deletion;
+    // preferences remain user-scoped while the saved address remains the target.
+    email: row.recipientEmail,
     name: user.name,
     shouldSend: resolution.emailEnabled
       && resolution.gearNotifications

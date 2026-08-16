@@ -11,6 +11,7 @@ vi.mock("@/lib/db/prisma", () => ({
     gearReservation: { findMany: mocks.reservationFindMany },
     $transaction: async (callback: (tx: unknown) => Promise<unknown>) => callback({
       teamMember: { findMany: mocks.teamMemberFindMany },
+      user: { findMany: vi.fn().mockResolvedValue([{ id: "cuuuuuuuuuuuuuuuuuuuuuuuu", email: "admin@example.com" }]) },
       notificationOutbox: { createMany: mocks.createMany },
     }),
   },
@@ -48,7 +49,10 @@ describe("gear custody reminders", () => {
     expect(mocks.createMany).toHaveBeenCalledWith(expect.objectContaining({
       data: [expect.objectContaining({
         aggregateId: "crrrrrrrrrrrrrrrrrrrrrrrr",
-        payload: expect.objectContaining({ dueDate: "2026-08-18" }),
+        payload: expect.objectContaining({
+          kind: "GEAR_RESERVATION",
+          data: expect.objectContaining({ dueDate: "2026-08-18" }),
+        }),
         dedupeKey: expect.stringContaining("gear.reservation.due_soon:crrrrrrrrrrrrrrrrrrrrrrrr:gear.reservation.due_soon:2026-08-18"),
       })],
     }));
