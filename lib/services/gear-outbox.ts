@@ -1,11 +1,22 @@
 import type { Prisma } from "@prisma/client";
 import type { GearNotificationPayload, NotificationRecipient } from "@/types/gear";
-import { gearNotificationPayloadSchema } from "@/lib/utils/validation";
+import { assertGearNotificationEvent } from "@/lib/services/gear-notification-registry";
+import {
+  normalizeRecipientEmail,
+  recipientIdentitySegment,
+} from "@/lib/services/gear-recipient-identity";
 
 type GearTransaction = Prisma.TransactionClient;
 
 export type GearOutboxEvent = {
   leagueId: string;
+  /**
+   * Must name an entry in the gear notification registry. This stays `string`
+   * rather than the registry's union because producers compose it from a status
+   * (`gear.need.${status.toLowerCase()}`); the constraint is therefore enforced
+   * at runtime, inside the producer's own transaction, where a violation rolls
+   * the mutation back instead of persisting a message nobody can deliver.
+   */
   eventType: string;
   /** Stable identifier for this specific occurrence, not merely its aggregate. */
   occurrenceKey: string;
@@ -15,19 +26,31 @@ export type GearOutboxEvent = {
 };
 
 function normalizedEmail(email: string): string {
-  return email.trim().toLowerCase();
+  return normalizeRecipientEmail(email);
 }
 
 /**
  * Writes fully addressed outbox rows inside the caller's transaction. Email is
  * captured at enqueue time so delivery is independent of later account changes.
+ *
+ * The dedupe key names the recipient by account id or, for recipients without
+ * one, by keyed digest — never by address. See `gear-recipient-identity`.
  */
 export async function queueGearOutbox(
   tx: GearTransaction,
   event: GearOutboxEvent,
   recipients: readonly NotificationRecipient[],
 ): Promise<void> {
-  const payload = gearNotificationPayloadSchema.parse(event.payload);
+  // Validate against the same registry the worker reads, so a contract break is
+  // a failed mutation now rather than a dead-lettered message hours later.
+  const validated = assertGearNotificationEvent({
+    eventType: event.eventType,
+    aggregateType: event.aggregateType,
+    aggregateId: event.aggregateId,
+    payload: event.payload,
+  });
+  const payload = validated.payload;
+
   const uniqueRecipients = new Map<string, NotificationRecipient>();
   for (const recipient of recipients) {
     const email = normalizedEmail(recipient.email);
@@ -48,7 +71,7 @@ export async function queueGearOutbox(
       aggregateType: event.aggregateType,
       aggregateId: event.aggregateId,
       payload,
-      dedupeKey: `${event.eventType}:${event.aggregateId}:${event.occurrenceKey}:${recipient.userId ?? recipient.email}`,
+      dedupeKey: `${event.eventType}:${event.aggregateId}:${event.occurrenceKey}:${recipientIdentitySegment(recipient)}`,
     })),
     skipDuplicates: true,
   });
