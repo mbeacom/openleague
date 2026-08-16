@@ -80,6 +80,12 @@ const returnSchema = allocationCommand.extend({
 
 type Tx = Prisma.TransactionClient;
 
+export type GearReservationAllocationOption = {
+  value: string;
+  label: string;
+  maxQuantity: number;
+};
+
 function reservationPath(leagueId: string, reservationId?: string) {
   return reservationId
     ? `/league/${leagueId}/gear/reservations/${reservationId}`
@@ -216,6 +222,120 @@ async function queueReservationPartyNotification(
     ...teamAdmins.map((membership) => membership.userId),
     ...(reservation.requestedById ? [reservation.requestedById] : []),
   ]);
+}
+
+/**
+ * Server-authoritative allocation candidates for one reservation line and
+ * proposed approved window. The mutation repeats these checks transactionally.
+ */
+export async function getGearReservationAllocationOptions(input: unknown): Promise<ActionResult<GearReservationAllocationOption[]>> {
+  try {
+    const validated = reservationCommand.extend({
+      reservationLineId: gearId,
+      approvedStartDate: date,
+      approvedEndDate: date,
+    }).refine((value) => value.approvedEndDate >= value.approvedStartDate, {
+      path: ["approvedEndDate"],
+      message: "Approved end date must be on or after the approved start date.",
+    }).parse(input);
+    await requireLeagueRole(validated.leagueId, "LEAGUE_ADMIN");
+    const startDate = new Date(`${validated.approvedStartDate}T00:00:00.000Z`);
+    const endDate = new Date(`${validated.approvedEndDate}T00:00:00.000Z`);
+    const line = await prisma.gearReservationLine.findFirst({
+      where: {
+        id: validated.reservationLineId,
+        reservation: { id: validated.reservationId, leagueId: validated.leagueId },
+      },
+      include: {
+        catalogItem: { select: { id: true, trackingMode: true } },
+        reservation: { select: { requestedStartDate: true, requestedEndDate: true } },
+      },
+    });
+    if (!line?.catalogItem) invalid("Reservation line is not backed by an active catalog item.");
+    if (!datesOverlap(
+      { startDate: validated.approvedStartDate, endDate: validated.approvedEndDate },
+      {
+        startDate: line.reservation.requestedStartDate.toISOString().slice(0, 10),
+        endDate: line.reservation.requestedEndDate.toISOString().slice(0, 10),
+      },
+    )) invalid("Approved dates must overlap the requested reservation dates.");
+
+    if (line.catalogItem.trackingMode === "POOLED") {
+      const stocks = await prisma.gearPoolStock.findMany({
+        where: { leagueId: validated.leagueId, catalogItemId: line.catalogItem.id, location: { isActive: true } },
+        include: {
+          location: { select: { name: true } },
+          allocations: {
+            where: {
+              status: { in: ["PENDING", "ALLOCATED", "PICKED_UP", "PARTIALLY_RETURNED"] },
+              effectiveStartDate: { lte: endDate },
+              effectiveEndDate: { gte: startDate },
+            },
+            select: { allocatedQty: true, pickedUpQty: true, returnedQty: true, releasedQty: true },
+          },
+        },
+      });
+      return {
+        success: true,
+        data: stocks.flatMap((stock) => {
+          const available = stock.quantityOnHand - stock.allocations.reduce(
+            (total, allocation) => total + activeAllocationQuantity(allocation), 0,
+          );
+          return available > 0 ? [{
+            value: `pool:${stock.id}`,
+            label: `${stock.location.name} (${stock.condition}, ${available} available)`,
+            maxQuantity: available,
+          }] : [];
+        }),
+      };
+    }
+
+    const units = await prisma.gearUnit.findMany({
+      where: {
+        leagueId: validated.leagueId,
+        catalogItemId: line.catalogItem.id,
+        status: { in: ["AVAILABLE", "RESERVED"] },
+      },
+      select: { id: true, assetTag: true, currentCondition: true },
+    });
+    const [conflicts, overdueCheckouts] = await Promise.all([
+      prisma.gearAllocation.findMany({
+        where: {
+          leagueId: validated.leagueId,
+          gearUnitId: { in: units.map((unit) => unit.id) },
+          status: { in: ["PENDING", "ALLOCATED", "PICKED_UP", "PARTIALLY_RETURNED"] },
+          effectiveStartDate: { lte: endDate },
+          effectiveEndDate: { gte: startDate },
+        },
+        select: { gearUnitId: true },
+      }),
+      prisma.gearAllocation.findMany({
+        where: {
+          leagueId: validated.leagueId,
+          gearUnitId: { in: units.map((unit) => unit.id) },
+          status: { in: ["PICKED_UP", "PARTIALLY_RETURNED"] },
+          effectiveEndDate: { lt: new Date() },
+        },
+        select: { gearUnitId: true },
+      }),
+    ]);
+    const unavailable = new Set([
+      ...conflicts.map((allocation) => allocation.gearUnitId),
+      ...overdueCheckouts.map((allocation) => allocation.gearUnitId),
+    ]);
+    return {
+      success: true,
+      data: units
+        .filter((unit) => !unavailable.has(unit.id))
+        .map((unit) => ({
+          value: `unit:${unit.id}`,
+          label: `${unit.assetTag ?? "Tagged unit"} (${unit.currentCondition})`,
+          maxQuantity: 1,
+        })),
+    };
+  } catch (error) {
+    return actionError(error);
+  }
 }
 
 export async function createGearReservation(

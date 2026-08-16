@@ -134,6 +134,34 @@ export const NotificationPreferencesComponent: React.FC<NotificationPreferencesP
         });
 
         if (result.success) {
+          if (scopeLeagueId) {
+            setAllPreferences((current) =>
+              current
+                ? {
+                    ...current,
+                    leagues: current.leagues.map((league) =>
+                      league.leagueId === scopeLeagueId
+                        ? { ...league, preferences: result.data.preferences }
+                        : league,
+                    ),
+                  }
+                : current,
+            );
+          } else {
+            setPreferences(result.data.preferences);
+            setAllPreferences((current) =>
+              current
+                ? {
+                    global: result.data.preferences,
+                    leagues: current.leagues.map((league) =>
+                      league.preferences.source === "GLOBAL"
+                        ? { ...league, preferences: result.data.preferences }
+                        : league,
+                    ),
+                  }
+                : current,
+            );
+          }
           setSuccess("Preferences updated successfully");
           setTimeout(() => setSuccess(null), 3000);
         } else {

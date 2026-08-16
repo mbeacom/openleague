@@ -5,7 +5,6 @@ import { LinkButton } from "@/components/ui/NextLinkComposites";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { getGearReservationContext } from "@/lib/actions/gear-context";
-import { getGearInventoryContext } from "@/lib/actions/gear-context";
 import { GearReservationLifecycleControls } from "@/components/features/gear/GearReservationLifecycleControls";
 import { LinkButton } from "@/components/ui/NextLinkComposites";
 
@@ -15,10 +14,7 @@ interface GearReservationDetailPageProps {
 
 export default async function GearReservationDetailPage({ params }: GearReservationDetailPageProps) {
   const { leagueId, reservationId } = await params;
-  const [data, inventory] = await Promise.all([
-    getGearReservationContext(leagueId),
-    getGearInventoryContext(leagueId),
-  ]);
+  const data = await getGearReservationContext(leagueId);
   const reservation = data?.reservations.find((candidate) => candidate.id === reservationId);
   if (!data || !reservation) notFound();
 
@@ -51,7 +47,6 @@ export default async function GearReservationDetailPage({ params }: GearReservat
           leagueId={leagueId}
           reservation={reservation}
           canManage={data.canManageReservations}
-          inventory={inventory}
         />
         <Card variant="outlined" sx={{ p: 2 }}>
           <Typography variant="h6" gutterBottom>Requested items</Typography>

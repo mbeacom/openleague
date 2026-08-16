@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle,
@@ -10,11 +10,13 @@ import {
   approveAndAllocateGearReservation,
   cancelGearReservation,
   declineGearReservation,
+  getGearReservationAllocationOptions,
   recordGearPickup,
   recordGearReturn,
   releaseGearAllocation,
 } from "@/lib/actions/gear-reservations";
-import type { GearInventoryContext, GearReservationContext } from "@/lib/actions/gear-context";
+import type { GearReservationAllocationOption } from "@/lib/actions/gear-reservations";
+import type { GearReservationContext } from "@/lib/actions/gear-context";
 
 type Reservation = GearReservationContext["reservations"][number];
 
@@ -22,12 +24,10 @@ export function GearReservationLifecycleControls({
   leagueId,
   reservation,
   canManage,
-  inventory,
 }: {
   leagueId: string;
   reservation: Reservation;
   canManage: boolean;
-  inventory: GearInventoryContext | null;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -44,17 +44,45 @@ export function GearReservationLifecycleControls({
     (reservation.approvedEndDate ?? reservation.requestedEndDate).slice(0, 10),
   );
   const [disposition, setDisposition] = useState<"GOOD" | "DAMAGED" | "LOST" | "CONSUMED">("GOOD");
-  const selectedLine = reservation.lines.find((line) => line.id === lineId);
-  const allocatable = useMemo(() => [
-    ...(inventory?.pooledStock.filter((stock) =>
-      stock.availableQuantity > 0 && stock.catalogItemId === selectedLine?.catalogItemId,
-    )
-      .map((stock) => ({ value: `pool:${stock.id}`, label: `${stock.catalogName} — ${stock.locationName} (${stock.condition}, ${stock.availableQuantity} available)` })) ?? []),
-    ...(inventory?.units.filter((unit) =>
-      unit.status === "AVAILABLE" && unit.catalogItemId === selectedLine?.catalogItemId,
-    )
-      .map((unit) => ({ value: `unit:${unit.id}`, label: `${unit.catalogName} — ${unit.assetTag ?? "tagged unit"} (${unit.currentCondition})` })) ?? []),
-  ], [inventory, selectedLine?.catalogItemId]);
+  const [allocatable, setAllocatable] = useState<GearReservationAllocationOption[]>([]);
+  const [loadingAvailability, setLoadingAvailability] = useState(false);
+  const hasValidApprovalWindow = Boolean(
+    lineId && approvedStartDate && approvedEndDate && approvedEndDate >= approvedStartDate,
+  );
+
+  useEffect(() => {
+    if (!allocationOpen || !hasValidApprovalWindow) {
+      return;
+    }
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) setLoadingAvailability(true);
+    });
+    getGearReservationAllocationOptions({
+      leagueId,
+      reservationId: reservation.id,
+      reservationLineId: lineId,
+      approvedStartDate,
+      approvedEndDate,
+      expectedVersion: reservation.version,
+    }).then((result) => {
+      if (cancelled) return;
+      if (result.success) {
+        setAllocatable(result.data);
+      } else {
+        setAllocatable([]);
+        setError(result.error);
+      }
+    }).catch(() => {
+      if (!cancelled) {
+        setAllocatable([]);
+        setError("Unable to refresh date-specific inventory availability.");
+      }
+    }).finally(() => {
+      if (!cancelled) setLoadingAvailability(false);
+    });
+    return () => { cancelled = true; };
+  }, [allocationOpen, approvedEndDate, approvedStartDate, hasValidApprovalWindow, leagueId, lineId, reservation.id, reservation.version]);
 
   const run = (operation: () => Promise<{ success: boolean; error?: string }>) => {
     startTransition(async () => {
@@ -77,7 +105,10 @@ export function GearReservationLifecycleControls({
       {error && <Alert severity="error" onClose={() => setError(null)}>{error}</Alert>}
       {canManage && ["REQUESTED", "APPROVED"].includes(reservation.status) && (
         <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-          <Button variant="contained" onClick={() => setAllocationOpen(true)} disabled={pending} sx={{ minHeight: 44 }}>
+          <Button variant="contained" onClick={() => {
+            setResource("");
+            setAllocationOpen(true);
+          }} disabled={pending} sx={{ minHeight: 44 }}>
             Review and allocate
           </Button>
           {reservation.status === "REQUESTED" && (
@@ -129,17 +160,23 @@ export function GearReservationLifecycleControls({
         <DialogContent>
           <Stack spacing={2} sx={{ pt: 1 }}>
             <Typography variant="body2" color="text.secondary">Choose a pooled location and condition quantity, or one available tagged unit.</Typography>
-            <TextField select label="Reservation line" value={lineId} onChange={(event) => setLineId(event.target.value)}>
+            <TextField select label="Reservation line" value={lineId} onChange={(event) => {
+              setResource("");
+              setLineId(event.target.value);
+            }}>
               {reservation.lines.map((line) => <MenuItem key={line.id} value={line.id}>{line.name} (requested {line.requestedQty})</MenuItem>)}
             </TextField>
-            <TextField select label="Inventory" value={resource} onChange={(event) => setResource(event.target.value)} required>
-              {allocatable.map((option) => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
+            <TextField select label="Inventory" value={resource} onChange={(event) => setResource(event.target.value)} required disabled={loadingAvailability || !hasValidApprovalWindow}>
+              {(hasValidApprovalWindow ? allocatable : []).map((option) => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
             </TextField>
             <TextField
               label="Approved start date"
               type="date"
               value={approvedStartDate}
-              onChange={(event) => setApprovedStartDate(event.target.value)}
+              onChange={(event) => {
+                setResource("");
+                setApprovedStartDate(event.target.value);
+              }}
               slotProps={{ inputLabel: { shrink: true } }}
               required
             />
@@ -147,14 +184,17 @@ export function GearReservationLifecycleControls({
               label="Approved end date"
               type="date"
               value={approvedEndDate}
-              onChange={(event) => setApprovedEndDate(event.target.value)}
+              onChange={(event) => {
+                setResource("");
+                setApprovedEndDate(event.target.value);
+              }}
               slotProps={{ inputLabel: { shrink: true } }}
               required
             />
             <TextField
               label="Quantity"
               type="number"
-              inputProps={{ min: 1, max: resource.startsWith("unit:") ? 1 : undefined }}
+              inputProps={{ min: 1, max: allocatable.find((option) => option.value === resource)?.maxQuantity }}
               value={resource.startsWith("unit:") ? "1" : quantity}
               onChange={(event) => setQuantity(event.target.value)}
               disabled={resource.startsWith("unit:")}
@@ -164,7 +204,7 @@ export function GearReservationLifecycleControls({
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setAllocationOpen(false)} disabled={pending}>Cancel</Button>
-          <Button variant="contained" disabled={pending || !resource || !lineId} onClick={() => {
+          <Button variant="contained" disabled={pending || loadingAvailability || !resource || !lineId} onClick={() => {
             const [kind, id] = resource.split(":");
             run(() => approveAndAllocateGearReservation({
               leagueId,

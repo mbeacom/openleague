@@ -38,24 +38,44 @@ const basePreferences = {
   urgentOnly: false,
   batchDelivery: false,
 };
+const globalPreferences = {
+  ...basePreferences,
+  source: "GLOBAL" as const,
+  hasLeagueOverride: false,
+};
+const leaguePreferences = {
+  ...basePreferences,
+  source: "GLOBAL" as const,
+  hasLeagueOverride: false,
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockUpdatePreferences.mockResolvedValue({ success: true, data: { updated: true } });
+  mockUpdatePreferences.mockImplementation(async (input) => ({
+    success: true,
+    data: {
+      updated: true,
+      preferences: {
+        ...globalPreferences,
+        ...input.preferences,
+        ...(input.leagueId ? { source: "LEAGUE", hasLeagueOverride: true } : {}),
+      },
+    },
+  }));
   mockGetAllPreferences.mockResolvedValue({
     success: true,
     data: {
-      global: { ...basePreferences },
+      global: globalPreferences,
       leagues: [
         {
           leagueId: "league-1",
           leagueName: "Metro League",
-          preferences: { ...basePreferences },
+          preferences: leaguePreferences,
         },
       ],
     },
   });
-  mockGetPreferences.mockResolvedValue({ success: true, data: { ...basePreferences } });
+  mockGetPreferences.mockResolvedValue({ success: true, data: globalPreferences });
 });
 
 describe("NotificationPreferencesComponent", () => {
@@ -140,5 +160,40 @@ describe("NotificationPreferencesComponent", () => {
         preferences: { teamInvitations: false },
       })
     );
+  });
+
+  it("refreshes every globally inherited league entry after a global preference update", async () => {
+    const user = userEvent.setup();
+    const updated = { ...globalPreferences, eventNotifications: false };
+    mockUpdatePreferences.mockResolvedValue({ success: true, data: { updated: true, preferences: updated } });
+    render(<NotificationPreferencesComponent />);
+
+    const [globalSwitch, leagueSwitch] = await screen.findAllByLabelText("Event Notifications");
+    await user.click(globalSwitch);
+
+    await waitFor(() => {
+      expect(globalSwitch).not.toBeChecked();
+      expect(leagueSwitch).not.toBeChecked();
+    });
+  });
+
+  it("replaces an inherited league entry with the returned league override", async () => {
+    const user = userEvent.setup();
+    const override = {
+      ...leaguePreferences,
+      gearNotifications: false,
+      source: "LEAGUE" as const,
+      hasLeagueOverride: true,
+    };
+    mockUpdatePreferences.mockResolvedValue({ success: true, data: { updated: true, preferences: override } });
+    render(<NotificationPreferencesComponent />);
+
+    const switches = await screen.findAllByLabelText("Gear Requests and Custody");
+    await user.click(switches[1]);
+
+    await waitFor(() => {
+      expect(switches[1]).not.toBeChecked();
+      expect(screen.queryByText("Using global preference")).not.toBeInTheDocument();
+    });
   });
 });

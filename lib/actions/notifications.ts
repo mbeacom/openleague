@@ -63,7 +63,7 @@ export async function getNotificationPreferences(
  */
 export async function updateNotificationPreferences(
   input: z.infer<typeof updateNotificationPreferencesSchema>
-): Promise<ActionResult<{ updated: boolean }>> {
+): Promise<ActionResult<{ updated: boolean; preferences: ResolvedNotificationPreferences }>> {
   try {
     const validated = updateNotificationPreferencesSchema.parse(input);
     const userId = await requireUserId();
@@ -90,6 +90,10 @@ export async function updateNotificationPreferences(
       validated.preferences,
       validated.leagueId
     );
+    const preferences = await notificationService.resolveNotificationPreferences(
+      userId,
+      validated.leagueId,
+    );
 
     revalidatePath("/account");
     if (validated.leagueId) {
@@ -98,7 +102,7 @@ export async function updateNotificationPreferences(
 
     return {
       success: true,
-      data: { updated: true },
+      data: { updated: true, preferences },
     };
   } catch (error) {
     if (error instanceof z.ZodError) {
