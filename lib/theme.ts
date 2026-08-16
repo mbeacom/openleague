@@ -96,6 +96,23 @@ declare module '@mui/material/Card' {
 // assert on the light values directly).
 const DARK_SCHEME = '*:where([data-mui-color-scheme="dark"]) &';
 
+// The counterpart that undoes DARK_SCHEME inside a light-pinned subtree. It has
+// to name BOTH ancestors — a dark one (the <html> of a dark-mode visitor) and a
+// light one nested under it (a LightThemeScope, see
+// components/ui/LightThemeScope.tsx) — because that pair is the only situation
+// the restore is for.
+//
+// Matching on '[data-mui-color-scheme="light"]' alone would be the obvious
+// spelling and is wrong: in ordinary light mode <html> carries that attribute,
+// so the restore would match every card and field in the app. And since a
+// nested selector compiles to a SEPARATE rule emitted after the base one at
+// equal specificity ( :where() and * contribute nothing ), it would then
+// outrank call-site `sx` — quietly flattening, say, the green outline the
+// pricing page draws on its free-plan card. Naming both ancestors keeps the
+// rule inert everywhere except inside a pin, where it is the last matching rule
+// and so beats DARK_SCHEME as intended.
+const LIGHT_PIN = '*:where([data-mui-color-scheme="dark"]) *:where([data-mui-color-scheme="light"]) &';
+
 // Light scheme: the original Digital Playbook palette
 const lightPalette: PaletteOptions = {
   primary: {
@@ -124,6 +141,21 @@ const lightPalette: PaletteOptions = {
     main: '#2E7D32', // Scoreboard Green
     light: '#4CAF50',
     dark: '#1B5E20',
+  },
+  // Defined rather than inherited: MUI's default info (#0288D1) sits at 3.9:1
+  // on white, so outlined `color="info"` chips (the roadmap's "Planned" status)
+  // miss AA for small text. #0277BD clears it at 4.8:1.
+  //
+  // Deeper would read better on white still, but this value is also constrained
+  // from below: CalendarView, OverlayChips and SegmentationEditor read
+  // `theme.palette.info.main` in JS, which under cssVariables always returns the
+  // LIGHT literal — so this same colour has to stay above 3:1 on the dark paper
+  // too (it lands at 3.1:1). Those call sites should move to channel tokens;
+  // until they do, this is the value that satisfies both ends.
+  info: {
+    main: '#0277BD',
+    light: '#039BE5',
+    dark: '#01579B',
   },
   background: {
     default: '#F8FAFB', // Fresh Ice - clean, crisp
@@ -175,6 +207,11 @@ const darkPalette: PaletteOptions = {
     light: '#81C784',
     dark: '#388E3C',
   },
+  info: {
+    main: '#4FC3F7', // Info blue, lightened for dark surfaces
+    light: '#81D4FA',
+    dark: '#0288D1',
+  },
   background: {
     default: '#0A1929', // Night Rink - deep blue-gray
     paper: '#102A43',
@@ -182,7 +219,11 @@ const darkPalette: PaletteOptions = {
   divider: 'rgba(144, 202, 249, 0.16)',
   text: {
     primary: 'rgba(236, 242, 248, 0.92)',
-    secondary: 'rgba(214, 226, 238, 0.64)',
+    // 0.70 rather than 0.64: at 0.64 secondary text lands at 4.4:1 on the
+    // tinted surfaces MUI derives from primary.main (a selected ListItem, e.g.
+    // the docs sidebar), just under AA. 0.70 clears it at 4.9:1 there and
+    // raises every other dark surface with it.
+    secondary: 'rgba(214, 226, 238, 0.70)',
     disabled: 'rgba(214, 226, 238, 0.38)',
   },
   marketing: {
@@ -298,26 +339,37 @@ const baseTheme = createTheme({
           '& .MuiInputBase-root': {
             minHeight: 48,
           },
+          // The scheme variation is carried by custom properties, not by
+          // competing rules. A nested `[DARK_SCHEME]` / `[LIGHT_PIN]` block that
+          // set `borderColor` directly would compile to a separate rule emitted
+          // after the base one at equal specificity, and so would outrank any
+          // `sx` a call site passes. Setting only variables keeps the actual
+          // declarations in the base rule, where `sx` still wins.
           '& .MuiOutlinedInput-root': {
+            '--ol-input-border': 'rgba(13, 71, 161, 0.2)',
+            '--ol-input-border-hover': 'rgba(13, 71, 161, 0.5)',
+            ...theme.applyStyles('dark', {
+              '--ol-input-border': 'rgba(100, 181, 246, 0.28)',
+              '--ol-input-border-hover': 'rgba(100, 181, 246, 0.56)',
+            }),
+            // Light-pinned subtrees (the auth forms) keep the League Blue
+            // outline; the lightened-blue dark borders sit at ~1.2:1 on white,
+            // which reads as a borderless field. See LIGHT_PIN above.
+            [LIGHT_PIN]: {
+              '--ol-input-border': 'rgba(13, 71, 161, 0.2)',
+              '--ol-input-border-hover': 'rgba(13, 71, 161, 0.5)',
+            },
             backgroundColor: (theme.vars || theme).palette.background.paper,
             '& fieldset': {
-              borderColor: 'rgba(13, 71, 161, 0.2)',
+              borderColor: 'var(--ol-input-border)',
               borderWidth: 2,
             },
             '&:hover fieldset': {
-              borderColor: 'rgba(13, 71, 161, 0.5)',
+              borderColor: 'var(--ol-input-border-hover)',
             },
             '&.Mui-focused fieldset': {
               borderColor: (theme.vars || theme).palette.secondary.main,
             },
-            ...theme.applyStyles('dark', {
-              '& fieldset': {
-                borderColor: 'rgba(100, 181, 246, 0.28)',
-              },
-              '&:hover fieldset': {
-                borderColor: 'rgba(100, 181, 246, 0.56)',
-              },
-            }),
           },
           '& .MuiInputLabel-root': {
             color: (theme.vars || theme).palette.text.secondary,
@@ -442,24 +494,40 @@ const baseTheme = createTheme({
     MuiCard: {
       styleOverrides: {
         root: {
-          borderRadius: 16,
-          boxShadow: '0px 4px 24px rgba(13, 71, 161, 0.08)',
-          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-          border: '1px solid rgba(13, 71, 161, 0.08)',
-          '&:hover': {
-            boxShadow: '0px 8px 32px rgba(13, 71, 161, 0.16)',
-            transform: 'translateY(-4px)',
-            borderColor: 'rgba(13, 71, 161, 0.15)',
-          },
+          // Same reasoning as MuiTextField above: the scheme variation lives in
+          // custom properties so the real `boxShadow` / `border` declarations
+          // stay in the base rule, where a call-site `sx` (the pricing page's
+          // green free-plan outline, the practice planner's selected-play
+          // border) still overrides them. Setting them inside the nested
+          // scheme blocks instead would silently win over every such sx.
+          '--ol-card-shadow': '0px 4px 24px rgba(13, 71, 161, 0.08)',
+          '--ol-card-shadow-hover': '0px 8px 32px rgba(13, 71, 161, 0.16)',
+          '--ol-card-border': 'rgba(13, 71, 161, 0.08)',
+          '--ol-card-border-hover': 'rgba(13, 71, 161, 0.15)',
           // Blue-tinted shadows/borders vanish on dark surfaces; swap for
           // neutral shadows and a lightened-blue hairline in dark scheme.
           [DARK_SCHEME]: {
-            boxShadow: '0px 4px 24px rgba(0, 0, 0, 0.45)',
-            border: '1px solid rgba(144, 202, 249, 0.12)',
-            '&:hover': {
-              boxShadow: '0px 8px 32px rgba(0, 0, 0, 0.6)',
-              borderColor: 'rgba(144, 202, 249, 0.24)',
-            },
+            '--ol-card-shadow': '0px 4px 24px rgba(0, 0, 0, 0.45)',
+            '--ol-card-shadow-hover': '0px 8px 32px rgba(0, 0, 0, 0.6)',
+            '--ol-card-border': 'rgba(144, 202, 249, 0.12)',
+            '--ol-card-border-hover': 'rgba(144, 202, 249, 0.24)',
+          },
+          // …and back to the blue-tinted shadow inside a light-pinned subtree,
+          // where the heavy neutral drop shadow reads as a smudge on white.
+          [LIGHT_PIN]: {
+            '--ol-card-shadow': '0px 4px 24px rgba(13, 71, 161, 0.08)',
+            '--ol-card-shadow-hover': '0px 8px 32px rgba(13, 71, 161, 0.16)',
+            '--ol-card-border': 'rgba(13, 71, 161, 0.08)',
+            '--ol-card-border-hover': 'rgba(13, 71, 161, 0.15)',
+          },
+          borderRadius: 16,
+          boxShadow: 'var(--ol-card-shadow)',
+          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          border: '1px solid var(--ol-card-border)',
+          '&:hover': {
+            boxShadow: 'var(--ol-card-shadow-hover)',
+            transform: 'translateY(-4px)',
+            borderColor: 'var(--ol-card-border-hover)',
           },
         },
       },

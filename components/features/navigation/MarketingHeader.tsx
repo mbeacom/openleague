@@ -23,8 +23,10 @@ import { useTheme } from '@mui/material/styles';
 import MenuIcon from '@mui/icons-material/Menu';
 import CloseIcon from '@mui/icons-material/Close';
 import Logo from '@/components/ui/Logo';
+import { usePinnedScheme } from '@/components/ui/LightThemeScope';
 import CTAButton from '@/components/features/marketing/CTAButton';
 import { marketingEvents } from '@/lib/analytics/tracking';
+import { isAuthRoute } from '@/lib/config/auth-routes';
 
 const navigationLinks = [
   { label: 'Features', href: '/features' },
@@ -34,21 +36,25 @@ const navigationLinks = [
   { label: 'Docs', href: '/docs' },
 ];
 
-// Auth page pathnames
-const AUTH_PATHNAMES = ['/login', '/signup'];
-
 export default function MarketingHeader() {
   const theme = useTheme();
   const pathname = usePathname();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
+  // Which scheme an ancestor layout pinned this header to, if any. Read from
+  // React context rather than the DOM because the portaled Drawer below cannot
+  // inherit it any other way.
+  const scopedScheme = usePinnedScheme();
 
   const isHomepage = pathname === '/';
   const isTransparent = isHomepage && !isScrolled;
 
-  // Hide navbar completely on auth pages (they have their own logos)
-  const isAuthPage = AUTH_PATHNAMES.includes(pathname);
+  // Hide navbar completely on auth pages (they have their own logos). Uses the
+  // same roster LayoutProvider branches on, so the two cannot drift apart —
+  // they previously disagreed, leaving /forgot-password and the token routes
+  // with a header but no skip link or main landmark.
+  const isAuthPage = isAuthRoute(pathname);
 
   // Track scroll position to transition the homepage header from transparent to solid.
   useEffect(() => {
@@ -80,18 +86,32 @@ export default function MarketingHeader() {
         component="header"
         position="fixed"
         elevation={0}
-        sx={{
-          bgcolor: isTransparent ? 'transparent' : 'background.paper',
+        // color="inherit" is load-bearing, not cosmetic. AppBar's default
+        // (color="primary") emits `color: primary.contrastText` — white — which
+        // the Logo wordmark inherits, rendering it white-on-white against this
+        // bar's own light background. That same variant also carries MUI's
+        // `applyStyles('dark', …)` override, whose `*:where([data-mui-color-scheme="dark"]) &`
+        // ancestor selector reaches through LightThemeScope and repaints the bar
+        // in dark-palette colors underneath light-pinned text. "inherit" opts
+        // out of both: the bar takes its text color from the surrounding scope
+        // and its background from the tokens below.
+        color="inherit"
+        sx={(theme) => ({
+          // Scheme-aware so the bar follows whichever scope it lands in — pinned
+          // light under (marketing)/layout.tsx, dark-capable under LayoutProvider
+          // on /docs and the auth routes.
+          backgroundColor: isTransparent
+            ? 'transparent'
+            : `rgba(${theme.vars.palette.background.paperChannel} / 0.95)`,
           borderBottom: isTransparent ? 0 : '2px solid',
-          borderColor: 'rgba(13, 71, 161, 0.08)',
+          borderColor: `rgba(${theme.vars.palette.primary.mainChannel} / 0.12)`,
           backdropFilter: isTransparent ? 'none' : 'blur(12px)',
-          backgroundColor: isTransparent ? 'transparent' : 'rgba(255, 255, 255, 0.95)',
           boxShadow: isTransparent ? 'none' : '0 4px 12px rgba(13, 71, 161, 0.08)',
           transition: 'background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
           '@media (prefers-reduced-motion: reduce)': {
             transition: 'none',
           },
-        }}
+        })}
       >
       <Container maxWidth="lg">
         <Toolbar
@@ -208,11 +228,25 @@ export default function MarketingHeader() {
                 anchor="right"
                 open={mobileMenuOpen}
                 onClose={handleDrawerToggle}
+                // The Drawer paper is portaled to <body>, outside whatever
+                // LightThemeScope wraps this header in the React tree — and
+                // data-mui-color-scheme only reaches an actual DOM subtree. So
+                // it is restamped with the scheme this header was pinned to,
+                // otherwise a dark-mode visitor on a light-pinned marketing
+                // page opens a dark panel over a light page. Null on /docs,
+                // where nothing pinned the header and the ambient scheme is
+                // already the right one.
                 slotProps={{
                   paper: {
                     id: 'marketing-mobile-menu',
                     role: 'dialog',
                     'aria-label': 'Marketing navigation menu',
+                    ...(scopedScheme
+                      ? {
+                          'data-mui-color-scheme': scopedScheme,
+                          sx: { colorScheme: scopedScheme, color: 'text.primary' },
+                        }
+                      : {}),
                   },
                 }}
                 sx={{

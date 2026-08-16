@@ -11,6 +11,7 @@ import {
 import type { PublicSignupEventView } from "@/lib/actions/signup-events";
 import type { MyEventAssignments, PublicEventGames } from "@/lib/actions/event-teams";
 import { RegisterDialog } from "./RegisterDialog";
+import { contrastTextFor } from "@/lib/utils/contrast-color";
 import { AGE_CLASSIFICATION_LABELS } from "@/lib/utils/age-level";
 import { formatCurrencyFromCents } from "@/lib/utils/currency";
 import { formatDateTime } from "@/lib/utils/date";
@@ -213,7 +214,15 @@ export function PublicEventView({
                       <Chip
                         size="small"
                         label={assignment.teamName}
-                        sx={assignment.teamColorHex ? { bgcolor: assignment.teamColorHex, color: "#fff" } : undefined}
+                        // Team colour is organizer-supplied data, so the ink has
+                        // to be derived from it — a light team colour made this
+                        // chip white-on-white.
+                        sx={assignment.teamColorHex
+                          ? (theme) => ({
+                              bgcolor: assignment.teamColorHex as string,
+                              color: contrastTextFor(theme, assignment.teamColorHex),
+                            })
+                          : undefined}
                       />
                     ) : (
                       <Chip size="small" variant="outlined" label="No team yet" />

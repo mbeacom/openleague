@@ -40,7 +40,11 @@ export default function GlobalError({
               fontWeight: 700,
               letterSpacing: "0.12em",
               textTransform: "uppercase",
-              color: "#1976D2",
+              // League Blue, not Action Blue: at 13px/700 this is not WCAG
+              // "large text", and #1976D2 on #F7F9FC is 4.35:1 — short of the
+              // 4.5:1 AA needs. #0D47A1 gives 8.16:1. This file stays
+              // deliberately token-free, so the value is picked, not resolved.
+              color: "#0D47A1",
             }}
           >
             OpenLeague

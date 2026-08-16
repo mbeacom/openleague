@@ -1,5 +1,6 @@
 import { Box, Card, CardContent, Chip, Stack, Typography } from "@mui/material";
 import { LinkButton } from "@/components/ui/NextLinkComposites";
+import { contrastTextFor } from "@/lib/utils/contrast-color";
 import type { PublicVenueProfile, PublicVenueSummary } from "@/lib/utils/public-venues";
 
 interface PublicVenueRelationship {
@@ -48,12 +49,15 @@ export function PublicRinkProfile({
   return (
     <Stack spacing={4}>
       <Box
-        sx={{
+        sx={(theme) => ({
           borderRadius: 3,
           p: { xs: 3, md: 5 },
           bgcolor: venue.brandPrimaryColor || "primary.main",
-          color: "primary.contrastText",
-        }}
+          // Derived, not pinned: this hero is inside the light-only marketing
+          // scope, where primary.contrastText is always #FFFFFF — so a venue
+          // that saves a light brand colour got a white <h1> on a light hero.
+          color: contrastTextFor(theme, venue.brandPrimaryColor),
+        })}
       >
         <Typography variant="h3" component="h1" gutterBottom>
           {venue.name}

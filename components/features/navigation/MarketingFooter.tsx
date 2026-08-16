@@ -57,7 +57,10 @@ const socialLinks = [
     icon: GitHubIcon,
     href: 'https://github.com/mbeacom/openleague',
     label: 'GitHub',
-    color: '#333'
+    // GitHub's brand black would hover to ~1.3:1 on the dark footer this
+    // renders on for /docs (the one route LayoutProvider leaves unpinned), so
+    // the hover follows the scheme instead. Twitter/LinkedIn blues read on both.
+    color: 'primary.main'
   },
   {
     icon: TwitterIcon,
