@@ -2079,7 +2079,7 @@ const gearDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYY
 const gearQuantitySchema = z.coerce.number().int("Quantity must be a whole number").min(1, "Quantity must be at least 1");
 const gearOptionalQuantitySchema = z.coerce.number().int("Quantity must be a whole number").min(0);
 const gearCuidSchema = z.string().cuid("Invalid gear identifier");
-const gearAttributesSchema = z.record(z.string().max(80), z.unknown()).optional();
+const gearAttributesSchema = z.record(z.string().max(80), z.json()).optional();
 
 export const createGearCatalogItemSchema = z.object({
   leagueId: gearCuidSchema,
