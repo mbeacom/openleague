@@ -1,6 +1,7 @@
 import type {
   GearAllocationQuantities,
   GearAllocationStatus,
+  GearInventoryDirection,
   GearPoolAvailability,
   GearReservationStatus,
   GearReservationWindow,
@@ -136,7 +137,32 @@ export function taggedAllocationWindowsConflict(
 }
 
 export function hasExactlyOneNotificationRecipient(recipient: NotificationRecipient): boolean {
-  return Boolean(recipient.userId) !== Boolean(recipient.email);
+  return recipient.email.trim().length > 0;
+}
+
+export function isValidInventoryMovementDirection(
+  type:
+    | "RECEIPT"
+    | "ALLOCATION"
+    | "RELEASE"
+    | "RETURN"
+    | "TRANSFER"
+    | "ADJUSTMENT"
+    | "WRITE_OFF",
+  direction: GearInventoryDirection,
+): boolean {
+  const expectedDirections = {
+    RECEIPT: "INCREASE",
+    ALLOCATION: "DECREASE",
+    RELEASE: "INCREASE",
+    RETURN: "INCREASE",
+    TRANSFER: "NEUTRAL",
+    ADJUSTMENT: undefined,
+    WRITE_OFF: "DECREASE",
+  } as const;
+
+  const expected = expectedDirections[type];
+  return expected ? direction === expected : direction === "INCREASE" || direction === "DECREASE";
 }
 
 export function canTransitionReservation(

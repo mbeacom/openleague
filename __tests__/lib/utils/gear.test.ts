@@ -10,6 +10,7 @@ import {
   canTransitionUnit,
   datesOverlap,
   hasExactlyOneNotificationRecipient,
+  isValidInventoryMovementDirection,
   isRetryablePrismaConflict,
   isActiveTaggedAllocationStatus,
   normalizeGearAssetTag,
@@ -117,11 +118,18 @@ describe("gear utilities", () => {
     ).toBe(false);
   });
 
-  it("requires an immutable outbox row to retain exactly one recipient target", () => {
-    expect(hasExactlyOneNotificationRecipient({ userId: "user" })).toBe(true);
+  it("requires an immutable outbox row to retain a delivery-email snapshot", () => {
     expect(hasExactlyOneNotificationRecipient({ email: "user@example.com" })).toBe(true);
-    expect(hasExactlyOneNotificationRecipient({ userId: "user", email: "user@example.com" })).toBe(false);
-    expect(hasExactlyOneNotificationRecipient({})).toBe(false);
+    expect(hasExactlyOneNotificationRecipient({ userId: "user", email: "user@example.com" })).toBe(true);
+    expect(hasExactlyOneNotificationRecipient({ email: "   " })).toBe(false);
+  });
+
+  it("requires an explicit signed direction for every inventory movement", () => {
+    expect(isValidInventoryMovementDirection("ADJUSTMENT", "INCREASE")).toBe(true);
+    expect(isValidInventoryMovementDirection("ADJUSTMENT", "DECREASE")).toBe(true);
+    expect(isValidInventoryMovementDirection("ADJUSTMENT", "NEUTRAL")).toBe(false);
+    expect(isValidInventoryMovementDirection("TRANSFER", "NEUTRAL")).toBe(true);
+    expect(isValidInventoryMovementDirection("ALLOCATION", "INCREASE")).toBe(false);
   });
 
   it("permits only legal workflow transitions", () => {

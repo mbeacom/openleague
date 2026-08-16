@@ -68,6 +68,23 @@ export enum Permission {
     REQUEST_TEAM_GEAR = "request_team_gear",
 }
 
+export const TEAM_SCOPED_PERMISSIONS = [
+    Permission.UPDATE_TEAM,
+    Permission.DELETE_TEAM,
+    Permission.ADD_PLAYER,
+    Permission.UPDATE_PLAYER,
+    Permission.REMOVE_PLAYER,
+    Permission.CREATE_EVENT,
+    Permission.UPDATE_EVENT,
+    Permission.DELETE_EVENT,
+    Permission.SEND_TEAM_MESSAGE,
+    Permission.EXPORT_TEAM_DATA,
+    Permission.CREATE_TEAM_GEAR_NEED,
+    Permission.REQUEST_TEAM_GEAR,
+] as const;
+
+export type TeamScopedPermission = (typeof TEAM_SCOPED_PERMISSIONS)[number];
+
 /**
  * Permission matrix mapping access levels to permissions
  * Using lazy initialization to avoid forward reference issues
@@ -183,9 +200,17 @@ export async function hasPermission(
         const allowedPermissions = getPermissionMatrix()[accessLevel] || [];
         const hasBasePermission = allowedPermissions.includes(permission);
 
-        // For team-specific permissions, verify team access if teamId is provided
-        if (hasBasePermission && teamId && isTeamSpecificPermission(permission)) {
-            return await hasTeamSpecificPermission(userId, leagueId, teamId, permission, accessLevel);
+        if (isTeamSpecificPermission(permission)) {
+            // Team-specific operations are never league-wide by omission. League
+            // admins still receive access to a supplied team through the exact
+            // same scoped path as team admins.
+            if (!teamId) {
+                return false;
+            }
+
+            return hasBasePermission
+                ? await hasTeamSpecificPermission(userId, leagueId, teamId, permission, accessLevel)
+                : false;
         }
 
         return hasBasePermission;
@@ -198,23 +223,17 @@ export async function hasPermission(
 /**
  * Check if a permission is team-specific
  */
-function isTeamSpecificPermission(permission: Permission): boolean {
-    const teamSpecificPermissions = [
-        Permission.UPDATE_TEAM,
-        Permission.DELETE_TEAM,
-        Permission.ADD_PLAYER,
-        Permission.UPDATE_PLAYER,
-        Permission.REMOVE_PLAYER,
-        Permission.CREATE_EVENT,
-        Permission.UPDATE_EVENT,
-        Permission.DELETE_EVENT,
-        Permission.SEND_TEAM_MESSAGE,
-        Permission.EXPORT_TEAM_DATA,
-        Permission.CREATE_TEAM_GEAR_NEED,
-        Permission.REQUEST_TEAM_GEAR,
-    ];
+export function isTeamSpecificPermission(permission: Permission): permission is TeamScopedPermission {
+    return (TEAM_SCOPED_PERMISSIONS as readonly Permission[]).includes(permission);
+}
 
-    return teamSpecificPermissions.includes(permission);
+export async function hasTeamPermission(
+    userId: string,
+    leagueId: string,
+    permission: TeamScopedPermission,
+    teamId: string,
+): Promise<boolean> {
+    return hasPermission(userId, leagueId, permission, teamId);
 }
 
 /**

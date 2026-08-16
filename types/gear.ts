@@ -28,6 +28,9 @@ export const GEAR_ALLOCATION_STATUSES = [
 ] as const;
 export type GearAllocationStatus = (typeof GEAR_ALLOCATION_STATUSES)[number];
 
+export const GEAR_INVENTORY_DIRECTIONS = ["INCREASE", "DECREASE", "NEUTRAL"] as const;
+export type GearInventoryDirection = (typeof GEAR_INVENTORY_DIRECTIONS)[number];
+
 export type GearPoolAvailability = {
   quantityOnHand: number;
   allocatedQuantity: number;
@@ -61,6 +64,23 @@ export type TaggedAllocationWindow = GearReservationWindow & {
 };
 
 export type NotificationRecipient = {
+  email: string;
   userId?: string | null;
-  email?: string | null;
+};
+
+export type GearActivityDetails = {
+  action: string;
+  summary?: string;
+  metadata?: Record<string, string | number | boolean | null>;
+};
+
+export type GearNotificationPayload = {
+  kind: "GEAR_RESERVATION" | "GEAR_ALLOCATION" | "GEAR_PLEDGE" | "GEAR_WISHLIST";
+  data: Record<string, string | number | boolean | null>;
+};
+
+export type NotificationOutboxRecipientSnapshot = {
+  email: string;
+  userId: string | null;
+  redactedAt: Date | null;
 };

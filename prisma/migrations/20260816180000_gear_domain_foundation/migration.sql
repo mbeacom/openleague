@@ -2,6 +2,8 @@
 -- outbox. Application mutations use Prisma transactions; the constraints here
 -- protect invariants that PostgreSQL can enforce locally.
 
+BEGIN;
+
 CREATE TYPE "GearTrackingMode" AS ENUM ('POOLED', 'INDIVIDUAL');
 CREATE TYPE "GearCondition" AS ENUM ('NEW', 'EXCELLENT', 'GOOD', 'FAIR', 'POOR', 'DAMAGED');
 CREATE TYPE "GearUnitStatus" AS ENUM ('AVAILABLE', 'RESERVED', 'CHECKED_OUT', 'MAINTENANCE', 'RETIRED', 'LOST');
@@ -13,6 +15,7 @@ CREATE TYPE "GearAllocationStatus" AS ENUM ('PENDING', 'ALLOCATED', 'PICKED_UP',
 CREATE TYPE "GearHandoffType" AS ENUM ('PICKUP', 'RETURN', 'TRANSFER', 'RECEIPT', 'ADJUSTMENT');
 CREATE TYPE "GearReturnDisposition" AS ENUM ('GOOD', 'DAMAGED', 'LOST', 'CONSUMED');
 CREATE TYPE "GearInventoryMovementType" AS ENUM ('RECEIPT', 'ALLOCATION', 'RELEASE', 'RETURN', 'TRANSFER', 'ADJUSTMENT', 'WRITE_OFF');
+CREATE TYPE "GearInventoryDirection" AS ENUM ('INCREASE', 'DECREASE', 'NEUTRAL');
 CREATE TYPE "GearWishlistStatus" AS ENUM ('DRAFT', 'PUBLISHED', 'ARCHIVED');
 CREATE TYPE "GearPledgeStatus" AS ENUM ('PLEDGED', 'RECEIVED', 'DECLINED', 'CANCELED', 'EXPIRED');
 CREATE TYPE "GearActivityEntityType" AS ENUM ('CATALOG_ITEM', 'STORAGE_LOCATION', 'POOL_STOCK', 'UNIT', 'NEED', 'RESERVATION', 'ALLOCATION', 'HANDOFF', 'MOVEMENT', 'WISHLIST', 'PLEDGE');
@@ -317,7 +320,8 @@ CREATE TABLE "gear_pledge_receipts" (
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT "gear_pledge_receipts_pkey" PRIMARY KEY ("id"),
   CONSTRAINT "gear_pledge_receipts_exactly_one_inventory_target" CHECK (("poolStockId" IS NOT NULL) <> ("gearUnitId" IS NOT NULL)),
-  CONSTRAINT "gear_pledge_receipts_quantity_positive" CHECK ("quantity" > 0)
+  CONSTRAINT "gear_pledge_receipts_quantity_positive" CHECK ("quantity" > 0),
+  CONSTRAINT "gear_pledge_receipts_tagged_unit_quantity" CHECK ("gearUnitId" IS NULL OR "quantity" = 1)
 );
 
 CREATE TABLE "gear_activity" (
@@ -337,6 +341,7 @@ CREATE TABLE "gear_inventory_movements" (
   "id" TEXT NOT NULL,
   "leagueId" TEXT NOT NULL,
   "type" "GearInventoryMovementType" NOT NULL,
+  "direction" "GearInventoryDirection" NOT NULL,
   "poolStockId" TEXT,
   "gearUnitId" TEXT,
   "allocationId" TEXT,
@@ -353,14 +358,25 @@ CREATE TABLE "gear_inventory_movements" (
   "recordedById" TEXT,
   CONSTRAINT "gear_inventory_movements_pkey" PRIMARY KEY ("id"),
   CONSTRAINT "gear_inventory_movements_exactly_one_inventory_target" CHECK (("poolStockId" IS NOT NULL) <> ("gearUnitId" IS NOT NULL)),
-  CONSTRAINT "gear_inventory_movements_quantity_positive" CHECK ("quantity" > 0)
+  CONSTRAINT "gear_inventory_movements_quantity_positive" CHECK ("quantity" > 0),
+  CONSTRAINT "gear_inventory_movements_tagged_unit_quantity" CHECK ("gearUnitId" IS NULL OR "quantity" = 1),
+  CONSTRAINT "gear_inventory_movements_direction_valid" CHECK (
+    ("type" = 'RECEIPT' AND "direction" = 'INCREASE')
+    OR ("type" = 'ALLOCATION' AND "direction" = 'DECREASE')
+    OR ("type" = 'RELEASE' AND "direction" = 'INCREASE')
+    OR ("type" = 'RETURN' AND "direction" = 'INCREASE')
+    OR ("type" = 'TRANSFER' AND "direction" = 'NEUTRAL')
+    OR ("type" = 'WRITE_OFF' AND "direction" = 'DECREASE')
+    OR ("type" = 'ADJUSTMENT' AND "direction" IN ('INCREASE', 'DECREASE'))
+  )
 );
 
 CREATE TABLE "notification_outbox" (
   "id" TEXT NOT NULL,
   "leagueId" TEXT NOT NULL,
   "recipientUserId" TEXT,
-  "recipientEmail" TEXT,
+  "recipientEmail" TEXT NOT NULL,
+  "recipientRedactedAt" TIMESTAMP(3),
   "eventType" TEXT NOT NULL,
   "aggregateType" TEXT NOT NULL,
   "aggregateId" TEXT NOT NULL,
@@ -377,7 +393,7 @@ CREATE TABLE "notification_outbox" (
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "updatedAt" TIMESTAMP(3) NOT NULL,
   CONSTRAINT "notification_outbox_pkey" PRIMARY KEY ("id"),
-  CONSTRAINT "notification_outbox_exactly_one_recipient" CHECK (("recipientUserId" IS NOT NULL) <> ("recipientEmail" IS NOT NULL)),
+  CONSTRAINT "notification_outbox_recipient_email_present" CHECK (length(btrim("recipientEmail")) > 0),
   CONSTRAINT "notification_outbox_attempts_nonnegative" CHECK ("attempts" >= 0)
 );
 
@@ -498,4 +514,132 @@ ALTER TABLE "gear_inventory_movements" ADD CONSTRAINT "gear_inventory_movements_
 ALTER TABLE "gear_inventory_movements" ADD CONSTRAINT "gear_inventory_movements_afterLocationId_fkey" FOREIGN KEY ("leagueId", "afterLocationId") REFERENCES "gear_storage_locations"("leagueId", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "gear_inventory_movements" ADD CONSTRAINT "gear_inventory_movements_recordedById_fkey" FOREIGN KEY ("recordedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 ALTER TABLE "notification_outbox" ADD CONSTRAINT "notification_outbox_leagueId_fkey" FOREIGN KEY ("leagueId") REFERENCES "leagues"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "notification_outbox" ADD CONSTRAINT "notification_outbox_recipientUserId_fkey" FOREIGN KEY ("recipientUserId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "notification_outbox" ADD CONSTRAINT "notification_outbox_recipientUserId_fkey" FOREIGN KEY ("recipientUserId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- The operational ledger is append-only. Corrections are represented as
+-- compensating handoffs, movements, or activity entries rather than rewrites.
+CREATE FUNCTION "gear_reject_ledger_mutation"() RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RAISE EXCEPTION '% records are append-only; create a compensating entry instead', TG_TABLE_NAME
+    USING ERRCODE = '55000';
+END;
+$$;
+
+CREATE TRIGGER "gear_handoffs_append_only"
+  BEFORE UPDATE OR DELETE ON "gear_handoffs"
+  FOR EACH ROW EXECUTE FUNCTION "gear_reject_ledger_mutation"();
+CREATE TRIGGER "gear_activity_append_only"
+  BEFORE UPDATE OR DELETE ON "gear_activity"
+  FOR EACH ROW EXECUTE FUNCTION "gear_reject_ledger_mutation"();
+CREATE TRIGGER "gear_inventory_movements_append_only"
+  BEFORE UPDATE OR DELETE ON "gear_inventory_movements"
+  FOR EACH ROW EXECUTE FUNCTION "gear_reject_ledger_mutation"();
+
+-- An activity row may name any gear aggregate, but it must name that aggregate
+-- within the activity's League. PostgreSQL cannot express this polymorphic
+-- foreign key declaratively, so the trigger is the tenant boundary.
+CREATE FUNCTION "gear_validate_activity_entity_league"() RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  entity_exists BOOLEAN;
+BEGIN
+  CASE NEW."entityType"
+    WHEN 'CATALOG_ITEM' THEN SELECT EXISTS (SELECT 1 FROM "gear_catalog_items" WHERE "id" = NEW."entityId" AND "leagueId" = NEW."leagueId") INTO entity_exists;
+    WHEN 'STORAGE_LOCATION' THEN SELECT EXISTS (SELECT 1 FROM "gear_storage_locations" WHERE "id" = NEW."entityId" AND "leagueId" = NEW."leagueId") INTO entity_exists;
+    WHEN 'POOL_STOCK' THEN SELECT EXISTS (SELECT 1 FROM "gear_pool_stocks" WHERE "id" = NEW."entityId" AND "leagueId" = NEW."leagueId") INTO entity_exists;
+    WHEN 'UNIT' THEN SELECT EXISTS (SELECT 1 FROM "gear_units" WHERE "id" = NEW."entityId" AND "leagueId" = NEW."leagueId") INTO entity_exists;
+    WHEN 'NEED' THEN SELECT EXISTS (SELECT 1 FROM "team_gear_needs" WHERE "id" = NEW."entityId" AND "leagueId" = NEW."leagueId") INTO entity_exists;
+    WHEN 'RESERVATION' THEN SELECT EXISTS (SELECT 1 FROM "gear_reservations" WHERE "id" = NEW."entityId" AND "leagueId" = NEW."leagueId") INTO entity_exists;
+    WHEN 'ALLOCATION' THEN SELECT EXISTS (SELECT 1 FROM "gear_allocations" WHERE "id" = NEW."entityId" AND "leagueId" = NEW."leagueId") INTO entity_exists;
+    WHEN 'HANDOFF' THEN SELECT EXISTS (SELECT 1 FROM "gear_handoffs" WHERE "id" = NEW."entityId" AND "leagueId" = NEW."leagueId") INTO entity_exists;
+    WHEN 'MOVEMENT' THEN SELECT EXISTS (SELECT 1 FROM "gear_inventory_movements" WHERE "id" = NEW."entityId" AND "leagueId" = NEW."leagueId") INTO entity_exists;
+    WHEN 'WISHLIST' THEN SELECT EXISTS (SELECT 1 FROM "gear_wishlists" WHERE "id" = NEW."entityId" AND "leagueId" = NEW."leagueId") INTO entity_exists;
+    WHEN 'PLEDGE' THEN SELECT EXISTS (SELECT 1 FROM "gear_pledges" WHERE "id" = NEW."entityId" AND "leagueId" = NEW."leagueId") INTO entity_exists;
+    ELSE RAISE EXCEPTION 'Unsupported gear activity entity type: %', NEW."entityType" USING ERRCODE = '23514';
+  END CASE;
+
+  IF NOT entity_exists THEN
+    RAISE EXCEPTION 'Gear activity entity % does not belong to League %', NEW."entityId", NEW."leagueId"
+      USING ERRCODE = '23503';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER "gear_activity_entity_league"
+  BEFORE INSERT ON "gear_activity"
+  FOR EACH ROW EXECUTE FUNCTION "gear_validate_activity_entity_league"();
+
+-- Workers may update delivery state only. The email destination is immutable
+-- except for the terminal redaction procedure below; the nullable user link is
+-- also allowed to become NULL when the user is deleted.
+CREATE FUNCTION "guard_notification_outbox_mutation"() RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    RAISE EXCEPTION 'notification_outbox records are durable and cannot be deleted'
+      USING ERRCODE = '55000';
+  END IF;
+
+  IF NEW."leagueId" IS DISTINCT FROM OLD."leagueId"
+    OR NEW."eventType" IS DISTINCT FROM OLD."eventType"
+    OR NEW."aggregateType" IS DISTINCT FROM OLD."aggregateType"
+    OR NEW."aggregateId" IS DISTINCT FROM OLD."aggregateId"
+    OR NEW."payload" IS DISTINCT FROM OLD."payload"
+    OR NEW."dedupeKey" IS DISTINCT FROM OLD."dedupeKey"
+    OR NEW."createdAt" IS DISTINCT FROM OLD."createdAt" THEN
+    RAISE EXCEPTION 'notification_outbox intent fields are immutable'
+      USING ERRCODE = '55000';
+  END IF;
+
+  IF NEW."recipientUserId" IS DISTINCT FROM OLD."recipientUserId"
+    AND NEW."recipientUserId" IS NOT NULL THEN
+    RAISE EXCEPTION 'notification_outbox recipient user can only be cleared'
+      USING ERRCODE = '55000';
+  END IF;
+
+  IF NEW."recipientEmail" IS DISTINCT FROM OLD."recipientEmail"
+    OR NEW."recipientRedactedAt" IS DISTINCT FROM OLD."recipientRedactedAt" THEN
+    IF OLD."status" NOT IN ('SENT', 'FAILED', 'CANCELED')
+      OR current_setting('openleague.notification_outbox_redaction', true) <> 'on'
+      OR NEW."recipientUserId" IS NOT NULL
+      OR NEW."recipientEmail" <> ('redacted:' || OLD."id" || '@invalid.openleague')
+      OR NEW."recipientRedactedAt" IS NULL THEN
+      RAISE EXCEPTION 'notification_outbox recipient destination is immutable'
+        USING ERRCODE = '55000';
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER "notification_outbox_delivery_state_only"
+  BEFORE UPDATE OR DELETE ON "notification_outbox"
+  FOR EACH ROW EXECUTE FUNCTION "guard_notification_outbox_mutation"();
+
+-- This routine is intentionally not granted to PUBLIC. An operations-only
+-- retention role may use it after a terminal record reaches its retention date.
+CREATE FUNCTION "redact_notification_outbox_recipient"("outbox_id" TEXT) RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  PERFORM set_config('openleague.notification_outbox_redaction', 'on', true);
+  UPDATE public."notification_outbox"
+  SET "recipientUserId" = NULL,
+      "recipientEmail" = 'redacted:' || "id" || '@invalid.openleague',
+      "recipientRedactedAt" = CURRENT_TIMESTAMP
+  WHERE "id" = "outbox_id"
+    AND "status" IN ('SENT', 'FAILED', 'CANCELED')
+    AND "recipientRedactedAt" IS NULL;
+END;
+$$;
+REVOKE ALL ON FUNCTION "redact_notification_outbox_recipient"(TEXT) FROM PUBLIC;
+
+COMMIT;

@@ -698,6 +698,12 @@ enum GearInventoryMovementType {
   WRITE_OFF
 }
 
+enum GearInventoryDirection {
+  INCREASE
+  DECREASE
+  NEUTRAL
+}
+
 enum GearWishlistStatus {
   DRAFT
   PUBLISHED
@@ -1158,6 +1164,7 @@ model GearInventoryMovement {
   id               String                    @id @default(cuid())
   leagueId         String
   type             GearInventoryMovementType
+  direction        GearInventoryDirection
   poolStockId      String?
   gearUnitId       String?
   allocationId     String?
@@ -1192,28 +1199,31 @@ model GearInventoryMovement {
 }
 
 model NotificationOutbox {
-  id              String                   @id @default(cuid())
-  leagueId        String
-  recipientUserId String?
-  recipientEmail  String?
-  eventType       String
-  aggregateType   String
-  aggregateId     String
-  payload         Json
-  dedupeKey       String
-  status          NotificationOutboxStatus @default(PENDING)
-  attempts        Int                      @default(0)
-  scheduledAt     DateTime                 @default(now())
-  lockedAt        DateTime?
-  lastAttemptAt   DateTime?
-  sentAt          DateTime?
-  failedAt        DateTime?
-  lastError       String?
-  createdAt       DateTime                 @default(now())
-  updatedAt       DateTime                 @updatedAt
+  id                  String                   @id @default(cuid())
+  leagueId            String
+  recipientUserId     String?
+  // The captured delivery destination survives account deletion; a privileged,
+  // terminal-only retention routine may replace it with a redacted address.
+  recipientEmail      String
+  recipientRedactedAt DateTime?
+  eventType           String
+  aggregateType       String
+  aggregateId         String
+  payload             Json
+  dedupeKey           String
+  status              NotificationOutboxStatus @default(PENDING)
+  attempts            Int                      @default(0)
+  scheduledAt         DateTime                 @default(now())
+  lockedAt            DateTime?
+  lastAttemptAt       DateTime?
+  sentAt              DateTime?
+  failedAt            DateTime?
+  lastError           String?
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
 
   league        League @relation(fields: [leagueId], references: [id], onDelete: Restrict)
-  recipientUser User?  @relation("NotificationOutboxRecipient", fields: [recipientUserId], references: [id], onDelete: Restrict)
+  recipientUser User?  @relation("NotificationOutboxRecipient", fields: [recipientUserId], references: [id], onDelete: SetNull)
 
   @@unique([leagueId, dedupeKey])
   @@unique([leagueId, id])

@@ -2,8 +2,9 @@
 schemaVersion: 0.1.0
 id: "0006"
 title: Model league-owned gear with ledger projections and an outbox
-status: proposed
+status: accepted
 date: 2026-08-16
+created: 2026-08-16
 deciders: ["@mbeacom"]
 tags: [architecture, gear, inventory, ledger, notifications]
 scope: org
@@ -21,13 +22,21 @@ affects:
     pattern: "lib/utils/gear.ts"
   - type: path
     pattern: "types/gear.ts"
+  - type: path
+    pattern: "lib/utils/validation.ts"
+  - type: path
+    pattern: "lib/utils/permissions.ts"
+  - type: path
+    pattern: ".github/workflows/smoke-tests.yml"
 provenance:
   authoredBy: agent-drafted
+  ratifiedBy: "@mbeacom"
+  sourceArtifact: "PR #331 review adjudication"
 review:
   tier: async
   tierReason: >-
-    The model introduces a durable operational boundary spanning inventory,
-    custody, public pledges, and notification delivery.
+    Ratified after persistence, privacy, and operational review of the
+    implementation boundary spanning inventory, custody, pledges, and delivery.
 reviewBy: 2027-08-16
 ---
 
@@ -59,8 +68,9 @@ is never copied to generic activity details.
 Allocation mutations will execute in serializable Prisma transactions and use
 optimistic versions on mutable inventory and workflow projections. PostgreSQL
 checks and partial unique indexes enforce local invariants such as nonnegative
-quantities, one inventory source per allocation, one active allocation for a
-tagged unit, and exactly one notification recipient target.
+quantities, one inventory source per allocation, and one active allocation for
+a tagged unit. The ledger tables are insert-only at the PostgreSQL boundary;
+corrections use compensating entries.
 
 Tagged-unit allocations retain their effective date window and are protected by
 a PostgreSQL exclusion constraint, so pending and active allocations for the
@@ -69,8 +79,21 @@ Locations referenced by immutable movements are archive-only: history-bearing
 references restrict deletion rather than being nulled.
 
 Every notification intent will be persisted to a durable outbox in the same
-transaction as its aggregate mutation. A later worker owns delivery, retries,
-and status transitions; actions do not deliver notifications inline.
+transaction as its aggregate mutation. A later gear outbox worker owns claiming
+and retry scheduling only; it delegates preferences, batching, and provider
+delivery to the existing `NotificationService` and its `NotificationBatch`
+path. That service remains the sole delivery-state owner, preventing a second
+notification state machine.
+
+Outbox rows retain a nullable user relation plus an immutable delivery-email
+snapshot, so deleting a user cannot block an already durable notification. A
+privileged terminal-retention procedure may replace that email with a redacted
+address after the retention period; it preserves the event fact, intent
+metadata, and delivery outcome. Donor and custodian contact data is held only
+in mutable pledge/reservation snapshot fields, is never copied to activity or
+outbox payloads, and is subject to the same controlled retention/redaction
+policy. Activity and outbox payloads use typed allowlists rather than arbitrary
+PII-bearing JSON.
 
 ## Options considered
 
@@ -110,9 +133,12 @@ commits, leaving no durable retry intent.
 
 - Projection and ledger writes must be kept in the same transaction.
 - Serializable transactions can abort and need bounded retry handling.
-- Restrictive foreign keys retain operational history, including outbox
-  recipients and before/after movement locations, but make destructive cleanup
-  intentionally harder; locations must be archived instead.
+- Restrictive foreign keys retain operational movement-location history; storage
+  locations must be archived rather than deleted.
+- Migration SQL is transaction-wrapped. If a deployment fails, do not edit an
+  applied migration: use `prisma migrate resolve` only after inspecting the
+  failed migration, then recover a Neon branch from its restore point or create
+  a fresh branch before retrying a corrected deployment.
 - The outbox adds a processing component and monitoring requirement.
 
 ## Consequences
@@ -134,3 +160,5 @@ commits, leaving no durable retry intent.
    notification outbox to the Prisma schema and migration.
 2. [ ] Implement serializable inventory actions with retryable conflict handling.
 3. [ ] Implement an outbox worker with bounded retries and observability.
+4. [ ] Define production ledger/outbox capacity thresholds and archival policy.
+5. [ ] Add parity guards before future gear enum changes duplicate across layers.

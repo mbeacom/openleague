@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   createGearPledgeSchema,
   createGearReservationSchema,
+  gearActivityDetailsSchema,
+  gearNotificationPayloadSchema,
+  recordGearInventoryMovementSchema,
   receiveGearPledgeSchema,
 } from "@/lib/utils/validation";
 
@@ -48,6 +51,48 @@ describe("gear validation schemas", () => {
     expect(receiveGearPledgeSchema.safeParse({ ...base, poolStockId: STOCK_ID }).success).toBe(true);
     expect(
       receiveGearPledgeSchema.safeParse({ ...base, poolStockId: STOCK_ID, gearUnitId: UNIT_ID }).success,
+    ).toBe(false);
+    expect(receiveGearPledgeSchema.safeParse({ ...base, gearUnitId: UNIT_ID, quantity: 2 }).success).toBe(false);
+  });
+
+  it("requires tagged movement quantities of one and compatible adjustment direction", () => {
+    const base = {
+      leagueId: LEAGUE_ID,
+      gearUnitId: UNIT_ID,
+      type: "ADJUSTMENT" as const,
+      direction: "INCREASE" as const,
+      quantity: 1,
+    };
+
+    expect(recordGearInventoryMovementSchema.safeParse(base).success).toBe(true);
+    expect(recordGearInventoryMovementSchema.safeParse({ ...base, quantity: 2 }).success).toBe(false);
+    expect(recordGearInventoryMovementSchema.safeParse({ ...base, direction: "NEUTRAL" }).success).toBe(false);
+  });
+
+  it("allows only typed, non-PII activity and notification payload fields", () => {
+    expect(
+      gearActivityDetailsSchema.safeParse({
+        action: "reservation_requested",
+        metadata: { lineCount: 2 },
+      }).success,
+    ).toBe(true);
+    expect(
+      gearActivityDetailsSchema.safeParse({
+        action: "reservation_requested",
+        donorEmail: "donor@example.com",
+      }).success,
+    ).toBe(false);
+    expect(
+      gearNotificationPayloadSchema.safeParse({
+        kind: "GEAR_RESERVATION",
+        data: { reservationId: ITEM_ID },
+      }).success,
+    ).toBe(true);
+    expect(
+      gearNotificationPayloadSchema.safeParse({
+        kind: "GEAR_RESERVATION",
+        data: { recipientEmail: "player@example.com" },
+      }).success,
     ).toBe(false);
   });
 

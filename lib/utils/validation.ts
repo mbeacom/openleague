@@ -2064,6 +2064,16 @@ export const GEAR_TRACKING_MODES = ["POOLED", "INDIVIDUAL"] as const;
 export const GEAR_CONDITIONS = ["NEW", "EXCELLENT", "GOOD", "FAIR", "POOR", "DAMAGED"] as const;
 export const GEAR_NEED_PRIORITIES = ["LOW", "NORMAL", "HIGH", "URGENT"] as const;
 export const GEAR_RETURN_DISPOSITIONS = ["GOOD", "DAMAGED", "LOST", "CONSUMED"] as const;
+export const GEAR_INVENTORY_DIRECTIONS = ["INCREASE", "DECREASE", "NEUTRAL"] as const;
+export const GEAR_INVENTORY_MOVEMENT_TYPES = [
+  "RECEIPT",
+  "ALLOCATION",
+  "RELEASE",
+  "RETURN",
+  "TRANSFER",
+  "ADJUSTMENT",
+  "WRITE_OFF",
+] as const;
 
 const gearDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD");
 const gearQuantitySchema = z.coerce.number().int("Quantity must be a whole number").min(1, "Quantity must be at least 1");
@@ -2211,7 +2221,94 @@ export const receiveGearPledgeSchema = z.object({
       path: ["poolStockId"],
     });
   }
+  if (value.gearUnitId && value.quantity !== 1) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "A tagged-unit receipt quantity must be exactly 1",
+      path: ["quantity"],
+    });
+  }
 });
+
+export const recordGearInventoryMovementSchema = z
+  .object({
+    leagueId: gearCuidSchema,
+    type: z.enum(GEAR_INVENTORY_MOVEMENT_TYPES),
+    direction: z.enum(GEAR_INVENTORY_DIRECTIONS),
+    poolStockId: gearCuidSchema.optional().or(z.literal("")),
+    gearUnitId: gearCuidSchema.optional().or(z.literal("")),
+    quantity: gearQuantitySchema,
+    notes: optionalSanitizedString(1_000),
+  })
+  .superRefine((value, context) => {
+    const inventoryLinks = [value.poolStockId, value.gearUnitId].filter(Boolean);
+    if (inventoryLinks.length !== 1) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "A movement must link to exactly one pool stock row or tagged unit",
+        path: ["poolStockId"],
+      });
+    }
+    if (value.gearUnitId && value.quantity !== 1) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "A tagged-unit movement quantity must be exactly 1",
+        path: ["quantity"],
+      });
+    }
+    const validDirection =
+      (value.type === "RECEIPT" && value.direction === "INCREASE") ||
+      (value.type === "ALLOCATION" && value.direction === "DECREASE") ||
+      (value.type === "RELEASE" && value.direction === "INCREASE") ||
+      (value.type === "RETURN" && value.direction === "INCREASE") ||
+      (value.type === "TRANSFER" && value.direction === "NEUTRAL") ||
+      (value.type === "WRITE_OFF" && value.direction === "DECREASE") ||
+      (value.type === "ADJUSTMENT" && value.direction !== "NEUTRAL");
+    if (!validDirection) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Movement type and direction are incompatible",
+        path: ["direction"],
+      });
+    }
+  });
+
+export const gearActivityDetailsSchema = z
+  .object({
+    action: sanitizedStringWithMin(1, 80),
+    summary: optionalSanitizedString(500),
+    metadata: z.record(z.string().max(80), z.union([z.string().max(500), z.number(), z.boolean(), z.null()])).optional(),
+  })
+  .superRefine((value, context) => {
+    for (const key of Object.keys(value.metadata ?? {})) {
+      if (/(email|phone|name|address|contact)/i.test(key)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Activity metadata cannot contain contact PII",
+          path: ["metadata", key],
+        });
+      }
+    }
+  })
+  .strict();
+
+export const gearNotificationPayloadSchema = z
+  .object({
+    kind: z.enum(["GEAR_RESERVATION", "GEAR_ALLOCATION", "GEAR_PLEDGE", "GEAR_WISHLIST"]),
+    data: z.record(z.string().max(80), z.union([z.string().max(500), z.number(), z.boolean(), z.null()])),
+  })
+  .superRefine((value, context) => {
+    for (const key of Object.keys(value.data)) {
+      if (/(email|phone|name|address|contact)/i.test(key)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Outbox payloads cannot contain contact PII",
+          path: ["data", key],
+        });
+      }
+    }
+  })
+  .strict();
 
 export const recordGearHandoffSchema = z.object({
   leagueId: gearCuidSchema,
@@ -2232,4 +2329,5 @@ export type CreateGearReservationInput = z.input<typeof createGearReservationSch
 export type SaveGearWishlistInput = z.input<typeof saveGearWishlistSchema>;
 export type CreateGearPledgeInput = z.input<typeof createGearPledgeSchema>;
 export type ReceiveGearPledgeInput = z.input<typeof receiveGearPledgeSchema>;
+export type RecordGearInventoryMovementInput = z.input<typeof recordGearInventoryMovementSchema>;
 export type RecordGearHandoffInput = z.input<typeof recordGearHandoffSchema>;

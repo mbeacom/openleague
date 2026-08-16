@@ -35,15 +35,39 @@ describe("gear domain foundation persistence invariants", () => {
     expect(migration).toContain("gear_allocations_status_quantities_valid");
   });
 
-  it("retains immutable outbox recipients and movement locations", () => {
+  it("preserves movement locations and allows user deletion without deleting delivery intent", () => {
     expect(schema).toContain(
-      '@relation("NotificationOutboxRecipient", fields: [recipientUserId], references: [id], onDelete: Restrict)',
+      '@relation("NotificationOutboxRecipient", fields: [recipientUserId], references: [id], onDelete: SetNull)',
     );
     expect(migration).toContain(
-      'FOREIGN KEY ("recipientUserId") REFERENCES "User"("id") ON DELETE RESTRICT',
+      'FOREIGN KEY ("recipientUserId") REFERENCES "User"("id") ON DELETE SET NULL',
     );
     expect(migration).not.toContain(
       'gear_inventory_movements_beforeLocationId_fkey" FOREIGN KEY ("leagueId", "beforeLocationId") REFERENCES "gear_storage_locations"("leagueId", "id") ON DELETE SET NULL',
     );
+  });
+
+  it("makes ledger rows append-only and validates polymorphic activity tenancy", () => {
+    expect(migration.trimStart()).toMatch(/^--[\s\S]*?BEGIN;/);
+    expect(migration.trimEnd()).toMatch(/COMMIT;$/);
+    expect(migration).toContain('CREATE FUNCTION "gear_reject_ledger_mutation"()');
+    expect(migration).toContain('"gear_handoffs_append_only"');
+    expect(migration).toContain('"gear_activity_append_only"');
+    expect(migration).toContain('"gear_inventory_movements_append_only"');
+    expect(migration).toContain('CREATE FUNCTION "gear_validate_activity_entity_league"()');
+    expect(migration).toContain('"gear_activity_entity_league"');
+  });
+
+  it("guards durable outbox intent while supporting terminal PII redaction", () => {
+    expect(migration).toContain('CREATE FUNCTION "guard_notification_outbox_mutation"()');
+    expect(migration).toContain('"notification_outbox_delivery_state_only"');
+    expect(migration).toContain('CREATE FUNCTION "redact_notification_outbox_recipient"("outbox_id" TEXT)');
+    expect(migration).toContain('REVOKE ALL ON FUNCTION "redact_notification_outbox_recipient"(TEXT) FROM PUBLIC');
+  });
+
+  it("requires a quantity of one for tagged movements and pledge receipts", () => {
+    expect(migration).toContain("gear_inventory_movements_tagged_unit_quantity");
+    expect(migration).toContain("gear_pledge_receipts_tagged_unit_quantity");
+    expect(migration).toContain("gear_inventory_movements_direction_valid");
   });
 });
