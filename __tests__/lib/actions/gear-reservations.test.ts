@@ -5,7 +5,7 @@ const { mockAuth, mockTx, mockPrisma, recordGearActivity, recordGearInventoryMov
     gearReservation: { findFirst: vi.fn(), updateMany: vi.fn() },
     gearAllocation: { updateMany: vi.fn(), count: vi.fn() },
     gearReservationLine: { updateMany: vi.fn() },
-    gearUnit: { updateMany: vi.fn() },
+    gearUnit: { findFirst: vi.fn(), updateMany: vi.fn() },
   };
   return {
     mockAuth: { requireUserId: vi.fn(), getUserLeagueRole: vi.fn(), isTeamAdmin: vi.fn() },
@@ -41,6 +41,10 @@ beforeEach(() => {
   mockTx.gearReservation.updateMany.mockResolvedValue({ count: 1 });
   mockTx.gearAllocation.count.mockResolvedValue(0);
   mockTx.gearUnit.updateMany.mockResolvedValue({ count: 1 });
+  mockTx.gearUnit.findFirst.mockResolvedValue({
+    id: "cguuuuuuuuuuuuuuuuuuuuuuuu",
+    version: 1,
+  });
   mockTx.gearReservation.findFirst.mockResolvedValue({
     id: RESERVATION_ID,
     leagueId: LEAGUE_ID,

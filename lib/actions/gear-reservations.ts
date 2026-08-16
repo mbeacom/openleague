@@ -190,11 +190,18 @@ async function releaseTaggedUnitIfFree(tx: Tx, leagueId: string, gearUnitId: str
   const active = await tx.gearAllocation.count({
     where: { leagueId, gearUnitId, status: { in: ["PENDING", "ALLOCATED", "PICKED_UP", "PARTIALLY_RETURNED"] } },
   });
-  if (active === 0) {
-    await tx.gearUnit.updateMany({
-      where: { id: gearUnitId, leagueId, status: "RESERVED" },
+  const unit = active === 0
+    ? await tx.gearUnit.findFirst({
+        where: { id: gearUnitId, leagueId, status: "RESERVED" },
+        select: { id: true, version: true },
+      })
+    : null;
+  if (unit) {
+    const updated = await tx.gearUnit.updateMany({
+      where: { id: unit.id, leagueId, status: "RESERVED", version: unit.version },
       data: { status: "AVAILABLE", version: { increment: 1 } },
     });
+    if (updated.count !== 1) throw new GearConflictError();
   }
 }
 
@@ -273,7 +280,7 @@ export async function createGearReservation(
       });
       await recordGearActivity(tx, {
         leagueId: validated.leagueId, entityType: "RESERVATION", entityId: reservation.id,
-        action: "requested", actorUserId: userId, details: { teamId: validated.teamId },
+        action: "requested", actorUserId: userId, details: { metadata: { teamId: validated.teamId } },
       });
       return reservation;
     }, gearTransactionOptions);
@@ -320,6 +327,7 @@ export async function cancelGearReservation(input: unknown): Promise<ActionResul
         await recordGearInventoryMovement(tx, {
           leagueId: validated.leagueId,
           type: "RELEASE",
+          direction: "NEUTRAL",
           allocationId: allocation.id,
           poolStockId: allocation.poolStockId,
           gearUnitId: allocation.gearUnitId,
@@ -559,7 +567,8 @@ export async function approveAndAllocateGearReservation(input: unknown): Promise
       if (update.count !== 1) throw new GearConflictError();
       await recordGearActivity(tx, {
         leagueId: validated.leagueId, entityType: "RESERVATION", entityId: reservation.id,
-        action: "approved_and_allocated", actorUserId: userId, details: { allocationCount: validated.allocations.length },
+        action: "approved_and_allocated", actorUserId: userId,
+        details: { metadata: { allocationCount: validated.allocations.length } },
       });
       return { id: reservation.id };
     }, gearTransactionOptions));
@@ -641,8 +650,11 @@ export async function recordGearPickup(input: unknown): Promise<ActionResult<{ i
       });
       await recordGearInventoryMovement(tx, {
         leagueId: validated.leagueId, type: "ALLOCATION", quantity: validated.quantity,
+        direction: "DECREASE",
         poolStockId: allocation.poolStockId, gearUnitId: allocation.gearUnitId,
         allocationId: allocation.id, handoffId: handoff.id, recordedById: userId, notes: validated.notes,
+        beforeLocationId: allocation.poolStock?.locationId ?? allocation.gearUnit?.currentLocationId,
+        beforeCondition: allocation.poolStock?.condition ?? allocation.gearUnit?.currentCondition,
       });
       await recordGearActivity(tx, { leagueId: validated.leagueId, entityType: "HANDOFF", entityId: handoff.id, action: "picked_up", actorUserId: userId });
       const reservationUpdate = await tx.gearReservation.updateMany({
@@ -751,15 +763,20 @@ export async function recordGearReturn(input: unknown): Promise<ActionResult<{ i
       await recordGearInventoryMovement(tx, {
         leagueId: validated.leagueId,
         type: ["LOST", "CONSUMED"].includes(validated.returnDisposition) ? "WRITE_OFF" : "RETURN",
+        direction: ["LOST", "CONSUMED"].includes(validated.returnDisposition) ? "DECREASE" : "INCREASE",
         quantity: validated.quantity, poolStockId: allocation.poolStockId, gearUnitId: allocation.gearUnitId,
         allocationId: allocation.id, handoffId: handoff.id,
-        beforeLocationId: allocation.poolStock?.locationId, afterLocationId: allocation.poolStock?.locationId,
+        beforeLocationId: allocation.poolStock?.locationId ?? allocation.gearUnit?.currentLocationId,
+        afterLocationId: ["LOST", "CONSUMED"].includes(validated.returnDisposition)
+          ? null
+          : allocation.poolStock?.locationId ?? allocation.gearUnit?.currentLocationId,
         beforeCondition: allocation.poolStock?.condition ?? allocation.gearUnit?.currentCondition,
         afterCondition: returnCondition, recordedById: userId, notes: validated.notes,
       });
       await recordGearActivity(tx, {
         leagueId: validated.leagueId, entityType: "HANDOFF", entityId: handoff.id,
-        action: "returned", actorUserId: userId, details: { quantity: validated.quantity, disposition: validated.returnDisposition },
+        action: "returned", actorUserId: userId,
+        details: { metadata: { quantity: validated.quantity, disposition: validated.returnDisposition } },
       });
       const openAllocations = await tx.gearAllocation.count({
         where: {
