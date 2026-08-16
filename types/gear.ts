@@ -55,3 +55,12 @@ export type GearReservationWindow = {
   startDate: string;
   endDate: string;
 };
+
+export type TaggedAllocationWindow = GearReservationWindow & {
+  status: GearAllocationStatus;
+};
+
+export type NotificationRecipient = {
+  userId?: string | null;
+  email?: string | null;
+};

@@ -211,6 +211,7 @@ model Team {
   gearNeeds          TeamGearNeed[]
   gearReservations   GearReservation[]
 
+  @@unique([leagueId, id])
   @@index([leagueId]) // Optimize league-team queries
   @@index([divisionId]) // Optimize division-team queries
 }
@@ -739,8 +740,8 @@ enum NotificationOutboxStatus {
   CANCELED
 }
 
-// League-owned gear catalog and location projections. Tenant consistency across
-// related rows is enforced by future action transactions.
+// League-owned gear catalog and location projections. Composite tenant keys keep
+// every gear relationship within the same League.
 model GearCatalogItem {
   id            String           @id @default(cuid())
   leagueId      String
@@ -767,6 +768,7 @@ model GearCatalogItem {
   pledgeReceipts   GearPledgeReceipt[]
 
   @@unique([leagueId, normalizedKey])
+  @@unique([leagueId, id])
   @@index([leagueId, isActive])
   @@map("gear_catalog_items")
 }
@@ -790,6 +792,7 @@ model GearStorageLocation {
   movementsAfter  GearInventoryMovement[] @relation("GearMovementAfterLocation")
 
   @@unique([leagueId, normalizedName])
+  @@unique([leagueId, id])
   @@index([leagueId, isActive])
   @@map("gear_storage_locations")
 }
@@ -806,13 +809,14 @@ model GearPoolStock {
   updatedAt      DateTime      @updatedAt
 
   league             League                  @relation(fields: [leagueId], references: [id], onDelete: Restrict)
-  catalogItem        GearCatalogItem         @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
-  location           GearStorageLocation     @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  catalogItem        GearCatalogItem         @relation(fields: [leagueId, catalogItemId], references: [leagueId, id], onDelete: Restrict)
+  location           GearStorageLocation     @relation(fields: [leagueId, locationId], references: [leagueId, id], onDelete: Restrict)
   allocations        GearAllocation[]
   inventoryMovements GearInventoryMovement[]
   pledgeReceipts     GearPledgeReceipt[]
 
   @@unique([leagueId, catalogItemId, locationId, condition])
+  @@unique([leagueId, id])
   @@index([leagueId, catalogItemId])
   @@index([leagueId, locationId])
   @@map("gear_pool_stocks")
@@ -835,13 +839,14 @@ model GearUnit {
   updatedAt         DateTime       @updatedAt
 
   league             League                  @relation(fields: [leagueId], references: [id], onDelete: Restrict)
-  catalogItem        GearCatalogItem         @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
-  currentLocation    GearStorageLocation?    @relation("GearUnitCurrentLocation", fields: [currentLocationId], references: [id], onDelete: SetNull)
+  catalogItem        GearCatalogItem         @relation(fields: [leagueId, catalogItemId], references: [leagueId, id], onDelete: Restrict)
+  currentLocation    GearStorageLocation?    @relation("GearUnitCurrentLocation", fields: [leagueId, currentLocationId], references: [leagueId, id], onDelete: Restrict)
   allocations        GearAllocation[]
   inventoryMovements GearInventoryMovement[]
   pledgeReceipts     GearPledgeReceipt[]
 
   @@unique([leagueId, assetTag])
+  @@unique([leagueId, id])
   @@index([leagueId, catalogItemId, status])
   @@index([currentLocationId])
   @@map("gear_units")
@@ -864,16 +869,18 @@ model TeamGearNeed {
   createdById String?
 
   league    League             @relation(fields: [leagueId], references: [id], onDelete: Restrict)
-  team      Team               @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  team      Team               @relation(fields: [leagueId, teamId], references: [leagueId, id], onDelete: Restrict)
   createdBy User?              @relation("GearNeedCreator", fields: [createdById], references: [id], onDelete: SetNull)
   lines     TeamGearNeedLine[]
 
+  @@unique([leagueId, id])
   @@index([leagueId, teamId, status])
   @@map("team_gear_needs")
 }
 
 model TeamGearNeedLine {
   id               String             @id @default(cuid())
+  leagueId         String
   needId           String
   catalogItemId    String?
   nameSnapshot     String
@@ -890,10 +897,11 @@ model TeamGearNeedLine {
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
 
-  need             TeamGearNeed          @relation(fields: [needId], references: [id], onDelete: Restrict)
-  catalogItem      GearCatalogItem?      @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
+  need             TeamGearNeed          @relation(fields: [leagueId, needId], references: [leagueId, id], onDelete: Restrict)
+  catalogItem      GearCatalogItem?      @relation(fields: [leagueId, catalogItemId], references: [leagueId, id], onDelete: Restrict)
   reservationLines GearReservationLine[]
 
+  @@unique([leagueId, id])
   @@index([needId, status])
   @@index([catalogItemId])
   @@map("team_gear_need_lines")
@@ -925,12 +933,13 @@ model GearReservation {
   decidedById            String?
 
   league      League                @relation(fields: [leagueId], references: [id], onDelete: Restrict)
-  team        Team                  @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  team        Team                  @relation(fields: [leagueId, teamId], references: [leagueId, id], onDelete: Restrict)
   requestedBy User?                 @relation("GearReservationRequester", fields: [requestedById], references: [id], onDelete: SetNull)
   decidedBy   User?                 @relation("GearReservationDecider", fields: [decidedById], references: [id], onDelete: SetNull)
   lines       GearReservationLine[]
   handoffs    GearHandoff[]
 
+  @@unique([leagueId, id])
   @@index([leagueId, teamId, status])
   @@index([leagueId, requestedStartDate, requestedEndDate])
   @@map("gear_reservations")
@@ -938,6 +947,7 @@ model GearReservation {
 
 model GearReservationLine {
   id            String   @id @default(cuid())
+  leagueId      String
   reservationId String
   catalogItemId String?
   needLineId    String?
@@ -948,44 +958,48 @@ model GearReservationLine {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  reservation GearReservation   @relation(fields: [reservationId], references: [id], onDelete: Restrict)
-  catalogItem GearCatalogItem?  @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
-  needLine    TeamGearNeedLine? @relation(fields: [needLineId], references: [id], onDelete: SetNull)
+  reservation GearReservation   @relation(fields: [leagueId, reservationId], references: [leagueId, id], onDelete: Restrict)
+  catalogItem GearCatalogItem?  @relation(fields: [leagueId, catalogItemId], references: [leagueId, id], onDelete: Restrict)
+  needLine    TeamGearNeedLine? @relation(fields: [leagueId, needLineId], references: [leagueId, id], onDelete: Restrict)
   allocations GearAllocation[]
 
+  @@unique([leagueId, id])
   @@index([reservationId])
   @@index([needLineId])
   @@map("gear_reservation_lines")
 }
 
 model GearAllocation {
-  id                String               @id @default(cuid())
-  leagueId          String
-  reservationLineId String
-  poolStockId       String?
-  gearUnitId        String?
-  status            GearAllocationStatus @default(PENDING)
-  allocatedQty      Int                  @default(0)
-  pickedUpQty       Int                  @default(0)
-  returnedQty       Int                  @default(0)
-  releasedQty       Int                  @default(0)
-  version           Int                  @default(0)
-  allocatedAt       DateTime?
-  pickedUpAt        DateTime?
-  returnedAt        DateTime?
-  releasedAt        DateTime?
-  createdAt         DateTime             @default(now())
-  updatedAt         DateTime             @updatedAt
-  allocatedById     String?
+  id                 String               @id @default(cuid())
+  leagueId           String
+  reservationLineId  String
+  poolStockId        String?
+  gearUnitId         String?
+  status             GearAllocationStatus @default(PENDING)
+  allocatedQty       Int                  @default(0)
+  pickedUpQty        Int                  @default(0)
+  returnedQty        Int                  @default(0)
+  releasedQty        Int                  @default(0)
+  effectiveStartDate DateTime?            @db.Date
+  effectiveEndDate   DateTime?            @db.Date
+  version            Int                  @default(0)
+  allocatedAt        DateTime?
+  pickedUpAt         DateTime?
+  returnedAt         DateTime?
+  releasedAt         DateTime?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  allocatedById      String?
 
   league             League                  @relation(fields: [leagueId], references: [id], onDelete: Restrict)
-  reservationLine    GearReservationLine     @relation(fields: [reservationLineId], references: [id], onDelete: Restrict)
-  poolStock          GearPoolStock?          @relation(fields: [poolStockId], references: [id], onDelete: Restrict)
-  gearUnit           GearUnit?               @relation(fields: [gearUnitId], references: [id], onDelete: Restrict)
+  reservationLine    GearReservationLine     @relation(fields: [leagueId, reservationLineId], references: [leagueId, id], onDelete: Restrict)
+  poolStock          GearPoolStock?          @relation(fields: [leagueId, poolStockId], references: [leagueId, id], onDelete: Restrict)
+  gearUnit           GearUnit?               @relation(fields: [leagueId, gearUnitId], references: [leagueId, id], onDelete: Restrict)
   allocatedBy        User?                   @relation("GearAllocationAllocator", fields: [allocatedById], references: [id], onDelete: SetNull)
   handoffs           GearHandoff[]
   inventoryMovements GearInventoryMovement[]
 
+  @@unique([leagueId, id])
   @@index([leagueId, status])
   @@index([reservationLineId])
   @@index([poolStockId])
@@ -1007,11 +1021,12 @@ model GearHandoff {
   handledById           String?
 
   league             League                  @relation(fields: [leagueId], references: [id], onDelete: Restrict)
-  reservation        GearReservation?        @relation(fields: [reservationId], references: [id], onDelete: Restrict)
-  allocation         GearAllocation?         @relation(fields: [allocationId], references: [id], onDelete: Restrict)
+  reservation        GearReservation?        @relation(fields: [leagueId, reservationId], references: [leagueId, id], onDelete: Restrict)
+  allocation         GearAllocation?         @relation(fields: [leagueId, allocationId], references: [leagueId, id], onDelete: Restrict)
   handledBy          User?                   @relation("GearHandoffHandler", fields: [handledById], references: [id], onDelete: SetNull)
   inventoryMovements GearInventoryMovement[]
 
+  @@unique([leagueId, id])
   @@index([leagueId, occurredAt])
   @@index([reservationId])
   @@index([allocationId])
@@ -1034,12 +1049,14 @@ model GearWishlist {
   league League             @relation(fields: [leagueId], references: [id], onDelete: Restrict)
   items  GearWishlistItem[]
 
+  @@unique([leagueId, id])
   @@index([status])
   @@map("gear_wishlists")
 }
 
 model GearWishlistItem {
   id               String   @id @default(cuid())
+  leagueId         String
   wishlistId       String
   catalogItemId    String?
   normalizedKey    String
@@ -1054,10 +1071,11 @@ model GearWishlistItem {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  wishlist    GearWishlist     @relation(fields: [wishlistId], references: [id], onDelete: Restrict)
-  catalogItem GearCatalogItem? @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
+  wishlist    GearWishlist     @relation(fields: [leagueId, wishlistId], references: [leagueId, id], onDelete: Restrict)
+  catalogItem GearCatalogItem? @relation(fields: [leagueId, catalogItemId], references: [leagueId, id], onDelete: Restrict)
   pledges     GearPledge[]
 
+  @@unique([leagueId, id])
   @@index([wishlistId, isActive])
   @@index([catalogItemId])
   @@map("gear_wishlist_items")
@@ -1081,10 +1099,11 @@ model GearPledge {
   updatedAt        DateTime         @updatedAt
 
   league       League              @relation(fields: [leagueId], references: [id], onDelete: Restrict)
-  wishlistItem GearWishlistItem    @relation(fields: [wishlistItemId], references: [id], onDelete: Restrict)
+  wishlistItem GearWishlistItem    @relation(fields: [leagueId, wishlistItemId], references: [leagueId, id], onDelete: Restrict)
   receipts     GearPledgeReceipt[]
 
   @@unique([leagueId, idempotencyKey])
+  @@unique([leagueId, id])
   @@index([wishlistItemId, status])
   @@map("gear_pledges")
 }
@@ -1102,12 +1121,13 @@ model GearPledgeReceipt {
   createdAt     DateTime @default(now())
 
   league             League                  @relation(fields: [leagueId], references: [id], onDelete: Restrict)
-  pledge             GearPledge              @relation(fields: [pledgeId], references: [id], onDelete: Restrict)
-  catalogItem        GearCatalogItem?        @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
-  poolStock          GearPoolStock?          @relation(fields: [poolStockId], references: [id], onDelete: Restrict)
-  gearUnit           GearUnit?               @relation(fields: [gearUnitId], references: [id], onDelete: Restrict)
+  pledge             GearPledge              @relation(fields: [leagueId, pledgeId], references: [leagueId, id], onDelete: Restrict)
+  catalogItem        GearCatalogItem?        @relation(fields: [leagueId, catalogItemId], references: [leagueId, id], onDelete: Restrict)
+  poolStock          GearPoolStock?          @relation(fields: [leagueId, poolStockId], references: [leagueId, id], onDelete: Restrict)
+  gearUnit           GearUnit?               @relation(fields: [leagueId, gearUnitId], references: [leagueId, id], onDelete: Restrict)
   inventoryMovements GearInventoryMovement[]
 
+  @@unique([leagueId, id])
   @@index([leagueId, receivedAt])
   @@index([pledgeId])
   @@map("gear_pledge_receipts")
@@ -1129,6 +1149,7 @@ model GearActivity {
   league    League @relation(fields: [leagueId], references: [id], onDelete: Restrict)
   actorUser User?  @relation("GearActivityActor", fields: [actorUserId], references: [id], onDelete: SetNull)
 
+  @@unique([leagueId, id])
   @@index([leagueId, entityType, entityId, occurredAt])
   @@map("gear_activity")
 }
@@ -1153,15 +1174,16 @@ model GearInventoryMovement {
   recordedById     String?
 
   league         League               @relation(fields: [leagueId], references: [id], onDelete: Restrict)
-  poolStock      GearPoolStock?       @relation(fields: [poolStockId], references: [id], onDelete: Restrict)
-  gearUnit       GearUnit?            @relation(fields: [gearUnitId], references: [id], onDelete: Restrict)
-  allocation     GearAllocation?      @relation(fields: [allocationId], references: [id], onDelete: Restrict)
-  handoff        GearHandoff?         @relation(fields: [handoffId], references: [id], onDelete: Restrict)
-  pledgeReceipt  GearPledgeReceipt?   @relation(fields: [pledgeReceiptId], references: [id], onDelete: Restrict)
-  beforeLocation GearStorageLocation? @relation("GearMovementBeforeLocation", fields: [beforeLocationId], references: [id], onDelete: SetNull)
-  afterLocation  GearStorageLocation? @relation("GearMovementAfterLocation", fields: [afterLocationId], references: [id], onDelete: SetNull)
+  poolStock      GearPoolStock?       @relation(fields: [leagueId, poolStockId], references: [leagueId, id], onDelete: Restrict)
+  gearUnit       GearUnit?            @relation(fields: [leagueId, gearUnitId], references: [leagueId, id], onDelete: Restrict)
+  allocation     GearAllocation?      @relation(fields: [leagueId, allocationId], references: [leagueId, id], onDelete: Restrict)
+  handoff        GearHandoff?         @relation(fields: [leagueId, handoffId], references: [leagueId, id], onDelete: Restrict)
+  pledgeReceipt  GearPledgeReceipt?   @relation(fields: [leagueId, pledgeReceiptId], references: [leagueId, id], onDelete: Restrict)
+  beforeLocation GearStorageLocation? @relation("GearMovementBeforeLocation", fields: [leagueId, beforeLocationId], references: [leagueId, id], onDelete: Restrict)
+  afterLocation  GearStorageLocation? @relation("GearMovementAfterLocation", fields: [leagueId, afterLocationId], references: [leagueId, id], onDelete: Restrict)
   recordedBy     User?                @relation("GearMovementRecorder", fields: [recordedById], references: [id], onDelete: SetNull)
 
+  @@unique([leagueId, id])
   @@index([leagueId, occurredAt])
   @@index([poolStockId])
   @@index([gearUnitId])
@@ -1191,9 +1213,10 @@ model NotificationOutbox {
   updatedAt       DateTime                 @updatedAt
 
   league        League @relation(fields: [leagueId], references: [id], onDelete: Restrict)
-  recipientUser User?  @relation("NotificationOutboxRecipient", fields: [recipientUserId], references: [id], onDelete: SetNull)
+  recipientUser User?  @relation("NotificationOutboxRecipient", fields: [recipientUserId], references: [id], onDelete: Restrict)
 
   @@unique([leagueId, dedupeKey])
+  @@unique([leagueId, id])
   @@index([status, scheduledAt])
   @@index([leagueId, aggregateType, aggregateId])
   @@map("notification_outbox")

@@ -2,15 +2,19 @@ import { describe, expect, it } from "vitest";
 import {
   allocationIsConsistent,
   allocationRemainingForReturn,
+  allocationStatusQuantitiesValid,
   availablePoolQuantity,
   canAllocatePoolStock,
   canTransitionAllocation,
   canTransitionReservation,
   canTransitionUnit,
   datesOverlap,
+  hasExactlyOneNotificationRecipient,
   isRetryablePrismaConflict,
+  isActiveTaggedAllocationStatus,
   normalizeGearAssetTag,
   normalizeGearKey,
+  taggedAllocationWindowsConflict,
 } from "@/lib/utils/gear";
 
 describe("gear utilities", () => {
@@ -50,6 +54,74 @@ describe("gear utilities", () => {
     expect(
       allocationIsConsistent({ allocatedQty: 4, pickedUpQty: 3, returnedQty: 4, releasedQty: 0 }),
     ).toBe(false);
+  });
+
+  it("enforces status-aware terminal allocation reconciliation", () => {
+    expect(
+      allocationStatusQuantitiesValid("PARTIALLY_RETURNED", {
+        allocatedQty: 4,
+        pickedUpQty: 4,
+        returnedQty: 1,
+        releasedQty: 0,
+      }),
+    ).toBe(true);
+    expect(
+      allocationStatusQuantitiesValid("RETURNED", {
+        allocatedQty: 4,
+        pickedUpQty: 3,
+        returnedQty: 3,
+        releasedQty: 1,
+      }),
+    ).toBe(true);
+    expect(
+      allocationStatusQuantitiesValid("RETURNED", {
+        allocatedQty: 4,
+        pickedUpQty: 3,
+        returnedQty: 2,
+        releasedQty: 1,
+      }),
+    ).toBe(false);
+    expect(
+      allocationStatusQuantitiesValid("RELEASED", {
+        allocatedQty: 4,
+        pickedUpQty: 1,
+        returnedQty: 1,
+        releasedQty: 3,
+      }),
+    ).toBe(false);
+  });
+
+  it("blocks overlapping active or pending tagged allocations but permits separate windows", () => {
+    const pending = { status: "PENDING" as const, startDate: "2026-09-01", endDate: "2026-09-03" };
+    expect(isActiveTaggedAllocationStatus(pending.status)).toBe(true);
+    expect(
+      taggedAllocationWindowsConflict(pending, {
+        status: "ALLOCATED",
+        startDate: "2026-09-03",
+        endDate: "2026-09-05",
+      }),
+    ).toBe(true);
+    expect(
+      taggedAllocationWindowsConflict(pending, {
+        status: "RETURNED",
+        startDate: "2026-09-01",
+        endDate: "2026-09-03",
+      }),
+    ).toBe(false);
+    expect(
+      taggedAllocationWindowsConflict(pending, {
+        status: "ALLOCATED",
+        startDate: "2026-09-04",
+        endDate: "2026-09-05",
+      }),
+    ).toBe(false);
+  });
+
+  it("requires an immutable outbox row to retain exactly one recipient target", () => {
+    expect(hasExactlyOneNotificationRecipient({ userId: "user" })).toBe(true);
+    expect(hasExactlyOneNotificationRecipient({ email: "user@example.com" })).toBe(true);
+    expect(hasExactlyOneNotificationRecipient({ userId: "user", email: "user@example.com" })).toBe(false);
+    expect(hasExactlyOneNotificationRecipient({})).toBe(false);
   });
 
   it("permits only legal workflow transitions", () => {

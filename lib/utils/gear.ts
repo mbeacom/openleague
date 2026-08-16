@@ -5,6 +5,8 @@ import type {
   GearReservationStatus,
   GearReservationWindow,
   GearTrackingMode,
+  NotificationRecipient,
+  TaggedAllocationWindow,
   GearUnitStatus,
 } from "@/types/gear";
 
@@ -74,6 +76,67 @@ export function allocationIsConsistent(allocation: GearAllocationQuantities): bo
     allocation.returnedQty <= allocation.pickedUpQty &&
     allocation.releasedQty <= allocation.allocatedQty - allocation.pickedUpQty
   );
+}
+
+export function allocationStatusQuantitiesValid(
+  status: GearAllocationStatus,
+  allocation: GearAllocationQuantities,
+): boolean {
+  if (!allocationIsConsistent(allocation)) {
+    return false;
+  }
+
+  switch (status) {
+    case "PENDING":
+      return (
+        allocation.allocatedQty === 0 &&
+        allocation.pickedUpQty === 0 &&
+        allocation.returnedQty === 0 &&
+        allocation.releasedQty === 0
+      );
+    case "ALLOCATED":
+      return allocation.allocatedQty > 0 && allocation.pickedUpQty === 0 && allocation.returnedQty === 0 && allocation.releasedQty === 0;
+    case "PICKED_UP":
+      return allocation.pickedUpQty > 0 && allocation.returnedQty === 0 && allocation.releasedQty === 0;
+    case "PARTIALLY_RETURNED":
+      return (
+        allocation.pickedUpQty > 0 &&
+        allocation.returnedQty > 0 &&
+        allocation.returnedQty < allocation.pickedUpQty &&
+        allocation.releasedQty === 0
+      );
+    case "RETURNED":
+      return (
+        allocation.pickedUpQty === allocation.returnedQty &&
+        allocation.returnedQty + allocation.releasedQty === allocation.allocatedQty
+      );
+    case "RELEASED":
+      return (
+        allocation.allocatedQty > 0 &&
+        allocation.pickedUpQty === 0 &&
+        allocation.returnedQty === 0 &&
+        allocation.releasedQty === allocation.allocatedQty
+      );
+  }
+}
+
+export function isActiveTaggedAllocationStatus(status: GearAllocationStatus): boolean {
+  return ["PENDING", "ALLOCATED", "PICKED_UP", "PARTIALLY_RETURNED"].includes(status);
+}
+
+export function taggedAllocationWindowsConflict(
+  candidate: TaggedAllocationWindow,
+  existing: TaggedAllocationWindow,
+): boolean {
+  return (
+    isActiveTaggedAllocationStatus(candidate.status) &&
+    isActiveTaggedAllocationStatus(existing.status) &&
+    datesOverlap(candidate, existing)
+  );
+}
+
+export function hasExactlyOneNotificationRecipient(recipient: NotificationRecipient): boolean {
+  return Boolean(recipient.userId) !== Boolean(recipient.email);
 }
 
 export function canTransitionReservation(

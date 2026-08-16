@@ -62,6 +62,12 @@ checks and partial unique indexes enforce local invariants such as nonnegative
 quantities, one inventory source per allocation, one active allocation for a
 tagged unit, and exactly one notification recipient target.
 
+Tagged-unit allocations retain their effective date window and are protected by
+a PostgreSQL exclusion constraint, so pending and active allocations for the
+same unit cannot overlap while separate future windows remain possible.
+Locations referenced by immutable movements are archive-only: history-bearing
+references restrict deletion rather than being nulled.
+
 Every notification intent will be persisted to a durable outbox in the same
 transaction as its aggregate mutation. A later worker owns delivery, retries,
 and status transitions; actions do not deliver notifications inline.
@@ -104,8 +110,9 @@ commits, leaving no durable retry intent.
 
 - Projection and ledger writes must be kept in the same transaction.
 - Serializable transactions can abort and need bounded retry handling.
-- Restrictive foreign keys retain operational history but make destructive
-  cleanup intentionally harder.
+- Restrictive foreign keys retain operational history, including outbox
+  recipients and before/after movement locations, but make destructive cleanup
+  intentionally harder; locations must be archived instead.
 - The outbox adds a processing component and monitoring requirement.
 
 ## Consequences
