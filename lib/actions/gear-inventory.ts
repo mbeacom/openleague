@@ -18,6 +18,7 @@ import {
   gearTransactionOptions,
   withGearSerializableRetry,
 } from "@/lib/services/gear-transaction";
+import { logGearInventoryFailure } from "@/lib/utils/gear-observability";
 
 export type ActionResult<T> =
   | { success: true; data: T }
@@ -64,37 +65,64 @@ const transferPoolStockSchema = z.object({
 });
 
 const unitCommandSchema = z.object({ leagueId: gearIdSchema, unitId: gearIdSchema });
+const expectedVersionSchema = z.coerce.number().int().min(0);
 const updateUnitSchema = createGearUnitSchema
   .omit({ leagueId: true, catalogItemId: true, currentLocationId: true, currentCondition: true })
   .partial()
-  .extend({ leagueId: gearIdSchema, unitId: gearIdSchema })
-  .refine((input) => Object.keys(input).some((key) => !["leagueId", "unitId"].includes(key)), {
+  .extend({ leagueId: gearIdSchema, unitId: gearIdSchema, expectedVersion: expectedVersionSchema })
+  .refine((input) => Object.keys(input).some((key) => !["leagueId", "unitId", "expectedVersion"].includes(key)), {
     message: "Provide at least one unit field to update",
   });
 const transferUnitSchema = z.object({
   leagueId: gearIdSchema,
   unitId: gearIdSchema,
   destinationLocationId: gearIdSchema,
+  expectedVersion: expectedVersionSchema,
   notes: z.string().trim().max(1_000).optional(),
 });
 const changeUnitConditionSchema = z.object({
   leagueId: gearIdSchema,
   unitId: gearIdSchema,
   condition: conditionSchema,
+  expectedVersion: expectedVersionSchema,
   notes: z.string().trim().max(1_000).optional(),
 });
 const retireUnitSchema = z.object({
   leagueId: gearIdSchema,
   unitId: gearIdSchema,
+  expectedVersion: expectedVersionSchema,
   notes: z.string().trim().min(1, "A retirement reason is required").max(1_000),
+});
+const unretireUnitSchema = z.object({
+  leagueId: gearIdSchema,
+  unitId: gearIdSchema,
+  expectedVersion: expectedVersionSchema,
+  destinationLocationId: gearIdSchema,
+  condition: conditionSchema,
+  notes: z.string().trim().min(1, "An unretirement reason is required").max(1_000),
 });
 
 function gearPath(leagueId: string) {
   return `/league/${leagueId}/gear`;
 }
 
-function messageForGearError(error: unknown): ActionResult<never> {
-  if (error instanceof GearConflictError) return { success: false, error: error.message };
+function messageForGearError(
+  error: unknown,
+  action = "unknown",
+  input?: unknown,
+): ActionResult<never> {
+  const leagueId = typeof input === "object" && input !== null && "leagueId" in input && typeof input.leagueId === "string"
+    ? input.leagueId
+    : undefined;
+  if (error instanceof GearConflictError) {
+    const incidentId = error.retryExhausted ? logGearInventoryFailure(action, leagueId, error) : undefined;
+    return {
+      success: false,
+      error: incidentId
+        ? "Inventory could not be saved after concurrent updates. Please try again."
+        : error.message,
+    };
+  }
   if (error instanceof z.ZodError) {
     return { success: false, error: "Please correct the highlighted inventory fields.", details: error.issues };
   }
@@ -105,7 +133,8 @@ function messageForGearError(error: unknown): ActionResult<never> {
     if (error.message.startsWith("Unauthorized")) return { success: false, error: "League admin access is required." };
     if (error.message.startsWith("Gear validation:")) return { success: false, error: error.message.slice(17) };
   }
-  return { success: false, error: "Unable to update gear inventory. Please try again." };
+  const incidentId = logGearInventoryFailure(action, leagueId, error);
+  return { success: false, error: `Unable to update gear inventory. Please try again. Reference: ${incidentId}` };
 }
 
 function invalid(message: string): never {
@@ -186,7 +215,7 @@ export async function createGearStorageLocation(
     revalidatePath(gearPath(validated.leagueId));
     return { success: true, data: location };
   } catch (error) {
-    return messageForGearError(error);
+    return messageForGearError(error, "create-storage-location", input);
   }
 }
 
@@ -216,7 +245,7 @@ export async function updateGearStorageLocation(input: unknown): Promise<ActionR
     revalidatePath(gearPath(validated.leagueId));
     return { success: true, data: location };
   } catch (error) {
-    return messageForGearError(error);
+    return messageForGearError(error, "update-storage-location", input);
   }
 }
 
@@ -253,7 +282,7 @@ export async function archiveGearStorageLocation(input: unknown): Promise<Action
     revalidatePath(gearPath(leagueId));
     return { success: true, data: location };
   } catch (error) {
-    return messageForGearError(error);
+    return messageForGearError(error, "archive-storage-location", input);
   }
 }
 
@@ -278,7 +307,7 @@ export async function createGearCatalogItem(
     revalidatePath(gearPath(validated.leagueId));
     return { success: true, data: item };
   } catch (error) {
-    return messageForGearError(error);
+    return messageForGearError(error, "create-catalog-item", input);
   }
 }
 
@@ -332,7 +361,7 @@ export async function updateGearCatalogItem(input: unknown): Promise<ActionResul
     revalidatePath(gearPath(validated.leagueId));
     return { success: true, data: item };
   } catch (error) {
-    return messageForGearError(error);
+    return messageForGearError(error, "update-catalog-item", input);
   }
 }
 
@@ -345,6 +374,40 @@ export async function archiveGearCatalogItem(input: unknown): Promise<ActionResu
         where: { id: catalogItemId, leagueId, isActive: true }, select: { id: true },
       });
       if (!existing) invalid("Active catalog item not found.");
+      const [stock, liveUnits, movements, commitments] = await Promise.all([
+        tx.gearPoolStock.count({
+          where: { leagueId, catalogItemId: existing.id, quantityOnHand: { gt: 0 } },
+        }),
+        tx.gearUnit.count({
+          where: {
+            leagueId,
+            catalogItemId: existing.id,
+            status: { notIn: ["RETIRED", "LOST"] },
+          },
+        }),
+        tx.gearInventoryMovement.count({
+          where: {
+            leagueId,
+            OR: [
+              { poolStock: { catalogItemId: existing.id } },
+              { gearUnit: { catalogItemId: existing.id } },
+            ],
+          },
+        }),
+        tx.gearAllocation.count({
+          where: {
+            leagueId,
+            status: { in: [...activeAllocationStatuses] },
+            OR: [
+              { poolStock: { catalogItemId: existing.id } },
+              { gearUnit: { catalogItemId: existing.id } },
+            ],
+          },
+        }),
+      ]);
+      if (stock || liveUnits || movements || commitments) {
+        invalid("Catalog items with stock, active units, commitments, or inventory history cannot be archived.");
+      }
       const archived = await tx.gearCatalogItem.update({
         where: { id: existing.id }, data: { isActive: false, archivedAt: new Date() }, select: { id: true },
       });
@@ -356,7 +419,7 @@ export async function archiveGearCatalogItem(input: unknown): Promise<ActionResu
     revalidatePath(gearPath(leagueId));
     return { success: true, data: item };
   } catch (error) {
-    return messageForGearError(error);
+    return messageForGearError(error, "archive-catalog-item", input);
   }
 }
 
@@ -415,7 +478,9 @@ export async function adjustGearPoolStock(
         direction: validated.quantityDelta > 0 ? "INCREASE" : "DECREASE",
         beforeLocationId: validated.quantityDelta < 0 ? validated.locationId : null,
         afterLocationId: validated.quantityDelta > 0 ? validated.locationId : null,
-        afterCondition: validated.condition, recordedById: userId, notes: validated.notes,
+        beforeCondition: validated.quantityDelta < 0 ? validated.condition : null,
+        afterCondition: validated.quantityDelta > 0 ? validated.condition : null,
+        recordedById: userId, notes: validated.notes,
       });
       await recordGearActivity(tx, {
         leagueId: validated.leagueId, entityType: "POOL_STOCK", entityId: current.id,
@@ -427,7 +492,7 @@ export async function adjustGearPoolStock(
     revalidatePath(gearPath(validated.leagueId));
     return { success: true, data: stock };
   } catch (error) {
-    return messageForGearError(error);
+    return messageForGearError(error, "adjust-pooled-stock", input);
   }
 }
 
@@ -492,7 +557,7 @@ export async function transferGearPoolStock(input: unknown): Promise<ActionResul
     revalidatePath(gearPath(validated.leagueId));
     return { success: true, data: transfer };
   } catch (error) {
-    return messageForGearError(error);
+    return messageForGearError(error, "transfer-pooled-stock", input);
   }
 }
 
@@ -533,7 +598,7 @@ export async function createGearUnit(
     revalidatePath(gearPath(validated.leagueId));
     return { success: true, data: unit };
   } catch (error) {
-    return messageForGearError(error);
+    return messageForGearError(error, "create-unit", input);
   }
 }
 
@@ -544,33 +609,33 @@ export async function updateGearUnit(input: unknown): Promise<ActionResult<{ id:
     const unit = await prisma.$transaction(async (tx) => {
       const existing = await tx.gearUnit.findFirst({
         where: { id: validated.unitId, leagueId: validated.leagueId },
-        select: { id: true, status: true },
+        select: { id: true, status: true, version: true },
       });
       if (!existing) invalid("Tagged unit not found.");
       if (existing.status === "RETIRED" || existing.status === "LOST") invalid("Retired or lost units cannot be edited.");
-      const { leagueId, unitId, assetTag, acquiredAt, ...changes } = validated;
+      const { leagueId, unitId, expectedVersion, assetTag, acquiredAt, ...changes } = validated;
       if (assetTag !== undefined && !normalizeGearAssetTag(assetTag)) {
         invalid("An asset tag is required for individually tracked gear.");
       }
-      const updated = await tx.gearUnit.update({
-        where: { id: existing.id },
+      const updated = await tx.gearUnit.updateMany({
+        where: { id: existing.id, leagueId, version: expectedVersion },
         data: {
           ...changes,
           ...(assetTag !== undefined ? { assetTag: assetTag ? normalizeGearAssetTag(assetTag) : null } : {}),
           ...(acquiredAt !== undefined ? { acquiredAt: acquiredAt ? new Date(`${acquiredAt}T00:00:00.000Z`) : null } : {}),
           version: { increment: 1 },
         },
-        select: { id: true },
       });
+      if (updated.count !== 1) throw new GearConflictError();
       await recordGearActivity(tx, {
-        leagueId, entityType: "UNIT", entityId: updated.id, action: "updated", actorUserId: userId,
+        leagueId, entityType: "UNIT", entityId: existing.id, action: "updated", actorUserId: userId,
       });
-      return updated;
+      return { id: existing.id };
     }, gearTransactionOptions);
     revalidatePath(gearPath(validated.leagueId));
     return { success: true, data: unit };
   } catch (error) {
-    return messageForGearError(error);
+    return messageForGearError(error, "update-unit", input);
   }
 }
 
@@ -581,36 +646,36 @@ export async function transferGearUnit(input: unknown): Promise<ActionResult<{ i
     const unit = await prisma.$transaction(async (tx) => {
       const existing = await tx.gearUnit.findFirst({
         where: { id: validated.unitId, leagueId: validated.leagueId },
-        select: { id: true, status: true, currentLocationId: true, currentCondition: true },
+        select: { id: true, status: true, currentLocationId: true, currentCondition: true, version: true },
       });
       if (!existing) invalid("Tagged unit not found.");
       if (!["AVAILABLE", "MAINTENANCE"].includes(existing.status)) invalid("Only available or maintenance units can be transferred.");
       await assertUnitCanMove(tx, validated.leagueId, existing.id);
       await ensureActiveLocation(tx, validated.leagueId, validated.destinationLocationId);
       if (existing.currentLocationId === validated.destinationLocationId) invalid("Choose a different destination location.");
-      const updated = await tx.gearUnit.update({
-        where: { id: existing.id },
+      const updated = await tx.gearUnit.updateMany({
+        where: { id: existing.id, leagueId: validated.leagueId, version: validated.expectedVersion },
         data: { currentLocationId: validated.destinationLocationId, version: { increment: 1 } },
-        select: { id: true },
       });
+      if (updated.count !== 1) throw new GearConflictError();
       await recordGearInventoryMovement(tx, {
-        leagueId: validated.leagueId, type: "TRANSFER", gearUnitId: updated.id, quantity: 1,
+        leagueId: validated.leagueId, type: "TRANSFER", gearUnitId: existing.id, quantity: 1,
         direction: "NEUTRAL",
         beforeLocationId: existing.currentLocationId, afterLocationId: validated.destinationLocationId,
         beforeCondition: existing.currentCondition, afterCondition: existing.currentCondition,
         recordedById: userId, notes: validated.notes,
       });
       await recordGearActivity(tx, {
-        leagueId: validated.leagueId, entityType: "UNIT", entityId: updated.id, action: "transferred",
+        leagueId: validated.leagueId, entityType: "UNIT", entityId: existing.id, action: "transferred",
         actorUserId: userId,
         details: { metadata: { destinationLocationId: validated.destinationLocationId } },
       });
-      return updated;
+      return { id: existing.id };
     }, gearTransactionOptions);
     revalidatePath(gearPath(validated.leagueId));
     return { success: true, data: unit };
   } catch (error) {
-    return messageForGearError(error);
+    return messageForGearError(error, "transfer-unit", input);
   }
 }
 
@@ -621,40 +686,40 @@ export async function changeGearUnitCondition(input: unknown): Promise<ActionRes
     const unit = await prisma.$transaction(async (tx) => {
       const existing = await tx.gearUnit.findFirst({
         where: { id: validated.unitId, leagueId: validated.leagueId },
-        select: { id: true, status: true, currentLocationId: true, currentCondition: true },
+        select: { id: true, status: true, currentLocationId: true, currentCondition: true, version: true },
       });
       if (!existing) invalid("Tagged unit not found.");
       if (!["AVAILABLE", "MAINTENANCE"].includes(existing.status)) invalid("Only available or maintenance units can have their condition changed.");
       await assertUnitCanMove(tx, validated.leagueId, existing.id);
       if (existing.currentCondition === validated.condition) invalid("Choose a different condition.");
-      const updated = await tx.gearUnit.update({
-        where: { id: existing.id },
+      const updated = await tx.gearUnit.updateMany({
+        where: { id: existing.id, leagueId: validated.leagueId, version: validated.expectedVersion },
         data: { currentCondition: validated.condition, version: { increment: 1 } },
-        select: { id: true },
       });
+      if (updated.count !== 1) throw new GearConflictError();
       await recordGearInventoryMovement(tx, {
-        leagueId: validated.leagueId, type: "ADJUSTMENT", gearUnitId: updated.id, quantity: 1,
+        leagueId: validated.leagueId, type: "ADJUSTMENT", gearUnitId: existing.id, quantity: 1,
         direction: "DECREASE",
         beforeLocationId: existing.currentLocationId, beforeCondition: existing.currentCondition,
         recordedById: userId, notes: validated.notes,
       });
       await recordGearInventoryMovement(tx, {
-        leagueId: validated.leagueId, type: "ADJUSTMENT", gearUnitId: updated.id, quantity: 1,
+        leagueId: validated.leagueId, type: "ADJUSTMENT", gearUnitId: existing.id, quantity: 1,
         direction: "INCREASE",
         afterLocationId: existing.currentLocationId, afterCondition: validated.condition,
         recordedById: userId, notes: validated.notes,
       });
       await recordGearActivity(tx, {
-        leagueId: validated.leagueId, entityType: "UNIT", entityId: updated.id, action: "condition_changed",
+        leagueId: validated.leagueId, entityType: "UNIT", entityId: existing.id, action: "condition_changed",
         actorUserId: userId,
         details: { metadata: { fromCondition: existing.currentCondition, toCondition: validated.condition } },
       });
-      return updated;
+      return { id: existing.id };
     }, gearTransactionOptions);
     revalidatePath(gearPath(validated.leagueId));
     return { success: true, data: unit };
   } catch (error) {
-    return messageForGearError(error);
+    return messageForGearError(error, "change-unit-condition", input);
   }
 }
 
@@ -665,31 +730,89 @@ export async function retireGearUnit(input: unknown): Promise<ActionResult<{ id:
     const unit = await prisma.$transaction(async (tx) => {
       const existing = await tx.gearUnit.findFirst({
         where: { id: validated.unitId, leagueId: validated.leagueId },
-        select: { id: true, status: true, currentLocationId: true, currentCondition: true },
+        select: { id: true, status: true, currentLocationId: true, currentCondition: true, version: true },
       });
       if (!existing) invalid("Tagged unit not found.");
       if (!["AVAILABLE", "MAINTENANCE"].includes(existing.status)) invalid("Only available or maintenance units can be retired.");
       await assertUnitCanMove(tx, validated.leagueId, existing.id);
-      const updated = await tx.gearUnit.update({
-        where: { id: existing.id },
+      const updated = await tx.gearUnit.updateMany({
+        where: { id: existing.id, leagueId: validated.leagueId, version: validated.expectedVersion },
         data: { status: "RETIRED", retiredAt: new Date(), currentLocationId: null, version: { increment: 1 } },
-        select: { id: true },
       });
+      if (updated.count !== 1) throw new GearConflictError();
       await recordGearInventoryMovement(tx, {
-        leagueId: validated.leagueId, type: "WRITE_OFF", gearUnitId: updated.id, quantity: 1,
+        leagueId: validated.leagueId, type: "WRITE_OFF", gearUnitId: existing.id, quantity: 1,
         direction: "DECREASE",
         beforeLocationId: existing.currentLocationId, beforeCondition: existing.currentCondition,
-        afterCondition: existing.currentCondition, recordedById: userId, notes: validated.notes,
+        recordedById: userId, notes: validated.notes,
       });
       await recordGearActivity(tx, {
-        leagueId: validated.leagueId, entityType: "UNIT", entityId: updated.id, action: "retired",
+        leagueId: validated.leagueId, entityType: "UNIT", entityId: existing.id, action: "retired",
         actorUserId: userId,
       });
-      return updated;
+      return { id: existing.id };
     }, gearTransactionOptions);
     revalidatePath(gearPath(validated.leagueId));
     return { success: true, data: unit };
   } catch (error) {
-    return messageForGearError(error);
+    return messageForGearError(error, "retire-unit", input);
+  }
+}
+
+export async function unretireGearUnit(input: unknown): Promise<ActionResult<{ id: string }>> {
+  try {
+    const validated = unretireUnitSchema.parse(input);
+    const userId = await requireLeagueRole(validated.leagueId, "LEAGUE_ADMIN");
+    const unit = await prisma.$transaction(async (tx) => {
+      const existing = await tx.gearUnit.findFirst({
+        where: { id: validated.unitId, leagueId: validated.leagueId },
+        select: { id: true, status: true, version: true },
+      });
+      if (!existing) invalid("Tagged unit not found.");
+      if (existing.status !== "RETIRED") invalid("Only retired units can be returned to inventory.");
+      await ensureActiveLocation(tx, validated.leagueId, validated.destinationLocationId);
+      const updated = await tx.gearUnit.updateMany({
+        where: { id: existing.id, leagueId: validated.leagueId, version: validated.expectedVersion },
+        data: {
+          status: "AVAILABLE",
+          currentLocationId: validated.destinationLocationId,
+          currentCondition: validated.condition,
+          retiredAt: null,
+          version: { increment: 1 },
+        },
+      });
+      if (updated.count !== 1) throw new GearConflictError();
+      await recordGearInventoryMovement(tx, {
+        leagueId: validated.leagueId,
+        type: "RECEIPT",
+        direction: "INCREASE",
+        gearUnitId: existing.id,
+        quantity: 1,
+        afterLocationId: validated.destinationLocationId,
+        afterCondition: validated.condition,
+        recordedById: userId,
+        notes: validated.notes,
+      });
+      await recordGearActivity(tx, {
+        leagueId: validated.leagueId,
+        entityType: "UNIT",
+        entityId: existing.id,
+        action: "unretired",
+        actorUserId: userId,
+        details: {
+          summary: "Unit returned to active inventory after retirement.",
+          metadata: {
+            destinationLocationId: validated.destinationLocationId,
+            condition: validated.condition,
+            retirementReversed: true,
+          },
+        },
+      });
+      return { id: existing.id };
+    }, gearTransactionOptions);
+    revalidatePath(gearPath(validated.leagueId));
+    return { success: true, data: unit };
+  } catch (error) {
+    return messageForGearError(error, "unretire-unit", input);
   }
 }

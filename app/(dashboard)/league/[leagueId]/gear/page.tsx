@@ -8,14 +8,20 @@ import { getGearInventoryContext } from "@/lib/actions/gear-context";
 
 interface GearInventoryPageProps {
   params: Promise<{ leagueId: string }>;
+  searchParams: Promise<{ activityPage?: string; activitySearch?: string }>;
 }
 
-export default async function GearInventoryPage({ params }: GearInventoryPageProps) {
+export default async function GearInventoryPage({ params, searchParams }: GearInventoryPageProps) {
   const { leagueId } = await params;
-  const data = await getGearInventoryContext(leagueId);
+  const query = await searchParams;
+  const activityPage = Number.parseInt(query.activityPage ?? "1", 10);
+  const data = await getGearInventoryContext(leagueId, {
+    activityPage: Number.isFinite(activityPage) ? activityPage : 1,
+    activitySearch: query.activitySearch,
+  });
   if (!data) notFound();
 
-  const hasInventory = data.catalogItems.length > 0 || data.locations.length > 0 || data.units.length > 0 || data.pooledStock.length > 0;
+  const hasInventory = data.units.length > 0 || data.pooledStock.length > 0;
 
   return (
     <PageContainer maxWidth="xl">
