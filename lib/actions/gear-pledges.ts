@@ -138,7 +138,7 @@ export async function createGearPledge(
         entityId: created.id,
         action: "pledged",
         actorKind: "PUBLIC_DONOR",
-        details: { wishlistItemId: item.id, quantity: validated.quantity },
+        details: { metadata: { wishlistItemId: item.id, quantity: validated.quantity } },
       });
       await queueGearOutboxForLeagueAdmins(tx, {
         leagueId: item.wishlist.leagueId,
@@ -146,7 +146,7 @@ export async function createGearPledge(
         occurrenceKey: created.id,
         aggregateType: "PLEDGE",
         aggregateId: created.id,
-        payload: { pledgeId: created.id, wishlistItemId: item.id, quantity: validated.quantity },
+        payload: { kind: "GEAR_PLEDGE", data: { pledgeId: created.id, wishlistItemId: item.id, quantity: validated.quantity } },
       });
       return created;
     }, gearTransactionOptions));
@@ -272,6 +272,7 @@ export async function receiveGearPledge(
         await recordGearInventoryMovement(tx, {
           leagueId: validated.leagueId,
           type: "RECEIPT",
+          direction: "INCREASE",
           quantity: validated.quantity,
           poolStockId: stock.id,
           pledgeReceiptId: receipt.id,
@@ -341,6 +342,7 @@ export async function receiveGearPledge(
           await recordGearInventoryMovement(tx, {
             leagueId: validated.leagueId,
             type: "RECEIPT",
+            direction: "INCREASE",
             quantity: 1,
             gearUnitId: unit.id,
             pledgeReceiptId: receipt.id,
@@ -355,7 +357,7 @@ export async function receiveGearPledge(
             entityId: unit.id,
             action: "received_from_pledge",
             actorUserId: userId,
-            details: { pledgeId: pledge.id, receiptId: receipt.id, assetTag },
+            details: { metadata: { pledgeId: pledge.id, receiptId: receipt.id, assetTag } },
           });
         }
       }
@@ -382,9 +384,11 @@ export async function receiveGearPledge(
         action: pledgeStatus === "RECEIVED" ? "received" : "partially_received",
         actorUserId: userId,
         details: {
-          receiptIds,
-          quantity: validated.quantity,
-          inventoryKind: validated.poolStockId ? "POOLED" : "INDIVIDUAL",
+          metadata: {
+            receiptCount: receiptIds.length,
+            quantity: validated.quantity,
+            inventoryKind: validated.poolStockId ? "POOLED" : "INDIVIDUAL",
+          },
         },
       });
       await queueGearOutboxForLeagueAdmins(tx, {
@@ -394,11 +398,14 @@ export async function receiveGearPledge(
         aggregateType: "PLEDGE",
         aggregateId: pledge.id,
         payload: {
-          pledgeId: pledge.id,
-          receiptIds,
-          wishlistItemId: pledge.wishlistItem.id,
-          quantity: validated.quantity,
-          status: pledgeStatus,
+          kind: "GEAR_PLEDGE",
+          data: {
+            pledgeId: pledge.id,
+            receiptCount: receiptIds.length,
+            wishlistItemId: pledge.wishlistItem.id,
+            quantity: validated.quantity,
+            status: pledgeStatus,
+          },
         },
       });
       return { receiptId: receiptIds[0], receiptIds, pledgeStatus, pledgeVersion: pledge.version + 1 };
@@ -480,7 +487,7 @@ async function transitionPledge(
         entityId: pledge.id,
         action: target.toLowerCase(),
         actorUserId: userId,
-        details: { wishlistItemId: pledge.wishlistItemId, outstandingQty },
+        details: { metadata: { wishlistItemId: pledge.wishlistItemId, outstandingQty } },
       });
       await queueGearOutboxForLeagueAdmins(tx, {
         leagueId: validated.leagueId,
@@ -488,7 +495,7 @@ async function transitionPledge(
         occurrenceKey: `v${pledge.version + 1}`,
         aggregateType: "PLEDGE",
         aggregateId: pledge.id,
-        payload: { pledgeId: pledge.id, wishlistItemId: pledge.wishlistItemId, status: target },
+        payload: { kind: "GEAR_PLEDGE", data: { pledgeId: pledge.id, wishlistItemId: pledge.wishlistItemId, status: target } },
       });
       return { id: pledge.id, status: target, version: pledge.version + 1 };
     }, gearTransactionOptions));

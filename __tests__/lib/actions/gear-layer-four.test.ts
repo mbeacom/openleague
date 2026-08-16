@@ -27,6 +27,7 @@ const {
     gearUnit: { findMany: vi.fn(), create: vi.fn() },
     gearInventoryMovement: { create: vi.fn() },
     notificationOutbox: { createMany: vi.fn() },
+    user: { findMany: vi.fn() },
     leagueUser: { findMany: vi.fn() },
     teamMember: { findMany: vi.fn() },
   };
@@ -106,6 +107,7 @@ beforeEach(() => {
   tx.gearInventoryMovement.create.mockResolvedValue({});
   tx.leagueUser.findMany.mockResolvedValue([{ userId: USER_ID }]);
   tx.teamMember.findMany.mockResolvedValue([{ userId: USER_ID }]);
+  tx.user.findMany.mockResolvedValue([{ id: USER_ID, email: "admin@example.com" }]);
   tx.gearWishlistItem.update.mockResolvedValue({});
   tx.gearPledge.updateMany.mockResolvedValue({ count: 1 });
   tx.gearPledgeReceiptCommand.findUnique.mockResolvedValue(null);
@@ -316,13 +318,14 @@ describe("Layer 4 gear actions", () => {
   it("keeps distinct outbox occurrences while deduplicating recipients within each occurrence", async () => {
     const outboxTx = {
       notificationOutbox: { createMany: vi.fn().mockResolvedValue({ count: 1 }) },
+      user: { findMany: vi.fn().mockResolvedValue([{ id: USER_ID, email: "admin@example.com" }]) },
     };
     const event = {
       leagueId: LEAGUE_ID,
       eventType: "gear.wishlist.published",
       aggregateType: "WISHLIST" as const,
       aggregateId: WISHLIST_ID,
-      payload: { wishlistId: WISHLIST_ID },
+      payload: { kind: "GEAR_WISHLIST" as const, data: { wishlistId: WISHLIST_ID } },
     };
     await queueGearOutboxForRecipients(outboxTx as never, { ...event, occurrenceKey: "v1" }, [USER_ID, USER_ID]);
     await queueGearOutboxForRecipients(outboxTx as never, { ...event, occurrenceKey: "v2" }, [USER_ID]);

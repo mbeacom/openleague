@@ -7,6 +7,7 @@ import { getUserLeagueRole, isTeamAdmin, requireLeagueRole, requireUserId } from
 import { prisma } from "@/lib/db/prisma";
 import { recordGearActivity } from "@/lib/services/gear-ledger";
 import {
+  type GearOutboxEvent,
   queueGearOutboxForLeagueAdmins,
   queueGearOutboxForRecipients,
 } from "@/lib/services/gear-outbox";
@@ -253,15 +254,15 @@ async function transitionNeed(
         entityId: need.id,
         action: target.toLowerCase(),
         actorUserId: userId,
-        details: { teamId: need.teamId },
+        details: { metadata: { teamId: need.teamId } },
       });
-      const event = {
+      const event: GearOutboxEvent = {
         leagueId: validated.leagueId,
         eventType: `gear.need.${target.toLowerCase()}`,
         occurrenceKey: `v${need.version + 1}`,
         aggregateType: "NEED" as const,
         aggregateId: need.id,
-        payload: { needId: need.id, teamId: need.teamId, status: target },
+        payload: { kind: "GEAR_NEED", data: { needId: need.id, teamId: need.teamId, status: target } },
       };
       if (target === "SUBMITTED") {
         await queueGearOutboxForLeagueAdmins(tx, event);
@@ -340,7 +341,7 @@ export async function createTeamGearNeed(
         entityId: need.id,
         action: "created",
         actorUserId: userId,
-        details: { teamId: validated.teamId, lineCount: validated.lines.length },
+        details: { metadata: { teamId: validated.teamId, lineCount: validated.lines.length } },
       });
       return need;
     }, gearTransactionOptions));

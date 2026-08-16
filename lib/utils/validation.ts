@@ -2341,7 +2341,7 @@ export const gearActivityDetailsSchema = z
 
 export const gearNotificationPayloadSchema = z
   .object({
-    kind: z.enum(["GEAR_RESERVATION", "GEAR_ALLOCATION", "GEAR_PLEDGE", "GEAR_WISHLIST"]),
+    kind: z.enum(["GEAR_RESERVATION", "GEAR_ALLOCATION", "GEAR_NEED", "GEAR_PLEDGE", "GEAR_WISHLIST"]),
     data: z.record(z.string().max(80), z.union([z.string().max(500), z.number(), z.boolean(), z.null()])),
   })
   .superRefine((value, context) => {

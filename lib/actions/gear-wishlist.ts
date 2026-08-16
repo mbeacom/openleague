@@ -137,7 +137,7 @@ export async function saveGearWishlist(
           entityId: created.id,
           action: validated.publish ? "created_and_published" : "created",
           actorUserId: userId,
-          details: { itemCount: items.length },
+          details: { metadata: { itemCount: items.length } },
         });
         await queueGearOutboxForLeagueAdmins(tx, {
           leagueId: validated.leagueId,
@@ -145,7 +145,7 @@ export async function saveGearWishlist(
           occurrenceKey: `v${created.version}`,
           aggregateType: "WISHLIST",
           aggregateId: created.id,
-          payload: { wishlistId: created.id, status: created.status, itemCount: items.length },
+          payload: { kind: "GEAR_WISHLIST", data: { wishlistId: created.id, status: created.status, itemCount: items.length } },
         });
         return created;
       }
@@ -185,7 +185,7 @@ export async function saveGearWishlist(
           entityId: existing.id,
           action: "recycled",
           actorUserId: userId,
-          details: { itemCount: items.length, status },
+          details: { metadata: { itemCount: items.length, status } },
         });
         await queueGearOutboxForLeagueAdmins(tx, {
           leagueId: validated.leagueId,
@@ -193,7 +193,7 @@ export async function saveGearWishlist(
           occurrenceKey: `v${existing.version + 1}`,
           aggregateType: "WISHLIST",
           aggregateId: existing.id,
-          payload: { wishlistId: existing.id, status, itemCount: items.length },
+          payload: { kind: "GEAR_WISHLIST", data: { wishlistId: existing.id, status, itemCount: items.length } },
         });
         return {
           id: existing.id,
@@ -259,7 +259,7 @@ export async function saveGearWishlist(
         entityId: existing.id,
         action: nextStatus === "PUBLISHED" && existing.status === "DRAFT" ? "published" : "updated",
         actorUserId: userId,
-        details: { itemCount: items.length },
+        details: { metadata: { itemCount: items.length } },
       });
       if (nextStatus === "PUBLISHED" && existing.status === "DRAFT") {
         await queueGearOutboxForLeagueAdmins(tx, {
@@ -268,7 +268,7 @@ export async function saveGearWishlist(
           occurrenceKey: `v${existing.version + 1}`,
           aggregateType: "WISHLIST",
           aggregateId: existing.id,
-          payload: { wishlistId: existing.id, status: nextStatus, itemCount: items.length },
+          payload: { kind: "GEAR_WISHLIST", data: { wishlistId: existing.id, status: nextStatus, itemCount: items.length } },
         });
       }
       return {
@@ -310,7 +310,7 @@ export async function archiveGearWishlist(input: unknown): Promise<ActionResult<
         occurrenceKey: `v${wishlist.version + 1}`,
         aggregateType: "WISHLIST",
         aggregateId: wishlist.id,
-        payload: { wishlistId: wishlist.id, status: "ARCHIVED" },
+        payload: { kind: "GEAR_WISHLIST", data: { wishlistId: wishlist.id, status: "ARCHIVED" } },
       });
       return { id: wishlist.id, version: wishlist.version + 1 };
     }, gearTransactionOptions));
@@ -351,7 +351,7 @@ export async function rotateGearWishlistShareToken(
         occurrenceKey: `v${wishlist.version + 1}`,
         aggregateType: "WISHLIST",
         aggregateId: wishlist.id,
-        payload: { wishlistId: wishlist.id },
+        payload: { kind: "GEAR_WISHLIST", data: { wishlistId: wishlist.id } },
       });
       return { id: wishlist.id, shareToken: token, version: wishlist.version + 1 };
     }, gearTransactionOptions));
@@ -402,7 +402,7 @@ export async function setGearWishlistStatus(input: unknown): Promise<ActionResul
         occurrenceKey: `v${wishlist.version + 1}`,
         aggregateType: "WISHLIST",
         aggregateId: wishlist.id,
-        payload: { wishlistId: wishlist.id, status: "PUBLISHED", itemCount: wishlist.items.length },
+        payload: { kind: "GEAR_WISHLIST", data: { wishlistId: wishlist.id, status: "PUBLISHED", itemCount: wishlist.items.length } },
       });
       return { id: wishlist.id, status: "PUBLISHED", version: wishlist.version + 1 };
     }, gearTransactionOptions));

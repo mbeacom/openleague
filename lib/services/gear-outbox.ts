@@ -1,4 +1,6 @@
 import type { Prisma } from "@prisma/client";
+import type { GearNotificationPayload } from "@/types/gear";
+import { gearNotificationPayloadSchema } from "@/lib/utils/validation";
 
 type GearTransaction = Prisma.TransactionClient;
 
@@ -9,7 +11,7 @@ export type GearOutboxEvent = {
   occurrenceKey: string;
   aggregateType: "NEED" | "PLEDGE" | "WISHLIST";
   aggregateId: string;
-  payload: Prisma.InputJsonValue;
+  payload: GearNotificationPayload;
 };
 
 export async function queueGearOutboxForRecipients(
@@ -20,15 +22,21 @@ export async function queueGearOutboxForRecipients(
   const recipientIds = [...new Set(recipientUserIds)];
   if (recipientIds.length === 0) return;
 
+  const recipients = await tx.user.findMany({
+    where: { id: { in: recipientIds } },
+    select: { id: true, email: true },
+  });
+  const payload = gearNotificationPayloadSchema.parse(event.payload);
   await tx.notificationOutbox.createMany({
-    data: recipientIds.map((recipientUserId) => ({
+    data: recipients.map((recipient) => ({
       leagueId: event.leagueId,
-      recipientUserId,
+      recipientUserId: recipient.id,
+      recipientEmail: recipient.email,
       eventType: event.eventType,
       aggregateType: event.aggregateType,
       aggregateId: event.aggregateId,
-      payload: event.payload,
-      dedupeKey: `${event.eventType}:${event.aggregateId}:${event.occurrenceKey}:${recipientUserId}`,
+      payload,
+      dedupeKey: `${event.eventType}:${event.aggregateId}:${event.occurrenceKey}:${recipient.id}`,
     })),
     skipDuplicates: true,
   });
