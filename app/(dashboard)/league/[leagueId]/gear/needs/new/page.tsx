@@ -1,8 +1,7 @@
-import Link from "next/link";
 import { ArrowBackOutlined } from "@mui/icons-material";
-import { Button } from "@mui/material";
 import { notFound } from "next/navigation";
 import { GearNeedCreateForm } from "@/components/features/gear/GearNeedCreateForm";
+import { LinkButton } from "@/components/ui/NextLinkComposites";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { getGearNeedsContext } from "@/lib/actions/gear-needs";
@@ -14,9 +13,9 @@ export default async function NewGearNeedPage({ params }: { params: Promise<{ le
 
   return (
     <PageContainer maxWidth="md">
-      <Button component={Link} href={`/league/${leagueId}/gear/needs`} startIcon={<ArrowBackOutlined />} sx={{ minHeight: 44, mb: 1 }}>
+      <LinkButton href={`/league/${leagueId}/gear/needs`} startIcon={<ArrowBackOutlined />} sx={{ minHeight: 44, mb: 1 }}>
         All needs
-      </Button>
+      </LinkButton>
       <PageHeader title="New gear need" subtitle="Describe a team need for association review. This does not reserve equipment." />
       <GearNeedCreateForm leagueId={leagueId} teams={context.teams} />
     </PageContainer>

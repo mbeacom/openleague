@@ -1,11 +1,11 @@
-import Link from "next/link";
 import { ArrowBackOutlined } from "@mui/icons-material";
-import { Alert, Button, Card, Chip, Divider, Stack, Typography } from "@mui/material";
+import { Alert, Card, Chip, Divider, Stack, Typography } from "@mui/material";
 import { notFound } from "next/navigation";
 import { GearNeedActions } from "@/components/features/gear/GearNeedActions";
+import { LinkButton } from "@/components/ui/NextLinkComposites";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { getGearNeedDetail, getGearNeedsContext } from "@/lib/actions/gear-needs";
+import { getGearNeedDetail } from "@/lib/actions/gear-needs";
 
 export default async function GearNeedDetailPage({ params }: { params: Promise<{ leagueId: string; needId: string }> }) {
   const { leagueId, needId } = await params;
@@ -14,9 +14,9 @@ export default async function GearNeedDetailPage({ params }: { params: Promise<{
 
   return (
     <PageContainer maxWidth="md">
-      <Button component={Link} href={`/league/${leagueId}/gear/needs`} startIcon={<ArrowBackOutlined />} sx={{ minHeight: 44, mb: 1 }}>
+      <LinkButton href={`/league/${leagueId}/gear/needs`} startIcon={<ArrowBackOutlined />} sx={{ minHeight: 44, mb: 1 }}>
         All needs
-      </Button>
+      </LinkButton>
       <PageHeader title={need.title} subtitle={`${need.teamName} gear need`} />
       <Stack spacing={2}>
         <Alert severity="info">This is a demand request, not a reservation. Inventory remains available until a separate reservation is approved and allocated.</Alert>

@@ -1,5 +1,5 @@
-import Link from "next/link";
-import { Alert, Box, Button, Card, Chip, Stack, Table, TableBody, TableCell, TableHead, TableRow, Typography } from "@mui/material";
+import { Alert, Box, Card, Chip, Stack, Table, TableBody, TableCell, TableHead, TableRow, Typography } from "@mui/material";
+import { LinkButton } from "@/components/ui/NextLinkComposites";
 
 export type GearNeedListItem = {
   id: string;
@@ -57,9 +57,9 @@ export function GearNeedsList({
                     {need.fulfilledQuantity} of {need.requestedQuantity} fulfilled
                   </Typography>
                 </Stack>
-                <Button component={Link} href={`/league/${leagueId}/gear/needs/${need.id}`} variant="outlined" sx={{ minHeight: 44 }}>
+                <LinkButton href={`/league/${leagueId}/gear/needs/${need.id}`} variant="outlined" sx={{ minHeight: 44 }}>
                   View need
-                </Button>
+                </LinkButton>
               </Stack>
             </Card>
           ))}
@@ -85,9 +85,9 @@ export function GearNeedsList({
               <TableCell><Chip size="small" label={need.status} color={statusColor[need.status]} /></TableCell>
               <TableCell>{need.fulfilledQuantity} / {need.requestedQuantity}</TableCell>
               <TableCell align="right">
-                <Button component={Link} href={`/league/${leagueId}/gear/needs/${need.id}`} sx={{ minHeight: 44 }}>
+                <LinkButton href={`/league/${leagueId}/gear/needs/${need.id}`} sx={{ minHeight: 44 }}>
                   Details
-                </Button>
+                </LinkButton>
               </TableCell>
             </TableRow>
           ))}

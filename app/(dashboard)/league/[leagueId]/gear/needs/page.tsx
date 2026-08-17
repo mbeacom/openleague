@@ -1,8 +1,8 @@
-import Link from "next/link";
 import { AddOutlined } from "@mui/icons-material";
 import { Button, MenuItem, Stack, TextField } from "@mui/material";
 import { notFound } from "next/navigation";
 import { GearNeedsList, type GearNeedListItem } from "@/components/features/gear/GearNeedsList";
+import { LinkButton } from "@/components/ui/NextLinkComposites";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { getGearNeedsContext } from "@/lib/actions/gear-needs";
@@ -40,7 +40,11 @@ export default async function GearNeedsPage({ params, searchParams }: GearNeedsP
       <PageHeader
         title="Gear needs"
         subtitle="Team demand requests. Approving a need never reserves inventory."
-        actions={<Button component={Link} href={`/league/${leagueId}/gear/needs/new`} startIcon={<AddOutlined />} variant="contained" sx={{ minHeight: 44 }}>New need</Button>}
+        actions={
+          <LinkButton href={`/league/${leagueId}/gear/needs/new`} startIcon={<AddOutlined />} variant="contained" sx={{ minHeight: 44 }}>
+            New need
+          </LinkButton>
+        }
       />
       <Stack component="form" direction={{ xs: "column", sm: "row" }} spacing={1} method="get" sx={{ mb: 2 }}>
         <TextField select name="team" label="Team" defaultValue={filters.team ?? ""} sx={{ minWidth: 180 }}>
