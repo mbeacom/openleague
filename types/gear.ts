@@ -75,7 +75,7 @@ export type GearActivityDetails = {
 };
 
 export type GearNotificationPayload = {
-  kind: "GEAR_RESERVATION" | "GEAR_ALLOCATION" | "GEAR_PLEDGE" | "GEAR_WISHLIST";
+  kind: "GEAR_RESERVATION" | "GEAR_ALLOCATION" | "GEAR_NEED" | "GEAR_PLEDGE" | "GEAR_WISHLIST";
   data: Record<string, string | number | boolean | null>;
 };
 

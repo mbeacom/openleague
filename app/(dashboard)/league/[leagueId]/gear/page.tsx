@@ -30,13 +30,19 @@ export default async function GearInventoryPage({ params, searchParams }: GearIn
         title="Gear inventory"
         subtitle={`${data.league.name} equipment, locations, and current availability.`}
         actions={
-          <LinkButton
-            href={`/league/${leagueId}/gear/reservations`}
-            variant="outlined"
-            sx={{ minHeight: 44 }}
-          >
-            Reservations
-          </LinkButton>
+          <>
+            <LinkButton href={`/league/${leagueId}/gear/needs`} variant="outlined" sx={{ minHeight: 44 }}>
+              Needs
+            </LinkButton>
+            <LinkButton href={`/league/${leagueId}/gear/reservations`} variant="outlined" sx={{ minHeight: 44 }}>
+              Reservations
+            </LinkButton>
+            {data.canManageInventory && (
+              <LinkButton href={`/league/${leagueId}/gear/wishlist`} variant="outlined" sx={{ minHeight: 44 }}>
+                Wishlist
+              </LinkButton>
+            )}
+          </>
         }
       />
       {hasInventory || data.canManageInventory ? (

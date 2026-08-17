@@ -39,6 +39,7 @@ beforeEach(() => {
 afterEach(() => {
   randomSpy.mockRestore();
   vi.useRealTimers();
+  vi.unstubAllEnvs();
 });
 
 describe("checkRateLimit", () => {
@@ -164,22 +165,24 @@ describe("rateLimitMessage", () => {
 });
 
 describe("getClientIp", () => {
-  it("prefers the first x-forwarded-for hop", async () => {
+  it("does not trust arbitrary proxy headers outside Vercel", async () => {
+    vi.stubEnv("VERCEL", "");
     mocks.headers.mockResolvedValue(
       new Headers({ "x-forwarded-for": "1.2.3.4, 10.0.0.1", "x-real-ip": "5.6.7.8" })
+    );
+    expect(await getClientIp()).toBeNull();
+  });
+
+  it("uses the Vercel-provided client address only in a verified Vercel context", async () => {
+    vi.stubEnv("VERCEL", "1");
+    mocks.headers.mockResolvedValue(
+      new Headers({ "x-vercel-forwarded-for": "1.2.3.4", "x-forwarded-for": "spoofed" }),
     );
     expect(await getClientIp()).toBe("1.2.3.4");
   });
 
-  it("falls back to x-real-ip, then cf-connecting-ip", async () => {
-    mocks.headers.mockResolvedValue(new Headers({ "x-real-ip": "5.6.7.8" }));
-    expect(await getClientIp()).toBe("5.6.7.8");
-
-    mocks.headers.mockResolvedValue(new Headers({ "cf-connecting-ip": "9.9.9.9" }));
-    expect(await getClientIp()).toBe("9.9.9.9");
-  });
-
-  it("returns null when no IP header is present so callers can skip per-IP checks", async () => {
+  it("returns null when no trusted IP header is present so public callers fail closed", async () => {
+    vi.stubEnv("VERCEL", "1");
     mocks.headers.mockResolvedValue(new Headers());
     expect(await getClientIp()).toBeNull();
   });

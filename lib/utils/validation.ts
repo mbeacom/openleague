@@ -2126,6 +2126,7 @@ export const createGearUnitSchema = z.object({
 export const createTeamGearNeedSchema = z.object({
   leagueId: gearCuidSchema,
   teamId: gearCuidSchema,
+  idempotencyKey: z.string().trim().min(16).max(255),
   title: sanitizedStringWithMin(1, 160),
   notes: optionalSanitizedString(2_000),
   lines: z
@@ -2195,39 +2196,98 @@ export const saveGearWishlistSchema = z.object({
 export const createGearPledgeSchema = z.object({
   wishlistToken: z.string().trim().min(16).max(255),
   wishlistItemId: gearCuidSchema,
+  // Kept empty by real clients; spam bots that populate it receive a generic
+  // success response without creating a pledge.
+  website: optionalSanitizedString(255),
   donorName: sanitizedStringWithMin(1, 160),
   donorEmail: optionalEmailSchema,
   donorPhone: optionalSanitizedString(40),
   contactConsent: z.boolean().default(false),
-  quantity: gearQuantitySchema,
+  quantity: gearQuantitySchema.max(100, "A pledge cannot exceed 100 items"),
   note: optionalSanitizedString(1_000),
   idempotencyKey: z.string().trim().min(16).max(255),
+}).refine((value) => Boolean(value.donorEmail || value.donorPhone), {
+  message: "Provide an email address or phone number so we can contact you.",
+  path: ["donorEmail"],
 });
 
 export const receiveGearPledgeSchema = z.object({
   leagueId: gearCuidSchema,
   pledgeId: gearCuidSchema,
+  expectedVersion: z.coerce.number().int().min(0),
+  idempotencyKey: z.string().trim().min(16).max(255),
   catalogItemId: gearCuidSchema.optional().or(z.literal("")),
   poolStockId: gearCuidSchema.optional().or(z.literal("")),
+  /** @deprecated Tagged pledge receipts create new units from assetTags. */
   gearUnitId: gearCuidSchema.optional().or(z.literal("")),
+  assetTags: z.array(sanitizedStringWithMin(1, 80)).max(100).optional(),
+  locationId: gearCuidSchema.optional().or(z.literal("")),
+  condition: z.enum(GEAR_CONDITIONS).optional(),
   quantity: gearQuantitySchema,
   notes: optionalSanitizedString(1_000),
 }).superRefine((value, context) => {
-  const inventoryLinks = [value.poolStockId, value.gearUnitId].filter(Boolean);
-  if (inventoryLinks.length !== 1) {
+  const isPoolReceipt = Boolean(value.poolStockId);
+  const assetTags = value.assetTags ?? [];
+  if (value.gearUnitId) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "A receipt must link to exactly one pool stock row or tagged unit",
-      path: ["poolStockId"],
+      message: "Tagged receipts use new asset tags rather than a pre-existing unit",
+      path: ["gearUnitId"],
     });
   }
-  if (value.gearUnitId && value.quantity !== 1) {
+  if (isPoolReceipt && assetTags.length > 0) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "A tagged-unit receipt quantity must be exactly 1",
-      path: ["quantity"],
+      message: "A receipt may use pooled stock or asset tags, not both",
+      path: ["assetTags"],
     });
   }
+  const isTaggedReceipt = assetTags.length > 0;
+  if (!isPoolReceipt && !isTaggedReceipt && (!value.catalogItemId || !value.locationId || !value.condition)) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "A pooled receipt needs catalog, storage location, and condition when no stock row is selected",
+      path: ["catalogItemId"],
+    });
+  }
+  if (!isPoolReceipt && isTaggedReceipt) {
+    if (!value.catalogItemId) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Tagged receipts require a catalog item",
+        path: ["catalogItemId"],
+      });
+    }
+    if (!value.locationId) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Tagged receipts require a storage location",
+        path: ["locationId"],
+      });
+    }
+    if (!value.condition) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Tagged receipts require an item condition",
+        path: ["condition"],
+      });
+    }
+    if (assetTags.length !== value.quantity) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Tagged receipt quantity must equal the number of asset tags",
+        path: ["quantity"],
+      });
+    }
+  }
+});
+
+export const correctGearPledgeReceiptSchema = z.object({
+  leagueId: gearCuidSchema,
+  pledgeId: gearCuidSchema,
+  receiptId: gearCuidSchema,
+  expectedVersion: z.coerce.number().int().min(0),
+  reason: sanitizedStringWithMin(1, 1_000),
 });
 
 export const recordGearInventoryMovementSchema = z
@@ -2294,7 +2354,7 @@ export const gearActivityDetailsSchema = z
 
 export const gearNotificationPayloadSchema = z
   .object({
-    kind: z.enum(["GEAR_RESERVATION", "GEAR_ALLOCATION", "GEAR_PLEDGE", "GEAR_WISHLIST"]),
+    kind: z.enum(["GEAR_RESERVATION", "GEAR_ALLOCATION", "GEAR_NEED", "GEAR_PLEDGE", "GEAR_WISHLIST"]),
     data: z.record(z.string().max(80), z.union([z.string().max(500), z.number(), z.boolean(), z.null()])),
   })
   .superRefine((value, context) => {
@@ -2329,5 +2389,6 @@ export type CreateGearReservationInput = z.input<typeof createGearReservationSch
 export type SaveGearWishlistInput = z.input<typeof saveGearWishlistSchema>;
 export type CreateGearPledgeInput = z.input<typeof createGearPledgeSchema>;
 export type ReceiveGearPledgeInput = z.input<typeof receiveGearPledgeSchema>;
+export type CorrectGearPledgeReceiptInput = z.input<typeof correctGearPledgeReceiptSchema>;
 export type RecordGearInventoryMovementInput = z.input<typeof recordGearInventoryMovementSchema>;
 export type RecordGearHandoffInput = z.input<typeof recordGearHandoffSchema>;

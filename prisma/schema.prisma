@@ -209,6 +209,7 @@ model Team {
   hostedSignupEvents SignupEvent[]
   signupPhases       EventRegistrationPhase[] @relation("PhaseTeams")
   gearNeeds          TeamGearNeed[]
+  gearNeedCommands   TeamGearNeedCommand[]
   gearReservations   GearReservation[]
 
   @@unique([leagueId, id])
@@ -529,38 +530,40 @@ model League {
   updatedAt DateTime @updatedAt
 
   // Essential relationships only
-  divisions               Division[]
-  teams                   Team[]
-  events                  Event[]
-  players                 Player[]
-  users                   LeagueUser[]
-  invitations             Invitation[]
-  playerTransfers         PlayerTransfer[]
-  messages                LeagueMessage[]
-  notificationPreferences NotificationPreference[]
-  notificationBatches     NotificationBatch[]
-  auditLogs               AuditLog[]
-  venues                  Venue[]
-  seasons                 Season[]
-  gameProposals           GameProposal[]
-  venueRelationships      VenueRelationship[]
-  iceTimeRequests         IceTimeRequest[]
-  hostedSignupEvents      SignupEvent[]
-  payments                Payment[]
-  gearCatalogItems        GearCatalogItem[]
-  gearStorageLocations    GearStorageLocation[]
-  gearPoolStocks          GearPoolStock[]
-  gearUnits               GearUnit[]
-  gearNeeds               TeamGearNeed[]
-  gearReservations        GearReservation[]
-  gearAllocations         GearAllocation[]
-  gearHandoffs            GearHandoff[]
-  gearInventoryMovements  GearInventoryMovement[]
-  gearWishlist            GearWishlist?
-  gearPledges             GearPledge[]
-  gearPledgeReceipts      GearPledgeReceipt[]
-  gearActivity            GearActivity[]
-  notificationOutbox      NotificationOutbox[]
+  divisions                 Division[]
+  teams                     Team[]
+  events                    Event[]
+  players                   Player[]
+  users                     LeagueUser[]
+  invitations               Invitation[]
+  playerTransfers           PlayerTransfer[]
+  messages                  LeagueMessage[]
+  notificationPreferences   NotificationPreference[]
+  notificationBatches       NotificationBatch[]
+  auditLogs                 AuditLog[]
+  venues                    Venue[]
+  seasons                   Season[]
+  gameProposals             GameProposal[]
+  venueRelationships        VenueRelationship[]
+  iceTimeRequests           IceTimeRequest[]
+  hostedSignupEvents        SignupEvent[]
+  payments                  Payment[]
+  gearCatalogItems          GearCatalogItem[]
+  gearStorageLocations      GearStorageLocation[]
+  gearPoolStocks            GearPoolStock[]
+  gearUnits                 GearUnit[]
+  gearNeeds                 TeamGearNeed[]
+  gearNeedCommands          TeamGearNeedCommand[]
+  gearReservations          GearReservation[]
+  gearAllocations           GearAllocation[]
+  gearHandoffs              GearHandoff[]
+  gearInventoryMovements    GearInventoryMovement[]
+  gearWishlist              GearWishlist?
+  gearPledges               GearPledge[]
+  gearPledgeReceipts        GearPledgeReceipt[]
+  gearPledgeReceiptCommands GearPledgeReceiptCommand[]
+  gearActivity              GearActivity[]
+  notificationOutbox        NotificationOutbox[]
 
   @@map("leagues")
 }
@@ -716,6 +719,11 @@ enum GearPledgeStatus {
   DECLINED
   CANCELED
   EXPIRED
+}
+
+enum GearPledgePiiRedactionStatus {
+  PENDING
+  REDACTED
 }
 
 enum GearActivityEntityType {
@@ -874,14 +882,36 @@ model TeamGearNeed {
   updatedAt   DateTime       @updatedAt
   createdById String?
 
-  league    League             @relation(fields: [leagueId], references: [id], onDelete: Restrict)
-  team      Team               @relation(fields: [leagueId, teamId], references: [leagueId, id], onDelete: Restrict)
-  createdBy User?              @relation("GearNeedCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  lines     TeamGearNeedLine[]
+  league        League               @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  team          Team                 @relation(fields: [leagueId, teamId], references: [leagueId, id], onDelete: Restrict)
+  createdBy     User?                @relation("GearNeedCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  lines         TeamGearNeedLine[]
+  createCommand TeamGearNeedCommand?
 
   @@unique([leagueId, id])
   @@index([leagueId, teamId, status])
   @@map("team_gear_needs")
+}
+
+// Durable idempotency journal for draft-need creation. Its tenant/team scoped
+// key makes retries return the original need instead of creating another draft.
+model TeamGearNeedCommand {
+  id             String   @id @default(cuid())
+  leagueId       String
+  teamId         String
+  idempotencyKey String
+  needId         String
+  createdAt      DateTime @default(now())
+
+  league League       @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  team   Team         @relation(fields: [leagueId, teamId], references: [leagueId, id], onDelete: Restrict)
+  need   TeamGearNeed @relation(fields: [leagueId, needId], references: [leagueId, id], onDelete: Restrict)
+
+  @@unique([leagueId, id])
+  @@unique([leagueId, teamId, idempotencyKey])
+  @@unique([leagueId, needId])
+  @@index([leagueId, teamId, createdAt])
+  @@map("team_gear_need_commands")
 }
 
 model TeamGearNeedLine {
@@ -1088,25 +1118,29 @@ model GearWishlistItem {
 }
 
 model GearPledge {
-  id               String           @id @default(cuid())
-  leagueId         String
-  wishlistItemId   String
-  donorName        String
-  donorEmail       String?
-  donorPhone       String?
-  contactConsentAt DateTime?
-  status           GearPledgeStatus @default(PLEDGED)
-  quantity         Int
-  note             String?
-  idempotencyKey   String
-  expiresAt        DateTime?
-  receivedAt       DateTime?
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
+  id                 String                       @id @default(cuid())
+  leagueId           String
+  wishlistItemId     String
+  donorName          String?
+  donorEmail         String?
+  donorPhone         String?
+  contactConsentAt   DateTime?
+  status             GearPledgeStatus             @default(PLEDGED)
+  quantity           Int
+  note               String?
+  idempotencyKey     String
+  version            Int                          @default(0)
+  expiresAt          DateTime?
+  receivedAt         DateTime?
+  piiRedactionStatus GearPledgePiiRedactionStatus @default(PENDING)
+  piiRedactedAt      DateTime?
+  createdAt          DateTime                     @default(now())
+  updatedAt          DateTime                     @updatedAt
 
-  league       League              @relation(fields: [leagueId], references: [id], onDelete: Restrict)
-  wishlistItem GearWishlistItem    @relation(fields: [leagueId, wishlistItemId], references: [leagueId, id], onDelete: Restrict)
-  receipts     GearPledgeReceipt[]
+  league          League                     @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  wishlistItem    GearWishlistItem           @relation(fields: [leagueId, wishlistItemId], references: [leagueId, id], onDelete: Restrict)
+  receipts        GearPledgeReceipt[]
+  receiptCommands GearPledgeReceiptCommand[]
 
   @@unique([leagueId, idempotencyKey])
   @@unique([leagueId, id])
@@ -1115,28 +1149,58 @@ model GearPledge {
 }
 
 model GearPledgeReceipt {
-  id            String   @id @default(cuid())
-  leagueId      String
-  pledgeId      String
-  catalogItemId String?
-  poolStockId   String?
-  gearUnitId    String?
-  quantity      Int
-  receivedAt    DateTime @default(now())
-  notes         String?
-  createdAt     DateTime @default(now())
+  id                    String   @id @default(cuid())
+  leagueId              String
+  pledgeId              String
+  catalogItemId         String?
+  poolStockId           String?
+  gearUnitId            String?
+  receiptCommandId      String?
+  correctionOfReceiptId String?
+  correctionReason      String?
+  quantity              Int
+  receivedAt            DateTime @default(now())
+  notes                 String?
+  createdAt             DateTime @default(now())
 
-  league             League                  @relation(fields: [leagueId], references: [id], onDelete: Restrict)
-  pledge             GearPledge              @relation(fields: [leagueId, pledgeId], references: [leagueId, id], onDelete: Restrict)
-  catalogItem        GearCatalogItem?        @relation(fields: [leagueId, catalogItemId], references: [leagueId, id], onDelete: Restrict)
-  poolStock          GearPoolStock?          @relation(fields: [leagueId, poolStockId], references: [leagueId, id], onDelete: Restrict)
-  gearUnit           GearUnit?               @relation(fields: [leagueId, gearUnitId], references: [leagueId, id], onDelete: Restrict)
+  league             League                    @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  pledge             GearPledge                @relation(fields: [leagueId, pledgeId], references: [leagueId, id], onDelete: Restrict)
+  catalogItem        GearCatalogItem?          @relation(fields: [leagueId, catalogItemId], references: [leagueId, id], onDelete: Restrict)
+  poolStock          GearPoolStock?            @relation(fields: [leagueId, poolStockId], references: [leagueId, id], onDelete: Restrict)
+  gearUnit           GearUnit?                 @relation(fields: [leagueId, gearUnitId], references: [leagueId, id], onDelete: Restrict)
+  receiptCommand     GearPledgeReceiptCommand? @relation(fields: [leagueId, receiptCommandId], references: [leagueId, id], onDelete: Restrict)
+  correctionOf       GearPledgeReceipt?        @relation("GearReceiptCorrection", fields: [leagueId, correctionOfReceiptId], references: [leagueId, id], onDelete: Restrict)
+  correction         GearPledgeReceipt?        @relation("GearReceiptCorrection")
   inventoryMovements GearInventoryMovement[]
 
   @@unique([leagueId, id])
+  @@unique([leagueId, correctionOfReceiptId])
   @@index([leagueId, receivedAt])
   @@index([pledgeId])
   @@map("gear_pledge_receipts")
+}
+
+// A durable receipt-command journal makes receipt retries idempotent even when
+// a command creates multiple tagged-unit receipts.
+model GearPledgeReceiptCommand {
+  id               String           @id @default(cuid())
+  leagueId         String
+  pledgeId         String
+  idempotencyKey   String
+  payloadHash      String
+  expectedVersion  Int
+  resultingVersion Int
+  resultingStatus  GearPledgeStatus
+  createdAt        DateTime         @default(now())
+
+  league   League              @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  pledge   GearPledge          @relation(fields: [leagueId, pledgeId], references: [leagueId, id], onDelete: Restrict)
+  receipts GearPledgeReceipt[]
+
+  @@unique([leagueId, id])
+  @@unique([leagueId, pledgeId, idempotencyKey])
+  @@index([leagueId, pledgeId, createdAt])
+  @@map("gear_pledge_receipt_commands")
 }
 
 // Immutable operational ledger. `details` deliberately excludes public donor

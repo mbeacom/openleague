@@ -24,6 +24,11 @@ export interface RateLimitResult {
   retryAfterSec?: number;
 }
 
+export interface RateLimitCheckOptions {
+  /** Public, anonymous operations must not proceed when the limiter is down. */
+  failOpen?: boolean;
+}
+
 /** Every Server Action rate-limit policy, defined in one place. */
 export const RATE_LIMITS = {
   /** Signup burns a bcrypt hash (cost 12) + a verification email per account. */
@@ -51,6 +56,8 @@ export const RATE_LIMITS = {
   INVITATION_SEND_PER_USER: { limit: 30, windowSec: 60 * 60 },
   /** League/team message fan-out per sender. */
   MESSAGE_SEND_PER_USER: { limit: 20, windowSec: 60 * 60 },
+  /** Public wishlist pledges are anonymous and therefore throttled per IP. */
+  GEAR_PLEDGE_PER_IP: { limit: 10, windowSec: 60 * 60 },
 } as const satisfies Record<string, RateLimitOptions>;
 
 /** Fraction of checks that piggyback a delete of expired buckets. */
@@ -71,7 +78,8 @@ const CLEANUP_PROBABILITY = 0.01;
  */
 export async function checkRateLimit(
   key: string,
-  opts: RateLimitOptions
+  opts: RateLimitOptions,
+  { failOpen = true }: RateLimitCheckOptions = {},
 ): Promise<RateLimitResult> {
   try {
     const now = Date.now();
@@ -103,8 +111,8 @@ export async function checkRateLimit(
     }
     return { allowed: true };
   } catch (error) {
-    console.error(`Rate-limit check failed for "${key}" (failing open):`, error);
-    return { allowed: true };
+    console.error({ event: "rate_limit_check_failed", failOpen, errorType: error instanceof Error ? error.name : "unknown" });
+    return { allowed: failOpen };
   }
 }
 
@@ -115,18 +123,16 @@ export function rateLimitMessage(retryAfterSec?: number): string {
 }
 
 /**
- * Client IP for keying unauthenticated actions, read from proxy-set headers
- * (same trust model as getClientIp in lib/utils/rate-limit.ts). Returns null
- * when no IP is available — callers should SKIP their per-IP check in that
- * case rather than throttle all IP-less traffic in one shared bucket.
+ * Client IP for keying unauthenticated actions. We use Vercel's platform-set
+ * header only when Vercel confirms the deployment context; every other proxy
+ * header, including `x-forwarded-for`, is client-controlled at this boundary.
+ * Returning null makes public actions fail closed rather than bypass limiting.
  */
 export async function getClientIp(): Promise<string | null> {
   try {
     const headerList = await headers();
-    const forwarded = headerList.get("x-forwarded-for");
-    const realIp = headerList.get("x-real-ip");
-    const cfConnectingIp = headerList.get("cf-connecting-ip"); // Cloudflare
-    return forwarded?.split(",")[0]?.trim() || realIp || cfConnectingIp || null;
+    if (process.env.VERCEL !== "1") return null;
+    return headerList.get("x-vercel-forwarded-for") || null;
   } catch {
     // headers() throws outside a request scope (e.g. unit tests).
     return null;
