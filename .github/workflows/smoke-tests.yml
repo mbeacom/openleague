@@ -63,6 +63,9 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Apply migrations to a clean PostgreSQL database
+        run: bunx prisma migrate deploy --config prisma/prisma.config.ts
+
       - name: Push schema to smoke database
         run: bunx prisma db push --config prisma/prisma.config.ts
 

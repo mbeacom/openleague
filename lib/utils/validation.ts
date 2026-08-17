@@ -2057,3 +2057,277 @@ export type SetSegmentActiveInput = z.input<typeof setSegmentActiveSchema>;
 export type SetWholeSurfaceLabelInput = z.input<typeof setWholeSurfaceLabelSchema>;
 export type SuggestCoexistenceInput = z.input<typeof suggestCoexistenceSchema>;
 export type SaveVenueLayoutInput = z.input<typeof saveVenueLayoutSchema>;
+
+// League-owned gear foundation. These schemas describe future action inputs;
+// authorization and tenant-consistency checks remain action responsibilities.
+export const GEAR_TRACKING_MODES = ["POOLED", "INDIVIDUAL"] as const;
+export const GEAR_CONDITIONS = ["NEW", "EXCELLENT", "GOOD", "FAIR", "POOR", "DAMAGED"] as const;
+export const GEAR_NEED_PRIORITIES = ["LOW", "NORMAL", "HIGH", "URGENT"] as const;
+export const GEAR_RETURN_DISPOSITIONS = ["GOOD", "DAMAGED", "LOST", "CONSUMED"] as const;
+export const GEAR_INVENTORY_DIRECTIONS = ["INCREASE", "DECREASE", "NEUTRAL"] as const;
+export const GEAR_INVENTORY_MOVEMENT_TYPES = [
+  "RECEIPT",
+  "ALLOCATION",
+  "RELEASE",
+  "RETURN",
+  "TRANSFER",
+  "ADJUSTMENT",
+  "WRITE_OFF",
+] as const;
+
+const gearDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD");
+const gearQuantitySchema = z.coerce.number().int("Quantity must be a whole number").min(1, "Quantity must be at least 1");
+const gearOptionalQuantitySchema = z.coerce.number().int("Quantity must be a whole number").min(0);
+const gearCuidSchema = z.string().cuid("Invalid gear identifier");
+const gearAttributesSchema = z.record(z.string().max(80), z.unknown()).optional();
+
+export const createGearCatalogItemSchema = z.object({
+  leagueId: gearCuidSchema,
+  name: sanitizedStringWithMin(1, 160),
+  category: sanitizedStringWithMin(1, 80),
+  size: optionalSanitizedString(80),
+  brand: optionalSanitizedString(100),
+  model: optionalSanitizedString(100),
+  description: optionalSanitizedString(2_000),
+  attributes: gearAttributesSchema,
+  trackingMode: z.enum(GEAR_TRACKING_MODES),
+});
+
+export const createGearStorageLocationSchema = z.object({
+  leagueId: gearCuidSchema,
+  name: sanitizedStringWithMin(1, 120),
+  address: optionalSanitizedString(500),
+  privateNotes: optionalSanitizedString(2_000),
+});
+
+export const adjustGearPoolStockSchema = z.object({
+  leagueId: gearCuidSchema,
+  catalogItemId: gearCuidSchema,
+  locationId: gearCuidSchema,
+  condition: z.enum(GEAR_CONDITIONS),
+  quantityDelta: z.coerce.number().int("Quantity adjustment must be a whole number").refine((value) => value !== 0, {
+    message: "Quantity adjustment cannot be zero",
+  }),
+  expectedVersion: z.coerce.number().int().min(0),
+  notes: optionalSanitizedString(1_000),
+});
+
+export const createGearUnitSchema = z.object({
+  leagueId: gearCuidSchema,
+  catalogItemId: gearCuidSchema,
+  currentLocationId: gearCuidSchema.optional().or(z.literal("")),
+  assetTag: optionalSanitizedString(80),
+  serialNumber: optionalSanitizedString(160),
+  currentCondition: z.enum(GEAR_CONDITIONS).default("GOOD"),
+  acquiredAt: gearDateSchema.optional().or(z.literal("")),
+  notes: optionalSanitizedString(2_000),
+});
+
+export const createTeamGearNeedSchema = z.object({
+  leagueId: gearCuidSchema,
+  teamId: gearCuidSchema,
+  title: sanitizedStringWithMin(1, 160),
+  notes: optionalSanitizedString(2_000),
+  lines: z
+    .array(
+      z.object({
+        catalogItemId: gearCuidSchema.optional().or(z.literal("")),
+        nameSnapshot: sanitizedStringWithMin(1, 160),
+        categorySnapshot: optionalSanitizedString(80),
+        sizeSnapshot: optionalSanitizedString(80),
+        trackingMode: z.enum(GEAR_TRACKING_MODES).optional(),
+        requestedQty: gearQuantitySchema,
+        priority: z.enum(GEAR_NEED_PRIORITIES).default("NORMAL"),
+        notes: optionalSanitizedString(1_000),
+      }),
+    )
+    .min(1, "Add at least one gear need line")
+    .max(100),
+});
+
+export const createGearReservationSchema = z
+  .object({
+    leagueId: gearCuidSchema,
+    teamId: gearCuidSchema,
+    requestedStartDate: gearDateSchema,
+    requestedEndDate: gearDateSchema,
+    custodianNameSnapshot: sanitizedStringWithMin(1, 160),
+    custodianEmailSnapshot: optionalEmailSchema,
+    custodianPhoneSnapshot: optionalSanitizedString(40),
+    requestNotes: optionalSanitizedString(2_000),
+    lines: z
+      .array(
+        z.object({
+          catalogItemId: gearCuidSchema.optional().or(z.literal("")),
+          needLineId: gearCuidSchema.optional().or(z.literal("")),
+          nameSnapshot: sanitizedStringWithMin(1, 160),
+          requestedQty: gearQuantitySchema,
+        }),
+      )
+      .min(1, "Add at least one reservation line")
+      .max(100),
+  })
+  .refine((value) => value.requestedEndDate >= value.requestedStartDate, {
+    message: "Reservation end date must be on or after the start date",
+    path: ["requestedEndDate"],
+  });
+
+export const saveGearWishlistSchema = z.object({
+  leagueId: gearCuidSchema,
+  title: sanitizedStringWithMin(1, 160),
+  description: optionalSanitizedString(2_000),
+  publish: z.boolean(),
+  expectedVersion: z.coerce.number().int().min(0).optional(),
+  items: z
+    .array(
+      z.object({
+        catalogItemId: gearCuidSchema.optional().or(z.literal("")),
+        nameSnapshot: sanitizedStringWithMin(1, 160),
+        categorySnapshot: optionalSanitizedString(80),
+        sizeSnapshot: optionalSanitizedString(80),
+        description: optionalSanitizedString(1_000),
+        targetQty: gearQuantitySchema,
+      }),
+    )
+    .max(100),
+});
+
+export const createGearPledgeSchema = z.object({
+  wishlistToken: z.string().trim().min(16).max(255),
+  wishlistItemId: gearCuidSchema,
+  donorName: sanitizedStringWithMin(1, 160),
+  donorEmail: optionalEmailSchema,
+  donorPhone: optionalSanitizedString(40),
+  contactConsent: z.boolean().default(false),
+  quantity: gearQuantitySchema,
+  note: optionalSanitizedString(1_000),
+  idempotencyKey: z.string().trim().min(16).max(255),
+});
+
+export const receiveGearPledgeSchema = z.object({
+  leagueId: gearCuidSchema,
+  pledgeId: gearCuidSchema,
+  catalogItemId: gearCuidSchema.optional().or(z.literal("")),
+  poolStockId: gearCuidSchema.optional().or(z.literal("")),
+  gearUnitId: gearCuidSchema.optional().or(z.literal("")),
+  quantity: gearQuantitySchema,
+  notes: optionalSanitizedString(1_000),
+}).superRefine((value, context) => {
+  const inventoryLinks = [value.poolStockId, value.gearUnitId].filter(Boolean);
+  if (inventoryLinks.length !== 1) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "A receipt must link to exactly one pool stock row or tagged unit",
+      path: ["poolStockId"],
+    });
+  }
+  if (value.gearUnitId && value.quantity !== 1) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "A tagged-unit receipt quantity must be exactly 1",
+      path: ["quantity"],
+    });
+  }
+});
+
+export const recordGearInventoryMovementSchema = z
+  .object({
+    leagueId: gearCuidSchema,
+    type: z.enum(GEAR_INVENTORY_MOVEMENT_TYPES),
+    direction: z.enum(GEAR_INVENTORY_DIRECTIONS),
+    poolStockId: gearCuidSchema.optional().or(z.literal("")),
+    gearUnitId: gearCuidSchema.optional().or(z.literal("")),
+    quantity: gearQuantitySchema,
+    notes: optionalSanitizedString(1_000),
+  })
+  .superRefine((value, context) => {
+    const inventoryLinks = [value.poolStockId, value.gearUnitId].filter(Boolean);
+    if (inventoryLinks.length !== 1) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "A movement must link to exactly one pool stock row or tagged unit",
+        path: ["poolStockId"],
+      });
+    }
+    if (value.gearUnitId && value.quantity !== 1) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "A tagged-unit movement quantity must be exactly 1",
+        path: ["quantity"],
+      });
+    }
+    const validDirection =
+      (value.type === "RECEIPT" && value.direction === "INCREASE") ||
+      (value.type === "ALLOCATION" && value.direction === "DECREASE") ||
+      (value.type === "RELEASE" && value.direction === "INCREASE") ||
+      (value.type === "RETURN" && value.direction === "INCREASE") ||
+      (value.type === "TRANSFER" && value.direction === "NEUTRAL") ||
+      (value.type === "WRITE_OFF" && value.direction === "DECREASE") ||
+      (value.type === "ADJUSTMENT" && value.direction !== "NEUTRAL");
+    if (!validDirection) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Movement type and direction are incompatible",
+        path: ["direction"],
+      });
+    }
+  });
+
+export const gearActivityDetailsSchema = z
+  .object({
+    action: sanitizedStringWithMin(1, 80),
+    summary: optionalSanitizedString(500),
+    metadata: z.record(z.string().max(80), z.union([z.string().max(500), z.number(), z.boolean(), z.null()])).optional(),
+  })
+  .superRefine((value, context) => {
+    for (const key of Object.keys(value.metadata ?? {})) {
+      if (/(email|phone|name|address|contact)/i.test(key)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Activity metadata cannot contain contact PII",
+          path: ["metadata", key],
+        });
+      }
+    }
+  })
+  .strict();
+
+export const gearNotificationPayloadSchema = z
+  .object({
+    kind: z.enum(["GEAR_RESERVATION", "GEAR_ALLOCATION", "GEAR_PLEDGE", "GEAR_WISHLIST"]),
+    data: z.record(z.string().max(80), z.union([z.string().max(500), z.number(), z.boolean(), z.null()])),
+  })
+  .superRefine((value, context) => {
+    for (const key of Object.keys(value.data)) {
+      if (/(email|phone|name|address|contact)/i.test(key)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Outbox payloads cannot contain contact PII",
+          path: ["data", key],
+        });
+      }
+    }
+  })
+  .strict();
+
+export const recordGearHandoffSchema = z.object({
+  leagueId: gearCuidSchema,
+  allocationId: gearCuidSchema,
+  type: z.enum(["PICKUP", "RETURN", "TRANSFER"]),
+  returnDisposition: z.enum(GEAR_RETURN_DISPOSITIONS).optional(),
+  quantity: gearQuantitySchema,
+  notes: optionalSanitizedString(1_000),
+  expectedVersion: z.coerce.number().int().min(0),
+});
+
+export type CreateGearCatalogItemInput = z.input<typeof createGearCatalogItemSchema>;
+export type CreateGearStorageLocationInput = z.input<typeof createGearStorageLocationSchema>;
+export type AdjustGearPoolStockInput = z.input<typeof adjustGearPoolStockSchema>;
+export type CreateGearUnitInput = z.input<typeof createGearUnitSchema>;
+export type CreateTeamGearNeedInput = z.input<typeof createTeamGearNeedSchema>;
+export type CreateGearReservationInput = z.input<typeof createGearReservationSchema>;
+export type SaveGearWishlistInput = z.input<typeof saveGearWishlistSchema>;
+export type CreateGearPledgeInput = z.input<typeof createGearPledgeSchema>;
+export type ReceiveGearPledgeInput = z.input<typeof receiveGearPledgeSchema>;
+export type RecordGearInventoryMovementInput = z.input<typeof recordGearInventoryMovementSchema>;
+export type RecordGearHandoffInput = z.input<typeof recordGearHandoffSchema>;
