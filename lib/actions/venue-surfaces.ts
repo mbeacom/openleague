@@ -790,6 +790,7 @@ async function findFutureSegmentBookings(
         segment: { select: { name: true } },
         recurrenceRule: true,
         recurrenceEndDate: true,
+        venue: { select: { timezone: true } },
       },
     }),
     prisma.practiceSession.findMany({
@@ -877,6 +878,7 @@ function futureBlockOccurrences(
     endsAt: Date;
     recurrenceRule: string | null;
     recurrenceEndDate: Date | null;
+    venue: { timezone: string };
   },
   now: Date,
   horizon: Date,
@@ -892,6 +894,7 @@ function futureBlockOccurrences(
         endAt: block.endsAt,
         recurrenceRule: block.recurrenceRule,
         recurrenceEndAt: block.recurrenceEndDate,
+        timezone: block.venue.timezone,
       },
       now,
       horizon

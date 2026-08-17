@@ -69,8 +69,11 @@ const candidate = {
   aggregateId: row.aggregateId,
   recipientUserId: row.recipientUserId,
   recipientEmail: row.recipientEmail,
+  eventType: row.eventType,
   createdAt: row.createdAt,
 };
+
+const gearPrefixFilter = { startsWith: "gear." };
 
 function preference(overrides: Record<string, unknown> = {}) {
   return {
@@ -104,7 +107,11 @@ describe("gear outbox worker", () => {
 
     await expect(recoverStaleGearOutboxLocks(now)).resolves.toBe(2);
     expect(mockPrisma.notificationOutbox.updateMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({ status: "PROCESSING", lockedAt: { lt: new Date("2026-08-16T11:50:00.000Z") } }),
+      where: expect.objectContaining({
+        eventType: gearPrefixFilter,
+        status: "PROCESSING",
+        lockedAt: { lt: new Date("2026-08-16T11:50:00.000Z") },
+      }),
       data: expect.objectContaining({ status: "PENDING", lockedAt: null, scheduledAt: now }),
     }));
   });
@@ -117,7 +124,12 @@ describe("gear outbox worker", () => {
 
     await expect(claimDueGearOutbox(10, now)).resolves.toEqual({ rows: [row], skippedForOrdering: 0 });
     expect(mockPrisma.notificationOutbox.updateMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: row.id, status: "PENDING", scheduledAt: { lte: now } },
+      where: expect.objectContaining({
+        id: row.id,
+        eventType: gearPrefixFilter,
+        status: "PENDING",
+        scheduledAt: { lte: now },
+      }),
       data: expect.objectContaining({ status: "PROCESSING", lockedAt: now, attempts: { increment: 1 } }),
     }));
   });
@@ -131,6 +143,7 @@ describe("gear outbox worker", () => {
     expect(mockPrisma.notificationOutbox.updateMany).not.toHaveBeenCalled();
     expect(mockPrisma.notificationOutbox.findFirst).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({
+        eventType: gearPrefixFilter,
         aggregateId: row.aggregateId,
         recipientUserId: row.recipientUserId,
         status: { in: ["PENDING", "PROCESSING"] },
@@ -394,7 +407,15 @@ describe("gear outbox worker", () => {
 
   it("dead-letters an unknown persisted event immediately instead of retrying it", async () => {
     mockPrisma.notificationOutbox.updateMany.mockResolvedValue({ count: 1 });
-    mockPrisma.notificationOutbox.findMany.mockResolvedValue([candidate]);
+    const unknownCandidate = {
+      ...candidate,
+      eventType: "gear.reservation.teleported",
+    };
+    mockPrisma.notificationOutbox.findMany.mockImplementation(async ({ where }) =>
+      unknownCandidate.eventType.startsWith(where.eventType.startsWith)
+        ? [unknownCandidate]
+        : [],
+    );
     mockPrisma.notificationOutbox.findUnique.mockResolvedValue({
       ...row,
       attempts: 1,
@@ -408,12 +429,53 @@ describe("gear outbox worker", () => {
       sent: 0,
     });
     expect(mockSendGearNotificationEmail).not.toHaveBeenCalled();
+    expect(mockPrisma.notificationOutbox.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ eventType: gearPrefixFilter }),
+      }),
+    );
     expect(mockPrisma.notificationOutbox.updateMany).toHaveBeenLastCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         status: "FAILED",
         lastError: expect.stringContaining("undeliverable (UNKNOWN_EVENT_TYPE)"),
       }),
     }));
+  });
+
+  it("leaves non-gear rows untouched while claiming unknown gear events", async () => {
+    const associationCandidate = {
+      ...candidate,
+      id: "cassociationxxxxxxxxxxxxxx",
+      eventType: "association.venue_reservation.created",
+    };
+    const unknownGearCandidate = {
+      ...candidate,
+      id: "cunknowngearxxxxxxxxxxxxxx",
+      eventType: "gear.experimental.created",
+    };
+    mockPrisma.notificationOutbox.findMany.mockImplementation(async ({ where }) =>
+      [associationCandidate, unknownGearCandidate].filter((item) =>
+        item.eventType.startsWith(where.eventType.startsWith),
+      ),
+    );
+    mockPrisma.notificationOutbox.findFirst.mockResolvedValue(null);
+    mockPrisma.notificationOutbox.updateMany.mockResolvedValue({ count: 1 });
+    mockPrisma.notificationOutbox.findUnique.mockResolvedValue({
+      ...row,
+      id: unknownGearCandidate.id,
+      eventType: unknownGearCandidate.eventType,
+    });
+
+    await expect(processGearOutbox(10)).resolves.toMatchObject({
+      claimed: 1,
+      rejected: 1,
+      deadLettered: 1,
+    });
+    expect(mockPrisma.notificationOutbox.updateMany).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ id: associationCandidate.id }),
+      }),
+    );
   });
 
   it("dead-letters a payload that no longer satisfies its event contract", async () => {
@@ -450,6 +512,18 @@ describe("gear outbox worker", () => {
       oldestPendingAgeMs: 60 * 60 * 1_000,
       backlogged: true,
     });
+    for (const call of mockPrisma.notificationOutbox.count.mock.calls) {
+      expect(call[0]).toEqual(
+        expect.objectContaining({
+          where: expect.objectContaining({ eventType: gearPrefixFilter }),
+        }),
+      );
+    }
+    expect(mockPrisma.notificationOutbox.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ eventType: gearPrefixFilter }),
+      }),
+    );
   });
 
   it("is not backlogged when the queue is empty", async () => {

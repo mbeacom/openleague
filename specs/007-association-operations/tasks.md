@@ -20,8 +20,8 @@ description: "Dependency-ordered implementation backlog for association operatio
 
 - [x] T001 Review and ratify the canonical venue-reservation draft ADR in `docs/adr/0007-use-canonical-venue-reservations-for-occupancy.md`
 - [x] T002 [P] Review and ratify the free/provider-portable core association draft ADR in `docs/adr/0008-keep-core-association-operations-free-and-provider-portable.md`
-- [ ] T003 [P] After T001 and T002, add venue-reservation, profile, responsibility, volunteer, content, gear-integration, and utilization validation schemas to `lib/utils/validation.ts`
-- [ ] T004 [P] After T001 and T002, add explicit venue-reservation and association-operation view types that cannot collide with `types/gear.ts` to `types/association-operations.ts`
+- [x] T003 [P] After T001 and T002, add venue-reservation, profile, responsibility, volunteer, content, gear-integration, and utilization validation schemas to `lib/utils/validation.ts`
+- [x] T004 [P] After T001 and T002, add explicit venue-reservation and association-operation view types that cannot collide with `types/gear.ts` to `types/association-operations.ts`
 
 ---
 
@@ -31,18 +31,18 @@ description: "Dependency-ordered implementation backlog for association operatio
 
 **CRITICAL**: No code or schema work begins until T001 and T002 are accepted, and no venue-based user-story work begins until the reservation transaction and dual-read compatibility layer are complete.
 
-- [ ] T005 Add `VenueReservation`, transition, override, status/usage enums, schedule-block intent, request approval fields, and nullable activity links to `prisma/schema.prisma`
-- [ ] T006 Create the additive canonical-reservation migration with ownership, interval, ancestry, and lifecycle checks in `prisma/migrations/<timestamp>_add_canonical_venue_reservations/migration.sql`
-- [ ] T007 Regenerate the Prisma client after the reservation schema migration with `bun run db:generate`
-- [ ] T008 [P] Add serializable venue-reservation retry tests plus gear/non-gear outbox namespace-isolation tests in `__tests__/lib/services/venue-reservation-transaction.test.ts` and `__tests__/lib/services/notification-outbox-worker.test.ts`
-- [ ] T009 [P] Add venue-reservation interval, surface, segment, coexistence, offering, public-redaction, and venue-wide-claim conflicts against every surface/segment tests in `__tests__/lib/services/venue-reservation-availability.test.ts`
-- [ ] T010 Implement bounded serializable retry and friendly contention errors in `lib/services/venue-reservation-transaction.ts`
-- [ ] T011 Implement transaction-client venue-reservation conflict detection and offering/occupancy separation in `lib/services/venue-reservation-availability.ts`
-- [ ] T012 Implement venue-reservation lifecycle, assignment, override, ancestry, audit, minimal request/practice notification registry, and registry-filtered association outbox worker while preserving gear-worker ownership in `lib/services/venue-reservations.ts`, `lib/services/association-operations-notification-registry.ts`, `lib/services/association-operations-outbox-worker.ts`, and `lib/services/notification-outbox-lease.ts`
-- [ ] T013 Add canonical schedule identity and reservation deduplication helpers to `lib/data/schedule-items.ts`
-- [ ] T014 Add idempotent venue-reservation backfill scaffolding and dry-run reporting to `scripts/backfill-venue-reservations.ts`
-- [ ] T015 Add idempotent backfill, linked-alias deduplication, preserved-overlap, reconciliation, and dual-read rollback tests to `__tests__/scripts/backfill-venue-reservations.test.ts` and `scripts/verify-venue-reservation-cutover.ts`
-- [ ] T016 Add dual-read reservation plus unlinked-legacy behavior to `lib/utils/availability.ts`
+- [x] T005 Add `VenueReservation`, transition, override, status/usage enums, schedule-block intent, request approval fields, and nullable activity links to `prisma/schema.prisma`
+- [x] T006 Create the additive canonical-reservation migration with ownership, interval, ancestry, and lifecycle checks in `prisma/migrations/<timestamp>_add_canonical_venue_reservations/migration.sql`
+- [x] T007 Regenerate the Prisma client after the reservation schema migration with `bun run db:generate`
+- [x] T008 [P] Add serializable venue-reservation retry tests plus gear/non-gear outbox namespace-isolation tests in `__tests__/lib/services/venue-reservation-transaction.test.ts` and `__tests__/lib/services/notification-outbox-worker.test.ts`
+- [x] T009 [P] Add venue-reservation interval, surface, segment, coexistence, offering, public-redaction, and venue-wide-claim conflicts against every surface/segment tests in `__tests__/lib/services/venue-reservation-availability.test.ts`
+- [x] T010 Implement bounded serializable retry and friendly contention errors in `lib/services/venue-reservation-transaction.ts`
+- [x] T011 Implement transaction-client venue-reservation conflict detection and offering/occupancy separation in `lib/services/venue-reservation-availability.ts`
+- [x] T012 Implement venue-reservation lifecycle, assignment, override, ancestry, audit, minimal request/practice notification registry, and registry-filtered association outbox worker while preserving gear-worker ownership in `lib/services/venue-reservations.ts`, `lib/services/association-operations-notification-registry.ts`, `lib/services/association-operations-outbox-worker.ts`, and `lib/services/notification-outbox-lease.ts`
+- [x] T013 Add canonical schedule identity and reservation deduplication helpers to `lib/data/schedule-items.ts`
+- [x] T014 Add idempotent venue-reservation backfill scaffolding and dry-run reporting to `scripts/backfill-venue-reservations.ts`
+- [x] T015 Add idempotent backfill, linked-alias deduplication, preserved-overlap, reconciliation, and dual-read rollback tests to `__tests__/scripts/backfill-venue-reservations.test.ts` and `scripts/verify-venue-reservation-cutover.ts`
+- [x] T016 Add dual-read reservation plus unlinked-legacy behavior to `lib/utils/availability.ts`
 
 **Checkpoint**: Reservation writes are atomic; requestable offerings do not occupy inventory; legacy commitments remain visible.
 

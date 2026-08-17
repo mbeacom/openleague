@@ -314,6 +314,7 @@ export async function publishSpecialtyEvent(
         audience: validated.audience,
         visibility: "PUBLIC",
         status: "PUBLISHED",
+        intent: "VENUE_ACTIVITY",
         startsAt: validated.startsAt,
         endsAt: validated.endsAt,
         capacity: validated.capacity ?? null,

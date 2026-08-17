@@ -43,6 +43,7 @@ describe("venue schedule range helpers", () => {
         startAt: new Date("2026-01-05T10:00:00Z"),
         endAt: new Date("2026-01-05T11:00:00Z"),
         recurrenceRule: "FREQ=WEEKLY;BYDAY=MO,WE;COUNT=4",
+        timezone: "UTC",
       },
       new Date("2026-01-01T00:00:00Z"),
       new Date("2026-01-20T00:00:00Z")
@@ -53,6 +54,49 @@ describe("venue schedule range helpers", () => {
       "2026-01-07T10:00:00.000Z",
       "2026-01-12T10:00:00.000Z",
       "2026-01-14T10:00:00.000Z",
+    ]);
+  });
+
+  it("keeps New York wall-clock time across DST regardless of process timezone", () => {
+    const originalProcessTimezone = process.env.TZ;
+    const results: string[][] = [];
+
+    try {
+      for (const processTimezone of ["UTC", "America/Los_Angeles", "Asia/Tokyo"]) {
+        process.env.TZ = processTimezone;
+        results.push(
+          expandRecurrenceWindow(
+            {
+              startAt: new Date("2026-03-01T15:00:00.000Z"),
+              endAt: new Date("2026-03-01T16:00:00.000Z"),
+              recurrenceRule: "FREQ=WEEKLY;COUNT=3",
+              timezone: "America/New_York",
+            },
+            new Date("2026-03-01T00:00:00.000Z"),
+            new Date("2026-03-16T00:00:00.000Z"),
+          ).map((occurrence) => occurrence.startAt.toISOString()),
+        );
+      }
+    } finally {
+      process.env.TZ = originalProcessTimezone;
+    }
+
+    expect(results).toEqual([
+      [
+        "2026-03-01T15:00:00.000Z",
+        "2026-03-08T14:00:00.000Z",
+        "2026-03-15T14:00:00.000Z",
+      ],
+      [
+        "2026-03-01T15:00:00.000Z",
+        "2026-03-08T14:00:00.000Z",
+        "2026-03-15T14:00:00.000Z",
+      ],
+      [
+        "2026-03-01T15:00:00.000Z",
+        "2026-03-08T14:00:00.000Z",
+        "2026-03-15T14:00:00.000Z",
+      ],
     ]);
   });
 

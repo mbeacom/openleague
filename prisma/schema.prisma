@@ -40,51 +40,55 @@ model User {
   practiceSessions             PracticeSession[]
   plays                        Play[]
   venues                       Venue[]
-  createdSeasons               Season[]                 @relation("SeasonCreator")
-  createdSeasonGames           SeasonGame[]             @relation("SeasonGameCreator")
-  seasonGameConflictOverrides  SeasonGame[]             @relation("SeasonGameConflictOverride")
-  eventGameConflictOverrides   EventGame[]              @relation("EventGameConflictOverride")
-  eventConflictOverrides       Event[]                  @relation("EventConflictOverride")
-  practiceConflictOverrides    PracticeSession[]        @relation("PracticeConflictOverride")
-  createdGameProposals         GameProposal[]           @relation("GameProposalCreator")
-  gameProposalEntries          GameProposalEntry[]      @relation("GameProposalActor")
-  placementDecisions           PlacementDecision[]      @relation("PlacementDecider")
-  createdVenueOrganizations    VenueOrganization[]      @relation("VenueOrganizationCreator")
-  venueStaffMemberships        VenueStaff[]             @relation("VenueStaffUser")
-  sentVenueStaffInvites        VenueStaff[]             @relation("VenueStaffInviter")
-  createdVenueScheduleBlocks   VenueScheduleBlock[]     @relation("VenueScheduleBlockCreator")
-  updatedVenueScheduleBlocks   VenueScheduleBlock[]     @relation("VenueScheduleBlockUpdater")
-  iceTimeRequests              IceTimeRequest[]         @relation("IceTimeRequester")
-  decidedIceTimeRequests       IceTimeRequest[]         @relation("IceTimeDecider")
-  venueContentPosts            VenueContentPost[]       @relation("VenueContentAuthor")
-  sentVenueRelationshipInvites VenueRelationship[]      @relation("VenueRelationshipInviter")
-  acceptedVenueRelationships   VenueRelationship[]      @relation("VenueRelationshipAccepter")
-  removedVenueRelationships    VenueRelationship[]      @relation("VenueRelationshipRemover")
-  venueActivityLogs            VenueActivityLog[]       @relation("VenueActivityActor")
-  sessionRegistrations         SessionRegistration[]    @relation("SessionRegistrant")
-  canceledSessionRegistrations SessionRegistration[]    @relation("SessionRegistrationCanceler")
-  createdSignupEvents          SignupEvent[]            @relation("SignupEventCreator")
-  updatedSignupEvents          SignupEvent[]            @relation("SignupEventUpdater")
-  eventRegistrations           EventRegistration[]      @relation("EventRegistrant")
-  canceledEventRegistrations   EventRegistration[]      @relation("EventRegistrationCanceler")
-  eventCheckIns                EventRegistration[]      @relation("EventCheckInActor")
-  markedManualPayments         EventRegistration[]      @relation("ManualPaymentMarker")
-  eventInvitationsReceived     EventInvitation[]        @relation("EventInvitee")
-  eventInvitationsSent         EventInvitation[]        @relation("EventInviter")
-  eventManagerRoles            EventManager[]           @relation("EventManagerUser")
-  grantedEventManagerRoles     EventManager[]           @relation("EventManagerGrantor")
-  eventTeamAssignmentsMade     EventTeamAssignment[]    @relation("EventTeamAssigner")
-  uploadedEventMedia           EventMediaItem[]         @relation("EventMediaUploader")
-  removedEventMedia            EventMediaItem[]         @relation("EventMediaRemover")
-  grantedParentalConsents      ParentalConsent[]        @relation("ParentalConsentGrantor")
-  createdGearNeeds             TeamGearNeed[]           @relation("GearNeedCreator")
-  requestedGearReservations    GearReservation[]        @relation("GearReservationRequester")
-  decidedGearReservations      GearReservation[]        @relation("GearReservationDecider")
-  gearAllocations              GearAllocation[]         @relation("GearAllocationAllocator")
-  handledGearHandoffs          GearHandoff[]            @relation("GearHandoffHandler")
-  recordedGearMovements        GearInventoryMovement[]  @relation("GearMovementRecorder")
-  gearActivity                 GearActivity[]           @relation("GearActivityActor")
-  notificationOutbox           NotificationOutbox[]     @relation("NotificationOutboxRecipient")
+  createdSeasons               Season[]                     @relation("SeasonCreator")
+  createdSeasonGames           SeasonGame[]                 @relation("SeasonGameCreator")
+  seasonGameConflictOverrides  SeasonGame[]                 @relation("SeasonGameConflictOverride")
+  eventGameConflictOverrides   EventGame[]                  @relation("EventGameConflictOverride")
+  eventConflictOverrides       Event[]                      @relation("EventConflictOverride")
+  practiceConflictOverrides    PracticeSession[]            @relation("PracticeConflictOverride")
+  createdGameProposals         GameProposal[]               @relation("GameProposalCreator")
+  gameProposalEntries          GameProposalEntry[]          @relation("GameProposalActor")
+  placementDecisions           PlacementDecision[]          @relation("PlacementDecider")
+  createdVenueOrganizations    VenueOrganization[]          @relation("VenueOrganizationCreator")
+  venueStaffMemberships        VenueStaff[]                 @relation("VenueStaffUser")
+  sentVenueStaffInvites        VenueStaff[]                 @relation("VenueStaffInviter")
+  createdVenueScheduleBlocks   VenueScheduleBlock[]         @relation("VenueScheduleBlockCreator")
+  updatedVenueScheduleBlocks   VenueScheduleBlock[]         @relation("VenueScheduleBlockUpdater")
+  iceTimeRequests              IceTimeRequest[]             @relation("IceTimeRequester")
+  decidedIceTimeRequests       IceTimeRequest[]             @relation("IceTimeDecider")
+  venueContentPosts            VenueContentPost[]           @relation("VenueContentAuthor")
+  sentVenueRelationshipInvites VenueRelationship[]          @relation("VenueRelationshipInviter")
+  acceptedVenueRelationships   VenueRelationship[]          @relation("VenueRelationshipAccepter")
+  removedVenueRelationships    VenueRelationship[]          @relation("VenueRelationshipRemover")
+  venueActivityLogs            VenueActivityLog[]           @relation("VenueActivityActor")
+  sessionRegistrations         SessionRegistration[]        @relation("SessionRegistrant")
+  canceledSessionRegistrations SessionRegistration[]        @relation("SessionRegistrationCanceler")
+  createdSignupEvents          SignupEvent[]                @relation("SignupEventCreator")
+  updatedSignupEvents          SignupEvent[]                @relation("SignupEventUpdater")
+  eventRegistrations           EventRegistration[]          @relation("EventRegistrant")
+  canceledEventRegistrations   EventRegistration[]          @relation("EventRegistrationCanceler")
+  eventCheckIns                EventRegistration[]          @relation("EventCheckInActor")
+  markedManualPayments         EventRegistration[]          @relation("ManualPaymentMarker")
+  eventInvitationsReceived     EventInvitation[]            @relation("EventInvitee")
+  eventInvitationsSent         EventInvitation[]            @relation("EventInviter")
+  eventManagerRoles            EventManager[]               @relation("EventManagerUser")
+  grantedEventManagerRoles     EventManager[]               @relation("EventManagerGrantor")
+  eventTeamAssignmentsMade     EventTeamAssignment[]        @relation("EventTeamAssigner")
+  uploadedEventMedia           EventMediaItem[]             @relation("EventMediaUploader")
+  removedEventMedia            EventMediaItem[]             @relation("EventMediaRemover")
+  grantedParentalConsents      ParentalConsent[]            @relation("ParentalConsentGrantor")
+  createdGearNeeds             TeamGearNeed[]               @relation("GearNeedCreator")
+  requestedGearReservations    GearReservation[]            @relation("GearReservationRequester")
+  decidedGearReservations      GearReservation[]            @relation("GearReservationDecider")
+  gearAllocations              GearAllocation[]             @relation("GearAllocationAllocator")
+  handledGearHandoffs          GearHandoff[]                @relation("GearHandoffHandler")
+  recordedGearMovements        GearInventoryMovement[]      @relation("GearMovementRecorder")
+  gearActivity                 GearActivity[]               @relation("GearActivityActor")
+  notificationOutbox           NotificationOutbox[]         @relation("NotificationOutboxRecipient")
+  createdVenueReservations     VenueReservation[]           @relation("VenueReservationCreator")
+  assignedVenueReservations    VenueReservation[]           @relation("VenueReservationAssigner")
+  venueReservationTransitions  VenueReservationTransition[] @relation("VenueReservationTransitionActor")
+  venueReservationOverrides    VenueReservationOverride[]   @relation("VenueReservationOverrideActor")
 }
 
 // Single-use, hashed account-lifecycle tokens (email verification, password
@@ -211,6 +215,7 @@ model Team {
   gearNeeds          TeamGearNeed[]
   gearNeedCommands   TeamGearNeedCommand[]
   gearReservations   GearReservation[]
+  venueReservations  VenueReservation[]       @relation("VenueReservationTeamOwner")
 
   @@unique([leagueId, id])
   @@index([leagueId]) // Optimize league-team queries
@@ -419,11 +424,15 @@ model Event {
   rsvps      RSVP[]
   seasonGame SeasonGame?
 
+  venueReservationId String?           @unique
+  venueReservation   VenueReservation? @relation(fields: [venueReservationId], references: [id], onDelete: SetNull)
+
   @@index([teamId, startAt]) // Optimize queries for team events sorted by date
   @@index([startAt]) // Optimize queries for upcoming events across teams
   @@index([leagueId, startAt]) // Optimize league event queries
   @@index([homeTeamId, awayTeamId]) // Optimize multi-team game queries
   @@index([venueId, startAt]) // Optimize venue availability queries
+  @@index([venueReservationId])
 }
 
 enum EventType {
@@ -564,6 +573,7 @@ model League {
   gearPledgeReceiptCommands GearPledgeReceiptCommand[]
   gearActivity              GearActivity[]
   notificationOutbox        NotificationOutbox[]
+  venueReservations         VenueReservation[]         @relation("VenueReservationLeagueOwner")
 
   @@map("leagues")
 }
@@ -1524,11 +1534,15 @@ model PracticeSession {
   conflictOverriddenBy   User?     @relation("PracticeConflictOverride", fields: [conflictOverriddenById], references: [id], onDelete: SetNull)
   conflictOverriddenAt   DateTime?
 
+  venueReservationId String?           @unique
+  venueReservation   VenueReservation? @relation(fields: [venueReservationId], references: [id], onDelete: SetNull)
+
   plays PracticeSessionPlay[]
 
   @@index([teamId, date])
   @@index([venueId, startAt])
   @@index([surfaceId, startAt])
+  @@index([venueReservationId])
   @@map("practice_sessions")
 }
 
@@ -1675,6 +1689,13 @@ enum VenueScheduleBlockStatus {
   ARCHIVED
 }
 
+enum VenueScheduleBlockIntent {
+  OFFERING
+  VENUE_ACTIVITY
+  CLOSURE
+  INFORMATION
+}
+
 enum RegistrationMode {
   INFO_ONLY
   REQUEST_REQUIRED
@@ -1706,9 +1727,24 @@ enum IceTimeRequestStatus {
   SUBMITTED
   UNDER_REVIEW
   ACCEPTED
+  PARTIALLY_ACCEPTED
   DECLINED
   CANCELED
   EXPIRED
+}
+
+enum VenueReservationStatus {
+  HELD
+  CONFIRMED
+  RELEASED
+  CANCELED
+  COMPLETED
+}
+
+enum VenueReservationUsageStatus {
+  PENDING
+  USED
+  UNUSED
 }
 
 enum LessonOfferingType {
@@ -1798,6 +1834,7 @@ model VenueOrganization {
   payments           Payment[]
   hostedSignupEvents SignupEvent[]
   invitations        Invitation[]
+  venueReservations  VenueReservation[] @relation("VenueReservationVenueOrganizationOwner")
 
   @@index([createdById])
   @@index([status])
@@ -1876,22 +1913,23 @@ model Venue {
   createdById String
   createdBy   User   @relation(fields: [createdById], references: [id], onDelete: Restrict)
 
-  events           Event[]
-  staff            VenueStaff[]
-  surfaces         IceSurface[]
-  operatingHours   VenueOperatingHour[]
-  scheduleBlocks   VenueScheduleBlock[]
-  iceTimeRequests  IceTimeRequest[]
-  lessonOfferings  LessonOffering[]
-  contentPosts     VenueContentPost[]
-  relationships    VenueRelationship[]
-  activityLogs     VenueActivityLog[]
-  registrations    SessionRegistration[]
-  payments         Payment[]
-  signupEvents     SignupEvent[]
-  seasonGames      SeasonGame[]
-  proposalEntries  GameProposalEntry[]
-  practiceSessions PracticeSession[]
+  events            Event[]
+  staff             VenueStaff[]
+  surfaces          IceSurface[]
+  operatingHours    VenueOperatingHour[]
+  scheduleBlocks    VenueScheduleBlock[]
+  iceTimeRequests   IceTimeRequest[]
+  lessonOfferings   LessonOffering[]
+  contentPosts      VenueContentPost[]
+  relationships     VenueRelationship[]
+  activityLogs      VenueActivityLog[]
+  registrations     SessionRegistration[]
+  payments          Payment[]
+  signupEvents      SignupEvent[]
+  seasonGames       SeasonGame[]
+  proposalEntries   GameProposalEntry[]
+  practiceSessions  PracticeSession[]
+  venueReservations VenueReservation[]
 
   @@index([visibility])
   @@index([teamId])
@@ -1920,14 +1958,16 @@ model IceSurface {
   venueId String
   venue   Venue  @relation(fields: [venueId], references: [id], onDelete: Cascade)
 
-  operatingHours   VenueOperatingHour[]
-  scheduleBlocks   VenueScheduleBlock[]
-  lessonOfferings  LessonOffering[]
-  signupEvents     SignupEvent[]        @relation("SignupEventSurfaces")
-  eventGames       EventGame[]
-  seasonGames      SeasonGame[]
-  segments         SurfaceSegment[]
-  practiceSessions PracticeSession[]
+  operatingHours          VenueOperatingHour[]
+  scheduleBlocks          VenueScheduleBlock[]
+  lessonOfferings         LessonOffering[]
+  signupEvents            SignupEvent[]        @relation("SignupEventSurfaces")
+  eventGames              EventGame[]
+  seasonGames             SeasonGame[]
+  segments                SurfaceSegment[]
+  practiceSessions        PracticeSession[]
+  venueReservations       VenueReservation[]
+  approvedIceTimeRequests IceTimeRequest[]     @relation("IceTimeRequestApprovedSurface")
 
   @@unique([venueId, name])
   @@index([venueId, isActive])
@@ -1964,10 +2004,12 @@ model SurfaceSegment {
   coexistenceA SegmentCoexistence[] @relation("CoexistA")
   coexistenceB SegmentCoexistence[] @relation("CoexistB")
 
-  seasonGames      SeasonGame[]
-  eventGames       EventGame[]
-  scheduleBlocks   VenueScheduleBlock[]
-  practiceSessions PracticeSession[]
+  seasonGames             SeasonGame[]
+  eventGames              EventGame[]
+  scheduleBlocks          VenueScheduleBlock[]
+  practiceSessions        PracticeSession[]
+  venueReservations       VenueReservation[]
+  approvedIceTimeRequests IceTimeRequest[]     @relation("IceTimeRequestApprovedSegment")
 
   @@unique([surfaceId, name])
   @@unique([surfaceId, presetRole])
@@ -2022,6 +2064,7 @@ model VenueScheduleBlock {
   audience                VenueScheduleAudience     @default(PUBLIC)
   visibility              VenueScheduleVisibility   @default(PUBLIC)
   status                  VenueScheduleBlockStatus  @default(DRAFT)
+  intent                  VenueScheduleBlockIntent
   startsAt                DateTime
   endsAt                  DateTime
   recurrenceRule          String?
@@ -2052,10 +2095,12 @@ model VenueScheduleBlock {
   updatedById String?
   updatedBy   User?   @relation("VenueScheduleBlockUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
 
-  iceTimeRequests IceTimeRequest[]
-  lessonOfferings LessonOffering[]
-  skillLevels     SkillLevelReference[]
-  registrations   SessionRegistration[]
+  iceTimeRequests        IceTimeRequest[]
+  lessonOfferings        LessonOffering[]
+  skillLevels            SkillLevelReference[]
+  registrations          SessionRegistration[]
+  offeringReservations   VenueReservation[]    @relation("VenueReservationOffering")
+  reservationOccurrences VenueReservation[]    @relation("VenueReservationScheduleBlockSource")
 
   @@index([venueId, startsAt])
   @@index([surfaceId, startsAt])
@@ -2072,6 +2117,10 @@ model IceTimeRequest {
   contactPhone              String?
   requestedStartAt          DateTime
   requestedEndAt            DateTime
+  approvedStartAt           DateTime?
+  approvedEndAt             DateTime?
+  approvedSurfaceId         String?
+  approvedSegmentId         String?
   notes                     String?
   status                    IceTimeRequestStatus @default(SUBMITTED)
   decisionMessage           String?
@@ -2097,12 +2146,125 @@ model IceTimeRequest {
   decidedById String?
   decidedBy   User?   @relation("IceTimeDecider", fields: [decidedById], references: [id], onDelete: SetNull)
 
+  approvedSurface  IceSurface?       @relation("IceTimeRequestApprovedSurface", fields: [approvedSurfaceId], references: [id], onDelete: SetNull)
+  approvedSegment  SurfaceSegment?   @relation("IceTimeRequestApprovedSegment", fields: [approvedSegmentId], references: [id], onDelete: SetNull)
+  venueReservation VenueReservation?
+
   @@index([venueId, status])
   @@index([scheduleBlockId, status])
   @@index([requesterUserId])
   @@index([requesterTeamId])
   @@index([requesterLeagueId])
+  @@index([approvedSurfaceId])
+  @@index([approvedSegmentId])
   @@map("ice_time_requests")
+}
+
+// The authoritative claim on venue space and time. This is intentionally named
+// VenueReservation to preserve the boundary from GearReservation custody.
+model VenueReservation {
+  id          String                      @id @default(cuid())
+  status      VenueReservationStatus
+  usageStatus VenueReservationUsageStatus @default(PENDING)
+  startsAt    DateTime
+  endsAt      DateTime
+  timezone    String                      @default("America/New_York")
+  heldUntil   DateTime?
+  confirmedAt DateTime?
+  releasedAt  DateTime?
+  canceledAt  DateTime?
+  completedAt DateTime?
+  createdAt   DateTime                    @default(now())
+  updatedAt   DateTime                    @updatedAt
+
+  venueId String
+  venue   Venue  @relation(fields: [venueId], references: [id], onDelete: Restrict)
+
+  // Null surface is an intentional venue-wide claim and conflicts with every
+  // surface and segment at the venue.
+  surfaceId String?
+  surface   IceSurface? @relation(fields: [surfaceId], references: [id], onDelete: Restrict)
+
+  segmentId String?
+  segment   SurfaceSegment? @relation(fields: [segmentId], references: [id], onDelete: Restrict)
+
+  ownerLeagueId String?
+  ownerLeague   League? @relation("VenueReservationLeagueOwner", fields: [ownerLeagueId], references: [id], onDelete: Restrict)
+
+  ownerTeamId String?
+  ownerTeam   Team?   @relation("VenueReservationTeamOwner", fields: [ownerTeamId], references: [id], onDelete: Restrict)
+
+  ownerVenueOrganizationId String?
+  ownerVenueOrganization   VenueOrganization? @relation("VenueReservationVenueOrganizationOwner", fields: [ownerVenueOrganizationId], references: [id], onDelete: Restrict)
+
+  sourceRequestId String?         @unique
+  sourceRequest   IceTimeRequest? @relation(fields: [sourceRequestId], references: [id], onDelete: SetNull)
+
+  offeringBlockId String?
+  offeringBlock   VenueScheduleBlock? @relation("VenueReservationOffering", fields: [offeringBlockId], references: [id], onDelete: SetNull)
+
+  sourceScheduleBlockId String?
+  sourceScheduleBlock   VenueScheduleBlock? @relation("VenueReservationScheduleBlockSource", fields: [sourceScheduleBlockId], references: [id], onDelete: SetNull)
+
+  createdById String
+  createdBy   User   @relation("VenueReservationCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  assignedById String?
+  assignedBy   User?   @relation("VenueReservationAssigner", fields: [assignedById], references: [id], onDelete: SetNull)
+
+  transitions      VenueReservationTransition[]
+  overrides        VenueReservationOverride[]
+  events           Event[]
+  seasonGames      SeasonGame[]
+  eventGames       EventGame[]
+  signupEvents     SignupEvent[]
+  practiceSessions PracticeSession[]
+  proposalEntries  GameProposalEntry[]
+
+  @@unique([sourceScheduleBlockId, startsAt])
+  @@index([venueId, startsAt, endsAt])
+  @@index([surfaceId, startsAt, endsAt])
+  @@index([segmentId, startsAt, endsAt])
+  @@index([ownerLeagueId, status, startsAt])
+  @@index([ownerTeamId, status, startsAt])
+  @@index([ownerVenueOrganizationId, status, startsAt])
+  @@index([status, heldUntil])
+  @@map("venue_reservations")
+}
+
+model VenueReservationTransition {
+  id             String                  @id @default(cuid())
+  previousStatus VenueReservationStatus?
+  nextStatus     VenueReservationStatus
+  reason         String?
+  snapshot       Json?
+  occurredAt     DateTime                @default(now())
+
+  reservationId String
+  reservation   VenueReservation @relation(fields: [reservationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  actorId String?
+  actor   User?   @relation("VenueReservationTransitionActor", fields: [actorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([reservationId, occurredAt])
+  @@map("venue_reservation_transitions")
+}
+
+model VenueReservationOverride {
+  id                        String   @id @default(cuid())
+  reason                    String
+  candidateSnapshot         Json
+  conflictingReservationIds String[]
+  occurredAt                DateTime @default(now())
+
+  reservationId String
+  reservation   VenueReservation @relation(fields: [reservationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  actorId String?
+  actor   User?   @relation("VenueReservationOverrideActor", fields: [actorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([reservationId, occurredAt])
+  @@map("venue_reservation_overrides")
 }
 
 model LessonOffering {
@@ -2463,6 +2625,9 @@ model SeasonGame {
   eventId String? @unique
   event   Event?  @relation(fields: [eventId], references: [id], onDelete: SetNull)
 
+  venueReservationId String?           @unique
+  venueReservation   VenueReservation? @relation(fields: [venueReservationId], references: [id], onDelete: SetNull)
+
   proposalId String?       @unique
   proposal   GameProposal? @relation(fields: [proposalId], references: [id])
 
@@ -2477,6 +2642,7 @@ model SeasonGame {
   @@index([awayTeamId, startAt])
   @@index([venueId, startAt])
   @@index([surfaceId, startAt])
+  @@index([venueReservationId])
   @@map("season_games")
 }
 
@@ -2534,7 +2700,11 @@ model GameProposalEntry {
   actorUser   User     @relation("GameProposalActor", fields: [actorUserId], references: [id], onDelete: Restrict)
   createdAt   DateTime @default(now())
 
+  venueReservationId String?           @unique
+  venueReservation   VenueReservation? @relation(fields: [venueReservationId], references: [id], onDelete: SetNull)
+
   @@index([proposalId, createdAt])
+  @@index([venueReservationId])
   @@map("game_proposal_entries")
 }
 
@@ -2731,6 +2901,9 @@ model SignupEvent {
   updatedById String?
   updatedBy   User?   @relation("SignupEventUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
 
+  venueReservationId String?           @unique
+  venueReservation   VenueReservation? @relation(fields: [venueReservationId], references: [id], onDelete: SetNull)
+
   slots         SignupSlot[]
   phases        EventRegistrationPhase[]
   registrations EventRegistration[]
@@ -2745,6 +2918,7 @@ model SignupEvent {
   @@index([hostTeamId, startAt])
   @@index([venueId, startAt])
   @@index([status, visibility, startAt])
+  @@index([venueReservationId])
   @@map("signup_events")
 }
 
@@ -2971,6 +3145,9 @@ model EventGame {
   segmentId String?
   segment   SurfaceSegment? @relation(fields: [segmentId], references: [id], onDelete: SetNull)
 
+  venueReservationId String?           @unique
+  venueReservation   VenueReservation? @relation(fields: [venueReservationId], references: [id], onDelete: SetNull)
+
   homeTeamId String
   homeTeam   EventTeam @relation("EventGameHome", fields: [homeTeamId], references: [id], onDelete: Cascade)
 
@@ -2982,6 +3159,7 @@ model EventGame {
 
   @@index([eventId, startAt])
   @@index([surfaceId, startAt])
+  @@index([venueReservationId])
   @@map("event_games")
 }
 

@@ -1,12 +1,15 @@
 import { NotificationOutboxStatus, type NotificationOutbox } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
-import { parseGearNotificationEvent } from "@/lib/services/gear-notification-registry";
+import {
+  parseGearNotificationEvent,
+} from "@/lib/services/gear-notification-registry";
 import { addressingFromDedupeKey } from "@/lib/services/gear-recipient-identity";
 import { notificationService, type GearNotificationAddressing } from "@/lib/services/notification";
 
 export const GEAR_OUTBOX_BATCH_SIZE = 50;
 export const GEAR_OUTBOX_MAX_ATTEMPTS = 5;
 const STALE_LOCK_MS = 10 * 60 * 1_000;
+const GEAR_EVENT_TYPE_FILTER = { startsWith: "gear." } as const;
 
 /** A pending backlog older than this means delivery is not keeping up. */
 export const GEAR_OUTBOX_BACKLOG_AGE_MS = 30 * 60 * 1_000;
@@ -60,6 +63,7 @@ export async function recoverStaleGearOutboxLocks(now = new Date()): Promise<num
   const staleBefore = new Date(now.getTime() - STALE_LOCK_MS);
   const result = await prisma.notificationOutbox.updateMany({
     where: {
+      eventType: GEAR_EVENT_TYPE_FILTER,
       status: NotificationOutboxStatus.PROCESSING,
       lockedAt: { lt: staleBefore },
     },
@@ -74,7 +78,7 @@ export async function recoverStaleGearOutboxLocks(now = new Date()): Promise<num
 
 type OrderingCandidate = Pick<
   NotificationOutbox,
-  "id" | "leagueId" | "aggregateType" | "aggregateId" | "recipientUserId" | "recipientEmail" | "createdAt"
+  "id" | "leagueId" | "aggregateType" | "aggregateId" | "recipientUserId" | "recipientEmail" | "eventType" | "createdAt"
 >;
 
 /**
@@ -122,6 +126,7 @@ async function hasUnfinishedPredecessor(row: OrderingCandidate): Promise<boolean
   const predecessor = await prisma.notificationOutbox.findFirst({
     where: {
       id: { not: row.id },
+      eventType: GEAR_EVENT_TYPE_FILTER,
       leagueId: row.leagueId,
       aggregateType: row.aggregateType,
       aggregateId: row.aggregateId,
@@ -156,6 +161,7 @@ export async function claimDueGearOutbox(
   const boundedLimit = Math.min(Math.max(1, limit), GEAR_OUTBOX_BATCH_SIZE);
   const candidates = await prisma.notificationOutbox.findMany({
     where: {
+      eventType: GEAR_EVENT_TYPE_FILTER,
       status: NotificationOutboxStatus.PENDING,
       scheduledAt: { lte: now },
     },
@@ -168,6 +174,7 @@ export async function claimDueGearOutbox(
       aggregateId: true,
       recipientUserId: true,
       recipientEmail: true,
+      eventType: true,
       createdAt: true,
     },
   });
@@ -192,6 +199,7 @@ export async function claimDueGearOutbox(
     const updated = await prisma.notificationOutbox.updateMany({
       where: {
         id: candidate.id,
+        eventType: GEAR_EVENT_TYPE_FILTER,
         status: NotificationOutboxStatus.PENDING,
         scheduledAt: { lte: now },
       },
@@ -216,7 +224,12 @@ export async function claimDueGearOutbox(
 
 async function markSent(row: NotificationOutbox, now: Date, detail: string | null = null): Promise<void> {
   await prisma.notificationOutbox.updateMany({
-    where: { id: row.id, status: NotificationOutboxStatus.PROCESSING, lockedAt: row.lockedAt },
+    where: {
+      id: row.id,
+      eventType: GEAR_EVENT_TYPE_FILTER,
+      status: NotificationOutboxStatus.PROCESSING,
+      lockedAt: row.lockedAt,
+    },
     data: {
       status: NotificationOutboxStatus.SENT,
       sentAt: now,
@@ -233,7 +246,12 @@ async function markSent(row: NotificationOutbox, now: Date, detail: string | nul
  */
 async function markSuppressed(row: NotificationOutbox, reason: string): Promise<void> {
   await prisma.notificationOutbox.updateMany({
-    where: { id: row.id, status: NotificationOutboxStatus.PROCESSING, lockedAt: row.lockedAt },
+    where: {
+      id: row.id,
+      eventType: GEAR_EVENT_TYPE_FILTER,
+      status: NotificationOutboxStatus.PROCESSING,
+      lockedAt: row.lockedAt,
+    },
     data: {
       status: NotificationOutboxStatus.CANCELED,
       lockedAt: null,
@@ -255,7 +273,12 @@ async function markContractViolation(
   now: Date,
 ): Promise<void> {
   await prisma.notificationOutbox.updateMany({
-    where: { id: row.id, status: NotificationOutboxStatus.PROCESSING, lockedAt: row.lockedAt },
+    where: {
+      id: row.id,
+      eventType: GEAR_EVENT_TYPE_FILTER,
+      status: NotificationOutboxStatus.PROCESSING,
+      lockedAt: row.lockedAt,
+    },
     data: {
       status: NotificationOutboxStatus.FAILED,
       failedAt: now,
@@ -268,7 +291,12 @@ async function markContractViolation(
 async function markFailure(row: NotificationOutbox, error: unknown, now: Date): Promise<"retry" | "dead-letter"> {
   const deadLetter = row.attempts >= GEAR_OUTBOX_MAX_ATTEMPTS;
   const result = await prisma.notificationOutbox.updateMany({
-    where: { id: row.id, status: NotificationOutboxStatus.PROCESSING, lockedAt: row.lockedAt },
+    where: {
+      id: row.id,
+      eventType: GEAR_EVENT_TYPE_FILTER,
+      status: NotificationOutboxStatus.PROCESSING,
+      lockedAt: row.lockedAt,
+    },
     data: deadLetter
       ? {
           status: NotificationOutboxStatus.FAILED,
@@ -406,11 +434,11 @@ export type GearOutboxHealth = {
  */
 export async function getGearOutboxHealth(now = new Date()): Promise<GearOutboxHealth> {
   const [pending, processing, deadLettered, oldest] = await Promise.all([
-    prisma.notificationOutbox.count({ where: { status: NotificationOutboxStatus.PENDING } }),
-    prisma.notificationOutbox.count({ where: { status: NotificationOutboxStatus.PROCESSING } }),
-    prisma.notificationOutbox.count({ where: { status: NotificationOutboxStatus.FAILED } }),
+    prisma.notificationOutbox.count({ where: { eventType: GEAR_EVENT_TYPE_FILTER, status: NotificationOutboxStatus.PENDING } }),
+    prisma.notificationOutbox.count({ where: { eventType: GEAR_EVENT_TYPE_FILTER, status: NotificationOutboxStatus.PROCESSING } }),
+    prisma.notificationOutbox.count({ where: { eventType: GEAR_EVENT_TYPE_FILTER, status: NotificationOutboxStatus.FAILED } }),
     prisma.notificationOutbox.findFirst({
-      where: { status: NotificationOutboxStatus.PENDING, scheduledAt: { lte: now } },
+      where: { eventType: GEAR_EVENT_TYPE_FILTER, status: NotificationOutboxStatus.PENDING, scheduledAt: { lte: now } },
       orderBy: { scheduledAt: "asc" },
       select: { scheduledAt: true },
     }),

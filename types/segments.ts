@@ -44,6 +44,7 @@ export interface SurfaceSegmentation {
 }
 
 export type BookingConflictSource =
+  | "venueReservation"
   | "event"
   | "seasonGame"
   | "eventGame"

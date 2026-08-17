@@ -467,6 +467,7 @@ export async function createScheduleBlock(
       endsAt: validated.endsAt,
       recurrenceRule: validated.recurrenceRule || null,
       recurrenceEndDate: validated.recurrenceEndDate ?? null,
+      timezone: venue.timezone,
     });
 
     if (validated.status !== "DRAFT" && conflicts.length > 0) {
@@ -527,6 +528,7 @@ export async function updateScheduleBlock(
         endsAt: validated.endsAt,
         recurrenceRule: validated.recurrenceRule || null,
         recurrenceEndDate: validated.recurrenceEndDate ?? null,
+        timezone: venue.timezone,
       },
       command.scheduleBlockId
     );
@@ -697,7 +699,7 @@ async function setScheduleBlockStatus(
         segmentId: true,
         recurrenceRule: true,
         recurrenceEndDate: true,
-        venue: { select: { organizationId: true, slug: true } },
+        venue: { select: { organizationId: true, slug: true, timezone: true } },
       },
     });
 
@@ -715,6 +717,7 @@ async function setScheduleBlockStatus(
           endsAt: block.endsAt,
           recurrenceRule: block.recurrenceRule,
           recurrenceEndDate: block.recurrenceEndDate,
+          timezone: block.venue.timezone,
         },
         block.id
       );
@@ -810,6 +813,7 @@ type BlockConflictCandidate = {
   endsAt: Date;
   recurrenceRule: string | null;
   recurrenceEndDate: Date | null;
+  timezone: string;
 };
 
 /**
@@ -872,6 +876,7 @@ function expandCandidateOccurrences(
         endAt: candidate.endsAt,
         recurrenceRule: candidate.recurrenceRule,
         recurrenceEndAt: candidate.recurrenceEndDate,
+        timezone: candidate.timezone,
       },
       candidate.startsAt,
       horizon
@@ -953,6 +958,7 @@ async function findFutureSurfaceBookings(
         segment: { select: { name: true } },
         recurrenceRule: true,
         recurrenceEndDate: true,
+        venue: { select: { timezone: true } },
       },
     }),
     prisma.practiceSession.findMany({
@@ -1040,6 +1046,7 @@ function nextFutureBlockOccurrence(
     endsAt: Date;
     recurrenceRule: string | null;
     recurrenceEndDate: Date | null;
+    venue: { timezone: string };
   },
   now: Date,
   horizon: Date
@@ -1054,6 +1061,7 @@ function nextFutureBlockOccurrence(
         endAt: block.endsAt,
         recurrenceRule: block.recurrenceRule,
         recurrenceEndAt: block.recurrenceEndDate,
+        timezone: block.venue.timezone,
       },
       now,
       horizon
@@ -1077,6 +1085,7 @@ function scheduleBlockData(
     audience: validated.audience,
     visibility: validated.visibility,
     status: validated.status,
+    intent: scheduleBlockIntent(validated),
     startsAt: validated.startsAt,
     endsAt: validated.endsAt,
     recurrenceRule: validated.recurrenceRule || null,
@@ -1104,6 +1113,7 @@ function scheduleBlockUpdateData(
     audience: validated.audience,
     visibility: validated.visibility,
     status: validated.status,
+    intent: scheduleBlockIntent(validated),
     startsAt: validated.startsAt,
     endsAt: validated.endsAt,
     recurrenceRule: validated.recurrenceRule || null,
@@ -1116,6 +1126,15 @@ function scheduleBlockUpdateData(
     registrationMode: validated.registrationMode,
     externalRegistrationUrl: validated.externalRegistrationUrl || null,
   };
+}
+
+function scheduleBlockIntent(
+  validated: ReturnType<typeof venueScheduleBlockSchema.parse>,
+): "OFFERING" | "VENUE_ACTIVITY" | "CLOSURE" | "INFORMATION" {
+  if (validated.intent) return validated.intent;
+  if (validated.registrationMode === "REQUEST_REQUIRED") return "OFFERING";
+  if (validated.activityType === "CLOSURE") return "CLOSURE";
+  return "VENUE_ACTIVITY";
 }
 
 /**
@@ -1186,7 +1205,7 @@ export async function getVenueScheduleBoard(input: {
     }
 
     await requireVenueScheduleManager(validated.organizationId, validated.venueId);
-    await ensureVenueContext(validated.organizationId, validated.venueId);
+    const venue = await ensureVenueContext(validated.organizationId, validated.venueId);
 
     const [bookings, surfaces, blockRows] = await Promise.all([
       getVenueBookings({
@@ -1259,6 +1278,7 @@ export async function getVenueScheduleBoard(input: {
               endAt: block.endsAt,
               recurrenceRule: block.recurrenceRule,
               recurrenceEndAt: block.recurrenceEndDate,
+              timezone: venue.timezone,
             },
             validated.from,
             validated.to
