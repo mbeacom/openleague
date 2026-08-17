@@ -52,7 +52,7 @@ Grounded in the verified 2026-07-04 audit (see 005 research) plus targeted check
 
 **Decision**: Segmentation presets key off `SurfaceType` (ICE/COURT/…) in new `lib/utils/segment-presets.ts`; `sport-catalog.ts` drops `surfaceUsageOptions` (its consumers move to segment pickers) but keeps sport labels/ages/formats.
 
-**Rationale**: Segmentation is a property of the physical surface, not the sport (a soccer club renting a turf FIELD gets field presets regardless of league sport). SC-007 (no ice vocabulary on non-ice surfaces) becomes structural. 005's sport-awareness tests are updated: the hockey assertion moves from "usage select shows Full/Half/Cross ice" to "ice surface segments show ice preset names; non-ice surfaces never do".
+**Rationale**: Segmentation is a property of the physical surface, not the sport (a soccer club renting a turf FIELD gets field presets regardless of league sport). SC-007 (no ice vocabulary on non-ice surfaces) becomes structural. 005's sport-awareness tests are updated: the hockey assertion moves from "usage select shows Full/Half/Cross ice" to "ice surface segments show ice preset names; non-ice surfaces never do". Feature 007 consumes this inventory for canonical association reservation and allocation; paid public self-service rentals remain a later extension.
 
 ## R8. Practice sessions
 
