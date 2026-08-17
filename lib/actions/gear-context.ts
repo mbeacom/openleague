@@ -4,7 +4,8 @@ import { requireUserId } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
 import {
   activeAllocationQuantity,
-  allocationConsumesCapacityForWindow,
+  canTransitionAllocation,
+  canTransitionReservation,
   isOutstandingAllocationOverdue,
 } from "@/lib/utils/gear";
 
@@ -60,10 +61,13 @@ export type GearInventoryContext = {
     currentLocationName: string | null;
     acquiredAt?: string | null;
     retiredAt?: string | null;
-    notes?: string | null;
     version?: number;
+    notes?: string | null;
   }>;
   recentActivity: {
+    page: number;
+    search: string;
+    hasMore: boolean;
     items: Array<{
       id: string;
       type: string;
@@ -81,9 +85,6 @@ export type GearInventoryContext = {
       occurredAt: string;
       notes: string | null;
     }>;
-    page: number;
-    hasMore: boolean;
-    search: string;
   };
 };
 
@@ -104,25 +105,6 @@ export async function getGearInventoryContext(
   const canManageInventory = membership.role === "LEAGUE_ADMIN";
   const activityPage = Math.max(1, Math.floor(options?.activityPage ?? 1));
   const activitySearch = options?.activitySearch?.trim().slice(0, 100) ?? "";
-  const activityWhere = {
-    leagueId,
-    ...(activitySearch
-      ? {
-          OR: [
-            { notes: { contains: activitySearch, mode: "insensitive" as const } },
-            { poolStock: { catalogItem: { name: { contains: activitySearch, mode: "insensitive" as const } } } },
-            {
-              gearUnit: {
-                OR: [
-                  { assetTag: { contains: activitySearch, mode: "insensitive" as const } },
-                  { catalogItem: { name: { contains: activitySearch, mode: "insensitive" as const } } },
-                ],
-              },
-            },
-          ],
-        }
-      : {}),
-  };
   const [locations, catalogItems, stocks, units, movements] = await Promise.all([
     prisma.gearStorageLocation.findMany({
       where: { leagueId },
@@ -167,10 +149,19 @@ export async function getGearInventoryContext(
     }),
     canManageInventory
       ? prisma.gearInventoryMovement.findMany({
-          where: activityWhere,
+          where: {
+            leagueId,
+            ...(activitySearch ? {
+              OR: [
+                { poolStock: { catalogItem: { name: { contains: activitySearch, mode: "insensitive" } } } },
+                { gearUnit: { assetTag: { contains: activitySearch, mode: "insensitive" } } },
+                { gearUnit: { catalogItem: { name: { contains: activitySearch, mode: "insensitive" } } } },
+              ],
+            } : {}),
+          },
           select: {
-            id: true, type: true, quantity: true, poolStockId: true, gearUnitId: true,
-            direction: true, beforeCondition: true, afterCondition: true, occurredAt: true, notes: true,
+            id: true, type: true, direction: true, quantity: true, poolStockId: true, gearUnitId: true,
+            beforeCondition: true, afterCondition: true, occurredAt: true, notes: true,
             beforeLocation: { select: { name: true } },
             afterLocation: { select: { name: true } },
             poolStock: { select: { catalogItem: { select: { name: true } } } },
@@ -209,17 +200,17 @@ export async function getGearInventoryContext(
     catalogItemId: unit.catalogItemId,
     catalogName: unit.catalogItem.name,
     assetTag: unit.assetTag,
-    ...(canManageInventory ? {
-      serialNumber: unit.serialNumber,
-      acquiredAt: unit.acquiredAt?.toISOString() ?? null,
-      retiredAt: unit.retiredAt?.toISOString() ?? null,
-      notes: unit.notes,
-      version: unit.version,
-    } : {}),
+    ...(canManageInventory ? { serialNumber: unit.serialNumber } : {}),
     status: unit.status,
     currentCondition: unit.currentCondition,
     currentLocationId: unit.currentLocationId,
     currentLocationName: unit.currentLocation?.name ?? null,
+    ...(canManageInventory ? {
+      acquiredAt: unit.acquiredAt?.toISOString() ?? null,
+      retiredAt: unit.retiredAt?.toISOString() ?? null,
+      version: unit.version,
+      notes: unit.notes,
+    } : {}),
   }));
 
   return {
@@ -241,6 +232,9 @@ export async function getGearInventoryContext(
     pooledStock,
     units: taggedUnits,
     recentActivity: {
+      page: activityPage,
+      search: activitySearch,
+      hasMore: movements.length > 20,
       items: movements.slice(0, 20).map((movement) => ({
       id: movement.id,
       type: movement.type,
@@ -258,17 +252,30 @@ export async function getGearInventoryContext(
       occurredAt: movement.occurredAt.toISOString(),
       notes: movement.notes,
       })),
-      page: activityPage,
-      hasMore: movements.length > 20,
-      search: activitySearch,
     },
   };
 }
 
+export type GearReservationCapabilities = {
+  canApproveAndAllocate: boolean;
+  canDecline: boolean;
+  canReschedule: boolean;
+  canCancel: boolean;
+};
+
+export type GearAllocationCapabilities = {
+  canRecordPickup: boolean;
+  canRecordReturn: boolean;
+  canRelease: boolean;
+};
+
 export type GearReservationContext = {
   league: { id: string; name: string };
   canManageReservations: boolean;
+  canRequestReservations: boolean;
   teamIds: string[];
+  requestableTeams: Array<{ id: string; name: string }>;
+  catalogItems: Array<{ id: string; name: string; trackingMode: "POOLED" | "INDIVIDUAL" }>;
   reservations: Array<{
     id: string;
     teamId: string;
@@ -276,14 +283,18 @@ export type GearReservationContext = {
     status: "DRAFT" | "REQUESTED" | "APPROVED" | "DECLINED" | "CANCELED" | "FULFILLED" | "CLOSED";
     requestedStartDate: string;
     requestedEndDate: string;
+    approvedStartDate: string | null;
+    approvedEndDate: string | null;
     custodianName: string;
     requestNotes: string | null;
     decisionNotes?: string | null;
     version: number;
+    capabilities: GearReservationCapabilities;
     overdue: boolean;
     reallocationWarning: boolean;
     lines: Array<{
       id: string;
+      catalogItemId: string | null;
       name: string;
       requestedQty: number;
       approvedQty: number;
@@ -296,19 +307,24 @@ export type GearReservationContext = {
       pickedUpQty: number;
       returnedQty: number;
       releasedQty: number;
+      outstandingQty: number;
       poolStockId: string | null;
       gearUnitId: string | null;
       assetTag: string | null;
       locationName: string | null;
+      effectiveStartDate: string | null;
+      effectiveEndDate: string | null;
+      overdue: boolean;
       version: number;
+      capabilities: GearAllocationCapabilities;
     }>;
   }>;
 };
 
 /**
  * Reservation visibility is deliberately narrower than inventory visibility:
- * only league and owning-team administrators can view custody records, while
- * league administrators alone see association-wide decision notes.
+ * members see only teams they belong to, while league administrators see the
+ * association-wide operational queue and decision notes.
  */
 export async function getGearReservationContext(leagueId: string): Promise<GearReservationContext | null> {
   const userId = await requireUserId();
@@ -325,23 +341,49 @@ export async function getGearReservationContext(leagueId: string): Promise<GearR
         select: { id: true },
       })
     : await prisma.teamMember.findMany({
-        where: { userId, role: "ADMIN", team: { leagueId, isActive: true } },
+        where: { userId, team: { leagueId, isActive: true } },
         select: { teamId: true },
       });
   const teamIds = teamMemberships.map((membership) => "teamId" in membership ? membership.teamId : membership.id);
+  const requestableTeams = canManageReservations
+    ? await prisma.team.findMany({
+        where: { leagueId, isActive: true },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      })
+    : await prisma.teamMember.findMany({
+        where: { userId, role: "ADMIN", team: { leagueId, isActive: true } },
+        select: { team: { select: { id: true, name: true } } },
+        orderBy: { team: { name: "asc" } },
+      }).then((memberships) => memberships.map((membership) => membership.team));
+  const catalogItems = await prisma.gearCatalogItem.findMany({
+    where: { leagueId, isActive: true },
+    select: { id: true, name: true, trackingMode: true },
+    orderBy: { name: "asc" },
+  });
+  const requestableTeamIds = new Set(
+    requestableTeams
+      .filter((team): team is { id: string; name: string } => Boolean(team))
+      .map((team) => team.id),
+  );
+  const canRequestReservations = canManageReservations || requestableTeamIds.size > 0;
   if (teamIds.length === 0) {
-    return { league: membership.league, canManageReservations, teamIds, reservations: [] };
+    return {
+      league: membership.league, canManageReservations, canRequestReservations,
+      teamIds, requestableTeams, catalogItems, reservations: [],
+    };
   }
 
   const reservations = await prisma.gearReservation.findMany({
     where: { leagueId, teamId: { in: teamIds } },
     select: {
       id: true, teamId: true, status: true, requestedStartDate: true, requestedEndDate: true,
+      approvedStartDate: true, approvedEndDate: true,
       custodianNameSnapshot: true, requestNotes: true, decisionNotes: canManageReservations,
       version: true, team: { select: { name: true } },
       lines: {
         select: {
-          id: true, nameSnapshot: true, requestedQty: true, approvedQty: true, allocatedQty: true,
+          id: true, catalogItemId: true, nameSnapshot: true, requestedQty: true, approvedQty: true, allocatedQty: true,
           allocations: {
             select: {
               id: true, status: true, allocatedQty: true, pickedUpQty: true, returnedQty: true,
@@ -366,47 +408,41 @@ export async function getGearReservationContext(leagueId: string): Promise<GearR
       allocations: {
         where: {
           status: { in: ["PENDING", "ALLOCATED", "PICKED_UP", "PARTIALLY_RETURNED"] },
+          effectiveEndDate: { gt: today },
         },
-        select: {
-          id: true, status: true, allocatedQty: true, pickedUpQty: true, returnedQty: true,
-          releasedQty: true, effectiveStartDate: true, effectiveEndDate: true,
-        },
+        select: { allocatedQty: true, pickedUpQty: true, returnedQty: true, releasedQty: true },
       },
     },
   });
-  const reallocationWarningByAllocationId = new Set<string>();
-  for (const stock of poolStocks) {
-    for (const candidate of stock.allocations) {
-      if (
-        !["PENDING", "ALLOCATED"].includes(candidate.status)
-        || !candidate.effectiveStartDate
-        || !candidate.effectiveEndDate
-      ) continue;
-      const window = {
-        startDate: candidate.effectiveStartDate.toISOString().slice(0, 10),
-        endDate: candidate.effectiveEndDate.toISOString().slice(0, 10),
-      };
-      const otherCommitments = stock.allocations.reduce((total, allocation) => {
-        if (allocation.id === candidate.id || !allocationConsumesCapacityForWindow(allocation, window)) {
-          return total;
-        }
-        return total + activeAllocationQuantity(allocation);
-      }, 0);
-      if (stock.quantityOnHand - otherCommitments < activeAllocationQuantity(candidate)) {
-        reallocationWarningByAllocationId.add(candidate.id);
-      }
-    }
-  }
+  const reallocationWarningByStockId = new Set(
+    poolStocks
+      .filter((stock) => stock.allocations.reduce(
+        (total, allocation) => total + activeAllocationQuantity(allocation),
+        0,
+      ) > stock.quantityOnHand)
+      .map((stock) => stock.id),
+  );
   return {
     league: membership.league,
     canManageReservations,
+    canRequestReservations,
     teamIds,
+    requestableTeams,
+    catalogItems,
     reservations: reservations.map((reservation) => {
       const activeAllocations = reservation.lines.flatMap((line) => line.allocations)
         .filter((allocation) => ["PENDING", "ALLOCATED", "PICKED_UP", "PARTIALLY_RETURNED"].includes(allocation.status));
       const reallocationWarning = activeAllocations.some((allocation) =>
-        allocation.poolStockId !== null && reallocationWarningByAllocationId.has(allocation.id),
+        allocation.poolStockId !== null
+        && (reservation.approvedStartDate ?? reservation.requestedStartDate) > today
+        && reallocationWarningByStockId.has(allocation.poolStockId),
       );
+      const outstandingCustody = activeAllocations.some((allocation) =>
+        ["PICKED_UP", "PARTIALLY_RETURNED"].includes(allocation.status)
+        && allocation.pickedUpQty > allocation.returnedQty,
+      );
+      const isRequester = requestableTeamIds.has(reservation.teamId);
+      const allocatableLines = reservation.lines.some((line) => line.catalogItemId !== null);
       return {
         id: reservation.id,
         teamId: reservation.teamId,
@@ -414,32 +450,73 @@ export async function getGearReservationContext(leagueId: string): Promise<GearR
         status: reservation.status,
         requestedStartDate: reservation.requestedStartDate.toISOString(),
         requestedEndDate: reservation.requestedEndDate.toISOString(),
+        approvedStartDate: reservation.approvedStartDate?.toISOString() ?? null,
+        approvedEndDate: reservation.approvedEndDate?.toISOString() ?? null,
         custodianName: reservation.custodianNameSnapshot,
         requestNotes: reservation.requestNotes,
         ...(canManageReservations ? { decisionNotes: reservation.decisionNotes } : {}),
         version: reservation.version,
-        overdue: activeAllocations.some((allocation) => isOutstandingAllocationOverdue(allocation, today)),
+        capabilities: {
+          canApproveAndAllocate: canManageReservations
+            && allocatableLines
+            && ["REQUESTED", "APPROVED"].includes(reservation.status),
+          canDecline: canManageReservations && canTransitionReservation(reservation.status, "DECLINED"),
+          canReschedule: (canManageReservations || isRequester)
+            && ["DRAFT", "REQUESTED", "APPROVED"].includes(reservation.status),
+          canCancel: (canManageReservations || isRequester)
+            && canTransitionReservation(reservation.status, "CANCELED")
+            && !outstandingCustody,
+        },
+        overdue: activeAllocations.some((allocation) =>
+          isOutstandingAllocationOverdue(allocation, today),
+        ),
         reallocationWarning,
         lines: reservation.lines.map((line) => ({
           id: line.id,
+          catalogItemId: line.catalogItemId,
           name: line.nameSnapshot,
           requestedQty: line.requestedQty,
           approvedQty: line.approvedQty,
           allocatedQty: line.allocatedQty,
         })),
-        allocations: reservation.lines.flatMap((line) => line.allocations.map((allocation) => ({
-          id: allocation.id,
-          status: allocation.status,
-          allocatedQty: allocation.allocatedQty,
-          pickedUpQty: allocation.pickedUpQty,
-          returnedQty: allocation.returnedQty,
-          releasedQty: allocation.releasedQty,
-          poolStockId: allocation.poolStockId,
-          gearUnitId: allocation.gearUnitId,
-          assetTag: allocation.gearUnit?.assetTag ?? null,
-          locationName: allocation.poolStock?.location.name ?? null,
-          version: allocation.version,
-        }))),
+        allocations: reservation.lines.flatMap((line) => line.allocations.map((allocation) => {
+          const outstandingQty = Math.max(0, allocation.pickedUpQty - allocation.returnedQty);
+          // Pickup mirrors the server guard: a due date already in the past
+          // blocks checkout regardless of the allocation's current status.
+          const dueDatePassed = isOutstandingAllocationOverdue(
+            { status: "PICKED_UP", effectiveEndDate: allocation.effectiveEndDate },
+            today,
+          );
+          return {
+            id: allocation.id,
+            status: allocation.status,
+            allocatedQty: allocation.allocatedQty,
+            pickedUpQty: allocation.pickedUpQty,
+            returnedQty: allocation.returnedQty,
+            releasedQty: allocation.releasedQty,
+            outstandingQty,
+            poolStockId: allocation.poolStockId,
+            gearUnitId: allocation.gearUnitId,
+            assetTag: allocation.gearUnit?.assetTag ?? null,
+            locationName: allocation.poolStock?.location.name ?? null,
+            effectiveStartDate: allocation.effectiveStartDate?.toISOString() ?? null,
+            effectiveEndDate: allocation.effectiveEndDate?.toISOString() ?? null,
+            overdue: isOutstandingAllocationOverdue(allocation, today),
+            version: allocation.version,
+            capabilities: {
+              canRecordPickup: canManageReservations
+                && allocation.status === "ALLOCATED"
+                && allocation.pickedUpQty === 0
+                && !dueDatePassed,
+              canRecordReturn: canManageReservations
+                && ["PICKED_UP", "PARTIALLY_RETURNED"].includes(allocation.status)
+                && outstandingQty > 0,
+              canRelease: canManageReservations
+                && canTransitionAllocation(allocation.status, "RELEASED")
+                && allocation.pickedUpQty === 0,
+            },
+          };
+        })),
       };
     }),
   };

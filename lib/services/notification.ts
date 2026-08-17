@@ -1,5 +1,11 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
-import { sendLeagueMessageEmail } from "@/lib/email/templates";
+import { sendGearNotificationEmail, sendLeagueMessageEmail } from "@/lib/email/templates";
+import {
+  gearNotificationDefinition,
+  type GearNotificationEvent,
+  type GearNotificationPriority,
+} from "@/lib/services/gear-notification-registry";
 import { randomBytes } from "crypto";
 
 export interface NotificationPreferences {
@@ -9,52 +15,170 @@ export interface NotificationPreferences {
   rsvpReminders: boolean;
   teamInvitations: boolean;
   practicePlanNotifications: boolean;
+  gearNotifications: boolean;
   emailEnabled: boolean;
   urgentOnly: boolean;
   batchDelivery: boolean;
 }
 
+export type NotificationPreferenceSource = "LEAGUE" | "GLOBAL" | "DEFAULT";
+
+export interface ResolvedNotificationPreferences extends NotificationPreferences {
+  source: NotificationPreferenceSource;
+  hasLeagueOverride: boolean;
+}
+
+const defaultNotificationPreferences: NotificationPreferences = {
+  leagueMessages: true,
+  leagueAnnouncements: true,
+  eventNotifications: true,
+  rsvpReminders: true,
+  teamInvitations: true,
+  practicePlanNotifications: true,
+  gearNotifications: true,
+  emailEnabled: true,
+  urgentOnly: false,
+  batchDelivery: false,
+};
+
+function toNotificationPreferences(preferences: NotificationPreferences): NotificationPreferences {
+  return {
+    leagueMessages: preferences.leagueMessages,
+    leagueAnnouncements: preferences.leagueAnnouncements,
+    eventNotifications: preferences.eventNotifications,
+    rsvpReminders: preferences.rsvpReminders,
+    teamInvitations: preferences.teamInvitations,
+    practicePlanNotifications: preferences.practicePlanNotifications,
+    gearNotifications: preferences.gearNotifications,
+    emailEnabled: preferences.emailEnabled,
+    urgentOnly: preferences.urgentOnly,
+    batchDelivery: preferences.batchDelivery,
+  };
+}
+
+/** The addressee captured on the outbox row when the event was produced. */
+/**
+ * How the row was addressed *at enqueue time*. This is deliberately explicit
+ * rather than inferred from `userId`, because `NotificationOutbox.recipientUser`
+ * is `onDelete: SetNull`: deleting an account silently nulls `recipientUserId`
+ * while the captured `recipientEmail` survives. Inferring "no account" from a
+ * null id would therefore reclassify a deleted member as an anonymous external
+ * donor and send them the snapshot address — the one thing that must not happen.
+ */
+export type GearNotificationAddressing = "ACCOUNT" | "EXTERNAL";
+
+export type GearNotificationRecipient =
+  | {
+      /** Enqueued against a league account. */
+      addressing: "ACCOUNT";
+      /** Null once the account is deleted; the row survives with its captured email. */
+      userId: string | null;
+      /** False when the account no longer exists. Delivery is then terminal. */
+      accountFound: boolean;
+      email: string | null;
+      name?: string | null;
+      /** Set by the account-redaction path; a redacted row must never be delivered. */
+      redactedAt: Date | null;
+    }
+  | {
+      /**
+       * Enqueued against a bare address that never had an account — a public
+       * in-kind donor receiving a pledge acknowledgement they asked for.
+       */
+      addressing: "EXTERNAL";
+      email: string | null;
+      name?: string | null;
+      redactedAt: Date | null;
+    };
+
+/** The outbox row's identity, so delivery can be correlated and de-duplicated. */
+export interface GearNotificationIdempotency {
+  outboxId: string;
+  leagueId: string;
+  /** Stable per (recipient, event occurrence); unique with leagueId. */
+  dedupeKey: string;
+  /** Distinguishes the first attempt from a retry of the same occurrence. */
+  attempt: number;
+  occurredAt: Date;
+}
+
+export interface GearNotificationDeliveryInput {
+  recipient: GearNotificationRecipient;
+  event: GearNotificationEvent;
+  idempotency: GearNotificationIdempotency;
+}
+
+export type GearNotificationSuppressionReason =
+  | "RECIPIENT_REDACTED"
+  | "RECIPIENT_UNAVAILABLE"
+  | "EMAIL_DISABLED"
+  | "CATEGORY_DISABLED"
+  | "URGENT_ONLY";
+
+/**
+ * Honest delivery outcomes. `DELIVERED` means a provider accepted the message;
+ * `DEFERRED` means it is durably queued into a digest that has not been sent
+ * yet; `SUPPRESSED` means it will never be sent, and why. Nothing here is
+ * retryable — a retryable failure throws instead.
+ */
+export type GearNotificationDeliveryOutcome =
+  | { status: "DELIVERED"; channel: "EMAIL"; detail: string | null }
+  | { status: "DEFERRED"; channel: "DIGEST"; detail: string }
+  | {
+      status: "SUPPRESSED";
+      channel: "NONE";
+      reason: GearNotificationSuppressionReason;
+      detail: string;
+    };
+
+function suppressed(
+  reason: GearNotificationSuppressionReason,
+  detail: string,
+): GearNotificationDeliveryOutcome {
+  return { status: "SUPPRESSED", channel: "NONE", reason, detail };
+}
+
+/**
+ * Takes the full priority union rather than one event's narrowed literal, so
+ * adding an `URGENT` gear event later does not silently change this rule.
+ */
+function bypassesDigest(priority: GearNotificationPriority): boolean {
+  return priority === "URGENT" || priority === "HIGH";
+}
+
 export class NotificationService {
   /**
-   * Get or create notification preferences for a user in a league
+   * League rows override a global row. If neither exists, defaults are used.
+   * This is the single resolver used by delivery workers and account settings.
+   */
+  async resolveNotificationPreferences(
+    userId: string,
+    leagueId?: string,
+  ): Promise<ResolvedNotificationPreferences> {
+    const rows = await prisma.notificationPreference.findMany({
+      where: leagueId === undefined
+        ? { userId, leagueId: null }
+        : { userId, OR: [{ leagueId }, { leagueId: null }] },
+    });
+    const league = leagueId === undefined ? undefined : rows.find((row) => row.leagueId === leagueId);
+    const global = rows.find((row) => row.leagueId === null);
+    if (league) {
+      return { ...toNotificationPreferences(league), source: "LEAGUE", hasLeagueOverride: true };
+    }
+    if (global) {
+      return { ...toNotificationPreferences(global), source: "GLOBAL", hasLeagueOverride: false };
+    }
+    return { ...defaultNotificationPreferences, source: "DEFAULT", hasLeagueOverride: false };
+  }
+
+  /**
+   * Returns the effective preferences without creating a synthetic override.
    */
   async getNotificationPreferences(
     userId: string,
     leagueId?: string
   ): Promise<NotificationPreferences> {
-    const preferences = await prisma.notificationPreference.findFirst({
-      where: {
-        userId,
-        leagueId: leagueId ?? null,
-      },
-    });
-
-    if (preferences) {
-      return {
-        leagueMessages: preferences.leagueMessages,
-        leagueAnnouncements: preferences.leagueAnnouncements,
-        eventNotifications: preferences.eventNotifications,
-        rsvpReminders: preferences.rsvpReminders,
-        teamInvitations: preferences.teamInvitations,
-        practicePlanNotifications: preferences.practicePlanNotifications,
-        emailEnabled: preferences.emailEnabled,
-        urgentOnly: preferences.urgentOnly,
-        batchDelivery: preferences.batchDelivery,
-      };
-    }
-
-    // Return default preferences if none exist
-    return {
-      leagueMessages: true,
-      leagueAnnouncements: true,
-      eventNotifications: true,
-      rsvpReminders: true,
-      teamInvitations: true,
-      practicePlanNotifications: true,
-      emailEnabled: true,
-      urgentOnly: false,
-      batchDelivery: false,
-    };
+    return await this.resolveNotificationPreferences(userId, leagueId);
   }
 
   /**
@@ -77,6 +201,14 @@ export class NotificationService {
       return;
     }
 
+    const existingLeaguePreference = await prisma.notificationPreference.findFirst({
+      where: { userId, leagueId },
+      select: { id: true },
+    });
+    const inherited = existingLeaguePreference
+      ? undefined
+      : await this.resolveNotificationPreferences(userId, leagueId);
+
     await prisma.notificationPreference.upsert({
       where: {
         userId_leagueId: { userId, leagueId },
@@ -89,6 +221,9 @@ export class NotificationService {
         userId,
         leagueId,
         unsubscribeToken: randomBytes(32).toString("hex"),
+        // A first league override must preserve every resolved global choice;
+        // Prisma schema defaults would silently re-enable global opt-outs.
+        ...(inherited ? toNotificationPreferences(inherited) : defaultNotificationPreferences),
         ...preferences,
       },
     });
@@ -108,21 +243,28 @@ export class NotificationService {
     });
 
     if (existing) {
-      await prisma.notificationPreference.update({
-        where: { id: existing.id },
-        data,
-      });
+      await prisma.notificationPreference.update({ where: { id: existing.id }, data });
       return;
     }
 
-    await prisma.notificationPreference.create({
-      data: {
-        ...data,
-        userId,
-        leagueId: null,
-        unsubscribeToken: data.unsubscribeToken ?? randomBytes(32).toString("hex"),
-      },
-    });
+    try {
+      await prisma.notificationPreference.create({
+        data: {
+          ...data,
+          userId,
+          leagueId: null,
+          unsubscribeToken: data.unsubscribeToken ?? randomBytes(32).toString("hex"),
+        },
+      });
+    } catch (error) {
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
+      const concurrent = await prisma.notificationPreference.findFirst({
+        where: { userId, leagueId: null },
+        select: { id: true },
+      });
+      if (!concurrent) throw error;
+      await prisma.notificationPreference.update({ where: { id: concurrent.id }, data });
+    }
   }
 
   /**
@@ -184,6 +326,107 @@ export class NotificationService {
 
     // Add to batch for non-urgent messages
     await this.addToBatch(userId, subject, content, priority, leagueId, messageId);
+  }
+
+  /** Adds an already-durable domain notification to the existing daily digest. */
+  async queueDigestNotification(
+    userId: string,
+    leagueId: string,
+    subject: string,
+    content: string,
+    priority: "LOW" | "NORMAL" | "HIGH" | "URGENT",
+  ): Promise<void> {
+    await this.addToBatch(userId, subject, content, priority, leagueId);
+  }
+
+  /**
+   * Delivers one durable gear notification.
+   *
+   * This is the *only* place where gear delivery policy lives: preference
+   * resolution, urgent-only and category gating, digest batching, and the
+   * choice of provider are all decided here. The outbox worker owns claiming,
+   * retries and status transitions and nothing else, so the two concerns can be
+   * reasoned about — and tested — separately.
+   *
+   * Returns an honest outcome rather than a boolean: callers can tell a real
+   * send apart from a digest deferral apart from a deliberate suppression, and
+   * record that distinction durably. Infrastructure failures (provider errors,
+   * database errors) throw, because those are retryable and the worker owns
+   * retry policy.
+   */
+  async deliverGearNotification(
+    input: GearNotificationDeliveryInput,
+  ): Promise<GearNotificationDeliveryOutcome> {
+    const { recipient, event, idempotency } = input;
+
+    if (recipient.redactedAt) {
+      return suppressed("RECIPIENT_REDACTED", "recipient contact details were redacted before delivery");
+    }
+    if (!recipient.email) {
+      return suppressed("RECIPIENT_UNAVAILABLE", "no deliverable address remains for this recipient");
+    }
+
+    // Dispatch on the enqueue-time discriminant, never on whether a user id is
+    // still present. A deleted member is `ACCOUNT` with a null id and therefore
+    // cannot reach the external branch at all; that is the property that keeps
+    // their captured address from being emailed as if they were a donor.
+    if (recipient.addressing === "EXTERNAL") {
+      // No account means no preference row to consult; the donor supplied this
+      // address for exactly this transactional reply, so it is sent directly.
+      await sendGearNotificationEmail({
+        email: recipient.email,
+        name: recipient.name ?? null,
+        leagueId: idempotency.leagueId,
+        copy: gearNotificationDefinition(event.type).email,
+      });
+      return { status: "DELIVERED", channel: "EMAIL", detail: "sent to unauthenticated recipient" };
+    }
+
+    // A row addressed to an account outlives that account: the FK is nulled on
+    // delete and the captured address remains. Delivering it would send league
+    // activity to someone who left, so this is terminal and never retried.
+    const { userId } = recipient;
+    if (!userId || !recipient.accountFound) {
+      return suppressed("RECIPIENT_UNAVAILABLE", "the addressed account no longer exists");
+    }
+
+    const preferences = await this.resolveNotificationPreferences(userId, idempotency.leagueId);
+
+    if (!preferences.emailEnabled) {
+      return suppressed("EMAIL_DISABLED", "recipient disabled email notifications");
+    }
+    if (!preferences.gearNotifications) {
+      return suppressed("CATEGORY_DISABLED", "recipient disabled gear notifications");
+    }
+    const isUrgent = bypassesDigest(event.priority);
+    if (preferences.urgentOnly && !isUrgent) {
+      return suppressed("URGENT_ONLY", "recipient receives urgent notifications only");
+    }
+
+    const definition = gearNotificationDefinition(event.type);
+
+    if (preferences.batchDelivery && !isUrgent) {
+      await this.queueDigestNotification(
+        userId,
+        idempotency.leagueId,
+        definition.digest.subject,
+        definition.digest.content,
+        event.priority,
+      );
+      return {
+        status: "DEFERRED",
+        channel: "DIGEST",
+        detail: "queued into the recipient's daily digest",
+      };
+    }
+
+    await sendGearNotificationEmail({
+      email: recipient.email,
+      name: recipient.name ?? null,
+      leagueId: idempotency.leagueId,
+      copy: definition.email,
+    });
+    return { status: "DELIVERED", channel: "EMAIL", detail: null };
   }
 
   /**

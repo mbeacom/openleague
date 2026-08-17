@@ -5,6 +5,7 @@ import { LinkButton } from "@/components/ui/NextLinkComposites";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { getGearReservationContext } from "@/lib/actions/gear-context";
+import { GearReservationLifecycleControls } from "@/components/features/gear/GearReservationLifecycleControls";
 
 interface GearReservationDetailPageProps {
   params: Promise<{ leagueId: string; reservationId: string }>;
@@ -16,12 +17,21 @@ export default async function GearReservationDetailPage({ params }: GearReservat
   const reservation = data?.reservations.find((candidate) => candidate.id === reservationId);
   if (!data || !reservation) notFound();
 
+  const asDate = (value: string) => value.slice(0, 10);
+  const requestedWindow = `${asDate(reservation.requestedStartDate)} to ${asDate(reservation.requestedEndDate)}`;
+  const approvedWindow = reservation.approvedStartDate && reservation.approvedEndDate
+    ? `${asDate(reservation.approvedStartDate)} to ${asDate(reservation.approvedEndDate)}`
+    : null;
+
   return (
     <PageContainer maxWidth="md">
       <LinkButton href={`/league/${leagueId}/gear/reservations`} startIcon={<ArrowBackOutlined />} sx={{ minHeight: 44, mb: 1 }}>
         All reservations
       </LinkButton>
-      <PageHeader title={`${reservation.teamName} gear reservation`} subtitle={`${reservation.requestedStartDate.slice(0, 10)} to ${reservation.requestedEndDate.slice(0, 10)}`} />
+      <PageHeader
+        title={`${reservation.teamName} gear reservation`}
+        subtitle={approvedWindow ? `Approved ${approvedWindow}` : `Requested ${requestedWindow}`}
+      />
       <Stack spacing={2}>
         {(reservation.overdue || reservation.reallocationWarning) && (
           <Alert severity="warning">
@@ -34,6 +44,18 @@ export default async function GearReservationDetailPage({ params }: GearReservat
               <Typography variant="h6">Request</Typography>
               <Chip label={reservation.status.replace("_", " ")} />
             </Stack>
+            {approvedWindow ? (
+              <>
+                <Typography>Approved window: {approvedWindow}</Typography>
+                {approvedWindow !== requestedWindow && (
+                  <Typography variant="body2" color="text.secondary">
+                    Requested window: {requestedWindow}
+                  </Typography>
+                )}
+              </>
+            ) : (
+              <Typography>Requested window: {requestedWindow} (not yet approved)</Typography>
+            )}
             <Typography>Custody contact: {reservation.custodianName}</Typography>
             {reservation.requestNotes && <Typography variant="body2">{reservation.requestNotes}</Typography>}
             {data.canManageReservations && reservation.decisionNotes && (
@@ -41,6 +63,10 @@ export default async function GearReservationDetailPage({ params }: GearReservat
             )}
           </Stack>
         </Card>
+        <GearReservationLifecycleControls
+          leagueId={leagueId}
+          reservation={reservation}
+        />
         <Card variant="outlined" sx={{ p: 2 }}>
           <Typography variant="h6" gutterBottom>Requested items</Typography>
           <Stack divider={<Divider flexItem />}>
@@ -57,9 +83,17 @@ export default async function GearReservationDetailPage({ params }: GearReservat
             {reservation.allocations.length === 0 ? (
               <Typography color="text.secondary">No inventory has been allocated.</Typography>
             ) : reservation.allocations.map((allocation) => (
-              <Typography key={allocation.id}>
-                {allocation.assetTag ?? allocation.locationName ?? "Pooled stock"}: {allocation.status.replace("_", " ")} ({allocation.returnedQty}/{allocation.pickedUpQty} returned)
-              </Typography>
+              <Stack key={allocation.id} spacing={0.25} sx={{ py: 0.5 }}>
+                <Typography>
+                  {allocation.assetTag ?? allocation.locationName ?? "Pooled stock"}: {allocation.status.replace("_", " ")} ({allocation.returnedQty}/{allocation.pickedUpQty} returned)
+                </Typography>
+                {allocation.effectiveStartDate && allocation.effectiveEndDate && (
+                  <Typography variant="body2" color={allocation.overdue ? "error.main" : "text.secondary"}>
+                    Approved dates: {asDate(allocation.effectiveStartDate)} to {asDate(allocation.effectiveEndDate)}
+                    {allocation.overdue ? " (overdue)" : ""}
+                  </Typography>
+                )}
+              </Stack>
             ))}
           </Stack>
         </Card>

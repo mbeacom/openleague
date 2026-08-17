@@ -4,7 +4,10 @@ import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
 import { requireUserId } from "@/lib/auth/session";
 import { revalidatePath } from "next/cache";
-import { notificationService, type NotificationPreferences } from "@/lib/services/notification";
+import {
+  notificationService,
+  type ResolvedNotificationPreferences,
+} from "@/lib/services/notification";
 
 export type ActionResult<T> =
   | { success: true; data: T }
@@ -20,6 +23,7 @@ const updateNotificationPreferencesSchema = z.object({
     rsvpReminders: z.boolean().optional(),
     teamInvitations: z.boolean().optional(),
     practicePlanNotifications: z.boolean().optional(),
+    gearNotifications: z.boolean().optional(),
     emailEnabled: z.boolean().optional(),
     urgentOnly: z.boolean().optional(),
     batchDelivery: z.boolean().optional(),
@@ -35,11 +39,11 @@ const unsubscribeSchema = z.object({
  */
 export async function getNotificationPreferences(
   leagueId?: string
-): Promise<ActionResult<NotificationPreferences>> {
+): Promise<ActionResult<ResolvedNotificationPreferences>> {
   try {
     const userId = await requireUserId();
 
-    const preferences = await notificationService.getNotificationPreferences(userId, leagueId);
+    const preferences = await notificationService.resolveNotificationPreferences(userId, leagueId);
 
     return {
       success: true,
@@ -59,7 +63,7 @@ export async function getNotificationPreferences(
  */
 export async function updateNotificationPreferences(
   input: z.infer<typeof updateNotificationPreferencesSchema>
-): Promise<ActionResult<{ updated: boolean }>> {
+): Promise<ActionResult<{ updated: boolean; preferences: ResolvedNotificationPreferences }>> {
   try {
     const validated = updateNotificationPreferencesSchema.parse(input);
     const userId = await requireUserId();
@@ -86,6 +90,10 @@ export async function updateNotificationPreferences(
       validated.preferences,
       validated.leagueId
     );
+    const preferences = await notificationService.resolveNotificationPreferences(
+      userId,
+      validated.leagueId,
+    );
 
     revalidatePath("/account");
     if (validated.leagueId) {
@@ -94,7 +102,7 @@ export async function updateNotificationPreferences(
 
     return {
       success: true,
-      data: { updated: true },
+      data: { updated: true, preferences },
     };
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -117,18 +125,18 @@ export async function updateNotificationPreferences(
  * Get all notification preferences for the current user across all leagues
  */
 export async function getAllNotificationPreferences(): Promise<ActionResult<{
-  global: NotificationPreferences;
+  global: ResolvedNotificationPreferences;
   leagues: Array<{
     leagueId: string;
     leagueName: string;
-    preferences: NotificationPreferences;
+    preferences: ResolvedNotificationPreferences;
   }>;
 }>> {
   try {
     const userId = await requireUserId();
 
     // Get global preferences
-    const globalPreferences = await notificationService.getNotificationPreferences(userId);
+    const globalPreferences = await notificationService.resolveNotificationPreferences(userId);
 
     // Get league-specific preferences
     const leagueUsers = await prisma.leagueUser.findMany({
@@ -143,57 +151,11 @@ export async function getAllNotificationPreferences(): Promise<ActionResult<{
       },
     });
 
-    // Batch fetch all league preferences in a single query to avoid N+1 problem
-    const leagueIds = leagueUsers.map(lu => lu.leagueId);
-    const allPreferences = leagueIds.length > 0
-      ? await prisma.notificationPreference.findMany({
-          where: {
-            userId,
-            leagueId: { in: leagueIds },
-          },
-        })
-      : [];
-
-    // Create a map for O(1) lookup
-    const preferencesMap = new Map(
-      allPreferences.map(pref => [pref.leagueId!, pref])
-    );
-
-    // Build league preferences using the fetched data or defaults
-    const leaguePreferences = leagueUsers.map((leagueUser) => {
-      const pref = preferencesMap.get(leagueUser.leagueId);
-
-      const preferences: NotificationPreferences = pref
-        ? {
-            leagueMessages: pref.leagueMessages,
-            leagueAnnouncements: pref.leagueAnnouncements,
-            eventNotifications: pref.eventNotifications,
-            rsvpReminders: pref.rsvpReminders,
-            teamInvitations: pref.teamInvitations,
-            practicePlanNotifications: pref.practicePlanNotifications,
-            emailEnabled: pref.emailEnabled,
-            urgentOnly: pref.urgentOnly,
-            batchDelivery: pref.batchDelivery,
-          }
-        : {
-            // Default preferences if none exist for this league
-            leagueMessages: true,
-            leagueAnnouncements: true,
-            eventNotifications: true,
-            rsvpReminders: true,
-            teamInvitations: true,
-            practicePlanNotifications: true,
-            emailEnabled: true,
-            urgentOnly: false,
-            batchDelivery: false,
-          };
-
-      return {
-        leagueId: leagueUser.leagueId,
-        leagueName: leagueUser.league.name,
-        preferences,
-      };
-    });
+    const leaguePreferences = await Promise.all(leagueUsers.map(async (leagueUser) => ({
+      leagueId: leagueUser.leagueId,
+      leagueName: leagueUser.league.name,
+      preferences: await notificationService.resolveNotificationPreferences(userId, leagueUser.leagueId),
+    })));
 
     return {
       success: true,

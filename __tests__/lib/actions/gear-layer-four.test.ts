@@ -259,7 +259,7 @@ describe("Layer 4 gear actions", () => {
         eventType: "gear.need.submitted",
         aggregateType: "NEED",
         aggregateId: NEED_ID,
-        dedupeKey: `gear.need.submitted:${NEED_ID}:v3:${USER_ID}`,
+        dedupeKey: `gear.need.submitted:${NEED_ID}:v3:user:${USER_ID}`,
       })],
     }));
   });
@@ -362,10 +362,10 @@ describe("Layer 4 gear actions", () => {
     await queueGearOutboxForRecipients(outboxTx as never, { ...event, occurrenceKey: "v2" }, [USER_ID]);
 
     expect(outboxTx.notificationOutbox.createMany).toHaveBeenNthCalledWith(1, expect.objectContaining({
-      data: [expect.objectContaining({ dedupeKey: `gear.wishlist.published:${WISHLIST_ID}:v1:${USER_ID}` })],
+      data: [expect.objectContaining({ dedupeKey: `gear.wishlist.published:${WISHLIST_ID}:v1:user:${USER_ID}` })],
     }));
     expect(outboxTx.notificationOutbox.createMany).toHaveBeenNthCalledWith(2, expect.objectContaining({
-      data: [expect.objectContaining({ dedupeKey: `gear.wishlist.published:${WISHLIST_ID}:v2:${USER_ID}` })],
+      data: [expect.objectContaining({ dedupeKey: `gear.wishlist.published:${WISHLIST_ID}:v2:user:${USER_ID}` })],
     }));
   });
 
@@ -394,6 +394,7 @@ describe("Layer 4 gear actions", () => {
       success: false, error: "Too many requests — try again in 1 minute.",
     });
     expect(mockCheckRateLimit.mock.calls.at(-1)?.[0]).not.toContain("t".repeat(32));
+    expect(mockCheckRateLimit.mock.calls.at(-1)?.[2]).toEqual({ failOpen: false });
   });
 
   it("caps public pledges at the current outstanding target in the serializable transaction", async () => {

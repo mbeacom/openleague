@@ -29,7 +29,7 @@ import {
   updateNotificationPreferences,
   getAllNotificationPreferences,
 } from "@/lib/actions/notifications";
-import type { NotificationPreferences } from "@/lib/services/notification";
+import type { NotificationPreferences, ResolvedNotificationPreferences } from "@/lib/services/notification";
 
 interface NotificationPreferencesProps {
   leagueId?: string;
@@ -43,13 +43,13 @@ export const NotificationPreferencesComponent: React.FC<NotificationPreferencesP
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [preferences, setPreferences] = useState<NotificationPreferences | null>(null);
+  const [preferences, setPreferences] = useState<ResolvedNotificationPreferences | null>(null);
   const [allPreferences, setAllPreferences] = useState<{
-    global: NotificationPreferences;
+    global: ResolvedNotificationPreferences;
     leagues: Array<{
       leagueId: string;
       leagueName: string;
-      preferences: NotificationPreferences;
+      preferences: ResolvedNotificationPreferences;
     }>;
   } | null>(null);
 
@@ -134,6 +134,34 @@ export const NotificationPreferencesComponent: React.FC<NotificationPreferencesP
         });
 
         if (result.success) {
+          if (scopeLeagueId) {
+            setAllPreferences((current) =>
+              current
+                ? {
+                    ...current,
+                    leagues: current.leagues.map((league) =>
+                      league.leagueId === scopeLeagueId
+                        ? { ...league, preferences: result.data.preferences }
+                        : league,
+                    ),
+                  }
+                : current,
+            );
+          } else {
+            setPreferences(result.data.preferences);
+            setAllPreferences((current) =>
+              current
+                ? {
+                    global: result.data.preferences,
+                    leagues: current.leagues.map((league) =>
+                      league.preferences.source === "GLOBAL"
+                        ? { ...league, preferences: result.data.preferences }
+                        : league,
+                    ),
+                  }
+                : current,
+            );
+          }
           setSuccess("Preferences updated successfully");
           setTimeout(() => setSuccess(null), 3000);
         } else {
@@ -161,7 +189,17 @@ export const NotificationPreferencesComponent: React.FC<NotificationPreferencesP
             <NotificationsIcon color="primary" />
             <Typography variant="h6" sx={{ fontWeight: 700 }}>{title}</Typography>
             {leagueContext && (
-              <Chip label={leagueContext.leagueName} size="small" variant="outlined" />
+              <>
+                <Chip label={leagueContext.leagueName} size="small" variant="outlined" />
+                {"source" in prefs && prefs.source !== "LEAGUE" && (
+                  <Chip
+                    label={prefs.source === "GLOBAL" ? "Using global preference" : "Using defaults"}
+                    size="small"
+                    color="info"
+                    variant="outlined"
+                  />
+                )}
+              </>
             )}
           </Box>
         }
@@ -280,6 +318,20 @@ export const NotificationPreferencesComponent: React.FC<NotificationPreferencesP
           />
           <Typography variant="body2" color="text.secondary" sx={{ ml: 4, mb: 2 }}>
             Practice plans shared with or updated for your team
+          </Typography>
+
+          <FormControlLabel
+            control={
+              <Switch
+                checked={prefs.gearNotifications}
+                onChange={(e) => handlePreferenceChange("gearNotifications", e.target.checked, leagueContext?.leagueId)}
+                disabled={isPending || !prefs.emailEnabled}
+              />
+            }
+            label="Gear Requests and Custody"
+          />
+          <Typography variant="body2" color="text.secondary" sx={{ ml: 4, mb: 2 }}>
+            Gear requests, decisions, pickup and return reminders, and in-kind pledge updates
           </Typography>
 
           <Divider sx={{ my: 2 }} />

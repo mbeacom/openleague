@@ -1296,6 +1296,17 @@ model NotificationOutbox {
   @@map("notification_outbox")
 }
 
+// A versioned singleton cursor prevents a chronically overdue low-id reservation
+// from starving later custody reminders when cron work is budgeted.
+model GearReminderSweep {
+  id        String   @id
+  cursorId  String?
+  version   Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@map("gear_reminder_sweeps")
+}
+
 // Player transfer history model for audit trail
 model PlayerTransfer {
   id        String   @id @default(cuid())
@@ -1422,6 +1433,7 @@ model NotificationPreference {
   rsvpReminders             Boolean @default(true) // RSVP reminder emails
   teamInvitations           Boolean @default(true) // Team invitation emails
   practicePlanNotifications Boolean @default(true) // Practice plan share/update notifications
+  gearNotifications         Boolean @default(true) // Gear requests, custody, and in-kind pledge updates
 
   // Delivery preferences
   emailEnabled  Boolean @default(true) // Receive emails

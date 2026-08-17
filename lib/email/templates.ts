@@ -6,6 +6,35 @@ import { notificationService } from "@/lib/services/notification";
 
 const BASE_URL = getBaseUrl();
 
+type GearNotificationEmailData = {
+  email: string;
+  name?: string | null;
+  leagueId: string;
+  /**
+   * Rendered copy, supplied by the gear notification registry
+   * (`lib/services/gear-notification-registry.ts`), which is the single source
+   * of truth for what each gear event says. This template only lays it out.
+   */
+  copy: { subject: string; body: string };
+};
+
+/** Sends a generic, operational gear message. Payload is intentionally not rendered. */
+export async function sendGearNotificationEmail(data: GearNotificationEmailData): Promise<void> {
+  const { copy } = data;
+  const greeting = data.name ? `Hi ${escapeHtml(data.name)},` : "Hi there,";
+  const gearLink = `${BASE_URL}/league/${data.leagueId}/gear`;
+  await sendEmail({
+    to: [{ email: data.email, ...(data.name ? { name: data.name } : {}) }],
+    subject: copy.subject,
+    html: `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2 style="color: #1976D2;">${escapeHtml(copy.subject)}</h2>
+      <p>${greeting}</p><p>${escapeHtml(copy.body)}</p>
+      <p><a href="${gearLink}">Open gear workspace</a></p>
+    </div>`,
+    text: `${copy.subject}\n\n${data.name ? `Hi ${data.name},\n\n` : ""}${copy.body}\n\nOpen gear workspace: ${gearLink}`,
+  });
+}
+
 /**
  * Escape a string for safe interpolation into HTML email bodies. Prevents
  * HTML/script injection from user-controlled values (event titles, names,

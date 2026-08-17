@@ -155,6 +155,17 @@ bun run validate-env        # Validate environment variables
 - **Email Notifications**: Automatic emails for events, invitations, and RSVP reminders
 - **Mobile-First Design**: Optimized for mobile with touch-friendly interface
 
+### Association Gear
+
+League administrators manage association-owned pooled and tagged inventory,
+locations, team requests, allocations, custody handoffs, and the immutable
+activity ledger. Team administrators request gear for their own teams; league
+administrators approve, allocate, confirm pickup, and record full or partial
+returns. Associations can publish an in-kind-only public wishlist: pledges are
+reviewed and received into inventory without collecting money, purchase orders,
+photos, QR codes, or player custody details. Gear email delivery uses a durable
+outbox with retry and reminder processing at `/api/cron/gear-notifications`.
+
 ### Signup Events (SignUpGenius replacement)
 
 Rinks, leagues/associations, and teams can host signup events — Mite Nights, clinics,

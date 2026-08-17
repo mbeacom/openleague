@@ -6,23 +6,20 @@ import { LinkButton } from "@/components/ui/NextLinkComposites";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { getGearInventoryContext } from "@/lib/actions/gear-context";
+import { parseGearActivitySearchParams } from "@/lib/utils/gear-activity-query";
 
 interface GearInventoryPageProps {
   params: Promise<{ leagueId: string }>;
-  searchParams: Promise<{ activityPage?: string; activitySearch?: string }>;
+  searchParams: Promise<{ activityPage?: string | string[]; activitySearch?: string | string[] }>;
 }
 
 export default async function GearInventoryPage({ params, searchParams }: GearInventoryPageProps) {
   const { leagueId } = await params;
-  const query = await searchParams;
-  const activityPage = Number.parseInt(query.activityPage ?? "1", 10);
-  const data = await getGearInventoryContext(leagueId, {
-    activityPage: Number.isFinite(activityPage) ? activityPage : 1,
-    activitySearch: query.activitySearch,
-  });
+  const activityOptions = parseGearActivitySearchParams(await searchParams);
+  const data = await getGearInventoryContext(leagueId, activityOptions);
   if (!data) notFound();
 
-  const hasInventory = data.units.length > 0 || data.pooledStock.length > 0;
+  const hasInventory = data.catalogItems.length > 0 || data.locations.length > 0 || data.units.length > 0 || data.pooledStock.length > 0;
 
   return (
     <PageContainer maxWidth="xl">

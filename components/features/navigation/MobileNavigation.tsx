@@ -22,6 +22,7 @@ import {
   HowToReg as HowToRegIcon,
   ManageAccounts as ManageAccountsIcon,
   AdminPanelSettings as AdminPanelSettingsIcon,
+  Inventory2 as GearIcon,
 } from '@mui/icons-material';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -181,6 +182,18 @@ export default function MobileNavigation({ isLeagueMode = false, isPlatformAdmin
               <SportsHockeyIcon />
             </ListItemIcon>
             <ListItemText>Practice Planner</ListItemText>
+          </MenuItem>
+        )}
+        {isLeagueMode && currentLeague && (
+          <MenuItem
+            component={Link}
+            href={`/league/${currentLeague.id}/gear`}
+            onClick={handleMenuClose}
+          >
+            <ListItemIcon>
+              <GearIcon />
+            </ListItemIcon>
+            <ListItemText>Gear</ListItemText>
           </MenuItem>
         )}
         <MenuItem

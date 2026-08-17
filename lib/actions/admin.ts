@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/db/prisma";
+import { cancelGearOutboxForDeletedUser } from "@/lib/services/gear-outbox-retention";
 import { requireSystemAdmin } from "@/lib/auth/session";
 import { z } from "zod";
 
@@ -94,9 +95,12 @@ export async function rejectUser(userId: string) {
       return { error: "Cannot reject an already approved user" };
     }
 
-    // Delete the user account
-    await prisma.user.delete({
-      where: { id: validatedUserId },
+    // Cancel/redact undelivered gear mail before the user relation is removed.
+    await prisma.$transaction(async (tx) => {
+      await cancelGearOutboxForDeletedUser(tx, validatedUserId);
+      await tx.user.delete({
+        where: { id: validatedUserId },
+      });
     });
 
     return { success: true };

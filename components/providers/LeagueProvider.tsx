@@ -56,6 +56,7 @@ const LEAGUE_SECTION_LABELS: Record<string, string> = {
   divisions: 'Divisions',
   invitations: 'Invitations',
   payments: 'Payments',
+  gear: 'Gear',
 };
 
 // Well-known nested segments; unknown tails (ids) render as 'Details'.
@@ -65,6 +66,9 @@ const SUBPAGE_LABELS: Record<string, string> = {
   'new-game': 'New Game',
   proposals: 'Proposals',
   placement: 'Placement',
+  needs: 'Needs',
+  reservations: 'Reservations',
+  wishlist: 'Wishlist',
 };
 
 /** Push "Section" or "Section > Subpage" crumbs for a top-level route. */
@@ -195,6 +199,21 @@ export const LeagueProvider: React.FC<LeagueProviderProps> = ({
           breadcrumbs.push({ label: 'Create New Team' });
         } else if (segments[3]) {
           breadcrumbs.push({ label: 'Team Details' });
+        }
+      } else if (pageSegment === 'gear') {
+        const gearHref = `/league/${currentLeague.id}/gear`;
+        if (segments.length === 3) {
+          breadcrumbs.push({ label: 'Gear' });
+        } else {
+          breadcrumbs.push({ label: 'Gear', href: gearHref });
+          const workspace = segments[3];
+          const workspaceLabel = SUBPAGE_LABELS[workspace] ?? 'Details';
+          if (segments.length === 4) {
+            breadcrumbs.push({ label: workspaceLabel });
+          } else {
+            breadcrumbs.push({ label: workspaceLabel, href: `${gearHref}/${workspace}` });
+            breadcrumbs.push({ label: SUBPAGE_LABELS[segments[4]] ?? 'Details' });
+          }
         }
       } else if (LEAGUE_SECTION_LABELS[pageSegment]) {
         pushSectionCrumbs(
