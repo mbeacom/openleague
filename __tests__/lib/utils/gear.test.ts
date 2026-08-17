@@ -3,6 +3,9 @@ import {
   allocationIsConsistent,
   allocationRemainingForReturn,
   allocationStatusQuantitiesValid,
+  activeAllocationQuantity,
+  activeAllocationTotal,
+  allocationConsumesCapacityForWindow,
   availablePoolQuantity,
   canAllocatePoolStock,
   canTransitionAllocation,
@@ -13,9 +16,12 @@ import {
   isValidInventoryMovementDirection,
   isRetryablePrismaConflict,
   isActiveTaggedAllocationStatus,
+  isOutstandingAllocationOverdue,
   normalizeGearAssetTag,
   normalizeGearKey,
   taggedAllocationWindowsConflict,
+  poolAvailabilityConflict,
+  taggedUnitAvailabilityConflict,
 } from "@/lib/utils/gear";
 
 describe("gear utilities", () => {
@@ -45,6 +51,55 @@ describe("gear utilities", () => {
     expect(canAllocatePoolStock(stock, 5)).toBe(true);
     expect(canAllocatePoolStock(stock, 6)).toBe(false);
     expect(canAllocatePoolStock(stock, 0)).toBe(false);
+  });
+
+  it("releases capacity as quantities are returned or released", () => {
+    expect(activeAllocationQuantity({ allocatedQty: 6, pickedUpQty: 6, returnedQty: 2, releasedQty: 0 })).toBe(4);
+    expect(activeAllocationQuantity({ allocatedQty: 6, pickedUpQty: 0, returnedQty: 0, releasedQty: 6 })).toBe(0);
+    expect(activeAllocationTotal([
+      { allocatedQty: 4, pickedUpQty: 4, returnedQty: 1, releasedQty: 0 },
+      { allocatedQty: 2, pickedUpQty: 0, returnedQty: 0, releasedQty: 1 },
+    ])).toBe(4);
+  });
+
+  it("keeps outstanding custody committed past its planned end date", () => {
+    const window = { startDate: "2026-09-10", endDate: "2026-09-12" };
+    expect(allocationConsumesCapacityForWindow({
+      status: "PICKED_UP",
+      allocatedQty: 2,
+      pickedUpQty: 2,
+      returnedQty: 0,
+      releasedQty: 0,
+      effectiveStartDate: new Date("2026-09-01"),
+      effectiveEndDate: new Date("2026-09-03"),
+    }, window)).toBe(true);
+    expect(allocationConsumesCapacityForWindow({
+      status: "ALLOCATED",
+      allocatedQty: 2,
+      pickedUpQty: 0,
+      returnedQty: 0,
+      releasedQty: 0,
+      effectiveStartDate: new Date("2026-09-01"),
+      effectiveEndDate: new Date("2026-09-03"),
+    }, window)).toBe(false);
+  });
+
+  it("marks only outstanding custody overdue after the effective end date", () => {
+    const finalDay = new Date("2026-09-03T00:00:00.000Z");
+    const allocation = { status: "PICKED_UP" as const, effectiveEndDate: finalDay };
+    expect(isOutstandingAllocationOverdue(allocation, finalDay)).toBe(false);
+    expect(isOutstandingAllocationOverdue(allocation, new Date("2026-09-04T00:00:00.000Z"))).toBe(true);
+    expect(isOutstandingAllocationOverdue({
+      status: "ALLOCATED",
+      effectiveEndDate: finalDay,
+    }, new Date("2026-09-04T00:00:00.000Z"))).toBe(false);
+  });
+
+  it("returns user-safe pool, tagged, and overdue availability conflicts", () => {
+    expect(poolAvailabilityConflict({ quantityOnHand: 2, allocatedQuantity: 2 }, 1)?.code).toBe("INSUFFICIENT_POOL_STOCK");
+    expect(taggedUnitAvailabilityConflict("MAINTENANCE", false)?.code).toBe("TAGGED_UNIT_UNAVAILABLE");
+    expect(taggedUnitAvailabilityConflict("CHECKED_OUT", true)?.code).toBe("OVERDUE_CUSTODY");
+    expect(taggedUnitAvailabilityConflict("AVAILABLE", false)).toBeNull();
   });
 
   it("guards allocation quantity accounting", () => {

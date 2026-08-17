@@ -29,6 +29,8 @@ export type GearMovementInput = {
   recordedById: string;
   poolStockId?: string | null;
   gearUnitId?: string | null;
+  allocationId?: string | null;
+  handoffId?: string | null;
   beforeLocationId?: string | null;
   afterLocationId?: string | null;
   beforeCondition?: "NEW" | "EXCELLENT" | "GOOD" | "FAIR" | "POOR" | "DAMAGED" | null;

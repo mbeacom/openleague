@@ -2,6 +2,7 @@ import { Inventory2Outlined } from "@mui/icons-material";
 import { notFound } from "next/navigation";
 import { GearInventoryManager } from "@/components/features/gear/GearInventoryManager";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { LinkButton } from "@/components/ui/NextLinkComposites";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { getGearInventoryContext } from "@/lib/actions/gear-context";
@@ -28,6 +29,15 @@ export default async function GearInventoryPage({ params, searchParams }: GearIn
       <PageHeader
         title="Gear inventory"
         subtitle={`${data.league.name} equipment, locations, and current availability.`}
+        actions={
+          <LinkButton
+            href={`/league/${leagueId}/gear/reservations`}
+            variant="outlined"
+            sx={{ minHeight: 44 }}
+          >
+            Reservations
+          </LinkButton>
+        }
       />
       {hasInventory || data.canManageInventory ? (
         <GearInventoryManager data={data} />

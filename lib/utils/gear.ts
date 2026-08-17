@@ -55,6 +55,62 @@ export function availablePoolQuantity(stock: GearPoolAvailability): number {
   return Math.max(0, stock.quantityOnHand - stock.allocatedQuantity);
 }
 
+/**
+ * Allocations continue to exist after a partial return, but only the portion
+ * still outside stock should reserve capacity.
+ */
+export function activeAllocationQuantity(allocation: GearAllocationQuantities): number {
+  return Math.max(0, allocation.allocatedQty - allocation.releasedQty - allocation.returnedQty);
+}
+
+export function activeAllocationTotal(allocations: GearAllocationQuantities[]): number {
+  return allocations.reduce((total, allocation) => total + activeAllocationQuantity(allocation), 0);
+}
+
+type CapacityAllocation = GearAllocationQuantities & {
+  status: GearAllocationStatus;
+  effectiveStartDate?: Date | string | null;
+  effectiveEndDate?: Date | string | null;
+};
+
+function dateOnly(value: Date | string): string {
+  return typeof value === "string" ? value.slice(0, 10) : value.toISOString().slice(0, 10);
+}
+
+/**
+ * Checked-out gear continues to consume capacity until it is reconciled, even
+ * after its planned reservation window. Planned allocations only block overlap.
+ */
+export function allocationConsumesCapacityForWindow(
+  allocation: CapacityAllocation,
+  window: GearReservationWindow,
+): boolean {
+  if (activeAllocationQuantity(allocation) === 0) return false;
+  if (["PICKED_UP", "PARTIALLY_RETURNED"].includes(allocation.status)) return true;
+  if (!["PENDING", "ALLOCATED"].includes(allocation.status)) return false;
+  if (!allocation.effectiveStartDate || !allocation.effectiveEndDate) return false;
+  return datesOverlap(
+    {
+      startDate: dateOnly(allocation.effectiveStartDate),
+      endDate: dateOnly(allocation.effectiveEndDate),
+    },
+    window,
+  );
+}
+
+/** Date-only due dates become overdue only after the final effective date. */
+export function isOutstandingAllocationOverdue(
+  allocation: Pick<CapacityAllocation, "status" | "effectiveEndDate">,
+  today = new Date(),
+): boolean {
+  return (
+    ["PICKED_UP", "PARTIALLY_RETURNED"].includes(allocation.status) &&
+    allocation.effectiveEndDate !== null &&
+    allocation.effectiveEndDate !== undefined &&
+    dateOnly(allocation.effectiveEndDate) < dateOnly(today)
+  );
+}
+
 export function canAllocatePoolStock(stock: GearPoolAvailability, quantity: number): boolean {
   return Number.isSafeInteger(quantity) && quantity > 0 && quantity <= availablePoolQuantity(stock);
 }
@@ -182,6 +238,45 @@ export function canTransitionUnit(from: GearUnitStatus, to: GearUnitStatus): boo
 
 export function requiresTaggedUnit(mode: GearTrackingMode): boolean {
   return mode === "INDIVIDUAL";
+}
+
+export type GearAvailabilityConflict = {
+  code: "INSUFFICIENT_POOL_STOCK" | "TAGGED_UNIT_UNAVAILABLE" | "OVERDUE_CUSTODY";
+  message: string;
+  entityId?: string;
+};
+
+export function poolAvailabilityConflict(
+  stock: GearPoolAvailability,
+  requestedQuantity: number,
+  entityId?: string,
+): GearAvailabilityConflict | null {
+  if (canAllocatePoolStock(stock, requestedQuantity)) return null;
+  return {
+    code: "INSUFFICIENT_POOL_STOCK",
+    entityId,
+    message: `Only ${availablePoolQuantity(stock)} matching item${availablePoolQuantity(stock) === 1 ? "" : "s"} are available.`,
+  };
+}
+
+export function taggedUnitAvailabilityConflict(
+  status: GearUnitStatus,
+  hasOverdueCheckout: boolean,
+  entityId?: string,
+): GearAvailabilityConflict | null {
+  if (hasOverdueCheckout) {
+    return {
+      code: "OVERDUE_CUSTODY",
+      entityId,
+      message: "This tagged item is still checked out past its due date.",
+    };
+  }
+  if (status === "AVAILABLE" || status === "RESERVED") return null;
+  return {
+    code: "TAGGED_UNIT_UNAVAILABLE",
+    entityId,
+    message: "This tagged item is unavailable for the requested dates.",
+  };
 }
 
 export function isRetryablePrismaConflict(error: unknown): boolean {

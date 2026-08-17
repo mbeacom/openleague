@@ -180,9 +180,14 @@ async function assertNoActiveAllocationsForStock(
   if (delta >= 0) return;
   const committed = await tx.gearAllocation.aggregate({
     where: { leagueId, poolStockId: stockId, status: { in: [...activeAllocationStatuses] } },
-    _sum: { allocatedQty: true, releasedQty: true },
+    _sum: { allocatedQty: true, releasedQty: true, returnedQty: true },
   });
-  const commitment = Math.max(0, (committed._sum.allocatedQty ?? 0) - (committed._sum.releasedQty ?? 0));
+  const commitment = Math.max(
+    0,
+    (committed._sum.allocatedQty ?? 0)
+      - (committed._sum.releasedQty ?? 0)
+      - (committed._sum.returnedQty ?? 0),
+  );
   if (onHand + delta < commitment) {
     invalid(`This reduction would leave fewer items than the ${commitment} currently committed.`);
   }
