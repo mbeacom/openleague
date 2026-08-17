@@ -74,11 +74,26 @@ export interface VenueBookingOption {
     timezone: string;
 }
 
+export interface VenueReservationBookingOption {
+    id: string;
+    startsAt: string;
+    endsAt: string;
+    timezone: string;
+    venueId: string;
+    venueName: string;
+    surfaceId: string | null;
+    surfaceName: string | null;
+    segmentId: string | null;
+    segmentName: string | null;
+    ownerType: "league" | "team";
+}
+
 /**
  * Optional venue attachment fields carried alongside the session data
  * on save (feature 006, FR-019). All null when the practice is unbooked.
  */
 export interface PracticeVenueAttachment {
+    reservationId: string | null;
     venueId: string | null;
     surfaceId: string | null;
     segmentId: string | null;
@@ -90,6 +105,7 @@ export interface PracticeSessionSubmitData
     extends PracticeSessionData,
         PracticeVenueAttachment {
     overrideConflicts: boolean;
+    overrideReason: string;
 }
 
 /**
@@ -108,7 +124,21 @@ export function extractBookingConflicts(details: unknown): BookingConflict[] | u
     if (details && typeof details === "object" && "conflicts" in details) {
         const conflicts = (details as { conflicts: unknown }).conflicts;
         if (Array.isArray(conflicts) && conflicts.length > 0) {
-            return conflicts as BookingConflict[];
+            return conflicts.map((conflict): BookingConflict => {
+                const item = conflict as Partial<BookingConflict> & {
+                    startsAt?: Date | string;
+                    endsAt?: Date | string | null;
+                };
+                return {
+                    source: item.source ?? "venueReservation",
+                    title: item.title ?? "Existing venue reservation",
+                    startAt: new Date(item.startsAt ?? 0),
+                    endAt: item.endsAt ? new Date(item.endsAt) : null,
+                    surfaceId: item.surfaceId ?? null,
+                    segmentId: item.segmentId ?? null,
+                    segmentName: item.segmentName ?? null,
+                };
+            });
         }
     }
     return undefined;
@@ -123,6 +153,8 @@ export interface PracticeSessionEditorProps {
     initialData?: Partial<PracticeSessionData> & Partial<PracticeVenueAttachment>;
     /** Venues available for the optional ice booking (feature 006). */
     venues?: VenueBookingOption[];
+    /** Confirmed, unassigned inventory eligible for this exact team. */
+    reservations?: VenueReservationBookingOption[];
     /** Active surfaces per venue id. */
     surfacesByVenue?: Record<string, Array<{ id: string; name: string }>>;
     /** Active segments per surface id. */
@@ -380,6 +412,7 @@ export function PracticeSessionEditor({
     teamId,
     initialData,
     venues = [],
+    reservations = [],
     surfacesByVenue = {},
     segmentsBySurface = {},
     wholeLabelBySurface = {},
@@ -397,6 +430,10 @@ export function PracticeSessionEditor({
     const [duration, setDuration] = useState(initialData?.duration || 60);
     const [plays, setPlays] = useState<PlayInSession[]>(initialData?.plays || []);
     const [isShared, setIsShared] = useState(initialData?.isShared || false);
+    const [reservationId, setReservationId] = useState(
+        initialData?.reservationId ?? "",
+    );
+    const [overrideReason, setOverrideReason] = useState("");
 
     // Ice booking state (feature 006, FR-019): optional venue attachment.
     // startTime is a wall-clock HH:MM interpreted in the venue's timezone.
@@ -431,15 +468,19 @@ export function PracticeSessionEditor({
 
     // Timezone the booking start time is entered in (the venue's zone,
     // matching GameForm's wall-clock handling).
+    const selectedReservation = reservations.find(
+        (reservation) => reservation.id === reservationId,
+    );
     const selectedVenueTimeZone = resolveTimeZone(
-        venues.find((venue) => venue.id === venueId)?.timezone
+        selectedReservation?.timezone
+        ?? venues.find((venue) => venue.id === venueId)?.timezone
     );
 
     /**
      * Validate form fields
      * Requirements: 2.1 - Form validation for required fields
      */
-    const validateForm = useCallback((): boolean => {
+    const validateForm = useCallback((requiresOverrideReason = false): boolean => {
         const errors: Record<string, string> = {};
 
         // Validate title
@@ -468,10 +509,13 @@ export function PracticeSessionEditor({
         if (venueId && !startTime) {
             errors.startTime = "Start time is required when booking a venue";
         }
+        if (requiresOverrideReason && !overrideReason.trim()) {
+            errors.overrideReason = "Explain why this conflict should be overridden";
+        }
 
         setValidationErrors(errors);
         return Object.keys(errors).length === 0;
-    }, [title, date, duration, venueId, startTime]);
+    }, [title, date, duration, venueId, startTime, overrideReason]);
 
     /**
      * Handle title change
@@ -531,12 +575,42 @@ export function PracticeSessionEditor({
      * stale selections would be rejected server-side, matching GameForm).
      */
     const handleVenueChange = (nextVenueId: string) => {
+        setReservationId("");
         setVenueId(nextVenueId);
         setSurfaceId("");
         setSegmentId("");
         setBookingConflicts(null);
         setHasUnsavedChanges(true);
         setSaveSuccess(false);
+    };
+
+    const handleReservationChange = (nextReservationId: string) => {
+        setReservationId(nextReservationId);
+        setBookingConflicts(null);
+        setOverrideReason("");
+        setHasUnsavedChanges(true);
+        setSaveSuccess(false);
+        const reservation = reservations.find(
+            (option) => option.id === nextReservationId,
+        );
+        if (!reservation) {
+            setVenueId("");
+            setSurfaceId("");
+            setSegmentId("");
+            setStartTime("");
+            return;
+        }
+
+        const startsAt = new Date(reservation.startsAt);
+        const endsAt = new Date(reservation.endsAt);
+        setDate(startsAt);
+        setDuration(Math.round((endsAt.getTime() - startsAt.getTime()) / 60_000));
+        setVenueId(reservation.venueId);
+        setSurfaceId(reservation.surfaceId ?? "");
+        setSegmentId(reservation.segmentId ?? "");
+        setStartTime(
+            formatDateTimeLocalInput(startsAt, reservation.timezone).slice(11, 16),
+        );
     };
 
     const handleSurfaceChange = (nextSurfaceId: string) => {
@@ -572,11 +646,13 @@ export function PracticeSessionEditor({
      * loses its availability footprint and behaves exactly as before.
      */
     const handleClearBooking = () => {
+        setReservationId("");
         setVenueId("");
         setSurfaceId("");
         setSegmentId("");
         setStartTime("");
         setBookingConflicts(null);
+        setOverrideReason("");
         setHasUnsavedChanges(true);
         setSaveSuccess(false);
         if (validationErrors.startTime) {
@@ -594,7 +670,7 @@ export function PracticeSessionEditor({
      */
     const handleSave = useCallback(async (overrideConflicts: boolean = false) => {
         // Validate form (includes date validation)
-        if (!validateForm()) {
+        if (!validateForm(overrideConflicts)) {
             setSaveError("Please fix the validation errors");
             return;
         }
@@ -605,7 +681,9 @@ export function PracticeSessionEditor({
         // Combine the practice date with the entered wall-clock start time in
         // the venue's timezone to form the booking instant (FR-019).
         let startAt: Date | null = null;
-        if (venueId) {
+        if (selectedReservation) {
+            startAt = new Date(selectedReservation.startsAt);
+        } else if (venueId) {
             // Derive the booking day in the venue's zone — not via browser-local
             // getFullYear/getMonth/getDate — so the day doesn't shift across
             // midnight between zones (matches the initial startTime derivation).
@@ -635,11 +713,13 @@ export function PracticeSessionEditor({
                 duration,
                 plays,
                 isShared,
+                reservationId: reservationId || null,
                 venueId: venueId || null,
                 surfaceId: venueId ? surfaceId || null : null,
                 segmentId: venueId && surfaceId ? segmentId || null : null,
                 startAt,
                 overrideConflicts,
+                overrideReason: overrideConflicts ? overrideReason.trim() : "",
             };
 
             // Call onSave callback if provided
@@ -682,11 +762,14 @@ export function PracticeSessionEditor({
         plays,
         isShared,
         sessionId,
+        reservationId,
         venueId,
         surfaceId,
         segmentId,
         startTime,
         selectedVenueTimeZone,
+        selectedReservation,
+        overrideReason,
         onSave,
         validateForm,
     ]);
@@ -976,10 +1059,12 @@ export function PracticeSessionEditor({
                         label="Practice Date & Time"
                         value={date}
                         onChange={handleDateChange}
+                        disabled={Boolean(selectedReservation)}
                         slotProps={{
                             textField: {
                                 fullWidth: true,
                                 required: true,
+                                sx: { "& .MuiInputBase-root": { minHeight: 44 } },
                                 error: !!validationErrors.date,
                                 helperText: validationErrors.date,
                             },
@@ -995,6 +1080,8 @@ export function PracticeSessionEditor({
                         onChange={handleDurationChange}
                         fullWidth
                         required
+                        disabled={Boolean(selectedReservation)}
+                        sx={{ "& .MuiInputBase-root": { minHeight: 44 } }}
                         inputProps={{
                             min: VALIDATION_CONSTRAINTS.MIN_DURATION,
                             max: VALIDATION_CONSTRAINTS.MAX_DURATION,
@@ -1016,9 +1103,7 @@ export function PracticeSessionEditor({
                 </Stack>
             </Paper>
 
-            {/* Ice Booking (feature 006, FR-019) */}
-            {/* Optional venue attachment: venue → surface → segment + start time. */}
-            {venues.length > 0 && (
+            {(reservations.length > 0 || venues.length > 0) && (
                 <Paper elevation={2} sx={{ p: 2 }}>
                     <Stack spacing={2}>
                         <Stack
@@ -1027,39 +1112,116 @@ export function PracticeSessionEditor({
                             alignItems="center"
                         >
                             <Typography variant="h6" component="h2">
-                                Ice Booking (optional)
+                                Venue reservation
                             </Typography>
-                            {venueId && (
+                            {(reservationId || venueId) && (
                                 <Button
-                                    size="small"
                                     color="inherit"
                                     onClick={handleClearBooking}
                                     disabled={isSaving || isSharing}
+                                    sx={{ minHeight: 44 }}
                                 >
                                     Clear booking
                                 </Button>
                             )}
                         </Stack>
                         <Typography variant="body2" color="text.secondary">
-                            Book a venue for this practice so it appears on the venue&apos;s
-                            schedule and other bookings warn against it.
+                            Select confirmed inventory. Its venue-local interval, surface,
+                            and segment become the practice schedule.
                         </Typography>
-                        <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+                        {reservations.length > 0 && (
                             <TextField
                                 select
-                                label="Venue"
+                                label="Confirmed reservation"
                                 fullWidth
-                                value={venueId}
-                                onChange={(event) => handleVenueChange(event.target.value)}
+                                value={reservationId}
+                                onChange={(event) =>
+                                    handleReservationChange(event.target.value)
+                                }
+                                helperText="Only confirmed, unassigned inventory owned by this team or its league is shown"
+                                sx={{ "& .MuiInputBase-root": { minHeight: 44 } }}
                             >
-                                <MenuItem value="">No venue booking</MenuItem>
-                                {venues.map((venue) => (
-                                    <MenuItem key={venue.id} value={venue.id}>
-                                        {venue.name}
+                                <MenuItem value="" sx={{ minHeight: 44 }}>
+                                    No reservation
+                                </MenuItem>
+                                {reservations.map((reservation) => (
+                                    <MenuItem
+                                        key={reservation.id}
+                                        value={reservation.id}
+                                        sx={{ minHeight: 44 }}
+                                    >
+                                        {reservation.venueName} ·{" "}
+                                        {formatDateTimeInZone(
+                                            reservation.startsAt,
+                                            reservation.timezone,
+                                        )}
+                                        {" – "}
+                                        {formatDateTimeInZone(
+                                            reservation.endsAt,
+                                            reservation.timezone,
+                                        )}
                                     </MenuItem>
                                 ))}
                             </TextField>
-                            {venueId && (
+                        )}
+                        {selectedReservation && (
+                            <Alert severity="info">
+                                <AlertTitle>
+                                    {selectedReservation.venueName}
+                                    {selectedReservation.surfaceName
+                                        ? ` · ${selectedReservation.surfaceName}`
+                                        : ""}
+                                    {selectedReservation.segmentName
+                                        ? ` · ${selectedReservation.segmentName}`
+                                        : ""}
+                                </AlertTitle>
+                                {formatDateTimeInZone(
+                                    selectedReservation.startsAt,
+                                    selectedReservation.timezone,
+                                )}
+                                {" – "}
+                                {formatDateTimeInZone(
+                                    selectedReservation.endsAt,
+                                    selectedReservation.timezone,
+                                )}
+                                {" "}
+                                ({selectedReservation.timezone})
+                            </Alert>
+                        )}
+                        {(reservations.length === 0
+                            || (!reservationId && Boolean(initialData?.venueId))) && (
+                            <>
+                                {reservations.length > 0 && (
+                                    <Alert severity="warning">
+                                        This is a legacy unreserved practice. Keep its venue
+                                        details for compatibility, or select confirmed inventory.
+                                    </Alert>
+                                )}
+                                <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+                                    <TextField
+                                        select
+                                        label="Venue"
+                                        fullWidth
+                                        value={venueId}
+                                        onChange={(event) =>
+                                            handleVenueChange(event.target.value)
+                                        }
+                                        sx={{ "& .MuiInputBase-root": { minHeight: 44 } }}
+                                    >
+                                        <MenuItem value="" sx={{ minHeight: 44 }}>
+                                            No venue booking
+                                        </MenuItem>
+                                        {venues.map((venue) => (
+                                            <MenuItem
+                                                key={venue.id}
+                                                value={venue.id}
+                                                sx={{ minHeight: 44 }}
+                                            >
+                                                {venue.name}
+                                            </MenuItem>
+                                        ))}
+                                    </TextField>
+                                    {venueId && (
                                 <TextField
                                     label="Start time"
                                     type="time"
@@ -1073,9 +1235,10 @@ export function PracticeSessionEditor({
                                         `On the practice date, in ${selectedVenueTimeZone} (the venue's timezone); runs ${duration} min`
                                     }
                                     slotProps={{ inputLabel: { shrink: true } }}
+                                    sx={{ "& .MuiInputBase-root": { minHeight: 44 } }}
                                 />
-                            )}
-                        </Stack>
+                                    )}
+                                </Stack>
                         {venueId && venueSurfaces.length > 0 && (
                             <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
                                 <TextField
@@ -1084,6 +1247,7 @@ export function PracticeSessionEditor({
                                     fullWidth
                                     value={surfaceId}
                                     onChange={(event) => handleSurfaceChange(event.target.value)}
+                                    sx={{ "& .MuiInputBase-root": { minHeight: 44 } }}
                                 >
                                     <MenuItem value="">Any surface</MenuItem>
                                     {venueSurfaces.map((surface) => (
@@ -1099,6 +1263,7 @@ export function PracticeSessionEditor({
                                         fullWidth
                                         value={segmentId}
                                         onChange={(event) => handleSegmentChange(event.target.value)}
+                                        sx={{ "& .MuiInputBase-root": { minHeight: 44 } }}
                                     >
                                         <MenuItem value="">{wholeSurfaceLabel}</MenuItem>
                                         {surfaceSegments.map((segment) => (
@@ -1109,6 +1274,8 @@ export function PracticeSessionEditor({
                                     </TextField>
                                 )}
                             </Stack>
+                        )}
+                            </>
                         )}
                     </Stack>
                 </Paper>
@@ -1223,11 +1390,15 @@ export function PracticeSessionEditor({
                             action={
                                 <Button
                                     color="inherit"
-                                    size="small"
-                                    disabled={isSaving || isSharing}
+                                    disabled={
+                                        isSaving
+                                        || isSharing
+                                        || !overrideReason.trim()
+                                    }
                                     onClick={() => handleSave(true)}
+                                    sx={{ minHeight: 44 }}
                                 >
-                                    Book anyway
+                                    Override conflict
                                 </Button>
                             }
                         >
@@ -1244,6 +1415,30 @@ export function PracticeSessionEditor({
                                         : ""}
                                 </Typography>
                             ))}
+                            <TextField
+                                label="Override reason"
+                                value={overrideReason}
+                                onChange={(event) => {
+                                    setOverrideReason(event.target.value);
+                                    if (validationErrors.overrideReason) {
+                                        setValidationErrors((previous) => {
+                                            const next = { ...previous };
+                                            delete next.overrideReason;
+                                            return next;
+                                        });
+                                    }
+                                }}
+                                required
+                                fullWidth
+                                multiline
+                                minRows={2}
+                                error={Boolean(validationErrors.overrideReason)}
+                                helperText={
+                                    validationErrors.overrideReason
+                                    || "Required for the audit trail"
+                                }
+                                sx={{ mt: 2, "& .MuiInputBase-root": { minHeight: 44 } }}
+                            />
                         </Alert>
                     )}
 

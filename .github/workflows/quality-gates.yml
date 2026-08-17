@@ -27,6 +27,20 @@ jobs:
     name: Type-check, lint, and test
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: openleague_test
+          POSTGRES_PASSWORD: openleague_test
+          POSTGRES_DB: openleague_t018
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U openleague_test -d openleague_t018"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     # Version-bump commits change no source; release.yml skips them the same
     # way. Scoped to `push` on purpose: `github.event.head_commit` does not
     # exist on a pull_request event, and an expression that skipped there would
@@ -35,6 +49,9 @@ jobs:
     if: ${{ github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip ci]') }}
 
     env:
+      # Dedicated ephemeral service database for PostgreSQL-backed integration
+      # tests. It is never pointed at a shared or secret-backed environment.
+      TEST_DATABASE_URL: postgresql://openleague_test:openleague_test@localhost:5432/openleague_t018
       # Prisma client generation runs during bun install. A real secret is used
       # when available; the fallback only satisfies generate-time URL parsing.
       DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/openleague_ci' }}
@@ -58,6 +75,11 @@ jobs:
       # implicit in a lifecycle script.
       - name: Generate Prisma Client
         run: bun run db:generate
+
+      - name: Apply integration test database migrations
+        env:
+          DATABASE_URL: ${{ env.TEST_DATABASE_URL }}
+        run: bun run db:migrate:deploy
 
       - name: Type check
         run: bun run type-check

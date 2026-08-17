@@ -38,7 +38,18 @@ describe("ice time request components", () => {
     renderWithTheme(
       <>
         <AvailableIceBrowser
-          blocks={[{ id: "block-1", title: "Available Ice", startsAt: new Date("2026-03-01T10:00:00Z"), endsAt: new Date("2026-03-01T11:00:00Z") }]}
+          mode="public"
+          timeZone="America/New_York"
+          blocks={[{
+            id: "block-1",
+            title: "Available Ice",
+            startsAt: new Date("2026-03-01T10:00:00Z"),
+            endsAt: new Date("2026-03-01T11:00:00Z"),
+            remainingSlices: [{
+              startsAt: new Date("2026-03-01T10:00:00Z"),
+              endsAt: new Date("2026-03-01T11:00:00Z"),
+            }],
+          }]}
         />
         <IceTimeRequestForm
           scheduleBlockId="block-1"
@@ -94,12 +105,15 @@ describe("ice time request components", () => {
   it("renders private manager request queue details", () => {
     renderWithTheme(
       <IceTimeRequestQueue
+        organizationId="corg000000000000000000000"
+        venueId="cvenue0000000000000000000"
         requests={[
           {
             id: "request-1",
             contactName: "Coach One",
             contactEmail: "coach@example.com",
             status: "SUBMITTED",
+            timezone: "America/New_York",
             requestedStartAt: new Date("2026-03-01T10:00:00Z"),
             requestedEndAt: new Date("2026-03-01T11:00:00Z"),
           },

@@ -2547,7 +2547,7 @@ export const venueReservationLifecycleSchema = z.object({
 export const venueReservationAvailabilitySchema = venueReservationIntervalSchema.extend({
   excludeReservationId: associationCuidSchema.optional(),
   includeOfferings: z.boolean().default(true),
-  publicView: z.boolean().default(false),
+  mode: z.enum(["PUBLIC", "STAFF"]),
 });
 
 export const associationProfileSchema = z.object({

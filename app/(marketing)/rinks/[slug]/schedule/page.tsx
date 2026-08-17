@@ -60,7 +60,7 @@ export default async function PublicRinkSchedulePage({ params, searchParams }: P
   const defaultEmail = session?.user?.email ?? undefined;
   const loginRedirect = `/rinks/${slug}/schedule`;
 
-  const requestableBlocks = venue.scheduleBlocks.filter((block) => block.registrationMode === "REQUEST_REQUIRED");
+  const requestableBlocks = venue.availableIce;
   const registrableBlocks = venue.scheduleBlocks.filter((block) => block.registrationMode === "SELF_REGISTER");
   const registrableLessons = venue.lessonOfferings;
 
@@ -236,18 +236,25 @@ export default async function PublicRinkSchedulePage({ params, searchParams }: P
         ) : null}
 
         <VenueScheduleCalendar blocks={venue.scheduleBlocks.map((block) => ({ ...block, status: "PUBLISHED" }))} />
-        <AvailableIceBrowser blocks={requestableBlocks} />
-        {requestableBlocks.map((block) => (
-          <IceTimeRequestForm
-            key={block.id}
-            scheduleBlockId={block.id}
-            venueId={venue.id}
-            venueName={venue.name}
-            startsAt={block.startsAt}
-            endsAt={block.endsAt}
-            timezone={venue.timezone}
-          />
-        ))}
+        <AvailableIceBrowser
+          blocks={requestableBlocks}
+          timeZone={venue.timezone}
+          mode="public"
+        />
+        {requestableBlocks.flatMap((block) =>
+          block.remainingSlices.map((slice, index) => (
+            <IceTimeRequestForm
+              key={`${block.id}-${slice.startsAt.toISOString()}`}
+              anchorId={`request-${block.id}-${index}`}
+              scheduleBlockId={block.offeringBlockId ?? block.id}
+              venueId={venue.id}
+              venueName={venue.name}
+              startsAt={slice.startsAt}
+              endsAt={slice.endsAt}
+              timezone={venue.timezone}
+            />
+          )),
+        )}
       </Stack>
     </Container>
   );

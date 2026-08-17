@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Prisma } from "@prisma/client";
 import {
   assignVenueReservation,
+  assertGenericRescheduleAllowed,
   createVenueReservation,
   transitionVenueReservation,
 } from "@/lib/services/venue-reservations";
@@ -456,6 +457,52 @@ describe("createVenueReservation validation", () => {
     );
   });
 
+  it("creates a public-request reservation only for the venue's organization", async () => {
+    const tx = makeTx();
+    vi.mocked(tx.venueStaff.findFirst).mockResolvedValue({ id: "staff-1" } as never);
+    vi.mocked(tx.venueScheduleBlock.findFirst).mockResolvedValue({
+      id: "offering-1",
+      venueId: "venue-1",
+      surfaceId: "surface-1",
+      segmentId: null,
+      startsAt,
+      endsAt,
+      recurrenceRule: null,
+      recurrenceEndDate: null,
+    } as never);
+    vi.mocked(tx.iceTimeRequest.findUnique).mockResolvedValue({
+      status: "ACCEPTED",
+      venueId: "venue-1",
+      scheduleBlockId: "offering-1",
+      approvedStartAt: startsAt,
+      approvedEndAt: endsAt,
+      approvedSurfaceId: "surface-1",
+      approvedSegmentId: "segment-1",
+      requesterTeamId: null,
+      requesterLeagueId: null,
+      requestedStartAt: startsAt,
+      requestedEndAt: endsAt,
+      venueReservation: null,
+    } as never);
+
+    await expect(createVenueReservation(tx, createInput({
+      ownerLeagueId: undefined,
+      ownerVenueOrganizationId: "venue-org-1",
+      sourceRequestId: "request-1",
+      offeringBlockId: "offering-1",
+    }))).resolves.toEqual({ id: venueReservationId });
+    expect(tx.venueReservation.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          ownerLeagueId: null,
+          ownerTeamId: null,
+          ownerVenueOrganizationId: "venue-org-1",
+          sourceRequestId: "request-1",
+        }),
+      }),
+    );
+  });
+
   it("requires exact active venue request staff for a source request", async () => {
     const tx = makeTx();
 
@@ -606,6 +653,34 @@ describe("assignVenueReservation validation", () => {
     expect(tx.practiceSession.update).not.toHaveBeenCalled();
   });
 
+  it("prevents assigning public-request venue inventory to team activities", async () => {
+    const tx = makeTx();
+    vi.mocked(tx.venueReservation.findUnique).mockResolvedValue(reservation({
+      ownerLeagueId: null,
+      ownerVenueOrganizationId: "venue-org-1",
+      sourceRequestId: "request-1",
+    }) as never);
+    const targetId = setAssignmentTarget(tx, "PRACTICE");
+
+    await expect(assignVenueReservation(tx, {
+      reservationId: "reservation-1",
+      targetType: "PRACTICE",
+      targetId,
+      actorId: "actor-1",
+    })).rejects.toThrow("cannot be assigned to association or team activities");
+    expect(tx.practiceSession.update).not.toHaveBeenCalled();
+  });
+
+  describe("request-backed rescheduling", () => {
+    it("rejects generic rescheduling without mutating request lineage", () => {
+      const requestBacked = { sourceRequestId: "request-1" };
+      expect(() => assertGenericRescheduleAllowed(requestBacked)).toThrow(
+        "cancel or amend the approved request",
+      );
+      expect(requestBacked.sourceRequestId).toBe("request-1");
+    });
+  });
+
   it.each<TargetType>([
     "EVENT",
     "SEASON_GAME",
@@ -751,5 +826,37 @@ describe("transitionVenueReservation authorization", () => {
       reason: "Approve held inventory",
       overrideReason: "Approved overlap",
     })).resolves.toEqual({ id: venueReservationId });
+  });
+
+  it("persists an optional transition snapshot for reschedule bookkeeping", async () => {
+    const tx = makeTx();
+    const snapshot = {
+      kind: "RESCHEDULE",
+      priorSourceRequestId: "request-1",
+      replacementStartsAt: "2026-09-08T18:00:00.000Z",
+      replacementEndsAt: "2026-09-08T19:00:00.000Z",
+    } as const;
+
+    await expect(transitionVenueReservation(tx, {
+      reservationId: "reservation-1",
+      nextStatus: "RELEASED",
+      actorId: "actor-1",
+      reason: "Moved to a replacement slot",
+      snapshot,
+    })).resolves.toEqual({ id: venueReservationId });
+
+    expect(tx.venueReservation.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: venueReservationId },
+        data: expect.objectContaining({
+          transitions: {
+            create: expect.objectContaining({
+              reason: "Moved to a replacement slot",
+              snapshot,
+            }),
+          },
+        }),
+      }),
+    );
   });
 });

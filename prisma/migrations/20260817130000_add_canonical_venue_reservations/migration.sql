@@ -412,6 +412,18 @@ BEGIN
           AND request."requesterLeagueId" IS NOT NULL
           AND NEW."ownerLeagueId" = request."requesterLeagueId"
         )
+        OR (
+          request."requesterTeamId" IS NULL
+          AND request."requesterLeagueId" IS NULL
+          AND NEW."ownerVenueOrganizationId" IS NOT NULL
+          AND EXISTS (
+            SELECT 1
+            FROM "venues" request_venue
+            WHERE request_venue."id" = request."venueId"
+              AND request_venue."organizationId" =
+                NEW."ownerVenueOrganizationId"
+          )
+        )
       )
   ) THEN
     RAISE EXCEPTION 'venue reservation source request approval or owner does not match'
@@ -468,8 +480,10 @@ LANGUAGE plpgsql
 AS $$
 BEGIN
   IF NOT EXISTS (
-    SELECT 1 FROM "venue_schedule_blocks"
-    WHERE "id" = NEW."scheduleBlockId" AND "venueId" = NEW."venueId"
+    SELECT 1
+    FROM "venue_schedule_blocks" block
+    WHERE block."id" = NEW."scheduleBlockId"
+      AND block."venueId" = NEW."venueId"
   ) THEN
     RAISE EXCEPTION 'ice time request block does not belong to request venue'
       USING ERRCODE = '23514';
@@ -492,12 +506,52 @@ BEGIN
       USING ERRCODE = '23514';
   END IF;
 
+  IF (
+    NEW."approvedStartAt" IS NOT NULL
+    OR NEW."status" IN ('ACCEPTED', 'PARTIALLY_ACCEPTED')
+  ) AND (
+    NEW."approvedSurfaceId" IS NOT NULL
+    OR NEW."approvedSegmentId" IS NOT NULL
+  ) AND NOT EXISTS (
+    SELECT 1
+    FROM "venue_schedule_blocks" block
+    WHERE block."id" = NEW."scheduleBlockId"
+      AND block."venueId" = NEW."venueId"
+      AND (
+        block."surfaceId" IS NULL
+        OR (
+          NEW."approvedSurfaceId" = block."surfaceId"
+          AND (
+            block."segmentId" IS NULL
+            OR NEW."approvedSegmentId" = block."segmentId"
+          )
+        )
+      )
+  ) THEN
+    RAISE EXCEPTION 'approved space widens or leaves requested space'
+      USING ERRCODE = '23514';
+  END IF;
+
+  IF (
+    NEW."approvedStartAt" IS NOT NULL
+    OR NEW."status" IN ('ACCEPTED', 'PARTIALLY_ACCEPTED')
+  ) AND NEW."approvedSurfaceId" IS NULL AND EXISTS (
+    SELECT 1
+    FROM "venue_schedule_blocks" block
+    WHERE block."id" = NEW."scheduleBlockId"
+      AND block."surfaceId" IS NOT NULL
+  ) THEN
+    RAISE EXCEPTION 'approved space widens requested surface to venue'
+      USING ERRCODE = '23514';
+  END IF;
+
   RETURN NEW;
 END;
 $$;
 
 CREATE TRIGGER "ice_time_requests_approval_ancestry_trigger"
-BEFORE INSERT OR UPDATE OF "scheduleBlockId", "venueId", "approvedSurfaceId", "approvedSegmentId"
+BEFORE INSERT OR UPDATE OF "scheduleBlockId", "venueId", "status",
+  "approvedStartAt", "approvedEndAt", "approvedSurfaceId", "approvedSegmentId"
 ON "ice_time_requests"
 FOR EACH ROW EXECUTE FUNCTION "validate_ice_time_request_approval_ancestry"();
 

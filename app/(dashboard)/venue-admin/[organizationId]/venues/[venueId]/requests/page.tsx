@@ -22,7 +22,14 @@ export default async function VenueRequestsPage({ params }: VenueRequestsPagePro
   return (
     <PageContainer>
       <PageHeader title="Ice Time Requests" />
-      <IceTimeRequestQueue requests={result.data.requests} />
+      <IceTimeRequestQueue
+        organizationId={organizationId}
+        venueId={venueId}
+        venueName={result.data.venueName}
+        venueTimeZone={result.data.timezone}
+        surfaceOptions={result.data.surfaceOptions}
+        requests={result.data.requests}
+      />
     </PageContainer>
   );
 }

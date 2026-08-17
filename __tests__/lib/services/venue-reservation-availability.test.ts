@@ -1,8 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Prisma } from "@prisma/client";
 import {
+  approvedSpaceWithinRequestedSpace,
+  findLegacyAcceptedRequestConflicts,
   findVenueReservationAvailability,
   findVenueReservationConflicts,
+  populateVenueOfferingAvailability,
+  subtractVenueReservationOccupancy,
 } from "@/lib/services/venue-reservation-availability";
 
 const baseCandidate = {
@@ -50,6 +54,7 @@ function offering(overrides: Record<string, unknown> = {}) {
 function tx() {
   return {
     venueReservation: { findMany: vi.fn().mockResolvedValue([]) },
+    iceTimeRequest: { findMany: vi.fn().mockResolvedValue([]) },
     segmentCoexistence: { findMany: vi.fn().mockResolvedValue([]) },
     venueScheduleBlock: { findMany: vi.fn().mockResolvedValue([]) },
   } as unknown as Prisma.TransactionClient;
@@ -96,6 +101,63 @@ describe("venue reservation availability", () => {
     ] as never);
 
     await expect(findVenueReservationConflicts(client, baseCandidate)).resolves.toEqual([]);
+  });
+
+  it("enforces the requested venue/surface/segment containment hierarchy", () => {
+    expect(approvedSpaceWithinRequestedSpace(
+      { surfaceId: null, segmentId: null },
+      { surfaceId: "surface-b", segmentId: "segment-b" },
+    )).toBe(true);
+    expect(approvedSpaceWithinRequestedSpace(
+      { surfaceId: "surface-a", segmentId: null },
+      { surfaceId: "surface-a", segmentId: "segment-a" },
+    )).toBe(true);
+    expect(approvedSpaceWithinRequestedSpace(
+      { surfaceId: "surface-a", segmentId: "segment-a" },
+      { surfaceId: "surface-a", segmentId: null },
+    )).toBe(false);
+    expect(approvedSpaceWithinRequestedSpace(
+      { surfaceId: "surface-a", segmentId: null },
+      { surfaceId: "surface-b", segmentId: null },
+    )).toBe(false);
+  });
+
+  it("applies canonical split-segment coexistence to legacy accepted requests", async () => {
+    const client = tx();
+    vi.mocked(client.iceTimeRequest.findMany).mockResolvedValue([{
+      id: "legacy-request",
+      requestedStartAt: baseCandidate.startsAt,
+      requestedEndAt: baseCandidate.endsAt,
+      approvedStartAt: baseCandidate.startsAt,
+      approvedEndAt: baseCandidate.endsAt,
+      approvedSurfaceId: baseCandidate.surfaceId,
+      approvedSegmentId: "csegment000000000000000002",
+      scheduleBlock: {
+        surfaceId: baseCandidate.surfaceId,
+        segmentId: "csegment000000000000000002",
+      },
+    }] as never);
+    vi.mocked(client.segmentCoexistence.findMany).mockResolvedValue([{
+      segmentAId: baseCandidate.segmentId,
+      segmentBId: "csegment000000000000000002",
+    }] as never);
+
+    await expect(
+      findLegacyAcceptedRequestConflicts(client, baseCandidate),
+    ).resolves.toEqual([]);
+    expect(client.iceTimeRequest.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          status: { in: ["ACCEPTED", "PARTIALLY_ACCEPTED"] },
+          venueReservation: null,
+        }),
+      }),
+    );
+
+    vi.mocked(client.segmentCoexistence.findMany).mockResolvedValue([]);
+    await expect(
+      findLegacyAcceptedRequestConflicts(client, baseCandidate),
+    ).resolves.toEqual([{ id: "legacy-request" }]);
   });
 
   it("treats whole-surface reservations as conflicts for every segment", async () => {
@@ -272,18 +334,116 @@ describe("venue reservation availability", () => {
     ]);
   });
 
-  it("redacts owner and request identity from public conflicts", async () => {
-    const client = tx();
-    vi.mocked(client.venueReservation.findMany).mockResolvedValue([reservation()] as never);
+  it("subtracts merged partial occupancy into concrete remaining slices", () => {
+    expect(
+      subtractVenueReservationOccupancy(
+        {
+          startsAt: new Date("2026-09-01T18:00:00.000Z"),
+          endsAt: new Date("2026-09-01T20:00:00.000Z"),
+        },
+        [
+          {
+            startsAt: new Date("2026-09-01T18:30:00.000Z"),
+            endsAt: new Date("2026-09-01T19:00:00.000Z"),
+          },
+          {
+            startsAt: new Date("2026-09-01T18:45:00.000Z"),
+            endsAt: new Date("2026-09-01T19:30:00.000Z"),
+          },
+        ],
+      ),
+    ).toEqual({
+      occupancy: [
+        {
+          startsAt: new Date("2026-09-01T18:30:00.000Z"),
+          endsAt: new Date("2026-09-01T19:30:00.000Z"),
+        },
+      ],
+      remainingSlices: [
+        {
+          startsAt: new Date("2026-09-01T18:00:00.000Z"),
+          endsAt: new Date("2026-09-01T18:30:00.000Z"),
+        },
+        {
+          startsAt: new Date("2026-09-01T19:30:00.000Z"),
+          endsAt: new Date("2026-09-01T20:00:00.000Z"),
+        },
+      ],
+    });
+  });
 
-    const [conflict] = await findVenueReservationConflicts(client, {
-      ...baseCandidate,
-      publicView: true,
+  it("keeps coexisting segment occupancy out of an offering occurrence", async () => {
+    const client = tx();
+    vi.mocked(client.venueReservation.findMany).mockResolvedValue([
+      reservation({
+        segmentId: "csegment000000000000000002",
+        startsAt: new Date("2026-09-01T18:15:00.000Z"),
+        endsAt: new Date("2026-09-01T18:45:00.000Z"),
+      }),
+    ] as never);
+    vi.mocked(client.segmentCoexistence.findMany).mockResolvedValue([
+      {
+        segmentAId: baseCandidate.segmentId,
+        segmentBId: "csegment000000000000000002",
+      },
+    ] as never);
+
+    const [result] = await populateVenueOfferingAvailability(client, {
+      venueId: baseCandidate.venueId,
+      offerings: [offering()],
+      now: baseCandidate.now,
+      mode: "STAFF",
     });
 
-    expect(conflict).not.toHaveProperty("ownerLeagueId");
-    expect(conflict).not.toHaveProperty("ownerTeamId");
-    expect(conflict).not.toHaveProperty("ownerVenueOrganizationId");
-    expect(conflict).not.toHaveProperty("sourceRequestId");
+    expect(result.occupancy).toEqual([]);
+    expect(result.remainingSlices).toEqual([
+      {
+        startsAt: baseCandidate.startsAt,
+        endsAt: baseCandidate.endsAt,
+      },
+    ]);
+  });
+
+  it("returns only remaining slices for public offerings without occupancy details", async () => {
+    const client = tx();
+    vi.mocked(client.venueReservation.findMany).mockResolvedValue([
+      reservation({
+        segmentId: null,
+        startsAt: new Date("2026-09-01T18:20:00.000Z"),
+        endsAt: new Date("2026-09-01T18:40:00.000Z"),
+      }),
+    ] as never);
+
+    const [result] = await populateVenueOfferingAvailability(client, {
+      venueId: baseCandidate.venueId,
+      offerings: [offering()],
+      now: baseCandidate.now,
+      mode: "PUBLIC",
+    });
+
+    expect(result).not.toHaveProperty("occupancy");
+    expect(result.remainingSlices).toHaveLength(2);
+  });
+
+  it("filters public offering discovery to PUBLIC audience and visibility", async () => {
+    const client = tx();
+    vi.mocked(client.venueReservation.findMany).mockResolvedValue([] as never);
+    vi.mocked(client.venueScheduleBlock.findMany).mockResolvedValue([] as never);
+
+    await findVenueReservationAvailability(client, {
+      ...baseCandidate,
+      includeOfferings: true,
+      offeringAccess: "PUBLIC",
+    });
+
+    expect(client.venueScheduleBlock.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          audience: "PUBLIC",
+          visibility: "PUBLIC",
+          status: "PUBLISHED",
+        }),
+      }),
+    );
   });
 });

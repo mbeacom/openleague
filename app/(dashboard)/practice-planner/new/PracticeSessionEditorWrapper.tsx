@@ -36,12 +36,14 @@ export function PracticeSessionEditorWrapper({
           duration: play.duration,
           instructions: play.instructions || "",
         })),
+        reservationId: session.reservationId,
         // Optional venue booking (006, FR-019); omitted fields mean unbooked.
         venueId: session.venueId || undefined,
         surfaceId: session.surfaceId || undefined,
         segmentId: session.segmentId || undefined,
         startAt: session.startAt || undefined,
         overrideConflicts: session.overrideConflicts,
+        overrideReason: session.overrideReason || undefined,
       });
 
       if (!result.success) {
@@ -67,6 +69,7 @@ export function PracticeSessionEditorWrapper({
     <PracticeSessionEditor
       teamId={teamId}
       venues={bookingOptions.venues}
+      reservations={bookingOptions.reservations}
       surfacesByVenue={bookingOptions.surfacesByVenue}
       segmentsBySurface={bookingOptions.segmentsBySurface}
       wholeLabelBySurface={bookingOptions.wholeLabelBySurface}
