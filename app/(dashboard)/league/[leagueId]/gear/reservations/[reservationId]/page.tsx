@@ -6,7 +6,6 @@ import { PageContainer } from "@/components/ui/PageContainer";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { getGearReservationContext } from "@/lib/actions/gear-context";
 import { GearReservationLifecycleControls } from "@/components/features/gear/GearReservationLifecycleControls";
-import { LinkButton } from "@/components/ui/NextLinkComposites";
 
 interface GearReservationDetailPageProps {
   params: Promise<{ leagueId: string; reservationId: string }>;

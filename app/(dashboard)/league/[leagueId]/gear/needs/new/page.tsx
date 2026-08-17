@@ -4,7 +4,6 @@ import { GearNeedCreateForm } from "@/components/features/gear/GearNeedCreateFor
 import { LinkButton } from "@/components/ui/NextLinkComposites";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { LinkButton } from "@/components/ui/NextLinkComposites";
 import { getGearNeedsContext } from "@/lib/actions/gear-needs";
 
 export default async function NewGearNeedPage({ params }: { params: Promise<{ leagueId: string }> }) {

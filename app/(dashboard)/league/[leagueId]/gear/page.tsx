@@ -5,7 +5,6 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { LinkButton } from "@/components/ui/NextLinkComposites";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { LinkButton } from "@/components/ui/NextLinkComposites";
 import { getGearInventoryContext } from "@/lib/actions/gear-context";
 import { parseGearActivitySearchParams } from "@/lib/utils/gear-activity-query";
 
