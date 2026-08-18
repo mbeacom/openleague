@@ -32,6 +32,9 @@ them.
 | [0003](./0003-access-postgresql-exclusively-through-prisma-on-neon-serverless.md) | accepted | Access PostgreSQL exclusively through Prisma on Neon serverless |
 | [0004](./0004-build-the-interface-on-mui-as-the-primary-component-library.md) | accepted | Build the interface on MUI as the primary component library |
 | [0005](./0005-standardize-on-bun-as-the-development-and-ci-toolchain.md) | accepted | Standardize on Bun as the development and CI toolchain |
+| [0006](./0006-model-league-owned-gear-with-ledger-projections-and-an-outbox.md) | accepted | Model league-owned gear with ledger projections and an outbox |
+| [0007](./0007-use-canonical-venue-reservations-for-occupancy.md) | accepted | Use canonical venue reservations for occupancy |
+| [0008](./0008-keep-core-association-operations-free-and-provider-portable.md) | accepted | Keep core association operations free and provider-portable |
 
 Records 0002–0005 are **backfilled** — written in 2026-08 from `CLAUDE.md` and
 the code as it stood, not from contemporaneous notes. Their `date` is the

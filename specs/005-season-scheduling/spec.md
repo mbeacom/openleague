@@ -234,7 +234,7 @@ The legacy schedule builder is removed outright. The platform is pre-launch with
 ## Out of Scope
 
 - Sub-surface segmentation as bookable inventory (half ice, cross ice, custom zones with concurrent-booking math) and the visual venue layout editor — planned as the venue segmentation feature (spec 006).
-- Paid/exclusive surface or segment rentals — planned as a follow-on to segmentation (spec 007).
+- Paid public self-service surface or segment rentals — remain a future commercial extension after feature 007 establishes canonical association reservation and allocation.
 - Working generators for formats other than round robin (elimination brackets, pool play seeding, ladders); these appear as labels only.
 - Playoff seeding automation and bracket visualization.
 - Cross-league or off-platform opponents for proposals and games.

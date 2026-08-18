@@ -17,7 +17,11 @@ affects:
   - type: path
     pattern: "prisma/migrations/*_gear_domain_foundation/**"
   - type: path
-    pattern: "lib/actions/gear/**"
+    pattern: "lib/actions/gear-*.ts"
+  - type: path
+    pattern: "lib/services/gear-*.ts"
+  - type: path
+    pattern: "components/features/gear/**"
   - type: path
     pattern: "lib/utils/gear.ts"
   - type: path
@@ -158,7 +162,7 @@ commits, leaving no durable retry intent.
 
 1. [x] Add tenant-safe gear projections, immutable ledger records, and the
    notification outbox to the Prisma schema and migration.
-2. [ ] Implement serializable inventory actions with retryable conflict handling.
-3. [ ] Implement an outbox worker with bounded retries and observability.
+2. [x] Implement serializable inventory actions with retryable conflict handling.
+3. [x] Implement an outbox worker with bounded retries and observability.
 4. [ ] Define production ledger/outbox capacity thresholds and archival policy.
 5. [ ] Add parity guards before future gear enum changes duplicate across layers.
