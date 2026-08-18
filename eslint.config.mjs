@@ -65,6 +65,11 @@ const eslintConfig = [
       "coverage/**",
       "*.min.js",
       "next-env.d.ts",
+      // Vendored/generated design-sync output (bundled React et al). Gitignored,
+      // so CI never sees it, but it made `bun run lint` fail locally with 41
+      // errors from third-party code and masked real findings.
+      "ds-bundle/**",
+      ".design-sync/**",
     ],
   },
   {

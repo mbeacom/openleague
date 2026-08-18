@@ -37,6 +37,7 @@ const SECTION_LABELS: Record<string, string> = {
   seasons: 'Seasons',
   venues: 'Venues',
   'venue-admin': 'Venue Admin',
+  league: 'Leagues',
   'signup-events': 'Signup Events',
   'my-registrations': 'My Registrations',
   settings: 'Team Settings',

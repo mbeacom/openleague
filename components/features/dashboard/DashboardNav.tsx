@@ -29,6 +29,7 @@ import {
   Forum as ForumIcon,
   AdminPanelSettings as AdminPanelSettingsIcon,
   Inventory2 as GearIcon,
+  EmojiEvents as LeagueIcon,
   Assessment as OperationsIcon,
   EventAvailable as VenueReservationsIcon,
 } from "@mui/icons-material";
@@ -80,6 +81,10 @@ export default function DashboardNav({
         { label: "My Registrations", path: "/my-registrations", icon: <ConfirmationNumberIcon /> },
         { label: "Seasons", path: "/seasons", icon: <DateRangeIcon /> },
         { label: "Practice Planner", path: "/practice-planner", icon: <SportsHockeyIcon /> },
+        // Entry point into league mode. Without this, /league (which hosts the
+        // create-a-league form) is unreachable by navigation for single-team
+        // users, hiding every league-scoped surface behind it — gear included.
+        { label: "Leagues", path: "/league", icon: <LeagueIcon /> },
         { label: "Team Settings", path: "/settings", icon: <SettingsIcon /> },
         { label: "Account", path: "/account", icon: <ManageAccountsIcon /> },
         ...adminItems,
