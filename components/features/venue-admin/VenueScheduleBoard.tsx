@@ -91,6 +91,7 @@ const SOURCE_CHIPS: Record<
   VenueBookingView["source"],
   { label: string; color: "primary" | "secondary" | "info" | "warning" | "success" }
 > = {
+  venueReservation: { label: "Venue reservation", color: "primary" },
   scheduleBlock: { label: "Block", color: "primary" },
   seasonGame: { label: "Season game", color: "secondary" },
   eventGame: { label: "Event game", color: "info" },

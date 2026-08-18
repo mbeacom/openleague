@@ -1,3 +1,6 @@
+import { TZDate } from "@date-fns/tz";
+import { isValidTimeZone } from "@/lib/utils/date";
+
 export interface TimeRange {
   startAt: Date;
   endAt: Date;
@@ -6,6 +9,8 @@ export interface TimeRange {
 export interface RecurrenceWindow extends TimeRange {
   recurrenceRule?: string | null;
   recurrenceEndAt?: Date | null;
+  /** Venue IANA timezone whose wall clock defines the recurrence. */
+  timezone: string;
 }
 
 export interface ScheduleConflict<T extends TimeRange = TimeRange> {
@@ -66,38 +71,82 @@ export function expandRecurrenceWindow(
   }
 
   const rule = parseRecurrenceRule(window.recurrenceRule);
+  if (!isValidTimeZone(window.timezone)) {
+    throw new Error(`Invalid recurrence timezone: ${window.timezone}`);
+  }
   const frequency = rule.FREQ;
   const interval = Math.max(Number(rule.INTERVAL ?? '1'), 1);
   const count = rule.COUNT ? Math.max(Number(rule.COUNT), 0) : undefined;
   const recurrenceEnd = minDate(window.recurrenceEndAt ?? rangeEnd, rangeEnd);
-  const durationMs = window.endAt.getTime() - window.startAt.getTime();
+  const localStart = localDateTime(window.startAt, window.timezone);
+  const localEnd = localDateTime(window.endAt, window.timezone);
+  const endDayOffset = Math.round(
+    (localDayNumber(localEnd) - localDayNumber(localStart)) / 86_400_000,
+  );
   const occurrences: TimeRange[] = [];
 
   if (frequency === 'DAILY') {
-    let cursor = new Date(window.startAt);
+    let cursor = localDayNumber(localStart);
     let emitted = 0;
-    while (cursor <= recurrenceEnd && (!count || emitted < count)) {
-      pushOccurrence(occurrences, cursor, durationMs, rangeStart, rangeEnd);
-      cursor = addDays(cursor, interval);
+    while (!count || emitted < count) {
+      const occurrenceStart = dateAtLocalTime(
+        cursor,
+        localStart,
+        window.timezone,
+      );
+      if (occurrenceStart > recurrenceEnd) break;
+      pushOccurrence(
+        occurrences,
+        occurrenceStart,
+        dateAtLocalTime(
+          cursor + endDayOffset * 86_400_000,
+          localEnd,
+          window.timezone,
+        ),
+        rangeStart,
+        rangeEnd,
+      );
+      cursor += interval * 86_400_000;
       emitted += 1;
     }
     return occurrences;
   }
 
   if (frequency === 'WEEKLY') {
-    const weekdays = parseWeekdays(rule.BYDAY) ?? [window.startAt.getDay()];
-    let cursor = startOfDay(window.startAt);
+    const weekdays = parseWeekdays(rule.BYDAY) ?? [
+      new Date(localDayNumber(localStart)).getUTCDay(),
+    ];
+    const startDay = localDayNumber(localStart);
+    let cursor = startDay;
     let emitted = 0;
 
-    while (cursor <= recurrenceEnd && (!count || emitted < count)) {
-      if (weekdays.includes(cursor.getDay()) && isWeeklyIntervalMatch(window.startAt, cursor, interval)) {
-        const occurrenceStart = copyTime(window.startAt, cursor);
+    while (!count || emitted < count) {
+      const occurrenceStart = dateAtLocalTime(
+        cursor,
+        localStart,
+        window.timezone,
+      );
+      if (occurrenceStart > recurrenceEnd) break;
+      if (
+        weekdays.includes(new Date(cursor).getUTCDay())
+        && isWeeklyIntervalMatch(startDay, cursor, interval)
+      ) {
         if (occurrenceStart >= window.startAt) {
-          pushOccurrence(occurrences, occurrenceStart, durationMs, rangeStart, rangeEnd);
+          pushOccurrence(
+            occurrences,
+            occurrenceStart,
+            dateAtLocalTime(
+              cursor + endDayOffset * 86_400_000,
+              localEnd,
+              window.timezone,
+            ),
+            rangeStart,
+            rangeEnd,
+          );
           emitted += 1;
         }
       }
-      cursor = addDays(cursor, 1);
+      cursor += 86_400_000;
     }
 
     return occurrences;
@@ -158,44 +207,69 @@ function parseWeekdays(byDay: string | undefined): number[] | undefined {
 function pushOccurrence(
   occurrences: TimeRange[],
   startAt: Date,
-  durationMs: number,
+  endAt: Date,
   rangeStart: Date,
   rangeEnd: Date
 ) {
-  const occurrence = {
-    startAt,
-    endAt: new Date(startAt.getTime() + durationMs),
-  };
+  const occurrence = { startAt, endAt };
 
   if (rangesOverlap(occurrence, { startAt: rangeStart, endAt: rangeEnd })) {
     occurrences.push(occurrence);
   }
 }
 
-function addDays(date: Date, days: number): Date {
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
-  return next;
-}
-
-function startOfDay(date: Date): Date {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
-}
-
-function copyTime(source: Date, targetDay: Date): Date {
-  const next = new Date(targetDay);
-  next.setHours(source.getHours(), source.getMinutes(), source.getSeconds(), source.getMilliseconds());
-  return next;
-}
-
 function minDate(left: Date, right: Date): Date {
   return left < right ? left : right;
 }
 
-function isWeeklyIntervalMatch(start: Date, candidate: Date, interval: number): boolean {
-  const startWeek = startOfDay(start).getTime();
-  const candidateWeek = startOfDay(candidate).getTime();
-  const days = Math.round((candidateWeek - startWeek) / 86_400_000);
+function isWeeklyIntervalMatch(startDay: number, candidateDay: number, interval: number): boolean {
+  const days = Math.round((candidateDay - startDay) / 86_400_000);
   const weeks = Math.floor(days / 7);
   return weeks % interval === 0;
+}
+
+type LocalDateTime = {
+  year: number;
+  month: number;
+  day: number;
+  hours: number;
+  minutes: number;
+  seconds: number;
+  milliseconds: number;
+};
+
+function localDateTime(date: Date, timezone: string): LocalDateTime {
+  const zoned = new TZDate(date.getTime(), timezone);
+  return {
+    year: zoned.getFullYear(),
+    month: zoned.getMonth(),
+    day: zoned.getDate(),
+    hours: zoned.getHours(),
+    minutes: zoned.getMinutes(),
+    seconds: zoned.getSeconds(),
+    milliseconds: zoned.getMilliseconds(),
+  };
+}
+
+function localDayNumber(value: Pick<LocalDateTime, "year" | "month" | "day">): number {
+  return Date.UTC(value.year, value.month, value.day);
+}
+
+function dateAtLocalTime(
+  localDay: number,
+  time: Pick<LocalDateTime, "hours" | "minutes" | "seconds" | "milliseconds">,
+  timezone: string,
+): Date {
+  const day = new Date(localDay);
+  const zoned = new TZDate(
+    day.getUTCFullYear(),
+    day.getUTCMonth(),
+    day.getUTCDate(),
+    time.hours,
+    time.minutes,
+    time.seconds,
+    time.milliseconds,
+    timezone,
+  );
+  return new Date(zoned.getTime());
 }

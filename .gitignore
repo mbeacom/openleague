@@ -36,6 +36,7 @@ bower_components
 
 # Compiled binary addons (https://nodejs.org/api/addons.html)
 build/Release
+build/
 
 # Dependency directories
 node_modules/
@@ -143,6 +144,7 @@ local-context/
 
 # macOS system files
 .DS_Store
+Thumbs.db
 
 # Editor and temporary files
 # Contents-glob rather than `.vscode/` so shared project config can be

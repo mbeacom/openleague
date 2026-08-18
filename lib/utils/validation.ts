@@ -82,11 +82,18 @@ export const VENUE_SCHEDULE_AUDIENCES = [
 ] as const;
 export const VENUE_SCHEDULE_VISIBILITIES = ["PUBLIC", "AUTHENTICATED", "RELATIONSHIP_ONLY", "PRIVATE"] as const;
 export const VENUE_SCHEDULE_BLOCK_STATUSES = ["DRAFT", "PUBLISHED", "CANCELED", "ARCHIVED"] as const;
+export const VENUE_SCHEDULE_BLOCK_INTENTS = [
+  "OFFERING",
+  "VENUE_ACTIVITY",
+  "CLOSURE",
+  "INFORMATION",
+] as const;
 export const REGISTRATION_MODES = ["INFO_ONLY", "REQUEST_REQUIRED", "EXTERNAL_REGISTRATION", "SELF_REGISTER"] as const;
 export const ICE_TIME_REQUEST_STATUSES = [
   "SUBMITTED",
   "UNDER_REVIEW",
   "ACCEPTED",
+  "PARTIALLY_ACCEPTED",
   "DECLINED",
   "CANCELED",
   "EXPIRED",
@@ -1005,6 +1012,7 @@ export const venueScheduleBlockSchema = z
     audience: z.enum(VENUE_SCHEDULE_AUDIENCES).default("PUBLIC"),
     visibility: z.enum(VENUE_SCHEDULE_VISIBILITIES).default("PUBLIC"),
     status: z.enum(VENUE_SCHEDULE_BLOCK_STATUSES).default("DRAFT"),
+    intent: z.enum(VENUE_SCHEDULE_BLOCK_INTENTS).optional(),
     startsAt: z.coerce.date({ message: "Valid start date is required" }),
     endsAt: z.coerce.date({ message: "Valid end date is required" }),
     recurrenceRule: optionalSanitizedString(500),
@@ -1059,6 +1067,52 @@ export const decideIceTimeRequestSchema = z.object({
   status: z.enum(["ACCEPTED", "DECLINED"]),
   decisionMessage: optionalSanitizedString(1000),
 });
+
+export const decideVenueReservationRequestSchema = z
+  .object({
+    organizationId: z.string().cuid("Invalid organization ID format"),
+    venueId: z.string().cuid("Invalid venue ID format"),
+    requestId: z.string().cuid("Invalid request ID format"),
+    status: z.enum(["ACCEPTED", "PARTIALLY_ACCEPTED", "DECLINED"]),
+    approvedStartAt: z.coerce.date().optional(),
+    approvedEndAt: z.coerce.date().optional(),
+    approvedSurfaceId: optionalCuid("Invalid approved surface ID format"),
+    approvedSegmentId: optionalCuid("Invalid approved segment ID format"),
+    decisionMessage: optionalSanitizedString(1000),
+    overrideConflicts: z.boolean().default(false),
+    overrideReason: optionalSanitizedString(1000),
+  })
+  .superRefine((value, context) => {
+    if (value.status !== "DECLINED") {
+      if (!value.approvedStartAt || !value.approvedEndAt) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Approved start and end times are required",
+          path: ["approvedStartAt"],
+        });
+      } else if (value.approvedEndAt <= value.approvedStartAt) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Approved end time must be after approved start time",
+          path: ["approvedEndAt"],
+        });
+      }
+    }
+    if (value.approvedSegmentId && !value.approvedSurfaceId) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "An approved segment requires an approved surface",
+        path: ["approvedSegmentId"],
+      });
+    }
+    if (value.overrideConflicts && !value.overrideReason) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "A reason is required to override conflicts",
+        path: ["overrideReason"],
+      });
+    }
+  });
 
 export const lessonOfferingSchema = z.object({
   organizationId: z.string().cuid("Invalid organization ID format"),
@@ -2392,3 +2446,246 @@ export type ReceiveGearPledgeInput = z.input<typeof receiveGearPledgeSchema>;
 export type CorrectGearPledgeReceiptInput = z.input<typeof correctGearPledgeReceiptSchema>;
 export type RecordGearInventoryMovementInput = z.input<typeof recordGearInventoryMovementSchema>;
 export type RecordGearHandoffInput = z.input<typeof recordGearHandoffSchema>;
+
+// Association operations (feature 007). VenueReservation is intentionally
+// explicit here and in every dependent surface so it cannot be confused with
+// the existing GearReservation custody domain.
+export const VENUE_RESERVATION_STATUSES = [
+  "HELD",
+  "CONFIRMED",
+  "RELEASED",
+  "CANCELED",
+  "COMPLETED",
+] as const;
+export const VENUE_RESERVATION_USAGE_STATUSES = ["PENDING", "USED", "UNUSED"] as const;
+export const VENUE_RESERVATION_TARGET_TYPES = [
+  "SEASON_GAME",
+  "PRACTICE",
+  "EVENT",
+  "SIGNUP_EVENT",
+  "EVENT_GAME",
+] as const;
+
+const associationCuidSchema = z.string().cuid("Invalid identifier format");
+const associationOptionalCuidSchema = associationCuidSchema.optional().nullable();
+const requiredReasonSchema = sanitizedStringWithMin(1, 1_000);
+
+export const venueReservationIntervalSchema = z
+  .object({
+    venueId: associationCuidSchema,
+    surfaceId: associationOptionalCuidSchema,
+    segmentId: associationOptionalCuidSchema,
+    startsAt: z.coerce.date({ message: "Valid start time is required" }),
+    endsAt: z.coerce.date({ message: "Valid end time is required" }),
+    timezone: z.string().max(100).refine(isValidTimeZone, "Invalid timezone"),
+  })
+  .refine((value) => value.endsAt > value.startsAt, {
+    message: "End time must be after start time",
+    path: ["endsAt"],
+  })
+  .refine((value) => !value.segmentId || !!value.surfaceId, {
+    message: "A segment requires a surface",
+    path: ["segmentId"],
+  });
+
+export const createVenueReservationSchema = venueReservationIntervalSchema
+  .extend({
+    status: z.enum(VENUE_RESERVATION_STATUSES).default("CONFIRMED"),
+    usageStatus: z.enum(VENUE_RESERVATION_USAGE_STATUSES).default("PENDING"),
+    ownerLeagueId: associationOptionalCuidSchema,
+    ownerTeamId: associationOptionalCuidSchema,
+    ownerVenueOrganizationId: associationOptionalCuidSchema,
+    sourceRequestId: associationOptionalCuidSchema,
+    offeringBlockId: associationOptionalCuidSchema,
+    heldUntil: z.coerce.date().optional().nullable(),
+  })
+  .superRefine((value, context) => {
+    const owners = [
+      value.ownerLeagueId,
+      value.ownerTeamId,
+      value.ownerVenueOrganizationId,
+    ].filter(Boolean);
+    if (owners.length !== 1) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Exactly one venue reservation owner is required",
+        path: ["ownerLeagueId"],
+      });
+    }
+    if (value.status === "HELD" && !value.heldUntil) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Held reservations require an expiration time",
+        path: ["heldUntil"],
+      });
+    }
+  });
+
+export const assignVenueReservationSchema = z.object({
+  reservationId: associationCuidSchema,
+  targetType: z.enum(VENUE_RESERVATION_TARGET_TYPES),
+  targetId: associationCuidSchema,
+  overrideConflicts: z.boolean().default(false),
+  overrideReason: optionalSanitizedString(1_000),
+}).superRefine((value, context) => {
+  if (value.overrideConflicts && !value.overrideReason) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "A reason is required to override conflicts",
+      path: ["overrideReason"],
+    });
+  }
+});
+
+export const venueReservationLifecycleSchema = z.object({
+  reservationId: associationCuidSchema,
+  nextStatus: z.enum(VENUE_RESERVATION_STATUSES),
+  reason: requiredReasonSchema,
+  usageStatus: z.enum(VENUE_RESERVATION_USAGE_STATUSES).optional(),
+});
+
+export const venueReservationAvailabilitySchema = venueReservationIntervalSchema.extend({
+  excludeReservationId: associationCuidSchema.optional(),
+  includeOfferings: z.boolean().default(true),
+  publicView: z.boolean().default(false),
+});
+
+export const associationProfileSchema = z.object({
+  leagueId: associationCuidSchema,
+  publicDescription: optionalSanitizedString(5_000),
+  mission: optionalSanitizedString(2_000),
+  publicEmail: optionalEmailSchema,
+  publicPhone: optionalSanitizedString(30),
+  website: optionalUrlSchema(),
+  timezone: z.string().max(100).refine(isValidTimeZone, "Invalid timezone"),
+});
+
+export const ASSOCIATION_RESPONSIBILITY_ROLES = [
+  "ASSOCIATION_ADMIN",
+  "SCHEDULER",
+  "REGISTRAR",
+  "TREASURER",
+  "COMMUNICATIONS_LEAD",
+  "TEAM_MANAGER",
+  "COACH",
+  "VOLUNTEER_COORDINATOR",
+  "EVENT_MANAGER",
+  "EQUIPMENT_MANAGER",
+] as const;
+export const ASSOCIATION_RESPONSIBILITY_SCOPES = [
+  "ASSOCIATION",
+  "DIVISION",
+  "TEAM",
+  "SEASON",
+  "EVENT",
+  "SIGNUP_EVENT",
+] as const;
+
+export const associationResponsibilitySchema = z.object({
+  leagueId: associationCuidSchema,
+  userId: associationCuidSchema,
+  role: z.enum(ASSOCIATION_RESPONSIBILITY_ROLES),
+  scopeType: z.enum(ASSOCIATION_RESPONSIBILITY_SCOPES),
+  scopeId: associationCuidSchema,
+  teamId: associationCuidSchema.optional(),
+});
+
+export const VOLUNTEER_NEED_STATUSES = ["OPEN", "CLOSED", "CANCELED", "COMPLETED"] as const;
+export const VOLUNTEER_ASSIGNMENT_STATUSES = [
+  "INVITED",
+  "ACCEPTED",
+  "DECLINED",
+  "CANCELED",
+  "COMPLETED",
+  "MISSED",
+] as const;
+
+export const volunteerNeedSchema = z.object({
+  leagueId: associationCuidSchema,
+  roleLabel: sanitizedStringWithMin(1, 120),
+  description: optionalSanitizedString(2_000),
+  capacity: z.coerce.number().int().min(1).max(10_000),
+  startsAt: z.coerce.date(),
+  endsAt: z.coerce.date(),
+  timezone: z.string().max(100).refine(isValidTimeZone, "Invalid timezone"),
+  status: z.enum(VOLUNTEER_NEED_STATUSES).default("OPEN"),
+}).refine((value) => value.endsAt > value.startsAt, {
+  message: "End time must be after start time",
+  path: ["endsAt"],
+});
+
+export const volunteerAssignmentSchema = z.object({
+  needId: associationCuidSchema,
+  userId: associationCuidSchema.optional(),
+  invitedEmail: optionalEmailSchema,
+  status: z.enum(VOLUNTEER_ASSIGNMENT_STATUSES).default("INVITED"),
+}).refine((value) => !!value.userId || !!value.invitedEmail, {
+  message: "A user or invited email is required",
+  path: ["userId"],
+});
+
+export const PUBLIC_CONTENT_TYPES = ["ANNOUNCEMENT", "NEWS"] as const;
+export const PUBLIC_CONTENT_AUDIENCES = ["PUBLIC", "MEMBERS"] as const;
+export const PUBLIC_CONTENT_STATUSES = ["DRAFT", "SCHEDULED", "PUBLISHED", "ARCHIVED"] as const;
+
+export const publicContentSchema = z.object({
+  leagueId: associationCuidSchema,
+  teamId: associationCuidSchema.optional(),
+  type: z.enum(PUBLIC_CONTENT_TYPES),
+  audience: z.enum(PUBLIC_CONTENT_AUDIENCES),
+  status: z.enum(PUBLIC_CONTENT_STATUSES).default("DRAFT"),
+  title: sanitizedStringWithMin(1, 160),
+  slug: z.string().trim().toLowerCase().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(160),
+  excerpt: optionalSanitizedString(500),
+  body: sanitizedStringWithMin(1, 50_000),
+  scheduledAt: z.coerce.date().optional().nullable(),
+}).superRefine((value, context) => {
+  if (value.status === "SCHEDULED" && !value.scheduledAt) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Scheduled content requires a publication time",
+      path: ["scheduledAt"],
+    });
+  }
+});
+
+export const equipmentManagerGearScopeSchema = z.object({
+  leagueId: associationCuidSchema,
+  scopeType: z.enum(["ASSOCIATION", "DIVISION", "TEAM"]),
+  scopeId: associationCuidSchema,
+  teamId: associationCuidSchema.optional(),
+}).superRefine((value, context) => {
+  if (value.scopeType === "TEAM" && !value.teamId) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Team-scoped gear operations require a team ID",
+      path: ["teamId"],
+    });
+  }
+});
+
+export const associationUtilizationQuerySchema = z.object({
+  leagueId: associationCuidSchema,
+  from: z.coerce.date(),
+  to: z.coerce.date(),
+  teamId: associationCuidSchema.optional(),
+  venueId: associationCuidSchema.optional(),
+  surfaceId: associationCuidSchema.optional(),
+  segmentId: associationCuidSchema.optional(),
+  statuses: z.array(z.enum(VENUE_RESERVATION_STATUSES)).max(5).optional(),
+}).refine((value) => value.to > value.from, {
+  message: "Report end must be after report start",
+  path: ["to"],
+});
+
+export type CreateVenueReservationInput = z.input<typeof createVenueReservationSchema>;
+export type AssignVenueReservationInput = z.input<typeof assignVenueReservationSchema>;
+export type VenueReservationLifecycleInput = z.input<typeof venueReservationLifecycleSchema>;
+export type VenueReservationAvailabilityInput = z.input<typeof venueReservationAvailabilitySchema>;
+export type AssociationProfileInput = z.input<typeof associationProfileSchema>;
+export type AssociationResponsibilityInput = z.input<typeof associationResponsibilitySchema>;
+export type VolunteerNeedInput = z.input<typeof volunteerNeedSchema>;
+export type VolunteerAssignmentInput = z.input<typeof volunteerAssignmentSchema>;
+export type PublicContentInput = z.input<typeof publicContentSchema>;
+export type EquipmentManagerGearScopeInput = z.input<typeof equipmentManagerGearScopeSchema>;
+export type AssociationUtilizationQuery = z.input<typeof associationUtilizationQuerySchema>;

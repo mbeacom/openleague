@@ -17,6 +17,9 @@ const { mockPrisma } = vi.hoisted(() => ({
     practiceSession: {
       findMany: vi.fn(),
     },
+    venueReservation: {
+      findMany: vi.fn(),
+    },
     segmentCoexistence: {
       findMany: vi.fn(),
     },
@@ -81,6 +84,7 @@ type EventRow = {
   title: string;
   startAt: Date;
   endAt: Date | null;
+  venueReservationId?: string | null;
 };
 
 type SeasonGameRow = {
@@ -94,6 +98,7 @@ type SeasonGameRow = {
   segment: { name: string } | null;
   homeTeam: { name: string };
   awayTeam: { name: string };
+  venueReservationId?: string | null;
 };
 
 type EventGameRow = {
@@ -110,6 +115,7 @@ type EventGameRow = {
     status: "DRAFT" | "PUBLISHED" | "CANCELED" | "COMPLETED";
     title: string;
   };
+  venueReservationId?: string | null;
 };
 
 type BlockRow = {
@@ -124,6 +130,9 @@ type BlockRow = {
   segment: { name: string } | null;
   recurrenceRule: string | null;
   recurrenceEndDate: Date | null;
+  venue: { timezone: string };
+  intent?: "OFFERING" | "VENUE_ACTIVITY" | "CLOSURE" | "INFORMATION";
+  reservationOccurrences?: Array<{ id: string; startsAt: Date }>;
 };
 
 type PracticeRow = {
@@ -135,9 +144,26 @@ type PracticeRow = {
   surfaceId: string | null;
   segmentId: string | null;
   segment: { name: string } | null;
+  venueReservationId?: string | null;
 };
 
 type CoexistenceRow = { segmentAId: string; segmentBId: string };
+type ReservationRow = {
+  id: string;
+  venueId: string;
+  status: "HELD" | "CONFIRMED" | "RELEASED" | "CANCELED" | "COMPLETED";
+  heldUntil: Date | null;
+  startsAt: Date;
+  endsAt: Date;
+  surfaceId: string | null;
+  segmentId: string | null;
+  segment: { name: string } | null;
+  eventId?: string;
+  seasonGameId?: string;
+  eventGameId?: string;
+  practiceId?: string;
+  sourceScheduleBlockId?: string;
+};
 
 let eventRows: EventRow[];
 let seasonGameRows: SeasonGameRow[];
@@ -145,6 +171,7 @@ let eventGameRows: EventGameRow[];
 let blockRows: BlockRow[];
 let practiceRows: PracticeRow[];
 let coexistenceRows: CoexistenceRow[];
+let reservationRows: ReservationRow[];
 
 function matchesSurfaceOr(rowSurfaceId: string | null, where: any): boolean {
   if (!where.OR) return true; // venue-wide candidate: no surface pre-filter
@@ -171,6 +198,7 @@ function matchesEventCondition(row: EventRow, cond: any): boolean {
 function matchesEventWhere(row: EventRow, where: any): boolean {
   if (row.venueId !== where.venueId) return false;
   if (where.id?.not !== undefined && row.id === where.id.not) return false;
+  if (where.venueReservationId === null && row.venueReservationId) return false;
   return (where.AND ?? []).every((clause: any) =>
     clause.OR.some((cond: any) => matchesEventCondition(row, cond))
   );
@@ -180,6 +208,7 @@ function matchesSeasonGameWhere(row: SeasonGameRow, where: any): boolean {
   if (row.venueId !== where.venueId) return false;
   if (where.status?.in && !where.status.in.includes(row.status)) return false;
   if (where.id?.not !== undefined && row.id === where.id.not) return false;
+  if (where.venueReservationId === null && row.venueReservationId) return false;
   if (!matchesSurfaceOr(row.surfaceId, where)) return false;
   if (!(row.startAt < where.startAt.lt)) return false;
   if (!(row.endAt > where.endAt.gt)) return false;
@@ -191,6 +220,7 @@ function matchesEventGameWhere(row: EventGameRow, where: any): boolean {
   if (row.event.status !== where.event.status) return false;
   if (where.status?.not !== undefined && row.status === where.status.not) return false;
   if (where.id?.not !== undefined && row.id === where.id.not) return false;
+  if (where.venueReservationId === null && row.venueReservationId) return false;
   if (!matchesSurfaceOr(row.surfaceId, where)) return false;
   if (!(row.startAt < where.startAt.lt)) return false;
   if (!(row.endAt > where.endAt.gt)) return false;
@@ -201,6 +231,7 @@ function matchesBlockWhere(row: BlockRow, where: any): boolean {
   if (row.venueId !== where.venueId) return false;
   if (row.status !== where.status) return false;
   if (where.id?.not !== undefined && row.id === where.id.not) return false;
+  if (where.intent?.in && !where.intent.in.includes(row.intent)) return false;
   if (!matchesSurfaceOr(row.surfaceId, where)) return false;
   if (!(row.startsAt < where.startsAt.lt)) return false;
   return (where.AND ?? []).every((clause: any) =>
@@ -215,6 +246,7 @@ function matchesBlockWhere(row: BlockRow, where: any): boolean {
 function matchesPracticeWhere(row: PracticeRow, where: any): boolean {
   if (row.venueId !== where.venueId) return false;
   if (where.id?.not !== undefined && row.id === where.id.not) return false;
+  if (where.venueReservationId === null && row.venueReservationId) return false;
   if (!matchesSurfaceOr(row.surfaceId, where)) return false;
   if (row.startAt === null) return false; // startAt: { not: null }
   if (!(row.startAt < where.startAt.lt)) return false;
@@ -238,6 +270,7 @@ const eventRow = (overrides: Partial<EventRow> = {}): EventRow => ({
   title: "Open Skate",
   startAt: at(10, 30),
   endAt: at(11, 30),
+  venueReservationId: null,
   ...overrides,
 });
 
@@ -251,6 +284,7 @@ const gameRow = (overrides: Partial<SeasonGameRow> = {}): SeasonGameRow => ({
   ...seg(null),
   homeTeam: { name: "Hawks" },
   awayTeam: { name: "Otters" },
+  venueReservationId: null,
   ...overrides,
 });
 
@@ -263,6 +297,7 @@ const eventGameRow = (overrides: Partial<EventGameRow> = {}): EventGameRow => ({
   surfaceId: SURFACE_1,
   ...seg(null),
   event: { venueId: VENUE, status: "PUBLISHED", title: "Summer Classic" },
+  venueReservationId: null,
   ...overrides,
 });
 
@@ -277,6 +312,9 @@ const blockRow = (overrides: Partial<BlockRow> = {}): BlockRow => ({
   ...seg(null),
   recurrenceRule: null,
   recurrenceEndDate: null,
+  venue: { timezone: "UTC" },
+  intent: "VENUE_ACTIVITY",
+  reservationOccurrences: [],
   ...overrides,
 });
 
@@ -286,6 +324,19 @@ const practiceRow = (overrides: Partial<PracticeRow> = {}): PracticeRow => ({
   title: "Morning Skate",
   startAt: at(10, 30),
   duration: 60,
+  surfaceId: SURFACE_1,
+  ...seg(null),
+  venueReservationId: null,
+  ...overrides,
+});
+
+const reservationRow = (overrides: Partial<ReservationRow> = {}): ReservationRow => ({
+  id: "venue-reservation-1",
+  venueId: VENUE,
+  status: "CONFIRMED",
+  heldUntil: null,
+  startsAt: at(10, 20),
+  endsAt: at(11, 20),
   surfaceId: SURFACE_1,
   ...seg(null),
   ...overrides,
@@ -312,6 +363,7 @@ describe("availability engine", () => {
       { segmentAId: SEG_A, segmentBId: SEG_B },
       { segmentAId: SEG_B, segmentBId: SEG_C },
     ];
+    reservationRows = [];
 
     mockPrisma.event.findMany.mockImplementation(async ({ where }: { where: unknown }) =>
       eventRows.filter((row) => matchesEventWhere(row, where))
@@ -329,6 +381,31 @@ describe("availability engine", () => {
     mockPrisma.practiceSession.findMany.mockImplementation(
       async ({ where }: { where: unknown }) =>
         practiceRows.filter((row) => matchesPracticeWhere(row, where))
+    );
+    mockPrisma.venueReservation.findMany.mockImplementation(
+      async ({ where }: { where: any }) =>
+        reservationRows.filter((row) => {
+          if (row.venueId !== where.venueId) return false;
+          if (!where.status.in.includes(row.status)) return false;
+          if (!matchesSurfaceOr(row.surfaceId, where)) return false;
+          if (!(row.startsAt < where.startsAt.lt)) return false;
+          if (!(row.endsAt > where.endsAt.gt)) return false;
+          if (
+            row.status === "HELD"
+            && (!row.heldUntil || row.heldUntil <= where.AND[0].OR[1].heldUntil.gt)
+          ) return false;
+          for (const excluded of where.NOT ?? []) {
+            if (excluded.events?.some.id === row.eventId) return false;
+            if (excluded.seasonGames?.some.id === row.seasonGameId) return false;
+            if (excluded.eventGames?.some.id === row.eventGameId) return false;
+            if (excluded.practiceSessions?.some.id === row.practiceId) return false;
+            if (
+              excluded.sourceScheduleBlockId
+              && excluded.sourceScheduleBlockId === row.sourceScheduleBlockId
+            ) return false;
+          }
+          return true;
+        }),
     );
     mockPrisma.segmentCoexistence.findMany.mockImplementation(
       async ({ where }: { where: any }) =>
@@ -642,6 +719,62 @@ describe("availability engine", () => {
       practiceRows = [practiceRow()];
     });
 
+    describe("feature 007 dual-read compatibility", () => {
+      beforeEach(() => {
+        eventRows = [];
+        seasonGameRows = [];
+        eventGameRows = [];
+        blockRows = [];
+        practiceRows = [];
+        reservationRows = [];
+      });
+
+      it("returns a canonical venue reservation and suppresses its linked legacy aliases", async () => {
+        reservationRows = [reservationRow()];
+        eventRows = [eventRow({ venueReservationId: "venue-reservation-1" })];
+        seasonGameRows = [gameRow({ venueReservationId: "venue-reservation-1" })];
+
+        const conflicts = await findBookingConflicts(
+          candidate({ surfaceId: SURFACE_1 }),
+        );
+
+        expect(conflicts).toEqual([
+          expect.objectContaining({
+            source: "venueReservation",
+            startAt: at(10, 20),
+            endAt: at(11, 20),
+          }),
+        ]);
+      });
+
+      it("continues to return unlinked legacy commitments during rollback", async () => {
+        eventRows = [eventRow()];
+        seasonGameRows = [gameRow()];
+
+        const conflicts = await findBookingConflicts(candidate());
+
+        expect(conflicts.map(({ source }) => source).sort()).toEqual([
+          "event",
+          "seasonGame",
+        ]);
+      });
+
+      it("does not treat requestable offerings as occupancy", async () => {
+        blockRows = [blockRow({ intent: "OFFERING" })];
+
+        await expect(findBookingConflicts(candidate())).resolves.toEqual([]);
+      });
+
+      it("excludes the canonical reservation linked to an edited legacy source", async () => {
+        reservationRows = [reservationRow({ practiceId: "practice-1" })];
+        practiceRows = [practiceRow({ venueReservationId: "venue-reservation-1" })];
+
+        await expect(findBookingConflicts(candidate({
+          excludePracticeId: "practice-1",
+        }))).resolves.toEqual([]);
+      });
+    });
+
     it.each([
       ["excludeEventId", "event-1", "event"],
       ["excludeSeasonGameId", "game-1", "seasonGame"],
@@ -771,6 +904,65 @@ describe("availability engine", () => {
         }),
       ]);
     });
+
+    it("suppresses only the recurring occurrence linked to a canonical reservation", async () => {
+      const linkedStart = utc(2026, 8, 14, 10);
+      seedWeeklyBlock({
+        reservationOccurrences: [
+          { id: "venue-reservation-1", startsAt: linkedStart },
+        ],
+      });
+      reservationRows = [
+        reservationRow({
+          startsAt: linkedStart,
+          endsAt: utc(2026, 8, 14, 11),
+        }),
+      ];
+
+      const bookings = await getVenueBookings({
+        venueId: VENUE,
+        from: utc(2026, 8, 6),
+        to: utc(2026, 8, 21),
+      });
+
+      expect(bookings.map((booking) => [
+        booking.source,
+        booking.startAt.toISOString(),
+      ])).toEqual([
+        ["scheduleBlock", utc(2026, 8, 7, 10).toISOString()],
+        ["venueReservation", linkedStart.toISOString()],
+      ]);
+    });
+
+    it.each(["RELEASED", "CANCELED"] as const)(
+      "keeps a %s reservation authoritative for only its linked occurrence",
+      async (status) => {
+        const linkedStart = utc(2026, 8, 14, 10);
+        seedWeeklyBlock({
+          reservationOccurrences: [
+            { id: "venue-reservation-1", startsAt: linkedStart },
+          ],
+        });
+        reservationRows = [
+          reservationRow({
+            status,
+            startsAt: linkedStart,
+            endsAt: utc(2026, 8, 14, 11),
+          }),
+        ];
+
+        const bookings = await getVenueBookings({
+          venueId: VENUE,
+          from: utc(2026, 8, 6),
+          to: utc(2026, 8, 21),
+        });
+
+        expect(bookings.map((booking) => booking.startAt.toISOString())).toEqual([
+          utc(2026, 8, 7, 10).toISOString(),
+        ]);
+        expect(bookings[0].source).toBe("scheduleBlock");
+      },
+    );
   });
 
   describe("getVenueBookings", () => {

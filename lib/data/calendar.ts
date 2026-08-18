@@ -347,6 +347,7 @@ async function fetchVenueScheduleBlocks(params: {
             endAt: block.endsAt,
             recurrenceRule: block.recurrenceRule,
             recurrenceEndAt: block.recurrenceEndDate,
+            timezone: block.venue.timezone,
           },
           params.from,
           params.to
