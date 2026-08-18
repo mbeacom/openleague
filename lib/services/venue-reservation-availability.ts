@@ -1,5 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { expandRecurrenceWindow } from "@/lib/utils/venue-schedule";
+import { findUnlinkedLegacyBookingConflicts } from "@/lib/utils/availability";
+import type { BookingConflictSource } from "@/types/segments";
 
 const OCCUPYING_STATUSES = ["HELD", "CONFIRMED", "COMPLETED"] as const;
 
@@ -11,14 +13,17 @@ export type VenueReservationAvailabilityCandidate = {
   endsAt: Date;
   now?: Date;
   excludeReservationId?: string;
+  excludeReservationIds?: readonly string[];
 };
 
 export type VenueReservationConflict = {
   id: string;
-  status: "HELD" | "CONFIRMED" | "COMPLETED";
+  source?: BookingConflictSource | "iceTimeRequest";
+  title?: string;
+  status?: "HELD" | "CONFIRMED" | "COMPLETED";
   startsAt: Date;
   endsAt: Date;
-  timezone: string;
+  timezone?: string;
   venueId: string;
   surfaceId: string | null;
   segmentId: string | null;
@@ -29,6 +34,8 @@ export type VenueReservationConflict = {
 };
 
 type ReservationRow = VenueReservationConflict & {
+  status: "HELD" | "CONFIRMED" | "COMPLETED";
+  timezone: string;
   ownerLeagueId: string | null;
   ownerTeamId: string | null;
   ownerVenueOrganizationId: string | null;
@@ -37,6 +44,78 @@ type ReservationRow = VenueReservationConflict & {
 
 function pairKey(a: string, b: string): string {
   return a < b ? `${a}\0${b}` : `${b}\0${a}`;
+}
+
+type VenueReservationWriteCandidate = VenueReservationAvailabilityCandidate & {
+  excludeEventId?: string;
+  excludeSeasonGameId?: string;
+  excludeEventGameId?: string;
+  excludeBlockId?: string;
+  excludePracticeId?: string;
+  excludeRequestId?: string;
+};
+
+/**
+ * Complete dual-read conflict boundary for canonical writes. All queries use
+ * the caller's TransactionClient, so canonical reservations, unlinked legacy
+ * activities, occupying schedule-block occurrences, practices, and accepted
+ * legacy requests are observed in the same serializable transaction.
+ */
+export async function findVenueReservationWriteConflicts(
+  tx: Prisma.TransactionClient,
+  candidate: VenueReservationWriteCandidate,
+): Promise<VenueReservationConflict[]> {
+  const [canonical, legacyBookings, legacyRequests] = await Promise.all([
+    findVenueReservationConflicts(tx, candidate),
+    findUnlinkedLegacyBookingConflicts({
+      venueId: candidate.venueId,
+      surfaceId: candidate.surfaceId,
+      segmentId: candidate.segmentId,
+      startAt: candidate.startsAt,
+      endAt: candidate.endsAt,
+      excludeEventId: candidate.excludeEventId,
+      excludeSeasonGameId: candidate.excludeSeasonGameId,
+      excludeEventGameId: candidate.excludeEventGameId,
+      excludeBlockId: candidate.excludeBlockId,
+      excludePracticeId: candidate.excludePracticeId,
+      excludeReservationIds: candidate.excludeReservationIds
+        ?? (candidate.excludeReservationId ? [candidate.excludeReservationId] : undefined),
+    }, tx),
+    findLegacyAcceptedRequestConflicts(tx, {
+      ...candidate,
+      excludeRequestId: candidate.excludeRequestId,
+    }),
+  ]);
+
+  return [
+    ...canonical.map((conflict) => ({
+      ...conflict,
+      source: "venueReservation" as const,
+      title: "Reserved venue time",
+    })),
+    ...legacyBookings.map((conflict, index) => ({
+      id: `legacy:${conflict.source}:${index}:${conflict.startAt.toISOString()}`,
+      source: conflict.source,
+      title: conflict.title,
+      status: "CONFIRMED" as const,
+      startsAt: conflict.startAt,
+      endsAt: conflict.endAt ?? conflict.startAt,
+      venueId: candidate.venueId,
+      surfaceId: conflict.surfaceId,
+      segmentId: conflict.segmentId,
+    })),
+    ...legacyRequests.map((conflict) => ({
+      id: conflict.id,
+      source: "iceTimeRequest" as const,
+      title: "Accepted ice-time request",
+      status: "CONFIRMED" as const,
+      startsAt: candidate.startsAt,
+      endsAt: candidate.endsAt,
+      venueId: candidate.venueId,
+      surfaceId: candidate.surfaceId ?? null,
+      segmentId: candidate.segmentId ?? null,
+    })),
+  ];
 }
 
 export function venueReservationScopesConflict(
@@ -95,8 +174,10 @@ export async function findVenueReservationConflicts(
   const rows = await tx.venueReservation.findMany({
     where: {
       venueId: candidate.venueId,
-      ...(candidate.excludeReservationId
-        ? { id: { not: candidate.excludeReservationId } }
+      ...(candidate.excludeReservationIds?.length
+        ? { id: { notIn: [...candidate.excludeReservationIds] } }
+        : candidate.excludeReservationId
+          ? { id: { not: candidate.excludeReservationId } }
         : {}),
       startsAt: { lt: candidate.endsAt },
       endsAt: { gt: candidate.startsAt },

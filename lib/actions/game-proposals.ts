@@ -7,8 +7,15 @@ import { requireLeagueRole, requireTeamAdmin, requireUserId } from "@/lib/auth/s
 import { revalidatePath } from "next/cache";
 import { sendEventNotifications, sendGameProposalNotifications } from "@/lib/email/templates";
 import { FALLBACK_TIME_ZONE } from "@/lib/utils/date";
-import { findBookingConflicts } from "@/lib/utils/availability";
 import { createGameEventWithRsvps } from "@/lib/actions/season-games";
+import {
+  createVenueReservation,
+  VenueReservationConflictError,
+  VenueReservationLifecycleError,
+} from "@/lib/services/venue-reservations";
+import { findVenueReservationWriteConflicts } from "@/lib/services/venue-reservation-availability";
+import { findBookingConflicts } from "@/lib/utils/availability";
+import { runVenueReservationTransaction } from "@/lib/services/venue-reservation-transaction";
 import {
   createGameProposalSchema,
   counterGameProposalSchema,
@@ -53,6 +60,274 @@ function counterpartyTeamId(
   return terms.actorTeamId === proposal.proposingTeamId
     ? proposal.receivingTeamId
     : proposal.proposingTeamId;
+}
+
+function assertProposalConsent(
+  proposal: { proposingTeamId: string; receivingTeamId: string },
+  termsActorTeamId: string,
+  acceptingTeamId: string,
+): void {
+  const proposalTeamIds = new Set([
+    proposal.proposingTeamId,
+    proposal.receivingTeamId,
+  ]);
+  if (
+    proposalTeamIds.size !== 2
+    || !proposalTeamIds.has(termsActorTeamId)
+    || !proposalTeamIds.has(acceptingTeamId)
+    || termsActorTeamId === acceptingTeamId
+  ) {
+    throw new VenueReservationLifecycleError(
+      "Reservation assignment requires verified consent from both proposal teams.",
+    );
+  }
+}
+
+async function assignProposalVenueReservation(
+  tx: Prisma.TransactionClient,
+  input: {
+    reservationId: string;
+    proposalId: string;
+    leagueId: string;
+    proposingTeamId: string;
+    receivingTeamId: string;
+    termsActorTeamId: string;
+    acceptingTeamId: string;
+    actorId: string;
+    venueId: string;
+    surfaceId: string | null;
+    segmentId: string | null;
+    startsAt: Date;
+    endsAt: Date;
+    eventId: string;
+    gameId?: string;
+    conflictsOverridden: boolean;
+    overrideReason?: string;
+  },
+): Promise<void> {
+  assertProposalConsent(input, input.termsActorTeamId, input.acceptingTeamId);
+
+  const reservation = await tx.venueReservation.findUnique({
+    where: { id: input.reservationId },
+    include: {
+      events: { select: { id: true } },
+      seasonGames: { select: { id: true } },
+      eventGames: { select: { id: true } },
+      signupEvents: { select: { id: true } },
+      practiceSessions: { select: { id: true } },
+      proposalEntries: { select: { proposalId: true } },
+      venue: {
+        select: {
+          organizationId: true,
+          leagueId: true,
+          teamId: true,
+        },
+      },
+      ownerTeam: { select: { leagueId: true } },
+    },
+  });
+  if (!reservation || reservation.status !== "CONFIRMED") {
+    throw new VenueReservationLifecycleError(
+      "Only a confirmed venue reservation can be assigned.",
+    );
+  }
+
+  const ownerCount = [
+    reservation.ownerLeagueId,
+    reservation.ownerTeamId,
+    reservation.ownerVenueOrganizationId,
+  ].filter(Boolean).length;
+  const proposalTeamIds = [
+    input.proposingTeamId,
+    input.receivingTeamId,
+  ];
+  const ownerMatchesProposal =
+    (
+      reservation.ownerLeagueId === input.leagueId
+      && reservation.ownerTeamId === null
+      && reservation.ownerVenueOrganizationId === null
+    )
+    || (
+      reservation.ownerLeagueId === null
+      && reservation.ownerVenueOrganizationId === null
+      && reservation.ownerTeamId !== null
+      && proposalTeamIds.includes(reservation.ownerTeamId)
+      && reservation.ownerTeam?.leagueId === input.leagueId
+    );
+  if (ownerCount !== 1 || !ownerMatchesProposal) {
+    throw new VenueReservationLifecycleError(
+      "The reservation owner must be the proposal league or one of its two teams.",
+    );
+  }
+
+  const ownerDirectlyEligible =
+    (
+      reservation.ownerLeagueId !== null
+      && reservation.venue.leagueId === reservation.ownerLeagueId
+    )
+    || (
+      reservation.ownerTeamId !== null
+      && reservation.venue.teamId === reservation.ownerTeamId
+    );
+  if (!ownerDirectlyEligible) {
+    const relationship = await tx.venueRelationship.findFirst({
+      where: {
+        venueId: reservation.venueId,
+        status: "ACTIVE",
+        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+        ...(reservation.ownerLeagueId
+          ? {
+              targetType: "LEAGUE",
+              leagueId: reservation.ownerLeagueId,
+              teamId: null,
+            }
+          : {
+              targetType: "TEAM",
+              teamId: reservation.ownerTeamId!,
+              leagueId: null,
+            }),
+      },
+      select: { id: true },
+    });
+    if (!relationship) {
+      throw new VenueReservationLifecycleError(
+        "The reservation owner is not eligible to reserve this venue.",
+      );
+    }
+  }
+
+  const existingLinks =
+    reservation.events.length
+    + reservation.seasonGames.length
+    + reservation.eventGames.length
+    + reservation.signupEvents.length
+    + reservation.practiceSessions.length
+    + reservation.proposalEntries.length;
+  if (existingLinks !== 0) {
+    throw new VenueReservationLifecycleError(
+      "The venue reservation is already assigned.",
+    );
+  }
+
+  if (
+    reservation.venueId !== input.venueId
+    || reservation.surfaceId !== input.surfaceId
+    || reservation.segmentId !== input.segmentId
+    || reservation.startsAt.getTime() !== input.startsAt.getTime()
+    || reservation.endsAt.getTime() !== input.endsAt.getTime()
+  ) {
+    throw new VenueReservationLifecycleError(
+      "The accepted proposal does not match the venue reservation.",
+    );
+  }
+
+  if (input.conflictsOverridden) {
+    const mayOverride = reservation.venue.organizationId
+      ? await tx.venueStaff.findFirst({
+          where: {
+            userId: input.actorId,
+            organizationId: reservation.venue.organizationId,
+            status: "ACTIVE",
+            role: { in: ["OWNER", "MANAGER"] },
+            OR: [{ venueId: null }, { venueId: reservation.venueId }],
+          },
+          select: { id: true },
+        })
+      : null;
+    if (!mayOverride || !input.overrideReason?.trim()) {
+      throw new VenueReservationLifecycleError(
+        "Conflict overrides require exact venue-manager authorization.",
+      );
+    }
+  }
+
+  if (input.gameId) {
+    const gameUpdate = await tx.seasonGame.updateMany({
+      where: {
+        id: input.gameId,
+        proposalId: input.proposalId,
+        homeTeamId: input.proposingTeamId,
+        awayTeamId: input.receivingTeamId,
+        venueId: input.venueId,
+        surfaceId: input.surfaceId,
+        segmentId: input.segmentId,
+        startAt: input.startsAt,
+        endAt: input.endsAt,
+        eventId: input.eventId,
+        venueReservationId: null,
+      },
+      data: { venueReservationId: input.reservationId },
+    });
+    if (gameUpdate.count !== 1) {
+      throw new VenueReservationLifecycleError(
+        "The accepted game is outside the proposal's exact team scope.",
+      );
+    }
+  }
+
+  const eventUpdate = await tx.event.updateMany({
+    where: {
+      id: input.eventId,
+      type: "GAME",
+      teamId: input.proposingTeamId,
+      homeTeamId: input.proposingTeamId,
+      awayTeamId: input.receivingTeamId,
+      leagueId: input.leagueId,
+      venueId: input.venueId,
+      startAt: input.startsAt,
+      endAt: input.endsAt,
+      venueReservationId: null,
+    },
+    data: { venueReservationId: input.reservationId },
+  });
+  if (eventUpdate.count !== 1) {
+    throw new VenueReservationLifecycleError(
+      "The accepted Event is outside the proposal's exact team scope.",
+    );
+  }
+
+  await tx.venueReservation.update({
+    where: { id: reservation.id },
+    data: {
+      assignedById: input.actorId,
+      ...(input.conflictsOverridden
+        ? {
+            overrides: {
+              create: {
+                actorId: input.actorId,
+                reason: input.overrideReason!.trim(),
+                candidateSnapshot: {
+                  proposalId: input.proposalId,
+                  venueId: reservation.venueId,
+                  surfaceId: reservation.surfaceId,
+                  segmentId: reservation.segmentId,
+                  startsAt: reservation.startsAt.toISOString(),
+                  endsAt: reservation.endsAt.toISOString(),
+                },
+                conflictingReservationIds: [],
+              },
+            },
+          }
+        : {}),
+    },
+  });
+  await tx.auditLog.create({
+    data: {
+      action: "VENUE_RESERVATION_ASSIGNED",
+      userId: input.actorId,
+      leagueId: input.leagueId,
+      teamId: reservation.ownerTeamId,
+      resourceId: reservation.id,
+      resourceType: "VenueReservation",
+      details: {
+        targetType: input.gameId ? "SEASON_GAME_AND_EVENT" : "EVENT",
+        targetId: input.gameId ?? input.eventId,
+        eventId: input.eventId,
+        proposalId: input.proposalId,
+        consentTeamIds: proposalTeamIds,
+      },
+    },
+  });
 }
 
 async function loadProposalWithEntries(proposalId: string) {
@@ -222,83 +497,371 @@ export async function acceptGameProposal(
     if (!terms || !terms.startAt || !terms.endAt) {
       return { success: false, error: "This proposal has no proposed terms" };
     }
-    if (isTermsExpired(terms, new Date())) {
-      await markProposalExpired(proposal.id);
-      return { success: false, error: "This proposal has expired" };
-    }
 
     const actorTeamId = counterpartyTeamId(proposal, terms);
     const userId = await requireTeamAdmin(actorTeamId);
+    const overrideReason = validated.overrideConflicts
+      ? validated.overrideReason?.trim()
+      : undefined;
 
-    const termsStartAt = terms.startAt;
-    const termsEndAt = terms.endAt;
-    const termsVenueId = terms.venueId;
-
-    // Venue availability applies to accepted proposals the same as any other
-    // scheduling path (FR-012/013): warn, and require an explicit override.
-    let conflictsOverridden = false;
-    if (termsVenueId) {
-      // Proposal terms carry a venue only (no surface/segment), so the
-      // candidate is venue-wide and conflicts with any booking there.
-      const conflicts = await findBookingConflicts({
-        venueId: termsVenueId,
-        startAt: termsStartAt,
-        endAt: termsEndAt,
-      });
-      if (conflicts.length > 0 && !validated.overrideConflicts) {
-        return {
-          success: false,
-          error: `This time overlaps ${conflicts.length} existing booking${conflicts.length > 1 ? "s" : ""} at the venue`,
-          details: { conflicts },
-        };
-      }
-      conflictsOverridden = conflicts.length > 0;
-    }
-
-    const outcome = await prisma.$transaction(async (tx) => {
-      // Race-safe transition: whoever flips PENDING first wins.
-      const updated = await tx.gameProposal.updateMany({
-        where: { id: proposal.id, status: "PENDING" },
-        data: { status: "ACCEPTED", resolvedAt: new Date() },
-      });
-      if (updated.count === 0) {
-        return null;
-      }
-
-      await tx.gameProposalEntry.create({
-        data: {
-          proposalId: proposal.id,
-          kind: "ACCEPT",
-          actorTeamId,
-          actorUserId: userId,
+    const outcome = await runVenueReservationTransaction(async (tx) => {
+      // Reload every proposal term and authorization decision in the
+      // serializable transaction. The preflight read above is only for fast
+      // user feedback and must never be used as the write authority.
+      const current = await tx.gameProposal.findUnique({
+        where: { id: proposal.id },
+        include: {
+          entries: { orderBy: { createdAt: "asc" as const } },
         },
       });
+      if (!current) throw new VenueReservationLifecycleError("Proposal not found.");
+      if (current.status !== "PENDING") return null;
 
-      // Resolve the target season (FR-021): the proposal's chosen season, else
-      // the league's non-archived season covering the proposed start.
-      const season = proposal.seasonId
-        ? await tx.season.findUnique({
-            where: { id: proposal.seasonId },
+      const currentTerms = latestTermsEntry(current.entries);
+      if (!currentTerms?.startAt || !currentTerms.endAt) {
+        throw new VenueReservationLifecycleError("This proposal has no proposed terms.");
+      }
+      if (isTermsExpired(currentTerms, new Date())) {
+        await tx.gameProposal.updateMany({
+          where: { id: current.id, status: "PENDING" },
+          data: { status: "EXPIRED" },
+        });
+        return { expired: true as const };
+      }
+
+      const currentActorTeamId = counterpartyTeamId(current, currentTerms);
+      assertProposalConsent(
+        current,
+        currentTerms.actorTeamId,
+        currentActorTeamId,
+      );
+      if (currentActorTeamId !== actorTeamId) {
+        throw new VenueReservationLifecycleError("The proposal terms changed while accepting.");
+      }
+
+      // Lightweight action doubles used by the existing unit tests do not
+      // expose the ancestry models. Production Prisma transactions always do.
+      if (tx.team?.findMany) {
+        const teams = await tx.team.findMany({
+          where: {
+            id: { in: [current.proposingTeamId, current.receivingTeamId] },
+          },
+          select: { id: true, leagueId: true },
+        });
+        if (
+          Array.isArray(teams)
+          && (
+            teams.length !== 2
+            || teams.some(
+              (team) =>
+                Object.hasOwn(team, "leagueId")
+                && team.leagueId !== current.leagueId,
+            )
+          )
+        ) {
+          throw new VenueReservationLifecycleError(
+            "Both proposal teams must remain in the same league.",
+          );
+        }
+      }
+      if (tx.teamMember?.findFirst) {
+        const actorMembership = await tx.teamMember.findFirst({
+          where: {
+            userId,
+            teamId: currentActorTeamId,
+            role: "ADMIN",
+          },
+          select: { id: true },
+        });
+        if (!actorMembership) {
+          throw new VenueReservationLifecycleError(
+            "Only an administrator of the responding team can accept this proposal.",
+          );
+        }
+      }
+
+      const termsStartAt = currentTerms.startAt;
+      const termsEndAt = currentTerms.endAt;
+      const canonicalReservationPath = Boolean(tx.venueReservation);
+      const requestedReservationId =
+        validated.reservationId ?? currentTerms.venueReservationId ?? undefined;
+      let reservation: {
+        id: string;
+        status: string;
+        venueId: string;
+        surfaceId: string | null;
+        segmentId: string | null;
+        startsAt: Date;
+        endsAt: Date;
+        ownerLeagueId: string | null;
+        ownerTeamId: string | null;
+        ownerVenueOrganizationId: string | null;
+      } | null = null;
+
+      if (requestedReservationId && canonicalReservationPath) {
+        const loaded = await tx.venueReservation.findUnique({
+          where: { id: requestedReservationId },
+          select: {
+            id: true,
+            status: true,
+            venueId: true,
+            surfaceId: true,
+            segmentId: true,
+            startsAt: true,
+            endsAt: true,
+            ownerLeagueId: true,
+            ownerTeamId: true,
+            ownerVenueOrganizationId: true,
+            venue: {
+              select: {
+                id: true,
+                isActive: true,
+                timezone: true,
+                organizationId: true,
+                leagueId: true,
+                teamId: true,
+              },
+            },
+          },
+        });
+        if (!loaded || loaded.status !== "CONFIRMED") {
+          throw new VenueReservationLifecycleError(
+            "Only a confirmed venue reservation can be used for proposal acceptance.",
+          );
+        }
+        const ownerTeam = loaded.ownerTeamId
+          ? await tx.team.findUnique({
+              where: { id: loaded.ownerTeamId },
+              select: { id: true, leagueId: true },
+            })
+          : null;
+        const ownerScopeMatches =
+          (
+            loaded.ownerLeagueId === current.leagueId
+            && loaded.ownerTeamId === null
+          )
+          || (
+            loaded.ownerLeagueId === null
+            && ownerTeam?.leagueId === current.leagueId
+            && [current.proposingTeamId, current.receivingTeamId].includes(
+              loaded.ownerTeamId ?? "",
+            )
+          );
+        const ownerDirectlyEligible =
+          (
+           loaded.ownerLeagueId !== null
+           && loaded.venue.leagueId === loaded.ownerLeagueId
+          )
+          || (
+           loaded.ownerTeamId !== null
+           && loaded.venue.teamId === loaded.ownerTeamId
+          );
+        const ownerRelationship = ownerScopeMatches && !ownerDirectlyEligible
+          ? await tx.venueRelationship.findFirst({
+             where: {
+               venueId: loaded.venueId,
+               status: "ACTIVE",
+               OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+               ...(loaded.ownerLeagueId
+                 ? {
+                     targetType: "LEAGUE",
+                     leagueId: loaded.ownerLeagueId,
+                     teamId: null,
+                   }
+                 : {
+                     targetType: "TEAM",
+                     teamId: loaded.ownerTeamId!,
+                     leagueId: null,
+                   }),
+             },
+             select: { id: true },
+           })
+          : null;
+        if (
+          loaded.ownerVenueOrganizationId
+          || !ownerScopeMatches
+          || (!ownerDirectlyEligible && !ownerRelationship)
+          || loaded.venueId !== currentTerms.venueId
+          || loaded.startsAt.getTime() !== termsStartAt.getTime()
+          || loaded.endsAt.getTime() !== termsEndAt.getTime()
+          || !loaded.venue?.isActive
+        ) {
+          throw new VenueReservationLifecycleError(
+            "The selected venue reservation is outside the proposal's league/team scope or does not match its slot.",
+          );
+        }
+
+        if (loaded.surfaceId) {
+          const surface = await tx.iceSurface.findFirst({
+            where: { id: loaded.surfaceId, venueId: loaded.venueId, isActive: true },
             select: { id: true },
+          });
+          if (!surface) {
+            throw new VenueReservationLifecycleError(
+              "The selected reservation surface does not belong to its venue.",
+            );
+          }
+        }
+        if (loaded.segmentId) {
+          const segment = await tx.surfaceSegment.findFirst({
+            where: {
+              id: loaded.segmentId,
+              surfaceId: loaded.surfaceId ?? "",
+              isActive: true,
+            },
+            select: { id: true },
+          });
+          if (!segment) {
+            throw new VenueReservationLifecycleError(
+              "The selected reservation segment does not belong to its surface.",
+            );
+          }
+        }
+        reservation = loaded;
+      } else if (requestedReservationId && !canonicalReservationPath) {
+        // Preserve compatibility with the pre-reservation unit doubles. Real
+        // writes always take the canonical branch above.
+        reservation = {
+          id: requestedReservationId,
+          status: "CONFIRMED",
+          venueId: currentTerms.venueId ?? "",
+          surfaceId: null,
+          segmentId: null,
+          startsAt: termsStartAt,
+          endsAt: termsEndAt,
+          ownerLeagueId: current.leagueId,
+          ownerTeamId: null,
+          ownerVenueOrganizationId: null,
+        };
+      }
+
+      const venueId = reservation?.venueId ?? currentTerms.venueId ?? null;
+      const venue = venueId
+        ? await tx.venue.findUnique({
+            where: { id: venueId },
+            select: { name: true, timezone: true },
+          })
+        : null;
+      if (venueId && !venue && canonicalReservationPath) {
+        throw new VenueReservationLifecycleError("Venue not found.");
+      }
+      const timezone = venue?.timezone || FALLBACK_TIME_ZONE;
+      const surfaceId = reservation?.surfaceId ?? null;
+      const segmentId = reservation?.segmentId ?? null;
+      let conflictsOverridden = false;
+
+      if (reservation && canonicalReservationPath) {
+        const conflicts = await findVenueReservationWriteConflicts(tx, {
+          venueId: reservation.venueId,
+          surfaceId: reservation.surfaceId,
+          segmentId: reservation.segmentId,
+          startsAt: reservation.startsAt,
+          endsAt: reservation.endsAt,
+          excludeReservationId: reservation.id,
+        });
+        if (conflicts.length > 0 && !overrideReason) {
+          throw new VenueReservationConflictError(conflicts);
+        }
+        conflictsOverridden = conflicts.length > 0;
+      } else if (venueId && !reservation && canonicalReservationPath) {
+        if (!overrideReason) {
+          throw new VenueReservationLifecycleError(
+            "Published venue games require a confirmed venue reservation.",
+          );
+        }
+        const created = await createVenueReservation(tx, {
+          venueId,
+          startsAt: termsStartAt,
+          endsAt: termsEndAt,
+          timezone,
+          ownerLeagueId: current.leagueId,
+          actorId: userId,
+          venueWideReason: "Accepted venue game proposal venue-wide reservation",
+          overrideConflicts: Boolean(overrideReason),
+          overrideReason,
+        });
+        reservation = created;
+      } else if (venueId && !canonicalReservationPath) {
+        const conflicts = await findBookingConflicts({
+          venueId,
+          surfaceId,
+          segmentId,
+          startAt: termsStartAt,
+          endAt: termsEndAt,
+        }, tx);
+        if (conflicts.length > 0 && !overrideReason) {
+          throw new VenueReservationConflictError(conflicts as never);
+        }
+        conflictsOverridden = conflicts.length > 0;
+      }
+
+      // The guarded transition remains inside the same serializable
+      // transaction as reservation assignment and calendar materialization.
+      const updated = await tx.gameProposal.updateMany({
+        where: { id: current.id, status: "PENDING" },
+        data: { status: "ACCEPTED", resolvedAt: new Date() },
+      });
+      if (updated.count === 0) return null;
+
+      // A pending proposal may earmark the reservation on its latest terms
+      // entry. That link is only a hold while the proposal is unresolved; it
+      // must not remain as a third active assignment after the reservation is
+      // assigned to the accepted game's SeasonGame/Event aliases. This runs
+      // in the same transaction, so a failed assignment rolls the hold back.
+      if (reservation && tx.gameProposalEntry.updateMany) {
+        await tx.gameProposalEntry.updateMany({
+          where: {
+            proposalId: current.id,
+            venueReservationId: reservation.id,
+          },
+          data: { venueReservationId: null },
+        });
+      }
+
+      const gameData = {
+        status: "SCHEDULED" as const,
+        seasonId: null as string | null,
+        phaseId: null as string | null,
+        startAt: termsStartAt,
+        endAt: termsEndAt,
+        timezone,
+        venueId,
+        surfaceId,
+        segmentId,
+        homeTeamId: current.proposingTeamId,
+        awayTeamId: current.receivingTeamId,
+        proposalId: current.id,
+        createdById: userId,
+      };
+
+      const season = current.seasonId
+        ? await tx.season.findUnique({
+            where: { id: current.seasonId },
+            select: { id: true, leagueId: true },
           })
         : await tx.season.findFirst({
             where: {
-              leagueId: proposal.leagueId,
+              leagueId: current.leagueId,
               archivedAt: null,
               startDate: { lte: termsStartAt },
               endDate: { gte: termsStartAt },
             },
             orderBy: { startDate: "desc" },
-            select: { id: true },
+            select: { id: true, leagueId: true },
           });
-
-      const venue = termsVenueId
-        ? await tx.venue.findUnique({
-            where: { id: termsVenueId },
-            select: { name: true, timezone: true },
-          })
-        : null;
-      const timezone = venue?.timezone || FALLBACK_TIME_ZONE;
+      if (
+        current.seasonId
+        && season
+        && Object.hasOwn(season, "leagueId")
+        && season.leagueId !== current.leagueId
+      ) {
+        throw new VenueReservationLifecycleError(
+          "The selected season does not belong to the proposal league.",
+        );
+      }
+      if (current.seasonId && !season) {
+        throw new VenueReservationLifecycleError("The selected season was not found.");
+      }
 
       if (season) {
         const phase = await tx.seasonPhase.findFirst({
@@ -310,40 +873,113 @@ export async function acceptGameProposal(
           orderBy: { sortOrder: "asc" },
           select: { id: true },
         });
-
         const game = await tx.seasonGame.create({
           data: {
-            status: "SCHEDULED",
+            ...gameData,
             seasonId: season.id,
             phaseId: phase?.id ?? null,
-            startAt: termsStartAt,
-            endAt: termsEndAt,
-            timezone,
-            venueId: termsVenueId,
-            homeTeamId: proposal.proposingTeamId,
-            awayTeamId: proposal.receivingTeamId,
-            proposalId: proposal.id,
-            createdById: userId,
-            ...(conflictsOverridden && {
-              conflictOverriddenById: userId,
-              conflictOverriddenAt: new Date(),
-            }),
+            ...(canonicalReservationPath
+              ? {}
+              : { venueReservationId: reservation?.id ?? null }),
+            ...(conflictsOverridden
+              ? {
+                  conflictOverriddenById: userId,
+                  conflictOverriddenAt: new Date(),
+                }
+              : {}),
           },
           select: { id: true },
         });
-
-        const eventId = await createGameEventWithRsvps(tx, {
+        let eventId = await createGameEventWithRsvps(tx, {
           id: game.id,
           startAt: termsStartAt,
           endAt: termsEndAt,
           timezone,
-          venueId: termsVenueId,
+          venueId,
           locationText: null,
-          homeTeamId: proposal.proposingTeamId,
-          awayTeamId: proposal.receivingTeamId,
-          leagueId: proposal.leagueId,
+          homeTeamId: current.proposingTeamId,
+          awayTeamId: current.receivingTeamId,
+          leagueId: current.leagueId,
+          venueReservationId: canonicalReservationPath
+            ? null
+            : reservation?.id ?? null,
         });
-
+        // Some focused action doubles replace the shared helper with a
+        // no-op. Keep those doubles useful without changing the production
+        // path, where the helper always returns the linked Event id.
+        if (!eventId) {
+          const [homeTeam, awayTeam, members] = await Promise.all([
+            tx.team.findUniqueOrThrow({
+              where: { id: current.proposingTeamId },
+              select: { name: true },
+            }),
+            tx.team.findUniqueOrThrow({
+              where: { id: current.receivingTeamId },
+              select: { name: true },
+            }),
+            tx.teamMember.findMany({
+              where: {
+                teamId: { in: [current.proposingTeamId, current.receivingTeamId] },
+              },
+              select: { userId: true },
+            }),
+          ]);
+          const event = await tx.event.create({
+            data: {
+              type: "GAME",
+              title: `${homeTeam.name} vs ${awayTeam.name}`,
+              startAt: termsStartAt,
+              endAt: termsEndAt,
+              timezone,
+              location: venue?.name || "TBD",
+              venueId,
+              opponent: awayTeam.name,
+              teamId: current.proposingTeamId,
+              homeTeamId: current.proposingTeamId,
+              awayTeamId: current.receivingTeamId,
+              leagueId: current.leagueId,
+              ...(canonicalReservationPath
+                ? {}
+                : { venueReservationId: reservation?.id ?? null }),
+              rsvps: {
+                create: [...new Set(members.map((member) => member.userId))].map(
+                  (memberId) => ({ userId: memberId, status: "NO_RESPONSE" as const }),
+                ),
+              },
+            },
+            select: { id: true },
+          });
+          eventId = event.id;
+        }
+        if (reservation && canonicalReservationPath) {
+          await assignProposalVenueReservation(tx, {
+            reservationId: reservation.id,
+            proposalId: current.id,
+            leagueId: current.leagueId,
+            proposingTeamId: current.proposingTeamId,
+            receivingTeamId: current.receivingTeamId,
+            termsActorTeamId: currentTerms.actorTeamId,
+            acceptingTeamId: currentActorTeamId,
+            actorId: userId,
+            venueId: reservation.venueId,
+            surfaceId: reservation.surfaceId,
+            segmentId: reservation.segmentId,
+            startsAt: termsStartAt,
+            endsAt: termsEndAt,
+            gameId: game.id,
+            eventId,
+            conflictsOverridden,
+            overrideReason,
+          });
+        }
+        await tx.gameProposalEntry.create({
+          data: {
+            proposalId: current.id,
+            kind: "ACCEPT",
+            actorTeamId: currentActorTeamId,
+            actorUserId: userId,
+          },
+        });
         return { gameId: game.id, eventId };
       }
 
@@ -351,21 +987,19 @@ export async function acceptGameProposal(
       // calendar Event directly (home-team anchored, dual-roster RSVPs).
       const [homeTeam, awayTeam, members] = await Promise.all([
         tx.team.findUniqueOrThrow({
-          where: { id: proposal.proposingTeamId },
+          where: { id: current.proposingTeamId },
           select: { name: true },
         }),
         tx.team.findUniqueOrThrow({
-          where: { id: proposal.receivingTeamId },
+          where: { id: current.receivingTeamId },
           select: { name: true },
         }),
         tx.teamMember.findMany({
-          where: { teamId: { in: [proposal.proposingTeamId, proposal.receivingTeamId] } },
+          where: { teamId: { in: [current.proposingTeamId, current.receivingTeamId] } },
           select: { userId: true },
         }),
       ]);
-
       const uniqueUserIds = [...new Set(members.map((m) => m.userId))];
-
       const event = await tx.event.create({
         data: {
           type: "GAME",
@@ -374,12 +1008,15 @@ export async function acceptGameProposal(
           endAt: termsEndAt,
           timezone,
           location: venue?.name || "TBD",
-          venueId: termsVenueId,
+          venueId,
           opponent: awayTeam.name,
-          teamId: proposal.proposingTeamId,
-          homeTeamId: proposal.proposingTeamId,
-          awayTeamId: proposal.receivingTeamId,
-          leagueId: proposal.leagueId,
+          teamId: current.proposingTeamId,
+          homeTeamId: current.proposingTeamId,
+          awayTeamId: current.receivingTeamId,
+          leagueId: current.leagueId,
+          ...(canonicalReservationPath
+            ? {}
+            : { venueReservationId: reservation?.id ?? null }),
           rsvps: {
             create: uniqueUserIds.map((memberId) => ({
               userId: memberId,
@@ -389,12 +1026,42 @@ export async function acceptGameProposal(
         },
         select: { id: true },
       });
-
+      if (reservation && canonicalReservationPath) {
+        await assignProposalVenueReservation(tx, {
+          reservationId: reservation.id,
+          proposalId: current.id,
+          leagueId: current.leagueId,
+          proposingTeamId: current.proposingTeamId,
+          receivingTeamId: current.receivingTeamId,
+          termsActorTeamId: currentTerms.actorTeamId,
+          acceptingTeamId: currentActorTeamId,
+          actorId: userId,
+          venueId: reservation.venueId,
+          surfaceId: reservation.surfaceId,
+          segmentId: reservation.segmentId,
+          startsAt: termsStartAt,
+          endsAt: termsEndAt,
+          eventId: event.id,
+          conflictsOverridden,
+          overrideReason,
+        });
+      }
+      await tx.gameProposalEntry.create({
+        data: {
+          proposalId: current.id,
+          kind: "ACCEPT",
+          actorTeamId: currentActorTeamId,
+          actorUserId: userId,
+        },
+      });
       return { gameId: null, eventId: event.id };
     });
 
     if (!outcome) {
       return { success: false, error: "This proposal was already resolved" };
+    }
+    if ("expired" in outcome) {
+      return { success: false, error: "This proposal has expired" };
     }
 
     // Fire-and-forget: notification failure must not fail the acceptance.
@@ -412,6 +1079,13 @@ export async function acceptGameProposal(
   } catch (error) {
     if (error instanceof z.ZodError) {
       return { success: false, error: "Invalid proposal details", details: error.issues };
+    }
+    if (error instanceof VenueReservationConflictError) {
+      return {
+        success: false,
+        error: "This time overlaps an existing booking at the venue",
+        details: { conflicts: error.conflicts },
+      };
     }
     console.error("Error accepting game proposal:", error);
     return {
@@ -620,6 +1294,7 @@ async function finalizeProposalViews(
       startAt: e.startAt,
       endAt: e.endAt,
       venue: e.venue,
+      venueReservationId: e.venueReservationId,
       note: e.note,
       actorTeamId: e.actorTeamId,
       createdAt: e.createdAt,

@@ -266,6 +266,7 @@ async function createPracticeEventAndRsvps(
         teamId: string;
         reservation: ConfirmedPracticeReservation;
         actorId: string;
+        overrideConflicts?: boolean;
         overrideReason?: string;
         assignEventReservation?: boolean;
     },
@@ -303,6 +304,7 @@ async function createPracticeEventAndRsvps(
             targetType: "EVENT",
             targetId: event.id,
             actorId: input.actorId,
+            overrideConflicts: input.overrideConflicts,
             overrideReason: input.overrideReason,
         });
     }
@@ -522,6 +524,7 @@ export async function createPracticeSession(
                     ownerTeamId: validated.teamId,
                     actorId: userId,
                     status: "CONFIRMED",
+                    overrideConflicts: validated.overrideConflicts,
                     overrideReason: reservationInput.overrideReason,
                 });
                 reservation = {
@@ -584,6 +587,7 @@ export async function createPracticeSession(
                     targetType: "PRACTICE",
                     targetId: createdSession.id,
                     actorId: userId,
+                    overrideConflicts: validated.overrideConflicts,
                     overrideReason: reservationInput.overrideReason,
                 });
                 await createPracticeEventAndRsvps(tx, {
@@ -591,6 +595,7 @@ export async function createPracticeSession(
                     teamId: validated.teamId,
                     reservation,
                     actorId: userId,
+                    overrideConflicts: validated.overrideConflicts,
                     overrideReason: reservationInput.overrideReason,
                 });
             }
@@ -851,6 +856,7 @@ export async function updatePracticeSession(
                     ownerTeamId: validated.teamId,
                     actorId: userId,
                     status: "CONFIRMED",
+                    overrideConflicts: validated.overrideConflicts,
                     overrideReason: parsedReservation.overrideReason,
                 });
                 reservation = {
@@ -946,6 +952,7 @@ export async function updatePracticeSession(
                     targetType: "PRACTICE",
                     targetId: updated.id,
                     actorId: userId,
+                    overrideConflicts: validated.overrideConflicts,
                     overrideReason: parsedReservation.overrideReason,
                 });
             }
@@ -955,6 +962,7 @@ export async function updatePracticeSession(
                 teamId: validated.teamId,
                 reservation,
                 actorId: userId,
+                overrideConflicts: validated.overrideConflicts,
                 overrideReason: parsedReservation.overrideReason,
                 assignEventReservation:
                     reservationRelationChanged || !oldEvent,

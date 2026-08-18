@@ -407,8 +407,12 @@ export async function decideIceTimeRequestInTransaction(
       sourceRequestId: request.id,
       offeringBlockId: request.scheduleBlockId,
       actorId: userId,
+      venueWideReason: venueWideApproval
+        ? validated.overrideReason?.trim()
+        : undefined,
+      overrideConflicts: validated.overrideConflicts,
       overrideReason:
-        validated.overrideConflicts || venueWideApproval
+        validated.overrideConflicts
           ? validated.overrideReason?.trim()
           : undefined,
     });

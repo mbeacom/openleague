@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import EventForm from "@/components/features/events/EventForm";
 import { getUserAdminTeamContext, getUserTeamContext } from "@/lib/actions/team-context";
 import { PageContainer } from "@/components/ui/PageContainer";
+import { getEventReservationOptions } from "../venue-reservation-options";
 
 export default async function NewEventPage() {
   // Prefer any team the user administers so admins of a non-primary team
@@ -13,6 +14,7 @@ export default async function NewEventPage() {
     const memberContext = await getUserTeamContext();
     redirect(memberContext ? "/calendar" : "/");
   }
+  const reservations = await getEventReservationOptions(context.teamId);
 
   return (
     <PageContainer maxWidth="md">
@@ -23,7 +25,7 @@ export default async function NewEventPage() {
           alignItems: "center",
         }}
       >
-        <EventForm teamId={context.teamId} />
+        <EventForm teamId={context.teamId} reservations={reservations} />
       </Box>
     </PageContainer>
   );

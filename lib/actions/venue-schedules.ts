@@ -4,7 +4,10 @@ import { revalidatePath } from "next/cache";
 import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
-import { requireVenueScheduleManager } from "@/lib/auth/session";
+import {
+  requireVenueScheduleManager,
+  VENUE_SCHEDULE_ROLES,
+} from "@/lib/auth/session";
 import { type ActionResult } from "@/lib/actions/venue-organizations";
 import { logVenueActivity } from "@/lib/services/venue-activity";
 import { publicPublishedVenueWhere } from "@/lib/utils/public-venues";
@@ -25,6 +28,12 @@ import {
   populateVenueOfferingAvailability,
   type VenueReservationOfferingWithAvailability,
 } from "@/lib/services/venue-reservation-availability";
+import {
+  createVenueReservation,
+  transitionVenueReservation,
+  VenueReservationConflictError,
+} from "@/lib/services/venue-reservations";
+import { runVenueReservationTransaction } from "@/lib/services/venue-reservation-transaction";
 
 type VenueContext = {
   id: string;
@@ -39,6 +48,28 @@ type VenueContext = {
  * fallback instead).
  */
 class ScheduleActionError extends Error {}
+
+async function assertVenueScheduleManagerInTransaction(
+  tx: Prisma.TransactionClient,
+  input: { userId: string; organizationId: string; venueId: string },
+): Promise<void> {
+  const membership = await tx.venueStaff.findFirst({
+    where: {
+      userId: input.userId,
+      organizationId: input.organizationId,
+      status: "ACTIVE",
+      role: { in: [...VENUE_SCHEDULE_ROLES] },
+      organization: { status: { in: ["DRAFT", "ACTIVE"] } },
+      OR: [{ venueId: null }, { venueId: input.venueId }],
+    },
+    select: { id: true },
+  });
+  if (!membership) {
+    throw new ScheduleActionError(
+      "Unauthorized: You do not have permission to manage this venue",
+    );
+  }
+}
 
 /**
  * Optional segment reference for schedule blocks (feature 006). Kept
@@ -154,8 +185,8 @@ export async function getVenueScheduleAdminData(
           startsAt: true,
           endsAt: true,
           activityType: true,
-          status: true,
           intent: true,
+          status: true,
           registrationMode: true,
           surfaceId: true,
           segmentId: true,
@@ -255,19 +286,51 @@ export async function updateIceSurface(
     const userId = await requireVenueScheduleManager(validated.organizationId, validated.venueId);
     await ensureVenueContext(validated.organizationId, validated.venueId);
 
-    const surface = await prisma.iceSurface.update({
-      where: { id: validated.surfaceId, venueId: validated.venueId },
-      data: {
-        name: validated.name,
-        surfaceType: validated.surfaceType,
-        capacity: validated.capacity ?? null,
-        isDefault: validated.isDefault,
-        isActive: validated.isActive,
-        displayOrder: validated.displayOrder,
-        notes: validated.notes || null,
-      },
-      select: { id: true, venueId: true, name: true },
+    const outcome = await runVenueReservationTransaction(async (tx) => {
+      const existing = await tx.iceSurface.findFirst({
+        where: { id: validated.surfaceId, venueId: validated.venueId },
+        select: { id: true },
+      });
+      if (!existing) return { kind: "missing" as const };
+
+      if (!validated.isActive) {
+        const futureBookings = await findFutureSurfaceBookings(
+          { venueId: validated.venueId, surfaceId: validated.surfaceId },
+          new Date(),
+          tx,
+        );
+        if (futureBookings.length > 0) {
+          return { kind: "blocked" as const, futureBookings };
+        }
+      }
+
+      const surface = await tx.iceSurface.update({
+        where: { id: validated.surfaceId, venueId: validated.venueId },
+        data: {
+          name: validated.name,
+          surfaceType: validated.surfaceType,
+          capacity: validated.capacity ?? null,
+          isDefault: validated.isDefault,
+          isActive: validated.isActive,
+          displayOrder: validated.displayOrder,
+          notes: validated.notes || null,
+        },
+        select: { id: true, venueId: true, name: true },
+      });
+      return { kind: "updated" as const, surface };
     });
+    if (outcome.kind === "missing") {
+      return { success: false, error: "Surface not found" };
+    }
+    if (outcome.kind === "blocked") {
+      return {
+        success: false,
+        error:
+          "This surface has upcoming bookings and cannot be deactivated. Move or cancel them first.",
+        details: { futureBookings: outcome.futureBookings },
+      };
+    }
+    const { surface } = outcome;
 
     await logVenueActivity({
       venueId: validated.venueId,
@@ -298,32 +361,44 @@ export async function archiveIceSurface(input: {
     const userId = await requireVenueScheduleManager(validated.organizationId, validated.venueId);
     await ensureVenueContext(validated.organizationId, validated.venueId);
 
-    const existing = await prisma.iceSurface.findFirst({
-      where: { id: validated.surfaceId, venueId: validated.venueId },
-      select: { id: true },
+    const outcome = await runVenueReservationTransaction(async (tx) => {
+      const existing = await tx.iceSurface.findFirst({
+        where: { id: validated.surfaceId, venueId: validated.venueId },
+        select: { id: true },
+      });
+      if (!existing) return { kind: "missing" as const };
+
+      // Recheck and deactivate in one serializable transaction. A concurrent
+      // reservation writer that read the surface as active forces one side to
+      // retry rather than permitting a stale check followed by archival.
+      const futureBookings = await findFutureSurfaceBookings(
+        { venueId: validated.venueId, surfaceId: validated.surfaceId },
+        new Date(),
+        tx,
+      );
+      if (futureBookings.length > 0) {
+        return { kind: "blocked" as const, futureBookings };
+      }
+
+      const surface = await tx.iceSurface.update({
+        where: { id: validated.surfaceId, venueId: validated.venueId },
+        data: { isActive: false },
+        select: { id: true, venueId: true },
+      });
+      return { kind: "archived" as const, surface };
     });
-    if (!existing) {
+    if (outcome.kind === "missing") {
       return { success: false, error: "Surface not found" };
     }
-
-    // FR-007: archiving a surface with future bookings is refused with the
-    // list. Calendar Events are venue-wide (they never reference a surface),
-    // so the four surface-capable sources are checked.
-    const futureBookings = await findFutureSurfaceBookings(validated.surfaceId);
-    if (futureBookings.length > 0) {
+    if (outcome.kind === "blocked") {
       return {
         success: false,
         error:
           "This surface has upcoming bookings and cannot be archived. Move or cancel them first.",
-        details: { futureBookings },
+        details: { futureBookings: outcome.futureBookings },
       };
     }
-
-    const surface = await prisma.iceSurface.update({
-      where: { id: validated.surfaceId, venueId: validated.venueId },
-      data: { isActive: false },
-      select: { id: true, venueId: true },
-    });
+    const { surface } = outcome;
 
     await logVenueActivity({
       venueId: validated.venueId,
@@ -497,6 +572,63 @@ export async function createScheduleBlock(
       validated.surfaceId || null,
       rawSegment.segmentId || null
     );
+    const intent = scheduleBlockIntent(validated);
+    if (
+      intent !== "OFFERING"
+      && intent !== "INFORMATION"
+      && validated.recurrenceRule
+      && !validated.recurrenceEndDate
+    ) {
+      throw new ScheduleActionError("Occupying recurring blocks must have an end date.");
+    }
+    if (
+      (prisma as typeof prisma & { venueReservation?: unknown }).venueReservation
+      && validated.status === "PUBLISHED"
+      && intent !== "OFFERING"
+      && intent !== "INFORMATION"
+    ) {
+      try {
+        const block = await runVenueReservationTransaction(async (tx) => {
+          const created = await tx.venueScheduleBlock.create({
+            data: { ...scheduleBlockData(validated, userId), segmentId },
+            select: { id: true, status: true },
+          });
+          await materializeScheduleBlockReservations(tx, {
+            blockId: created.id,
+            venueId: validated.venueId,
+            organizationId: validated.organizationId,
+            surfaceId: validated.surfaceId || null,
+            segmentId,
+            startsAt: validated.startsAt,
+            endsAt: validated.endsAt,
+            recurrenceRule: validated.recurrenceRule || null,
+            recurrenceEndDate: validated.recurrenceEndDate ?? null,
+            timezone: venue.timezone,
+            actorId: userId,
+          });
+          return created;
+        });
+        await logVenueActivity({
+          venueId: validated.venueId,
+          actorId: userId,
+          action: "SCHEDULE_BLOCK_CREATED",
+          resourceType: "VenueScheduleBlock",
+          resourceId: block.id,
+          summary: `Created schedule block ${validated.title}`,
+        });
+        revalidateSchedulePaths(validated.organizationId, validated.venueId, venue.slug);
+        return { success: true, data: { scheduleBlockId: block.id, status: block.status } };
+      } catch (error) {
+        if (error instanceof VenueReservationConflictError) {
+          return {
+            success: false,
+            error: "Schedule block conflicts with existing bookings at this venue.",
+            details: { conflicts: error.conflicts },
+          };
+        }
+        throw error;
+      }
+    }
     const conflicts = await getBlockConflicts({
       venueId: validated.venueId,
       surfaceId: validated.surfaceId || null,
@@ -557,6 +689,136 @@ export async function updateScheduleBlock(
       validated.surfaceId || null,
       rawSegment.segmentId || null
     );
+    const intent = scheduleBlockIntent(validated);
+    if (
+      intent !== "OFFERING"
+      && intent !== "INFORMATION"
+      && validated.recurrenceRule
+      && !validated.recurrenceEndDate
+    ) {
+      throw new ScheduleActionError("Occupying recurring blocks must have an end date.");
+    }
+    const canonicalReservations = (prisma as typeof prisma & { venueReservation?: unknown }).venueReservation;
+    if (canonicalReservations) {
+      try {
+        const block = await runVenueReservationTransaction(async (tx) => {
+          const currentBlock = await tx.venueScheduleBlock.findFirst({
+            where: {
+              id: command.scheduleBlockId,
+              venueId: validated.venueId,
+              venue: { organizationId: validated.organizationId },
+            },
+            select: {
+              status: true,
+              intent: true,
+              recurrenceRule: true,
+              recurrenceEndDate: true,
+              venue: {
+                select: {
+                  organizationId: true,
+                  slug: true,
+                  timezone: true,
+                },
+              },
+              reservationOccurrences: {
+                select: {
+                  id: true,
+                  status: true,
+                  venueId: true,
+                  surfaceId: true,
+                  segmentId: true,
+                  startsAt: true,
+                  endsAt: true,
+                },
+              },
+            },
+          });
+          if (
+            !currentBlock
+            || currentBlock.venue.organizationId !== validated.organizationId
+          ) {
+            throw new ScheduleActionError("Schedule block not found");
+          }
+          await assertVenueScheduleManagerInTransaction(tx, {
+            userId,
+            organizationId: currentBlock.venue.organizationId,
+            venueId: validated.venueId,
+          });
+
+          const updated = await tx.venueScheduleBlock.update({
+            where: { id: command.scheduleBlockId, venueId: validated.venueId },
+            data: {
+              ...scheduleBlockUpdateData(validated),
+              segmentId,
+              updatedById: userId,
+            },
+            select: {
+              id: true,
+              venueId: true,
+              surfaceId: true,
+              segmentId: true,
+              startsAt: true,
+              endsAt: true,
+              status: true,
+              intent: true,
+              recurrenceRule: true,
+              recurrenceEndDate: true,
+              venue: {
+                select: {
+                  organizationId: true,
+                  slug: true,
+                  timezone: true,
+                },
+              },
+            },
+          });
+          const wasOccupyingPublished =
+            currentBlock.status === "PUBLISHED"
+            && isOccupyingScheduleIntent(currentBlock.intent);
+          if (
+            updated.status === "PUBLISHED"
+            && isOccupyingScheduleIntent(updated.intent)
+          ) {
+            await materializeScheduleBlockReservations(tx, {
+              blockId: updated.id,
+              venueId: updated.venueId,
+              organizationId: currentBlock.venue.organizationId,
+              surfaceId: updated.surfaceId,
+              segmentId: updated.segmentId,
+              startsAt: updated.startsAt,
+              endsAt: updated.endsAt,
+              recurrenceRule: updated.recurrenceRule,
+              recurrenceEndDate: updated.recurrenceEndDate,
+              timezone: updated.venue.timezone,
+              actorId: userId,
+            });
+          } else if (wasOccupyingPublished) {
+            await cancelScheduleBlockReservations(tx, updated.id, userId);
+          }
+          return updated;
+        });
+        await logVenueActivity({
+          venueId: validated.venueId,
+          actorId: userId,
+          action: "SCHEDULE_BLOCK_UPDATED",
+          resourceType: "VenueScheduleBlock",
+          resourceId: block.id,
+          summary: `Updated schedule block ${validated.title}`,
+        });
+        revalidateSchedulePaths(validated.organizationId, validated.venueId, venue.slug);
+        return { success: true, data: { scheduleBlockId: block.id, status: block.status } };
+      } catch (error) {
+        if (error instanceof VenueReservationConflictError) {
+          return {
+            success: false,
+            error: "Schedule block conflicts with existing bookings at this venue.",
+            details: { conflicts: error.conflicts },
+          };
+        }
+        throw error;
+      }
+    }
+
     const conflicts = await getBlockConflicts(
       {
         venueId: validated.venueId,
@@ -824,6 +1086,125 @@ async function setScheduleBlockStatus(
   try {
     const validated = scheduleBlockCommandSchema.parse(input);
     const userId = await requireVenueScheduleManager(validated.organizationId, validated.venueId);
+    const canonicalReservations = (prisma as typeof prisma & { venueReservation?: unknown })
+      .venueReservation;
+
+    if (canonicalReservations) {
+      try {
+        const result = await runVenueReservationTransaction(async (tx) => {
+          const block = await tx.venueScheduleBlock.findFirst({
+            where: {
+              id: validated.scheduleBlockId,
+              venueId: validated.venueId,
+              venue: { organizationId: validated.organizationId },
+            },
+            select: {
+              id: true,
+              venueId: true,
+              startsAt: true,
+              endsAt: true,
+              status: true,
+              intent: true,
+              surfaceId: true,
+              segmentId: true,
+              recurrenceRule: true,
+              recurrenceEndDate: true,
+              venue: {
+                select: {
+                  organizationId: true,
+                  slug: true,
+                  timezone: true,
+                },
+              },
+              reservationOccurrences: {
+                select: {
+                  id: true,
+                  status: true,
+                  venueId: true,
+                  surfaceId: true,
+                  segmentId: true,
+                  startsAt: true,
+                  endsAt: true,
+                },
+              },
+            },
+          });
+          if (!block || block.venue.organizationId !== validated.organizationId) {
+            throw new ScheduleActionError("Schedule block not found");
+          }
+          await assertVenueScheduleManagerInTransaction(tx, {
+            userId,
+            organizationId: block.venue.organizationId,
+            venueId: block.venueId,
+          });
+          if (
+            status === "PUBLISHED"
+            && isOccupyingScheduleIntent(block.intent)
+            && block.recurrenceRule
+            && !block.recurrenceEndDate
+          ) {
+            throw new ScheduleActionError("Occupying recurring blocks must have an end date.");
+          }
+
+          const updated = await tx.venueScheduleBlock.update({
+            where: { id: block.id, venueId: validated.venueId },
+            data: { status, updatedById: userId },
+            select: { id: true, status: true },
+          });
+
+          if (status === "PUBLISHED" && isOccupyingScheduleIntent(block.intent)) {
+            await materializeScheduleBlockReservations(tx, {
+              blockId: block.id,
+              venueId: block.venueId,
+              organizationId: block.venue.organizationId,
+              surfaceId: block.surfaceId,
+              segmentId: block.segmentId,
+              startsAt: block.startsAt,
+              endsAt: block.endsAt,
+              recurrenceRule: block.recurrenceRule,
+              recurrenceEndDate: block.recurrenceEndDate,
+              timezone: block.venue.timezone,
+              actorId: userId,
+            });
+          } else if (
+            status === "CANCELED"
+            && block.status === "PUBLISHED"
+            && isOccupyingScheduleIntent(block.intent)
+          ) {
+            await cancelScheduleBlockReservations(tx, block.id, userId);
+          }
+
+          return { updated, slug: block.venue.slug };
+        });
+
+        await logVenueActivity({
+          venueId: validated.venueId,
+          actorId: userId,
+          action,
+          resourceType: "VenueScheduleBlock",
+          resourceId: result.updated.id,
+          summary: `${status === "PUBLISHED" ? "Published" : "Canceled"} schedule block`,
+        });
+        revalidateSchedulePaths(validated.organizationId, validated.venueId, result.slug);
+        return {
+          success: true,
+          data: {
+            scheduleBlockId: result.updated.id,
+            status: result.updated.status,
+          },
+        };
+      } catch (error) {
+        if (error instanceof VenueReservationConflictError) {
+          return {
+            success: false,
+            error: "Schedule block conflicts with existing bookings at this venue.",
+            details: { conflicts: error.conflicts },
+          };
+        }
+        throw error;
+      }
+    }
+
     const block = await prisma.venueScheduleBlock.findFirst({
       where: { id: validated.scheduleBlockId, venueId: validated.venueId },
       select: {
@@ -833,6 +1214,7 @@ async function setScheduleBlockStatus(
         endsAt: true,
         status: true,
         activityType: true,
+        intent: true,
         surfaceId: true,
         segmentId: true,
         recurrenceRule: true,
@@ -888,6 +1270,9 @@ async function setScheduleBlockStatus(
   } catch (error) {
     if (error instanceof Error && error.message.includes("NEXT_REDIRECT")) {
       throw error;
+    }
+    if (error instanceof ScheduleActionError) {
+      return { success: false, error: error.message };
     }
     return { success: false, error: "Failed to update schedule block status." };
   }
@@ -1033,15 +1418,54 @@ function expandCandidateOccurrences(
  * they still have a future occurrence (reported once, at that occurrence).
  */
 async function findFutureSurfaceBookings(
-  surfaceId: string,
-  now: Date = new Date()
+  scope: { venueId: string; surfaceId: string },
+  now: Date = new Date(),
+  client: Prisma.TransactionClient = prisma as unknown as Prisma.TransactionClient,
 ): Promise<VenueBookingView[]> {
   const horizon = new Date(now.getTime() + RECURRENCE_HORIZON_MS);
 
-  const [seasonGames, eventGames, blocks, practices] = await Promise.all([
-    prisma.seasonGame.findMany({
+  type CanonicalReservation = {
+    id: string;
+    startsAt: Date;
+    endsAt: Date;
+    surfaceId: string | null;
+    segmentId: string | null;
+    sourceScheduleBlock: { title: string } | null;
+  };
+  const canonicalReservations = (
+    client as typeof client & {
+      venueReservation?: {
+        findMany?: (args: unknown) => Promise<CanonicalReservation[]>;
+      };
+    }
+  ).venueReservation;
+
+  const [reservations, seasonGames, eventGames, blocks, practices, requests] = await Promise.all([
+    canonicalReservations?.findMany
+      ? Promise.resolve(canonicalReservations.findMany({
+          where: {
+            venueId: scope.venueId,
+            surfaceId: scope.surfaceId,
+            status: { in: ["HELD", "CONFIRMED", "COMPLETED"] },
+            endsAt: { gt: now },
+            OR: [{ status: { not: "HELD" } }, { heldUntil: { gt: now } }],
+          },
+          select: {
+            id: true,
+            startsAt: true,
+            endsAt: true,
+            surfaceId: true,
+            segmentId: true,
+            sourceScheduleBlock: { select: { title: true } },
+          },
+          orderBy: { startsAt: "asc" },
+        })).then((rows) => rows ?? [])
+      : Promise.resolve([]),
+    client.seasonGame.findMany({
       where: {
-        surfaceId,
+        venueId: scope.venueId,
+        surfaceId: scope.surfaceId,
+        venueReservationId: null,
         status: { in: ["SCHEDULED", "COMPLETED"] },
         endAt: { gt: now },
       },
@@ -1056,11 +1480,12 @@ async function findFutureSurfaceBookings(
         awayTeam: { select: { name: true } },
       },
     }),
-    prisma.eventGame.findMany({
+    client.eventGame.findMany({
       where: {
-        surfaceId,
+        surfaceId: scope.surfaceId,
+        venueReservationId: null,
         status: { not: "CANCELED" },
-        event: { status: "PUBLISHED" },
+        event: { venueId: scope.venueId, status: "PUBLISHED" },
         endAt: { gt: now },
       },
       select: {
@@ -1074,10 +1499,12 @@ async function findFutureSurfaceBookings(
         event: { select: { title: true } },
       },
     }),
-    prisma.venueScheduleBlock.findMany({
+    client.venueScheduleBlock.findMany({
       where: {
-        surfaceId,
+        venueId: scope.venueId,
+        surfaceId: scope.surfaceId,
         status: "PUBLISHED",
+        intent: { in: ["OFFERING", "VENUE_ACTIVITY", "CLOSURE"] },
         OR: [
           { endsAt: { gt: now } },
           {
@@ -1097,10 +1524,16 @@ async function findFutureSurfaceBookings(
         recurrenceRule: true,
         recurrenceEndDate: true,
         venue: { select: { timezone: true } },
+        reservationOccurrences: { select: { startsAt: true } },
       },
     }),
-    prisma.practiceSession.findMany({
-      where: { surfaceId, startAt: { gte: now } },
+    client.practiceSession.findMany({
+      where: {
+        venueId: scope.venueId,
+        surfaceId: scope.surfaceId,
+        venueReservationId: null,
+        startAt: { gte: now },
+      },
       select: {
         id: true,
         title: true,
@@ -1111,9 +1544,53 @@ async function findFutureSurfaceBookings(
         segment: { select: { name: true } },
       },
     }),
+    client.iceTimeRequest.findMany({
+      where: {
+        venueId: scope.venueId,
+        status: { in: ["ACCEPTED", "PARTIALLY_ACCEPTED"] },
+        venueReservation: null,
+        OR: [
+          {
+            approvedStartAt: { not: null },
+            approvedEndAt: { gt: now },
+            approvedSurfaceId: scope.surfaceId,
+          },
+          {
+            approvedStartAt: null,
+            requestedEndAt: { gt: now },
+            scheduleBlock: { surfaceId: scope.surfaceId },
+          },
+        ],
+      },
+      select: {
+        id: true,
+        requestedStartAt: true,
+        requestedEndAt: true,
+        approvedStartAt: true,
+        approvedEndAt: true,
+        approvedSurfaceId: true,
+        approvedSegmentId: true,
+        scheduleBlock: {
+          select: { title: true, surfaceId: true, segmentId: true },
+        },
+      },
+    }),
   ]);
 
   const bookings: VenueBookingView[] = [];
+
+  for (const reservation of reservations) {
+    bookings.push({
+      id: reservation.id,
+      source: "venueReservation",
+      title: reservation.sourceScheduleBlock?.title ?? "Venue reservation",
+      startAt: reservation.startsAt,
+      endAt: reservation.endsAt,
+      surfaceId: reservation.surfaceId,
+      segmentId: reservation.segmentId,
+      segmentName: null,
+    });
+  }
 
   for (const game of seasonGames) {
     bookings.push({
@@ -1142,8 +1619,12 @@ async function findFutureSurfaceBookings(
   }
 
   for (const block of blocks) {
+    const linkedOccurrenceStarts = new Set(
+      (block.reservationOccurrences ?? []).map((reservation) => reservation.startsAt.getTime()),
+    );
     const occurrence = nextFutureBlockOccurrence(block, now, horizon);
     if (!occurrence) continue;
+    if (linkedOccurrenceStarts.has(occurrence.startAt.getTime())) continue;
     bookings.push({
       id: block.id,
       source: "scheduleBlock",
@@ -1170,7 +1651,34 @@ async function findFutureSurfaceBookings(
     });
   }
 
-  return bookings.sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
+  for (const request of requests) {
+    const hasApprovalSnapshot =
+      request.approvedStartAt !== null && request.approvedEndAt !== null;
+    bookings.push({
+      id: request.id,
+      source: "iceTimeRequest" as VenueBookingView["source"],
+      title: `Accepted request — ${request.scheduleBlock.title}`,
+      startAt: request.approvedStartAt ?? request.requestedStartAt,
+      endAt: request.approvedEndAt ?? request.requestedEndAt,
+      surfaceId: hasApprovalSnapshot
+        ? request.approvedSurfaceId
+        : request.scheduleBlock.surfaceId,
+      segmentId: hasApprovalSnapshot
+        ? request.approvedSegmentId
+        : request.scheduleBlock.segmentId,
+      segmentName: null,
+    });
+  }
+
+  const seen = new Set<string>();
+  return bookings
+    .filter((booking) => {
+      const key = `${booking.source}:${booking.id}:${booking.startAt.getTime()}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
 }
 
 /**
@@ -1192,6 +1700,7 @@ function nextFutureBlockOccurrence(
   if (!block.recurrenceRule) {
     return block.endsAt > now ? { startAt: block.startsAt, endAt: block.endsAt } : null;
   }
+
   try {
     const occurrences = expandRecurrenceWindow(
       {
@@ -1207,6 +1716,135 @@ function nextFutureBlockOccurrence(
     return occurrences[0] ?? null;
   } catch {
     return block.endsAt > now ? { startAt: block.startsAt, endAt: block.endsAt } : null;
+  }
+}
+
+async function materializeScheduleBlockReservations(
+  tx: Prisma.TransactionClient,
+  input: {
+    blockId: string;
+    venueId: string;
+    organizationId: string;
+    surfaceId: string | null;
+    segmentId: string | null;
+    startsAt: Date;
+    endsAt: Date;
+    recurrenceRule: string | null;
+    recurrenceEndDate: Date | null;
+    timezone: string;
+    actorId: string;
+  },
+): Promise<void> {
+  const occurrences = input.recurrenceRule
+    ? expandRecurrenceWindow(
+        {
+          startAt: input.startsAt,
+          endAt: input.endsAt,
+          recurrenceRule: input.recurrenceRule,
+          recurrenceEndAt: input.recurrenceEndDate,
+          timezone: input.timezone,
+        },
+        input.startsAt,
+        input.recurrenceEndDate ?? input.endsAt,
+      )
+    : [{ startAt: input.startsAt, endAt: input.endsAt }];
+  const desired = new Map(
+    occurrences.map((occurrence) => [occurrence.startAt.getTime(), occurrence]),
+  );
+  const existing = await tx.venueReservation.findMany({
+    where: { sourceScheduleBlockId: input.blockId },
+    select: {
+      id: true,
+      venueId: true,
+      surfaceId: true,
+      segmentId: true,
+      startsAt: true,
+      endsAt: true,
+      status: true,
+    },
+  });
+  const existingByStart = new Map(
+    existing.map((reservation) => [reservation.startsAt.getTime(), reservation]),
+  );
+
+  for (const reservation of existing) {
+    const occurrence = desired.get(reservation.startsAt.getTime());
+    const unchanged =
+      occurrence
+      && reservation.venueId === input.venueId
+      && reservation.surfaceId === input.surfaceId
+      && reservation.segmentId === input.segmentId
+      && occurrence.endAt.getTime() === reservation.endsAt.getTime()
+      && ["HELD", "CONFIRMED"].includes(reservation.status);
+    if (unchanged) continue;
+    if (reservation.status === "HELD" || reservation.status === "CONFIRMED") {
+      await transitionVenueReservation(tx, {
+        reservationId: reservation.id,
+        nextStatus: "CANCELED",
+        actorId: input.actorId,
+        reason: "Schedule block occurrence replaced",
+        allowAssignedDisposition: true,
+      });
+    }
+    if (occurrence) {
+      await tx.venueReservation.update({
+        where: { id: reservation.id },
+        data: { sourceScheduleBlockId: null },
+      });
+    }
+  }
+
+  for (const occurrence of desired.values()) {
+    const previous = existingByStart.get(occurrence.startAt.getTime());
+    const unchanged =
+      previous
+      && previous.venueId === input.venueId
+      && previous.surfaceId === input.surfaceId
+      && previous.segmentId === input.segmentId
+      && occurrence.endAt.getTime() === previous.endsAt.getTime()
+      && ["HELD", "CONFIRMED"].includes(previous.status);
+    if (unchanged) continue;
+    await createVenueReservation(tx, {
+      venueId: input.venueId,
+      surfaceId: input.surfaceId,
+      segmentId: input.segmentId,
+      startsAt: occurrence.startAt,
+      endsAt: occurrence.endAt,
+      timezone: input.timezone,
+      ownerVenueOrganizationId: input.organizationId,
+      sourceScheduleBlockId: input.blockId,
+      actorId: input.actorId,
+      venueWideReason: input.surfaceId
+        ? null
+        : "Venue schedule block venue-wide reservation",
+    });
+  }
+}
+
+function isOccupyingScheduleIntent(intent: string | null | undefined): boolean {
+  return intent !== "OFFERING" && intent !== "INFORMATION";
+}
+
+async function cancelScheduleBlockReservations(
+  tx: Prisma.TransactionClient,
+  blockId: string,
+  actorId: string,
+): Promise<void> {
+  const reservations = await tx.venueReservation.findMany({
+    where: {
+      sourceScheduleBlockId: blockId,
+      status: { in: ["HELD", "CONFIRMED"] },
+    },
+    select: { id: true },
+  });
+  for (const reservation of reservations) {
+    await transitionVenueReservation(tx, {
+      reservationId: reservation.id,
+      nextStatus: "CANCELED",
+      actorId,
+      reason: "Schedule block canceled",
+      allowAssignedDisposition: true,
+    });
   }
 }
 

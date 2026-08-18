@@ -72,7 +72,7 @@ export async function getPlacementBoard(params: {
     }
     const { season } = access;
 
-    const [teams, games, decisions] = await Promise.all([
+    const [teams, games, decisions, placements] = await Promise.all([
       prisma.team.findMany({
         where: { leagueId: season.leagueId, isActive: true },
         select: {
@@ -101,6 +101,18 @@ export async function getPlacementBoard(params: {
         where: { seasonId: season.id },
         orderBy: { createdAt: "desc" },
         select: { teamId: true, rank: true, privateNote: true },
+      }),
+      prisma.seasonTeamPlacement.findMany({
+        where: { seasonId: season.id },
+        select: {
+          teamId: true,
+          divisionId: true,
+          divisionNameSnapshot: true,
+          teamNameSnapshot: true,
+          rank: true,
+          privateNote: true,
+          division: { select: { name: true, ageClassification: true } },
+        },
       }),
     ]);
 
@@ -147,18 +159,28 @@ export async function getPlacementBoard(params: {
       }
     }
 
+    const placementByTeam = new Map(placements.map((placement) => [placement.teamId, placement]));
+
     const rows: PlacementBoardRow[] = teams.map((team) => {
       const stats = statsByTeam.get(team.id);
-      const level = team.division?.ageClassification ?? null;
+      const placement = placementByTeam.get(team.id);
+      const level = placement
+        ? placement.division?.ageClassification ?? null
+        : team.division?.ageClassification ?? null;
       // FR-026: never expose records below the score-recording threshold.
       const scoresGated =
         level !== null && !isStatsEligible(level, STATS_MIN_AGE_LEVEL as AgeClassification);
-      const decision = latestDecisionByTeam.get(team.id);
+      const decision = placement ?? latestDecisionByTeam.get(team.id);
+      const divisionNameSnapshot =
+        placement?.divisionNameSnapshot ??
+        (placement as { divisionName?: string | null } | undefined)?.divisionName ??
+        placement?.division?.name ??
+        null;
       return {
         teamId: team.id,
-        teamName: team.name,
-        divisionId: team.division?.id ?? null,
-        divisionName: team.division?.name ?? null,
+        teamName: placement?.teamNameSnapshot || team.name,
+        divisionId: placement ? placement.divisionId : team.division?.id ?? null,
+        divisionName: placement ? divisionNameSnapshot : team.division?.name ?? null,
         gamesPlayed: stats?.gamesPlayed ?? 0,
         wins: scoresGated ? null : stats?.wins ?? 0,
         losses: scoresGated ? null : stats?.losses ?? 0,
@@ -186,9 +208,9 @@ export async function getPlacementBoard(params: {
 
 /**
  * Record a placement decision (FR-027/028): appends an immutable
- * PlacementDecision (divisionId null = unassigned) and updates the team's
- * current division in the same transaction. History — played games and prior
- * decisions — is preserved.
+ * PlacementDecision (divisionId null = unassigned) and updates the current
+ * season projection in the same transaction. History — played games, prior
+ * decisions, and other seasons' placements — is preserved.
  */
 export async function recordPlacement(
   input: RecordPlacementInput
@@ -202,26 +224,40 @@ export async function recordPlacement(
     }
     const { season, userId } = access;
 
-    const team = await prisma.team.findFirst({
-      where: { id: validated.teamId, leagueId: season.leagueId, isActive: true },
-      select: { id: true },
-    });
-    if (!team) {
-      return { success: false, error: "Team not found in this league" };
-    }
-
     const divisionId = validated.divisionId ?? null;
-    if (divisionId) {
-      const division = await prisma.division.findFirst({
-        where: { id: divisionId, leagueId: season.leagueId, isActive: true },
-        select: { id: true },
-      });
-      if (!division) {
-        return { success: false, error: "Division not found in this league" };
-      }
-    }
 
     const decision = await prisma.$transaction(async (tx) => {
+      // Reload every resource boundary in the transaction. This prevents a
+      // valid league-admin session from writing a team or division from a
+      // different tenant when objects change between authorization and write.
+      const transactionSeason = await tx.season.findUnique({
+        where: { id: season.id },
+        select: { id: true, leagueId: true },
+      });
+      if (!transactionSeason || transactionSeason.leagueId !== season.leagueId) {
+        throw new Error("Season not found in this league");
+      }
+
+      const team = await tx.team.findFirst({
+        where: { id: validated.teamId, leagueId: season.leagueId, isActive: true },
+        select: { id: true, name: true },
+      });
+      if (!team) {
+        throw new Error("Team not found in this league");
+      }
+
+      let divisionName: string | null = null;
+      if (divisionId) {
+        const division = await tx.division.findFirst({
+          where: { id: divisionId, leagueId: season.leagueId, isActive: true },
+          select: { id: true, name: true },
+        });
+        if (!division) {
+          throw new Error("Division not found in this league");
+        }
+        divisionName = division.name;
+      }
+
       const created = await tx.placementDecision.create({
         data: {
           seasonId: season.id,
@@ -233,9 +269,31 @@ export async function recordPlacement(
         },
         select: { id: true },
       });
-      await tx.team.update({
-        where: { id: team.id },
-        data: { divisionId },
+      await tx.seasonTeamPlacement.upsert({
+        where: {
+          seasonId_teamId: {
+            seasonId: season.id,
+            teamId: team.id,
+          },
+        },
+        create: {
+          seasonId: season.id,
+          teamId: team.id,
+          divisionId,
+          teamNameSnapshot: team.name ?? "",
+          divisionNameSnapshot: divisionName,
+          rank: validated.rank ?? null,
+          privateNote: validated.privateNote ?? null,
+          placedById: userId,
+        },
+        update: {
+          divisionId,
+          teamNameSnapshot: team.name ?? "",
+          divisionNameSnapshot: divisionName,
+          rank: validated.rank ?? null,
+          privateNote: validated.privateNote ?? null,
+          placedById: userId,
+        },
       });
       return created;
     });

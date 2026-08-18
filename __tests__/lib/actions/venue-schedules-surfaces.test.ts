@@ -35,10 +35,18 @@ const { mockRequireVenueScheduleManager, mockPrisma, mockLogVenueActivity } = vi
     practiceSession: {
       findMany: vi.fn(),
     },
+    venueReservation: {
+      findMany: vi.fn(),
+    },
+    iceTimeRequest: {
+      findMany: vi.fn(),
+    },
+    $transaction: vi.fn(),
   },
 }));
 
 vi.mock("@/lib/auth/session", () => ({
+  VENUE_SCHEDULE_ROLES: ["OWNER", "MANAGER", "SCHEDULER"],
   requireVenueScheduleManager: (...args: unknown[]) => mockRequireVenueScheduleManager(...args),
 }));
 
@@ -78,6 +86,11 @@ beforeEach(() => {
   mockPrisma.eventGame.findMany.mockResolvedValue([]);
   mockPrisma.venueScheduleBlock.findMany.mockResolvedValue([]);
   mockPrisma.practiceSession.findMany.mockResolvedValue([]);
+  mockPrisma.venueReservation.findMany.mockResolvedValue([]);
+  mockPrisma.iceTimeRequest.findMany.mockResolvedValue([]);
+  mockPrisma.$transaction.mockImplementation(
+    async (callback: (tx: typeof mockPrisma) => unknown) => callback(mockPrisma),
+  );
   mockLogVenueActivity.mockResolvedValue({ id: "cllogxxxxxxxxxxxxxxxxxxxxxxx" });
 });
 
@@ -172,6 +185,68 @@ describe("ice surface actions", () => {
         })
       );
     }
+    expect(mockPrisma.iceSurface.update).not.toHaveBeenCalled();
+  });
+
+  it("refuses to archive when an active canonical reservation references the surface", async () => {
+    mockPrisma.venueReservation.findMany.mockResolvedValue([
+      {
+        id: "clreservationxxxxxxxxxxxxxxxxx",
+        startsAt: new Date("2027-01-10T18:00:00Z"),
+        endsAt: new Date("2027-01-10T19:30:00Z"),
+        surfaceId: SURFACE_ID,
+        segmentId: null,
+        sourceScheduleBlock: null,
+      },
+    ]);
+
+    const result = await archiveIceSurface({
+      organizationId: ORGANIZATION_ID,
+      venueId: VENUE_ID,
+      surfaceId: SURFACE_ID,
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.details).toEqual(
+        expect.objectContaining({
+          futureBookings: expect.arrayContaining([
+            expect.objectContaining({ source: "venueReservation" }),
+          ]),
+        }),
+      );
+    }
+    expect(mockPrisma.venueReservation.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          venueId: VENUE_ID,
+          surfaceId: SURFACE_ID,
+        }),
+      }),
+    );
+  });
+
+  it("cannot bypass the reservation guard through generic surface update", async () => {
+    mockPrisma.venueReservation.findMany.mockResolvedValue([{
+      id: "clreservationxxxxxxxxxxxxxxxxx",
+      startsAt: new Date("2027-01-10T18:00:00Z"),
+      endsAt: new Date("2027-01-10T19:30:00Z"),
+      surfaceId: SURFACE_ID,
+      segmentId: null,
+      sourceScheduleBlock: null,
+    }]);
+
+    const result = await updateIceSurface({
+      organizationId: ORGANIZATION_ID,
+      venueId: VENUE_ID,
+      surfaceId: SURFACE_ID,
+      name: "Main",
+      surfaceType: "ICE",
+      isActive: false,
+    });
+
+    expect(result.success).toBe(false);
+    expect(mockPrisma.$transaction).toHaveBeenCalled();
     expect(mockPrisma.iceSurface.update).not.toHaveBeenCalled();
   });
 });

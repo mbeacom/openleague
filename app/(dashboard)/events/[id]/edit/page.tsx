@@ -4,6 +4,7 @@ import { Box } from "@mui/material";
 import { redirect, notFound } from "next/navigation";
 import EventForm from "@/components/features/events/EventForm";
 import { PageContainer } from "@/components/ui/PageContainer";
+import { getEventReservationOptions } from "../../venue-reservation-options";
 
 interface EditEventPageProps {
   params: Promise<{
@@ -27,6 +28,7 @@ export default async function EditEventPage({ params }: EditEventPageProps) {
   if (event.userRole !== "ADMIN") {
     redirect(`/events/${id}`);
   }
+  const reservations = await getEventReservationOptions(event.teamId, event.id);
 
   return (
     <PageContainer maxWidth="md">
@@ -40,6 +42,7 @@ export default async function EditEventPage({ params }: EditEventPageProps) {
         <EventForm
           teamId={event.teamId}
           eventId={event.id}
+          reservations={reservations}
           initialData={{
             type: event.type as "GAME" | "PRACTICE",
             title: event.title,
@@ -48,6 +51,7 @@ export default async function EditEventPage({ params }: EditEventPageProps) {
             timezone: event.timezone,
             location: event.location,
             venueId: event.venueId ?? undefined,
+            reservationId: event.venueReservationId ?? undefined,
             opponent: event.opponent || "",
             notes: event.notes || "",
           }}

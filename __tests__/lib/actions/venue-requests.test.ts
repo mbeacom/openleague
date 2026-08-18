@@ -589,7 +589,7 @@ describe("decideIceTimeRequest full/partial/decline approval (T017 -> T023 inten
       expect.objectContaining({
         surfaceId: null,
         segmentId: null,
-        overrideReason: "Tournament setup uses the full venue",
+        venueWideReason: "Tournament setup uses the full venue",
       }),
     );
   });

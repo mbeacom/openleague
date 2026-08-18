@@ -92,6 +92,7 @@ export async function queueGearCustodyReminders(now = new Date()): Promise<GearR
     const page = await prisma.gearReservation.findMany({
       where: {
         status: "FULFILLED",
+        custodyStartedAt: { not: null },
         OR: [
           { approvedEndDate: { lte: dueSoonEnd } },
           { approvedEndDate: null, requestedEndDate: { lte: dueSoonEnd } },
@@ -204,7 +205,13 @@ export async function cancelStaleGearCustodyReminders(
 
   const reservations = await prisma.gearReservation.findMany({
     where: { id: { in: [...new Set(pending.map((row) => row.aggregateId))] } },
-    select: { id: true, status: true, requestedEndDate: true, approvedEndDate: true },
+    select: {
+      id: true,
+      status: true,
+      custodyStartedAt: true,
+      requestedEndDate: true,
+      approvedEndDate: true,
+    },
   });
   const byId = new Map(reservations.map((reservation) => [reservation.id, reservation]));
 
@@ -215,7 +222,7 @@ export async function cancelStaleGearCustodyReminders(
 
     if (!reservation) {
       reason = "reservation no longer exists";
-    } else if (reservation.status !== "FULFILLED") {
+    } else if (reservation.status !== "FULFILLED" || !reservation.custodyStartedAt) {
       reason = `reservation is ${reservation.status.toLowerCase()}, no gear is in custody`;
     } else {
       const dueDate = reservation.approvedEndDate ?? reservation.requestedEndDate;

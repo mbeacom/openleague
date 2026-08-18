@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db/prisma";
 import { requireUserId, canUserCreateLeagueGames } from "@/lib/auth/session";
+import { getLeagueScheduleItems } from "@/lib/data/schedule-items";
 import type { LeagueEvent } from "@/types/events";
 
 /**
@@ -103,17 +104,9 @@ export async function getLeagueScheduleData(leagueId: string): Promise<{
 
   if (!leagueUser || !leagueUser.league.isActive) return null;
 
-  const [canCreateGames, events, teams, divisions] = await Promise.all([
+  const [canCreateGames, scheduleItems, teams, divisions] = await Promise.all([
     canUserCreateLeagueGames(userId, leagueId, leagueUser.role),
-    prisma.event.findMany({
-      where: { leagueId },
-      include: {
-        team: { select: { id: true, name: true } },
-        homeTeam: { select: { id: true, name: true } },
-        awayTeam: { select: { id: true, name: true } },
-      },
-      orderBy: { startAt: "asc" },
-    }),
+    getLeagueScheduleItems(leagueId, { userId, leagueRole: leagueUser.role }),
     prisma.team.findMany({
       where: { leagueId, isActive: true },
       include: { division: { select: { id: true, name: true } } },
@@ -125,17 +118,21 @@ export async function getLeagueScheduleData(leagueId: string): Promise<{
     }),
   ]);
 
-  const serializedEvents = events.map((event) => ({
-    id: event.id,
-    type: event.type as "GAME" | "PRACTICE",
-    title: event.title,
-    startAt: event.startAt.toISOString(),
-    endAt: event.endAt ? event.endAt.toISOString() : null,
-    location: event.location ?? "",
-    opponent: event.opponent,
-    team: event.team ?? { id: "", name: "" },
-    homeTeam: event.homeTeam,
-    awayTeam: event.awayTeam,
+  const serializedEvents = scheduleItems.map((item) => ({
+    id: item.id,
+    type: (item.eventType === "GAME" || item.source === "seasonGame" || item.source === "eventGame"
+      ? "GAME"
+      : "PRACTICE") as "GAME" | "PRACTICE",
+    title: item.title,
+    startAt: item.startsAt.toISOString(),
+    endAt: item.endsAt ? item.endsAt.toISOString() : null,
+    location: item.location ?? item.venueName ?? "",
+    opponent: item.opponent ?? null,
+    team: item.teamId && item.teamName
+      ? { id: item.teamId, name: item.teamName }
+      : { id: "", name: "" },
+    homeTeam: item.homeTeam ?? null,
+    awayTeam: item.awayTeam ?? null,
   }));
 
   return {

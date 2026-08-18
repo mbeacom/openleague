@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db/prisma";
 import { expandRecurrenceWindow } from "@/lib/utils/venue-schedule";
 import type { BookingConflict, VenueBookingView } from "@/types/segments";
+import type { Prisma } from "@prisma/client";
 
 /**
  * Unified venue availability engine (feature 006 + feature 007 dual-read).
@@ -49,7 +50,10 @@ export type AvailabilityCandidate = {
   excludeEventGameId?: string;
   excludeBlockId?: string;
   excludePracticeId?: string;
+  excludeReservationIds?: readonly string[];
 };
+
+type AvailabilityClient = Prisma.TransactionClient;
 
 type FetchParams = {
   venueId: string;
@@ -72,7 +76,29 @@ type FetchParams = {
  * by startAt ascending.
  */
 export async function findBookingConflicts(
-  candidate: AvailabilityCandidate
+  candidate: AvailabilityCandidate,
+  client: AvailabilityClient = prisma as unknown as AvailabilityClient,
+): Promise<BookingConflict[]> {
+  return findBookingConflictsFromSources(candidate, client, true);
+}
+
+/**
+ * Reservation writers use this inside their serializable transaction while
+ * canonical rows are checked by the reservation-native detector. Keeping the
+ * legacy half separate avoids querying and reporting canonical reservations
+ * twice while the dual-read rollout is active.
+ */
+export async function findUnlinkedLegacyBookingConflicts(
+  candidate: AvailabilityCandidate,
+  client: AvailabilityClient,
+): Promise<BookingConflict[]> {
+  return findBookingConflictsFromSources(candidate, client, false);
+}
+
+async function findBookingConflictsFromSources(
+  candidate: AvailabilityCandidate,
+  client: AvailabilityClient,
+  includeReservations: boolean,
 ): Promise<BookingConflict[]> {
   const surfaceId = candidate.surfaceId ?? null;
   // A segment is only meaningful with a surface; without one the candidate
@@ -93,16 +119,18 @@ export async function findBookingConflicts(
 
   const [reservations, events, seasonGames, eventGames, scheduleBlocks, practices, coexistenceKeys] =
     await Promise.all([
-      fetchVenueReservations(params),
-      fetchEvents(params),
-      fetchSeasonGames(params),
-      fetchEventGames(params),
-      fetchScheduleBlocks(params),
-      fetchPracticeSessions(params),
+      includeReservations
+        ? fetchVenueReservations(client, params, candidate.excludeReservationIds)
+        : Promise.resolve([]),
+      fetchEvents(client, params),
+      fetchSeasonGames(client, params),
+      fetchEventGames(client, params),
+      fetchScheduleBlocks(client, params),
+      fetchPracticeSessions(client, params),
       // Coexistence only matters when both sides carry segments (rule 4);
       // whole-surface or venue-wide candidates conflict without consulting it.
       segmentId && surfaceId
-        ? loadCoexistenceKeys(surfaceId)
+        ? loadCoexistenceKeys(client, surfaceId)
         : Promise.resolve(new Set<string>()),
     ]);
 
@@ -125,6 +153,7 @@ export async function getVenueBookings(params: {
   from: Date;
   to: Date;
 }): Promise<VenueBookingView[]> {
+  const client = prisma as unknown as AvailabilityClient;
   const fetchParams: FetchParams = {
     venueId: params.venueId,
     windowStart: params.from,
@@ -132,12 +161,12 @@ export async function getVenueBookings(params: {
   };
 
   const [reservations, events, seasonGames, eventGames, scheduleBlocks, practices] = await Promise.all([
-    fetchVenueReservations(fetchParams),
-    fetchEvents(fetchParams),
-    fetchSeasonGames(fetchParams),
-    fetchEventGames(fetchParams),
-    fetchScheduleBlocks(fetchParams),
-    fetchPracticeSessions(fetchParams),
+    fetchVenueReservations(client, fetchParams),
+    fetchEvents(client, fetchParams),
+    fetchSeasonGames(client, fetchParams),
+    fetchEventGames(client, fetchParams),
+    fetchScheduleBlocks(client, fetchParams),
+    fetchPracticeSessions(client, fetchParams),
   ]);
 
   return [...reservations, ...events, ...seasonGames, ...eventGames, ...scheduleBlocks, ...practices].sort(
@@ -173,10 +202,13 @@ function pairKey(a: string, b: string): string {
   return a < b ? `${a}\0${b}` : `${b}\0${a}`;
 }
 
-async function loadCoexistenceKeys(surfaceId: string): Promise<Set<string>> {
+async function loadCoexistenceKeys(
+  client: AvailabilityClient,
+  surfaceId: string,
+): Promise<Set<string>> {
   // Both segments of a pair belong to the same surface (validation invariant),
   // so filtering on segmentA is sufficient.
-  const pairs = await prisma.segmentCoexistence.findMany({
+  const pairs = await client.segmentCoexistence.findMany({
     where: { segmentA: { surfaceId } },
     select: { segmentAId: true, segmentBId: true },
   });
@@ -195,7 +227,9 @@ function surfaceScopeFilter(surfaceId: string | null | undefined) {
 }
 
 async function fetchVenueReservations(
+  client: AvailabilityClient,
   params: FetchParams,
+  excludeReservationIds: readonly string[] = [],
 ): Promise<VenueBookingView[]> {
   const excludedLinkedSources = [
     params.excludeEventId
@@ -214,9 +248,12 @@ async function fetchVenueReservations(
       ? { sourceScheduleBlockId: params.excludeBlockId }
       : null,
   ].filter((filter): filter is NonNullable<typeof filter> => filter !== null);
-  const reservations = await prisma.venueReservation.findMany({
+  const reservations = await client.venueReservation.findMany({
     where: {
       venueId: params.venueId,
+      ...(excludeReservationIds.length
+        ? { id: { notIn: [...excludeReservationIds] } }
+        : {}),
       status: { in: ["HELD", "CONFIRMED", "COMPLETED"] },
       startsAt: { lt: params.windowEnd },
       endsAt: { gt: params.windowStart },
@@ -255,8 +292,11 @@ async function fetchVenueReservations(
   }));
 }
 
-async function fetchEvents(params: FetchParams): Promise<VenueBookingView[]> {
-  const events = await prisma.event.findMany({
+async function fetchEvents(
+  client: AvailabilityClient,
+  params: FetchParams,
+): Promise<VenueBookingView[]> {
+  const events = await client.event.findMany({
     where: {
       venueId: params.venueId,
       venueReservationId: null,
@@ -294,8 +334,11 @@ async function fetchEvents(params: FetchParams): Promise<VenueBookingView[]> {
   }));
 }
 
-async function fetchSeasonGames(params: FetchParams): Promise<VenueBookingView[]> {
-  const games = await prisma.seasonGame.findMany({
+async function fetchSeasonGames(
+  client: AvailabilityClient,
+  params: FetchParams,
+): Promise<VenueBookingView[]> {
+  const games = await client.seasonGame.findMany({
     where: {
       venueId: params.venueId,
       venueReservationId: null,
@@ -329,8 +372,11 @@ async function fetchSeasonGames(params: FetchParams): Promise<VenueBookingView[]
   }));
 }
 
-async function fetchEventGames(params: FetchParams): Promise<VenueBookingView[]> {
-  const games = await prisma.eventGame.findMany({
+async function fetchEventGames(
+  client: AvailabilityClient,
+  params: FetchParams,
+): Promise<VenueBookingView[]> {
+  const games = await client.eventGame.findMany({
     where: {
       status: { not: "CANCELED" },
       venueReservationId: null,
@@ -366,8 +412,11 @@ async function fetchEventGames(params: FetchParams): Promise<VenueBookingView[]>
   }));
 }
 
-async function fetchScheduleBlocks(params: FetchParams): Promise<VenueBookingView[]> {
-  const blocks = await prisma.venueScheduleBlock.findMany({
+async function fetchScheduleBlocks(
+  client: AvailabilityClient,
+  params: FetchParams,
+): Promise<VenueBookingView[]> {
+  const blocks = await client.venueScheduleBlock.findMany({
     where: {
       venueId: params.venueId,
       status: "PUBLISHED",
@@ -445,8 +494,11 @@ async function fetchScheduleBlocks(params: FetchParams): Promise<VenueBookingVie
   return views;
 }
 
-async function fetchPracticeSessions(params: FetchParams): Promise<VenueBookingView[]> {
-  const practices = await prisma.practiceSession.findMany({
+async function fetchPracticeSessions(
+  client: AvailabilityClient,
+  params: FetchParams,
+): Promise<VenueBookingView[]> {
+  const practices = await client.practiceSession.findMany({
     where: {
       // Unattached practices (no venue) have no availability footprint;
       // startAt is required whenever venueId is set (application invariant),

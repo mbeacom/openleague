@@ -3,11 +3,11 @@
 import { type FormEvent, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Alert, Button, MenuItem, Stack, TextField } from "@mui/material";
-import type { ScheduleFormat } from "@prisma/client";
+import type { ScheduleFormat, SeasonScheduleVisibility } from "@prisma/client";
 import { DateField } from "@/components/ui/date";
 import { createSeason, updateSeason } from "@/lib/actions/seasons";
 import { SCHEDULE_FORMAT_LABELS } from "@/lib/utils/sport-catalog";
-import { SCHEDULE_FORMATS } from "@/lib/utils/validation";
+import { SCHEDULE_FORMATS, SEASON_SCHEDULE_VISIBILITIES } from "@/lib/utils/validation";
 
 /** Exactly one of leagueId/teamId — a season belongs to one owner (FR-001). */
 export type SeasonOwner = { leagueId?: string; teamId?: string };
@@ -24,6 +24,7 @@ export type SeasonFormInitialValues = {
   startDate: Date;
   endDate: Date;
   format: ScheduleFormat | null;
+  scheduleVisibility: SeasonScheduleVisibility;
 };
 
 interface SeasonFormProps {
@@ -87,6 +88,7 @@ export function SeasonForm({ ownerOptions = [], initialValues, onSaved, onCancel
           startDate,
           endDate,
           format: formatText ? (formatText as ScheduleFormat) : null,
+          scheduleVisibility: text("scheduleVisibility") as SeasonScheduleVisibility,
         });
         if (!result.success) {
           setError(result.error);
@@ -109,6 +111,7 @@ export function SeasonForm({ ownerOptions = [], initialValues, onSaved, onCancel
         endDate,
         leagueId: selected.owner.leagueId,
         teamId: selected.owner.teamId,
+        scheduleVisibility: text("scheduleVisibility") as SeasonScheduleVisibility,
       });
       if (!result.success) {
         setError(result.error);
@@ -172,6 +175,25 @@ export function SeasonForm({ ownerOptions = [], initialValues, onSaved, onCancel
           defaultValue={initialValues ? dateInputValue(initialValues.endDate) : ""}
         />
       </Stack>
+
+      <TextField
+        select
+        name="scheduleVisibility"
+        label="Schedule visibility"
+        defaultValue={initialValues?.scheduleVisibility ?? "PRIVATE"}
+        helperText="Private schedules remain visible to participating teams; public schedules are visible without signing in"
+      >
+        {SEASON_SCHEDULE_VISIBILITIES.map((visibility) => (
+          <MenuItem key={visibility} value={visibility}>
+            {{
+              PUBLIC: "Public",
+              AUTHENTICATED: "All signed-in league members",
+              RELATIONSHIP_ONLY: "Participating teams",
+              PRIVATE: "Private (participants only)",
+            }[visibility]}
+          </MenuItem>
+        ))}
+      </TextField>
 
       {isEdit ? (
         <TextField

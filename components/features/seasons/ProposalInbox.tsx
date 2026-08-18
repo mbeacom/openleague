@@ -18,7 +18,10 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import AddIcon from "@mui/icons-material/Add";
 import type { GameProposalStatus } from "@prisma/client";
 import { ProposalForm, type ProposalFormTeam } from "./ProposalForm";
-import { ProposalThread } from "./ProposalThread";
+import {
+  ProposalThread,
+  type ProposalReservationOption,
+} from "./ProposalThread";
 import type { GameProposalView } from "@/types/seasons";
 
 const STATUS_CHIPS: Record<
@@ -54,6 +57,7 @@ interface ProposalInboxProps {
   /** Active teams per league, for the opponent picker. */
   leagueTeams: Record<string, Array<{ id: string; name: string }>>;
   venues: Array<{ id: string; name: string; timezone: string }>;
+  reservations: ProposalReservationOption[];
 }
 
 // Proposal terms carry no timezone — render in the viewer's local zone.
@@ -87,6 +91,7 @@ export function ProposalInbox({
   myTeams,
   leagueTeams,
   venues,
+  reservations,
 }: ProposalInboxProps) {
   const [tab, setTab] = useState(0);
   const [formOpen, setFormOpen] = useState(false);
@@ -195,6 +200,7 @@ export function ProposalInbox({
                     canAct={canAct}
                     canWithdraw={canWithdraw}
                     venues={venues}
+                    reservations={reservations}
                   />
                 </AccordionDetails>
               </Accordion>

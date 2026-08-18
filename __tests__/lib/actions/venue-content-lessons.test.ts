@@ -6,6 +6,7 @@ const { mockRequireVenueContentManager, mockPrisma } = vi.hoisted(() => ({
   mockRequireVenueContentManager: vi.fn(),
   mockPrisma: {
     venue: { findFirst: vi.fn() },
+    surfaceSegment: { findFirst: vi.fn() },
     lessonOffering: { create: vi.fn(), update: vi.fn() },
     venueScheduleBlock: { create: vi.fn() },
   },
@@ -25,11 +26,14 @@ import {
 
 const ORGANIZATION_ID = "clorgxxxxxxxxxxxxxxxxxxxxxxx";
 const VENUE_ID = "clvenxxxxxxxxxxxxxxxxxxxxxxx";
+const SURFACE_ID = "clsurxxxxxxxxxxxxxxxxxxxxxxx";
+const SEGMENT_ID = "clsegxxxxxxxxxxxxxxxxxxxxxxx";
 
 beforeEach(() => {
   vi.clearAllMocks();
   mockRequireVenueContentManager.mockResolvedValue("clusrxxxxxxxxxxxxxxxxxxxxxxx");
   mockPrisma.venue.findFirst.mockResolvedValue({ id: VENUE_ID, organizationId: ORGANIZATION_ID, slug: "north-rink" });
+  mockPrisma.surfaceSegment.findFirst.mockResolvedValue({ id: SEGMENT_ID });
 });
 
 describe("venue lessons and specialty events", () => {
@@ -55,6 +59,8 @@ describe("venue lessons and specialty events", () => {
     const result = await publishSpecialtyEvent({
       organizationId: ORGANIZATION_ID,
       venueId: VENUE_ID,
+      surfaceId: SURFACE_ID,
+      segmentId: SEGMENT_ID,
       title: "Holiday Skate",
       activityType: "SPECIALTY_EVENT",
       startsAt: "2026-12-01T18:00:00Z",
@@ -68,6 +74,8 @@ describe("venue lessons and specialty events", () => {
         data: expect.objectContaining({
           activityType: "SPECIALTY_EVENT",
           visibility: "PUBLIC",
+          surfaceId: SURFACE_ID,
+          segmentId: SEGMENT_ID,
         }),
       })
     );

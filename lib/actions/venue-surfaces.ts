@@ -18,6 +18,7 @@ import { prisma } from "@/lib/db/prisma";
 import { requireVenueScheduleManager } from "@/lib/auth/session";
 import { type ActionResult } from "@/lib/actions/venue-organizations";
 import { logVenueActivity } from "@/lib/services/venue-activity";
+import { runVenueReservationTransaction } from "@/lib/services/venue-reservation-transaction";
 import {
   applySegmentationPresetSchema,
   createSegmentSchema,
@@ -342,7 +343,10 @@ export async function updateSegment(
         .map(([, pair]) => pair);
 
       if (toRemove.length > 0) {
-        const newlyConflicting = await findNewlyConflictingBookings(toRemove);
+        const newlyConflicting = await findNewlyConflictingBookings(toRemove, {
+          venueId: context.venueId,
+          surfaceId: segment.surfaceId,
+        });
         if (newlyConflicting.length > 0 && !validated.confirm) {
           return {
             success: false,
@@ -466,38 +470,90 @@ export async function setSegmentActive(
   try {
     const validated = setSegmentActiveSchema.parse(input);
     const context = await requireSegmentManager(validated.segmentId);
-    const segment = context.segment;
-
-    if (!validated.isActive) {
-      const futureBookings = await findFutureSegmentBookings([segment.id]);
-      if (futureBookings.length > 0) {
-        return {
-          success: false,
-          error:
-            "This segment has upcoming bookings and cannot be deactivated. Move or cancel them first.",
-          details: { futureBookings },
-        };
+    const outcome = await runVenueReservationTransaction(async (tx) => {
+      const segment = await tx.surfaceSegment.findUnique({
+        where: { id: validated.segmentId },
+        select: {
+          id: true,
+          name: true,
+          isActive: true,
+          surfaceId: true,
+          surface: {
+            select: {
+              name: true,
+              venueId: true,
+              venue: {
+                select: {
+                  organizationId: true,
+                  slug: true,
+                },
+              },
+            },
+          },
+        },
+      });
+      if (
+        !segment
+        || segment.surface.venue.organizationId !== context.organizationId
+        || segment.surface.venueId !== context.venueId
+      ) {
+        throw new SegmentActionError("Segment not found");
       }
-    }
+      if (segment.isActive === validated.isActive) {
+        return { kind: "unchanged" as const, segment };
+      }
 
-    if (segment.isActive !== validated.isActive) {
-      await prisma.surfaceSegment.update({
-        where: { id: segment.id },
+      if (!validated.isActive) {
+        const futureBookings = await findFutureSegmentBookings(
+          [segment.id],
+          new Date(),
+          1,
+          {
+            venueId: segment.surface.venueId,
+            surfaceId: segment.surfaceId,
+            includeOfferings: true,
+          },
+          tx,
+        );
+        if (futureBookings.length > 0) {
+          return { kind: "blocked" as const, segment, futureBookings };
+        }
+      }
+
+      await tx.surfaceSegment.update({
+        where: { id: segment.id, isActive: segment.isActive },
         data: { isActive: validated.isActive },
       });
+      return { kind: "updated" as const, segment };
+    });
+
+    if (outcome.kind === "blocked") {
+      return {
+        success: false,
+        error:
+          "This segment has upcoming bookings and cannot be deactivated. Move or cancel them first.",
+        details: { futureBookings: outcome.futureBookings },
+      };
+    }
+
+    if (outcome.kind === "updated") {
+      const segment = outcome.segment;
 
       await logVenueActivity({
-        venueId: context.venueId,
+        venueId: segment.surface.venueId,
         actorId: context.userId,
         action: validated.isActive ? "SEGMENT_ACTIVATED" : "SEGMENT_DEACTIVATED",
         resourceType: "SurfaceSegment",
         resourceId: segment.id,
-        summary: `${validated.isActive ? "Activated" : "Deactivated"} segment ${segment.name} on ${context.surfaceName}`,
+        summary: `${validated.isActive ? "Activated" : "Deactivated"} segment ${segment.name} on ${segment.surface.name}`,
       });
       revalidateSegmentationPaths(context);
     }
 
-    return { success: true, data: { segmentId: segment.id, isActive: validated.isActive } };
+    return {
+      success: true,
+      data: { segmentId: outcome.segment.id, isActive: validated.isActive },
+    };
   } catch (error) {
     return actionFailure(error, "Failed to update the segment's status.");
   }
@@ -727,15 +783,60 @@ async function requireSegmentManager(segmentId: string): Promise<SegmentContext>
 async function findFutureSegmentBookings(
   segmentIds: string[],
   now: Date = new Date(),
-  maxOccurrencesPerBlock: number = 1
+  maxOccurrencesPerBlock: number = 1,
+  scope: {
+    venueId: string;
+    surfaceId: string;
+    includeOfferings?: boolean;
+  },
+  client: Prisma.TransactionClient | typeof prisma = prisma,
 ): Promise<VenueBookingView[]> {
   if (segmentIds.length === 0) return [];
   const horizon = new Date(now.getTime() + FUTURE_BOOKING_HORIZON_MS);
 
-  const [seasonGames, eventGames, blocks, practices] = await Promise.all([
-    prisma.seasonGame.findMany({
+  type CanonicalReservation = {
+    id: string;
+    startsAt: Date;
+    endsAt: Date;
+    surfaceId: string | null;
+    segmentId: string | null;
+    sourceScheduleBlock: { title: string } | null;
+  };
+  const canonicalReservations = (
+    client as typeof prisma & {
+      venueReservation?: {
+        findMany?: (args: unknown) => Promise<CanonicalReservation[]>;
+      };
+    }
+  ).venueReservation;
+  const [reservations, seasonGames, eventGames, blocks, practices, requests] = await Promise.all([
+    canonicalReservations?.findMany
+      ? Promise.resolve(canonicalReservations.findMany({
+          where: {
+            venueId: scope.venueId,
+            surfaceId: scope.surfaceId,
+            segmentId: { in: segmentIds },
+            status: { in: ["HELD", "CONFIRMED", "COMPLETED"] },
+            endsAt: { gt: now },
+            OR: [{ status: { not: "HELD" } }, { heldUntil: { gt: now } }],
+          },
+          select: {
+            id: true,
+            startsAt: true,
+            endsAt: true,
+            surfaceId: true,
+            segmentId: true,
+            sourceScheduleBlock: { select: { title: true } },
+          },
+          orderBy: { startsAt: "asc" },
+        })).then((rows) => rows ?? [])
+      : Promise.resolve([]),
+    client.seasonGame.findMany({
       where: {
+        venueId: scope.venueId,
+        surfaceId: scope.surfaceId,
         segmentId: { in: segmentIds },
+        venueReservationId: null,
         status: { in: ["SCHEDULED", "COMPLETED"] },
         endAt: { gt: now },
       },
@@ -750,11 +851,13 @@ async function findFutureSegmentBookings(
         awayTeam: { select: { name: true } },
       },
     }),
-    prisma.eventGame.findMany({
+    client.eventGame.findMany({
       where: {
+        surfaceId: scope.surfaceId,
+        event: { venueId: scope.venueId, status: "PUBLISHED" },
         segmentId: { in: segmentIds },
+        venueReservationId: null,
         status: { not: "CANCELED" },
-        event: { status: "PUBLISHED" },
         endAt: { gt: now },
       },
       select: {
@@ -768,10 +871,15 @@ async function findFutureSegmentBookings(
         event: { select: { title: true } },
       },
     }),
-    prisma.venueScheduleBlock.findMany({
+    client.venueScheduleBlock.findMany({
       where: {
+        venueId: scope.venueId,
+        surfaceId: scope.surfaceId,
         segmentId: { in: segmentIds },
         status: "PUBLISHED",
+        intent: scope?.includeOfferings
+          ? { in: ["OFFERING", "VENUE_ACTIVITY", "CLOSURE"] }
+          : { in: ["VENUE_ACTIVITY", "CLOSURE"] },
         OR: [
           { endsAt: { gt: now } },
           {
@@ -791,10 +899,17 @@ async function findFutureSegmentBookings(
         recurrenceRule: true,
         recurrenceEndDate: true,
         venue: { select: { timezone: true } },
+        reservationOccurrences: { select: { startsAt: true } },
       },
     }),
-    prisma.practiceSession.findMany({
-      where: { segmentId: { in: segmentIds }, startAt: { gte: now } },
+    client.practiceSession.findMany({
+      where: {
+        venueId: scope.venueId,
+        surfaceId: scope.surfaceId,
+        segmentId: { in: segmentIds },
+        venueReservationId: null,
+        startAt: { gte: now },
+      },
       select: {
         id: true,
         title: true,
@@ -805,9 +920,57 @@ async function findFutureSegmentBookings(
         segment: { select: { name: true } },
       },
     }),
+    client.iceTimeRequest.findMany({
+      where: {
+        venueId: scope.venueId,
+        status: { in: ["ACCEPTED", "PARTIALLY_ACCEPTED"] },
+        venueReservation: null,
+        OR: [
+          {
+            approvedStartAt: { not: null },
+            approvedEndAt: { gt: now },
+            approvedSurfaceId: scope.surfaceId,
+            approvedSegmentId: { in: segmentIds },
+          },
+          {
+            approvedStartAt: null,
+            requestedEndAt: { gt: now },
+            scheduleBlock: {
+              surfaceId: scope.surfaceId,
+              segmentId: { in: segmentIds },
+            },
+          },
+        ],
+      },
+      select: {
+        id: true,
+        requestedStartAt: true,
+        requestedEndAt: true,
+        approvedStartAt: true,
+        approvedEndAt: true,
+        approvedSurfaceId: true,
+        approvedSegmentId: true,
+        scheduleBlock: {
+          select: { title: true, surfaceId: true, segmentId: true },
+        },
+      },
+    }),
   ]);
 
   const bookings: VenueBookingView[] = [];
+
+  for (const reservation of reservations) {
+    bookings.push({
+      id: reservation.id,
+      source: "venueReservation",
+      title: reservation.sourceScheduleBlock?.title ?? "Venue reservation",
+      startAt: reservation.startsAt,
+      endAt: reservation.endsAt,
+      surfaceId: reservation.surfaceId,
+      segmentId: reservation.segmentId,
+      segmentName: null,
+    });
+  }
 
   for (const game of seasonGames) {
     bookings.push({
@@ -836,7 +999,11 @@ async function findFutureSegmentBookings(
   }
 
   for (const block of blocks) {
+    const linkedOccurrenceStarts = new Set(
+      (block.reservationOccurrences ?? []).map((reservation) => reservation.startsAt.getTime()),
+    );
     for (const occurrence of futureBlockOccurrences(block, now, horizon, maxOccurrencesPerBlock)) {
+      if (linkedOccurrenceStarts.has(occurrence.startAt.getTime())) continue;
       bookings.push({
         id: block.id,
         source: "scheduleBlock",
@@ -864,7 +1031,34 @@ async function findFutureSegmentBookings(
     });
   }
 
-  return bookings.sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
+  for (const request of requests) {
+    const hasApprovalSnapshot =
+      request.approvedStartAt !== null && request.approvedEndAt !== null;
+    bookings.push({
+      id: request.id,
+      source: "iceTimeRequest" as VenueBookingView["source"],
+      title: `Accepted request — ${request.scheduleBlock.title}`,
+      startAt: request.approvedStartAt ?? request.requestedStartAt,
+      endAt: request.approvedEndAt ?? request.requestedEndAt,
+      surfaceId: hasApprovalSnapshot
+        ? request.approvedSurfaceId
+        : request.scheduleBlock.surfaceId,
+      segmentId: hasApprovalSnapshot
+        ? request.approvedSegmentId
+        : request.scheduleBlock.segmentId,
+      segmentName: null,
+    });
+  }
+
+  const seen = new Set<string>();
+  return bookings
+    .filter((booking) => {
+      const key = `${booking.source}:${booking.id}:${booking.startAt.getTime()}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
 }
 
 /**
@@ -915,6 +1109,7 @@ function futureBlockOccurrences(
  */
 async function findNewlyConflictingBookings(
   removedPairs: CoexistencePair[],
+  scope: { venueId: string; surfaceId: string },
   now: Date = new Date()
 ): Promise<VenueBookingView[]> {
   if (removedPairs.length === 0) return [];
@@ -925,7 +1120,8 @@ async function findNewlyConflictingBookings(
   const bookings = await findFutureSegmentBookings(
     segmentIds,
     now,
-    MAX_RECURRENCE_CONFLICT_OCCURRENCES
+    MAX_RECURRENCE_CONFLICT_OCCURRENCES,
+    scope,
   );
 
   const bySegment = new Map<string, VenueBookingView[]>();

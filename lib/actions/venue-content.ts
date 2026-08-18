@@ -5,6 +5,12 @@ import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
 import { requireVenueContentManager } from "@/lib/auth/session";
+import { expandRecurrenceWindow } from "@/lib/utils/venue-schedule";
+import {
+  createVenueReservation,
+  VenueReservationConflictError,
+} from "@/lib/services/venue-reservations";
+import { runVenueReservationTransaction } from "@/lib/services/venue-reservation-transaction";
 import type { ActionResult } from "@/lib/actions/venue-organizations";
 import { publicPublishedVenueWhere } from "@/lib/utils/public-venues";
 import {
@@ -292,7 +298,7 @@ export async function archiveLessonOffering(
 }
 
 export async function publishSpecialtyEvent(
-  input: VenueScheduleBlockInput
+  input: VenueScheduleBlockInput & { segmentId?: string | null }
 ): Promise<ActionResult<{ scheduleBlockId: string; status: string }>> {
   try {
     const validated = venueScheduleBlockSchema.parse({
@@ -301,13 +307,112 @@ export async function publishSpecialtyEvent(
       visibility: "PUBLIC",
       status: "PUBLISHED",
     });
+    const segmentId = z.string().cuid("Invalid segment ID format").nullish().parse(
+      input.segmentId,
+    ) ?? null;
     const userId = await requireVenueContentManager(validated.organizationId, validated.venueId);
     const venue = await ensureVenue(validated.organizationId, validated.venueId);
+    if (segmentId) {
+      if (!validated.surfaceId) {
+        return { success: false, error: "Pick a surface before choosing a segment." };
+      }
+      const segment = await prisma.surfaceSegment.findFirst({
+        where: {
+          id: segmentId,
+          surfaceId: validated.surfaceId,
+          isActive: true,
+        },
+        select: { id: true },
+      });
+      if (!segment) {
+        return { success: false, error: "Select an active segment on the chosen surface." };
+      }
+    }
+
+    if (validated.recurrenceRule && !validated.recurrenceEndDate) {
+      return { success: false, error: "Occupying recurring events must have an end date." };
+    }
+
+    if ((prisma as typeof prisma & { venueReservation?: unknown }).venueReservation) {
+      try {
+        const block = await runVenueReservationTransaction(async (tx) => {
+          const created = await tx.venueScheduleBlock.create({
+            data: {
+              venueId: validated.venueId,
+              surfaceId: validated.surfaceId || null,
+              segmentId,
+              title: validated.title,
+              description: validated.description || null,
+              activityType: "SPECIALTY_EVENT",
+              audience: validated.audience,
+              visibility: "PUBLIC",
+              status: "PUBLISHED",
+              intent: "VENUE_ACTIVITY",
+              startsAt: validated.startsAt,
+              endsAt: validated.endsAt,
+              recurrenceRule: validated.recurrenceRule || null,
+              recurrenceStartDate: validated.recurrenceStartDate ?? null,
+              recurrenceEndDate: validated.recurrenceEndDate ?? null,
+              capacity: validated.capacity ?? null,
+              priceAmount: validated.priceAmount ?? null,
+              priceCurrency: validated.priceCurrency,
+              priceLabel: validated.priceLabel || null,
+              registrationMode: validated.registrationMode,
+              externalRegistrationUrl: validated.externalRegistrationUrl || null,
+              createdById: userId,
+            },
+            select: { id: true, status: true },
+          });
+          const occurrences = validated.recurrenceRule
+            ? expandRecurrenceWindow(
+                {
+                  startAt: validated.startsAt,
+                  endAt: validated.endsAt,
+                  recurrenceRule: validated.recurrenceRule,
+                  recurrenceEndAt: validated.recurrenceEndDate ?? null,
+                  timezone: venue.timezone,
+                },
+                validated.startsAt,
+                validated.recurrenceEndDate!,
+              )
+            : [{ startAt: validated.startsAt, endAt: validated.endsAt }];
+          for (const occurrence of occurrences) {
+            await createVenueReservation(tx, {
+              venueId: validated.venueId,
+              surfaceId: validated.surfaceId || null,
+              segmentId,
+              startsAt: occurrence.startAt,
+              endsAt: occurrence.endAt,
+              timezone: venue.timezone,
+              ownerVenueOrganizationId: validated.organizationId,
+              sourceScheduleBlockId: created.id,
+              actorId: userId,
+              venueWideReason: validated.surfaceId
+                ? null
+                : "Specialty event venue-wide reservation",
+            });
+          }
+          return created;
+        });
+        revalidateContentPaths(validated.organizationId, validated.venueId, venue.slug);
+        return { success: true, data: { scheduleBlockId: block.id, status: block.status } };
+      } catch (error) {
+        if (error instanceof VenueReservationConflictError) {
+          return {
+            success: false,
+            error: "Specialty event conflicts with an existing venue booking.",
+            details: { conflicts: error.conflicts },
+          };
+        }
+        throw error;
+      }
+    }
 
     const block = await prisma.venueScheduleBlock.create({
       data: {
         venueId: validated.venueId,
         surfaceId: validated.surfaceId || null,
+        segmentId,
         title: validated.title,
         description: validated.description || null,
         activityType: "SPECIALTY_EVENT",
@@ -317,6 +422,9 @@ export async function publishSpecialtyEvent(
         intent: "VENUE_ACTIVITY",
         startsAt: validated.startsAt,
         endsAt: validated.endsAt,
+        recurrenceRule: validated.recurrenceRule || null,
+        recurrenceStartDate: validated.recurrenceStartDate ?? null,
+        recurrenceEndDate: validated.recurrenceEndDate ?? null,
         capacity: validated.capacity ?? null,
         priceAmount: validated.priceAmount ?? null,
         priceCurrency: validated.priceCurrency,
@@ -467,7 +575,7 @@ async function setLessonStatus(
 async function ensureVenue(organizationId: string, venueId: string) {
   const venue = await prisma.venue.findFirst({
     where: { id: venueId, organizationId },
-    select: { id: true, slug: true },
+    select: { id: true, slug: true, timezone: true },
   });
 
   if (!venue) {

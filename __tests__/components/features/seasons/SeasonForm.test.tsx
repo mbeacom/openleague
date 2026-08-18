@@ -22,6 +22,7 @@ const editValues = {
   startDate: new Date("2026-09-01T00:00:00.000Z"),
   endDate: new Date("2026-12-01T00:00:00.000Z"),
   format: null,
+  scheduleVisibility: "PRIVATE" as const,
 };
 
 describe("SeasonForm", () => {
@@ -39,6 +40,7 @@ describe("SeasonForm", () => {
       expect(screen.getByRole("group", { name: /starts/i })).toBeInTheDocument();
       expect(screen.getByRole("group", { name: /ends/i })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /create season/i })).toBeInTheDocument();
+      expect(screen.getByLabelText(/schedule visibility/i)).toBeInTheDocument();
     });
 
     it("presents NO format control on the create path", () => {
@@ -94,6 +96,7 @@ describe("SeasonForm", () => {
       expect(input.name).toBe("Fall 2026");
       expect(input.leagueId).toBe(LEAGUE_ID);
       expect(input.teamId).toBeUndefined();
+      expect(input.scheduleVisibility).toBe("PRIVATE");
       expect(input).not.toHaveProperty("format");
     });
   });

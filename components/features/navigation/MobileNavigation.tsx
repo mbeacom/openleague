@@ -23,6 +23,8 @@ import {
   ManageAccounts as ManageAccountsIcon,
   AdminPanelSettings as AdminPanelSettingsIcon,
   Inventory2 as GearIcon,
+  Assessment as OperationsIcon,
+  EventAvailable as VenueReservationsIcon,
 } from '@mui/icons-material';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -96,7 +98,7 @@ export default function MobileNavigation({ isLeagueMode = false, isPlatformAdmin
       if (item.path === '/dashboard' && (pathname === '/' || pathname === '/dashboard')) {
         return true;
       }
-      return pathname.startsWith(item.path);
+      return pathname === item.path || pathname.startsWith(`${item.path}/`);
     });
     return currentItem?.path || pathname;
   };
@@ -194,6 +196,30 @@ export default function MobileNavigation({ isLeagueMode = false, isPlatformAdmin
               <GearIcon />
             </ListItemIcon>
             <ListItemText>Gear</ListItemText>
+          </MenuItem>
+        )}
+        {isLeagueMode && currentLeague && (
+          <MenuItem
+            component={Link}
+            href={`/league/${currentLeague.id}/operations`}
+            onClick={handleMenuClose}
+          >
+            <ListItemIcon>
+              <OperationsIcon />
+            </ListItemIcon>
+            <ListItemText>Operations</ListItemText>
+          </MenuItem>
+        )}
+        {isLeagueMode && currentLeague && (
+          <MenuItem
+            component={Link}
+            href={`/league/${currentLeague.id}/venue-reservations`}
+            onClick={handleMenuClose}
+          >
+            <ListItemIcon>
+              <VenueReservationsIcon />
+            </ListItemIcon>
+            <ListItemText>Venue Reservations</ListItemText>
           </MenuItem>
         )}
         <MenuItem
