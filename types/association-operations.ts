@@ -92,6 +92,19 @@ export interface AssociationScheduleItemView {
   segmentId: string | null;
   /** Participant-facing Event/RSVP destination when one exists. */
   href?: string | null;
+  eventType?: string | null;
+  location?: string | null;
+  opponent?: string | null;
+  notes?: string | null;
+  updatedAt?: Date | null;
+  teamId?: string | null;
+  teamName?: string | null;
+  divisionName?: string | null;
+  homeTeam?: { id: string; name: string } | null;
+  awayTeam?: { id: string; name: string } | null;
+  venueName?: string | null;
+  leagueId?: string | null;
+  leagueName?: string | null;
 }
 
 export interface AssociationOperationsSummaryView {

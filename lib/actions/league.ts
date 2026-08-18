@@ -1660,8 +1660,8 @@ export async function exportLeagueRosterCSV(
     const { generateLeagueRosterCSV, getReportMetadata } = await import("@/lib/services/league-reporting");
 
     const [csv, metadata] = await Promise.all([
-      generateLeagueRosterCSV(leagueId, { includeAdminFields: isAdmin }),
-      getReportMetadata(leagueId),
+      generateLeagueRosterCSV(leagueId, userId, { includeAdminFields: isAdmin }),
+      getReportMetadata(leagueId, userId),
     ]);
 
     const filename = `${metadata.leagueName.replace(/\s+/g, '_')}_roster_${format(new Date(), 'yyyy-MM-dd')}.csv`;
@@ -1699,8 +1699,13 @@ export async function exportLeagueRosterPDF(
     const isAdmin = await verifyLeagueAdmin(leagueId, userId);
     const { generateLeagueRosterPDF, getReportMetadata } = await import("@/lib/services/league-reporting");
 
-    const metadata = await getReportMetadata(leagueId);
-    const pdfBase64 = await generateLeagueRosterPDF(leagueId, { includeAdminFields: isAdmin }, metadata);
+    const metadata = await getReportMetadata(leagueId, userId);
+    const pdfBase64 = await generateLeagueRosterPDF(
+      leagueId,
+      userId,
+      { includeAdminFields: isAdmin },
+      metadata,
+    );
 
     const filename = `${metadata.leagueName.replace(/\s+/g, '_')}_roster_${format(new Date(), 'yyyy-MM-dd')}.pdf`;
 
@@ -1738,8 +1743,8 @@ export async function exportLeagueScheduleCSV(
     const { generateLeagueScheduleCSV, getReportMetadata } = await import("@/lib/services/league-reporting");
 
     const [csv, metadata] = await Promise.all([
-      generateLeagueScheduleCSV(leagueId),
-      getReportMetadata(leagueId),
+      generateLeagueScheduleCSV(leagueId, userId),
+      getReportMetadata(leagueId, userId),
     ]);
 
     const filename = `${metadata.leagueName.replace(/\s+/g, '_')}_schedule_${format(new Date(), 'yyyy-MM-dd')}.csv`;
@@ -1776,8 +1781,8 @@ export async function exportLeagueSchedulePDF(
 
     const { generateLeagueSchedulePDF, getReportMetadata } = await import("@/lib/services/league-reporting");
 
-    const metadata = await getReportMetadata(leagueId);
-    const pdfBase64 = await generateLeagueSchedulePDF(leagueId, metadata);
+    const metadata = await getReportMetadata(leagueId, userId);
+    const pdfBase64 = await generateLeagueSchedulePDF(leagueId, userId, metadata);
 
     const filename = `${metadata.leagueName.replace(/\s+/g, '_')}_schedule_${format(new Date(), 'yyyy-MM-dd')}.pdf`;
 
@@ -1815,8 +1820,8 @@ export async function exportAttendanceReportCSV(
     const { generateAttendanceReportByDivisionCSV, getReportMetadata } = await import("@/lib/services/league-reporting");
 
     const [csv, metadata] = await Promise.all([
-      generateAttendanceReportByDivisionCSV(leagueId),
-      getReportMetadata(leagueId),
+      generateAttendanceReportByDivisionCSV(leagueId, userId),
+      getReportMetadata(leagueId, userId),
     ]);
 
     const filename = `${metadata.leagueName.replace(/\s+/g, '_')}_attendance_${format(new Date(), 'yyyy-MM-dd')}.csv`;
@@ -1853,8 +1858,8 @@ export async function exportAttendanceReportPDF(
 
     const { generateAttendanceReportByDivisionPDF, getReportMetadata } = await import("@/lib/services/league-reporting");
 
-    const metadata = await getReportMetadata(leagueId);
-    const pdfBase64 = await generateAttendanceReportByDivisionPDF(leagueId, metadata);
+    const metadata = await getReportMetadata(leagueId, userId);
+    const pdfBase64 = await generateAttendanceReportByDivisionPDF(leagueId, userId, metadata);
 
     const filename = `${metadata.leagueName.replace(/\s+/g, '_')}_attendance_${format(new Date(), 'yyyy-MM-dd')}.pdf`;
 
@@ -1892,8 +1897,8 @@ export async function exportFinancialReportCSV(
     const { generateFinancialReportCSV, getReportMetadata } = await import("@/lib/services/league-reporting");
 
     const [csv, metadata] = await Promise.all([
-      generateFinancialReportCSV(leagueId),
-      getReportMetadata(leagueId),
+      generateFinancialReportCSV(leagueId, userId),
+      getReportMetadata(leagueId, userId),
     ]);
 
     const filename = `${metadata.leagueName.replace(/\s+/g, '_')}_financial_${format(new Date(), 'yyyy-MM-dd')}.csv`;
@@ -1930,8 +1935,8 @@ export async function exportFinancialReportPDF(
 
     const { generateFinancialReportPDF, getReportMetadata } = await import("@/lib/services/league-reporting");
 
-    const metadata = await getReportMetadata(leagueId);
-    const pdfBase64 = await generateFinancialReportPDF(leagueId, metadata);
+    const metadata = await getReportMetadata(leagueId, userId);
+    const pdfBase64 = await generateFinancialReportPDF(leagueId, userId, metadata);
 
     const filename = `${metadata.leagueName.replace(/\s+/g, '_')}_financial_${format(new Date(), 'yyyy-MM-dd')}.pdf`;
 

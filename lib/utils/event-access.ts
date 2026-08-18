@@ -56,6 +56,47 @@ export async function canViewSignupEvent(
   }
 }
 
+/** Management access for server readers that already have the viewer id. */
+export async function isSignupEventManager(userId: string, eventId: string): Promise<boolean> {
+  const event = await prisma.signupEvent.findUnique({
+    where: { id: eventId },
+    select: { hostOrganizationId: true, hostLeagueId: true, hostTeamId: true },
+  });
+  if (!event) return false;
+
+  const [grant, leagueAdmin, teamAdmin, venueAdmin] = await Promise.all([
+    prisma.eventManager.findUnique({
+      where: { eventId_userId: { eventId, userId } },
+      select: { id: true },
+    }),
+    event.hostLeagueId
+      ? prisma.leagueUser.findFirst({
+        where: { userId, leagueId: event.hostLeagueId, role: "LEAGUE_ADMIN" },
+        select: { id: true },
+      })
+      : null,
+    event.hostTeamId
+      ? prisma.teamMember.findFirst({
+        where: { userId, teamId: event.hostTeamId, role: "ADMIN" },
+        select: { id: true },
+      })
+      : null,
+    event.hostOrganizationId
+      ? prisma.venueStaff.findFirst({
+        where: {
+          userId,
+          organizationId: event.hostOrganizationId,
+          status: "ACTIVE",
+          role: { in: ["OWNER", "MANAGER", "SCHEDULER"] },
+        },
+        select: { id: true },
+      })
+      : null,
+  ]);
+
+  return Boolean(grant || leagueAdmin || teamAdmin || venueAdmin);
+}
+
 /** Confirmed registrant (contact of record) on the event — gallery contributor. */
 export async function isConfirmedEventRegistrant(eventId: string, userId: string): Promise<boolean> {
   const count = await prisma.eventRegistration.count({

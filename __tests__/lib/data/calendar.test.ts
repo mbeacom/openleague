@@ -6,6 +6,7 @@ const { mockPrisma, mockAuth, mockDashboard } = vi.hoisted(() => ({
     practiceSession: { findMany: vi.fn() },
     signupEvent: { findMany: vi.fn() },
     venueStaff: { findMany: vi.fn() },
+    team: { findMany: vi.fn() },
   },
   mockAuth: {
     getViewableTeamIds: vi.fn(),
@@ -95,24 +96,58 @@ describe("getUserCalendarItems event privacy", () => {
     mockPrisma.practiceSession.findMany.mockResolvedValue([]);
     mockPrisma.signupEvent.findMany.mockResolvedValue([]);
     mockPrisma.venueStaff.findMany.mockResolvedValue([]);
+    mockPrisma.team.findMany.mockResolvedValue([]);
   });
 
-  it("does not broaden a team-scoped participant Event to every league member", async () => {
+  it("defaults an ordinary league member to least-privilege team scope", async () => {
+    mockDashboard.getViewerMemberships.mockResolvedValue({
+      teams: [{
+        role: "MEMBER",
+        team: { id: "team-1", name: "Hawks", leagueId: "league-1" },
+      }],
+      leagues: [{
+        role: "MEMBER",
+        league: { id: "league-1", name: "Association" },
+      }],
+    });
+    mockPrisma.team.findMany.mockResolvedValue([{ id: "team-1" }]);
+
     await getUserCalendarItems({
       from: "2026-09-01T00:00:00.000Z",
       to: "2026-10-01T00:00:00.000Z",
     });
 
-    expect(mockPrisma.event.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          AND: expect.arrayContaining([
-            {
-              OR: [{ leagueId: { in: ["league-1"] } }],
-            },
-          ]),
-        }),
-      }),
+    const eventQueries = mockPrisma.event.findMany.mock.calls.map(([args]) =>
+      JSON.stringify(args.where),
     );
+    expect(eventQueries.some((query) => query.includes("team-1"))).toBe(true);
+    expect(eventQueries.every((query) => !query.includes('"leagueId":{"in":["league-1"]}'))).toBe(true);
+  });
+
+  it("resolves each league role independently for member privacy and admin aggregation", async () => {
+    mockDashboard.getViewerMemberships.mockResolvedValue({
+      teams: [],
+      leagues: [
+        { role: "MEMBER", league: { id: "league-member", name: "Member league" } },
+        { role: "LEAGUE_ADMIN", league: { id: "league-admin", name: "Admin league" } },
+      ],
+    });
+    mockPrisma.team.findMany.mockImplementation(async ({ where }) =>
+      where.leagueId === "league-member"
+        ? [{ id: "member-team" }]
+        : [{ id: "admin-team-a" }, { id: "admin-team-b" }],
+    );
+
+    await getUserCalendarItems({
+      from: "2026-09-01T00:00:00.000Z",
+      to: "2026-10-01T00:00:00.000Z",
+    });
+
+    const eventQueries = mockPrisma.event.findMany.mock.calls.map(([args]) =>
+      JSON.stringify(args.where),
+    );
+    expect(eventQueries.some((query) => query.includes("member-team"))).toBe(true);
+    expect(eventQueries.every((query) => !query.includes('"leagueId":{"in":["league-member"]}'))).toBe(true);
+    expect(eventQueries.some((query) => query.includes('"leagueId":{"in":["league-admin"]}'))).toBe(true);
   });
 });

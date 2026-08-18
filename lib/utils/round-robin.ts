@@ -34,6 +34,11 @@ export type ProposedGame = {
 export type RoundRobinResult = {
   games: ProposedGame[]; // slotted games in chronological order
   unslottedCount: number; // pairings that did not fit in the date range
+  unslottedPairings: Array<{
+    homeTeamId: string;
+    awayTeamId: string;
+    round: number;
+  }>;
 };
 
 const START_TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
@@ -198,5 +203,9 @@ export function buildRoundRobin(input: RoundRobinInput): RoundRobinResult {
     cursor += MS_PER_DAY;
   }
 
-  return { games, unslottedCount: pairings.length - slotted };
+  return {
+    games,
+    unslottedCount: pairings.length - slotted,
+    unslottedPairings: pairings.slice(slotted),
+  };
 }

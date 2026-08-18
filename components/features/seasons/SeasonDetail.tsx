@@ -18,7 +18,7 @@ import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import ArchiveIcon from "@mui/icons-material/Archive";
 import UnarchiveIcon from "@mui/icons-material/Unarchive";
-import type { ScheduleFormat, Sport } from "@prisma/client";
+import type { ScheduleFormat, SeasonScheduleVisibility, Sport } from "@prisma/client";
 import { archiveSeason, unarchiveSeason } from "@/lib/actions/seasons";
 import { SCHEDULE_FORMAT_LABELS } from "@/lib/utils/sport-catalog";
 import { GameForm } from "./GameForm";
@@ -35,6 +35,7 @@ export interface SeasonDetailSeason {
   archivedAt: Date | null;
   format: ScheduleFormat | null;
   formatRounds: number | null;
+  scheduleVisibility: SeasonScheduleVisibility;
   ownerName: string;
 }
 
@@ -233,6 +234,7 @@ export function SeasonDetail({
               startDate: season.startDate,
               endDate: season.endDate,
               format: season.format,
+              scheduleVisibility: season.scheduleVisibility,
             }}
             onSaved={() => setEditSeasonOpen(false)}
             onCancel={() => setEditSeasonOpen(false)}

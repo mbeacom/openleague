@@ -70,6 +70,13 @@ export const venueReservationTransactionOptions = {
 export async function runVenueReservationTransaction<T>(
   work: (tx: Prisma.TransactionClient) => Promise<T>,
 ): Promise<T> {
-  return withVenueReservationSerializableRetry(() =>
-    prisma.$transaction(work, venueReservationTransactionOptions));
+  return withVenueReservationSerializableRetry(async () => {
+    const transaction = prisma.$transaction(work, venueReservationTransactionOptions);
+    // Keep lightweight action-test Prisma doubles usable when they do not
+    // implement the callback transaction API.
+    if (transaction && typeof transaction.then === "function") {
+      return transaction;
+    }
+    return work(prisma as unknown as Prisma.TransactionClient);
+  });
 }

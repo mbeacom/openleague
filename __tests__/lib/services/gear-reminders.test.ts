@@ -42,6 +42,7 @@ function reservation(overrides: Record<string, unknown> = {}) {
     requestedById: null,
     requestedEndDate: new Date("2026-08-30T00:00:00.000Z"),
     approvedEndDate: new Date("2026-08-18T00:00:00.000Z"),
+    custodyStartedAt: new Date("2026-08-01T00:00:00.000Z"),
     ...overrides,
   };
 }
@@ -86,6 +87,12 @@ describe("gear custody reminders", () => {
           "gear.reservation.due_soon:crrrrrrrrrrrrrrrrrrrrrrrr:gear.reservation.due_soon:2026-08-18",
         ),
       })],
+    }));
+    expect(mocks.reservationFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        status: "FULFILLED",
+        custodyStartedAt: { not: null },
+      }),
     }));
   });
 
@@ -258,6 +265,7 @@ describe("stale gear custody reminder cancellation", () => {
     mocks.reservationFindMany.mockResolvedValue([{
       id: "crrrrrrrrrrrrrrrrrrrrrrrr",
       status: "FULFILLED",
+      custodyStartedAt: new Date("2026-08-01T00:00:00.000Z"),
       requestedEndDate: new Date("2026-08-30T00:00:00.000Z"),
       approvedEndDate: new Date("2026-08-25T00:00:00.000Z"),
     }]);
@@ -275,6 +283,7 @@ describe("stale gear custody reminder cancellation", () => {
     mocks.reservationFindMany.mockResolvedValue([{
       id: "crrrrrrrrrrrrrrrrrrrrrrrr",
       status: "FULFILLED",
+      custodyStartedAt: new Date("2026-08-01T00:00:00.000Z"),
       requestedEndDate: new Date("2026-08-10T00:00:00.000Z"),
       approvedEndDate: new Date("2026-08-10T00:00:00.000Z"),
     }]);
@@ -290,11 +299,28 @@ describe("stale gear custody reminder cancellation", () => {
     mocks.reservationFindMany.mockResolvedValue([{
       id: "crrrrrrrrrrrrrrrrrrrrrrrr",
       status: "FULFILLED",
+      custodyStartedAt: new Date("2026-08-01T00:00:00.000Z"),
       requestedEndDate: new Date("2026-08-30T00:00:00.000Z"),
       approvedEndDate: new Date("2026-08-18T00:00:00.000Z"),
     }]);
 
     await expect(cancelStaleGearCustodyReminders(NOW)).resolves.toEqual({ inspected: 1, canceled: 0 });
     expect(mocks.outboxUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it("cancels a pending custody reminder when pickup never started", async () => {
+    mocks.outboxFindMany.mockResolvedValue([pendingRow()]);
+    mocks.reservationFindMany.mockResolvedValue([{
+      id: "crrrrrrrrrrrrrrrrrrrrrrrr",
+      status: "FULFILLED",
+      custodyStartedAt: null,
+      requestedEndDate: new Date("2026-08-30T00:00:00.000Z"),
+      approvedEndDate: new Date("2026-08-18T00:00:00.000Z"),
+    }]);
+
+    await expect(cancelStaleGearCustodyReminders(NOW)).resolves.toEqual({
+      inspected: 1,
+      canceled: 1,
+    });
   });
 });

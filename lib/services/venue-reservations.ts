@@ -9,7 +9,7 @@ import {
 } from "@/lib/services/association-operations-notification-registry";
 import {
   approvedSpaceWithinRequestedSpace,
-  findVenueReservationConflicts,
+  findVenueReservationWriteConflicts,
   type VenueReservationConflict,
 } from "@/lib/services/venue-reservation-availability";
 import { expandRecurrenceWindow } from "@/lib/utils/venue-schedule";
@@ -28,6 +28,22 @@ export class VenueReservationLifecycleError extends Error {
     super(message);
     this.name = "VenueReservationLifecycleError";
   }
+}
+
+function canonicalConflictIds(conflicts: readonly VenueReservationConflict[]): string[] {
+  return conflicts
+    .filter((conflict) => !conflict.source || conflict.source === "venueReservation")
+    .map(({ id }) => id);
+}
+
+function legacyConflictReferences(conflicts: readonly VenueReservationConflict[]) {
+  return conflicts
+    .filter((conflict) => conflict.source && conflict.source !== "venueReservation")
+    .map((conflict) => ({
+      id: conflict.id,
+      source: conflict.source,
+      title: conflict.title ?? null,
+    }));
 }
 
 export function assertGenericRescheduleAllowed(
@@ -58,8 +74,12 @@ export type CreateVenueReservationServiceInput =
     heldUntil?: Date | null;
     sourceRequestId?: string | null;
     offeringBlockId?: string | null;
+    sourceScheduleBlockId?: string | null;
     actorId: string;
+    venueWideReason?: string | null;
+    overrideConflicts?: boolean;
     overrideReason?: string | null;
+    excludeReservationIds?: readonly string[];
   };
 
 async function assertVenueAncestry(
@@ -199,6 +219,7 @@ async function hasVenueStaffAuthorization(
       | "MANAGER"
       | "SCHEDULER"
       | "REQUEST_MANAGER"
+      | "CONTENT_EDITOR"
     )[];
   },
 ): Promise<boolean> {
@@ -367,6 +388,8 @@ async function assertCreateAuthorizationAndSources(
     venueId: input.venueId,
     roles: input.sourceRequestId
       ? ["OWNER", "MANAGER", "REQUEST_MANAGER"]
+      : input.sourceScheduleBlockId
+        ? ["OWNER", "MANAGER", "SCHEDULER", "CONTENT_EDITOR"]
       : ["OWNER", "MANAGER", "SCHEDULER"],
   });
   if (
@@ -446,6 +469,23 @@ async function assertCreateAuthorizationAndSources(
     ) {
       throw new VenueReservationLifecycleError(
         "The offering does not contain the venue reservation.",
+      );
+    }
+  }
+
+  if (input.sourceScheduleBlockId) {
+    const sourceBlock = await tx.venueScheduleBlock.findFirst({
+      where: {
+        id: input.sourceScheduleBlockId,
+        venueId: input.venueId,
+        status: "PUBLISHED",
+        intent: { notIn: ["OFFERING", "INFORMATION"] },
+      },
+      select: { id: true },
+    });
+    if (!sourceBlock) {
+      throw new VenueReservationLifecycleError(
+        "The source schedule block does not match the venue reservation.",
       );
     }
   }
@@ -533,7 +573,7 @@ export async function createVenueReservation(
   }
   if (
     (input.surfaceId === null || input.surfaceId === undefined)
-    && !input.overrideReason?.trim()
+    && !input.venueWideReason?.trim()
   ) {
     throw new VenueReservationLifecycleError(
       "Venue-wide reservations require a reason.",
@@ -548,7 +588,9 @@ export async function createVenueReservation(
       actorId: input.actorId,
       organizationId: venue.organizationId,
       venueId: input.venueId,
-      roles: ["OWNER", "MANAGER"],
+      roles: input.sourceScheduleBlockId
+        ? ["OWNER", "MANAGER", "SCHEDULER", "CONTENT_EDITOR"]
+        : ["OWNER", "MANAGER"],
     });
     if (!venueManagerAuthorized) {
       throw new VenueReservationLifecycleError(
@@ -557,14 +599,20 @@ export async function createVenueReservation(
     }
   }
 
-  const conflicts = await findVenueReservationConflicts(tx, {
+  const conflicts = await findVenueReservationWriteConflicts(tx, {
     venueId: input.venueId,
     surfaceId: input.surfaceId,
     segmentId: input.segmentId,
     startsAt: input.startsAt,
     endsAt: input.endsAt,
+    excludeReservationIds: input.excludeReservationIds,
+    excludeBlockId: input.sourceScheduleBlockId ?? undefined,
+    excludeRequestId: input.sourceRequestId ?? undefined,
   });
-  if (conflicts.length > 0 && !input.overrideReason?.trim()) {
+  if (
+    conflicts.length > 0
+    && (!input.overrideConflicts || !input.overrideReason?.trim())
+  ) {
     throw new VenueReservationConflictError(conflicts);
   }
   if (conflicts.length > 0) {
@@ -599,6 +647,7 @@ export async function createVenueReservation(
       ownerVenueOrganizationId: input.ownerVenueOrganizationId ?? null,
       sourceRequestId: input.sourceRequestId ?? null,
       offeringBlockId: input.offeringBlockId ?? null,
+      sourceScheduleBlockId: input.sourceScheduleBlockId ?? null,
       createdById: input.actorId,
       transitions: {
         create: {
@@ -616,8 +665,6 @@ export async function createVenueReservation(
         },
       },
       ...(conflicts.length > 0
-        || input.surfaceId === null
-        || input.surfaceId === undefined
         ? {
             overrides: {
               create: {
@@ -629,8 +676,9 @@ export async function createVenueReservation(
                   segmentId: input.segmentId ?? null,
                   startsAt: input.startsAt.toISOString(),
                   endsAt: input.endsAt.toISOString(),
+                   legacyConflicts: legacyConflictReferences(conflicts),
                 },
-                conflictingReservationIds: conflicts.map(({ id }) => id),
+                conflictingReservationIds: canonicalConflictIds(conflicts),
               },
             },
           }
@@ -650,6 +698,7 @@ export async function createVenueReservation(
         status,
         venueId: input.venueId,
         conflictOverrideCount: conflicts.length,
+        venueWideReason: input.venueWideReason?.trim() ?? null,
       },
     },
   });
@@ -691,6 +740,7 @@ export async function transitionVenueReservation(
     reason: string;
     usageStatus?: VenueReservationUsageStatus;
     allowAssignedDisposition?: boolean;
+    overrideConflicts?: boolean;
     overrideReason?: string;
     snapshot?: Prisma.InputJsonValue;
   },
@@ -763,7 +813,7 @@ export async function transitionVenueReservation(
         "This venue reservation hold has expired.",
       );
     }
-    confirmationConflicts = await findVenueReservationConflicts(tx, {
+    confirmationConflicts = await findVenueReservationWriteConflicts(tx, {
       venueId: reservation.venueId,
       surfaceId: reservation.surfaceId,
       segmentId: reservation.segmentId,
@@ -774,7 +824,7 @@ export async function transitionVenueReservation(
     });
     if (
       confirmationConflicts.length > 0
-      && !input.overrideReason?.trim()
+      && (!input.overrideConflicts || !input.overrideReason?.trim())
     ) {
       throw new VenueReservationConflictError(confirmationConflicts);
     }
@@ -845,10 +895,9 @@ export async function transitionVenueReservation(
                   segmentId: reservation.segmentId,
                   startsAt: reservation.startsAt.toISOString(),
                   endsAt: reservation.endsAt.toISOString(),
+                  legacyConflicts: legacyConflictReferences(confirmationConflicts),
                 },
-                conflictingReservationIds: confirmationConflicts.map(
-                  ({ id }) => id,
-                ),
+                conflictingReservationIds: canonicalConflictIds(confirmationConflicts),
               },
             },
           }
@@ -992,6 +1041,8 @@ export async function assignVenueReservation(
       | "EVENT_GAME";
     targetId: string;
     actorId: string;
+    excludeReservationIds?: readonly string[];
+    overrideConflicts?: boolean;
     overrideReason?: string | null;
   },
 ) {
@@ -1037,19 +1088,58 @@ export async function assignVenueReservation(
     + reservation.signupEvents.length
     + reservation.practiceSessions.length
     + reservation.proposalEntries.length;
-  const assignmentConflicts = totalLinkCount === 0
-    ? await findVenueReservationConflicts(tx, {
+  let assignmentConflicts: Awaited<
+    ReturnType<typeof findVenueReservationWriteConflicts>
+  > = [];
+  let conflictsChecked = false;
+  const checkAssignmentConflicts = async () => {
+    if (conflictsChecked) return;
+    conflictsChecked = true;
+    assignmentConflicts = await findVenueReservationWriteConflicts(tx, {
+      venueId: reservation.venueId,
+      surfaceId: reservation.surfaceId,
+      segmentId: reservation.segmentId,
+      startsAt: reservation.startsAt,
+      endsAt: reservation.endsAt,
+      excludeReservationIds: [
+        reservation.id,
+        ...(input.excludeReservationIds ?? []),
+      ],
+      ...(input.targetType === "EVENT" ? { excludeEventId: input.targetId } : {}),
+      ...(input.targetType === "SEASON_GAME"
+        ? { excludeSeasonGameId: input.targetId }
+        : {}),
+      ...(input.targetType === "EVENT_GAME"
+        ? { excludeEventGameId: input.targetId }
+        : {}),
+      ...(input.targetType === "PRACTICE"
+        ? { excludePracticeId: input.targetId }
+        : {}),
+    });
+    if (
+      assignmentConflicts.length > 0
+      && (!input.overrideConflicts || !input.overrideReason?.trim())
+    ) {
+      throw new VenueReservationConflictError(assignmentConflicts);
+    }
+    if (assignmentConflicts.length > 0) {
+      const venue = await tx.venue.findUnique({
+        where: { id: reservation.venueId },
+        select: { organizationId: true },
+      });
+      const mayOverride = await hasVenueStaffAuthorization(tx, {
+        actorId: input.actorId,
+        organizationId: venue?.organizationId ?? null,
         venueId: reservation.venueId,
-        surfaceId: reservation.surfaceId,
-        segmentId: reservation.segmentId,
-        startsAt: reservation.startsAt,
-        endsAt: reservation.endsAt,
-        excludeReservationId: reservation.id,
-      })
-    : [];
-  if (assignmentConflicts.length > 0 && !input.overrideReason?.trim()) {
-    throw new VenueReservationConflictError(assignmentConflicts);
-  }
+        roles: ["OWNER", "MANAGER"],
+      });
+      if (!mayOverride) {
+        throw new VenueReservationLifecycleError(
+          "Conflict overrides require exact venue-manager authorization.",
+        );
+      }
+    }
+  };
   const targetSpaceMatches = (target: {
     surfaceId: string | null;
     segmentId: string | null;
@@ -1144,7 +1234,8 @@ export async function assignVenueReservation(
           "The Event does not match the venue reservation.",
         );
       }
-      if (isIdempotent) return reservation;
+      await checkAssignmentConflicts();
+      if (isIdempotent) break;
       await tx.event.update({
         where: { id: event.id },
         data: { venueReservationId: reservation.id },
@@ -1216,7 +1307,8 @@ export async function assignVenueReservation(
           "The season game does not match the venue reservation.",
         );
       }
-      if (isIdempotent) return reservation;
+      await checkAssignmentConflicts();
+      if (isIdempotent) break;
       await tx.seasonGame.update({
         where: { id: game.id },
         data: { venueReservationId: reservation.id },
@@ -1274,7 +1366,8 @@ export async function assignVenueReservation(
           "The practice does not match the venue reservation.",
         );
       }
-      if (isIdempotent) return reservation;
+      await checkAssignmentConflicts();
+      if (isIdempotent) break;
       await tx.practiceSession.update({
         where: { id: practice.id },
         data: { venueReservationId: reservation.id },
@@ -1355,7 +1448,8 @@ export async function assignVenueReservation(
           "The signup event does not match the venue reservation.",
         );
       }
-      if (isIdempotent) return reservation;
+      await checkAssignmentConflicts();
+      if (isIdempotent) break;
       await tx.signupEvent.update({
         where: { id: event.id },
         data: { venueReservationId: reservation.id },
@@ -1447,7 +1541,8 @@ export async function assignVenueReservation(
           "The event game does not match the venue reservation.",
         );
       }
-      if (isIdempotent) return reservation;
+      await checkAssignmentConflicts();
+      if (isIdempotent) break;
       await tx.eventGame.update({
         where: { id: game.id },
         data: { venueReservationId: reservation.id },
@@ -1474,10 +1569,9 @@ export async function assignVenueReservation(
                   endsAt: reservation.endsAt.toISOString(),
                   targetType: input.targetType,
                   targetId: input.targetId,
+                  legacyConflicts: legacyConflictReferences(assignmentConflicts),
                 },
-                conflictingReservationIds: assignmentConflicts.map(
-                  ({ id }) => id,
-                ),
+                conflictingReservationIds: canonicalConflictIds(assignmentConflicts),
               },
             },
           }
@@ -1514,5 +1608,8 @@ export async function assignVenueReservation(
       },
     });
   }
-  return updated;
+  return {
+    ...updated,
+    conflictsOverridden: assignmentConflicts.length > 0,
+  };
 }

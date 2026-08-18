@@ -63,6 +63,20 @@ interface ProposalThreadProps {
   /** Viewer administers either side and the proposal is still pending. */
   canWithdraw: boolean;
   venues: Array<{ id: string; name: string; timezone: string }>;
+  reservations: ProposalReservationOption[];
+}
+
+export interface ProposalReservationOption {
+  id: string;
+  venueId: string;
+  startsAt: Date;
+  endsAt: Date;
+  venueName: string;
+  surfaceName: string | null;
+  segmentName: string | null;
+  proposalId: string | null;
+  ownerLeagueId: string | null;
+  ownerTeamId: string | null;
 }
 
 function extractConflicts(details: unknown): GameConflictView[] | null {
@@ -104,7 +118,13 @@ const termsText = (entry: GameProposalEntryView) => {
  * venue conflicts on accept come back as a warning with an explicit
  * "Accept anyway" override, mirroring GameForm.
  */
-export function ProposalThread({ proposal, canAct, canWithdraw, venues }: ProposalThreadProps) {
+export function ProposalThread({
+  proposal,
+  canAct,
+  canWithdraw,
+  venues,
+  reservations,
+}: ProposalThreadProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -114,6 +134,8 @@ export function ProposalThread({ proposal, canAct, canWithdraw, venues }: Propos
   const [counterVenueId, setCounterVenueId] = useState("");
   const [confirm, setConfirm] = useState<"decline" | "withdraw" | null>(null);
   const [reason, setReason] = useState("");
+  const [reservationId, setReservationId] = useState("");
+  const [overrideReason, setOverrideReason] = useState("");
 
   const teamName = (teamId: string) =>
     teamId === proposal.proposingTeam.id
@@ -123,11 +145,41 @@ export function ProposalThread({ proposal, canAct, canWithdraw, venues }: Propos
   const status = proposal.isExpired ? "EXPIRED" : proposal.status;
   const actionable = status === "PENDING";
 
+  const currentTerms = [...proposal.entries].reverse().find(
+    (entry) => entry.kind === "PROPOSE" || entry.kind === "COUNTER",
+  );
+  const matchingReservations = currentTerms?.startAt && currentTerms.endAt
+    ? reservations.filter(
+        (reservation) =>
+          (!reservation.proposalId || reservation.proposalId === proposal.id)
+          &&
+          (
+            reservation.ownerLeagueId === proposal.leagueId
+            || reservation.ownerTeamId === proposal.proposingTeam.id
+            || reservation.ownerTeamId === proposal.receivingTeam.id
+          )
+          &&
+          reservation.venueId === currentTerms.venue?.id
+          && new Date(reservation.startsAt).getTime() === new Date(currentTerms.startAt!).getTime()
+          && new Date(reservation.endsAt).getTime() === new Date(currentTerms.endAt!).getTime(),
+      )
+    : [];
+  const heldReservation = matchingReservations.find(
+    (reservation) => reservation.id === currentTerms?.venueReservationId,
+  );
+  const selectedReservationId = reservationId || heldReservation?.id || "";
+  const venueReservationRequired = Boolean(currentTerms?.venue?.id);
+
   const handleAccept = (overrideConflicts: boolean) => {
     startTransition(async () => {
       setError(null);
       setSuccess(null);
-      const result = await acceptGameProposal({ proposalId: proposal.id, overrideConflicts });
+      const result = await acceptGameProposal({
+        proposalId: proposal.id,
+        reservationId: selectedReservationId || undefined,
+        overrideConflicts,
+        overrideReason: overrideConflicts ? overrideReason.trim() : undefined,
+      });
       if (!result.success) {
         const conflicts = extractConflicts(result.details);
         if (conflicts) {
@@ -137,6 +189,7 @@ export function ProposalThread({ proposal, canAct, canWithdraw, venues }: Propos
           return;
         }
         setAcceptConflicts(null);
+        setOverrideReason("");
         setError(result.error);
         return;
       }
@@ -222,7 +275,7 @@ export function ProposalThread({ proposal, canAct, canWithdraw, venues }: Propos
             <Button
               color="inherit"
               size="small"
-              disabled={isPending}
+              disabled={isPending || !overrideReason.trim()}
               onClick={() => handleAccept(true)}
             >
               Accept anyway
@@ -239,6 +292,15 @@ export function ProposalThread({ proposal, canAct, canWithdraw, venues }: Propos
               {conflict.endAt ? ` – ${formatDateTimeInZone(conflict.endAt, resolveTimeZone())}` : ""}
             </Typography>
           ))}
+          <TextField
+            fullWidth
+            size="small"
+            label="Override reason"
+            value={overrideReason}
+            onChange={(event) => setOverrideReason(event.target.value)}
+            helperText="Required. The reason and conflicting commitments are audited."
+            sx={{ mt: 1 }}
+          />
         </Alert>
       ) : null}
 
@@ -270,13 +332,45 @@ export function ProposalThread({ proposal, canAct, canWithdraw, venues }: Propos
       </Stack>
 
       {actionable && (canAct || canWithdraw) ? (
-        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+        <Stack spacing={1}>
+          {canAct && venueReservationRequired ? (
+            <TextField
+              select
+              size="small"
+              label="Confirmed venue reservation"
+              value={selectedReservationId}
+              onChange={(event) => {
+                setReservationId(event.target.value);
+                setAcceptConflicts(null);
+              }}
+              helperText={
+                matchingReservations.length
+                  ? "Choose available inventory matching the proposed venue and time."
+                  : "No confirmed unassigned reservation matches these terms."
+              }
+            >
+              {matchingReservations.map((reservation) => (
+                <MenuItem key={reservation.id} value={reservation.id}>
+                  {reservation.venueName}
+                  {reservation.surfaceName ? ` · ${reservation.surfaceName}` : ""}
+                  {reservation.segmentName ? ` · ${reservation.segmentName}` : ""}
+                </MenuItem>
+              ))}
+            </TextField>
+          ) : null}
+          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
           {canAct ? (
             <>
               <Button
                 variant="contained"
                 size="small"
-                disabled={isPending}
+                disabled={
+                  isPending
+                  || (
+                    venueReservationRequired
+                    && !selectedReservationId
+                  )
+                }
                 onClick={() => handleAccept(false)}
                 sx={{ minHeight: 44 }}
               >
@@ -312,6 +406,7 @@ export function ProposalThread({ proposal, canAct, canWithdraw, venues }: Propos
               Withdraw
             </Button>
           ) : null}
+          </Stack>
         </Stack>
       ) : null}
 

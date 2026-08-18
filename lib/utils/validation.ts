@@ -447,6 +447,7 @@ const baseEventSchema = z.object({
   }).optional(),
   location: sanitizedStringWithMin(1, 200).refine(val => val.length > 0, "Location is required"),
   venueId: z.string().cuid("Invalid venue ID format").optional().or(z.literal("")),
+  reservationId: optionalCuid("Invalid reservation ID format"),
   timezone: optionalTimeZoneSchema,
   opponent: optionalSanitizedString(100),
   notes: optionalSanitizedString(1000),
@@ -454,9 +455,22 @@ const baseEventSchema = z.object({
   // Proceed despite venue booking conflicts; the override is recorded on the
   // event (conflictOverriddenBy/At — 006 FR-011).
   overrideConflicts: z.boolean().default(false),
+  overrideReason: optionalSanitizedString(1000),
 });
 
+const venueEventHasEndAt = (data: { venueId?: string; endAt?: Date }) =>
+  !data.venueId || Boolean(data.endAt);
+
 export const createEventSchema = baseEventSchema
+  .superRefine((data, context) => {
+    if (data.overrideConflicts && !data.overrideReason) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "A reason is required to override conflicts",
+        path: ["overrideReason"],
+      });
+    }
+  })
   .refine(
     (data) => {
       // Validate date is not in the past
@@ -480,6 +494,10 @@ export const createEventSchema = baseEventSchema
       path: ["endAt"],
     }
   )
+  .refine(venueEventHasEndAt, {
+    message: "End date and time is required when a venue is selected",
+    path: ["endAt"],
+  })
   .refine(
     (data) => {
       // Require opponent field for GAME type
@@ -521,6 +539,10 @@ export const updateEventSchema = baseEventSchema
       path: ["endAt"],
     }
   )
+  .refine(venueEventHasEndAt, {
+    message: "End date and time is required when a venue is selected",
+    path: ["endAt"],
+  })
   .refine(
     (data) => {
       // Require opponent field for GAME type
@@ -1305,6 +1327,7 @@ const practiceVenueAttachmentFields = {
   venueId: optionalCuid("Invalid venue ID format"),
   surfaceId: optionalCuid("Invalid surface ID format"),
   segmentId: optionalCuid("Invalid segment ID format"),
+  reservationId: optionalCuid("Invalid reservation ID format"),
   startAt: z.coerce.date().optional(),
   overrideConflicts: z.boolean().default(false),
 };
@@ -1671,6 +1694,8 @@ export const eventGameSchema = z
     endAt: z.coerce.date({ message: "Valid game end time is required" }),
     surfaceId: optionalCuid("Invalid surface ID format"),
     segmentId: optionalCuid("Invalid segment ID format"),
+    reservationId: optionalCuid("Invalid reservation ID format"),
+    venueId: optionalCuid("Invalid venue ID format"),
     notes: optionalSanitizedString(500),
     // Proceed despite venue booking conflicts; the override is recorded on
     // the game (conflictOverriddenBy/At — 006 FR-011).
@@ -1764,6 +1789,12 @@ export const SCHEDULE_FORMATS = [
 ] as const;
 
 export const SEASON_PHASE_TYPES = ["PRE_SEASON", "REGULAR_SEASON", "PLAYOFFS", "CUSTOM"] as const;
+export const SEASON_SCHEDULE_VISIBILITIES = [
+  "PUBLIC",
+  "AUTHENTICATED",
+  "RELATIONSHIP_ONLY",
+  "PRIVATE",
+] as const;
 
 // Owner is resolved and authorized server-side; exactly one of leagueId/teamId.
 export const createSeasonSchema = z
@@ -1772,6 +1803,7 @@ export const createSeasonSchema = z
     description: optionalSanitizedString(1000),
     startDate: z.coerce.date({ message: "Valid start date is required" }),
     endDate: z.coerce.date({ message: "Valid end date is required" }),
+    scheduleVisibility: z.enum(SEASON_SCHEDULE_VISIBILITIES).default("PRIVATE"),
     leagueId: optionalCuid("Invalid league ID format"),
     teamId: optionalCuid("Invalid team ID format"),
   })
@@ -1794,6 +1826,7 @@ export const updateSeasonSchema = z
     endDate: z.coerce.date().optional(),
     format: z.enum(SCHEDULE_FORMATS).nullable().optional(),
     formatRounds: z.coerce.number().int().min(1).max(4).nullable().optional(),
+    scheduleVisibility: z.enum(SEASON_SCHEDULE_VISIBILITIES).optional(),
   })
   .refine((data) => !data.startDate || !data.endDate || data.endDate >= data.startDate, {
     message: "End date must be on or after the start date",
@@ -1852,6 +1885,8 @@ const seasonGameFields = {
   segmentId: optionalCuid("Invalid segment ID format"),
   locationText: optionalSanitizedString(255),
   notes: optionalSanitizedString(1000),
+  reservationId: optionalCuid("Invalid venue reservation ID"),
+  overrideReason: optionalSanitizedString(1000),
 };
 
 export const createSeasonGameSchema = z
@@ -1882,6 +1917,8 @@ export const updateSeasonGameSchema = z
     segmentId: optionalCuid("Invalid segment ID format").nullable(),
     locationText: optionalSanitizedString(255),
     notes: optionalSanitizedString(1000),
+    reservationId: optionalCuid("Invalid venue reservation ID").nullable(),
+    overrideReason: optionalSanitizedString(1000),
     overrideConflicts: z.boolean().default(false),
   })
   .refine((data) => !data.startAt || !data.endAt || data.endAt > data.startAt, {
@@ -1896,6 +1933,16 @@ export const seasonGameCommandSchema = z.object({
 export const publishSeasonGamesSchema = z.object({
   seasonId: z.string().cuid("Invalid season ID format"),
   gameIds: z.array(z.string().cuid("Invalid game ID format")).max(200).optional(),
+  overrideConflicts: z.boolean().default(false),
+  overrideReason: optionalSanitizedString(1000),
+}).superRefine((value, context) => {
+  if (value.overrideConflicts && !value.overrideReason) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "A reason is required to override conflicts",
+      path: ["overrideReason"],
+    });
+  }
 });
 
 export const recordSeasonGameScoreSchema = z.object({
@@ -1975,7 +2022,17 @@ export const counterGameProposalSchema = z
 
 export const acceptGameProposalSchema = z.object({
   proposalId: z.string().cuid("Invalid proposal ID format"),
+  reservationId: optionalCuid("Invalid venue reservation ID"),
   overrideConflicts: z.boolean().default(false),
+  overrideReason: optionalSanitizedString(1000),
+}).superRefine((value, context) => {
+  if (value.overrideConflicts && !value.overrideReason) {
+    context.addIssue({
+      code: "custom",
+      message: "A reason is required to override conflicts",
+      path: ["overrideReason"],
+    });
+  }
 });
 
 export const declineGameProposalSchema = z.object({

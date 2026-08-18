@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   computeSeasonStandings,
+  overlaySeasonTeamDivisions,
   type SeasonStandingsGame,
 } from "@/lib/utils/season-standings";
 
@@ -15,6 +16,26 @@ const completed = (
   awayTeamId,
   homeScore,
   awayScore,
+});
+
+describe("overlaySeasonTeamDivisions", () => {
+  it("preserves an unprojected legacy division and honors explicit null placement", () => {
+    expect(overlaySeasonTeamDivisions(
+      [
+        { id: "legacy", name: "Legacy", divisionId: "division-old" },
+        { id: "moved", name: "Moved", divisionId: "division-old" },
+        { id: "cleared", name: "Cleared", divisionId: "division-old" },
+      ],
+      [
+        { teamId: "moved", divisionId: "division-new" },
+        { teamId: "cleared", divisionId: null },
+      ],
+    )).toEqual([
+      { id: "legacy", name: "Legacy", divisionId: "division-old" },
+      { id: "moved", name: "Moved", divisionId: "division-new" },
+      { id: "cleared", name: "Cleared", divisionId: null },
+    ]);
+  });
 });
 
 describe("computeSeasonStandings", () => {

@@ -4,6 +4,7 @@ import {
   assignVenueReservation,
   assertGenericRescheduleAllowed,
   createVenueReservation,
+  VenueReservationConflictError,
   transitionVenueReservation,
 } from "@/lib/services/venue-reservations";
 
@@ -71,8 +72,14 @@ function makeTx() {
     teamMember: {
       findFirst: vi.fn().mockResolvedValue({ id: "team-member-1" }),
     },
-    venueScheduleBlock: { findFirst: vi.fn().mockResolvedValue(null) },
-    iceTimeRequest: { findUnique: vi.fn().mockResolvedValue(null) },
+    venueScheduleBlock: {
+      findFirst: vi.fn().mockResolvedValue(null),
+      findMany: vi.fn().mockResolvedValue([]),
+    },
+    iceTimeRequest: {
+      findUnique: vi.fn().mockResolvedValue(null),
+      findMany: vi.fn().mockResolvedValue([]),
+    },
     venueReservation: {
       findUnique: vi.fn().mockResolvedValue(reservation()),
       findMany: vi.fn().mockResolvedValue([]),
@@ -82,14 +89,17 @@ function makeTx() {
     segmentCoexistence: { findMany: vi.fn().mockResolvedValue([]) },
     event: {
       findUnique: vi.fn(),
+      findMany: vi.fn().mockResolvedValue([]),
       update: vi.fn().mockResolvedValue({ id: "event-1" }),
     },
     seasonGame: {
       findUnique: vi.fn(),
+      findMany: vi.fn().mockResolvedValue([]),
       update: vi.fn().mockResolvedValue({ id: "season-game-1" }),
     },
     practiceSession: {
       findUnique: vi.fn(),
+      findMany: vi.fn().mockResolvedValue([]),
       update: vi.fn().mockResolvedValue({ id: "practice-1" }),
     },
     signupEvent: {
@@ -98,6 +108,7 @@ function makeTx() {
     },
     eventGame: {
       findUnique: vi.fn(),
+      findMany: vi.fn().mockResolvedValue([]),
       update: vi.fn().mockResolvedValue({ id: "event-game-1" }),
     },
     auditLog: { create: vi.fn().mockResolvedValue({ id: "audit-1" }) },
@@ -374,7 +385,7 @@ describe("createVenueReservation validation", () => {
       startsAt: laterStart,
       endsAt: laterEnd,
       offeringBlockId: "offering-1",
-    }))).resolves.toEqual({ id: venueReservationId });
+    }))).resolves.toMatchObject({ id: venueReservationId });
   });
 
   it.each([
@@ -451,7 +462,7 @@ describe("createVenueReservation validation", () => {
     await expect(createVenueReservation(tx, createInput({
       sourceRequestId: "request-1",
       offeringBlockId: "offering-1",
-    }))).resolves.toEqual({ id: venueReservationId });
+    }))).resolves.toMatchObject({ id: venueReservationId });
     expect(tx.iceTimeRequest.findUnique).toHaveBeenCalledBefore(
       vi.mocked(tx.venueReservation.create),
     );
@@ -490,7 +501,7 @@ describe("createVenueReservation validation", () => {
       ownerVenueOrganizationId: "venue-org-1",
       sourceRequestId: "request-1",
       offeringBlockId: "offering-1",
-    }))).resolves.toEqual({ id: venueReservationId });
+    }))).resolves.toMatchObject({ id: venueReservationId });
     expect(tx.venueReservation.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
@@ -534,7 +545,7 @@ describe("createVenueReservation validation", () => {
     await expect(createVenueReservation(tx, createInput({
       surfaceId: null,
       segmentId: null,
-      overrideReason: "Private venue event",
+      venueWideReason: "Private venue event",
     }))).rejects.toThrow("venue-manager authorization");
     expect(tx.venueReservation.create).not.toHaveBeenCalled();
   });
@@ -547,13 +558,15 @@ describe("createVenueReservation validation", () => {
     }] as never);
 
     await expect(createVenueReservation(tx, createInput({
+      overrideConflicts: true,
       overrideReason: "Approved overlap",
     }))).rejects.toThrow("venue-manager authorization");
 
     vi.mocked(tx.venueStaff.findFirst).mockResolvedValue({ id: "staff-1" } as never);
     await expect(createVenueReservation(tx, createInput({
+      overrideConflicts: true,
       overrideReason: "Approved overlap",
-    }))).resolves.toEqual({ id: venueReservationId });
+    }))).resolves.toMatchObject({ id: venueReservationId });
     expect(tx.venueReservation.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
@@ -566,6 +579,23 @@ describe("createVenueReservation validation", () => {
         }),
       }),
     );
+  });
+
+  it("does not let a venue-wide justification override a conflict", async () => {
+    const tx = makeTx();
+    vi.mocked(tx.venueStaff.findFirst).mockResolvedValue({ id: "staff-1" } as never);
+    vi.mocked(tx.venueReservation.findMany).mockResolvedValue([{
+      ...reservation(),
+      id: "reservation-2",
+    }] as never);
+
+    await expect(createVenueReservation(tx, createInput({
+      ownerLeagueId: undefined,
+      ownerVenueOrganizationId: "venue-org-1",
+      surfaceId: null,
+      segmentId: null,
+      venueWideReason: "Private venue event",
+    }))).rejects.toBeInstanceOf(VenueReservationConflictError);
   });
 });
 
@@ -587,7 +617,7 @@ describe("assignVenueReservation validation", () => {
       targetType,
       targetId,
       actorId: "actor-1",
-    })).resolves.toEqual({ id: venueReservationId });
+    })).resolves.toMatchObject({ id: venueReservationId });
 
     const delegate = {
       EVENT: tx.event,
@@ -612,7 +642,7 @@ describe("assignVenueReservation validation", () => {
       targetType: "PRACTICE",
       targetId,
       actorId: "actor-1",
-    })).resolves.toEqual({ id: venueReservationId });
+    })).resolves.toMatchObject({ id: venueReservationId });
 
     expect(tx.leagueUser.findFirst).toHaveBeenCalledWith({
       where: {
@@ -742,6 +772,93 @@ describe("assignVenueReservation validation", () => {
     expect(tx.practiceSession.update).not.toHaveBeenCalled();
   });
 
+  it("rechecks conflicts for an already-linked target", async () => {
+    const tx = makeTx();
+    vi.mocked(tx.venueReservation.findUnique).mockResolvedValue(reservation({
+      practiceSessions: [{ id: "practice-1", teamId: "team-1" }],
+    }) as never);
+    vi.mocked(tx.venueReservation.findMany).mockResolvedValue([
+      reservation({ id: "reservation-2" }),
+    ] as never);
+    const targetId = setAssignmentTarget(tx, "PRACTICE", "league-1", venueReservationId);
+
+    await expect(assignVenueReservation(tx, {
+      reservationId: "reservation-1",
+      targetType: "PRACTICE",
+      targetId,
+      actorId: "actor-1",
+    })).rejects.toBeInstanceOf(VenueReservationConflictError);
+    expect(tx.practiceSession.update).not.toHaveBeenCalled();
+    expect(tx.auditLog.create).not.toHaveBeenCalled();
+  });
+
+  it("preserves explicit reservation exclusions during assignment rechecks", async () => {
+    const tx = makeTx();
+    const targetId = setAssignmentTarget(tx, "PRACTICE", "league-1", null);
+    const parentReservationId = "parent-reservation-1";
+
+    await assignVenueReservation(tx, {
+      reservationId: "reservation-1",
+      targetType: "PRACTICE",
+      targetId,
+      actorId: "actor-1",
+      excludeReservationIds: [parentReservationId],
+    });
+
+    expect(tx.venueReservation.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          id: { notIn: [venueReservationId, parentReservationId] },
+        }),
+      }),
+    );
+  });
+
+  it("records the actor, reason, and conflict snapshot for an idempotent override", async () => {
+    const tx = makeTx();
+    vi.mocked(tx.venueReservation.findUnique).mockResolvedValue(reservation({
+      practiceSessions: [{ id: "practice-1", teamId: "team-1" }],
+    }) as never);
+    vi.mocked(tx.venueReservation.findMany).mockResolvedValue([
+      reservation({ id: "reservation-2" }),
+    ] as never);
+    vi.mocked(tx.venueStaff.findFirst).mockResolvedValue({ id: "staff-1" } as never);
+    const targetId = setAssignmentTarget(tx, "PRACTICE", "league-1", venueReservationId);
+
+    await assignVenueReservation(tx, {
+      reservationId: "reservation-1",
+      targetType: "PRACTICE",
+      targetId,
+      actorId: "actor-1",
+      overrideConflicts: true,
+      overrideReason: "Tournament director approved the overlap",
+    });
+
+    expect(tx.venueReservation.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        assignedById: "actor-1",
+        overrides: {
+          create: expect.objectContaining({
+            actorId: "actor-1",
+            reason: "Tournament director approved the overlap",
+            conflictingReservationIds: ["reservation-2"],
+          }),
+        },
+      }),
+    }));
+    expect(tx.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        action: "VENUE_RESERVATION_ASSIGNED",
+        userId: "actor-1",
+        details: expect.objectContaining({
+          targetType: "PRACTICE",
+          targetId,
+          conflictOverrideCount: 1,
+        }),
+      }),
+    }));
+  });
+
   it("uses canonical reservation space for surface Events and segmented SignupEvents", async () => {
     const eventTx = makeTx();
     setAssignmentTarget(eventTx, "EVENT");
@@ -750,7 +867,7 @@ describe("assignVenueReservation validation", () => {
       targetType: "EVENT",
       targetId: "event-1",
       actorId: "actor-1",
-    })).resolves.toEqual({ id: venueReservationId });
+    })).resolves.toMatchObject({ id: venueReservationId });
 
     const signupTx = makeTx();
     setAssignmentTarget(signupTx, "SIGNUP_EVENT");
@@ -759,7 +876,7 @@ describe("assignVenueReservation validation", () => {
       targetType: "SIGNUP_EVENT",
       targetId: "signup-event-1",
       actorId: "actor-1",
-    })).resolves.toEqual({ id: venueReservationId });
+    })).resolves.toMatchObject({ id: venueReservationId });
   });
 
   it("allows an explicitly matched Practice/Event alias to share one reservation", async () => {
@@ -781,7 +898,7 @@ describe("assignVenueReservation validation", () => {
       targetType: "PRACTICE",
       targetId: "practice-1",
       actorId: "actor-1",
-    })).resolves.toEqual({ id: venueReservationId });
+    })).resolves.toMatchObject({ id: venueReservationId });
   });
 });
 
@@ -815,6 +932,7 @@ describe("transitionVenueReservation authorization", () => {
       nextStatus: "CONFIRMED",
       actorId: "actor-1",
       reason: "Approve held inventory",
+      overrideConflicts: true,
       overrideReason: "Approved overlap",
     })).rejects.toThrow("venue-manager authorization");
 
@@ -824,8 +942,9 @@ describe("transitionVenueReservation authorization", () => {
       nextStatus: "CONFIRMED",
       actorId: "actor-1",
       reason: "Approve held inventory",
+      overrideConflicts: true,
       overrideReason: "Approved overlap",
-    })).resolves.toEqual({ id: venueReservationId });
+    })).resolves.toMatchObject({ id: venueReservationId });
   });
 
   it("persists an optional transition snapshot for reschedule bookkeeping", async () => {
@@ -843,7 +962,7 @@ describe("transitionVenueReservation authorization", () => {
       actorId: "actor-1",
       reason: "Moved to a replacement slot",
       snapshot,
-    })).resolves.toEqual({ id: venueReservationId });
+    })).resolves.toMatchObject({ id: venueReservationId });
 
     expect(tx.venueReservation.update).toHaveBeenCalledWith(
       expect.objectContaining({

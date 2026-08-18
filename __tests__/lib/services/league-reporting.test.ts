@@ -14,6 +14,7 @@ vi.mock('@/lib/db/prisma', () => ({
     prisma: {
         team: {
             count: vi.fn(),
+            findMany: vi.fn(),
         },
         player: {
             count: vi.fn(),
@@ -29,12 +30,21 @@ vi.mock('@/lib/db/prisma', () => ({
         league: {
             findUnique: vi.fn(),
         },
+        leagueUser: {
+            findFirst: vi.fn(),
+        },
     },
 }));
 
 describe('League Reporting Service', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        vi.mocked(prisma.leagueUser.findFirst).mockResolvedValue({
+            role: 'LEAGUE_ADMIN',
+        } as unknown as Awaited<ReturnType<typeof prisma.leagueUser.findFirst>>);
+        vi.mocked(prisma.team.findMany).mockResolvedValue([
+            { id: 'team-a' },
+        ] as unknown as Awaited<ReturnType<typeof prisma.team.findMany>>);
     });
 
     describe('generateLeagueRosterCSV', () => {
@@ -62,7 +72,7 @@ describe('League Reporting Service', () => {
                 },
             ] as unknown as Awaited<ReturnType<typeof prisma.player.findMany>>);
 
-            const csv = await generateLeagueRosterCSV(leagueId);
+            const csv = await generateLeagueRosterCSV(leagueId, 'viewer-1');
 
             expect(csv).toContain('Player Name,Email,Phone,Team,Division,Jersey Number,Position,Date Added');
             expect(csv).toContain('John Doe');
@@ -98,7 +108,7 @@ describe('League Reporting Service', () => {
                 },
             ] as unknown as Awaited<ReturnType<typeof prisma.player.findMany>>);
 
-            const csv = await generateLeagueRosterCSV(leagueId);
+            const csv = await generateLeagueRosterCSV(leagueId, 'viewer-1');
 
             expect(csv).toContain('Unassigned');
         });
@@ -127,7 +137,11 @@ describe('League Reporting Service', () => {
                 },
             ] as unknown as Awaited<ReturnType<typeof prisma.player.findMany>>);
 
-            const csv = await generateLeagueRosterCSV(leagueId, { includeAdminFields: true });
+            const csv = await generateLeagueRosterCSV(
+                leagueId,
+                'viewer-1',
+                { includeAdminFields: true },
+            );
 
             expect(csv).toContain('Emergency Contact Name,Emergency Contact Phone,USA Hockey Member ID');
             expect(csv).toContain('Jane Doe');
@@ -141,6 +155,28 @@ describe('League Reporting Service', () => {
                         usahMemberId: true,
                     }),
                 })
+            );
+        });
+
+        it('never exposes admin-only roster fields to a non-admin caller', async () => {
+            vi.mocked(prisma.leagueUser.findFirst).mockResolvedValue({
+                role: 'MEMBER',
+            } as unknown as Awaited<ReturnType<typeof prisma.leagueUser.findFirst>>);
+            vi.mocked(prisma.player.findMany).mockResolvedValue([]);
+
+            const csv = await generateLeagueRosterCSV(
+                'league-1',
+                'member-1',
+                { includeAdminFields: true },
+            );
+
+            expect(csv).not.toContain('Emergency Contact Name');
+            expect(prisma.player.findMany).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    select: expect.not.objectContaining({
+                        emergencyContact: true,
+                    }),
+                }),
             );
         });
 
@@ -172,7 +208,7 @@ describe('League Reporting Service', () => {
             vi.mocked(prisma.player.count).mockResolvedValue(1);
             vi.mocked(prisma.event.count).mockResolvedValue(0);
 
-            const pdfBase64 = await generateLeagueRosterPDF(leagueId);
+            const pdfBase64 = await generateLeagueRosterPDF(leagueId, 'viewer-1');
             const pdfHeader = Buffer.from(pdfBase64, 'base64').toString('utf8', 0, 8);
 
             expect(pdfHeader).toBe('%PDF-1.4');
@@ -180,6 +216,14 @@ describe('League Reporting Service', () => {
     });
 
     describe('generateLeagueScheduleCSV', () => {
+        it('requires the authenticated caller identity instead of assuming an admin viewer', async () => {
+            await expect(
+                generateLeagueScheduleCSV('league-1', ''),
+            ).rejects.toThrow('Authenticated user identity is required');
+            expect(prisma.leagueUser.findFirst).not.toHaveBeenCalled();
+            expect(prisma.event.findMany).not.toHaveBeenCalled();
+        });
+
         it('should generate CSV with event schedule data', async () => {
             const leagueId = 'league-1';
 
@@ -203,12 +247,20 @@ describe('League Reporting Service', () => {
                 },
             ] as unknown as Awaited<ReturnType<typeof prisma.event.findMany>>);
 
-            const csv = await generateLeagueScheduleCSV(leagueId);
+            const csv = await generateLeagueScheduleCSV(leagueId, 'viewer-1');
 
             expect(csv).toContain('Date,Time,Event Type,Title');
             expect(csv).toContain('Practice Session');
             expect(csv).toContain('PRACTICE');
             expect(csv).toContain('Field 1');
+            expect(prisma.leagueUser.findFirst).toHaveBeenCalledWith({
+                where: {
+                    leagueId,
+                    userId: 'viewer-1',
+                    league: { isActive: true },
+                },
+                select: { role: true },
+            });
         });
 
         it('should handle games with home and away teams', async () => {
@@ -238,10 +290,37 @@ describe('League Reporting Service', () => {
                 },
             ] as unknown as Awaited<ReturnType<typeof prisma.event.findMany>>);
 
-            const csv = await generateLeagueScheduleCSV(leagueId);
+            const csv = await generateLeagueScheduleCSV(leagueId, 'viewer-1');
 
             expect(csv).toContain('Team A');
             expect(csv).toContain('Team B');
+        });
+
+        it('uses the authenticated member role instead of implicitly aggregating the league', async () => {
+            vi.mocked(prisma.leagueUser.findFirst).mockResolvedValue({
+                role: 'MEMBER',
+            } as unknown as Awaited<ReturnType<typeof prisma.leagueUser.findFirst>>);
+            vi.mocked(prisma.team.findMany).mockResolvedValue([
+                { id: 'member-team' },
+            ] as unknown as Awaited<ReturnType<typeof prisma.team.findMany>>);
+            vi.mocked(prisma.event.findMany).mockResolvedValue([]);
+
+            await generateLeagueScheduleCSV('league-1', 'member-1');
+
+            const eventWhere = vi.mocked(prisma.event.findMany).mock.calls[0][0]?.where;
+            expect(JSON.stringify(eventWhere)).toContain('member-team');
+            expect(JSON.stringify(eventWhere)).not.toContain(
+                '"leagueId":{"in":["league-1"]}',
+            );
+        });
+
+        it('rejects a schedule export when the viewer is not an active league member', async () => {
+            vi.mocked(prisma.leagueUser.findFirst).mockResolvedValue(null);
+
+            await expect(
+                generateLeagueScheduleCSV('league-1', 'outsider-1'),
+            ).rejects.toThrow('Unauthorized league report export');
+            expect(prisma.event.findMany).not.toHaveBeenCalled();
         });
 
         it('should preserve commas inside quoted CSV cells when generating schedule PDFs', async () => {
@@ -274,7 +353,7 @@ describe('League Reporting Service', () => {
             vi.mocked(prisma.player.count).mockResolvedValue(0);
             vi.mocked(prisma.event.count).mockResolvedValue(1);
 
-            const pdfBase64 = await generateLeagueSchedulePDF(leagueId);
+            const pdfBase64 = await generateLeagueSchedulePDF(leagueId, 'viewer-1');
             const pdfText = Buffer.from(pdfBase64, 'base64').toString('utf8');
 
             expect(pdfText).toContain('Springfield, IL');
@@ -345,7 +424,7 @@ describe('League Reporting Service', () => {
                 },
             ] as unknown as Awaited<ReturnType<typeof prisma.division.findMany>>);
 
-            const csv = await generateAttendanceReportByDivisionCSV(leagueId);
+            const csv = await generateAttendanceReportByDivisionCSV(leagueId, 'viewer-1');
 
             expect(csv).toContain('Division,Team,Total Events,Total RSVPs');
             expect(csv).toContain('Division 1');
@@ -379,7 +458,7 @@ describe('League Reporting Service', () => {
                 },
             ] as unknown as Awaited<ReturnType<typeof prisma.division.findMany>>);
 
-            const csv = await generateAttendanceReportByDivisionCSV(leagueId);
+            const csv = await generateAttendanceReportByDivisionCSV(leagueId, 'viewer-1');
 
             // 4 going out of 5 total = 80% attendance rate
             expect(csv).toContain('80.0');
@@ -430,7 +509,7 @@ describe('League Reporting Service', () => {
                 ],
             } as unknown as Awaited<ReturnType<typeof prisma.league.findUnique>>);
 
-            const csv = await generateFinancialReportCSV(leagueId);
+            const csv = await generateFinancialReportCSV(leagueId, 'viewer-1');
 
             expect(csv).toContain('Scope,Team,Division,Total Players,Total Events,Ice Time Requests,Approved Requests,Pending Requests,Known Scheduled Cost,Currency,Notes');
             expect(csv).toContain('Team A');
@@ -452,7 +531,7 @@ describe('League Reporting Service', () => {
 
             vi.mocked(prisma.league.findUnique).mockResolvedValue(null);
 
-            await expect(generateFinancialReportCSV(leagueId)).rejects.toThrow(
+            await expect(generateFinancialReportCSV(leagueId, 'viewer-1')).rejects.toThrow(
                 'League not found'
             );
         });

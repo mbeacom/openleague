@@ -34,6 +34,13 @@ import { computeStandings } from "@/lib/utils/event-standings";
 import { STATS_MIN_AGE_LEVEL } from "@/lib/env";
 import type { AgeClassification } from "@prisma/client";
 import { logSignupEventActivity } from "@/lib/utils/event-activity";
+import {
+  assignVenueReservation,
+  createVenueReservation,
+  VenueReservationConflictError,
+  VenueReservationLifecycleError,
+} from "@/lib/services/venue-reservations";
+import { runVenueReservationTransaction } from "@/lib/services/venue-reservation-transaction";
 
 function overlaps(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date): boolean {
   return aStart < bEnd && bStart < aEnd;
@@ -282,7 +289,17 @@ export async function upsertEventGame(
 
     const event = await prisma.signupEvent.findUnique({
       where: { id: validated.eventId },
-      select: { id: true, startAt: true, endAt: true, venueId: true },
+      select: {
+        id: true,
+        startAt: true,
+        endAt: true,
+        venueId: true,
+        timezone: true,
+        hostOrganizationId: true,
+        hostLeagueId: true,
+        hostTeamId: true,
+        status: true,
+      },
     });
     if (!event) {
       return { success: false, error: "Event not found" };
@@ -333,7 +350,8 @@ export async function upsertEventGame(
     // candidate is scoped to the chosen surface/segment (null surface =
     // venue-wide claim) and the game itself is excluded on update.
     let conflictsOverridden = false;
-    if (event.venueId) {
+    const canonicalReservations = (prisma as typeof prisma & { venueReservation?: unknown }).venueReservation;
+    if (event.venueId && !canonicalReservations) {
       const conflicts = await findBookingConflicts({
         venueId: event.venueId,
         surfaceId,
@@ -360,8 +378,274 @@ export async function upsertEventGame(
       endAt: validated.endAt,
       surfaceId,
       segmentId,
+      venueReservationId: canonicalReservations ? null : validated.reservationId || null,
       notes: validated.notes || null,
     };
+
+    // The reservation service is authoritative in production. Keep the
+    // legacy branch only for narrow unit-test doubles that predate the
+    // reservation delegate; real Prisma clients always take this branch.
+    if (event.venueId && (prisma as typeof prisma & { venueReservation?: unknown }).venueReservation) {
+      try {
+        const result = await runVenueReservationTransaction(async (tx) => {
+          const currentEvent = await tx.signupEvent.findUnique({
+            where: { id: validated.eventId },
+            select: {
+              id: true,
+              status: true,
+              venueId: true,
+              startAt: true,
+              endAt: true,
+              timezone: true,
+              hostOrganizationId: true,
+              hostLeagueId: true,
+              hostTeamId: true,
+              venueReservation: {
+                select: {
+                  id: true,
+                  venueId: true,
+                  surfaceId: true,
+                  segmentId: true,
+                  startsAt: true,
+                  endsAt: true,
+                },
+              },
+            },
+          });
+          if (!currentEvent) {
+            throw new VenueReservationLifecycleError("Event not found");
+          }
+          const existingGame = validated.gameId
+            ? await tx.eventGame.findFirst({
+                where: { id: validated.gameId, eventId: validated.eventId },
+                select: {
+                  id: true,
+                  eventId: true,
+                  venueReservationId: true,
+                  venueReservation: {
+                    select: {
+                      id: true,
+                      venueId: true,
+                      surfaceId: true,
+                      segmentId: true,
+                      startsAt: true,
+                      endsAt: true,
+                    },
+                  },
+                  event: {
+                    select: {
+                      id: true,
+                      hostOrganizationId: true,
+                      hostLeagueId: true,
+                      hostTeamId: true,
+                    },
+                  },
+                },
+              })
+            : null;
+          if (validated.gameId && !existingGame) {
+            throw new VenueReservationLifecycleError("Game not found for this event");
+          }
+          if (
+            existingGame
+            && (
+              existingGame.eventId !== currentEvent.id
+              || existingGame.event.id !== currentEvent.id
+              || existingGame.event.hostOrganizationId !== currentEvent.hostOrganizationId
+              || existingGame.event.hostLeagueId !== currentEvent.hostLeagueId
+              || existingGame.event.hostTeamId !== currentEvent.hostTeamId
+            )
+          ) {
+            throw new VenueReservationLifecycleError("Game not found for this event");
+          }
+
+          if (currentEvent.status === "CANCELED") {
+            throw new VenueReservationLifecycleError(
+              "Games cannot be saved for a canceled event.",
+            );
+          }
+          if (currentEvent.status !== "DRAFT" && currentEvent.status !== "PUBLISHED") {
+            throw new VenueReservationLifecycleError(
+              "Games can only be saved for draft or published events.",
+            );
+          }
+
+          // Draft children are planning records only. Their inventory is
+          // materialized by publishSignupEvent in the same transaction that
+          // publishes the parent, so a draft can never occupy confirmed ice.
+          if (currentEvent.status === "DRAFT" || !currentEvent.venueId) {
+            if (existingGame?.venueReservationId) {
+              throw new VenueReservationLifecycleError(
+                "A draft event game cannot hold a venue reservation.",
+              );
+            }
+            return existingGame
+              ? tx.eventGame.update({
+                  where: { id: existingGame.id },
+                  data: {
+                    ...data,
+                    venueReservationId: null,
+                    conflictOverriddenById: null,
+                    conflictOverriddenAt: null,
+                  },
+                  select: { id: true },
+                })
+              : tx.eventGame.create({
+                  data: { ...data, venueReservationId: null, eventId: validated.eventId },
+                  select: { id: true },
+                });
+          }
+
+          const ownerCount = [
+            currentEvent.hostOrganizationId,
+            currentEvent.hostLeagueId,
+            currentEvent.hostTeamId,
+          ].filter(Boolean).length;
+          if (ownerCount !== 1) {
+            throw new VenueReservationLifecycleError("The event has invalid owner ancestry.");
+          }
+          const parentReservation = currentEvent.venueReservation;
+          const aliasesParentReservation = !!parentReservation
+           && parentReservation.venueId === currentEvent.venueId
+           && parentReservation.surfaceId === surfaceId
+           && parentReservation.segmentId === segmentId
+           && parentReservation.startsAt.getTime() === validated.startAt.getTime()
+           && parentReservation.endsAt.getTime() === validated.endAt.getTime();
+          const existingGameReservation = existingGame?.venueReservation ?? null;
+          const aliasesExistingGameReservation = !!existingGameReservation
+           && existingGameReservation.venueId === currentEvent.venueId
+           && existingGameReservation.surfaceId === surfaceId
+           && existingGameReservation.segmentId === segmentId
+           && existingGameReservation.startsAt.getTime() === validated.startAt.getTime()
+           && existingGameReservation.endsAt.getTime() === validated.endAt.getTime();
+          const siblingReservation =
+           !validated.reservationId && !aliasesParentReservation && !aliasesExistingGameReservation
+             ? await tx.venueReservation.findFirst({
+                 where: {
+                   venueId: currentEvent.venueId,
+                   surfaceId,
+                   segmentId,
+                   startsAt: validated.startAt,
+                   endsAt: validated.endAt,
+                   status: { in: ["HELD", "CONFIRMED"] },
+                   eventGames: {
+                     some: {
+                       eventId: currentEvent.id,
+                       ...(existingGame ? { id: { not: existingGame.id } } : {}),
+                     },
+                   },
+                 },
+                 select: {
+                   id: true,
+                   venueId: true,
+                   surfaceId: true,
+                   segmentId: true,
+                   startsAt: true,
+                   endsAt: true,
+                 },
+               })
+             : null;
+          const reservation = validated.reservationId
+           ? await tx.venueReservation.findUnique({
+               where: { id: validated.reservationId },
+               select: {
+                 id: true,
+                 venueId: true,
+                 surfaceId: true,
+                 segmentId: true,
+                 startsAt: true,
+                 endsAt: true,
+               },
+             })
+           : aliasesParentReservation
+             ? parentReservation
+             : aliasesExistingGameReservation
+               ? existingGameReservation
+             : siblingReservation
+               ? siblingReservation
+             : await createVenueReservation(tx, {
+                 venueId: currentEvent.venueId,
+                 surfaceId,
+                 segmentId,
+                 startsAt: validated.startAt,
+                 endsAt: validated.endAt,
+                 timezone: currentEvent.timezone,
+                 ownerVenueOrganizationId: currentEvent.hostOrganizationId,
+                 ownerLeagueId: currentEvent.hostLeagueId,
+                 ownerTeamId: currentEvent.hostTeamId,
+                 actorId: userId,
+                 excludeReservationIds: [
+                   ...(parentReservation ? [parentReservation.id] : []),
+                   ...(existingGame?.venueReservationId ? [existingGame.venueReservationId] : []),
+                 ],
+                 overrideConflicts: validated.overrideConflicts,
+                 venueWideReason: surfaceId
+                   ? null
+                   : "Event game venue-wide reservation",
+                 overrideReason: validated.overrideConflicts
+                   ? "Event game conflict override"
+                   : null,
+               });
+          if (!reservation) {
+           throw new VenueReservationLifecycleError("Venue reservation not found.");
+          }
+          const game = existingGame
+           ? await tx.eventGame.update({
+               where: { id: existingGame.id },
+               data: {
+                 ...data,
+                 venueReservationId: null,
+                 conflictOverriddenById: null,
+                 conflictOverriddenAt: null,
+               },
+               select: { id: true },
+             })
+           : await tx.eventGame.create({
+               data: { ...data, venueReservationId: null, eventId: validated.eventId },
+               select: { id: true },
+             });
+          await assignVenueReservation(tx, {
+           reservationId: reservation.id,
+           targetType: "EVENT_GAME",
+            targetId: game.id,
+            actorId: userId,
+           excludeReservationIds: [
+             ...(parentReservation ? [parentReservation.id] : []),
+             ...(existingGame?.venueReservationId ? [existingGame.venueReservationId] : []),
+           ],
+           overrideConflicts: validated.overrideConflicts,
+            overrideReason: validated.overrideConflicts
+              ? "Event game conflict override"
+              : null,
+          });
+          return game;
+        });
+        revalidatePath(`/signup-events/${validated.eventId}`);
+        revalidatePath(`/signups/${validated.eventId}`);
+        return { success: true, data: { gameId: result.id, warnings } };
+      } catch (error) {
+        if (error instanceof VenueReservationConflictError) {
+          return {
+            success: false,
+            error: "This time overlaps an existing booking at the venue",
+            details: { conflicts: error.conflicts },
+          };
+        }
+        if (
+          error instanceof VenueReservationLifecycleError
+          && [
+            "Event not found",
+            "Game not found for this event",
+            "Games cannot be saved for a canceled event.",
+            "Games can only be saved for draft or published events.",
+            "A draft event game cannot hold a venue reservation.",
+          ].includes(error.message)
+        ) {
+          return { success: false, error: error.message };
+        }
+        throw error;
+      }
+    }
 
     let gameId: string;
     if (validated.gameId) {
@@ -417,14 +701,47 @@ export async function deleteEventGame(
 
     const game = await prisma.eventGame.findUnique({
       where: { id: gameId },
-      select: { id: true, eventId: true },
+      select: { id: true, eventId: true, venueReservationId: true },
     });
     if (!game) {
       return { success: false, error: "Game not found" };
     }
     await requireEventManager(game.eventId);
 
-    await prisma.eventGame.delete({ where: { id: game.id } });
+    const canonicalReservations = (prisma as typeof prisma & { venueReservation?: unknown }).venueReservation;
+    if (game.venueReservationId && canonicalReservations) {
+      await runVenueReservationTransaction(async (tx) => {
+        const current = await tx.eventGame.findFirst({
+          where: { id: game.id, eventId: game.eventId },
+          select: {
+            id: true,
+            eventId: true,
+            venueReservationId: true,
+            event: {
+              select: {
+                id: true,
+                hostOrganizationId: true,
+                hostLeagueId: true,
+                hostTeamId: true,
+              },
+            },
+          },
+        });
+        if (!current || current.event.id !== game.eventId) {
+          throw new VenueReservationLifecycleError("Game not found for this event");
+        }
+        if (
+          current.event.hostOrganizationId === null
+          && current.event.hostLeagueId === null
+          && current.event.hostTeamId === null
+        ) {
+          throw new VenueReservationLifecycleError("The event has invalid owner ancestry.");
+        }
+        await tx.eventGame.delete({ where: { id: current.id } });
+      });
+    } else {
+      await prisma.eventGame.delete({ where: { id: game.id } });
+    }
     revalidatePath(`/signup-events/${game.eventId}`);
     return { success: true, data: { gameId: game.id } };
   } catch (error) {

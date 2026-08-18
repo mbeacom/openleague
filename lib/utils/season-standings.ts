@@ -27,16 +27,44 @@ export type SeasonStandingsRow = {
   points: number;
 };
 
+export type SeasonStandingsPlacement = {
+  teamId: string;
+  teamNameSnapshot: string;
+};
+
+/**
+ * Overlay the season's division projection while preserving the legacy team
+ * division only when no season placement exists. A placement with a null
+ * division is intentional and must clear the legacy value.
+ */
+export function overlaySeasonTeamDivisions<
+  T extends { id: string; divisionId: string | null },
+>(
+  teams: T[],
+  placements: Array<{ teamId: string; divisionId: string | null }>,
+): T[] {
+  const placementByTeam = new Map(
+    placements.map((placement) => [placement.teamId, placement.divisionId]),
+  );
+  return teams.map((team) =>
+    placementByTeam.has(team.id)
+      ? { ...team, divisionId: placementByTeam.get(team.id) ?? null }
+      : team,
+  );
+}
+
 export function computeSeasonStandings(
   teams: Array<{ id: string; name: string }>,
-  games: SeasonStandingsGame[]
+  games: SeasonStandingsGame[],
+  placements: SeasonStandingsPlacement[] = [],
 ): SeasonStandingsRow[] {
+  const placementByTeam = new Map(placements.map((placement) => [placement.teamId, placement]));
   const rows = new Map<string, SeasonStandingsRow>(
     teams.map((team) => [
       team.id,
       {
         teamId: team.id,
-        teamName: team.name,
+        teamName: placementByTeam.get(team.id)?.teamNameSnapshot || team.name,
         gamesPlayed: 0,
         wins: 0,
         losses: 0,

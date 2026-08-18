@@ -49,6 +49,7 @@ model User {
   createdGameProposals         GameProposal[]               @relation("GameProposalCreator")
   gameProposalEntries          GameProposalEntry[]          @relation("GameProposalActor")
   placementDecisions           PlacementDecision[]          @relation("PlacementDecider")
+  seasonTeamPlacements         SeasonTeamPlacement[]        @relation("SeasonPlacementActor")
   createdVenueOrganizations    VenueOrganization[]          @relation("VenueOrganizationCreator")
   venueStaffMemberships        VenueStaff[]                 @relation("VenueStaffUser")
   sentVenueStaffInvites        VenueStaff[]                 @relation("VenueStaffInviter")
@@ -208,6 +209,7 @@ model Team {
   proposalsSent      GameProposal[]           @relation("ProposalsSent")
   proposalsReceived  GameProposal[]           @relation("ProposalsReceived")
   placementDecisions PlacementDecision[]
+  seasonPlacements   SeasonTeamPlacement[]
   venueRelationships VenueRelationship[]
   iceTimeRequests    IceTimeRequest[]
   hostedSignupEvents SignupEvent[]
@@ -596,6 +598,7 @@ model Division {
   messageTargeting   MessageTargeting[]
   signupPhases       EventRegistrationPhase[] @relation("PhaseDivisions")
   placementDecisions PlacementDecision[]
+  seasonPlacements   SeasonTeamPlacement[]
 
   @@map("divisions")
 }
@@ -2526,6 +2529,13 @@ enum GameProposalEntryKind {
   WITHDRAW
 }
 
+enum SeasonScheduleVisibility {
+  PUBLIC
+  AUTHENTICATED
+  RELATIONSHIP_ONLY
+  PRIVATE
+}
+
 // A scheduling container ("Fall 2026") owned by a league or a standalone
 // team (exactly one — DB CHECK constraint). Format is never required.
 model Season {
@@ -2538,6 +2548,7 @@ model Season {
 
   format       ScheduleFormat?
   formatRounds Int?
+  scheduleVisibility SeasonScheduleVisibility @default(PRIVATE)
 
   leagueId String?
   league   League? @relation(fields: [leagueId], references: [id], onDelete: Cascade)
@@ -2553,6 +2564,7 @@ model Season {
   phases     SeasonPhase[]
   games      SeasonGame[]
   placements PlacementDecision[]
+  teamPlacements SeasonTeamPlacement[]
   proposals  GameProposal[]
 
   @@index([leagueId, startDate])
@@ -2731,6 +2743,35 @@ model PlacementDecision {
 
   @@index([seasonId, teamId, createdAt])
   @@map("placement_decisions")
+}
+
+// Mutable current placement projection for one season/team pair. Placement
+// history remains in PlacementDecision; snapshots keep season labels stable
+// when teams or divisions are renamed later.
+model SeasonTeamPlacement {
+  id String @id @default(cuid())
+
+  seasonId String
+  season   Season @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  teamId   String
+  team     Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  divisionId         String?
+  division           Division? @relation(fields: [divisionId], references: [id], onDelete: SetNull)
+  teamNameSnapshot   String
+  divisionNameSnapshot String?
+  rank               Int?
+  privateNote        String?
+
+  placedById String
+  placedBy   User   @relation("SeasonPlacementActor", fields: [placedById], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([seasonId, teamId])
+  @@index([seasonId, divisionId])
+  @@index([seasonId, rank])
+  @@map("season_team_placements")
 }
 
 // ============================================================================

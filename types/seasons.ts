@@ -2,6 +2,7 @@ import type {
   GameProposalEntryKind,
   GameProposalStatus,
   ScheduleFormat,
+  SeasonScheduleVisibility,
   SeasonGameStatus,
   SeasonPhaseType,
   Sport,
@@ -17,6 +18,7 @@ export interface SeasonSummary {
   archivedAt: Date | null;
   format: ScheduleFormat | null;
   formatRounds: number | null;
+  scheduleVisibility: SeasonScheduleVisibility;
   leagueId: string | null;
   teamId: string | null;
   sport: Sport;
@@ -67,6 +69,7 @@ export interface GameProposalEntryView {
   startAt: Date | null;
   endAt: Date | null;
   venue: { id: string; name: string } | null;
+  venueReservationId?: string | null;
   note: string | null;
   actorTeamId: string;
   createdAt: Date;

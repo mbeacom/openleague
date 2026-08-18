@@ -11,7 +11,10 @@ const { mockPrisma } = vi.hoisted(() => ({
   },
 }));
 
-vi.mock("@/lib/auth/session", () => ({ requireVenueContentManager: vi.fn() }));
+vi.mock("@/lib/auth/session", () => ({
+  VENUE_SCHEDULE_ROLES: ["OWNER", "MANAGER", "SCHEDULER"],
+  requireVenueContentManager: vi.fn(),
+}));
 vi.mock("@/lib/db/prisma", () => ({ prisma: mockPrisma }));
 vi.mock("@/lib/email/templates", () => ({ sendVenueRelationshipInvitationEmail: vi.fn() }));
 

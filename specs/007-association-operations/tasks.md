@@ -90,31 +90,31 @@ description: "Dependency-ordered implementation backlog for association operatio
 
 ### Tests
 
-- [ ] T035 [P] [US2] Add season-specific placement and historical-preservation tests to `__tests__/lib/actions/placements.test.ts`
-- [ ] T036 [P] [US2] Add reservation-driven generation and publication-time recheck tests to `__tests__/lib/actions/season-generation.test.ts`
-- [ ] T037 [P] [US2] Add shared SeasonGame/Event reservation and RSVP fan-out tests to `__tests__/lib/actions/season-games.test.ts`
-- [ ] T038 [P] [US2] Add reservation-backed proposal acceptance tests to `__tests__/lib/actions/game-proposals.test.ts`
-- [ ] T039 [P] [US2] Add EventGame/parent-signup publication tests and a complete writer-by-conflicting-source matrix to `__tests__/lib/actions/event-teams.test.ts` and `__tests__/integration/reservation-writer-matrix.test.ts`
-- [ ] T040 [P] [US2] Add venue activity/closure occurrence materialization tests to `__tests__/lib/actions/venue-schedules.test.ts`
-- [ ] T041 [P] [US2] Add canonical association schedule, privacy, contents, and slug-based ICS contract tests to `__tests__/api/public-association-ics.test.ts`
+- [X] T035 [P] [US2] Add season-specific placement and historical-preservation tests to `__tests__/lib/actions/placements.test.ts`
+- [X] T036 [P] [US2] Add reservation-driven generation and publication-time recheck tests to `__tests__/lib/actions/season-generation.test.ts`
+- [X] T037 [P] [US2] Add shared SeasonGame/Event reservation and RSVP fan-out tests to `__tests__/lib/actions/season-games.test.ts`
+- [X] T038 [P] [US2] Add reservation-backed proposal acceptance tests to `__tests__/lib/actions/game-proposals.test.ts`
+- [X] T039 [P] [US2] Add EventGame/parent-signup publication tests and a complete writer-by-conflicting-source matrix to `__tests__/lib/actions/event-teams.test.ts` and `__tests__/integration/reservation-writer-matrix.test.ts`
+- [X] T040 [P] [US2] Add venue activity/closure occurrence materialization tests to `__tests__/lib/actions/venue-schedules.test.ts`
+- [X] T041 [P] [US2] Add canonical association schedule, privacy, contents, and slug-based ICS contract tests to `__tests__/api/public-association-ics.test.ts`
 
 ### Data and Services
 
-- [ ] T042 [US2] Add `SeasonTeamPlacement` and schedule visibility to `prisma/schema.prisma`
-- [ ] T043 [US2] Create season-placement migration and constraints, then regenerate Prisma before dependent actions, in `prisma/migrations/<timestamp>_add_season_team_placements/migration.sql` with `bun run db:generate`
-- [ ] T044 [US2] Add idempotent placement backfill and snapshots to `scripts/backfill-season-placements.ts`
-- [ ] T045 [US2] Update placement actions to append history and upsert season-specific placement atomically in `lib/actions/placements.ts`
-- [ ] T046 [US2] Make standings, generation, and season detail read season-specific placement in `lib/utils/season-standings.ts`, `lib/actions/season-generation.ts`, and `lib/actions/seasons.ts`
+- [X] T042 [US2] Add `SeasonTeamPlacement` and schedule visibility to `prisma/schema.prisma`
+- [X] T043 [US2] Create season-placement migration and constraints, then regenerate Prisma before dependent actions, in `prisma/migrations/<timestamp>_add_season_team_placements/migration.sql` with `bun run db:generate`
+- [X] T044 [US2] Add idempotent placement backfill and snapshots to `scripts/backfill-season-placements.ts`
+- [X] T045 [US2] Update placement actions to append history and upsert season-specific placement atomically in `lib/actions/placements.ts`
+- [X] T046 [US2] Make standings, generation, and season detail read season-specific placement in `lib/utils/season-standings.ts`, `lib/actions/season-generation.ts`, and `lib/actions/seasons.ts`
 
 ### Writer Cutover
 
-- [ ] T047 [US2] Route manual game create/update/delete/publish through reservations and share one reservation with the generated Event in `lib/actions/season-games.ts`
-- [ ] T048 [US2] Generate draft games from confirmed unassigned reservations and recheck every item during bulk publication in `lib/actions/season-generation.ts`
-- [ ] T049 [US2] Carry and atomically assign reservation inventory during proposal acceptance in `lib/actions/game-proposals.ts`
-- [ ] T050 [US2] Route team Events, EventGames, signup publication, venue activities/closures, specialty events, and surface archival checks through reservation services in `lib/actions/events.ts`, `lib/actions/event-teams.ts`, `lib/actions/signup-events.ts`, `lib/actions/venue-schedules.ts`, `lib/actions/venue-content.ts`, and `lib/actions/venue-surfaces.ts`
-- [ ] T051 [US2] Move league/team/venue calendar, report, and ICS readers to `lib/data/schedule-items.ts` in `lib/data/calendar.ts`, `lib/actions/league-context.ts`, `lib/services/league-reporting.ts`, `app/api/leagues/[leagueId]/schedule.ics/route.ts`, and `app/api/associations/[slug]/schedule.ics/route.ts`
-- [ ] T052 [US2] Implement and privacy-test the tenant-safe operations read model for pending requests, unassigned venue reservations, stale drafts, conflicts, migration overrides, unscheduled teams, urgent gear needs, overdue gear custody, gear outbox health, and upcoming changes in `lib/data/association-operations.ts`, `__tests__/lib/data/association-operations.test.ts`, `app/(dashboard)/league/[leagueId]/operations/page.tsx`, and `components/features/association-operations/OperationalDashboard.tsx`
-- [ ] T053 [US2] Add Operations and Venue Reservations destinations without regressing merged Gear navigation in `components/features/navigation/DashboardNav.tsx` and `components/features/navigation/MobileNavigation.tsx`
+- [X] T047 [US2] Route manual game create/update/delete/publish through reservations and share one reservation with the generated Event in `lib/actions/season-games.ts`
+- [X] T048 [US2] Generate draft games from confirmed unassigned reservations and recheck every item during bulk publication in `lib/actions/season-generation.ts`
+- [X] T049 [US2] Carry and atomically assign reservation inventory during proposal acceptance in `lib/actions/game-proposals.ts`
+- [X] T050 [US2] Route team Events, EventGames, signup publication, venue activities/closures, specialty events, and surface archival checks through reservation services in `lib/actions/events.ts`, `lib/actions/event-teams.ts`, `lib/actions/signup-events.ts`, `lib/actions/venue-schedules.ts`, `lib/actions/venue-content.ts`, and `lib/actions/venue-surfaces.ts`
+- [X] T051 [US2] Move league/team/venue calendar, report, and ICS readers to `lib/data/schedule-items.ts` in `lib/data/calendar.ts`, `lib/actions/league-context.ts`, `lib/services/league-reporting.ts`, `app/api/leagues/[leagueId]/schedule.ics/route.ts`, and `app/api/associations/[slug]/schedule.ics/route.ts`
+- [X] T052 [US2] Implement and privacy-test the tenant-safe operations read model for pending requests, unassigned venue reservations, stale drafts, conflicts, migration overrides, unscheduled teams, urgent gear needs, overdue gear custody, gear outbox health, and upcoming changes in `lib/data/association-operations.ts`, `__tests__/lib/data/association-operations.test.ts`, `app/(dashboard)/league/[leagueId]/operations/page.tsx`, and `components/features/association-operations/OperationalDashboard.tsx`
+- [X] T053 [US2] Add Operations and Venue Reservations destinations without regressing merged Gear navigation in `components/features/navigation/DashboardNav.tsx` and `components/features/navigation/MobileNavigation.tsx`
 
 **Checkpoint**: Association pre-season and in-season scheduling no longer requires external ice spreadsheets.
 

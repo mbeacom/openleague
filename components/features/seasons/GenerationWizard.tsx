@@ -328,6 +328,12 @@ function WizardBody({
   const conflictedCount = preview
     ? preview.games.filter((game) => game.conflicts.length > 0).length
     : 0;
+  const dateRangeUnslottedCount = preview
+    ? preview.unslottedPairings.filter((pairing) => pairing.reason === "DATE_RANGE").length
+    : 0;
+  const noReservationUnslottedCount = preview
+    ? preview.unslottedPairings.filter((pairing) => pairing.reason === "NO_RESERVATION").length
+    : 0;
 
   return (
     <>
@@ -534,17 +540,26 @@ function WizardBody({
             <Stack spacing={2}>
               <Typography variant="body2">
                 {preview.games.length} of {preview.totalPairings} pairing
-                {preview.totalPairings === 1 ? "" : "s"} scheduled
+                {preview.totalPairings === 1 ? "" : "s"} slotted
                 {preview.games.length > 0
                   ? ` — ${preview.games.length} draft game${preview.games.length === 1 ? "" : "s"} will be created.`
                   : "."}
               </Typography>
 
-              {preview.unslottedCount > 0 ? (
+              {dateRangeUnslottedCount > 0 ? (
                 <Alert severity="warning">
-                  {preview.unslottedCount} pairing{preview.unslottedCount === 1 ? "" : "s"} did not
+                  {dateRangeUnslottedCount} pairing{dateRangeUnslottedCount === 1 ? "" : "s"} did not
                   fit in the selected date range and will not be created. Extend the range or add
-                  more eligible days to include {preview.unslottedCount === 1 ? "it" : "them"}.
+                  more eligible days to include {dateRangeUnslottedCount === 1 ? "it" : "them"}.
+                </Alert>
+              ) : null}
+
+              {noReservationUnslottedCount > 0 ? (
+                <Alert severity="warning">
+                  {noReservationUnslottedCount} pairing
+                  {noReservationUnslottedCount === 1 ? "" : "s"} could not be slotted because no
+                  confirmed reservation inventory was available at the selected venue. Confirm or
+                  add reservations, choose another venue, or generate without a default venue.
                 </Alert>
               ) : null}
 

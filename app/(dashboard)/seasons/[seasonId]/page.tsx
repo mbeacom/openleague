@@ -8,7 +8,10 @@ import { prisma } from "@/lib/db/prisma";
 import { requireUserId } from "@/lib/auth/session";
 import { STATS_MIN_AGE_LEVEL } from "@/lib/env";
 import { AGE_CLASSIFICATION_RANK, isStatsEligible } from "@/lib/utils/age-level";
-import { computeSeasonStandings } from "@/lib/utils/season-standings";
+import {
+  computeSeasonStandings,
+  overlaySeasonTeamDivisions,
+} from "@/lib/utils/season-standings";
 import { SeasonDetail } from "@/components/features/seasons/SeasonDetail";
 import { GenerationWizard } from "@/components/features/seasons/GenerationWizard";
 import { PhaseEditor } from "@/components/features/seasons/PhaseEditor";
@@ -50,9 +53,13 @@ export default async function SeasonDetailPage({
         })) > 0
       : false;
 
+  const seasonPlacementByTeam = new Map(
+    season.teamPlacements.map((placement) => [placement.teamId, placement]),
+  );
+
   // Eligible opponents (FR-008): the league's teams for league seasons; for
   // team-owned seasons, any teams the viewer administers (legacy team scope).
-  const teams = season.leagueId
+  const teamRows = season.leagueId
     ? await prisma.team.findMany({
         where: { leagueId: season.leagueId, isActive: true },
         select: { id: true, name: true, divisionId: true },
@@ -65,6 +72,7 @@ export default async function SeasonDetailPage({
           orderBy: { team: { name: "asc" } },
         })
       ).map((membership) => membership.team);
+  const teams = overlaySeasonTeamDivisions(teamRows, season.teamPlacements);
 
   // League divisions feed the generation wizard's division preselect (FR-018).
   const divisions = season.leagueId
@@ -134,7 +142,12 @@ export default async function SeasonDetailPage({
   // classification; unclassified-only seasons stay score-eligible. Below the
   // stats threshold the whole standings table is suppressed.
   const participantLevels = participatingTeams
-    .map((team) => team.division?.ageClassification)
+    .map((team) => {
+      const placement = seasonPlacementByTeam.get(team.id);
+      return placement
+        ? placement.division?.ageClassification ?? null
+        : team.division?.ageClassification ?? null;
+    })
     .filter((level): level is AgeClassification => Boolean(level));
   const mostRestrictiveLevel =
     participantLevels.length > 0
@@ -148,14 +161,21 @@ export default async function SeasonDetailPage({
   const standingsRows = standingsGated
     ? []
     : computeSeasonStandings(
-        participatingTeams.map((team) => ({ id: team.id, name: team.name })),
+        participatingTeams.map((team) => ({
+          id: team.id,
+          name: seasonPlacementByTeam.get(team.id)?.teamNameSnapshot || team.name,
+        })),
         season.games.map((game) => ({
           status: game.status,
           homeTeamId: game.homeTeamId,
           awayTeamId: game.awayTeamId,
           homeScore: game.homeScore,
           awayScore: game.awayScore,
-        }))
+        })),
+        season.teamPlacements.map((placement) => ({
+          teamId: placement.teamId,
+          teamNameSnapshot: placement.teamNameSnapshot,
+        })),
       );
 
   const phaseGameCounts = new Map<string, number>();
@@ -208,6 +228,7 @@ export default async function SeasonDetailPage({
           archivedAt: season.archivedAt,
           format: season.format,
           formatRounds: season.formatRounds,
+          scheduleVisibility: season.scheduleVisibility,
           ownerName: season.league?.name ?? season.team?.name ?? "",
         }}
         games={games}

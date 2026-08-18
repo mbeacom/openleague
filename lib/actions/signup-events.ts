@@ -2,9 +2,16 @@
 
 import { randomBytes } from "crypto";
 import { revalidatePath } from "next/cache";
-import type { PhaseAudience } from "@prisma/client";
+import type { PhaseAudience, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { FALLBACK_TIME_ZONE } from "@/lib/utils/date";
+import {
+  assignVenueReservation,
+  createVenueReservation,
+  transitionVenueReservation,
+  VenueReservationConflictError,
+} from "@/lib/services/venue-reservations";
+import { runVenueReservationTransaction } from "@/lib/services/venue-reservation-transaction";
 import {
   getCurrentUserId,
   isEventManager,
@@ -33,6 +40,13 @@ import { sendSignupEventCanceledEmail, sendSignupEventUpdatedEmail } from "@/lib
 import { logSignupEventActivity } from "@/lib/utils/event-activity";
 
 const ACTIVE_REGISTRATION_STATUSES = ["CONFIRMED", "PENDING_PAYMENT", "OFFERED", "WAITLISTED"] as const;
+
+class SignupEventLifecycleError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SignupEventLifecycleError";
+  }
+}
 
 function generateEventToken(): string {
   return randomBytes(32).toString("hex");
@@ -228,19 +242,31 @@ export async function updateSignupEvent(
 ): Promise<ActionResult<{ eventId: string; warnings: string[] }>> {
   try {
     const validated = updateSignupEventSchema.parse(input);
-    await requireEventManager(validated.eventId);
+    const actorId = await requireEventManager(validated.eventId);
+    const rawInput = input as unknown as Record<string, unknown>;
+    if ("surfaceId" in rawInput || "segmentId" in rawInput) {
+      return {
+        success: false,
+        error: "Published signup events do not support surface or segment reservations.",
+      };
+    }
 
     const existing = await prisma.signupEvent.findUnique({
       where: { id: validated.eventId },
       select: {
         id: true,
         status: true,
+        venueReservationId: true,
         startAt: true,
         endAt: true,
         venueId: true,
         locationText: true,
         visibility: true,
         linkToken: true,
+        timezone: true,
+        hostOrganizationId: true,
+        hostLeagueId: true,
+        hostTeamId: true,
         title: true,
         venue: { select: { slug: true } },
         hostLeague: { select: { slug: true, name: true } },
@@ -311,8 +337,15 @@ export async function updateSignupEvent(
         existing.endAt.getTime() !== validated.endAt.getTime() ||
         (existing.venueId ?? null) !== (validated.venueId || null) ||
         (existing.locationText ?? "") !== (validated.locationText ?? ""));
+    const reservationChange =
+      existing.status === "PUBLISHED" &&
+      (
+        existing.startAt.getTime() !== validated.startAt.getTime() ||
+        existing.endAt.getTime() !== validated.endAt.getTime() ||
+        (existing.venueId ?? null) !== (validated.venueId || null)
+      );
 
-    await prisma.$transaction(async (tx) => {
+    const saveEvent = async (tx: Prisma.TransactionClient, reservationId?: string | null) => {
       await tx.signupEvent.update({
         where: { id: validated.eventId },
         data: {
@@ -324,7 +357,8 @@ export async function updateSignupEvent(
               ? generateEventToken()
               : undefined,
           venueId: validated.venueId || null,
-          updatedById: await requireUserId(),
+          updatedById: actorId,
+          ...(reservationId !== undefined ? { venueReservationId: reservationId } : {}),
         },
       });
 
@@ -352,7 +386,105 @@ export async function updateSignupEvent(
       for (const phase of phaseCreateData(validated.phases)) {
         await tx.eventRegistrationPhase.create({ data: { ...phase, eventId: validated.eventId } });
       }
-    });
+    };
+
+    const canonicalReservations = (prisma as typeof prisma & { venueReservation?: unknown }).venueReservation;
+    if (reservationChange && !canonicalReservations) {
+      return {
+        success: false,
+        error: "Published venue changes require canonical reservation support.",
+      };
+    }
+    if (reservationChange && canonicalReservations) {
+      await runVenueReservationTransaction(async (tx) => {
+        const current = await tx.signupEvent.findUnique({
+          where: { id: validated.eventId },
+          select: {
+            id: true,
+            status: true,
+            venueReservationId: true,
+            hostOrganizationId: true,
+            hostLeagueId: true,
+            hostTeamId: true,
+            timezone: true,
+            venueId: true,
+          },
+        });
+        if (!current || current.status !== "PUBLISHED") {
+          throw new Error("The event changed while it was being edited.");
+        }
+        const ownerCount = [
+          current.hostOrganizationId,
+          current.hostLeagueId,
+          current.hostTeamId,
+        ].filter(Boolean).length;
+        if (ownerCount !== 1) {
+          throw new Error("The event has invalid owner ancestry.");
+        }
+
+        let newReservationId: string | null = null;
+        if (current.venueReservationId) {
+          const childGames = await tx.eventGame.findMany({
+            where: { eventId: current.id },
+            select: { id: true },
+          });
+          if (childGames.length > 0) {
+            throw new SignupEventLifecycleError(
+              "Published events with games cannot be rescheduled.",
+            );
+          }
+          await transitionVenueReservation(tx, {
+            reservationId: current.venueReservationId,
+            nextStatus: "CANCELED",
+            actorId,
+            reason: "Published signup event rescheduled",
+            allowAssignedDisposition: true,
+          });
+        } else {
+          const childGames = await tx.eventGame.findMany({
+            where: { eventId: current.id },
+            select: { id: true },
+          });
+          if (childGames.length > 0) {
+            throw new SignupEventLifecycleError(
+              "Published events with games cannot be rescheduled.",
+            );
+          }
+        }
+        if (validated.venueId) {
+          const venue = await tx.venue.findUnique({
+            where: { id: validated.venueId },
+            select: { timezone: true },
+          });
+          if (!venue) {
+            throw new Error("Venue not found");
+          }
+          const reservation = await createVenueReservation(tx, {
+            venueId: validated.venueId,
+            startsAt: validated.startAt,
+            endsAt: validated.endAt,
+            timezone: venue.timezone,
+            ownerVenueOrganizationId: current.hostOrganizationId,
+            ownerLeagueId: current.hostLeagueId,
+            ownerTeamId: current.hostTeamId,
+            actorId,
+            venueWideReason: "Published signup event venue-wide reservation",
+          });
+          newReservationId = reservation.id;
+        }
+        await saveEvent(tx, newReservationId);
+        if (newReservationId) {
+          await assignVenueReservation(tx, {
+            reservationId: newReservationId,
+            targetType: "SIGNUP_EVENT",
+            targetId: validated.eventId,
+            actorId,
+          });
+        }
+      });
+    } else {
+      await prisma.$transaction((tx) => saveEvent(tx));
+    }
 
     // A capacity increase frees spots — cascade waitlist offers for those slots.
     const increasedSlotIds = validated.slots
@@ -401,6 +533,16 @@ export async function updateSignupEvent(
     if (error instanceof Error && error.message.startsWith("Unauthorized")) {
       return { success: false, error: error.message };
     }
+    if (error instanceof SignupEventLifecycleError) {
+      return { success: false, error: error.message };
+    }
+    if (error instanceof VenueReservationConflictError) {
+      return {
+        success: false,
+        error: "This time overlaps an existing booking at the venue",
+        details: { conflicts: error.conflicts },
+      };
+    }
     console.error("Failed to update signup event:", error);
     return { success: false, error: "Failed to update the event." };
   }
@@ -428,6 +570,11 @@ export async function publishSignupEvent(
         acceptsOnlinePayment: true,
         acceptsManualPayment: true,
         hostTeamId: true,
+        venueId: true,
+        startAt: true,
+        endAt: true,
+        timezone: true,
+        venueReservationId: true,
         venue: { select: { slug: true } },
         hostOrganization: {
           select: { id: true, stripeAccountId: true, stripeChargesEnabled: true },
@@ -471,32 +618,230 @@ export async function publishSignupEvent(
       }
     }
 
-    // A league's first PUBLIC event mints the association's public URL slug.
-    let leagueSlug = event.hostLeague?.slug ?? null;
-    if (event.visibility === "PUBLIC" && event.hostLeague && !event.hostLeague.slug) {
-      const base = slugifyName(event.hostLeague.name);
-      let candidate = base;
-      for (let suffix = 2; suffix < 50; suffix += 1) {
-        const taken = await prisma.league.findUnique({ where: { slug: candidate }, select: { id: true } });
-        if (!taken) break;
-        candidate = `${base}-${suffix}`;
-      }
-      await prisma.league.update({ where: { id: event.hostLeague.id }, data: { slug: candidate } });
-      leagueSlug = candidate;
+    const actorId = await requireUserId();
+    if (event.venueId && (!event.startAt || !event.endAt)) {
+      return {
+        success: false,
+        error: "Published venue events require a start and end time.",
+      };
     }
+    let leagueSlug = event.hostLeague?.slug ?? null;
+    try {
+      const publication = await runVenueReservationTransaction(async (tx) => {
+        // Re-read all lifecycle and ownership inputs in the committing
+        // transaction. The preflight read above is only for friendly errors.
+        const current = await tx.signupEvent.findUnique({
+          where: { id: eventId },
+          select: {
+            id: true,
+            status: true,
+            visibility: true,
+            linkToken: true,
+            acceptsOnlinePayment: true,
+            acceptsManualPayment: true,
+            hostTeamId: true,
+            venueId: true,
+            startAt: true,
+            endAt: true,
+            timezone: true,
+            venueReservationId: true,
+            venue: { select: { slug: true } },
+            hostOrganization: {
+              select: { id: true, stripeAccountId: true, stripeChargesEnabled: true },
+            },
+            hostLeague: {
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+                stripeAccountId: true,
+                stripeChargesEnabled: true,
+              },
+            },
+            slots: { select: { id: true, priceAmount: true } },
+          },
+        });
+        if (!current) {
+          throw new SignupEventLifecycleError("Event not found");
+        }
+        if (current.status !== "DRAFT") {
+          throw new SignupEventLifecycleError("This event is no longer a draft.");
+        }
+        if (current.slots.length === 0) {
+          throw new SignupEventLifecycleError("Add at least one signup slot before publishing.");
+        }
 
-    await prisma.signupEvent.update({
-      where: { id: eventId },
-      data: {
-        status: "PUBLISHED",
-        publishedAt: new Date(),
-        linkToken: event.visibility === "LINK" && !event.linkToken ? generateEventToken() : undefined,
-      },
-    });
+        const hasCurrentPricedSlot = current.slots.some((slot) => (slot.priceAmount ?? 0) > 0);
+        if (hasCurrentPricedSlot && !current.acceptsOnlinePayment && !current.acceptsManualPayment) {
+          throw new SignupEventLifecycleError("Priced slots need at least one accepted payment method.");
+        }
+        if (current.acceptsOnlinePayment) {
+          if (current.hostTeamId) {
+            throw new SignupEventLifecycleError(
+              "Team-hosted events support manual payment methods only.",
+            );
+          }
+          const merchant = current.hostOrganization ?? current.hostLeague;
+          if (
+            !isStripeEnabled()
+            || !merchant?.stripeAccountId
+            || !merchant.stripeChargesEnabled
+          ) {
+            throw new SignupEventLifecycleError(
+              "Online payments aren't set up for this host yet — finish payment onboarding or switch to manual payment methods.",
+            );
+          }
+        }
+
+        const ownerCount = [
+          current.hostOrganization?.id,
+          current.hostLeague?.id,
+          current.hostTeamId,
+        ].filter(Boolean).length;
+        if (ownerCount !== 1) {
+          throw new SignupEventLifecycleError("The event has invalid owner ancestry.");
+        }
+        if (current.venueId && (!current.startAt || !current.endAt)) {
+          throw new SignupEventLifecycleError(
+            "Published venue events require a start and end time.",
+          );
+        }
+
+        let currentLeagueSlug = current.hostLeague?.slug ?? null;
+        if (current.visibility === "PUBLIC" && current.hostLeague && !current.hostLeague.slug) {
+          const base = slugifyName(current.hostLeague.name);
+          let candidate = base;
+          for (let suffix = 2; suffix < 50; suffix += 1) {
+            const taken = await tx.league.findUnique({
+              where: { slug: candidate },
+              select: { id: true },
+            });
+            if (!taken) break;
+            candidate = `${base}-${suffix}`;
+          }
+          await tx.league.update({
+            where: { id: current.hostLeague.id },
+            data: { slug: candidate },
+          });
+          currentLeagueSlug = candidate;
+        }
+
+        const hasCanonicalReservations = Boolean(
+          (tx as Prisma.TransactionClient & { venueReservation?: unknown }).venueReservation,
+        );
+        let reservationId: string | null = current.venueReservationId;
+        if (current.venueId && current.startAt && current.endAt && hasCanonicalReservations) {
+          const childGames = (await tx.eventGame.findMany({
+            where: { eventId: current.id, status: { not: "CANCELED" } },
+            select: {
+              id: true,
+              startAt: true,
+              endAt: true,
+              surfaceId: true,
+              segmentId: true,
+              venueReservationId: true,
+            },
+            orderBy: [{ startAt: "asc" }, { id: "asc" }],
+          })) ?? [];
+
+          if (childGames.length > 0) {
+            if (current.venueReservationId) {
+              throw new SignupEventLifecycleError(
+                "Events with game sessions cannot also hold a parent venue reservation.",
+              );
+            }
+            reservationId = null;
+            for (const game of childGames) {
+              if (game.venueReservationId) {
+                throw new SignupEventLifecycleError(
+                  "A draft event game cannot hold a venue reservation.",
+                );
+              }
+              const reservation = await createVenueReservation(tx, {
+                venueId: current.venueId,
+                surfaceId: game.surfaceId,
+                segmentId: game.segmentId,
+                startsAt: game.startAt,
+                endsAt: game.endAt,
+                timezone: current.timezone,
+                ownerVenueOrganizationId: current.hostOrganization?.id,
+                ownerLeagueId: current.hostLeague?.id,
+                ownerTeamId: current.hostTeamId,
+                actorId,
+                venueWideReason: game.surfaceId
+                  ? null
+                  : "Published event game venue-wide reservation",
+              });
+              await assignVenueReservation(tx, {
+                reservationId: reservation.id,
+                targetType: "EVENT_GAME",
+                targetId: game.id,
+                actorId,
+              });
+            }
+          } else {
+            const reservation = current.venueReservationId
+              ? { id: current.venueReservationId }
+              : await createVenueReservation(tx, {
+                  venueId: current.venueId,
+                  startsAt: current.startAt,
+                  endsAt: current.endAt,
+                  timezone: current.timezone,
+                  ownerVenueOrganizationId: current.hostOrganization?.id,
+                  ownerLeagueId: current.hostLeague?.id,
+                  ownerTeamId: current.hostTeamId,
+                  actorId,
+                  venueWideReason: "Published signup event venue-wide reservation",
+                });
+            reservationId = reservation.id;
+            await assignVenueReservation(tx, {
+              reservationId,
+              targetType: "SIGNUP_EVENT",
+              targetId: eventId,
+              actorId,
+            });
+          }
+        }
+
+        const publishedAt = new Date();
+        const updateResult = await tx.signupEvent.updateMany({
+          where: { id: eventId, status: "DRAFT" },
+          data: {
+            status: "PUBLISHED",
+            publishedAt,
+            linkToken:
+              current.visibility === "LINK" && !current.linkToken
+                ? generateEventToken()
+                : undefined,
+            ...(reservationId ? { venueReservationId: reservationId } : {}),
+          },
+        });
+        if (updateResult.count !== 1) {
+          throw new SignupEventLifecycleError("This event changed while it was being published.");
+        }
+        return {
+          venue: current.venue,
+          leagueSlug: currentLeagueSlug,
+        };
+      });
+      leagueSlug = publication.leagueSlug;
+    } catch (error) {
+      if (error instanceof VenueReservationConflictError) {
+        return {
+          success: false,
+          error: "This time overlaps an existing booking at the venue",
+          details: { conflicts: error.conflicts },
+        };
+      }
+      if (error instanceof SignupEventLifecycleError) {
+        return { success: false, error: error.message };
+      }
+      throw error;
+    }
 
     await logSignupEventActivity({
       eventId,
-      actorId: await requireUserId(),
+      actorId,
       action: "published",
       summary: "Event published",
     });
@@ -525,7 +870,7 @@ export async function cancelSignupEvent(
 ): Promise<ActionResult<{ eventId: string; paidRegistrations: number }>> {
   try {
     const validated = cancelSignupEventSchema.parse(input);
-    await requireEventManager(validated.eventId);
+    const actorId = await requireEventManager(validated.eventId);
 
     const event = await prisma.signupEvent.findUnique({
       where: { id: validated.eventId },
@@ -533,6 +878,7 @@ export async function cancelSignupEvent(
         id: true,
         status: true,
         title: true,
+        venueReservationId: true,
         venue: { select: { slug: true } },
         hostLeague: { select: { slug: true, name: true } },
         hostOrganization: { select: { name: true } },
@@ -557,14 +903,104 @@ export async function cancelSignupEvent(
       }),
     ]);
 
-    await prisma.signupEvent.update({
-      where: { id: event.id },
-      data: { status: "CANCELED", canceledAt: new Date() },
+    await runVenueReservationTransaction(async (tx) => {
+      const current = await tx.signupEvent.findUnique({
+        where: { id: event.id },
+        select: {
+          id: true,
+          status: true,
+          venueReservationId: true,
+          hostLeagueId: true,
+          hostTeamId: true,
+        },
+      });
+      if (!current) {
+        throw new SignupEventLifecycleError("Event not found");
+      }
+      if (current.status === "CANCELED") {
+        throw new SignupEventLifecycleError("This event is already canceled.");
+      }
+
+      const childGames = (await tx.eventGame.findMany({
+        where: { eventId: current.id },
+        select: {
+          id: true,
+          status: true,
+          venueReservationId: true,
+          venueReservation: { select: { id: true, status: true } },
+        },
+      })) ?? [];
+      const transitionedReservationIds = new Set<string>();
+      const reservationModel = (
+        tx as Prisma.TransactionClient & { venueReservation?: unknown }
+      ).venueReservation;
+
+      if (current.venueReservationId && reservationModel) {
+        await transitionVenueReservation(tx, {
+          reservationId: current.venueReservationId,
+          nextStatus: "CANCELED",
+          actorId,
+          reason: validated.reason || "Signup event canceled",
+          allowAssignedDisposition: true,
+        });
+        transitionedReservationIds.add(current.venueReservationId);
+      }
+
+      for (const game of childGames) {
+        if (
+          game.venueReservationId
+          && reservationModel
+          && !transitionedReservationIds.has(game.venueReservationId)
+          && (
+            game.venueReservation?.status === undefined
+            || game.venueReservation.status === "HELD"
+            || game.venueReservation.status === "CONFIRMED"
+          )
+        ) {
+          await transitionVenueReservation(tx, {
+            reservationId: game.venueReservationId,
+            nextStatus: "CANCELED",
+            actorId,
+            reason: validated.reason || "Signup event canceled",
+            allowAssignedDisposition: true,
+          });
+          transitionedReservationIds.add(game.venueReservationId);
+        }
+
+        if (game.status !== "CANCELED") {
+          await tx.eventGame.update({
+            where: { id: game.id },
+            data: { status: "CANCELED" },
+          });
+          await tx.auditLog.create({
+            data: {
+              action: "EVENT_GAME_CANCELED",
+              userId: actorId,
+              resourceId: game.id,
+              resourceType: "EventGame",
+              teamId: current.hostTeamId,
+              leagueId: current.hostLeagueId,
+              details: {
+                eventId: current.id,
+                reason: validated.reason || "Signup event canceled",
+              },
+            },
+          });
+        }
+      }
+
+      const updateResult = await tx.signupEvent.updateMany({
+        where: { id: current.id, status: { not: "CANCELED" } },
+        data: { status: "CANCELED", canceledAt: new Date() },
+      });
+      if (updateResult.count !== 1) {
+        throw new SignupEventLifecycleError("This event changed while it was being canceled.");
+      }
     });
 
     await logSignupEventActivity({
       eventId: event.id,
-      actorId: await requireUserId(),
+      actorId,
       action: "canceled",
       summary: validated.reason ? `Event canceled: ${validated.reason}` : "Event canceled",
       details: { paidRegistrations },
@@ -588,6 +1024,9 @@ export async function cancelSignupEvent(
       throw error;
     }
     if (error instanceof Error && error.message.startsWith("Unauthorized")) {
+      return { success: false, error: error.message };
+    }
+    if (error instanceof SignupEventLifecycleError) {
       return { success: false, error: error.message };
     }
     console.error("Failed to cancel signup event:", error);

@@ -6,9 +6,14 @@ import { getViewableTeamIds, requireTeamAdmin, requireTeamMember, requireUserId 
 import { revalidatePath } from "next/cache";
 import { sendEventNotifications } from "@/lib/email/templates";
 import { canUserAccessVenue as checkVenueAccess } from "@/lib/actions/venues";
-import { findBookingConflicts } from "@/lib/utils/availability";
 import type { BookingConflict } from "@/types/segments";
 import { FALLBACK_TIME_ZONE } from "@/lib/utils/date";
+import {
+  assignVenueReservation,
+  transitionVenueReservation,
+  VenueReservationConflictError,
+} from "@/lib/services/venue-reservations";
+import { runVenueReservationTransaction } from "@/lib/services/venue-reservation-transaction";
 import {
   createEventSchema,
   updateEventSchema,
@@ -36,6 +41,12 @@ function bookingConflictFailure(conflicts: BookingConflict[]): {
     error: `This time overlaps ${conflicts.length} existing booking${conflicts.length > 1 ? "s" : ""} at the venue`,
     details: { conflicts },
   };
+}
+
+function notifyEventMembers(eventId: string, kind: "created" | "updated"): void {
+  sendEventNotifications(eventId, kind).catch((error) => {
+    console.error(`Failed to send event ${kind} notification emails:`, error);
+  });
 }
 
 
@@ -72,12 +83,7 @@ export async function createEvent(
       },
     });
 
-    // Check venue availability if venueId and endAt are provided. Team
-    // calendar events are venue-wide claims (US2 scenario 4), so the unified
-    // engine is asked with no surface/segment; conflicts warn rather than
-    // block, and proceeding requires the recorded override (FR-010/011).
     const venueId = validated.venueId || null;
-    let conflictsOverridden = false;
     if (venueId) {
       const venue = await prisma.venue.findUnique({
         where: { id: venueId },
@@ -93,19 +99,6 @@ export async function createEvent(
       const hasAccess = await checkVenueAccess(currentUserId, venue);
       if (!hasAccess) {
         return { success: false, error: "Your team does not have access to this venue" };
-      }
-      if (validated.endAt) {
-        const conflicts = await findBookingConflicts({
-          venueId,
-          surfaceId: null,
-          segmentId: null,
-          startAt: validated.startAt,
-          endAt: validated.endAt,
-        });
-        if (conflicts.length > 0 && !validated.overrideConflicts) {
-          return bookingConflictFailure(conflicts);
-        }
-        conflictsOverridden = conflicts.length > 0;
       }
     }
 
@@ -124,6 +117,79 @@ export async function createEvent(
     // schema default (never the server runtime zone, which is UTC on Vercel).
     const timezone = validated.timezone ?? venueTimezone ?? FALLBACK_TIME_ZONE;
 
+    const canonicalReservations = (prisma as typeof prisma & { venueReservation?: unknown }).venueReservation;
+    if (validated.reservationId && (!venueId || !validated.endAt)) {
+      return {
+        success: false,
+        error: "A reservation can only be assigned to a timed venue activity.",
+      };
+    }
+    if (venueId && validated.endAt) {
+      if (!validated.reservationId) {
+        return {
+          success: false,
+          error: "Published venue activities require a confirmed reservation.",
+        };
+      }
+      if (!canonicalReservations) {
+        return {
+          success: false,
+          error: "Published venue activities require canonical reservation support.",
+        };
+      }
+      try {
+        const event = await runVenueReservationTransaction(async (tx) => {
+          const created = await tx.event.create({
+            data: {
+              type: validated.type,
+              title: validated.title,
+              startAt: validated.startAt,
+              endAt: validated.endAt,
+              timezone,
+              location,
+              venueId,
+              opponent: validated.opponent || null,
+              notes: validated.notes || null,
+              teamId: validated.teamId,
+              rsvps: {
+                create: allTeamMembers.map((member: { userId: string }) => ({
+                  userId: member.userId,
+                  status: "NO_RESPONSE",
+                })),
+              },
+            },
+            select: {
+              id: true,
+              type: true,
+              title: true,
+              startAt: true,
+              location: true,
+              opponent: true,
+              notes: true,
+            },
+          });
+          await assignVenueReservation(tx, {
+            reservationId: validated.reservationId!,
+            targetType: "EVENT",
+            targetId: created.id,
+            actorId: currentUserId,
+            overrideConflicts: validated.overrideConflicts,
+            overrideReason: validated.overrideConflicts ? validated.overrideReason : null,
+          });
+          return created;
+        });
+        revalidatePath("/calendar");
+        revalidatePath("/events");
+        notifyEventMembers(event.id, "created");
+        return { success: true, data: event };
+      } catch (error) {
+        if (error instanceof VenueReservationConflictError) {
+          return bookingConflictFailure(error.conflicts as unknown as BookingConflict[]);
+        }
+        throw error;
+      }
+    }
+
     // Create event with RSVPs for all team members
     const event = await prisma.event.create({
       data: {
@@ -134,13 +200,10 @@ export async function createEvent(
         timezone,
         location,
         venueId,
+        ...(validated.reservationId ? { venueReservationId: validated.reservationId } : {}),
         opponent: validated.opponent || null,
         notes: validated.notes || null,
         teamId: validated.teamId,
-        ...(conflictsOverridden && {
-          conflictOverriddenById: currentUserId,
-          conflictOverriddenAt: new Date(),
-        }),
         rsvps: {
           create: allTeamMembers.map((member: { userId: string }) => ({
             userId: member.userId,
@@ -164,9 +227,7 @@ export async function createEvent(
     revalidatePath("/events");
 
     // Send email notifications to all team members (async, don't block response)
-    sendEventNotifications(event.id, "created").catch((error) => {
-      console.error("Failed to send event notification emails:", error);
-    });
+    notifyEventMembers(event.id, "created");
 
     return {
       success: true,
@@ -216,7 +277,7 @@ export async function updateEvent(
     // Get the event to verify it exists and get team ID
     const existingEvent = await prisma.event.findUnique({
       where: { id: validated.id },
-      select: { teamId: true },
+      select: { teamId: true, venueReservationId: true },
     });
 
     if (!existingEvent) {
@@ -229,11 +290,7 @@ export async function updateEvent(
     // Check authentication and authorization - only ADMIN can update events
     const currentUserId = await requireTeamAdmin(existingEvent.teamId);
 
-    // Check venue availability if venueId and endAt are provided. Venue-wide
-    // candidate (team events carry no surface); the event itself is excluded
-    // so a reschedule never conflicts with its own booking (FR-010/011).
     const venueId = validated.venueId || null;
-    let conflictsOverridden = false;
     if (venueId) {
       const venue = await prisma.venue.findUnique({
         where: { id: venueId },
@@ -250,20 +307,6 @@ export async function updateEvent(
       if (!hasAccess) {
         return { success: false, error: "Your team does not have access to this venue" };
       }
-      if (validated.endAt) {
-        const conflicts = await findBookingConflicts({
-          venueId,
-          surfaceId: null,
-          segmentId: null,
-          startAt: validated.startAt,
-          endAt: validated.endAt,
-          excludeEventId: validated.id,
-        });
-        if (conflicts.length > 0 && !validated.overrideConflicts) {
-          return bookingConflictFailure(conflicts);
-        }
-        conflictsOverridden = conflicts.length > 0;
-      }
     }
 
     // If venueId provided, auto-populate location from venue name
@@ -278,6 +321,140 @@ export async function updateEvent(
     }
     const timezone = validated.timezone ?? venueTimezone ?? FALLBACK_TIME_ZONE;
 
+    const canonicalReservations = (prisma as typeof prisma & { venueReservation?: unknown }).venueReservation;
+    if (venueId && validated.endAt && !validated.reservationId) {
+      return {
+        success: false,
+        error: "Published venue activities require a confirmed reservation.",
+      };
+    }
+    if (validated.reservationId && (!venueId || !validated.endAt)) {
+      return {
+        success: false,
+        error: "A reservation can only be assigned to a timed venue activity.",
+      };
+    }
+    if (venueId && validated.endAt && !canonicalReservations) {
+      return {
+        success: false,
+        error: "Published venue activities require canonical reservation support.",
+      };
+    }
+    if (
+      existingEvent.venueReservationId
+      && (!venueId || !validated.endAt)
+      && canonicalReservations
+    ) {
+      await runVenueReservationTransaction(async (tx) => {
+        await transitionVenueReservation(tx, {
+          reservationId: existingEvent.venueReservationId!,
+          nextStatus: "CANCELED",
+          actorId: currentUserId,
+          reason: "Team event venue removed",
+          allowAssignedDisposition: true,
+        });
+        await tx.event.update({
+          where: { id: validated.id },
+          data: {
+            type: validated.type,
+            title: validated.title,
+            startAt: validated.startAt,
+            endAt: validated.endAt || null,
+            timezone,
+            location,
+            venueId,
+            opponent: validated.opponent || null,
+            notes: validated.notes || null,
+            venueReservationId: null,
+            conflictOverriddenById: null,
+            conflictOverriddenAt: null,
+          },
+        });
+      });
+      revalidatePath("/calendar");
+      revalidatePath("/events");
+      revalidatePath(`/events/${validated.id}`);
+      notifyEventMembers(validated.id, "updated");
+      return {
+        success: true,
+        data: {
+          id: validated.id,
+          type: validated.type,
+          title: validated.title,
+          startAt: validated.startAt,
+          location,
+          opponent: validated.opponent || null,
+          notes: validated.notes || null,
+        },
+      };
+    }
+
+    if (venueId && validated.endAt && canonicalReservations) {
+      try {
+        const event = await runVenueReservationTransaction(async (tx) => {
+          const reservationChanged =
+            existingEvent.venueReservationId !== validated.reservationId;
+          if (existingEvent.venueReservationId && reservationChanged) {
+            await transitionVenueReservation(tx, {
+              reservationId: existingEvent.venueReservationId,
+              nextStatus: "CANCELED",
+              actorId: currentUserId,
+              reason: "Team event rescheduled",
+              allowAssignedDisposition: true,
+            });
+          }
+          const updated = await tx.event.update({
+            where: { id: validated.id },
+            data: {
+              type: validated.type,
+              title: validated.title,
+              startAt: validated.startAt,
+              endAt: validated.endAt,
+              timezone,
+              location,
+              venueId,
+              opponent: validated.opponent || null,
+              notes: validated.notes || null,
+              venueReservationId:
+                !reservationChanged && existingEvent.venueReservationId
+                  ? existingEvent.venueReservationId
+                  : null,
+              conflictOverriddenById: null,
+              conflictOverriddenAt: null,
+            },
+            select: {
+              id: true,
+              type: true,
+              title: true,
+              startAt: true,
+              location: true,
+              opponent: true,
+              notes: true,
+            },
+          });
+          await assignVenueReservation(tx, {
+            reservationId: validated.reservationId!,
+            targetType: "EVENT",
+            targetId: updated.id,
+            actorId: currentUserId,
+            overrideConflicts: validated.overrideConflicts,
+            overrideReason: validated.overrideConflicts ? validated.overrideReason : null,
+          });
+          return updated;
+        });
+        revalidatePath("/calendar");
+        revalidatePath("/events");
+        revalidatePath(`/events/${validated.id}`);
+        notifyEventMembers(event.id, "updated");
+        return { success: true, data: event };
+      } catch (error) {
+        if (error instanceof VenueReservationConflictError) {
+          return bookingConflictFailure(error.conflicts as unknown as BookingConflict[]);
+        }
+        throw error;
+      }
+    }
+
     // Update the event
     const event = await prisma.event.update({
       where: { id: validated.id },
@@ -291,12 +468,7 @@ export async function updateEvent(
         venueId,
         opponent: validated.opponent || null,
         notes: validated.notes || null,
-        // The conflict check re-ran above whenever it could (venue + endAt);
-        // without a venue or an end time the event has no bookable footprint,
-        // so no conflicts are possible either way. Always write the override
-        // audit fields: stale metadata must not survive a conflict-free save.
-        conflictOverriddenById: conflictsOverridden ? currentUserId : null,
-        conflictOverriddenAt: conflictsOverridden ? new Date() : null,
+        venueReservationId: null,
       },
       select: {
         id: true,
@@ -315,9 +487,7 @@ export async function updateEvent(
     revalidatePath(`/events/${validated.id}`);
 
     // Send email notifications to all team members (async, don't block response)
-    sendEventNotifications(event.id, "updated").catch((error) => {
-      console.error("Failed to send event update notification emails:", error);
-    });
+    notifyEventMembers(event.id, "updated");
 
     return {
       success: true,
@@ -354,7 +524,7 @@ export async function deleteEvent(
     // Get the event to verify it exists and get team ID
     const existingEvent = await prisma.event.findUnique({
       where: { id: eventId },
-      select: { teamId: true },
+      select: { teamId: true, venueReservationId: true },
     });
 
     if (!existingEvent) {
@@ -365,12 +535,26 @@ export async function deleteEvent(
     }
 
     // Check authentication and authorization - only ADMIN can delete events
-    await requireTeamAdmin(existingEvent.teamId);
+    const currentUserId = await requireTeamAdmin(existingEvent.teamId);
 
-    // Delete the event (RSVPs will be cascade deleted)
-    await prisma.event.delete({
-      where: { id: eventId },
-    });
+    const canonicalReservations = (prisma as typeof prisma & { venueReservation?: unknown }).venueReservation;
+    if (existingEvent.venueReservationId && canonicalReservations) {
+      await runVenueReservationTransaction(async (tx) => {
+        await transitionVenueReservation(tx, {
+          reservationId: existingEvent.venueReservationId!,
+          nextStatus: "CANCELED",
+          actorId: currentUserId,
+          reason: "Team event deleted",
+          allowAssignedDisposition: true,
+        });
+        await tx.event.delete({ where: { id: eventId } });
+      });
+    } else {
+      // Delete the event (RSVPs will be cascade deleted)
+      await prisma.event.delete({
+        where: { id: eventId },
+      });
+    }
 
     // Send cancellation email after deletion (async, don't block response)
     sendEventNotifications(eventId, "cancelled").catch((error) => {

@@ -11,6 +11,9 @@ const {
   mockIsStripeEnabled,
   mockUpdatedEmail,
   mockCanceledEmail,
+  mockCreateVenueReservation,
+  mockAssignVenueReservation,
+  mockTransitionVenueReservation,
   mockPrisma,
 } = vi.hoisted(() => ({
   mockRequireUserId: vi.fn(),
@@ -21,12 +24,24 @@ const {
   mockIsStripeEnabled: vi.fn(),
   mockUpdatedEmail: vi.fn(),
   mockCanceledEmail: vi.fn(),
+  mockCreateVenueReservation: vi.fn(),
+  mockAssignVenueReservation: vi.fn(),
+  mockTransitionVenueReservation: vi.fn(),
   mockPrisma: {
     $transaction: vi.fn(),
-    signupEvent: { create: vi.fn(), findUnique: vi.fn(), findFirst: vi.fn(), update: vi.fn(), findMany: vi.fn() },
+    signupEvent: {
+      create: vi.fn(),
+      findUnique: vi.fn(),
+      findFirst: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      findMany: vi.fn(),
+    },
     signupSlot: { update: vi.fn(), create: vi.fn(), deleteMany: vi.fn() },
     eventRegistrationPhase: { deleteMany: vi.fn(), create: vi.fn() },
     eventRegistration: { findMany: vi.fn(), count: vi.fn() },
+    eventGame: { findMany: vi.fn().mockResolvedValue([]), update: vi.fn() },
+    auditLog: { create: vi.fn() },
     eventManager: { findUnique: vi.fn(), findMany: vi.fn() },
     league: { findUnique: vi.fn(), update: vi.fn() },
     venue: { findUnique: vi.fn(), findMany: vi.fn() },
@@ -35,6 +50,7 @@ const {
     teamMember: { findMany: vi.fn() },
     user: { findUnique: vi.fn() },
     eventInvitation: { findFirst: vi.fn() },
+    venueReservation: undefined as unknown as Record<string, ReturnType<typeof vi.fn>>,
   },
 }));
 
@@ -58,8 +74,26 @@ vi.mock("@/lib/email/templates", () => ({
 }));
 
 vi.mock("@/lib/actions/venue-organizations", () => ({}));
+vi.mock("@/lib/services/venue-reservations", () => ({
+  assignVenueReservation: (...args: unknown[]) => mockAssignVenueReservation(...args),
+  createVenueReservation: (...args: unknown[]) => mockCreateVenueReservation(...args),
+  transitionVenueReservation: (...args: unknown[]) => mockTransitionVenueReservation(...args),
+  VenueReservationConflictError: class extends Error {
+    conflicts: unknown[];
+    constructor(conflicts: unknown[]) {
+      super("conflict");
+      this.conflicts = conflicts;
+    }
+  },
+  VenueReservationLifecycleError: class extends Error {},
+}));
 
-import { createSignupEvent, publishSignupEvent, cancelSignupEvent } from "@/lib/actions/signup-events";
+import {
+  createSignupEvent,
+  publishSignupEvent,
+  cancelSignupEvent,
+  updateSignupEvent,
+} from "@/lib/actions/signup-events";
 
 const futureDate = (hours: number) => new Date(Date.now() + hours * 60 * 60 * 1000);
 
@@ -261,11 +295,74 @@ describe("publishSignupEvent", () => {
       where: { id: "league-1" },
       data: { slug: "great-falls-hockey-association" },
     });
-    expect(mockPrisma.signupEvent.update).toHaveBeenCalledWith(
+    expect(mockPrisma.signupEvent.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: eventId },
+        where: expect.objectContaining({ id: eventId, status: "DRAFT" }),
         data: expect.objectContaining({ status: "PUBLISHED" }),
       })
+    );
+  });
+
+  it("atomically materializes child reservations without a conflicting parent claim", async () => {
+    const draft = {
+      id: eventId,
+      status: "DRAFT",
+      visibility: "PUBLIC",
+      linkToken: null,
+      acceptsOnlinePayment: false,
+      acceptsManualPayment: true,
+      hostTeamId: null,
+      venueId: "clvenue0000000000000001",
+      startAt: futureDate(24 * 7),
+      endAt: futureDate(24 * 7 + 2),
+      timezone: "America/New_York",
+      venueReservationId: null,
+      venue: { slug: "test-rink" },
+      hostOrganization: { id: "org-1", stripeAccountId: null, stripeChargesEnabled: false },
+      hostLeague: null,
+      slots: [{ id: "slot-1", priceAmount: null }],
+    };
+    mockRequireUserId.mockResolvedValue("user-1");
+    mockPrisma.signupEvent.findUnique.mockResolvedValue(draft);
+    mockPrisma.venueReservation = {};
+    mockPrisma.eventGame.findMany.mockResolvedValueOnce([
+      {
+        id: "game-1",
+        startAt: draft.startAt,
+        endAt: futureDate(24 * 7 + 1),
+        surfaceId: "surface-1",
+        segmentId: null,
+        venueReservationId: null,
+      },
+      {
+        id: "game-2",
+        startAt: futureDate(24 * 7 + 1),
+        endAt: draft.endAt,
+        surfaceId: "surface-1",
+        segmentId: null,
+        venueReservationId: null,
+      },
+    ]);
+    mockCreateVenueReservation
+      .mockResolvedValueOnce({ id: "reservation-1" })
+      .mockResolvedValueOnce({ id: "reservation-2" });
+
+    const result = await publishSignupEvent({ eventId });
+
+    expect(result.success).toBe(true);
+    expect(mockCreateVenueReservation).toHaveBeenCalledTimes(2);
+    expect(mockAssignVenueReservation).toHaveBeenCalledTimes(2);
+    expect(mockAssignVenueReservation).toHaveBeenNthCalledWith(
+      1,
+      expect.anything(),
+      expect.objectContaining({ targetType: "EVENT_GAME", targetId: "game-1" }),
+    );
+    expect(mockAssignVenueReservation).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ targetType: "SIGNUP_EVENT" }),
+    );
+    expect(mockPrisma.signupEvent.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: eventId, status: "DRAFT" } }),
     );
   });
 
@@ -340,5 +437,334 @@ describe("cancelSignupEvent", () => {
 
     expect(result).toEqual({ success: false, error: "This event is already canceled." });
     expect(mockPrisma.signupEvent.update).not.toHaveBeenCalled();
+  });
+
+  it("atomically replaces a published event reservation when its window moves", async () => {
+    const eventId = "cldevent0000000000000001";
+    const oldStart = futureDate(24 * 8);
+    const oldEnd = futureDate(24 * 8 + 2);
+    const newStart = futureDate(24 * 9);
+    const newEnd = futureDate(24 * 9 + 2);
+    const existing = {
+      id: eventId,
+      status: "PUBLISHED",
+      venueReservationId: "cloldreservation00000001",
+      startAt: oldStart,
+      endAt: oldEnd,
+      venueId: "clvenue0000000000000001",
+      locationText: null,
+      visibility: "PUBLIC",
+      linkToken: null,
+      title: "Mite Night",
+      timezone: "America/New_York",
+      hostOrganizationId: null,
+      hostLeagueId: "cldleague0000000000000001",
+      hostTeamId: null,
+      venue: { slug: null },
+      hostLeague: { slug: "gfha", name: "GFHA" },
+      hostOrganization: null,
+      hostTeam: null,
+      slots: [],
+    };
+    mockRequireEventManager.mockResolvedValue("user-1");
+    mockPrisma.venueReservation = { findUnique: vi.fn() };
+    mockPrisma.venue.findUnique.mockResolvedValue({ timezone: "America/New_York" });
+    mockPrisma.$transaction.mockImplementation(async (callback: (tx: unknown) => unknown) =>
+      callback(mockPrisma));
+    mockPrisma.signupEvent.findUnique
+      .mockResolvedValueOnce(existing)
+      .mockResolvedValueOnce({
+        id: eventId,
+        status: "PUBLISHED",
+        venueReservationId: existing.venueReservationId,
+        hostOrganizationId: null,
+        hostLeagueId: existing.hostLeagueId,
+        hostTeamId: null,
+        timezone: existing.timezone,
+        venueId: existing.venueId,
+      });
+    mockPrisma.venueReservation.findUnique.mockResolvedValue({ id: existing.venueReservationId, eventGames: [] });
+    mockCreateVenueReservation.mockResolvedValue({ id: "clnewreservation0000001" });
+    mockPrisma.signupEvent.update.mockResolvedValue({});
+
+    const result = await updateSignupEvent({
+      ...validCreateInput,
+      eventId,
+      startAt: newStart,
+      endAt: newEnd,
+      venueId: existing.venueId,
+    });
+
+    expect(result.success).toBe(true);
+    expect(mockTransitionVenueReservation).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        reservationId: existing.venueReservationId,
+        nextStatus: "CANCELED",
+      }),
+    );
+    expect(mockCreateVenueReservation).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ startsAt: newStart, endsAt: newEnd }),
+    );
+    expect(mockAssignVenueReservation).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        targetType: "SIGNUP_EVENT",
+        targetId: eventId,
+      }),
+    );
+    expect(mockPrisma.signupEvent.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ venueReservationId: "clnewreservation0000001" }),
+      }),
+    );
+  });
+
+  it("does not update the event when the replacement reservation conflicts", async () => {
+    const eventId = "cldevent0000000000000001";
+    const existing = {
+      id: eventId,
+      status: "PUBLISHED",
+      venueReservationId: "cloldreservation00000001",
+      startAt: futureDate(24 * 8),
+      endAt: futureDate(24 * 8 + 2),
+      venueId: "clvenue0000000000000001",
+      locationText: null,
+      visibility: "PUBLIC",
+      linkToken: null,
+      title: "Mite Night",
+      timezone: "America/New_York",
+      hostOrganizationId: null,
+      hostLeagueId: "cldleague0000000000000001",
+      hostTeamId: null,
+      venue: { slug: null },
+      hostLeague: { slug: "gfha", name: "GFHA" },
+      hostOrganization: null,
+      hostTeam: null,
+      slots: [],
+    };
+    mockRequireEventManager.mockResolvedValue("user-1");
+    mockPrisma.venueReservation = { findUnique: vi.fn() };
+    mockPrisma.venue.findUnique.mockResolvedValue({ timezone: "America/New_York" });
+    mockPrisma.$transaction.mockImplementation(async (callback: (tx: unknown) => unknown) =>
+      callback(mockPrisma));
+    mockPrisma.signupEvent.findUnique
+      .mockResolvedValueOnce(existing)
+      .mockResolvedValueOnce({
+        id: eventId,
+        status: "PUBLISHED",
+        venueReservationId: existing.venueReservationId,
+        hostOrganizationId: null,
+        hostLeagueId: existing.hostLeagueId,
+        hostTeamId: null,
+        timezone: existing.timezone,
+        venueId: existing.venueId,
+      });
+    mockPrisma.venueReservation.findUnique.mockResolvedValue({ id: existing.venueReservationId, eventGames: [] });
+    mockCreateVenueReservation.mockRejectedValue(new Error("That venue space is no longer available."));
+
+    const result = await updateSignupEvent({
+      ...validCreateInput,
+      eventId,
+      startAt: futureDate(24 * 9),
+      endAt: futureDate(24 * 9 + 2),
+      venueId: existing.venueId,
+    });
+
+    expect(result.success).toBe(false);
+    expect(mockPrisma.signupEvent.update).not.toHaveBeenCalled();
+  });
+
+  it("rejects a published reschedule when child games have independent reservations", async () => {
+    const existing = {
+      id: eventId,
+      status: "PUBLISHED",
+      venueReservationId: null,
+      startAt: futureDate(24 * 8),
+      endAt: futureDate(24 * 8 + 2),
+      venueId: "clvenue0000000000000001",
+      locationText: null,
+      visibility: "PUBLIC",
+      linkToken: null,
+      title: "Mite Night",
+      timezone: "America/New_York",
+      hostOrganizationId: null,
+      hostLeagueId: "cldleague0000000000000001",
+      hostTeamId: null,
+      venue: { slug: null },
+      hostLeague: { slug: "gfha", name: "GFHA" },
+      hostOrganization: null,
+      hostTeam: null,
+      slots: [],
+    };
+    mockPrisma.venueReservation = { findUnique: vi.fn() };
+    mockPrisma.venue.findUnique.mockResolvedValue({ timezone: "America/New_York" });
+    mockPrisma.$transaction.mockImplementation(async (callback: (tx: unknown) => unknown) =>
+      callback(mockPrisma));
+    mockPrisma.signupEvent.findUnique
+      .mockResolvedValueOnce(existing)
+      .mockResolvedValueOnce({
+        id: eventId,
+        status: "PUBLISHED",
+        venueReservationId: null,
+        hostOrganizationId: null,
+        hostLeagueId: existing.hostLeagueId,
+        hostTeamId: null,
+        timezone: existing.timezone,
+        venueId: existing.venueId,
+      });
+    mockPrisma.eventGame.findMany.mockResolvedValue([{ id: "game-1" }]);
+
+    const result = await updateSignupEvent({
+      ...validCreateInput,
+      eventId,
+      startAt: futureDate(24 * 9),
+      endAt: futureDate(24 * 9 + 2),
+      venueId: existing.venueId,
+    });
+
+    expect(result).toEqual({
+      success: false,
+      error: "Published events with games cannot be rescheduled.",
+    });
+    expect(mockCreateVenueReservation).not.toHaveBeenCalled();
+    expect(mockPrisma.eventGame.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { eventId } }),
+    );
+  });
+});
+
+describe("SignupEvent lifecycle concurrency", () => {
+  const eventId = "cldevent0000000000000001";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockRequireEventManager.mockResolvedValue("user-1");
+    mockRequireUserId.mockResolvedValue("user-1");
+  });
+
+  it("does not publish after a concurrent cancel changes the draft state", async () => {
+    const draft = {
+      id: eventId,
+      status: "DRAFT",
+      visibility: "PUBLIC",
+      linkToken: null,
+      acceptsOnlinePayment: false,
+      acceptsManualPayment: true,
+      hostTeamId: null,
+      venueId: null,
+      startAt: null,
+      endAt: null,
+      timezone: "America/New_York",
+      venueReservationId: null,
+      venue: null,
+      hostOrganization: null,
+      hostLeague: null,
+      slots: [{ id: "slot-1", priceAmount: null }],
+    };
+    mockPrisma.signupEvent.findUnique
+      .mockResolvedValueOnce(draft)
+      .mockResolvedValueOnce({ ...draft, status: "CANCELED" });
+    mockPrisma.$transaction.mockImplementation(async (callback: (tx: unknown) => unknown) =>
+      callback(mockPrisma));
+
+    const result = await publishSignupEvent({ eventId });
+
+    expect(result).toEqual({ success: false, error: "This event is no longer a draft." });
+    expect(mockPrisma.signupEvent.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("does not report cancellation success after a concurrent lifecycle update wins", async () => {
+    mockPrisma.signupEvent.findUnique
+      .mockResolvedValueOnce({
+        id: eventId,
+        status: "PUBLISHED",
+        title: "Mite Night",
+        venue: null,
+        hostLeague: null,
+        hostOrganization: null,
+        hostTeam: null,
+        venueReservationId: null,
+      })
+      .mockResolvedValueOnce({
+        id: eventId,
+        status: "PUBLISHED",
+        venueReservationId: null,
+        hostLeagueId: null,
+        hostTeamId: null,
+      });
+    mockPrisma.eventRegistration.findMany.mockResolvedValue([]);
+    mockPrisma.eventRegistration.count.mockResolvedValue(0);
+    mockPrisma.eventGame.findMany.mockResolvedValue([]);
+    mockPrisma.signupEvent.updateMany.mockResolvedValue({ count: 0 });
+    mockPrisma.$transaction.mockImplementation(async (callback: (tx: unknown) => unknown) =>
+      callback(mockPrisma));
+
+    const result = await cancelSignupEvent({ eventId });
+
+    expect(result).toEqual({
+      success: false,
+      error: "This event changed while it was being canceled.",
+    });
+    expect(mockCanceledEmail).not.toHaveBeenCalled();
+  });
+
+  it("cancels active child game reservations and records child lifecycle changes", async () => {
+    mockPrisma.signupEvent.findUnique
+      .mockResolvedValueOnce({
+        id: eventId,
+        status: "PUBLISHED",
+        title: "Mite Night",
+        venue: null,
+        hostLeague: null,
+        hostOrganization: null,
+        hostTeam: null,
+        venueReservationId: null,
+      })
+      .mockResolvedValueOnce({
+        id: eventId,
+        status: "PUBLISHED",
+        venueReservationId: null,
+        hostLeagueId: "league-1",
+        hostTeamId: "team-1",
+      });
+    mockPrisma.eventRegistration.findMany.mockResolvedValue([]);
+    mockPrisma.eventRegistration.count.mockResolvedValue(0);
+    mockPrisma.eventGame.findMany.mockResolvedValue([
+      {
+        id: "game-1",
+        status: "SCHEDULED",
+        venueReservationId: "reservation-child",
+        venueReservation: { id: "reservation-child", status: "CONFIRMED" },
+      },
+    ]);
+    mockPrisma.venueReservation = {};
+    mockPrisma.signupEvent.updateMany.mockResolvedValue({ count: 1 });
+    mockPrisma.$transaction.mockImplementation(async (callback: (tx: unknown) => unknown) =>
+      callback(mockPrisma));
+
+    const result = await cancelSignupEvent({ eventId });
+
+    expect(result.success).toBe(true);
+    expect(mockTransitionVenueReservation).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        reservationId: "reservation-child",
+        nextStatus: "CANCELED",
+      }),
+    );
+    expect(mockPrisma.eventGame.update).toHaveBeenCalledWith({
+      where: { id: "game-1" },
+      data: { status: "CANCELED" },
+    });
+    expect(mockPrisma.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          action: "EVENT_GAME_CANCELED",
+          resourceId: "game-1",
+        }),
+      }),
+    );
   });
 });

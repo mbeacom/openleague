@@ -46,7 +46,7 @@ export function EditSessionWrapper({
           duration: play.duration,
           instructions: play.instructions || "",
         })),
-        reservationId: session.reservationId,
+        reservationId: session.reservationId ?? undefined,
         // Optional venue booking (006, FR-019); the attachment is replaced
         // wholesale — omitting venueId detaches the practice.
         venueId: session.venueId || undefined,

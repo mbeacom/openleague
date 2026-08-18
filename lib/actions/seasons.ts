@@ -2,7 +2,14 @@
 
 import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
-import { requireLeagueRole, requireTeamAdmin, requireTeamMember, requireUserId } from "@/lib/auth/session";
+import {
+  getUserLeagueRole,
+  isTeamAdmin,
+  requireLeagueRole,
+  requireTeamAdmin,
+  requireTeamMember,
+  requireUserId,
+} from "@/lib/auth/session";
 import { revalidatePath } from "next/cache";
 import {
   createSeasonSchema,
@@ -81,6 +88,7 @@ export async function createSeason(
         description: validated.description || null,
         startDate: validated.startDate,
         endDate: validated.endDate,
+        scheduleVisibility: validated.scheduleVisibility,
         leagueId,
         teamId,
         createdById: userId,
@@ -118,6 +126,9 @@ export async function updateSeason(
         ...(validated.endDate !== undefined && { endDate: validated.endDate }),
         ...(validated.format !== undefined && { format: validated.format }),
         ...(validated.formatRounds !== undefined && { formatRounds: validated.formatRounds }),
+        ...(validated.scheduleVisibility !== undefined && {
+          scheduleVisibility: validated.scheduleVisibility,
+        }),
       },
     });
 
@@ -345,7 +356,10 @@ export async function getSeasons(params: {
 
 /** Full season detail: phases, games (with teams/venues), owner sport. */
 export async function getSeasonDetail(seasonId: string) {
-  await requireSeasonViewer(seasonId);
+  const { season, userId } = await requireSeasonViewer(seasonId);
+  const canViewPrivatePlacementNotes = season.leagueId
+    ? (await getUserLeagueRole(userId, season.leagueId)) === "LEAGUE_ADMIN"
+    : Boolean(season.teamId && await isTeamAdmin(userId, season.teamId));
 
   return prisma.season.findUnique({
     where: { id: seasonId },
@@ -353,6 +367,18 @@ export async function getSeasonDetail(seasonId: string) {
       league: { select: { id: true, name: true, sport: true } },
       team: { select: { id: true, name: true, sport: true } },
       phases: { orderBy: [{ sortOrder: "asc" }, { startDate: "asc" }] },
+      teamPlacements: {
+        orderBy: [{ rank: "asc" }, { teamNameSnapshot: "asc" }],
+        select: {
+          teamId: true,
+          divisionId: true,
+          divisionNameSnapshot: true,
+          teamNameSnapshot: true,
+          rank: true,
+          ...(canViewPrivatePlacementNotes ? { privateNote: true } : {}),
+          division: { select: { ageClassification: true } },
+        },
+      },
       games: {
         include: {
           homeTeam: { select: { id: true, name: true } },

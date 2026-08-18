@@ -34,6 +34,7 @@ import type { BookingConflict } from "@/types/segments";
 interface EventFormProps {
   teamId: string;
   eventId?: string;
+  reservations?: EventReservationOption[];
   initialData?: {
     type: "GAME" | "PRACTICE";
     title: string;
@@ -42,9 +43,21 @@ interface EventFormProps {
     timezone?: string;
     location: string;
     venueId?: string;
+    reservationId?: string;
     opponent: string;
     notes: string;
   };
+}
+
+export interface EventReservationOption {
+  id: string;
+  startsAt: string;
+  endsAt: string;
+  timezone: string;
+  venueId: string;
+  venueName: string;
+  surfaceName: string | null;
+  segmentName: string | null;
 }
 
 function extractConflicts(details: unknown): BookingConflict[] | null {
@@ -61,6 +74,7 @@ export default function EventForm({
   teamId,
   eventId,
   initialData,
+  reservations = [],
 }: EventFormProps) {
   const router = useRouter();
   const isEditMode = !!eventId;
@@ -72,6 +86,7 @@ export default function EventForm({
     endAt: initialData?.endAt || undefined,
     location: initialData?.location || "",
     venueId: initialData?.venueId || "",
+    reservationId: initialData?.reservationId,
     opponent: initialData?.opponent || "",
     notes: initialData?.notes || "",
     teamId,
@@ -99,6 +114,9 @@ export default function EventForm({
   );
   const [endAtLocal, setEndAtLocal] = useState(() =>
     initialData?.endAt ? formatDateTimeLocalInput(initialData.endAt, initialTimeZone) : ""
+  );
+  const selectedReservation = reservations.find(
+    (reservation) => reservation.id === formData.reservationId,
   );
 
   // Any edit invalidates a pending conflict override: "Schedule anyway"
@@ -134,6 +152,7 @@ export default function EventForm({
       setStartAtLocal(value);
       setFieldErrors((prev) => ({ ...prev, startAt: undefined }));
     }
+    setFormData((previous) => ({ ...previous, reservationId: undefined }));
     setError(null);
     clearConflicts();
   };
@@ -147,6 +166,7 @@ export default function EventForm({
       ...prev,
       venueId: venueId || "",
       location: venueName || prev.location,
+      reservationId: undefined,
     }));
     // Adopt the venue's zone so wall-clock times are interpreted at the venue;
     // revert to the initial zone when the venue is cleared.
@@ -157,6 +177,37 @@ export default function EventForm({
     }
     setError(null);
     clearConflicts();
+    setFieldErrors((prev) => ({
+      ...prev,
+      venueId: undefined,
+      endAt: venueId ? prev.endAt : undefined,
+    }));
+  };
+
+  const handleReservationChange = (reservationId: string) => {
+    const reservation = reservations.find((option) => option.id === reservationId);
+    if (!reservation) {
+      setFormData((previous) => ({ ...previous, reservationId: undefined }));
+      return;
+    }
+    setFormData((previous) => ({
+      ...previous,
+      reservationId: reservation.id,
+      venueId: reservation.venueId,
+      location: reservation.venueName,
+    }));
+    setTimeZone(resolveTimeZone(reservation.timezone));
+    setStartAtLocal(formatDateTimeLocalInput(reservation.startsAt, reservation.timezone));
+    setEndAtLocal(formatDateTimeLocalInput(reservation.endsAt, reservation.timezone));
+    setError(null);
+    clearConflicts();
+    setFieldErrors((previous) => ({
+      ...previous,
+      reservationId: undefined,
+      venueId: undefined,
+      startAt: undefined,
+      endAt: undefined,
+    }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -353,14 +404,20 @@ export default function EventForm({
       />
 
       <DateTimeField
-        label="End Date & Time (optional)"
+        label={`End Date & Time${formData.venueId ? "" : " (optional)"}`}
         name="endAt"
         value={endAtLocal}
         onChange={handleDateChange("endAt")}
+        required={Boolean(formData.venueId)}
         fullWidth
         disabled={isSubmitting}
         error={!!fieldErrors.endAt}
-        helperText={fieldErrors.endAt || `Times are in ${timeZone}`}
+        helperText={
+          fieldErrors.endAt
+          || (formData.venueId
+            ? `Required for venue events. Times are in ${timeZone}`
+            : `Times are in ${timeZone}`)
+        }
       />
 
       <VenueSelector
@@ -370,6 +427,46 @@ export default function EventForm({
         error={!!fieldErrors.venueId}
         helperText={fieldErrors.venueId}
       />
+
+      {reservations.length > 0 ? (
+        <TextField
+          select
+          label="Confirmed reservation"
+          value={formData.reservationId ?? ""}
+          onChange={(event) => handleReservationChange(event.target.value)}
+          disabled={isSubmitting}
+          error={!!fieldErrors.reservationId}
+          helperText={
+            fieldErrors.reservationId
+            || "Only confirmed, unassigned inventory available to this team is shown"
+          }
+        >
+          <MenuItem value="">No reservation</MenuItem>
+          {reservations.map((reservation) => (
+            <MenuItem key={reservation.id} value={reservation.id}>
+              {reservation.venueName} ·{" "}
+              {formatDateTimeInZone(reservation.startsAt, reservation.timezone)}
+              {" – "}
+              {formatDateTimeInZone(reservation.endsAt, reservation.timezone)}
+            </MenuItem>
+          ))}
+        </TextField>
+      ) : formData.venueId && endAtLocal ? (
+        <Alert severity="warning">
+          No confirmed unassigned reservation inventory is available for this team.
+        </Alert>
+      ) : null}
+
+      {selectedReservation ? (
+        <Alert severity="info">
+          <AlertTitle>
+            {selectedReservation.venueName}
+            {selectedReservation.surfaceName ? ` · ${selectedReservation.surfaceName}` : ""}
+            {selectedReservation.segmentName ? ` · ${selectedReservation.segmentName}` : ""}
+          </AlertTitle>
+          This confirmed reservation supplies the event venue and time.
+        </Alert>
+      ) : null}
 
       <TextField
         label="Location"

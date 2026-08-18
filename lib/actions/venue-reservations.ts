@@ -175,6 +175,7 @@ export async function assignVenueReservation(
         targetType: validated.targetType,
         targetId: validated.targetId,
         actorId,
+        overrideConflicts: validated.overrideConflicts,
         overrideReason: validated.overrideConflicts
           ? validated.overrideReason
           : undefined,

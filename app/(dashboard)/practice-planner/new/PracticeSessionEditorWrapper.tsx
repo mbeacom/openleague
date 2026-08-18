@@ -36,7 +36,7 @@ export function PracticeSessionEditorWrapper({
           duration: play.duration,
           instructions: play.instructions || "",
         })),
-        reservationId: session.reservationId,
+        reservationId: session.reservationId ?? undefined,
         // Optional venue booking (006, FR-019); omitted fields mean unbooked.
         venueId: session.venueId || undefined,
         surfaceId: session.surfaceId || undefined,

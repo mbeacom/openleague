@@ -96,6 +96,7 @@ export default async function ProposalsPage() {
       for (const proposal of proposals) {
         leagueProposals.set(proposal.id, proposal);
       }
+
     }
     leagueView = [...leagueProposals.values()]
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
@@ -104,6 +105,75 @@ export default async function ProposalsPage() {
 
   // Opponent options per league for the new-proposal form.
   const leagueIds = [...new Set(myTeams.map((team) => team.leagueId))];
+  const actionableProposalIds = items
+    .filter(({ canAct }) => canAct)
+    .map(({ proposal }) => proposal.id);
+  const actionableProposals = items
+    .filter(({ canAct }) => canAct)
+    .map(({ proposal }) => proposal);
+  const actionableTeamIds = [
+    ...new Set(
+      actionableProposals.flatMap((proposal) => [
+        proposal.proposingTeam.id,
+        proposal.receivingTeam.id,
+      ]),
+    ),
+  ];
+  const actionableLeagueIds = [
+    ...new Set(actionableProposals.map((proposal) => proposal.leagueId)),
+  ];
+  const reservations = leagueIds.length
+    ? await prisma.venueReservation.findMany({
+        where: {
+          status: "CONFIRMED",
+          usageStatus: "PENDING",
+          startsAt: { gte: new Date() },
+          ownerVenueOrganizationId: null,
+          AND: [
+            {
+              OR: [
+                ...(actionableTeamIds.length
+                  ? [{ ownerTeamId: { in: actionableTeamIds } }]
+                  : []),
+                ...(actionableLeagueIds.length
+                  ? [{ ownerLeagueId: { in: actionableLeagueIds } }]
+                  : []),
+              ],
+            },
+            {
+              OR: [
+                { proposalEntries: { none: {} } },
+                ...(actionableProposalIds.length
+                  ? [{
+                      proposalEntries: {
+                        some: { proposalId: { in: actionableProposalIds } },
+                      },
+                    }]
+                  : []),
+              ],
+            },
+          ],
+          seasonGames: { none: {} },
+          events: { none: {} },
+          eventGames: { none: {} },
+          signupEvents: { none: {} },
+          practiceSessions: { none: {} },
+        },
+        select: {
+          id: true,
+          venueId: true,
+          startsAt: true,
+          endsAt: true,
+          venue: { select: { name: true } },
+          surface: { select: { name: true } },
+          segment: { select: { name: true } },
+          proposalEntries: { select: { proposalId: true } },
+          ownerLeagueId: true,
+          ownerTeamId: true,
+        },
+        orderBy: [{ startsAt: "asc" }, { id: "asc" }],
+      })
+    : [];
   const leagueTeamRows = leagueIds.length
     ? await prisma.team.findMany({
         where: { leagueId: { in: leagueIds }, isActive: true },
@@ -134,6 +204,18 @@ export default async function ProposalsPage() {
         myTeams={myTeams}
         leagueTeams={leagueTeams}
         venues={venues}
+        reservations={reservations.map((reservation) => ({
+          id: reservation.id,
+          venueId: reservation.venueId,
+          startsAt: reservation.startsAt,
+          endsAt: reservation.endsAt,
+          venueName: reservation.venue.name,
+          surfaceName: reservation.surface?.name ?? null,
+          segmentName: reservation.segment?.name ?? null,
+          proposalId: reservation.proposalEntries[0]?.proposalId ?? null,
+          ownerLeagueId: reservation.ownerLeagueId,
+          ownerTeamId: reservation.ownerTeamId,
+        }))}
       />
     </PageContainer>
   );

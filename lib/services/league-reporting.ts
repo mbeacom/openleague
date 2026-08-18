@@ -5,6 +5,7 @@
 
 import { prisma } from "@/lib/db/prisma";
 import { format } from "date-fns";
+import { getLeagueScheduleItems } from "@/lib/data/schedule-items";
 import { generateSimplePdfReportBase64 } from "@/lib/utils/pdf-report";
 
 interface LeagueRosterCSVOptions {
@@ -32,6 +33,31 @@ interface LeagueReportMetadata {
 
 const PENDING_ICE_TIME_STATUSES = new Set(["SUBMITTED", "UNDER_REVIEW"]);
 
+type LeagueReportRole = "LEAGUE_ADMIN" | "TEAM_ADMIN" | "MEMBER";
+
+async function requireLeagueReportViewer(
+    leagueId: string,
+    authenticatedUserId: string,
+    requiredRole?: "LEAGUE_ADMIN",
+): Promise<{
+    userId: string;
+    leagueRole: LeagueReportRole;
+}> {
+    if (!authenticatedUserId) throw new Error("Authenticated user identity is required");
+    const membership = await prisma.leagueUser.findFirst({
+        where: {
+            leagueId,
+            userId: authenticatedUserId,
+            league: { isActive: true },
+            ...(requiredRole ? { role: requiredRole } : {}),
+        },
+        select: { role: true },
+    });
+    if (!membership) throw new Error("Unauthorized league report export");
+
+    return { userId: authenticatedUserId, leagueRole: membership.role };
+}
+
 function buildCsvContent(headers: string[], rows: ReportCell[][]): string {
     return [
         headers.join(','),
@@ -41,11 +67,12 @@ function buildCsvContent(headers: string[], rows: ReportCell[][]): string {
 
 async function generatePdfFromCsv(
     leagueId: string,
+    authenticatedUserId: string,
     reportTitle: string,
     csv: string,
     metadata?: LeagueReportMetadata
 ): Promise<string> {
-    const reportMetadata = metadata ?? await getReportMetadata(leagueId);
+    const reportMetadata = metadata ?? await getReportMetadata(leagueId, authenticatedUserId);
     const lines = csvToPdfLines(csv);
 
     return generateSimplePdfReportBase64({
@@ -154,9 +181,12 @@ function formatCurrencySummary(amountsByCurrency: Record<string, number>): strin
  */
 export async function generateLeagueRosterCSV(
     leagueId: string,
+    authenticatedUserId: string,
     options: LeagueRosterCSVOptions = {}
 ): Promise<string> {
-    const includeAdminFields = options.includeAdminFields ?? false;
+    const viewer = await requireLeagueReportViewer(leagueId, authenticatedUserId);
+    const includeAdminFields =
+        options.includeAdminFields === true && viewer.leagueRole === "LEAGUE_ADMIN";
 
     const players = await prisma.player.findMany({
         where: { leagueId },
@@ -243,43 +273,29 @@ export async function generateLeagueRosterCSV(
  */
 export async function generateLeagueRosterPDF(
     leagueId: string,
+    authenticatedUserId: string,
     options: LeagueRosterCSVOptions = {},
     metadata?: LeagueReportMetadata
 ): Promise<string> {
-    const csv = await generateLeagueRosterCSV(leagueId, options);
-    return generatePdfFromCsv(leagueId, "League Roster Report", csv, metadata);
+    const csv = await generateLeagueRosterCSV(leagueId, authenticatedUserId, options);
+    return generatePdfFromCsv(
+        leagueId,
+        authenticatedUserId,
+        "League Roster Report",
+        csv,
+        metadata,
+    );
 }
 
 /**
  * Generate CSV content for league schedule
  */
-export async function generateLeagueScheduleCSV(leagueId: string): Promise<string> {
-    const events = await prisma.event.findMany({
-        where: { leagueId },
-        include: {
-            team: {
-                select: {
-                    name: true,
-                    division: {
-                        select: {
-                            name: true,
-                        },
-                    },
-                },
-            },
-            homeTeam: {
-                select: {
-                    name: true,
-                },
-            },
-            awayTeam: {
-                select: {
-                    name: true,
-                },
-            },
-        },
-        orderBy: { startAt: 'asc' },
-    });
+export async function generateLeagueScheduleCSV(
+    leagueId: string,
+    authenticatedUserId: string,
+): Promise<string> {
+    const viewer = await requireLeagueReportViewer(leagueId, authenticatedUserId);
+    const events = await getLeagueScheduleItems(leagueId, viewer);
 
     // CSV Header
     const headers = [
@@ -298,15 +314,15 @@ export async function generateLeagueScheduleCSV(leagueId: string): Promise<strin
 
     // CSV Rows
     const rows = events.map(event => [
-        format(event.startAt, 'yyyy-MM-dd'),
-        format(event.startAt, 'HH:mm'),
-        event.type,
+        format(event.startsAt, 'yyyy-MM-dd'),
+        format(event.startsAt, 'HH:mm'),
+        event.eventType ?? event.source,
         event.title,
-        event.team.name,
-        event.team.division?.name || 'Unassigned',
+        event.teamName || '',
+        event.divisionName || 'Unassigned',
         event.homeTeam?.name || '',
         event.awayTeam?.name || '',
-        event.location,
+        event.location || event.venueName || '',
         event.opponent || '',
         event.notes || '',
     ]);
@@ -319,16 +335,55 @@ export async function generateLeagueScheduleCSV(leagueId: string): Promise<strin
  */
 export async function generateLeagueSchedulePDF(
     leagueId: string,
-    metadata?: LeagueReportMetadata
+    authenticatedUserId: string,
+    metadata?: LeagueReportMetadata,
 ): Promise<string> {
-    const csv = await generateLeagueScheduleCSV(leagueId);
-    return generatePdfFromCsv(leagueId, "League Schedule Report", csv, metadata);
+    const viewer = await requireLeagueReportViewer(leagueId, authenticatedUserId);
+    const events = await getLeagueScheduleItems(leagueId, viewer);
+    const headers = [
+        'Date',
+        'Time',
+        'Event Type',
+        'Title',
+        'Team',
+        'Division',
+        'Home Team',
+        'Away Team',
+        'Location',
+        'Opponent',
+        'Notes',
+    ];
+    const rows = events.map(event => [
+        format(event.startsAt, 'yyyy-MM-dd'),
+        format(event.startsAt, 'HH:mm'),
+        event.eventType ?? event.source,
+        event.title,
+        event.teamName || '',
+        event.divisionName || 'Unassigned',
+        event.homeTeam?.name || '',
+        event.awayTeam?.name || '',
+        event.location || event.venueName || '',
+        event.opponent || '',
+        event.notes || '',
+    ]);
+    const csv = buildCsvContent(headers, rows);
+    return generatePdfFromCsv(
+        leagueId,
+        authenticatedUserId,
+        "League Schedule Report",
+        csv,
+        metadata,
+    );
 }
 
 /**
  * Generate CSV content for attendance report by division
  */
-export async function generateAttendanceReportByDivisionCSV(leagueId: string): Promise<string> {
+export async function generateAttendanceReportByDivisionCSV(
+    leagueId: string,
+    authenticatedUserId: string,
+): Promise<string> {
+    await requireLeagueReportViewer(leagueId, authenticatedUserId);
     const divisions = await prisma.division.findMany({
         where: { leagueId, isActive: true },
         include: {
@@ -401,10 +456,17 @@ export async function generateAttendanceReportByDivisionCSV(leagueId: string): P
  */
 export async function generateAttendanceReportByDivisionPDF(
     leagueId: string,
+    authenticatedUserId: string,
     metadata?: LeagueReportMetadata
 ): Promise<string> {
-    const csv = await generateAttendanceReportByDivisionCSV(leagueId);
-    return generatePdfFromCsv(leagueId, "Attendance by Division Report", csv, metadata);
+    const csv = await generateAttendanceReportByDivisionCSV(leagueId, authenticatedUserId);
+    return generatePdfFromCsv(
+        leagueId,
+        authenticatedUserId,
+        "Attendance by Division Report",
+        csv,
+        metadata,
+    );
 }
 
 /**
@@ -416,7 +478,11 @@ export async function generateAttendanceReportByDivisionPDF(
  * them. This keeps the export data-backed while giving admins actionable cost
  * exposure for league activities.
  */
-export async function generateFinancialReportCSV(leagueId: string): Promise<string> {
+export async function generateFinancialReportCSV(
+    leagueId: string,
+    authenticatedUserId: string,
+): Promise<string> {
+    await requireLeagueReportViewer(leagueId, authenticatedUserId, "LEAGUE_ADMIN");
     const league = await prisma.league.findUnique({
         where: { id: leagueId },
         select: {
@@ -551,16 +617,27 @@ export async function generateFinancialReportCSV(leagueId: string): Promise<stri
  */
 export async function generateFinancialReportPDF(
     leagueId: string,
+    authenticatedUserId: string,
     metadata?: LeagueReportMetadata
 ): Promise<string> {
-    const csv = await generateFinancialReportCSV(leagueId);
-    return generatePdfFromCsv(leagueId, "Financial Activity Report", csv, metadata);
+    const csv = await generateFinancialReportCSV(leagueId, authenticatedUserId);
+    return generatePdfFromCsv(
+        leagueId,
+        authenticatedUserId,
+        "Financial Activity Report",
+        csv,
+        metadata,
+    );
 }
 
 /**
  * Get report metadata for a league
  */
-export async function getReportMetadata(leagueId: string): Promise<LeagueReportMetadata> {
+export async function getReportMetadata(
+    leagueId: string,
+    authenticatedUserId: string,
+): Promise<LeagueReportMetadata> {
+    await requireLeagueReportViewer(leagueId, authenticatedUserId);
     const [league, teamCount, playerCount, eventCount] = await Promise.all([
         prisma.league.findUnique({
             where: { id: leagueId },

@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   addPlayerSchema,
+  createEventSchema,
+  updateEventSchema,
   updateTeamMemberUsahIdSchema,
 } from "@/lib/utils/validation";
 
@@ -107,6 +109,7 @@ describe("updateTeamMemberUsahIdSchema", () => {
       ...base,
       usahMemberId: "ABC123",
     });
+
     expect(result.success).toBe(true);
   });
 
@@ -150,5 +153,49 @@ describe("updateTeamMemberUsahIdSchema", () => {
       usahMemberId: "ABC@123",
     });
     expect(result.success).toBe(false);
+  });
+});
+
+describe("venue event end time", () => {
+  const base = {
+    type: "PRACTICE" as const,
+    title: "Practice",
+    startAt: new Date("2099-08-01T18:00:00.000Z"),
+    location: "North Rink",
+    teamId: "cteam00000000000000000001",
+    venueId: "cvenue0000000000000000001",
+    overrideConflicts: false,
+  };
+
+  it("requires endAt when creating a venue event", () => {
+    const result = createEventSchema.safeParse(base);
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          path: ["endAt"],
+          message: "End date and time is required when a venue is selected",
+        }),
+      ]));
+    }
+  });
+
+  it("requires endAt when updating a venue event", () => {
+    const result = updateEventSchema.safeParse({
+      ...base,
+      id: "cevent0000000000000000001",
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues).toEqual(expect.arrayContaining([
+        expect.objectContaining({ path: ["endAt"] }),
+      ]));
+    }
+  });
+
+  it("keeps endAt optional for events without a venue", () => {
+    expect(createEventSchema.safeParse({ ...base, venueId: "" }).success).toBe(true);
   });
 });

@@ -29,6 +29,8 @@ import {
   Forum as ForumIcon,
   AdminPanelSettings as AdminPanelSettingsIcon,
   Inventory2 as GearIcon,
+  Assessment as OperationsIcon,
+  EventAvailable as VenueReservationsIcon,
 } from "@mui/icons-material";
 import { logout } from "@/lib/actions/logout";
 import { useLeague } from "@/components/providers/LeagueProvider";
@@ -91,6 +93,12 @@ export default function DashboardNav({
       { label: "Teams", path: `${leaguePrefix}/teams`, icon: <GroupsIcon /> },
       { label: "Schedule", path: `${leaguePrefix}/schedule`, icon: <CalendarIcon /> },
       { label: "Gear", path: `${leaguePrefix}/gear`, icon: <GearIcon /> },
+      { label: "Operations", path: `${leaguePrefix}/operations`, icon: <OperationsIcon /> },
+      {
+        label: "Venue Reservations",
+        path: `${leaguePrefix}/venue-reservations`,
+        icon: <VenueReservationsIcon />,
+      },
       { label: "Messages", path: `${leaguePrefix}/messages`, icon: <ForumIcon /> },
       { label: "Signup Events", path: "/signup-events", icon: <HowToRegIcon /> },
       // League-scoped venues; falls back to the global page without league context
