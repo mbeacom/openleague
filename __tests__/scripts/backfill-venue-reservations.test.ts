@@ -48,7 +48,10 @@ function verifierEmptyDelegates() {
   };
 }
 
-function materializationClient(options: { failStandaloneLink?: boolean } = {}) {
+function materializationClient(options: {
+  failStandaloneLink?: boolean;
+  publicRequest?: boolean;
+} = {}) {
   const at = (day: number) => new Date(`2026-09-0${day}T10:00:00Z`);
   const end = (day: number) => new Date(`2026-09-0${day}T11:00:00Z`);
   let state = {
@@ -241,10 +244,13 @@ function materializationClient(options: { failStandaloneLink?: boolean } = {}) {
       approvedEndAt: null,
       approvedSurfaceId: null,
       approvedSegmentId: null,
-      requesterTeamId: "request-team",
+      requesterTeamId: options.publicRequest ? null : "request-team",
       requesterLeagueId: null,
       venueId: "venue",
-      venue: { timezone: "UTC" },
+      venue: {
+        timezone: "UTC",
+        organizationId: "venue-organization",
+      },
       venueReservation: null,
       scheduleBlockId: "offering",
     })),
@@ -479,6 +485,7 @@ describe("venue reservation backfill", () => {
       preservedOverlaps: 1,
       unresolved: [],
     });
+
     expect(fixture.state.links.season).toBe(fixture.state.links.seasonEvent);
     expect(fixture.state.links.practice).toBe(fixture.state.links.practiceEvent);
     expect(fixture.state.links.eventGame).toBe(fixture.state.links.signupEvent);
@@ -507,6 +514,27 @@ describe("venue reservation backfill", () => {
       unresolved: [],
     });
     expect(fixture.state.reservations).toHaveLength(7);
+  });
+
+  it("backfills unaffiliated accepted requests to the venue organization owner", async () => {
+    const fixture = materializationClient({ publicRequest: true });
+
+    const report = await backfillVenueReservations(
+      {
+        dryRun: false,
+        systemActorId: "cactor00000000000000000001",
+      },
+      fixture.client as never,
+    );
+
+    expect(report.unresolved).toEqual([]);
+    expect(fixture.state.reservations.find(
+      (reservation) => reservation.sourceRequestId === "request",
+    )).toMatchObject({
+      ownerLeagueId: null,
+      ownerTeamId: null,
+      ownerVenueOrganizationId: "venue-organization",
+    });
   });
 
   it("recomputes a shortened recurrence inside each transaction and skips the stale later candidate", async () => {

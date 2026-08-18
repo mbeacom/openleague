@@ -26,7 +26,7 @@ export default async function EditPracticeSessionPage({ params }: PageProps) {
   }
 
   // Venue/surface/segment options for the optional ice booking (006, FR-019).
-  const bookingOptions = await getVenueBookingOptions();
+  const bookingOptions = await getVenueBookingOptions(data.teamId, sessionId);
 
   return (
     <PageContainer>

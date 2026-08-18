@@ -55,13 +55,37 @@ describe("canonical venue reservation migration parity", () => {
       'request."requesterTeamId" IS NOT NULL',
     );
     expect(migration).toContain(
+      'request."requesterLeagueId" IS NULL',
+    );
+    expect(migration).toMatch(
+      /request_venue\."organizationId"\s*=\s*NEW\."ownerVenueOrganizationId"/,
+    );
+    expect(migration).toContain(
       "venue reservation league owner has no active venue relationship",
     );
     expect(migration).toContain('"ice_time_requests_approval_ancestry_trigger"');
-    expect(migration).toContain(
-      '"id" = NEW."scheduleBlockId" AND "venueId" = NEW."venueId"',
+    expect(migration).toMatch(
+      /block\."id" = NEW\."scheduleBlockId"[\s\S]*block\."venueId" = NEW\."venueId"/,
     );
     expect(migration).toContain('"venue_schedule_blocks_ancestry_trigger"');
+  });
+
+  it("enforces partial approval space containment at the database boundary", () => {
+    expect(migration).toContain(
+      "approved space widens or leaves requested space",
+    );
+    expect(migration).toContain(
+      "approved space widens requested surface to venue",
+    );
+    expect(migration).toMatch(
+      /block\."surfaceId" IS NULL[\s\S]*NEW\."approvedSurfaceId" = block\."surfaceId"[\s\S]*block\."segmentId" IS NULL[\s\S]*NEW\."approvedSegmentId" = block\."segmentId"/,
+    );
+    expect(migration).toContain(
+      `NEW."status" IN ('ACCEPTED', 'PARTIALLY_ACCEPTED')`,
+    );
+    expect(migration).toMatch(
+      /UPDATE OF "scheduleBlockId", "venueId", "status",[\s\S]*"approvedStartAt", "approvedEndAt"/,
+    );
   });
 
   it("uses distinct offering and occupying-block provenance with occurrence uniqueness", () => {

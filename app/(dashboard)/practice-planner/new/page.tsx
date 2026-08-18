@@ -18,7 +18,7 @@ export default async function NewPracticeSessionPage() {
   }
 
   // Venue/surface/segment options for the optional ice booking (006, FR-019).
-  const bookingOptions = await getVenueBookingOptions();
+  const bookingOptions = await getVenueBookingOptions(context.teamId);
 
   return (
     <PageContainer>

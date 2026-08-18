@@ -8,7 +8,11 @@ import {
   getVenueScheduleBoard,
 } from "@/lib/actions/venue-schedules";
 import { resolveTimeZone } from "@/lib/utils/date";
-import { IceSurfaceManager, OperatingHoursEditor } from "@/components/features/venue-admin";
+import {
+  AvailableIceBrowser,
+  IceSurfaceManager,
+  OperatingHoursEditor,
+} from "@/components/features/venue-admin";
 import { VenueScheduleBoard } from "@/components/features/venue-admin/VenueScheduleBoard";
 
 interface VenueSchedulePageProps {
@@ -88,6 +92,11 @@ export default async function VenueSchedulePage({ params }: VenueSchedulePagePro
       <Stack spacing={3}>
         <IceSurfaceManager organizationId={organizationId} venueId={venueId} surfaces={surfaces} />
         <OperatingHoursEditor organizationId={organizationId} venueId={venueId} operatingHours={operatingHours} />
+        <AvailableIceBrowser
+          blocks={result.data.availableIce}
+          timeZone={timeZone}
+          mode="staff"
+        />
         <VenueScheduleBoard
           organizationId={organizationId}
           venueId={venueId}

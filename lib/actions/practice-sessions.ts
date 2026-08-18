@@ -2,7 +2,11 @@
 
 import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
-import { requireTeamAdmin, requireTeamMember } from "@/lib/auth/session";
+import {
+    requireLeagueRole,
+    requireTeamAdmin,
+    requireTeamMember,
+} from "@/lib/auth/session";
 import { revalidatePath } from "next/cache";
 import type { Prisma } from "@prisma/client";
 import {
@@ -19,14 +23,307 @@ import {
     type GetPracticeSessionsByTeamInput,
     type SharePracticeSessionInput,
 } from "@/lib/utils/validation";
-import { findBookingConflicts } from "@/lib/utils/availability";
-import { canUserAccessVenue } from "@/lib/actions/venues";
-import type { BookingConflict } from "@/types/segments";
 import type { PlayData } from "@/types/practice-planner";
+import {
+    assignVenueReservation,
+    createVenueReservation,
+    VenueReservationConflictError,
+    VenueReservationLifecycleError,
+} from "@/lib/services/venue-reservations";
+import { runVenueReservationTransaction } from "@/lib/services/venue-reservation-transaction";
+import { FALLBACK_TIME_ZONE } from "@/lib/utils/date";
 
 export type ActionResult<T> =
     | { success: true; data: T }
     | { success: false; error: string; details?: unknown };
+
+type PracticeReservationFields = {
+    reservationId?: string | null;
+    overrideReason?: string;
+};
+
+type CreatePracticeSessionActionInput =
+    CreatePracticeSessionInput & PracticeReservationFields;
+type UpdatePracticeSessionActionInput =
+    UpdatePracticeSessionInput & PracticeReservationFields;
+
+const practiceReservationFieldsSchema = z.object({
+    reservationId: z.string().cuid("Invalid venue reservation ID").nullable().optional(),
+    overrideReason: z.string().trim().min(1).max(1000).optional(),
+});
+
+type ConfirmedPracticeReservation = {
+    id: string;
+    status: string;
+    startsAt: Date;
+    endsAt: Date;
+    timezone: string;
+    venueId: string;
+    surfaceId: string | null;
+    segmentId: string | null;
+    ownerTeamId: string | null;
+    ownerLeagueId: string | null;
+    ownerVenueOrganizationId: string | null;
+    venue?: { name: string; timezone: string } | null;
+};
+
+function reservationFields(input: PracticeReservationFields) {
+    return practiceReservationFieldsSchema.parse({
+        reservationId: input.reservationId,
+        overrideReason: input.overrideReason,
+    });
+}
+
+async function requirePracticeScheduler(
+    teamId: string,
+    reservationId?: string | null,
+): Promise<string> {
+    let teamActorId: string | null = null;
+    let teamError: unknown;
+    try {
+        teamActorId = await requireTeamAdmin(teamId);
+    } catch (error) {
+        teamError = error;
+    }
+    if (!reservationId) {
+        if (teamActorId) return teamActorId;
+        throw teamError;
+    }
+
+    const reservation = await prisma.venueReservation.findUnique({
+        where: { id: reservationId },
+        select: { ownerLeagueId: true },
+    });
+    if (!reservation?.ownerLeagueId) {
+        if (teamActorId) return teamActorId;
+        throw teamError;
+    }
+
+    const team = await prisma.team.findUnique({
+        where: { id: teamId },
+        select: { leagueId: true },
+    });
+    if (team?.leagueId !== reservation.ownerLeagueId) {
+        throw teamError ?? new Error("Unauthorized");
+    }
+    return requireLeagueRole(team.leagueId, "LEAGUE_ADMIN");
+}
+
+async function loadConfirmedPracticeReservation(
+    tx: Prisma.TransactionClient,
+    reservationId: string,
+    teamId: string,
+    expectedStart: Date,
+    expectedDuration: number,
+): Promise<ConfirmedPracticeReservation> {
+    const reservation = await tx.venueReservation.findUnique({
+        where: { id: reservationId },
+        include: { venue: { select: { name: true, timezone: true } } },
+    }) as ConfirmedPracticeReservation | null;
+    if (!reservation || reservation.status !== "CONFIRMED") {
+        throw new VenueReservationLifecycleError(
+            "Select a confirmed venue reservation.",
+        );
+    }
+
+    if (reservation.ownerTeamId) {
+        if (reservation.ownerTeamId !== teamId) {
+            throw new VenueReservationLifecycleError(
+                "The venue reservation is outside this team's scope.",
+            );
+        }
+    } else if (reservation.ownerLeagueId) {
+        const team = await tx.team.findUnique({
+            where: { id: teamId },
+            select: { leagueId: true },
+        });
+        if (team?.leagueId !== reservation.ownerLeagueId) {
+            throw new VenueReservationLifecycleError(
+                "The venue reservation is outside this league's scope.",
+            );
+        }
+    } else {
+        throw new VenueReservationLifecycleError(
+            "Venue-owned inventory cannot be assigned to this practice.",
+        );
+    }
+
+    const expectedEnd = new Date(
+        expectedStart.getTime() + expectedDuration * 60_000,
+    );
+    if (
+        reservation.startsAt.getTime() !== expectedStart.getTime()
+        || reservation.endsAt.getTime() !== expectedEnd.getTime()
+    ) {
+        throw new VenueReservationLifecycleError(
+            "The practice time and duration must match the selected venue reservation.",
+        );
+    }
+    return reservation;
+}
+
+async function assertExactTeamAdminInTransaction(
+    tx: Prisma.TransactionClient,
+    input: { teamId: string; actorId: string },
+): Promise<void> {
+    const teamAdmin = await tx.teamMember.findFirst({
+        where: {
+            userId: input.actorId,
+            teamId: input.teamId,
+            role: "ADMIN",
+        },
+        select: { id: true },
+    });
+    if (!teamAdmin) {
+        throw new VenueReservationLifecycleError(
+            "Practice updates require exact team-admin authority.",
+        );
+    }
+}
+
+async function assertPracticeReservationActorInTransaction(
+    tx: Prisma.TransactionClient,
+    input: {
+        reservationId: string;
+        teamId: string;
+        actorId: string;
+    },
+): Promise<void> {
+    const reservation = await tx.venueReservation.findUnique({
+        where: { id: input.reservationId },
+        select: { ownerLeagueId: true, ownerTeamId: true },
+    });
+    if (!reservation) {
+        throw new VenueReservationLifecycleError(
+            "Venue reservation not found.",
+        );
+    }
+    if (reservation.ownerTeamId) {
+        if (reservation.ownerTeamId !== input.teamId) {
+            throw new VenueReservationLifecycleError(
+                "The venue reservation is outside this team's scope.",
+            );
+        }
+        const teamAdmin = await tx.teamMember.findFirst({
+            where: {
+                userId: input.actorId,
+                teamId: input.teamId,
+                role: "ADMIN",
+            },
+            select: { id: true },
+        });
+        if (!teamAdmin) {
+            throw new VenueReservationLifecycleError(
+                "Team-owned reservations require exact team-admin authority.",
+            );
+        }
+        return;
+    }
+    if (reservation.ownerLeagueId) {
+        const team = await tx.team.findUnique({
+            where: { id: input.teamId },
+            select: { leagueId: true },
+        });
+        const scheduler = await tx.leagueUser.findFirst({
+            where: {
+                userId: input.actorId,
+                leagueId: reservation.ownerLeagueId,
+                role: "LEAGUE_ADMIN",
+            },
+            select: { id: true },
+        });
+        if (
+            team?.leagueId !== reservation.ownerLeagueId
+            || !scheduler
+        ) {
+            throw new VenueReservationLifecycleError(
+                "League-owned reservations require same-league scheduler authority.",
+            );
+        }
+        return;
+    }
+    throw new VenueReservationLifecycleError(
+        "Venue-owned inventory cannot be assigned to this practice.",
+    );
+}
+
+function practiceDataFromReservation(
+    reservation: ConfirmedPracticeReservation,
+): PracticeAttachment {
+    return {
+        venueId: reservation.venueId,
+        surfaceId: reservation.surfaceId,
+        segmentId: reservation.segmentId,
+        startAt: reservation.startsAt,
+    };
+}
+
+async function createPracticeEventAndRsvps(
+    tx: Prisma.TransactionClient,
+    input: {
+        eventId?: string;
+        title: string;
+        teamId: string;
+        reservation: ConfirmedPracticeReservation;
+        actorId: string;
+        overrideReason?: string;
+        assignEventReservation?: boolean;
+    },
+): Promise<string> {
+    const eventData = {
+        type: "PRACTICE" as const,
+        title: input.title,
+        startAt: input.reservation.startsAt,
+        endAt: input.reservation.endsAt,
+        timezone:
+            input.reservation.timezone
+            || input.reservation.venue?.timezone
+            || FALLBACK_TIME_ZONE,
+        location: input.reservation.venue?.name || "Venue",
+        venueId: input.reservation.venueId,
+        opponent: null,
+        notes: null,
+        teamId: input.teamId,
+        leagueId: null,
+    };
+    const event = input.eventId
+        ? await tx.event.update({
+            where: { id: input.eventId },
+            data: eventData,
+            select: { id: true },
+        })
+        : await tx.event.create({
+            data: eventData,
+            select: { id: true },
+        });
+
+    if (input.assignEventReservation !== false) {
+        await assignVenueReservation(tx, {
+            reservationId: input.reservation.id,
+            targetType: "EVENT",
+            targetId: event.id,
+            actorId: input.actorId,
+            overrideReason: input.overrideReason,
+        });
+    }
+
+    const members = await tx.teamMember.findMany({
+        where: { teamId: input.teamId },
+        select: { userId: true },
+    });
+    const userIds = [...new Set(members.map(({ userId }) => userId))];
+    if (userIds.length > 0) {
+        await tx.rSVP.createMany({
+            data: userIds.map((userId) => ({
+                eventId: event.id,
+                userId,
+                status: "NO_RESPONSE" as const,
+            })),
+            skipDuplicates: true,
+        });
+    }
+    return event.id;
+}
 
 /**
  * Sanitize text input by removing control characters and trimming
@@ -129,110 +426,21 @@ function normalizePracticeAttachment(validated: {
 }
 
 /**
- * Verify attachment references: the venue is active and accessible to this
- * user (visibility rules — public, or scoped to a team/league the user
- * belongs to), the surface is active and belongs to the venue, and the
- * segment is active and belongs to the surface (same checks as events and
- * season-games, 006 FR). Returns an error message or null.
- */
-async function validatePracticeAttachment(
-    userId: string,
-    attachment: PracticeAttachment
-): Promise<string | null> {
-    const { venueId, surfaceId, segmentId } = attachment;
-    if (!venueId) return null;
-
-    const venue = await prisma.venue.findUnique({
-        where: { id: venueId },
-        select: { id: true, isActive: true, visibility: true, teamId: true, leagueId: true },
-    });
-    if (!venue || !venue.isActive || !(await canUserAccessVenue(userId, venue))) {
-        return "Venue not found or unavailable";
-    }
-
-    if (surfaceId) {
-        const surface = await prisma.iceSurface.findFirst({
-            where: { id: surfaceId, venueId, isActive: true },
-            select: { id: true },
-        });
-        if (!surface) {
-            return "Select an active surface at the chosen venue";
-        }
-    }
-
-    if (segmentId) {
-        if (!surfaceId) {
-            return "Pick a surface before choosing a segment";
-        }
-        const segment = await prisma.surfaceSegment.findFirst({
-            where: { id: segmentId, surfaceId, isActive: true },
-            select: { id: true },
-        });
-        if (!segment) {
-            return "Select an active segment on the chosen surface";
-        }
-    }
-
-    return null;
-}
-
-function practiceConflictFailure(conflicts: BookingConflict[]): {
-    success: false;
-    error: string;
-    details: { conflicts: BookingConflict[] };
-} {
-    return {
-        success: false,
-        error: `This time overlaps ${conflicts.length} existing booking${conflicts.length > 1 ? "s" : ""} at the venue`,
-        details: { conflicts },
-    };
-}
-
-/**
- * Run the unified availability check for an attached practice (FR-019).
- * Returns the conflicts found; the caller decides warn-vs-proceed based on
- * overrideConflicts. Unattached practices (no venue/startAt) never conflict.
- */
-async function findPracticeConflicts(
-    attachment: PracticeAttachment,
-    duration: number,
-    excludePracticeId?: string
-): Promise<BookingConflict[]> {
-    if (!attachment.venueId || !attachment.startAt) return [];
-    const endAt = new Date(attachment.startAt.getTime() + duration * 60_000);
-    return findBookingConflicts({
-        venueId: attachment.venueId,
-        surfaceId: attachment.surfaceId,
-        segmentId: attachment.segmentId,
-        startAt: attachment.startAt,
-        endAt,
-        excludePracticeId,
-    });
-}
-
-/**
  * Create a new practice session
  * Only ADMIN role can create sessions
  * Requirements: 2.1, 2.2, 2.5
  */
 export async function createPracticeSession(
-    input: CreatePracticeSessionInput
+    input: CreatePracticeSessionActionInput
 ): Promise<ActionResult<{ id: string; title: string; date: Date; conflictsOverridden: boolean }>> {
     try {
-        // Validate input
         const validated = createPracticeSessionSchema.parse(input);
+        const reservationInput = reservationFields(input);
+        const userId = await requirePracticeScheduler(
+            validated.teamId,
+            reservationInput.reservationId,
+        );
 
-        // Check authentication and authorization - only ADMIN can create sessions
-        const userId = await requireTeamAdmin(validated.teamId);
-
-        // Optional venue attachment (FR-019, feature 006)
-        const attachment = normalizePracticeAttachment(validated);
-        const attachmentError = await validatePracticeAttachment(userId, attachment);
-        if (attachmentError) {
-            return { success: false, error: attachmentError };
-        }
-
-        // Validate play sequence integrity
         if (validated.plays && validated.plays.length > 0) {
             const sequenceValidation = validatePlaySequence(validated.plays);
             if (!sequenceValidation.valid) {
@@ -242,7 +450,6 @@ export async function createPracticeSession(
                 };
             }
 
-            // Validate total duration
             const durationValidation = validateTotalDuration(validated.duration, validated.plays);
             if (!durationValidation.valid) {
                 return {
@@ -251,7 +458,6 @@ export async function createPracticeSession(
                 };
             }
 
-            // Verify all plays exist and belong to the team
             const playIds = validated.plays.map(p => p.playId);
             const plays = await prisma.play.findMany({
                 where: {
@@ -269,54 +475,137 @@ export async function createPracticeSession(
             }
         }
 
-        // Venue availability (FR-019): warn on conflicts and require an
-        // explicit override to proceed; the override is recorded on the row
-        // (conflictOverriddenBy/At), matching SeasonGame/EventGame.
-        const conflicts = await findPracticeConflicts(attachment, validated.duration);
-        if (conflicts.length > 0 && !validated.overrideConflicts) {
-            return practiceConflictFailure(conflicts);
+        const requestedAttachment = normalizePracticeAttachment(validated);
+        if (
+            !reservationInput.reservationId
+            && requestedAttachment.venueId
+            && validated.overrideConflicts
+            && !reservationInput.overrideReason
+        ) {
+            return {
+                success: false,
+                error: "Explain why this venue conflict should be overridden.",
+            };
         }
-        const conflictsOverridden = conflicts.length > 0;
 
-        // Create practice session with plays
-        const session = await prisma.practiceSession.create({
-            data: {
-                title: validated.title,
-                date: validated.date,
-                duration: validated.duration,
-                isShared: false,
-                teamId: validated.teamId,
-                createdById: userId,
-                venueId: attachment.venueId,
-                surfaceId: attachment.surfaceId,
-                segmentId: attachment.segmentId,
-                startAt: attachment.startAt,
-                ...(conflictsOverridden && {
-                    conflictOverriddenById: userId,
-                    conflictOverriddenAt: new Date(),
-                }),
-                plays: validated.plays && validated.plays.length > 0 ? {
-                    create: validated.plays.map(play => ({
-                        playId: play.playId,
-                        sequence: play.sequence,
-                        duration: play.duration,
-                        instructions: play.instructions ? sanitizeText(play.instructions, 2000) : null,
-                    })),
-                } : undefined,
-            },
-            select: {
-                id: true,
-                title: true,
-                date: true,
-            },
+        const session = await runVenueReservationTransaction(async (tx) => {
+            let reservation: ConfirmedPracticeReservation | null = null;
+
+            if (reservationInput.reservationId) {
+                reservation = await loadConfirmedPracticeReservation(
+                    tx,
+                    reservationInput.reservationId,
+                    validated.teamId,
+                    validated.date,
+                    validated.duration,
+                );
+            } else if (requestedAttachment.venueId && requestedAttachment.startAt) {
+                const venue = await tx.venue.findUnique({
+                    where: { id: requestedAttachment.venueId },
+                    select: { name: true, timezone: true },
+                });
+                if (!venue) {
+                    throw new VenueReservationLifecycleError(
+                        "Venue not found or unavailable.",
+                    );
+                }
+                const created = await createVenueReservation(tx, {
+                    venueId: requestedAttachment.venueId,
+                    surfaceId: requestedAttachment.surfaceId,
+                    segmentId: requestedAttachment.segmentId,
+                    startsAt: requestedAttachment.startAt,
+                    endsAt: new Date(
+                        requestedAttachment.startAt.getTime()
+                            + validated.duration * 60_000,
+                    ),
+                    timezone: venue.timezone,
+                    ownerTeamId: validated.teamId,
+                    actorId: userId,
+                    status: "CONFIRMED",
+                    overrideReason: reservationInput.overrideReason,
+                });
+                reservation = {
+                    ...created,
+                    startsAt: requestedAttachment.startAt,
+                    endsAt: new Date(
+                        requestedAttachment.startAt.getTime()
+                            + validated.duration * 60_000,
+                    ),
+                    timezone: venue.timezone,
+                    venueId: requestedAttachment.venueId,
+                    surfaceId: requestedAttachment.surfaceId,
+                    segmentId: requestedAttachment.segmentId,
+                    ownerTeamId: validated.teamId,
+                    ownerLeagueId: null,
+                    ownerVenueOrganizationId: null,
+                    venue,
+                };
+            }
+
+            const canonical = reservation
+                ? practiceDataFromReservation(reservation)
+                : requestedAttachment;
+            const createdSession = await tx.practiceSession.create({
+                data: {
+                    title: validated.title,
+                    date: reservation ? reservation.startsAt : validated.date,
+                    duration: reservation
+                        ? Math.round(
+                            (
+                                reservation.endsAt.getTime()
+                                - reservation.startsAt.getTime()
+                            ) / 60_000,
+                        )
+                        : validated.duration,
+                    isShared: false,
+                    teamId: validated.teamId,
+                    createdById: userId,
+                    venueId: canonical.venueId,
+                    surfaceId: canonical.surfaceId,
+                    segmentId: canonical.segmentId,
+                    startAt: canonical.startAt,
+                    plays: validated.plays.length > 0 ? {
+                        create: validated.plays.map(play => ({
+                            playId: play.playId,
+                            sequence: play.sequence,
+                            duration: play.duration,
+                            instructions: play.instructions
+                                ? sanitizeText(play.instructions, 2000)
+                                : null,
+                        })),
+                    } : undefined,
+                },
+                select: { id: true, title: true, date: true },
+            });
+
+            if (reservation) {
+                await assignVenueReservation(tx, {
+                    reservationId: reservation.id,
+                    targetType: "PRACTICE",
+                    targetId: createdSession.id,
+                    actorId: userId,
+                    overrideReason: reservationInput.overrideReason,
+                });
+                await createPracticeEventAndRsvps(tx, {
+                    title: validated.title,
+                    teamId: validated.teamId,
+                    reservation,
+                    actorId: userId,
+                    overrideReason: reservationInput.overrideReason,
+                });
+            }
+            return createdSession;
         });
 
-        // Revalidate practice planner pages
         revalidatePath("/practice-planner");
+        revalidatePath("/calendar");
 
         return {
             success: true,
-            data: { ...session, conflictsOverridden },
+            data: {
+                ...session,
+                conflictsOverridden: Boolean(reservationInput.overrideReason),
+            },
         };
     } catch (error) {
         if (error instanceof z.ZodError) {
@@ -324,6 +613,21 @@ export async function createPracticeSession(
                 success: false,
                 error: "Invalid input",
                 details: error.issues,
+            };
+        }
+
+        if (
+            error instanceof VenueReservationConflictError
+            || error instanceof VenueReservationLifecycleError
+        ) {
+            return {
+                success: false,
+                error: error.message,
+                ...(
+                    error instanceof VenueReservationConflictError
+                        ? { details: { conflicts: error.conflicts } }
+                        : {}
+                ),
             };
         }
 
@@ -348,16 +652,20 @@ export async function createPracticeSession(
  * Requirements: 2.1, 2.2, 2.5
  */
 export async function updatePracticeSession(
-    input: UpdatePracticeSessionInput
+    input: UpdatePracticeSessionActionInput
 ): Promise<ActionResult<{ id: string; title: string; date: Date; conflictsOverridden: boolean }>> {
     try {
-        // Validate input
         const validated = updatePracticeSessionSchema.parse(input);
+        const parsedReservation = reservationFields(input);
+        const reservationWasSubmitted = Object.hasOwn(input, "reservationId");
 
-        // First fetch the existing session to get its actual teamId for authorization
         const existingSession = await prisma.practiceSession.findUnique({
             where: { id: validated.id },
-            select: { teamId: true, isShared: true },
+            select: {
+                teamId: true,
+                isShared: true,
+                venueReservationId: true,
+            },
         });
 
         if (!existingSession) {
@@ -367,42 +675,49 @@ export async function updatePracticeSession(
             };
         }
 
-        // Authorize against the session's actual teamId
-        const userId = await requireTeamAdmin(existingSession.teamId);
-
-        // Verify the teamId in the request matches the session's actual teamId
         if (existingSession.teamId !== validated.teamId) {
             return {
                 success: false,
                 error: "Unauthorized: Practice session does not belong to this team",
             };
         }
-
-        // Optional venue attachment (FR-019, feature 006). The editor submits
-        // the full session state, so the attachment is replaced wholesale:
-        // omitting/clearing venueId detaches the practice (clears surface,
-        // segment, and startAt — no availability footprint).
-        const attachment = normalizePracticeAttachment(validated);
-        const attachmentError = await validatePracticeAttachment(userId, attachment);
-        if (attachmentError) {
-            return { success: false, error: attachmentError };
+        const selectedReservationId = reservationWasSubmitted
+            ? parsedReservation.reservationId ?? null
+            : existingSession.venueReservationId;
+        const requestedAttachment = normalizePracticeAttachment(validated);
+        const createsDirectReservation =
+            !selectedReservationId
+            && Boolean(
+                requestedAttachment.venueId
+                && requestedAttachment.startAt,
+            );
+        const reservationRelationChanged =
+            selectedReservationId !== existingSession.venueReservationId
+            || createsDirectReservation;
+        let userId: string;
+        if (!reservationRelationChanged) {
+            userId = await requireTeamAdmin(existingSession.teamId);
+        } else {
+            const actorIds: string[] = [];
+            if (existingSession.venueReservationId) {
+                actorIds.push(await requirePracticeScheduler(
+                    existingSession.teamId,
+                    existingSession.venueReservationId,
+                ));
+            }
+            if (selectedReservationId) {
+                actorIds.push(await requirePracticeScheduler(
+                    existingSession.teamId,
+                    selectedReservationId,
+                ));
+            }
+            if (createsDirectReservation) {
+                actorIds.push(await requireTeamAdmin(existingSession.teamId));
+            }
+            userId = actorIds[actorIds.length - 1]
+                ?? await requireTeamAdmin(existingSession.teamId);
         }
 
-        // Venue availability (FR-019): warn on conflicts and require an
-        // explicit override to proceed, excluding this practice's own slot;
-        // the override is recorded on the row (conflictOverriddenBy/At),
-        // matching SeasonGame/EventGame.
-        const conflicts = await findPracticeConflicts(
-            attachment,
-            validated.duration,
-            validated.id
-        );
-        if (conflicts.length > 0 && !validated.overrideConflicts) {
-            return practiceConflictFailure(conflicts);
-        }
-        const conflictsOverridden = conflicts.length > 0;
-
-        // Validate play sequence integrity
         if (validated.plays && validated.plays.length > 0) {
             const sequenceValidation = validatePlaySequence(validated.plays);
             if (!sequenceValidation.valid) {
@@ -412,7 +727,6 @@ export async function updatePracticeSession(
                 };
             }
 
-            // Validate total duration
             const durationValidation = validateTotalDuration(validated.duration, validated.plays);
             if (!durationValidation.valid) {
                 return {
@@ -421,7 +735,6 @@ export async function updatePracticeSession(
                 };
             }
 
-            // Verify all plays exist and belong to the team
             const playIds = validated.plays.map(p => p.playId);
             const plays = await prisma.play.findMany({
                 where: {
@@ -439,31 +752,172 @@ export async function updatePracticeSession(
             }
         }
 
-        // Update session - delete existing plays and recreate
-        const session = await prisma.$transaction(async (tx) => {
-            // Delete existing plays
+        if (
+            !selectedReservationId
+            && requestedAttachment.venueId
+            && validated.overrideConflicts
+            && !parsedReservation.overrideReason
+        ) {
+            return {
+                success: false,
+                error: "Explain why this venue conflict should be overridden.",
+            };
+        }
+
+        const session = await runVenueReservationTransaction(async (tx) => {
+            const current = await tx.practiceSession.findUnique({
+                where: { id: validated.id },
+                select: {
+                    id: true,
+                    teamId: true,
+                    venueReservationId: true,
+                },
+            });
+            if (!current || current.teamId !== validated.teamId) {
+                throw new VenueReservationLifecycleError(
+                    "Practice session not found.",
+                );
+            }
+            if (!reservationRelationChanged) {
+                if (
+                    current.venueReservationId
+                    !== existingSession.venueReservationId
+                ) {
+                    throw new VenueReservationLifecycleError(
+                        "The practice reservation changed while the update was in progress.",
+                    );
+                }
+                await assertExactTeamAdminInTransaction(tx, {
+                    teamId: current.teamId,
+                    actorId: userId,
+                });
+            } else if (current.venueReservationId) {
+                await assertPracticeReservationActorInTransaction(tx, {
+                    reservationId: current.venueReservationId,
+                    teamId: current.teamId,
+                    actorId: userId,
+                });
+            }
+            if (createsDirectReservation) {
+                await assertExactTeamAdminInTransaction(tx, {
+                    teamId: current.teamId,
+                    actorId: userId,
+                });
+            }
+
+            const oldEvent = current.venueReservationId
+                ? await tx.event.findUnique({
+                    where: { venueReservationId: current.venueReservationId },
+                    select: { id: true },
+                })
+                : null;
+
+            let reservation: ConfirmedPracticeReservation | null = null;
+            if (selectedReservationId) {
+                reservation = await loadConfirmedPracticeReservation(
+                    tx,
+                    selectedReservationId,
+                    validated.teamId,
+                    validated.date,
+                    validated.duration,
+                );
+                if (reservationRelationChanged) {
+                    await assertPracticeReservationActorInTransaction(tx, {
+                        reservationId: reservation.id,
+                        teamId: validated.teamId,
+                        actorId: userId,
+                    });
+                }
+            } else if (requestedAttachment.venueId && requestedAttachment.startAt) {
+                const venue = await tx.venue.findUnique({
+                    where: { id: requestedAttachment.venueId },
+                    select: { name: true, timezone: true },
+                });
+                if (!venue) {
+                    throw new VenueReservationLifecycleError(
+                        "Venue not found or unavailable.",
+                    );
+                }
+                const created = await createVenueReservation(tx, {
+                    venueId: requestedAttachment.venueId,
+                    surfaceId: requestedAttachment.surfaceId,
+                    segmentId: requestedAttachment.segmentId,
+                    startsAt: requestedAttachment.startAt,
+                    endsAt: new Date(
+                        requestedAttachment.startAt.getTime()
+                            + validated.duration * 60_000,
+                    ),
+                    timezone: venue.timezone,
+                    ownerTeamId: validated.teamId,
+                    actorId: userId,
+                    status: "CONFIRMED",
+                    overrideReason: parsedReservation.overrideReason,
+                });
+                reservation = {
+                    ...created,
+                    startsAt: requestedAttachment.startAt,
+                    endsAt: new Date(
+                        requestedAttachment.startAt.getTime()
+                            + validated.duration * 60_000,
+                    ),
+                    timezone: venue.timezone,
+                    venueId: requestedAttachment.venueId,
+                    surfaceId: requestedAttachment.surfaceId,
+                    segmentId: requestedAttachment.segmentId,
+                    ownerTeamId: validated.teamId,
+                    ownerLeagueId: null,
+                    ownerVenueOrganizationId: null,
+                    venue,
+                };
+            }
+
+            if (
+                current.venueReservationId
+                && current.venueReservationId !== reservation?.id
+            ) {
+                if (oldEvent) {
+                    await tx.event.update({
+                        where: { id: oldEvent.id },
+                        data: { venueReservationId: null },
+                    });
+                }
+                await tx.practiceSession.update({
+                    where: { id: current.id },
+                    data: { venueReservationId: null },
+                });
+            }
+
             await tx.practiceSessionPlay.deleteMany({
                 where: { sessionId: validated.id },
             });
 
-            // Update session with new plays
-            return await tx.practiceSession.update({
+            const canonical = reservation
+                ? practiceDataFromReservation(reservation)
+                : requestedAttachment;
+            const updated = await tx.practiceSession.update({
                 where: { id: validated.id },
                 data: {
                     title: validated.title,
-                    date: validated.date,
-                    duration: validated.duration,
-                    venueId: attachment.venueId,
-                    surfaceId: attachment.surfaceId,
-                    segmentId: attachment.segmentId,
-                    startAt: attachment.startAt,
-                    // The conflict check re-ran above whenever a venue is
-                    // attached (and a detached practice has no footprint), so
-                    // always write the override audit fields: stale metadata
-                    // must not survive a reschedule to a clean slot.
-                    conflictOverriddenById: conflictsOverridden ? userId : null,
-                    conflictOverriddenAt: conflictsOverridden ? new Date() : null,
-                    plays: validated.plays && validated.plays.length > 0 ? {
+                    date: reservation ? reservation.startsAt : validated.date,
+                    duration: reservation
+                        ? Math.round(
+                            (
+                                reservation.endsAt.getTime()
+                                - reservation.startsAt.getTime()
+                            ) / 60_000,
+                        )
+                        : validated.duration,
+                    venueId: canonical.venueId,
+                    surfaceId: canonical.surfaceId,
+                    segmentId: canonical.segmentId,
+                    startAt: canonical.startAt,
+                    conflictOverriddenById: parsedReservation.overrideReason
+                        ? userId
+                        : null,
+                    conflictOverriddenAt: parsedReservation.overrideReason
+                        ? new Date()
+                        : null,
+                    plays: validated.plays.length > 0 ? {
                         create: validated.plays.map(play => ({
                             playId: play.playId,
                             sequence: play.sequence,
@@ -478,11 +932,39 @@ export async function updatePracticeSession(
                     date: true,
                 },
             });
+
+            if (!reservation) {
+                if (oldEvent) {
+                    await tx.event.delete({ where: { id: oldEvent.id } });
+                }
+                return updated;
+            }
+
+            if (reservationRelationChanged) {
+                await assignVenueReservation(tx, {
+                    reservationId: reservation.id,
+                    targetType: "PRACTICE",
+                    targetId: updated.id,
+                    actorId: userId,
+                    overrideReason: parsedReservation.overrideReason,
+                });
+            }
+            await createPracticeEventAndRsvps(tx, {
+                eventId: oldEvent?.id,
+                title: validated.title,
+                teamId: validated.teamId,
+                reservation,
+                actorId: userId,
+                overrideReason: parsedReservation.overrideReason,
+                assignEventReservation:
+                    reservationRelationChanged || !oldEvent,
+            });
+            return updated;
         });
 
-        // Revalidate practice planner pages
         revalidatePath("/practice-planner");
         revalidatePath(`/practice-planner/${validated.id}`);
+        revalidatePath("/calendar");
 
         // Send update notifications if session is shared (Requirements: 6.3)
         if (existingSession.isShared) {
@@ -495,7 +977,10 @@ export async function updatePracticeSession(
 
         return {
             success: true,
-            data: { ...session, conflictsOverridden },
+            data: {
+                ...session,
+                conflictsOverridden: Boolean(parsedReservation.overrideReason),
+            },
         };
     } catch (error) {
         if (error instanceof z.ZodError) {
@@ -503,6 +988,21 @@ export async function updatePracticeSession(
                 success: false,
                 error: "Invalid input",
                 details: error.issues,
+            };
+        }
+
+        if (
+            error instanceof VenueReservationConflictError
+            || error instanceof VenueReservationLifecycleError
+        ) {
+            return {
+                success: false,
+                error: error.message,
+                ...(
+                    error instanceof VenueReservationConflictError
+                        ? { details: { conflicts: error.conflicts } }
+                        : {}
+                ),
             };
         }
 
@@ -536,7 +1036,7 @@ export async function deletePracticeSession(
         // First fetch the existing session to get its actual teamId for authorization
         const existingSession = await prisma.practiceSession.findUnique({
             where: { id: validated.id },
-            select: { teamId: true },
+            select: { teamId: true, venueReservationId: true },
         });
 
         if (!existingSession) {
@@ -546,9 +1046,6 @@ export async function deletePracticeSession(
             };
         }
 
-        // Authorize against the session's actual teamId
-        await requireTeamAdmin(existingSession.teamId);
-
         // Verify the teamId in the request matches the session's actual teamId
         if (existingSession.teamId !== validated.teamId) {
             return {
@@ -557,13 +1054,56 @@ export async function deletePracticeSession(
             };
         }
 
-        // Delete session (cascade will remove associated PracticeSessionPlay records)
-        await prisma.practiceSession.delete({
-            where: { id: validated.id },
+        const actorId = await requirePracticeScheduler(
+            existingSession.teamId,
+            existingSession.venueReservationId,
+        );
+
+        await runVenueReservationTransaction(async (tx) => {
+            const practice = await tx.practiceSession.findUnique({
+                where: { id: validated.id },
+                select: {
+                    id: true,
+                    teamId: true,
+                    venueReservationId: true,
+                },
+            });
+            if (!practice || practice.teamId !== validated.teamId) {
+                throw new VenueReservationLifecycleError(
+                    "Practice session not found.",
+                );
+            }
+            if (practice.venueReservationId) {
+                await assertPracticeReservationActorInTransaction(tx, {
+                    reservationId: practice.venueReservationId,
+                    teamId: practice.teamId,
+                    actorId,
+                });
+                const participantEvent = await tx.event.findUnique({
+                    where: {
+                        venueReservationId: practice.venueReservationId,
+                    },
+                    select: { id: true, type: true, teamId: true },
+                });
+                if (
+                    participantEvent?.type === "PRACTICE"
+                    && participantEvent.teamId === practice.teamId
+                ) {
+                    // Event deletion cascades its participant RSVP rows.
+                    await tx.event.delete({
+                        where: { id: participantEvent.id },
+                    });
+                }
+            }
+            // The confirmed reservation remains valid, unassigned inventory.
+            await tx.practiceSession.delete({
+                where: { id: practice.id },
+            });
         });
 
         // Revalidate practice planner pages
         revalidatePath("/practice-planner");
+        revalidatePath("/calendar");
 
         return {
             success: true,

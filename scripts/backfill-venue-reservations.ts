@@ -978,7 +978,7 @@ export async function backfillVenueReservations(
           requesterTeamId: true,
           requesterLeagueId: true,
           venueId: true,
-          venue: { select: { timezone: true } },
+          venue: { select: { timezone: true, organizationId: true } },
           venueReservation: { select: { id: true } },
           scheduleBlockId: true,
         },
@@ -1003,7 +1003,10 @@ export async function backfillVenueReservations(
           ? null
           : request.requesterLeagueId,
         ownerTeamId: request.requesterTeamId,
-        ownerVenueOrganizationId: null,
+        ownerVenueOrganizationId:
+          request.requesterTeamId || request.requesterLeagueId
+            ? null
+            : request.venue.organizationId,
         sourceRequestId: request.id,
         offeringBlockId: request.scheduleBlockId,
         aliasIds: {},

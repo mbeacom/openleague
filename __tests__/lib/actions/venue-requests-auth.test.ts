@@ -68,7 +68,7 @@ describe("ice time request authorization and booking safety", () => {
     expect(mockGetUserLeagueRole).toHaveBeenCalledWith(USER_ID, LEAGUE_ID);
   });
 
-  it("rejects accepted-request double booking", async () => {
+  it("allows competing requests because canonical conflicts are decided atomically at approval", async () => {
     mockPrisma.iceTimeRequest.findFirst.mockResolvedValue({ id: "existing-request" });
 
     const result = await submitIceTimeRequest({
@@ -80,7 +80,7 @@ describe("ice time request authorization and booking safety", () => {
       requestedEndAt: "2026-03-01T11:00:00Z",
     });
 
-    expect(result.success).toBe(false);
-    expect(mockPrisma.iceTimeRequest.create).not.toHaveBeenCalled();
+    expect(result.success).toBe(true);
+    expect(mockPrisma.iceTimeRequest.create).toHaveBeenCalled();
   });
 });

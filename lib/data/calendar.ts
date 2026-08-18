@@ -60,7 +60,7 @@ export async function getUserCalendarItems(window: CalendarWindow): Promise<Cale
   ]);
 
   // ISO-8601 UTC strings sort correctly lexicographically.
-  return dedupeItems([...events, ...practices, ...signups, ...venueBlocks]).sort((a, b) =>
+  return deduplicateCalendarItems([...events, ...practices, ...signups, ...venueBlocks]).sort((a, b) =>
     a.startAt.localeCompare(b.startAt)
   );
 }
@@ -84,15 +84,36 @@ function normalizeWindow(window: CalendarWindow): { from: Date; to: Date } {
 /**
  * Two scopes can reach the same row (e.g. a team event in the viewer's league),
  * and recurring venue blocks emit one item per occurrence under the block's id,
- * so the identity key is source + id + startAt.
+ * Linked activity aliases share the reservation identity. Legacy rows retain a
+ * source + id + startAt identity so recurring occurrences remain distinct.
  */
-function dedupeItems(items: CalendarItem[]): CalendarItem[] {
+export function deduplicateCalendarItems(items: CalendarItem[]): CalendarItem[] {
   const seen = new Map<string, CalendarItem>();
+  const participantEventHrefs = new Map<string, string>();
   for (const item of items) {
-    const key = `${item.source}:${item.id}:${item.startAt}`;
-    if (!seen.has(key)) seen.set(key, item);
+    const key = item.venueReservationId
+      ? `reservation:${item.venueReservationId}`
+      : `${item.source}:${item.id}:${item.startAt}`;
+    if (item.venueReservationId && item.source === "event") {
+      const currentHref = participantEventHrefs.get(key);
+      if (!currentHref || item.href.localeCompare(currentHref) < 0) {
+        participantEventHrefs.set(key, item.href);
+      }
+    }
+    const current = seen.get(key);
+    if (
+      !current
+      || (item.source === "practice" && current.source === "event")
+    ) {
+      seen.set(key, item);
+    }
   }
-  return [...seen.values()];
+  return [...seen.entries()].map(([key, item]) => {
+    const participantEventHref = participantEventHrefs.get(key);
+    return participantEventHref
+      ? { ...item, href: participantEventHref }
+      : item;
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -129,6 +150,7 @@ async function fetchTeamAndLeagueEvents(params: {
       startAt: true,
       endAt: true,
       timezone: true,
+      venueReservationId: true,
       team: { select: { id: true, name: true } },
       league: { select: { id: true, name: true } },
     },
@@ -149,6 +171,7 @@ async function fetchTeamAndLeagueEvents(params: {
       },
       href: `/events/${event.id}`,
       eventType: event.type,
+      venueReservationId: event.venueReservationId,
     })
   );
 }
@@ -174,6 +197,8 @@ async function fetchPracticeSessions(params: {
       // Venue-attached sessions carry an exact startAt; `date` is the fallback.
       startAt: true,
       duration: true,
+      venueReservationId: true,
+      venueReservation: { select: { timezone: true } },
       teamId: true,
       team: { select: { name: true } },
     },
@@ -189,6 +214,8 @@ async function fetchPracticeSessions(params: {
       endAt: new Date(start.getTime() + practice.duration * 60_000).toISOString(),
       scope: { teamId: practice.teamId, teamName: practice.team.name },
       href: `/practice-planner/${practice.id}`,
+      venueReservationId: practice.venueReservationId,
+      timezone: practice.venueReservation?.timezone,
     };
   });
 }

@@ -37,6 +37,7 @@ export function deduplicateAssociationScheduleItems<
   T extends AssociationScheduleItemView,
 >(items: readonly T[]): T[] {
   const chosen = new Map<string, T>();
+  const participantEventHrefs = new Map<string, string>();
   for (const item of items) {
     const identity = canonicalScheduleIdentity({
       venueReservationId: item.venueReservationId,
@@ -44,6 +45,12 @@ export function deduplicateAssociationScheduleItems<
       sourceId: item.sourceId,
       startsAt: item.startsAt,
     });
+    if (item.venueReservationId && item.source === "event" && item.href) {
+      const currentHref = participantEventHrefs.get(identity);
+      if (!currentHref || item.href.localeCompare(currentHref) < 0) {
+        participantEventHrefs.set(identity, item.href);
+      }
+    }
     const current = chosen.get(identity);
     if (
       !current
@@ -52,7 +59,12 @@ export function deduplicateAssociationScheduleItems<
       chosen.set(identity, { ...item, canonicalScheduleId: identity });
     }
   }
-  return [...chosen.values()].sort(
+  return [...chosen.entries()].map(([identity, item]) => {
+    const participantEventHref = participantEventHrefs.get(identity);
+    return participantEventHref
+      ? { ...item, href: participantEventHref }
+      : item;
+  }).sort(
     (a, b) =>
       a.startsAt.getTime() - b.startsAt.getTime()
       || a.canonicalScheduleId.localeCompare(b.canonicalScheduleId),

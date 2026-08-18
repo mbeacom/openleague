@@ -21,6 +21,10 @@ import {
 import { findBookingConflicts, getVenueBookings } from "@/lib/utils/availability";
 import { expandRecurrenceWindow } from "@/lib/utils/venue-schedule";
 import type { BookingConflict, VenueBookingView } from "@/types/segments";
+import {
+  populateVenueOfferingAvailability,
+  type VenueReservationOfferingWithAvailability,
+} from "@/lib/services/venue-reservation-availability";
 
 type VenueContext = {
   id: string;
@@ -110,6 +114,7 @@ export async function getVenueScheduleAdminData(
       status: string;
       surfaceId: string | null;
     }>;
+    availableIce: VenueReservationOfferingWithAvailability[];
   }>
 > {
   try {
@@ -150,15 +155,48 @@ export async function getVenueScheduleAdminData(
           endsAt: true,
           activityType: true,
           status: true,
+          intent: true,
+          registrationMode: true,
           surfaceId: true,
+          segmentId: true,
+          recurrenceRule: true,
+          recurrenceEndDate: true,
+          surface: { select: { name: true } },
         },
         orderBy: { startsAt: "asc" },
       }),
     ]);
+    const availabilityFrom = new Date();
+    const availabilityTo = new Date(
+      availabilityFrom.getTime() + OFFERING_AVAILABILITY_HORIZON_MS,
+    );
+    const availableIce = await populateVenueOfferingAvailability(prisma, {
+      venueId,
+      offerings: expandRequestableOfferingOccurrences(
+        scheduleBlocks.filter(
+          (block) =>
+            block.status === "PUBLISHED"
+            && block.intent === "OFFERING"
+            && block.registrationMode === "REQUEST_REQUIRED",
+        ),
+        venue.timezone,
+        availabilityFrom,
+        availabilityTo,
+      ),
+      now: availabilityFrom,
+      mode: "STAFF",
+    });
 
     return {
       success: true,
-      data: { venueId, timezone: venue.timezone, surfaces, operatingHours, scheduleBlocks },
+      data: {
+        venueId,
+        timezone: venue.timezone,
+        surfaces,
+        operatingHours,
+        scheduleBlocks,
+        availableIce,
+      },
     };
   } catch (error) {
     if (error instanceof Error && error.message.includes("NEXT_REDIRECT")) {
@@ -593,13 +631,68 @@ interface PublicVenueScheduleFilters {
   skillLevelIds?: string[];
 }
 
+const OFFERING_AVAILABILITY_HORIZON_MS = 366 * 24 * 60 * 60 * 1000;
+
+type RequestableOfferingBlock = {
+  id: string;
+  title: string;
+  startsAt: Date;
+  endsAt: Date;
+  surfaceId: string | null;
+  segmentId: string | null;
+  recurrenceRule: string | null;
+  recurrenceEndDate: Date | null;
+  surface: { name: string } | null;
+};
+
+function expandRequestableOfferingOccurrences(
+  blocks: RequestableOfferingBlock[],
+  timeZone: string,
+  from: Date,
+  to: Date,
+) {
+  return blocks.flatMap((block) => {
+    const occurrences = block.recurrenceRule
+      ? expandRecurrenceWindow(
+          {
+            startAt: block.startsAt,
+            endAt: block.endsAt,
+            recurrenceRule: block.recurrenceRule,
+            recurrenceEndAt: block.recurrenceEndDate,
+            timezone: timeZone,
+          },
+          from,
+          to,
+        )
+      : block.startsAt < to && block.endsAt > from
+        ? [{ startAt: block.startsAt, endAt: block.endsAt }]
+        : [];
+
+    return occurrences.map((occurrence) => ({
+      id: block.recurrenceRule
+        ? `${block.id}:${occurrence.startAt.toISOString()}`
+        : block.id,
+      offeringBlockId: block.id,
+      title: block.title,
+      startsAt: occurrence.startAt,
+      endsAt: occurrence.endAt,
+      surfaceId: block.surfaceId,
+      segmentId: block.segmentId,
+      surfaceName: block.surface?.name ?? null,
+    }));
+  });
+}
+
 export async function getPublicVenueSchedule(slug: string, filters: PublicVenueScheduleFilters = {}) {
   const now = new Date();
+  const availabilityEnd = new Date(
+    now.getTime() + OFFERING_AVAILABILITY_HORIZON_MS,
+  );
   const skillLevelWhere = filters.skillLevelIds?.length
     ? { skillLevels: { some: { id: { in: filters.skillLevelIds } } } }
     : {};
 
-  return prisma.venue.findFirst({
+  const venue = await prisma.venue.findFirst({
     where: {
       ...publicPublishedVenueWhere,
       slug,
@@ -613,7 +706,18 @@ export async function getPublicVenueSchedule(slug: string, filters: PublicVenueS
         where: {
           status: "PUBLISHED",
           visibility: "PUBLIC",
-          startsAt: { gte: now },
+          audience: "PUBLIC",
+          startsAt: { lt: availabilityEnd },
+          OR: [
+            { recurrenceRule: null, endsAt: { gt: now } },
+            {
+              recurrenceRule: { not: null },
+              OR: [
+                { recurrenceEndDate: null },
+                { recurrenceEndDate: { gte: now } },
+              ],
+            },
+          ],
           ...skillLevelWhere,
         },
         select: {
@@ -629,8 +733,19 @@ export async function getPublicVenueSchedule(slug: string, filters: PublicVenueS
           priceCurrency: true,
           priceLabel: true,
           registrationMode: true,
+          intent: true,
           externalRegistrationUrl: true,
+          surfaceId: true,
+          segmentId: true,
+          recurrenceRule: true,
+          recurrenceEndDate: true,
           surface: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          segment: {
             select: {
               id: true,
               name: true,
@@ -676,6 +791,29 @@ export async function getPublicVenueSchedule(slug: string, filters: PublicVenueS
       },
     },
   });
+  if (!venue) return null;
+
+  const requestableOfferings = expandRequestableOfferingOccurrences(
+    venue.scheduleBlocks.filter(
+      (block) =>
+        block.registrationMode === "REQUEST_REQUIRED"
+        && block.intent === "OFFERING",
+    ),
+    venue.timezone,
+    now,
+    availabilityEnd,
+  );
+  const availableIce = await populateVenueOfferingAvailability(prisma, {
+    venueId: venue.id,
+    offerings: requestableOfferings,
+    now,
+    mode: "PUBLIC",
+  });
+
+  return {
+    ...venue,
+    availableIce,
+  };
 }
 
 async function setScheduleBlockStatus(

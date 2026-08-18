@@ -413,14 +413,19 @@ export async function sendIceTimeRequestSubmittedEmail(
 interface IceTimeRequestDecisionEmailData {
   contactEmail: string;
   venueName: string;
-  status: "ACCEPTED" | "DECLINED";
+  status: "ACCEPTED" | "PARTIALLY_ACCEPTED" | "DECLINED";
   decisionMessage?: string | null;
 }
 
 export async function sendIceTimeRequestDecisionEmail(
   data: IceTimeRequestDecisionEmailData
 ): Promise<void> {
-  const statusLabel = data.status === "ACCEPTED" ? "accepted" : "declined";
+  const statusLabel =
+    data.status === "ACCEPTED"
+      ? "accepted"
+      : data.status === "PARTIALLY_ACCEPTED"
+        ? "partially accepted"
+        : "declined";
 
   await sendEmail({
     subject: `Your ice time request was ${statusLabel}`,

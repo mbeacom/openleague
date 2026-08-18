@@ -46,6 +46,7 @@ export function EditSessionWrapper({
           duration: play.duration,
           instructions: play.instructions || "",
         })),
+        reservationId: session.reservationId,
         // Optional venue booking (006, FR-019); the attachment is replaced
         // wholesale — omitting venueId detaches the practice.
         venueId: session.venueId || undefined,
@@ -53,6 +54,7 @@ export function EditSessionWrapper({
         segmentId: session.segmentId || undefined,
         startAt: session.startAt || undefined,
         overrideConflicts: session.overrideConflicts,
+        overrideReason: session.overrideReason || undefined,
       });
 
       if (!result.success) {
@@ -91,8 +93,12 @@ export function EditSessionWrapper({
     <PracticeSessionEditor
       sessionId={sessionId}
       teamId={teamId}
-      initialData={initialData}
+      initialData={{
+        ...initialData,
+        reservationId: bookingOptions.currentReservationId,
+      }}
       venues={bookingOptions.venues}
+      reservations={bookingOptions.reservations}
       surfacesByVenue={bookingOptions.surfacesByVenue}
       segmentsBySurface={bookingOptions.segmentsBySurface}
       wholeLabelBySurface={bookingOptions.wholeLabelBySurface}

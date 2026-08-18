@@ -11,6 +11,7 @@ import {
 } from "@/lib/utils/date";
 
 interface IceTimeRequestFormProps {
+  anchorId?: string;
   scheduleBlockId: string;
   venueId: string;
   venueName: string;
@@ -22,7 +23,7 @@ interface IceTimeRequestFormProps {
 
 type FormMessage = { severity: "success" | "error"; text: string };
 
-export function IceTimeRequestForm({ scheduleBlockId, venueId, venueName, startsAt, endsAt, timezone }: IceTimeRequestFormProps) {
+export function IceTimeRequestForm({ anchorId, scheduleBlockId, venueId, venueName, startsAt, endsAt, timezone }: IceTimeRequestFormProps) {
   const [message, setMessage] = useState<FormMessage | null>(null);
   const [isPending, startTransition] = useTransition();
   const tz = useMemo(() => resolveTimeZone(timezone), [timezone]);
@@ -70,7 +71,7 @@ export function IceTimeRequestForm({ scheduleBlockId, venueId, venueName, starts
   };
 
   return (
-    <Stack id={`request-${scheduleBlockId}`} component="form" spacing={2} sx={{ maxWidth: 560 }} onSubmit={handleSubmit}>
+    <Stack id={anchorId ?? `request-${scheduleBlockId}`} component="form" spacing={2} sx={{ maxWidth: 560 }} onSubmit={handleSubmit}>
       <Typography variant="h5">Request ice time</Typography>
       <Alert severity="info">Requesting ice at {venueName}</Alert>
       {message ? <Alert severity={message.severity}>{message.text}</Alert> : null}

@@ -8,6 +8,7 @@ import {
   type AssociationOperationsNotificationEventType,
 } from "@/lib/services/association-operations-notification-registry";
 import {
+  approvedSpaceWithinRequestedSpace,
   findVenueReservationConflicts,
   type VenueReservationConflict,
 } from "@/lib/services/venue-reservation-availability";
@@ -26,6 +27,16 @@ export class VenueReservationLifecycleError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "VenueReservationLifecycleError";
+  }
+}
+
+export function assertGenericRescheduleAllowed(
+  reservation: { sourceRequestId: string | null },
+): void {
+  if (reservation.sourceRequestId) {
+    throw new VenueReservationLifecycleError(
+      "Request-backed reservations cannot be generically rescheduled. Venue staff must cancel or amend the approved request and approve a new request.",
+    );
   }
 }
 
@@ -416,15 +427,18 @@ async function assertCreateAuthorizationAndSources(
       (occurrence) =>
         occurrence.startAt <= input.startsAt && occurrence.endAt >= input.endsAt,
     );
-    const offeringContainsSpace =
-      offering?.surfaceId === null
-      || (
-        offering?.surfaceId === (input.surfaceId ?? null)
-        && (
-          offering.segmentId === null
-          || offering.segmentId === (input.segmentId ?? null)
+    const offeringContainsSpace = offering
+      ? approvedSpaceWithinRequestedSpace(
+          {
+            surfaceId: offering.surfaceId,
+            segmentId: offering.segmentId,
+          },
+          {
+            surfaceId: input.surfaceId ?? null,
+            segmentId: input.segmentId ?? null,
+          },
         )
-      );
+      : false;
     if (
       !offering
       || !offeringContainsInterval
@@ -468,7 +482,11 @@ async function assertCreateAuthorizationAndSources(
     : input.ownerLeagueId
       ? request?.requesterLeagueId === input.ownerLeagueId
         && request.requesterTeamId === null
-      : false;
+      : input.ownerVenueOrganizationId
+        ? request?.requesterLeagueId === null
+          && request.requesterTeamId === null
+          && venue.organizationId === input.ownerVenueOrganizationId
+        : false;
   if (
     !request
     || !["ACCEPTED", "PARTIALLY_ACCEPTED"].includes(request.status)
@@ -674,6 +692,7 @@ export async function transitionVenueReservation(
     usageStatus?: VenueReservationUsageStatus;
     allowAssignedDisposition?: boolean;
     overrideReason?: string;
+    snapshot?: Prisma.InputJsonValue;
   },
 ) {
   const reservation = await tx.venueReservation.findUnique({
@@ -811,6 +830,7 @@ export async function transitionVenueReservation(
           nextStatus: input.nextStatus,
           actorId: input.actorId,
           reason: input.reason.trim(),
+          snapshot: input.snapshot,
         },
       },
       ...(confirmationConflicts.length > 0
@@ -885,6 +905,14 @@ async function assertAssignmentScope(
   scope: AssignmentScope,
   actorId: string,
 ): Promise<void> {
+  if (
+    reservation.ownerVenueOrganizationId
+    && scope.authorization.type !== "ORGANIZATION"
+  ) {
+    throw new VenueReservationLifecycleError(
+      "Venue-organization-owned public request reservations cannot be assigned to association or team activities.",
+    );
+  }
   const ownerMatches = reservation.ownerLeagueId
     ? scope.leagueId === reservation.ownerLeagueId
     : reservation.ownerTeamId
@@ -964,6 +992,7 @@ export async function assignVenueReservation(
       | "EVENT_GAME";
     targetId: string;
     actorId: string;
+    overrideReason?: string | null;
   },
 ) {
   const reservation = await tx.venueReservation.findUnique({
@@ -1008,6 +1037,19 @@ export async function assignVenueReservation(
     + reservation.signupEvents.length
     + reservation.practiceSessions.length
     + reservation.proposalEntries.length;
+  const assignmentConflicts = totalLinkCount === 0
+    ? await findVenueReservationConflicts(tx, {
+        venueId: reservation.venueId,
+        surfaceId: reservation.surfaceId,
+        segmentId: reservation.segmentId,
+        startsAt: reservation.startsAt,
+        endsAt: reservation.endsAt,
+        excludeReservationId: reservation.id,
+      })
+    : [];
+  if (assignmentConflicts.length > 0 && !input.overrideReason?.trim()) {
+    throw new VenueReservationConflictError(assignmentConflicts);
+  }
   const targetSpaceMatches = (target: {
     surfaceId: string | null;
     segmentId: string | null;
@@ -1416,7 +1458,31 @@ export async function assignVenueReservation(
 
   const updated = await tx.venueReservation.update({
     where: { id: reservation.id },
-    data: { assignedById: input.actorId },
+    data: {
+      assignedById: input.actorId,
+      ...(assignmentConflicts.length > 0
+        ? {
+            overrides: {
+              create: {
+                actorId: input.actorId,
+                reason: input.overrideReason!.trim(),
+                candidateSnapshot: {
+                  venueId: reservation.venueId,
+                  surfaceId: reservation.surfaceId,
+                  segmentId: reservation.segmentId,
+                  startsAt: reservation.startsAt.toISOString(),
+                  endsAt: reservation.endsAt.toISOString(),
+                  targetType: input.targetType,
+                  targetId: input.targetId,
+                },
+                conflictingReservationIds: assignmentConflicts.map(
+                  ({ id }) => id,
+                ),
+              },
+            },
+          }
+        : {}),
+    },
   });
   const leagueId = await reservationLeagueId(tx, reservation);
   await tx.auditLog.create({
@@ -1427,7 +1493,11 @@ export async function assignVenueReservation(
       teamId: reservation.ownerTeamId,
       resourceId: reservation.id,
       resourceType: "VenueReservation",
-      details: { targetType: input.targetType, targetId: input.targetId },
+      details: {
+        targetType: input.targetType,
+        targetId: input.targetId,
+        conflictOverrideCount: assignmentConflicts.length,
+      },
     },
   });
 

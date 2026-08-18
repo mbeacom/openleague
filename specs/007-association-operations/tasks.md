@@ -56,27 +56,27 @@ description: "Dependency-ordered implementation backlog for association operatio
 
 ### Tests
 
-- [ ] T017 [P] [US1] Add full, partial, declined, canceled, idempotent approval, durable notification-ID, and registry-validation contract tests to `__tests__/lib/actions/venue-requests.test.ts`
-- [ ] T018 [P] [US1] Add simultaneous overlapping approval and documented-scale p95 performance tests to `__tests__/integration/venue-reservation-concurrency.test.ts` and `__tests__/performance/venue-reservation-availability.test.ts`
-- [ ] T019 [P] [US1] Add venue-reservation assignment and lifecycle action tests to `__tests__/lib/actions/venue-reservations.test.ts`
-- [ ] T020 [P] [US1] Add practice reservation, Event/RSVP linkage, and override tests to `__tests__/lib/actions/practice-sessions.test.ts`
-- [ ] T021 [P] [US1] Add canonical schedule deduplication tests to `__tests__/lib/data/schedule-items.test.ts`
-- [ ] T022 [P] [US1] Add venue request decision-control component tests to `__tests__/components/features/venue-admin/IceTimeRequestQueue.test.tsx`
+- [x] T017 [P] [US1] Add full, partial, declined, canceled, idempotent approval, durable notification-ID, and registry-validation contract tests to `__tests__/lib/actions/venue-requests.test.ts`
+- [x] T018 [P] [US1] Add simultaneous overlapping approval and documented-scale p95 performance tests to `__tests__/integration/venue-reservation-concurrency.test.ts` and `__tests__/performance/venue-reservation-availability.test.ts`
+- [x] T019 [P] [US1] Add venue-reservation assignment and lifecycle action tests to `__tests__/lib/actions/venue-reservations.test.ts`
+- [x] T020 [P] [US1] Add practice reservation, Event/RSVP linkage, and override tests to `__tests__/lib/actions/practice-sessions.test.ts`
+- [x] T021 [P] [US1] Add canonical schedule deduplication tests to `__tests__/lib/data/schedule-items.test.ts`
+- [x] T022 [P] [US1] Add venue request decision-control component tests to `__tests__/components/features/venue-admin/IceTimeRequestQueue.test.tsx`
 
 ### Implementation
 
-- [ ] T023 [US1] Make `decideIceTimeRequest` atomically create one confirmed full or partial venue reservation and enqueue typed notification intent in `lib/actions/venue-requests.ts`
-- [ ] T024 [US1] Propagate accepted-request cancellation and expiration into reservation lifecycle in `lib/actions/venue-requests.ts`
-- [ ] T025 [US1] Add assign, unassign, release, cancel, complete, unused, reschedule, and availability Server Actions to `lib/actions/venue-reservations.ts`
-- [ ] T026 [US1] Add venue manager approve/partial/decline/cancel/expire/annotate controls and approved-space display to `components/features/venue-admin/IceTimeRequestQueue.tsx`
-- [ ] T027 [US1] Add remaining-slice and offering-versus-occupancy display to `components/features/venue-admin/AvailableIceBrowser.tsx`
-- [ ] T028 [US1] Revalidate venue request, venue schedule, association operations, and affected team paths from `lib/actions/venue-requests.ts`
-- [ ] T029 [US1] Add association ice-reservation inventory and filters to `components/features/association-operations/VenueReservationInventory.tsx`
-- [ ] T030 [US1] Add venue-reservation-to-practice assignment workflow to `components/features/association-operations/VenueReservationAssignmentDialog.tsx`
-- [ ] T031 [US1] Create Venue Reservations inventory route and server data loading in `app/(dashboard)/league/[leagueId]/venue-reservations/page.tsx`
-- [ ] T032 [US1] Update practice creation/editing to select confirmed venue-reservation inventory, atomically link/create its Event/RSVPs, and enqueue typed notification intent in `lib/actions/practice-sessions.ts`
-- [ ] T033 [US1] Update practice editor reservation selection, venue-local time, and reasoned override UI in `components/features/practice-planner/PracticeSessionEditor.tsx`
-- [ ] T034 [US1] Make signed-in calendar and venue schedule readers deduplicate linked practice/Event aliases via `lib/data/calendar.ts` and `lib/data/schedule-items.ts`
+- [x] T023 [US1] Make `decideIceTimeRequest` atomically create one confirmed full or partial venue reservation and enqueue typed notification intent in `lib/actions/venue-requests.ts`
+- [x] T024 [US1] Propagate accepted-request cancellation and expiration into reservation lifecycle in `lib/actions/venue-requests.ts`
+- [x] T025 [US1] Add assign, unassign, release, cancel, complete, unused, reschedule, and availability Server Actions to `lib/actions/venue-reservations.ts`
+- [x] T026 [US1] Add venue manager approve/partial/decline/cancel/expire/annotate controls and approved-space display to `components/features/venue-admin/IceTimeRequestQueue.tsx`
+- [x] T027 [US1] Add remaining-slice and offering-versus-occupancy display to `components/features/venue-admin/AvailableIceBrowser.tsx`
+- [x] T028 [US1] Revalidate venue request, venue schedule, association operations, and affected team paths from `lib/actions/venue-requests.ts`
+- [x] T029 [US1] Add association ice-reservation inventory and filters to `components/features/association-operations/VenueReservationInventory.tsx`
+- [x] T030 [US1] Add venue-reservation-to-practice assignment workflow to `components/features/association-operations/VenueReservationAssignmentDialog.tsx`
+- [x] T031 [US1] Create Venue Reservations inventory route and server data loading in `app/(dashboard)/league/[leagueId]/venue-reservations/page.tsx`
+- [x] T032 [US1] Update practice creation/editing to select confirmed venue-reservation inventory, atomically link/create its Event/RSVPs, and enqueue typed notification intent in `lib/actions/practice-sessions.ts`
+- [x] T033 [US1] Update practice editor reservation selection, venue-local time, and reasoned override UI in `components/features/practice-planner/PracticeSessionEditor.tsx`
+- [x] T034 [US1] Make signed-in calendar and venue schedule readers deduplicate linked practice/Event aliases via `lib/data/calendar.ts` and `lib/data/schedule-items.ts`
 
 **Checkpoint**: User Story 1 is deployable as the first useful association MVP.
 

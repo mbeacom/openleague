@@ -52,6 +52,11 @@ export interface VenueReservationView {
 }
 
 export interface PublicVenueReservationOccupancyView {
+  startsAt: Date;
+  endsAt: Date;
+}
+
+export interface VenueReservationConflictView {
   id: string;
   startsAt: Date;
   endsAt: Date;
@@ -60,10 +65,6 @@ export interface PublicVenueReservationOccupancyView {
   surfaceId: string | null;
   segmentId: string | null;
   status: "HELD" | "CONFIRMED" | "COMPLETED";
-}
-
-export interface VenueReservationConflictView
-  extends PublicVenueReservationOccupancyView {
   owner?: VenueReservationOwnerView;
   sourceRequestId?: string | null;
 }
@@ -89,6 +90,8 @@ export interface AssociationScheduleItemView {
   venueId: string | null;
   surfaceId: string | null;
   segmentId: string | null;
+  /** Participant-facing Event/RSVP destination when one exists. */
+  href?: string | null;
 }
 
 export interface AssociationOperationsSummaryView {

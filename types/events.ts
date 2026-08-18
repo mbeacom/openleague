@@ -134,6 +134,8 @@ export interface CalendarItem {
   href: string;
   /** Source-specific subtype: EventType, SignupEventCategory, or venue activity type. */
   eventType?: string;
+  /** Canonical identity shared by linked practice/Event aliases. */
+  venueReservationId?: string | null;
 }
 
 export type CalendarScopeKind = "team" | "league" | "venue";
