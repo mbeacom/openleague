@@ -21,7 +21,11 @@ export default function FinalCTA() {
       aria-labelledby="final-cta-heading"
       sx={{
         py: { xs: 10, md: 14 },
-        background: 'linear-gradient(135deg, #0D47A1 0%, #1976D2 50%, #42A5F5 100%)',
+        // Ends at Action Blue rather than the old #42A5F5. White copy over that
+        // lighter stop measured 2.9-3.7:1 against the actually-painted pixels —
+        // and because the gradient is animated, every stop eventually slides
+        // under the text, so the lightest one sets the floor for all of it.
+        background: 'linear-gradient(135deg, #0A3A82 0%, #0D47A1 50%, #1565C0 100%)',
         backgroundSize: '200% 200%',
         position: 'relative',
         overflow: 'hidden',

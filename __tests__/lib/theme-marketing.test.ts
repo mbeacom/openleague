@@ -155,7 +155,11 @@ describe('Marketing Theme Extensions', () => {
     });
 
     it('uses consistent shadow system', () => {
-      expect((theme.components?.MuiCard?.styleOverrides?.root as any)?.boxShadow).toBe('0px 4px 24px rgba(13, 71, 161, 0.08)');
+      // The literal moved into a custom property so the scheme blocks can vary
+      // it without their nested rules outranking call-site sx.
+      const root = theme.components?.MuiCard?.styleOverrides?.root as any;
+      expect(root?.boxShadow).toBe('var(--ol-card-shadow)');
+      expect(root?.['--ol-card-shadow']).toBe('0px 4px 24px rgba(13, 71, 161, 0.08)');
     });
   });
 });

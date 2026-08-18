@@ -1,7 +1,11 @@
 /* Import Cabinet Grotesk - distinctive geometric sans-serif from Fontshare */
 @import url('https://api.fontshare.com/css?f[]=cabinet-grotesk@100,200,300,400,500,600,700,800,900');
 
-:root {
+/* Paired with the dark block below so a LightThemeScope subtree re-declares
+   these too — :root alone only ever matches <html>, which never sits inside a
+   pin, leaving the dark values to inherit straight through it. */
+:root,
+[data-mui-color-scheme="light"] {
   --background: #ffffff;
   --foreground: #171717;
   --font-primary: 'Cabinet Grotesk', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;

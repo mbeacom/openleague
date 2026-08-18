@@ -7,6 +7,8 @@ import { Box } from '@mui/material';
 import MarketingHeader from '@/components/features/navigation/MarketingHeader';
 import MarketingFooter from '@/components/features/navigation/MarketingFooter';
 import SkipLink from '@/components/ui/SkipLink';
+import LightThemeScope from '@/components/ui/LightThemeScope';
+import { isAuthRoute } from '@/lib/config/auth-routes';
 
 interface LayoutProviderProps {
   children: ReactNode;
@@ -51,16 +53,30 @@ export default function LayoutProvider({ children }: LayoutProviderProps) {
   const isMarketingRouteGroup = marketingRouteGroupPaths.some(path =>
     pathname === path || pathname.startsWith(`${path}/`)
   );
-  const isAuthRoute = pathname.startsWith('/login') || pathname.startsWith('/signup');
+  // Whole-segment match from the shared roster (lib/config/auth-routes.ts).
+  // A bare startsWith('/signup') also swallowed the public '/signups*' pages —
+  // which already get chrome and a pin from app/(marketing)/layout.tsx, so they
+  // ended up with two headers, two footers, two skip links and a duplicated
+  // id="main-content" — and the authenticated '/signup-events*' dashboard,
+  // which renders through this branch during the window where useSession() has
+  // not resolved yet.
+  const isAuth = isAuthRoute(pathname);
   const isDocsRoute = pathname === '/docs' || pathname.startsWith('/docs/');
 
   // Show marketing layout for unauthenticated users on marketing routes
   const shouldShowMarketingLayout =
-    !session?.user && ((isMarketingRoute && !isMarketingRouteGroup) || isAuthRoute);
+    !session?.user && ((isMarketingRoute && !isMarketingRouteGroup) || isAuth);
+
+  // The landing page and the auth pages are light-only compositions (their
+  // sections and cards bake in white and Fresh Ice backgrounds), so the chrome
+  // has to be pinned with them — otherwise a dark-mode visitor gets a dark
+  // header and footer bracketing a light page. /docs is genuinely
+  // scheme-aware, so it keeps the plain Box and follows the visitor's theme.
+  const LayoutRoot = isDocsRoute ? Box : LightThemeScope;
 
   if (shouldShowMarketingLayout) {
     return (
-      <Box
+      <LayoutRoot
         sx={{
           display: 'flex',
           flexDirection: 'column',
@@ -87,7 +103,7 @@ export default function LayoutProvider({ children }: LayoutProviderProps) {
           </Box>
         )}
         <MarketingFooter />
-      </Box>
+      </LayoutRoot>
     );
   }
 
