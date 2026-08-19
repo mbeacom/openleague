@@ -59,11 +59,13 @@ const LEAGUE_SECTION_LABELS: Record<string, string> = {
   payments: 'Payments',
   gear: 'Gear',
   workforce: 'Workforce',
+  content: 'News',
 };
 
 // Well-known nested segments; unknown tails (ids) render as 'Details'.
 const SUBPAGE_LABELS: Record<string, string> = {
   new: 'New',
+  public: 'Public page',
   edit: 'Edit',
   'new-game': 'New Game',
   proposals: 'Proposals',

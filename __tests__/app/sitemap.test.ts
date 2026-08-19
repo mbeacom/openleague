@@ -1,16 +1,24 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+
+const { mockLeague } = vi.hoisted(() => ({ mockLeague: { findMany: vi.fn() } }));
+
+// The sitemap now enumerates published association surfaces. Default to none so
+// the existing static-page assertions stay about the static pages.
+vi.mock('@/lib/db/prisma', () => ({ prisma: { league: mockLeague } }));
+mockLeague.findMany.mockResolvedValue([]);
+
 import sitemap from '@/app/sitemap';
 
 describe('Sitemap Generation', () => {
-    it('should generate a valid sitemap array', () => {
-        const sitemapData = sitemap();
+    it('should generate a valid sitemap array', async () => {
+        const sitemapData = await sitemap();
 
         expect(Array.isArray(sitemapData)).toBe(true);
         expect(sitemapData.length).toBeGreaterThan(0);
     });
 
-    it('should include homepage with highest priority', () => {
-        const sitemapData = sitemap();
+    it('should include homepage with highest priority', async () => {
+        const sitemapData = await sitemap();
         const homepage = sitemapData.find((entry) => entry.url === 'https://openl.app');
 
         expect(homepage).toBeDefined();
@@ -18,8 +26,8 @@ describe('Sitemap Generation', () => {
         expect(homepage?.changeFrequency).toBe('weekly');
     });
 
-    it('should include all marketing pages', () => {
-        const sitemapData = sitemap();
+    it('should include all marketing pages', async () => {
+        const sitemapData = await sitemap();
         const urls = sitemapData.map((entry) => entry.url);
 
         expect(urls).toContain('https://openl.app/features');
@@ -29,8 +37,8 @@ describe('Sitemap Generation', () => {
         expect(urls).toContain('https://openl.app/about');
     });
 
-    it('should include documentation pages', () => {
-        const sitemapData = sitemap();
+    it('should include documentation pages', async () => {
+        const sitemapData = await sitemap();
         const urls = sitemapData.map((entry) => entry.url);
 
         expect(urls).toContain('https://openl.app/docs');
@@ -40,8 +48,8 @@ describe('Sitemap Generation', () => {
         expect(urls).toContain('https://openl.app/docs/contributing');
     });
 
-    it('should include legal pages with lower priority', () => {
-        const sitemapData = sitemap();
+    it('should include legal pages with lower priority', async () => {
+        const sitemapData = await sitemap();
         const privacyPage = sitemapData.find((entry) => entry.url === 'https://openl.app/privacy');
         const termsPage = sitemapData.find((entry) => entry.url === 'https://openl.app/terms');
 
@@ -51,8 +59,8 @@ describe('Sitemap Generation', () => {
         expect(termsPage?.priority).toBe(0.3);
     });
 
-    it('should set appropriate priorities for different page types', () => {
-        const sitemapData = sitemap();
+    it('should set appropriate priorities for different page types', async () => {
+        const sitemapData = await sitemap();
         const homepage = sitemapData.find((entry) => entry.url === 'https://openl.app');
         const featuresPage = sitemapData.find((entry) => entry.url === 'https://openl.app/features');
         const legalPage = sitemapData.find((entry) => entry.url === 'https://openl.app/privacy');
@@ -61,8 +69,8 @@ describe('Sitemap Generation', () => {
         expect(featuresPage?.priority).toBeGreaterThan(legalPage?.priority || 0);
     });
 
-    it('should set appropriate change frequencies', () => {
-        const sitemapData = sitemap();
+    it('should set appropriate change frequencies', async () => {
+        const sitemapData = await sitemap();
         const homepage = sitemapData.find((entry) => entry.url === 'https://openl.app');
         const legalPage = sitemapData.find((entry) => entry.url === 'https://openl.app/privacy');
 
@@ -70,24 +78,24 @@ describe('Sitemap Generation', () => {
         expect(legalPage?.changeFrequency).toBe('yearly');
     });
 
-    it('should include lastModified dates for all entries', () => {
-        const sitemapData = sitemap();
+    it('should include lastModified dates for all entries', async () => {
+        const sitemapData = await sitemap();
 
         sitemapData.forEach((entry) => {
             expect(entry.lastModified).toBeInstanceOf(Date);
         });
     });
 
-    it('should use correct base URL', () => {
-        const sitemapData = sitemap();
+    it('should use correct base URL', async () => {
+        const sitemapData = await sitemap();
 
         sitemapData.forEach((entry) => {
             expect(entry.url).toMatch(/^https:\/\/openl\.app/);
         });
     });
 
-    it('should have valid priority values between 0 and 1', () => {
-        const sitemapData = sitemap();
+    it('should have valid priority values between 0 and 1', async () => {
+        const sitemapData = await sitemap();
 
         sitemapData.forEach((entry) => {
             expect(entry.priority).toBeGreaterThanOrEqual(0);
@@ -95,8 +103,8 @@ describe('Sitemap Generation', () => {
         });
     });
 
-    it('should have valid changeFrequency values', () => {
-        const sitemapData = sitemap();
+    it('should have valid changeFrequency values', async () => {
+        const sitemapData = await sitemap();
         const validFrequencies = ['always', 'hourly', 'daily', 'weekly', 'monthly', 'yearly', 'never'];
 
         sitemapData.forEach((entry) => {

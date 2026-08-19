@@ -98,6 +98,9 @@ model User {
   volunteerNeedsCreated        VolunteerNeed[]        @relation("VolunteerNeedCreator")
   volunteerAssignments         VolunteerAssignment[]  @relation("VolunteerAssignmentSubject")
   volunteerAssignmentsAssigned VolunteerAssignment[]  @relation("VolunteerAssignmentAssigner")
+
+  // Feature 007 US4 — public profiles and content.
+  publicContentItems  PublicContentItem[] @relation("PublicContentAuthor")
 }
 
 // Single-use, hashed account-lifecycle tokens (email verification, password
@@ -182,6 +185,13 @@ enum Sport {
 // Team model
 model Team {
   id        String   @id @default(cuid())
+  // Feature 007 US4 — publishable team profile. The slug is unique per
+  // association, not globally: two associations may both have a "storm".
+  slug              String?
+  publicDescription String?
+  logoUrl           String?
+  profileStatus     PublicProfileStatus @default(DRAFT)
+  publishedAt       DateTime?
   name      String
   sport     Sport    @default(HOCKEY)
   season    String
@@ -231,6 +241,10 @@ model Team {
   // Feature 007 US3 — scoped responsibilities and volunteers.
   associationRoleGrants AssociationRoleGrant[]
   volunteerNeeds        VolunteerNeed[]
+
+  // Feature 007 US4 — public profiles and content.
+  publicSlugRedirects PublicSlugRedirect[]
+  publicContentItems  PublicContentItem[]
   @@unique([leagueId, id])
   @@index([leagueId]) // Optimize league-team queries
   @@index([divisionId]) // Optimize division-team queries
@@ -560,8 +574,21 @@ model League {
   contactPhone String?
   isActive     Boolean @default(true)
   // Public URL slug for the association events page; generated when the league
-  // first publishes a PUBLIC signup event, editable by league admins.
+  // first publishes a PUBLIC signup event, editable by league admins. Also the
+  // slug for the public association home added in feature 007 US4 — there is
+  // deliberately only one.
   slug         String? @unique
+
+  // Feature 007 US4 — publishable association profile. Field names mirror
+  // Venue's so the two public profiles read the same way.
+  publicDescription   String?
+  logoUrl             String?
+  brandPrimaryColor   String?
+  brandSecondaryColor String?
+  publicEmail         String?
+  publicPhone         String?
+  profileStatus       PublicProfileStatus @default(DRAFT)
+  publishedAt         DateTime?
 
   // Stripe Connect (direct charges) — the league/association is the merchant of
   // record for its hosted signup events. Mirrors VenueOrganization.
@@ -616,6 +643,10 @@ model League {
   // Feature 007 US3 — scoped responsibilities and volunteers.
   associationRoleGrants     AssociationRoleGrant[]
   volunteerNeeds            VolunteerNeed[]
+
+  // Feature 007 US4 — public profiles and content.
+  publicSlugRedirects PublicSlugRedirect[]
+  publicContentItems  PublicContentItem[]
   @@map("leagues")
 }
 
@@ -3502,4 +3533,93 @@ model VolunteerAssignment {
   @@index([needId, status])
   @@index([userId, status])
   @@map("volunteer_assignments")
+}
+
+// ---------------------------------------------------------------------------
+// Feature 007 / User Story 4 — public association and team identity.
+//
+// League.slug already exists (minted when a league publishes its first PUBLIC
+// signup event) and stays the single association slug: adding a second would
+// give /associations/<slug>/events and the new pages divergent identities.
+// ---------------------------------------------------------------------------
+
+/// Publication state for association and team public profiles. Mirrors
+/// VenueProfileStatus rather than reusing it so the two can diverge.
+enum PublicProfileStatus {
+  DRAFT
+  PUBLISHED
+  UNPUBLISHED
+  ARCHIVED
+}
+
+enum PublicContentStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHED
+  ARCHIVED
+}
+
+/// Who may read a content item. MEMBERS_ONLY is never selected by the public
+/// readers; it exists so an association can post to its own people without a
+/// second system.
+enum PublicContentVisibility {
+  PUBLIC
+  MEMBERS_ONLY
+}
+
+/// A slug that used to point somewhere and must keep resolving.
+///
+/// The row stores the *id* of the current target, not its slug, so renames
+/// never build chains and a redirect always lands on whatever the target is
+/// called today. `teamId` null means the row is a retired association slug.
+model PublicSlugRedirect {
+  id        String   @id @default(cuid())
+  slug      String
+  createdAt DateTime @default(now())
+
+  leagueId String
+  league   League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  teamId String?
+  team   Team?   @relation(fields: [leagueId, teamId], references: [leagueId, id], onDelete: Cascade)
+
+  // Association slugs are globally unique, team slugs unique within a league.
+  // Both are partial unique indexes in the migration, because Postgres treats
+  // NULL teamId values as distinct and a plain @@unique would not dedupe them.
+  @@index([leagueId])
+  @@map("public_slug_redirects")
+}
+
+/// An association or team news item / announcement.
+model PublicContentItem {
+  id          String                  @id @default(cuid())
+  slug        String
+  title       String
+  body        String
+  summary     String?
+  status      PublicContentStatus     @default(DRAFT)
+  visibility  PublicContentVisibility @default(PUBLIC)
+  /// When the item becomes readable. Publication is a time-gated read rather
+  /// than a scheduled job, which is what makes it idempotent: nothing has to
+  /// run at the appointed minute.
+  publishAt   DateTime?
+  publishedAt DateTime?
+  archivedAt  DateTime?
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+
+  leagueId String
+  league   League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  /// Set for a team news post; null for an association-wide one.
+  teamId String?
+  team   Team?   @relation(fields: [leagueId, teamId], references: [leagueId, id], onDelete: Cascade)
+
+  authorId String?
+  author   User?   @relation("PublicContentAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@unique([leagueId, slug])
+  @@index([leagueId, status, publishAt])
+  @@index([leagueId, teamId, status])
+  @@map("public_content_items")
 }
