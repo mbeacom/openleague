@@ -7,14 +7,22 @@ import {
   Button,
   Card,
   Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   LinearProgress,
+  MenuItem,
   Stack,
+  TextField,
   Typography,
 } from "@mui/material";
 
 import type { VolunteerNeedSummary } from "@/lib/actions/volunteers";
 import {
+  assignVolunteer,
   completeVolunteerAssignment,
+  createVolunteerNeed,
   markVolunteerAssignmentMissed,
   respondToVolunteerAssignment,
 } from "@/lib/actions/volunteers";
@@ -43,6 +51,10 @@ function chipColor<T extends Record<string, string>>(
 }
 
 export interface VolunteerBoardProps {
+  /** Required for organizers, who can create needs here. */
+  leagueId?: string;
+  /** Teams a need may be scoped to; empty for volunteers. */
+  teams?: Array<{ id: string; name: string }>;
   needs: VolunteerNeedSummary[];
   /**
    * Organizers see fulfillment across every need and can close assignments
@@ -54,9 +66,24 @@ export interface VolunteerBoardProps {
   currentUserId?: string;
 }
 
-export function VolunteerBoard({ needs, isOrganizer }: VolunteerBoardProps) {
+export function VolunteerBoard({
+  leagueId,
+  teams = [],
+  needs,
+  isOrganizer,
+}: VolunteerBoardProps) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [assignFor, setAssignFor] = useState<string | null>(null);
+  const [assignEmail, setAssignEmail] = useState("");
+  const [form, setForm] = useState({
+    roleLabel: "",
+    capacity: "1",
+    startAt: "",
+    endAt: "",
+    teamId: "",
+  });
 
   function run(action: () => Promise<{ success: boolean; error?: string }>) {
     setError(null);
@@ -68,19 +95,69 @@ export function VolunteerBoard({ needs, isOrganizer }: VolunteerBoardProps) {
     });
   }
 
-  if (needs.length === 0) {
-    return (
-      <Alert severity="info">
-        {isOrganizer
-          ? "No volunteer needs yet. Create one to start staffing the season."
-          : "You have no volunteer shifts right now."}
-      </Alert>
-    );
+  const timezone =
+    typeof Intl !== "undefined"
+      ? Intl.DateTimeFormat().resolvedOptions().timeZone
+      : "UTC";
+
+  function handleCreate() {
+    if (!leagueId) return;
+    setError(null);
+    startTransition(async () => {
+      const result = await createVolunteerNeed({
+        leagueId,
+        roleLabel: form.roleLabel,
+        capacity: Number(form.capacity),
+        startAt: new Date(form.startAt),
+        endAt: new Date(form.endAt),
+        timezone,
+        ...(form.teamId ? { teamId: form.teamId } : {}),
+      });
+      if (result.success) {
+        setCreateOpen(false);
+        setForm({ roleLabel: "", capacity: "1", startAt: "", endAt: "", teamId: "" });
+      } else {
+        setError(result.error);
+      }
+    });
+  }
+
+  function handleAssign(needId: string) {
+    setError(null);
+    startTransition(async () => {
+      const result = await assignVolunteer({ needId, invitedEmail: assignEmail });
+      if (result.success) {
+        setAssignFor(null);
+        setAssignEmail("");
+      } else {
+        setError(result.error);
+      }
+    });
   }
 
   return (
     <Stack spacing={2}>
       {error ? <Alert severity="error">{error}</Alert> : null}
+
+      {isOrganizer && leagueId ? (
+        <Box>
+          <Button
+            variant="contained"
+            onClick={() => setCreateOpen(true)}
+            sx={{ minHeight: 44 }}
+          >
+            Create volunteer need
+          </Button>
+        </Box>
+      ) : null}
+
+      {needs.length === 0 ? (
+        <Alert severity="info">
+          {isOrganizer
+            ? "No volunteer needs yet. Create one to start staffing the season."
+            : "You have no volunteer shifts right now."}
+        </Alert>
+      ) : null}
 
       {needs.map((need) => {
         const filled = need.capacity > 0 ? (need.acceptedCount / need.capacity) * 100 : 0;
@@ -100,7 +177,10 @@ export function VolunteerBoard({ needs, isOrganizer }: VolunteerBoardProps) {
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                   {need.teamName ? `${need.teamName} · ` : ""}
-                  {new Date(need.startAt).toLocaleString()} ({need.timezone})
+                  {new Date(need.startAt).toLocaleString(undefined, {
+                    timeZone: need.timezone,
+                  })}{" "}
+                  ({need.timezone})
                 </Typography>
               </Box>
               <Stack direction="row" spacing={1} alignItems="center">
@@ -225,10 +305,121 @@ export function VolunteerBoard({ needs, isOrganizer }: VolunteerBoardProps) {
                   Nobody assigned yet.
                 </Typography>
               ) : null}
+
+              {isOrganizer && need.status === "OPEN" ? (
+                <Box>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    disabled={pending}
+                    sx={{ minHeight: 44 }}
+                    onClick={() => {
+                      setAssignFor(need.id);
+                      setAssignEmail("");
+                    }}
+                  >
+                    Assign volunteer
+                  </Button>
+                </Box>
+              ) : null}
             </Stack>
           </Card>
         );
       })}
+
+      <Dialog open={createOpen} onClose={() => setCreateOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Create volunteer need</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField
+              label="Role"
+              value={form.roleLabel}
+              onChange={(e) => setForm({ ...form, roleLabel: e.target.value })}
+              fullWidth
+            />
+            <TextField
+              label="How many volunteers"
+              type="number"
+              value={form.capacity}
+              onChange={(e) => setForm({ ...form, capacity: e.target.value })}
+              fullWidth
+            />
+            <TextField
+              label="Starts"
+              type="datetime-local"
+              value={form.startAt}
+              onChange={(e) => setForm({ ...form, startAt: e.target.value })}
+              slotProps={{ inputLabel: { shrink: true } }}
+              fullWidth
+            />
+            <TextField
+              label="Ends"
+              type="datetime-local"
+              value={form.endAt}
+              onChange={(e) => setForm({ ...form, endAt: e.target.value })}
+              slotProps={{ inputLabel: { shrink: true } }}
+              fullWidth
+            />
+            {teams.length > 0 ? (
+              <TextField
+                select
+                label="Team (optional)"
+                value={form.teamId}
+                onChange={(e) => setForm({ ...form, teamId: e.target.value })}
+                fullWidth
+              >
+                <MenuItem value="">Whole association</MenuItem>
+                {teams.map((team) => (
+                  <MenuItem key={team.id} value={team.id}>
+                    {team.name}
+                  </MenuItem>
+                ))}
+              </TextField>
+            ) : null}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCreateOpen(false)} sx={{ minHeight: 44 }}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleCreate}
+            disabled={pending || !form.roleLabel || !form.startAt || !form.endAt}
+            sx={{ minHeight: 44 }}
+          >
+            Create
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={assignFor !== null} onClose={() => setAssignFor(null)} fullWidth maxWidth="xs">
+        <DialogTitle>Assign a volunteer</DialogTitle>
+        <DialogContent>
+          <TextField
+            label="Email address"
+            type="email"
+            value={assignEmail}
+            onChange={(e) => setAssignEmail(e.target.value)}
+            fullWidth
+            sx={{ mt: 1 }}
+            helperText="They need an existing account. Invite them to the association first if not."
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setAssignFor(null)} sx={{ minHeight: 44 }}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={() => assignFor && handleAssign(assignFor)}
+            disabled={pending || !assignEmail}
+            sx={{ minHeight: 44 }}
+          >
+            Assign
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Stack>
   );
 }

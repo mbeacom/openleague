@@ -19,7 +19,7 @@ import {
 } from "@/lib/auth/capabilities";
 import { AuditAction, logAuditEvent } from "@/lib/utils/security";
 import { rethrowIfNextRedirectError } from "@/lib/utils/next-errors";
-import { normalizeScope } from "@/lib/services/association-roles";
+import { normalizeScope, scopeBelongsToLeague } from "@/lib/services/association-roles";
 
 /**
  * Scoped responsibility grants (feature 007 / User Story 3).
@@ -72,61 +72,6 @@ const grantSchema = z.object({
 });
 
 export type GrantAssociationResponsibilityInput = z.infer<typeof grantSchema>;
-
-/**
- * Confirm the scope target exists *inside this association*.
- *
- * Without this a grant could name a team in someone else's league; the database
- * only enforces tenancy for the team scope, whose compound foreign key carries
- * the league id. Everything else is checked here.
- */
-async function scopeBelongsToLeague(
-  leagueId: string,
-  scopeType: AssociationRoleScopeType,
-  scopeId: string | null,
-): Promise<boolean> {
-  if (scopeType === "ASSOCIATION" || scopeId === null) return true;
-
-  switch (scopeType) {
-    case "DIVISION":
-      return (
-        (await prisma.division.findFirst({
-          where: { id: scopeId, leagueId },
-          select: { id: true },
-        })) !== null
-      );
-    case "TEAM":
-      return (
-        (await prisma.team.findFirst({
-          where: { id: scopeId, leagueId },
-          select: { id: true },
-        })) !== null
-      );
-    case "SEASON":
-      return (
-        (await prisma.season.findFirst({
-          where: { id: scopeId, leagueId },
-          select: { id: true },
-        })) !== null
-      );
-    case "EVENT":
-      return (
-        (await prisma.event.findFirst({
-          where: { id: scopeId, leagueId },
-          select: { id: true },
-        })) !== null
-      );
-    case "SIGNUP_EVENT":
-      return (
-        (await prisma.signupEvent.findFirst({
-          where: { id: scopeId, hostLeagueId: leagueId },
-          select: { id: true },
-        })) !== null
-      );
-    default:
-      return false;
-  }
-}
 
 /**
  * Only association administration may delegate. This is the anti-escalation
@@ -370,7 +315,7 @@ export type InviteAssociationOperatorInput = z.infer<typeof inviteSchema>;
  */
 export async function inviteAssociationOperator(
   input: InviteAssociationOperatorInput,
-): Promise<ActionResult<{ invitationId: string }>> {
+): Promise<ActionResult<{ invitationId: string } | { granted: true; id: string }>> {
   try {
     const actingUserId = await requireUserId();
     const validated = inviteSchema.parse(input);
@@ -398,21 +343,53 @@ export async function inviteAssociationOperator(
     // Same construction as the other invitation senders. It cannot be imported
     // from lib/actions/invitations.ts: that file is "use server", so every
     // export there must be an async action, not a helper.
+    // An account that already exists cannot accept a signup invitation —
+    // lib/actions/auth.ts rejects signup for a known address — so grant
+    // directly instead of creating a row nobody can redeem.
+    const existingUser = await prisma.user.findUnique({
+      where: { email: validated.email.toLowerCase() },
+      select: { id: true },
+    });
+
+    if (existingUser) {
+      const granted = await grantAssociationResponsibility({
+        leagueId: validated.leagueId,
+        userId: existingUser.id,
+        role: validated.role,
+        scopeType: validated.scopeType,
+        divisionId: validated.divisionId,
+        teamId: validated.teamId,
+        seasonId: validated.seasonId,
+        eventId: validated.eventId,
+        signupEventId: validated.signupEventId,
+        notes: validated.notes,
+      });
+
+      if (!granted.success) return granted;
+      return { success: true, data: { granted: true as const, id: granted.data.id } };
+    }
+
+    // Same construction as the other invitation senders. It cannot be imported
+    // from lib/actions/invitations.ts: that file is "use server", so every
+    // export there must be an async action, not a helper.
     const token = randomBytes(32).toString("hex");
+
+    // Invitation_exactly_one_target permits exactly one of teamId / leagueId /
+    // organizationId. A TEAM-scoped grant therefore travels as a team-target
+    // invitation and acceptance resolves the owning league from the team;
+    // every other scope travels as a league-target invitation.
+    const isTeamTarget = validated.scopeType === "TEAM";
 
     const invitation = await prisma.invitation.create({
       data: {
         email: validated.email.toLowerCase(),
         token,
-        leagueId: validated.leagueId,
+        teamId: isTeamTarget ? scope.data.teamId : null,
+        leagueId: isTeamTarget ? null : validated.leagueId,
         invitedById: actingUserId,
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
         associationRole: validated.role,
         associationScopeType: validated.scopeType,
-        // TEAM and ASSOCIATION reuse the invitation's existing columns; the
-        // rest get their own so acceptance can apply any scope the grant model
-        // supports.
-        teamId: validated.scopeType === "TEAM" ? scope.data.teamId : null,
         associationDivisionId: scope.data.divisionId,
         associationSeasonId: scope.data.seasonId,
         associationEventId: scope.data.eventId,
@@ -420,6 +397,39 @@ export async function inviteAssociationOperator(
       },
       select: { id: true },
     });
+
+    // Reporting "invitation sent" without sending one leaves the recipient with
+    // no way to discover the token, so the send happens before we claim success.
+    const [league, inviter] = await Promise.all([
+      prisma.league.findUnique({
+        where: { id: validated.leagueId },
+        select: { name: true },
+      }),
+      prisma.user.findUnique({
+        where: { id: actingUserId },
+        select: { name: true, email: true },
+      }),
+    ]);
+
+    try {
+      const { sendLeagueInvitationEmail } = await import("@/lib/email/templates");
+      await sendLeagueInvitationEmail({
+        email: validated.email.toLowerCase(),
+        leagueName: league?.name ?? "your association",
+        inviterName: inviter?.name ?? inviter?.email ?? "An administrator",
+        token,
+      });
+    } catch (emailError) {
+      // The row is useless without the token reaching them, so this is a
+      // failure rather than a warning. The invitation is removed so a retry
+      // does not collide with an orphan.
+      console.error("Failed to send association operator invitation:", emailError);
+      await prisma.invitation.delete({ where: { id: invitation.id } }).catch(() => {});
+      return {
+        success: false,
+        error: "The invitation could not be emailed. Please try again.",
+      };
+    }
 
     revalidatePath(`/league/${validated.leagueId}/workforce`);
     return { success: true, data: { invitationId: invitation.id } };

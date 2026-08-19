@@ -6,85 +6,15 @@ import { prisma } from "@/lib/db/prisma";
 import { LeagueAccessLevel, logAuditEvent, AuditAction } from "./security";
 import { sanitizeErrorForLogging } from "./error-handling";
 import type { GearAction } from "@/lib/auth/capabilities";
+import { Permission, TEAM_SCOPED_PERMISSIONS, type TeamScopedPermission } from "./permission-types";
 
 /**
  * Permission definitions for different operations
  */
-export enum Permission {
-    // League management
-    CREATE_LEAGUE = "create_league",
-    UPDATE_LEAGUE = "update_league",
-    DELETE_LEAGUE = "delete_league",
-    VIEW_LEAGUE = "view_league",
-
-    // Team management
-    CREATE_TEAM = "create_team",
-    UPDATE_TEAM = "update_team",
-    DELETE_TEAM = "delete_team",
-    VIEW_TEAM = "view_team",
-    MIGRATE_TEAM = "migrate_team",
-
-    // Division management
-    CREATE_DIVISION = "create_division",
-    UPDATE_DIVISION = "update_division",
-    DELETE_DIVISION = "delete_division",
-    ASSIGN_TEAM_TO_DIVISION = "assign_team_to_division",
-
-    // Player management
-    ADD_PLAYER = "add_player",
-    UPDATE_PLAYER = "update_player",
-    REMOVE_PLAYER = "remove_player",
-    TRANSFER_PLAYER = "transfer_player",
-    VIEW_PLAYER_DETAILS = "view_player_details",
-    VIEW_EMERGENCY_CONTACTS = "view_emergency_contacts",
-
-    // Event management
-    CREATE_EVENT = "create_event",
-    UPDATE_EVENT = "update_event",
-    DELETE_EVENT = "delete_event",
-    CREATE_INTER_TEAM_GAME = "create_inter_team_game",
-
-    // Communication
-    SEND_LEAGUE_MESSAGE = "send_league_message",
-    SEND_LEAGUE_ANNOUNCEMENT = "send_league_announcement",
-    SEND_TEAM_MESSAGE = "send_team_message",
-
-    // User management
-    ASSIGN_LEAGUE_ROLE = "assign_league_role",
-    ASSIGN_TEAM_ROLE = "assign_team_role",
-    INVITE_USER = "invite_user",
-
-    // Reporting and data
-    EXPORT_LEAGUE_DATA = "export_league_data",
-    EXPORT_TEAM_DATA = "export_team_data",
-    VIEW_LEAGUE_REPORTS = "view_league_reports",
-    VIEW_FINANCIAL_REPORTS = "view_financial_reports",
-
-    // League-owned gear. Team-admin grants must always be evaluated with the
-    // requested team ID, while inventory and public wishlist administration
-    // remain league-admin operations.
-    MANAGE_GEAR_INVENTORY = "manage_gear_inventory",
-    MANAGE_GEAR_WISHLIST = "manage_gear_wishlist",
-    CREATE_TEAM_GEAR_NEED = "create_team_gear_need",
-    REQUEST_TEAM_GEAR = "request_team_gear",
-}
-
-export const TEAM_SCOPED_PERMISSIONS = [
-    Permission.UPDATE_TEAM,
-    Permission.DELETE_TEAM,
-    Permission.ADD_PLAYER,
-    Permission.UPDATE_PLAYER,
-    Permission.REMOVE_PLAYER,
-    Permission.CREATE_EVENT,
-    Permission.UPDATE_EVENT,
-    Permission.DELETE_EVENT,
-    Permission.SEND_TEAM_MESSAGE,
-    Permission.EXPORT_TEAM_DATA,
-    Permission.CREATE_TEAM_GEAR_NEED,
-    Permission.REQUEST_TEAM_GEAR,
-] as const;
-
-export type TeamScopedPermission = (typeof TEAM_SCOPED_PERMISSIONS)[number];
+// Declared in a dependency-free module so client components and tests can use
+// these values without pulling this file's dependency graph with them.
+export { Permission, TEAM_SCOPED_PERMISSIONS };
+export type { TeamScopedPermission };
 
 /**
  * Permission matrix mapping access levels to permissions
@@ -357,6 +287,37 @@ export async function requirePermission(
 
         throw new Error(`Permission denied: ${permission}`);
     }
+}
+
+/**
+ * Session-aware guard with `requireLeagueRole`'s ergonomics, but routed through
+ * the permission matrix so association role grants are honoured.
+ *
+ * Gear actions previously called `requireLeagueRole(leagueId, "LEAGUE_ADMIN")`
+ * directly, which meant an equipment-manager grant authorized nothing in
+ * practice — the grant bridge below was unreachable from the domain it exists
+ * to serve. Swapping those guards for this one is what connects them.
+ *
+ * The thrown message keeps the `Unauthorized:` prefix because callers and pages
+ * match on it to decide between a 404 and an error surface.
+ */
+export async function requirePermissionForLeague(
+    leagueId: string,
+    permission: Permission,
+    teamId?: string
+): Promise<string> {
+    const { requireUserId } = await import("@/lib/auth/session");
+    const userId = await requireUserId();
+
+    try {
+        // Reused rather than reimplemented so denials keep hitting the same
+        // PERMISSION_DENIED audit path.
+        await requirePermission(userId, leagueId, permission, teamId);
+    } catch {
+        throw new Error("Unauthorized: insufficient permissions for this action");
+    }
+
+    return userId;
 }
 
 /**

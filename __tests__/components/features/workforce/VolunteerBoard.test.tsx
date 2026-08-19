@@ -2,16 +2,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-const { mockRespond, mockComplete, mockMissed } = vi.hoisted(() => ({
+const { mockRespond, mockComplete, mockMissed, mockCreateNeed, mockAssign } = vi.hoisted(() => ({
   mockRespond: vi.fn(),
   mockComplete: vi.fn(),
   mockMissed: vi.fn(),
+  mockCreateNeed: vi.fn(),
+  mockAssign: vi.fn(),
 }));
 
 vi.mock("@/lib/actions/volunteers", () => ({
   respondToVolunteerAssignment: mockRespond,
   completeVolunteerAssignment: mockComplete,
   markVolunteerAssignmentMissed: mockMissed,
+  createVolunteerNeed: mockCreateNeed,
+  assignVolunteer: mockAssign,
 }));
 
 import VolunteerBoard from "@/components/features/workforce/VolunteerBoard";
@@ -146,9 +150,28 @@ describe("RoleGrantManager", () => {
   it("explains what the selected role actually confers", async () => {
     render(<RoleGrantManager {...props} />);
 
-    // Default selection is Team manager; its guidance should be on screen so an
-    // administrator is not delegating a word they have to guess the meaning of.
-    expect(screen.getByText(/Runs one team/)).toBeInTheDocument();
+    // Default selection is Team manager. The guidance states what the grant
+    // does *today* — volunteers and gear — and is explicit that roster and
+    // practice administration still follow team admin membership, so nobody
+    // delegates expecting more than they get.
+    expect(screen.getByText(/Volunteers and gear needs\/requests for one team/)).toBeInTheDocument();
+    expect(screen.getByText(/still follow team admin membership/)).toBeInTheDocument();
+  });
+
+  it("does not offer roles whose work is not yet routed through grants", async () => {
+    const user = userEvent.setup();
+    render(<RoleGrantManager {...props} />);
+
+    await user.click(screen.getByRole("combobox", { name: /Responsibility/i }));
+
+    // Offered: the roles a grant actually empowers.
+    expect(screen.getByRole("option", { name: "Equipment manager" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Volunteer coordinator" })).toBeInTheDocument();
+    // Withheld: scheduling, registration, finance, communications, and event
+    // administration still guard on legacy roles, so a grant would do nothing.
+    for (const withheld of ["Scheduler", "Registrar", "Treasurer", "Communications lead", "Coach", "Event manager"]) {
+      expect(screen.queryByRole("option", { name: withheld })).not.toBeInTheDocument();
+    }
   });
 
   it("warns that equipment managers get gear only", async () => {
@@ -168,14 +191,29 @@ describe("RoleGrantManager", () => {
     render(<RoleGrantManager {...props} />);
 
     await user.click(screen.getByRole("combobox", { name: /Responsibility/i }));
-    await user.click(screen.getByRole("option", { name: "Treasurer" }));
+    await user.click(screen.getByRole("option", { name: "Association admin" }));
 
     await user.click(screen.getByRole("combobox", { name: /Scope/i }));
 
-    // Treasurer is association-only; offering a team scope would build a
-    // combination the server refuses.
+    // Association admin is association-only; offering a team scope would build
+    // a combination the server refuses.
     expect(screen.getByRole("option", { name: "Entire association" })).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "One team" })).not.toBeInTheDocument();
+  });
+
+  it("never offers a scope the form cannot supply a target for", async () => {
+    const user = userEvent.setup();
+    render(<RoleGrantManager {...props} />);
+
+    await user.click(screen.getByRole("combobox", { name: /Responsibility/i }));
+    await user.click(screen.getByRole("option", { name: "Volunteer coordinator" }));
+    await user.click(screen.getByRole("combobox", { name: /Scope/i }));
+
+    // The matrix allows season and event scope for this role, but the form has
+    // no picker for them, so selecting one would always be rejected server-side.
+    for (const unsupported of ["One season", "One event", "One signup event"]) {
+      expect(screen.queryByRole("option", { name: unsupported })).not.toBeInTheDocument();
+    }
   });
 
   it("revokes a responsibility", async () => {

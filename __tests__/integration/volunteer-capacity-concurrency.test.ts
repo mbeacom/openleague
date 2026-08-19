@@ -224,6 +224,40 @@ describeWithTestDatabase("volunteer capacity concurrency (T057)", () => {
     }
   });
 
+  it("lets one accept win when the same assignment is answered twice at once", async () => {
+    // The case a compensating decrement cannot cover: both callers read the
+    // assignment as INVITED, so without a conditional claim inside the
+    // transaction they would each take a slot on a multi-slot need.
+    const fixture = await createFixture(2);
+
+    try {
+      const barrier = createBarrier(2);
+      const assignmentId = fixture.assignmentIds[0];
+
+      actingUsers.length = 0;
+      actingUsers.push(fixture.userIds[0], fixture.userIds[0]);
+
+      const results = await Promise.all(
+        [0, 1].map(async () => {
+          await barrier();
+          return respondToVolunteerAssignment({ assignmentId, response: "ACCEPTED" });
+        }),
+      );
+
+      expect(results.filter((r) => r.success)).toHaveLength(1);
+
+      const need = await prisma.volunteerNeed.findUnique({
+        where: { id: fixture.needId },
+        select: { acceptedCount: true },
+      });
+      // One assignment accepted means exactly one slot consumed, even though
+      // the need had room for two.
+      expect(need.acceptedCount).toBe(1);
+    } finally {
+      await cleanup(fixture.leagueId, fixture.userIds);
+    }
+  });
+
   it("refuses to let the database exceed capacity even by direct write", async () => {
     // Proves the CHECK backing the guard is really present, so a future caller
     // that forgets the guard still cannot oversubscribe.

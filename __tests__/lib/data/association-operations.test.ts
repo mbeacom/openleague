@@ -11,7 +11,9 @@ const { mockPrisma, mockAuth } = vi.hoisted(() => ({
     teamGearNeed: { findMany: vi.fn() },
     gearReservation: { findMany: vi.fn() },
     notificationOutbox: { findMany: vi.fn() },
-    volunteerNeed: { findMany: vi.fn() },
+    // `fields` backs the Prisma field reference the shortage query uses to
+    // compare acceptedCount against capacity in the database.
+    volunteerNeed: { findMany: vi.fn(), fields: { capacity: "capacity" } },
   },
   mockAuth: { requireLeagueRole: vi.fn() },
 }));
@@ -27,7 +29,7 @@ const to = new Date("2026-10-01T00:00:00.000Z");
 beforeEach(() => {
   vi.clearAllMocks();
   mockAuth.requireLeagueRole.mockResolvedValue("user-1");
-  for (const model of Object.values(mockPrisma)) model.findMany.mockResolvedValue([]);
+  for (const model of Object.values(mockPrisma)) model.findMany?.mockResolvedValue([]);
 });
 
 describe("getAssociationOperationsData", () => {

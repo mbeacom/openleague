@@ -3,10 +3,14 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 
+import type { AssociationRoleScopeType } from "@prisma/client";
+
 import { prisma } from "@/lib/db/prisma";
 import { requireUserId } from "@/lib/auth/session";
-import { Capability, hasCapability } from "@/lib/auth/capabilities";
+import { Capability, hasCapability, loadActiveGrants } from "@/lib/auth/capabilities";
+import { ROLE_CAPABILITY_MATRIX } from "@/lib/auth/capability-matrix";
 import { rethrowIfNextRedirectError } from "@/lib/utils/next-errors";
+import { scopeBelongsToLeague } from "@/lib/services/association-roles";
 
 /**
  * Volunteer needs and assignments (feature 007 / User Story 3).
@@ -16,6 +20,14 @@ import { rethrowIfNextRedirectError } from "@/lib/utils/next-errors";
  * else. Volunteers themselves need no capability: they act on assignments
  * addressed to them, which is checked by ownership rather than by role.
  */
+
+/** Rolls the acceptance transaction back with a reason the caller can report. */
+class VolunteerClaimError extends Error {
+  constructor(readonly reason: "FULL" | "ALREADY_ANSWERED") {
+    super(reason);
+    this.name = "VolunteerClaimError";
+  }
+}
 
 export type ActionResult<T> =
   | { success: true; data: T }
@@ -81,6 +93,23 @@ export async function createVolunteerNeed(
 
     if (!(await canOrganize(userId, validated.leagueId, validated))) {
       return { success: false, error: "You do not have permission to organize volunteers." };
+    }
+
+    // Only teamId has a compound tenant foreign key; the other scope columns
+    // would happily reference another association's division, event, or signup
+    // event. Without this a scoped coordinator could attach an association-owned
+    // need to a foreign tenant's activity.
+    const tenancyChecks: Array<[AssociationRoleScopeType, string | undefined]> = [
+      ["DIVISION", validated.divisionId],
+      ["TEAM", validated.teamId],
+      ["EVENT", validated.eventId],
+      ["SIGNUP_EVENT", validated.signupEventId],
+    ];
+    for (const [scopeType, scopeId] of tenancyChecks) {
+      if (!scopeId) continue;
+      if (!(await scopeBelongsToLeague(validated.leagueId, scopeType, scopeId))) {
+        return { success: false, error: "That scope does not belong to this association." };
+      }
     }
 
     const need = await prisma.volunteerNeed.create({
@@ -267,11 +296,30 @@ export async function assignVolunteer(
       return { success: false, error: "You do not have permission to organize volunteers." };
     }
 
+    // An assignment carrying only an email can never be answered: responding
+    // requires the signed-in user to own the row, and nothing claims an email
+    // assignment on signup. Resolve the address to an account, or say so
+    // plainly rather than creating a permanently dead shift.
+    let subjectUserId = validated.userId ?? null;
+    if (!subjectUserId && validated.invitedEmail) {
+      const existing = await prisma.user.findUnique({
+        where: { email: validated.invitedEmail.toLowerCase() },
+        select: { id: true },
+      });
+      if (!existing) {
+        return {
+          success: false,
+          error:
+            "That email address has no account yet. Invite them to the association first, then assign the shift.",
+        };
+      }
+      subjectUserId = existing.id;
+    }
+
     const assignment = await prisma.volunteerAssignment.create({
       data: {
         needId: need.id,
-        userId: validated.userId ?? null,
-        invitedEmail: validated.invitedEmail?.toLowerCase() ?? null,
+        userId: subjectUserId,
         assignedById: actingUserId,
       },
       select: { id: true },
@@ -347,31 +395,45 @@ export async function respondToVolunteerAssignment(
       return { success: true, data: { status: "DECLINED" } };
     }
 
-    const claimed = await prisma.volunteerNeed.updateMany({
-      where: {
-        id: assignment.need.id,
-        status: "OPEN",
-        acceptedCount: { lt: assignment.need.capacity },
-      },
-      data: { acceptedCount: { increment: 1 } },
-    });
-
-    if (claimed.count === 0) {
-      return { success: false, error: "That volunteer need is already full." };
-    }
-
+    // Both writes commit together or neither does. Claiming the assignment
+    // conditionally (still INVITED) is what stops two requests for the SAME
+    // assignment from each incrementing a multi-slot need; the guarded
+    // increment is what stops two different volunteers from taking one slot.
+    // A compensating decrement cannot cover the first case, because both
+    // callers would have already passed the status check.
     try {
-      await prisma.volunteerAssignment.update({
-        where: { id: assignment.id },
-        data: { status: "ACCEPTED", respondedAt: new Date() },
+      await prisma.$transaction(async (tx) => {
+        const claimedAssignment = await tx.volunteerAssignment.updateMany({
+          where: { id: assignment.id, status: "INVITED" },
+          data: { status: "ACCEPTED", respondedAt: new Date() },
+        });
+        if (claimedAssignment.count === 0) {
+          throw new VolunteerClaimError("ALREADY_ANSWERED");
+        }
+
+        const claimedSlot = await tx.volunteerNeed.updateMany({
+          where: {
+            id: assignment.need.id,
+            status: "OPEN",
+            acceptedCount: { lt: assignment.need.capacity },
+          },
+          data: { acceptedCount: { increment: 1 } },
+        });
+        if (claimedSlot.count === 0) {
+          // Rolls the assignment transition back with it.
+          throw new VolunteerClaimError("FULL");
+        }
       });
     } catch (error) {
-      // Hand the slot back rather than leaving it claimed by an assignment that
-      // never reached ACCEPTED.
-      await prisma.volunteerNeed.updateMany({
-        where: { id: assignment.need.id, acceptedCount: { gt: 0 } },
-        data: { acceptedCount: { decrement: 1 } },
-      });
+      if (error instanceof VolunteerClaimError) {
+        return {
+          success: false,
+          error:
+            error.reason === "FULL"
+              ? "That volunteer need is already full."
+              : "That assignment has already been answered.",
+        };
+      }
       throw error;
     }
 
@@ -503,16 +565,31 @@ export async function getVolunteerBoard(
     const userId = await requireUserId();
     const validated = cuid.parse(leagueId);
 
-    const isOrganizer = await hasCapability({
+    // Organizing authority is per need, not per association. Asking with an
+    // empty target classified every team-, division-, or event-scoped
+    // coordinator as a non-organizer, because narrow grants deliberately do
+    // not match an empty target — so the very people authorized to run those
+    // shifts saw only their own rows.
+    const grants = (await loadActiveGrants(userId, validated)).filter(
+      (grant) => ROLE_CAPABILITY_MATRIX[grant.role]?.capabilities.includes(
+        Capability.MANAGE_VOLUNTEERS,
+      ) && ROLE_CAPABILITY_MATRIX[grant.role]?.scopes.includes(grant.scopeType),
+    );
+
+    // Association-wide authority (a grant at association scope, or a legacy
+    // league admin) still short-circuits the per-need matching below.
+    const isAssociationOrganizer = await hasCapability({
       userId,
       leagueId: validated,
       capability: Capability.MANAGE_VOLUNTEERS,
     });
 
+    const hasAnyOrganizingGrant = isAssociationOrganizer || grants.length > 0;
+
     const needs = await prisma.volunteerNeed.findMany({
       where: {
         leagueId: validated,
-        ...(isOrganizer ? {} : { assignments: { some: { userId } } }),
+        ...(hasAnyOrganizingGrant ? {} : { assignments: { some: { userId } } }),
       },
       select: {
         id: true,
@@ -524,9 +601,14 @@ export async function getVolunteerBoard(
         startAt: true,
         endAt: true,
         timezone: true,
-        team: { select: { name: true } },
+        // Scope columns: needed to decide organizer standing per need.
+        teamId: true,
+        divisionId: true,
+        eventId: true,
+        signupEventId: true,
+        team: { select: { name: true, divisionId: true } },
         assignments: {
-          where: isOrganizer ? {} : { userId },
+          where: hasAnyOrganizingGrant ? {} : { userId },
           select: {
             id: true,
             status: true,
@@ -538,11 +620,49 @@ export async function getVolunteerBoard(
       orderBy: { startAt: "asc" },
     });
 
+    // Decide organizer standing per need, in memory, from the grants already
+    // loaded — one query rather than a hasCapability round-trip per row.
+    const organizesNeed = (need: {
+      teamId: string | null;
+      divisionId: string | null;
+      eventId: string | null;
+      signupEventId: string | null;
+      team: { divisionId: string | null } | null;
+    }): boolean => {
+      if (isAssociationOrganizer) return true;
+      return grants.some((grant) => {
+        switch (grant.scopeType) {
+          case "ASSOCIATION":
+            return true;
+          case "DIVISION":
+            return (
+              grant.divisionId !== null &&
+              (grant.divisionId === need.divisionId ||
+                grant.divisionId === need.team?.divisionId)
+            );
+          case "TEAM":
+            return grant.teamId !== null && grant.teamId === need.teamId;
+          case "EVENT":
+            return grant.eventId !== null && grant.eventId === need.eventId;
+          case "SIGNUP_EVENT":
+            return (
+              grant.signupEventId !== null && grant.signupEventId === need.signupEventId
+            );
+          default:
+            return false;
+        }
+      });
+    };
+
+    const visible = needs.filter(
+      (need) => organizesNeed(need) || need.assignments.length > 0,
+    );
+
     return {
       success: true,
       data: {
-        isOrganizer,
-        needs: needs.map((need) => ({
+        isOrganizer: isAssociationOrganizer || visible.some(organizesNeed),
+        needs: visible.map((need) => ({
           id: need.id,
           roleLabel: need.roleLabel,
           description: need.description,

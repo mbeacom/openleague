@@ -3,9 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const {
   mockNeed,
   mockAssignment,
+  mockUser,
   mockTransaction,
   mockRequireUserId,
   mockHasCapability,
+  mockLoadActiveGrants,
+  mockScopeBelongsToLeague,
 } = vi.hoisted(() => ({
   mockNeed: {
     create: vi.fn(),
@@ -20,15 +23,19 @@ const {
     updateMany: vi.fn(),
     findUnique: vi.fn(),
   },
+  mockUser: { findUnique: vi.fn() },
   mockTransaction: vi.fn(),
   mockRequireUserId: vi.fn(),
   mockHasCapability: vi.fn(),
+  mockLoadActiveGrants: vi.fn(),
+  mockScopeBelongsToLeague: vi.fn(),
 }));
 
 vi.mock("@/lib/db/prisma", () => ({
   prisma: {
     volunteerNeed: mockNeed,
     volunteerAssignment: mockAssignment,
+    user: mockUser,
     $transaction: mockTransaction,
   },
 }));
@@ -37,8 +44,18 @@ vi.mock("@/lib/auth/session", () => ({ requireUserId: mockRequireUserId }));
 
 vi.mock("@/lib/auth/capabilities", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/auth/capabilities")>();
-  return { ...actual, hasCapability: mockHasCapability };
+  return {
+    ...actual,
+    hasCapability: mockHasCapability,
+    loadActiveGrants: mockLoadActiveGrants,
+  };
 });
+
+// Tenancy validation shares the grant path's checker; here it is a seam so
+// these tests assert the action's decisions rather than re-testing lookups.
+vi.mock("@/lib/services/association-roles", () => ({
+  scopeBelongsToLeague: mockScopeBelongsToLeague,
+}));
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
@@ -66,6 +83,8 @@ describe("volunteer needs", () => {
     vi.clearAllMocks();
     mockRequireUserId.mockResolvedValue("organizer-1");
     mockHasCapability.mockResolvedValue(true);
+    mockLoadActiveGrants.mockResolvedValue([]);
+    mockScopeBelongsToLeague.mockResolvedValue(true);
     mockNeed.create.mockResolvedValue({ id: NEED });
     mockTransaction.mockResolvedValue([]);
   });
@@ -196,6 +215,8 @@ describe("volunteer assignment and capacity", () => {
     vi.clearAllMocks();
     mockRequireUserId.mockResolvedValue(VOLUNTEER);
     mockHasCapability.mockResolvedValue(true);
+    mockLoadActiveGrants.mockResolvedValue([]);
+    mockScopeBelongsToLeague.mockResolvedValue(true);
     mockAssignment.create.mockResolvedValue({ id: ASSIGNMENT });
     mockAssignment.update.mockResolvedValue({ id: ASSIGNMENT });
   });
@@ -244,26 +265,43 @@ describe("volunteer assignment and capacity", () => {
         status: "INVITED",
         need: acceptedNeed,
       });
+      mockAssignment.updateMany.mockResolvedValue({ count: 1 });
       mockNeed.updateMany.mockResolvedValue({ count: 1 });
+      // Interactive transaction: run the callback against the same mocks so
+      // the two conditional writes are observable.
+      mockTransaction.mockImplementation(async (fn: unknown) =>
+        typeof fn === "function"
+          ? (fn as (client: unknown) => unknown)({
+              volunteerAssignment: mockAssignment,
+              volunteerNeed: mockNeed,
+            })
+          : undefined,
+      );
     });
 
-    it("claims a slot with a guarded conditional update", async () => {
+    it("claims the assignment and a slot inside one transaction", async () => {
       const result = await respondToVolunteerAssignment({
         assignmentId: ASSIGNMENT,
         response: "ACCEPTED",
       });
 
       expect(result).toEqual({ success: true, data: { status: "ACCEPTED" } });
-      // The guard is what makes this atomic: Postgres evaluates
-      // acceptedCount < capacity at write time, so a second caller racing for
-      // the last slot matches zero rows.
+      // Conditional on still being INVITED: this is what stops two requests
+      // for the SAME assignment from each taking a slot on a multi-slot need.
+      expect(mockAssignment.updateMany).toHaveBeenCalledWith({
+        where: { id: ASSIGNMENT, status: "INVITED" },
+        data: expect.objectContaining({ status: "ACCEPTED" }),
+      });
+      // Guarded on capacity: this is what stops two different volunteers from
+      // taking the same last slot. Postgres evaluates it at write time.
       expect(mockNeed.updateMany).toHaveBeenCalledWith({
         where: { id: NEED, status: "OPEN", acceptedCount: { lt: 2 } },
         data: { acceptedCount: { increment: 1 } },
       });
+      expect(mockTransaction).toHaveBeenCalledTimes(1);
     });
 
-    it("reports the need full when the guarded update matches nothing", async () => {
+    it("reports the need full when the capacity guard matches nothing", async () => {
       mockNeed.updateMany.mockResolvedValue({ count: 0 });
 
       const result = await respondToVolunteerAssignment({
@@ -273,11 +311,11 @@ describe("volunteer assignment and capacity", () => {
 
       expect(result.success).toBe(false);
       if (!result.success) expect(result.error).toMatch(/already full/);
-      expect(mockAssignment.update).not.toHaveBeenCalled();
     });
 
-    it("returns the claimed slot if marking the assignment fails", async () => {
-      mockAssignment.update.mockRejectedValue(new Error("write failed"));
+    it("reports an already-answered assignment when the claim matches nothing", async () => {
+      // The row moved out of INVITED between the read and the write.
+      mockAssignment.updateMany.mockResolvedValue({ count: 0 });
 
       const result = await respondToVolunteerAssignment({
         assignmentId: ASSIGNMENT,
@@ -285,11 +323,9 @@ describe("volunteer assignment and capacity", () => {
       });
 
       expect(result.success).toBe(false);
-      // The counter must not stay incremented for a slot nobody holds.
-      expect(mockNeed.updateMany).toHaveBeenLastCalledWith({
-        where: { id: NEED, acceptedCount: { gt: 0 } },
-        data: { acceptedCount: { decrement: 1 } },
-      });
+      if (!result.success) expect(result.error).toMatch(/already been answered/);
+      // The slot is never claimed when the assignment claim fails.
+      expect(mockNeed.updateMany).not.toHaveBeenCalled();
     });
 
     it("does not touch capacity when declining", async () => {
@@ -361,6 +397,7 @@ describe("volunteer board visibility", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRequireUserId.mockResolvedValue(VOLUNTEER);
+    mockLoadActiveGrants.mockResolvedValue([]);
     mockNeed.findMany.mockResolvedValue([]);
   });
 
@@ -374,8 +411,52 @@ describe("volunteer board visibility", () => {
     expect(args.select.assignments.where).toEqual({});
   });
 
+  it("treats a team-scoped coordinator as an organizer for their own team's needs", async () => {
+    // The bug this covers: asking hasCapability with an empty target classified
+    // every narrow coordinator as a non-organizer, so the people authorized to
+    // run those shifts saw only their own rows.
+    mockHasCapability.mockResolvedValue(false);
+    mockLoadActiveGrants.mockResolvedValue([
+      {
+        role: "VOLUNTEER_COORDINATOR",
+        scopeType: "TEAM",
+        divisionId: null,
+        teamId: TEAM,
+        seasonId: null,
+        eventId: null,
+        signupEventId: null,
+      },
+    ]);
+    mockNeed.findMany.mockResolvedValue([
+      {
+        id: "need-mine", roleLabel: "Scorekeeper", description: null, capacity: 2,
+        acceptedCount: 0, status: "OPEN", startAt: new Date(), endAt: new Date(),
+        timezone: "America/Chicago", teamId: TEAM, divisionId: null, eventId: null,
+        signupEventId: null, team: { name: "Metro Blades", divisionId: null },
+        assignments: [{ id: "a1", status: "ACCEPTED", invitedEmail: null, user: { name: "Sam", email: "s@e.com" } }],
+      },
+      {
+        id: "need-other", roleLabel: "Timekeeper", description: null, capacity: 2,
+        acceptedCount: 0, status: "OPEN", startAt: new Date(), endAt: new Date(),
+        timezone: "America/Chicago", teamId: "other-team", divisionId: null, eventId: null,
+        signupEventId: null, team: { name: "Harbor Hawks", divisionId: null },
+        assignments: [],
+      },
+    ]);
+
+    const result = await getVolunteerBoard(LEAGUE);
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.isOrganizer).toBe(true);
+    // Their own team's need is visible with fulfillment; the other team's is not.
+    expect(result.data.needs.map((n) => n.id)).toEqual(["need-mine"]);
+    expect(result.data.needs[0].assignments).toHaveLength(1);
+  });
+
   it("shows a volunteer only needs they are assigned to, and only their own row", async () => {
     mockHasCapability.mockResolvedValue(false);
+    mockLoadActiveGrants.mockResolvedValue([]);
 
     await getVolunteerBoard(LEAGUE);
 

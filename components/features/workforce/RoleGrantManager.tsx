@@ -26,6 +26,27 @@ import {
   revokeAssociationResponsibility,
 } from "@/lib/actions/association-roles";
 
+/**
+ * Roles this form offers today.
+ *
+ * The server matrix knows all ten, but a grant only *does* something where the
+ * work has been routed through capability checks. As of feature 007 US3 that is
+ * gear (equipment manager, association admin), volunteers (coordinator, team
+ * manager, association admin), and delegation itself. Scheduling, registration,
+ * finance, communications, and event administration still guard on the legacy
+ * league/team roles, so offering those here would hand out responsibilities
+ * that silently do nothing. They are re-enabled as each action set is wired.
+ */
+const OFFERED_ROLES: AssociationRole[] = [
+  "ASSOCIATION_ADMIN",
+  "TEAM_MANAGER",
+  "VOLUNTEER_COORDINATOR",
+  "EQUIPMENT_MANAGER",
+];
+
+/** Scopes this form can supply a target for. */
+const SELECTABLE_SCOPES: AssociationRoleScopeType[] = ["ASSOCIATION", "DIVISION", "TEAM"];
+
 const ROLE_LABELS: Record<AssociationRole, string> = {
   ASSOCIATION_ADMIN: "Association admin",
   SCHEDULER: "Scheduler",
@@ -55,15 +76,16 @@ const SCOPE_LABELS: Record<AssociationRoleScopeType, string> = {
  */
 const ROLE_GUIDANCE: Record<AssociationRole, string> = {
   ASSOCIATION_ADMIN:
-    "Everything, including delegating to others. Grant sparingly.",
+    "Delegation, volunteers, and gear across the whole association. Grant sparingly. Note that scheduling, registration, and finance still follow league admin membership, not this grant.",
   SCHEDULER: "Ice requests, reservations, schedules, games, and practices.",
   REGISTRAR: "Rosters, placements, and registration eligibility and reporting.",
   TREASURER: "Payments, refunds, and financial reports.",
   COMMUNICATIONS_LEAD: "Public content and operational messages.",
   TEAM_MANAGER:
-    "Runs one team: its roster, events, practices, volunteers, and gear requests.",
+    "Volunteers and gear needs/requests for one team. Roster, event, and practice administration still follow team admin membership.",
   COACH: "Practice plans and practice participation for one team.",
-  VOLUNTEER_COORDINATOR: "Volunteer needs and assignments.",
+  VOLUNTEER_COORDINATOR:
+    "Volunteer needs and assignments within the scope you choose, and nothing else.",
   EVENT_MANAGER: "One exact event, without wider association access.",
   EQUIPMENT_MANAGER:
     "Gear only — inventory and the public wishlist at association scope, and team gear needs and requests within the scope you choose. Confers no scheduling, finance, or administrative access.",
@@ -95,7 +117,10 @@ export function RoleGrantManager({
   // administrator build a combination the server refuses, which reads as a bug
   // rather than as the intended least-privilege boundary.
   const allowedScopes = useMemo(
-    () => ROLE_CAPABILITY_MATRIX[role]?.scopes ?? [],
+    () =>
+      (ROLE_CAPABILITY_MATRIX[role]?.scopes ?? []).filter((scope) =>
+        SELECTABLE_SCOPES.includes(scope),
+      ),
     [role],
   );
 
@@ -104,7 +129,9 @@ export function RoleGrantManager({
 
   function handleRoleChange(next: AssociationRole) {
     setRole(next);
-    const scopes = ROLE_CAPABILITY_MATRIX[next]?.scopes ?? [];
+    const scopes = (ROLE_CAPABILITY_MATRIX[next]?.scopes ?? []).filter((scope) =>
+      SELECTABLE_SCOPES.includes(scope),
+    );
     if (!scopes.includes(scopeType)) {
       setScopeType(scopes[0] ?? "ASSOCIATION");
       setScopeId("");
@@ -171,7 +198,7 @@ export function RoleGrantManager({
             onChange={(event) => handleRoleChange(event.target.value as AssociationRole)}
             fullWidth
           >
-            {(Object.keys(ROLE_LABELS) as AssociationRole[]).map((option) => (
+            {OFFERED_ROLES.map((option) => (
               <MenuItem key={option} value={option}>
                 {ROLE_LABELS[option]}
               </MenuItem>

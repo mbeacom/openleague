@@ -23,6 +23,7 @@ import {
   ManageAccounts as ManageAccountsIcon,
   AdminPanelSettings as AdminPanelSettingsIcon,
   Inventory2 as GearIcon,
+  Diversity3 as WorkforceIcon,
   EmojiEvents as LeagueIcon,
   Assessment as OperationsIcon,
   EventAvailable as VenueReservationsIcon,
@@ -219,6 +220,18 @@ export default function MobileNavigation({ isLeagueMode = false, isPlatformAdmin
               <OperationsIcon />
             </ListItemIcon>
             <ListItemText>Operations</ListItemText>
+          </MenuItem>
+        )}
+        {isLeagueMode && currentLeague && (
+          <MenuItem
+            component={Link}
+            href={`/league/${currentLeague.id}/workforce`}
+            onClick={handleMenuClose}
+          >
+            <ListItemIcon>
+              <WorkforceIcon />
+            </ListItemIcon>
+            <ListItemText>Workforce</ListItemText>
           </MenuItem>
         )}
         {isLeagueMode && currentLeague && (

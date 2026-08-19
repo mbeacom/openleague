@@ -260,16 +260,17 @@ export async function getAssociationOperationsData(
       select: { status: true, scheduledAt: true },
       orderBy: { scheduledAt: "asc" },
     }),
-    // Open volunteer needs overlapping the window. The shortfall itself
-    // (acceptedCount < capacity) is computed below rather than in the `where`:
-    // Prisma cannot compare two columns of the same row, and a bounded take
-    // keeps this a dashboard query rather than a table scan.
+    // Understaffed open needs overlapping the window. The shortfall is part of
+    // the query via a Prisma field reference, so `take` bounds the *shortages*
+    // rather than the needs scanned — filtering after a take silently reported
+    // "everything staffed" whenever the first N happened to be full.
     prisma.volunteerNeed.findMany({
       where: {
         leagueId,
         status: "OPEN",
         startAt: { lt: to },
         endAt: { gt: from },
+        acceptedCount: { lt: prisma.volunteerNeed.fields.capacity },
       },
       select: {
         id: true,
@@ -333,9 +334,7 @@ export async function getAssociationOperationsData(
 
   // A shortage is an open need that still has unfilled slots. Surfaced to
   // organizers so a game is not discovered to be unstaffed on the morning.
-  const volunteerShortages = volunteerNeeds
-    .filter((need) => need.acceptedCount < need.capacity)
-    .map((need) => ({
+  const volunteerShortages = volunteerNeeds.map((need) => ({
       id: need.id,
       title: need.roleLabel,
       detail: `${need.capacity - need.acceptedCount} of ${need.capacity} unfilled${
@@ -343,7 +342,7 @@ export async function getAssociationOperationsData(
       }`,
       href: href(leagueId, "/workforce"),
       at: need.startAt.toISOString(),
-    }));
+  }));
 
   return {
     leagueId,

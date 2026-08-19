@@ -1,3 +1,5 @@
+import { prisma } from "@/lib/db/prisma";
+
 import type {
   AssociationRole,
   AssociationRoleScopeType,
@@ -7,6 +9,61 @@ import type {
 // Pure matrix module: importing lib/auth/capabilities here would pull Prisma
 // and the session helpers (and thus next-auth) into the invitation-acceptance
 // path, which is how an unrelated auth test lost its module resolution.
+/**
+ * Confirm the scope target exists *inside this association*.
+ *
+ * Without this a grant could name a team in someone else's league; the database
+ * only enforces tenancy for the team scope, whose compound foreign key carries
+ * the league id. Everything else is checked here.
+ */
+export async function scopeBelongsToLeague(
+  leagueId: string,
+  scopeType: AssociationRoleScopeType,
+  scopeId: string | null,
+): Promise<boolean> {
+  if (scopeType === "ASSOCIATION" || scopeId === null) return true;
+
+  switch (scopeType) {
+    case "DIVISION":
+      return (
+        (await prisma.division.findFirst({
+          where: { id: scopeId, leagueId },
+          select: { id: true },
+        })) !== null
+      );
+    case "TEAM":
+      return (
+        (await prisma.team.findFirst({
+          where: { id: scopeId, leagueId },
+          select: { id: true },
+        })) !== null
+      );
+    case "SEASON":
+      return (
+        (await prisma.season.findFirst({
+          where: { id: scopeId, leagueId },
+          select: { id: true },
+        })) !== null
+      );
+    case "EVENT":
+      return (
+        (await prisma.event.findFirst({
+          where: { id: scopeId, leagueId },
+          select: { id: true },
+        })) !== null
+      );
+    case "SIGNUP_EVENT":
+      return (
+        (await prisma.signupEvent.findFirst({
+          where: { id: scopeId, hostLeagueId: leagueId },
+          select: { id: true },
+        })) !== null
+      );
+    default:
+      return false;
+  }
+}
+
 import { supportedScopesForRole } from "@/lib/auth/capability-matrix";
 
 /**
@@ -96,8 +153,22 @@ export async function applyInvitationResponsibility(
   },
   userId: string,
 ): Promise<void> {
-  const { associationRole: role, associationScopeType: scopeType, leagueId } = invitation;
-  if (!role || !scopeType || !leagueId) return;
+  const { associationRole: role, associationScopeType: scopeType } = invitation;
+  if (!role || !scopeType) return;
+
+  // Invitation_exactly_one_target means a TEAM-scoped grant arrives as a
+  // team-target invitation with no leagueId, so the owning association is
+  // resolved from the team. Doing it inside the caller's transaction keeps the
+  // grant and the membership rows consistent.
+  let leagueId = invitation.leagueId;
+  if (!leagueId && invitation.teamId) {
+    const team = await tx.team.findUnique({
+      where: { id: invitation.teamId },
+      select: { leagueId: true },
+    });
+    leagueId = team?.leagueId ?? null;
+  }
+  if (!leagueId) return;
 
   if (!supportedScopesForRole(role).includes(scopeType)) return;
 

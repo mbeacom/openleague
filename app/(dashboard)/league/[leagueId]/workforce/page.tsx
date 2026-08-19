@@ -42,17 +42,16 @@ export default async function WorkforcePage({
 
   const { isOrganizer, needs } = volunteerBoard.data;
 
-  // Nothing to administer and no shifts of their own: this route has no
-  // content for them, and its existence is not worth advertising.
-  if (!canAdminister && !isOrganizer && needs.length === 0) {
-    notFound();
-  }
+  // Deliberately NOT a 404 for members with no shifts: the nav entry is shown
+  // to every league user, and a link that 404s is worse than a page saying
+  // there is nothing here yet. Non-members are already excluded — the board
+  // query is league-scoped and getVolunteerBoard fails for them.
 
   const [grantsResult, teams, membership] = await Promise.all([
     canAdminister
       ? listAssociationResponsibilityGrants(leagueId)
       : Promise.resolve(null),
-    canAdminister
+    canAdminister || volunteerBoard.data.isOrganizer
       ? prisma.team.findMany({
           where: { leagueId, isActive: true },
           select: { id: true, name: true, sport: true, season: true },
@@ -103,7 +102,13 @@ export default async function WorkforcePage({
           <Typography variant="h5" component="h2" gutterBottom>
             {isOrganizer ? "Volunteers" : "My shifts"}
           </Typography>
-          <VolunteerBoard needs={needs} isOrganizer={isOrganizer} currentUserId={userId} />
+          <VolunteerBoard
+            leagueId={leagueId}
+            teams={teams.map((team) => ({ id: team.id, name: team.name }))}
+            needs={needs}
+            isOrganizer={isOrganizer}
+            currentUserId={userId}
+          />
         </Box>
 
         {canAdminister ? (

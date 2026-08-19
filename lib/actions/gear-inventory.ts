@@ -3,7 +3,8 @@
 import { Prisma, type GearCondition, type GearUnitStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireLeagueRole } from "@/lib/auth/session";
+import { Permission } from "@/lib/utils/permission-types";
+import { requirePermissionForLeague } from "@/lib/utils/permissions";
 import { prisma } from "@/lib/db/prisma";
 import {
   adjustGearPoolStockSchema,
@@ -205,7 +206,7 @@ export async function createGearStorageLocation(
 ): Promise<ActionResult<{ id: string }>> {
   try {
     const validated = createGearStorageLocationSchema.parse(input);
-    const userId = await requireLeagueRole(validated.leagueId, "LEAGUE_ADMIN");
+    const userId = await requirePermissionForLeague(validated.leagueId, Permission.MANAGE_GEAR_INVENTORY);
     const location = await prisma.$transaction(async (tx) => {
       const created = await tx.gearStorageLocation.create({
         data: { ...validated, normalizedName: normalizeGearKey(validated.name) },
@@ -227,7 +228,7 @@ export async function createGearStorageLocation(
 export async function updateGearStorageLocation(input: unknown): Promise<ActionResult<{ id: string }>> {
   try {
     const validated = updateLocationSchema.parse(input);
-    const userId = await requireLeagueRole(validated.leagueId, "LEAGUE_ADMIN");
+    const userId = await requirePermissionForLeague(validated.leagueId, Permission.MANAGE_GEAR_INVENTORY);
     const location = await prisma.$transaction(async (tx) => {
       const existing = await tx.gearStorageLocation.findFirst({
         where: { id: validated.locationId, leagueId: validated.leagueId },
@@ -257,7 +258,7 @@ export async function updateGearStorageLocation(input: unknown): Promise<ActionR
 export async function archiveGearStorageLocation(input: unknown): Promise<ActionResult<{ id: string }>> {
   try {
     const { leagueId, locationId } = locationCommandSchema.parse(input);
-    const userId = await requireLeagueRole(leagueId, "LEAGUE_ADMIN");
+    const userId = await requirePermissionForLeague(leagueId, Permission.MANAGE_GEAR_INVENTORY);
     const location = await prisma.$transaction(async (tx) => {
       const existing = await tx.gearStorageLocation.findFirst({
         where: { id: locationId, leagueId, isActive: true }, select: { id: true },
@@ -296,7 +297,7 @@ export async function createGearCatalogItem(
 ): Promise<ActionResult<{ id: string }>> {
   try {
     const validated = createGearCatalogItemSchema.parse(input);
-    const userId = await requireLeagueRole(validated.leagueId, "LEAGUE_ADMIN");
+    const userId = await requirePermissionForLeague(validated.leagueId, Permission.MANAGE_GEAR_INVENTORY);
     const item = await prisma.$transaction(async (tx) => {
       const created = await tx.gearCatalogItem.create({
         data: { ...validated, normalizedKey: normalizeGearKey([validated.name, validated.category, validated.size ?? ""].join(" ")) },
@@ -319,7 +320,7 @@ export async function createGearCatalogItem(
 export async function updateGearCatalogItem(input: unknown): Promise<ActionResult<{ id: string }>> {
   try {
     const validated = updateCatalogSchema.parse(input);
-    const userId = await requireLeagueRole(validated.leagueId, "LEAGUE_ADMIN");
+    const userId = await requirePermissionForLeague(validated.leagueId, Permission.MANAGE_GEAR_INVENTORY);
     const item = await prisma.$transaction(async (tx) => {
       const existing = await tx.gearCatalogItem.findFirst({
         where: { id: validated.catalogItemId, leagueId: validated.leagueId },
@@ -373,7 +374,7 @@ export async function updateGearCatalogItem(input: unknown): Promise<ActionResul
 export async function archiveGearCatalogItem(input: unknown): Promise<ActionResult<{ id: string }>> {
   try {
     const { leagueId, catalogItemId } = catalogCommandSchema.parse(input);
-    const userId = await requireLeagueRole(leagueId, "LEAGUE_ADMIN");
+    const userId = await requirePermissionForLeague(leagueId, Permission.MANAGE_GEAR_INVENTORY);
     const item = await prisma.$transaction(async (tx) => {
       const existing = await tx.gearCatalogItem.findFirst({
         where: { id: catalogItemId, leagueId, isActive: true }, select: { id: true },
@@ -433,7 +434,7 @@ export async function adjustGearPoolStock(
 ): Promise<ActionResult<{ id: string; quantityOnHand: number; version: number }>> {
   try {
     const validated = adjustGearPoolStockSchema.parse(input);
-    const userId = await requireLeagueRole(validated.leagueId, "LEAGUE_ADMIN");
+    const userId = await requirePermissionForLeague(validated.leagueId, Permission.MANAGE_GEAR_INVENTORY);
     const stock = await withGearSerializableRetry(() => prisma.$transaction(async (tx) => {
       await Promise.all([
         ensureActiveCatalog(tx, validated.leagueId, validated.catalogItemId, "POOLED"),
@@ -504,7 +505,7 @@ export async function adjustGearPoolStock(
 export async function transferGearPoolStock(input: unknown): Promise<ActionResult<{ sourceId: string; destinationId: string }>> {
   try {
     const validated = transferPoolStockSchema.parse(input);
-    const userId = await requireLeagueRole(validated.leagueId, "LEAGUE_ADMIN");
+    const userId = await requirePermissionForLeague(validated.leagueId, Permission.MANAGE_GEAR_INVENTORY);
     const transfer = await withGearSerializableRetry(() => prisma.$transaction(async (tx) => {
       await Promise.all([
         ensureActiveCatalog(tx, validated.leagueId, validated.catalogItemId, "POOLED"),
@@ -571,7 +572,7 @@ export async function createGearUnit(
 ): Promise<ActionResult<{ id: string }>> {
   try {
     const validated = createGearUnitSchema.parse(input);
-    const userId = await requireLeagueRole(validated.leagueId, "LEAGUE_ADMIN");
+    const userId = await requirePermissionForLeague(validated.leagueId, Permission.MANAGE_GEAR_INVENTORY);
     const unit = await prisma.$transaction(async (tx) => {
       await ensureActiveCatalog(tx, validated.leagueId, validated.catalogItemId, "INDIVIDUAL");
       const assetTag = validated.assetTag ? normalizeGearAssetTag(validated.assetTag) : "";
@@ -610,7 +611,7 @@ export async function createGearUnit(
 export async function updateGearUnit(input: unknown): Promise<ActionResult<{ id: string }>> {
   try {
     const validated = updateUnitSchema.parse(input);
-    const userId = await requireLeagueRole(validated.leagueId, "LEAGUE_ADMIN");
+    const userId = await requirePermissionForLeague(validated.leagueId, Permission.MANAGE_GEAR_INVENTORY);
     const unit = await prisma.$transaction(async (tx) => {
       const existing = await tx.gearUnit.findFirst({
         where: { id: validated.unitId, leagueId: validated.leagueId },
@@ -647,7 +648,7 @@ export async function updateGearUnit(input: unknown): Promise<ActionResult<{ id:
 export async function transferGearUnit(input: unknown): Promise<ActionResult<{ id: string }>> {
   try {
     const validated = transferUnitSchema.parse(input);
-    const userId = await requireLeagueRole(validated.leagueId, "LEAGUE_ADMIN");
+    const userId = await requirePermissionForLeague(validated.leagueId, Permission.MANAGE_GEAR_INVENTORY);
     const unit = await prisma.$transaction(async (tx) => {
       const existing = await tx.gearUnit.findFirst({
         where: { id: validated.unitId, leagueId: validated.leagueId },
@@ -687,7 +688,7 @@ export async function transferGearUnit(input: unknown): Promise<ActionResult<{ i
 export async function changeGearUnitCondition(input: unknown): Promise<ActionResult<{ id: string }>> {
   try {
     const validated = changeUnitConditionSchema.parse(input);
-    const userId = await requireLeagueRole(validated.leagueId, "LEAGUE_ADMIN");
+    const userId = await requirePermissionForLeague(validated.leagueId, Permission.MANAGE_GEAR_INVENTORY);
     const unit = await prisma.$transaction(async (tx) => {
       const existing = await tx.gearUnit.findFirst({
         where: { id: validated.unitId, leagueId: validated.leagueId },
@@ -731,7 +732,7 @@ export async function changeGearUnitCondition(input: unknown): Promise<ActionRes
 export async function retireGearUnit(input: unknown): Promise<ActionResult<{ id: string }>> {
   try {
     const validated = retireUnitSchema.parse(input);
-    const userId = await requireLeagueRole(validated.leagueId, "LEAGUE_ADMIN");
+    const userId = await requirePermissionForLeague(validated.leagueId, Permission.MANAGE_GEAR_INVENTORY);
     const unit = await prisma.$transaction(async (tx) => {
       const existing = await tx.gearUnit.findFirst({
         where: { id: validated.unitId, leagueId: validated.leagueId },
@@ -767,7 +768,7 @@ export async function retireGearUnit(input: unknown): Promise<ActionResult<{ id:
 export async function unretireGearUnit(input: unknown): Promise<ActionResult<{ id: string }>> {
   try {
     const validated = unretireUnitSchema.parse(input);
-    const userId = await requireLeagueRole(validated.leagueId, "LEAGUE_ADMIN");
+    const userId = await requirePermissionForLeague(validated.leagueId, Permission.MANAGE_GEAR_INVENTORY);
     const unit = await prisma.$transaction(async (tx) => {
       const existing = await tx.gearUnit.findFirst({
         where: { id: validated.unitId, leagueId: validated.leagueId },

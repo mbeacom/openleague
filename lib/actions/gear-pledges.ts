@@ -4,7 +4,8 @@ import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireLeagueRole } from "@/lib/auth/session";
+import { Permission } from "@/lib/utils/permission-types";
+import { requirePermissionForLeague } from "@/lib/utils/permissions";
 import { prisma } from "@/lib/db/prisma";
 import { recordGearActivity, recordGearInventoryMovement } from "@/lib/services/gear-ledger";
 import { queueGearOutboxForEmail, queueGearOutboxForLeagueAdmins } from "@/lib/services/gear-outbox";
@@ -224,7 +225,7 @@ export async function receiveGearPledge(
   try {
     const validated = receiveGearPledgeSchema.parse(input);
     const payloadHash = receiptPayloadHash(validated);
-    const userId = await requireLeagueRole(validated.leagueId, "LEAGUE_ADMIN");
+    const userId = await requirePermissionForLeague(validated.leagueId, Permission.MANAGE_GEAR_WISHLIST);
     const result = await withGearSerializableRetry(() => prisma.$transaction(async (tx) => {
       const priorCommand = await tx.gearPledgeReceiptCommand.findUnique({
         where: {
@@ -576,7 +577,7 @@ export async function correctGearPledgeReceipt(
 ): Promise<ActionResult<{ receiptId: string; pledgeStatus: string; pledgeVersion: number }>> {
   try {
     const validated = correctGearPledgeReceiptSchema.parse(input);
-    const userId = await requireLeagueRole(validated.leagueId, "LEAGUE_ADMIN");
+    const userId = await requirePermissionForLeague(validated.leagueId, Permission.MANAGE_GEAR_WISHLIST);
     const result = await withGearSerializableRetry(() => prisma.$transaction(async (tx) => {
       const receipt = await tx.gearPledgeReceipt.findFirst({
         where: {
@@ -709,7 +710,7 @@ export async function redactGearPledgePii(
 ): Promise<ActionResult<{ id: string; version: number }>> {
   try {
     const validated = pledgeCommandSchema.parse(input);
-    const userId = await requireLeagueRole(validated.leagueId, "LEAGUE_ADMIN");
+    const userId = await requirePermissionForLeague(validated.leagueId, Permission.MANAGE_GEAR_WISHLIST);
     const result = await prisma.$transaction(async (tx) => {
       const pledge = await tx.gearPledge.findFirst({
         where: { id: validated.pledgeId, leagueId: validated.leagueId },
@@ -745,7 +746,7 @@ async function transitionPledge(
 ): Promise<ActionResult<{ id: string; status: string; version: number }>> {
   try {
     const validated = pledgeCommandSchema.parse(input);
-    const userId = await requireLeagueRole(validated.leagueId, "LEAGUE_ADMIN");
+    const userId = await requirePermissionForLeague(validated.leagueId, Permission.MANAGE_GEAR_WISHLIST);
     const result = await withGearSerializableRetry(() => prisma.$transaction(async (tx) => {
       const pledge = await tx.gearPledge.findFirst({
         where: { id: validated.pledgeId, leagueId: validated.leagueId, status: "PLEDGED" },
@@ -840,7 +841,7 @@ export type GearPledgeAdminContext = Array<{
 }>;
 
 export async function getGearPledgeAdminContext(leagueId: string): Promise<GearPledgeAdminContext> {
-  await requireLeagueRole(leagueId, "LEAGUE_ADMIN");
+  await requirePermissionForLeague(leagueId, Permission.MANAGE_GEAR_WISHLIST);
   const pledges = await prisma.gearPledge.findMany({
     where: { leagueId },
     select: {

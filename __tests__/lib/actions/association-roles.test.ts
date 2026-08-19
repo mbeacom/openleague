@@ -9,9 +9,11 @@ const {
   mockEvent,
   mockSignupEvent,
   mockInvitation,
+  mockLeague,
   mockRequireUserId,
   mockHasCapability,
   mockLogAuditEvent,
+  mockSendInvitationEmail,
 } = vi.hoisted(() => ({
   mockGrant: { findFirst: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
   mockUser: { findUnique: vi.fn() },
@@ -20,10 +22,12 @@ const {
   mockSeason: { findFirst: vi.fn() },
   mockEvent: { findFirst: vi.fn() },
   mockSignupEvent: { findFirst: vi.fn() },
-  mockInvitation: { create: vi.fn() },
+  mockInvitation: { create: vi.fn(), delete: vi.fn() },
+  mockLeague: { findUnique: vi.fn() },
   mockRequireUserId: vi.fn(),
   mockHasCapability: vi.fn(),
   mockLogAuditEvent: vi.fn(),
+  mockSendInvitationEmail: vi.fn(),
 }));
 
 vi.mock("@/lib/db/prisma", () => ({
@@ -36,6 +40,7 @@ vi.mock("@/lib/db/prisma", () => ({
     event: mockEvent,
     signupEvent: mockSignupEvent,
     invitation: mockInvitation,
+    league: mockLeague,
   },
 }));
 
@@ -47,6 +52,10 @@ vi.mock("@/lib/utils/security", () => ({
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+
+vi.mock("@/lib/email/templates", () => ({
+  sendLeagueInvitationEmail: mockSendInvitationEmail,
+}));
 
 // The capability resolver has its own suite; here it is a seam so these tests
 // assert the action's authorization *decisions*, not the resolver's internals.
@@ -372,6 +381,13 @@ describe("association responsibility grants", () => {
   describe("inviting an operator", () => {
     beforeEach(() => {
       mockInvitation.create.mockResolvedValue({ id: "invite-1" });
+      mockInvitation.delete.mockResolvedValue({});
+      mockLeague.findUnique.mockResolvedValue({ name: "Metro Hockey League" });
+      mockSendInvitationEmail.mockResolvedValue(undefined);
+      // Default: the address has no account yet, so the invitation path runs.
+      mockUser.findUnique.mockImplementation(({ where }: { where: { email?: string } }) =>
+        where.email ? Promise.resolve(null) : Promise.resolve({ id: SUBJECT }),
+      );
     });
 
     it("stores the pending responsibility on the invitation", async () => {
@@ -394,6 +410,87 @@ describe("association responsibility grants", () => {
           }),
         }),
       );
+    });
+
+    it("names exactly one invitation target, as the database requires", async () => {
+      // Invitation_exactly_one_target permits one of teamId / leagueId /
+      // organizationId. Setting both is a hard constraint violation, which a
+      // mocked create will happily accept — hence this explicit shape check.
+      await inviteAssociationOperator({
+        leagueId: LEAGUE,
+        email: "coach@example.com",
+        role: "COACH",
+        scopeType: "TEAM",
+        teamId: TEAM,
+      });
+
+      const data = mockInvitation.create.mock.calls[0][0].data;
+      expect(data.teamId).toBe(TEAM);
+      expect(data.leagueId).toBeNull();
+
+      mockInvitation.create.mockClear();
+
+      await inviteAssociationOperator({
+        leagueId: LEAGUE,
+        email: "treasurer@example.com",
+        role: "TREASURER",
+        scopeType: "ASSOCIATION",
+      });
+
+      const assoc = mockInvitation.create.mock.calls[0][0].data;
+      expect(assoc.leagueId).toBe(LEAGUE);
+      expect(assoc.teamId).toBeNull();
+    });
+
+    it("emails the token before reporting success", async () => {
+      await inviteAssociationOperator({
+        leagueId: LEAGUE,
+        email: "new@example.com",
+        role: "COACH",
+        scopeType: "TEAM",
+        teamId: TEAM,
+      });
+
+      expect(mockSendInvitationEmail).toHaveBeenCalledWith(
+        expect.objectContaining({ email: "new@example.com" }),
+      );
+    });
+
+    it("does not claim success when the invitation cannot be emailed", async () => {
+      mockSendInvitationEmail.mockRejectedValue(new Error("smtp down"));
+
+      const result = await inviteAssociationOperator({
+        leagueId: LEAGUE,
+        email: "new@example.com",
+        role: "COACH",
+        scopeType: "TEAM",
+        teamId: TEAM,
+      });
+
+      expect(result.success).toBe(false);
+      // The row is useless without the token reaching them, so it is removed
+      // rather than left as an orphan a retry would collide with.
+      expect(mockInvitation.delete).toHaveBeenCalled();
+    });
+
+    it("grants directly when the address already has an account", async () => {
+      // Signup is refused for a known address, so an invitation would be
+      // unredeemable. Grant instead.
+      mockUser.findUnique.mockImplementation(({ where }: { where: { email?: string; id?: string } }) =>
+        where.email ? Promise.resolve({ id: SUBJECT }) : Promise.resolve({ id: SUBJECT }),
+      );
+
+      const result = await inviteAssociationOperator({
+        leagueId: LEAGUE,
+        email: "existing@example.com",
+        role: "COACH",
+        scopeType: "TEAM",
+        teamId: TEAM,
+      });
+
+      expect(result.success).toBe(true);
+      expect(mockInvitation.create).not.toHaveBeenCalled();
+      expect(mockGrant.create).toHaveBeenCalled();
     });
 
     it("refuses a role/scope pairing the matrix does not support", async () => {
@@ -429,10 +526,12 @@ describe("association responsibility grants", () => {
 describe("applying a responsibility at invitation acceptance", () => {
   const tx = {
     associationRoleGrant: { findFirst: vi.fn(), create: vi.fn() },
+    team: { findUnique: vi.fn() },
   } as unknown as Parameters<typeof applyInvitationResponsibility>[0];
 
   const txMocks = tx as unknown as {
     associationRoleGrant: { findFirst: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> };
+    team: { findUnique: ReturnType<typeof vi.fn> };
   };
 
   const invitation = {
@@ -499,8 +598,24 @@ describe("applying a responsibility at invitation acceptance", () => {
     expect(txMocks.associationRoleGrant.create).not.toHaveBeenCalled();
   });
 
-  it("skips an invitation with no association", async () => {
+  it("resolves the association from the team for a team-target invitation", async () => {
+    // TEAM-scoped invitations carry teamId and no leagueId, so acceptance looks
+    // the association up rather than bailing out.
+    txMocks.team.findUnique.mockResolvedValue({ leagueId: LEAGUE });
+
     await applyInvitationResponsibility(tx, { ...invitation, leagueId: null }, SUBJECT);
+
+    expect(txMocks.associationRoleGrant.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ leagueId: LEAGUE }) }),
+    );
+  });
+
+  it("skips an invitation with neither an association nor a team", async () => {
+    await applyInvitationResponsibility(
+      tx,
+      { ...invitation, leagueId: null, teamId: null },
+      SUBJECT,
+    );
 
     expect(txMocks.associationRoleGrant.create).not.toHaveBeenCalled();
   });

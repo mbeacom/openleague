@@ -55,7 +55,7 @@ export interface HasCapabilityOptions extends CapabilityTarget {
 }
 
 /** The grant columns scope resolution needs. */
-interface GrantRow {
+export interface GrantRow {
   role: AssociationRole;
   scopeType: AssociationRoleScopeType;
   divisionId: string | null;
@@ -132,7 +132,7 @@ async function userAdministersTeam(
  * work has nothing to match against and returns false rather than defaulting to
  * "any team".
  */
-async function grantCoversTarget(
+export async function grantCoversTarget(
   leagueId: string,
   grant: GrantRow,
   target: CapabilityTarget,
@@ -273,6 +273,15 @@ export async function grantsAllowGearAction(options: {
   const grants = await loadActiveGrants(userId, leagueId);
 
   for (const grant of grants) {
+    // An explicit ASSOCIATION_ADMIN grant carries every capability, gear
+    // included — the role matrix says so, and the data model lists association
+    // gear access. Without this an invited association admin who is not also a
+    // legacy LeagueUser LEAGUE_ADMIN reaches the gear domain as a plain member.
+    // The mandatory-teamId check above still applies.
+    if (grant.role === "ASSOCIATION_ADMIN" && grant.scopeType === "ASSOCIATION") {
+      return true;
+    }
+
     if (grant.role === "EQUIPMENT_MANAGER") {
       switch (grant.scopeType) {
         case "ASSOCIATION":
