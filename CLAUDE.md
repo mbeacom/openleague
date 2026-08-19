@@ -567,10 +567,17 @@ The two ADR badges in `README.md` — corpus size and ARB queue depth — are a
 recipe over JSON adrkit already emits, not a hosted service. When the corpus
 changes on `main`, `.github/workflows/adr-badges.yml` regenerates
 `.adrkit/lint.json` (`$.checked`) and `.adrkit/queue.json` (`$.totalItems`),
-validates them with `bun run adr:check-reports`, and commits them for
-shields.io to read. A malformed report renders as `no result` rather than
+validates them with `bun run adr:check-reports`, and force-pushes them as a
+single orphan commit to the dedicated **`badges`** branch, which is what
+shields.io reads. It does not write to `main`: the `main` ruleset requires four
+status checks that a workflow push cannot produce, so publishing there was
+rejected with GH013. A malformed report renders as `no result` rather than
 failing, so it is validated before it is published; regenerate the pair locally
 with the same two commands the workflow runs if you need to inspect them.
+
+The `.adrkit/*.json` committed on `main` are a point-in-time snapshot, not the
+published artifact — the `badges` branch is. Do not trust main's copies to be
+current, and do not "fix" the workflow by pointing it back at `main`.
 
 ### CI/CD and Releases
 
@@ -589,9 +596,17 @@ smoke tests, deployment checks, and CodeQL.
 **Release process**:
 1. Merge to `main` branch triggers automated release workflow
 2. GitHub Actions runs type-checking, linting, and the build
-3. Semantic version determined from commit messages
+3. Semantic version determined from commit messages, derived from the latest
+   git tag (`git describe --tags`) — tags are the source of truth
 4. Changelog generated automatically
-5. GitHub release created with assets
+5. Git tag pushed and GitHub release created with assets
+
+`package.json`'s `version` is deliberately **not** bumped and therefore trails
+the latest tag. The workflow used to commit that bump to `main`, but the `main`
+ruleset rejects workflow pushes, and the failure aborted the job before it ever
+tagged or released. Nothing reads the field at build or runtime, so it was
+dropped rather than worked around. Read the version from the newest tag or the
+GitHub release — the README's version badge does.
 
 See `.github/AUTOMATION.md` for full CI/CD details.
 

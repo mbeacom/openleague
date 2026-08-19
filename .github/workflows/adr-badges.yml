@@ -45,10 +45,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
-          # Full history: the push step rebases onto main when another workflow
-          # (release.yml also pushes there) landed a commit mid-run, and a
-          # shallow clone makes that rebase unreliable.
-          fetch-depth: 0
+          # `adrkit queue` reads the corpus, not history, and the publish step
+          # below builds an orphan commit, so neither needs ancestry. The
+          # default shallow clone is enough.
+          fetch-depth: 1
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
@@ -92,39 +92,42 @@ jobs:
           mv .adrkit-staging/lint.json .adrkit-staging/queue.json .adrkit/
           rmdir .adrkit-staging
 
-      - name: Commit when the reports changed
+      # Published to a dedicated `badges` branch, NOT to main.
+      #
+      # The `main` ruleset requires four status checks, and a push straight from
+      # a workflow produces none of them, so pushing here was rejected outright
+      # with GH013. The previous rebase-and-retry loop could not help: the
+      # rejection is a rule violation, not a lost race, so all three attempts
+      # failed identically and the job errored. The ruleset is scoped to
+      # `~DEFAULT_BRANCH`, so any other branch is unrestricted.
+      #
+      # This also removes the reason this job was uneasy about itself: it no
+      # longer writes to the default branch at all.
+      #
+      # The branch holds nothing but these two generated files and has no
+      # history worth keeping, so each run rebuilds it as a single orphan commit
+      # and force-pushes. That is race-free by construction, which rebasing onto
+      # a shared branch never was. `[skip ci]` is gone with it -- no workflow
+      # watches this branch, so there is nothing to suppress.
+      - name: Publish the reports to the badges branch
         run: |
-          # `git diff` alone cannot see an untracked file, so on the first run it
-          # would report "no change" and never publish anything. Compare against
-          # the index, and stage the paths explicitly -- `commit -am` does not
-          # stage a new file and would sweep in unrelated tracked edits.
-          git add .adrkit/lint.json .adrkit/queue.json
-          if git diff --cached --quiet -- .adrkit; then
-            echo "Reports unchanged; nothing to commit."
-            exit 0
-          fi
-
           git config user.name  'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          # `[skip ci]` matches the convention release.yml already uses for its
-          # version-bump commit. Without it this push starts a release run and a
-          # full quality-gates run for a two-file JSON refresh; `.adrkit/**` is
-          # not covered by release.yml's `paths-ignore`, so the marker is what
-          # stops it.
-          git commit -m 'chore(adr): refresh corpus badge reports [skip ci]'
 
-          # release.yml pushes to main too, so a commit can land between the
-          # checkout and this push. The reports touch only .adrkit/*.json, which
-          # no other workflow writes, so the rebase applies cleanly and a plain
-          # retry is enough. No --force: this is a shared branch.
-          for attempt in 1 2 3; do
-            if git push; then
-              echo "Published on attempt $attempt."
-              exit 0
-            fi
-            echo "Push rejected on attempt $attempt; rebasing onto main."
-            git pull --rebase origin main
-          done
+          # --orphan keeps the working tree (the freshly generated reports) but
+          # starts with no parent, and stages every tracked path. `git reset`
+          # empties that index so the commit below can contain only these two
+          # files -- without it the branch would carry the whole repository.
+          #
+          # `git reset`, not `git rm -r --cached .`: the reports differ from
+          # HEAD at this point (they were just regenerated), and `git rm`
+          # refuses to drop a path whose staged content differs from both the
+          # file and HEAD. It fails, the index survives, and the branch
+          # silently gets everything.
+          git checkout --quiet --orphan badge-reports
+          git reset --quiet
+          git add .adrkit/lint.json .adrkit/queue.json
+          git commit --quiet -m 'chore(adr): refresh corpus badge reports'
 
-          echo "::error::Could not publish the ADR badge reports after 3 attempts."
-          exit 1
+          git push --force origin HEAD:badges
+          echo "Published to the badges branch."

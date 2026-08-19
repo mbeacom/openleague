@@ -184,7 +184,8 @@ These are automatically provided by GitHub Actions.
 
 ### Don'ts ❌
 
-- Don't manually edit version in package.json on `main`
+- Don't expect `package.json`'s version to track releases — it is deliberately
+  not bumped, and trails the newest tag (see "Check Version" below)
 - Don't create duplicate tags
 - Don't skip CI checks
 - Don't force push to `main`
@@ -220,15 +221,20 @@ gh run watch
 
 ### Check Version
 
-```bash
-# Current package.json version
-cat package.json | grep '"version"'
+The released version is the newest **git tag**, not `package.json`. The release
+workflow derives the version from `git describe` and no longer writes the field
+back, because pushing that bump to `main` is rejected by the branch ruleset and
+the failure used to abort the tag and release steps entirely.
 
-# Latest Git tag
+```bash
+# Latest Git tag — the source of truth
 git describe --tags --abbrev=0
 
 # Latest GitHub release
 gh release view --json tagName
+
+# package.json — a stale mirror; nothing reads it at build or runtime
+grep '"version"' package.json
 ```
 
 ## Troubleshooting
@@ -272,8 +278,7 @@ gh run view <failed-run-id>
 git tag -d v1.2.3
 git push origin :refs/tags/v1.2.3
 
-# Fix version in package.json
-# Recommit and re-release
+# Re-run the release workflow; it recomputes the version from the tags
 ```
 
 ## Examples
