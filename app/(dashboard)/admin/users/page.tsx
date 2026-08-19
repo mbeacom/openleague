@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { notFound } from "next/navigation";
 import { Typography, Box, CircularProgress } from "@mui/material";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -15,14 +16,10 @@ async function UserManagementContent() {
   const isAdmin = await isPlatformAdmin(userId);
 
   if (!isAdmin) {
-    return (
-      <PageContainer>
-        <PageHeader title="Access Denied" />
-        <Typography variant="body1">
-          You do not have permission to access this page. Only system administrators can manage user approvals.
-        </Typography>
-      </PageContainer>
-    );
+    // 404 rather than a visible "Access Denied", matching /admin and
+    // /admin/audit: a distinct denial page confirms the route exists to
+    // anyone probing for it.
+    notFound();
   }
 
   const result = await getAllUsers();

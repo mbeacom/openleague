@@ -53,6 +53,13 @@ const staticIconSources = [
 
 const nextConfig: NextConfig = {
   pageExtensions: ["js", "jsx", "md", "mdx", "ts", "tsx"],
+  // Dev-only: Next 16 blocks cross-origin requests to dev assets, and treats
+  // any host other than the one the server booted on (localhost) as foreign —
+  // so hitting the dev server by IP returns 403 for every /_next chunk and the
+  // page loads unhydrated. Allowing loopback + private ranges lets you test on
+  // a phone over the LAN, which matters for a mobile-first UI. No effect on a
+  // production build.
+  allowedDevOrigins: ["127.0.0.1", "192.168.*.*", "10.*.*.*"],
   compiler: {
     emotion: true,
   },

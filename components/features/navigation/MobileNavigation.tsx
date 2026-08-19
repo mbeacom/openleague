@@ -23,6 +23,7 @@ import {
   ManageAccounts as ManageAccountsIcon,
   AdminPanelSettings as AdminPanelSettingsIcon,
   Inventory2 as GearIcon,
+  EmojiEvents as LeagueIcon,
   Assessment as OperationsIcon,
   EventAvailable as VenueReservationsIcon,
 } from '@mui/icons-material';
@@ -184,6 +185,16 @@ export default function MobileNavigation({ isLeagueMode = false, isPlatformAdmin
               <SportsHockeyIcon />
             </ListItemIcon>
             <ListItemText>Practice Planner</ListItemText>
+          </MenuItem>
+        )}
+        {/* Mirrors the desktop sidebar: the only navigable route to /league,
+            where single-team users create or join a league. */}
+        {!isLeagueMode && (
+          <MenuItem component={Link} href="/league" onClick={handleMenuClose}>
+            <ListItemIcon>
+              <LeagueIcon />
+            </ListItemIcon>
+            <ListItemText>Leagues</ListItemText>
           </MenuItem>
         )}
         {isLeagueMode && currentLeague && (

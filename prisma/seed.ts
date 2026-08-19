@@ -203,6 +203,11 @@ async function seedLeagueVenue(leagueId: string, createdById: string) {
       state: 'IL',
       surfaceType: 'ICE',
       timezone: 'America/Chicago',
+      // venues.amenities is NOT NULL with no DB default. Prisma 7's pg driver
+      // adapter sends NULL for an omitted scalar list rather than '{}', so
+      // leaving this out fails the seed with P2011. The app is unaffected:
+      // createVenueSchema defaults amenities to [].
+      amenities: ['locker_rooms', 'parking', 'pro_shop'],
       leagueId,
       createdById,
     },
