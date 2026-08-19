@@ -6,16 +6,15 @@ import { prisma } from "@/lib/db/prisma";
 import { requireUserId } from "@/lib/auth/session";
 import { sanitizeErrorForLogging } from "./error-handling";
 import type { Prisma } from "@prisma/client";
+import { LeagueAccessLevel } from "./access-levels";
 
 /**
  * League access levels for permission checking
  */
-export enum LeagueAccessLevel {
-    NONE = 0,
-    MEMBER = 1,
-    TEAM_ADMIN = 2,
-    LEAGUE_ADMIN = 3,
-}
+// Declared in a dependency-free module so client components can import the
+// enum without pulling this file's server-only dependency graph with it.
+// Imported as well as re-exported: this file uses the value itself.
+export { LeagueAccessLevel };
 
 /**
  * Audit action types for logging

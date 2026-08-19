@@ -29,6 +29,7 @@ export type AssociationOperationsData = {
     phaseGaps: number;
     upcomingReservations: number;
     upcomingChanges: number;
+    volunteerShortages: number;
     urgentGearNeeds: number;
     overdueGearCustody: number;
     outboxPending: number;
@@ -43,6 +44,7 @@ export type AssociationOperationsData = {
   phaseGaps: OperationsAction[];
   upcomingReservations: OperationsAction[];
   upcomingChanges: OperationsAction[];
+  volunteerShortages: OperationsAction[];
   gear: {
     urgentNeeds: OperationsAction[];
     overdueCustody: OperationsAction[];
@@ -101,6 +103,7 @@ export async function getAssociationOperationsData(
     urgentNeeds,
     custody,
     outbox,
+    volunteerNeeds,
   ] = await Promise.all([
     prisma.iceTimeRequest.findMany({
       where: {
@@ -257,6 +260,29 @@ export async function getAssociationOperationsData(
       select: { status: true, scheduledAt: true },
       orderBy: { scheduledAt: "asc" },
     }),
+    // Understaffed open needs overlapping the window. The shortfall is part of
+    // the query via a Prisma field reference, so `take` bounds the *shortages*
+    // rather than the needs scanned — filtering after a take silently reported
+    // "everything staffed" whenever the first N happened to be full.
+    prisma.volunteerNeed.findMany({
+      where: {
+        leagueId,
+        status: "OPEN",
+        startAt: { lt: to },
+        endAt: { gt: from },
+        acceptedCount: { lt: prisma.volunteerNeed.fields.capacity },
+      },
+      select: {
+        id: true,
+        roleLabel: true,
+        capacity: true,
+        acceptedCount: true,
+        startAt: true,
+        team: { select: { name: true } },
+      },
+      orderBy: { startAt: "asc" },
+      take: 50,
+    }),
   ]);
 
   const unassignedReservations = reservations.filter(
@@ -306,6 +332,18 @@ export async function getAssociationOperationsData(
   const outboxProcessing = outbox.filter((row) => row.status === "PROCESSING");
   const outboxFailed = outbox.filter((row) => row.status === "FAILED");
 
+  // A shortage is an open need that still has unfilled slots. Surfaced to
+  // organizers so a game is not discovered to be unstaffed on the morning.
+  const volunteerShortages = volunteerNeeds.map((need) => ({
+      id: need.id,
+      title: need.roleLabel,
+      detail: `${need.capacity - need.acceptedCount} of ${need.capacity} unfilled${
+        need.team?.name ? ` · ${need.team.name}` : ""
+      }`,
+      href: href(leagueId, "/workforce"),
+      at: need.startAt.toISOString(),
+  }));
+
   return {
     leagueId,
     window: { from: from.toISOString(), to: to.toISOString() },
@@ -319,6 +357,7 @@ export async function getAssociationOperationsData(
       phaseGaps: phaseGaps.length,
       upcomingReservations: upcomingReservations.length,
       upcomingChanges: upcomingChanges.length,
+      volunteerShortages: volunteerShortages.length,
       urgentGearNeeds: urgentNeeds.length,
       overdueGearCustody: overdueCustody.length,
       outboxPending: outboxPending.length,
@@ -380,6 +419,7 @@ export async function getAssociationOperationsData(
       href: href(leagueId, "/venue-reservations"),
       at: reservation.transitions?.[0]?.occurredAt.toISOString(),
     })),
+    volunteerShortages,
     gear: {
       urgentNeeds: urgentNeeds.map((need) => ({
         id: need.id,

@@ -58,6 +58,7 @@ const LEAGUE_SECTION_LABELS: Record<string, string> = {
   invitations: 'Invitations',
   payments: 'Payments',
   gear: 'Gear',
+  workforce: 'Workforce',
 };
 
 // Well-known nested segments; unknown tails (ids) render as 'Details'.

@@ -42,8 +42,8 @@ import {
     type AssignLeagueRoleInput,
     type RemoveLeagueRoleInput,
 } from "@/lib/actions/permissions";
-import { LeagueAccessLevel } from "@/lib/utils/security";
-import { Permission } from "@/lib/utils/permissions";
+import { LeagueAccessLevel } from "@/lib/utils/access-levels";
+import type { Permission } from "@/lib/utils/permissions";
 
 interface UserPermissionManagerProps {
     leagueId: string;

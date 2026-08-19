@@ -4,7 +4,9 @@ import { randomBytes } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireLeagueRole, requireUserId } from "@/lib/auth/session";
+import { requireUserId } from "@/lib/auth/session";
+import { Permission } from "@/lib/utils/permission-types";
+import { requirePermissionForLeague } from "@/lib/utils/permissions";
 import { prisma } from "@/lib/db/prisma";
 import { recordGearActivity } from "@/lib/services/gear-ledger";
 import { reportGearActionFailure } from "@/lib/services/gear-observability";
@@ -101,7 +103,7 @@ export async function saveGearWishlist(
 ): Promise<ActionResult<{ id: string; shareToken: string; status: string; version: number }>> {
   try {
     const validated = saveGearWishlistSchema.parse(input);
-    const userId = await requireLeagueRole(validated.leagueId, "LEAGUE_ADMIN");
+    const userId = await requirePermissionForLeague(validated.leagueId, Permission.MANAGE_GEAR_WISHLIST);
 
     const result = await withGearSerializableRetry(() => prisma.$transaction(async (tx) => {
       const existing = await tx.gearWishlist.findUnique({
@@ -291,7 +293,7 @@ export async function saveGearWishlist(
 export async function archiveGearWishlist(input: unknown): Promise<ActionResult<{ id: string; version: number }>> {
   try {
     const validated = wishlistCommandSchema.parse(input);
-    const userId = await requireLeagueRole(validated.leagueId, "LEAGUE_ADMIN");
+    const userId = await requirePermissionForLeague(validated.leagueId, Permission.MANAGE_GEAR_WISHLIST);
     const result = await withGearSerializableRetry(() => prisma.$transaction(async (tx) => {
       const wishlist = await tx.gearWishlist.findUnique({ where: { leagueId: validated.leagueId } });
       if (!wishlist) invalid("Wishlist not found.");
@@ -328,7 +330,7 @@ export async function rotateGearWishlistShareToken(
 ): Promise<ActionResult<{ id: string; shareToken: string; version: number }>> {
   try {
     const validated = wishlistCommandSchema.parse(input);
-    const userId = await requireLeagueRole(validated.leagueId, "LEAGUE_ADMIN");
+    const userId = await requirePermissionForLeague(validated.leagueId, Permission.MANAGE_GEAR_WISHLIST);
     const result = await withGearSerializableRetry(() => prisma.$transaction(async (tx) => {
       const wishlist = await tx.gearWishlist.findUnique({ where: { leagueId: validated.leagueId } });
       if (!wishlist) invalid("Wishlist not found.");
@@ -376,7 +378,7 @@ export async function setGearWishlistStatus(input: unknown): Promise<ActionResul
         : archived;
     }
 
-    const userId = await requireLeagueRole(validated.leagueId, "LEAGUE_ADMIN");
+    const userId = await requirePermissionForLeague(validated.leagueId, Permission.MANAGE_GEAR_WISHLIST);
     const result = await withGearSerializableRetry(() => prisma.$transaction(async (tx) => {
       const wishlist = await tx.gearWishlist.findUnique({
         where: { leagueId: validated.leagueId },
@@ -440,7 +442,7 @@ export type GearWishlistAdminContext = {
 };
 
 export async function getGearWishlistAdminContext(leagueId: string): Promise<GearWishlistAdminContext | null> {
-  await requireLeagueRole(leagueId, "LEAGUE_ADMIN");
+  await requirePermissionForLeague(leagueId, Permission.MANAGE_GEAR_WISHLIST);
   const wishlist = await prisma.gearWishlist.findUnique({
     where: { leagueId },
     select: {

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
-const { mockRequireLeagueRole, mockPrisma, tx } = vi.hoisted(() => {
+const { mockRequireGearPermission, mockPrisma, tx } = vi.hoisted(() => {
   const tx = {
     gearCatalogItem: { create: vi.fn(), findFirst: vi.fn(), update: vi.fn(), count: vi.fn() },
     gearStorageLocation: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
@@ -14,13 +14,17 @@ const { mockRequireLeagueRole, mockPrisma, tx } = vi.hoisted(() => {
   };
   return {
     tx,
-    mockRequireLeagueRole: vi.fn(),
+    mockRequireGearPermission: vi.fn(),
     mockPrisma: { $transaction: vi.fn((callback: (client: typeof tx) => unknown) => callback(tx)) },
   };
 });
 
-vi.mock("@/lib/auth/session", () => ({
-  requireLeagueRole: (...args: unknown[]) => mockRequireLeagueRole(...args),
+// Gear actions authorize through the permission matrix (which honours
+// association role grants), not the legacy league role, so the guard mocked
+// here is requirePermissionForLeague. Behaviour asserted below is unchanged:
+// authorized resolves to the acting user, unauthorized throws.
+vi.mock("@/lib/utils/permissions", () => ({
+  requirePermissionForLeague: (...args: unknown[]) => mockRequireGearPermission(...args),
 }));
 vi.mock("@/lib/db/prisma", () => ({ prisma: mockPrisma }));
 
@@ -40,7 +44,7 @@ const LOCATION_ID = "cbbbbbbbbbbbbbbbbbbbbbbbb";
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockRequireLeagueRole.mockResolvedValue("cuserrrrrrrrrrrrrrrrrrrrr");
+  mockRequireGearPermission.mockResolvedValue("cuserrrrrrrrrrrrrrrrrrrrr");
   tx.gearCatalogItem.create.mockResolvedValue({ id: CATALOG_ID });
   tx.gearCatalogItem.findFirst.mockResolvedValue({ id: CATALOG_ID, trackingMode: "INDIVIDUAL" });
   tx.gearStorageLocation.findFirst.mockResolvedValue({ id: LOCATION_ID });
@@ -55,7 +59,7 @@ beforeEach(() => {
 
 describe("gear inventory actions", () => {
   it("requires a league admin before creating catalog items", async () => {
-    mockRequireLeagueRole.mockRejectedValue(new Error("Unauthorized"));
+    mockRequireGearPermission.mockRejectedValue(new Error("Unauthorized"));
 
     const result = await createGearCatalogItem({
       leagueId: LEAGUE_ID,

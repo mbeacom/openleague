@@ -555,6 +555,10 @@ Current records:
 | 0003 | Access PostgreSQL exclusively through Prisma on Neon serverless |
 | 0004 | Build the interface on MUI as the primary component library |
 | 0005 | Standardize on Bun as the development and CI toolchain |
+| 0006 | Model league-owned gear with ledger projections and an outbox |
+| 0007 | Use canonical venue reservations for occupancy |
+| 0008 | Keep core association operations free and provider-portable |
+| 0009 | Delegate association authority through scoped role grants |
 
 Spec Kit users additionally have `/speckit.adrkit.context`,
 `/speckit.adrkit.check`, and `/speckit.adrkit.draft` from the installed adrkit

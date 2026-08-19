@@ -5,7 +5,7 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 const {
   mockRequireUserId,
-  mockRequireLeagueRole,
+  mockRequireGearPermission,
   mockGetUserLeagueRole,
   mockIsTeamAdmin,
   mockCheckRateLimit,
@@ -36,7 +36,7 @@ const {
   return {
     tx,
     mockRequireUserId: vi.fn(),
-    mockRequireLeagueRole: vi.fn(),
+    mockRequireGearPermission: vi.fn(),
     mockGetUserLeagueRole: vi.fn(),
     mockIsTeamAdmin: vi.fn(),
     mockCheckRateLimit: vi.fn(),
@@ -56,9 +56,17 @@ const {
 
 vi.mock("@/lib/auth/session", () => ({
   requireUserId: (...args: unknown[]) => mockRequireUserId(...args),
-  requireLeagueRole: (...args: unknown[]) => mockRequireLeagueRole(...args),
+  // Still mocked: the need and reservation actions in this suite continue to
+  // guard on the legacy league role.
+  requireLeagueRole: (...args: unknown[]) => mockRequireGearPermission(...args),
   getUserLeagueRole: (...args: unknown[]) => mockGetUserLeagueRole(...args),
   isTeamAdmin: (...args: unknown[]) => mockIsTeamAdmin(...args),
+}));
+// Wishlist and pledge actions now authorize through the permission matrix, so
+// association role grants reach them. Same mock target: authorized resolves to
+// the acting user, unauthorized throws.
+vi.mock("@/lib/utils/permissions", () => ({
+  requirePermissionForLeague: (...args: unknown[]) => mockRequireGearPermission(...args),
 }));
 vi.mock("@/lib/db/prisma", () => ({ prisma: mockPrisma }));
 vi.mock("@/lib/utils/durable-rate-limit", () => ({
@@ -102,7 +110,7 @@ const USER_ID = "cuuuuuuuuuuuuuuuuuuuuuuuu";
 beforeEach(() => {
   vi.clearAllMocks();
   mockRequireUserId.mockResolvedValue(USER_ID);
-  mockRequireLeagueRole.mockResolvedValue(USER_ID);
+  mockRequireGearPermission.mockResolvedValue(USER_ID);
   mockGetUserLeagueRole.mockResolvedValue("TEAM_ADMIN");
   mockIsTeamAdmin.mockResolvedValue(true);
   mockPrisma.team.findFirst.mockResolvedValue({ id: TEAM_ID });
