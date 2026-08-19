@@ -21,6 +21,18 @@ permissions:
   issues: write
   discussions: write
 
+# Two merges landing close together start two runs that compute the SAME next
+# version from the same latest tag, then race to create it -- exactly what
+# happened when #341 and #342 merged nine seconds apart. Serialize instead.
+#
+# `cancel-in-progress: false`, matching adr-badges.yml: cancelling a run that
+# has already pushed a tag would leave the tag without its GitHub release, which
+# is worse than waiting. The duplicate is handled by the existing tag_check
+# step, which the second run reaches only after the first has finished.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
   release:
     name: Create Release
@@ -137,6 +149,12 @@ jobs:
         if: steps.tag_check.outputs.exists == 'false'
         run: |
           VERSION=${{ steps.version.outputs.version }}
+          # `git tag -a` is annotated, so it writes a tagger ident and fails with
+          # "empty ident name" without one. The identity used to be set by the
+          # version-bump step that stood here; it is configured locally now so
+          # that it lives in the step that actually needs it.
+          git config user.name  'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git tag -a "v$VERSION" -m "Release v$VERSION"
           git push origin "v$VERSION"
 
