@@ -269,7 +269,11 @@ describe("getEventAttendance", () => {
       leagueId: null,
       team: { leagueId: null },
     });
-    mockPrismaTeamMember.findUnique.mockResolvedValue({ role: "MEMBER" });
+    // ADMIN, not MEMBER: these cases assert *attribution*, and who answered for
+    // a child is organizer-only information as of feature 007 US3. The
+    // member's-eye view — same entries, no responder — is covered in
+    // rsvp-guardians.test.ts.
+    mockPrismaTeamMember.findUnique.mockResolvedValue({ role: "ADMIN" });
   });
 
   it("lists user-level and player-level entries with attribution and counts", async () => {

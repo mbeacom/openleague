@@ -3,6 +3,7 @@
 import { hash } from "bcryptjs";
 import type { Invitation, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
+import { applyInvitationResponsibility } from "@/lib/services/association-roles";
 import { ensureLeagueUser } from "@/lib/actions/league";
 import { issueVerificationToken } from "@/lib/auth/tokens";
 import { sendVerificationEmail } from "@/lib/email/templates";
@@ -265,4 +266,10 @@ async function acceptInvitationMemberships(
       });
     }
   }
+
+  // A pending scoped responsibility applies independently of the membership
+  // branches above: an invitation can add somebody to a team AND delegate an
+  // association role in the same acceptance. No-ops when the invitation carries
+  // no role payload.
+  await applyInvitationResponsibility(tx, invitation, user.id);
 }

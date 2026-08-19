@@ -84,6 +84,23 @@ export function OperationalDashboard({ data, error }: OperationalDashboardProps)
         })}
         <Card variant="outlined">
           <CardContent>
+            <Typography variant="h6" sx={{ mb: 1 }}>Volunteer shortages</Typography>
+            {data.volunteerShortages.length === 0 ? (
+              <Typography color="text.secondary" variant="body2">
+                Every open volunteer need is fully staffed.
+              </Typography>
+            ) : (
+              <Stack spacing={1}>
+                <Typography variant="body2">
+                  {data.volunteerShortages.length} need(s) still short of volunteers
+                </Typography>
+                <ActionList items={data.volunteerShortages} />
+              </Stack>
+            )}
+          </CardContent>
+        </Card>
+        <Card variant="outlined">
+          <CardContent>
             <Typography variant="h6" sx={{ mb: 1 }}>Gear and notification health</Typography>
             <Stack spacing={1}>
               <Typography variant="body2">Urgent needs: {data.gear.urgentNeeds.length}</Typography>

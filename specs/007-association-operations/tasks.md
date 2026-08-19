@@ -128,23 +128,23 @@ description: "Dependency-ordered implementation backlog for association operatio
 
 ### Tests
 
-- [ ] T054 [P] [US3] Add least-privilege workflow matrix tests for coach, team manager, scheduler, registrar, treasurer, communications lead, volunteer coordinator, event manager, and equipment manager, including the association/division/team/unsupported gear scope matrix and mandatory `teamId`, to `__tests__/lib/auth/capabilities.test.ts` and `__tests__/lib/utils/permissions-gear.test.ts`
-- [ ] T055 [P] [US3] Add grant, revoke, ancestry, invitation-acceptance, and equipment-manager scope tests to `__tests__/lib/actions/association-roles.test.ts`
-- [ ] T056 [P] [US3] Add volunteer capacity/response and per-child guardian authorization/privacy tests to `__tests__/lib/actions/volunteers.test.ts` and `__tests__/lib/actions/rsvp-guardians.test.ts`
-- [ ] T057 [P] [US3] Add simultaneous final volunteer-slot acceptance tests to `__tests__/integration/volunteer-capacity-concurrency.test.ts`
-- [ ] T058 [P] [US3] Add workforce role and volunteer board component tests to `__tests__/components/features/workforce/VolunteerBoard.test.tsx`
+- [x] T054 [P] [US3] Add least-privilege workflow matrix tests for coach, team manager, scheduler, registrar, treasurer, communications lead, volunteer coordinator, event manager, and equipment manager, including the association/division/team/unsupported gear scope matrix and mandatory `teamId`, to `__tests__/lib/auth/capabilities.test.ts` and `__tests__/lib/utils/permissions-gear.test.ts`
+- [x] T055 [P] [US3] Add grant, revoke, ancestry, invitation-acceptance, and equipment-manager scope tests to `__tests__/lib/actions/association-roles.test.ts`
+- [x] T056 [P] [US3] Add volunteer capacity/response and per-child guardian authorization/privacy tests to `__tests__/lib/actions/volunteers.test.ts` and `__tests__/lib/actions/rsvp-guardians.test.ts`
+- [x] T057 [P] [US3] Add simultaneous final volunteer-slot acceptance tests to `__tests__/integration/volunteer-capacity-concurrency.test.ts`
+- [x] T058 [P] [US3] Add workforce role and volunteer board component tests to `__tests__/components/features/workforce/VolunteerBoard.test.tsx`
 
 ### Implementation
 
-- [ ] T059 [US3] Add `AssociationRoleGrant` with `EQUIPMENT_MANAGER`, `VolunteerNeed`, `VolunteerAssignment`, related enums, and invitation payload fields without altering existing gear entities in `prisma/schema.prisma`
-- [ ] T060 [US3] Create scoped-role and volunteer migration constraints, then regenerate Prisma before capability/actions work, in `prisma/migrations/<timestamp>_add_association_roles_and_volunteers/migration.sql` with `bun run db:generate`
-- [ ] T061 [US3] Implement capability mapping, scoped ancestry, legacy-admin compatibility, and equipment-manager delegation through existing gear `Permission` checks in `lib/auth/capabilities.ts` and `lib/utils/permissions.ts`
-- [ ] T062 [US3] Implement grant/revoke/list/invite actions and acceptance application in `lib/actions/association-roles.ts` and `lib/actions/invitations.ts`
-- [ ] T063 [US3] Backfill association-admin grants from league admins without inferring permissions from officials in `scripts/backfill-association-role-grants.ts`
-- [ ] T064 [US3] Implement volunteer need/assignment/fulfillment actions and harden per-child guardian response privacy in `lib/actions/volunteers.ts`, `lib/actions/rsvp.ts`, and `lib/actions/guardians.ts`
-- [ ] T065 [US3] Add role grant manager with equipment-manager guidance and volunteer board components to `components/features/workforce/RoleGrantManager.tsx` and `components/features/workforce/VolunteerBoard.tsx`
-- [ ] T066 [US3] Add workforce management route and feed volunteer shortages plus safe gear-attention summaries into the operations dashboard in `app/(dashboard)/league/[leagueId]/workforce/page.tsx` and `app/(dashboard)/league/[leagueId]/operations/page.tsx`
-- [ ] T067 [US3] Mount existing permission-management surfaces within the scoped workforce route via `components/features/admin/UserPermissionManager.tsx` and `components/features/admin/TeamPermissionManager.tsx`
+- [x] T059 [US3] Add `AssociationRoleGrant` with `EQUIPMENT_MANAGER`, `VolunteerNeed`, `VolunteerAssignment`, related enums, and invitation payload fields without altering existing gear entities in `prisma/schema.prisma`
+- [x] T060 [US3] Create scoped-role and volunteer migration constraints, then regenerate Prisma before capability/actions work, in `prisma/migrations/<timestamp>_add_association_roles_and_volunteers/migration.sql` with `bun run db:generate`
+- [x] T061 [US3] Implement capability mapping, scoped ancestry, legacy-admin compatibility, and equipment-manager delegation through existing gear `Permission` checks in `lib/auth/capabilities.ts` and `lib/utils/permissions.ts`
+- [x] T062 [US3] Implement grant/revoke/list/invite actions and acceptance application in `lib/actions/association-roles.ts` and `lib/actions/invitations.ts`
+- [x] T063 [US3] Backfill association-admin grants from league admins without inferring permissions from officials in `scripts/backfill-association-role-grants.ts`
+- [x] T064 [US3] Implement volunteer need/assignment/fulfillment actions and harden per-child guardian response privacy in `lib/actions/volunteers.ts`, `lib/actions/rsvp.ts`, and `lib/actions/guardians.ts`
+- [x] T065 [US3] Add role grant manager with equipment-manager guidance and volunteer board components to `components/features/workforce/RoleGrantManager.tsx` and `components/features/workforce/VolunteerBoard.tsx`
+- [x] T066 [US3] Add workforce management route and feed volunteer shortages plus safe gear-attention summaries into the operations dashboard in `app/(dashboard)/league/[leagueId]/workforce/page.tsx` and `app/(dashboard)/league/[leagueId]/operations/page.tsx`
+- [x] T067 [US3] Mount existing permission-management surfaces within the scoped workforce route via `components/features/admin/UserPermissionManager.tsx` and `components/features/admin/TeamPermissionManager.tsx`
 
 **Checkpoint**: Season work can be distributed without broad administrator grants.
 

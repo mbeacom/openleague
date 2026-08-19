@@ -30,6 +30,7 @@ import {
   AdminPanelSettings as AdminPanelSettingsIcon,
   Inventory2 as GearIcon,
   EmojiEvents as LeagueIcon,
+  Diversity3 as WorkforceIcon,
   Assessment as OperationsIcon,
   EventAvailable as VenueReservationsIcon,
 } from "@mui/icons-material";
@@ -99,6 +100,7 @@ export default function DashboardNav({
       { label: "Schedule", path: `${leaguePrefix}/schedule`, icon: <CalendarIcon /> },
       { label: "Gear", path: `${leaguePrefix}/gear`, icon: <GearIcon /> },
       { label: "Operations", path: `${leaguePrefix}/operations`, icon: <OperationsIcon /> },
+      { label: "Workforce", path: `${leaguePrefix}/workforce`, icon: <WorkforceIcon /> },
       {
         label: "Venue Reservations",
         path: `${leaguePrefix}/venue-reservations`,

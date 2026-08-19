@@ -241,6 +241,12 @@ export async function getEventAttendance(
       select: { role: true },
     });
 
+    // Organizers may see who answered for a child; ordinary team members may
+    // not. A guardian's name or email attached to a specific participant is
+    // family information, and every member of a youth team could otherwise read
+    // it off the attendance list (spec 007 US3, acceptance scenario 4).
+    let isOrganizer = teamMember?.role === "ADMIN";
+
     if (!teamMember) {
       const eventLeagueId = event.leagueId ?? event.team.leagueId;
       const leagueAdmin = eventLeagueId
@@ -260,6 +266,8 @@ export async function getEventAttendance(
           error: "You do not have access to this event",
         };
       }
+
+      isOrganizer = true;
     }
 
     const rsvps = await prisma.rSVP.findMany({
@@ -300,7 +308,11 @@ export async function getEventAttendance(
         kind: "player",
         name: row.player!.name,
         status: row.status as RSVPStatus,
-        respondedByName: row.user.name ?? row.user.email,
+        // Omitted entirely for non-organizers rather than blanked, so no caller
+        // can infer the responder from a placeholder.
+        ...(isOrganizer
+          ? { respondedByName: row.user.name ?? row.user.email }
+          : {}),
       });
     }
 

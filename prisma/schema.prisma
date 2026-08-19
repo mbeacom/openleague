@@ -90,6 +90,14 @@ model User {
   assignedVenueReservations    VenueReservation[]           @relation("VenueReservationAssigner")
   venueReservationTransitions  VenueReservationTransition[] @relation("VenueReservationTransitionActor")
   venueReservationOverrides    VenueReservationOverride[]   @relation("VenueReservationOverrideActor")
+
+  // Feature 007 US3 — scoped responsibilities and volunteers.
+  associationRoleGrants        AssociationRoleGrant[] @relation("AssociationRoleGrantSubject")
+  associationRoleGrantsGranted AssociationRoleGrant[] @relation("AssociationRoleGrantGrantor")
+  associationRoleGrantsRevoked AssociationRoleGrant[] @relation("AssociationRoleGrantRevoker")
+  volunteerNeedsCreated        VolunteerNeed[]        @relation("VolunteerNeedCreator")
+  volunteerAssignments         VolunteerAssignment[]  @relation("VolunteerAssignmentSubject")
+  volunteerAssignmentsAssigned VolunteerAssignment[]  @relation("VolunteerAssignmentAssigner")
 }
 
 // Single-use, hashed account-lifecycle tokens (email verification, password
@@ -219,6 +227,10 @@ model Team {
   gearReservations   GearReservation[]
   venueReservations  VenueReservation[]       @relation("VenueReservationTeamOwner")
 
+
+  // Feature 007 US3 — scoped responsibilities and volunteers.
+  associationRoleGrants AssociationRoleGrant[]
+  volunteerNeeds        VolunteerNeed[]
   @@unique([leagueId, id])
   @@index([leagueId]) // Optimize league-team queries
   @@index([divisionId]) // Optimize division-team queries
@@ -429,6 +441,11 @@ model Event {
   venueReservationId String?           @unique
   venueReservation   VenueReservation? @relation(fields: [venueReservationId], references: [id], onDelete: SetNull)
 
+
+  // Feature 007 US3 — scoped responsibilities and volunteers.
+  associationRoleGrants AssociationRoleGrant[]
+  volunteerNeeds        VolunteerNeed[]
+  invitationGrants      Invitation[]          @relation("InvitationAssociationEvent")
   @@index([teamId, startAt]) // Optimize queries for team events sorted by date
   @@index([startAt]) // Optimize queries for upcoming events across teams
   @@index([leagueId, startAt]) // Optimize league event queries
@@ -502,6 +519,24 @@ model Invitation {
   // organization target → VenueStaff membership).
   officialRole TeamOfficialRole?
   venueRole    VenueStaffRole?
+
+  // Pending scoped responsibility (feature 007 US3) applied at acceptance.
+  // scopeType selects which target below is authoritative; ASSOCIATION uses
+  // leagueId and TEAM uses teamId, both of which already exist above.
+  associationRole      AssociationRole?
+  associationScopeType AssociationRoleScopeType?
+
+  associationDivisionId String?
+  associationDivision   Division? @relation("InvitationAssociationDivision", fields: [associationDivisionId], references: [id], onDelete: Cascade)
+
+  associationSeasonId String?
+  associationSeason   Season? @relation("InvitationAssociationSeason", fields: [associationSeasonId], references: [id], onDelete: Cascade)
+
+  associationEventId String?
+  associationEvent   Event?  @relation("InvitationAssociationEvent", fields: [associationEventId], references: [id], onDelete: Cascade)
+
+  associationSignupEventId String?
+  associationSignupEvent   SignupEvent? @relation("InvitationAssociationSignupEvent", fields: [associationSignupEventId], references: [id], onDelete: Cascade)
 
   invitedById String
   invitedBy   User   @relation(fields: [invitedById], references: [id])
@@ -577,6 +612,10 @@ model League {
   notificationOutbox        NotificationOutbox[]
   venueReservations         VenueReservation[]         @relation("VenueReservationLeagueOwner")
 
+
+  // Feature 007 US3 — scoped responsibilities and volunteers.
+  associationRoleGrants     AssociationRoleGrant[]
+  volunteerNeeds            VolunteerNeed[]
   @@map("leagues")
 }
 
@@ -600,6 +639,11 @@ model Division {
   placementDecisions PlacementDecision[]
   seasonPlacements   SeasonTeamPlacement[]
 
+
+  // Feature 007 US3 — scoped responsibilities and volunteers.
+  associationRoleGrants AssociationRoleGrant[]
+  volunteerNeeds        VolunteerNeed[]
+  invitationGrants      Invitation[]          @relation("InvitationAssociationDivision")
   @@map("divisions")
 }
 
@@ -2567,6 +2611,10 @@ model Season {
   teamPlacements SeasonTeamPlacement[]
   proposals  GameProposal[]
 
+
+  // Feature 007 US3 — scoped responsibilities and volunteers.
+  associationRoleGrants AssociationRoleGrant[]
+  invitationGrants      Invitation[]          @relation("InvitationAssociationSeason")
   @@index([leagueId, startDate])
   @@index([teamId, startDate])
   @@map("seasons")
@@ -2954,6 +3002,11 @@ model SignupEvent {
   games         EventGame[]
   media         EventMediaItem[]
 
+
+  // Feature 007 US3 — scoped responsibilities and volunteers.
+  associationRoleGrants AssociationRoleGrant[]
+  volunteerNeeds        VolunteerNeed[]
+  invitationGrants      Invitation[]          @relation("InvitationAssociationSignupEvent")
   @@index([hostOrganizationId, startAt])
   @@index([hostLeagueId, startAt])
   @@index([hostTeamId, startAt])
@@ -3269,4 +3322,184 @@ model EventMediaItem {
 
   @@index([eventId, status, createdAt])
   @@map("event_media_items")
+}
+
+// ---------------------------------------------------------------------------
+// Feature 007 / User Story 3 — scoped responsibilities and volunteers.
+//
+// AssociationRoleGrant is the ONLY source of delegated capability. TeamOfficial
+// is descriptive and never grants anything (spec 007 US3); venue authorization
+// stays in VenueOrganization/VenueStaff and is deliberately not mirrored here.
+// ---------------------------------------------------------------------------
+
+enum AssociationRole {
+  ASSOCIATION_ADMIN
+  SCHEDULER
+  REGISTRAR
+  TREASURER
+  COMMUNICATIONS_LEAD
+  TEAM_MANAGER
+  COACH
+  VOLUNTEER_COORDINATOR
+  EVENT_MANAGER
+  EQUIPMENT_MANAGER
+}
+
+/// The one explicit scope a grant is bounded to. ASSOCIATION means the grant
+/// covers the owning league and sets no narrower target.
+enum AssociationRoleScopeType {
+  ASSOCIATION
+  DIVISION
+  TEAM
+  SEASON
+  EVENT
+  SIGNUP_EVENT
+}
+
+enum AssociationRoleGrantState {
+  ACTIVE
+  REVOKED
+}
+
+/// A bounded responsibility delegated to a user. Uniqueness is enforced per
+/// (user, role, scope) among ACTIVE rows only — revoking leaves history behind
+/// and must not block re-granting the same responsibility later.
+model AssociationRoleGrant {
+  id        String                    @id @default(cuid())
+  role      AssociationRole
+  scopeType AssociationRoleScopeType
+  state     AssociationRoleGrantState @default(ACTIVE)
+  notes     String?
+  createdAt DateTime                  @default(now())
+  updatedAt DateTime                  @updatedAt
+  revokedAt DateTime?
+
+  userId String
+  user   User   @relation("AssociationRoleGrantSubject", fields: [userId], references: [id], onDelete: Cascade)
+
+  grantedById String?
+  grantedBy   User?   @relation("AssociationRoleGrantGrantor", fields: [grantedById], references: [id], onDelete: SetNull)
+
+  revokedById String?
+  revokedBy   User?   @relation("AssociationRoleGrantRevoker", fields: [revokedById], references: [id], onDelete: SetNull)
+
+  // Owning association. Always set: every grant belongs to exactly one league.
+  leagueId String
+  league   League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  // Exactly one of these is set unless scopeType is ASSOCIATION, in which case
+  // none are. Enforced by a num_nonnulls CHECK in the migration.
+  divisionId String?
+  division   Division? @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+
+  teamId String?
+  // Compound FK: a team-scoped grant cannot point at a team in another league.
+  team   Team?   @relation(fields: [leagueId, teamId], references: [leagueId, id], onDelete: Cascade)
+
+  seasonId String?
+  season   Season? @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+
+  eventId String?
+  event   Event?  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  signupEventId String?
+  signupEvent   SignupEvent? @relation(fields: [signupEventId], references: [id], onDelete: Cascade)
+
+  @@index([leagueId, state, role])
+  @@index([userId, state])
+  @@index([leagueId, teamId, state])
+  @@map("association_role_grants")
+}
+
+enum VolunteerNeedStatus {
+  OPEN
+  CLOSED
+  CANCELED
+  COMPLETED
+}
+
+enum VolunteerAssignmentStatus {
+  INVITED
+  ACCEPTED
+  DECLINED
+  CANCELED
+  COMPLETED
+  MISSED
+}
+
+/// An association-owned request for volunteer labour, optionally narrowed to a
+/// division, team, or specific activity.
+model VolunteerNeed {
+  id          String              @id @default(cuid())
+  roleLabel   String
+  description String?
+  capacity    Int
+  /// Accepted assignments, denormalized so capacity can be claimed with a
+  /// single conditional updateMany (acceptedCount < capacity) instead of a
+  /// read-then-write race. Never edited directly outside volunteer actions.
+  acceptedCount Int               @default(0)
+  status      VolunteerNeedStatus @default(OPEN)
+  startAt     DateTime
+  endAt       DateTime
+  timezone    String
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  canceledAt  DateTime?
+  completedAt DateTime?
+
+  leagueId String
+  league   League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  divisionId String?
+  division   Division? @relation(fields: [divisionId], references: [id], onDelete: SetNull)
+
+  teamId String?
+  // Cascade, not SetNull: the compound FK carries the required leagueId, which
+  // SetNull cannot null. A need scoped to a deleted team has no meaning anyway.
+  team   Team?   @relation(fields: [leagueId, teamId], references: [leagueId, id], onDelete: Cascade)
+
+  eventId String?
+  event   Event?  @relation(fields: [eventId], references: [id], onDelete: SetNull)
+
+  signupEventId String?
+  signupEvent   SignupEvent? @relation(fields: [signupEventId], references: [id], onDelete: SetNull)
+
+  createdById String?
+  createdBy   User?   @relation("VolunteerNeedCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  assignments VolunteerAssignment[]
+
+  @@index([leagueId, status, startAt])
+  @@index([leagueId, teamId, status])
+  @@map("volunteer_needs")
+}
+
+/// One volunteer slot against a need. Either a known user or an invited email
+/// address, never both — enforced by CHECK in the migration.
+///
+/// Capacity is enforced by a conditional updateMany against the parent need's
+/// acceptedCount, so two simultaneous acceptances cannot both take the last
+/// slot (ADR-0003 rules out SELECT ... FOR UPDATE).
+model VolunteerAssignment {
+  id           String                    @id @default(cuid())
+  status       VolunteerAssignmentStatus @default(INVITED)
+  invitedEmail String?
+  notes        String?
+  createdAt    DateTime                  @default(now())
+  updatedAt    DateTime                  @updatedAt
+  respondedAt  DateTime?
+  completedAt  DateTime?
+
+  needId String
+  need   VolunteerNeed @relation(fields: [needId], references: [id], onDelete: Cascade)
+
+  userId String?
+  user   User?   @relation("VolunteerAssignmentSubject", fields: [userId], references: [id], onDelete: Cascade)
+
+  assignedById String?
+  assignedBy   User?   @relation("VolunteerAssignmentAssigner", fields: [assignedById], references: [id], onDelete: SetNull)
+
+  @@index([needId, status])
+  @@index([userId, status])
+  @@map("volunteer_assignments")
 }

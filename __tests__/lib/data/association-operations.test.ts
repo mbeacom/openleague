@@ -11,6 +11,7 @@ const { mockPrisma, mockAuth } = vi.hoisted(() => ({
     teamGearNeed: { findMany: vi.fn() },
     gearReservation: { findMany: vi.fn() },
     notificationOutbox: { findMany: vi.fn() },
+    volunteerNeed: { findMany: vi.fn() },
   },
   mockAuth: { requireLeagueRole: vi.fn() },
 }));

@@ -5,6 +5,7 @@
 import { prisma } from "@/lib/db/prisma";
 import { LeagueAccessLevel, logAuditEvent, AuditAction } from "./security";
 import { sanitizeErrorForLogging } from "./error-handling";
+import type { GearAction } from "@/lib/auth/capabilities";
 
 /**
  * Permission definitions for different operations
@@ -183,6 +184,51 @@ const getPermissionMatrix = (): Record<LeagueAccessLevel, Permission[]> => ({
 });
 
 /**
+ * Gear `Permission` values that a scoped association grant can supply.
+ *
+ * Deliberately a closed map rather than a predicate: adding a permission to the
+ * grant path has to be a decision someone writes down here, not something a new
+ * enum member inherits by accident.
+ */
+const GEAR_PERMISSION_ACTIONS: Partial<Record<Permission, GearAction>> = {
+    [Permission.MANAGE_GEAR_INVENTORY]: "MANAGE_INVENTORY",
+    [Permission.MANAGE_GEAR_WISHLIST]: "MANAGE_WISHLIST",
+    [Permission.CREATE_TEAM_GEAR_NEED]: "TEAM_NEED_OR_REQUEST",
+    [Permission.REQUEST_TEAM_GEAR]: "TEAM_NEED_OR_REQUEST",
+};
+
+/**
+ * Last-resort authorization for gear work via an association role grant.
+ *
+ * Consulted only after the access-level matrix has declined, so a grant can add
+ * authority but never remove or loosen an existing rule — including the
+ * mandatory-teamId rule above, which `grantsAllowGearAction` re-checks.
+ *
+ * The import is lazy to match the rest of this module: `lib/auth/capabilities`
+ * pulls in security helpers that transitively reach back here, and eager
+ * resolution would reintroduce the cycle the other dynamic imports avoid.
+ */
+async function hasGearPermissionViaGrant(
+    userId: string,
+    leagueId: string,
+    permission: Permission,
+    teamId?: string
+): Promise<boolean> {
+    const action = GEAR_PERMISSION_ACTIONS[permission];
+    if (!action) {
+        return false;
+    }
+
+    try {
+        const { grantsAllowGearAction } = await import("@/lib/auth/capabilities");
+        return await grantsAllowGearAction({ userId, leagueId, action, teamId });
+    } catch (error) {
+        console.error("Error checking gear grant:", sanitizeErrorForLogging(error));
+        return false;
+    }
+}
+
+/**
  * Check if a user has a specific permission for a league
  */
 export async function hasPermission(
@@ -208,12 +254,24 @@ export async function hasPermission(
                 return false;
             }
 
-            return hasBasePermission
-                ? await hasTeamSpecificPermission(userId, leagueId, teamId, permission, accessLevel)
-                : false;
+            if (
+                hasBasePermission &&
+                (await hasTeamSpecificPermission(userId, leagueId, teamId, permission, accessLevel))
+            ) {
+                return true;
+            }
+
+            // Fall through: an equipment manager or team manager may hold this
+            // team's gear rights through a scoped grant without being a team
+            // admin. Non-gear permissions have no grant path and end at false.
+            return hasGearPermissionViaGrant(userId, leagueId, permission, teamId);
         }
 
-        return hasBasePermission;
+        if (hasBasePermission) {
+            return true;
+        }
+
+        return hasGearPermissionViaGrant(userId, leagueId, permission, teamId);
     } catch (error) {
         console.error("Error checking permission:", sanitizeErrorForLogging(error));
         return false;
