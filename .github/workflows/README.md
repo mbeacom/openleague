@@ -100,8 +100,10 @@ git push origin v1.2.3
   adrkit binary (never a registry fetch — see ADR-0005)
 - Validates both reports with `bun run adr:check-reports` before publishing, so a
   truncated write fails the run instead of rendering `no result` on the badge
-- Commits with `[skip ci]` so a report refresh does not start a release
-- Rebases and retries the push, since `release.yml` also writes to `main`
+- Publishes to the dedicated `badges` branch as a single force-pushed orphan
+  commit — never to `main`, whose ruleset rejects workflow pushes (GH013), and
+  which the rebase-and-retry loop this replaced could not work around
+- Holds no write access to the default branch as a result
 
 ## Release Configuration
 

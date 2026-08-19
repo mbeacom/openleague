@@ -115,24 +115,23 @@ jobs:
             echo "🆕 Tag v$VERSION does not exist — will create tag and release"
           fi
 
-      - name: Update package.json version
-        if: steps.tag_check.outputs.exists == 'false'
-        run: |
-          VERSION=${{ steps.version.outputs.version }}
-          # Update version in package.json
-          cat package.json | jq ".version = \"$VERSION\"" > package.json.tmp
-          mv package.json.tmp package.json
-          echo "Updated package.json to version $VERSION"
-
-      - name: Commit version bump
-        if: steps.tag_check.outputs.exists == 'false'
-        run: |
-          VERSION=${{ steps.version.outputs.version }}
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-          git add package.json
-          git commit -m "chore: bump version to $VERSION [skip ci]" || echo "No changes to commit"
-          git push
+      # There is deliberately no "bump package.json and push to main" step here.
+      #
+      # The `main` ruleset requires four status checks, and a direct push from
+      # this job produces none of them, so the push was rejected with GH013 and
+      # the job died before ever reaching the tag and release steps below —
+      # which are the steps that actually matter and which the ruleset does not
+      # govern (it targets branches; there is no tag protection).
+      #
+      # The bump was safe to drop rather than work around: the version above is
+      # derived from `git describe --tags`, so tags are already the source of
+      # truth, and nothing reads `package.json`'s version at build or runtime.
+      # Restoring the bump means re-breaking releases unless the ruleset gains
+      # a bypass for the Actions app (id 15368) — which would let any workflow
+      # holding `contents: write` push to main past all four required checks.
+      #
+      # `package.json` therefore trails the latest tag by design. Read the
+      # version from the newest tag or the GitHub release, not from the file.
 
       - name: Create Git tag
         if: steps.tag_check.outputs.exists == 'false'

@@ -4,11 +4,11 @@
   # OpenLeague
 
   [![Release](https://github.com/mbeacom/openleague/workflows/Release/badge.svg)](https://github.com/mbeacom/openleague/actions/workflows/release.yml)
-  [![ADRs](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fmbeacom%2Fopenleague%2Fmain%2F.adrkit%2Flint.json&query=%24.checked&label=ADRs&color=cb492d)](./docs/adr)
-  [![ARB queue](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fmbeacom%2Fopenleague%2Fmain%2F.adrkit%2Fqueue.json&query=%24.totalItems&label=ARB%20queue&suffix=%20pending&color=cb492d)](./docs/adr)
+  [![ADRs](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fmbeacom%2Fopenleague%2Fbadges%2F.adrkit%2Flint.json&query=%24.checked&label=ADRs&color=cb492d)](./docs/adr)
+  [![ARB queue](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fmbeacom%2Fopenleague%2Fbadges%2F.adrkit%2Fqueue.json&query=%24.totalItems&label=ARB%20queue&suffix=%20pending&color=cb492d)](./docs/adr)
   [![Code License](https://img.shields.io/badge/code-Apache--2.0-blue.svg)](./LICENSE)
   [![Docs License](https://img.shields.io/badge/docs-CC%20BY%204.0-blue.svg)](./LICENSE-DOCS)
-  [![Version](https://img.shields.io/github/package-json/v/mbeacom/openleague)](./package.json)
+  [![Version](https://img.shields.io/github/v/release/mbeacom/openleague)](https://github.com/mbeacom/openleague/releases/latest)
 </div>
 
 A free, open-source platform for managing sports teams. Simplify your season with tools for roster management, scheduling, and team communication.
