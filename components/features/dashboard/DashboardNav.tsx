@@ -31,6 +31,7 @@ import {
   Inventory2 as GearIcon,
   EmojiEvents as LeagueIcon,
   Diversity3 as WorkforceIcon,
+  Article as NewsIcon,
   Assessment as OperationsIcon,
   EventAvailable as VenueReservationsIcon,
 } from "@mui/icons-material";
@@ -107,6 +108,7 @@ export default function DashboardNav({
         icon: <VenueReservationsIcon />,
       },
       { label: "Messages", path: `${leaguePrefix}/messages`, icon: <ForumIcon /> },
+      { label: "News", path: `${leaguePrefix}/content`, icon: <NewsIcon /> },
       { label: "Signup Events", path: "/signup-events", icon: <HowToRegIcon /> },
       // League-scoped venues; falls back to the global page without league context
       {

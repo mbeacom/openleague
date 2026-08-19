@@ -926,7 +926,21 @@ async function readReservations(
     ? [
       ...(scope.leagueIds?.length
         ? [
-          { seasonGames: { some: { season: { leagueId: { in: scope.leagueIds, scheduleVisibility: "PUBLIC" } }, status: { in: ["SCHEDULED", "COMPLETED"] } } } },
+          // scheduleVisibility belongs to the season, not to the leagueId
+          // filter. Nested one level deeper it lands inside a StringFilter,
+          // which Prisma rejects at request time with "Unknown argument
+          // scheduleVisibility" — taking down the public schedule and the
+          // /api/associations/[slug]/schedule.ics feed for any association
+          // reaching this branch. Type-checking cannot catch it: the misplaced
+          // key is still a valid object literal.
+          {
+            seasonGames: {
+              some: {
+                season: { leagueId: { in: scope.leagueIds }, scheduleVisibility: "PUBLIC" },
+                status: { in: ["SCHEDULED", "COMPLETED"] },
+              },
+            },
+          },
           { signupEvents: { some: { hostLeagueId: { in: scope.leagueIds }, status: "PUBLISHED", visibility: "PUBLIC" } } },
         ]
         : []),
