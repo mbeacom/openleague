@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
-const { mockGetCurrentUserId, mockPrisma } = vi.hoisted(() => ({
+const { mockGetCurrentUserId, mockPrisma, mockResolvePublicAssociation } = vi.hoisted(() => ({
   mockGetCurrentUserId: vi.fn(),
+  mockResolvePublicAssociation: vi.fn(),
   mockPrisma: {
     league: { findFirst: vi.fn(), findUnique: vi.fn() },
     event: { findMany: vi.fn() },
@@ -21,19 +22,27 @@ vi.mock("@/lib/auth/session", () => ({
 }));
 
 vi.mock("@/lib/db/prisma", () => ({ prisma: mockPrisma }));
+vi.mock("@/lib/actions/association-profile", () => ({
+  resolvePublicAssociation: mockResolvePublicAssociation,
+}));
 
 import { GET } from "@/app/api/associations/[slug]/schedule.ics/route";
 
 const SLUG = "north-stars";
 const LEAGUE_NAME = "North Stars";
 
-function request() {
-  return new NextRequest(`http://localhost/api/associations/${SLUG}/schedule.ics`);
+function request(slug = SLUG) {
+  return new NextRequest(`http://localhost/api/associations/${slug}/schedule.ics`);
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
   mockGetCurrentUserId.mockResolvedValue(null);
+  mockResolvePublicAssociation.mockResolvedValue({
+    id: "clleague0000000000000001",
+    canonicalSlug: SLUG,
+    redirected: false,
+  });
   mockPrisma.league.findFirst.mockResolvedValue({
     id: "clleague0000000000000001",
     name: LEAGUE_NAME,
@@ -118,10 +127,11 @@ describe("public association ICS", () => {
     expect(mockPrisma.league.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
-          slug: SLUG,
+          id: "clleague0000000000000001",
           isActive: true,
+          profileStatus: "PUBLISHED",
         }),
-        select: { id: true, name: true, slug: true },
+        select: { id: true, name: true },
       }),
     );
     expect(response.status).toBe(200);
@@ -144,10 +154,29 @@ describe("public association ICS", () => {
   });
 
   it("returns not found for an unpublished association slug", async () => {
-    mockPrisma.league.findFirst.mockResolvedValue(null);
+    mockResolvePublicAssociation.mockResolvedValue(null);
 
     const response = await GET(request(), { params: Promise.resolve({ slug: SLUG }) });
 
     expect(response.status).toBe(404);
+    expect(mockPrisma.league.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("redirects a retired slug to the canonical ICS address", async () => {
+    mockResolvePublicAssociation.mockResolvedValue({
+      id: "clleague0000000000000001",
+      canonicalSlug: SLUG,
+      redirected: true,
+    });
+
+    const response = await GET(request("old-north-stars"), {
+      params: Promise.resolve({ slug: "old-north-stars" }),
+    });
+
+    expect(response.status).toBe(308);
+    expect(response.headers.get("location")).toBe(
+      `http://localhost/api/associations/${SLUG}/schedule.ics`,
+    );
+    expect(mockPrisma.league.findFirst).not.toHaveBeenCalled();
   });
 });

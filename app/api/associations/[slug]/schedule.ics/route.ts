@@ -4,7 +4,9 @@ import {
   buildScheduleIcs,
   getPublicAssociationScheduleItems,
 } from "@/lib/data/schedule-items";
+import { resolvePublicAssociation } from "@/lib/actions/association-profile";
 import { prisma } from "@/lib/db/prisma";
+import { publicPublishedAssociationWhere } from "@/lib/utils/public-associations";
 
 /**
  * GET /api/associations/[slug]/schedule.ics
@@ -14,18 +16,29 @@ import { prisma } from "@/lib/db/prisma";
  * allowlist and never selects participant, roster, payment, or audit data.
  */
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ slug: string }> },
 ) {
   try {
     const { slug } = await params;
     if (!slug) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+    const resolved = await resolvePublicAssociation(slug);
+    if (!resolved) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    if (resolved.redirected) {
+      const canonicalUrl = request.nextUrl.clone();
+      canonicalUrl.pathname =
+        `/api/associations/${resolved.canonicalSlug}/schedule.ics`;
+      return NextResponse.redirect(canonicalUrl, 308);
+    }
+
     const association = await prisma.league.findFirst({
-      where: { slug, isActive: true },
-      select: { id: true, name: true, slug: true },
+      where: { ...publicPublishedAssociationWhere, id: resolved.id },
+      select: { id: true, name: true },
     });
-    if (!association || association.slug !== slug) {
+    if (!association) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 

@@ -245,6 +245,20 @@ export function getPublicAssociationScheduleItems(
   });
 }
 
+export async function getPublicTeamScheduleItems(
+  leagueId: string,
+  teamId: string,
+  window: ScheduleItemsWindow = {},
+) {
+  const items = await getPublicAssociationScheduleItems(leagueId, window);
+  return items.filter(
+    (item) =>
+      item.teamId === teamId
+      || item.homeTeam?.id === teamId
+      || item.awayTeam?.id === teamId,
+  );
+}
+
 /** Resolve the exact active venue resources a signed-in staff user may read. */
 export async function getUserVenueIds(userId: string): Promise<string[]> {
   const rows = await findMany<{
@@ -926,7 +940,21 @@ async function readReservations(
     ? [
       ...(scope.leagueIds?.length
         ? [
-          { seasonGames: { some: { season: { leagueId: { in: scope.leagueIds, scheduleVisibility: "PUBLIC" } }, status: { in: ["SCHEDULED", "COMPLETED"] } } } },
+          // scheduleVisibility belongs to the season, not to the leagueId
+          // filter. Nested one level deeper it lands inside a StringFilter,
+          // which Prisma rejects at request time with "Unknown argument
+          // scheduleVisibility" — taking down the public schedule and the
+          // /api/associations/[slug]/schedule.ics feed for any association
+          // reaching this branch. Type-checking cannot catch it: the misplaced
+          // key is still a valid object literal.
+          {
+            seasonGames: {
+              some: {
+                season: { leagueId: { in: scope.leagueIds }, scheduleVisibility: "PUBLIC" },
+                status: { in: ["SCHEDULED", "COMPLETED"] },
+              },
+            },
+          },
           { signupEvents: { some: { hostLeagueId: { in: scope.leagueIds }, status: "PUBLISHED", visibility: "PUBLIC" } } },
         ]
         : []),

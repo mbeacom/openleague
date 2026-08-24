@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import {
   Card,
   CardContent,
@@ -10,6 +10,7 @@ import {
 import { LinkCardActionArea } from "@/components/ui/NextLinkComposites";
 import { prisma } from "@/lib/db/prisma";
 import { listPublicSignupEvents } from "@/lib/actions/signup-events";
+import { resolveActiveAssociation } from "@/lib/actions/association-profile";
 import { AGE_CLASSIFICATION_LABELS } from "@/lib/utils/age-level";
 import { formatDateTime } from "@/lib/utils/date";
 
@@ -26,12 +27,22 @@ export default async function AssociationEventsPage({
 }) {
   const { slug } = await params;
 
+  // Signup events predate public profiles. Resolve retired slugs for any active
+  // association without making its draft profile visible.
+  const resolved = await resolveActiveAssociation(slug);
+  if (!resolved) notFound();
+
   const league = await prisma.league.findUnique({
-    where: { slug },
+    where: { id: resolved.id },
     select: { id: true, name: true, isActive: true },
   });
+
   if (!league || !league.isActive) {
     notFound();
+  }
+
+  if (resolved.canonicalSlug !== slug) {
+    redirect(`/associations/${resolved.canonicalSlug}/events`);
   }
 
   const events = await listPublicSignupEvents({ hostLeagueId: league.id });

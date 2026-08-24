@@ -1,10 +1,30 @@
 import { MetadataRoute } from 'next';
 
+import { prisma } from '@/lib/db/prisma';
+import {
+    publicPublishedAssociationWhere,
+    publicPublishedTeamWhere,
+    publicContentWhere,
+} from '@/lib/utils/public-associations';
+
 /**
  * Dynamic sitemap generation for OpenLeague
  * https://nextjs.org/docs/app/api-reference/file-conventions/metadata/sitemap
  */
-export default function sitemap(): MetadataRoute.Sitemap {
+/**
+ * Revalidated hourly rather than baked at build time.
+ *
+ * Sitemaps are cached by default, but this one now enumerates published
+ * associations, teams, and news — all of which change between deploys. A
+ * build-time snapshot would omit everything published since, and would also
+ * freeze in whatever state the build-time database happened to be in (a
+ * database still awaiting the migration yields an empty association list,
+ * which the catch below turns into "no association pages" rather than a
+ * failed build).
+ */
+export const revalidate = 3600;
+
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const baseUrl = 'https://openl.app';
     const currentDate = new Date();
 
@@ -116,5 +136,114 @@ export default function sitemap(): MetadataRoute.Sitemap {
         },
     ];
 
-    return [...marketingPages, ...docPages, ...legalPages];
+    // Published association surfaces (feature 007 US4). Every query is bounded
+    // by the same published-only `where` the pages use, so an unpublished
+    // association, team, or scheduled-but-not-yet-live post can never be
+    // advertised here — the sitemap cannot leak what the pages would 404 on.
+    const staticPageCount = marketingPages.length + docPages.length + legalPages.length;
+    const associationPages = await getPublishedAssociationPages(
+        baseUrl,
+        currentDate,
+        SITEMAP_URL_LIMIT - staticPageCount,
+    );
+
+    return [...marketingPages, ...docPages, ...legalPages, ...associationPages];
+}
+
+/** One global cap keeps the generated document below the protocol's 50,000 URLs. */
+const SITEMAP_URL_LIMIT = 10_000;
+const ASSOCIATION_LIMIT = 500;
+const ASSOCIATION_SURFACE_COUNT = 5;
+
+async function getPublishedAssociationPages(
+    baseUrl: string,
+    currentDate: Date,
+    urlBudget: number,
+): Promise<MetadataRoute.Sitemap> {
+    try {
+        const now = new Date();
+        const associations = await prisma.league.findMany({
+            where: publicPublishedAssociationWhere,
+            select: {
+                slug: true,
+                publishedAt: true,
+            },
+            take: Math.min(
+                ASSOCIATION_LIMIT,
+                Math.floor(urlBudget / ASSOCIATION_SURFACE_COUNT),
+            ),
+        });
+
+        const associationPages = associations.flatMap((association) => {
+            if (!association.slug) return [];
+            const base = `${baseUrl}/associations/${association.slug}`;
+            const lastModified = association.publishedAt ?? currentDate;
+
+            return [
+                { url: base, lastModified, changeFrequency: 'weekly' as const, priority: 0.7 },
+                { url: `${base}/teams`, lastModified, changeFrequency: 'weekly' as const, priority: 0.6 },
+                { url: `${base}/schedule`, lastModified, changeFrequency: 'daily' as const, priority: 0.6 },
+                { url: `${base}/events`, lastModified, changeFrequency: 'daily' as const, priority: 0.6 },
+                { url: `${base}/news`, lastModified, changeFrequency: 'weekly' as const, priority: 0.6 },
+            ];
+        });
+
+        const remainingBudget = Math.max(0, urlBudget - associationPages.length);
+        const teamBudget = Math.floor(remainingBudget / 2);
+        const contentBudget = remainingBudget - teamBudget;
+        const [teams, contentItems] = await Promise.all([
+            prisma.team.findMany({
+                where: {
+                    ...publicPublishedTeamWhere,
+                    league: { is: publicPublishedAssociationWhere },
+                },
+                select: {
+                    slug: true,
+                    publishedAt: true,
+                    league: { select: { slug: true, publishedAt: true } },
+                },
+                take: teamBudget,
+            }),
+            prisma.publicContentItem.findMany({
+                where: {
+                    ...publicContentWhere(now),
+                    league: { is: publicPublishedAssociationWhere },
+                },
+                select: {
+                    slug: true,
+                    publishAt: true,
+                    league: { select: { slug: true, publishedAt: true } },
+                },
+                orderBy: { publishAt: 'desc' },
+                take: contentBudget,
+            }),
+        ]);
+
+        const teamPages = teams.flatMap((team) => {
+            if (!team.slug || !team.league?.slug) return [];
+            return [{
+                    url: `${baseUrl}/associations/${team.league.slug}/teams/${team.slug}`,
+                    lastModified: team.publishedAt ?? team.league.publishedAt ?? currentDate,
+                    changeFrequency: 'weekly' as const,
+                    priority: 0.5,
+                }];
+        });
+        const contentPages = contentItems.flatMap((item) =>
+            item.league.slug
+                ? [{
+                    url: `${baseUrl}/associations/${item.league.slug}/news/${item.slug}`,
+                    lastModified: item.publishAt ?? item.league.publishedAt ?? currentDate,
+                    changeFrequency: 'monthly' as const,
+                    priority: 0.4,
+                }]
+                : [],
+        );
+
+        return [...associationPages, ...teamPages, ...contentPages].slice(0, urlBudget);
+    } catch (error) {
+        // A sitemap that throws takes the whole route down. The static pages
+        // are still worth serving if the database is unreachable.
+        console.error('Sitemap: association pages unavailable', error);
+        return [];
+    }
 }

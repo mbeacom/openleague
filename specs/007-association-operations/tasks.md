@@ -158,24 +158,24 @@ description: "Dependency-ordered implementation backlog for association operatio
 
 ### Tests
 
-- [ ] T068 [P] [US4] Add association/team profile validation and slug redirect action tests to `__tests__/lib/actions/association-profile.test.ts`
-- [ ] T069 [P] [US4] Add content lifecycle and scheduled-publication tests to `__tests__/lib/actions/public-content.test.ts`
-- [ ] T070 [P] [US4] Add public association/team privacy tests including gear token, donor/custodian PII, location, inventory, and outbox exclusions to `__tests__/app/public-association-privacy.test.tsx` and `__tests__/app/public-team-privacy.test.tsx`
-- [ ] T071 [P] [US4] Add public association profile/wishlist tests and automated no-more-than-three-activation navigation coverage for every published team, schedule, signup event, announcement, and active wishlist in `__tests__/components/features/association-profile/PublicAssociationProfile.test.tsx` and `__tests__/app/public-association-navigation.test.tsx`
+- [x] T068 [P] [US4] Add association/team profile validation and slug redirect action tests to `__tests__/lib/actions/association-profile.test.ts`
+- [x] T069 [P] [US4] Add content lifecycle and scheduled-publication tests to `__tests__/lib/actions/public-content.test.ts`
+- [x] T070 [P] [US4] Add public association/team privacy tests including gear token, donor/custodian PII, location, inventory, and outbox exclusions to `__tests__/app/public-association-privacy.test.tsx` and `__tests__/app/public-team-privacy.test.tsx`
+- [x] T071 [P] [US4] Add public association profile/wishlist tests and automated no-more-than-three-activation navigation coverage for every published team, schedule, signup event, announcement, and active wishlist in `__tests__/components/features/association-profile/PublicAssociationProfile.test.tsx` and `__tests__/app/public-association-navigation.test.tsx`
 
 ### Implementation
 
-- [ ] T072 [US4] Add publishable League/Team profile fields, redirect models, `PublicContentItem`, and enums to `prisma/schema.prisma`
-- [ ] T073 [US4] Create public profile/content migration and uniqueness constraints, then regenerate Prisma before profile/content actions, in `prisma/migrations/<timestamp>_add_association_public_profiles/migration.sql` with `bun run db:generate`
-- [ ] T074 [US4] Implement profile update/publish/unpublish/slug actions with dedicated public selectors and a safe published-wishlist link derived through existing gear selectors in `lib/actions/association-profile.ts` and `lib/actions/gear-wishlist.ts`
-- [ ] T075 [US4] Implement content draft/schedule/publish/archive actions and safe selectors in `lib/actions/public-content.ts`
-- [ ] T076 [US4] Add association profile and content editors to `components/features/association-profile/AssociationProfileEditor.tsx` and `components/features/association-profile/ContentEditor.tsx`
-- [ ] T077 [US4] Add public association home with published gear-wishlist navigation and team directory routes in `app/(marketing)/associations/[slug]/page.tsx` and `app/(marketing)/associations/[slug]/teams/page.tsx`
-- [ ] T078 [US4] Add public team and news routes in `app/(marketing)/associations/[slug]/teams/[teamSlug]/page.tsx` and `app/(marketing)/associations/[slug]/news/[contentSlug]/page.tsx`
-- [ ] T079 [US4] Add canonical public association schedule in `app/(marketing)/associations/[slug]/schedule/page.tsx`
-- [ ] T080 [US4] Retain and integrate existing event rollup in `app/(marketing)/associations/[slug]/events/page.tsx`
-- [ ] T081 [US4] Add public profile/content management routes in `app/(dashboard)/league/[leagueId]/settings/public/page.tsx` and `app/(dashboard)/league/[leagueId]/content/page.tsx`
-- [ ] T082 [US4] Add published association/team/content discovery to `app/sitemap.ts`
+- [x] T072 [US4] Add publishable League/Team profile fields, redirect models, `PublicContentItem`, and enums to `prisma/schema.prisma`
+- [x] T073 [US4] Create public profile/content migration and uniqueness constraints, then regenerate Prisma before profile/content actions, in `prisma/migrations/<timestamp>_add_association_public_profiles/migration.sql` with `bun run db:generate`
+- [x] T074 [US4] Implement profile update/publish/unpublish/slug actions with dedicated public selectors and a safe published-wishlist link derived through existing gear selectors in `lib/actions/association-profile.ts` and `lib/actions/gear-wishlist.ts`
+- [x] T075 [US4] Implement content draft/schedule/publish/archive actions and safe selectors in `lib/actions/public-content.ts`
+- [x] T076 [US4] Add association profile and content editors to `components/features/association-profile/AssociationProfileEditor.tsx` and `components/features/association-profile/ContentEditor.tsx`
+- [x] T077 [US4] Add public association home with published gear-wishlist navigation and team directory routes in `app/(marketing)/associations/[slug]/page.tsx` and `app/(marketing)/associations/[slug]/teams/page.tsx`
+- [x] T078 [US4] Add public team and news routes in `app/(marketing)/associations/[slug]/teams/[teamSlug]/page.tsx` and `app/(marketing)/associations/[slug]/news/[contentSlug]/page.tsx`
+- [x] T079 [US4] Add canonical public association schedule in `app/(marketing)/associations/[slug]/schedule/page.tsx`
+- [x] T080 [US4] Retain and integrate existing event rollup in `app/(marketing)/associations/[slug]/events/page.tsx`
+- [x] T081 [US4] Add public profile/content management routes in `app/(dashboard)/league/[leagueId]/settings/public/page.tsx` and `app/(dashboard)/league/[leagueId]/content/page.tsx`
+- [x] T082 [US4] Add published association/team/content discovery to `app/sitemap.ts`
 
 **Checkpoint**: Families and partners have one public association source without private roster exposure.
 
