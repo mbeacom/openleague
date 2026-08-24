@@ -247,15 +247,28 @@ export async function updateTeamPublicProfile(
     }
 
     if (validated.slug && validated.slug !== team.slug) {
-      const taken = await prisma.team.findFirst({
-        where: {
-          leagueId: validated.leagueId,
-          slug: validated.slug,
-          NOT: { id: validated.teamId },
-        },
-        select: { id: true },
-      });
-      if (taken) return { success: false, error: "Another team already uses that address." };
+      const [takenByTeam, takenByRedirect] = await Promise.all([
+        prisma.team.findFirst({
+          where: {
+            leagueId: validated.leagueId,
+            slug: validated.slug,
+            NOT: { id: validated.teamId },
+          },
+          select: { id: true },
+        }),
+        prisma.publicSlugRedirect.findFirst({
+          where: {
+            leagueId: validated.leagueId,
+            slug: validated.slug,
+            teamId: { not: null },
+            NOT: { teamId: validated.teamId },
+          },
+          select: { id: true },
+        }),
+      ]);
+      if (takenByTeam || takenByRedirect) {
+        return { success: false, error: "Another team already uses that address." };
+      }
     }
 
     await prisma.$transaction(async (tx) => {
@@ -292,7 +305,7 @@ export async function updateTeamPublicProfile(
           where: {
             leagueId: validated.leagueId,
             slug: validated.slug,
-            teamId: { not: null },
+            teamId: validated.teamId,
           },
         });
       }
@@ -321,11 +334,20 @@ export async function updateTeamPublicProfile(
  * page at a stale address, which keeps one URL per association for search
  * engines and for anybody copying the link out of the address bar.
  */
-export async function resolvePublicAssociation(
+type ResolvedAssociation = {
+  id: string;
+  canonicalSlug: string;
+  redirected: boolean;
+};
+
+async function resolveAssociationSlug(
   slug: string,
-): Promise<{ id: string; canonicalSlug: string; redirected: boolean } | null> {
+  requirePublishedProfile: boolean,
+): Promise<ResolvedAssociation | null> {
   const league = await prisma.league.findFirst({
-    where: { ...publicPublishedAssociationWhere, slug },
+    where: requirePublishedProfile
+      ? { ...publicPublishedAssociationWhere, slug }
+      : { isActive: true, slug },
     select: { id: true, slug: true },
   });
   if (league?.slug) {
@@ -342,12 +364,30 @@ export async function resolvePublicAssociation(
   if (
     redirect?.league?.slug &&
     redirect.league.isActive &&
-    redirect.league.profileStatus === "PUBLISHED"
+    (!requirePublishedProfile || redirect.league.profileStatus === "PUBLISHED")
   ) {
     return { id: redirect.league.id, canonicalSlug: redirect.league.slug, redirected: true };
   }
 
   return null;
+}
+
+export async function resolvePublicAssociation(
+  slug: string,
+): Promise<ResolvedAssociation | null> {
+  return resolveAssociationSlug(slug, true);
+}
+
+/**
+ * Resolve the public-events namespace, which predates association profiles.
+ * An active association may publish signup events while its profile is still a
+ * draft, so this resolver preserves retired event links without exposing the
+ * profile, team, news, or schedule surfaces.
+ */
+export async function resolveActiveAssociation(
+  slug: string,
+): Promise<ResolvedAssociation | null> {
+  return resolveAssociationSlug(slug, false);
 }
 
 export async function getPublicAssociationProfile(slug: string) {

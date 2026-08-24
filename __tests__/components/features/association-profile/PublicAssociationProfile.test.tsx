@@ -10,6 +10,8 @@ const base = {
   sport: "HOCKEY",
   publicDescription: null,
   logoUrl: null,
+  brandPrimaryColor: null,
+  brandSecondaryColor: null,
   publicEmail: null,
   publicPhone: null,
   divisions: [],

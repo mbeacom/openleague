@@ -1,15 +1,31 @@
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 
-const { mockLeague } = vi.hoisted(() => ({ mockLeague: { findMany: vi.fn() } }));
+const { mockLeague, mockTeam, mockContent } = vi.hoisted(() => ({
+    mockLeague: { findMany: vi.fn() },
+    mockTeam: { findMany: vi.fn() },
+    mockContent: { findMany: vi.fn() },
+}));
 
 // The sitemap now enumerates published association surfaces. Default to none so
 // the existing static-page assertions stay about the static pages.
-vi.mock('@/lib/db/prisma', () => ({ prisma: { league: mockLeague } }));
-mockLeague.findMany.mockResolvedValue([]);
+vi.mock('@/lib/db/prisma', () => ({
+    prisma: {
+        league: mockLeague,
+        team: mockTeam,
+        publicContentItem: mockContent,
+    },
+}));
 
 import sitemap from '@/app/sitemap';
 
 describe('Sitemap Generation', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockLeague.findMany.mockResolvedValue([]);
+        mockTeam.findMany.mockResolvedValue([]);
+        mockContent.findMany.mockResolvedValue([]);
+    });
+
     it('should generate a valid sitemap array', async () => {
         const sitemapData = await sitemap();
 
@@ -110,5 +126,42 @@ describe('Sitemap Generation', () => {
         sitemapData.forEach((entry) => {
             expect(validFrequencies).toContain(entry.changeFrequency);
         });
+    });
+
+    it('uses one global URL budget for association, team, and news pages', async () => {
+        const publishedAt = new Date('2026-08-01T00:00:00Z');
+        mockLeague.findMany.mockResolvedValue([
+            { slug: 'metro', publishedAt },
+        ]);
+        mockTeam.findMany.mockResolvedValue([
+            {
+                slug: 'blades',
+                publishedAt,
+                league: { slug: 'metro', publishedAt },
+            },
+        ]);
+        mockContent.findMany.mockResolvedValue([
+            {
+                slug: 'season-opens',
+                publishAt: publishedAt,
+                league: { slug: 'metro', publishedAt },
+            },
+        ]);
+
+        const sitemapData = await sitemap();
+        const urls = sitemapData.map((entry) => entry.url);
+
+        expect(urls).toEqual(expect.arrayContaining([
+            'https://openl.app/associations/metro/news',
+            'https://openl.app/associations/metro/teams/blades',
+            'https://openl.app/associations/metro/news/season-opens',
+        ]));
+        expect(sitemapData.length).toBeLessThanOrEqual(10_000);
+        expect(mockLeague.findMany.mock.calls[0][0].select.teams).toBeUndefined();
+        expect(mockLeague.findMany.mock.calls[0][0].select.publicContentItems).toBeUndefined();
+
+        const teamBudget = mockTeam.findMany.mock.calls[0][0].take;
+        const contentBudget = mockContent.findMany.mock.calls[0][0].take;
+        expect(teamBudget + contentBudget + 5).toBeLessThanOrEqual(9_984);
     });
 });

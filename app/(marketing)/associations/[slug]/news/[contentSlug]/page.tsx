@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { Chip, Container, Stack, Typography } from "@mui/material";
 
 import { LinkButton } from "@/components/ui/NextLinkComposites";
@@ -18,6 +18,9 @@ export default async function PublicNewsItemPage({
   if (!result) notFound();
 
   const { item, association } = result;
+  if (association.slug !== slug) {
+    redirect(`/associations/${association.slug}/news/${contentSlug}`);
+  }
 
   return (
     <Container maxWidth="md" sx={{ py: { xs: 6, md: 8 } }}>

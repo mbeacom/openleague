@@ -1,18 +1,29 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockItem, mockTeam, mockLeague, mockRequireUserId, mockHasCapability } = vi.hoisted(
+const {
+  mockItem,
+  mockTeam,
+  mockLeague,
+  mockRequireUserId,
+  mockHasCapability,
+  mockLoadActiveGrants,
+  mockResolvePublicAssociation,
+} = vi.hoisted(
   () => ({
     mockItem: {
+      count: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
       findFirst: vi.fn(),
       findUnique: vi.fn(),
       findMany: vi.fn(),
     },
-    mockTeam: { findFirst: vi.fn() },
+    mockTeam: { findFirst: vi.fn(), findMany: vi.fn() },
     mockLeague: { findFirst: vi.fn() },
     mockRequireUserId: vi.fn(),
     mockHasCapability: vi.fn(),
+    mockLoadActiveGrants: vi.fn(),
+    mockResolvePublicAssociation: vi.fn(),
   }),
 );
 
@@ -22,15 +33,24 @@ vi.mock("@/lib/db/prisma", () => ({
 vi.mock("@/lib/auth/session", () => ({ requireUserId: mockRequireUserId }));
 vi.mock("@/lib/auth/capabilities", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/auth/capabilities")>();
-  return { ...actual, hasCapability: mockHasCapability };
+  return {
+    ...actual,
+    hasCapability: mockHasCapability,
+    loadActiveGrants: mockLoadActiveGrants,
+  };
 });
+vi.mock("@/lib/actions/association-profile", () => ({
+  resolvePublicAssociation: mockResolvePublicAssociation,
+}));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 import {
   archivePublicContent,
   createPublicContent,
   getPublicContentItem,
+  listAssociationContent,
   listPublicAssociationContent,
+  listPublicAssociationContentPage,
   updatePublicContent,
 } from "@/lib/actions/public-content";
 
@@ -46,9 +66,17 @@ describe("public content", () => {
     vi.setSystemTime(NOW);
     mockRequireUserId.mockResolvedValue("editor-1");
     mockHasCapability.mockResolvedValue(true);
+    mockLoadActiveGrants.mockResolvedValue([]);
+    mockResolvePublicAssociation.mockResolvedValue({
+      id: LEAGUE,
+      canonicalSlug: "metro",
+      redirected: false,
+    });
     mockItem.findFirst.mockResolvedValue(null);
+    mockItem.count.mockResolvedValue(0);
     mockItem.create.mockResolvedValue({ id: ITEM });
     mockTeam.findFirst.mockResolvedValue({ id: TEAM });
+    mockTeam.findMany.mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -84,6 +112,15 @@ describe("public content", () => {
       const data = mockItem.create.mock.calls[0][0].data;
       expect(data.status).toBe("SCHEDULED");
       expect(data.publishAt).toEqual(future);
+      expect(data.publishedAt).toBeNull();
+    });
+
+    it("saves a draft without making it publicly readable", async () => {
+      await createPublicContent({ ...base, status: "DRAFT" });
+
+      const data = mockItem.create.mock.calls[0][0].data;
+      expect(data.status).toBe("DRAFT");
+      expect(data.publishAt).toBeNull();
       expect(data.publishedAt).toBeNull();
     });
 
@@ -128,6 +165,15 @@ describe("public content", () => {
         expect(result.success, `${bad} should be rejected`).toBe(false);
       }
     });
+
+    it("rejects whitespace-only titles and bodies", async () => {
+      const blankTitle = await createPublicContent({ ...base, title: "   " });
+      const blankBody = await createPublicContent({ ...base, body: "\n\t" });
+
+      expect(blankTitle.success).toBe(false);
+      expect(blankBody.success).toBe(false);
+      expect(mockItem.create).not.toHaveBeenCalled();
+    });
   });
 
   describe("updating", () => {
@@ -137,6 +183,7 @@ describe("public content", () => {
         leagueId: LEAGUE,
         teamId: null,
         status: "PUBLISHED",
+        publishAt: new Date("2026-05-01T00:00:00Z"),
         publishedAt: new Date("2026-05-01T00:00:00Z"),
       });
     });
@@ -179,6 +226,7 @@ describe("public content", () => {
         leagueId: LEAGUE,
         teamId: TEAM,
         status: "PUBLISHED",
+        publishAt: NOW,
         publishedAt: NOW,
       });
 
@@ -187,6 +235,77 @@ describe("public content", () => {
       expect(mockHasCapability).toHaveBeenCalledWith(
         expect.objectContaining({ teamId: TEAM }),
       );
+    });
+
+    it("publishes a draft using its saved future schedule", async () => {
+      const future = new Date("2026-09-01T00:00:00Z");
+      mockItem.findUnique.mockResolvedValue({
+        id: ITEM,
+        leagueId: LEAGUE,
+        teamId: null,
+        status: "DRAFT",
+        publishAt: future,
+        publishedAt: null,
+      });
+
+      await updatePublicContent({ itemId: ITEM, status: "PUBLISHED" });
+
+      expect(mockItem.update.mock.calls[0][0].data).toEqual(
+        expect.objectContaining({
+          status: "SCHEDULED",
+          publishAt: future,
+          publishedAt: null,
+        }),
+      );
+    });
+
+    it("moves scheduled content back to draft", async () => {
+      mockItem.findUnique.mockResolvedValue({
+        id: ITEM,
+        leagueId: LEAGUE,
+        teamId: null,
+        status: "SCHEDULED",
+        publishAt: new Date("2026-09-01T00:00:00Z"),
+        publishedAt: null,
+      });
+
+      await updatePublicContent({ itemId: ITEM, status: "DRAFT" });
+
+      expect(mockItem.update.mock.calls[0][0].data).toEqual(
+        expect.objectContaining({ status: "DRAFT", publishedAt: null }),
+      );
+    });
+
+    it("does not move already-published content back to draft", async () => {
+      const result = await updatePublicContent({ itemId: ITEM, status: "DRAFT" });
+
+      expect(result.success).toBe(false);
+      expect(mockItem.update).not.toHaveBeenCalled();
+    });
+
+    it("does not move an elapsed scheduled post back to draft", async () => {
+      mockItem.findUnique.mockResolvedValue({
+        id: ITEM,
+        leagueId: LEAGUE,
+        teamId: null,
+        status: "SCHEDULED",
+        publishAt: new Date("2026-05-01T00:00:00Z"),
+        publishedAt: null,
+      });
+
+      const result = await updatePublicContent({ itemId: ITEM, status: "DRAFT" });
+
+      expect(result.success).toBe(false);
+      expect(mockItem.update).not.toHaveBeenCalled();
+    });
+
+    it("rejects whitespace-only update values", async () => {
+      const title = await updatePublicContent({ itemId: ITEM, title: "   " });
+      const body = await updatePublicContent({ itemId: ITEM, body: "\n\t" });
+
+      expect(title.success).toBe(false);
+      expect(body.success).toBe(false);
+      expect(mockItem.update).not.toHaveBeenCalled();
     });
   });
 
@@ -245,6 +364,19 @@ describe("public content", () => {
       expect(select.visibility).toBeUndefined();
     });
 
+    it("rejects an out-of-range page before constructing a Prisma skip", async () => {
+      mockItem.count.mockResolvedValue(20);
+
+      const result = await listPublicAssociationContentPage(
+        LEAGUE,
+        Number.MAX_SAFE_INTEGER,
+      );
+
+      expect(result.items).toEqual([]);
+      expect(result.totalPages).toBe(1);
+      expect(mockItem.findMany).not.toHaveBeenCalled();
+    });
+
     it("reads a single item without a session", async () => {
       mockLeague.findFirst.mockResolvedValue({ id: LEAGUE, name: "Metro", slug: "metro" });
       mockItem.findFirst.mockResolvedValue({ id: ITEM, slug: "season-opens" });
@@ -255,10 +387,30 @@ describe("public content", () => {
       expect(mockRequireUserId).not.toHaveBeenCalled();
     });
 
+    it("resolves retired association slugs to the canonical news URL", async () => {
+      mockResolvePublicAssociation.mockResolvedValue({
+        id: LEAGUE,
+        canonicalSlug: "metro-hockey",
+        redirected: true,
+      });
+      mockLeague.findFirst.mockResolvedValue({
+        id: LEAGUE,
+        name: "Metro",
+        slug: "metro-hockey",
+      });
+      mockItem.findFirst.mockResolvedValue({ id: ITEM, slug: "season-opens" });
+
+      const result = await getPublicContentItem("old-metro", "season-opens");
+
+      expect(mockResolvePublicAssociation).toHaveBeenCalledWith("old-metro");
+      expect(result?.association.slug).toBe("metro-hockey");
+    });
+
     it("returns nothing when the association is not published", async () => {
-      mockLeague.findFirst.mockResolvedValue(null);
+      mockResolvePublicAssociation.mockResolvedValue(null);
 
       await expect(getPublicContentItem("metro", "season-opens")).resolves.toBeNull();
+      expect(mockLeague.findFirst).not.toHaveBeenCalled();
       expect(mockItem.findFirst).not.toHaveBeenCalled();
     });
 
@@ -270,6 +422,41 @@ describe("public content", () => {
 
       expect(mockItem.findFirst.mock.calls[0][0].where).toEqual(
         expect.objectContaining({ visibility: "PUBLIC" }),
+      );
+    });
+  });
+
+  describe("management scope", () => {
+    it("returns only teams and content covered by a scoped communications grant", async () => {
+      mockHasCapability.mockResolvedValue(false);
+      mockLoadActiveGrants.mockResolvedValue([
+        {
+          role: "COMMUNICATIONS_LEAD",
+          scopeType: "TEAM",
+          divisionId: null,
+          teamId: TEAM,
+          seasonId: null,
+          eventId: null,
+          signupEventId: null,
+        },
+      ]);
+      mockTeam.findMany.mockResolvedValue([{ id: TEAM, name: "Blades" }]);
+      mockItem.findMany.mockResolvedValue([]);
+
+      const result = await listAssociationContent(LEAGUE);
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.canPublishAssociationWide).toBe(false);
+        expect(result.data.teams).toEqual([{ id: TEAM, name: "Blades" }]);
+      }
+      expect(mockItem.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            leagueId: LEAGUE,
+            teamId: { in: [TEAM] },
+          },
+        }),
       );
     });
   });

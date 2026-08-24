@@ -21,6 +21,8 @@ const association = {
   sport: "HOCKEY",
   publicDescription: "Youth hockey.",
   logoUrl: null,
+  brandPrimaryColor: "#123456",
+  brandSecondaryColor: "#654321",
   publicEmail: "hello@metro.example.com",
   publicPhone: null,
   divisions: [{ id: "d1", name: "U12 Recreational", ageGroup: "U12" }],
@@ -63,6 +65,7 @@ describe("association landing page reachability (SC-007)", () => {
   it("reaches every public announcement in one activation", () => {
     render(<PublicAssociationProfile association={association} />);
     expect(hrefs()).toContain("/associations/metro-hockey/news/season-opens");
+    expect(hrefs()).toContain("/associations/metro-hockey/news");
   });
 
   it("reaches an active published wishlist in one activation", () => {

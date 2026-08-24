@@ -245,6 +245,20 @@ export function getPublicAssociationScheduleItems(
   });
 }
 
+export async function getPublicTeamScheduleItems(
+  leagueId: string,
+  teamId: string,
+  window: ScheduleItemsWindow = {},
+) {
+  const items = await getPublicAssociationScheduleItems(leagueId, window);
+  return items.filter(
+    (item) =>
+      item.teamId === teamId
+      || item.homeTeam?.id === teamId
+      || item.awayTeam?.id === teamId,
+  );
+}
+
 /** Resolve the exact active venue resources a signed-in staff user may read. */
 export async function getUserVenueIds(userId: string): Promise<string[]> {
   const rows = await findMany<{

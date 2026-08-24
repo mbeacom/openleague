@@ -10,7 +10,7 @@ import {
 import { LinkCardActionArea } from "@/components/ui/NextLinkComposites";
 import { prisma } from "@/lib/db/prisma";
 import { listPublicSignupEvents } from "@/lib/actions/signup-events";
-import { resolvePublicAssociation } from "@/lib/actions/association-profile";
+import { resolveActiveAssociation } from "@/lib/actions/association-profile";
 import { AGE_CLASSIFICATION_LABELS } from "@/lib/utils/age-level";
 import { formatDateTime } from "@/lib/utils/date";
 
@@ -27,29 +27,21 @@ export default async function AssociationEventsPage({
 }) {
   const { slug } = await params;
 
-  // Resolves through the same path as the rest of the public association
-  // surface, so a renamed slug redirects here too rather than 404ing — this
-  // page predates the profile and used to resolve the slug on its own.
-  const resolved = await resolvePublicAssociation(slug);
+  // Signup events predate public profiles. Resolve retired slugs for any active
+  // association without making its draft profile visible.
+  const resolved = await resolveActiveAssociation(slug);
+  if (!resolved) notFound();
 
-  const league = resolved
-    ? await prisma.league.findUnique({
-        where: { id: resolved.id },
-        select: { id: true, name: true, isActive: true },
-      })
-    : // Fall back to the original lookup: an association may publish signup
-      // events without ever publishing a public profile, and those event URLs
-      // must keep working.
-      await prisma.league.findUnique({
-        where: { slug },
-        select: { id: true, name: true, isActive: true },
-      });
+  const league = await prisma.league.findUnique({
+    where: { id: resolved.id },
+    select: { id: true, name: true, isActive: true },
+  });
 
   if (!league || !league.isActive) {
     notFound();
   }
 
-  if (resolved && resolved.canonicalSlug !== slug) {
+  if (resolved.canonicalSlug !== slug) {
     redirect(`/associations/${resolved.canonicalSlug}/events`);
   }
 

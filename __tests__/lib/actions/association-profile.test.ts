@@ -34,6 +34,7 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 import {
   getPublicAssociationProfile,
+  resolveActiveAssociation,
   resolvePublicAssociation,
   setAssociationProfilePublished,
   updateAssociationProfile,
@@ -203,6 +204,26 @@ describe("association public profile", () => {
           create: expect.objectContaining({ slug: "blades", teamId: TEAM }),
         }),
       );
+      expect(mockRedirect.deleteMany).toHaveBeenCalledWith({
+        where: {
+          leagueId: LEAGUE,
+          slug: "metro-blades",
+          teamId: TEAM,
+        },
+      });
+    });
+
+    it("refuses a slug retired by another team in the association", async () => {
+      mockRedirect.findFirst.mockResolvedValue({ id: "other-team:metro-blades" });
+
+      const result = await updateTeamPublicProfile({
+        leagueId: LEAGUE,
+        teamId: TEAM,
+        slug: "metro-blades",
+      });
+
+      expect(result.success).toBe(false);
+      expect(mockTransaction).not.toHaveBeenCalled();
     });
 
     it("refuses to publish a team without an address", async () => {
@@ -272,6 +293,11 @@ describe("association public profile", () => {
       });
 
       await expect(resolvePublicAssociation("old-metro")).resolves.toBeNull();
+      await expect(resolveActiveAssociation("old-metro")).resolves.toEqual({
+        id: LEAGUE,
+        canonicalSlug: "metro",
+        redirected: true,
+      });
     });
 
     it("returns nothing for an unknown slug", async () => {

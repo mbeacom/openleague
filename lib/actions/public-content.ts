@@ -5,7 +5,13 @@ import { revalidatePath } from "next/cache";
 
 import { prisma } from "@/lib/db/prisma";
 import { requireUserId } from "@/lib/auth/session";
-import { Capability, hasCapability } from "@/lib/auth/capabilities";
+import {
+  Capability,
+  hasCapability,
+  loadActiveGrants,
+  ROLE_CAPABILITY_MATRIX,
+} from "@/lib/auth/capabilities";
+import { resolvePublicAssociation } from "@/lib/actions/association-profile";
 import { rethrowIfNextRedirectError } from "@/lib/utils/next-errors";
 import {
   publicContentDetailSelect,
@@ -47,10 +53,11 @@ const createSchema = z.object({
   leagueId: cuid,
   teamId: cuid.optional(),
   slug: slugSchema,
-  title: z.string().min(1, "A title is required").max(200),
-  summary: z.string().max(400).optional(),
-  body: z.string().min(1, "Some content is required").max(20000),
+  title: z.string().trim().min(1, "A title is required").max(200),
+  summary: z.string().trim().max(400).optional(),
+  body: z.string().trim().min(1, "Some content is required").max(20000),
   visibility: z.enum(["PUBLIC", "MEMBERS_ONLY"]).default("PUBLIC"),
+  status: z.enum(["DRAFT", "PUBLISHED"]).default("PUBLISHED"),
   /** Omitted publishes immediately; a future value schedules it. */
   publishAt: z.coerce.date().optional(),
 });
@@ -96,24 +103,25 @@ export async function createPublicContent(
     }
 
     const now = new Date();
-    const publishAt = validated.publishAt ?? now;
+    const draft = validated.status === "DRAFT";
+    const publishAt = validated.publishAt ?? (draft ? null : now);
     // SCHEDULED and PUBLISHED are the same row with a different publishAt; the
     // public reader gates on the timestamp, so the status is a label for
     // administrators rather than a switch the reader consults.
-    const scheduled = publishAt > now;
+    const scheduled = !draft && publishAt !== null && publishAt > now;
 
     const item = await prisma.publicContentItem.create({
       data: {
         leagueId: validated.leagueId,
         teamId: validated.teamId ?? null,
         slug: validated.slug,
-        title: validated.title.trim(),
-        summary: validated.summary ? validated.summary.trim() : null,
-        body: validated.body.trim(),
+        title: validated.title,
+        summary: validated.summary || null,
+        body: validated.body,
         visibility: validated.visibility,
-        status: scheduled ? "SCHEDULED" : "PUBLISHED",
+        status: draft ? "DRAFT" : scheduled ? "SCHEDULED" : "PUBLISHED",
         publishAt,
-        publishedAt: scheduled ? null : now,
+        publishedAt: draft || scheduled ? null : now,
         authorId: userId,
       },
       select: { id: true },
@@ -133,10 +141,11 @@ export async function createPublicContent(
 
 const updateSchema = z.object({
   itemId: cuid,
-  title: z.string().min(1).max(200).optional(),
-  summary: z.string().max(400).nullable().optional(),
-  body: z.string().min(1).max(20000).optional(),
+  title: z.string().trim().min(1).max(200).optional(),
+  summary: z.string().trim().max(400).nullable().optional(),
+  body: z.string().trim().min(1).max(20000).optional(),
   visibility: z.enum(["PUBLIC", "MEMBERS_ONLY"]).optional(),
+  status: z.enum(["DRAFT", "PUBLISHED"]).optional(),
   publishAt: z.coerce.date().optional(),
 });
 
@@ -149,7 +158,14 @@ export async function updatePublicContent(
 
     const item = await prisma.publicContentItem.findUnique({
       where: { id: validated.itemId },
-      select: { id: true, leagueId: true, teamId: true, status: true, publishedAt: true },
+      select: {
+        id: true,
+        leagueId: true,
+        teamId: true,
+        status: true,
+        publishAt: true,
+        publishedAt: true,
+      },
     });
     if (!item) return { success: false, error: "That post could not be found." };
 
@@ -159,21 +175,30 @@ export async function updatePublicContent(
     if (item.status === "ARCHIVED") {
       return { success: false, error: "Archived posts cannot be edited." };
     }
-
     const now = new Date();
-    const nextPublishAt = validated.publishAt;
-    const scheduled = nextPublishAt ? nextPublishAt > now : undefined;
+    const alreadyPublic =
+      item.status === "PUBLISHED"
+      || (
+        item.status === "SCHEDULED"
+        && item.publishAt !== null
+        && item.publishAt <= now
+      );
+    if (validated.status === "DRAFT" && alreadyPublic) {
+      return {
+        success: false,
+        error: "Published posts can be archived but cannot return to draft.",
+      };
+    }
 
-    await prisma.publicContentItem.update({
-      where: { id: item.id },
-      data: {
-        ...(validated.title !== undefined ? { title: validated.title.trim() } : {}),
-        ...(validated.summary !== undefined
-          ? { summary: validated.summary === null ? null : validated.summary.trim() }
-          : {}),
-        ...(validated.body !== undefined ? { body: validated.body.trim() } : {}),
-        ...(validated.visibility !== undefined ? { visibility: validated.visibility } : {}),
-        ...(nextPublishAt
+    const nextPublishAt =
+      validated.status === "PUBLISHED"
+        ? (validated.publishAt ?? item.publishAt ?? now)
+        : validated.publishAt;
+    const scheduled = nextPublishAt ? nextPublishAt > now : undefined;
+    const publication =
+      validated.status === "DRAFT"
+        ? { status: "DRAFT" as const, publishedAt: null }
+        : nextPublishAt
           ? {
               publishAt: nextPublishAt,
               status: scheduled ? ("SCHEDULED" as const) : ("PUBLISHED" as const),
@@ -181,7 +206,18 @@ export async function updatePublicContent(
               // published post's date forward should not rewrite its history.
               publishedAt: scheduled ? null : (item.publishedAt ?? now),
             }
+          : {};
+
+    await prisma.publicContentItem.update({
+      where: { id: item.id },
+      data: {
+        ...(validated.title !== undefined ? { title: validated.title } : {}),
+        ...(validated.summary !== undefined
+          ? { summary: validated.summary === null ? null : validated.summary }
           : {}),
+        ...(validated.body !== undefined ? { body: validated.body } : {}),
+        ...(validated.visibility !== undefined ? { visibility: validated.visibility } : {}),
+        ...publication,
       },
     });
 
@@ -234,15 +270,65 @@ export async function archivePublicContent(
   }
 }
 
-/** Administrator view: every item, including drafts and archived ones. */
+async function getContentManagementScope(userId: string, leagueId: string) {
+  const canPublishAssociationWide = await canPublish(userId, leagueId);
+  if (canPublishAssociationWide) {
+    const teams = await prisma.team.findMany({
+      where: { leagueId, isActive: true },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    });
+    return { canPublishAssociationWide, teams };
+  }
+
+  const grants = await loadActiveGrants(userId, leagueId);
+  const teamIds = new Set<string>();
+  const divisionIds = new Set<string>();
+
+  for (const grant of grants) {
+    const role = ROLE_CAPABILITY_MATRIX[grant.role];
+    if (
+      !role.capabilities.includes(Capability.MANAGE_PUBLIC_CONTENT)
+      || !role.scopes.includes(grant.scopeType)
+    ) {
+      continue;
+    }
+    if (grant.scopeType === "TEAM" && grant.teamId) teamIds.add(grant.teamId);
+    if (grant.scopeType === "DIVISION" && grant.divisionId) {
+      divisionIds.add(grant.divisionId);
+    }
+  }
+
+  const targets = [
+    ...(teamIds.size ? [{ id: { in: [...teamIds] } }] : []),
+    ...(divisionIds.size ? [{ divisionId: { in: [...divisionIds] } }] : []),
+  ];
+  const teams = targets.length
+    ? await prisma.team.findMany({
+        where: { leagueId, isActive: true, OR: targets },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      })
+    : [];
+
+  return { canPublishAssociationWide, teams };
+}
+
+/** Management view: every item covered by the caller's active grant scope. */
 export async function listAssociationContent(leagueId: string) {
   const userId = await requireUserId();
-  if (!(await canPublish(userId, leagueId))) {
+  const scope = await getContentManagementScope(userId, leagueId);
+  if (!scope.canPublishAssociationWide && scope.teams.length === 0) {
     return { success: false as const, error: "You do not have permission to view content." };
   }
 
   const items = await prisma.publicContentItem.findMany({
-    where: { leagueId },
+    where: {
+      leagueId,
+      ...(!scope.canPublishAssociationWide
+        ? { teamId: { in: scope.teams.map(({ id }) => id) } }
+        : {}),
+    },
     select: {
       id: true,
       slug: true,
@@ -256,20 +342,61 @@ export async function listAssociationContent(leagueId: string) {
     orderBy: [{ publishAt: "desc" }, { createdAt: "desc" }],
   });
 
-  return { success: true as const, data: items };
+  return {
+    success: true as const,
+    data: {
+      items,
+      teams: scope.teams,
+      canPublishAssociationWide: scope.canPublishAssociationWide,
+    },
+  };
 }
 
 /* ------------------------------------------------------------------------- */
 /* Public readers. No session — these serve anonymous visitors.               */
 /* ------------------------------------------------------------------------- */
 
-export async function listPublicAssociationContent(leagueId: string, limit = 20) {
+export async function listPublicAssociationContent(
+  leagueId: string,
+  limit = 20,
+  offset = 0,
+) {
   return prisma.publicContentItem.findMany({
     where: { leagueId, ...publicContentWhere(new Date()) },
     select: publicContentSelect,
     orderBy: { publishAt: "desc" },
-    take: limit,
+    take: Math.min(100, Math.max(1, Math.trunc(limit))),
+    skip: Math.max(0, Math.trunc(offset)),
   });
+}
+
+export async function listPublicAssociationContentPage(
+  leagueId: string,
+  page: number,
+  pageSize = 20,
+) {
+  const normalizedPage = Math.max(1, Math.trunc(page));
+  const normalizedPageSize = Math.min(100, Math.max(1, Math.trunc(pageSize)));
+  const where = { leagueId, ...publicContentWhere(new Date()) };
+  const totalItems = await prisma.publicContentItem.count({ where });
+  const totalPages = Math.max(1, Math.ceil(totalItems / normalizedPageSize));
+  const items =
+    normalizedPage > totalPages
+      ? []
+      : await prisma.publicContentItem.findMany({
+      where,
+      select: publicContentSelect,
+      orderBy: { publishAt: "desc" },
+      take: normalizedPageSize,
+      skip: (normalizedPage - 1) * normalizedPageSize,
+    });
+
+  return {
+    items,
+    page: normalizedPage,
+    totalItems,
+    totalPages,
+  };
 }
 
 /**
@@ -278,8 +405,11 @@ export async function listPublicAssociationContent(leagueId: string, limit = 20)
  */
 export async function getPublicContentItem(associationSlug: string, contentSlug: string) {
   const now = new Date();
+  const resolved = await resolvePublicAssociation(associationSlug);
+  if (!resolved) return null;
+
   const league = await prisma.league.findFirst({
-    where: { ...publicPublishedAssociationWhere, slug: associationSlug },
+    where: { ...publicPublishedAssociationWhere, id: resolved.id },
     select: { id: true, name: true, slug: true },
   });
   if (!league) return null;
@@ -290,5 +420,8 @@ export async function getPublicContentItem(associationSlug: string, contentSlug:
   });
   if (!item) return null;
 
-  return { item, association: league };
+  return {
+    item,
+    association: { ...league, slug: resolved.canonicalSlug },
+  };
 }

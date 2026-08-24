@@ -23,8 +23,8 @@ describe("public team page excludes participant data", () => {
   });
 
   it("never selects events, practices, or attendance", () => {
-    // The team page links to the association schedule, which applies its own
-    // public visibility filter, rather than reading events directly.
+    // The team page reads the canonical public schedule separately, rather
+    // than widening this approved-identity selector with activity relations.
     for (const field of ["events", "practiceSessions", "seasonGames"]) {
       expect(Object.keys(select), field).not.toContain(field);
     }

@@ -1,11 +1,21 @@
 import { notFound, redirect } from "next/navigation";
-import { Card, CardContent, Chip, Container, Stack, Typography } from "@mui/material";
+import {
+  Avatar,
+  Card,
+  CardContent,
+  Chip,
+  Container,
+  Stack,
+  Typography,
+} from "@mui/material";
 
 import { LinkButton, LinkCardActionArea } from "@/components/ui/NextLinkComposites";
 import {
   getPublicTeamProfile,
   resolvePublicAssociation,
 } from "@/lib/actions/association-profile";
+import { getPublicTeamScheduleItems } from "@/lib/data/schedule-items";
+import { formatDateTime } from "@/lib/utils/date";
 
 export const dynamic = "force-dynamic";
 
@@ -40,36 +50,73 @@ export default async function PublicTeamPage({
   // the relation is optional even though a published one always resolves here.
   const leagueName = team.league?.name ?? "Association";
   const base = `/associations/${association.canonicalSlug}`;
+  const now = new Date();
+  const scheduleItems = await getPublicTeamScheduleItems(association.id, team.id, {
+    from: now,
+    to: new Date(now.getTime() + 90 * 86_400_000),
+  });
 
   return (
     <Container maxWidth="md" sx={{ py: { xs: 6, md: 8 } }}>
       <Stack spacing={4}>
-        <div>
-          <Typography variant="overline" color="text.secondary">
-            {leagueName}
-          </Typography>
-          <Typography variant="h3" component="h1">
-            {team.name}
-          </Typography>
-          <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
-            {team.division?.name ? <Chip size="small" label={team.division.name} /> : null}
-            <Chip size="small" label={team.season} />
-          </Stack>
-          {team.publicDescription ? (
-            <Typography variant="body1" sx={{ mt: 2 }}>
-              {team.publicDescription}
-            </Typography>
+        <Stack direction={{ xs: "column", sm: "row" }} spacing={3} alignItems="center">
+          {team.logoUrl ? (
+            <Avatar src={team.logoUrl} alt="" variant="rounded" sx={{ width: 96, height: 96 }} />
           ) : null}
-        </div>
+          <div>
+            <Typography variant="overline" color="text.secondary">
+              {leagueName}
+            </Typography>
+            <Typography variant="h3" component="h1">
+              {team.name}
+            </Typography>
+            <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
+              {team.division?.name ? <Chip size="small" label={team.division.name} /> : null}
+              <Chip size="small" label={team.season} />
+            </Stack>
+            {team.publicDescription ? (
+              <Typography variant="body1" sx={{ mt: 2 }}>
+                {team.publicDescription}
+              </Typography>
+            ) : null}
+          </div>
+        </Stack>
 
         <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap>
           <LinkButton href={base} variant="outlined" sx={{ minHeight: 44 }}>
             {leagueName}
           </LinkButton>
-          <LinkButton href={`${base}/schedule`} variant="outlined" sx={{ minHeight: 44 }}>
+          <LinkButton href="#schedule" variant="outlined" sx={{ minHeight: 44 }}>
             Schedule
           </LinkButton>
         </Stack>
+
+        <div id="schedule">
+          <Typography variant="h5" component="h2" gutterBottom>
+            Team schedule
+          </Typography>
+          {scheduleItems.length === 0 ? (
+            <Typography color="text.secondary">
+              Nothing public is scheduled for this team in the next 90 days.
+            </Typography>
+          ) : (
+            <Stack spacing={2}>
+              {scheduleItems.map((item) => (
+                <Card key={item.canonicalScheduleId} variant="outlined">
+                  <CardContent>
+                    <Typography variant="h6" component="h3">
+                      {item.title}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {formatDateTime(item.startsAt)}
+                      {item.venueName ? ` · ${item.venueName}` : ""}
+                    </Typography>
+                  </CardContent>
+                </Card>
+              ))}
+            </Stack>
+          )}
+        </div>
 
         {team.publicContentItems.length > 0 ? (
           <div>

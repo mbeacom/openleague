@@ -9,10 +9,12 @@ import {
 import {
   archivePublicContent,
   createPublicContent,
+  updatePublicContent,
 } from "@/lib/actions/public-content";
 
 export interface ContentEditorProps {
   leagueId: string;
+  canPublishAssociationWide: boolean;
   teams: Array<{ id: string; name: string }>;
   items: Array<{
     id: string;
@@ -30,12 +32,22 @@ const STATUS_COLOR = {
   DRAFT: "default", SCHEDULED: "warning", PUBLISHED: "success", ARCHIVED: "default",
 } as const;
 
-export function ContentEditor({ leagueId, teams, items }: ContentEditorProps) {
+export function ContentEditor({
+  leagueId,
+  canPublishAssociationWide,
+  teams,
+  items,
+}: ContentEditorProps) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [form, setForm] = useState({
-    slug: "", title: "", summary: "", body: "", teamId: "", publishAt: "",
+    slug: "",
+    title: "",
+    summary: "",
+    body: "",
+    teamId: canPublishAssociationWide ? "" : (teams[0]?.id ?? ""),
+    publishAt: "",
     visibility: "PUBLIC" as "PUBLIC" | "MEMBERS_ONLY",
   });
 
@@ -71,7 +83,9 @@ export function ContentEditor({ leagueId, teams, items }: ContentEditorProps) {
           <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
             <TextField select label="Team (optional)" value={form.teamId} fullWidth
               onChange={(e) => setForm({ ...form, teamId: e.target.value })}>
-              <MenuItem value="">Whole association</MenuItem>
+              {canPublishAssociationWide ? (
+                <MenuItem value="">Whole association</MenuItem>
+              ) : null}
               {teams.map((team) => (
                 <MenuItem key={team.id} value={team.id}>{team.name}</MenuItem>
               ))}
@@ -89,9 +103,16 @@ export function ContentEditor({ leagueId, teams, items }: ContentEditorProps) {
             helperText="Leave empty to publish now. A future time schedules it."
             onChange={(e) => setForm({ ...form, publishAt: e.target.value })}
           />
-          <Box>
+          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
             <Button
-              variant="contained" disabled={pending || !form.title || !form.slug || !form.body}
+              variant="outlined"
+              disabled={
+                pending
+                || !form.title.trim()
+                || !form.slug
+                || !form.body.trim()
+                || (!canPublishAssociationWide && !form.teamId)
+              }
               sx={{ minHeight: 44 }}
               onClick={() =>
                 run(() => createPublicContent({
@@ -101,14 +122,41 @@ export function ContentEditor({ leagueId, teams, items }: ContentEditorProps) {
                   summary: form.summary || undefined,
                   body: form.body,
                   visibility: form.visibility,
+                  status: "DRAFT",
                   ...(form.teamId ? { teamId: form.teamId } : {}),
                   ...(form.publishAt ? { publishAt: new Date(form.publishAt) } : {}),
-                }), "Post saved.")
+                }), "Draft saved.")
               }
             >
-              Save post
+              Save draft
             </Button>
-          </Box>
+            <Button
+              variant="contained"
+              disabled={
+                pending
+                || !form.title.trim()
+                || !form.slug
+                || !form.body.trim()
+                || (!canPublishAssociationWide && !form.teamId)
+              }
+              sx={{ minHeight: 44 }}
+              onClick={() =>
+                run(() => createPublicContent({
+                  leagueId,
+                  slug: form.slug,
+                  title: form.title,
+                  summary: form.summary || undefined,
+                  body: form.body,
+                  visibility: form.visibility,
+                  status: "PUBLISHED",
+                  ...(form.teamId ? { teamId: form.teamId } : {}),
+                  ...(form.publishAt ? { publishAt: new Date(form.publishAt) } : {}),
+                }), form.publishAt ? "Post scheduled." : "Post published.")
+              }
+            >
+              {form.publishAt ? "Schedule" : "Publish"}
+            </Button>
+          </Stack>
         </Stack>
       </Card>
 
@@ -148,12 +196,54 @@ export function ContentEditor({ leagueId, teams, items }: ContentEditorProps) {
                       {item.publishAt ? new Date(item.publishAt).toLocaleString() : "—"}
                     </TableCell>
                     <TableCell align="right">
-                      {item.status !== "ARCHIVED" ? (
-                        <Button size="small" color="error" disabled={pending} sx={{ minHeight: 44 }}
-                          onClick={() => run(() => archivePublicContent(item.id), "Post archived.")}>
-                          Archive
-                        </Button>
-                      ) : null}
+                      <Stack direction="row" spacing={1} justifyContent="flex-end">
+                        {item.status === "DRAFT" ? (
+                          <Button
+                            size="small"
+                            disabled={pending}
+                            sx={{ minHeight: 44 }}
+                            onClick={() =>
+                              run(
+                                () => updatePublicContent({
+                                  itemId: item.id,
+                                  status: "PUBLISHED",
+                                }),
+                                "Post published.",
+                              )}
+                          >
+                            Publish
+                          </Button>
+                        ) : null}
+                        {item.status === "SCHEDULED" ? (
+                          <Button
+                            size="small"
+                            disabled={pending}
+                            sx={{ minHeight: 44 }}
+                            onClick={() =>
+                              run(
+                                () => updatePublicContent({
+                                  itemId: item.id,
+                                  status: "DRAFT",
+                                }),
+                                "Post moved to draft.",
+                              )}
+                          >
+                            Move to draft
+                          </Button>
+                        ) : null}
+                        {item.status !== "ARCHIVED" ? (
+                          <Button
+                            size="small"
+                            color="error"
+                            disabled={pending}
+                            sx={{ minHeight: 44 }}
+                            onClick={() =>
+                              run(() => archivePublicContent(item.id), "Post archived.")}
+                          >
+                            Archive
+                          </Button>
+                        ) : null}
+                      </Stack>
                     </TableCell>
                   </TableRow>
                 ))}

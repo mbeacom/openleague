@@ -24,6 +24,7 @@ import {
   updateAssociationSlug,
   updateTeamPublicProfile,
 } from "@/lib/actions/association-profile";
+import { VenueBrandingEditor } from "@/components/features/venue-admin/VenueBrandingEditor";
 
 export interface AssociationProfileEditorProps {
   leagueId: string;
@@ -43,6 +44,8 @@ export interface AssociationProfileEditorProps {
     name: string;
     slug: string | null;
     profileStatus: string;
+    publicDescription: string | null;
+    logoUrl: string | null;
   }>;
 }
 
@@ -64,8 +67,19 @@ export function AssociationProfileEditor({
     brandSecondaryColor: profile.brandSecondaryColor ?? "",
   });
   const [slug, setSlug] = useState(profile.slug ?? "");
-  const [teamSlugs, setTeamSlugs] = useState<Record<string, string>>(
-    Object.fromEntries(teams.map((team) => [team.id, team.slug ?? ""])),
+  const [teamFields, setTeamFields] = useState<
+    Record<string, { slug: string; publicDescription: string; logoUrl: string }>
+  >(
+    Object.fromEntries(
+      teams.map((team) => [
+        team.id,
+        {
+          slug: team.slug ?? "",
+          publicDescription: team.publicDescription ?? "",
+          logoUrl: team.logoUrl ?? "",
+        },
+      ]),
+    ),
   );
 
   const published = profile.profileStatus === "PUBLISHED";
@@ -165,11 +179,12 @@ export function AssociationProfileEditor({
             minRows={3}
             fullWidth
           />
-          <TextField
-            label="Logo URL"
-            value={fields.logoUrl}
-            onChange={(e) => setFields({ ...fields, logoUrl: e.target.value })}
-            fullWidth
+          <VenueBrandingEditor
+            logoUrl={fields.logoUrl}
+            brandPrimaryColor={fields.brandPrimaryColor}
+            brandSecondaryColor={fields.brandSecondaryColor}
+            disabled={pending}
+            onChange={(field, value) => setFields({ ...fields, [field]: value })}
           />
           <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
             <TextField
@@ -198,6 +213,8 @@ export function AssociationProfileEditor({
                       leagueId,
                       publicDescription: fields.publicDescription || null,
                       logoUrl: fields.logoUrl || null,
+                      brandPrimaryColor: fields.brandPrimaryColor || null,
+                      brandSecondaryColor: fields.brandSecondaryColor || null,
                       publicEmail: fields.publicEmail || null,
                       publicPhone: fields.publicPhone || null,
                     }),
@@ -222,6 +239,8 @@ export function AssociationProfileEditor({
               <TableRow>
                 <TableCell>Team</TableCell>
                 <TableCell>Address</TableCell>
+                <TableCell>Description</TableCell>
+                <TableCell>Logo URL</TableCell>
                 <TableCell>Status</TableCell>
                 <TableCell align="right">Actions</TableCell>
               </TableRow>
@@ -229,16 +248,61 @@ export function AssociationProfileEditor({
             <TableBody>
               {teams.map((team) => {
                 const teamPublished = team.profileStatus === "PUBLISHED";
-                const value = teamSlugs[team.id] ?? "";
+                const values = teamFields[team.id] ?? {
+                  slug: "",
+                  publicDescription: "",
+                  logoUrl: "",
+                };
                 return (
                   <TableRow key={team.id}>
                     <TableCell>{team.name}</TableCell>
                     <TableCell>
                       <TextField
                         size="small"
-                        value={value}
+                        value={values.slug}
+                        slotProps={{
+                          htmlInput: { "aria-label": `${team.name} public address` },
+                        }}
                         onChange={(e) =>
-                          setTeamSlugs({ ...teamSlugs, [team.id]: e.target.value })
+                          setTeamFields({
+                            ...teamFields,
+                            [team.id]: { ...values, slug: e.target.value },
+                          })
+                        }
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <TextField
+                        size="small"
+                        value={values.publicDescription}
+                        multiline
+                        minRows={2}
+                        slotProps={{
+                          htmlInput: { "aria-label": `${team.name} public description` },
+                        }}
+                        onChange={(e) =>
+                          setTeamFields({
+                            ...teamFields,
+                            [team.id]: {
+                              ...values,
+                              publicDescription: e.target.value,
+                            },
+                          })
+                        }
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <TextField
+                        size="small"
+                        value={values.logoUrl}
+                        slotProps={{
+                          htmlInput: { "aria-label": `${team.name} logo URL` },
+                        }}
+                        onChange={(e) =>
+                          setTeamFields({
+                            ...teamFields,
+                            [team.id]: { ...values, logoUrl: e.target.value },
+                          })
                         }
                       />
                     </TableCell>
@@ -253,7 +317,7 @@ export function AssociationProfileEditor({
                       <Stack direction="row" spacing={1} justifyContent="flex-end">
                         <Button
                           size="small"
-                          disabled={pending || !value || value === team.slug}
+                          disabled={pending}
                           sx={{ minHeight: 44 }}
                           onClick={() =>
                             run(
@@ -261,9 +325,11 @@ export function AssociationProfileEditor({
                                 updateTeamPublicProfile({
                                   leagueId,
                                   teamId: team.id,
-                                  slug: value,
+                                  ...(values.slug ? { slug: values.slug } : {}),
+                                  publicDescription: values.publicDescription || null,
+                                  logoUrl: values.logoUrl || null,
                                 }),
-                              "Team address saved.",
+                              "Team page saved.",
                             )
                           }
                         >
@@ -272,7 +338,7 @@ export function AssociationProfileEditor({
                         <Button
                           size="small"
                           variant={teamPublished ? "outlined" : "contained"}
-                          disabled={pending || !value}
+                          disabled={pending || !values.slug}
                           sx={{ minHeight: 44 }}
                           onClick={() =>
                             run(
@@ -280,7 +346,9 @@ export function AssociationProfileEditor({
                                 updateTeamPublicProfile({
                                   leagueId,
                                   teamId: team.id,
-                                  slug: value,
+                                  slug: values.slug,
+                                  publicDescription: values.publicDescription || null,
+                                  logoUrl: values.logoUrl || null,
                                   publish: !teamPublished,
                                 }),
                               teamPublished ? "Team unpublished." : "Team published.",

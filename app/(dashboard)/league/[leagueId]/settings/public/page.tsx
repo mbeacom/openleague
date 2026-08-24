@@ -45,7 +45,14 @@ export default async function PublicProfileSettingsPage({
     }),
     prisma.team.findMany({
       where: { leagueId, isActive: true },
-      select: { id: true, name: true, slug: true, profileStatus: true },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        profileStatus: true,
+        publicDescription: true,
+        logoUrl: true,
+      },
       orderBy: { name: "asc" },
     }),
   ]);

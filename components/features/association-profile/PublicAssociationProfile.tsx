@@ -1,6 +1,7 @@
 import { Avatar, Box, Card, CardContent, Chip, Stack, Typography } from "@mui/material";
 
 import { LinkButton, LinkCardActionArea } from "@/components/ui/NextLinkComposites";
+import { contrastTextFor } from "@/lib/utils/contrast-color";
 import { formatSport } from "@/lib/utils/validation";
 
 /**
@@ -24,6 +25,8 @@ export interface PublicAssociationProfileProps {
     sport: string;
     publicDescription: string | null;
     logoUrl: string | null;
+    brandPrimaryColor: string | null;
+    brandSecondaryColor: string | null;
     publicEmail: string | null;
     publicPhone: string | null;
     divisions: Array<{ id: string; name: string; ageGroup: string | null }>;
@@ -51,7 +54,19 @@ export function PublicAssociationProfile({ association }: PublicAssociationProfi
 
   return (
     <Stack spacing={5}>
-      <Stack direction={{ xs: "column", sm: "row" }} spacing={3} alignItems="center">
+      <Stack
+        direction={{ xs: "column", sm: "row" }}
+        spacing={3}
+        alignItems="center"
+        sx={(theme) => ({
+          borderRadius: 3,
+          borderBottom: "6px solid",
+          borderBottomColor: association.brandSecondaryColor || "secondary.main",
+          bgcolor: association.brandPrimaryColor || "primary.main",
+          color: contrastTextFor(theme, association.brandPrimaryColor),
+          p: { xs: 3, md: 5 },
+        })}
+      >
         {association.logoUrl ? (
           <Avatar
             src={association.logoUrl}
@@ -64,7 +79,11 @@ export function PublicAssociationProfile({ association }: PublicAssociationProfi
           <Typography variant="h3" component="h1">
             {association.name}
           </Typography>
-          <Chip size="small" label={formatSport(association.sport)} sx={{ mt: 1 }} />
+          <Chip
+            size="small"
+            label={formatSport(association.sport)}
+            sx={{ mt: 1, bgcolor: "background.paper", color: "text.primary" }}
+          />
           {association.publicDescription ? (
             <Typography variant="body1" sx={{ mt: 2 }}>
               {association.publicDescription}
@@ -82,6 +101,9 @@ export function PublicAssociationProfile({ association }: PublicAssociationProfi
         </LinkButton>
         <LinkButton href={`${base}/events`} variant="outlined" sx={{ minHeight: 44 }}>
           Events &amp; registration
+        </LinkButton>
+        <LinkButton href={`${base}/news`} variant="outlined" sx={{ minHeight: 44 }}>
+          News
         </LinkButton>
         {/* Linked only while the wishlist is published. The token route is the
             existing hardened public surface; no inventory, donor, custodian, or
