@@ -503,7 +503,7 @@ describe('Feature Name', () => {
 
 Architectural decisions are recorded as machine-readable ADRs in `docs/adr/`,
 managed by [adrkit](https://github.com/mbeacom/adrkit) (`@adrkit/cli`, pinned to
-0.8.0). See [ADR-0001](./docs/adr/0001-record-architecture-decisions-as-versioned-markdown-in-git.md)
+0.11.0). See [ADR-0001](./docs/adr/0001-record-architecture-decisions-as-versioned-markdown-in-git.md)
 for why.
 
 `CLAUDE.md` describes *how to work here*; ADRs record *why the conventions are

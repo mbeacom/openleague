@@ -90,10 +90,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
 
-      # Pinned to the immutable v0.8.0 commit rather than the moving @v0 tag,
+      # Pinned to the immutable v0.11.0 commit rather than the moving @v0 tag,
       # matching the ADR-0001 decision to pin adrkit exactly.
       - name: Resolve decisions governing this pull request
-        uses: mbeacom/adrkit/packages/ci@d9ce9e18fbe95525b4e3b2780bfe33352a5ab7f2 # v0.8.0
+        uses: mbeacom/adrkit/packages/ci@9a4bdf89680b1a5b358fba0f2c8c88b9f5ac7877 # v0.11.0
         env:
           # Inert as pinned, and safe to delete. Through v0.6.0 the action
           # recognised its own comment only when the resolved token equalled
