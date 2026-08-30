@@ -147,8 +147,8 @@ export function runIntegrityChecks(repoRoot: string): IntegrityResult {
       },
       {
         file: '.github/workflows/adr.yml',
-        find: /mbeacom\/adrkit\/packages\/ci@[0-9a-f]{40}\s*#\s*v(\d+\.\d+\.\d+)/,
-        label: 'the pinned CI action',
+        find: /mbeacom\/adrkit@[0-9a-f]{40}\s*#\s*v(\d+\.\d+\.\d+)/,
+        label: 'the root Marketplace CI action',
       },
     ];
 

@@ -31,6 +31,7 @@ interface FixtureOptions {
   cliVersion?: string;
   /** devDependencies pin for `@adrkit/mcp`; null omits it entirely. */
   mcpVersion?: string | null;
+  ciActionPath?: string;
   ciActionVersion?: string;
   cloudDocVersion?: string;
   /** Raw contents for the two local MCP configs. */
@@ -48,6 +49,7 @@ const LOCAL_MCP_JSON = JSON.stringify({
 /** Build a throwaway repo root that the checks can run against. */
 function makeFixture(options: FixtureOptions = {}): string {
   const {
+    ciActionPath = '',
     ciActionVersion = ADRKIT_VERSION,
     cliVersion = ADRKIT_VERSION,
     cloudDocVersion = ADRKIT_VERSION,
@@ -93,7 +95,7 @@ function makeFixture(options: FixtureOptions = {}): string {
   );
   write(
     '.github/workflows/adr.yml',
-    `jobs:\n  x:\n    steps:\n      - uses: mbeacom/adrkit/packages/ci@${CI_ACTION_SHA} # v${ciActionVersion}\n`,
+    `jobs:\n  x:\n    steps:\n      - uses: mbeacom/adrkit${ciActionPath}@${CI_ACTION_SHA} # v${ciActionVersion}\n`,
   );
 
   return root;
@@ -221,7 +223,15 @@ describe('check-adr-integrity', () => {
     it('fails when the CI action pin drifts from the CLI pin', () => {
       withFixture({ ciActionVersion: '0.3.9' }, (result) => {
         expect(result.failures.join('\n')).toContain(
-          '.github/workflows/adr.yml pins the pinned CI action at 0.3.9',
+          '.github/workflows/adr.yml pins the root Marketplace CI action at 0.3.9',
+        );
+      });
+    });
+
+    it('fails when the CI action uses the legacy nested surface', () => {
+      withFixture({ ciActionPath: '/packages/ci' }, (result) => {
+        expect(result.failures.join('\n')).toContain(
+          'does not pin the root Marketplace CI action',
         );
       });
     });
