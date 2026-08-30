@@ -78,8 +78,8 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@adrkit/cli": "0.12.0",
-    "@adrkit/mcp": "0.12.0",
+    "@adrkit/cli": "0.13.0",
+    "@adrkit/mcp": "0.13.0",
     "@eslint/eslintrc": "^3.3.6",
     "@tailwindcss/postcss": "^4.3.3",
     "@testing-library/jest-dom": "^6.10.0",

@@ -33,7 +33,7 @@ unauthenticated, so there is nothing to add under `COPILOT_MCP_*`.
     "adrkit": {
       "type": "local",
       "command": "npx",
-      "args": ["-y", "@adrkit/mcp@0.12.0", "--dir", "docs/adr"],
+      "args": ["-y", "@adrkit/mcp@0.13.0", "--dir", "docs/adr"],
       "tools": [
         "get_decision",
         "get_decision_context",
@@ -86,7 +86,7 @@ This gap closes only if the agent runner gains a dependable pre-install step
 (`copilot-setup-steps.yml` installing Bun and running `bun install`), at which
 point this entry can move to the local binary like the other two.
 
-**Pinned to `@0.12.0`.** Matches the `@adrkit/cli` and `@adrkit/mcp` pins in
+**Pinned to `@0.13.0`.** Matches the `@adrkit/cli` and `@adrkit/mcp` pins in
 `package.json` and the commit-pinned CI action, per
 [ADR-0001](../docs/adr/0001-record-architecture-decisions-as-versioned-markdown-in-git.md).
 An agent given a floating `@latest` would silently change behaviour on an
