@@ -190,6 +190,11 @@ model Team {
   slug              String?
   publicDescription String?
   logoUrl           String?
+  // Crest branding. Mirrors League/Venue so the three identity surfaces read
+  // the same way; when unset the crest falls back to a hue derived from the
+  // team id, so a division of teams is still visually separable on day one.
+  brandPrimaryColor   String?
+  brandSecondaryColor String?
   profileStatus     PublicProfileStatus @default(DRAFT)
   publishedAt       DateTime?
   name      String

@@ -41,6 +41,53 @@ export function eventMediaPrefix(eventId: string): string {
   return `signup-events/${eventId}/`;
 }
 
+/**
+ * Crest logos. Kept well under the gallery's image cap: these render at 104px
+ * at the very largest, so a multi-megabyte upload is pure waste on every page
+ * that shows the crest.
+ */
+export const LOGO_MAX_BYTES = 2 * 1024 * 1024;
+
+/** SVG is deliberately absent — it is a script-execution vector. */
+export const LOGO_CONTENT_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+] as const;
+
+/** The entity kinds that own a crest. */
+export const BRANDABLE_ENTITIES = ["team", "league", "venue"] as const;
+export type BrandableEntity = (typeof BRANDABLE_ENTITIES)[number];
+
+export function isBrandableEntity(value: string): value is BrandableEntity {
+  return (BRANDABLE_ENTITIES as readonly string[]).includes(value);
+}
+
+/** The pathname prefix every crest upload for an entity must live under. */
+export function entityLogoPrefix(entity: BrandableEntity, entityId: string): string {
+  return `branding/${entity}/${entityId}/`;
+}
+
+/**
+ * Whether a URL is one of our own blob objects under the given prefix.
+ *
+ * Both halves matter. The host check stops an arbitrary third-party URL being
+ * stored and then served as if it were ours; the prefix check stops one
+ * entity's admin from pointing their crest at another entity's object and
+ * having a later delete take out a file they never owned.
+ */
+export function isOwnedBlobUrl(url: string, prefix: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== "https:") return false;
+  if (!parsed.hostname.endsWith(".blob.vercel-storage.com")) return false;
+  return parsed.pathname.replace(/^\//, "").startsWith(prefix);
+}
+
 /** Best-effort blob deletion — a storage failure must not fail the DB removal. */
 export async function deleteBlobBestEffort(url: string): Promise<void> {
   if (!isBlobEnabled()) return;

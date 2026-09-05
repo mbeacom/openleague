@@ -4,6 +4,14 @@ import { withSentryConfig } from "@sentry/nextjs";
 
 const gaEnabled = Boolean(process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID?.trim());
 const sentryEnabled = Boolean(process.env.NEXT_PUBLIC_SENTRY_DSN?.trim());
+// Vercel Blob backs event media galleries and entity crests. Uploaded files are
+// served from a per-store subdomain, and the browser uploads straight to the
+// Blob API, so both hosts have to be named in the policy or the feature fails
+// silently: images render as broken and the upload XHR is refused. Gated on the
+// token so a deployment without Blob keeps the tighter policy.
+const blobEnabled = Boolean(process.env.BLOB_READ_WRITE_TOKEN?.trim());
+const BLOB_PUBLIC_HOST = "https://*.public.blob.vercel-storage.com";
+const BLOB_API_HOST = "https://blob.vercel-storage.com";
 
 const scriptSrc = [
   "'self'",
@@ -18,6 +26,7 @@ const imgSrc = [
   "'self'",
   "data:",
   "blob:",
+  ...(blobEnabled ? [BLOB_PUBLIC_HOST] : []),
   ...(gaEnabled ? ["https://www.google-analytics.com", "https://*.google-analytics.com"] : []),
 ];
 
@@ -25,6 +34,7 @@ const connectSrc = [
   "'self'",
   "https://cloud.umami.is",
   "https://api-gateway.umami.dev",
+  ...(blobEnabled ? [BLOB_API_HOST, BLOB_PUBLIC_HOST] : []),
   ...(sentryEnabled ? ["https://*.ingest.sentry.io", "https://*.ingest.us.sentry.io", "https://*.ingest.de.sentry.io"] : []),
   ...(gaEnabled ? ["https://www.google-analytics.com", "https://*.google-analytics.com", "https://region1.google-analytics.com"] : []),
 ];

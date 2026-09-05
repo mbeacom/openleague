@@ -6,6 +6,7 @@ import {
 import { LinkCard } from "@/components/ui/NextLinkComposites";
 import { getAdminAttention } from "@/lib/data/dashboard";
 import { formatDateTimeInZone } from "@/lib/utils/date";
+import { SectionHeader } from "@/components/ui/SectionHeader";
 
 /**
  * Admin-only attention items: upcoming events with unanswered RSVPs and
@@ -22,9 +23,7 @@ export default async function AdminAttentionWidget({ userId }: { userId: string 
 
   return (
     <Box component="section">
-      <Typography variant="h5" component="h2" sx={{ mb: 2 }}>
-        Needs Your Attention
-      </Typography>
+      <SectionHeader title="Needs your attention" />
 
       <Stack spacing={1.5}>
         {events.map((event) => (

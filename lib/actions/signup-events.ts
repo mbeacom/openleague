@@ -1328,12 +1328,33 @@ export async function listMySignupEvents() {
       timezone: true,
       locationText: true,
       venue: { select: { name: true } },
-      hostOrganization: { select: { name: true } },
-      hostLeague: { select: { name: true } },
-      hostTeam: { select: { name: true } },
+      // ids and logos so the list can render each host's crest
+      hostOrganization: { select: { id: true, name: true } },
+      hostLeague: { select: { id: true, name: true, logoUrl: true, brandPrimaryColor: true } },
+      hostTeam: { select: { id: true, name: true, logoUrl: true, brandPrimaryColor: true } },
       _count: { select: { registrations: true, slots: true } },
     },
   });
+}
+
+/**
+ * The organizer's events split into what is still ahead and what has already
+ * run. The split lives here rather than in the page because "now" is not a
+ * pure value: reading the clock during render is exactly what React's purity
+ * rule forbids, and the server action is the honest place to resolve it.
+ */
+export async function listMySignupEventsGrouped() {
+  const events = await listMySignupEvents();
+  const now = Date.now();
+
+  return {
+    // listMySignupEvents returns newest-first; upcoming events read better
+    // soonest-first, which is the order an organizer works through them.
+    upcoming: events
+      .filter((event) => event.startAt.getTime() >= now)
+      .sort((left, right) => left.startAt.getTime() - right.startAt.getTime()),
+    past: events.filter((event) => event.startAt.getTime() < now),
+  };
 }
 
 export type ManagedSignupEvent = NonNullable<Awaited<ReturnType<typeof getManagedSignupEvent>>>;

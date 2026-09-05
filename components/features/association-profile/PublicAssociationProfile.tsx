@@ -1,6 +1,7 @@
-import { Avatar, Box, Card, CardContent, Chip, Stack, Typography } from "@mui/material";
+import { Box, Card, CardContent, Chip, Stack, Typography } from "@mui/material";
 
 import { LinkButton, LinkCardActionArea } from "@/components/ui/NextLinkComposites";
+import { Crest } from "@/components/ui/Crest";
 import { contrastTextFor } from "@/lib/utils/contrast-color";
 import { formatSport } from "@/lib/utils/validation";
 
@@ -67,14 +68,17 @@ export function PublicAssociationProfile({ association }: PublicAssociationProfi
           p: { xs: 3, md: 5 },
         })}
       >
-        {association.logoUrl ? (
-          <Avatar
-            src={association.logoUrl}
-            alt=""
-            sx={{ width: 96, height: 96 }}
-            variant="rounded"
-          />
-        ) : null}
+        {/* Always rendered: an association with no artwork still gets a mark,
+            which is the point of the monogram fallback. Inverted because this
+            hero is painted in the association's own color. */}
+        <Crest
+          name={association.name}
+          id={association.id}
+          logoUrl={association.logoUrl}
+          brandColor={association.brandPrimaryColor}
+          size="xl"
+          tone="inverted"
+        />
         <Box>
           <Typography variant="h3" component="h1">
             {association.name}

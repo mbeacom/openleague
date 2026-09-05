@@ -344,10 +344,12 @@ type AccessibleTeamData = {
   sport: string;
   season: string;
   createdAt: Date;
+  logoUrl: string | null;
+  brandPrimaryColor: string | null;
   role: string;
   isAdmin: boolean;
   canOpenEventDetails: boolean;
-  league: { id: string; name: string } | null;
+  league: { id: string; name: string; logoUrl: string | null } | null;
   division: { id: string; name: string } | null;
   stats: {
     players: number;
@@ -367,10 +369,13 @@ async function getAccessibleTeamData(teamId: string): Promise<AccessibleTeamData
       sport: true,
       season: true,
       createdAt: true,
+      logoUrl: true,
+      brandPrimaryColor: true,
       league: {
         select: {
           id: true,
           name: true,
+          logoUrl: true,
           isActive: true,
           users: {
             where: { userId },
@@ -408,10 +413,14 @@ async function getAccessibleTeamData(teamId: string): Promise<AccessibleTeamData
     sport: team.sport,
     season: team.season,
     createdAt: team.createdAt,
+    logoUrl: team.logoUrl,
+    brandPrimaryColor: team.brandPrimaryColor,
     role: getEffectiveTeamRole(directRole as TeamRole | null, leagueRole as LeagueRole | null),
     isAdmin: directRole === "ADMIN",
     canOpenEventDetails: !!directRole || leagueRole === "LEAGUE_ADMIN",
-    league: team.league?.isActive ? { id: team.league.id, name: team.league.name } : null,
+    league: team.league?.isActive
+      ? { id: team.league.id, name: team.league.name, logoUrl: team.league.logoUrl }
+      : null,
     division: team.division,
     stats: {
       players: team._count.players,
@@ -430,10 +439,12 @@ export async function getTeamOverviewData(teamId: string): Promise<{
   sport: string;
   season: string;
   createdAt: string;
+  logoUrl: string | null;
+  brandPrimaryColor: string | null;
   role: string;
   isAdmin: boolean;
   canOpenEventDetails: boolean;
-  league: { id: string; name: string } | null;
+  league: { id: string; name: string; logoUrl: string | null } | null;
   division: { id: string; name: string } | null;
   stats: {
     players: number;

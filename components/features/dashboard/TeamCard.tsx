@@ -1,22 +1,10 @@
-"use client";
-
-import {
-  Card,
-  CardContent,
-  CardActions,
-  Typography,
-  Chip,
-  Box,
-  Button,
-  Avatar,
-} from "@mui/material";
+import { Box, Card, Chip, Stack, Typography } from "@mui/material";
+import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import { formatSport } from "@/lib/utils/validation";
-import {
-  People as PeopleIcon,
-  Event as EventIcon,
-  SportsSoccer as SportsIcon,
-} from "@mui/icons-material";
-import { useRouter } from "next/navigation";
+import { LinkCardActionArea } from "@/components/ui/NextLinkComposites";
+import { Crest } from "@/components/ui/Crest";
+import { StatStrip } from "@/components/ui/StatStrip";
+import { resolveCrestColor } from "@/lib/utils/crest";
 
 type TeamCardProps = {
   team: {
@@ -24,6 +12,8 @@ type TeamCardProps = {
     name: string;
     sport: string;
     season: string;
+    logoUrl?: string | null;
+    brandPrimaryColor?: string | null;
     league?: {
       id: string;
       name: string;
@@ -42,141 +32,122 @@ type TeamCardProps = {
   showStats?: boolean;
 };
 
+/**
+ * A team tile on the dashboard.
+ *
+ * The entire card is one link to the team. It previously carried a "View Team"
+ * text button and pushed with the router on click, which meant the tile — the
+ * obvious target — did nothing, and the one thing that worked could not be
+ * opened in a new tab, middle-clicked, or reached in the tab order as a link.
+ * A single CardActionArea over an anchor fixes all of that at once, and lets
+ * this drop its client boundary and render on the server.
+ */
 export default function TeamCard({
   team,
   role,
   showLeagueInfo = false,
-  showStats = false
+  showStats = false,
 }: TeamCardProps) {
-  const router = useRouter();
-
-  const handleViewTeam = () => {
-    router.push(`/team/${team.id}`);
-  };
-
-  const handleManageTeam = () => {
-    router.push(`/team/${team.id}/roster`);
-  };
-
-  const getTeamInitials = (name: string) => {
-    return name
-      .split(' ')
-      .map(word => word[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
-  };
+  const isAdmin = role === "ADMIN";
+  const accent = resolveCrestColor(team.id, team.brandPrimaryColor);
 
   return (
     <Card
+      variant="outlined"
       sx={{
-        height: '100%',
-        transition: 'all 0.2s ease-in-out',
-        '&:hover': {
+        height: "100%",
+        position: "relative",
+        overflow: "hidden",
+        transition: "border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease",
+        // The team's own color as a left edge — enough to tell two tiles apart
+        // in peripheral vision, not enough to fight the card's content.
+        "&::before": {
+          content: '""',
+          position: "absolute",
+          insetBlock: 0,
+          left: 0,
+          width: 3,
+          backgroundColor: accent,
+          zIndex: 1,
+        },
+        "&:hover": {
+          borderColor: "secondary.main",
           boxShadow: 3,
-          transform: 'translateY(-2px)',
-        }
+          transform: "translateY(-2px)",
+        },
+        "&:has(:focus-visible)": {
+          borderColor: "secondary.main",
+        },
+        "@media (prefers-reduced-motion: reduce)": {
+          transition: "none",
+          "&:hover": { transform: "none" },
+        },
       }}
     >
-      <CardContent>
-        {/* Team Header */}
-        <Box display="flex" alignItems="flex-start" gap={2} mb={2}>
-          <Avatar
-            sx={{
-              width: 40,
-              height: 40,
-              bgcolor: 'primary.main',
-              fontSize: '0.875rem',
-              fontWeight: 'bold'
-            }}
-          >
-            {getTeamInitials(team.name)}
-          </Avatar>
-          <Box flex={1}>
-            <Typography variant="h6" component="h3" gutterBottom>
-              {team.name}
-            </Typography>
-            <Box display="flex" alignItems="center" gap={1} mb={1}>
-              <Chip
-                icon={<SportsIcon />}
-                label={formatSport(team.sport)}
-                size="small"
-                variant="outlined"
-              />
-              <Typography variant="body2" color="text.secondary">
-                {team.season}
+      <LinkCardActionArea
+        href={`/team/${team.id}`}
+        sx={{ height: "100%", p: 2.5, pl: 3 }}
+      >
+        {/* Column with the strip pushed to the bottom: without this a card
+            carrying an "Admin" chip sits its scoreboard a row lower than its
+            neighbors, and a grid of tiles stops lining up. */}
+        <Box
+          sx={{ width: "100%", height: "100%", display: "flex", flexDirection: "column" }}
+        >
+          <Stack direction="row" spacing={2} alignItems="flex-start">
+            <Crest
+              name={team.name}
+              id={team.id}
+              logoUrl={team.logoUrl}
+              brandColor={team.brandPrimaryColor}
+              size="md"
+              ring={isAdmin ? "accent" : "none"}
+            />
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography
+                variant="h6"
+                component="h3"
+                sx={{ fontWeight: 700, lineHeight: 1.25, letterSpacing: "-0.01em" }}
+              >
+                {team.name}
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
+                {formatSport(team.sport)} · {team.season}
               </Typography>
             </Box>
-          </Box>
+            <ChevronRightIcon
+              fontSize="small"
+              sx={{ color: "text.disabled", mt: 0.5, flexShrink: 0 }}
+            />
+          </Stack>
+
+          <Stack
+            direction="row"
+            spacing={0.75}
+            flexWrap="wrap"
+            useFlexGap
+            sx={{ mt: 1.5, mb: "auto" }}
+          >
+            {isAdmin ? <Chip size="small" label="Admin" color="primary" /> : null}
+            {showLeagueInfo && team.league ? (
+              <Chip size="small" variant="outlined" label={team.league.name} />
+            ) : null}
+            {showLeagueInfo && team.division ? (
+              <Chip size="small" variant="outlined" label={team.division.name} />
+            ) : null}
+          </Stack>
+
+          {showStats && team._count ? (
+            <StatStrip
+              sx={{ mt: 2, pt: 1 }}
+              stats={[
+                { label: "Players", value: team._count.players },
+                { label: "Events", value: team._count.events },
+              ]}
+            />
+          ) : null}
         </Box>
-
-        {/* League and Division Info - Only shown in league mode */}
-        {showLeagueInfo && (team.league || team.division) && (
-          <Box sx={{ mb: 2 }}>
-            {team.league && (
-              <Chip
-                label={team.league.name}
-                size="small"
-                variant="outlined"
-                color="primary"
-                sx={{ mr: 1, mb: 0.5 }}
-              />
-            )}
-            {team.division && (
-              <Chip
-                label={`Division: ${team.division.name}`}
-                size="small"
-                variant="outlined"
-                color="secondary"
-                sx={{ mb: 0.5 }}
-              />
-            )}
-          </Box>
-        )}
-
-        {/* Team Stats */}
-        {showStats && team._count && (
-          <Box
-            sx={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(2, 1fr)',
-              gap: 2,
-              mb: 2
-            }}
-          >
-            <Box display="flex" alignItems="center" gap={1}>
-              <PeopleIcon fontSize="small" color="action" />
-              <Typography variant="body2" color="text.secondary">
-                {team._count.players} players
-              </Typography>
-            </Box>
-            <Box display="flex" alignItems="center" gap={1}>
-              <EventIcon fontSize="small" color="action" />
-              <Typography variant="body2" color="text.secondary">
-                {team._count.events} events
-              </Typography>
-            </Box>
-          </Box>
-        )}
-
-        {/* Role Badge */}
-        <Chip
-          label={role === "ADMIN" ? "Team Admin" : "Member"}
-          size="small"
-          color={role === "ADMIN" ? "primary" : "default"}
-        />
-      </CardContent>
-
-      <CardActions sx={{ pt: 0 }}>
-        <Button size="small" onClick={handleViewTeam}>
-          View Team
-        </Button>
-        {role === "ADMIN" && (
-          <Button size="small" onClick={handleManageTeam}>
-            Manage
-          </Button>
-        )}
-      </CardActions>
+      </LinkCardActionArea>
     </Card>
   );
 }

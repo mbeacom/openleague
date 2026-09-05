@@ -1,6 +1,5 @@
 import { notFound, redirect } from "next/navigation";
 import {
-  Avatar,
   Card,
   CardContent,
   Chip,
@@ -10,6 +9,7 @@ import {
 } from "@mui/material";
 
 import { LinkButton, LinkCardActionArea } from "@/components/ui/NextLinkComposites";
+import { Crest } from "@/components/ui/Crest";
 import {
   getPublicTeamProfile,
   resolvePublicAssociation,
@@ -60,9 +60,12 @@ export default async function PublicTeamPage({
     <Container maxWidth="md" sx={{ py: { xs: 6, md: 8 } }}>
       <Stack spacing={4}>
         <Stack direction={{ xs: "column", sm: "row" }} spacing={3} alignItems="center">
-          {team.logoUrl ? (
-            <Avatar src={team.logoUrl} alt="" variant="rounded" sx={{ width: 96, height: 96 }} />
-          ) : null}
+          {/* Always rendered — a team with no artwork still gets a monogram
+              crest rather than an empty space where identity should be. */}
+          {/* No brandColor: the public team select is a deliberate privacy
+              boundary and is not widened for a cosmetic field. Without one the
+              crest derives its hue from the team id, which is still distinct. */}
+          <Crest name={team.name} id={team.id} logoUrl={team.logoUrl} size="xl" />
           <div>
             <Typography variant="overline" color="text.secondary">
               {leagueName}

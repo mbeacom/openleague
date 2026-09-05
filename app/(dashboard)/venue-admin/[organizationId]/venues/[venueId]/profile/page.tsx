@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { prisma } from "@/lib/db/prisma";
 import { requireVenueProfileManager } from "@/lib/auth/session";
 import { VenueProfileEditor } from "@/components/features/venue-admin";
+import { isBlobEnabled } from "@/lib/media/blob";
 
 interface VenueProfilePageProps {
   params: Promise<{
@@ -49,7 +50,11 @@ export default async function VenueProfilePage({ params }: VenueProfilePageProps
   return (
     <PageContainer>
       <PageHeader title="Manage Venue Profile" />
-      <VenueProfileEditor organizationId={organizationId} venue={venue} />
+      <VenueProfileEditor
+        organizationId={organizationId}
+        venue={venue}
+        uploadsEnabled={isBlobEnabled()}
+      />
     </PageContainer>
   );
 }

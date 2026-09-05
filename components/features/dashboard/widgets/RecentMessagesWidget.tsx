@@ -3,6 +3,7 @@ import { MailOutline as MailOutlineIcon } from "@mui/icons-material";
 import { formatDistanceToNow } from "date-fns";
 import { LinkMuiLink } from "@/components/ui/NextLinkComposites";
 import { getRecentMessages } from "@/lib/data/dashboard";
+import { SectionHeader } from "@/components/ui/SectionHeader";
 
 /**
  * Teasers for the viewer's most recently received league messages, each
@@ -15,9 +16,7 @@ export default async function RecentMessagesWidget({ userId }: { userId: string 
 
   return (
     <Box component="section">
-      <Typography variant="h5" component="h2" sx={{ mb: 2 }}>
-        Recent Messages
-      </Typography>
+      <SectionHeader title="Recent messages" />
 
       {messages.length === 0 ? (
         <Stack direction="row" alignItems="center" spacing={1} sx={{ color: "text.secondary" }}>

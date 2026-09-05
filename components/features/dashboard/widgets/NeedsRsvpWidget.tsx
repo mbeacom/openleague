@@ -4,6 +4,7 @@ import { LinkMuiLink } from "@/components/ui/NextLinkComposites";
 import { RSVPButtons } from "@/components/features/events/RSVPButtons";
 import { getNeedsRsvp } from "@/lib/data/dashboard";
 import { formatDateTimeInZone } from "@/lib/utils/date";
+import { SectionHeader } from "@/components/ui/SectionHeader";
 
 /**
  * The viewer's pending RSVPs on future events, one row per identity (self and
@@ -17,9 +18,7 @@ export default async function NeedsRsvpWidget({ userId }: { userId: string }) {
 
   return (
     <Box component="section">
-      <Typography variant="h5" component="h2" sx={{ mb: 2 }}>
-        Needs Your RSVP
-      </Typography>
+      <SectionHeader title="Needs your RSVP" badge={items.length || undefined} />
 
       {items.length === 0 ? (
         <Stack direction="row" alignItems="center" spacing={1} sx={{ color: "text.secondary" }}>

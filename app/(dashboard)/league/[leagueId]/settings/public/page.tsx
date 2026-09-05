@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageHeader } from "@/components/ui/PageHeader";
 import AssociationProfileEditor from "@/components/features/association-profile/AssociationProfileEditor";
+import { isBlobEnabled } from "@/lib/media/blob";
 import { requireUserId } from "@/lib/auth/session";
 import { Capability, hasCapability } from "@/lib/auth/capabilities";
 import { prisma } from "@/lib/db/prisma";
@@ -65,7 +66,12 @@ export default async function PublicProfileSettingsPage({
         title="Public page"
         subtitle="What families, opponents, and venue partners see when they look you up."
       />
-      <AssociationProfileEditor leagueId={leagueId} profile={profile} teams={teams} />
+      <AssociationProfileEditor
+        leagueId={leagueId}
+        profile={profile}
+        teams={teams}
+        uploadsEnabled={isBlobEnabled()}
+      />
     </PageContainer>
   );
 }
