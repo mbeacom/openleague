@@ -1,0 +1,33 @@
+{
+  "version": "1",
+  "asOf": "2026-09-05",
+  "corpusFingerprint": "bb9d5ff514b9871facb581fcccaaff8c44e0b9b29043bbf14c5134af81b3c1e4",
+  "totalItems": 1,
+  "totalCorpusFindings": 0,
+  "itemsWithFindings": 0,
+  "items": [
+    {
+      "id": "0010",
+      "title": "Operate OpenLeague as a non-commercial open-source project",
+      "sourcePath": "docs/adr/0010-operate-openleague-as-a-non-commercial-open-source-project.md",
+      "tier": "async",
+      "tierLabel": "asynchronous human review",
+      "queuedAt": null,
+      "slaDays": null,
+      "reviewBy": "2027-09-05",
+      "slaState": "within-sla",
+      "deadlineDate": "2027-09-05",
+      "routingTargets": [
+        "@mbeacom"
+      ],
+      "quorum": null,
+      "approvalCount": 0,
+      "unresolvedObjectionCount": 0,
+      "resolvedObjectionCount": 0,
+      "escalatedAt": null,
+      "decidedAt": null,
+      "itemFindings": []
+    }
+  ],
+  "corpusFindings": []
+}
