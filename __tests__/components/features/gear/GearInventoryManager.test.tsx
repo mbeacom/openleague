@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { GearInventoryManager } from "@/components/features/gear/GearInventoryManager";
 import type { GearInventoryContext } from "@/lib/actions/gear-context";
@@ -51,7 +51,12 @@ describe("GearInventoryManager", () => {
     const error = await screen.findByRole("alert");
     expect(error).toHaveTextContent("name: Required");
     expect(screen.getByRole("dialog", { name: "Add storage location" })).toBeVisible();
-    expect(error).toHaveFocus();
+    // Awaited, not asserted outright: the dialog sets its error inside an async
+    // transition and moves focus from a passive effect, so the alert lands in
+    // the DOM (which is all findByRole waits for) one commit before it is
+    // focused. Asserting synchronously passes on a fast machine and loses the
+    // race on a contended CI runner.
+    await waitFor(() => expect(error).toHaveFocus());
   });
 
   it("shows an explicit accessible empty state and 44px admin controls", () => {
