@@ -350,81 +350,89 @@ describe("public schedule query", () => {
   });
 
   it("populates public requestable offerings with remaining slices and no occupancy detail", async () => {
-    const startsAt = new Date("2026-09-01T18:00:00.000Z");
-    const endsAt = new Date("2026-09-01T20:00:00.000Z");
-    const block = {
-      id: BLOCK_ID,
-      title: "Requestable ice",
-      startsAt,
-      endsAt,
-      registrationMode: "REQUEST_REQUIRED",
-      intent: "OFFERING",
-      surfaceId: "csurfacexxxxxxxxxxxxxxxxxx",
-      segmentId: null,
-      surface: { id: "csurfacexxxxxxxxxxxxxxxxxx", name: "Rink A" },
-      segment: null,
-      skillLevels: [],
-      registrations: [],
-    };
-    mockPrisma.venue.findFirst.mockResolvedValue({
-      id: VENUE_ID,
-      name: "North Rink",
-      timezone: "America/New_York",
-      scheduleBlocks: [block],
-      lessonOfferings: [],
-    });
-    mockPopulateVenueOfferingAvailability.mockResolvedValue([
-      {
-        ...block,
-        surfaceName: "Rink A",
-        remainingSlices: [
-          {
-            startsAt,
-            endsAt: new Date("2026-09-01T18:30:00.000Z"),
-          },
-          {
-            startsAt: new Date("2026-09-01T19:00:00.000Z"),
-            endsAt,
-          },
-        ],
-      },
-    ]);
+    // Pin the clock: the fixtures below are absolute dates, and a non-recurring
+    // offering is only expanded while it has not yet ended.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-25T12:00:00.000Z"));
+    try {
+      const startsAt = new Date("2026-09-01T18:00:00.000Z");
+      const endsAt = new Date("2026-09-01T20:00:00.000Z");
+      const block = {
+        id: BLOCK_ID,
+        title: "Requestable ice",
+        startsAt,
+        endsAt,
+        registrationMode: "REQUEST_REQUIRED",
+        intent: "OFFERING",
+        surfaceId: "csurfacexxxxxxxxxxxxxxxxxx",
+        segmentId: null,
+        surface: { id: "csurfacexxxxxxxxxxxxxxxxxx", name: "Rink A" },
+        segment: null,
+        skillLevels: [],
+        registrations: [],
+      };
+      mockPrisma.venue.findFirst.mockResolvedValue({
+        id: VENUE_ID,
+        name: "North Rink",
+        timezone: "America/New_York",
+        scheduleBlocks: [block],
+        lessonOfferings: [],
+      });
+      mockPopulateVenueOfferingAvailability.mockResolvedValue([
+        {
+          ...block,
+          surfaceName: "Rink A",
+          remainingSlices: [
+            {
+              startsAt,
+              endsAt: new Date("2026-09-01T18:30:00.000Z"),
+            },
+            {
+              startsAt: new Date("2026-09-01T19:00:00.000Z"),
+              endsAt,
+            },
+          ],
+        },
+      ]);
 
-    const result = await getPublicVenueSchedule("north-rink");
+      const result = await getPublicVenueSchedule("north-rink");
 
-    expect(mockPopulateVenueOfferingAvailability).toHaveBeenCalledWith(
-      mockPrisma,
-      expect.objectContaining({
-        venueId: VENUE_ID,
-        offerings: [
-          expect.objectContaining({
-            id: BLOCK_ID,
-            surfaceId: "csurfacexxxxxxxxxxxxxxxxxx",
-            segmentId: null,
-          }),
-        ],
-        mode: "PUBLIC",
-      }),
-    );
-    expect(result?.availableIce[0]).toEqual(
-      expect.objectContaining({
-        remainingSlices: expect.any(Array),
-      }),
-    );
-    expect(result?.availableIce[0]).not.toHaveProperty("occupancy");
-    expect(mockPrisma.venue.findFirst).toHaveBeenCalledWith(
-      expect.objectContaining({
-        select: expect.objectContaining({
-          scheduleBlocks: expect.objectContaining({
-            where: expect.objectContaining({
-              audience: "PUBLIC",
-              visibility: "PUBLIC",
-              status: "PUBLISHED",
+      expect(mockPopulateVenueOfferingAvailability).toHaveBeenCalledWith(
+        mockPrisma,
+        expect.objectContaining({
+          venueId: VENUE_ID,
+          offerings: [
+            expect.objectContaining({
+              id: BLOCK_ID,
+              surfaceId: "csurfacexxxxxxxxxxxxxxxxxx",
+              segmentId: null,
+            }),
+          ],
+          mode: "PUBLIC",
+        }),
+      );
+      expect(result?.availableIce[0]).toEqual(
+        expect.objectContaining({
+          remainingSlices: expect.any(Array),
+        }),
+      );
+      expect(result?.availableIce[0]).not.toHaveProperty("occupancy");
+      expect(mockPrisma.venue.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          select: expect.objectContaining({
+            scheduleBlocks: expect.objectContaining({
+              where: expect.objectContaining({
+                audience: "PUBLIC",
+                visibility: "PUBLIC",
+                status: "PUBLISHED",
+              }),
             }),
           }),
         }),
-      }),
-    );
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("expands recurring requestable offerings into concrete future occurrences", async () => {
@@ -497,58 +505,69 @@ describe("public schedule query", () => {
 
 describe("admin schedule availability", () => {
   it("populates the admin available-ice browser data", async () => {
-    const startsAt = new Date("2026-09-01T18:00:00.000Z");
-    const endsAt = new Date("2026-09-01T20:00:00.000Z");
-    mockPrisma.venue.findFirst.mockResolvedValue({
-      id: VENUE_ID,
-      organizationId: ORGANIZATION_ID,
-      slug: "north-rink",
-      timezone: "America/New_York",
-    });
-    mockPrisma.venueScheduleBlock.findMany.mockResolvedValue([
-      {
-        id: BLOCK_ID,
-        title: "Requestable ice",
-        startsAt,
-        endsAt,
-        activityType: "OTHER",
-        status: "PUBLISHED",
-        intent: "OFFERING",
-        registrationMode: "REQUEST_REQUIRED",
-        surfaceId: null,
-        segmentId: null,
-        surface: null,
-      },
-    ]);
-    mockPopulateVenueOfferingAvailability.mockResolvedValue([
-      {
-        id: BLOCK_ID,
-        title: "Requestable ice",
-        startsAt,
-        endsAt,
-        surfaceId: null,
-        segmentId: null,
-        surfaceName: null,
-        occupancy: [],
-        remainingSlices: [{ startsAt, endsAt }],
-      },
-    ]);
-
-    const result = await getVenueScheduleAdminData(ORGANIZATION_ID, VENUE_ID);
-
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.availableIce).toEqual([
-        expect.objectContaining({
+    // Pin the clock: the fixtures below are absolute dates, and a non-recurring
+    // offering is only expanded while it has not yet ended.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-25T12:00:00.000Z"));
+    try {
+      const startsAt = new Date("2026-09-01T18:00:00.000Z");
+      const endsAt = new Date("2026-09-01T20:00:00.000Z");
+      mockPrisma.venue.findFirst.mockResolvedValue({
+        id: VENUE_ID,
+        organizationId: ORGANIZATION_ID,
+        slug: "north-rink",
+        timezone: "America/New_York",
+      });
+      mockPrisma.venueScheduleBlock.findMany.mockResolvedValue([
+        {
           id: BLOCK_ID,
-          remainingSlices: [{ startsAt, endsAt }],
-        }),
+          title: "Requestable ice",
+          startsAt,
+          endsAt,
+          activityType: "OTHER",
+          status: "PUBLISHED",
+          intent: "OFFERING",
+          registrationMode: "REQUEST_REQUIRED",
+          surfaceId: null,
+          segmentId: null,
+          surface: null,
+        },
       ]);
+      mockPopulateVenueOfferingAvailability.mockResolvedValue([
+        {
+          id: BLOCK_ID,
+          title: "Requestable ice",
+          startsAt,
+          endsAt,
+          surfaceId: null,
+          segmentId: null,
+          surfaceName: null,
+          occupancy: [],
+          remainingSlices: [{ startsAt, endsAt }],
+        },
+      ]);
+
+      const result = await getVenueScheduleAdminData(ORGANIZATION_ID, VENUE_ID);
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.availableIce).toEqual([
+          expect.objectContaining({
+            id: BLOCK_ID,
+            remainingSlices: [{ startsAt, endsAt }],
+          }),
+        ]);
+      }
+      expect(mockPopulateVenueOfferingAvailability).toHaveBeenCalledWith(
+        mockPrisma,
+        expect.objectContaining({
+          mode: "STAFF",
+          offerings: [expect.objectContaining({ id: BLOCK_ID })],
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
     }
-    expect(mockPopulateVenueOfferingAvailability).toHaveBeenCalledWith(
-      mockPrisma,
-      expect.objectContaining({ mode: "STAFF" }),
-    );
   });
 });
 
