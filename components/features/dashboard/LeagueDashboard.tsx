@@ -34,6 +34,7 @@ import {
 } from '@mui/icons-material';
 import { formatDistanceToNow, format } from 'date-fns';
 import Link from 'next/link';
+import { EntityHeader } from '@/components/ui/EntityHeader';
 
 interface LeagueDashboardProps {
   league: {
@@ -43,6 +44,8 @@ interface LeagueDashboardProps {
     contactEmail: string;
     contactPhone: string | null;
     createdAt: Date;
+    logoUrl?: string | null;
+    brandPrimaryColor?: string | null;
     stats: {
       totalTeams: number;
       totalPlayers: number;
@@ -113,98 +116,30 @@ export default function LeagueDashboard({ league }: LeagueDashboardProps) {
 
   return (
     <Box sx={{ p: { xs: 2, sm: 3 } }}>
-      {/* Header */}
-      <Box sx={{ mb: { xs: 3, sm: 4 } }}>
-        <Typography
-          variant="h4"
-          component="h1"
-          gutterBottom
-          sx={{ fontSize: { xs: '1.75rem', sm: '2.125rem' } }}
-        >
-          {league.name}
-        </Typography>
-        <Box sx={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: { xs: 1, sm: 2 },
-          mb: 2,
-          flexWrap: 'wrap'
-        }}>
-          <Chip label={formatSport(league.sport)} color="primary" size="small" />
-          <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
-            Created {formatDistanceToNow(new Date(league.createdAt))} ago
-          </Typography>
-        </Box>
-      </Box>
-
-      {/* Stats Overview */}
-      <Box sx={{ mb: 3 }}>
-        <Box sx={{
-          display: 'grid',
-          gridTemplateColumns: {
-            xs: 'repeat(2, 1fr)',
-            sm: 'repeat(3, 1fr)',
-            md: 'repeat(5, 1fr)'
-          },
-          gap: 2
-        }}>
-          <Card>
-            <CardContent sx={{ textAlign: 'center', py: 2 }}>
-              <TeamsIcon color="primary" sx={{ fontSize: 32, mb: 1 }} />
-              <Typography variant="h5" component="div">
-                {league.stats.totalTeams}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Teams
-              </Typography>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent sx={{ textAlign: 'center', py: 2 }}>
-              <PlayersIcon color="success" sx={{ fontSize: 32, mb: 1 }} />
-              <Typography variant="h5" component="div">
-                {league.stats.totalPlayers}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Players
-              </Typography>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent sx={{ textAlign: 'center', py: 2 }}>
-              <EventIcon color="info" sx={{ fontSize: 32, mb: 1 }} />
-              <Typography variant="h5" component="div">
-                {league.stats.totalEvents}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Events
-              </Typography>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent sx={{ textAlign: 'center', py: 2 }}>
-              <CalendarIcon color="warning" sx={{ fontSize: 32, mb: 1 }} />
-              <Typography variant="h5" component="div">
-                {league.stats.upcomingEvents}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Upcoming
-              </Typography>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent sx={{ textAlign: 'center', py: 2 }}>
-              <DivisionIcon color="secondary" sx={{ fontSize: 32, mb: 1 }} />
-              <Typography variant="h5" component="div">
-                {league.stats.activeDivisions}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Divisions
-              </Typography>
-            </CardContent>
-          </Card>
-        </Box>
-      </Box>
+      <EntityHeader
+        name={league.name}
+        id={league.id}
+        logoUrl={league.logoUrl}
+        brandColor={league.brandPrimaryColor}
+        eyebrow="Association"
+        meta={
+          <>
+            <Chip label={formatSport(league.sport)} color="primary" size="small" />
+            <Chip
+              label={`Since ${format(new Date(league.createdAt), 'MMM yyyy')}`}
+              size="small"
+              variant="outlined"
+            />
+          </>
+        }
+        stats={[
+          { label: 'Teams', value: league.stats.totalTeams },
+          { label: 'Players', value: league.stats.totalPlayers },
+          { label: 'Divisions', value: league.stats.activeDivisions },
+          { label: 'Events', value: league.stats.totalEvents },
+          { label: 'Upcoming', value: league.stats.upcomingEvents },
+        ]}
+      />
 
       {/* Quick Actions */}
       <Card sx={{ mb: 3 }}>

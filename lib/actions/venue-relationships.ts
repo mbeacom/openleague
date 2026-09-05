@@ -220,7 +220,7 @@ export async function getTeamVenueRelationships(teamIds: string[]) {
       relationshipType: true,
       teamId: true,
       venue: {
-        select: { id: true, name: true, slug: true, organizationId: true },
+        select: { id: true, name: true, slug: true, organizationId: true, logoUrl: true },
       },
     },
     orderBy: { createdAt: "desc" },

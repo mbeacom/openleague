@@ -27,9 +27,15 @@ interface VenueProfileEditorProps {
     privateManagerNotes: string | null;
     profileStatus: string;
   };
+  /** Whether Blob storage is configured, so the logo field offers upload. */
+  uploadsEnabled?: boolean;
 }
 
-export function VenueProfileEditor({ organizationId, venue }: VenueProfileEditorProps) {
+export function VenueProfileEditor({
+  organizationId,
+  venue,
+  uploadsEnabled = false,
+}: VenueProfileEditorProps) {
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -132,6 +138,10 @@ export function VenueProfileEditor({ organizationId, venue }: VenueProfileEditor
         brandSecondaryColor={formData.brandSecondaryColor}
         disabled={isPending}
         onChange={updateField}
+        entity="venue"
+        entityId={venue.id}
+        name={formData.name || venue.name}
+        uploadsEnabled={uploadsEnabled}
       />
       <Divider />
       <TextField

@@ -39,9 +39,18 @@ export default function AgendaList({ days, colorForItem, focusDay }: AgendaListP
       {days.map(([dayKey, items]) => (
         <Box key={dayKey} id={`agenda-day-${dayKey}`} sx={{ scrollMarginTop: 80 }}>
           <Typography
-            variant="subtitle2"
             component="h3"
-            sx={{ color: "text.secondary", borderBottom: 1, borderColor: "divider", pb: 0.5, mb: 1 }}
+            sx={{
+              fontSize: "0.6875rem",
+              fontWeight: 700,
+              letterSpacing: "0.1em",
+              textTransform: "uppercase",
+              color: "text.secondary",
+              borderBottom: 1,
+              borderColor: "divider",
+              pb: 0.5,
+              mb: 1,
+            }}
           >
             {format(parseDayKey(dayKey), "EEEE, MMMM d")}
           </Typography>
@@ -70,9 +79,18 @@ export default function AgendaList({ days, colorForItem, focusDay }: AgendaListP
                     aria-hidden
                     sx={{ width: 10, height: 10, borderRadius: "50%", bgcolor: color, flexShrink: 0 }}
                   />
+                  {/* Mono + tabular so a day's start times form a straight
+                      column instead of ragging on digit width. */}
                   <Typography
                     variant="body2"
-                    sx={{ color: "text.secondary", flexShrink: 0, minWidth: { xs: 64, sm: 76 } }}
+                    sx={{
+                      color: "text.secondary",
+                      flexShrink: 0,
+                      minWidth: { xs: 64, sm: 76 },
+                      fontFamily: "var(--font-mono), ui-monospace, monospace",
+                      fontVariantNumeric: "tabular-nums",
+                      fontSize: "0.8125rem",
+                    }}
                   >
                     {formatItemTimeRange(item)}
                   </Typography>

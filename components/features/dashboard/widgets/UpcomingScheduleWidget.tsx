@@ -1,11 +1,11 @@
 import { Box, Chip, Skeleton, Stack, Typography, CardContent } from "@mui/material";
 import {
-  SportsHockey as SportsHockeyIcon,
-  Event as EventIcon,
   ArrowForward as ArrowForwardIcon,
   Place as PlaceIcon,
 } from "@mui/icons-material";
 import { LinkButton, LinkCard } from "@/components/ui/NextLinkComposites";
+import { SectionHeader } from "@/components/ui/SectionHeader";
+import { DateBlock } from "@/components/ui/DateBlock";
 import { getUpcomingSchedule, type UpcomingEventItem } from "@/lib/data/dashboard";
 import { formatDateTimeInZone } from "@/lib/utils/date";
 
@@ -29,14 +29,15 @@ export default async function UpcomingScheduleWidget({ userId }: { userId: strin
 
   return (
     <Box component="section">
-      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-        <Typography variant="h5" component="h2">
-          Upcoming Schedule
-        </Typography>
-        <LinkButton href="/calendar" endIcon={<ArrowForwardIcon />} size="small">
-          View Calendar
-        </LinkButton>
-      </Stack>
+      <SectionHeader
+        title="Upcoming schedule"
+        badge={items.length > 0 ? `next ${items.length}` : undefined}
+        action={
+          <LinkButton href="/calendar" endIcon={<ArrowForwardIcon />} size="small">
+            View calendar
+          </LinkButton>
+        }
+      />
 
       {items.length === 0 ? (
         <Typography variant="body2" color="text.secondary">
@@ -67,11 +68,12 @@ export default async function UpcomingScheduleWidget({ userId }: { userId: strin
                   spacing={1}
                 >
                   <Stack direction="row" alignItems="center" spacing={1.5} sx={{ minWidth: 0 }}>
-                    {item.kind === "event" && item.eventType === "GAME" ? (
-                      <EventIcon sx={{ color: "primary.main", fontSize: 20 }} />
-                    ) : (
-                      <SportsHockeyIcon sx={{ color: "primary.main", fontSize: 20 }} />
-                    )}
+                    {/* The date leads every row so a fortnight of items aligns
+                        on the day rather than on title length. */}
+                    <DateBlock
+                      value={item.startAt}
+                      timezone={item.kind === "event" ? item.timezone : null}
+                    />
                     <Box sx={{ minWidth: 0 }}>
                       <Typography variant="subtitle2" fontWeight={600} noWrap>
                         {item.title}

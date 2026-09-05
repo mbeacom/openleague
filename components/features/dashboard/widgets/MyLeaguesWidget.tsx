@@ -1,6 +1,7 @@
 import { Box, Skeleton, Typography } from "@mui/material";
 import LeagueOverviewCard from "@/components/features/dashboard/LeagueOverviewCard";
 import { getViewerMemberships } from "@/lib/data/dashboard";
+import { SectionHeader } from "@/components/ui/SectionHeader";
 
 /**
  * Role-aware league cards for every league the viewer belongs to. Renders
@@ -14,9 +15,7 @@ export default async function MyLeaguesWidget({ userId }: { userId: string }) {
 
   return (
     <Box component="section">
-      <Typography variant="h5" component="h2" sx={{ mb: 2 }}>
-        My Leagues
-      </Typography>
+      <SectionHeader title="My leagues" badge={leagues.length} />
       <Box
         sx={{
           display: "grid",

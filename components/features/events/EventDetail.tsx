@@ -27,6 +27,9 @@ import {
 } from "@mui/icons-material";
 import { deleteEvent } from "@/lib/actions/events";
 import { formatDateTime } from "@/lib/utils/date";
+import { Crest } from "@/components/ui/Crest";
+import { DateBlock } from "@/components/ui/DateBlock";
+import { resolveCrestColor } from "@/lib/utils/crest";
 import { RSVPButtons } from "./RSVPButtons";
 import { AttendanceView } from "./AttendanceView";
 import type { AttendanceCounts, AttendanceEntry } from "@/types/events";
@@ -70,6 +73,8 @@ interface EventDetailProps {
     team: {
       id: string;
       name: string;
+      logoUrl?: string | null;
+      brandPrimaryColor?: string | null;
     };
     rsvps: EventRsvp[];
     canRSVP?: boolean;
@@ -174,27 +179,61 @@ export default function EventDetail({
 
   return (
     <>
-      <Card>
-        <CardContent>
+      <Card
+        sx={{
+          position: "relative",
+          overflow: "hidden",
+          // The team's color as one rule across the top, matching how every
+          // other identity surface in the app introduces an entity.
+          "&::before": {
+            content: '""',
+            position: "absolute",
+            insetInline: 0,
+            top: 0,
+            height: 4,
+            backgroundColor: resolveCrestColor(event.team.id, event.team.brandPrimaryColor),
+          },
+        }}
+      >
+        <CardContent sx={{ pt: 3 }}>
           <Box
             sx={{
               display: "flex",
               justifyContent: "space-between",
               alignItems: "flex-start",
+              gap: 2,
               mb: 2,
             }}
           >
-            <Box>
-              <Chip
-                label={event.type}
-                color={event.type === "GAME" ? "primary" : "secondary"}
-                size="small"
-                sx={{ mb: 1 }}
-              />
-              <Typography variant="h4" component="h1" gutterBottom>
-                {event.title}
-              </Typography>
-            </Box>
+            <Stack direction="row" spacing={2} alignItems="flex-start" sx={{ minWidth: 0 }}>
+              <DateBlock value={event.startAt} timezone={event.timezone} />
+              <Box sx={{ minWidth: 0 }}>
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.75 }}>
+                  <Crest
+                    name={event.team.name}
+                    id={event.team.id}
+                    logoUrl={event.team.logoUrl}
+                    brandColor={event.team.brandPrimaryColor}
+                    size="xs"
+                  />
+                  <Typography variant="caption" color="text.secondary">
+                    {event.team.name}
+                  </Typography>
+                  <Chip
+                    label={event.type === "GAME" ? "Game" : "Practice"}
+                    color={event.type === "GAME" ? "primary" : "secondary"}
+                    size="small"
+                  />
+                </Stack>
+                <Typography
+                  variant="h4"
+                  component="h1"
+                  sx={{ fontWeight: 800, letterSpacing: "-0.02em", lineHeight: 1.15 }}
+                >
+                  {event.title}
+                </Typography>
+              </Box>
+            </Stack>
 
             {isAdmin && (
               <Box sx={{ display: "flex", gap: 1 }}>

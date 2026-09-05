@@ -25,9 +25,12 @@ import {
   updateTeamPublicProfile,
 } from "@/lib/actions/association-profile";
 import { VenueBrandingEditor } from "@/components/features/venue-admin/VenueBrandingEditor";
+import { Crest } from "@/components/ui/Crest";
 
 export interface AssociationProfileEditorProps {
   leagueId: string;
+  /** Whether Blob storage is configured, so logo fields offer upload. */
+  uploadsEnabled?: boolean;
   profile: {
     name: string;
     slug: string | null;
@@ -53,6 +56,7 @@ export function AssociationProfileEditor({
   leagueId,
   profile,
   teams,
+  uploadsEnabled = false,
 }: AssociationProfileEditorProps) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -185,6 +189,10 @@ export function AssociationProfileEditor({
             brandSecondaryColor={fields.brandSecondaryColor}
             disabled={pending}
             onChange={(field, value) => setFields({ ...fields, [field]: value })}
+            entity="league"
+            entityId={leagueId}
+            name={profile.name}
+            uploadsEnabled={uploadsEnabled}
           />
           <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
             <TextField
@@ -255,7 +263,17 @@ export function AssociationProfileEditor({
                 };
                 return (
                   <TableRow key={team.id}>
-                    <TableCell>{team.name}</TableCell>
+                    <TableCell>
+                      <Stack direction="row" spacing={1.5} alignItems="center">
+                        <Crest
+                          name={team.name}
+                          id={team.id}
+                          logoUrl={values.logoUrl || null}
+                          size="sm"
+                        />
+                        <span>{team.name}</span>
+                      </Stack>
+                    </TableCell>
                     <TableCell>
                       <TextField
                         size="small"

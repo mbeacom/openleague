@@ -14,6 +14,13 @@ import { describe, it, expect } from "vitest";
  * Server components must use the `"use client"` composites in
  * `components/ui/NextLinkComposites.tsx` (LinkButton, LinkCardActionArea, …)
  * instead. Client components may keep the direct pattern.
+ *
+ * The same boundary rejects a function-valued `sx` property — MUI's
+ * `sx={{ color: (theme) => … }}` callback form. React cannot serialize the
+ * function, so a server component handing one to an MUI client component fails
+ * with the identical error, and just as invisibly. Interpolate a CSS variable
+ * (`var(--mui-palette-divider)`; cssVariables is enabled in lib/theme.ts) or
+ * compute the value against the imported theme so a plain string crosses.
  */
 
 const SCAN_ROOTS = ["app", "components"];
@@ -78,6 +85,76 @@ describe("RSC boundary guard: next/link as a component prop", () => {
         `components/ui/NextLinkComposites.tsx (LinkButton, LinkCardActionArea, ` +
         `LinkCard, LinkChip, LinkListItemButton, LinkMuiLink) or add "use client" ` +
         `if the file is genuinely a client component.`
+    ).toEqual([]);
+  });
+});
+
+/**
+ * Property values inside an `sx={{ … }}` object literal that are arrow
+ * functions, i.e. `someProp: (theme) => …`.
+ *
+ * Deliberately narrow: it looks only for the `(args) =>` form directly after a
+ * property key, inside a braced sx prop. The whole-callback form
+ * `sx={(theme) => ({ … })}` is NOT matched, because MUI's own components accept
+ * it and it is not what crossed the boundary here. Regex rather than a parse
+ * because the guard has to stay cheap enough to run over every file on every
+ * test run.
+ */
+function functionValuedSxProps(source: string): string[] {
+  const hits: string[] = [];
+  const sxRe = /sx=\{\{/g;
+
+  for (const match of source.matchAll(sxRe)) {
+    // Walk to the matching close brace so nested objects stay in scope.
+    let depth = 0;
+    let index = match.index + "sx={".length;
+    const start = index;
+    for (; index < source.length; index += 1) {
+      const char = source[index];
+      if (char === "{") depth += 1;
+      else if (char === "}") {
+        depth -= 1;
+        if (depth === 0) break;
+      }
+    }
+
+    const block = source.slice(start, index);
+    const propRe = /([A-Za-z_$][\w$]*|"[^"]+"|'[^']+')\s*:\s*\([^)]*\)\s*=>/g;
+    for (const prop of block.matchAll(propRe)) {
+      hits.push(prop[1]);
+    }
+  }
+
+  return hits;
+}
+
+describe("RSC boundary guard: function-valued sx properties", () => {
+  it("no server component passes a theme callback as an sx property value", () => {
+    const violations: string[] = [];
+
+    for (const root of SCAN_ROOTS) {
+      for (const file of collectTsxFiles(join(REPO_ROOT, root))) {
+        const source = readFileSync(file, "utf8");
+        if (hasUseClientDirective(source)) continue;
+
+        const props = functionValuedSxProps(source);
+        if (props.length > 0) {
+          violations.push(
+            `${file.replace(`${REPO_ROOT}/`, "")} (${[...new Set(props)].join(", ")})`
+          );
+        }
+      }
+    }
+
+    expect(
+      violations,
+      `function-valued sx propert(ies) in server component(s):\n  ${violations.join(
+        "\n  "
+      )}\nReact cannot serialize a function across the server/client boundary, so ` +
+        `this throws at render time ("Functions cannot be passed directly to Client ` +
+        `Components") while passing type-check, lint, and build. Interpolate a CSS ` +
+        `variable such as var(--mui-palette-divider), or compute the value against ` +
+        `the imported theme so the result is a plain string.`
     ).toEqual([]);
   });
 });

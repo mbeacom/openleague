@@ -23,7 +23,9 @@ export type ViewerTeamMembership = {
     sport: string;
     season: string;
     leagueId: string | null;
-    league: { id: string; name: string } | null;
+    logoUrl: string | null;
+    brandPrimaryColor: string | null;
+    league: { id: string; name: string; logoUrl: string | null } | null;
     division: { id: string; name: string } | null;
     _count: { players: number; events: number };
   };
@@ -35,6 +37,8 @@ export type ViewerLeagueMembership = {
     id: string;
     name: string;
     sport: string;
+    logoUrl: string | null;
+    brandPrimaryColor: string | null;
     _count: { teams: number; players: number; events: number; divisions: number };
   };
 };
@@ -62,7 +66,9 @@ export const getViewerMemberships = cache(
               sport: true,
               season: true,
               leagueId: true,
-              league: { select: { id: true, name: true } },
+              logoUrl: true,
+              brandPrimaryColor: true,
+              league: { select: { id: true, name: true, logoUrl: true } },
               division: { select: { id: true, name: true } },
               _count: { select: { players: true, events: true } },
             },
@@ -79,6 +85,8 @@ export const getViewerMemberships = cache(
               id: true,
               name: true,
               sport: true,
+              logoUrl: true,
+              brandPrimaryColor: true,
               _count: {
                 select: { teams: true, players: true, events: true, divisions: true },
               },

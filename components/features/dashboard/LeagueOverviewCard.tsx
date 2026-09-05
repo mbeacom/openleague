@@ -1,29 +1,18 @@
-"use client";
-
-import {
-  Card,
-  CardContent,
-  CardActions,
-  Typography,
-  Chip,
-  Box,
-  Button,
-  Avatar,
-} from "@mui/material";
+import { Box, Card, Chip, Stack, Typography } from "@mui/material";
+import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import { formatSport } from "@/lib/utils/validation";
-import {
-  People as PeopleIcon,
-  Event as EventIcon,
-  Groups as GroupsIcon,
-  SportsSoccer as SportsIcon,
-} from "@mui/icons-material";
-import { useRouter } from "next/navigation";
+import { LinkCardActionArea } from "@/components/ui/NextLinkComposites";
+import { Crest } from "@/components/ui/Crest";
+import { StatStrip } from "@/components/ui/StatStrip";
+import { resolveCrestColor } from "@/lib/utils/crest";
 
 interface LeagueOverviewCardProps {
   league: {
     id: string;
     name: string;
     sport: string;
+    logoUrl?: string | null;
+    brandPrimaryColor?: string | null;
     _count: {
       teams: number;
       players: number;
@@ -31,179 +20,113 @@ interface LeagueOverviewCardProps {
       divisions: number;
     };
   };
-  userRole: 'LEAGUE_ADMIN' | 'TEAM_ADMIN' | 'MEMBER';
-  recentActivity?: {
-    description: string;
-    timestamp: Date;
-  };
+  userRole: "LEAGUE_ADMIN" | "TEAM_ADMIN" | "MEMBER";
 }
 
+const ROLE_LABELS: Record<LeagueOverviewCardProps["userRole"], string> = {
+  LEAGUE_ADMIN: "League admin",
+  TEAM_ADMIN: "Team admin",
+  MEMBER: "Member",
+};
+
+/**
+ * A league tile. Same contract as TeamCard: the whole card is the link, and it
+ * points at the league dashboard because no /league/[leagueId] index exists.
+ */
 export default function LeagueOverviewCard({
   league,
   userRole,
-  recentActivity
 }: LeagueOverviewCardProps) {
-  const router = useRouter();
-
-  const handleViewLeague = () => {
-    // No /league/[leagueId] index route exists — dashboard is the canonical view.
-    router.push(`/league/${league.id}/dashboard`);
-  };
-
-  const handleManageLeague = () => {
-    router.push(`/league/${league.id}/teams`);
-  };
-
-  const getLeagueInitials = (name: string) => {
-    return name
-      .split(' ')
-      .map(word => word[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
-  };
-
-  const getRoleColor = (role: string) => {
-    switch (role) {
-      case 'LEAGUE_ADMIN':
-        return 'primary';
-      case 'TEAM_ADMIN':
-        return 'secondary';
-      default:
-        return 'default';
-    }
-  };
-
-  const getRoleLabel = (role: string) => {
-    switch (role) {
-      case 'LEAGUE_ADMIN':
-        return 'League Admin';
-      case 'TEAM_ADMIN':
-        return 'Team Admin';
-      default:
-        return 'Member';
-    }
-  };
+  const isAdmin = userRole === "LEAGUE_ADMIN";
+  const accent = resolveCrestColor(league.id, league.brandPrimaryColor);
 
   return (
     <Card
+      variant="outlined"
       sx={{
-        height: '100%',
-        transition: 'all 0.2s ease-in-out',
-        '&:hover': {
-          boxShadow: 4,
-          transform: 'translateY(-2px)',
-        }
+        height: "100%",
+        position: "relative",
+        overflow: "hidden",
+        transition: "border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease",
+        "&::before": {
+          content: '""',
+          position: "absolute",
+          insetBlock: 0,
+          left: 0,
+          width: 3,
+          backgroundColor: accent,
+          zIndex: 1,
+        },
+        "&:hover": {
+          borderColor: "secondary.main",
+          boxShadow: 3,
+          transform: "translateY(-2px)",
+        },
+        "&:has(:focus-visible)": {
+          borderColor: "secondary.main",
+        },
+        "@media (prefers-reduced-motion: reduce)": {
+          transition: "none",
+          "&:hover": { transform: "none" },
+        },
       }}
     >
-      <CardContent>
-        {/* League Header */}
-        <Box display="flex" alignItems="flex-start" gap={2} mb={2}>
-          <Avatar
-            sx={{
-              width: 48,
-              height: 48,
-              bgcolor: 'primary.main',
-              fontSize: '1.1rem',
-              fontWeight: 'bold'
-            }}
-          >
-            {getLeagueInitials(league.name)}
-          </Avatar>
-          <Box flex={1}>
-            <Typography variant="h6" component="h3" gutterBottom>
-              {league.name}
-            </Typography>
-            <Box display="flex" alignItems="center" gap={1} mb={1}>
-              <Chip
-                icon={<SportsIcon />}
-                label={formatSport(league.sport)}
-                size="small"
-                variant="outlined"
-              />
-              <Chip
-                label={getRoleLabel(userRole)}
-                size="small"
-                color={getRoleColor(userRole) as 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning'}
-              />
-            </Box>
-          </Box>
-        </Box>
-
-        {/* League Stats */}
+      <LinkCardActionArea
+        href={`/league/${league.id}/dashboard`}
+        sx={{ height: "100%", p: 2.5, pl: 3 }}
+      >
+        {/* Column with the strip pushed to the bottom: without this a card
+            carrying an "Admin" chip sits its scoreboard a row lower than its
+            neighbors, and a grid of tiles stops lining up. */}
         <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(2, 1fr)',
-            gap: 2,
-            mb: 2
-          }}
+          sx={{ width: "100%", height: "100%", display: "flex", flexDirection: "column" }}
         >
-          <Box display="flex" alignItems="center" gap={1}>
-            <GroupsIcon fontSize="small" color="action" />
-            <Typography variant="body2" color="text.secondary">
-              {league._count.teams} teams
-            </Typography>
-          </Box>
-          <Box display="flex" alignItems="center" gap={1}>
-            <PeopleIcon fontSize="small" color="action" />
-            <Typography variant="body2" color="text.secondary">
-              {league._count.players} players
-            </Typography>
-          </Box>
-          <Box display="flex" alignItems="center" gap={1}>
-            <EventIcon fontSize="small" color="action" />
-            <Typography variant="body2" color="text.secondary">
-              {league._count.events} events
-            </Typography>
-          </Box>
-          <Box display="flex" alignItems="center" gap={1}>
-            <GroupsIcon fontSize="small" color="action" />
-            <Typography variant="body2" color="text.secondary">
-              {league._count.divisions} divisions
-            </Typography>
-          </Box>
+          <Stack direction="row" spacing={2} alignItems="flex-start">
+            <Crest
+              name={league.name}
+              id={league.id}
+              logoUrl={league.logoUrl}
+              brandColor={league.brandPrimaryColor}
+              size="md"
+              ring={isAdmin ? "accent" : "none"}
+            />
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography
+                variant="h6"
+                component="h3"
+                sx={{ fontWeight: 700, lineHeight: 1.25, letterSpacing: "-0.01em" }}
+              >
+                {league.name}
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
+                {formatSport(league.sport)}
+              </Typography>
+            </Box>
+            <ChevronRightIcon
+              fontSize="small"
+              sx={{ color: "text.disabled", mt: 0.5, flexShrink: 0 }}
+            />
+          </Stack>
+
+          <Stack direction="row" spacing={0.75} sx={{ mt: 1.5, mb: "auto" }}>
+            <Chip
+              size="small"
+              label={ROLE_LABELS[userRole]}
+              color={isAdmin ? "primary" : "default"}
+              variant={isAdmin ? "filled" : "outlined"}
+            />
+          </Stack>
+
+          <StatStrip
+            sx={{ mt: 2 }}
+            stats={[
+              { label: "Teams", value: league._count.teams },
+              { label: "Players", value: league._count.players },
+              { label: "Divisions", value: league._count.divisions },
+            ]}
+          />
         </Box>
-
-        {/* Recent Activity */}
-        {recentActivity && (
-          <Box
-            sx={{
-              p: 1.5,
-              bgcolor: 'grey.50',
-              borderRadius: 1,
-              border: '1px solid',
-              borderColor: 'grey.200'
-            }}
-          >
-            <Typography variant="caption" color="text.secondary" gutterBottom display="block">
-              Recent Activity
-            </Typography>
-            <Typography variant="body2" sx={{ fontSize: '0.875rem' }}>
-              {recentActivity.description}
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              {new Intl.DateTimeFormat('en-US', {
-                month: 'short',
-                day: 'numeric',
-                hour: 'numeric',
-                minute: '2-digit',
-              }).format(recentActivity.timestamp)}
-            </Typography>
-          </Box>
-        )}
-      </CardContent>
-
-      <CardActions sx={{ pt: 0 }}>
-        <Button size="small" onClick={handleViewLeague}>
-          View League
-        </Button>
-        {(userRole === 'LEAGUE_ADMIN' || userRole === 'TEAM_ADMIN') && (
-          <Button size="small" onClick={handleManageLeague}>
-            Manage
-          </Button>
-        )}
-      </CardActions>
+      </LinkCardActionArea>
     </Card>
   );
 }

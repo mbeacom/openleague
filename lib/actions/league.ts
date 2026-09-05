@@ -1172,6 +1172,8 @@ export async function getLeagueWithStats(leagueId: string): Promise<{
   contactEmail: string;
   contactPhone: string | null;
   createdAt: Date;
+  logoUrl: string | null;
+  brandPrimaryColor: string | null;
   stats: {
     totalTeams: number;
     totalPlayers: number;
@@ -1227,6 +1229,8 @@ export async function getLeagueWithStats(leagueId: string): Promise<{
         contactEmail: true,
         contactPhone: true,
         createdAt: true,
+        logoUrl: true,
+        brandPrimaryColor: true,
       },
     });
 
@@ -1506,6 +1510,8 @@ export async function getLeagueTeamsWithDivisions(leagueId: string): Promise<{
             sport: true,
             season: true,
             createdAt: true,
+            logoUrl: true,
+            brandPrimaryColor: true,
             _count: {
               select: {
                 players: true,
@@ -1532,6 +1538,8 @@ export async function getLeagueTeamsWithDivisions(leagueId: string): Promise<{
         sport: true,
         season: true,
         createdAt: true,
+        logoUrl: true,
+        brandPrimaryColor: true,
         _count: {
           select: {
             players: true,

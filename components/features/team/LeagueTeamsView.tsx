@@ -10,7 +10,6 @@ import {
   CardContent,
   CardActions,
   Chip,
-  Avatar,
   MenuItem,
   Fab,
   TextField,
@@ -24,7 +23,6 @@ import {
   Add as AddIcon,
   Groups as TeamsIcon,
   People as PlayersIcon,
-  Event as EventIcon,
   Category as DivisionIcon,
   Search as SearchIcon,
   FileDownload as DownloadIcon,
@@ -34,6 +32,8 @@ import Link from 'next/link';
 import { exportLeagueTeamsToCSV } from '@/lib/utils/csv-export';
 import DragDropTeams from './DragDropTeams';
 import { DraggableTeamCard } from './DraggableTeamCard';
+import { Crest } from '@/components/ui/Crest';
+import { StatStrip } from '@/components/ui/StatStrip';
 import { DroppableDivision } from './DroppableDivision';
 
 interface LeagueTeamsViewProps {
@@ -84,6 +84,8 @@ interface TeamCardProps {
     sport: string;
     season: string;
     createdAt: Date;
+    logoUrl?: string | null;
+    brandPrimaryColor?: string | null;
     _count: {
       players: number;
       events: number;
@@ -98,9 +100,13 @@ function TeamCard({ team, leagueId }: TeamCardProps) {
       <CardContent>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, sm: 2 } }}>
-            <Avatar sx={{ bgcolor: 'primary.main', width: { xs: 36, sm: 40 }, height: { xs: 36, sm: 40 } }}>
-              <TeamsIcon sx={{ fontSize: { xs: 18, sm: 20 } }} />
-            </Avatar>
+            <Crest
+              name={team.name}
+              id={team.id}
+              logoUrl={team.logoUrl}
+              brandColor={team.brandPrimaryColor}
+              size="md"
+            />
             <Box>
               <Typography
                 variant="h6"
@@ -120,28 +126,13 @@ function TeamCard({ team, leagueId }: TeamCardProps) {
           </Box>
         </Box>
 
-        <Box sx={{ display: 'flex', gap: { xs: 1.5, sm: 2 }, mb: 2, flexWrap: 'wrap' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <PlayersIcon sx={{ fontSize: { xs: 16, sm: 18 } }} color="action" />
-            <Typography
-              variant="body2"
-              color="text.secondary"
-              sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
-            >
-              {team._count.players} players
-            </Typography>
-          </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <EventIcon sx={{ fontSize: { xs: 16, sm: 18 } }} color="action" />
-            <Typography
-              variant="body2"
-              color="text.secondary"
-              sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
-            >
-              {team._count.events} events
-            </Typography>
-          </Box>
-        </Box>
+        <StatStrip
+          sx={{ mb: 2 }}
+          stats={[
+            { label: 'Players', value: team._count.players },
+            { label: 'Events', value: team._count.events },
+          ]}
+        />
 
         <Typography
           variant="caption"

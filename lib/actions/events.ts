@@ -630,6 +630,8 @@ export async function getEvent(eventId: string) {
             id: true,
             name: true,
             leagueId: true,
+            logoUrl: true,
+            brandPrimaryColor: true,
           },
         },
         rsvps: {
