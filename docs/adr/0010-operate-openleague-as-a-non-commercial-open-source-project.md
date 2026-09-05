@@ -63,8 +63,15 @@ We will operate OpenLeague as a non-commercial open-source project. There are no
 paid tiers, no subscriptions, no advertising, and no platform commission on
 payments the software facilitates. Public copy will say so plainly.
 
-Where the software touches money, it does so only to help an association collect
-its own dues or fees. The platform takes nothing.
+Where the software touches money it does so only to help an association collect
+**its own** dues, fees, or donations — as merchant of record on its own payment
+account. The platform never takes custody of association funds and takes no
+commission.
+
+Nothing here forecloses the project later operating under a nonprofit or a
+fiscal sponsor. That is a separate decision, and nonprofit status would not by
+itself require charging users: "nonprofit" governs who may own a surplus, not
+whether an organization charges for services.
 
 ## Options considered
 
@@ -117,6 +124,20 @@ portability, not a paywall. That is a real limitation, accepted deliberately.
   by superseding this record, never by quietly reintroducing pricing copy.
 - **Revisit if:** a governance change (foundation, grant, sponsorship) provides
   funding that does not require charging users, or by the review date above.
+
+## Open questions
+
+- **Nonprofit or fiscal-sponsor structure.** Deliberately not decided here.
+  Fiscal sponsorship and an independent 501(c)(3) differ substantially in cost,
+  timeline, and governance obligations. Neither is required for this record to
+  hold, and neither would require reversing it.
+- **Regulatory posture for donations.** Association-collected donations are
+  structured to keep the platform out of the funds path (direct charges on the
+  association's connected account, association as merchant of record, no
+  platform fee). Several states nonetheless regulate "charitable fundraising
+  platforms," and the line between hosting a nonprofit's own collection tool
+  and soliciting on its behalf is fact-specific. Obtain professional advice
+  before promoting donations as a platform capability.
 
 ## Action items
 
