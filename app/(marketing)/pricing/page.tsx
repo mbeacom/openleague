@@ -18,7 +18,6 @@ import {
   Shield as ShieldIcon,
   Code as CodeIcon,
   CloudDownload as CloudDownloadIcon,
-  AccountTree as AccountTreeIcon,
 } from '@mui/icons-material';
 import CTAButton from '@/components/features/marketing/CTAButton';
 import { generatePageMetadata, getBreadcrumbSchema, getFAQSchema } from '@/lib/config/seo';
@@ -27,7 +26,7 @@ import StructuredData from '@/components/ui/StructuredData';
 export const metadata = generatePageMetadata({
   title: 'Pricing',
   description:
-    'OpenLeague is free forever for teams — roster, scheduling, RSVPs, and communication with no subscriptions and no credit card. Optional paid tiers for leagues and clubs fund the free team plan.',
+    'OpenLeague is free — roster, scheduling, RSVPs, and communication for teams, leagues, and clubs, with no subscriptions, no paid tiers, and no credit card.',
   path: '/pricing',
   keywords: ['pricing', 'free team management', 'free sports team software', 'league management pricing'],
 });
@@ -82,15 +81,12 @@ const commitments = [
   },
 ];
 
-const leagueFeatures = [
+const organizationFeatures = [
   'Multiple teams and divisions in one organization',
   'Cross-team and cross-division scheduling',
   'Facility and ice allocation across teams',
   'Org-wide communications and announcements',
-  'Custom domain for your league or club',
-  'Single sign-on (SSO) for staff and admins',
   'Data export for your whole organization',
-  'Priority support from the OpenLeague team',
 ];
 
 const faqs = [
@@ -110,9 +106,14 @@ const faqs = [
       'No. Teams can sign up and start using OpenLeague right away without a credit card — now or ever.',
   },
   {
-    question: 'How does OpenLeague make money?',
+    question: 'How is OpenLeague sustained?',
     answer:
-      'Through optional paid tiers for leagues and clubs (below) and, later, opt-in local sponsorships that clubs choose — never by charging teams or showing third-party ads.',
+      'It is an open-source project, not a business. There are no paid tiers and no ads. The source is public under the Apache License 2.0, so anyone can run their own copy — that portability is the guarantee, not a pricing page.',
+  },
+  {
+    question: 'Is this free for leagues and clubs too?',
+    answer:
+      'Yes. Multi-team organizations get divisions, cross-team scheduling, facility allocation, and org-wide communication on the same free terms as a single team.',
   },
 ];
 
@@ -129,12 +130,12 @@ export default function PricingPage() {
       <Container maxWidth="lg">
         <Box sx={{ py: { xs: 8, md: 10 } }}>
           <Stack spacing={3} alignItems="center" textAlign="center" sx={{ mb: 8 }}>
-            <Chip label="Free forever for teams" color="success" variant="outlined" />
+            <Chip label="Free forever" color="success" variant="outlined" />
             <Typography variant="h1" component="h1" gutterBottom>
-              Simple Pricing for Busy Teams
+              Free. All of it.
             </Typography>
             <Typography variant="h5" color="text.secondary" sx={{ maxWidth: 820 }}>
-              OpenLeague gives coaches and managers the core team-management tools they need — free, forever, with no subscriptions, paid tiers, or credit card.
+              Every feature, for teams and for multi-team organizations alike — no subscriptions, no paid tiers, no credit card, and no ads.
             </Typography>
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ pt: 2 }}>
               <CTAButton
@@ -170,7 +171,7 @@ export default function PricingPage() {
               <Stack direction={{ xs: 'column', md: 'row' }} spacing={4} justifyContent="space-between">
                 <Box>
                   <Typography variant="h3" component="h2" gutterBottom>
-                    Free Team Plan
+                    The Free Plan
                   </Typography>
                   <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 620 }}>
                     Built for teams replacing spreadsheets, email chains, and group chats with one organized hub.
@@ -226,71 +227,13 @@ export default function PricingPage() {
             </Stack>
           </Box>
 
-          {/* League & Club tier — contact-driven, funds the free team plan */}
-          <Card
-            sx={{
-              mb: 8,
-              border: '2px solid',
-              borderColor: 'primary.main',
-              boxShadow: '0 12px 32px rgba(13, 71, 161, 0.12)',
-            }}
-          >
-            <CardContent sx={{ p: { xs: 3, md: 5 } }}>
-              <Stack direction={{ xs: 'column', md: 'row' }} spacing={4} justifyContent="space-between" alignItems={{ md: 'center' }}>
-                <Box>
-                  <Chip
-                    icon={<AccountTreeIcon />}
-                    label="For leagues, clubs, and associations"
-                    color="primary"
-                    variant="outlined"
-                    sx={{ mb: 2 }}
-                  />
-                  <Typography variant="h3" component="h2" gutterBottom>
-                    League &amp; Club
-                  </Typography>
-                  <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 620 }}>
-                    Everything a multi-team organization needs to run a season — and the tier that funds the free team plan.
-                  </Typography>
-                </Box>
-                <Box sx={{ textAlign: { xs: 'left', md: 'right' } }}>
-                  <Typography variant="h4" component="p" color="primary.main">
-                    Let&apos;s talk
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Pricing set with design-partner clubs
-                  </Typography>
-                </Box>
-              </Stack>
-              <Divider sx={{ my: 4 }} />
-              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)' }, gap: 2 }}>
-                {leagueFeatures.map((feature) => (
-                  <Stack key={feature} direction="row" spacing={1.5} alignItems="center">
-                    <CheckCircleIcon sx={{ color: 'primary.main', fontSize: 22 }} />
-                    <Typography variant="body1">{feature}</Typography>
-                  </Stack>
-                ))}
-              </Box>
-              <Box sx={{ mt: 4 }}>
-                <CTAButton
-                  href="/contact"
-                  variant="contained"
-                  size="large"
-                  trackingAction="pricing_league_contact_click"
-                  trackingLabel="pricing_league_tier"
-                >
-                  Talk to us about your league or club
-                </CTAButton>
-              </Box>
-            </CardContent>
-          </Card>
-
           {/* What's included, free + Our commitments */}
           <Box sx={{ mb: 8 }}>
             <Typography variant="h4" component="h2" gutterBottom textAlign="center">
               Free, and honest about it
             </Typography>
             <Typography variant="body1" color="text.secondary" textAlign="center" sx={{ mb: 4, maxWidth: 720, mx: 'auto' }}>
-              Here is exactly what teams get for free, and the commitments we make to keep it that way.
+              Here is exactly what you get for free, and the commitments we make to keep it that way.
             </Typography>
 
             <Typography variant="h6" component="h3" gutterBottom>
@@ -308,6 +251,25 @@ export default function PricingPage() {
                 <Stack key={feature.title} direction="row" spacing={1.5} alignItems="center">
                   <CheckCircleIcon color="success" sx={{ fontSize: 22 }} />
                   <Typography variant="body1">{feature.title}</Typography>
+                </Stack>
+              ))}
+            </Box>
+
+            <Typography variant="h6" component="h3" gutterBottom>
+              For leagues, clubs, and associations
+            </Typography>
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' },
+                gap: 2,
+                mb: 5,
+              }}
+            >
+              {organizationFeatures.map((feature) => (
+                <Stack key={feature} direction="row" spacing={1.5} alignItems="center">
+                  <CheckCircleIcon color="success" sx={{ fontSize: 22 }} />
+                  <Typography variant="body1">{feature}</Typography>
                 </Stack>
               ))}
             </Box>

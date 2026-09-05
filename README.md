@@ -81,7 +81,8 @@ NEXTAUTH_SECRET=""  # Generate with: openssl rand -base64 32
 
 # Email Service — "ses" (recommended), "mailchimp", or "log" (dev default when unset)
 # EMAIL_PROVIDER="ses"
-# AWS_REGION="us-east-1"  # SES region; AWS credentials via standard env vars
+# AWS_REGION="us-east-1"  # SES region
+# AWS_ROLE_ARN=""         # SES on Vercel: OIDC role; omit to use the SDK default chain
 MAILCHIMP_API_KEY=""  # Only for EMAIL_PROVIDER="mailchimp"
 EMAIL_FROM="noreply@yourdomain.com"  # Your sender email address
 
@@ -312,8 +313,10 @@ OpenLeague sends through a provider-agnostic `sendEmail()` seam (`lib/email/clie
 4. **Set Environment Variables**:
 
    ```bash
-   MAILCHIMP_API_KEY="md-your-api-key-here"
-   EMAIL_FROM="noreply@yourdomain.com"  # Must be verified domain
+   EMAIL_PROVIDER="ses"
+   AWS_REGION="us-east-1"
+   AWS_ROLE_ARN="arn:aws:iam::<account>:role/<role>"  # Vercel OIDC; omit off-Vercel
+   EMAIL_FROM="noreply@yourdomain.com"  # Must be a verified SES identity
    ```
 
 5. **Test Email Setup**:
@@ -810,7 +813,7 @@ A professionally hosted version is live at [openl.app](https://openl.app), offer
 - Free forever for teams — no per-player or per-season subscription, ever
 - No third-party ads (especially not on pages containing minors' data)
 
-The free team plan is a commitment, not a trial. Paid tiers exist only for leagues and clubs (multi-team orgs), and revenue comes from those org-level plans and opt-in local sponsorships clubs choose — never from charging teams or serving third-party ads.
+The free team plan is a commitment, not a trial. There are no paid tiers, no subscriptions, and no third-party ads — and because the source is Apache 2.0, you can always run it yourself.
 
 📚 **Developer Documentation:** [openleague.dev](https://openleague.dev)
 
