@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { AddOutlined, DeleteOutline } from "@mui/icons-material";
 import { Alert, Box, Button, Card, IconButton, MenuItem, Stack, TextField, Typography } from "@mui/material";
 import { createTeamGearNeed } from "@/lib/actions/gear-needs";
@@ -14,14 +15,15 @@ export function GearNeedCreateForm({
   leagueId: string;
   teams: Array<{ id: string; name: string }>;
 }) {
+  const router = useRouter();
   const [lines, setLines] = useState<NeedLine[]>([{ nameSnapshot: "", requestedQty: 1, priority: "NORMAL" }]);
-  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
+  const [idempotencyKey] = useState(() => crypto.randomUUID());
 
   async function submit(formData: FormData) {
     setIsSaving(true);
-    setMessage(null);
+    setError(null);
     const result = await createTeamGearNeed({
       leagueId,
       teamId: String(formData.get("teamId") ?? ""),
@@ -30,9 +32,13 @@ export function GearNeedCreateForm({
       notes: String(formData.get("notes") ?? ""),
       lines,
     });
-    setIsSaving(false);
-    if (result.success) setIdempotencyKey(crypto.randomUUID());
-    setMessage(result.success ? "Draft need created. Submit it from the need details page when ready for association review." : result.error);
+    if (!result.success) {
+      setIsSaving(false);
+      setError(result.error);
+      return;
+    }
+    // Stay disabled through the navigation so the draft cannot be submitted twice.
+    router.push(`/league/${leagueId}/gear/needs/${result.data.id}`);
   }
 
   function updateLine(index: number, patch: Partial<NeedLine>) {
@@ -42,7 +48,7 @@ export function GearNeedCreateForm({
   return (
     <Card component="form" action={submit} variant="outlined" sx={{ p: 2 }}>
       <Stack spacing={2}>
-        {message && <Alert severity={message.startsWith("Draft") ? "success" : "error"}>{message}</Alert>}
+        {error && <Alert severity="error">{error}</Alert>}
         <Box component="fieldset" disabled={isSaving} sx={{ border: 0, p: 0, m: 0 }}>
           <Stack spacing={2}>
             <TextField name="teamId" select label="Team" required defaultValue={teams[0]?.id ?? ""}>

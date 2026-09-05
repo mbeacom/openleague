@@ -123,9 +123,9 @@ function serializeNeed(
   };
 }
 
-function needsPath(leagueId: string, teamId?: string) {
-  return teamId
-    ? `/league/${leagueId}/gear/needs/${teamId}`
+function needsPath(leagueId: string, needId?: string) {
+  return needId
+    ? `/league/${leagueId}/gear/needs/${needId}`
     : `/league/${leagueId}/gear/needs`;
 }
 
@@ -282,7 +282,7 @@ async function transitionNeed(
     }, gearTransactionOptions));
 
     revalidatePath(needsPath(validated.leagueId));
-    revalidatePath(needsPath(validated.leagueId, result.teamId));
+    revalidatePath(needsPath(validated.leagueId, result.id));
     return { success: true, data: result };
   } catch (error) {
     return actionError(error);
@@ -369,7 +369,6 @@ export async function createTeamGearNeed(
     }, gearTransactionOptions));
 
     revalidatePath(needsPath(validated.leagueId));
-    revalidatePath(needsPath(validated.leagueId, validated.teamId));
     return { success: true, data: created };
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
