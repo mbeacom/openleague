@@ -84,7 +84,7 @@ export default function AboutPage() {
                 Free & Transparent
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Free forever for teams. Paid tiers exist only for leagues and clubs, and we never charge teams or serve third-party ads.
+                Free forever. No paid tiers, no subscriptions, and no third-party ads.
               </Typography>
             </Box>
             <Box>

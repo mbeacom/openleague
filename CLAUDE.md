@@ -340,7 +340,8 @@ export default async function RosterPage({ params }: { params: { teamId: string 
 
 Email is provider-agnostic behind `sendEmail()` in `lib/email/client.ts`:
 - Providers: AWS SES (`@aws-sdk/client-sesv2`, recommended), Mailchimp Transactional (legacy), and a dev-only `log` provider
-- Selection: `EMAIL_PROVIDER` env var, or inferred from credentials (`MAILCHIMP_API_KEY` → mailchimp, `AWS_REGION` → ses), else `log`
+- Selection: `EMAIL_PROVIDER` env var, or inferred from credentials (`MAILCHIMP_API_KEY` → mailchimp, `AWS_REGION` → ses), else `log`. Inference checks Mailchimp **first**, so a leftover `MAILCHIMP_API_KEY` silently beats an SES setup — set `EMAIL_PROVIDER` explicitly when switching
+- SES credentials: `AWS_ROLE_ARN` selects Vercel OIDC via `awsCredentialsProvider` (short-lived STS, no stored secret). The AWS SDK's default chain cannot do this on its own — it reads `AWS_WEB_IDENTITY_TOKEN_FILE`, while Vercel supplies `VERCEL_OIDC_TOKEN` as an env var. Unset `AWS_ROLE_ARN` falls back to the default chain for local dev and CI
 - The app boots without email credentials; in production an unconfigured send throws at send time (never at boot)
 - SES sends one API call per recipient so recipients never see each other's addresses (matches Mailchimp's `preserve_recipients: false` default)
 - All templates in `lib/email/templates.ts` call `sendEmail()` — never import a provider SDK directly
@@ -369,8 +370,9 @@ EMAIL_FROM             # Verified sender email address
 **Optional Variables**:
 ```bash
 EMAIL_PROVIDER                # ses | mailchimp | log (inferred from credentials when unset)
-AWS_REGION                     # SES region (EMAIL_PROVIDER=ses; credentials via AWS env vars)
-MAILCHIMP_API_KEY              # Mailchimp Transactional API key (EMAIL_PROVIDER=mailchimp)
+AWS_REGION                     # SES region (required when EMAIL_PROVIDER=ses)
+AWS_ROLE_ARN                   # SES on Vercel: IAM role assumed via OIDC; omit to use the SDK default chain
+MAILCHIMP_API_KEY              # Mailchimp *Transactional* key (EMAIL_PROVIDER=mailchimp) — a Marketing key 401s
 NEXT_PUBLIC_UMAMI_WEBSITE_ID  # Umami analytics (privacy-friendly)
 ```
 

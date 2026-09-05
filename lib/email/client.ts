@@ -1,5 +1,6 @@
 import Mailchimp from "@mailchimp/mailchimp_transactional";
 import { SESv2Client, SendEmailCommand } from "@aws-sdk/client-sesv2";
+import { awsCredentialsProvider } from "@vercel/oidc-aws-credentials-provider";
 import { env, isProduction } from "@/lib/env";
 
 /**
@@ -52,9 +53,19 @@ let sesClient: SESv2Client | null = null;
 
 function getSesClient(): SESv2Client {
   if (sesClient) return sesClient;
-  // Region/credentials come from AWS_REGION and the default provider chain
-  // (env credentials or Vercel OIDC); SESv2Client validates at send time.
-  sesClient = new SESv2Client(env.AWS_REGION ? { region: env.AWS_REGION } : {});
+  // AWS_ROLE_ARN selects Vercel OIDC: the platform mints a short-lived token
+  // per invocation which awsCredentialsProvider trades for STS credentials, so
+  // no long-lived AWS secret is ever stored in the project. The SDK's own
+  // default chain cannot do this — it looks for AWS_WEB_IDENTITY_TOKEN_FILE,
+  // whereas Vercel supplies VERCEL_OIDC_TOKEN as an environment variable.
+  // Without AWS_ROLE_ARN (local dev, CI) we fall through to the default chain
+  // so an `aws sso` profile or static env credentials still work.
+  sesClient = new SESv2Client({
+    ...(env.AWS_REGION ? { region: env.AWS_REGION } : {}),
+    ...(env.AWS_ROLE_ARN
+      ? { credentials: awsCredentialsProvider({ roleArn: env.AWS_ROLE_ARN }) }
+      : {}),
+  });
   return sesClient;
 }
 

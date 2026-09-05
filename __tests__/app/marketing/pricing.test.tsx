@@ -9,11 +9,11 @@ const renderWithTheme = (component: React.ReactElement) => {
 };
 
 describe('PricingPage', () => {
-  it('communicates permanent free-for-teams pricing and no-credit-card onboarding', () => {
+  it('communicates permanent free pricing and no-credit-card onboarding', () => {
     renderWithTheme(<PricingPage />);
 
-    expect(screen.getByRole('heading', { level: 1, name: /simple pricing for busy teams/i })).toBeInTheDocument();
-    expect(screen.getByText('Free forever for teams')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: /free\. all of it\./i })).toBeInTheDocument();
+    expect(screen.getByText('Free forever')).toBeInTheDocument();
     expect(screen.getByText('$0')).toBeInTheDocument();
     expect(screen.getAllByText(/no credit card/i).length).toBeGreaterThan(0);
     expect(
@@ -28,17 +28,27 @@ describe('PricingPage', () => {
     expect(screen.getByRole('link', { name: /start free today/i })).toHaveAttribute('href', '/signup');
   });
 
-  it('offers a contact-driven league and club tier without a public price', () => {
+  it('offers multi-team organization capabilities on the same free terms, with no paid tier', () => {
     renderWithTheme(<PricingPage />);
 
-    expect(screen.getByRole('heading', { level: 2, name: /league & club/i })).toBeInTheDocument();
-    expect(screen.getByText(/for leagues, clubs, and associations/i)).toBeInTheDocument();
+    // Org capabilities are presented as part of the free plan...
     expect(
-      screen.getByRole('link', { name: /talk to us about your league or club/i })
-    ).toHaveAttribute('href', '/contact');
+      screen.getByRole('heading', { level: 3, name: /for leagues, clubs, and associations/i })
+    ).toBeInTheDocument();
+    expect(screen.getByText(/multiple teams and divisions in one organization/i)).toBeInTheDocument();
+    expect(screen.getByText(/cross-team and cross-division scheduling/i)).toBeInTheDocument();
+
+    // ...and never as a separate, sellable tier.
+    expect(screen.queryByRole('heading', { level: 2, name: /league & club/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: /talk to us about your league or club/i })
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/funds the free/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/let's talk/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/pricing set with design-partner clubs/i)).not.toBeInTheDocument();
   });
 
-  it('states commitments and the repositioned pricing FAQ without future-bill hedging', () => {
+  it('states commitments and a sustainability FAQ that claims no revenue model', () => {
     renderWithTheme(<PricingPage />);
 
     // Comparison table and the future-bill FAQ are gone.
@@ -51,14 +61,21 @@ describe('PricingPage', () => {
     expect(screen.getByText(/no per-team paywall, ever/i)).toBeInTheDocument();
     expect(screen.getByText(/no third-party ads/i)).toBeInTheDocument();
 
-    // FAQ affirms the permanent-free stance and explains the revenue model.
+    // The FAQ explains sustainability via open source, not a revenue model.
     expect(screen.getByRole('heading', { level: 2, name: /pricing faq/i })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 3, name: /how does openleague make money/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { level: 3, name: /how is openleague sustained/i })
+    ).toBeInTheDocument();
+    expect(screen.getByText(/an open-source project, not a business/i)).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { level: 3, name: /how does openleague make money/i })
+    ).not.toBeInTheDocument();
   });
 
   it('sets indexable SEO metadata with canonical pricing URL', () => {
     expect(metadata.title).toBe('Pricing - OpenLeague');
-    expect(metadata.description).toMatch(/free forever for teams/i);
+    expect(metadata.description).toMatch(/no paid tiers/i);
+    expect(metadata.description).not.toMatch(/fund the free team plan/i);
     expect(metadata.alternates?.canonical).toBe('https://openl.app/pricing');
     expect(metadata.robots).toHaveProperty('index', true);
   });

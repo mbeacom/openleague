@@ -30,8 +30,10 @@ DATABASE_URL="postgresql://user:password@ep-xxx.us-east-2.aws.neon.tech/dbname?s
 NEXTAUTH_URL="https://your-domain.vercel.app"
 NEXTAUTH_SECRET="your-generated-secret-here"
 
-# Email Service
-MAILCHIMP_API_KEY="your-mailchimp-transactional-api-key"
+# Email Service (AWS SES — recommended)
+EMAIL_PROVIDER="ses"
+AWS_REGION="us-east-1"
+AWS_ROLE_ARN="arn:aws:iam::<account-id>:role/<role-name>"  # Vercel OIDC
 EMAIL_FROM="noreply@yourdomain.com"
 
 # Cron job authentication
@@ -82,12 +84,26 @@ Preview deployments skip automatic migration deployment by default. Set `OPENLEA
 
 ### Email Service Setup
 
-#### Mailchimp Transactional (Mandrill)
+#### AWS SES (recommended)
 
-1. Sign up for Mailchimp Transactional at [mandrillapp.com](https://mandrillapp.com)
-2. Generate an API key in Settings → SMTP & API Info
-3. Set the API key as `MAILCHIMP_API_KEY` in Vercel
-4. Configure `EMAIL_FROM` with your verified sender email
+1. Verify your sending domain in SES (Easy DKIM, plus a custom MAIL FROM
+   subdomain so DMARC aligns without touching an existing SPF record).
+2. Confirm the account has **production access** — a new SES region starts in
+   sandbox and will only deliver to pre-verified addresses (200/day).
+3. Create an IAM role for Vercel OIDC. Trust `oidc.vercel.com/<team-slug>` with
+   `aud` = `https://vercel.com/<team-slug>` and `sub` pinned to
+   `owner:<team-slug>:project:<project>:environment:production` (add `preview`
+   if preview deployments should send). Grant only `ses:SendEmail` on the
+   identity ARN, conditioned on `ses:FromAddress`.
+4. Set `EMAIL_PROVIDER=ses`, `AWS_REGION`, `AWS_ROLE_ARN`, and `EMAIL_FROM` in
+   Vercel, then **redeploy** — env changes never reach an existing build.
+
+#### Mailchimp Transactional (Mandrill, legacy)
+
+1. Generate a key in the **Transactional** dashboard → Settings → SMTP & API
+   Info. A Mailchimp *Marketing* API key is a different credential and fails
+   with `401 Invalid_Key`; sending also requires a paid Transactional plan.
+2. Set it as `MAILCHIMP_API_KEY` in Vercel and configure `EMAIL_FROM`.
 
 ### Security Configuration
 
@@ -381,7 +397,8 @@ bun run validate-env
 # - Ensure all required variables are set
 # - Generate new NEXTAUTH_SECRET: openssl rand -base64 32
 # - Verify DATABASE_URL includes ?sslmode=require
-# - Check MAILCHIMP_API_KEY format (starts with 'md-')
+# - SES: confirm AWS_REGION matches the verified identity's region
+# - Mailchimp: confirm the key is a Transactional key, not a Marketing key
 ```
 
 #### Database Connection Issues
