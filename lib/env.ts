@@ -36,8 +36,11 @@ const envSchema = z.object({
     NEXT_PUBLIC_HOTJAR_ID: z.string().optional(),
     NEXT_PUBLIC_MIXPANEL_TOKEN: z.string().optional(),
 
-    // Optional AWS variables (for future migration)
+    // AWS — SES transport. AWS_ROLE_ARN switches credential resolution to
+    // Vercel OIDC (short-lived STS credentials, no stored secret); when it is
+    // unset the SDK's default provider chain is used instead.
     AWS_REGION: z.string().optional(),
+    AWS_ROLE_ARN: z.string().optional(),
 
     // Payments — Stripe Connect (optional; payments disabled when unset)
     STRIPE_SECRET_KEY: z.string().optional(),
@@ -80,6 +83,7 @@ function validateEnv() {
             NEXT_PUBLIC_HOTJAR_ID: process.env.NEXT_PUBLIC_HOTJAR_ID,
             NEXT_PUBLIC_MIXPANEL_TOKEN: process.env.NEXT_PUBLIC_MIXPANEL_TOKEN,
             AWS_REGION: process.env.AWS_REGION,
+            AWS_ROLE_ARN: process.env.AWS_ROLE_ARN,
             STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
             STRIPE_CONNECT_WEBHOOK_SECRET: process.env.STRIPE_CONNECT_WEBHOOK_SECRET,
             NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY,
@@ -113,7 +117,7 @@ function validateEnv() {
             console.error('   NEXTAUTH_SECRET - Random secret (generate with: openssl rand -base64 32)')
             console.error('   EMAIL_FROM - Sender email address')
             console.error('\n📧 Email provider (optional — emails are logged, not sent, when unconfigured):')
-            console.error('   EMAIL_PROVIDER=ses       requires AWS_REGION (+ AWS credentials)')
+            console.error('   EMAIL_PROVIDER=ses       requires AWS_REGION (+ AWS_ROLE_ARN for Vercel OIDC, or AWS credentials)')
             console.error('   EMAIL_PROVIDER=mailchimp requires MAILCHIMP_API_KEY')
             console.error('\n💡 Copy .env.example to .env.local and fill in the values')
 
@@ -134,7 +138,7 @@ function assertEmailProviderConfig(env: z.infer<typeof envSchema>): void {
         process.exit(1)
     }
     if (env.EMAIL_PROVIDER === 'ses' && !env.AWS_REGION) {
-        console.error('🚨 EMAIL_PROVIDER=ses requires AWS_REGION to be set (credentials via AWS env vars or Vercel OIDC)')
+        console.error('🚨 EMAIL_PROVIDER=ses requires AWS_REGION to be set (credentials via AWS_ROLE_ARN + Vercel OIDC, or AWS env vars)')
         process.exit(1)
     }
 }

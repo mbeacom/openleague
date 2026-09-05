@@ -5,9 +5,12 @@ const state = vi.hoisted(() => ({
     EMAIL_PROVIDER: undefined as string | undefined,
     MAILCHIMP_API_KEY: undefined as string | undefined,
     AWS_REGION: undefined as string | undefined,
+    AWS_ROLE_ARN: undefined as string | undefined,
     EMAIL_FROM: "noreply@openl.app",
   },
   isProduction: false,
+  sesClientConfig: undefined as Record<string, unknown> | undefined,
+  awsCredentialsProvider: vi.fn(),
   sesSend: vi.fn(),
   mailchimpSend: vi.fn(),
 }));
@@ -26,10 +29,17 @@ vi.mock("@aws-sdk/client-sesv2", () => {
     constructor(public input: unknown) {}
   }
   class SESv2Client {
+    constructor(config: Record<string, unknown>) {
+      state.sesClientConfig = config;
+    }
     send = (command: InstanceType<typeof SendEmailCommand>) => state.sesSend(command.input);
   }
   return { SESv2Client, SendEmailCommand };
 });
+
+vi.mock("@vercel/oidc-aws-credentials-provider", () => ({
+  awsCredentialsProvider: (options: { roleArn: string }) => state.awsCredentialsProvider(options),
+}));
 
 vi.mock("@mailchimp/mailchimp_transactional", () => ({
   default: () => ({ messages: { send: state.mailchimpSend } }),
@@ -45,9 +55,12 @@ beforeEach(() => {
     EMAIL_PROVIDER: undefined,
     MAILCHIMP_API_KEY: undefined,
     AWS_REGION: undefined,
+    AWS_ROLE_ARN: undefined,
     EMAIL_FROM: "noreply@openl.app",
   };
   state.isProduction = false;
+  state.sesClientConfig = undefined;
+  state.awsCredentialsProvider.mockReset().mockReturnValue("oidc-credentials");
   state.sesSend.mockReset().mockResolvedValue({ MessageId: "id" });
   state.mailchimpSend.mockReset().mockResolvedValue([{ email: "a@b.c", status: "sent" }]);
 });
@@ -223,5 +236,43 @@ describe("sendEmail via log provider", () => {
     await expect(
       sendEmail({ to: [{ email: "one@example.com" }], subject: "S", html: "<p>H</p>" })
     ).rejects.toThrow("No email provider configured");
+  });
+});
+
+describe("SES credential resolution", () => {
+  const message = {
+    to: [{ email: "one@example.com" }],
+    subject: "Hi",
+    html: "<p>Hi</p>",
+  };
+
+  beforeEach(() => {
+    state.env.EMAIL_PROVIDER = "ses";
+    state.env.AWS_REGION = "us-east-1";
+  });
+
+  it("uses Vercel OIDC credentials when AWS_ROLE_ARN is set", async () => {
+    state.env.AWS_ROLE_ARN = "arn:aws:iam::123456789012:role/openleague-vercel-ses";
+    const { sendEmail } = await loadClient();
+
+    await sendEmail(message);
+
+    expect(state.awsCredentialsProvider).toHaveBeenCalledWith({
+      roleArn: "arn:aws:iam::123456789012:role/openleague-vercel-ses",
+    });
+    expect(state.sesClientConfig).toEqual({
+      region: "us-east-1",
+      credentials: "oidc-credentials",
+    });
+  });
+
+  it("falls back to the SDK default chain when AWS_ROLE_ARN is unset", async () => {
+    const { sendEmail } = await loadClient();
+
+    await sendEmail(message);
+
+    expect(state.awsCredentialsProvider).not.toHaveBeenCalled();
+    expect(state.sesClientConfig).toEqual({ region: "us-east-1" });
+    expect(state.sesClientConfig).not.toHaveProperty("credentials");
   });
 });
