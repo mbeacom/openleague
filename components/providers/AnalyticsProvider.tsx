@@ -36,8 +36,8 @@ function trackManualPageView(pathname: string, umamiEnabled: boolean, gaEnabled:
 
 export default function AnalyticsProvider() {
   const pathname = usePathname();
-  const publicWishlistRoute = isPublicCapabilityPath(pathname);
-  const publicWishlistRouteRef = useRef(publicWishlistRoute);
+  const publicCapabilityRoute = isPublicCapabilityPath(pathname);
+  const publicCapabilityRouteRef = useRef(publicCapabilityRoute);
   const activePathnameRef = useRef(pathname);
   const umamiWebsiteId = process.env.NEXT_PUBLIC_UMAMI_WEBSITE_ID?.trim();
   const gaMeasurementId = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID?.trim();
@@ -47,21 +47,21 @@ export default function AnalyticsProvider() {
     // bound to the committed active route rather than the pathname that rendered
     // the tag.
     activePathnameRef.current = pathname;
-    publicWishlistRouteRef.current = publicWishlistRoute;
-  }, [pathname, publicWishlistRoute]);
+    publicCapabilityRouteRef.current = publicCapabilityRoute;
+  }, [pathname, publicCapabilityRoute]);
 
   const reportWebVital = useCallback<ReportWebVitalsCallback>((metric) => {
-    if (!publicWishlistRouteRef.current) trackWebVital(metric);
+    if (!publicCapabilityRouteRef.current) trackWebVital(metric);
   }, []);
   useReportWebVitals(reportWebVital);
 
   useEffect(() => {
-    if (publicWishlistRoute) return;
+    if (publicCapabilityRoute) return;
     trackManualPageView(pathname, Boolean(umamiWebsiteId), Boolean(gaMeasurementId));
-  }, [gaMeasurementId, pathname, publicWishlistRoute, umamiWebsiteId]);
+  }, [gaMeasurementId, pathname, publicCapabilityRoute, umamiWebsiteId]);
 
   useEffect(() => {
-    if (publicWishlistRoute) return;
+    if (publicCapabilityRoute) return;
     const handleWindowError = (event: ErrorEvent) => {
       const errorType = event.error instanceof Error ? event.error.name : 'Error';
       trackClientError(errorType, 'window_error');
@@ -78,9 +78,9 @@ export default function AnalyticsProvider() {
       window.removeEventListener('error', handleWindowError);
       window.removeEventListener('unhandledrejection', handleUnhandledRejection);
     };
-  }, [publicWishlistRoute]);
+  }, [publicCapabilityRoute]);
 
-  if (publicWishlistRoute) return null;
+  if (publicCapabilityRoute) return null;
 
   return (
     <>

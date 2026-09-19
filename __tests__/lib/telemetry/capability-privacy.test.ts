@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   CAPABILITY_TOKEN_REDACTION,
+  PUBLIC_CAPABILITY_ROUTE_PREFIXES,
   isPublicCapabilityPath,
   isPublicCapabilityUrl,
   scrubCapabilityTokens,
@@ -44,6 +45,76 @@ describe('isPublicCapabilityUrl', () => {
   it('does not match other routes', () => {
     expect(isPublicCapabilityUrl('https://openleague.app/dashboard')).toBe(false);
     expect(isPublicCapabilityUrl(null)).toBe(false);
+  });
+});
+
+describe('every registered capability prefix', () => {
+  it.each([...PUBLIC_CAPABILITY_ROUTE_PREFIXES])('detects %s as a capability route', (prefix) => {
+    expect(isPublicCapabilityPath(`${prefix}${TOKEN}`)).toBe(true);
+  });
+
+  it.each([...PUBLIC_CAPABILITY_ROUTE_PREFIXES])('redacts the token under %s', (prefix) => {
+    expect(scrubCapabilityTokens(`https://openleague.app${prefix}${TOKEN}`)).toBe(
+      `https://openleague.app${prefix}${CAPABILITY_TOKEN_REDACTION}`
+    );
+  });
+
+  it('covers every unauthenticated token-bearing route in the app', () => {
+    // Guards the registry against a new capability route shipping unredacted.
+    expect([...PUBLIC_CAPABILITY_ROUTE_PREFIXES]).toEqual([
+      '/gear-wishlist/',
+      '/signups/l/',
+      '/reset-password/',
+      '/verify-email/',
+      '/confirm-email-change/',
+      '/api/invitations/',
+      '/api/event-invitations/',
+    ]);
+  });
+
+  it('redacts a password-reset token, the most sensitive of the set', () => {
+    expect(scrubCapabilityTokens(`GET /reset-password/${TOKEN} 500`)).toBe(
+      `GET /reset-password/${CAPABILITY_TOKEN_REDACTION} 500`
+    );
+  });
+
+  it('does not treat identifier-addressed public routes as capabilities', () => {
+    expect(isPublicCapabilityPath('/associations/river-valley-hockey')).toBe(false);
+    expect(isPublicCapabilityPath('/rinks/centre-ice-arena')).toBe(false);
+    expect(isPublicCapabilityPath('/signups/clx123abc')).toBe(false);
+    expect(isPublicCapabilityPath('/venue-relationships/clx456def')).toBe(false);
+  });
+});
+
+describe('query-string capability tokens', () => {
+  it('redacts the unsubscribe token carried as a query parameter', () => {
+    expect(scrubCapabilityTokens(`https://openleague.app/unsubscribe?token=${TOKEN}`)).toBe(
+      `https://openleague.app/unsubscribe?token=${CAPABILITY_TOKEN_REDACTION}`
+    );
+  });
+
+  it('stops at the next parameter or fragment', () => {
+    expect(scrubCapabilityTokens(`/unsubscribe?token=${TOKEN}&src=email`)).toBe(
+      `/unsubscribe?token=${CAPABILITY_TOKEN_REDACTION}&src=email`
+    );
+    expect(scrubCapabilityTokens(`/unsubscribe?src=email&token=${TOKEN}#done`)).toBe(
+      `/unsubscribe?src=email&token=${CAPABILITY_TOKEN_REDACTION}#done`
+    );
+  });
+
+  it('redacts a percent-encoded query token nested in another URL', () => {
+    expect(
+      scrubCapabilityTokens(`/login?callbackUrl=%2Funsubscribe%3Ftoken%3D${TOKEN}`)
+    ).toBe(`/login?callbackUrl=%2Funsubscribe%3Ftoken%3D${CAPABILITY_TOKEN_REDACTION}`);
+  });
+
+  it('does not match a parameter that merely starts with the name', () => {
+    expect(scrubCapabilityTokens(`/x?tokenish=${TOKEN}`)).toBe(`/x?tokenish=${TOKEN}`);
+  });
+
+  it('is idempotent', () => {
+    const once = scrubCapabilityTokens(`/unsubscribe?token=${TOKEN}`);
+    expect(scrubCapabilityTokens(once)).toBe(once);
   });
 });
 
