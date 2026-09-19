@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   mockRequireTeamAdmin,
@@ -92,7 +92,16 @@ const GAME_ID = "clgame000000000000000001";
 
 let activeReservationAliases: string[];
 
+// The fixtures below describe a reservation window and a proposal that were
+// authored as "near future". Pin the clock so they stay that way: without this
+// the suite passes until the real date overtakes the fixtures, then fails for
+// reasons unrelated to the code under test. Only `Date` is faked, so timers and
+// promise scheduling behave normally.
+const NOW = new Date("2026-09-01T00:00:00.000Z");
+
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(NOW);
   vi.clearAllMocks();
   mockPrisma.venueReservation = undefined;
   activeReservationAliases = ["proposal-entry"];
@@ -145,6 +154,10 @@ beforeEach(() => {
     activeReservationAliases.push("event");
     return { id: EVENT_ID };
   });
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe("reservation-backed proposal acceptance", () => {
