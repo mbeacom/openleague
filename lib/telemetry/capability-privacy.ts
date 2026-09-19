@@ -3,10 +3,13 @@
  *
  * Public capability routes are unauthenticated URLs whose path segment *is* the
  * credential — `/gear-wishlist/<shareToken>` grants anyone holding the link read
- * access to the wishlist and the ability to pledge against it. Any telemetry
- * payload that carries that URL (a Sentry request URL, transaction name, span
- * description, breadcrumb, navigation event, error message, or a `callbackUrl`
- * query parameter) leaks the credential to a third-party processor.
+ * access to the wishlist and the ability to pledge against it, and
+ * `/reset-password/<token>` grants the ability to set a password. A few routes
+ * carry the credential in the query string instead (`/unsubscribe?token=`). Any
+ * telemetry payload that carries such a URL (a Sentry request URL, transaction
+ * name, span description, breadcrumb, navigation event, error message, or a
+ * `callbackUrl` query parameter) leaks the credential to a third-party
+ * processor.
  *
  * This module is deliberately isomorphic and dependency-free: the same
  * redaction runs in the browser bundle (`instrumentation-client.ts`), on the
@@ -18,8 +21,35 @@
 /**
  * Path prefixes whose *next* segment is a bearer credential.
  * Prefixes must be absolute and end with `/` so only the token segment matches.
+ *
+ * Every unauthenticated route whose path segment *is* the credential belongs
+ * here. Adding a route to the app without adding it here silently reopens the
+ * leak this module exists to close.
+ *
+ * Deliberately excluded: `/associations/<slug>`, `/rinks/<slug>` and
+ * `/signups/<eventId>` address public records by identifier, not by credential,
+ * and `/venue-relationships/<relationshipId>` is authorized server-side by
+ * `requireTargetAuthority`.
  */
-export const PUBLIC_CAPABILITY_ROUTE_PREFIXES = ['/gear-wishlist/'] as const;
+export const PUBLIC_CAPABILITY_ROUTE_PREFIXES = [
+  '/gear-wishlist/',
+  '/signups/l/',
+  '/reset-password/',
+  '/verify-email/',
+  '/confirm-email-change/',
+  '/api/invitations/',
+  '/api/event-invitations/',
+] as const;
+
+/**
+ * Query parameters whose *value* is a bearer credential.
+ *
+ * `/unsubscribe?token=<token>` carries its credential in the query string, so
+ * the path-prefix patterns below can never match it. Analytics is already safe
+ * here because `trackManualPageView` emits a bare pathname, but Sentry captures
+ * whole URLs, so the value still has to be scrubbed on the way out.
+ */
+export const PUBLIC_CAPABILITY_QUERY_PARAMS = ['token'] as const;
 
 /** Replacement written in place of a capability token. */
 export const CAPABILITY_TOKEN_REDACTION = '[redacted]';
@@ -57,6 +87,23 @@ const ENCODED_TOKEN_PATTERNS = PUBLIC_CAPABILITY_ROUTE_PREFIXES.map(
     new RegExp(`(${escapeRegExp(prefix.replace(/\//g, '%2F'))})([^/?#&\\s"'\`\\\\%]+)`, 'gi')
 );
 
+/**
+ * `?token=<value>` and `&token=<value>`. A query value ends at the next
+ * parameter or fragment, so `/` stays inside the value unlike a path segment.
+ */
+const RAW_QUERY_PATTERNS = PUBLIC_CAPABILITY_QUERY_PARAMS.map(
+  (param) => new RegExp(`([?&]${escapeRegExp(param)}=)([^&#\\s"'\`\\\\]+)`, 'gi')
+);
+
+/**
+ * The same parameters percent-encoded, which is how they arrive nested inside
+ * another URL (`?callbackUrl=%2Funsubscribe%3Ftoken%3D<token>`).
+ */
+const ENCODED_QUERY_PATTERNS = PUBLIC_CAPABILITY_QUERY_PARAMS.map(
+  (param) =>
+    new RegExp(`((?:%3F|%26)${escapeRegExp(param)}%3D)([^&#\\s"'\`\\\\%]+)`, 'gi')
+);
+
 /** Next.js renders parameterized routes as `/gear-wishlist/[token]` — already safe. */
 function isPlaceholderSegment(segment: string): boolean {
   return /^\[.*\]$/.test(segment) || segment === CAPABILITY_TOKEN_REDACTION;
@@ -89,7 +136,12 @@ export function scrubCapabilityTokens(value: string): string {
 
   let scrubbed = value;
 
-  for (const pattern of [...RAW_TOKEN_PATTERNS, ...ENCODED_TOKEN_PATTERNS]) {
+  for (const pattern of [
+    ...RAW_TOKEN_PATTERNS,
+    ...ENCODED_TOKEN_PATTERNS,
+    ...RAW_QUERY_PATTERNS,
+    ...ENCODED_QUERY_PATTERNS,
+  ]) {
     // Reset explicitly: these patterns are module-level and /g is stateful.
     pattern.lastIndex = 0;
     scrubbed = scrubbed.replace(pattern, (match: string, prefix: string, token: string) =>

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { mockRequireUserId, mockPrisma } = vi.hoisted(() => ({
   mockRequireUserId: vi.fn(),
@@ -22,7 +22,16 @@ import { getGearInventoryContext, getGearReservationContext } from "@/lib/action
 
 const LEAGUE_ID = "cllllllllllllllllllllllll";
 
+// The fixtures below describe a reservation window and a proposal that were
+// authored as "near future". Pin the clock so they stay that way: without this
+// the suite passes until the real date overtakes the fixtures, then fails for
+// reasons unrelated to the code under test. Only `Date` is faked, so timers and
+// promise scheduling behave normally.
+const NOW = new Date("2026-09-01T00:00:00.000Z");
+
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(NOW);
   vi.clearAllMocks();
   mockRequireUserId.mockResolvedValue("cuserrrrrrrrrrrrrrrrrrrrr");
   mockPrisma.gearStorageLocation.findMany.mockResolvedValue([]);
@@ -33,6 +42,10 @@ beforeEach(() => {
   mockPrisma.teamMember.findMany.mockResolvedValue([]);
   mockPrisma.team.findMany.mockResolvedValue([]);
   mockPrisma.gearInventoryMovement.findMany.mockResolvedValue([]);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe("gear inventory context", () => {
