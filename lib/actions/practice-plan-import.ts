@@ -11,7 +11,7 @@ import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
-import { requireTeamAdmin, requireUserId } from "@/lib/auth/session";
+import { isTeamAdmin, requireUserId } from "@/lib/auth/session";
 import { newPlayId } from "@/lib/services/play-ids";
 import { sanitizePlayDataForWrite } from "@/lib/utils/play-data";
 import { parsePlan } from "@/lib/plan-document";
@@ -40,7 +40,7 @@ export async function importPracticePlan(
 ): Promise<ActionResult<{ sessionId: string }>> {
     // Outside the try: a signed-out caller is redirected by a thrown signal,
     // which a catch would swallow.
-    await requireUserId();
+    const userId = await requireUserId();
 
     try {
         const validated = importPracticePlanSchema.safeParse(input);
@@ -56,16 +56,9 @@ export async function importPracticePlan(
         const { session: planSession } = parsed.plan;
 
         // createPracticeSession's requirePracticeScheduler without a reservation.
-        let userId: string;
-        try {
-            userId = await requireTeamAdmin(teamId);
-        } catch (error) {
-            // Only the authorization refusal gets the scheduler copy; a lookup
-            // failure falls through to the generic import error below.
-            if (error instanceof Error && error.message.startsWith("Unauthorized")) {
-                return { success: false, error: NOT_SCHEDULER_MESSAGE };
-            }
-            throw error;
+        // A lookup failure throws to the generic import error below.
+        if (!(await isTeamAdmin(userId, teamId))) {
+            return { success: false, error: NOT_SCHEDULER_MESSAGE };
         }
 
         const diagrams: PlayData[] = [];

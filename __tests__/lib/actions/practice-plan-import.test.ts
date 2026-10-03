@@ -12,7 +12,7 @@ const { mockAuth, models, mockPrisma, mockCache } = vi.hoisted(() => {
     };
     return {
         models,
-        mockAuth: { requireUserId: vi.fn(), requireTeamAdmin: vi.fn() },
+        mockAuth: { requireUserId: vi.fn(), isTeamAdmin: vi.fn() },
         mockPrisma: { $transaction: vi.fn(async (fn: (tx: typeof models) => unknown) => fn(models)), ...models },
         mockCache: { revalidatePath: vi.fn() },
     };
@@ -67,7 +67,7 @@ beforeEach(() => {
     vi.clearAllMocks();
     playIds.next = 0;
     mockAuth.requireUserId.mockResolvedValue(USER);
-    mockAuth.requireTeamAdmin.mockResolvedValue(USER);
+    mockAuth.isTeamAdmin.mockResolvedValue(true);
     models.practiceSession.create.mockResolvedValue({ id: SESSION });
     models.play.createMany.mockResolvedValue({ count: 3 });
     models.practiceSessionPlay.createMany.mockResolvedValue({ count: 3 });
@@ -81,20 +81,29 @@ describe("importPracticePlan", () => {
     });
 
     it("rejects a caller who can't schedule for the team", async () => {
-        mockAuth.requireTeamAdmin.mockRejectedValue(new Error("Unauthorized: Only team admins can perform this action"));
+        mockAuth.isTeamAdmin.mockResolvedValue(false);
         expect(await call()).toEqual({ success: false, error: "You can't schedule practices for this team." });
+        expect(mockAuth.isTeamAdmin).toHaveBeenCalledWith(USER, TEAM);
         expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it("returns the generic import error when the admin lookup fails", async () => {
+        const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+        mockAuth.isTeamAdmin.mockRejectedValue(new Error("connection reset"));
+        expect(await call()).toEqual({ success: false, error: "Failed to import the practice plan. Please try again." });
+        expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+        consoleError.mockRestore();
     });
 
     it("rejects bad input fields", async () => {
         const result = await call({ teamId: "nope", date: "tomorrow" });
         expect(result).toMatchObject({ success: false, error: "Invalid input" });
-        expect(mockAuth.requireTeamAdmin).not.toHaveBeenCalled();
+        expect(mockAuth.isTeamAdmin).not.toHaveBeenCalled();
     });
 
     it("re-parses the document: not a plan", async () => {
         expect(await call({ document: { format: "other" } })).toEqual({ success: false, error: NOT_A_PLAN_MESSAGE, details: undefined });
-        expect(mockAuth.requireTeamAdmin).not.toHaveBeenCalled();
+        expect(mockAuth.isTeamAdmin).not.toHaveBeenCalled();
     });
 
     it("re-parses the document: invalid, with details", async () => {
