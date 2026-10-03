@@ -83,6 +83,29 @@ describe("generateThumbnail pixelRatio", () => {
     ])("clamps pixelRatio %s to %s", (input, expected) => {
         generateThumbnail(createEmptyPlayData(), { width: 300, height: 128, pixelRatio: input });
         expect(canvases[0].width).toBe(Math.round(300 * expected));
+        expect(canvases[0].height).toBe(Math.round(128 * expected));
         expect(canvases[0].calls.some((c) => c.name === "scale")).toBe(expected !== 1);
+    });
+});
+
+describe("generateThumbnail pixelRatio rounding", () => {
+    it("rounds each backing-store dimension half-up independently", () => {
+        const canvases: { width: number; height: number }[] = [];
+        const real = document.createElement.bind(document);
+        vi.spyOn(document, "createElement").mockImplementation(((tag: string) => {
+            if (tag !== "canvas") return real(tag);
+            const canvas = { width: 0, height: 0, getContext: () => recordingCtx([]), toDataURL: () => "data:image/png;base64,AA==" };
+            canvases.push(canvas);
+            return canvas as unknown as HTMLCanvasElement;
+        }) as typeof document.createElement);
+        clearRinkCache();
+        try {
+            generateThumbnail(createEmptyPlayData(), { width: 301, height: 129, pixelRatio: 1.5 });
+            // 301 * 1.5 = 451.5 -> 452; 129 * 1.5 = 193.5 -> 194
+            expect([canvases[0].width, canvases[0].height]).toEqual([452, 194]);
+        } finally {
+            vi.restoreAllMocks();
+            clearRinkCache();
+        }
     });
 });
