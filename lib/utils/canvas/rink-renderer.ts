@@ -8,7 +8,7 @@
  * Requirements: 1.1
  */
 
-import { Position } from "@/types/practice-planner";
+import type { Position, RinkRect } from "@/types/practice-planner";
 
 /**
  * Standard NHL rink dimensions in feet
@@ -27,6 +27,20 @@ const ZONE_DIMENSIONS = {
     offensiveZoneWidth: 75, // feet
     cornerRadius: 28, // feet
 } as const;
+
+/** Blue-line x positions in rink feet, derived from the zone widths. */
+export const BLUE_LINES = {
+    left: ZONE_DIMENSIONS.defensiveZoneWidth,
+    right: RINK_DIMENSIONS.width - ZONE_DIMENSIONS.offensiveZoneWidth,
+} as const;
+
+/** The whole rink as a rectangle in rink feet. */
+export const FULL_RINK: Readonly<RinkRect> = Object.freeze({
+    x: 0,
+    y: 0,
+    w: RINK_DIMENSIONS.width,
+    h: RINK_DIMENSIONS.height,
+});
 
 /**
  * Circle dimensions
@@ -299,8 +313,8 @@ function drawCenterRedLine(ctx: CanvasRenderingContext2D, transform: TransformCo
  * Draws the blue lines
  */
 function drawBlueLines(ctx: CanvasRenderingContext2D, transform: TransformContext): void {
-    const leftBlueLineX = ZONE_DIMENSIONS.defensiveZoneWidth;
-    const rightBlueLineX = RINK_DIMENSIONS.width - ZONE_DIMENSIONS.offensiveZoneWidth;
+    const leftBlueLineX = BLUE_LINES.left;
+    const rightBlueLineX = BLUE_LINES.right;
 
     ctx.strokeStyle = "#003087"; // Blue
     ctx.lineWidth = LINE_DIMENSIONS.blueLineWidth * transform.scaleX;

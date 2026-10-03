@@ -10,12 +10,15 @@
 import { z } from "zod";
 import {
     EQUIPMENT_KINDS,
+    ICE_AREA_PRESETS,
+    MIN_AREA_FT,
     PLAY_DATA_VERSION,
     PLAYER_ROLES,
     STROKE_ACTIONS,
     STROKE_ENDS,
     STROKE_PATHS,
     VALIDATION_CONSTRAINTS as C,
+    type IceArea,
     type PlayData,
     type Position,
     type StrokeOptions,
@@ -77,6 +80,23 @@ const annotationSchema = z.object({
     color: colorSchema,
 });
 
+/** A custom area: finite numbers, inside the rink, at least MIN_AREA_FT on each side. */
+const rinkRectSchema = z
+    .object({
+        x: z.number().min(0),
+        y: z.number().min(0),
+        w: z.number().min(MIN_AREA_FT),
+        h: z.number().min(MIN_AREA_FT),
+    })
+    .refine((r) => r.x + r.w <= RINK_WIDTH_FT && r.y + r.h <= RINK_HEIGHT_FT, {
+        message: "Custom ice area must lie inside the rink",
+    });
+
+export const iceAreaSchema = z.union([
+    z.object({ kind: z.enum(ICE_AREA_PRESETS) }),
+    z.object({ kind: z.literal("custom"), rect: rinkRectSchema }),
+]);
+
 export const playDataSchema = z
     .object({
         version: z.literal(PLAY_DATA_VERSION),
@@ -84,6 +104,7 @@ export const playDataSchema = z
         drawings: z.array(drawingSchema).max(C.MAX_DRAWINGS),
         equipment: z.array(equipmentSchema).max(C.MAX_EQUIPMENT),
         annotations: z.array(annotationSchema).max(C.MAX_ANNOTATIONS),
+        area: iceAreaSchema.optional(),
     })
     .refine(
         (d) => d.players.length + d.drawings.length + d.equipment.length + d.annotations.length <= C.MAX_ELEMENTS_PER_PLAY,
@@ -195,6 +216,20 @@ function createV1IdResolver(allIds: string[]) {
     };
 }
 
+/**
+ * An unreadable ice area must never make the drill unreadable: it is dropped
+ * (the drill reads as full ice) and logged. The key is deleted rather than set
+ * to undefined, because Zod keeps an undefined optional key. Returns `raw`
+ * itself when there is nothing to drop.
+ */
+function dropInvalidArea(raw: object): object {
+    if (!("area" in raw)) return raw;
+    const { area, ...rest } = raw as { area: unknown } & Record<string, unknown>;
+    if (area !== undefined && iceAreaSchema.safeParse(area).success) return raw;
+    if (area !== undefined) console.error("Dropping invalid ice area from play data:", area);
+    return rest;
+}
+
 /** Converts stored play data of any supported version to v2. Throws PlayDataError. */
 export function upgradePlayData(raw: unknown): PlayData {
     if (typeof raw !== "object" || raw === null) throw new PlayDataError("Play data must be an object");
@@ -203,12 +238,16 @@ export function upgradePlayData(raw: unknown): PlayData {
         if ((raw as { version: unknown }).version !== PLAY_DATA_VERSION) {
             throw new PlayDataError(`Unsupported play data version: ${String((raw as { version: unknown }).version)}`);
         }
-        const annotations = (raw as { annotations?: unknown }).annotations;
-        return parseV2(Array.isArray(annotations) ? { ...raw, annotations: annotations.filter(isNotBlankAnnotation) } : raw);
+        const readable = dropInvalidArea(raw);
+        const annotations = (readable as { annotations?: unknown }).annotations;
+        return parseV2(Array.isArray(annotations) ? { ...readable, annotations: annotations.filter(isNotBlankAnnotation) } : readable);
     }
 
     const v1 = v1Schema.safeParse(raw);
     if (!v1.success) throw new PlayDataError("Unrecognized play data", v1.error);
+
+    // v1Schema strips unknown keys, so a valid area is carried across explicitly.
+    const area = (dropInvalidArea(raw) as { area?: IceArea }).area;
 
     const resolveId = createV1IdResolver([
         ...v1.data.players.map((p) => p.id),
@@ -242,6 +281,7 @@ export function upgradePlayData(raw: unknown): PlayData {
                 position: clampToRink(a.position),
             }))
             .filter(isNotBlankAnnotation),
+        ...(area ? { area } : {}),
     });
 }
 

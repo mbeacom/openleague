@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
     playDataSchema,
     upgradePlayData,
@@ -12,7 +12,7 @@ import {
     sanitizePlayDataForWrite,
 } from "@/lib/utils/play-data";
 import { RINK_DIMENSIONS } from "@/lib/utils/canvas/rink-renderer";
-import { VALIDATION_CONSTRAINTS } from "@/types/practice-planner";
+import { VALIDATION_CONSTRAINTS, type IceArea } from "@/types/practice-planner";
 
 // Shape of a play saved before this change (no version key, `type` on drawings).
 const v1Play = {
@@ -250,5 +250,73 @@ describe("sanitizePlayDataForWrite", () => {
             annotations: [{ id: "a", text: "\u0001", position: { x: 5, y: 5 }, fontSize: 8, color: "#000000" }],
         };
         expect(sanitizePlayDataForWrite(data).ok).toBe(false);
+    });
+});
+
+describe("ice area", () => {
+    const zone: IceArea = { kind: "zone-neutral" };
+    const custom: IceArea = { kind: "custom", rect: { x: 100, y: 30, w: 20, h: 20 } };
+    const invalidAreas: Array<[string, unknown]> = [
+        ["outside the rink", { kind: "custom", rect: { x: 190, y: 0, w: 20, h: 20 } }],
+        ["under 20 ft", { kind: "custom", rect: { x: 0, y: 0, w: 10, h: 85 } }],
+        ["NaN", { kind: "custom", rect: { x: Number.NaN, y: 0, w: 20, h: 20 } }],
+        ["negative", { kind: "custom", rect: { x: -5, y: 0, w: 20, h: 20 } }],
+        ["an unknown kind", { kind: "middle" }],
+        ["custom without a rect", { kind: "custom" }],
+        ["null", null],
+        ["a bare string", "zone-left"],
+    ];
+
+    it("round-trips a valid preset and custom area", () => {
+        for (const area of [zone, custom]) {
+            const stored = { ...createEmptyPlayData(), area };
+            expect(upgradePlayData(stored)).toStrictEqual(stored);
+            expect(playDataSchema.safeParse(stored).success).toBe(true);
+        }
+    });
+
+    it("keeps a missing area missing", () => {
+        const result = upgradePlayData(createEmptyPlayData());
+        expect("area" in result).toBe(false);
+        expect("area" in upgradePlayData(v1Play)).toBe(false);
+    });
+
+    it.each(invalidAreas)("drops and logs an area that is %s on read (v2)", (_label, area) => {
+        const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+        const parsed = parseStoredPlayData({ ...createEmptyPlayData(), area });
+        expect(parsed.ok).toBe(true);
+        expect(parsed.ok && "area" in parsed.data).toBe(false);
+        expect(errorSpy).toHaveBeenCalledWith("Dropping invalid ice area from play data:", area);
+        errorSpy.mockRestore();
+    });
+
+    it.each(invalidAreas)("rejects an area that is %s on write", (_label, area) => {
+        expect(playDataSchema.safeParse({ ...createEmptyPlayData(), area }).success).toBe(false);
+    });
+
+    it("drops an explicitly undefined area without logging", () => {
+        const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+        const result = upgradePlayData({ ...createEmptyPlayData(), area: undefined });
+        expect("area" in result).toBe(false);
+        expect(errorSpy).not.toHaveBeenCalled();
+        errorSpy.mockRestore();
+    });
+
+    it("carries a valid area across the v1 upgrade and drops an invalid one", () => {
+        expect(upgradePlayData({ ...v1Play, area: zone }).area).toEqual(zone);
+        const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+        expect("area" in upgradePlayData({ ...v1Play, area: { kind: "custom", rect: { x: 0, y: 0, w: 5, h: 5 } } })).toBe(false);
+        expect(errorSpy).toHaveBeenCalledTimes(1);
+        errorSpy.mockRestore();
+    });
+
+    it("is idempotent with an area", () => {
+        const once = upgradePlayData({ ...createEmptyPlayData(), area: custom });
+        expect(upgradePlayData(once)).toStrictEqual(once);
+    });
+
+    it("keeps the area through write sanitizing", () => {
+        const result = sanitizePlayDataForWrite({ ...createEmptyPlayData(), area: custom });
+        expect(result.ok && result.data.area).toEqual(custom);
     });
 });

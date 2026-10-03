@@ -2,7 +2,7 @@
  * Display vocabulary for practice-board notation: labels and default colors.
  * Used by the toolbar, inspector, legend, and glyph renderers.
  */
-import type { EquipmentKind, PlayerRole, StrokeAction, StrokeEnd } from "@/types/practice-planner";
+import type { EquipmentKind, IceArea, IceAreaPreset, PlayerRole, StrokeAction, StrokeEnd } from "@/types/practice-planner";
 
 export const BOARD_COLORS = {
     leagueBlue: "#0D47A1",
@@ -64,3 +64,18 @@ export const DEFAULT_END_FOR_ACTION: Record<StrokeAction, StrokeEnd> = {
     lateral: "arrow",
     line: "none",
 };
+
+export const ICE_AREA_LABELS: Record<IceAreaPreset | "custom", string> = {
+    full: "Full ice",
+    "half-left": "Half ice (left)",
+    "half-right": "Half ice (right)",
+    "zone-left": "Left end zone",
+    "zone-neutral": "Neutral zone",
+    "zone-right": "Right end zone",
+    custom: "Custom area",
+};
+
+/** Display label for a drill's ice area; a missing area is full ice. */
+export function iceAreaLabel(area?: IceArea): string {
+    return ICE_AREA_LABELS[area?.kind ?? "full"];
+}
