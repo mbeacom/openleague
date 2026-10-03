@@ -112,6 +112,12 @@ describe("withArea / sameArea", () => {
         expect(withArea(empty, undefined)).toBe(empty);
     });
 
+    it("normalizes an explicit full area away (no area key)", () => {
+        const explicit: PlayData = { ...createEmptyPlayData(), area: { kind: "full" } };
+        expect("area" in withArea(explicit, undefined)).toBe(false);
+        expect("area" in withArea(explicit, { kind: "full" })).toBe(false);
+    });
+
     it("compares custom rectangles by value", () => {
         const a: IceArea = { kind: "custom", rect: { x: 0, y: 0, w: 20, h: 20 } };
         expect(sameArea(a, { kind: "custom", rect: { x: 0, y: 0, w: 20, h: 20 } })).toBe(true);

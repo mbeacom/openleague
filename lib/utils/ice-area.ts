@@ -79,10 +79,11 @@ export function sameArea(a?: IceArea, b?: IceArea): boolean {
 /**
  * Sets a drill's area. Full ice removes the key, so a reset drill matches a
  * pre-2a one. Returns `data` itself when nothing changes, so callers can skip
- * recording an undo step.
+ * recording an undo step; an explicit `{ kind: "full" }` is still normalized
+ * away, since `sameArea` treats it as equal to a missing area.
  */
 export function withArea(data: PlayData, area: IceArea | undefined): PlayData {
-    if (sameArea(data.area, area)) return data;
+    if (sameArea(data.area, area) && data.area?.kind !== "full") return data;
     const next: PlayData = { ...data };
     delete next.area;
     if (!area || isFullIce(area)) return next;
