@@ -1,7 +1,7 @@
 # Practice Sessions: Stations — Design
 
 **Date:** 2026-10-03
-**Status:** Draft for review
+**Status:** Implemented (2b)
 **Phase:** 2b of the practice-planner iteration. Build order: hotfix ✓ → 3a ✓ → 2a ✓ → **2b** → 3b.
 **Depends on:**
 - 2a ice area: `areaRect(playData.area)` is the station layout contract.
@@ -73,7 +73,7 @@ model PracticeSessionPlay {
 Hand-written migration. The dev database is about 30 migrations behind.
 
 ```sql
--- prisma/migrations/<timestamp>_practice_session_play_runs_with_previous/migration.sql
+-- prisma/migrations/20261003130000_practice_session_play_runs_with_previous/migration.sql
 -- Station grouping for practice sessions. Additive; existing rows stay sequential.
 ALTER TABLE "practice_session_plays"
   ADD COLUMN "runsWithPrevious" BOOLEAN NOT NULL DEFAULT false;
@@ -105,10 +105,14 @@ export function toggleRunsWithPrevious<T extends TimelinePlay>(plays: T[], index
 export function moveItem<T extends TimelinePlay>(plays: T[], index: number, dir: -1 | 1): T[];
 export function removeItem<T extends TimelinePlay>(plays: T[], index: number): T[];
 export function stationWarnings(
-  groups: StationGroup<TimelinePlay & { area?: IceArea }>[],
+  groups: StationGroup<TimelinePlay & { area?: IceArea | null }>[],
   bookedSegmentKind: SegmentKind | null,
 ): { overlaps: Array<[number, number, number]>; tooBig: number[] };   // [groupIndex, a, b], sequences
 ```
+
+Beyond the list above, the module exports `MAX_STATIONS_PER_GROUP`, `stationBlockLabel`, `groupRange`, `canToggleRunsWithPrevious`, `canMove`, `stationGroupError` (with `FIRST_DRILL_STATION_ERROR` and `STATION_GROUP_CAP_ERROR`), `drillFootprint`, `SEGMENT_KIND_FIT_LABELS`, `STATION_OVERLAP_TOLERANCE_FT` and `StationArea`.
+
+Ordering: `groupStations`, `sessionWallMinutes` and `stationGroupError` sort by `sequence`, because the server does not trust a payload's array order. `normalizeGroups`, `toggleRunsWithPrevious`, `moveItem` and `removeItem` work on array order. The editor keeps array order equal to sequence order, because every edit ends in `normalizeGroups`.
 
 Rules:
 
@@ -118,27 +122,38 @@ Rules:
 - **`moveItem`:**
   - Moving the first drill of a group moves the whole group.
   - Moving a station inside a group reorders it within the group.
+  - Moving the second drill of a block up makes it the block's first drill, and the old first drill becomes a station.
+  - Moving the last drill of a block down is a no-op. To leave the block, the coach turns off the drill's switch, so a move never silently ungroups a station.
   - A standalone drill hops over whole groups.
-  - The result is always normalized.
+  - The result is always normalized, and an input that can't move is returned unchanged.
 - **`removeItem`:** removing the first drill of a group clears the next drill's flag, so the remaining drills stay a group and don't join the group before them.
 - **`stationWarnings`:**
-  - **Overlap:** two areas intersect by more than 1 ft (via `areaRect`). Full ice overlaps everything.
-  - **Too big:** compared against the booked segment kind:
+  - **Unreadable drills:** `area` is `IceArea | null`. `null` means the drill's data couldn't be read, and the drill is skipped by both checks. Treating it as full ice would make it overlap every other station.
+  - **Overlap:** two areas overlap only when their intersection (via `areaRect`) is wider and taller than 1 ft (`STATION_OVERLAP_TOLERANCE_FT`). Zones that only share a blue line don't overlap. Full ice overlaps everything. Overlaps can only occur inside a block.
+  - **Footprint (`drillFootprint`):** a drill's area is classified by its width: wider than 100 ft (half the rink) is `full`; wider than 75 ft (a zone) is `half`; anything narrower is `zone`. Presets fall where expected: full = 200, half = 100, end zone = 75, neutral zone = 50.
+  - **Too big:** compared against the booked segment kind. The check covers every drill, not only stations, because a standalone full-ice drill in a half-ice booking doesn't fit either.
     - whole ice (`null`): nothing is too big;
-    - `HALF`: full ice is too big;
-    - `CROSS`: full ice and half ice are too big;
+    - `HALF`: `full` is too big;
+    - `CROSS`: `full` and `half` are too big;
     - `CUSTOM`: nothing is flagged.
 
 ## Server actions
 
-- **Validation:** extract one shared `practiceSessionPlayInputSchema`; the create and update schemas currently duplicate it. Add `runsWithPrevious: z.boolean().default(false)`.
+- **Validation:** the create and update schemas already share `practiceSessionPlayItemsSchema` (array plus unique-`clientKey` refine). Its item object is extracted as the exported `practiceSessionPlayInputSchema`, which gains `runsWithPrevious: z.boolean().default(false)`.
 - **`createPracticeSession` / `updatePracticeSession`:**
   - Keep `validatePlaySequence` as it is.
-  - Add a group check: the first drill can't run with the previous one, and the group cap is enforced.
-  - Replace `validateTotalDuration` with `sessionWallMinutes`. The error reads "Practice timeline (X min) exceeds session duration (Y min)".
+  - Add a group check by sequence: the first drill can't run with the previous one, and the group cap is enforced. The errors are `The first drill can't run as a station with a previous drill` and `A station block can hold at most 4 drills`.
+  - Replace the sum-based duration check with wall time (`sessionWallMinutes`). The error reads `Practice timeline (X min) exceeds session duration (Y min)`.
+  - These errors follow the sibling `validatePlaySequence`: `{ success: false, error }` with no Zod `details`.
   - Pass `runsWithPrevious` through the nested creates.
   - Ownership (3a's materialize) and the reservation code are unchanged.
-- **Reads:** add `runsWithPrevious` to every session-play select. The plan must re-grep `practiceSessionPlay` and `plays: {` selects. Also add `segment.kind` where the segment is selected.
+- **`validatePlayDurations` is deleted.** It was the sum-based validator in `types/practice-planner.ts` and had no production caller. A sum-based validator exported next to a wall-time server rule would be a trap.
+- **Reads:**
+  - `getPracticeSessionDetail` and `getPracticeSessionForEdit` use `include`, so the column arrives without a select change; only their return mappings change.
+  - `getPracticeSessionById` uses `select` and gains `runsWithPrevious: true`.
+  - The list query (first thumbnail only) needs nothing.
+  - `segment.kind` is added in `getPracticeSessionById`, `getPracticeSessionDetail` and `getVenueBookingOptions` (which reads it for both reservations and the segments list).
+  - `getPracticeSessionForEdit` runs `normalizeGroups`, so a stored first drill with the flag set loads as a standalone drill.
 - **Wrappers** (new and edit) map the field.
 - Overlap and too-big warnings are client-side only and never block a write.
 
@@ -147,29 +162,34 @@ Rules:
 - **PracticeSessionEditor (≤ 900 lines; put new logic in `SessionDrillList`, `SessionDrillCard` or a small hook):**
   - `PlayInSession` gains `runsWithPrevious: boolean`.
   - Every card after the first gets a "Run as a station with the previous drill" switch.
-    - It is disabled (with a tooltip) when it would exceed 4.
+    - It is disabled when it would exceed 4, with the tooltip `A station block holds at most 4 drills`.
     - It has a 44px touch target.
   - Grouped cards render inside one outlined block, "Stations · N · M min", with the warnings shown inline.
   - Move up/down and delete use the `session-timeline` helpers.
-  - The duration summary uses `sessionWallMinutes`.
-  - The booked segment's `kind` comes from the booking options (`venue-booking-options.ts`).
+  - The duration summary uses `sessionWallMinutes`. The editor keeps its `Total Play Time: X minutes` and `Total play time (X min) exceeds session duration (Y min)` copy, where X is now wall time. For sequential sessions the numbers are unchanged.
+  - Overlap warning: `Stations A and B overlap on the ice` (A and B are 1-based positions inside the block).
+  - Fit chip on a drill: `Larger than the booked half ice` or `Larger than the booked cross ice`.
+  - The booked segment's `kind` comes from the booking options (`venue-booking-options.ts`). The editor's booking types gain it as an optional field (`SegmentBookingOption.kind?`, `VenueReservationBookingOption.segmentKind?`), so a missing kind means no fit warning. These types change only for the practice editor.
 - **`StationMap.tsx` (new, client canvas):**
   - Draws the whole rink.
   - For each station: clip to its `areaRect`, call `drawAllElements`, outline the area, and add a numbered label.
   - The active station is highlighted.
   - The legend combines the stations' symbols.
-  - It reuses 2a's `drawBoardScene` pieces.
+  - It is the pure `drawStationMap` (`lib/utils/canvas/station-map.ts`, testable with a recording context) plus `PlayLegend`. It uses `drawRink` and a clipped `drawAllElements` rather than `drawBoardScene`, which draws every element unclipped and adds a mask. The rink is drawn uncached, because the map renders once per selection.
+  - Each station's label and unreadable message are clipped to that station's area, and the active station's outline is drawn last, so neighbouring outlines can't paint over it.
+  - The canvas label names every station and marks the current one, for example "Station map: 1 · Breakout (current), 2 · Regroup". An empty station list renders nothing.
 - **SessionDetailView:**
   - The sidebar groups stations under a "Stations" header.
   - When the active drill is in a group, the `StationMap` renders above the thumbnail with that station highlighted.
   - Previous/Next still step through drills one at a time.
-  - The fit warning shows as a chip next to the booking line.
+  - The fit warning shows as a chip next to the booking line: `1 drill larger than the booked half ice`, or `N drills larger than the booked half ice`.
 
 ## Error handling
 
-- An invalid group structure, or a wall time over the session duration, returns an `ActionResult` error with Zod `details` (the existing pattern). The client prevents both before the request.
+- An invalid group structure, or a wall time over the session duration, returns an `ActionResult` error with no `details`.
+- The client prevents an invalid group structure: the switch refuses past the cap and never appears on the first drill. A wall time over the session duration is warned inline in the editor and rejected by the server, with its message shown on save. It is not blocked before the request, because `validateForm` can only show a generic message and autosave would become a silent no-op.
 - Warnings never block.
-- If a drill in a group can't be read (`playData` is null), its station renders as an empty outlined area with the existing "unreadable" message, and the map still renders.
+- If a drill in a group can't be read (`playData` is null), its station is outlined over the whole rink with the "This play's diagram couldn't be read." message, and the map still renders. Such a drill is skipped by the overlap and fit warnings.
 
 ## Testing
 
@@ -197,3 +217,11 @@ Rules:
 - **What "Total minutes" means changes**, from the sum of drills to wall time. Existing sessions are sequential, so the two numbers are equal for them.
 - **Editor size.** `PracticeSessionEditor.tsx` is about 890 lines; grouping UI goes into the list and card components.
 - **Rotations aren't modeled.** A coach who wants "3 groups × 8 min" writes it in the instructions for now. It is a natural 3b bench-sheet addition.
+
+## Open questions (defaults shipped)
+
+Three product-owner questions came up during planning. The build proceeds with these defaults.
+
+1. **Last station moving down.** Should the last drill of a block leave the block and become standalone, or do nothing? *Default: nothing.* The coach turns off its switch instead.
+2. **Unreadable drill inside a block.** Should it be skipped by the overlap and fit warnings, or treated as full ice? *Default: skipped.*
+3. **Size classes for custom areas.** Is "wider than 100 ft = full ice, wider than 75 ft = half ice" the right rule, both for the fit warning and for "too big for cross ice"? *Default: yes.*
