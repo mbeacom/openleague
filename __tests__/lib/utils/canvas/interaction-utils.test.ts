@@ -17,7 +17,7 @@ import {
   isWithinRinkBounds,
   clampToRinkBounds,
 } from "@/lib/utils/canvas/interaction-utils";
-import { strokeFromV1Type } from "@/lib/utils/play-data";
+import { strokeFromV1Type, createEmptyPlayData } from "@/lib/utils/play-data";
 import type { PlayData, PlayerIcon, DrawingElement, TextAnnotation } from "@/types/practice-planner";
 
 const emptyPlayData: PlayData = { version: 2, players: [], drawings: [], equipment: [], annotations: [] };
@@ -245,4 +245,23 @@ describe("clampToRinkBounds", () => {
     expect(result.x).toBe(0);
     expect(result.y).toBe(0);
   });
+});
+
+describe("hitTest equipment", () => {
+    const withCone = {
+        ...createEmptyPlayData(),
+        equipment: [{ id: "cone", kind: "cone" as const, position: { x: 100, y: 40 }, rotation: 0 }],
+    };
+
+    it("hits equipment within its radius", () => {
+        expect(hitTest({ x: 100.5, y: 40 }, withCone)).toMatchObject({ hit: true, elementType: "equipment", elementId: "cone" });
+    });
+
+    it("misses a tiny glyph without a minimum hit radius", () => {
+        expect(hitTest({ x: 104, y: 40 }, withCone).hit).toBe(false);
+    });
+
+    it("honors minHitRadiusFt so small glyphs stay tappable when zoomed out", () => {
+        expect(hitTest({ x: 104, y: 40 }, withCone, 5).hit).toBe(true);
+    });
 });
