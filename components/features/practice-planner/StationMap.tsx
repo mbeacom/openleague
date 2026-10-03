@@ -6,7 +6,7 @@
  * combining the stations' symbols.
  */
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Stack } from "@mui/material";
 import { createTransformContext } from "@/lib/utils/canvas/rink-renderer";
 import {
@@ -37,6 +37,20 @@ export interface StationMapProps {
 
 export function StationMap({ stations, activeIndex }: StationMapProps) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
+    // The devicePixelRatio last seen changing (null until it first does). Browser
+    // zoom or moving the window to another display changes it; the redraw below
+    // depends on it so the backing store is resized and the map stays sharp.
+    const [pixelRatio, setPixelRatio] = useState<number | null>(null);
+
+    // A resolution query matches only the ratio it was made for, so it is
+    // re-armed for the new ratio after every change (this effect re-runs).
+    useEffect(() => {
+        if (typeof window.matchMedia !== "function") return;
+        const query = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+        const onChange = () => setPixelRatio(window.devicePixelRatio);
+        query.addEventListener("change", onChange);
+        return () => query.removeEventListener("change", onChange);
+    }, [pixelRatio]);
 
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -52,7 +66,7 @@ export function StationMap({ stations, activeIndex }: StationMapProps) {
         ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
         ctx.clearRect(0, 0, MAP_WIDTH, MAP_HEIGHT);
         drawStationMap(ctx, createTransformContext(MAP_WIDTH, MAP_HEIGHT, MAP_PADDING), stations, activeIndex);
-    }, [stations, activeIndex]);
+    }, [stations, activeIndex, pixelRatio]);
 
     if (stations.length === 0) return null;
 

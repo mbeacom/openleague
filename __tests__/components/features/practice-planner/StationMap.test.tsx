@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { StationMap } from "@/components/features/practice-planner/StationMap";
 import { clearRinkCache } from "@/lib/utils/canvas/rink-renderer";
@@ -127,5 +127,74 @@ describe("StationMap pixel ratio", () => {
         vi.stubGlobal("devicePixelRatio", 3);
         renderMap();
         expect(mapCanvas().style.width).toBe("100%");
+    });
+});
+
+describe("StationMap re-sharpens when the pixel ratio changes", () => {
+    type Listener = () => void;
+    interface FakeQuery {
+        media: string;
+        listeners: Set<Listener>;
+        addEventListener: ReturnType<typeof vi.fn>;
+        removeEventListener: ReturnType<typeof vi.fn>;
+    }
+    let queries: FakeQuery[];
+
+    beforeEach(() => {
+        queries = [];
+        vi.stubGlobal("matchMedia", vi.fn((media: string) => {
+            const listeners = new Set<Listener>();
+            const query: FakeQuery = {
+                media,
+                listeners,
+                addEventListener: vi.fn((type: string, fn: Listener) => { if (type === "change") listeners.add(fn); }),
+                removeEventListener: vi.fn((type: string, fn: Listener) => { if (type === "change") listeners.delete(fn); }),
+            };
+            queries.push(query);
+            return query;
+        }));
+    });
+
+    const mapCanvas = () => screen.getByRole("img", { name: /^Station map:/ }) as HTMLCanvasElement;
+    const armed = () => queries.filter((q) => q.listeners.size > 0);
+    const changeTo = (dpr: number) => {
+        const [query] = armed();
+        vi.stubGlobal("devicePixelRatio", dpr);
+        act(() => { for (const fn of [...query.listeners]) fn(); });
+    };
+
+    it("listens for the current resolution and redraws at the new ratio when it changes", () => {
+        vi.stubGlobal("devicePixelRatio", 1);
+        renderMap();
+        expect(mapCanvas().width).toBe(960);
+        expect(armed().map((q) => q.media)).toEqual(["(resolution: 1dppx)"]);
+
+        changeTo(2); // e.g. browser zoom to 200%, or the window moved to a retina display
+        expect([mapCanvas().width, mapCanvas().height]).toEqual([1920, 840]);
+        const calls = byCanvas.get(mapCanvas()) ?? [];
+        // The redraw (a fresh context recording) scales to the new ratio before drawing.
+        expect(calls[0]).toEqual({ name: "setTransform", args: [2, 0, 0, 2, 0, 0] });
+    });
+
+    it("re-arms on the new resolution after each change, dropping the old listener", () => {
+        vi.stubGlobal("devicePixelRatio", 1);
+        renderMap();
+        changeTo(2);
+        expect(armed().map((q) => q.media)).toEqual(["(resolution: 2dppx)"]);
+        changeTo(1.5);
+        expect(armed().map((q) => q.media)).toEqual(["(resolution: 1.5dppx)"]);
+        expect(mapCanvas().width).toBe(1440);
+    });
+
+    it("removes its listener on unmount", () => {
+        vi.stubGlobal("devicePixelRatio", 2);
+        const view = render(
+            <ThemeProvider theme={createTheme()}>
+                <StationMap stations={[{ name: "Breakout", playData: breakout }]} activeIndex={0} />
+            </ThemeProvider>,
+        );
+        expect(armed()).toHaveLength(1);
+        view.unmount();
+        expect(armed()).toHaveLength(0);
     });
 });
