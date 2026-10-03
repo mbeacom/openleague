@@ -198,6 +198,44 @@ describe("materializeSessionDrills", () => {
         ).rejects.toThrow("Drill copies");
     });
 
+    describe("a stale editor after detach-on-write", () => {
+        // Detach gave S its own copy A of library drill L and repointed S's rows
+        // to A; an editor still open on S then saves with L.
+        const L = play("L", { playData: { diagram: "edited library" } });
+        const A = play("A", { isTemplate: false, sessionId: SESSION, sourcePlayId: "L", playData: { diagram: "detached" } });
+
+        it("maps the stale library reference back to the detached copy instead of cloning", async () => {
+            const { mocks, tx } = fakeTx([L, A], refs("A"));
+            const result = await materializeSessionDrills(tx, { sessionId: SESSION, teamId: TEAM, userId: USER, items: items("L") });
+
+            expect(result.mapping).toEqual([{ clientKey: "k0", sequence: 0, playId: "A" }]);
+            expect(mocks.play.createManyAndReturn).not.toHaveBeenCalled();
+        });
+
+        it("still clones the library drill when the payload also keeps that copy", async () => {
+            const { mocks, tx } = fakeTx([L, A], refs("A"));
+            const result = await materializeSessionDrills(tx, { sessionId: SESSION, teamId: TEAM, userId: USER, items: items("A", "L") });
+
+            expect(result.mapping.map((m) => m.playId)).toEqual(["A", "clone-0"]);
+            expect(mocks.play.createManyAndReturn.mock.calls[0][0].data[0].playData).toEqual({ diagram: "edited library" });
+        });
+
+        it("reuses a copy at most once", async () => {
+            const { mocks, tx } = fakeTx([L, A], refs("A"));
+            const result = await materializeSessionDrills(tx, { sessionId: SESSION, teamId: TEAM, userId: USER, items: items("L", "L") });
+
+            expect(result.mapping.map((m) => m.playId)).toEqual(["A", "clone-0"]);
+            expect(mocks.play.createManyAndReturn.mock.calls[0][0].data).toHaveLength(1);
+        });
+
+        it("does not reuse a copy while the session still references the library drill itself", async () => {
+            const { tx } = fakeTx([L, A], refs("A", "L"));
+            const result = await materializeSessionDrills(tx, { sessionId: SESSION, teamId: TEAM, userId: USER, items: items("L") });
+
+            expect(result.mapping.map((m) => m.playId)).toEqual(["clone-0"]);
+        });
+    });
+
     it("reads nothing but the previous references for an empty payload", async () => {
         const { mocks, tx } = fakeTx([], refs("old"));
         const result = await materializeSessionDrills(tx, { sessionId: SESSION, teamId: TEAM, userId: USER, items: [] });

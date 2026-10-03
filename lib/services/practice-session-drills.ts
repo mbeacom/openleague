@@ -98,8 +98,54 @@ export async function cloneDrillsIntoSession(
 }
 
 /**
+ * Copies S already owns that a stale payload item should map back to, keyed
+ * by the unowned play they came from (each list is consumed one per item).
+ *
+ * Detach-on-write gives S a copy C of library play L and repoints S's rows to
+ * C. An editor opened before that still sends L; cloning L would take L's NEW
+ * content, and drop-only cleanup would then delete C. So an item sending an
+ * unowned L maps to C when: S referenced C before this save, C came from L,
+ * no payload item sends C itself, and S no longer references L.
+ *
+ * Trade-off: removing a copy's card and re-adding the same library drill in
+ * one save window also lands here, so it reuses the existing copy (with its
+ * session edits) instead of taking a fresh library copy.
+ */
+async function findReusableCopies(
+    tx: Prisma.TransactionClient,
+    sessionId: string,
+    items: SessionDrillItem[],
+    plays: Array<{ id: string; sessionId: string | null }>,
+    previousPlayIds: string[],
+): Promise<Map<string, string[]>> {
+    const reusable = new Map<string, string[]>();
+    const referenced = new Set(previousPlayIds);
+    const payloadIds = new Set(items.map((item) => item.playId));
+    const staleSources = plays
+        .filter((play) => play.sessionId === null && !referenced.has(play.id))
+        .map((play) => play.id);
+    const candidates = previousPlayIds.filter((id) => !payloadIds.has(id));
+    if (staleSources.length === 0 || candidates.length === 0) return reusable;
+
+    const copies = await tx.play.findMany({
+        where: { sessionId, id: { in: candidates }, sourcePlayId: { in: staleSources } },
+        select: { id: true, sessionId: true, sourcePlayId: true },
+        orderBy: { createdAt: "asc" },
+    });
+    for (const copy of copies) {
+        // Re-checked here: the where clause is the contract, this is the guard.
+        if (copy.sessionId !== sessionId || !copy.sourcePlayId || !staleSources.includes(copy.sourcePlayId)) continue;
+        if (!candidates.includes(copy.id)) continue;
+        reusable.set(copy.sourcePlayId, [...(reusable.get(copy.sourcePlayId) ?? []), copy.id]);
+    }
+    return reusable;
+}
+
+/**
  * Resolves a save payload to plays session S owns:
  * - owned by S: kept (a second occurrence of the same id is cloned);
+ * - an unowned play S no longer references, whose detached copy S still
+ *   owns and the payload does not send: mapped to that copy (findReusableCopies);
  * - a library play, or an unowned play S already references (pre-3a data): cloned;
  * - anything else (another session's copy, another team's play, a missing
  *   play, an unowned non-library play S never referenced): SessionDrillError.
@@ -126,6 +172,7 @@ export async function materializeSessionDrills(
     const byId = new Map(plays.map((play) => [play.id, play]));
     const referenced = new Set(previousPlayIds);
     const kept = new Set<string>();
+    const reusable = await findReusableCopies(tx, input.sessionId, input.items, plays, previousPlayIds);
 
     // For each item: the owned id it keeps, or the index of its clone source.
     const resolved: Array<{ item: SessionDrillItem; keptId: string } | { item: SessionDrillItem; cloneIndex: number }> = [];
@@ -138,6 +185,13 @@ export async function materializeSessionDrills(
         if (play.sessionId === input.sessionId && !kept.has(play.id)) {
             kept.add(play.id);
             resolved.push({ item, keptId: play.id });
+            continue;
+        }
+
+        const reused = play.sessionId === null ? reusable.get(play.id)?.shift() : undefined;
+        if (reused) {
+            kept.add(reused);
+            resolved.push({ item, keptId: reused });
             continue;
         }
 

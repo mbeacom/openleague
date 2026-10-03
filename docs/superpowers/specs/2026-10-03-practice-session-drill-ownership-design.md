@@ -141,6 +141,7 @@ materializeSessionDrills(tx, { sessionId, teamId, userId, items })
 1. Load the referenced plays, restricted to this team.
 2. Classify each item:
    - **Owned by this session:** keep it. A second occurrence of the same id is cloned.
+   - **An unowned play L that a stale editor still sends after detach-on-write:** map it to S's existing copy C instead of cloning. This applies when S referenced C before this save, C's `sourcePlayId` is L, no payload item sends C itself, and S no longer references L. Each C is matched at most once. Without this, an editor opened before L was edited would clone L's *new* content and drop-only cleanup would delete C, undoing the detach. Trade-off: removing a copy's card and re-adding the same library drill within one save window also reuses that copy (with its session edits) rather than taking a fresh library copy.
    - **A library play, or a legacy play this session already references:** clone it.
    - **Anything else** (another session's copy, another team's play, or a missing play): reject the whole save.
 3. Clone with `createManyAndReturn`:
