@@ -72,11 +72,6 @@ const KNOWN_VIOLATIONS = [
     "app/(dashboard)/practice-planner/[sessionId]/SessionDetailView.tsx -> next/navigation",
     "components/features/practice-planner/DuplicateSessionDialog.tsx -> @/lib/actions/practice-session-drills",
     "components/features/practice-planner/DuplicateSessionDialog.tsx -> next/navigation",
-    "components/features/practice-planner/PlayLibrary.tsx -> @/lib/actions/plays",
-    "components/features/practice-planner/PlayLibrary.tsx -> next/image",
-    "components/features/practice-planner/PlayLibrary.tsx -> next/navigation",
-    "components/features/practice-planner/SessionDrillCard.tsx -> next/image",
-    "components/features/practice-planner/SessionDrillDialog.tsx -> @/lib/actions/practice-session-drills",
     "components/ui/NextLinkComposites.tsx -> next/link",
 ];
 

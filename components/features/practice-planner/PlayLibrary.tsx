@@ -47,10 +47,8 @@ import {
     Edit as EditIcon,
     Add as AddIcon,
 } from "@mui/icons-material";
-import Image from "next/image";
-import { useRouter } from "next/navigation";
 import { SavedPlay } from "@/types/practice-planner";
-import { getPlaysByTeam, getPlayById, deletePlay, createPlay } from "@/lib/actions/plays";
+import { usePlannerPlatform, usePlannerStore } from "@/lib/planner-store";
 import { STARTER_PLAYS, type StarterPlay } from "@/lib/data/starter-plays";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import { generateThumbnail } from "@/lib/utils/canvas/thumbnail-generator";
@@ -96,6 +94,7 @@ function PlayCard({
     onDelete,
 }: PlayCardProps) {
     const theme = useTheme();
+    const { Image } = usePlannerPlatform();
 
     return (
         <Card
@@ -131,13 +130,7 @@ function PlayCard({
                 }}
             >
                 {play.thumbnail ? (
-                    <Image
-                        src={play.thumbnail}
-                        alt={play.name}
-                        fill
-                        style={{ objectFit: "contain" }}
-                        unoptimized // Base64 images don't need optimization
-                    />
+                    <Image src={play.thumbnail} alt={play.name} fit="contain" />
                 ) : (
                     <Typography variant="body2" color="text.secondary">
                         No preview
@@ -243,6 +236,7 @@ function StarterPlayCard({
     disabled,
     onAdd,
 }: StarterPlayCardProps) {
+    const { Image } = usePlannerPlatform();
     return (
         <Card
             sx={{
@@ -266,13 +260,7 @@ function StarterPlayCard({
                 }}
             >
                 {thumbnail ? (
-                    <Image
-                        src={thumbnail}
-                        alt={starter.name}
-                        fill
-                        style={{ objectFit: "contain" }}
-                        unoptimized // Base64 images don't need optimization
-                    />
+                    <Image src={thumbnail} alt={starter.name} fit="contain" />
                 ) : (
                     <Typography variant="body2" color="text.secondary">
                         No preview
@@ -342,7 +330,8 @@ export function PlayLibrary({
 }: PlayLibraryProps) {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
-    const router = useRouter();
+    const store = usePlannerStore();
+    const { navigate, routes } = usePlannerPlatform();
 
     // State
     const [plays, setPlays] = useState<SavedPlay[]>([]);
@@ -376,7 +365,7 @@ export function PlayLibrary({
         setError(null);
 
         try {
-            const result = await getPlaysByTeam({
+            const result = await store.getPlaysByTeam({
                 teamId,
                 isTemplate: true, // Only load library plays
                 page: currentPage,
@@ -404,7 +393,7 @@ export function PlayLibrary({
         } finally {
             setIsLoading(false);
         }
-    }, [teamId, currentPage]);
+    }, [store, teamId, currentPage]);
 
     // Debounced search to avoid too many server requests
     const debouncedSearch = useDebouncedCallback(
@@ -470,7 +459,7 @@ export function PlayLibrary({
             setError(null);
 
             try {
-                const result = await createPlay({
+                const result = await store.createPlay({
                     name: starter.name,
                     description: starter.description,
                     thumbnail: starterThumbnails[starter.id] || undefined,
@@ -496,7 +485,7 @@ export function PlayLibrary({
                 setAddingStarterId(null);
             }
         },
-        [starterThumbnails, teamId, loadPlays, searchQuery, dateFilter]
+        [store, starterThumbnails, teamId, loadPlays, searchQuery, dateFilter]
     );
 
     /**
@@ -530,7 +519,7 @@ export function PlayLibrary({
 
                 try {
                     // Fetch complete play data from server
-                    const result = await getPlayById({ id: play.id, teamId });
+                    const result = await store.getPlayById({ id: play.id, teamId });
                     if (result.success) {
                         const fullPlay: SavedPlay = {
                             id: result.data.id,
@@ -556,7 +545,7 @@ export function PlayLibrary({
                 }
             }
         },
-        [mode, onSelectPlay, teamId]
+        [store, mode, onSelectPlay, teamId]
     );
 
     /**
@@ -569,10 +558,10 @@ export function PlayLibrary({
             if (onEditPlay) {
                 onEditPlay(playId);
             } else {
-                router.push(`/practice-planner/library/${playId}/edit`);
+                navigate(routes.libraryEdit(playId));
             }
         },
-        [onEditPlay, router]
+        [onEditPlay, navigate, routes]
     );
 
     /**
@@ -595,7 +584,7 @@ export function PlayLibrary({
         setError(null);
 
         try {
-            const result = await deletePlay({
+            const result = await store.deletePlay({
                 id: playToDelete,
                 teamId,
             });
@@ -614,7 +603,7 @@ export function PlayLibrary({
         } finally {
             setIsDeleting(false);
         }
-    }, [playToDelete, teamId, loadPlays, searchQuery, dateFilter]);
+    }, [store, playToDelete, teamId, loadPlays, searchQuery, dateFilter]);
 
     /**
      * Handle delete dialog close
@@ -651,7 +640,7 @@ export function PlayLibrary({
                     <Button
                         variant="contained"
                         startIcon={<AddIcon />}
-                        onClick={() => router.push("/practice-planner/library/new")}
+                        onClick={() => navigate(routes.libraryNew())}
                     >
                         New Play
                     </Button>
@@ -745,7 +734,7 @@ export function PlayLibrary({
                         <Button
                             variant="contained"
                             startIcon={<AddIcon />}
-                            onClick={() => router.push("/practice-planner/library/new")}
+                            onClick={() => navigate(routes.libraryNew())}
                         >
                             Create Play
                         </Button>

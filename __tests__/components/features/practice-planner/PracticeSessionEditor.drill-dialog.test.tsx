@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeAll } from "vitest";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, screen } from "@testing-library/react";
+import { renderWithPlanner } from "@/__tests__/helpers/planner";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
@@ -18,13 +19,6 @@ beforeAll(() => {
         disconnect() { /* noop */ }
     } as unknown as typeof ResizeObserver;
 });
-
-vi.mock("@/lib/actions/plays", () => ({
-    getPlaysByTeam: vi.fn().mockResolvedValue({ success: true, data: { plays: [], total: 0 } }),
-    getPlayById: vi.fn(),
-    deletePlay: vi.fn(),
-    createPlay: vi.fn(),
-}));
 
 const FORK = "cforkxxxxxxxxxxxxxxxxxxxx";
 // What the last stub save's onSaved returned (the session-save outcome).
@@ -63,7 +57,7 @@ function drill(id: string, playId: string): PlayInSession {
 
 // sessionId null = a session that has never been saved.
 function renderEditor(onSave: SaveFn, plays: PlayInSession[], sessionId: string | null = "csessionxxxxxxxxxxxxxxxxx") {
-    render(
+    renderWithPlanner(
         <ThemeProvider theme={createTheme()}>
             <LocalizationProvider dateAdapter={AdapterDateFns}>
                 <PracticeSessionEditor

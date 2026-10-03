@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeAll } from "vitest";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, screen } from "@testing-library/react";
+import { renderWithPlanner } from "@/__tests__/helpers/planner";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
@@ -19,19 +20,6 @@ beforeAll(() => {
     } as unknown as typeof ResizeObserver;
 });
 
-vi.mock("@/lib/actions/plays", () => ({
-    getPlaysByTeam: vi.fn().mockResolvedValue({ success: true, data: { plays: [], total: 0 } }),
-    getPlayById: vi.fn(),
-    deletePlay: vi.fn(),
-    createPlay: vi.fn(),
-}));
-
-// The editor hosts SessionDrillDialog, which imports these server actions.
-vi.mock("@/lib/actions/practice-session-drills", () => ({
-    saveSessionDrill: vi.fn(),
-    copySessionDrillToLibrary: vi.fn(),
-}));
-
 type SaveFn = (data: PracticeSessionSubmitData) => Promise<PracticeSessionSaveResult>;
 
 const LIB = "clibraryxxxxxxxxxxxxxxxxx";
@@ -42,7 +30,7 @@ function drill(id: string, playId: string): PlayInSession {
 }
 
 function renderEditor(onSave: SaveFn, plays: PlayInSession[] = [], sessionId: string | null = "csessionxxxxxxxxxxxxxxxxx") {
-    render(
+    renderWithPlanner(
         <ThemeProvider theme={createTheme()}>
             <LocalizationProvider dateAdapter={AdapterDateFns}>
                 <PracticeSessionEditor

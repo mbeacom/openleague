@@ -5,7 +5,8 @@
  * mocked) while the editor's helpers keep the real rules and refuse.
  */
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
+import { renderWithPlanner } from "@/__tests__/helpers/planner";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
@@ -13,13 +14,6 @@ import { PracticeSessionEditor } from "@/components/features/practice-planner/Pr
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import type { PlayInSession } from "@/types/practice-planner";
 
-vi.mock("@/lib/actions/plays", () => ({
-    getPlaysByTeam: vi.fn().mockResolvedValue({ success: true, data: { plays: [], total: 0 } }),
-    getPlayById: vi.fn(),
-    deletePlay: vi.fn(),
-    createPlay: vi.fn(),
-}));
-vi.mock("@/lib/actions/practice-session-drills", () => ({ saveSessionDrill: vi.fn(), copySessionDrillToLibrary: vi.fn() }));
 // Only the list's checks are loosened; toggleRunsWithPrevious / moveItem call
 // the real checks inside their own module, so they still refuse.
 vi.mock("@/lib/utils/session-timeline", async (importOriginal) => ({
@@ -48,7 +42,7 @@ function drills(spec: string): PlayInSession[] {
 }
 
 function renderEditor(plays: PlayInSession[]) {
-    render(
+    renderWithPlanner(
         <ThemeProvider theme={createTheme()}>
             <LocalizationProvider dateAdapter={AdapterDateFns}>
                 <PracticeSessionEditor

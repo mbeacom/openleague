@@ -8,12 +8,11 @@
  */
 
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { PlayLibrary, PlayLibraryProps } from "@/components/features/practice-planner/PlayLibrary";
-
-import { getPlaysByTeam, getPlayById, deletePlay } from "@/lib/actions/plays";
+import { createMockPlannerStore, renderWithPlanner } from "@/__tests__/helpers/planner";
 
 // Mock ResizeObserver (required by MUI Select)
 beforeAll(() => {
@@ -24,27 +23,22 @@ beforeAll(() => {
     } as unknown as typeof ResizeObserver;
 });
 
-// Mock the server actions
-vi.mock("@/lib/actions/plays", () => ({
-    getPlaysByTeam: vi.fn(),
-    getPlayById: vi.fn(),
-    deletePlay: vi.fn(),
-}));
-
-// Cast to mock types for proper typing
-const mockGetPlaysByTeam = getPlaysByTeam as ReturnType<typeof vi.fn>;
-const mockGetPlayById = getPlayById as ReturnType<typeof vi.fn>;
-const mockDeletePlay = deletePlay as ReturnType<typeof vi.fn>;
+// The planner store double stands in for the server actions
+const store = createMockPlannerStore();
+const mockGetPlaysByTeam = store.getPlaysByTeam;
+const mockGetPlayById = store.getPlayById;
+const mockDeletePlay = store.deletePlay;
 
 // Create a theme for consistent testing
 const theme = createTheme();
 
 // Helper to render component with theme
 const renderWithTheme = (props: PlayLibraryProps) => {
-    return render(
+    return renderWithPlanner(
         <ThemeProvider theme={theme}>
             <PlayLibrary {...props} />
-        </ThemeProvider>
+        </ThemeProvider>,
+        { store },
     );
 };
 

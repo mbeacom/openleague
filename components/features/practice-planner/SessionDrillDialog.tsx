@@ -2,7 +2,7 @@
 
 /**
  * Full-screen editor for one drill's diagram inside a practice session
- * (practice planner 3a). Saves go through saveSessionDrill, so a library
+ * (practice planner 3a). Saves go through the planner store's saveSessionDrill, so a library
  * drill is forked into a copy only this session owns; PlayEditor's own
  * autosave is off so each save is deliberate.
  */
@@ -21,7 +21,7 @@ import {
 } from "@mui/material";
 import type { PlayData, SavedPlay } from "@/types/practice-planner";
 import type { SessionDrillPatch } from "@/lib/utils/session-drill-ids";
-import { copySessionDrillToLibrary, saveSessionDrill } from "@/lib/actions/practice-session-drills";
+import { usePlannerStore } from "@/lib/planner-store";
 import { PlayEditor } from "./PlayEditor";
 import type { SaveOutcome } from "./useSingleFlightSave";
 
@@ -49,6 +49,7 @@ export interface SessionDrillDialogProps {
 }
 
 export function SessionDrillDialog({ open, sessionId, teamId, drill, onSaved, onClose }: SessionDrillDialogProps) {
+    const store = usePlannerStore();
     const [playId, setPlayId] = useState<string | null>(drill?.playId ?? null);
     const [alsoAddToLibrary, setAlsoAddToLibrary] = useState(false);
     const [addedToLibrary, setAddedToLibrary] = useState(false);
@@ -70,7 +71,7 @@ export function SessionDrillDialog({ open, sessionId, teamId, drill, onSaved, on
     };
 
     const handleSave = async (saved: SavedPlay) => {
-        const result = await saveSessionDrill({
+        const result = await store.saveSessionDrill({
             sessionId,
             teamId,
             playId: playId ?? undefined,
@@ -96,7 +97,7 @@ export function SessionDrillDialog({ open, sessionId, teamId, drill, onSaved, on
         if (!linked.ok) throw new Error(`The drill was saved, but not added to this session: ${linked.error}`);
 
         if (alsoAddToLibrary && !addedToLibrary) {
-            const copy = await copySessionDrillToLibrary({ playId: result.data.playId, teamId });
+            const copy = await store.copySessionDrillToLibrary({ playId: result.data.playId, teamId });
             if (!copy.success) {
                 throw new Error(`Saved to this session, but not added to the library: ${copy.error}`);
             }

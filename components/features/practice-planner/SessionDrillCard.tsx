@@ -31,7 +31,7 @@ import {
     Draw as DrawIcon,
     Edit as EditIcon,
 } from "@mui/icons-material";
-import Image from "next/image";
+import { usePlannerPlatform } from "@/lib/planner-store";
 import { VALIDATION_CONSTRAINTS, type PlayInSession } from "@/types/practice-planner";
 import { MAX_STATIONS_PER_GROUP } from "@/lib/utils/session-timeline";
 
@@ -118,6 +118,7 @@ export function SessionDrillCard({
     locked = false,
     onEditDiagram,
 }: SessionDrillCardProps) {
+    const { Image } = usePlannerPlatform();
     // Local state for editing
     const [editDuration, setEditDuration] = useState(play.duration);
     const [editInstructions, setEditInstructions] = useState(play.instructions);
@@ -191,13 +192,7 @@ export function SessionDrillCard({
                 }}
             >
                 {thumbnail ? (
-                    <Image
-                        src={thumbnail}
-                        alt={play.name || `Drill ${index + 1}`}
-                        fill
-                        style={{ objectFit: "contain" }}
-                        unoptimized
-                    />
+                    <Image src={thumbnail} alt={play.name || `Drill ${index + 1}`} fit="contain" />
                 ) : (
                     <Typography variant="body2" color="text.secondary">
                         Play {index + 1}

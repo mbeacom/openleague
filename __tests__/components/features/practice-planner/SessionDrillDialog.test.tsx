@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, screen } from "@testing-library/react";
 import type { PlayEditorProps } from "@/components/features/practice-planner/PlayEditor";
 import type { SavedPlay } from "@/types/practice-planner";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
+import { createMockPlannerStore, renderWithPlanner } from "@/__tests__/helpers/planner";
 
 const captured = vi.hoisted(() => ({ props: null as PlayEditorProps | null }));
-const actions = vi.hoisted(() => ({ saveSessionDrill: vi.fn(), copySessionDrillToLibrary: vi.fn() }));
 
 vi.mock("@/components/features/practice-planner/PlayEditor", () => ({
     PlayEditor: (props: PlayEditorProps) => {
@@ -13,9 +13,10 @@ vi.mock("@/components/features/practice-planner/PlayEditor", () => ({
         return <div>play editor</div>;
     },
 }));
-vi.mock("@/lib/actions/practice-session-drills", () => actions);
 
 import { SessionDrillDialog } from "@/components/features/practice-planner/SessionDrillDialog";
+
+const actions = createMockPlannerStore();
 
 const SESSION = "csessionxxxxxxxxxxxxxxxxx";
 const TEAM = "cteamxxxxxxxxxxxxxxxxxxxx";
@@ -28,7 +29,7 @@ const saved: SavedPlay = {
 };
 
 function renderDialog(playId: string | null, onSaved = vi.fn().mockResolvedValue({ ok: true }), onClose = vi.fn()) {
-    render(
+    renderWithPlanner(
         <SessionDrillDialog
             open
             sessionId={SESSION}
@@ -37,6 +38,7 @@ function renderDialog(playId: string | null, onSaved = vi.fn().mockResolvedValue
             onSaved={onSaved}
             onClose={onClose}
         />,
+        { store: actions },
     );
     return { onSaved, onClose };
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
+import { renderWithPlanner } from "@/__tests__/helpers/planner";
 import { SessionDrillList } from "@/components/features/practice-planner/SessionDrillList";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import type { PlayInSession } from "@/types/practice-planner";
@@ -10,7 +11,7 @@ const play: PlayInSession = {
 };
 
 function renderList(disabled: boolean) {
-    render(
+    renderWithPlanner(
         <SessionDrillList
             plays={[play]} duration={60} editingPlayId={null} disabled={disabled}
             onOpenLibrary={vi.fn()} onDelete={vi.fn()} onEdit={vi.fn()} onUpdate={vi.fn()}
