@@ -300,4 +300,75 @@ describe("RinkBoard ice area", () => {
         expect(Math.max(...points.map((pt) => pt.x))).toBeCloseTo(75, 6);
         expect(points.at(-1)!.x).toBeCloseTo(75, 6);
     });
+    describe("tapping an element is not a drag", () => {
+        it("leaves an outside element in place on a mouse tap (zero-distance move), recording nothing", () => {
+            const onUndoRedoStateChange = vi.fn();
+            const { canvas, at, onPlayDataChange, onSelectionChange } = setup({
+                playData: { ...createEmptyPlayData(), area: CUSTOM, equipment: [cone(97)] },
+                selectedTool: "select",
+                onUndoRedoStateChange,
+            });
+            fireEvent.mouseDown(canvas, at(97, 40));
+            fireEvent.mouseMove(canvas, at(97, 40));
+            fireEvent.mouseUp(canvas);
+            expect(onSelectionChange).toHaveBeenLastCalledWith("c");
+            expect(onPlayDataChange).not.toHaveBeenCalled();
+            expect(onUndoRedoStateChange).not.toHaveBeenCalled();
+        });
+
+        it("leaves an outside element in place on a touch tap, recording nothing", () => {
+            const onUndoRedoStateChange = vi.fn();
+            const { canvas, at, onPlayDataChange } = setup({
+                playData: { ...createEmptyPlayData(), area: CUSTOM, equipment: [cone(97)] },
+                selectedTool: "select",
+                onUndoRedoStateChange,
+            });
+            const p = at(97, 40);
+            fireEvent.touchStart(canvas, { touches: [p] });
+            fireEvent.touchMove(canvas, { touches: [p] });
+            fireEvent.touchEnd(canvas, { touches: [] });
+            expect(onPlayDataChange).not.toHaveBeenCalled();
+            expect(onUndoRedoStateChange).not.toHaveBeenCalled();
+        });
+
+        it("ignores jitter under the drag threshold", () => {
+            const { canvas, at, onPlayDataChange } = setup({
+                playData: { ...createEmptyPlayData(), area: CUSTOM, equipment: [cone(97)] },
+                selectedTool: "select",
+            });
+            const p = at(97, 40);
+            fireEvent.mouseDown(canvas, p);
+            fireEvent.mouseMove(canvas, { clientX: p.clientX + 2, clientY: p.clientY + 1 });
+            fireEvent.mouseUp(canvas);
+            expect(onPlayDataChange).not.toHaveBeenCalled();
+        });
+
+        it("still drags past the threshold, clamping into the area", () => {
+            const onUndoRedoStateChange = vi.fn();
+            const { canvas, at, onPlayDataChange } = setup({
+                playData: { ...createEmptyPlayData(), area: CUSTOM, equipment: [cone(97)] },
+                selectedTool: "select",
+                onUndoRedoStateChange,
+            });
+            fireEvent.mouseDown(canvas, at(97, 40));
+            fireEvent.mouseMove(canvas, at(90, 40)); // further outside: clamps to the area edge
+            fireEvent.mouseUp(canvas);
+            expect(onPlayDataChange).toHaveBeenCalledTimes(1);
+            expect(onPlayDataChange.mock.calls[0][0].equipment[0].position.x).toBe(100);
+            expect(onUndoRedoStateChange).toHaveBeenCalledTimes(1);
+        });
+
+        it("records nothing for a drag that ends where it started", () => {
+            const { canvas, at, onPlayDataChange } = setup({
+                // At the area's corner, so the return trip clamps back to exactly (120, 50)
+                playData: { ...createEmptyPlayData(), area: CUSTOM, equipment: [cone(120, 50)] },
+                selectedTool: "select",
+            });
+            fireEvent.mouseDown(canvas, at(120, 50));
+            fireEvent.mouseMove(canvas, at(112, 42));
+            fireEvent.mouseMove(canvas, at(124, 54));
+            fireEvent.mouseUp(canvas);
+            expect(onPlayDataChange).not.toHaveBeenCalled();
+        });
+    });
 });

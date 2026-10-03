@@ -52,6 +52,12 @@ describe("element-ops", () => {
         expect(moveElement(data, "e", { x: 1, y: 2 }).equipment[0].position).toEqual({ x: 1, y: 2 });
         expect(moveElement(data, "d", { x: 1, y: 2 })).toEqual(data);
     });
+
+    it("returns the same reference when nothing moves", () => {
+        const at = data.equipment[0].position;
+        expect(moveElement(data, "e", { ...at })).toBe(data);
+        expect(moveElement(data, "zzz", { x: 1, y: 2 })).toBe(data);
+    });
 });
 
 describe("placement", () => {

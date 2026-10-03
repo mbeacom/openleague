@@ -18,10 +18,12 @@ import {
   clampToRinkBounds,
   clampToRect,
   dragTarget,
+  pxToRinkFt,
+  pastDragThreshold,
 } from "@/lib/utils/canvas/interaction-utils";
 import { strokeFromV1Type, createEmptyPlayData } from "@/lib/utils/play-data";
 import { areaRect } from "@/lib/utils/ice-area";
-import { FULL_RINK } from "@/lib/utils/canvas/rink-renderer";
+import { FULL_RINK, createTransformContext } from "@/lib/utils/canvas/rink-renderer";
 import type { PlayData, PlayerIcon, DrawingElement, TextAnnotation } from "@/types/practice-planner";
 
 const emptyPlayData: PlayData = { version: 2, players: [], drawings: [], equipment: [], annotations: [] };
@@ -303,5 +305,21 @@ describe("dragTarget", () => {
 
   it("clamps an element dragged far past the edge", () => {
     expect(dragTarget({ x: 160, y: 90 }, { x: -3, y: 0 }, zoneLeft)).toEqual({ x: 75, y: 85 });
+  });
+});
+
+describe("drag threshold", () => {
+  it("converts screen pixels to rink feet through the transform and zoom", () => {
+    const t = createTransformContext(800, 400, 20);
+    const ftAt1 = pxToRinkFt(4, t, 1);
+    expect(ftAt1).toBeCloseTo(4 / Math.min(t.scaleX, t.scaleY), 9);
+    expect(pxToRinkFt(4, t, 2)).toBeCloseTo(ftAt1 / 2, 9);
+  });
+
+  it("is not passed by a zero or sub-threshold move, and is passed at the threshold", () => {
+    const grab = { x: 97, y: 40 };
+    expect(pastDragThreshold(grab, grab, 0.5)).toBe(false);
+    expect(pastDragThreshold(grab, { x: 97.3, y: 40.3 }, 0.5)).toBe(false);
+    expect(pastDragThreshold(grab, { x: 97.5, y: 40 }, 0.5)).toBe(true);
   });
 });

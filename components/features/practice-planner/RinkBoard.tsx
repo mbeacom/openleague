@@ -49,6 +49,9 @@ import {
     getMousePosition,
     clampToRect,
     dragTarget,
+    DRAG_THRESHOLD_PX,
+    pastDragThreshold,
+    pxToRinkFt,
 } from "@/lib/utils/canvas/interaction-utils";
 
 /**
@@ -172,6 +175,8 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
     const isDraggingRef = useRef(isDragging);
     const selectedElementIdRef = useRef(selectedElementId);
     const dragOffsetRef = useRef(dragOffset);
+    // Where the current press grabbed an element (rink feet); the drag starts past DRAG_THRESHOLD_PX from it
+    const grabPointRef = useRef<Position | null>(null);
     const scaleRef = useRef(scale);
     const panOffsetRef = useRef(panOffset);
 
@@ -464,7 +469,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
 
     /** Hit radius in feet that stays MIN_HIT_RADIUS_PX on screen at any zoom */
     const minHitRadiusFt = useCallback(
-        () => (transform ? MIN_HIT_RADIUS_PX / (Math.min(transform.scaleX, transform.scaleY) * scaleRef.current) : 0),
+        () => (transform ? pxToRinkFt(MIN_HIT_RADIUS_PX, transform, scaleRef.current) : 0),
         [transform]
     );
 
@@ -518,10 +523,12 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
                     setDragOffset(null);
                     setIsDrawing(false);
                     setCurrentDrawingPoints([]);
+                    grabPointRef.current = null;
                     const hitResult = hitTest(hitPos, playData, minHitRadiusFt());
                     if (hitResult.hit && hitResult.elementId) {
                         setSelectedElementId(hitResult.elementId);
                         setIsDragging(true);
+                        grabPointRef.current = hitPos;
 
                         // Drag offset keeps the grab point under the pointer.
                         // Strokes have no position and are not draggable.
@@ -641,10 +648,18 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
 
             // Drag preview: pointer clamped only to the rink, minus the grab
             // offset, then clamped to the area, so the element can reach the
-            // area's edge exactly. Committed on mouseUp.
+            // area's edge exactly. Committed on mouseUp. The preview starts
+            // only once the pointer is DRAG_THRESHOLD_PX from the grab point,
+            // so a tap (or a touch tap's zero-distance touchmove) never clamps
+            // an element outside the area into it; once started, it follows
+            // the pointer even back inside the threshold.
             // Requirements: 5.4
-            if (isDraggingRef.current && selectedElementIdRef.current && dragOffsetRef.current) {
-                setDragPreviewPosition(dragTarget(clampToRect(rinkPos, FULL_RINK), dragOffsetRef.current, area));
+            const grabOffset = dragOffsetRef.current;
+            if (isDraggingRef.current && selectedElementIdRef.current && grabOffset) {
+                const pointer = clampToRect(rinkPos, FULL_RINK);
+                const grab = grabPointRef.current;
+                const started = !grab || pastDragThreshold(grab, pointer, pxToRinkFt(DRAG_THRESHOLD_PX, transform, scaleRef.current));
+                setDragPreviewPosition((prev) => (prev === null && !started ? null : dragTarget(pointer, grabOffset, area)));
             }
         },
         [mode, transform, isDrawing, selectedTool, areaDrag, getTransformedRinkPosition]
@@ -683,9 +698,12 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
                 }
             }
 
-            // Commit drag changes to playData (single history entry)
+            // Commit drag changes to playData (single history entry); a drag
+            // that ends where the element already is records nothing
             if (isDragging && selectedElementId && dragPreviewPosition) {
-                updatePlayData(moveElement(playDataRef.current, selectedElementId, dragPreviewPosition));
+                const current = playDataRef.current;
+                const next = moveElement(current, selectedElementId, dragPreviewPosition);
+                if (next !== current) updatePlayData(next);
             }
 
             // Reset drawing state
@@ -696,6 +714,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
             setIsDragging(false);
             setDragOffset(null);
             setDragPreviewPosition(null);
+            grabPointRef.current = null;
         },
         [
             mode,

@@ -87,6 +87,12 @@ export function removeElement(data: PlayData, id: string): PlayData {
 }
 
 export function moveElement(data: PlayData, id: string, position: Position): PlayData {
+    // Nothing to move (unknown id, a stroke, or already there): same reference,
+    // so callers can skip recording a no-op history entry.
+    const current = findElement(data, id);
+    if (!current || current.kind === "drawing") return data;
+    const at = current.element.position;
+    if (at.x === position.x && at.y === position.y) return data;
     const move = <T extends { id: string; position: Position }>(list: T[]) =>
         list.map((e) => (e.id === id ? { ...e, position: { ...position } } : e));
     return { ...data, players: move(data.players), equipment: move(data.equipment), annotations: move(data.annotations) };

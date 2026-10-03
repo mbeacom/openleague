@@ -471,6 +471,27 @@ export function dragTarget(pointer: Position, grabOffset: Position, rect: RinkRe
 }
 
 /**
+ * How far, in screen pixels, the pointer must travel from the grab point
+ * before a press on an element becomes a drag. Measured on screen rather than
+ * in rink feet so it feels the same at every viewport and pinch zoom: a fixed
+ * 1 ft (the area tool's click test) is ~12 px on a zoomed-in drill area but
+ * ~4 px on full ice. Below it, a press is a tap: it selects and never moves the
+ * element, so a tap on an element outside the drill's area cannot clamp it in
+ * (touch devices fire a touchmove on nearly every tap).
+ */
+export const DRAG_THRESHOLD_PX = 4;
+
+/** Screen pixels as rink feet, through the viewport transform and the board's zoom. */
+export function pxToRinkFt(px: number, transform: Pick<TransformContext, "scaleX" | "scaleY">, zoom: number): number {
+    return px / (Math.min(transform.scaleX, transform.scaleY) * zoom);
+}
+
+/** True once `pointer` is at least `thresholdFt` from `grab` (rink feet). */
+export function pastDragThreshold(grab: Position, pointer: Position, thresholdFt: number): boolean {
+    return Math.hypot(pointer.x - grab.x, pointer.y - grab.y) >= thresholdFt;
+}
+
+/**
  * Creates a debounced function that delays execution
  * Useful for auto-save functionality
  *
