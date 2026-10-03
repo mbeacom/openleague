@@ -114,7 +114,7 @@ export function SessionDrillCard({
                 {thumbnail ? (
                     <Image
                         src={thumbnail}
-                        alt={`Play ${index + 1}`}
+                        alt={play.name || `Drill ${index + 1}`}
                         fill
                         style={{ objectFit: "contain" }}
                         unoptimized
@@ -140,7 +140,7 @@ export function SessionDrillCard({
             <CardContent sx={{ flexGrow: 1, py: 1 }}>
                 <Stack spacing={1}>
                     <Typography variant="h6" component="h3">
-                        Play {index + 1}
+                        {play.name || `Drill ${index + 1}`}
                     </Typography>
 
                     {/* Duration - Editable */}
@@ -180,8 +180,8 @@ export function SessionDrillCard({
                             rows={3}
                             size="small"
                             fullWidth
-                            inputProps={{ maxLength: 500 }}
-                            helperText={`${editInstructions.length}/500 characters`}
+                            inputProps={{ maxLength: 2000 }}
+                            helperText={`${editInstructions.length}/2000 characters`}
                         />
                     ) : (
                         play.instructions && (

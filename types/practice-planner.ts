@@ -108,13 +108,17 @@ export type DrawingTool = "select" | "player" | "stroke" | "equipment" | "text" 
  * Requirements: 2.2, 2.4
  */
 export interface PlayInSession {
+    /** Stable client-side key for this card; sent to the server as clientKey. */
     id: string;
     playId: string;
+    /** Drill name (the session's own copy once saved). */
+    name: string;
+    description?: string;
     sequence: number;
     duration: number; // minutes
     instructions: string;
     playData: PlayData;
-    thumbnail?: string; // base64 PNG thumbnail from library play
+    thumbnail?: string; // base64 PNG thumbnail
 }
 
 /**

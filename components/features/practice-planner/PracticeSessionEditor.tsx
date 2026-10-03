@@ -37,6 +37,7 @@ import {
     VALIDATION_CONSTRAINTS,
 } from "@/types/practice-planner";
 import type { BookingConflict } from "@/types/segments";
+import { applySavedPlayIds, type SavedDrillId } from "@/lib/utils/session-drill-ids";
 import { PlayLibrary } from "./PlayLibrary";
 import { SessionDrillList } from "./SessionDrillList";
 import { BookingConflictAlert, VenueBookingFields } from "./VenueBookingFields";
@@ -77,7 +78,7 @@ export interface PracticeSessionSubmitData
  * conflicts (warn + "Book anyway", FR-019/US5) from ordinary errors.
  */
 export type PracticeSessionSaveResult =
-    | { success: true }
+    | { success: true; plays?: SavedDrillId[] }
     | { success: false; error: string; conflicts?: BookingConflict[] };
 
 /**
@@ -147,7 +148,15 @@ export function PracticeSessionEditor({
     const successTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const handleSaveRef = useRef<((overrideConflicts?: boolean, notify?: boolean) => Promise<void>) | undefined>(undefined);
 
+    // Single-flight saves: a save requested while one is running is queued
+    // and runs once, after the running save's state has rendered.
+    const saveInFlightRef = useRef(false);
+    const saveQueuedRef = useRef(false);
+    const editVersionRef = useRef(0);
+    const [queuedSaveTick, setQueuedSaveTick] = useState(0);
+
     const markDirty = useCallback(() => {
+        editVersionRef.current += 1;
         setHasUnsavedChanges(true);
         setSaveSuccess(false);
     }, []);
@@ -273,6 +282,11 @@ export function PracticeSessionEditor({
      * despite venue booking conflicts.
      */
     const handleSave = useCallback(async (overrideConflicts: boolean = false, notify: boolean = false) => {
+        if (saveInFlightRef.current) {
+            saveQueuedRef.current = true;
+            return;
+        }
+
         // Validate form (includes date validation)
         if (!validateForm(overrideConflicts)) {
             setSaveError("Please fix the validation errors");
@@ -293,6 +307,9 @@ export function PracticeSessionEditor({
             return;
         }
 
+        saveInFlightRef.current = true;
+        const startedVersion = editVersionRef.current;
+        const sentPlayIds = new Map(plays.map((play) => [play.id, play.playId]));
         setIsSaving(true);
         setSaveError(null);
         setSaveSuccess(false);
@@ -326,7 +343,13 @@ export function PracticeSessionEditor({
                 return;
             }
 
-            setHasUnsavedChanges(false);
+            setPlays((current) => applySavedPlayIds(current, sentPlayIds, result.plays));
+            if (editVersionRef.current === startedVersion) {
+                setHasUnsavedChanges(false);
+            } else {
+                // Edited while saving: save again once this one settles.
+                saveQueuedRef.current = true;
+            }
             setSaveSuccess(true);
 
             if (successTimeoutRef.current) {
@@ -342,6 +365,11 @@ export function PracticeSessionEditor({
             );
         } finally {
             setIsSaving(false);
+            saveInFlightRef.current = false;
+            if (saveQueuedRef.current) {
+                saveQueuedRef.current = false;
+                setQueuedSaveTick((tick) => tick + 1);
+            }
         }
     }, [title, date, duration, plays, isShared, sessionId, booking, onSave, validateForm]);
 
@@ -349,6 +377,11 @@ export function PracticeSessionEditor({
     useEffect(() => {
         handleSaveRef.current = handleSave;
     }, [handleSave]);
+
+    // Run a queued save after the previous save's state updates have rendered.
+    useEffect(() => {
+        if (queuedSaveTick > 0) void handleSaveRef.current?.();
+    }, [queuedSaveTick]);
 
     /**
      * Auto-save with debouncing
@@ -491,6 +524,8 @@ export function PracticeSessionEditor({
         const playInstance: PlayInSession = {
             id: `play-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
             playId: savedPlay.id,
+            name: savedPlay.name,
+            description: savedPlay.description || "",
             sequence: 0, // Assigned below from the current list (max + 1) so gaps cannot collide
             duration: 10, // Default duration
             instructions: savedPlay.description || "",

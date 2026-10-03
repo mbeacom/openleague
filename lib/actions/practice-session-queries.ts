@@ -214,6 +214,8 @@ export async function getPracticeSessionForEdit(sessionId: string): Promise<{
     plays: Array<{
       id: string;
       playId: string;
+      name: string;
+      description: string;
       sequence: number;
       duration: number;
       instructions: string;
@@ -270,6 +272,8 @@ export async function getPracticeSessionForEdit(sessionId: string): Promise<{
       plays: session.plays.map((sp, index) => ({
         id: sp.id,
         playId: sp.play.id,
+        name: sp.play.name,
+        description: sp.play.description ?? "",
         sequence: index,
         duration: sp.duration ?? 0,
         instructions: sp.instructions || "",

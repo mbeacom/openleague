@@ -43,6 +43,7 @@ function drill(id: string, sequence: number, duration = 10): PlayInSession {
     return {
         id,
         playId: `clib${id}xxxxxxxxxxxxxxxxxxxx`,
+        name: `Drill ${id}`,
         sequence,
         duration,
         instructions: `Run ${id}`,
@@ -85,8 +86,8 @@ describe("PracticeSessionEditor (characterization)", () => {
 
     it("renders a card per drill and saves reordered sequences", async () => {
         const { onSave } = renderEditor({}, [drill("a", 0), drill("b", 1)]);
-        expect(screen.getByRole("heading", { name: "Play 1" })).toBeInTheDocument();
-        expect(screen.getByRole("heading", { name: "Play 2" })).toBeInTheDocument();
+        expect(screen.getByRole("heading", { name: "Drill a" })).toBeInTheDocument();
+        expect(screen.getByRole("heading", { name: "Drill b" })).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole("button", { name: "Move play 1 down" }));
         await clickSaveSession();

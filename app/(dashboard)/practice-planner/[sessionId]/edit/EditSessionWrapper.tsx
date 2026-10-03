@@ -67,7 +67,7 @@ export function EditSessionWrapper({
         };
       }
 
-      return { success: true };
+      return { success: true, plays: result.data.plays };
     },
     [sessionId, teamId]
   );

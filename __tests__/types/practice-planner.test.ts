@@ -80,6 +80,7 @@ describe("Hockey Practice Planner Types", () => {
                 {
                     id: "play-1",
                     playId: "lib-1",
+                    name: "Drill",
                     sequence: 1,
                     duration: 10,
                     instructions: "First drill",
@@ -88,6 +89,7 @@ describe("Hockey Practice Planner Types", () => {
                 {
                     id: "play-2",
                     playId: "lib-2",
+                    name: "Drill",
                     sequence: 2,
                     duration: 15,
                     instructions: "Second drill",
@@ -103,6 +105,7 @@ describe("Hockey Practice Planner Types", () => {
                 {
                     id: "play-1",
                     playId: "lib-1",
+                    name: "Drill",
                     sequence: 1,
                     duration: 20,
                     instructions: "First drill",
@@ -111,6 +114,7 @@ describe("Hockey Practice Planner Types", () => {
                 {
                     id: "play-2",
                     playId: "lib-2",
+                    name: "Drill",
                     sequence: 2,
                     duration: 20,
                     instructions: "Second drill",
@@ -131,6 +135,7 @@ describe("Hockey Practice Planner Types", () => {
                 {
                     id: "play-1",
                     playId: "lib-1",
+                    name: "Drill",
                     sequence: 1,
                     duration: 30,
                     instructions: "Full session drill",
@@ -284,6 +289,7 @@ describe("Hockey Practice Planner Types", () => {
                 {
                     id: "p1",
                     playId: "lib-1",
+                    name: "Drill",
                     sequence: 1,
                     duration: 10,
                     instructions: "Warm up",
@@ -292,6 +298,7 @@ describe("Hockey Practice Planner Types", () => {
                 {
                     id: "p2",
                     playId: "lib-2",
+                    name: "Drill",
                     sequence: 2,
                     duration: 15,
                     instructions: "Drill",
@@ -300,6 +307,7 @@ describe("Hockey Practice Planner Types", () => {
                 {
                     id: "p3",
                     playId: "lib-3",
+                    name: "Drill",
                     sequence: 3,
                     duration: 5,
                     instructions: "Cool down",
