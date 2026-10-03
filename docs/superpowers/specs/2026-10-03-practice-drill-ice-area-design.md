@@ -1,7 +1,7 @@
 # Practice Drills: Ice Area — Design
 
 **Date:** 2026-10-03
-**Status:** Draft for review
+**Status:** Implemented (2a)
 **Phase:** 2a of the practice-planner iteration. Build order: hotfix ✓ → 3a (PR #373) → **2a** → 2b → 3b.
 **Depends on:**
 - Phase 1, board notation (PlayData v2). Merged.
@@ -84,11 +84,14 @@ export interface PlayData {
 ```
 
 - **No version bump.** The field is optional, and absent means full ice. `upgradePlayData` stays total and idempotent.
+- **Constants.** `MIN_AREA_FT` and `AREA_SNAP_FT` live in `types/practice-planner.ts`, so the schema and `rectFromDrag` share them without `play-data.ts` importing `canvas/*`. `FULL_RINK` and `BLUE_LINES` are exported from `rink-renderer.ts`, because `createTransformContext`'s default needs `FULL_RINK` and `ice-area.ts` already imports the renderer.
 - **Schema** (`lib/utils/play-data.ts`, `playDataSchema`): `area` is optional. A custom rectangle must:
   - lie entirely inside the rink;
   - be at least 20×20 ft (`MIN_AREA_FT = 20`);
   - have finite numbers.
-- **Lenient read.** In `upgradePlayData`, an `area` that fails validation is dropped and logged with `console.error` before the strict parse, on both the v1 and v2 paths. The drill renders as full ice. This is the same pattern already used to drop blank annotations.
+- **Lenient read.** In `upgradePlayData`, an `area` that fails validation is dropped and logged with `console.error` before the strict parse, on both the v1 and v2 paths. The drill renders as full ice. This is the same pattern already used to drop blank annotations. Zod keeps an optional key whose value is `undefined`, so dropping means deleting the key on both paths. The v1 path parses with a schema that strips unknown keys, so a valid area is carried across explicitly and an invalid one is logged and dropped.
+- **Full ice removes the key.** Choosing Full ice calls `setArea(undefined)`, so a reset drill is byte-identical to a pre-2a drill. `withArea` returns the same object for an unchanged area, so re-picking the current area records no undo step.
+- **Helpers.** `ice-area.ts` also exports `editViewport`, `isFullIce`, `sameArea`, `withArea`, `rectContains`, `countElementsOutside` and `iceAreaLabel`.
 - **Resolver.** `lib/utils/ice-area.ts` (new, pure) exports `areaRect(area?: IceArea): RinkRect`. `y` is always 0–85. The x-ranges are:
 
   | Area | x-range |
@@ -110,31 +113,45 @@ export interface PlayData {
   - `rinkToCanvas` and `canvasToRink` are unchanged; they already read the transform's scale and offsets.
   - `rinkCacheKey` already keys on scale and offsets, so different viewports cache separately. Add a regression test.
   - Shapes outside the viewport are clipped by the canvas.
+  - `rinkToScreen` and `screenToRink` map between rink feet and screen pixels under the viewport, zoom and pan. The board's draw sequence is the pure `drawBoardScene`, shared with thumbnails.
+  - A new viewport resets pinch-zoom and pan to 1 and (0, 0), since a zoom made for the full rink would misframe an end zone.
 - **`drawAreaMask(ctx, rect, transform)`** (new, in `drawing-utils.ts`):
   - shades the rink outside the rectangle with a semi-transparent ink overlay;
   - outlines the rectangle in Action Blue, dashed.
   - It draws nothing for full ice.
+  - It is drawn after the elements, so elements outside the area are dimmed with the ice. It is drawn in edit mode too.
+  - The outline's line width and dash are divided by zoom, so they look constant on screen. Thumbnails render at zoom 1.
 - **Edit board** (`RinkBoard`, edit mode):
   - When the area is not full ice, the transform viewport is the area plus a 5 ft margin, clamped to the rink. The mask is drawn.
   - Pinch-zoom and pan still apply on top.
+  - Hit tests (select, eraser) use the pointer clamped to the whole rink, so elements outside a narrowed area stay selectable, erasable and deletable by key. Placement and stroke points clamp to the area. A drag lands at `dragTarget(pointer, grabOffset, rect)`: the pointer minus the grab offset, then clamped, so an element grabbed off-center reaches the area edge exactly.
+  - On desktop, an element beyond the 5 ft margin is reachable only by widening the area (zoom-out exists only as a two-finger pinch). The outside-elements alert tells the coach such elements exist.
   - Placement and drag clamp to the area through a new `clampToRect(position, rect)` in `interaction-utils.ts`, which generalizes `clampToRinkBounds` (the latter becomes `clampToRect(p, FULL_RINK)`).
   - The touch hit radius (22 px / pxPerFt) uses the zoomed transform, so it automatically shrinks in feet as the board zooms in.
-- **View board, thumbnails, legend swatch:** the whole rink plus the mask. Thumbnail card sizes therefore stay consistent. Stored thumbnails regenerate on the next save, as in earlier phases.
-- **Legend.** `PlayLegend` shows an area chip (an MUI `Chip`, label from `ICE_AREA_LABELS`) above the symbol list when the area is not full ice. If the drill has no symbols but has an area, the legend renders just the chip.
+- **View board and thumbnails:** the whole rink plus the mask. There is no legend rink swatch, because legend swatches are 40×20 symbol glyphs with no rink. Thumbnail card sizes therefore stay consistent. Stored thumbnails regenerate on the next save, as in earlier phases.
+- **Legend.** `PlayLegend` shows an area chip (an MUI `Chip`, label from `ICE_AREA_LABELS`) above the collapsible accordion, so it shows while the legend is collapsed and is not counted in `Legend (N)`. It shows when the area is not full ice. If the drill has no symbols but has an area, the legend renders just the chip.
 
 ## Components
 
 - **`PlayEditor`.** Add an "Ice area" select next to the name and description fields, listing the six presets plus "Custom area…".
   - Choosing a preset sets `playData.area` through the board history, so it can be undone.
   - Choosing Custom enables an **area tool** on the board. Dragging draws a rectangle, snapped to 5 ft with a 20 ft minimum, which becomes `{ kind: "custom", rect }`. Also undoable.
-  - If any element lies outside the area, an inline MUI `Alert severity="info"` reads: "N elements are outside the ice area."
+  - While the area tool is on, the board shows the whole rink and clamps the pointer to the rink, so an already-narrowed drill can still be given a larger or different area. A click that moves less than 1 ft does nothing, and the preview appears only once the drag is not a click (`areaMaskRect`). A second touch during an area drag cancels it. `RinkBoard` has an `onAreaDrawn` callback so `PlayEditor` turns the tool off after one rectangle. The hint reads "Drag on the rink to draw the ice area." and has a `Cancel` action; its button reads "Stop drawing area". MUI `Select` fires no `onChange` for the current value, so a drill with a custom area also gets a `Redraw custom area` button.
+  - If any element lies outside the area, an inline MUI `Alert severity="info"` reads "N elements are outside the ice area." (singular: "1 element is outside the ice area."). Players, equipment and annotations are outside when their position is outside the rectangle (edges count as inside); drawings are outside when any point is.
 - **`RinkBoard`.**
   - Reads `playData.area` and applies the viewport, mask and clamp described above.
   - New prop `areaTool?: boolean` turns on rectangle drawing for the area.
-  - Rectangle math goes in a pure helper, `rectFromDrag(start, end, snapFt=5, minFt=20): RinkRect`, in `element-ops.ts`. The component only wires it in; it is already over 900 lines.
+  - Rectangle math goes in a pure helper, `rectFromDrag(start, end, snapFt=5, minFt=20): RinkRect`, in `element-ops.ts`. It snaps both edges to 5 ft and clamps them to the rink. If a side is under 20 ft it extends from the low edge, shifting back inside the rink on overflow, so the result is always a valid custom rectangle. The component only wires it in; it is already over 900 lines.
+  - Clear keeps the area: the area is set by its own control, and Clear erases the drawing, not the drill's setup. Undo restores everything.
+  - `DrawingToolbar` is unchanged; the area tool is a board mode, not a `DrawingTool`.
   - The handle gains `setArea(area: IceArea | undefined)`, which goes through `updatePlayData` so it is undoable.
 - **`SessionDrillDialog` (3a)** hosts `PlayEditor`, so the ice area works inside sessions with no extra code.
-- **Starter plays.** Give obvious drills an explicit area: offensive set plays → `zone-right`, breakouts → `zone-left`. Leave full-ice drills unset. A test validates every starter play.
+- **Starter plays.** Areas follow each drill's data:
+  - Breakout (5-Man) → `half-left` (its routes reach x≈95, so `zone-left` would flag elements).
+  - Penalty-Kill Box and D-Zone Coverage → `zone-left`.
+  - Power-Play Umbrella, Low Cycle and Point Shot with Screen → `zone-right`.
+  - 1-2-2 Forecheck, Neutral-Zone Regroup and 3-Man Weave stay unset (full ice).
+  - A test pins this list and that no starter has an element outside its own area.
 
 ## Error handling
 
@@ -170,3 +187,4 @@ export interface PlayData {
 - **Changing a library drill's area** detaches the sessions that use it, as any library edit does (3a). Their copies keep the old area.
 - **Board complexity:** all new logic lives in `lib/utils/canvas/*` and `ice-area.ts`. The only changes to RinkBoard are wiring.
 - **Phase 2b** reads `areaRect(playData.area)` for station layout and overlap checks. This spec's resolver is that contract.
+- **Open product choices:** four choices await product-owner confirmation: Breakout uses half-left; Clear keeps the area; the mask dims outside elements; and on desktop, elements beyond the 5 ft margin are reachable only by widening the area.
