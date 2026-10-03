@@ -61,9 +61,29 @@ describe("checkPlannerBuild", () => {
 });
 
 describe("unguardedProcessEnvCount", () => {
-    it("counts only reads without a typeof process guard just before them", () => {
+    it("counts only reads without a typeof process guard in the same expression", () => {
         expect(unguardedProcessEnvCount("process.env.A; x; process.env.B")).toBe(2);
         expect(unguardedProcessEnvCount('typeof process !== "undefined" && process.env.A')).toBe(0);
+        expect(unguardedProcessEnvCount('const a=typeof process<"u"&&(e=process.env.X),b=1')).toBe(0);
+    });
+
+    it("does not let a guard cover a later statement", () => {
+        expect(unguardedProcessEnvCount('typeof process !== "undefined" && process.env.A; process.env.B')).toBe(1);
+        expect(unguardedProcessEnvCount('const a=typeof process<"u"&&process.env.A,b=process.env.B')).toBe(1);
+        expect(unguardedProcessEnvCount('if(typeof process<"u"){x()}process.env.B')).toBe(1);
+    });
+
+    it("does not treat process && as a guard (an undeclared process throws)", () => {
+        expect(unguardedProcessEnvCount("process && process.env.A")).toBe(1);
+    });
+
+    it.each(["process?.env.A", 'process["env"].A', "process['env'].A", 'process?.["env"].A'])("counts the bare read %s", (read) => {
+        expect(unguardedProcessEnvCount(read)).toBe(1);
+        expect(unguardedProcessEnvCount(`typeof process<"u"&&${read}`)).toBe(0);
+    });
+
+    it("allows an optional read off another object (property access can't throw a ReferenceError)", () => {
         expect(unguardedProcessEnvCount("globalThis.process?.env.A")).toBe(0);
+        expect(unguardedProcessEnvCount("globalThis.process.env.A")).toBe(1);
     });
 });

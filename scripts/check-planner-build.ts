@@ -24,15 +24,37 @@ export const FORBIDDEN_IN_BUNDLE: ReadonlyArray<{ pattern: string; reason: strin
 
 export const REQUIRED_IN_BUNDLE = ["openleague.practice-plan"];
 
-const GUARD = /typeof process|process\s*&&|process\s*!==?\s*["']?undefined/;
+/** `process.env`, `process?.env`, `process["env"]` and `process?.["env"]`, capturing what precedes `process`. */
+const PROCESS_ENV = /(\.\s*)?\bprocess\s*(\?\.\s*env\b|\.\s*env\b|(\?\.)?\s*\[\s*["']env["']\s*\])/g;
+const TYPEOF_PROCESS = /\btypeof\s+process\b/;
 
-/** `process.env` reads without a `typeof process` style guard in the 60 characters before them. */
+/**
+ * The text from the start of the statement-level expression containing `index`:
+ * scanning back, it stops at `;`, `{`, `}` or `,` outside any parentheses or
+ * brackets it has to skip over. Strings aren't parsed; a heuristic for bundles.
+ */
+function enclosingExpression(text: string, index: number): string {
+    let depth = 0;
+    for (let i = index - 1; i >= 0; i--) {
+        const char = text[i];
+        if (char === ")" || char === "]") depth++;
+        else if (char === "(" || char === "[") depth = Math.max(0, depth - 1);
+        else if (depth === 0 && (char === ";" || char === "{" || char === "}" || char === ",")) return text.slice(i + 1, index);
+    }
+    return text.slice(0, index);
+}
+
+/**
+ * Reads of `process.env` (Vite has no `process`) not governed by a `typeof process`
+ * check in the same expression. `process &&` is no guard: an undeclared `process`
+ * throws. An optional read off another object (`globalThis.process?.env`) can't throw.
+ */
 export function unguardedProcessEnvCount(text: string): number {
     let count = 0;
-    let index = text.indexOf("process.env");
-    while (index !== -1) {
-        if (!GUARD.test(text.slice(Math.max(0, index - 60), index))) count++;
-        index = text.indexOf("process.env", index + 1);
+    for (const match of text.matchAll(PROCESS_ENV)) {
+        const [, member, access, optionalBracket] = match;
+        if (member && (access.startsWith("?.") || optionalBracket)) continue;
+        if (!TYPEOF_PROCESS.test(enclosingExpression(text, match.index))) count++;
     }
     return count;
 }
