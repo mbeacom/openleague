@@ -5,7 +5,7 @@ import { createEmptyPlayData } from "@/lib/utils/play-data";
 import type { PlayInSession } from "@/types/practice-planner";
 
 const play: PlayInSession = {
-    id: "k1", playId: "cplayxxxxxxxxxxxxxxxxxxxx", name: "Breakout", sequence: 0, duration: 10,
+    id: "k1", playId: "cplayxxxxxxxxxxxxxxxxxxxx", name: "Breakout", sequence: 0, duration: 10, runsWithPrevious: false,
     instructions: "", playData: createEmptyPlayData(),
 };
 
@@ -14,7 +14,7 @@ function renderList(disabled: boolean) {
         <SessionDrillList
             plays={[play]} duration={60} editingPlayId={null} disabled={disabled}
             onOpenLibrary={vi.fn()} onDelete={vi.fn()} onEdit={vi.fn()} onUpdate={vi.fn()}
-            onCancelEdit={vi.fn()} onMoveUp={vi.fn()} onMoveDown={vi.fn()}
+            onCancelEdit={vi.fn()} onMoveUp={vi.fn()} onMoveDown={vi.fn()} onToggleStation={vi.fn()}
             canEditDiagram onEditDiagram={vi.fn()} onNewDrill={vi.fn()}
         />,
     );

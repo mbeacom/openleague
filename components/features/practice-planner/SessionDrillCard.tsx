@@ -1,11 +1,12 @@
 "use client";
 
 /**
- * One drill in a practice session: thumbnail, duration, instructions, and the
- * reorder / edit / delete controls. Extracted from PracticeSessionEditor.
+ * One drill in a practice session: thumbnail, duration, instructions, the
+ * station switch (2b), and the reorder / edit / delete controls. Extracted
+ * from PracticeSessionEditor.
  */
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import {
     Box,
     Button,
@@ -14,8 +15,11 @@ import {
     CardContent,
     CardMedia,
     Chip,
+    FormControlLabel,
+    FormHelperText,
     IconButton,
     Stack,
+    Switch,
     TextField,
     Tooltip,
     Typography,
@@ -29,14 +33,32 @@ import {
 } from "@mui/icons-material";
 import Image from "next/image";
 import { VALIDATION_CONSTRAINTS, type PlayInSession } from "@/types/practice-planner";
+import { MAX_STATIONS_PER_GROUP } from "@/lib/utils/session-timeline";
+
+export const STATION_SWITCH_LABEL = "Run as a station with the previous drill";
+export const STATION_CAP_TOOLTIP = `A station block holds at most ${MAX_STATIONS_PER_GROUP} drills`;
 
 /**
  * Props for the SessionDrillCard component
  */
 export interface SessionDrillCardProps {
     play: PlayInSession;
+    /** Position in the whole session (not within a station block). */
     index: number;
-    totalPlays: number;
+    /** Whether Move up / Move down would change the order (station-aware, 2b). */
+    canMoveUp: boolean;
+    canMoveDown: boolean;
+    /** The station switch; null for the first drill, which always runs on its own. */
+    station: { checked: boolean; canToggle: boolean } | null;
+    onToggleStation: (index: number) => void;
+    /**
+     * The id of the station block header this drill belongs to, when it is one
+     * of several stations (2b). The card is styled as part of the block and
+     * described by the header; the list stays flat so cards never remount.
+     */
+    blockHeaderId?: string;
+    /** Advisory: the drill is larger than the booked ice segment (2b). Never blocks a save. */
+    fitWarning?: string | null;
     isEditing: boolean;
     onDelete: (playId: string) => void;
     onEdit: (playId: string) => void;
@@ -62,7 +84,12 @@ export interface SessionDrillCardProps {
 export function SessionDrillCard({
     play,
     index,
-    totalPlays,
+    canMoveUp,
+    canMoveDown,
+    station,
+    onToggleStation,
+    blockHeaderId,
+    fitWarning = null,
     isEditing,
     onDelete,
     onEdit,
@@ -78,6 +105,10 @@ export function SessionDrillCard({
     // Local state for editing
     const [editDuration, setEditDuration] = useState(play.duration);
     const [editInstructions, setEditInstructions] = useState(play.instructions);
+
+    const titleId = useId();
+    const capReasonId = useId();
+    const capped = station !== null && !station.canToggle;
 
     // Get thumbnail from play instance (copied from library play when added)
     const thumbnail = play.thumbnail || "";
@@ -104,10 +135,17 @@ export function SessionDrillCard({
 
     return (
         <Card
+            aria-describedby={blockHeaderId}
             sx={{
                 display: "flex",
                 flexDirection: { xs: "column", sm: "row" },
                 gap: 2,
+                ...(blockHeaderId && {
+                    borderLeft: 4,
+                    borderColor: "primary.main",
+                    bgcolor: "action.hover",
+                    ml: 1,
+                }),
             }}
         >
             {/* Thumbnail */}
@@ -152,9 +190,19 @@ export function SessionDrillCard({
             {/* Content */}
             <CardContent sx={{ flexGrow: 1, py: 1 }}>
                 <Stack spacing={1}>
-                    <Typography variant="h6" component="h3">
+                    <Typography id={titleId} variant="h6" component="h3">
                         {play.name || `Drill ${index + 1}`}
                     </Typography>
+
+                    {fitWarning && (
+                        <Chip
+                            label={fitWarning}
+                            color="warning"
+                            size="small"
+                            variant="outlined"
+                            sx={{ alignSelf: "flex-start" }}
+                        />
+                    )}
 
                     {/* Duration - Editable */}
                     {/* Requirements: 2.4 - Duration input for each play */}
@@ -236,6 +284,35 @@ export function SessionDrillCard({
                         </Tooltip>
                     )}
 
+                    {/* Station grouping (2b): runs at the same time as the drill before it */}
+                    {/* The switch is described by the drill's name (every switch shares one label) and, */}
+                    {/* at the block cap, by the visible reason it is disabled. */}
+                    {!isEditing && station && (
+                        <Box>
+                            <FormControlLabel
+                                control={
+                                    <Switch
+                                        checked={station.checked}
+                                        onChange={() => onToggleStation(index)}
+                                        slotProps={{
+                                            input: {
+                                                "aria-describedby": capped ? `${titleId} ${capReasonId}` : titleId,
+                                            },
+                                        }}
+                                    />
+                                }
+                                label={STATION_SWITCH_LABEL}
+                                disabled={locked || capped}
+                                sx={{ minHeight: 44, ml: 0 }}
+                            />
+                            {capped && (
+                                <FormHelperText id={capReasonId} sx={{ mt: 0 }}>
+                                    {STATION_CAP_TOOLTIP}
+                                </FormHelperText>
+                            )}
+                        </Box>
+                    )}
+
                     {/* Edit Actions */}
                     {isEditing && (
                         <Stack direction="row" spacing={1} justifyContent="flex-end">
@@ -258,11 +335,11 @@ export function SessionDrillCard({
             {/* Actions */}
             {!isEditing && (
                 <CardActions sx={{ flexDirection: "column", justifyContent: "center", p: 1, gap: 0.5 }}>
-                    {/* Requirements: 2.5 - Reordering controls */}
+                    {/* Requirements: 2.5 - Reordering controls (station-aware, 2b) */}
                     <IconButton
                         size="small"
                         onClick={() => onMoveUp(index)}
-                        disabled={locked || index === 0}
+                        disabled={locked || !canMoveUp}
                         aria-label={`Move play ${index + 1} up`}
                     >
                         <ArrowUpwardIcon />
@@ -270,7 +347,7 @@ export function SessionDrillCard({
                     <IconButton
                         size="small"
                         onClick={() => onMoveDown(index)}
-                        disabled={locked || index === totalPlays - 1}
+                        disabled={locked || !canMoveDown}
                         aria-label={`Move play ${index + 1} down`}
                     >
                         <ArrowDownwardIcon />

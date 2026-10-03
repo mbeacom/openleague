@@ -187,6 +187,18 @@ describe("duplicatePracticeSession", () => {
         }
     });
 
+    it("copies each drill's station flag (runsWithPrevious)", async () => {
+        mockPrisma.practiceSession.findUnique.mockResolvedValue({
+            teamId: TEAM, title: "Tuesday", duration: 75,
+            plays: [{ ...sourceRow(0), runsWithPrevious: false }, { ...sourceRow(1), runsWithPrevious: true }],
+        });
+
+        await duplicatePracticeSession({ id: SOURCE, teamId: TEAM, date: DATE });
+
+        const copied: Array<{ runsWithPrevious: boolean }> = tx.practiceSessionPlay.createMany.mock.calls[0][0].data;
+        expect(copied.map((row) => row.runsWithPrevious)).toEqual([false, true]);
+    });
+
     it("refuses a session of another team", async () => {
         mockPrisma.practiceSession.findUnique.mockResolvedValue({ teamId: "cotherteamxxxxxxxxxxxxxxx", title: "x", duration: 60, plays: [] });
         const result = await duplicatePracticeSession({ id: SOURCE, teamId: TEAM, date: DATE });

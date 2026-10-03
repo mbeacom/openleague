@@ -51,6 +51,7 @@ function drill(id: string, sequence: number, duration = 10): PlayInSession {
         playId: `clib${id}xxxxxxxxxxxxxxxxxxxx`,
         name: `Drill ${id}`,
         sequence,
+        runsWithPrevious: false,
         duration,
         instructions: `Run ${id}`,
         playData: createEmptyPlayData(),

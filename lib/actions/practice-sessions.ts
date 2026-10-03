@@ -8,7 +8,7 @@ import {
     requireTeamMember,
 } from "@/lib/auth/session";
 import { revalidatePath } from "next/cache";
-import type { Prisma } from "@prisma/client";
+import type { Prisma, SegmentKind } from "@prisma/client";
 import {
     createPracticeSessionSchema,
     updatePracticeSessionSchema,
@@ -39,6 +39,11 @@ import {
     type SessionDrillMapping,
 } from "@/lib/services/practice-session-drills";
 import { FALLBACK_TIME_ZONE } from "@/lib/utils/date";
+import {
+    sessionWallMinutes,
+    stationGroupError,
+    type TimelinePlay,
+} from "@/lib/utils/session-timeline";
 
 export type ActionResult<T> =
     | { success: true; data: T }
@@ -379,24 +384,22 @@ function validatePlaySequence(plays: Array<{ sequence: number }>): { valid: bool
 }
 
 /**
- * Validate total duration against session duration
- * Requirements: 2.3
+ * Validate the practice timeline against the session duration (2b). Station
+ * groups run at the same time, so each group counts once, for its longest
+ * drill. For a session with no stations this is the sum of drill durations.
  */
-function validateTotalDuration(
+function validateWallTime(
     sessionDuration: number,
-    plays: Array<{ duration: number }>
-): { valid: boolean; error?: string; totalDuration?: number } {
-    const totalDuration = plays.reduce((sum, play) => sum + play.duration, 0);
-
-    if (totalDuration > sessionDuration) {
+    plays: TimelinePlay[]
+): { valid: boolean; error?: string } {
+    const wallMinutes = sessionWallMinutes(plays);
+    if (wallMinutes > sessionDuration) {
         return {
             valid: false,
-            error: `Total play duration (${totalDuration} minutes) exceeds session duration (${sessionDuration} minutes)`,
-            totalDuration,
+            error: `Practice timeline (${wallMinutes} min) exceeds session duration (${sessionDuration} min)`,
         };
     }
-
-    return { valid: true, totalDuration };
+    return { valid: true };
 }
 
 /**
@@ -470,11 +473,16 @@ export async function createPracticeSession(
                 };
             }
 
-            const durationValidation = validateTotalDuration(validated.duration, validated.plays);
+            const groupError = stationGroupError(validated.plays);
+            if (groupError) {
+                return { success: false, error: groupError };
+            }
+
+            const durationValidation = validateWallTime(validated.duration, validated.plays);
             if (!durationValidation.valid) {
                 return {
                     success: false,
-                    error: durationValidation.error || "Invalid total duration",
+                    error: durationValidation.error || "Practice timeline exceeds session duration",
                 };
             }
         }
@@ -586,6 +594,7 @@ export async function createPracticeSession(
                         sessionId: createdSession.id,
                         playId: mapping[index].playId,
                         sequence: play.sequence,
+                        runsWithPrevious: play.runsWithPrevious,
                         duration: play.duration,
                         instructions: play.instructions
                             ? sanitizeText(play.instructions, 2000)
@@ -752,11 +761,16 @@ export async function updatePracticeSession(
                 };
             }
 
-            const durationValidation = validateTotalDuration(validated.duration, validated.plays);
+            const groupError = stationGroupError(validated.plays);
+            if (groupError) {
+                return { success: false, error: groupError };
+            }
+
+            const durationValidation = validateWallTime(validated.duration, validated.plays);
             if (!durationValidation.valid) {
                 return {
                     success: false,
-                    error: durationValidation.error || "Invalid total duration",
+                    error: durationValidation.error || "Practice timeline exceeds session duration",
                 };
             }
         }
@@ -940,6 +954,7 @@ export async function updatePracticeSession(
                         create: validated.plays.map((play, index) => ({
                             playId: mapping[index].playId,
                             sequence: play.sequence,
+                            runsWithPrevious: play.runsWithPrevious,
                             duration: play.duration,
                             instructions: play.instructions ? sanitizeText(play.instructions, 2000) : null,
                         })),
@@ -1187,12 +1202,14 @@ export async function getPracticeSessionById(input: GetPracticeSessionByIdInput)
     surfaceName: string | null;
     segmentId: string | null;
     segmentName: string | null;
+    segmentKind: SegmentKind | null;
     startAt: Date | null;
     plays: Array<{
         id: string;
         sequence: number;
         duration: number;
         instructions: string | null;
+        runsWithPrevious: boolean;
         play: {
             id: string;
             name: string;
@@ -1226,7 +1243,7 @@ export async function getPracticeSessionById(input: GetPracticeSessionByIdInput)
                 surfaceId: true,
                 surface: { select: { name: true } },
                 segmentId: true,
-                segment: { select: { name: true } },
+                segment: { select: { name: true, kind: true } },
                 startAt: true,
                 plays: {
                     orderBy: { sequence: "asc" },
@@ -1235,6 +1252,7 @@ export async function getPracticeSessionById(input: GetPracticeSessionByIdInput)
                         sequence: true,
                         duration: true,
                         instructions: true,
+                        runsWithPrevious: true,
                         play: {
                             select: {
                                 id: true,
@@ -1280,12 +1298,14 @@ export async function getPracticeSessionById(input: GetPracticeSessionByIdInput)
                 surfaceName: session.surface?.name ?? null,
                 segmentId: session.segmentId,
                 segmentName: session.segment?.name ?? null,
+                segmentKind: session.segment?.kind ?? null,
                 startAt: session.startAt,
                 plays: session.plays.map(p => ({
                     id: p.id,
                     sequence: p.sequence,
                     duration: p.duration,
                     instructions: p.instructions,
+                    runsWithPrevious: p.runsWithPrevious,
                     play: {
                         id: p.play.id,
                         name: p.play.name,

@@ -1638,6 +1638,10 @@ model PracticeSessionPlay {
   sequence     Int // Order in the session
   duration     Int // Duration for this play in minutes
   instructions String? // Specific instructions for this instance
+  /// Station grouping: true = runs at the same time as the previous drill
+  /// (by sequence). Consecutive true rows form one group with the nearest
+  /// preceding false row. sequence stays unique and total.
+  runsWithPrevious Boolean @default(false)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt // Track modifications for auditing
 

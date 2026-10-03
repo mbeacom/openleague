@@ -4,7 +4,7 @@ import { createEmptyPlayData } from "@/lib/utils/play-data";
 import type { PlayInSession } from "@/types/practice-planner";
 
 function card(id: string, playId: string, sequence = 0): PlayInSession {
-    return { id, playId, name: id, sequence, duration: 10, instructions: "", playData: createEmptyPlayData(), thumbnail: "" };
+    return { id, playId, name: id, sequence, runsWithPrevious: false, duration: 10, instructions: "", playData: createEmptyPlayData(), thumbnail: "" };
 }
 
 describe("applySavedPlayIds", () => {
@@ -36,6 +36,11 @@ describe("upsertSessionDrill", () => {
         const plays = [{ ...card("k1", "lib"), duration: 12, instructions: "Hard" }];
         const next = upsertSessionDrill(plays, "k1", patch);
         expect(next[0]).toMatchObject({ playId: "new", name: "Breakout", duration: 12, instructions: "Hard" });
+    });
+
+    it("clears the unreadable-diagram flag once a fresh diagram is saved (2b warnings apply again)", () => {
+        const next = upsertSessionDrill([{ ...card("k1", "lib"), playDataUnreadable: true }], "k1", patch);
+        expect(next[0].playDataUnreadable).toBeFalsy();
     });
 
     it("appends a new card at max sequence + 1", () => {

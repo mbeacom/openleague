@@ -96,7 +96,7 @@ describe("createPracticeSession owns its drills", () => {
 
         expect(result).toMatchObject({ success: true, data: { plays: [{ clientKey: "k1", playId: "cclone0xxxxxxxxxxxxxxxxxx" }] } });
         expect(models.practiceSessionPlay.createMany.mock.calls[0][0].data).toEqual([
-            { sessionId: SESSION, playId: "cclone0xxxxxxxxxxxxxxxxxx", sequence: 0, duration: 10, instructions: null },
+            { sessionId: SESSION, playId: "cclone0xxxxxxxxxxxxxxxxxx", sequence: 0, runsWithPrevious: false, duration: 10, instructions: null },
         ]);
     });
 });

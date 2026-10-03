@@ -13,13 +13,11 @@ import {
     DrawingElement,
     TextAnnotation,
     PlayData,
-    PlayInSession,
     PracticeSessionData,
     SavedPlay,
     DrawingTool,
     VALIDATION_CONSTRAINTS,
     validateSessionDuration,
-    validatePlayDurations,
 } from "@/types/practice-planner";
 import { createEmptyPlayData, strokeFromV1Type } from "@/lib/utils/play-data";
 
@@ -71,84 +69,6 @@ describe("Hockey Practice Planner Types", () => {
                     code: "INVALID_TYPE",
                 })
             );
-        });
-    });
-
-    describe("Play Durations Validation", () => {
-        it("should validate plays within session duration", () => {
-            const plays: PlayInSession[] = [
-                {
-                    id: "play-1",
-                    playId: "lib-1",
-                    name: "Drill",
-                    sequence: 1,
-                    duration: 10,
-                    instructions: "First drill",
-                    playData: createEmptyPlayData(),
-                },
-                {
-                    id: "play-2",
-                    playId: "lib-2",
-                    name: "Drill",
-                    sequence: 2,
-                    duration: 15,
-                    instructions: "Second drill",
-                    playData: createEmptyPlayData(),
-                },
-            ];
-            const result = validatePlayDurations(plays, 30);
-            expect(result.valid).toBe(true);
-        });
-
-        it("should reject plays exceeding session duration", () => {
-            const plays: PlayInSession[] = [
-                {
-                    id: "play-1",
-                    playId: "lib-1",
-                    name: "Drill",
-                    sequence: 1,
-                    duration: 20,
-                    instructions: "First drill",
-                    playData: createEmptyPlayData(),
-                },
-                {
-                    id: "play-2",
-                    playId: "lib-2",
-                    name: "Drill",
-                    sequence: 2,
-                    duration: 20,
-                    instructions: "Second drill",
-                    playData: createEmptyPlayData(),
-                },
-            ];
-            const result = validatePlayDurations(plays, 30);
-            expect(result.valid).toBe(false);
-            expect(result.errors).toContainEqual(
-                expect.objectContaining({
-                    code: "PLAY_DURATION_EXCEEDS_SESSION",
-                })
-            );
-        });
-
-        it("should validate plays exactly matching session duration", () => {
-            const plays: PlayInSession[] = [
-                {
-                    id: "play-1",
-                    playId: "lib-1",
-                    name: "Drill",
-                    sequence: 1,
-                    duration: 30,
-                    instructions: "Full session drill",
-                    playData: createEmptyPlayData(),
-                },
-            ];
-            const result = validatePlayDurations(plays, 30);
-            expect(result.valid).toBe(true);
-        });
-
-        it("should handle empty plays array", () => {
-            const result = validatePlayDurations([], 60);
-            expect(result.valid).toBe(true);
         });
     });
 
@@ -280,42 +200,6 @@ describe("Hockey Practice Planner Types", () => {
                 strokeWidth: 2,
             };
             expect(drawing.color).toMatch(/^#[0-9A-Fa-f]{6}$/);
-        });
-    });
-
-    describe("Edge Cases & Error Handling", () => {
-        it("should validate multiple plays with different types", () => {
-            const plays: PlayInSession[] = [
-                {
-                    id: "p1",
-                    playId: "lib-1",
-                    name: "Drill",
-                    sequence: 1,
-                    duration: 10,
-                    instructions: "Warm up",
-                    playData: createEmptyPlayData(),
-                },
-                {
-                    id: "p2",
-                    playId: "lib-2",
-                    name: "Drill",
-                    sequence: 2,
-                    duration: 15,
-                    instructions: "Drill",
-                    playData: createEmptyPlayData(),
-                },
-                {
-                    id: "p3",
-                    playId: "lib-3",
-                    name: "Drill",
-                    sequence: 3,
-                    duration: 5,
-                    instructions: "Cool down",
-                    playData: createEmptyPlayData(),
-                },
-            ];
-            const result = validatePlayDurations(plays, 30);
-            expect(result.valid).toBe(true);
         });
     });
 });

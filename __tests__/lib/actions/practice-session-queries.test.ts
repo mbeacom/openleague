@@ -12,14 +12,16 @@ vi.mock("@/lib/auth/session", () => ({
   requireUserId: vi.fn().mockResolvedValue("cuserxxxxxxxxxxxxxxxxxxxx"),
 }));
 
-import { getPracticeSessionForEdit } from "@/lib/actions/practice-session-queries";
+import { getPracticeSessionDetail, getPracticeSessionForEdit } from "@/lib/actions/practice-session-queries";
+import { createEmptyPlayData } from "@/lib/utils/play-data";
 
-function row(id: string, sequence: number) {
+function row(id: string, sequence: number, runsWithPrevious = false) {
   return {
     id,
     sequence,
     duration: 10,
     instructions: null,
+    runsWithPrevious,
     play: { id: `play-${id}`, name: id, description: null, thumbnail: null, playData: null },
   };
 }
@@ -61,5 +63,73 @@ describe("getPracticeSessionForEdit", () => {
     });
     const result = await getPracticeSessionForEdit("s1");
     expect(result?.initialData.plays[0]).toMatchObject({ name: "a", description: "" });
+  });
+
+  it("normalizes station flags with the sequences: the first drill never runs with a previous one", async () => {
+    // A pre-3a cascade could delete a block's first drill and leave its stations behind.
+    mockPrisma.practiceSession.findUnique.mockResolvedValue({
+      id: "s1", teamId: "t1", title: "T", date: new Date("2026-01-01T00:00:00Z"), duration: 60, isShared: false,
+      venueId: null, surfaceId: null, segmentId: null, startAt: null,
+      plays: [row("a", 1, true), row("b", 2, true), row("c", 3, false)],
+    });
+
+    const result = await getPracticeSessionForEdit("s1");
+
+    expect(result?.initialData.plays.map((p) => [p.id, p.sequence, p.runsWithPrevious])).toEqual([
+      ["a", 0, false],
+      ["b", 1, true],
+      ["c", 2, false],
+    ]);
+  });
+
+  it("flags a drill whose diagram couldn't be read, so the editor skips its station warnings", async () => {
+    const readable = { ...row("b", 1), play: { ...row("b", 1).play, playData: createEmptyPlayData() } };
+    mockPrisma.practiceSession.findUnique.mockResolvedValue({
+      id: "s1", teamId: "t1", title: "T", date: new Date("2026-01-01T00:00:00Z"), duration: 60, isShared: false,
+      venueId: null, surfaceId: null, segmentId: null, startAt: null,
+      plays: [row("a", 0), readable],
+    });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await getPracticeSessionForEdit("s1");
+
+    const [unreadable, ok] = result!.initialData.plays;
+    expect(unreadable.playDataUnreadable).toBe(true);
+    expect(unreadable.playData).toEqual(createEmptyPlayData()); // still an empty board for the editor
+    expect(ok.playDataUnreadable).toBeFalsy();
+  });
+});
+
+describe("getPracticeSessionDetail", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPrisma.teamMember.findFirst.mockResolvedValue({ id: "m", role: "ADMIN" });
+  });
+
+  it("returns each drill's station flag and the booked segment's kind", async () => {
+    mockPrisma.practiceSession.findUnique.mockResolvedValue({
+      id: "s1", teamId: "t1", title: "T", date: new Date("2026-01-01T00:00:00Z"), duration: 60, isShared: false,
+      createdBy: { name: "Coach" }, team: { id: "t1", name: "Team" },
+      venueId: "v1", venue: { name: "Rink" }, surfaceId: "sf1", surface: { name: "Main" },
+      segmentId: "sg1", segment: { name: "Half A", kind: "HALF" }, startAt: null,
+      plays: [row("a", 0, false), row("b", 1, true)],
+    });
+
+    const result = await getPracticeSessionDetail("s1");
+
+    expect(result?.session.segmentKind).toBe("HALF");
+    expect(result?.session.plays.map((p) => p.runsWithPrevious)).toEqual([false, true]);
+    expect(mockPrisma.practiceSession.findUnique.mock.calls[0][0].include.segment).toEqual({ select: { name: true, kind: true } });
+  });
+
+  it("reads an unbooked session's segment kind as null", async () => {
+    mockPrisma.practiceSession.findUnique.mockResolvedValue({
+      id: "s1", teamId: "t1", title: "T", date: new Date("2026-01-01T00:00:00Z"), duration: 60, isShared: false,
+      createdBy: { name: "Coach" }, team: { id: "t1", name: "Team" },
+      venueId: null, venue: null, surfaceId: null, surface: null, segmentId: null, segment: null, startAt: null,
+      plays: [],
+    });
+
+    expect((await getPracticeSessionDetail("s1"))?.session.segmentKind).toBeNull();
   });
 });

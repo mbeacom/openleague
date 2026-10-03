@@ -39,10 +39,10 @@ function renderNewSession(onSave: SaveFn) {
                         duration: 60,
                         date: new Date("2026-04-07T22:00:00Z"),
                         plays: [{
-                            id: "k1", playId: "clibraryxxxxxxxxxxxxxxxxx", name: "Breakout", sequence: 0, duration: 10,
+                            id: "k1", playId: "clibraryxxxxxxxxxxxxxxxxx", name: "Breakout", sequence: 0, duration: 10, runsWithPrevious: false,
                             instructions: "", playData: createEmptyPlayData(), thumbnail: "",
                         }, {
-                            id: "k2", playId: "clibrary2xxxxxxxxxxxxxxxx", name: "Regroup", sequence: 1, duration: 10,
+                            id: "k2", playId: "clibrary2xxxxxxxxxxxxxxxx", name: "Regroup", sequence: 1, duration: 10, runsWithPrevious: false,
                             instructions: "", playData: createEmptyPlayData(), thumbnail: "",
                         }],
                     }}

@@ -3,7 +3,9 @@
 import { prisma } from "@/lib/db/prisma";
 import { requireUserId } from "@/lib/auth/session";
 import type { PlayData } from "@/types/practice-planner";
-import { parseStoredPlayData, playDataOrEmpty } from "@/lib/utils/play-data";
+import { createEmptyPlayData, parseStoredPlayData } from "@/lib/utils/play-data";
+import type { SegmentKind } from "@prisma/client";
+import { normalizeGroups } from "@/lib/utils/session-timeline";
 
 /**
  * Get the practice planner list page data for the user's primary team.
@@ -92,12 +94,14 @@ export async function getPracticeSessionDetail(sessionId: string): Promise<{
     surfaceName: string | null;
     segmentId: string | null;
     segmentName: string | null;
+    segmentKind: SegmentKind | null;
     startAt: string | null;
     plays: Array<{
       id: string;
       sequence: number;
       duration: number;
       instructions: string | null;
+      runsWithPrevious: boolean;
       play: {
         id: string;
         name: string;
@@ -140,7 +144,7 @@ export async function getPracticeSessionDetail(sessionId: string): Promise<{
       team: { select: { id: true, name: true } },
       venue: { select: { name: true } },
       surface: { select: { name: true } },
-      segment: { select: { name: true } },
+      segment: { select: { name: true, kind: true } },
     },
   });
 
@@ -171,12 +175,14 @@ export async function getPracticeSessionDetail(sessionId: string): Promise<{
       surfaceName: session.surface?.name ?? null,
       segmentId: session.segmentId,
       segmentName: session.segment?.name ?? null,
+      segmentKind: session.segment?.kind ?? null,
       startAt: session.startAt ? session.startAt.toISOString() : null,
       plays: session.plays.map((sp) => ({
         id: sp.id,
         sequence: sp.sequence,
         duration: sp.duration ?? 0,
         instructions: sp.instructions,
+        runsWithPrevious: sp.runsWithPrevious,
         play: {
           id: sp.play.id,
           name: sp.play.name,
@@ -192,6 +198,18 @@ export async function getPracticeSessionDetail(sessionId: string): Promise<{
     },
     isAdmin,
   };
+}
+
+/**
+ * An unreadable diagram becomes an empty board (logged) flagged
+ * `playDataUnreadable`, so the editor's station warnings skip the drill
+ * instead of reading its missing area as full ice (2b).
+ */
+function editorPlayData(raw: unknown, playId: string): { playData: PlayData; playDataUnreadable?: true } {
+  const parsed = parseStoredPlayData(raw);
+  if (parsed.ok) return { playData: parsed.data };
+  console.error(`Unreadable playData (play ${playId}):`, parsed.error);
+  return { playData: createEmptyPlayData(), playDataUnreadable: true };
 }
 
 /**
@@ -217,9 +235,12 @@ export async function getPracticeSessionForEdit(sessionId: string): Promise<{
       name: string;
       description: string;
       sequence: number;
+      runsWithPrevious: boolean;
       duration: number;
       instructions: string;
       playData: PlayData;
+      /** The stored diagram couldn't be read; playData is an empty stand-in (2b warnings skip it). */
+      playDataUnreadable?: true;
       thumbnail: string;
     }>;
   };
@@ -266,20 +287,23 @@ export async function getPracticeSessionForEdit(sessionId: string): Promise<{
       surfaceId: session.surfaceId,
       segmentId: session.segmentId,
       startAt: session.startAt,
-      // Plays are ordered by sequence asc. Deleting a library play cascades
-      // its PracticeSessionPlay row away and leaves gaps (e.g. 0,2), which the
-      // save validator rejects — so renumber to consecutive 0-based indices.
-      plays: session.plays.map((sp, index) => ({
+      // Plays are ordered by sequence asc. Before 3a, deleting a library play
+      // cascaded its PracticeSessionPlay row away and could leave gaps (e.g.
+      // 0,2), which the save validator rejects, or a block's stations without
+      // their first drill. normalizeGroups renumbers to consecutive 0-based
+      // indices and clears the first drill's station flag (2b).
+      plays: normalizeGroups(session.plays.map((sp) => ({
         id: sp.id,
         playId: sp.play.id,
         name: sp.play.name,
         description: sp.play.description ?? "",
-        sequence: index,
+        sequence: sp.sequence,
+        runsWithPrevious: sp.runsWithPrevious,
         duration: sp.duration ?? 0,
         instructions: sp.instructions || "",
-        playData: playDataOrEmpty(sp.play.playData, `play ${sp.play.id}`),
+        ...editorPlayData(sp.play.playData, sp.play.id),
         thumbnail: sp.play.thumbnail || "",
-      })),
+      }))),
     },
   };
 }

@@ -139,9 +139,18 @@ export interface PlayInSession {
     name: string;
     description?: string;
     sequence: number;
+    /** Runs at the same time as the previous drill: a station (2b). */
+    runsWithPrevious: boolean;
     duration: number; // minutes
     instructions: string;
     playData: PlayData;
+    /**
+     * The stored diagram couldn't be read, so `playData` is an empty board
+     * stand-in. Station warnings skip such a drill rather than treating its
+     * missing area as full ice (2b). Cleared when the drill dialog saves a
+     * fresh diagram.
+     */
+    playDataUnreadable?: boolean;
     thumbnail?: string; // base64 PNG thumbnail
 }
 
@@ -235,32 +244,6 @@ export function validateSessionDuration(duration: number): ValidationResult {
             field: "duration",
             message: `Duration must not exceed ${VALIDATION_CONSTRAINTS.MAX_DURATION} minutes`,
             code: "DURATION_TOO_LONG",
-        });
-    }
-
-    return {
-        valid: errors.length === 0,
-        errors,
-    };
-}
-
-/**
- * Validates that total play durations don't exceed session duration
- * Requirements: 2.3
- */
-export function validatePlayDurations(
-    plays: PlayInSession[],
-    sessionDuration: number
-): ValidationResult {
-    const errors: ValidationError[] = [];
-
-    const totalPlayDuration = plays.reduce((sum, play) => sum + play.duration, 0);
-
-    if (totalPlayDuration > sessionDuration) {
-        errors.push({
-            field: "plays",
-            message: `Total play duration (${totalPlayDuration} min) exceeds session duration (${sessionDuration} min)`,
-            code: "PLAY_DURATION_EXCEEDS_SESSION",
         });
     }
 

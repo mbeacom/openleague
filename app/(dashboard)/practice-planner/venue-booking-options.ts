@@ -5,6 +5,7 @@ import type {
   VenueBookingOption,
   VenueReservationBookingOption,
 } from "@/components/features/practice-planner/PracticeSessionEditor";
+import type { SegmentBookingOption } from "@/components/features/practice-planner/useVenueBooking";
 
 /**
  * Venue/surface/segment option data for the practice editor's optional
@@ -19,7 +20,7 @@ export interface VenueBookingOptions {
   /** Active surfaces per venue id. */
   surfacesByVenue: Record<string, Array<{ id: string; name: string }>>;
   /** Active segments per surface id. */
-  segmentsBySurface: Record<string, Array<{ id: string; name: string }>>;
+  segmentsBySurface: Record<string, SegmentBookingOption[]>;
   /** Display name of the implicit whole-surface option per surface ("Full ice"). */
   wholeLabelBySurface: Record<string, string>;
 }
@@ -106,7 +107,7 @@ export async function getVenueBookingOptions(
       ownerTeamId: true,
       venue: { select: { name: true } },
       surface: { select: { name: true } },
-      segment: { select: { name: true } },
+      segment: { select: { name: true, kind: true } },
     },
     orderBy: { startsAt: "asc" },
   });
@@ -122,6 +123,7 @@ export async function getVenueBookingOptions(
       surfaceName: reservation.surface?.name ?? null,
       segmentId: reservation.segmentId,
       segmentName: reservation.segment?.name ?? null,
+      segmentKind: reservation.segment?.kind ?? null,
       ownerType: reservation.ownerLeagueId ? "league" : "team",
     }),
   );
@@ -145,13 +147,13 @@ export async function getVenueBookingOptions(
   const segments = surfaces.length
     ? await prisma.surfaceSegment.findMany({
         where: { surfaceId: { in: surfaces.map((surface) => surface.id) }, isActive: true },
-        select: { id: true, name: true, surfaceId: true },
+        select: { id: true, name: true, surfaceId: true, kind: true },
         orderBy: { name: "asc" },
       })
     : [];
-  const segmentsBySurface: Record<string, Array<{ id: string; name: string }>> = {};
+  const segmentsBySurface: Record<string, SegmentBookingOption[]> = {};
   for (const segment of segments) {
-    (segmentsBySurface[segment.surfaceId] ??= []).push({ id: segment.id, name: segment.name });
+    (segmentsBySurface[segment.surfaceId] ??= []).push({ id: segment.id, name: segment.name, kind: segment.kind });
   }
 
   return {
