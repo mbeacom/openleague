@@ -1,6 +1,7 @@
 /** Station grouping in the session editor (practice planner 2b). */
 import { describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
@@ -89,8 +90,10 @@ describe("PracticeSessionEditor stations (2b)", () => {
         fireEvent.click(screen.getAllByLabelText(SWITCH)[0]);
         fireEvent.click(screen.getAllByLabelText(SWITCH)[1]);
 
-        expect(screen.getByRole("group", { name: "Stations · 3 · 15 min" })).toBeInTheDocument();
         expect(screen.getByText("Stations · 3 · 15 min")).toBeInTheDocument();
+        // The block is decoration over a flat list: each grouped card is described by its header.
+        expect(screen.getByRole("heading", { name: "Drill b" }).closest(".MuiCard-root"))
+            .toHaveAccessibleDescription("Stations · 3 · 15 min");
         expect(screen.getByText("Total Play Time: 15 minutes")).toBeInTheDocument();
         expect(screen.queryByText(/exceeds/)).not.toBeInTheDocument();
         expect(await savedOrder(onSave)).toBe("a b+ c+");
@@ -126,6 +129,55 @@ describe("PracticeSessionEditor stations (2b)", () => {
         expect(screen.getByRole("button", { name: "Move play 3 down" })).toBeDisabled();
         fireEvent.click(screen.getByRole("button", { name: "Move play 3 up" }));
         expect(await savedOrder(onSave)).toBe("a c+ b+ s");
+    });
+});
+
+describe("PracticeSessionEditor cards keep their identity across regrouping (2b)", () => {
+    it("keeps focus on a station switch after toggling it into a block", async () => {
+        const user = userEvent.setup();
+        renderEditor(drills("a b c"));
+        const toggle = screen.getAllByLabelText(SWITCH)[0];
+
+        await user.click(toggle);
+
+        expect(screen.getByText("Stations · 2 · 15 min")).toBeInTheDocument();
+        expect(toggle.isConnected).toBe(true);
+        expect(document.activeElement).toBe(toggle);
+    });
+
+    it("keeps focus on a station switch after toggling it out of a block", async () => {
+        const user = userEvent.setup();
+        renderEditor(drills("a b+ c"));
+        const toggle = screen.getAllByLabelText(SWITCH)[0];
+
+        await user.click(toggle);
+
+        expect(screen.queryByText(/^Stations ·/)).not.toBeInTheDocument();
+        expect(document.activeElement).toBe(toggle);
+    });
+
+    it("keeps a sibling card's open inline-edit draft when the block's first drill is deleted", async () => {
+        const user = userEvent.setup();
+        renderEditor(drills("a b+ c+"));
+        await user.click(screen.getByRole("button", { name: "Edit play 3" }));
+        const instructions = screen.getByLabelText("Instructions");
+        await user.type(instructions, "Half-speed reps");
+
+        await user.click(screen.getByRole("button", { name: "Delete play 1" }));
+
+        expect(screen.getByText("Stations · 2 · 15 min")).toBeInTheDocument();
+        expect(screen.getByLabelText("Instructions")).toHaveValue("Half-speed reps");
+    });
+
+    it("keeps focus on a station's move button when it becomes its block's first drill", async () => {
+        const user = userEvent.setup();
+        renderEditor(drills("x a b+"));
+        const moveUp = screen.getByRole("button", { name: "Move play 3 up" });
+
+        await user.click(moveUp);
+
+        expect(screen.getByRole("button", { name: "Move play 2 up" })).toBe(moveUp);
+        expect(document.activeElement).toBe(moveUp);
     });
 });
 
@@ -193,6 +245,16 @@ describe("PracticeSessionEditor station warnings (2b)", () => {
         fireEvent.mouseDown(screen.getByRole("combobox", { name: /Confirmed reservation/ }));
         fireEvent.click(screen.getByRole("option", { name: /Test Rink/ }));
         expect(screen.getAllByText("Larger than the booked half ice")).toHaveLength(1);
+    });
+
+    it("skips a drill whose diagram couldn't be read: no overlap and no fit warning", () => {
+        const [a, b] = drills("a b+");
+        renderEditor([{ ...withArea(a), playDataUnreadable: true }, withArea(b, { kind: "half-left" })], {
+            ...booking,
+            initialData: { venueId: VENUE, surfaceId: SURFACE, segmentId: SEGMENT, startAt: START },
+        });
+        expect(screen.queryByText(/overlap on the ice/)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Larger than the booked/)).not.toBeInTheDocument();
     });
 
     it("flags nothing when the whole surface is booked", () => {

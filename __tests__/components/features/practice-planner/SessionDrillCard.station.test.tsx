@@ -45,10 +45,22 @@ describe("SessionDrillCard station switch", () => {
         expect(screen.getByLabelText(STATION_SWITCH_LABEL)).toBeDisabled();
     });
 
-    it("is disabled with the cap tooltip when it would exceed the block cap", () => {
+    it("names the drill it belongs to in its accessible description", () => {
+        renderCard();
+        expect(screen.getByLabelText(STATION_SWITCH_LABEL)).toHaveAccessibleDescription("Breakout");
+    });
+
+    it("is disabled at the block cap, with the reason visible and associated with the switch", () => {
         renderCard({ station: { checked: false, canToggle: false } });
-        expect(screen.getByLabelText(STATION_SWITCH_LABEL)).toBeDisabled();
-        expect(screen.getByLabelText(STATION_CAP_TOOLTIP)).toBeInTheDocument();
+        const toggle = screen.getByLabelText(STATION_SWITCH_LABEL);
+        expect(toggle).toBeDisabled();
+        expect(screen.getByText(STATION_CAP_TOOLTIP)).toBeVisible();
+        expect(toggle).toHaveAccessibleDescription(expect.stringContaining(STATION_CAP_TOOLTIP));
+    });
+
+    it("shows no cap reason when it is only locked", () => {
+        renderCard({ locked: true });
+        expect(screen.queryByText(STATION_CAP_TOOLTIP)).not.toBeInTheDocument();
     });
 
     it("is absent on the first drill", () => {

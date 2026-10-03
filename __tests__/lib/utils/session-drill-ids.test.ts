@@ -38,6 +38,11 @@ describe("upsertSessionDrill", () => {
         expect(next[0]).toMatchObject({ playId: "new", name: "Breakout", duration: 12, instructions: "Hard" });
     });
 
+    it("clears the unreadable-diagram flag once a fresh diagram is saved (2b warnings apply again)", () => {
+        const next = upsertSessionDrill([{ ...card("k1", "lib"), playDataUnreadable: true }], "k1", patch);
+        expect(next[0].playDataUnreadable).toBeFalsy();
+    });
+
     it("appends a new card at max sequence + 1", () => {
         const next = upsertSessionDrill([card("a", "x", 0), card("b", "y", 2)], "k9", patch);
         expect(next[2]).toMatchObject({ id: "k9", playId: "new", sequence: 3, duration: 10, instructions: "" });

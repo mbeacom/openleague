@@ -13,6 +13,7 @@ vi.mock("@/lib/auth/session", () => ({
 }));
 
 import { getPracticeSessionDetail, getPracticeSessionForEdit } from "@/lib/actions/practice-session-queries";
+import { createEmptyPlayData } from "@/lib/utils/play-data";
 
 function row(id: string, sequence: number, runsWithPrevious = false) {
   return {
@@ -79,6 +80,23 @@ describe("getPracticeSessionForEdit", () => {
       ["b", 1, true],
       ["c", 2, false],
     ]);
+  });
+
+  it("flags a drill whose diagram couldn't be read, so the editor skips its station warnings", async () => {
+    const readable = { ...row("b", 1), play: { ...row("b", 1).play, playData: createEmptyPlayData() } };
+    mockPrisma.practiceSession.findUnique.mockResolvedValue({
+      id: "s1", teamId: "t1", title: "T", date: new Date("2026-01-01T00:00:00Z"), duration: 60, isShared: false,
+      venueId: null, surfaceId: null, segmentId: null, startAt: null,
+      plays: [row("a", 0), readable],
+    });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await getPracticeSessionForEdit("s1");
+
+    const [unreadable, ok] = result!.initialData.plays;
+    expect(unreadable.playDataUnreadable).toBe(true);
+    expect(unreadable.playData).toEqual(createEmptyPlayData()); // still an empty board for the editor
+    expect(ok.playDataUnreadable).toBeFalsy();
   });
 });
 

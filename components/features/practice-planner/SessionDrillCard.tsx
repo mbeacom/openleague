@@ -6,7 +6,7 @@
  * from PracticeSessionEditor.
  */
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import {
     Box,
     Button,
@@ -16,6 +16,7 @@ import {
     CardMedia,
     Chip,
     FormControlLabel,
+    FormHelperText,
     IconButton,
     Stack,
     Switch,
@@ -50,6 +51,12 @@ export interface SessionDrillCardProps {
     /** The station switch; null for the first drill, which always runs on its own. */
     station: { checked: boolean; canToggle: boolean } | null;
     onToggleStation: (index: number) => void;
+    /**
+     * The id of the station block header this drill belongs to, when it is one
+     * of several stations (2b). The card is styled as part of the block and
+     * described by the header; the list stays flat so cards never remount.
+     */
+    blockHeaderId?: string;
     /** Advisory: the drill is larger than the booked ice segment (2b). Never blocks a save. */
     fitWarning?: string | null;
     isEditing: boolean;
@@ -81,6 +88,7 @@ export function SessionDrillCard({
     canMoveDown,
     station,
     onToggleStation,
+    blockHeaderId,
     fitWarning = null,
     isEditing,
     onDelete,
@@ -97,6 +105,10 @@ export function SessionDrillCard({
     // Local state for editing
     const [editDuration, setEditDuration] = useState(play.duration);
     const [editInstructions, setEditInstructions] = useState(play.instructions);
+
+    const titleId = useId();
+    const capReasonId = useId();
+    const capped = station !== null && !station.canToggle;
 
     // Get thumbnail from play instance (copied from library play when added)
     const thumbnail = play.thumbnail || "";
@@ -123,10 +135,17 @@ export function SessionDrillCard({
 
     return (
         <Card
+            aria-describedby={blockHeaderId}
             sx={{
                 display: "flex",
                 flexDirection: { xs: "column", sm: "row" },
                 gap: 2,
+                ...(blockHeaderId && {
+                    borderLeft: 4,
+                    borderColor: "primary.main",
+                    bgcolor: "action.hover",
+                    ml: 1,
+                }),
             }}
         >
             {/* Thumbnail */}
@@ -171,7 +190,7 @@ export function SessionDrillCard({
             {/* Content */}
             <CardContent sx={{ flexGrow: 1, py: 1 }}>
                 <Stack spacing={1}>
-                    <Typography variant="h6" component="h3">
+                    <Typography id={titleId} variant="h6" component="h3">
                         {play.name || `Drill ${index + 1}`}
                     </Typography>
 
@@ -266,22 +285,32 @@ export function SessionDrillCard({
                     )}
 
                     {/* Station grouping (2b): runs at the same time as the drill before it */}
+                    {/* The switch is described by the drill's name (every switch shares one label) and, */}
+                    {/* at the block cap, by the visible reason it is disabled. */}
                     {!isEditing && station && (
-                        <Tooltip title={station.canToggle ? "" : STATION_CAP_TOOLTIP}>
-                            <span>
-                                <FormControlLabel
-                                    control={
-                                        <Switch
-                                            checked={station.checked}
-                                            onChange={() => onToggleStation(index)}
-                                        />
-                                    }
-                                    label={STATION_SWITCH_LABEL}
-                                    disabled={locked || !station.canToggle}
-                                    sx={{ minHeight: 44, ml: 0 }}
-                                />
-                            </span>
-                        </Tooltip>
+                        <Box>
+                            <FormControlLabel
+                                control={
+                                    <Switch
+                                        checked={station.checked}
+                                        onChange={() => onToggleStation(index)}
+                                        slotProps={{
+                                            input: {
+                                                "aria-describedby": capped ? `${titleId} ${capReasonId}` : titleId,
+                                            },
+                                        }}
+                                    />
+                                }
+                                label={STATION_SWITCH_LABEL}
+                                disabled={locked || capped}
+                                sx={{ minHeight: 44, ml: 0 }}
+                            />
+                            {capped && (
+                                <FormHelperText id={capReasonId} sx={{ mt: 0 }}>
+                                    {STATION_CAP_TOOLTIP}
+                                </FormHelperText>
+                            )}
+                        </Box>
                     )}
 
                     {/* Edit Actions */}

@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/db/prisma";
 import { requireUserId } from "@/lib/auth/session";
 import type { PlayData } from "@/types/practice-planner";
-import { parseStoredPlayData, playDataOrEmpty } from "@/lib/utils/play-data";
+import { createEmptyPlayData, parseStoredPlayData } from "@/lib/utils/play-data";
 import type { SegmentKind } from "@prisma/client";
 import { normalizeGroups } from "@/lib/utils/session-timeline";
 
@@ -201,6 +201,18 @@ export async function getPracticeSessionDetail(sessionId: string): Promise<{
 }
 
 /**
+ * An unreadable diagram becomes an empty board (logged) flagged
+ * `playDataUnreadable`, so the editor's station warnings skip the drill
+ * instead of reading its missing area as full ice (2b).
+ */
+function editorPlayData(raw: unknown, playId: string): { playData: PlayData; playDataUnreadable?: true } {
+  const parsed = parseStoredPlayData(raw);
+  if (parsed.ok) return { playData: parsed.data };
+  console.error(`Unreadable playData (play ${playId}):`, parsed.error);
+  return { playData: createEmptyPlayData(), playDataUnreadable: true };
+}
+
+/**
  * Get a practice session for editing (admin only).
  * Returns null if not found or user is not an admin for the team.
  */
@@ -227,6 +239,8 @@ export async function getPracticeSessionForEdit(sessionId: string): Promise<{
       duration: number;
       instructions: string;
       playData: PlayData;
+      /** The stored diagram couldn't be read; playData is an empty stand-in (2b warnings skip it). */
+      playDataUnreadable?: true;
       thumbnail: string;
     }>;
   };
@@ -287,7 +301,7 @@ export async function getPracticeSessionForEdit(sessionId: string): Promise<{
         runsWithPrevious: sp.runsWithPrevious,
         duration: sp.duration ?? 0,
         instructions: sp.instructions || "",
-        playData: playDataOrEmpty(sp.play.playData, `play ${sp.play.id}`),
+        ...editorPlayData(sp.play.playData, sp.play.id),
         thumbnail: sp.play.thumbnail || "",
       }))),
     },

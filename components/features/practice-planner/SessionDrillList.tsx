@@ -41,29 +41,29 @@ export interface SessionDrillListProps {
     onNewDrill: () => void;
 }
 
-/** Drills that run at the same time: one outlined block headed "Stations · N · M min" (2b). */
-function StationBlock({ label, warnings, children }: { label: string; warnings: string[]; children: ReactNode }) {
+/**
+ * The header of a station block, "Stations · N · M min", with its overlap
+ * warnings (2b). It is a sibling of the block's cards, not their parent: the
+ * list renders flat so a drill joining, leaving or heading a block never
+ * remounts its card (which would drop keyboard focus and inline-edit drafts).
+ * The grouped cards point at `id` with aria-describedby.
+ */
+function StationBlockHeader({ id, label, warnings }: { id: string; label: string; warnings: string[] }) {
     return (
-        <Box
-            role="group"
-            aria-label={label}
-            sx={{ border: 2, borderColor: "primary.main", borderRadius: 1, p: 1.5 }}
-        >
-            <Stack spacing={1.5}>
-                <Typography
-                    variant="subtitle2"
-                    component="p"
-                    sx={{ fontWeight: 800, color: "primary.main", textTransform: "uppercase", letterSpacing: 1 }}
-                >
-                    {label}
-                </Typography>
-                {warnings.map((warning) => (
-                    <Alert key={warning} severity="warning">
-                        {warning}
-                    </Alert>
-                ))}
-                {children}
-            </Stack>
+        <Box sx={{ borderLeft: 4, borderColor: "primary.main", pl: 1.5 }}>
+            <Typography
+                id={id}
+                variant="subtitle2"
+                component="p"
+                sx={{ fontWeight: 800, color: "primary.main", textTransform: "uppercase", letterSpacing: 1 }}
+            >
+                {label}
+            </Typography>
+            {warnings.map((warning) => (
+                <Alert key={warning} severity="warning" sx={{ mt: 1 }}>
+                    {warning}
+                </Alert>
+            ))}
         </Box>
     );
 }
@@ -106,21 +106,23 @@ export function SessionDrillList({
 }: SessionDrillListProps) {
     const totalPlayTime = sessionWallMinutes(plays);
     const groups = groupStations(plays);
+    // An unreadable drill (area null) is skipped by the warnings, not read as full ice.
     const warnings = stationWarnings(
-        groupStations(plays.map((play) => ({ ...play, area: play.playData.area }))),
+        groupStations(plays.map((play) => ({ ...play, area: play.playDataUnreadable ? null : play.playData.area }))),
         segmentKind,
     );
     const fitLabel = segmentKind ? SEGMENT_KIND_FIT_LABELS[segmentKind] : null;
 
     // The editor keeps array order equal to sequence order, so a drill's
     // position in `plays` is its card number and its move/toggle index.
-    const renderCard = (play: PlayInSession) => {
+    const renderCard = (play: PlayInSession, blockHeaderId?: string) => {
         const index = plays.indexOf(play);
         return (
             <SessionDrillCard
                 key={play.id}
                 play={play}
                 index={index}
+                blockHeaderId={blockHeaderId}
                 canMoveUp={canMove(plays, index, -1)}
                 canMoveDown={canMove(plays, index, 1)}
                 station={index === 0 ? null : {
@@ -217,21 +219,23 @@ export function SessionDrillList({
                     </Box>
                 )}
 
+                {/* One flat, play.id-keyed list (no per-block wrapper or keyed Fragment): */}
+                {/* block headers are keyed siblings, so regrouping never remounts a card. */}
                 {plays.length > 0 && (
                     <Stack spacing={2}>
-                        {groups.map((group) =>
-                            group.stations.length > 1 ? (
-                                <StationBlock
-                                    key={`stations-${group.stations[0].id}`}
+                        {groups.flatMap((group): ReactNode[] => {
+                            if (group.stations.length === 1) return [renderCard(group.stations[0])];
+                            const headerId = `station-block-${group.stations[0].id}`;
+                            return [
+                                <StationBlockHeader
+                                    key={`header-${group.stations[0].id}`}
+                                    id={headerId}
                                     label={stationBlockLabel(group.stations.length, group.wallMinutes)}
                                     warnings={overlapMessages(group, warnings.overlaps)}
-                                >
-                                    {group.stations.map(renderCard)}
-                                </StationBlock>
-                            ) : (
-                                renderCard(group.stations[0])
-                            )
-                        )}
+                                />,
+                                ...group.stations.map((play) => renderCard(play, headerId)),
+                            ];
+                        })}
                     </Stack>
                 )}
             </Stack>

@@ -63,7 +63,8 @@ export function upsertSessionDrill(
     patch: SessionDrillPatch,
 ): PlayInSession[] {
     if (plays.some((play) => play.id === clientKey)) {
-        return plays.map((play) => (play.id === clientKey ? { ...play, ...patch } : play));
+        // A freshly saved diagram is readable, whatever the drill loaded with.
+        return plays.map((play) => (play.id === clientKey ? { ...play, ...patch, playDataUnreadable: undefined } : play));
     }
     const sequence = plays.reduce((max, play) => Math.max(max, play.sequence), -1) + 1;
     return [...plays, { id: clientKey, ...patch, sequence, runsWithPrevious: false, duration: 10, instructions: "" }];

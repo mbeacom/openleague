@@ -144,6 +144,13 @@ export interface PlayInSession {
     duration: number; // minutes
     instructions: string;
     playData: PlayData;
+    /**
+     * The stored diagram couldn't be read, so `playData` is an empty board
+     * stand-in. Station warnings skip such a drill rather than treating its
+     * missing area as full ice (2b). Cleared when the drill dialog saves a
+     * fresh diagram.
+     */
+    playDataUnreadable?: boolean;
     thumbnail?: string; // base64 PNG thumbnail
 }
 
