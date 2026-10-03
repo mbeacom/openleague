@@ -67,4 +67,16 @@ describe("SessionDrillCard station switch", () => {
         renderCard({ index: 0, station: null });
         expect(screen.queryByLabelText(STATION_SWITCH_LABEL)).not.toBeInTheDocument();
     });
+
+    it("names a grouped card by its place in the block and its title, as an h4", () => {
+        renderCard({ stationSlot: { position: 2, count: 3 } });
+        const group = screen.getByRole("group", { name: "Station 2 of 3: Breakout" });
+        expect(group).toContainElement(screen.getByRole("heading", { level: 4, name: "Breakout" }));
+    });
+
+    it("leaves a standalone card ungrouped, with an h3 title", () => {
+        renderCard();
+        expect(screen.queryByRole("group")).not.toBeInTheDocument();
+        expect(screen.getByRole("heading", { level: 3, name: "Breakout" })).toBeInTheDocument();
+    });
 });

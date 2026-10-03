@@ -520,6 +520,52 @@ export function pinchView(
     };
 }
 
+/**
+ * The rectangle the board draws as its content, in unzoomed canvas pixels:
+ * `viewport` (rink feet; the drill's area viewport in edit mode, else the
+ * whole rink) mapped through the viewport transform.
+ */
+export function viewportContentRect(transform: TransformContext, viewport: RinkRect): RinkRect {
+    return {
+        x: viewport.x * transform.scaleX + transform.offsetX,
+        y: viewport.y * transform.scaleY + transform.offsetY,
+        w: viewport.w * transform.scaleX,
+        h: viewport.h * transform.scaleY,
+    };
+}
+
+/** One axis of clampPan: content [min, min + size] at `zoom` on a canvas `extent` long. */
+function clampPanAxis(pan: number, zoom: number, extent: number, min: number, size: number): number {
+    const shown = zoom * size;
+    // Fits on this axis: keep it centered (at zoom 1 the transform already centers it, so pan 0).
+    // Rounding noise snaps to exactly 0: the board only uses its cached rink when pan === 0.
+    if (shown <= extent) {
+        const centered = (extent - shown) / 2 - zoom * min;
+        return Math.abs(centered) < 1e-9 ? 0 : centered;
+    }
+    // Overflows: its edges may not be pulled inside the canvas edges.
+    return Math.min(-zoom * min, Math.max(extent - zoom * (min + size), pan));
+}
+
+/**
+ * Bounds the board's pan (screen = zoom * canvasPoint + pan) so the content
+ * rect (canvas pixels, from viewportContentRect) can't leave the canvas. Per
+ * axis, standard image-viewer rules: content that fits is centered (at zoom
+ * <= 1 that is always the case, and zoom 1 gives pan 0), and content larger
+ * than the canvas can't show empty margin past its edges.
+ */
+export function clampPan(
+    pan: Position,
+    zoom: number,
+    canvas: { width: number; height: number },
+    content: RinkRect
+): Position {
+    return {
+        x: clampPanAxis(pan.x, zoom, canvas.width, content.x, content.w),
+        y: clampPanAxis(pan.y, zoom, canvas.height, content.y, content.h),
+    };
+}
+
 /** True once `pointer` is at least `thresholdFt` from `grab` (rink feet). */
 export function pastDragThreshold(grab: Position, pointer: Position, thresholdFt: number): boolean {
     return Math.hypot(pointer.x - grab.x, pointer.y - grab.y) >= thresholdFt;

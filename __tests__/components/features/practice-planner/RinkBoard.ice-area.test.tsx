@@ -351,6 +351,23 @@ describe("RinkBoard ice area", () => {
         expect(second.x).toBeCloseTo(160, 6);
     });
 
+    it("stops a long pinch-pan at the rink's edge instead of dragging the rink off-screen", () => {
+        const { canvas, onPlayDataChange } = setup({ selectedTool: "player" });
+        // Whole rink in 800x400: content x 20..780, y 38.5..361.5 (3.8 px/ft).
+        // Spread to 2x about (400, 200), then drag both fingers 1000 px right.
+        fireEvent.touchStart(canvas, { touches: [{ clientX: 350, clientY: 200 }, { clientX: 450, clientY: 200 }] });
+        fireEvent.touchMove(canvas, { touches: [{ clientX: 300, clientY: 200 }, { clientX: 500, clientY: 200 }] });
+        fireEvent.touchMove(canvas, { touches: [{ clientX: 1300, clientY: 200 }, { clientX: 1500, clientY: 200 }] });
+        fireEvent.touchEnd(canvas, { touches: [] });
+        // Unbounded, pan.x would be 600 and screen x 100 would map off the rink (x < 0).
+        // Clamped, the rink's left edge sits at the canvas edge: pan.x = -2 * 20 = -40,
+        // so screen x 100 is canvas x 70, rink x (70 - 20) / 3.8.
+        fireEvent.mouseDown(canvas, { clientX: 100, clientY: 200 });
+        const placed = onPlayDataChange.mock.calls.at(-1)![0].players[0].position;
+        expect(placed.x).toBeCloseTo(50 / 3.8, 6);
+        expect(placed.y).toBeCloseTo((200 - 38.5) / 3.8, 6);
+    });
+
     it("anchors the pinch on a canvas that is offset on the page (client vs canvas coordinates)", () => {
         const { canvas, at, onPlayDataChange } = setup({ selectedTool: "player" });
         const [left, top] = [120, 60];
