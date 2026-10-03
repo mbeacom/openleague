@@ -21,14 +21,19 @@ import {
     Checkbox,
     FormControlLabel,
     Stack,
+    Snackbar,
 } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import { Save as SaveIcon } from "@mui/icons-material";
 import { RinkBoard, RinkBoardHandle } from "./RinkBoard";
 import { RinkBoardErrorBoundary } from "./RinkBoardErrorBoundary";
+import { PlayLegend } from "./PlayLegend";
 import { DrawingToolbar } from "./DrawingToolbar";
-import { PlayData, DrawingTool, SavedPlay } from "@/types/practice-planner";
+import { ElementInspector } from "./ElementInspector";
+import { findElement } from "@/lib/utils/canvas/element-ops";
+import { PlayData, DrawingTool, SavedPlay, PlayerRole, StrokeOptions, EquipmentKind } from "@/types/practice-planner";
+import { createEmptyPlayData } from "@/lib/utils/play-data";
 import { generateThumbnail } from "@/lib/utils/canvas/thumbnail-generator";
 
 /**
@@ -68,16 +73,18 @@ export function PlayEditor({
 
     // Play data state
     const [playData, setPlayData] = useState<PlayData>(
-        initialData?.playData || {
-            players: [],
-            drawings: [],
-            annotations: [],
-        }
+        initialData?.playData || createEmptyPlayData()
     );
 
     // Drawing tool state
     const [selectedTool, setSelectedTool] = useState<DrawingTool>("select");
-    const [selectedColor, setSelectedColor] = useState("#000000");
+    const [selectedColor, setSelectedColor] = useState("#212121");
+    const [playerRole, setPlayerRole] = useState<PlayerRole>("X");
+    const [strokeOptions, setStrokeOptions] = useState<StrokeOptions>({ action: "skate", path: "freehand", end: "arrow" });
+    const [equipmentKind, setEquipmentKind] = useState<EquipmentKind>("cone");
+    // Consumed by the element inspector (Task 8)
+    const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
+    const [limitNotice, setLimitNotice] = useState<string | null>(null);
     const [canUndo, setCanUndo] = useState(false);
     const [canRedo, setCanRedo] = useState(false);
 
@@ -343,6 +350,12 @@ export function PlayEditor({
                     onClear={handleClear}
                     canUndo={canUndo}
                     canRedo={canRedo}
+                    playerRole={playerRole}
+                    onPlayerRoleChange={setPlayerRole}
+                    strokeOptions={strokeOptions}
+                    onStrokeOptionsChange={setStrokeOptions}
+                    equipmentKind={equipmentKind}
+                    onEquipmentKindChange={setEquipmentKind}
                 />
             </Paper>
 
@@ -358,10 +371,26 @@ export function PlayEditor({
                         selectedTool={selectedTool}
                         selectedColor={selectedColor}
                         onUndoRedoStateChange={handleUndoRedoStateChange}
+                        playerRole={playerRole}
+                        strokeOptions={strokeOptions}
+                        equipmentKind={equipmentKind}
+                        onSelectionChange={setSelectedElementId}
+                        onLimitReached={setLimitNotice}
                         height={isMobile ? 400 : 600}
                     />
                 </RinkBoardErrorBoundary>
+                <Box sx={{ mt: 2 }}>
+                    <PlayLegend playData={playData} />
+                </Box>
             </Paper>
+
+            {/* Element inspector sits BELOW the board so selecting never shifts the canvas */}
+            {/* Keyed by element so a pending label draft can never carry over to another element */}
+            <ElementInspector
+                key={selectedElementId ?? "none"}
+                selected={selectedElementId ? findElement(playData, selectedElementId) : null}
+                onChange={(patch) => selectedElementId && rinkBoardRef.current?.updateElement(selectedElementId, patch)}
+            />
 
             {/* Save Status and Actions */}
             <Paper elevation={2} sx={{ p: 2 }}>
@@ -426,6 +455,17 @@ export function PlayEditor({
                     </Stack>
                 </Stack>
             </Paper>
+
+            {/* Play limit notices from the board */}
+            <Snackbar
+                open={limitNotice !== null}
+                autoHideDuration={4000}
+                onClose={() => setLimitNotice(null)}
+            >
+                <Alert severity="warning" onClose={() => setLimitNotice(null)} sx={{ width: "100%" }}>
+                    {limitNotice}
+                </Alert>
+            </Snackbar>
         </Box>
     );
 }

@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/db/prisma";
 import { requireUserId } from "@/lib/auth/session";
 import type { PlayData } from "@/types/practice-planner";
+import { parseStoredPlayData, playDataOrEmpty } from "@/lib/utils/play-data";
 
 /**
  * Get the practice planner list page data for the user's primary team.
@@ -102,6 +103,8 @@ export async function getPracticeSessionDetail(sessionId: string): Promise<{
         name: string;
         description: string | null;
         thumbnail: string | null;
+        /** null = stored data unreadable; hide the legend. */
+        playData: PlayData | null;
       };
     }>;
   };
@@ -179,6 +182,11 @@ export async function getPracticeSessionDetail(sessionId: string): Promise<{
           name: sp.play.name,
           description: sp.play.description,
           thumbnail: sp.play.thumbnail,
+          playData: (() => {
+            const parsed = parseStoredPlayData(sp.play.playData);
+            if (!parsed.ok) console.error(`Unreadable playData (play ${sp.play.id}):`, parsed.error);
+            return parsed.ok ? parsed.data : null;
+          })(),
         },
       })),
     },
@@ -262,7 +270,7 @@ export async function getPracticeSessionForEdit(sessionId: string): Promise<{
         sequence: sp.sequence,
         duration: sp.duration ?? 0,
         instructions: sp.instructions || "",
-        playData: sp.play.playData as unknown as PlayData,
+        playData: playDataOrEmpty(sp.play.playData, `play ${sp.play.id}`),
         thumbnail: sp.play.thumbnail || "",
       })),
     },

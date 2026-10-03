@@ -2,7 +2,7 @@
  * Drawing utilities for the Hockey Practice Planner
  *
  * This module provides functions to draw various elements on the rink board:
- * - Lines, curves, and arrows with directional indicators
+ * - Strokes by hockey action (skate, carry, pass, shot, ...) with end caps
  * - Player icons with labels and colors
  * - Text annotations
  *
@@ -14,150 +14,74 @@ import {
     PlayerIcon,
     DrawingElement,
     TextAnnotation,
+    EquipmentItem,
+    PlayData,
 } from "@/types/practice-planner";
+import type { StrokeOptions } from "@/types/practice-planner";
 import { TransformContext, rinkToCanvas } from "./rink-renderer";
+import { buildStrokeGeometry, type StrokeGeometry } from "./stroke-geometry";
+import { drawPlayerGlyph, drawEquipmentGlyph } from "./glyphs";
+import { EQUIPMENT_RADIUS_FT, PLAYER_RADIUS_FT, glyphRadiusPx } from "./glyph-metrics";
 
 /**
  * Visual constants for drawing
  */
-const PLAYER_ICON_RADIUS = 12; // feet in rink coordinates
 const SELECTION_COLOR = "#FFD700"; // Gold highlight for selected elements
 
 /**
- * Draws a line with optional directional arrow
- * Requirements: 5.1
- *
- * @param ctx - Canvas 2D rendering context
- * @param points - Array of positions defining the line path
- * @param color - Line color (hex format)
- * @param strokeWidth - Line width in pixels
- * @param transform - Transformation context for coordinate conversion
- * @param showArrow - Whether to show directional arrow at the end
+ * Draws a stroke by hockey action (pattern), path style and end cap.
+ * Geometry is computed in canvas px by `buildStrokeGeometry`.
  */
-export function drawLine(
+export function drawStroke(
     ctx: CanvasRenderingContext2D,
-    points: Position[],
-    color: string,
-    strokeWidth: number,
-    transform: TransformContext,
-    showArrow: boolean = false
-): void {
-    if (points.length < 2) return;
-
-    ctx.strokeStyle = color;
-    ctx.lineWidth = strokeWidth;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-
-    ctx.beginPath();
-    const startCanvas = rinkToCanvas(points[0], transform);
-    ctx.moveTo(startCanvas.x, startCanvas.y);
-
-    for (let i = 1; i < points.length; i++) {
-        const pointCanvas = rinkToCanvas(points[i], transform);
-        ctx.lineTo(pointCanvas.x, pointCanvas.y);
-    }
-
-    ctx.stroke();
-
-    // Draw arrow at the end if requested
-    if (showArrow && points.length >= 2) {
-        const lastPoint = rinkToCanvas(points[points.length - 1], transform);
-        const secondLastPoint = rinkToCanvas(points[points.length - 2], transform);
-        drawArrowHead(ctx, secondLastPoint, lastPoint, color, strokeWidth);
-    }
-}
-
-/**
- * Draws a curved path with optional directional arrow
- * Requirements: 5.2
- *
- * @param ctx - Canvas 2D rendering context
- * @param points - Array of positions defining the curve path
- * @param color - Curve color (hex format)
- * @param strokeWidth - Curve width in pixels
- * @param transform - Transformation context for coordinate conversion
- * @param showArrow - Whether to show directional arrow at the end
- */
-export function drawCurve(
-    ctx: CanvasRenderingContext2D,
-    points: Position[],
-    color: string,
-    strokeWidth: number,
-    transform: TransformContext,
-    showArrow: boolean = false
-): void {
-    if (points.length < 2) return;
-
-    ctx.strokeStyle = color;
-    ctx.lineWidth = strokeWidth;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-
-    ctx.beginPath();
-
-    if (points.length < 3) {
-        // Just draw a straight line if there are only 2 points
-        const startCanvas = rinkToCanvas(points[0], transform);
-        ctx.moveTo(startCanvas.x, startCanvas.y);
-        if (points.length === 2) {
-            const endCanvas = rinkToCanvas(points[1], transform);
-            ctx.lineTo(endCanvas.x, endCanvas.y);
-        }
-    } else {
-        // Use quadratic curves for a smooth path through all points
-        // Technique: use midpoints as destinations and actual points as control points
-        const canvasPoints = points.map(p => rinkToCanvas(p, transform));
-
-        // Start at the first point
-        ctx.moveTo(canvasPoints[0].x, canvasPoints[0].y);
-
-        // Curve through all middle points
-        for (let i = 1; i < canvasPoints.length - 2; i++) {
-            const xc = (canvasPoints[i].x + canvasPoints[i + 1].x) / 2;
-            const yc = (canvasPoints[i].y + canvasPoints[i + 1].y) / 2;
-            ctx.quadraticCurveTo(canvasPoints[i].x, canvasPoints[i].y, xc, yc);
-        }
-
-        // For the last segment, curve to the final point
-        const last = canvasPoints.length - 1;
-        ctx.quadraticCurveTo(
-            canvasPoints[last - 1].x,
-            canvasPoints[last - 1].y,
-            canvasPoints[last].x,
-            canvasPoints[last].y
-        );
-    }
-
-    ctx.stroke();
-
-    // Draw arrow at the end if requested
-    if (showArrow && points.length >= 2) {
-        const lastPoint = rinkToCanvas(points[points.length - 1], transform);
-        const secondLastPoint = rinkToCanvas(points[points.length - 2], transform);
-        drawArrowHead(ctx, secondLastPoint, lastPoint, color, strokeWidth);
-    }
-}
-
-/**
- * Draws an arrow (line with directional indicator)
- * Requirements: 5.1
- *
- * @param ctx - Canvas 2D rendering context
- * @param points - Array of positions defining the arrow path
- * @param color - Arrow color (hex format)
- * @param strokeWidth - Arrow width in pixels
- * @param transform - Transformation context for coordinate conversion
- */
-export function drawArrow(
-    ctx: CanvasRenderingContext2D,
-    points: Position[],
-    color: string,
-    strokeWidth: number,
+    stroke: StrokeOptions & { points: Position[]; color: string; strokeWidth: number },
     transform: TransformContext
 ): void {
-    // Draw the line with arrow head
-    drawLine(ctx, points, color, strokeWidth, transform, true);
+    if (stroke.points.length < 2) return;
+    const pxPerFt = Math.min(transform.scaleX, transform.scaleY);
+    const geometry = buildStrokeGeometry(
+        { ...stroke, points: stroke.points.map((p) => rinkToCanvas(p, transform)) },
+        pxPerFt
+    );
+
+    paintStrokeGeometry(ctx, geometry, stroke.color, pxPerFt);
+}
+
+/**
+ * Paints precomputed stroke geometry (canvas px): the pattern polylines, then
+ * the end cap. Shared by the board and the drill legend swatches.
+ */
+export function paintStrokeGeometry(
+    ctx: CanvasRenderingContext2D,
+    geometry: StrokeGeometry,
+    color: string,
+    pxPerFt: number
+): void {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = geometry.lineWidth;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    for (const line of geometry.polylines) {
+        ctx.beginPath();
+        ctx.moveTo(line[0].x, line[0].y);
+        for (let i = 1; i < line.length; i++) ctx.lineTo(line[i].x, line[i].y);
+        ctx.stroke();
+    }
+
+    if (!geometry.end) return;
+    const { tip, angle, type } = geometry.end;
+    if (type === "arrow") {
+        const from = { x: tip.x - Math.cos(angle), y: tip.y - Math.sin(angle) };
+        drawArrowHead(ctx, from, tip, color, geometry.lineWidth);
+    } else {
+        const half = Math.max(1.8 * pxPerFt, 4);
+        const nx = -Math.sin(angle);
+        const ny = Math.cos(angle);
+        ctx.beginPath();
+        ctx.moveTo(tip.x + nx * half, tip.y + ny * half);
+        ctx.lineTo(tip.x - nx * half, tip.y - ny * half);
+        ctx.stroke();
+    }
 }
 
 /**
@@ -216,35 +140,37 @@ export function drawPlayerIcon(
     ctx: CanvasRenderingContext2D,
     player: PlayerIcon,
     transform: TransformContext,
-    isSelected: boolean = false
+    isSelected: boolean = false,
+    zoom: number = 1
 ): void {
-    const canvasPos = rinkToCanvas(player.position, transform);
-    const radius = PLAYER_ICON_RADIUS * Math.min(transform.scaleX, transform.scaleY);
+    const pxPerFt = Math.min(transform.scaleX, transform.scaleY);
+    drawPlayerGlyph(
+        ctx,
+        player,
+        rinkToCanvas(player.position, transform),
+        glyphRadiusPx(PLAYER_RADIUS_FT, pxPerFt, zoom),
+        isSelected
+    );
+}
 
-    // Draw selection highlight if selected
-    if (isSelected) {
-        ctx.strokeStyle = SELECTION_COLOR;
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.arc(canvasPos.x, canvasPos.y, radius + 4, 0, Math.PI * 2);
-        ctx.stroke();
-    }
-
-    // Draw player circle
-    ctx.fillStyle = player.color;
-    ctx.strokeStyle = "#000000";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(canvasPos.x, canvasPos.y, radius, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-
-    // Draw label text
-    ctx.fillStyle = "#FFFFFF";
-    ctx.font = `bold ${Math.floor(radius * 1.2)}px Arial`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(player.label, canvasPos.x, canvasPos.y);
+/**
+ * Draws an equipment item (puck, cone, net, ...)
+ */
+export function drawEquipmentItem(
+    ctx: CanvasRenderingContext2D,
+    item: EquipmentItem,
+    transform: TransformContext,
+    isSelected: boolean = false,
+    zoom: number = 1
+): void {
+    const pxPerFt = Math.min(transform.scaleX, transform.scaleY);
+    drawEquipmentGlyph(
+        ctx,
+        item,
+        rinkToCanvas(item.position, transform),
+        glyphRadiusPx(EQUIPMENT_RADIUS_FT[item.kind], pxPerFt, zoom),
+        isSelected
+    );
 }
 
 /**
@@ -330,64 +256,27 @@ export function drawElement(
         ctx.globalAlpha = 1.0;
     }
 
-    // Draw the actual element
-    switch (element.type) {
-        case "line":
-            drawLine(
-                ctx,
-                element.points,
-                element.color,
-                element.strokeWidth,
-                transform,
-                false
-            );
-            break;
-        case "curve":
-            drawCurve(
-                ctx,
-                element.points,
-                element.color,
-                element.strokeWidth,
-                transform,
-                false
-            );
-            break;
-        case "arrow":
-            drawArrow(ctx, element.points, element.color, element.strokeWidth, transform);
-            break;
-    }
+    drawStroke(ctx, element, transform);
 }
 
 /**
- * Draws all elements from play data
+ * Draws all elements from play data: drawings, equipment, players, annotations
  *
  * @param ctx - Canvas 2D rendering context
- * @param players - Array of player icons
- * @param drawings - Array of drawing elements
- * @param annotations - Array of text annotations
+ * @param playData - Play data to render
  * @param transform - Transformation context
  * @param selectedId - ID of currently selected element (if any)
+ * @param zoom - Canvas zoom applied by the caller (keeps minimum glyph size on screen)
  */
 export function drawAllElements(
     ctx: CanvasRenderingContext2D,
-    players: PlayerIcon[],
-    drawings: DrawingElement[],
-    annotations: TextAnnotation[],
+    playData: PlayData,
     transform: TransformContext,
-    selectedId?: string
+    selectedId?: string,
+    zoom: number = 1
 ): void {
-    // Draw drawings first (bottom layer)
-    drawings.forEach((drawing) => {
-        drawElement(ctx, drawing, transform, drawing.id === selectedId);
-    });
-
-    // Draw players (middle layer)
-    players.forEach((player) => {
-        drawPlayerIcon(ctx, player, transform, player.id === selectedId);
-    });
-
-    // Draw annotations last (top layer)
-    annotations.forEach((annotation) => {
-        drawTextAnnotation(ctx, annotation, transform, annotation.id === selectedId);
-    });
+    playData.drawings.forEach((d) => drawElement(ctx, d, transform, d.id === selectedId));
+    playData.equipment.forEach((e) => drawEquipmentItem(ctx, e, transform, e.id === selectedId, zoom));
+    playData.players.forEach((p) => drawPlayerIcon(ctx, p, transform, p.id === selectedId, zoom));
+    playData.annotations.forEach((a) => drawTextAnnotation(ctx, a, transform, a.id === selectedId));
 }

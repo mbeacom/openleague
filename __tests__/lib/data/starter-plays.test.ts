@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { STARTER_PLAYS } from "@/lib/data/starter-plays";
-import { validatePlayData } from "@/types/practice-planner";
+import { playDataSchema } from "@/lib/utils/play-data";
 import { RINK_DIMENSIONS } from "@/lib/utils/canvas/rink-renderer";
 
 const withinRink = ({ x, y }: { x: number; y: number }) =>
@@ -28,16 +28,16 @@ describe("Starter plays pack", () => {
                 expect(play.description.length).toBeLessThanOrEqual(1000);
             });
 
-            it("passes PlayData validation", () => {
-                const result = validatePlayData(play.playData);
-                expect(result.errors).toEqual([]);
-                expect(result.valid).toBe(true);
+            it("passes the v2 play-data schema", () => {
+                const result = playDataSchema.safeParse(play.playData);
+                expect(result.success ? [] : result.error.issues).toEqual([]);
             });
 
             it("has element ids unique within the play", () => {
                 const ids = [
                     ...play.playData.players.map((p) => p.id),
                     ...play.playData.drawings.map((d) => d.id),
+                    ...play.playData.equipment.map((e) => e.id),
                     ...play.playData.annotations.map((a) => a.id),
                 ];
                 expect(new Set(ids).size).toBe(ids.length);
@@ -52,8 +52,18 @@ describe("Starter plays pack", () => {
                         expect(withinRink(point)).toBe(true);
                     }
                 }
+                for (const item of play.playData.equipment) {
+                    expect(withinRink(item.position)).toBe(true);
+                }
                 for (const annotation of play.playData.annotations) {
                     expect(withinRink(annotation.position)).toBe(true);
+                }
+            });
+
+            it("tags passes and shots semantically (not just by color)", () => {
+                for (const d of play.playData.drawings) {
+                    if (d.id.includes("pass")) expect(d.action).toBe("pass");
+                    if (d.id.includes("shot")) expect(d.action).toBe("shot");
                 }
             });
 

@@ -42,6 +42,8 @@ import {
   Place as PlaceIcon,
 } from "@mui/icons-material";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { PlayLegend } from "@/components/features/practice-planner/PlayLegend";
+import type { PlayData } from "@/types/practice-planner";
 import {
   deletePracticeSession,
   sharePracticeSession,
@@ -57,6 +59,7 @@ interface SessionPlay {
     name: string;
     description: string | null;
     thumbnail: string | null;
+    playData: PlayData | null;
   };
 }
 
@@ -565,6 +568,10 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
                       </Typography>
                     </Stack>
                   )}
+                </Box>
+
+                <Box sx={{ px: 3, pt: 2 }}>
+                  <PlayLegend playData={activePlay.play.playData} />
                 </Box>
 
                 {/* Play details */}

@@ -11,12 +11,13 @@
  */
 
 import React, { useRef, useEffect, useState, useCallback, forwardRef, useImperativeHandle } from "react";
-import {
+import type {
     PlayData,
     DrawingTool,
+    EquipmentKind,
+    PlayerRole,
     Position,
-    PlayerIcon,
-    DrawingElement,
+    StrokeOptions,
     TextAnnotation,
 } from "@/types/practice-planner";
 import {
@@ -26,7 +27,19 @@ import {
     rinkToCanvas,
     canvasToRink,
 } from "@/lib/utils/canvas/rink-renderer";
-import { drawAllElements } from "@/lib/utils/canvas/drawing-utils";
+import { drawAllElements, drawStroke } from "@/lib/utils/canvas/drawing-utils";
+import { createEmptyPlayData } from "@/lib/utils/play-data";
+import {
+    findElement,
+    finishStroke,
+    limitMessage,
+    moveElement,
+    placeEquipment,
+    placePlayer,
+    removeElement,
+    updateElement as applyElementPatch,
+    type ElementPatch,
+} from "@/lib/utils/canvas/element-ops";
 import {
     HistoryManager,
     hitTest,
@@ -46,6 +59,16 @@ export interface RinkBoardProps {
     width?: number;
     height?: number;
     onUndoRedoStateChange?: (canUndo: boolean, canRedo: boolean) => void;
+    /** Role placed by the player tool (default "X") */
+    playerRole?: PlayerRole;
+    /** Action/path/end used by the stroke tool */
+    strokeOptions?: StrokeOptions;
+    /** Kind placed by the equipment tool (default "cone") */
+    equipmentKind?: EquipmentKind;
+    /** Fires whenever the selected element changes (null = nothing selected) */
+    onSelectionChange?: (id: string | null) => void;
+    /** Fires with a user-facing message when an add is blocked by a play limit */
+    onLimitReached?: (message: string) => void;
 }
 
 /**
@@ -56,6 +79,8 @@ export interface RinkBoardHandle {
     undo: () => void;
     redo: () => void;
     clear: () => void;
+    /** Patches an element's editable fields; recorded in undo history */
+    updateElement: (id: string, patch: ElementPatch) => void;
 }
 
 /**
@@ -63,7 +88,21 @@ export interface RinkBoardHandle {
  */
 const DEFAULT_WIDTH = 800;
 const DEFAULT_HEIGHT = 400;
-const DEFAULT_COLOR = "#000000";
+/** True when a key event came from a text-entry control (shortcuts must not fire). */
+function isEditableTarget(target: EventTarget | null): boolean {
+    if (!(target instanceof HTMLElement)) return false;
+    return (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        target.isContentEditable
+    );
+}
+
+const DEFAULT_COLOR = "#212121";
+const DEFAULT_STROKE_OPTIONS: StrokeOptions = { action: "skate", path: "freehand", end: "arrow" };
+/** Minimum on-screen hit radius in CSS pixels, so small glyphs stay tappable */
+const MIN_HIT_RADIUS_PX = 22;
 
 /**
  * RinkBoard Component
@@ -80,6 +119,11 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         width = DEFAULT_WIDTH,
         height = DEFAULT_HEIGHT,
         onUndoRedoStateChange,
+        playerRole = "X",
+        strokeOptions = DEFAULT_STROKE_OPTIONS,
+        equipmentKind = "cone",
+        onSelectionChange,
+        onLimitReached,
     },
     ref
 ) {
@@ -227,58 +271,18 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         // Draw rink background
         drawRink(ctx, transform);
 
-        // Create a modified version of playData for rendering with drag preview
-        let renderPlayers = playData.players;
-        let renderAnnotations = playData.annotations;
+        // Drag preview is visual only; the move is committed on mouseUp
+        const renderData = isDragging && selectedElementId && dragPreviewPosition
+            ? moveElement(playData, selectedElementId, dragPreviewPosition)
+            : playData;
+        drawAllElements(ctx, renderData, transform, selectedElementId || undefined, scale);
 
-        // Apply drag preview position during dragging (visual feedback only)
-        if (isDragging && selectedElementId && dragPreviewPosition) {
-            const playerIndex = playData.players.findIndex((p) => p.id === selectedElementId);
-            if (playerIndex !== -1) {
-                renderPlayers = [...playData.players];
-                renderPlayers[playerIndex] = {
-                    ...renderPlayers[playerIndex],
-                    position: dragPreviewPosition,
-                };
-            } else {
-                const annotationIndex = playData.annotations.findIndex((a) => a.id === selectedElementId);
-                if (annotationIndex !== -1) {
-                    renderAnnotations = [...playData.annotations];
-                    renderAnnotations[annotationIndex] = {
-                        ...renderAnnotations[annotationIndex],
-                        position: dragPreviewPosition,
-                    };
-                }
-            }
-        }
-
-        // Draw all elements (with preview position during drag)
-        drawAllElements(
-            ctx,
-            renderPlayers,
-            playData.drawings,
-            renderAnnotations,
-            transform,
-            selectedElementId || undefined
-        );
-
-        // Draw current drawing in progress
-        if (isDrawing && currentDrawingPoints.length > 0) {
-            ctx.strokeStyle = selectedColor;
-            ctx.lineWidth = 2;
-            ctx.lineCap = "round";
-            ctx.lineJoin = "round";
-
-            ctx.beginPath();
-            const startCanvas = rinkToCanvas(currentDrawingPoints[0], transform);
-            ctx.moveTo(startCanvas.x, startCanvas.y);
-
-            for (let i = 1; i < currentDrawingPoints.length; i++) {
-                const pointCanvas = rinkToCanvas(currentDrawingPoints[i], transform);
-                ctx.lineTo(pointCanvas.x, pointCanvas.y);
-            }
-
-            ctx.stroke();
+        // Draw current stroke in progress
+        if (isDrawing && currentDrawingPoints.length > 1) {
+            const previewPoints = strokeOptions.path === "straight"
+                ? [currentDrawingPoints[0], currentDrawingPoints[currentDrawingPoints.length - 1]]
+                : currentDrawingPoints;
+            drawStroke(ctx, { ...strokeOptions, points: previewPoints, color: selectedColor, strokeWidth: 2 }, transform);
         }
     }, [
         transform,
@@ -289,6 +293,8 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         dragPreviewPosition,
         currentDrawingPoints,
         selectedColor,
+        strokeOptions,
+        scale,
     ]);
 
     /**
@@ -380,11 +386,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
     const handleClear = useCallback(() => {
         if (mode === "view") return;
 
-        const clearedData: PlayData = {
-            players: [],
-            drawings: [],
-            annotations: [],
-        };
+        const clearedData: PlayData = createEmptyPlayData();
 
         if (onPlayDataChange) {
             onPlayDataChange(clearedData);
@@ -408,7 +410,33 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         undo: handleUndo,
         redo: handleRedo,
         clear: handleClear,
-    }), [handleUndo, handleRedo, handleClear]);
+        updateElement: (id: string, patch: ElementPatch) => {
+            const current = playDataRef.current;
+            const next = applyElementPatch(current, id, patch);
+            if (next !== current) updatePlayData(next);
+        },
+    }), [handleUndo, handleRedo, handleClear, updatePlayData]);
+
+    /**
+     * Report selection changes; leaving the select tool clears the selection
+     * and abandons any stroke in progress.
+     */
+    // Undo/redo/eraser can remove the selected element; drop the stale selection.
+    useEffect(() => {
+        if (selectedElementId && !findElement(playData, selectedElementId)) setSelectedElementId(null);
+    }, [playData, selectedElementId]);
+    useEffect(() => { onSelectionChange?.(selectedElementId); }, [selectedElementId, onSelectionChange]);
+    useEffect(() => {
+        if (selectedTool !== "select") setSelectedElementId(null);
+        setIsDrawing(false);
+        setCurrentDrawingPoints([]);
+    }, [selectedTool]);
+
+    /** Hit radius in feet that stays MIN_HIT_RADIUS_PX on screen at any zoom */
+    const minHitRadiusFt = useCallback(
+        () => (transform ? MIN_HIT_RADIUS_PX / (Math.min(transform.scaleX, transform.scaleY) * scaleRef.current) : 0),
+        [transform]
+    );
 
     /**
      * Generate unique ID for new elements
@@ -425,6 +453,14 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         (event: React.MouseEvent<HTMLCanvasElement>) => {
             if (mode === "view" || !transform || !canvasRef.current) return;
 
+            // Touch taps never move focus off a text field (touchend is
+            // preventDefault-ed), so blur it here: its blur commit then lands
+            // on the element selected *before* this press changes the selection.
+            const active = document.activeElement;
+            if (active instanceof HTMLElement && isEditableTarget(active) && !canvasRef.current.contains(active)) {
+                active.blur();
+            }
+
             const rinkPos = getTransformedRinkPosition(event.nativeEvent, canvasRef.current, transform);
             if (!rinkPos) return;
 
@@ -435,30 +471,26 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
                 case "select":
                     // Handle selection
                     // Requirements: 5.4
-                    const hitResult = hitTest(clampedPos, playData);
+                    // A gesture whose release was never seen (e.g. released
+                    // outside the window) must not leak its preview into this one.
+                    setDragPreviewPosition(null);
+                    setIsDragging(false);
+                    setDragOffset(null);
+                    setIsDrawing(false);
+                    setCurrentDrawingPoints([]);
+                    const hitResult = hitTest(clampedPos, playData, minHitRadiusFt());
                     if (hitResult.hit && hitResult.elementId) {
                         setSelectedElementId(hitResult.elementId);
                         setIsDragging(true);
 
-                        // Calculate drag offset for smooth dragging
-                        if (hitResult.elementType === "player") {
-                            const player = playData.players.find((p) => p.id === hitResult.elementId);
-                            if (player) {
-                                setDragOffset({
-                                    x: clampedPos.x - player.position.x,
-                                    y: clampedPos.y - player.position.y,
-                                });
-                            }
-                        } else if (hitResult.elementType === "annotation") {
-                            const annotation = playData.annotations.find(
-                                (a) => a.id === hitResult.elementId
-                            );
-                            if (annotation) {
-                                setDragOffset({
-                                    x: clampedPos.x - annotation.position.x,
-                                    y: clampedPos.y - annotation.position.y,
-                                });
-                            }
+                        // Drag offset keeps the grab point under the pointer.
+                        // Strokes have no position and are not draggable.
+                        const found = findElement(playData, hitResult.elementId);
+                        if (found && found.kind !== "drawing") {
+                            setDragOffset({
+                                x: clampedPos.x - found.element.position.x,
+                                y: clampedPos.y - found.element.position.y,
+                            });
                         }
                     } else {
                         // Clicked on empty space, deselect
@@ -466,33 +498,35 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
                     }
                     break;
 
-                case "player":
+                case "player": {
                     // Place player icon
                     // Requirements: 1.2
-                    const newPlayer: PlayerIcon = {
-                        id: generateId(),
-                        position: clampedPos,
-                        label: String.fromCharCode(65 + playData.players.length % 26), // A, B, C, etc.
-                        color: selectedColor,
-                    };
-                    updatePlayData({
-                        ...playData,
-                        players: [...playData.players, newPlayer],
-                    });
+                    const blocked = limitMessage(playData, "player");
+                    if (blocked) { onLimitReached?.(blocked); break; }
+                    updatePlayData(placePlayer(playData, clampedPos, playerRole, generateId()));
                     break;
+                }
 
-                case "line":
-                case "curve":
-                case "arrow":
-                    // Start drawing
+                case "equipment": {
+                    const blocked = limitMessage(playData, "equipment");
+                    if (blocked) { onLimitReached?.(blocked); break; }
+                    updatePlayData(placeEquipment(playData, clampedPos, equipmentKind, generateId()));
+                    break;
+                }
+
+                case "stroke": {
+                    // Start drawing; the limit is checked when the stroke finishes
                     // Requirements: 1.3, 5.1, 5.2
                     setIsDrawing(true);
                     setCurrentDrawingPoints([clampedPos]);
                     break;
+                }
 
-                case "text":
+                case "text": {
                     // Add text annotation
                     // Requirements: 1.4
+                    const blocked = limitMessage(playData, "annotation");
+                    if (blocked) { onLimitReached?.(blocked); break; }
                     const text = prompt("Enter text annotation:");
                     if (text && text.trim()) {
                         const newAnnotation: TextAnnotation = {
@@ -508,28 +542,17 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
                         });
                     }
                     break;
+                }
 
-                case "eraser":
+                case "eraser": {
                     // Erase element
                     // Requirements: 5.4
-                    const eraserHitResult = hitTest(clampedPos, playData);
+                    const eraserHitResult = hitTest(clampedPos, playData, minHitRadiusFt());
                     if (eraserHitResult.hit && eraserHitResult.elementId) {
-                        const newPlayData = {
-                            ...playData,
-                            players: eraserHitResult.elementType === "player"
-                                ? playData.players.filter((p) => p.id !== eraserHitResult.elementId)
-                                : playData.players,
-                            drawings: eraserHitResult.elementType === "drawing"
-                                ? playData.drawings.filter((d) => d.id !== eraserHitResult.elementId)
-                                : playData.drawings,
-                            annotations: eraserHitResult.elementType === "annotation"
-                                ? playData.annotations.filter((a) => a.id !== eraserHitResult.elementId)
-                                : playData.annotations,
-                        };
-
-                        updatePlayData(newPlayData);
+                        updatePlayData(removeElement(playData, eraserHitResult.elementId));
                     }
                     break;
+                }
             }
         },
         [
@@ -538,9 +561,13 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
             selectedTool,
             selectedColor,
             playData,
+            playerRole,
+            equipmentKind,
+            onLimitReached,
             updatePlayData,
             generateId,
             getTransformedRinkPosition,
+            minHitRadiusFt,
         ]
     );
 
@@ -562,7 +589,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
             const clampedPos = clampToRinkBounds(rinkPos);
 
             // Continue drawing if in drawing mode
-            if (isDrawing && (selectedTool === "line" || selectedTool === "curve" || selectedTool === "arrow")) {
+            if (isDrawing && selectedTool === "stroke") {
                 setCurrentDrawingPoints((prev) => [...prev, clampedPos]);
             }
 
@@ -594,55 +621,19 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         () => {
             if (mode === "view" || !transform) return;
 
-            // Finish drawing
-            if (isDrawing && currentDrawingPoints.length >= 2) {
-                const newDrawing: DrawingElement = {
-                    id: generateId(),
-                    type: selectedTool as "line" | "curve" | "arrow",
-                    points: currentDrawingPoints,
-                    color: selectedColor,
-                    strokeWidth: 2,
-                };
-
-                updatePlayData({
-                    ...playData,
-                    drawings: [...playData.drawings, newDrawing],
-                });
+            // Finish drawing (taps shorter than 1 ft come back unchanged and are dropped)
+            if (isDrawing && selectedTool === "stroke") {
+                const finished = finishStroke(playData, currentDrawingPoints, strokeOptions, selectedColor, generateId());
+                if (finished !== playData) {
+                    const blocked = limitMessage(playData, "drawing");
+                    if (blocked) onLimitReached?.(blocked);
+                    else updatePlayData(finished);
+                }
             }
 
             // Commit drag changes to playData (single history entry)
             if (isDragging && selectedElementId && dragPreviewPosition) {
-                const currentPlayData = playDataRef.current;
-
-                // Update player position
-                const playerIndex = currentPlayData.players.findIndex((p) => p.id === selectedElementId);
-                if (playerIndex !== -1) {
-                    const newPlayers = [...currentPlayData.players];
-                    newPlayers[playerIndex] = {
-                        ...newPlayers[playerIndex],
-                        position: dragPreviewPosition,
-                    };
-                    updatePlayData({
-                        ...currentPlayData,
-                        players: newPlayers,
-                    });
-                } else {
-                    // Update annotation position
-                    const annotationIndex = currentPlayData.annotations.findIndex(
-                        (a) => a.id === selectedElementId
-                    );
-                    if (annotationIndex !== -1) {
-                        const newAnnotations = [...currentPlayData.annotations];
-                        newAnnotations[annotationIndex] = {
-                            ...newAnnotations[annotationIndex],
-                            position: dragPreviewPosition,
-                        };
-                        updatePlayData({
-                            ...currentPlayData,
-                            annotations: newAnnotations,
-                        });
-                    }
-                }
+                updatePlayData(moveElement(playDataRef.current, selectedElementId, dragPreviewPosition));
             }
 
             // Reset drawing state
@@ -664,11 +655,28 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
             currentDrawingPoints,
             selectedTool,
             selectedColor,
+            strokeOptions,
             playData,
+            onLimitReached,
             updatePlayData,
             generateId,
         ]
     );
+
+    /**
+     * A drag or stroke released outside the canvas ends the same way a canvas
+     * release does. Releases on the canvas are left to its own handler (they
+     * also bubble here, before React has re-rendered).
+     */
+    useEffect(() => {
+        if (!isDragging && !isDrawing) return;
+        const onWindowMouseUp = (event: MouseEvent) => {
+            if (event.target instanceof Node && canvasRef.current?.contains(event.target)) return;
+            handleMouseUp();
+        };
+        window.addEventListener("mouseup", onWindowMouseUp);
+        return () => window.removeEventListener("mouseup", onWindowMouseUp);
+    }, [isDragging, isDrawing, handleMouseUp]);
 
     /**
      * Handle keyboard delete key for selected elements
@@ -678,18 +686,12 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         if (mode === "view" || !selectedElementId) return;
 
         const handleKeyDown = (event: KeyboardEvent) => {
+            if (isEditableTarget(event.target)) return;
             if (event.key === "Delete" || event.key === "Backspace") {
                 event.preventDefault();
 
                 // Remove selected element
-                updatePlayData({
-                    ...playData,
-                    players: playData.players.filter((p) => p.id !== selectedElementId),
-                    drawings: playData.drawings.filter((d) => d.id !== selectedElementId),
-                    annotations: playData.annotations.filter(
-                        (a) => a.id !== selectedElementId
-                    ),
-                });
+                updatePlayData(removeElement(playData, selectedElementId));
                 setSelectedElementId(null);
             }
         };
@@ -706,6 +708,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         if (mode === "view") return;
 
         const handleKeyDown = (event: KeyboardEvent) => {
+            if (isEditableTarget(event.target)) return;
             // Undo: Ctrl+Z (Windows/Linux) or Cmd+Z (Mac)
             if ((event.ctrlKey || event.metaKey) && event.key === "z" && !event.shiftKey) {
                 event.preventDefault();

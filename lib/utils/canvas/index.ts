@@ -22,10 +22,9 @@ export {
 
 // Drawing utilities
 export {
-    drawLine,
-    drawCurve,
-    drawArrow,
+    drawStroke,
     drawPlayerIcon,
+    drawEquipmentItem,
     drawTextAnnotation,
     drawElement,
     drawAllElements,

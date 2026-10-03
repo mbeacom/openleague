@@ -15,19 +15,20 @@ import {
     DrawingElement,
     TextAnnotation,
     PlayData,
+    EquipmentItem,
 } from "@/types/practice-planner";
 import { TransformContext, canvasToRink } from "./rink-renderer";
+import { PLAYER_RADIUS_FT, EQUIPMENT_RADIUS_FT } from "./glyph-metrics";
 
 /**
  * Hit detection constants
  */
-const PLAYER_ICON_RADIUS = 12; // feet in rink coordinates (must match drawing-utils)
 const HIT_THRESHOLD = 5; // Hit detection threshold in rink coordinates
 
 /**
  * Type for elements that can be selected
  */
-export type SelectableElement = PlayerIcon | DrawingElement | TextAnnotation;
+export type SelectableElement = PlayerIcon | DrawingElement | TextAnnotation | EquipmentItem;
 
 /**
  * Result of a hit detection test
@@ -35,7 +36,7 @@ export type SelectableElement = PlayerIcon | DrawingElement | TextAnnotation;
 export interface HitTestResult {
     hit: boolean;
     elementId?: string;
-    elementType?: "player" | "drawing" | "annotation";
+    elementType?: "player" | "drawing" | "annotation" | "equipment";
     element?: SelectableElement;
 }
 
@@ -143,17 +144,7 @@ export class HistoryManager {
      * Deep clones play data to prevent mutations
      */
     private deepClone(playData: PlayData): PlayData {
-        return {
-            players: playData.players.map((p) => ({ ...p, position: { ...p.position } })),
-            drawings: playData.drawings.map((d) => ({
-                ...d,
-                points: d.points.map((pt) => ({ ...pt })),
-            })),
-            annotations: playData.annotations.map((a) => ({
-                ...a,
-                position: { ...a.position },
-            })),
-        };
+        return structuredClone(playData);
     }
 }
 
@@ -228,16 +219,19 @@ export function getEventRinkPosition(
  *
  * @param point - Point to test in rink coordinates
  * @param player - Player icon to test against
+ * @param minHitRadiusFt - Minimum hit radius in feet (default: 0)
  * @returns True if point hits the player
  */
 export function hitTestPlayer(
     point: Position,
-    player: PlayerIcon
+    player: PlayerIcon,
+    minHitRadiusFt = 0
 ): boolean {
+    const r = Math.max(PLAYER_RADIUS_FT, minHitRadiusFt);
     const distance = Math.sqrt(
         Math.pow(point.x - player.position.x, 2) + Math.pow(point.y - player.position.y, 2)
     );
-    return distance <= PLAYER_ICON_RADIUS;
+    return distance <= r;
 }
 
 /**
@@ -246,11 +240,13 @@ export function hitTestPlayer(
  *
  * @param point - Point to test in rink coordinates
  * @param drawing - Drawing element to test against
+ * @param threshold - Hit detection threshold (default: HIT_THRESHOLD)
  * @returns True if point hits the drawing
  */
 export function hitTestDrawing(
     point: Position,
-    drawing: DrawingElement
+    drawing: DrawingElement,
+    threshold = HIT_THRESHOLD
 ): boolean {
     // Check each line segment in the drawing
     for (let i = 0; i < drawing.points.length - 1; i++) {
@@ -258,7 +254,7 @@ export function hitTestDrawing(
         const p2 = drawing.points[i + 1];
 
         const distance = distanceToLineSegment(point, p1, p2);
-        if (distance <= HIT_THRESHOLD) {
+        if (distance <= threshold) {
             return true;
         }
     }
@@ -302,16 +298,36 @@ export function hitTestAnnotation(
 }
 
 /**
+ * Tests if a point hits an equipment item
+ * Requirements: 5.4
+ *
+ * @param point - Point to test in rink coordinates
+ * @param item - Equipment item to test against
+ * @param minHitRadiusFt - Minimum hit radius in feet (default: 0)
+ * @returns True if point hits the equipment
+ */
+export function hitTestEquipment(
+    point: Position,
+    item: EquipmentItem,
+    minHitRadiusFt = 0
+): boolean {
+    const r = Math.max(EQUIPMENT_RADIUS_FT[item.kind], minHitRadiusFt);
+    return Math.hypot(point.x - item.position.x, point.y - item.position.y) <= r;
+}
+
+/**
  * Performs hit testing on all elements in play data
  * Requirements: 5.4
  *
  * @param point - Point to test in rink coordinates
  * @param playData - Play data containing all elements
+ * @param minHitRadiusFt - Minimum hit radius in feet (default: 0)
  * @returns Hit test result with element information
  */
 export function hitTest(
     point: Position,
-    playData: PlayData
+    playData: PlayData,
+    minHitRadiusFt = 0
 ): HitTestResult {
     // Test annotations first (top layer)
     for (const annotation of playData.annotations) {
@@ -325,9 +341,9 @@ export function hitTest(
         }
     }
 
-    // Test players (middle layer)
+    // Test players
     for (const player of playData.players) {
-        if (hitTestPlayer(point, player)) {
+        if (hitTestPlayer(point, player, minHitRadiusFt)) {
             return {
                 hit: true,
                 elementId: player.id,
@@ -337,9 +353,21 @@ export function hitTest(
         }
     }
 
+    // Test equipment
+    for (const item of playData.equipment) {
+        if (hitTestEquipment(point, item, minHitRadiusFt)) {
+            return {
+                hit: true,
+                elementId: item.id,
+                elementType: "equipment",
+                element: item,
+            };
+        }
+    }
+
     // Test drawings (bottom layer)
     for (const drawing of playData.drawings) {
-        if (hitTestDrawing(point, drawing)) {
+        if (hitTestDrawing(point, drawing, Math.max(HIT_THRESHOLD, minHitRadiusFt))) {
             return {
                 hit: true,
                 elementId: drawing.id,

@@ -24,6 +24,7 @@ import {
     type SharePracticeSessionInput,
 } from "@/lib/utils/validation";
 import type { PlayData } from "@/types/practice-planner";
+import { playDataOrEmpty } from "@/lib/utils/play-data";
 import {
     assignVenueReservation,
     createVenueReservation,
@@ -1265,7 +1266,7 @@ export async function getPracticeSessionById(input: GetPracticeSessionByIdInput)
                         name: p.play.name,
                         description: p.play.description,
                         thumbnail: p.play.thumbnail,
-                        playData: p.play.playData as unknown as PlayData,
+                        playData: playDataOrEmpty(p.play.playData, `play ${p.play.id}`),
                     },
                 })),
             },

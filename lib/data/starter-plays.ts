@@ -8,22 +8,25 @@
  * - Rink coordinates are in feet: x 0-200 (left to right), y 0-85 (top to bottom)
  * - Left goal line x=11, right goal line x=189; blue lines x=75 and x=125
  * - Center ice (100, 42.5); end-zone faceoff dots at x=31/169, y=20.5/64.5
- * - Player markers render with a 12 ft radius, so player centers are kept
- *   roughly 24+ ft apart to avoid overlapping circles
  *
  * Diagram conventions used across the pack:
- * - Blue players (#0000FF): our team; Red (#FF0000): opponents; Black: goalie
- * - Black arrows: skating routes; Orange arrows: passes; Red arrows: shots
- * - Purple lines: zone/coverage markings
+ * - Meaning is carried by `action` (skate, pass, shot, line) and `role`
+ *   (F/D forwards and defense, O opponents, G goalie), never by color alone;
+ *   colors are just the theme defaults for each
+ * - Player markers are 6 ft radius, so centers are kept >= 12 ft apart
  */
 
-import type {
-    DrawingElement,
-    PlayData,
-    PlayerIcon,
-    Position,
-    TextAnnotation,
+import {
+    PLAY_DATA_VERSION,
+    type DrawingElement,
+    type PlayData,
+    type PlayerIcon,
+    type PlayerRole,
+    type Position,
+    type StrokeAction,
+    type TextAnnotation,
 } from "@/types/practice-planner";
+import { DEFAULT_END_FOR_ACTION, ROLE_DEFAULT_COLORS } from "@/lib/utils/canvas/notation";
 
 export interface StarterPlay {
     /** Stable slug used for React keys and thumbnail caching */
@@ -33,42 +36,34 @@ export interface StarterPlay {
     playData: PlayData;
 }
 
-const OUR_TEAM = "#0000FF";
-const OPPONENT = "#FF0000";
-const GOALIE = "#000000";
-const SKATE_COLOR = "#000000";
-const PASS_COLOR = "#FFA500";
-const SHOT_COLOR = "#FF0000";
-const ZONE_COLOR = "#800080";
+const SKATE_COLOR = "#212121";
+const PASS_COLOR = "#1976D2";
+const SHOT_COLOR = "#D32F2F";
+const OPPONENT_ROUTE_COLOR = "#D32F2F";
+const ZONE_COLOR = "#0D47A1";
 
 type Point = [x: number, y: number];
 
 const toPositions = (points: Point[]): Position[] =>
     points.map(([x, y]) => ({ x, y }));
 
-function player(id: string, label: string, x: number, y: number, color: string = OUR_TEAM): PlayerIcon {
-    return { id, label, position: { x, y }, color };
+type Side = "us" | "them" | "goalie";
+
+function player(id: string, label: string, x: number, y: number, side: Side = "us"): PlayerIcon {
+    // A label "C" means center (a forward), never coach.
+    const role: PlayerRole = side === "them" ? "O" : side === "goalie" ? "G" : label.startsWith("D") ? "D" : "F";
+    return { id, role, label, position: { x, y }, color: ROLE_DEFAULT_COLORS[role] };
 }
 
-function skate(id: string, ...points: Point[]): DrawingElement {
-    return { id, type: "arrow", points: toPositions(points), color: SKATE_COLOR, strokeWidth: 3 };
+function stroke(action: StrokeAction, id: string, color: string, strokeWidth: number, points: Point[]): DrawingElement {
+    return { id, action, path: "straight", end: DEFAULT_END_FOR_ACTION[action], points: toPositions(points), color, strokeWidth };
 }
 
-function pass(id: string, ...points: Point[]): DrawingElement {
-    return { id, type: "arrow", points: toPositions(points), color: PASS_COLOR, strokeWidth: 2 };
-}
-
-function shot(id: string, ...points: Point[]): DrawingElement {
-    return { id, type: "arrow", points: toPositions(points), color: SHOT_COLOR, strokeWidth: 4 };
-}
-
-function opponentRoute(id: string, ...points: Point[]): DrawingElement {
-    return { id, type: "arrow", points: toPositions(points), color: OPPONENT, strokeWidth: 2 };
-}
-
-function zoneLine(id: string, ...points: Point[]): DrawingElement {
-    return { id, type: "line", points: toPositions(points), color: ZONE_COLOR, strokeWidth: 2 };
-}
+const skate = (id: string, ...points: Point[]) => stroke("skate", id, SKATE_COLOR, 3, points);
+const pass = (id: string, ...points: Point[]) => stroke("pass", id, PASS_COLOR, 2, points);
+const shot = (id: string, ...points: Point[]) => stroke("shot", id, SHOT_COLOR, 2, points);
+const opponentRoute = (id: string, ...points: Point[]) => stroke("skate", id, OPPONENT_ROUTE_COLOR, 2, points);
+const zoneLine = (id: string, ...points: Point[]) => stroke("line", id, ZONE_COLOR, 2, points);
 
 function note(id: string, text: string, x: number, y: number, color: string = "#000000"): TextAnnotation {
     return { id, text, position: { x, y }, fontSize: 8, color };
@@ -81,6 +76,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
         description:
             "Standard controlled breakout out of the defensive zone. D1 retrieves behind the net and hits the strong-side winger on the wall; the winger chips to the center swinging through the middle with speed while the weak-side winger stretches the far wall.",
         playData: {
+            version: PLAY_DATA_VERSION,
             players: [
                 player("bo-d1", "D1", 16, 56),
                 player("bo-d2", "D2", 27, 30),
@@ -96,6 +92,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
                 skate("bo-rw-route", [46, 73], [85, 71]),
                 skate("bo-d2-route", [32, 32], [55, 34]),
             ],
+            equipment: [],
             annotations: [],
         },
     },
@@ -105,6 +102,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
         description:
             "Full-ice passing and timing drill in three lanes. Pass and follow behind the next two skaters, filling the lane the puck came from. Emphasize crisp tape-to-tape passes, skating full speed through the crossovers, and finishing with a shot in stride.",
         playData: {
+            version: PLAY_DATA_VERSION,
             players: [
                 player("wv-f1", "F1", 16, 15),
                 player("wv-f2", "F2", 16, 42.5),
@@ -117,6 +115,10 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
                 pass("wv-pass1", [32, 36], [50, 28]),
                 pass("wv-pass2", [88, 58], [106, 40]),
             ],
+            equipment: [
+                { id: "wv-pucks", kind: "puckPile", position: { x: 8, y: 42.5 }, rotation: 0 },
+                { id: "wv-net", kind: "net", position: { x: 189, y: 42.5 }, rotation: 0 },
+            ],
             annotations: [],
         },
     },
@@ -126,6 +128,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
         description:
             "1-3-1 umbrella setup on the power play. The point quarterback distributes to the flank shooters at the top of the circles for one-timers while the bumper occupies the middle of the box and the net-front player screens the goalie and hunts tips and rebounds.",
         playData: {
+            version: PLAY_DATA_VERSION,
             players: [
                 player("pp-pt", "PT", 132, 42.5),
                 player("pp-f1", "F1", 150, 13),
@@ -138,6 +141,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
                 pass("pp-pass2", [136, 49], [148, 66]),
                 shot("pp-shot", [155, 17], [184, 39]),
             ],
+            equipment: [],
             annotations: [note("pp-note", "Screen", 168, 58)],
         },
     },
@@ -147,13 +151,14 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
         description:
             "Basic box penalty kill in the defensive zone. All four killers keep sticks in passing lanes and shift as a unit toward the puck side, denying seam passes through the middle. Pressure only when the puck carrier bobbles or turns their back.",
         playData: {
+            version: PLAY_DATA_VERSION,
             players: [
                 player("pk-d1", "D1", 24, 29),
                 player("pk-d2", "D2", 24, 56),
                 player("pk-f1", "F1", 50, 29),
                 player("pk-f2", "F2", 50, 56),
-                player("pk-o1", "O1", 34, 8, OPPONENT),
-                player("pk-o2", "O2", 70, 42.5, OPPONENT),
+                player("pk-o1", "O1", 34, 8, "them"),
+                player("pk-o2", "O2", 70, 42.5, "them"),
             ],
             drawings: [
                 skate("pk-shift1", [24, 25], [28, 16]),
@@ -161,6 +166,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
                 skate("pk-shift3", [24, 52], [26, 42]),
                 skate("pk-shift4", [50, 52], [48, 42]),
             ],
+            equipment: [],
             annotations: [note("pk-note", "Shift", 36, 70)],
         },
     },
@@ -170,13 +176,14 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
         description:
             "Conservative forecheck that traps the breakout. F1 angles the puck carrier to one wall and takes away the D-to-D pass; F2 and F3 seal the boards on each side while both defensemen hold the middle of the neutral zone to swallow chips and stretch passes.",
         playData: {
+            version: PLAY_DATA_VERSION,
             players: [
                 player("fc-f1", "F1", 152, 42.5),
                 player("fc-f2", "F2", 128, 18),
                 player("fc-f3", "F3", 128, 67),
                 player("fc-d1", "D1", 92, 28),
                 player("fc-d2", "D2", 92, 58),
-                player("fc-o1", "O1", 180, 62, OPPONENT),
+                player("fc-o1", "O1", 180, 62, "them"),
             ],
             drawings: [
                 skate("fc-f1-route", [158, 46], [172, 58]),
@@ -184,6 +191,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
                 skate("fc-f3-route", [132, 70], [150, 75]),
                 opponentRoute("fc-o1-route", [176, 68], [158, 76]),
             ],
+            equipment: [],
             annotations: [note("fc-note", "Angle", 162, 52)],
         },
     },
@@ -193,6 +201,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
         description:
             "Offensive-zone puck protection below the goal line. The puck carrier drives up the half-wall and chips the puck back along the boards to the rotating teammate; the three forwards keep rotating corner, half-wall, and slot until a lane opens to attack the net.",
         playData: {
+            version: PLAY_DATA_VERSION,
             players: [
                 player("cy-f1", "F1", 176, 68),
                 player("cy-f2", "F2", 150, 73),
@@ -205,6 +214,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
                 skate("cy-f2-route", [156, 74], [172, 71]),
                 skate("cy-f3-route", [158, 48], [146, 64]),
             ],
+            equipment: [],
             annotations: [],
         },
     },
@@ -214,6 +224,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
         description:
             "Simple offensive-zone set to generate traffic goals. The corner forward wins the puck and moves it to the point; the net-front forward establishes a screen at the top of the crease while the high slot forward crashes for tips and rebounds off the point shot.",
         playData: {
+            version: PLAY_DATA_VERSION,
             players: [
                 player("ps-d1", "D1", 130, 30),
                 player("ps-d2", "D2", 130, 60),
@@ -226,6 +237,10 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
                 shot("ps-shot", [136, 31], [181, 41]),
                 skate("ps-f3-route", [158, 27], [172, 38]),
             ],
+            equipment: [
+                { id: "ps-pucks", kind: "puckPile", position: { x: 128, y: 45 }, rotation: 0 },
+                { id: "ps-net", kind: "net", position: { x: 189, y: 42.5 }, rotation: 0 },
+            ],
             annotations: [note("ps-note", "Screen", 170, 57)],
         },
     },
@@ -235,8 +250,9 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
         description:
             "Base defensive-zone structure. Defensemen own the net-front and battle in the corners, wingers cover the points, and the center supports low. Protect the house: keep opponents to the outside and box out on every shot.",
         playData: {
+            version: PLAY_DATA_VERSION,
             players: [
-                player("dz-g", "G", 13, 42.5, GOALIE),
+                player("dz-g", "G", 13, 42.5, "goalie"),
                 player("dz-d1", "D1", 27, 26),
                 player("dz-d2", "D2", 27, 59),
                 player("dz-c", "C", 47, 42.5),
@@ -251,6 +267,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
                 skate("dz-rw-route", [64, 75], [72, 78]),
                 skate("dz-c-route", [43, 38], [36, 32]),
             ],
+            equipment: [],
             annotations: [note("dz-note", "House", 24, 49, ZONE_COLOR)],
         },
     },
@@ -260,6 +277,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
         description:
             "Regroup to attack with speed instead of forcing a play at the offensive blue line. Forwards peel back, the defensemen move the puck D-to-D, and the center curls underneath to take the second pass in stride while both wingers stretch wide.",
         playData: {
+            version: PLAY_DATA_VERSION,
             players: [
                 player("rg-d1", "D1", 58, 30),
                 player("rg-d2", "D2", 58, 55),
@@ -274,6 +292,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
                 skate("rg-lw-route", [112, 12], [138, 15]),
                 skate("rg-rw-route", [112, 73], [138, 70]),
             ],
+            equipment: [],
             annotations: [],
         },
     },

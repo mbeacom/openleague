@@ -17,11 +17,13 @@ import {
     type GetPlayByIdInput,
     type GetPlaysByTeamInput,
 } from "@/lib/utils/validation";
+import { VALIDATION_CONSTRAINTS, type PlayData } from "@/types/practice-planner";
 import {
-    validatePlayData,
-    VALIDATION_CONSTRAINTS,
-    type PlayData,
-} from "@/types/practice-planner";
+    PLAY_DATA_UNREADABLE_CODE,
+    PLAY_DATA_UNREADABLE_MESSAGE,
+    parseStoredPlayData,
+    playDataSchema,
+} from "@/lib/utils/play-data";
 
 export type ActionResult<T> =
     | { success: true; data: T }
@@ -44,11 +46,6 @@ function sanitizeText(text: string | null | undefined, maxLength: number): strin
 }
 
 /**
- * Maximum length for player labels
- */
-const MAX_PLAYER_LABEL_LENGTH = 50;
-
-/**
  * Sanitize PlayData by sanitizing all text annotations and player labels
  * Requirements: 1.5
  */
@@ -57,13 +54,31 @@ function sanitizePlayData(playData: PlayData): PlayData {
         ...playData,
         players: playData.players.map(player => ({
             ...player,
-            label: sanitizeText(player.label, MAX_PLAYER_LABEL_LENGTH),
+            label: sanitizeText(player.label, VALIDATION_CONSTRAINTS.MAX_PLAYER_LABEL_LENGTH),
         })),
         annotations: playData.annotations.map(annotation => ({
             ...annotation,
             text: sanitizeText(annotation.text, VALIDATION_CONSTRAINTS.MAX_ANNOTATION_LENGTH),
         })),
     };
+}
+
+/**
+ * Sanitizes PlayData, then re-validates the result: sanitizing can empty a
+ * field the schema checked as non-blank (e.g. annotation text "\u0001"), and
+ * storing that would leave a play the strict read path rejects. Rejecting
+ * (rather than silently dropping the element) keeps the action a single,
+ * predictable rule: what is stored always passes the schema.
+ */
+function sanitizeAndRevalidate(
+    playData: PlayData
+): { ok: true; data: PlayData } | { ok: false; result: { success: false; error: string; details: unknown } } {
+    const sanitized = sanitizePlayData(playData);
+    const check = playDataSchema.safeParse(sanitized);
+    if (!check.success) {
+        return { ok: false, result: { success: false, error: "Invalid play data", details: check.error.issues } };
+    }
+    return { ok: true, data: sanitized };
 }
 
 /**
@@ -84,18 +99,10 @@ export async function createPlay(
         // Note: name and description are already sanitized by Zod schema
         // (sanitizedStringWithMin and optionalSanitizedString)
 
-        // Validate PlayData structure
-        const playDataValidation = validatePlayData(validated.playData);
-        if (!playDataValidation.valid) {
-            return {
-                success: false,
-                error: "Invalid play data",
-                details: playDataValidation.errors,
-            };
-        }
-
-        // Sanitize PlayData
-        const sanitizedPlayData = sanitizePlayData(validated.playData as PlayData);
+        // Sanitize PlayData, then confirm it still passes the schema
+        const sanitizedResult = sanitizeAndRevalidate(validated.playData);
+        if (!sanitizedResult.ok) return sanitizedResult.result;
+        const sanitizedPlayData = sanitizedResult.data;
 
         // Create play
         const play = await prisma.play.create({
@@ -125,9 +132,10 @@ export async function createPlay(
         };
     } catch (error) {
         if (error instanceof z.ZodError) {
+            const isPlayData = error.issues.some((issue) => issue.path[0] === "playData");
             return {
                 success: false,
-                error: "Invalid input",
+                error: isPlayData ? "Invalid play data" : "Invalid input",
                 details: error.issues,
             };
         }
@@ -186,18 +194,10 @@ export async function updatePlay(
 
         // Note: name and description are already sanitized by Zod schema
 
-        // Validate PlayData structure
-        const playDataValidation = validatePlayData(validated.playData);
-        if (!playDataValidation.valid) {
-            return {
-                success: false,
-                error: "Invalid play data",
-                details: playDataValidation.errors,
-            };
-        }
-
-        // Sanitize PlayData
-        const sanitizedPlayData = sanitizePlayData(validated.playData as PlayData);
+        // Sanitize PlayData, then confirm it still passes the schema
+        const sanitizedResult = sanitizeAndRevalidate(validated.playData);
+        if (!sanitizedResult.ok) return sanitizedResult.result;
+        const sanitizedPlayData = sanitizedResult.data;
 
         // Update play
         const play = await prisma.play.update({
@@ -226,9 +226,10 @@ export async function updatePlay(
         };
     } catch (error) {
         if (error instanceof z.ZodError) {
+            const isPlayData = error.issues.some((issue) => issue.path[0] === "playData");
             return {
                 success: false,
-                error: "Invalid input",
+                error: isPlayData ? "Invalid play data" : "Invalid input",
                 details: error.issues,
             };
         }
@@ -376,6 +377,16 @@ export async function getPlayById(input: GetPlayByIdInput): Promise<ActionResult
             };
         }
 
+        const parsed = parseStoredPlayData(play.playData);
+        if (!parsed.ok) {
+            console.error(`Unreadable playData for play ${play.id}:`, parsed.error);
+            return {
+                success: false,
+                error: PLAY_DATA_UNREADABLE_MESSAGE,
+                details: { code: PLAY_DATA_UNREADABLE_CODE },
+            };
+        }
+
         return {
             success: true,
             data: {
@@ -383,7 +394,7 @@ export async function getPlayById(input: GetPlayByIdInput): Promise<ActionResult
                 name: play.name,
                 description: play.description,
                 thumbnail: play.thumbnail,
-                playData: play.playData as unknown as PlayData,
+                playData: parsed.data,
                 isTemplate: play.isTemplate,
                 createdAt: play.createdAt,
                 updatedAt: play.updatedAt,
