@@ -1,7 +1,7 @@
 # Practice Board: Hockey-Native Notation — Design
 
 **Date:** 2026-10-02
-**Status:** Draft for review
+**Status:** Implemented (phase 1)
 **Phase:** 1 of 3 in the practice-planner iteration
 
 ## Context
@@ -100,6 +100,10 @@ export type StrokeAction =
   | "line";       // plain line: markings, lanes, no hockey meaning
 
 export type StrokePath = "straight" | "freehand";
+// "straight" means "polyline through the stored points, unsmoothed", not
+// "two endpoints": v1 line/arrow strokes recorded every mouse-move point, and
+// endpoints-only rendering would destroy them. New straight strokes store only
+// [start, end]. "freehand" is smoothed.
 export type StrokeEnd = "arrow" | "stop" | "none";
 
 export interface DrawingElement {
@@ -160,16 +164,18 @@ is neither valid v1 nor valid v2 throws a typed `PlayDataError`.
 
 ### Validation
 
-One Zod v4 schema, `playDataSchema`, in `lib/utils/validation.ts`:
+One Zod v4 schema, `playDataSchema`, defined in `lib/utils/play-data.ts`
+(so `types/` never imports from `lib/`) and imported by
+`lib/utils/validation.ts`:
 
 - replaces the two `playData: z.any()` fields (create and update play schemas);
 - replaces the hand-written guards in `types/practice-planner.ts`
   (`isValidPosition`, `isValidPlayerIcon`, `isValidDrawingElement`,
-  `isValidTextAnnotation`, `validatePlayData`, `validatePlayDataJSON`) — their
+  `isValidTextAnnotation`, `validatePlayData`, `validatePlayDataJSON`, and the test-only `validatePracticeSessionData`, which is deleted) — their
   callers move to the schema; tests in `__tests__/types/practice-planner.test.ts`
   are migrated, not dropped;
 - enforces the existing `VALIDATION_CONSTRAINTS` plus a new
-  `MAX_EQUIPMENT: 50`; positions are bounded to the rink (0–200, 0–85);
+  `MAX_EQUIPMENT: 50`, `MAX_PLAYER_LABEL_LENGTH: 50` and `MAX_STROKE_POINTS: 1000`; positions are bounded to the rink (0–200, 0–85);
   strokes need ≥ 2 points; `MAX_ELEMENTS_PER_PLAY` counts players + drawings +
   equipment + annotations.
 
@@ -217,11 +223,12 @@ helper keeps the "v1 still exists in the DB" fact in one place.
 - Path utilities that sample a polyline (straight or freehand-smoothed, reusing
   the existing curve smoothing) at even arc-length so wave/zig-zag/tick patterns
   render uniformly regardless of how fast the coach drew.
-- `drawPlayer(role, …)`: role glyphs in the Digital Playbook palette —
-  `X`/`O` as letters (X in Action Blue, O in Penalty Box Red by default),
-  `F`/`D` as filled circles with the letter, `G` as a circle with a goalie
-  bar, `C` as a triangle (coach). Default colors come from the theme; the
-  per-player `color` overrides.
+- `drawPlayerGlyph(role, …)`: role glyphs in the Digital Playbook palette.
+  `X`, `F` and `D` are filled circles showing `label || role` (so upgraded v1
+  players, role `X`, look as before: a filled circle with their label). `O` is
+  a hollow ring, `G` a filled circle with a goalie bar, `C` a triangle (coach).
+  Labels too long for the glyph are ellipsized at the minimum font size.
+  Default colors come from the theme; the per-player `color` overrides.
 - `drawEquipment(kind, …)`: puck (small filled disc), puck pile (cluster),
   cone (triangle), pylon (tall narrow triangle), tire (ring), net (rotatable
   goal frame).
@@ -231,6 +238,9 @@ helper keeps the "v1 still exists in the DB" fact in one place.
   cone ≈ 3 ft, net 6 ft wide), with a minimum on-screen size of 8 CSS px so
   they stay tappable when zoomed out.
 
+Legend swatches build strokes with `buildStrokeGeometry` in canvas px and paint
+through the shared `paintStrokeGeometry` helper exported from `drawing-utils.ts`.
+
 `thumbnail-generator.ts` and `drawAllElements` render through the same
 functions, so thumbnails, the board, and the session detail view stay
 identical.
@@ -239,8 +249,10 @@ identical.
 
 ### DrawingToolbar
 
-Tools regroup into four groups, each a single ToggleButton with a secondary
-picker (popover on desktop, bottom sheet on `xs`):
+Tools regroup into four groups, each a single ToggleButton. Secondary options
+render as a contextual options row under the tool buttons on every breakpoint
+(no popover or bottom sheet: fewer moving parts, no portal/focus edge cases on
+mobile):
 
 - **Players**: role (X, O, F, D, G, C)
 - **Movement**: action (7) × path (straight / freehand) × end (arrow / stop / none)
@@ -254,8 +266,9 @@ has an accessible name and tooltip.
 
 ### Element inspector (new: `ElementInspector.tsx`)
 
-Appears when exactly one element is selected (floating panel anchored near the
-selection on `md+`, bottom sheet on `xs`):
+Appears when exactly one element is selected, as an inline panel rendered
+**below the board**, so selecting an element never shifts the canvas
+mid-drag:
 
 - stroke → action, end cap, color
 - player → role, label, color
@@ -269,7 +282,17 @@ Edits go through the board's existing history so they are undoable.
 - Hit-testing and drag gain the `equipment` collection; existing select/drag
   behavior covers it. The eraser removes equipment too.
 - Stroke drawing records the active action/path/end at pointer-up.
-- `RinkBoardHandle` is unchanged (undo/redo/clear).
+- The interface grows: `RinkBoardHandle` gains `updateElement(id, patch)` so
+  inspector edits go through history and are undoable; props gain `playerRole`,
+  `strokeOptions`, `equipmentKind`, `onSelectionChange` and `onLimitReached`.
+  Placement, stroke-finish and limit logic live in pure functions in
+  `lib/utils/canvas/element-ops.ts`.
+- Keyboard shortcuts (Delete/Backspace, undo/redo) ignore keystrokes typed into
+  inputs, textareas, selects and contentEditable elements.
+- The board clears its selection when the selected element disappears (undo,
+  redo, erase); the inspector then hides.
+- Over-limit additions are blocked with a warning snackbar via `limitMessage`
+  in `element-ops`.
 - `RinkBoard.tsx` is already ~900 lines. New hit-testing for equipment goes into
   `lib/utils/canvas/interaction-utils.ts`, and new rendering into
   `drawing-utils.ts`, rather than into the component.
@@ -310,7 +333,8 @@ every starter play passes `playDataSchema`.
   the expected canvas calls against a mocked 2D context (matching the
   approach in `__tests__/lib/utils/canvas/`).
 - `DrawingToolbar` / `ElementInspector` / `PlayLegend`: Testing Library —
-  selecting options, inspector edits are undoable, legend reflects content.
+  the toolbar touch-target test asserts the exported `OPTION_SX` (44px) rather
+  than computed styles; selecting options, inspector edits are undoable, legend reflects content.
 - Read sites: actions return upgraded data for v1 rows (Prisma mocked).
 - Starter pack validates.
 - Gates: `bun run type-check`, `bun run lint`, `bun run test`; `bun run build`
@@ -323,5 +347,7 @@ every starter play passes `playDataSchema`.
   short; revisit after real use.
 - **Mixed-version rows.** v1 rows persist until edited. All reads go through one
   helper, and phase 2/3 must use that helper rather than reading `playData` directly.
+- **Stale thumbnails.** Stored library thumbnails are not regenerated; a v1
+  play's thumbnail stays in the old style until the play is next saved.
 - **Hand-rolled guard removal.** Other callers may depend on the guards in
   `types/practice-planner.ts`. The plan must grep and migrate all of them.
