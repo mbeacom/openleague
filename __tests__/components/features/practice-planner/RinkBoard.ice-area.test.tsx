@@ -307,6 +307,21 @@ describe("RinkBoard ice area", () => {
         expect(second.x).toBeCloseTo(160, 6);
     });
 
+    it("anchors the pinch on a canvas that is offset on the page (client vs canvas coordinates)", () => {
+        const { canvas, at, onPlayDataChange } = setup({ selectedTool: "player" });
+        const [left, top] = [120, 60];
+        canvas.getBoundingClientRect = () => ({ left, top, width: 800, height: 400, right: left + 800, bottom: top + 400, x: left, y: top, toJSON: () => ({}) });
+        const p = at(150, 40);
+        const mid = { clientX: p.clientX + left, clientY: p.clientY + top };
+        fireEvent.touchStart(canvas, { touches: [{ clientX: mid.clientX - 50, clientY: mid.clientY }, { clientX: mid.clientX + 50, clientY: mid.clientY }] });
+        fireEvent.touchMove(canvas, { touches: [{ clientX: mid.clientX - 100, clientY: mid.clientY }, { clientX: mid.clientX + 100, clientY: mid.clientY }] });
+        fireEvent.touchEnd(canvas, { touches: [] });
+        fireEvent.mouseDown(canvas, mid);
+        const placed = onPlayDataChange.mock.calls.at(-1)![0].players[0].position;
+        expect(placed.x).toBeCloseTo(150, 6);
+        expect(placed.y).toBeCloseTo(40, 6);
+    });
+
     it("resets pinch-zoom and pan when the viewport changes", () => {
         const { canvas, ref, onPlayDataChange, rerender } = setup({ selectedTool: "player" });
         // Pinch to 2x around an off-center point, which also pans.
