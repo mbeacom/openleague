@@ -35,12 +35,12 @@ function drill(id: string, playId: string): PlayInSession {
     return { id, playId, name: "Breakout", sequence: 0, duration: 10, instructions: "", playData: createEmptyPlayData(), thumbnail: "" };
 }
 
-function renderEditor(onSave: SaveFn, plays: PlayInSession[] = []) {
+function renderEditor(onSave: SaveFn, plays: PlayInSession[] = [], sessionId: string | null = "csessionxxxxxxxxxxxxxxxxx") {
     render(
         <ThemeProvider theme={createTheme()}>
             <LocalizationProvider dateAdapter={AdapterDateFns}>
                 <PracticeSessionEditor
-                    sessionId="csessionxxxxxxxxxxxxxxxxx"
+                    sessionId={sessionId ?? undefined}
                     teamId="cteamxxxxxxxxxxxxxxxxxxxx"
                     initialData={{ title: "Practice", duration: 60, date: new Date("2026-04-07T22:00:00Z"), plays }}
                     onSave={onSave}
@@ -111,6 +111,66 @@ describe("PracticeSessionEditor drill ids and autosave", () => {
             expect(maxInFlight).toBe(1);
             expect(onSave).toHaveBeenCalledTimes(2);
             expect(screen.queryByText("Unsaved changes")).not.toBeInTheDocument();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+    it("never runs a second create when the coach edits while a new session is saving", async () => {
+        vi.useFakeTimers();
+        try {
+            let release: () => void = () => {};
+            const onSave = vi.fn<SaveFn>(async () => {
+                await new Promise<void>((resolve) => { release = resolve; });
+                return { success: true, plays: [] };
+            });
+            renderEditor(onSave, [], null);
+
+            fireEvent.change(screen.getByLabelText(/session title/i), { target: { value: "New" } });
+            fireEvent.click(screen.getByRole("button", { name: /save session/i }));
+            expect(onSave).toHaveBeenCalledTimes(1);
+
+            fireEvent.change(screen.getByLabelText(/session title/i), { target: { value: "New 2" } });
+            await act(async () => {
+                release();
+                await vi.advanceTimersByTimeAsync(2100);
+            });
+            expect(onSave).toHaveBeenCalledTimes(1);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it("keeps a Save click's notify intent when it arrives during an autosave", async () => {
+        vi.useFakeTimers();
+        try {
+            const releases: Array<() => void> = [];
+            const onSave = vi.fn<SaveFn>(async () => {
+                await new Promise<void>((resolve) => releases.push(resolve));
+                return { success: true, plays: [] };
+            });
+            renderEditor(onSave);
+            fireEvent.change(screen.getByLabelText(/session title/i), { target: { value: "A" } });
+            const saveButton = screen.getByRole("button", { name: /save session/i });
+
+            // The autosave starts and the click lands before isSaving renders.
+            act(() => {
+                vi.advanceTimersByTime(2000);
+                fireEvent.click(saveButton);
+            });
+            expect(onSave).toHaveBeenCalledTimes(1);
+            expect(onSave.mock.calls[0][0].notify).toBe(false);
+
+            await act(async () => {
+                releases[0]();
+                await vi.advanceTimersByTimeAsync(0);
+            });
+            expect(onSave).toHaveBeenCalledTimes(2);
+            expect(onSave.mock.calls[1][0].notify).toBe(true);
+
+            await act(async () => {
+                releases[1]();
+                await vi.advanceTimersByTimeAsync(0);
+            });
         } finally {
             vi.useRealTimers();
         }

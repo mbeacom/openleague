@@ -39,6 +39,7 @@ import {
 import type { BookingConflict } from "@/types/segments";
 import { applySavedPlayIds, type SavedDrillId } from "@/lib/utils/session-drill-ids";
 import { PlayLibrary } from "./PlayLibrary";
+import { useSingleFlightSave } from "./useSingleFlightSave";
 import { SessionDrillList } from "./SessionDrillList";
 import { BookingConflictAlert, VenueBookingFields } from "./VenueBookingFields";
 import {
@@ -150,16 +151,13 @@ export function PracticeSessionEditor({
 
     // Single-flight saves: a save requested while one is running is queued
     // and runs once, after the running save's state has rendered.
-    const saveInFlightRef = useRef(false);
-    const saveQueuedRef = useRef(false);
-    const editVersionRef = useRef(0);
-    const [queuedSaveTick, setQueuedSaveTick] = useState(0);
+    const saveFlight = useSingleFlightSave();
 
     const markDirty = useCallback(() => {
-        editVersionRef.current += 1;
+        saveFlight.markEdited();
         setHasUnsavedChanges(true);
         setSaveSuccess(false);
-    }, []);
+    }, [saveFlight]);
 
     const clearValidationError = useCallback((key: string) => {
         setValidationErrors((prev) =>
@@ -282,8 +280,9 @@ export function PracticeSessionEditor({
      * despite venue booking conflicts.
      */
     const handleSave = useCallback(async (overrideConflicts: boolean = false, notify: boolean = false) => {
-        if (saveInFlightRef.current) {
-            saveQueuedRef.current = true;
+        if (saveFlight.isRunning()) {
+            // A create redirects to its edit page, which loads the saved state.
+            if (sessionId) saveFlight.queue({ overrideConflicts, notify });
             return;
         }
 
@@ -307,8 +306,7 @@ export function PracticeSessionEditor({
             return;
         }
 
-        saveInFlightRef.current = true;
-        const startedVersion = editVersionRef.current;
+        const startedVersion = saveFlight.start();
         const sentPlayIds = new Map(plays.map((play) => [play.id, play.playId]));
         setIsSaving(true);
         setSaveError(null);
@@ -344,11 +342,11 @@ export function PracticeSessionEditor({
             }
 
             setPlays((current) => applySavedPlayIds(current, sentPlayIds, result.plays));
-            if (editVersionRef.current === startedVersion) {
+            if (!saveFlight.editedSince(startedVersion)) {
                 setHasUnsavedChanges(false);
-            } else {
+            } else if (sessionId) {
                 // Edited while saving: save again once this one settles.
-                saveQueuedRef.current = true;
+                saveFlight.queue({ overrideConflicts: false, notify: false });
             }
             setSaveSuccess(true);
 
@@ -365,13 +363,9 @@ export function PracticeSessionEditor({
             );
         } finally {
             setIsSaving(false);
-            saveInFlightRef.current = false;
-            if (saveQueuedRef.current) {
-                saveQueuedRef.current = false;
-                setQueuedSaveTick((tick) => tick + 1);
-            }
+            saveFlight.finish();
         }
-    }, [title, date, duration, plays, isShared, sessionId, booking, onSave, validateForm]);
+    }, [title, date, duration, plays, isShared, sessionId, booking, onSave, validateForm, saveFlight]);
 
     // Keep handleSaveRef updated with latest handleSave function
     useEffect(() => {
@@ -379,9 +373,10 @@ export function PracticeSessionEditor({
     }, [handleSave]);
 
     // Run a queued save after the previous save's state updates have rendered.
+    const { followUp } = saveFlight;
     useEffect(() => {
-        if (queuedSaveTick > 0) void handleSaveRef.current?.();
-    }, [queuedSaveTick]);
+        if (followUp) void handleSaveRef.current?.(followUp.overrideConflicts, followUp.notify);
+    }, [followUp]);
 
     /**
      * Auto-save with debouncing
