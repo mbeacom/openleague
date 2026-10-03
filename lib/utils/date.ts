@@ -138,6 +138,63 @@ export function formatDateTimeInZone(date: Date | string, timeZone: string): str
 }
 
 /**
+ * The fields of a practice session that pick its clock (3b). Structural, so
+ * this module never imports from lib/actions.
+ */
+export interface SessionClockSource {
+  date: string | Date;
+  startAt?: string | Date | null;
+  /** The booked venue's IANA zone; null when no venue is attached. */
+  venueTimezone?: string | null;
+}
+
+/**
+ * Clock time such as "6:00 PM", or "6:00 PM EDT" with `withZone`. A missing or
+ * invalid zone formats in the runtime's zone with no suffix. ICU's narrow
+ * no-break space before AM/PM becomes a plain space, so server and browser
+ * output agree across ICU versions.
+ */
+export function formatClockTime(date: Date, timeZone?: string, withZone = false): string {
+  const zone = isValidTimeZone(timeZone) ? timeZone : undefined;
+  return new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    ...(zone ? { timeZone: zone } : {}),
+    ...(zone && withZone ? { timeZoneName: "short" as const } : {}),
+  })
+    .format(date)
+    .replace(/\u202f/g, " ");
+}
+
+/** "Tuesday, April 7, 2026", in `timeZone` when it is valid, else in the runtime's zone. */
+export function formatLongDate(date: Date, timeZone?: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    ...(isValidTimeZone(timeZone) ? { timeZone } : {}),
+  }).format(date);
+}
+
+/**
+ * Which zone a session's times use (3b): a booked session's valid venue zone,
+ * shown with its short name; otherwise the viewer's zone with no suffix.
+ */
+export function sessionTimeZone(
+  session: Pick<SessionClockSource, "venueTimezone">
+): { timeZone?: string; showZone: boolean } {
+  return isValidTimeZone(session.venueTimezone)
+    ? { timeZone: session.venueTimezone, showZone: true }
+    : { timeZone: undefined, showZone: false };
+}
+
+/** When a session's first block starts: the booked start, else the session date. */
+export function sessionStart(session: Pick<SessionClockSource, "date" | "startAt">): Date {
+  return new Date(session.startAt ?? session.date);
+}
+
+/**
  * Format a date for datetime-local input fields using the runtime's local zone.
  *
  * @deprecated Prefer {@link formatDateTimeLocalInput} with an explicit IANA

@@ -76,6 +76,29 @@ export function sessionWallMinutes(plays: readonly TimelinePlay[]): number {
     return groupStations(plays).reduce((total, group) => total + group.wallMinutes, 0);
 }
 
+const MS_PER_MINUTE = 60_000;
+
+export interface ScheduleRow<T extends TimelinePlay> {
+    group: StationGroup<T>;
+    /** sessionStart + group.startMinute */
+    startsAt: Date;
+    /** startsAt + group.wallMinutes */
+    endsAt: Date;
+}
+
+/**
+ * Each block's start and end instant (3b). Instants only: formatting, and so
+ * the timezone, belong to the caller (lib/utils/date.ts), which keeps this
+ * module zone-free.
+ */
+export function buildSchedule<T extends TimelinePlay>(plays: readonly T[], sessionStart: Date): ScheduleRow<T>[] {
+    const base = sessionStart.getTime();
+    return groupStations(plays).map((group) => {
+        const startsAt = new Date(base + group.startMinute * MS_PER_MINUTE);
+        return { group, startsAt, endsAt: new Date(startsAt.getTime() + group.wallMinutes * MS_PER_MINUTE) };
+    });
+}
+
 /** The server's group check: the first drill runs on its own, and no group passes the cap. */
 export function stationGroupError(plays: readonly TimelinePlay[]): string | null {
     const groups = groupStations(plays);
