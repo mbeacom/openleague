@@ -1646,13 +1646,18 @@ model PracticeSessionPlay {
 
   playId String
   // NO ACTION (defense in depth): a play still referenced by a session can't
-  // be deleted — deletePlay detaches the sessions first. Deleting the session still
-  // works: its session plays and owned plays go in one statement, and NO
-  // ACTION is only checked at the end of the statement.
+  // be deleted — deletePlay detaches the sessions first. The constraint is
+  // DEFERRABLE INITIALLY DEFERRED (set in migration
+  // 20261003120000_session_owned_plays; Prisma can't model deferrability, so
+  // keep it by hand if this FK is ever regenerated). A team or session delete
+  // removes session plays and plays along separate cascade paths, each its own
+  // nested statement; an immediate check would depend on trigger order.
+  // Deferred, it runs once at commit, so a stray delete still fails (P2003).
   play   Play   @relation(fields: [playId], references: [id], onDelete: NoAction)
 
   @@unique([sessionId, sequence])
   @@index([sessionId])
+  @@index([playId])
   @@map("practice_session_plays")
 }
 
@@ -1685,6 +1690,7 @@ model Play {
 
   @@index([teamId, isTemplate])
   @@index([sessionId])
+  @@index([sourcePlayId])
   @@map("plays")
 }
 

@@ -45,6 +45,7 @@ The hotfix covers three bugs that exist today:
 - **Warnings never block a save.** The coach is warned about overlapping station areas and about drills larger than the booked segment kind.
 - **Display.** The session detail view shows a station map: one rink, with each station's drawing clipped to its area and labeled.
 - **Deferred:** player-group assignment to stations, and rotation scheduling.
+- **Columns on `PracticeSessionPlay` and duplicate (from 3a).** Duplicating a session copies every `PracticeSessionPlay` scalar column automatically (`copySessionPlayScalars` in `lib/services/practice-session-drills.ts` walks the generated scalar-field enum), so a plain column like `runsWithPrevious` needs no change there. Any foreign-key column added to `PracticeSessionPlay` in phase 2 (or later) must be added to `SESSION_PLAY_FIELDS_NOT_COPIED` in the same file, and to the `CopiedSessionPlayFields` type beside it, so a duplicate does not copy a reference that belongs to the original session.
 
 ## Phase 3b: timeline and bench sheet (accepted decisions)
 

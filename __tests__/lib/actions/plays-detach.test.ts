@@ -142,6 +142,42 @@ describe("deletePlay detaches, then hard-deletes", () => {
         const result = await deletePlay({ id: PLAY, teamId: TEAM });
         expect(result).toEqual({ success: false, error: "This drill is still used by a session" });
     });
+
+    // practice_session_plays_playId_fkey is DEFERRABLE INITIALLY DEFERRED, so a
+    // racing reference fails at COMMIT. Inside an interactive $transaction the
+    // adapter's raw DriverAdapterError reaches the caller (shape observed
+    // against PostgreSQL 17 with @prisma/adapter-pg), not a P2003.
+    function commitTimeFkViolation(kind = "ForeignKeyConstraintViolation") {
+        return Object.assign(new Error(kind), {
+            name: "DriverAdapterError",
+            cause: {
+                originalCode: "23503",
+                originalMessage: 'update or delete on table "plays" violates foreign key constraint "practice_session_plays_playId_fkey" on table "practice_session_plays"',
+                kind,
+                constraint: { index: "practice_session_plays_playId_fkey" },
+            },
+        });
+    }
+
+    it("maps a racing reference that fails at commit (deferred FK) to a friendly error", async () => {
+        mockPrisma.$transaction.mockRejectedValueOnce(commitTimeFkViolation());
+        const result = await deletePlay({ id: PLAY, teamId: TEAM });
+        expect(result).toEqual({ success: false, error: "This drill is still used by a session" });
+    });
+
+    it("maps a commit-time FK violation on update to the same friendly error", async () => {
+        mockPrisma.$transaction.mockRejectedValueOnce(commitTimeFkViolation());
+        const result = await updatePlay({ id: PLAY, teamId: TEAM, name: "Drill", playData: createEmptyPlayData() });
+        expect(result).toEqual({ success: false, error: "This drill is still used by a session" });
+    });
+
+    it("does not map other driver adapter errors to the still-referenced message", async () => {
+        const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+        mockPrisma.$transaction.mockRejectedValueOnce(commitTimeFkViolation("TransactionWriteConflict"));
+        const result = await deletePlay({ id: PLAY, teamId: TEAM });
+        expect(result).toEqual({ success: false, error: expect.not.stringContaining("still used") });
+        consoleError.mockRestore();
+    });
 });
 
 describe("any unowned play is detached, not only templates", () => {

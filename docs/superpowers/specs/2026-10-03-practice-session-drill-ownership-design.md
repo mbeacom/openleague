@@ -71,6 +71,12 @@ model Play {
   copies       Play[]  @relation("PlayCopies")
 
   @@index([sessionId])
+  @@index([sourcePlayId]) // the SET NULL FK looks copies up by sourcePlayId on every play delete
+}
+
+model PracticeSessionPlay {
+  // …existing…
+  @@index([playId]) // detach, orphan cleanup, and the FK check all filter by playId
 }
 
 model PracticeSession {
@@ -79,9 +85,10 @@ model PracticeSession {
 }
 ```
 
-`PracticeSessionPlay.play` changes from `onDelete: Cascade` to `onDelete: NoAction`, as defense in depth:
-- Deleting a session still works. The session cascade removes its session plays and owned plays in one statement, and NO ACTION is only checked at the end of the statement.
-- A stray delete of a play that a session still references fails loudly (Prisma `P2003`) instead of silently removing the drill from that session.
+`PracticeSessionPlay.play` changes from `onDelete: Cascade` to `onDelete: NoAction`, as defense in depth. The constraint is also `DEFERRABLE INITIALLY DEFERRED`, so it is checked once, at commit:
+- Deleting a session or a team still works. A team delete reaches the same rows along two cascade paths: Team → practice_sessions → practice_session_plays, and Team → plays (a session delete similarly removes session plays and owned plays through separate cascades). Each cascade runs as its own nested statement, so an immediate NO ACTION check passes or fails depending on the order the RI triggers fire, which follows trigger names and can change after a `pg_dump`/restore. A review reproduced `DELETE FROM "Team"` failing this way after a restore. Deferred to commit, the check runs after every cascade has finished, whatever the order.
+- A stray delete of a play that a session still references still fails loudly instead of silently removing the drill from that session. A single-statement delete fails at its implicit commit as Prisma `P2003`. Inside an interactive `prisma.$transaction` the violation surfaces at commit, where Prisma 7 rethrows the driver adapter's raw `DriverAdapterError` (`cause.kind` `"ForeignKeyConstraintViolation"`, SQLSTATE 23503) rather than a `P2003`; `isStillReferenced` in `lib/actions/plays.ts` matches both shapes.
+- Prisma can't model deferrability, so the schema only shows `onDelete: NoAction`; a comment there points at the migration. `prisma migrate diff` from a migrated database to the schema stays empty, but a regenerated migration for this FK would silently drop `DEFERRABLE` and must be fixed by hand.
 
 Migration (`prisma/migrations/<timestamp>_session_owned_plays/migration.sql`):
 
@@ -91,11 +98,14 @@ ALTER TABLE "plays" ADD COLUMN "sourcePlayId" TEXT;
 CREATE INDEX "plays_sessionId_idx" ON "plays"("sessionId");
 ALTER TABLE "plays" ADD CONSTRAINT "plays_sessionId_fkey"
   FOREIGN KEY ("sessionId") REFERENCES "practice_sessions"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+CREATE INDEX "plays_sourcePlayId_idx" ON "plays"("sourcePlayId");
 ALTER TABLE "plays" ADD CONSTRAINT "plays_sourcePlayId_fkey"
   FOREIGN KEY ("sourcePlayId") REFERENCES "plays"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 ALTER TABLE "practice_session_plays" DROP CONSTRAINT "practice_session_plays_playId_fkey";
 ALTER TABLE "practice_session_plays" ADD CONSTRAINT "practice_session_plays_playId_fkey"
-  FOREIGN KEY ("playId") REFERENCES "plays"("id") ON DELETE NO ACTION ON UPDATE CASCADE;
+  FOREIGN KEY ("playId") REFERENCES "plays"("id") ON DELETE NO ACTION ON UPDATE CASCADE
+  DEFERRABLE INITIALLY DEFERRED;
+CREATE INDEX "practice_session_plays_playId_idx" ON "practice_session_plays"("playId");
 ```
 
 The implementation plan must verify the actual constraint name before dropping it.
@@ -182,6 +192,7 @@ materializeSessionDrills(tx, { sessionId, teamId, userId, items })
 - **`PlayInSession`** gains `name: string` and an optional `description` (the drill dialog needs it; without it, forking a library drill would blank its description). The existing `id` is the `clientKey`.
   - `playId` is replaced from the mapping each save returns, except for a card whose `playId` changed since the save was sent (for example, the dialog forked it meanwhile); that card keeps its newer id.
   - Saves are single-flight, in the `useSingleFlightSave` hook: autosave is skipped while a save is in flight, and a queued save runs once afterwards. Queued Save and "Book anyway" intent is OR-merged, so a queued explicit save is never downgraded. No follow-up save runs on create (there is no `sessionId` yet).
+  - **Fork durability.** A dialog save that forks a library or legacy drill, or creates a new drill, produces an id the session does not reference until a session save sends it. Waiting for the 2-second autosave is not enough: if an earlier save failed, `hasUnsavedChanges` is already true and the autosave timer does not re-arm, so the fork would wait for an explicit Save and a coach leaving the page would lose the edit. So `useSessionDrillDialog`'s `onSaved` asks for a session save at once through `useSingleFlightSave.request`: it is queued behind an in-flight save, or published as a follow-up that runs after the render holding the new id. Editing a copy the session already owns keeps the same id and is left to autosave.
 - **Instructions limit:** raised to 2000 in the UI to match the server.
 - **`SessionDrillDialog`**: a full-screen MUI `Dialog` that hosts `PlayEditor`.
   - `PlayEditor` gets `lockTemplate` and a new `autoSave={false}` prop. Its built-in autosave would otherwise fork a new copy on every save.
@@ -194,8 +205,9 @@ materializeSessionDrills(tx, { sessionId, teamId, userId, items })
 ## Error handling
 
 - **The helper rejects a play the session can't use** → `ActionResult` error "One or more drills not found or do not belong to this session". A clone failure aborts the whole transaction, so a session is never half-saved.
+  - The server text stays verbatim. When the editor gets exactly this message it appends "Reload the page to get the latest drills." (`describeSaveError` in `lib/utils/session-drill-ids.ts`): a library drill deleted while the editor still holds its id makes every save fail this way until the page is reloaded.
 - **`saveSessionDrill` validation errors** show inside the dialog through `PlayEditor`'s existing save-error UI, and the dialog stays open.
-- **A `P2003` from `deletePlay` or `updatePlay`**, meaning a session referenced the play between the detach and the write (the NO ACTION FK stays as defense in depth) → "This drill is still used by a session". The coach retries; the retry detaches the new reference.
+- **An FK violation from `deletePlay` or `updatePlay`**, meaning a session referenced the play between the detach and the write (the deferred NO ACTION FK stays as defense in depth) → "This drill is still used by a session". The coach retries; the retry detaches the new reference. Because the FK is deferred, the violation surfaces when the action's `$transaction` commits, as a `DriverAdapterError` rather than a `P2003`; `isStillReferenced` matches both. The normal path (detach, then delete) is unaffected: it leaves no reference behind, so the commit check passes.
 - **An unknown `clientKey` in a save response** is ignored. The next save re-sends the library id, which clones again; drop-only cleanup removes the extra row, because the earlier save referenced it.
 
 ## Testing
@@ -231,7 +243,7 @@ materializeSessionDrills(tx, { sessionId, teamId, userId, items })
 
 - **Row growth.** Each drill in each session is one `Play` row, and a thumbnail is typically ≤ ~30 KB. Drop-only cleanup and the session cascade keep it bounded. The only uncollected rows are dialog-created drills that were abandoned before any save; they go with their session.
 - **Two shapes coexist** (legacy library references) until each session is next saved, or until the library drill is edited or deleted, which detaches it. Reads are identical. Library writes never leak into a legacy session.
-- **Detach cost on library writes.** The library editor autosaves, so `updatePlay` runs the detach query on every save. Only the first save after a session last referenced the play actually clones; later saves find no rows (one indexed `findMany`). A library drill used by many old sessions makes its first edit or delete clone once per session, in one `createManyAndReturn` plus one `updateMany` per session.
+- **Detach cost on library writes.** The library editor autosaves, so `updatePlay` runs the detach query on every save. Only the first save after a session last referenced the play actually clones; later saves find no rows (one `findMany` on `practice_session_plays.playId`, served by `practice_session_plays_playId_idx`; without that index it, orphan cleanup's `sessions: { none: {} }`, and every FK check on a play delete would scan the table). A library drill used by many old sessions makes its first edit or delete clone once per session, in one `createManyAndReturn` plus one `updateMany` per session.
 - **Transaction length.** Clones run inside the venue-reservation transaction on Neon. `createManyAndReturn` keeps that to one round trip.
 - **Editor refactor regressions.** Extract with no behavior change first, under the existing tests, before adding features.
 - **Phase-2 coupling.** Ice area travels inside `playData` copies, and duplicate copies all session-play scalars.

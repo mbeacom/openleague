@@ -47,9 +47,20 @@ function sanitizeAndRevalidate(
     return { ok: true, data: result.data };
 }
 
-/** NO ACTION FK on practice_session_plays.playId: a session referenced the play mid-write. */
+/**
+ * NO ACTION FK on practice_session_plays.playId: a session referenced the play
+ * mid-write. The FK is DEFERRABLE INITIALLY DEFERRED, so inside an interactive
+ * $transaction it fails at COMMIT, and Prisma rethrows the driver adapter's raw
+ * DriverAdapterError (cause.kind "ForeignKeyConstraintViolation", SQLSTATE
+ * 23503) instead of a P2003. Both shapes mean the same thing here.
+ */
 function isStillReferenced(error: unknown): boolean {
-    return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003";
+    if (error instanceof Prisma.PrismaClientKnownRequestError) return error.code === "P2003";
+    return (
+        error instanceof Error &&
+        error.name === "DriverAdapterError" &&
+        (error.cause as { kind?: unknown } | undefined)?.kind === "ForeignKeyConstraintViolation"
+    );
 }
 
 /**
