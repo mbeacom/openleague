@@ -36,6 +36,7 @@ import { RinkBoardErrorBoundary } from "./RinkBoardErrorBoundary";
 import { PlayLegend } from "./PlayLegend";
 import { DrawingToolbar } from "./DrawingToolbar";
 import { ElementInspector } from "./ElementInspector";
+import { CustomAreaFields, rectFromFields } from "./CustomAreaFields";
 import { findElement } from "@/lib/utils/canvas/element-ops";
 import {
     ICE_AREA_PRESETS,
@@ -44,6 +45,7 @@ import {
     type IceAreaPreset,
     type PlayData,
     type PlayerRole,
+    type RinkRect,
     type SavedPlay,
     type StrokeOptions,
 } from "@/types/practice-planner";
@@ -130,7 +132,13 @@ export function PlayEditor({
     const handleAreaChange = (event: SelectChangeEvent<IceAreaChoice>) => {
         const value = event.target.value as IceAreaChoice;
         if (value === "custom") {
+            // Apply a custom area right away so a keyboard-only choice is savable
+            // as-is; the numeric fields then edit it, and the drag tool redraws it.
             setAreaTool(true);
+            if (playData.area?.kind !== "custom") {
+                const start = areaRect(isFullIce(playData.area) ? { kind: "zone-left" } : playData.area);
+                rinkBoardRef.current?.setArea({ kind: "custom", rect: rectFromFields(start) });
+            }
             return;
         }
         setAreaTool(false);
@@ -138,6 +146,10 @@ export function PlayEditor({
         rinkBoardRef.current?.setArea(value === "full" ? undefined : { kind: value });
     };
     const handleAreaDrawn = useCallback(() => setAreaTool(false), []);
+    const handleAreaFieldsCommit = useCallback(
+        (rect: RinkRect) => rinkBoardRef.current?.setArea({ kind: "custom", rect }),
+        []
+    );
 
     // Save state
     const [isSaving, setIsSaving] = useState(false);
@@ -402,6 +414,13 @@ export function PlayEditor({
                             </Button>
                         )}
                     </Stack>
+                    {playData.area?.kind === "custom" && (
+                        <CustomAreaFields
+                            key={JSON.stringify(playData.area.rect)}
+                            rect={playData.area.rect}
+                            onCommit={handleAreaFieldsCommit}
+                        />
+                    )}
 
                     {/* Save to Library Checkbox */}
                     {/* Requirements: 4.1 */}

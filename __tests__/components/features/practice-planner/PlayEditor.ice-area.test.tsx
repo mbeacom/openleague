@@ -83,18 +83,90 @@ describe("PlayEditor ice area", () => {
         expect(screen.queryByText("Drag on the rink to draw the ice area.")).not.toBeInTheDocument();
     });
 
-    it("cancels the area tool without changing the area", async () => {
+    it("cancels the area tool and keeps the custom area that Custom area… applied", async () => {
         renderEditor();
         await chooseArea("Custom area…");
         fireEvent.click(screen.getByRole("button", { name: "Stop drawing area" }));
         expect(boardProps.current!.areaTool).toBe(false);
-        expect("area" in boardProps.current!.playData).toBe(false);
+        expect(boardProps.current!.playData.area).toEqual({ kind: "custom", rect: { x: 0, y: 0, w: 75, h: 85 } });
     });
 
     it("offers a redraw for a drill that already has a custom area", () => {
         renderEditor({ ...createEmptyPlayData(), area: { kind: "custom", rect: { x: 100, y: 30, w: 20, h: 20 } } });
         fireEvent.click(screen.getByRole("button", { name: "Redraw custom area" }));
         expect(boardProps.current!.areaTool).toBe(true);
+    });
+
+    describe("custom area fields (keyboard)", () => {
+        const field = (name: string) => screen.getByRole("spinbutton", { name }) as HTMLInputElement;
+        function commit(name: string, value: string, how: "blur" | "enter" = "blur") {
+            const input = field(name);
+            fireEvent.change(input, { target: { value } });
+            if (how === "enter") fireEvent.keyDown(input, { key: "Enter" });
+            else fireEvent.blur(input);
+        }
+
+        it("applies a default custom area as soon as Custom area… is chosen", async () => {
+            renderEditor();
+            expect(screen.queryByRole("spinbutton", { name: "Area left (ft)" })).not.toBeInTheDocument();
+            await chooseArea("Custom area…");
+            expect(boardProps.current!.playData.area).toEqual({ kind: "custom", rect: { x: 0, y: 0, w: 75, h: 85 } });
+            expect(field("Area left (ft)").value).toBe("0");
+            expect(field("Area top (ft)").value).toBe("0");
+            expect(field("Area width (ft)").value).toBe("75");
+            expect(field("Area height (ft)").value).toBe("85");
+        });
+
+        it("starts from the current preset's rectangle", async () => {
+            renderEditor({ ...createEmptyPlayData(), area: { kind: "zone-neutral" } });
+            await chooseArea("Custom area…");
+            expect(boardProps.current!.playData.area).toEqual({ kind: "custom", rect: { x: 75, y: 0, w: 50, h: 85 } });
+        });
+
+        it("sets typed values through setArea, snapped to 5 ft", async () => {
+            renderEditor();
+            await chooseArea("Custom area…");
+            commit("Area left (ft)", "101");
+            commit("Area width (ft)", "43");
+            commit("Area height (ft)", "29", "enter");
+            commit("Area top (ft)", "12", "enter");
+            expect(boardProps.current!.playData.area).toEqual({ kind: "custom", rect: { x: 100, y: 10, w: 45, h: 30 } });
+            expect(field("Area width (ft)").value).toBe("45");
+        });
+
+        it("corrects values below the minimum or outside the rink", async () => {
+            renderEditor({ ...createEmptyPlayData(), area: { kind: "custom", rect: { x: 100, y: 30, w: 40, h: 40 } } });
+            commit("Area width (ft)", "5");
+            expect(boardProps.current!.playData.area).toEqual({ kind: "custom", rect: { x: 100, y: 30, w: 20, h: 40 } });
+            commit("Area left (ft)", "250");
+            expect(boardProps.current!.playData.area).toEqual({ kind: "custom", rect: { x: 180, y: 30, w: 20, h: 40 } });
+            commit("Area top (ft)", "-10");
+            expect(boardProps.current!.playData.area).toEqual({ kind: "custom", rect: { x: 180, y: 0, w: 20, h: 40 } });
+            expect(field("Area left (ft)").value).toBe("180");
+        });
+
+        it("reverts a blank or non-numeric entry without changing the area", () => {
+            const rect = { x: 100, y: 30, w: 40, h: 40 };
+            renderEditor({ ...createEmptyPlayData(), area: { kind: "custom", rect } });
+            commit("Area height (ft)", "");
+            expect(boardProps.current!.playData.area).toEqual({ kind: "custom", rect });
+            expect(field("Area height (ft)").value).toBe("40");
+        });
+
+        it("reflects the stored area after an undo", () => {
+            const before: PlayData = { ...createEmptyPlayData(), area: { kind: "custom", rect: { x: 100, y: 30, w: 40, h: 40 } } };
+            renderEditor(before);
+            commit("Area left (ft)", "20");
+            expect(field("Area left (ft)").value).toBe("20");
+            // Undo arrives from the board as the previous playData
+            act(() => boardProps.current!.onPlayDataChange!(before));
+            expect(field("Area left (ft)").value).toBe("100");
+        });
+
+        it("gives each field a 44px touch target", () => {
+            renderEditor({ ...createEmptyPlayData(), area: { kind: "custom", rect: { x: 100, y: 30, w: 40, h: 40 } } });
+            expect(field("Area left (ft)").closest(".MuiInputBase-root")).toHaveStyle({ minHeight: "44px" });
+        });
     });
 
     it("words the alert for one and for many elements", () => {
