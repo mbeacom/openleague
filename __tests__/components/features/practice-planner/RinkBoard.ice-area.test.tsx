@@ -322,6 +322,27 @@ describe("RinkBoard ice area", () => {
         expect(placed.y).toBeCloseTo(40, 6);
     });
 
+    it("re-anchors when the finger count changes, so the view doesn't jump", () => {
+        const { canvas, at, onPlayDataChange } = setup({ selectedTool: "player" });
+        const a = { clientX: 300, clientY: 200 };
+        const b = { clientX: 400, clientY: 200 };
+        const c = { clientX: 400, clientY: 300 };
+        fireEvent.touchStart(canvas, { touches: [a, b] });
+        // A third finger lands, then the first lifts: the remaining pair is a
+        // different pair, so holding it still must not move the view.
+        fireEvent.touchStart(canvas, { touches: [a, b, c] });
+        fireEvent.touchMove(canvas, { touches: [a, b, c] });
+        fireEvent.touchEnd(canvas, { touches: [b, c] });
+        fireEvent.touchMove(canvas, { touches: [b, c] });
+        fireEvent.touchEnd(canvas, { touches: [] });
+        expect(onPlayDataChange).not.toHaveBeenCalled();
+        // Still zoom 1, no pan: a click maps straight through the viewport.
+        fireEvent.mouseDown(canvas, at(150, 40));
+        const placed = onPlayDataChange.mock.calls.at(-1)![0].players[0].position;
+        expect(placed.x).toBeCloseTo(150, 6);
+        expect(placed.y).toBeCloseTo(40, 6);
+    });
+
     it("resets pinch-zoom and pan when the viewport changes", () => {
         const { canvas, ref, onPlayDataChange, rerender } = setup({ selectedTool: "player" });
         // Pinch to 2x around an off-center point, which also pans.

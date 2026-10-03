@@ -831,6 +831,25 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         };
     }, []);
 
+    /**
+     * Starts a pinch from the current view and these touches when exactly two
+     * are down, and ends it otherwise. Called whenever the finger count
+     * changes, so a pinch never continues from a different pair of fingers.
+     */
+    const capturePinch = useCallback(
+        (touches: React.TouchList) => {
+            pinchStartRef.current = touches.length === 2
+                ? {
+                    zoom: scaleRef.current,
+                    pan: panOffsetRef.current,
+                    center: getTouchCenter(touches[0], touches[1]),
+                    distance: getTouchDistance(touches[0], touches[1]),
+                }
+                : null;
+        },
+        [getTouchCenter, getTouchDistance]
+    );
+
     /** Runs handleMouseDown for a touch point (it maps the point through zoom/pan). */
     const simulateMouseDown = useCallback(
         (clientX: number, clientY: number) => {
@@ -863,16 +882,11 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
                 }
                 // Select (drag), stroke and the area tool start now, like a mouse down
                 simulateMouseDown(clientX, clientY);
-            } else if (event.touches.length === 2) {
+            } else {
                 pendingTapRef.current = null;
-                // Two touches - pinch to zoom or pan
-                // Requirements: 3.5
-                pinchStartRef.current = {
-                    zoom: scaleRef.current,
-                    pan: panOffsetRef.current,
-                    center: getTouchCenter(event.touches[0], event.touches[1]),
-                    distance: getTouchDistance(event.touches[0], event.touches[1]),
-                };
+                // Two touches pinch to zoom or pan (Requirements: 3.5); a third
+                // finger ends the pinch until the count is back to two.
+                capturePinch(event.touches);
                 // The pinch takes over: abandon any area drag, element drag or
                 // stroke so the final touchend cannot commit a rectangle, a move
                 // or a line the coach never meant. A drag's preview is visual
@@ -888,7 +902,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
                 setCurrentDrawingPoints([]);
             }
         },
-        [transform, areaTool, selectedTool, getTouchDistance, getTouchCenter, simulateMouseDown]
+        [transform, areaTool, selectedTool, capturePinch, simulateMouseDown]
     );
 
     /**
@@ -951,12 +965,13 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
                 // All touches ended - treat like mouse up
                 handleMouseUp();
                 pinchStartRef.current = null;
-            } else if (event.touches.length === 1) {
-                // One touch remaining - the pinch is over
-                pinchStartRef.current = null;
+            } else {
+                // Fewer fingers remain: one ends the pinch; two (after a
+                // third lifted) restart it from the pair that is left.
+                capturePinch(event.touches);
             }
         },
-        [handleMouseUp, simulateMouseDown]
+        [handleMouseUp, simulateMouseDown, capturePinch]
     );
 
     return (
