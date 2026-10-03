@@ -333,9 +333,9 @@ These are the only third-party requests. They carry no plan data, and the privac
 
 ### 8. Privacy
 
-The footer, the empty state and the import screen carry the same note:
+The footer and the import screen carry the same note (the empty practice list relies on the footer's, so it shows once):
 
-> Your practices stay in this browser. Nothing is uploaded, and there's no account or tracking. Browsers can clear site data, so download plan files to keep a backup.
+> Your practices stay in this browser. Nothing is uploaded, and there's no account or tracking. Browsers can clear site data, so download plan files to keep a backup. Fonts load from Fontshare and Google Fonts, which see your IP address like any website.
 
 There is no analytics provider, no Sentry, no service worker and no network call besides the two font stylesheets. The build check enforces the telemetry part.
 

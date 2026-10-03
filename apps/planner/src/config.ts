@@ -16,4 +16,5 @@ export const LOCAL_AUTHOR_NAME = "You";
 
 export const PRIVACY_NOTE =
     "Your practices stay in this browser. Nothing is uploaded, and there's no account or tracking. " +
-    "Browsers can clear site data, so download plan files to keep a backup.";
+    "Browsers can clear site data, so download plan files to keep a backup. " +
+    "Fonts load from Fontshare and Google Fonts, which see your IP address like any website.";

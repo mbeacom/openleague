@@ -4,7 +4,6 @@ import { Add as AddIcon, FileUploadOutlined as UploadIcon, SportsHockey as Hocke
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { formatClockTime, formatLongDate } from "@/lib/utils/date";
-import { PRIVACY_NOTE } from "../config";
 import { staticRoutes } from "../routes";
 import type { LocalPlannerStore } from "../store/types";
 import { LoadingScreen } from "./StatusScreens";
@@ -34,7 +33,7 @@ export function SessionListScreen({ store }: { store: LocalPlannerStore }) {
             <EmptyState
                 icon={<HockeyIcon sx={{ fontSize: 48 }} />}
                 title="Plan your first practice"
-                description={`Build a practice from drills, print a bench sheet, and share it as a file. ${PRIVACY_NOTE}`}
+                description="Build a practice from drills, print a bench sheet, and share it as a file."
                 action={<Actions />}
             />
         );

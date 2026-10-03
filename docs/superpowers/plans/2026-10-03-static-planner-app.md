@@ -28,7 +28,7 @@
 - **IndexedDB rule.** Inside `repo.write(work)`/`repo.read(work)`, `work` awaits only `RepoTx` calls; everything else in it is synchronous. Thumbnails, sanitizing and parsing that can run earlier run before the transaction.
 - **Clock in store tests.** Inject `now` through the store options. Do **not** use `vi.useFakeTimers` in any test that touches `fake-indexeddb`: it schedules with timers and hangs.
 - **Copy, verbatim** (constants named in parentheses):
-  - Privacy (`PRIVACY_NOTE`): `Your practices stay in this browser. Nothing is uploaded, and there's no account or tracking. Browsers can clear site data, so download plan files to keep a backup.`
+  - Privacy (`PRIVACY_NOTE`): `Your practices stay in this browser. Nothing is uploaded, and there's no account or tracking. Browsers can clear site data, so download plan files to keep a backup. Fonts load from Fontshare and Google Fonts, which see your IP address like any website.`
   - Fallback storage (`NOT_SAVING_MESSAGE`): `This browser isn't letting the planner save. Your work will be lost when you close this tab. Download plan files to keep it.`
   - Stale tab (`STALE_TAB_MESSAGE`): `The planner was updated in another tab. Reload to continue.`
   - Storage full (`STORAGE_FULL_MESSAGE`): `Your browser is out of storage space for this site. Download plan files to back up, then delete old practices or drills.`

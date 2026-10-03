@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act as rtlAct, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { PlannerApp } from "@/apps/planner/src/App";
+import { PRIVACY_NOTE } from "@/apps/planner/src/config";
 import { NOT_SAVING_MESSAGE, STALE_TAB_MESSAGE } from "@/apps/planner/src/screens/AppShell";
 import { createStaleSignal } from "@/apps/planner/src/store/open-store";
 import { SESSION_NOT_ON_DEVICE_MESSAGE } from "@/apps/planner/src/store/sessions";
@@ -31,6 +32,14 @@ describe("PlannerApp", () => {
         expect(await screen.findByText("Plan your first practice")).toBeInTheDocument();
         expect(screen.getAllByRole("link", { name: /new practice/i })[0]).toHaveAttribute("href", "#/sessions/new");
         expect(screen.getAllByRole("link", { name: /import plan/i })[0]).toHaveAttribute("href", "#/import");
+    });
+
+    it("shows the privacy note once on the empty practice list, naming the font hosts", async () => {
+        const { store } = memoryStore();
+        render(app(store));
+        await screen.findByText("Plan your first practice");
+        expect(document.body.textContent?.split(PRIVACY_NOTE)).toHaveLength(2);
+        expect(PRIVACY_NOTE).toMatch(/Fontshare and Google Fonts/);
     });
 
     it("lists saved practices linking to their detail", async () => {
