@@ -81,12 +81,36 @@ export interface TextAnnotation {
     color: string;
 }
 
+// ============================================================================
+// Ice area (practice planner 2a)
+// ============================================================================
+
+export const ICE_AREA_PRESETS = ["full", "half-left", "half-right", "zone-left", "zone-neutral", "zone-right"] as const;
+export type IceAreaPreset = (typeof ICE_AREA_PRESETS)[number];
+
+/** Axis-aligned rectangle in rink feet. */
+export interface RinkRect {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+}
+
+export type IceArea = { kind: IceAreaPreset } | { kind: "custom"; rect: RinkRect };
+
+/** Smallest custom-area side in feet (schema and area tool). */
+export const MIN_AREA_FT = 20;
+/** Grid the area tool snaps custom rectangles to, in feet. UI only: the server does not require it. */
+export const AREA_SNAP_FT = 5;
+
 export interface PlayData {
     version: typeof PLAY_DATA_VERSION;
     players: PlayerIcon[];
     drawings: DrawingElement[];
     equipment: EquipmentItem[];
     annotations: TextAnnotation[];
+    /** Where on the ice the drill runs. Absent = full ice. */
+    area?: IceArea;
 }
 
 // ============================================================================

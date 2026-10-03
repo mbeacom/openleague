@@ -16,6 +16,7 @@ import {
     TextAnnotation,
     PlayData,
     EquipmentItem,
+    RinkRect,
 } from "@/types/practice-planner";
 import { TransformContext, canvasToRink } from "./rink-renderer";
 import { PLAYER_RADIUS_FT, EQUIPMENT_RADIUS_FT } from "./glyph-metrics";
@@ -435,7 +436,17 @@ export function isWithinRinkBounds(
 }
 
 /**
- * Clamps a position to stay within rink bounds
+ * Clamps a position to an axis-aligned rectangle in rink feet.
+ */
+export function clampToRect(position: Position, rect: RinkRect): Position {
+    return {
+        x: Math.max(rect.x, Math.min(rect.x + rect.w, position.x)),
+        y: Math.max(rect.y, Math.min(rect.y + rect.h, position.y)),
+    };
+}
+
+/**
+ * Clamps a position to stay within rink bounds: `clampToRect` over the rink.
  *
  * @param position - Position to clamp
  * @param rinkWidth - Rink width (default: 200)
@@ -447,10 +458,37 @@ export function clampToRinkBounds(
     rinkWidth: number = 200,
     rinkHeight: number = 85
 ): Position {
-    return {
-        x: Math.max(0, Math.min(rinkWidth, position.x)),
-        y: Math.max(0, Math.min(rinkHeight, position.y)),
-    };
+    return clampToRect(position, { x: 0, y: 0, w: rinkWidth, h: rinkHeight });
+}
+
+/**
+ * Where a dragged element lands: the pointer (clamped only to the rink by the
+ * caller) minus the grab offset, then clamped to `rect`. Clamping the pointer
+ * to `rect` first would stop the element `grabOffset` feet short of the edge.
+ */
+export function dragTarget(pointer: Position, grabOffset: Position, rect: RinkRect): Position {
+    return clampToRect({ x: pointer.x - grabOffset.x, y: pointer.y - grabOffset.y }, rect);
+}
+
+/**
+ * How far, in screen pixels, the pointer must travel from the grab point
+ * before a press on an element becomes a drag. Measured on screen rather than
+ * in rink feet so it feels the same at every viewport and pinch zoom: a fixed
+ * 1 ft (the area tool's click test) is ~12 px on a zoomed-in drill area but
+ * ~4 px on full ice. Below it, a press is a tap: it selects and never moves the
+ * element, so a tap on an element outside the drill's area cannot clamp it in
+ * (touch devices fire a touchmove on nearly every tap).
+ */
+export const DRAG_THRESHOLD_PX = 4;
+
+/** Screen pixels as rink feet, through the viewport transform and the board's zoom. */
+export function pxToRinkFt(px: number, transform: Pick<TransformContext, "scaleX" | "scaleY">, zoom: number): number {
+    return px / (Math.min(transform.scaleX, transform.scaleY) * zoom);
+}
+
+/** True once `pointer` is at least `thresholdFt` from `grab` (rink feet). */
+export function pastDragThreshold(grab: Position, pointer: Position, thresholdFt: number): boolean {
+    return Math.hypot(pointer.x - grab.x, pointer.y - grab.y) >= thresholdFt;
 }
 
 /**

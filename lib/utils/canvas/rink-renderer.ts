@@ -8,7 +8,7 @@
  * Requirements: 1.1
  */
 
-import { Position } from "@/types/practice-planner";
+import type { Position, RinkRect } from "@/types/practice-planner";
 
 /**
  * Standard NHL rink dimensions in feet
@@ -27,6 +27,20 @@ const ZONE_DIMENSIONS = {
     offensiveZoneWidth: 75, // feet
     cornerRadius: 28, // feet
 } as const;
+
+/** Blue-line x positions in rink feet, derived from the zone widths. */
+export const BLUE_LINES = {
+    left: ZONE_DIMENSIONS.defensiveZoneWidth,
+    right: RINK_DIMENSIONS.width - ZONE_DIMENSIONS.offensiveZoneWidth,
+} as const;
+
+/** The whole rink as a rectangle in rink feet. */
+export const FULL_RINK: Readonly<RinkRect> = Object.freeze({
+    x: 0,
+    y: 0,
+    w: RINK_DIMENSIONS.width,
+    h: RINK_DIMENSIONS.height,
+});
 
 /**
  * Circle dimensions
@@ -68,32 +82,32 @@ export interface TransformContext {
 }
 
 /**
- * Creates a transformation context for converting between rink coordinates
- * and canvas coordinates with responsive scaling
+ * Creates a transformation context that fits `viewport` (rink feet; default
+ * the whole rink) into the canvas, preserving aspect ratio and centering it.
+ * rinkToCanvas/canvasToRink read only scale and offsets, so they work
+ * unchanged for any viewport; shapes outside it are clipped by the canvas.
  *
  * @param canvasWidth - Width of the canvas element in pixels
  * @param canvasHeight - Height of the canvas element in pixels
- * @param padding - Padding around the rink in pixels (default: 20)
+ * @param padding - Padding around the viewport in pixels (default: 20)
+ * @param viewport - Rink rectangle to fit (default: FULL_RINK)
  * @returns Transformation context for coordinate conversions
  */
 export function createTransformContext(
     canvasWidth: number,
     canvasHeight: number,
-    padding: number = 20
+    padding: number = 20,
+    viewport: RinkRect = FULL_RINK
 ): TransformContext {
     const availableWidth = canvasWidth - padding * 2;
     const availableHeight = canvasHeight - padding * 2;
 
-    // Calculate scale to fit rink in available space while maintaining aspect ratio
-    const scaleX = availableWidth / RINK_DIMENSIONS.width;
-    const scaleY = availableHeight / RINK_DIMENSIONS.height;
-    const scale = Math.min(scaleX, scaleY);
+    // Scale that fits the viewport in the available space at its aspect ratio
+    const scale = Math.min(availableWidth / viewport.w, availableHeight / viewport.h);
 
-    // Calculate offsets to center the rink
-    const scaledWidth = RINK_DIMENSIONS.width * scale;
-    const scaledHeight = RINK_DIMENSIONS.height * scale;
-    const offsetX = (canvasWidth - scaledWidth) / 2;
-    const offsetY = (canvasHeight - scaledHeight) / 2;
+    // Center the viewport: rink x=viewport.x sits at the left of the fitted box
+    const offsetX = (canvasWidth - viewport.w * scale) / 2 - viewport.x * scale;
+    const offsetY = (canvasHeight - viewport.h * scale) / 2 - viewport.y * scale;
 
     return {
         canvasWidth,
@@ -131,6 +145,21 @@ export function canvasToRink(canvasPos: Position, transform: TransformContext): 
         x: (canvasPos.x - transform.offsetX) / transform.scaleX,
         y: (canvasPos.y - transform.offsetY) / transform.scaleY,
     };
+}
+
+/**
+ * Board zoom/pan sits on top of the transform: RinkBoard calls
+ * ctx.setTransform(zoom, 0, 0, zoom, pan.x, pan.y) before drawing, so a rink
+ * point appears on screen at zoom * rinkToCanvas(p) + pan.
+ */
+export function rinkToScreen(p: Position, transform: TransformContext, zoom: number, pan: Position): Position {
+    const c = rinkToCanvas(p, transform);
+    return { x: c.x * zoom + pan.x, y: c.y * zoom + pan.y };
+}
+
+/** Inverse of rinkToScreen: undo pan and zoom, then the viewport transform. */
+export function screenToRink(p: Position, transform: TransformContext, zoom: number, pan: Position): Position {
+    return canvasToRink({ x: (p.x - pan.x) / zoom, y: (p.y - pan.y) / zoom }, transform);
 }
 
 /**
@@ -189,13 +218,34 @@ function getCachedRinkCanvas(transform: TransformContext): HTMLCanvasElement {
     return canvas;
 }
 
+export interface DrawRinkOptions {
+    /**
+     * Draw from the cached viewport-sized background (default). Pass false
+     * when the caller has a zoom/pan transform on the context: the cached
+     * image covers only the canvas-sized rectangle at the origin, so under
+     * zoom < 1 or a pan it leaves part of the screen undrawn. The direct path
+     * fills the base white over the whole canvas under an identity transform,
+     * then draws the rink's markings through the caller's transform.
+     */
+    cache?: boolean;
+}
+
 /**
  * Draws the complete hockey rink with all markings
  *
  * @param ctx - Canvas 2D rendering context
  * @param transform - Transformation context for coordinate conversion
  */
-export function drawRink(ctx: CanvasRenderingContext2D, transform: TransformContext): void {
+export function drawRink(ctx: CanvasRenderingContext2D, transform: TransformContext, options: DrawRinkOptions = {}): void {
+    if (options.cache === false) {
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillRect(0, 0, transform.canvasWidth, transform.canvasHeight);
+        ctx.restore();
+        drawRinkMarkings(ctx, transform);
+        return;
+    }
     // Use cached background if available
     try {
         const cachedCanvas = getCachedRinkCanvas(transform);
@@ -218,6 +268,11 @@ function drawRinkBackground(ctx: CanvasRenderingContext2D, transform: TransformC
     ctx.fillStyle = "#FFFFFF";
     ctx.fillRect(0, 0, transform.canvasWidth, transform.canvasHeight);
 
+    drawRinkMarkings(ctx, transform);
+}
+
+/** The ice, boards, lines, circles and creases, without the white base. */
+function drawRinkMarkings(ctx: CanvasRenderingContext2D, transform: TransformContext): void {
     // Draw ice surface
     drawIceSurface(ctx, transform);
 
@@ -299,8 +354,8 @@ function drawCenterRedLine(ctx: CanvasRenderingContext2D, transform: TransformCo
  * Draws the blue lines
  */
 function drawBlueLines(ctx: CanvasRenderingContext2D, transform: TransformContext): void {
-    const leftBlueLineX = ZONE_DIMENSIONS.defensiveZoneWidth;
-    const rightBlueLineX = RINK_DIMENSIONS.width - ZONE_DIMENSIONS.offensiveZoneWidth;
+    const leftBlueLineX = BLUE_LINES.left;
+    const rightBlueLineX = BLUE_LINES.right;
 
     ctx.strokeStyle = "#003087"; // Blue
     ctx.lineWidth = LINE_DIMENSIONS.blueLineWidth * transform.scaleX;

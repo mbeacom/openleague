@@ -12,12 +12,17 @@
 // Rink rendering
 export {
     RINK_DIMENSIONS,
+    BLUE_LINES,
+    FULL_RINK,
     type TransformContext,
     createTransformContext,
     rinkToCanvas,
     canvasToRink,
+    rinkToScreen,
+    screenToRink,
     clearRinkCache,
     drawRink,
+    type DrawRinkOptions,
 } from "./rink-renderer";
 
 // Drawing utilities
@@ -28,6 +33,11 @@ export {
     drawTextAnnotation,
     drawElement,
     drawAllElements,
+    drawAreaMask,
+    drawBoardScene,
+    drawBoardFrame,
+    type BoardSceneOptions,
+    type BoardFrameOptions,
 } from "./drawing-utils";
 
 // Interaction utilities
@@ -44,7 +54,9 @@ export {
     hitTestAnnotation,
     hitTest,
     isWithinRinkBounds,
+    clampToRect,
     clampToRinkBounds,
+    dragTarget,
     debounce,
     preventDefaultAndStop,
 } from "./interaction-utils";

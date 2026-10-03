@@ -14,6 +14,8 @@
  *   (F/D forwards and defense, O opponents, G goalie), never by color alone;
  *   colors are just the theme defaults for each
  * - Player markers are 6 ft radius, so centers are kept >= 12 ft apart
+ * - Set plays confined to one end carry an explicit ice area (practice
+ *   planner 2a); drills that span the ice leave it unset (full ice)
  */
 
 import {
@@ -94,6 +96,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
             ],
             equipment: [],
             annotations: [],
+            area: { kind: "half-left" },
         },
     },
     {
@@ -143,6 +146,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
             ],
             equipment: [],
             annotations: [note("pp-note", "Screen", 168, 58)],
+            area: { kind: "zone-right" },
         },
     },
     {
@@ -168,6 +172,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
             ],
             equipment: [],
             annotations: [note("pk-note", "Shift", 36, 70)],
+            area: { kind: "zone-left" },
         },
     },
     {
@@ -216,6 +221,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
             ],
             equipment: [],
             annotations: [],
+            area: { kind: "zone-right" },
         },
     },
     {
@@ -242,6 +248,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
                 { id: "ps-net", kind: "net", position: { x: 189, y: 42.5 }, rotation: 0 },
             ],
             annotations: [note("ps-note", "Screen", 170, 57)],
+            area: { kind: "zone-right" },
         },
     },
     {
@@ -269,6 +276,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
             ],
             equipment: [],
             annotations: [note("dz-note", "House", 24, 49, ZONE_COLOR)],
+            area: { kind: "zone-left" },
         },
     },
     {

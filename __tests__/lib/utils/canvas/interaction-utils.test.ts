@@ -16,8 +16,14 @@ import {
   hitTest,
   isWithinRinkBounds,
   clampToRinkBounds,
+  clampToRect,
+  dragTarget,
+  pxToRinkFt,
+  pastDragThreshold,
 } from "@/lib/utils/canvas/interaction-utils";
 import { strokeFromV1Type, createEmptyPlayData } from "@/lib/utils/play-data";
+import { areaRect } from "@/lib/utils/ice-area";
+import { FULL_RINK, createTransformContext } from "@/lib/utils/canvas/rink-renderer";
 import type { PlayData, PlayerIcon, DrawingElement, TextAnnotation } from "@/types/practice-planner";
 
 const emptyPlayData: PlayData = { version: 2, players: [], drawings: [], equipment: [], annotations: [] };
@@ -264,4 +270,56 @@ describe("hitTest equipment", () => {
     it("honors minHitRadiusFt so small glyphs stay tappable when zoomed out", () => {
         expect(hitTest({ x: 104, y: 40 }, withCone, 5).hit).toBe(true);
     });
+});
+
+describe("clampToRect", () => {
+  const zoneLeft = areaRect({ kind: "zone-left" });
+
+  it("keeps a point inside, including on the edge", () => {
+    expect(clampToRect({ x: 75, y: 85 }, zoneLeft)).toEqual({ x: 75, y: 85 });
+    expect(clampToRect({ x: 30, y: 40 }, zoneLeft)).toEqual({ x: 30, y: 40 });
+  });
+
+  it("clamps each axis to the rectangle", () => {
+    expect(clampToRect({ x: 150, y: 40 }, zoneLeft)).toEqual({ x: 75, y: 40 });
+    expect(clampToRect({ x: -3, y: 99 }, { x: 100, y: 30, w: 20, h: 20 })).toEqual({ x: 100, y: 50 });
+  });
+
+  it("is what clampToRinkBounds does for the whole rink", () => {
+    const p = { x: 250, y: -4 };
+    expect(clampToRinkBounds(p)).toEqual(clampToRect(p, FULL_RINK));
+  });
+});
+
+describe("dragTarget", () => {
+  const zoneLeft = areaRect({ kind: "zone-left" });
+
+  it("moves the element with the pointer, keeping the grab offset", () => {
+    expect(dragTarget({ x: 50, y: 40 }, { x: 2, y: -1 }, zoneLeft)).toEqual({ x: 48, y: 41 });
+  });
+
+  it("lets an element grabbed off-center reach the area edge exactly", () => {
+    // Clamping the pointer to the area first would stop the element at 73.
+    expect(dragTarget({ x: 77, y: 40 }, { x: 2, y: 0 }, zoneLeft)).toEqual({ x: 75, y: 40 });
+  });
+
+  it("clamps an element dragged far past the edge", () => {
+    expect(dragTarget({ x: 160, y: 90 }, { x: -3, y: 0 }, zoneLeft)).toEqual({ x: 75, y: 85 });
+  });
+});
+
+describe("drag threshold", () => {
+  it("converts screen pixels to rink feet through the transform and zoom", () => {
+    const t = createTransformContext(800, 400, 20);
+    const ftAt1 = pxToRinkFt(4, t, 1);
+    expect(ftAt1).toBeCloseTo(4 / Math.min(t.scaleX, t.scaleY), 9);
+    expect(pxToRinkFt(4, t, 2)).toBeCloseTo(ftAt1 / 2, 9);
+  });
+
+  it("is not passed by a zero or sub-threshold move, and is passed at the threshold", () => {
+    const grab = { x: 97, y: 40 };
+    expect(pastDragThreshold(grab, grab, 0.5)).toBe(false);
+    expect(pastDragThreshold(grab, { x: 97.3, y: 40.3 }, 0.5)).toBe(false);
+    expect(pastDragThreshold(grab, { x: 97.5, y: 40 }, 0.5)).toBe(true);
+  });
 });

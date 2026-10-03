@@ -11,6 +11,7 @@ import {
   drawRink,
   rinkCacheKey,
 } from "@/lib/utils/canvas/rink-renderer";
+import { editViewport } from "@/lib/utils/ice-area";
 
 function fakeCtx(): CanvasRenderingContext2D {
   const target: Record<string, unknown> = { drawImage: vi.fn() };
@@ -67,5 +68,49 @@ describe("drawRink cache", () => {
     drawRink(out, createTransformContext(800, 400, 20));
     expect(built).toHaveLength(2);
     expect(out.drawImage).toHaveBeenCalledTimes(2);
+  });
+
+  it("keys same-size viewports at different places apart", () => {
+    const left = createTransformContext(800, 400, 20, editViewport({ kind: "half-left" }));
+    const right = createTransformContext(800, 400, 20, editViewport({ kind: "half-right" }));
+    expect(left.scaleX).toBe(right.scaleX);
+    expect(left.offsetY).toBe(right.offsetY);
+    expect(rinkCacheKey(left)).not.toBe(rinkCacheKey(right));
+    expect(rinkCacheKey(createTransformContext(800, 400, 20, editViewport({ kind: "zone-left" })))).not.toBe(
+      rinkCacheKey(createTransformContext(800, 400, 20)),
+    );
+  });
+
+  it("never reuses one viewport's background for another", () => {
+    const out = fakeCtx();
+    const left = createTransformContext(800, 400, 20, editViewport({ kind: "half-left" }));
+    const right = createTransformContext(800, 400, 20, editViewport({ kind: "half-right" }));
+    drawRink(out, left);
+    drawRink(out, right);
+    drawRink(out, left);
+    expect(built).toHaveLength(3);
+  });
+  it("bypasses the cache when asked, filling the base under an identity transform", () => {
+    const calls: string[] = [];
+    const out = new Proxy({} as Record<string, unknown>, {
+      get(t, prop: string) {
+        if (prop in t) return t[prop];
+        return (...args: unknown[]) => {
+          calls.push(`${prop}(${args.join(",")})`);
+          return { addColorStop: vi.fn() };
+        };
+      },
+      set(t, prop: string, value) {
+        t[prop] = value;
+        return true;
+      },
+    }) as unknown as CanvasRenderingContext2D;
+    drawRink(out, createTransformContext(800, 400, 20), { cache: false });
+    expect(built).toHaveLength(0);
+    expect(calls).not.toContain("drawImage");
+    const identity = calls.indexOf("setTransform(1,0,0,1,0,0)");
+    expect(identity).toBeGreaterThanOrEqual(0);
+    expect(calls[identity + 1]).toBe("fillRect(0,0,800,400)");
+    expect(calls).toContain("restore()");
   });
 });

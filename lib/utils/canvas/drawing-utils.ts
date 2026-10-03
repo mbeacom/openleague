@@ -17,11 +17,12 @@ import {
     EquipmentItem,
     PlayData,
 } from "@/types/practice-planner";
-import type { StrokeOptions } from "@/types/practice-planner";
-import { TransformContext, rinkToCanvas } from "./rink-renderer";
+import type { RinkRect, StrokeOptions } from "@/types/practice-planner";
+import { FULL_RINK, TransformContext, drawRink, rinkToCanvas } from "./rink-renderer";
 import { buildStrokeGeometry, type StrokeGeometry } from "./stroke-geometry";
 import { drawPlayerGlyph, drawEquipmentGlyph } from "./glyphs";
 import { EQUIPMENT_RADIUS_FT, PLAYER_RADIUS_FT, glyphRadiusPx } from "./glyph-metrics";
+import { BOARD_COLORS } from "./notation";
 
 /**
  * Visual constants for drawing
@@ -279,4 +280,103 @@ export function drawAllElements(
     playData.equipment.forEach((e) => drawEquipmentItem(ctx, e, transform, e.id === selectedId, zoom));
     playData.players.forEach((p) => drawPlayerIcon(ctx, p, transform, p.id === selectedId, zoom));
     playData.annotations.forEach((a) => drawTextAnnotation(ctx, a, transform, a.id === selectedId));
+}
+
+/** Ink (#212121) at 35%: shades the ice outside a drill's area. */
+const AREA_MASK_FILL = "rgba(33, 33, 33, 0.35)";
+const AREA_OUTLINE_DASH = [8, 6];
+const AREA_OUTLINE_WIDTH = 2;
+
+function coversRink(rect: RinkRect): boolean {
+    return rect.x <= 0 && rect.y <= 0 && rect.x + rect.w >= FULL_RINK.w && rect.y + rect.h >= FULL_RINK.h;
+}
+
+/**
+ * Shades the rink outside `rect` (even-odd fill of the rink rectangle minus
+ * the area) and outlines the area, dashed, in Action Blue. Draws nothing when
+ * `rect` covers the whole rink. `zoom` is the caller's canvas zoom: the
+ * outline's width and dash are divided by it so they stay the same on screen.
+ */
+export function drawAreaMask(
+    ctx: CanvasRenderingContext2D,
+    rect: RinkRect,
+    transform: TransformContext,
+    zoom: number = 1
+): void {
+    if (coversRink(rect)) return;
+    const rinkTopLeft = rinkToCanvas({ x: 0, y: 0 }, transform);
+    const rinkBottomRight = rinkToCanvas({ x: FULL_RINK.w, y: FULL_RINK.h }, transform);
+    const topLeft = rinkToCanvas({ x: rect.x, y: rect.y }, transform);
+    const bottomRight = rinkToCanvas({ x: rect.x + rect.w, y: rect.y + rect.h }, transform);
+
+    ctx.save();
+    ctx.fillStyle = AREA_MASK_FILL;
+    ctx.beginPath();
+    ctx.rect(rinkTopLeft.x, rinkTopLeft.y, rinkBottomRight.x - rinkTopLeft.x, rinkBottomRight.y - rinkTopLeft.y);
+    ctx.rect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
+    ctx.fill("evenodd");
+    ctx.strokeStyle = BOARD_COLORS.actionBlue;
+    ctx.lineWidth = AREA_OUTLINE_WIDTH / zoom;
+    ctx.setLineDash(AREA_OUTLINE_DASH.map((d) => d / zoom));
+    ctx.strokeRect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
+    ctx.restore();
+}
+
+export interface BoardSceneOptions {
+    /** Element drawn with the selection highlight */
+    selectedId?: string;
+    /** Canvas zoom applied by the caller (keeps minimum glyph size and the mask outline constant on screen) */
+    zoom?: number;
+    /** Rectangle left unshaded; omitted, or covering the rink, means no mask */
+    maskRect?: RinkRect;
+    /** Draw the rink from its cached background (default true); see DrawRinkOptions.cache */
+    cachedRink?: boolean;
+}
+
+/**
+ * The board's draw sequence, shared by RinkBoard and thumbnails: rink, then
+ * elements, then the area mask on top, so elements outside the area are
+ * dimmed with the ice they sit on.
+ */
+export function drawBoardScene(
+    ctx: CanvasRenderingContext2D,
+    transform: TransformContext,
+    playData: PlayData,
+    options: BoardSceneOptions = {}
+): void {
+    drawRink(ctx, transform, { cache: options.cachedRink ?? true });
+    drawAllElements(ctx, playData, transform, options.selectedId, options.zoom ?? 1);
+    if (options.maskRect) drawAreaMask(ctx, options.maskRect, transform, options.zoom ?? 1);
+}
+
+export interface BoardFrameOptions extends BoardSceneOptions {
+    /** Board pan in screen pixels, applied with `zoom` (default none) */
+    pan?: Position;
+}
+
+/**
+ * One RinkBoard animation frame. Clears the whole canvas under an identity
+ * transform (a clear under the zoom/pan transform misses part of the screen,
+ * and the 35% area mask then stacks on the uncleared pixels every frame),
+ * applies the zoom/pan transform for drawing, then draws the scene once.
+ * Zoomed or panned, the rink is drawn directly, because the cached background
+ * only covers a canvas-sized rectangle at the origin; at zoom 1 with no pan
+ * the cache is used as before. The transform is left applied so the caller
+ * can draw an in-progress stroke on top.
+ */
+export function drawBoardFrame(
+    ctx: CanvasRenderingContext2D,
+    transform: TransformContext,
+    playData: PlayData,
+    options: BoardFrameOptions = {}
+): void {
+    const zoom = options.zoom ?? 1;
+    const pan = options.pan ?? { x: 0, y: 0 };
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, transform.canvasWidth, transform.canvasHeight);
+    ctx.restore();
+    ctx.setTransform(zoom, 0, 0, zoom, pan.x, pan.y);
+    const shifted = zoom !== 1 || pan.x !== 0 || pan.y !== 0;
+    drawBoardScene(ctx, transform, playData, { ...options, zoom, cachedRink: !shifted });
 }

@@ -15,7 +15,11 @@ import {
   rinkToCanvas,
   canvasToRink,
   RINK_DIMENSIONS,
+  FULL_RINK,
+  rinkToScreen,
+  screenToRink,
 } from "@/lib/utils/canvas/rink-renderer";
+import { editViewport } from "@/lib/utils/ice-area";
 
 describe("RINK_DIMENSIONS", () => {
   it("has standard NHL rink dimensions", () => {
@@ -122,5 +126,68 @@ describe("canvasToRink", () => {
       expect(roundTrip.x).toBeCloseTo(rinkPos.x, 1);
       expect(roundTrip.y).toBeCloseTo(rinkPos.y, 1);
     }
+  });
+});
+
+describe("createTransformContext with a viewport", () => {
+  it("defaults to the whole rink", () => {
+    expect(createTransformContext(800, 400, 20, FULL_RINK)).toEqual(createTransformContext(800, 400));
+  });
+
+  it("fits a tall viewport to the height and centers it", () => {
+    const vp = editViewport({ kind: "zone-left" }); // { x: 0, y: 0, w: 80, h: 85 }
+    const t = createTransformContext(800, 400, 20, vp);
+    expect(t.scaleX).toBeCloseTo(360 / 85, 10);
+    const center = rinkToCanvas({ x: vp.x + vp.w / 2, y: vp.y + vp.h / 2 }, t);
+    expect(center.x).toBeCloseTo(400, 9);
+    expect(center.y).toBeCloseTo(200, 9);
+    expect(rinkToCanvas({ x: 0, y: 0 }, t).y).toBeCloseTo(20, 9);
+    expect(rinkToCanvas({ x: 0, y: 85 }, t).y).toBeCloseTo(380, 9);
+  });
+
+  it("fits a wide viewport to the width", () => {
+    const vp = editViewport({ kind: "custom", rect: { x: 20, y: 30, w: 160, h: 20 } }); // { 15, 25, 170, 30 }
+    const t = createTransformContext(800, 400, 20, vp);
+    expect(t.scaleX).toBeCloseTo(760 / 170, 10);
+    expect(rinkToCanvas({ x: 15, y: 25 }, t).x).toBeCloseTo(20, 9);
+    expect(rinkToCanvas({ x: 185, y: 25 }, t).x).toBeCloseTo(780, 9);
+  });
+
+  it.each([
+    [{ x: 100, y: 40 }],
+    [{ x: 150, y: 40 }], // outside a zone-neutral viewport
+    [{ x: 0, y: 85 }],
+  ])("round-trips %o through a cropped viewport", (p) => {
+    const t = createTransformContext(800, 400, 20, editViewport({ kind: "zone-neutral" }));
+    const back = canvasToRink(rinkToCanvas(p, t), t);
+    expect(back.x).toBeCloseTo(p.x, 9);
+    expect(back.y).toBeCloseTo(p.y, 9);
+  });
+});
+
+describe("screen mapping under zoom and pan", () => {
+  const t = createTransformContext(800, 400, 20, editViewport({ kind: "zone-neutral" }));
+  const zoom = 2.3;
+  const pan = { x: -137.5, y: 41.25 };
+
+  it("matches ctx.setTransform(zoom, 0, 0, zoom, pan.x, pan.y) applied to rinkToCanvas", () => {
+    const p = { x: 90, y: 20 };
+    const c = rinkToCanvas(p, t);
+    expect(rinkToScreen(p, t, zoom, pan)).toEqual({ x: c.x * zoom + pan.x, y: c.y * zoom + pan.y });
+  });
+
+  it.each([
+    [{ x: 90, y: 20 }],
+    [{ x: 150, y: 40 }], // outside the viewport, visible only after zooming out
+    [{ x: 75, y: 0 }],
+  ])("round-trips %o", (p) => {
+    const back = screenToRink(rinkToScreen(p, t, zoom, pan), t, zoom, pan);
+    expect(back.x).toBeCloseTo(p.x, 9);
+    expect(back.y).toBeCloseTo(p.y, 9);
+  });
+
+  it("is the plain canvas mapping at zoom 1 and no pan", () => {
+    const p = { x: 110, y: 60 };
+    expect(screenToRink(rinkToCanvas(p, t), t, 1, { x: 0, y: 0 }).x).toBeCloseTo(110, 9);
   });
 });
