@@ -1,0 +1,68 @@
+/*
+ * Bench sheet print rules (practice planner 3b). Imported only by
+ * app/(print)/layout.tsx. Every rule is print-only or scoped to bench-* and
+ * no-print classes, so the sheet stays harmless if a client navigation keeps
+ * it loaded.
+ */
+@page {
+  margin: 12mm;
+}
+
+.bench-timeline table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.bench-timeline th,
+.bench-timeline td {
+  border-bottom: 1px solid #999;
+  padding: 4px 6px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.bench-timeline ul {
+  margin: 2px 0 0;
+  padding-left: 1.1em;
+}
+
+.bench-over-time {
+  font-weight: 700;
+}
+
+/* A drill never splits across pages. No forced heights: a full-width 720x306
+   diagram is about 79 mm tall, so two drills with their text fit on A4 or Letter. */
+.bench-drill {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+@media print {
+  html,
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  /* Drills start on page 2. */
+  .bench-page-break {
+    break-before: page;
+    page-break-before: always;
+  }
+
+  /* Two drills per page: every second drill ends a page (BenchSheet skips the last). */
+  .bench-drill--page-end {
+    break-after: page;
+    page-break-after: always;
+  }
+
+  .bench-sheet {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+}
