@@ -1375,6 +1375,9 @@ export const updatePracticeSessionSchema = z.object({
     duration: z.number().int().min(1, "Play duration must be at least 1 minute").max(300, "Play duration must be less than 300 minutes"),
     instructions: optionalSanitizedString(2000),
   })).optional().default([]),
+  // Explicit Save only; autosave omits it so shared sessions do not email the
+  // team on every debounce.
+  notify: z.boolean().optional().default(false),
   ...practiceVenueAttachmentFields,
 }).refine(practiceHasStartAtWhenVenueSet, practiceStartAtRequiredIssue);
 

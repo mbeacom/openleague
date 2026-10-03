@@ -264,10 +264,13 @@ export async function getPracticeSessionForEdit(sessionId: string): Promise<{
       surfaceId: session.surfaceId,
       segmentId: session.segmentId,
       startAt: session.startAt,
-      plays: session.plays.map((sp) => ({
+      // Plays are ordered by sequence asc. Deleting a library play cascades
+      // its PracticeSessionPlay row away and leaves gaps (e.g. 0,2), which the
+      // save validator rejects — so renumber to consecutive 0-based indices.
+      plays: session.plays.map((sp, index) => ({
         id: sp.id,
         playId: sp.play.id,
-        sequence: sp.sequence,
+        sequence: index,
         duration: sp.duration ?? 0,
         instructions: sp.instructions || "",
         playData: playDataOrEmpty(sp.play.playData, `play ${sp.play.id}`),

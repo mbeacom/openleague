@@ -20,7 +20,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockAuth, mockTx, mockPrisma, serviceAssignVenueReservation, serviceCreateVenueReservation } = vi.hoisted(() => {
+const { mockAuth, mockTx, mockPrisma, serviceAssignVenueReservation, serviceCreateVenueReservation, mockSendNotifications } = vi.hoisted(() => {
   // Shared model mocks: today's `createPracticeSession` calls `prisma.*`
   // directly with no `$transaction` wrapper at all, while the intended T032
   // contract wraps every write in one atomic `prisma.$transaction(tx => ...)`.
@@ -63,11 +63,13 @@ const { mockAuth, mockTx, mockPrisma, serviceAssignVenueReservation, serviceCrea
     },
     serviceAssignVenueReservation: vi.fn(),
     serviceCreateVenueReservation: vi.fn(),
+    mockSendNotifications: vi.fn().mockResolvedValue(undefined),
   };
 });
 
 vi.mock("@/lib/auth/session", () => mockAuth);
 vi.mock("@/lib/db/prisma", () => ({ prisma: mockPrisma }));
+vi.mock("@/lib/email/templates", () => ({ sendPracticePlanNotifications: mockSendNotifications }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/actions/venues", () => ({ canUserAccessVenue: vi.fn().mockResolvedValue(true) }));
 vi.mock("@/lib/services/venue-reservations", () => ({
@@ -454,5 +456,53 @@ describe("deletePracticeSession coordinated cleanup", () => {
       where: { id: SESSION_ID },
     });
     expect(mockTx.venueReservation.findUnique).toHaveBeenCalled();
+  });
+});
+
+describe("updatePracticeSession update notifications", () => {
+  beforeEach(() => {
+    mockTx.practiceSession.findUnique.mockResolvedValue({
+      id: SESSION_ID,
+      teamId: TEAM_ID,
+      isShared: true,
+      venueReservationId: null,
+    });
+    mockSendNotifications.mockResolvedValue(undefined);
+  });
+
+  it("notifies the team on a shared session when notify is true", async () => {
+    const result = await updatePracticeSession({
+      id: SESSION_ID,
+      ...baseInput({ notify: true }),
+    });
+
+    expect(result.success).toBe(true);
+    expect(mockSendNotifications).toHaveBeenCalledWith(SESSION_ID, TEAM_ID, "updated");
+  });
+
+  it("does not notify on a shared session when notify is omitted (autosave)", async () => {
+    const result = await updatePracticeSession({
+      id: SESSION_ID,
+      ...baseInput(),
+    });
+
+    expect(result.success).toBe(true);
+    expect(mockSendNotifications).not.toHaveBeenCalled();
+  });
+
+  it("does not notify when notify is explicitly false", async () => {
+    await updatePracticeSession({ id: SESSION_ID, ...baseInput({ notify: false }) });
+    expect(mockSendNotifications).not.toHaveBeenCalled();
+  });
+
+  it("does not notify for an unshared session even when notify is true", async () => {
+    mockTx.practiceSession.findUnique.mockResolvedValue({
+      id: SESSION_ID,
+      teamId: TEAM_ID,
+      isShared: false,
+      venueReservationId: null,
+    });
+    await updatePracticeSession({ id: SESSION_ID, ...baseInput({ notify: true }) });
+    expect(mockSendNotifications).not.toHaveBeenCalled();
   });
 });
