@@ -204,7 +204,7 @@ export async function detachLibraryPlay(
     input: { playId: string; teamId: string; userId: string },
 ): Promise<number> {
     const rows = await tx.practiceSessionPlay.findMany({
-        where: { playId: input.playId },
+        where: { playId: input.playId, session: { teamId: input.teamId } },
         select: { sessionId: true },
     });
     const sessionIds = [...new Set(rows.map((row) => row.sessionId))];

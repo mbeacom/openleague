@@ -112,10 +112,12 @@ describe("materializeSessionDrills", () => {
     });
 
     it("clones an unowned non-library play this session already references (pre-3a data)", async () => {
-        const { tx } = fakeTx([play("old", { isTemplate: false })], refs("old"));
+        const { mocks, tx } = fakeTx([play("old", { isTemplate: false })], refs("old"));
         const result = await materializeSessionDrills(tx, { sessionId: SESSION, teamId: TEAM, userId: USER, items: items("old") });
 
         expect(result.mapping[0].playId).toBe("clone-0");
+        // The legacy row has no sourcePlayId, so provenance falls back to its own id.
+        expect(mocks.play.createManyAndReturn.mock.calls[0][0].data[0].sourcePlayId).toBe("old");
         expect(result.previousPlayIds).toEqual(["old"]);
     });
 
@@ -246,5 +248,23 @@ describe("team scoping (a session never references another team's play)", () => 
         const { mocks, tx } = fakeTx([play("lib")], [{ sessionId: "sA", playId: "lib" }]);
         await detachLibraryPlay(tx, { playId: "lib", teamId: TEAM, userId: USER });
         expect(mocks.play.findUniqueOrThrow.mock.calls[0][0].where).toEqual({ id: "lib", teamId: TEAM });
+    });
+
+    it("looks up referencing session plays only within the caller's team", async () => {
+        const { mocks, tx } = fakeTx([play("lib")], [{ sessionId: "sA", playId: "lib" }]);
+        await detachLibraryPlay(tx, { playId: "lib", teamId: TEAM, userId: USER });
+        expect(mocks.practiceSessionPlay.findMany.mock.calls[0][0].where).toEqual({
+            playId: "lib",
+            session: { teamId: TEAM },
+        });
+    });
+
+    it("propagates the rejection when the play is not in the team", async () => {
+        const { mocks, tx } = fakeTx([play("lib")], [{ sessionId: "sA", playId: "lib" }]);
+        mocks.play.findUniqueOrThrow.mockRejectedValueOnce(new Error("No Play found"));
+        await expect(
+            detachLibraryPlay(tx, { playId: "lib", teamId: TEAM, userId: USER }),
+        ).rejects.toThrow("No Play found");
+        expect(mocks.play.createManyAndReturn).not.toHaveBeenCalled();
     });
 });

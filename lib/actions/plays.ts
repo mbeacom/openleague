@@ -4,7 +4,8 @@ import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
 import { requireTeamAdmin, requireTeamMember } from "@/lib/auth/session";
 import { revalidatePath } from "next/cache";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
+import { detachLibraryPlay } from "@/lib/services/practice-session-drills";
 import {
     createPlaySchema,
     updatePlaySchema,
@@ -79,6 +80,11 @@ function sanitizeAndRevalidate(
         return { ok: false, result: { success: false, error: "Invalid play data", details: check.error.issues } };
     }
     return { ok: true, data: sanitized };
+}
+
+/** NO ACTION FK on practice_session_plays.playId: a session referenced the play mid-write. */
+function isStillReferenced(error: unknown): boolean {
+    return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003";
 }
 
 /**
@@ -171,7 +177,7 @@ export async function updatePlay(
         // This prevents authorization bypass by providing a different teamId
         const existingPlay = await prisma.play.findUnique({
             where: { id: validated.id },
-            select: { teamId: true },
+            select: { teamId: true, sessionId: true, isTemplate: true },
         });
 
         if (!existingPlay) {
@@ -182,13 +188,22 @@ export async function updatePlay(
         }
 
         // Authorize against the play's actual teamId, not user-provided input
-        await requireTeamAdmin(existingPlay.teamId);
+        const userId = await requireTeamAdmin(existingPlay.teamId);
 
         // Verify the teamId in the request matches the play's actual teamId
         if (existingPlay.teamId !== validated.teamId) {
             return {
                 success: false,
                 error: "Unauthorized: Play does not belong to this team",
+            };
+        }
+
+        // A session's private copy is edited from its session (SessionDrillDialog),
+        // never from the library editor, which would also let it become a template.
+        if (existingPlay.sessionId) {
+            return {
+                success: false,
+                error: "This drill belongs to a practice session. Edit it from that session.",
             };
         }
 
@@ -199,21 +214,27 @@ export async function updatePlay(
         if (!sanitizedResult.ok) return sanitizedResult.result;
         const sanitizedPlayData = sanitizedResult.data;
 
-        // Update play
-        const play = await prisma.play.update({
-            where: { id: validated.id },
-            data: {
-                name: validated.name,
-                description: validated.description || null,
-                thumbnail: validated.thumbnail || null,
-                playData: sanitizedPlayData as unknown as Prisma.InputJsonValue,
-                ...(validated.isTemplate !== undefined && { isTemplate: validated.isTemplate }),
-            },
-            select: {
-                id: true,
-                name: true,
-                isTemplate: true,
-            },
+        // Detach-on-write: sessions still pointing at this library row keep
+        // the version they were planned with.
+        const play = await prisma.$transaction(async (tx) => {
+            if (existingPlay.isTemplate) {
+                await detachLibraryPlay(tx, { playId: validated.id, teamId: existingPlay.teamId, userId });
+            }
+            return tx.play.update({
+                where: { id: validated.id },
+                data: {
+                    name: validated.name,
+                    description: validated.description || null,
+                    thumbnail: validated.thumbnail || null,
+                    playData: sanitizedPlayData as unknown as Prisma.InputJsonValue,
+                    ...(validated.isTemplate !== undefined && { isTemplate: validated.isTemplate }),
+                },
+                select: {
+                    id: true,
+                    name: true,
+                    isTemplate: true,
+                },
+            });
         });
 
         // Revalidate practice planner pages
@@ -234,6 +255,10 @@ export async function updatePlay(
             };
         }
 
+        if (isStillReferenced(error)) {
+            return { success: false, error: "This drill is still used by a session" };
+        }
+
         if (error instanceof Error && error.message.includes("Unauthorized")) {
             return {
                 success: false,
@@ -250,23 +275,24 @@ export async function updatePlay(
 }
 
 /**
- * Delete a play from the library
- * Only ADMIN role can delete plays
- * Note: Cascade delete will also remove play instances from practice sessions (PracticeSessionPlay records)
- * Requirements: 4.5
+ * Delete a play from the library.
+ * Only ADMIN role can delete plays.
+ * Detach-on-write: every session that still references the play first gets
+ * its own copy (one per session) and is repointed to it; then the library
+ * row is really deleted, all in one transaction. PracticeSessionPlay.play is
+ * ON DELETE NO ACTION, so a reference that appears mid-transaction fails the
+ * delete (P2003) instead of removing the drill from that session.
  */
 export async function deletePlay(
     input: DeletePlayInput
-): Promise<ActionResult<{ id: string }>> {
+): Promise<ActionResult<{ id: string; detachedSessions: number }>> {
     try {
-        // Validate input
         const validated = deletePlaySchema.parse(input);
 
-        // First fetch the existing play to get its actual teamId for authorization
-        // This prevents authorization bypass by providing a different teamId
+        // Fetch the play first to authorize against its actual teamId
         const existingPlay = await prisma.play.findUnique({
             where: { id: validated.id },
-            select: { teamId: true },
+            select: { teamId: true, sessionId: true, isTemplate: true },
         });
 
         if (!existingPlay) {
@@ -277,9 +303,8 @@ export async function deletePlay(
         }
 
         // Authorize against the play's actual teamId, not user-provided input
-        await requireTeamAdmin(existingPlay.teamId);
+        const userId = await requireTeamAdmin(existingPlay.teamId);
 
-        // Verify the teamId in the request matches the play's actual teamId
         if (existingPlay.teamId !== validated.teamId) {
             return {
                 success: false,
@@ -287,18 +312,25 @@ export async function deletePlay(
             };
         }
 
-        // Delete play (cascade will remove associated PracticeSessionPlay records)
-        await prisma.play.delete({
-            where: { id: validated.id },
+        const isLibraryPlay = existingPlay.isTemplate && existingPlay.sessionId === null;
+        const detachedSessions = await prisma.$transaction(async (tx) => {
+            const detached = isLibraryPlay
+                ? await detachLibraryPlay(tx, {
+                    playId: validated.id,
+                    teamId: existingPlay.teamId,
+                    userId,
+                })
+                : 0;
+            await tx.play.delete({ where: { id: validated.id } });
+            return detached;
         });
 
-        // Revalidate practice planner pages
         revalidatePath("/practice-planner");
         revalidatePath("/practice-planner/library");
 
         return {
             success: true,
-            data: { id: validated.id },
+            data: { id: validated.id, detachedSessions },
         };
     } catch (error) {
         if (error instanceof z.ZodError) {
@@ -306,6 +338,13 @@ export async function deletePlay(
                 success: false,
                 error: "Invalid input",
                 details: error.issues,
+            };
+        }
+
+        if (isStillReferenced(error)) {
+            return {
+                success: false,
+                error: "This drill is still used by a session",
             };
         }
 
@@ -454,6 +493,8 @@ export async function getPlaysByTeam(input: GetPlaysByTeamInput): Promise<Action
         // Requirements: 8.4 - Server-side search and date filtering
         const where: Prisma.PlayWhereInput = {
             teamId: validated.teamId,
+            // Session-owned copies never appear in any listing.
+            sessionId: null,
         };
 
         if (validated.isTemplate !== undefined) {
