@@ -113,7 +113,15 @@ export function writablePlayData(playData: PlayData): PlayData {
     return sanitized.data;
 }
 
-/** Only image data URLs are kept; anything else is dropped rather than stored. */
+/**
+ * Hosted's thumbnail rule (base64ImageSchema and MAX_THUMBNAIL_SIZE in
+ * lib/utils/validation.ts). Copied, not imported: that module isn't exported
+ * piecemeal and pulls in unrelated validation for the static bundle.
+ */
+export const MAX_THUMBNAIL_SIZE = 1000000;
+const THUMBNAIL_DATA_URL = /^data:image\/(png|jpeg|jpg|webp);base64,/;
+
+/** Only thumbnails hosted would accept are kept; anything else is dropped rather than stored. */
 export function thumbnailOrNull(value: string | null | undefined): string | null {
-    return value && value.startsWith("data:image/") ? value : null;
+    return value && value.length <= MAX_THUMBNAIL_SIZE && THUMBNAIL_DATA_URL.test(value) ? value : null;
 }
