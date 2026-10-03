@@ -538,7 +538,11 @@ export function viewportContentRect(transform: TransformContext, viewport: RinkR
 function clampPanAxis(pan: number, zoom: number, extent: number, min: number, size: number): number {
     const shown = zoom * size;
     // Fits on this axis: keep it centered (at zoom 1 the transform already centers it, so pan 0).
-    if (shown <= extent) return (extent - shown) / 2 - zoom * min;
+    // Rounding noise snaps to exactly 0: the board only uses its cached rink when pan === 0.
+    if (shown <= extent) {
+        const centered = (extent - shown) / 2 - zoom * min;
+        return Math.abs(centered) < 1e-9 ? 0 : centered;
+    }
     // Overflows: its edges may not be pulled inside the canvas edges.
     return Math.min(-zoom * min, Math.max(extent - zoom * (min + size), pan));
 }

@@ -27,7 +27,7 @@ import {
   PINCH_ZOOM_MAX,
 } from "@/lib/utils/canvas/interaction-utils";
 import { strokeFromV1Type, createEmptyPlayData } from "@/lib/utils/play-data";
-import { areaRect } from "@/lib/utils/ice-area";
+import { areaRect, editViewport } from "@/lib/utils/ice-area";
 import { FULL_RINK, createTransformContext } from "@/lib/utils/canvas/rink-renderer";
 import type { PlayData, PlayerIcon, DrawingElement, TextAnnotation } from "@/types/practice-planner";
 
@@ -398,6 +398,21 @@ describe("clampPan", () => {
       const out = clampPan(pan, 1, canvas, full);
       expect(out.x).toBeCloseTo(0, 9);
       expect(out.y).toBeCloseTo(0, 9);
+    }
+  });
+
+  it("gives exactly zero pan at zoom 1 for cropped viewports too (the board's cached-rink path needs pan === 0)", () => {
+    const viewports = [
+      editViewport({ kind: "zone-left" }),
+      editViewport({ kind: "zone-neutral" }),
+      editViewport({ kind: "custom", rect: { x: 100, y: 30, w: 20, h: 20 } }),
+      editViewport({ kind: "custom", rect: { x: 13.3, y: 7.7, w: 41.1, h: 23.9 } }),
+    ];
+    for (const viewport of viewports) {
+      for (const [w, h] of [[800, 400], [1024, 600], [375, 300], [733, 417]]) {
+        const content = viewportContentRect(createTransformContext(w, h, 20, viewport), viewport);
+        expect(clampPan({ x: 123, y: -45 }, 1, { width: w, height: h }, content)).toEqual({ x: 0, y: 0 });
+      }
     }
   });
 
