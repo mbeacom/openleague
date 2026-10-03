@@ -133,3 +133,62 @@ describe("getPracticeSessionDetail", () => {
     expect((await getPracticeSessionDetail("s1"))?.session.segmentKind).toBeNull();
   });
 });
+
+describe("getPracticeSessionDetail: venue timezone and unchanged access (3b)", () => {
+  function detailRow(overrides: Record<string, unknown> = {}) {
+    return {
+      id: "s1", teamId: "t1", title: "T", date: new Date("2026-04-07T22:00:00Z"), duration: 60, isShared: false,
+      createdBy: { name: "Coach" }, team: { id: "t1", name: "Team" },
+      venueId: "v1", venue: { name: "Rink", timezone: "America/Denver" },
+      surfaceId: null, surface: null, segmentId: null, segment: null,
+      startAt: new Date("2026-04-08T00:00:00Z"),
+      plays: [],
+      ...overrides,
+    };
+  }
+
+  /** The query reads membership twice: any team (first), then the session's team (second). */
+  function memberships(sessionTeam: { role: "ADMIN" | "MEMBER" } | null) {
+    mockPrisma.teamMember.findFirst
+      .mockResolvedValueOnce({ id: "m-any", role: "MEMBER" })
+      .mockResolvedValueOnce(sessionTeam ? { id: "m", ...sessionTeam } : null);
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPrisma.teamMember.findFirst.mockReset();
+  });
+
+  it("returns the venue's timezone, selected alongside its name", async () => {
+    memberships({ role: "ADMIN" });
+    mockPrisma.practiceSession.findUnique.mockResolvedValue(detailRow());
+
+    const result = await getPracticeSessionDetail("s1");
+
+    expect(result?.session.venueTimezone).toBe("America/Denver");
+    expect(mockPrisma.practiceSession.findUnique.mock.calls[0][0].include.venue).toEqual({
+      select: { name: true, timezone: true },
+    });
+  });
+
+  it("returns a null timezone for an unbooked session", async () => {
+    memberships({ role: "ADMIN" });
+    mockPrisma.practiceSession.findUnique.mockResolvedValue(detailRow({ venueId: null, venue: null, startAt: null }));
+
+    expect((await getPracticeSessionDetail("s1"))?.session.venueTimezone).toBeNull();
+  });
+
+  it.each([
+    ["an admin, unshared", { role: "ADMIN" as const }, false, true],
+    ["a member, shared", { role: "MEMBER" as const }, true, true],
+    ["a member, unshared", { role: "MEMBER" as const }, false, false],
+    ["a non-member, shared", null, true, false],
+  ])("keeps the access rule: %s", async (_label, sessionTeam, isShared, visible) => {
+    memberships(sessionTeam);
+    mockPrisma.practiceSession.findUnique.mockResolvedValue(detailRow({ isShared }));
+
+    const result = await getPracticeSessionDetail("s1");
+
+    expect(result !== null).toBe(visible);
+  });
+});
