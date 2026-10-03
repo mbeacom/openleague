@@ -149,6 +149,58 @@ describe("drawStationMap", () => {
     });
 });
 
+describe("drawStationMap label placement", () => {
+    beforeEach(() => clearRinkCache());
+
+    const custom = (x: number, y: number, w = 60, h = 40): PlayData => ({
+        ...createEmptyPlayData(),
+        area: { kind: "custom", rect: { x, y, w, h } },
+    });
+
+    /** Each label's backing box (the fillRect drawn just before its text), as [x, y, w, h]. */
+    const labelBoxes = (calls: Call[]) =>
+        calls.flatMap((c, i) => (c.name === "fillText" && calls[i - 1]?.name === "fillRect" ? [calls[i - 1].args as number[]] : []));
+    const overlaps = (a: number[], b: number[]) => a[0] < b[0] + b[2] && b[0] < a[0] + a[2] && a[1] < b[1] + b[3] && b[1] < a[1] + a[3];
+    const expectNoOverlaps = (boxes: number[][]) => {
+        for (let i = 0; i < boxes.length; i++) {
+            for (let j = i + 1; j < boxes.length; j++) expect(overlaps(boxes[i], boxes[j]), `labels ${i} and ${j}`).toBe(false);
+        }
+    };
+
+    it("gives stations that share a top-left corner non-overlapping labels", () => {
+        const calls = draw([
+            { name: "Full", playData: createEmptyPlayData() },
+            { name: "Half", playData: { ...createEmptyPlayData(), area: { kind: "half-left" } } },
+            { name: "Zone", playData: breakout },
+        ]);
+        const boxes = labelBoxes(calls);
+        expect(boxes).toHaveLength(3);
+        expectNoOverlaps(boxes);
+    });
+
+    it("steps a label down when it would overlap one placed at a nearby, different corner", () => {
+        const calls = draw([{ name: "Top", playData: custom(0, 0) }, { name: "Nudged", playData: custom(0, 2) }]);
+        const boxes = labelBoxes(calls);
+        expect(boxes).toHaveLength(2);
+        expectNoOverlaps(boxes);
+    });
+
+    it("counts an unreadable station's two lines when stacking the next label", () => {
+        const calls = draw([{ name: "Lost", playData: null }, { name: "Half", playData: { ...createEmptyPlayData(), area: { kind: "half-left" } } }]);
+        expectNoOverlaps(labelBoxes(calls));
+    });
+
+    it("leaves labels at their corner when nothing collides", () => {
+        const calls = draw([{ name: "Breakout", playData: breakout }, { name: "Regroup", playData: regroup }]);
+        const ys = calls
+            .filter((c) => c.name === "fillText" && /^\d · /.test(String(c.args[0])))
+            .map((c) => c.args[2] as number);
+        expect(ys).toHaveLength(2);
+        expect(ys[0]).toBeCloseTo(rinkToCanvas({ x: 0, y: 0 }, t).y + 6, 9);
+        expect(ys[1]).toBeCloseTo(rinkToCanvas({ x: 125, y: 0 }, t).y + 6, 9);
+    });
+});
+
 describe("combinedLegendData", () => {
     it("merges every readable station's symbols, without an area", () => {
         const merged = combinedLegendData([
