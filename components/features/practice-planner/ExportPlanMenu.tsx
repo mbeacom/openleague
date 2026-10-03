@@ -18,6 +18,7 @@ import type { PlayData } from "@/types/practice-planner";
 import { formatDateTimeLocalInput, resolveTimeZone, sessionStart } from "@/lib/utils/date";
 import {
     LINK_TOO_LARGE_MESSAGE,
+    MAX_PLAN_FILE_BYTES,
     PlanLinkTooLargeError,
     encodePlanLink,
     parsePlan,
@@ -73,13 +74,17 @@ export function unreadableDiagramNotice(count: number): string | null {
         : `${count} drills had unreadable diagrams and were exported blank.`;
 }
 
+export const FILE_TOO_LARGE_TO_IMPORT_NOTICE = `This file is too large to import (over ${MAX_PLAN_FILE_BYTES / 1000} KB).`;
+
 /**
  * A hosted session can exceed what a plan file may hold (more than
- * MAX_PLAN_DRILLS drills, say). The file still downloads; this says why it
- * won't import as-is, naming the first problem.
+ * MAX_PLAN_DRILLS drills, or more than MAX_PLAN_FILE_BYTES). This says why it
+ * won't import as-is, naming the first problem. `text` is the exact JSON being
+ * handed over, measured as the importer measures it: by size first, then schema.
  */
-export function importProblemNotice(doc: PlanDocument): string | null {
-    const result = parsePlan(JSON.parse(JSON.stringify(doc)));
+export function importProblemNotice(doc: PlanDocument, text: string = JSON.stringify(doc)): string | null {
+    if (new TextEncoder().encode(text).byteLength > MAX_PLAN_FILE_BYTES) return FILE_TOO_LARGE_TO_IMPORT_NOTICE;
+    const result = parsePlan(JSON.parse(text));
     if (result.ok) return null;
     return `This file can't be imported as-is: ${result.error.issues?.[0] ?? result.error.message}`;
 }
@@ -100,7 +105,8 @@ export function ExportPlanMenu({ session, size = "medium" }: ExportPlanMenuProps
     const download = () => {
         setAnchor(null);
         const doc = buildPlanDocument(session);
-        const url = URL.createObjectURL(new Blob([JSON.stringify(doc, null, 2)], { type: "application/json" }));
+        const text = JSON.stringify(doc, null, 2);
+        const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));
         const link = document.createElement("a");
         link.href = url;
         link.download = planFileName(session.title);
@@ -109,15 +115,22 @@ export function ExportPlanMenu({ session, size = "medium" }: ExportPlanMenuProps
         link.remove();
         // Safari and Firefox can cut the download short if the URL is revoked right away.
         window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-        const warnings = [unreadable, importProblemNotice(doc)].filter((text): text is string => text !== null);
+        const warnings = [unreadable, importProblemNotice(doc, text)].filter((text): text is string => text !== null);
         setNotice(warnings.length > 0 ? { severity: "warning", text: warnings.join(" ") } : null);
     };
 
     const copyLink = async () => {
         setAnchor(null);
         if (!plannerUrl) return;
+        const doc = buildPlanDocument(session);
+        // A link the import page would refuse is worse than none: warn instead of copying.
+        const problem = importProblemNotice(doc);
+        if (problem) {
+            setNotice({ severity: "warning", text: problem });
+            return;
+        }
         try {
-            const encoded = await encodePlanLink(buildPlanDocument(session));
+            const encoded = await encodePlanLink(doc);
             await navigator.clipboard.writeText(`${plannerUrl.split("#")[0]}#plan=${encoded}`);
             setNotice(
                 unreadable

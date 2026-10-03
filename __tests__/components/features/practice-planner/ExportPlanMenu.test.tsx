@@ -7,7 +7,7 @@ import {
     unreadableDiagramNotice,
     type ExportableSession,
 } from "@/components/features/practice-planner/ExportPlanMenu";
-import { LINK_TOO_LARGE_MESSAGE, MAX_PLAN_DRILLS, decodePlanLink, parsePlan } from "@/lib/plan-document";
+import { LINK_TOO_LARGE_MESSAGE, MAX_PLAN_DRILLS, MAX_PLAN_FILE_BYTES, decodePlanLink, parsePlan } from "@/lib/plan-document";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import { formatDateTimeLocalInput, resolveTimeZone } from "@/lib/utils/date";
 
@@ -132,6 +132,21 @@ describe("ExportPlanMenu", () => {
         );
     });
 
+    it("still downloads a file too large to import, and warns before the importer refuses it", async () => {
+        const huge: ExportableSession = {
+            ...SESSION,
+            plays: [{ ...sessionPlay("Huge", 0), instructions: "a".repeat(MAX_PLAN_FILE_BYTES) }],
+        };
+        render(<ExportPlanMenu session={huge} />);
+        openMenu();
+        fireEvent.click(screen.getByRole("menuitem", { name: "Download plan file" }));
+
+        expect(clicks).toHaveLength(1);
+        expect(await screen.findByRole("alert")).toHaveTextContent(
+            `This file is too large to import (over ${MAX_PLAN_FILE_BYTES / 1000} KB).`,
+        );
+    });
+
     it("downloads a valid plan without an import warning", () => {
         render(<ExportPlanMenu session={SESSION} />);
         openMenu();
@@ -168,6 +183,26 @@ describe("ExportPlanMenu", () => {
         const result = parsePlan(await decodePlanLink(link.split("#plan=")[1]));
         expect(result.ok && result.plan.session.title).toBe("Tuesday Skills");
         expect(await screen.findByText("Link copied. Paste it to open this plan in the planner.")).toBeInTheDocument();
+    });
+
+    it("doesn't copy a link to a plan that can't be imported, and warns instead", async () => {
+        vi.stubEnv("NEXT_PUBLIC_STATIC_PLANNER_URL", "https://planner.example/app/");
+        const writeText = vi.fn().mockResolvedValue(undefined);
+        Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+        const tooMany: ExportableSession = {
+            ...SESSION,
+            duration: 300,
+            plays: Array.from({ length: MAX_PLAN_DRILLS + 1 }, (_, i) => ({ ...sessionPlay(`Drill ${i}`, i), duration: 1 })),
+        };
+
+        render(<ExportPlanMenu session={tooMany} />);
+        openMenu();
+        fireEvent.click(screen.getByRole("menuitem", { name: /open in planner/i }));
+
+        expect(await screen.findByRole("alert")).toHaveTextContent(
+            `This file can't be imported as-is: A plan can hold at most ${MAX_PLAN_DRILLS} drills`,
+        );
+        expect(writeText).not.toHaveBeenCalled();
     });
 
     it("says when the plan is too large for a link", async () => {
