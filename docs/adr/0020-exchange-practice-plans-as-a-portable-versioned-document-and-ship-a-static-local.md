@@ -148,6 +148,6 @@ Plans stay locked in the hosted database, and coaches without an account can't u
 
 1. [ ] Sub-project 1: plan document plus hosted export and import (`docs/superpowers/specs/2026-10-03-plan-document-design.md`).
 2. [ ] Sub-project 2: `PlannerStore` seam.
-3. [ ] Sub-project 3: static app and Pages deploy.
+3. [x] Sub-project 3: static app and Pages deploy.
 4. [ ] Sub-project 4: HTML and `.docx` exports.
 5. [ ] Sub-project 5: Drive and OneDrive saving, once the OAuth apps are registered.
