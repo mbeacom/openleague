@@ -11,7 +11,7 @@ import {
     type PracticeSessionSubmitData,
 } from "@/components/features/practice-planner/PracticeSessionEditor";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
-import type { PlayInSession } from "@/types/practice-planner";
+import type { IceArea, PlayInSession } from "@/types/practice-planner";
 
 vi.mock("@/lib/actions/plays", () => ({
     getPlaysByTeam: vi.fn().mockResolvedValue({ success: true, data: { plays: [], total: 0 } }),
@@ -126,5 +126,56 @@ describe("PracticeSessionEditor stations (2b)", () => {
         expect(screen.getByRole("button", { name: "Move play 3 down" })).toBeDisabled();
         fireEvent.click(screen.getByRole("button", { name: "Move play 3 up" }));
         expect(await savedOrder(onSave)).toBe("a c+ b+ s");
+    });
+});
+
+describe("PracticeSessionEditor station warnings (2b)", () => {
+    const VENUE = "cvenuexxxxxxxxxxxxxxxxxxx";
+    const SURFACE = "csurfacexxxxxxxxxxxxxxxxx";
+    const SEGMENT = "csegmentxxxxxxxxxxxxxxxxx";
+    const booking: Partial<PracticeSessionEditorProps> = {
+        venues: [{ id: VENUE, name: "Test Rink", timezone: "America/New_York" }],
+        surfacesByVenue: { [VENUE]: [{ id: SURFACE, name: "Main" }] },
+        segmentsBySurface: { [SURFACE]: [{ id: SEGMENT, name: "Half A", kind: "HALF" }] },
+    };
+
+    function withArea(play: PlayInSession, area?: IceArea): PlayInSession {
+        return { ...play, playData: { ...createEmptyPlayData(), ...(area ? { area } : {}) } };
+    }
+
+    it("warns, without blocking the save, when two stations' areas overlap", async () => {
+        const [a, b] = drills("a b+");
+        const { onSave } = renderEditor([withArea(a, { kind: "half-left" }), withArea(b, { kind: "zone-neutral" })]);
+
+        expect(screen.getByText("Stations 1 and 2 overlap on the ice")).toBeInTheDocument();
+        expect(await savedOrder(onSave)).toBe("a b+");
+    });
+
+    it("doesn't warn for stations that only share a blue line", () => {
+        const [a, b, c] = drills("a b+ c+");
+        renderEditor([
+            withArea(a, { kind: "zone-left" }),
+            withArea(b, { kind: "zone-neutral" }),
+            withArea(c, { kind: "zone-right" }),
+        ]);
+        expect(screen.queryByText(/overlap on the ice/)).not.toBeInTheDocument();
+    });
+
+    it("flags a drill larger than the booked half-ice segment", () => {
+        const [a, b] = drills("a b");
+        renderEditor([withArea(a), withArea(b, { kind: "half-left" })], {
+            ...booking,
+            initialData: { venueId: VENUE, surfaceId: SURFACE, segmentId: SEGMENT, startAt: START },
+        });
+        expect(screen.getAllByText("Larger than the booked half ice")).toHaveLength(1);
+    });
+
+    it("flags nothing when the whole surface is booked", () => {
+        const [a] = drills("a");
+        renderEditor([withArea(a)], {
+            ...booking,
+            initialData: { venueId: VENUE, surfaceId: SURFACE, startAt: START },
+        });
+        expect(screen.queryByText(/Larger than the booked/)).not.toBeInTheDocument();
     });
 });

@@ -1,21 +1,27 @@
 "use client";
 
 import type { ReactNode } from "react";
+import type { SegmentKind } from "@prisma/client";
 import { Alert, Box, Button, Paper, Stack, Tooltip, Typography } from "@mui/material";
 import { Add as AddIcon, Draw as DrawIcon } from "@mui/icons-material";
 import type { PlayInSession } from "@/types/practice-planner";
 import {
+    SEGMENT_KIND_FIT_LABELS,
     canMove,
     canToggleRunsWithPrevious,
     groupStations,
     sessionWallMinutes,
     stationBlockLabel,
+    stationWarnings,
+    type StationGroup,
 } from "@/lib/utils/session-timeline";
 import { SessionDrillCard } from "./SessionDrillCard";
 
 export interface SessionDrillListProps {
     plays: PlayInSession[];
     duration: number;
+    /** The booked segment's kind, for the fit warning (2b); null = unbooked or the whole surface. */
+    segmentKind?: SegmentKind | null;
     editingPlayId: string | null;
     disabled: boolean;
     /** The session is being created: every card control is locked. */
@@ -36,7 +42,7 @@ export interface SessionDrillListProps {
 }
 
 /** Drills that run at the same time: one outlined block headed "Stations · N · M min" (2b). */
-function StationBlock({ label, children }: { label: string; children: ReactNode }) {
+function StationBlock({ label, warnings, children }: { label: string; warnings: string[]; children: ReactNode }) {
     return (
         <Box
             role="group"
@@ -51,20 +57,38 @@ function StationBlock({ label, children }: { label: string; children: ReactNode 
                 >
                     {label}
                 </Typography>
+                {warnings.map((warning) => (
+                    <Alert key={warning} severity="warning">
+                        {warning}
+                    </Alert>
+                ))}
                 {children}
             </Stack>
         </Box>
     );
 }
 
+/** "Stations 1 and 2 overlap on the ice", numbering stations by their place in the block. */
+function overlapMessages(
+    group: StationGroup<PlayInSession>,
+    overlaps: Array<[number, number, number]>,
+): string[] {
+    const position = (sequence: number) => group.stations.findIndex((station) => station.sequence === sequence) + 1;
+    return overlaps
+        .filter(([groupIndex]) => groupIndex === group.index)
+        .map(([, a, b]) => `Stations ${position(a)} and ${position(b)} overlap on the ice`);
+}
+
 /**
  * Plays in Session: totals, empty state, and one card per drill
  * (Requirements 2.2-2.5). Drills that run together render as one station
- * block; the total is the session's wall time (2b).
+ * block; the total is the session's wall time; overlap and fit warnings are
+ * advisory (2b).
  */
 export function SessionDrillList({
     plays,
     duration,
+    segmentKind = null,
     editingPlayId,
     disabled,
     locked = false,
@@ -82,6 +106,11 @@ export function SessionDrillList({
 }: SessionDrillListProps) {
     const totalPlayTime = sessionWallMinutes(plays);
     const groups = groupStations(plays);
+    const warnings = stationWarnings(
+        groupStations(plays.map((play) => ({ ...play, area: play.playData.area }))),
+        segmentKind,
+    );
+    const fitLabel = segmentKind ? SEGMENT_KIND_FIT_LABELS[segmentKind] : null;
 
     // The editor keeps array order equal to sequence order, so a drill's
     // position in `plays` is its card number and its move/toggle index.
@@ -99,6 +128,7 @@ export function SessionDrillList({
                     canToggle: canToggleRunsWithPrevious(plays, index),
                 }}
                 onToggleStation={onToggleStation}
+                fitWarning={fitLabel && warnings.tooBig.includes(play.sequence) ? `Larger than the booked ${fitLabel}` : null}
                 isEditing={editingPlayId === play.id}
                 onDelete={onDelete}
                 onEdit={onEdit}
@@ -194,6 +224,7 @@ export function SessionDrillList({
                                 <StationBlock
                                     key={`stations-${group.stations[0].id}`}
                                     label={stationBlockLabel(group.stations.length, group.wallMinutes)}
+                                    warnings={overlapMessages(group, warnings.overlaps)}
                                 >
                                     {group.stations.map(renderCard)}
                                 </StationBlock>

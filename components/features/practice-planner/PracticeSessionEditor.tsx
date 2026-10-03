@@ -47,6 +47,7 @@ import { BookingConflictAlert, VenueBookingFields } from "./VenueBookingFields";
 import {
     useVenueBooking,
     type PracticeVenueAttachment,
+    type SegmentBookingOption,
     type VenueBookingOption,
     type VenueReservationBookingOption,
 } from "./useVenueBooking";
@@ -98,7 +99,7 @@ export interface PracticeSessionEditorProps {
     /** Active surfaces per venue id. */
     surfacesByVenue?: Record<string, Array<{ id: string; name: string }>>;
     /** Active segments per surface id. */
-    segmentsBySurface?: Record<string, Array<{ id: string; name: string }>>;
+    segmentsBySurface?: Record<string, SegmentBookingOption[]>;
     /** Display name of the implicit whole-surface option per surface ("Full ice"). */
     wholeLabelBySurface?: Record<string, string>;
     onSave?: (session: PracticeSessionSubmitData) => Promise<PracticeSessionSaveResult>;
@@ -700,6 +701,7 @@ export function PracticeSessionEditor({
             <SessionDrillList
                 plays={plays}
                 duration={duration}
+                segmentKind={booking.segmentKind}
                 editingPlayId={editingPlayId}
                 disabled={busy}
                 locked={creating}

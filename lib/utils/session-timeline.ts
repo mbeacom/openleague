@@ -15,6 +15,11 @@
  * ends in `normalizeGroups`.
  */
 
+import type { SegmentKind } from "@prisma/client";
+import type { IceArea } from "@/types/practice-planner";
+import { areaRect, isFullIce } from "@/lib/utils/ice-area";
+import { BLUE_LINES, RINK_DIMENSIONS } from "@/lib/utils/canvas/rink-renderer";
+
 /** The most drills one station group may hold. */
 export const MAX_STATIONS_PER_GROUP = 4;
 
@@ -171,4 +176,76 @@ export function removeItem<T extends TimelinePlay>(plays: T[], index: number): T
     const follower = next[index];
     if (removedHead && follower?.runsWithPrevious) next[index] = { ...follower, runsWithPrevious: false };
     return normalizeGroups(next);
+}
+
+// ---------------------------------------------------------------------------
+// Advisory warnings (client-only; they never block a save)
+// ---------------------------------------------------------------------------
+
+/** Areas that share an edge, or overlap by at most this much, don't count as overlapping. */
+export const STATION_OVERLAP_TOLERANCE_FT = 1;
+
+/** A drill's ice area for the warnings. null = the drill couldn't be read, so it is never flagged. */
+export interface StationArea {
+    area?: IceArea | null;
+}
+
+/** How much ice a drill needs, judged by its area's width against the rink's halves and zones. */
+export type DrillFootprint = "full" | "half" | "zone";
+
+export function drillFootprint(area?: IceArea): DrillFootprint {
+    if (isFullIce(area)) return "full";
+    const { w } = areaRect(area);
+    if (w > RINK_DIMENSIONS.width / 2) return "full";
+    if (w > BLUE_LINES.left) return "half";
+    return "zone";
+}
+
+const TOO_BIG_FOR: Record<SegmentKind, readonly DrillFootprint[]> = {
+    HALF: ["full"],
+    CROSS: ["full", "half"],
+    CUSTOM: [],
+};
+
+/** How the fit warning names a booked segment kind. */
+export const SEGMENT_KIND_FIT_LABELS: Record<SegmentKind, string> = {
+    HALF: "half ice",
+    CROSS: "cross ice",
+    CUSTOM: "ice segment",
+};
+
+function areasOverlap(a: IceArea | undefined, b: IceArea | undefined): boolean {
+    const r = areaRect(a);
+    const s = areaRect(b);
+    const width = Math.min(r.x + r.w, s.x + s.w) - Math.max(r.x, s.x);
+    const height = Math.min(r.y + r.h, s.y + s.h) - Math.max(r.y, s.y);
+    return width > STATION_OVERLAP_TOLERANCE_FT && height > STATION_OVERLAP_TOLERANCE_FT;
+}
+
+/**
+ * Overlapping stations within each block ([groupIndex, sequenceA, sequenceB])
+ * and drills larger than the booked segment's kind (sequences). A whole-
+ * surface or unbooked session (`null`) and a CUSTOM segment flag nothing for
+ * size; HALF flags full-ice drills; CROSS flags full- and half-ice drills.
+ */
+export function stationWarnings(
+    groups: StationGroup<TimelinePlay & StationArea>[],
+    bookedSegmentKind: SegmentKind | null,
+): { overlaps: Array<[number, number, number]>; tooBig: number[] } {
+    const overlaps: Array<[number, number, number]> = [];
+    const tooBig: number[] = [];
+    const tooBigFootprints: readonly DrillFootprint[] = bookedSegmentKind ? TOO_BIG_FOR[bookedSegmentKind] : [];
+    for (const group of groups) {
+        const readable = group.stations.filter((station) => station.area !== null);
+        readable.forEach((station, i) => {
+            const area = station.area ?? undefined;
+            if (tooBigFootprints.includes(drillFootprint(area))) tooBig.push(station.sequence);
+            for (const other of readable.slice(i + 1)) {
+                if (areasOverlap(area, other.area ?? undefined)) {
+                    overlaps.push([group.index, station.sequence, other.sequence]);
+                }
+            }
+        });
+    }
+    return { overlaps, tooBig };
 }

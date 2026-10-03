@@ -8,6 +8,7 @@
  */
 
 import { useState, type ChangeEvent } from "react";
+import type { SegmentKind } from "@prisma/client";
 import type { BookingConflict } from "@/types/segments";
 import {
     formatDateTimeLocalInput,
@@ -25,6 +26,16 @@ export interface VenueBookingOption {
     timezone: string;
 }
 
+/**
+ * A bookable segment of a surface. `kind` feeds the drills' advisory fit
+ * check (2b); when it is absent the check treats the segment as unknown.
+ */
+export interface SegmentBookingOption {
+    id: string;
+    name: string;
+    kind?: SegmentKind;
+}
+
 export interface VenueReservationBookingOption {
     id: string;
     startsAt: string;
@@ -36,6 +47,7 @@ export interface VenueReservationBookingOption {
     surfaceName: string | null;
     segmentId: string | null;
     segmentName: string | null;
+    segmentKind?: SegmentKind | null;
     ownerType: "league" | "team";
 }
 
@@ -84,7 +96,7 @@ export interface UseVenueBookingOptions {
     venues: VenueBookingOption[];
     reservations: VenueReservationBookingOption[];
     surfacesByVenue: Record<string, Array<{ id: string; name: string }>>;
-    segmentsBySurface: Record<string, Array<{ id: string; name: string }>>;
+    segmentsBySurface: Record<string, SegmentBookingOption[]>;
     wholeLabelBySurface: Record<string, string>;
     /** Any booking edit: the editor marks the session dirty. */
     onDirty: () => void;
@@ -239,6 +251,14 @@ export function useVenueBooking({
     const surfaceSegments = surfaceId ? (segmentsBySurface[surfaceId] ?? []) : [];
     const wholeSurfaceLabel = (surfaceId && wholeLabelBySurface[surfaceId]) || "Whole surface";
 
+    // The booked segment's kind for the drills' fit warning (2b). null means
+    // unbooked, the whole surface, or a segment whose kind wasn't loaded.
+    const segmentKind: SegmentKind | null = !venueId
+        ? null
+        : selectedReservation
+            ? selectedReservation.segmentKind ?? null
+            : surfaceSegments.find((segment) => segment.id === segmentId)?.kind ?? null;
+
     return {
         reservationId,
         venueId,
@@ -254,6 +274,7 @@ export function useVenueBooking({
         venueSurfaces,
         surfaceSegments,
         wholeSurfaceLabel,
+        segmentKind,
         handleVenueChange,
         handleReservationChange,
         handleSurfaceChange,

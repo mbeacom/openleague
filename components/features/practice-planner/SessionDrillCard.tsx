@@ -50,6 +50,8 @@ export interface SessionDrillCardProps {
     /** The station switch; null for the first drill, which always runs on its own. */
     station: { checked: boolean; canToggle: boolean } | null;
     onToggleStation: (index: number) => void;
+    /** Advisory: the drill is larger than the booked ice segment (2b). Never blocks a save. */
+    fitWarning?: string | null;
     isEditing: boolean;
     onDelete: (playId: string) => void;
     onEdit: (playId: string) => void;
@@ -79,6 +81,7 @@ export function SessionDrillCard({
     canMoveDown,
     station,
     onToggleStation,
+    fitWarning = null,
     isEditing,
     onDelete,
     onEdit,
@@ -171,6 +174,16 @@ export function SessionDrillCard({
                     <Typography variant="h6" component="h3">
                         {play.name || `Drill ${index + 1}`}
                     </Typography>
+
+                    {fitWarning && (
+                        <Chip
+                            label={fitWarning}
+                            color="warning"
+                            size="small"
+                            variant="outlined"
+                            sx={{ alignSelf: "flex-start" }}
+                        />
+                    )}
 
                     {/* Duration - Editable */}
                     {/* Requirements: 2.4 - Duration input for each play */}

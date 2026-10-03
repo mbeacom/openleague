@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
+import type { SegmentKind } from "@prisma/client";
+import type { IceArea } from "@/types/practice-planner";
 import {
     FIRST_DRILL_STATION_ERROR,
     MAX_STATIONS_PER_GROUP,
+    SEGMENT_KIND_FIT_LABELS,
     STATION_GROUP_CAP_ERROR,
+    STATION_OVERLAP_TOLERANCE_FT,
     canMove,
     canToggleRunsWithPrevious,
+    drillFootprint,
     groupRange,
     groupStations,
     moveItem,
@@ -13,7 +18,9 @@ import {
     sessionWallMinutes,
     stationBlockLabel,
     stationGroupError,
+    stationWarnings,
     toggleRunsWithPrevious,
+    type StationArea,
     type TimelinePlay,
 } from "@/lib/utils/session-timeline";
 
@@ -270,5 +277,98 @@ describe("removeItem", () => {
         const plays = cards("a b");
         expect(removeItem(plays, -1)).toBe(plays);
         expect(removeItem(plays, 2)).toBe(plays);
+    });
+});
+
+describe("drillFootprint", () => {
+    it.each([
+        ["missing (full ice)", undefined, "full"],
+        ["full", { kind: "full" }, "full"],
+        ["half-left", { kind: "half-left" }, "half"],
+        ["half-right", { kind: "half-right" }, "half"],
+        ["zone-left", { kind: "zone-left" }, "zone"],
+        ["zone-neutral", { kind: "zone-neutral" }, "zone"],
+        ["zone-right", { kind: "zone-right" }, "zone"],
+        ["custom 101 ft wide", { kind: "custom", rect: { x: 0, y: 0, w: 101, h: 20 } }, "full"],
+        ["custom 100 ft wide", { kind: "custom", rect: { x: 0, y: 0, w: 100, h: 85 } }, "half"],
+        ["custom 76 ft wide", { kind: "custom", rect: { x: 0, y: 0, w: 76, h: 40 } }, "half"],
+        ["custom 75 ft wide", { kind: "custom", rect: { x: 0, y: 0, w: 75, h: 85 } }, "zone"],
+    ] as Array<[string, IceArea | undefined, string]>)("classifies %s as %s", (_name, area, footprint) => {
+        expect(drillFootprint(area)).toBe(footprint);
+    });
+});
+
+describe("stationWarnings", () => {
+    type Placed = TimelinePlay & StationArea;
+
+    /** One drill per area; `flags` defaults to a single block holding all of them. */
+    function placed(areas: Array<IceArea | undefined | null>, flags = areas.map((_, index) => index > 0)): Placed[] {
+        return areas.map((area, sequence) => ({ sequence, duration: 10, runsWithPrevious: flags[sequence], area }));
+    }
+
+    function warn(plays: Placed[], kind: SegmentKind | null = null) {
+        return stationWarnings(groupStations(plays), kind);
+    }
+
+    it("flags two stations whose areas overlap", () => {
+        expect(warn(placed([{ kind: "half-left" }, { kind: "zone-neutral" }])).overlaps).toEqual([[0, 0, 1]]);
+    });
+
+    it("doesn't flag zones that only share a blue line", () => {
+        expect(warn(placed([{ kind: "zone-left" }, { kind: "zone-neutral" }, { kind: "zone-right" }])).overlaps).toEqual([]);
+    });
+
+    it("treats a full-ice drill as overlapping every other station", () => {
+        expect(warn(placed([undefined, { kind: "zone-right" }, { kind: "zone-left" }])).overlaps).toEqual([
+            [0, 0, 1],
+            [0, 0, 2],
+        ]);
+    });
+
+    it("tolerates up to 1 ft of overlap", () => {
+        expect(STATION_OVERLAP_TOLERANCE_FT).toBe(1);
+        const touching: IceArea = { kind: "custom", rect: { x: 74, y: 0, w: 20, h: 20 } };
+        const overlapping: IceArea = { kind: "custom", rect: { x: 73, y: 0, w: 20, h: 20 } };
+        expect(warn(placed([{ kind: "zone-left" }, touching])).overlaps).toEqual([]);
+        expect(warn(placed([{ kind: "zone-left" }, overlapping])).overlaps).toEqual([[0, 0, 1]]);
+    });
+
+    it("only compares drills in the same block, and reports the block's index", () => {
+        const plays = placed([{ kind: "half-left" }, { kind: "half-left" }, { kind: "half-left" }, { kind: "zone-left" }], [false, false, false, true]);
+        expect(warn(plays).overlaps).toEqual([[2, 2, 3]]);
+    });
+
+    it("skips an unreadable drill in both checks", () => {
+        expect(warn(placed([null, { kind: "zone-left" }]), "CROSS")).toEqual({ overlaps: [], tooBig: [] });
+    });
+
+    const AREAS: Record<string, IceArea | undefined> = {
+        "missing (full ice)": undefined,
+        full: { kind: "full" },
+        "half-left": { kind: "half-left" },
+        "zone-left": { kind: "zone-left" },
+        "zone-neutral": { kind: "zone-neutral" },
+        "custom 150x85": { kind: "custom", rect: { x: 0, y: 0, w: 150, h: 85 } },
+        "custom 90x40": { kind: "custom", rect: { x: 0, y: 0, w: 90, h: 40 } },
+        "custom 60x85": { kind: "custom", rect: { x: 0, y: 0, w: 60, h: 85 } },
+    };
+    const TOO_BIG: Record<"whole" | SegmentKind, string[]> = {
+        whole: [],
+        HALF: ["missing (full ice)", "full", "custom 150x85"],
+        CROSS: ["missing (full ice)", "full", "half-left", "custom 150x85", "custom 90x40"],
+        CUSTOM: [],
+    };
+
+    it.each(Object.keys(TOO_BIG) as Array<keyof typeof TOO_BIG>)("flags the drills too big for a %s booking", (kind) => {
+        const names = Object.keys(AREAS);
+        // One drill per block, so only the size check can fire.
+        const plays = placed(names.map((name) => AREAS[name]), names.map(() => false));
+        const { tooBig, overlaps } = warn(plays, kind === "whole" ? null : kind);
+        expect(tooBig.map((sequence) => names[sequence])).toEqual(TOO_BIG[kind]);
+        expect(overlaps).toEqual([]);
+    });
+
+    it("names booked segment kinds for the fit warning", () => {
+        expect(SEGMENT_KIND_FIT_LABELS).toEqual({ HALF: "half ice", CROSS: "cross ice", CUSTOM: "ice segment" });
     });
 });
