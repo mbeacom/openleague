@@ -1,0 +1,15 @@
+/* Static planner base (ADR-0020). lib/theme.ts does the rest; these mirror app/globals.css. */
+:root {
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}

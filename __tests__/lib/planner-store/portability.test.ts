@@ -19,6 +19,8 @@ const ENTRIES = [
     "app/(dashboard)/practice-planner/[sessionId]/SessionDetailView.tsx",
     "lib/plan-document/index.ts",
     "lib/planner-store/index.ts",
+    // The static planner's whole bundle (sub-project 3).
+    "apps/planner/src/main.tsx",
 ];
 
 /** Forbidden even as `import type`: the static app has no generated Prisma client. */
