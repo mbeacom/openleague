@@ -43,7 +43,7 @@ The static planner (sub-project 3) uses the same module.
         "instructions": "…",                  // ≤ 2000 chars, may be empty
         "drill": {
           "name": "Warmup Laps",              // 1–100 chars
-          "description": "…",                 // ≤ 500 chars, may be empty
+          "description": "…",                 // ≤ 1000 chars, may be empty
           "playData": { "version": 2 }        // full PlayData; v1 accepted and upgraded on parse
         }
       }
@@ -101,11 +101,9 @@ The static planner (sub-project 3) uses the same module.
 - **Fragment.** On mount, `PlanImportView` reads `location.hash`.
   - If it holds `plan=`, the view decodes and parses it, then clears the hash with `history.replaceState`, so the plan doesn't linger in the URL or history.
   - Fragments never reach the server or logs.
-- **Surviving login.** The dashboard layout redirects signed-out users to login. That redirect drops the fragment. To keep it, a tiny client script on the **login page** checks for `#plan=` in the URL. If it finds one, it stores the value in `sessionStorage` under `openleague.pendingPlan` and sets the `callbackUrl` to `/practice-planner/import`.
+- **Surviving login.** The dashboard layout's auth redirect is a 307 to `/login`, and browsers carry the fragment across it (verified in Chromium in this PR). The login page checks for `#plan=` in the URL; if it finds one, it stashes the value in `sessionStorage` under `openleague.pendingPlan` and clears it from the URL. After sign-in, the coach continues to `/practice-planner/import`.
   - It is shared with the import page as a `lib/plan-document/pending.ts` helper.
   - The import view consumes and deletes that key on mount.
-  - The direct path also works, because the static app links straight to `/practice-planner/import#plan=…`. Next's auth redirect sends the user to `/login?callbackUrl=...`, and browsers carry the fragment across same-origin redirects.
-  - **Implementation note:** check whether the fragment survives the redirect. If it does, the `sessionStorage` handoff covers only the login form's own navigation.
 
 **Preview UI**
 - Title, duration, and "Planned X of Y min".
