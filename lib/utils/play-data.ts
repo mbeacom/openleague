@@ -163,6 +163,16 @@ function parseV2(raw: unknown): PlayData {
     return result.data as PlayData;
 }
 
+/**
+ * A blank label carries no meaning, so on read it is dropped rather than
+ * allowed to make the whole drill unreadable. Non-string text is kept so the
+ * strict parse still reports it.
+ */
+function isNotBlankAnnotation(a: unknown): boolean {
+    const text = typeof a === "object" && a !== null ? (a as { text?: unknown }).text : undefined;
+    return typeof text !== "string" || text.trim().length > 0;
+}
+
 /** Converts stored play data of any supported version to v2. Throws PlayDataError. */
 export function upgradePlayData(raw: unknown): PlayData {
     if (typeof raw !== "object" || raw === null) throw new PlayDataError("Play data must be an object");
@@ -171,7 +181,8 @@ export function upgradePlayData(raw: unknown): PlayData {
         if ((raw as { version: unknown }).version !== PLAY_DATA_VERSION) {
             throw new PlayDataError(`Unsupported play data version: ${String((raw as { version: unknown }).version)}`);
         }
-        return parseV2(raw);
+        const annotations = (raw as { annotations?: unknown }).annotations;
+        return parseV2(Array.isArray(annotations) ? { ...raw, annotations: annotations.filter(isNotBlankAnnotation) } : raw);
     }
 
     const v1 = v1Schema.safeParse(raw);
@@ -194,13 +205,15 @@ export function upgradePlayData(raw: unknown): PlayData {
             strokeWidth: Math.min(MAX_STROKE_WIDTH, d.strokeWidth),
         })),
         equipment: [],
-        annotations: v1.data.annotations.map((a) => ({
-            ...a,
-            id: a.id.slice(0, MAX_ID_LENGTH),
-            text: a.text.slice(0, C.MAX_ANNOTATION_LENGTH),
-            fontSize: Math.min(MAX_FONT_SIZE, a.fontSize),
-            position: clampToRink(a.position),
-        })),
+        annotations: v1.data.annotations
+            .map((a) => ({
+                ...a,
+                id: a.id.slice(0, MAX_ID_LENGTH),
+                text: a.text.slice(0, C.MAX_ANNOTATION_LENGTH),
+                fontSize: Math.min(MAX_FONT_SIZE, a.fontSize),
+                position: clampToRink(a.position),
+            }))
+            .filter(isNotBlankAnnotation),
     });
 }
 

@@ -22,6 +22,7 @@ import {
     PLAY_DATA_UNREADABLE_CODE,
     PLAY_DATA_UNREADABLE_MESSAGE,
     parseStoredPlayData,
+    playDataSchema,
 } from "@/lib/utils/play-data";
 
 export type ActionResult<T> =
@@ -63,6 +64,24 @@ function sanitizePlayData(playData: PlayData): PlayData {
 }
 
 /**
+ * Sanitizes PlayData, then re-validates the result: sanitizing can empty a
+ * field the schema checked as non-blank (e.g. annotation text "\u0001"), and
+ * storing that would leave a play the strict read path rejects. Rejecting
+ * (rather than silently dropping the element) keeps the action a single,
+ * predictable rule: what is stored always passes the schema.
+ */
+function sanitizeAndRevalidate(
+    playData: PlayData
+): { ok: true; data: PlayData } | { ok: false; result: { success: false; error: string; details: unknown } } {
+    const sanitized = sanitizePlayData(playData);
+    const check = playDataSchema.safeParse(sanitized);
+    if (!check.success) {
+        return { ok: false, result: { success: false, error: "Invalid play data", details: check.error.issues } };
+    }
+    return { ok: true, data: sanitized };
+}
+
+/**
  * Create a new play
  * Only ADMIN role can create plays
  * Requirements: 1.5, 4.1
@@ -80,8 +99,10 @@ export async function createPlay(
         // Note: name and description are already sanitized by Zod schema
         // (sanitizedStringWithMin and optionalSanitizedString)
 
-        // Sanitize PlayData
-        const sanitizedPlayData = sanitizePlayData(validated.playData);
+        // Sanitize PlayData, then confirm it still passes the schema
+        const sanitizedResult = sanitizeAndRevalidate(validated.playData);
+        if (!sanitizedResult.ok) return sanitizedResult.result;
+        const sanitizedPlayData = sanitizedResult.data;
 
         // Create play
         const play = await prisma.play.create({
@@ -173,8 +194,10 @@ export async function updatePlay(
 
         // Note: name and description are already sanitized by Zod schema
 
-        // Sanitize PlayData
-        const sanitizedPlayData = sanitizePlayData(validated.playData);
+        // Sanitize PlayData, then confirm it still passes the schema
+        const sanitizedResult = sanitizeAndRevalidate(validated.playData);
+        if (!sanitizedResult.ok) return sanitizedResult.result;
+        const sanitizedPlayData = sanitizedResult.data;
 
         // Update play
         const play = await prisma.play.update({

@@ -27,6 +27,13 @@ describe("element-ops", () => {
         expect(data.drawings[0].action).toBe("skate"); // not mutated
     });
 
+    it("returns the same reference when the patch changes nothing", () => {
+        expect(updateElement(data, "p", { role: "X" })).toBe(data);
+        expect(updateElement(data, "d", { action: "skate", color: "#000000" })).toBe(data);
+        expect(updateElement(data, "e", { kind: "net" })).toBe(data);
+        expect(updateElement(data, "p", { label: "B" })).not.toBe(data);
+    });
+
     it("ignores fields that don't apply to the element kind", () => {
         const next = updateElement(data, "e", { rotation: 90, label: "nope" } as never);
         expect(next.equipment[0]).toEqual({ ...data.equipment[0], rotation: 90 });

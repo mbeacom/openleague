@@ -56,6 +56,25 @@ describe("upgradePlayData", () => {
         expect("type" in v2.drawings[0]).toBe(false);
     });
 
+    it("drops a blank stored v2 annotation instead of rejecting the whole play", () => {
+        const stored = {
+            ...createEmptyPlayData(),
+            annotations: [
+                { id: "blank", text: "", position: { x: 5, y: 5 }, fontSize: 8, color: "#000000" },
+                { id: "ok", text: "Go", position: { x: 5, y: 5 }, fontSize: 8, color: "#000000" },
+            ],
+        };
+        const parsed = parseStoredPlayData(stored);
+        expect(parsed.ok).toBe(true);
+        if (parsed.ok) expect(parsed.data.annotations.map((a) => a.id)).toEqual(["ok"]);
+    });
+
+    it("drops a v1 annotation that is blank once truncated", () => {
+        const text = " ".repeat(600) + "x";
+        const v2 = upgradePlayData({ ...v1Play, annotations: [...v1Play.annotations, { ...v1Play.annotations[0], id: "a2", text }] });
+        expect(v2.annotations.map((a) => a.id)).toEqual(["a1"]);
+    });
+
     it("is idempotent on v2 data", () => {
         const once = upgradePlayData(v1Play);
         expect(upgradePlayData(once)).toEqual(once);

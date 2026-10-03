@@ -56,6 +56,10 @@ export function updateElement(data: PlayData, id: string, patch: ElementPatch): 
     const found = findElement(data, id);
     if (!found) return data;
     const fields = pick(patch, found.kind);
+    // A no-op patch (e.g. re-clicking the current role) returns `data` itself,
+    // so callers can skip recording an undo step.
+    const current = found.element as unknown as Record<string, unknown>;
+    if (Object.keys(fields).every((key) => current[key] === fields[key])) return data;
     const apply = <T extends { id: string }>(list: T[]) => list.map((e) => (e.id === id ? { ...e, ...fields } : e));
     switch (found.kind) {
         case "player":
