@@ -10,7 +10,7 @@
  * Requirements: 1.1, 1.2, 1.3, 1.4, 5.1, 5.2, 5.4, 5.5, 3.5
  */
 
-import React, { useRef, useEffect, useState, useCallback, forwardRef, useImperativeHandle } from "react";
+import React, { useRef, useEffect, useState, useCallback, useMemo, forwardRef, useImperativeHandle } from "react";
 import type {
     IceArea,
     PlayData,
@@ -53,6 +53,8 @@ import {
     pastDragThreshold,
     pxToRinkFt,
     pinchView,
+    clampPan,
+    viewportContentRect,
 } from "@/lib/utils/canvas/interaction-utils";
 
 /**
@@ -193,7 +195,6 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
     useEffect(() => { selectedElementIdRef.current = selectedElementId; }, [selectedElementId]);
     useEffect(() => { dragOffsetRef.current = dragOffset; }, [dragOffset]);
     useEffect(() => { scaleRef.current = scale; }, [scale]);
-    useEffect(() => { panOffsetRef.current = panOffset; }, [panOffset]);
 
     /**
      * Get rink position from event, accounting for zoom/pan transformations.
@@ -271,6 +272,26 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         );
     }, [canvasSize, viewX, viewY, viewW, viewH]);
 
+    /**
+     * Bounds a pan for `zoom` to the content the board draws (the viewport above,
+     * through the live transform): it can't be dragged off the canvas.
+     */
+    const boundPan = useCallback(
+        (pan: Position, zoom: number): Position => transform
+            ? clampPan(
+                pan,
+                zoom,
+                { width: transform.canvasWidth, height: transform.canvasHeight },
+                viewportContentRect(transform, { x: viewX, y: viewY, w: viewW, h: viewH })
+            )
+            : pan,
+        [transform, viewX, viewY, viewW, viewH]
+    );
+    // The pan in use: the stored one re-bounded, so a canvas resize (a new
+    // transform at the same zoom) can't leave the content off-screen.
+    const viewPan = useMemo(() => boundPan(panOffset, scale), [boundPan, panOffset, scale]);
+    useEffect(() => { panOffsetRef.current = viewPan; }, [viewPan]);
+
     // A new viewport starts unzoomed: a pinch-zoom/pan made for the old one would
     // misframe it. A pinch in progress ends too, or its next move would re-apply it.
     useEffect(() => {
@@ -310,7 +331,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         drawBoardFrame(ctx, transform, renderData, {
             selectedId: selectedElementId || undefined,
             zoom: scale,
-            pan: panOffset,
+            pan: viewPan,
             maskRect: areaMaskRect(areaDrag, playData.area),
         });
 
@@ -332,7 +353,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         selectedColor,
         strokeOptions,
         scale,
-        panOffset,
+        viewPan,
         areaDrag,
     ]);
 
@@ -947,18 +968,20 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
             } else if (event.touches.length === 2 && pinchStartRef.current) {
                 // Two touches: zoom about the fingers' midpoint and pan with it
                 // Requirements: 3.5
+                // The anchored pan is then bounded, so the rink can't be pinched off-screen.
                 const view = pinchView(pinchStartRef.current, {
                     center: getTouchCenter(event.touches[0], event.touches[1]),
                     distance: getTouchDistance(event.touches[0], event.touches[1]),
                 });
+                const pan = boundPan(view.pan, view.zoom);
                 // The refs follow at once, so a tap right after the pinch maps through the new view.
                 scaleRef.current = view.zoom;
-                panOffsetRef.current = view.pan;
+                panOffsetRef.current = pan;
                 setScale(view.zoom);
-                setPanOffset(view.pan);
+                setPanOffset(pan);
             }
         },
-        [transform, getTouchDistance, getTouchCenter, handleMouseMove]
+        [transform, getTouchDistance, getTouchCenter, handleMouseMove, boundPan]
     );
 
     /**

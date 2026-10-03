@@ -21,6 +21,8 @@ import {
   pxToRinkFt,
   pastDragThreshold,
   pinchView,
+  clampPan,
+  viewportContentRect,
   PINCH_ZOOM_MIN,
   PINCH_ZOOM_MAX,
 } from "@/lib/utils/canvas/interaction-utils";
@@ -376,5 +378,74 @@ describe("pinchView", () => {
   it("leaves the view unchanged for a degenerate (zero-distance) start", () => {
     const view = pinchView({ ...start, distance: 0 }, { center: { x: 0, y: 0 }, distance: 50 });
     expect(view).toEqual({ zoom: start.zoom, pan: start.pan });
+  });
+});
+
+describe("clampPan", () => {
+  // The whole rink fitted into 800x400 with 20 px padding: x 20..780, y 38.5..361.5.
+  const canvas = { width: 800, height: 400 };
+  const full = viewportContentRect(createTransformContext(800, 400, 20, FULL_RINK), FULL_RINK);
+
+  it("maps the viewport through the transform (the rect the board draws)", () => {
+    expect(full.x).toBeCloseTo(20, 9);
+    expect(full.y).toBeCloseTo(38.5, 9);
+    expect(full.w).toBeCloseTo(760, 9);
+    expect(full.h).toBeCloseTo(323, 9);
+  });
+
+  it("pins the content centered at zoom 1 (no pan), however far it was pulled", () => {
+    for (const pan of [{ x: 0, y: 0 }, { x: 500, y: -500 }, { x: -9000, y: 9000 }]) {
+      const out = clampPan(pan, 1, canvas, full);
+      expect(out.x).toBeCloseTo(0, 9);
+      expect(out.y).toBeCloseTo(0, 9);
+    }
+  });
+
+  it("centers zoomed-out content (zoom < 1)", () => {
+    const out = clampPan({ x: -300, y: 250 }, 0.5, canvas, full);
+    expect(out.x).toBeCloseTo(200, 9);
+    expect(out.y).toBeCloseTo(100, 9);
+  });
+
+  it("stops at each corner at zoom 3, so no empty margin shows past the content", () => {
+    // Allowed: x in [800 - 3*780, -3*20] = [-1540, -60]; y in [400 - 3*361.5, -3*38.5] = [-684.5, -115.5].
+    const cases: Array<[{ x: number; y: number }, { x: number; y: number }]> = [
+      [{ x: 1000, y: 1000 }, { x: -60, y: -115.5 }], // top-left corner
+      [{ x: -5000, y: 1000 }, { x: -1540, y: -115.5 }], // top-right
+      [{ x: 1000, y: -5000 }, { x: -60, y: -684.5 }], // bottom-left
+      [{ x: -5000, y: -5000 }, { x: -1540, y: -684.5 }], // bottom-right
+    ];
+    for (const [pan, expected] of cases) {
+      const out = clampPan(pan, 3, canvas, full);
+      expect(out.x).toBeCloseTo(expected.x, 9);
+      expect(out.y).toBeCloseTo(expected.y, 9);
+    }
+  });
+
+  it("leaves a pan already inside the bounds alone", () => {
+    expect(clampPan({ x: -700, y: -300 }, 3, canvas, full)).toEqual({ x: -700, y: -300 });
+  });
+
+  it("clamps each axis on its own for an asymmetric (cropped) viewport", () => {
+    // A 30x30 ft drill area viewport: scale 12, content x 220..580, y 20..380.
+    const viewport = { x: 95, y: 25, w: 30, h: 30 };
+    const content = viewportContentRect(createTransformContext(800, 400, 20, viewport), viewport);
+    expect(content.x).toBeCloseTo(220, 9);
+    expect(content.y).toBeCloseTo(20, 9);
+    // At zoom 2 the content is 720 px wide (fits the 800 px canvas: centered) but
+    // 720 px tall (overflows the 400 px canvas: y in [400 - 760, -40]).
+    const down = clampPan({ x: 999, y: 999 }, 2, canvas, content);
+    expect(down.x).toBeCloseTo(-400, 9);
+    expect(down.y).toBeCloseTo(-40, 9);
+    const up = clampPan({ x: -999, y: -999 }, 2, canvas, content);
+    expect(up.x).toBeCloseTo(-400, 9);
+    expect(up.y).toBeCloseTo(-360, 9);
+  });
+
+  it("is continuous where the content just fills the canvas", () => {
+    // 800/760 zoom makes the content exactly as wide as the canvas: centered and clamped agree.
+    const zoom = 800 / 760;
+    const out = clampPan({ x: 123, y: 0 }, zoom, canvas, full);
+    expect(out.x).toBeCloseTo(-zoom * 20, 9);
   });
 });
