@@ -362,7 +362,21 @@ export function SessionDrillCard({
 
             {/* Actions */}
             {!isEditing && (
-                <CardActions sx={{ flexDirection: "column", justifyContent: "center", p: 1, gap: 0.5 }}>
+                <CardActions
+                    sx={{
+                        // Phone: one row of 44px targets under the content; sm+: the column beside it.
+                        flexDirection: { xs: "row", sm: "column" },
+                        justifyContent: { xs: "space-between", sm: "center" },
+                        p: 1,
+                        gap: 0.5,
+                        "& .MuiIconButton-root": {
+                            minWidth: { xs: 44, sm: 0 },
+                            minHeight: { xs: 44, sm: 0 },
+                            // CardActions adds a left margin to later siblings
+                            ml: 0,
+                        },
+                    }}
+                >
                     {/* Requirements: 2.5 - Reordering controls (station-aware, 2b) */}
                     <IconButton
                         size="small"
