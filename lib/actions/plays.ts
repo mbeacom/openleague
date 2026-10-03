@@ -368,9 +368,10 @@ export async function getPlayById(input: GetPlayByIdInput): Promise<ActionResult
         // Check authentication and authorization - team members can view plays
         await requireTeamMember(validated.teamId);
 
-        // Fetch play
+        // Fetch play. Only library and unowned plays: a session-owned copy is
+        // read through its session (getPracticeSessionForEdit), never by id.
         const play = await prisma.play.findUnique({
-            where: { id: validated.id },
+            where: { id: validated.id, sessionId: null },
             select: {
                 id: true,
                 name: true,
@@ -379,12 +380,13 @@ export async function getPlayById(input: GetPlayByIdInput): Promise<ActionResult
                 playData: true,
                 isTemplate: true,
                 teamId: true,
+                sessionId: true,
                 createdAt: true,
                 updatedAt: true,
             },
         });
 
-        if (!play) {
+        if (!play || play.sessionId != null) {
             return {
                 success: false,
                 error: "Play not found",
