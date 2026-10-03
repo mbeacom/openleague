@@ -12,6 +12,7 @@
 
 import React, { useRef, useEffect, useState, useCallback, forwardRef, useImperativeHandle } from "react";
 import type {
+    IceArea,
     PlayData,
     DrawingTool,
     EquipmentKind,
@@ -22,13 +23,14 @@ import type {
 } from "@/types/practice-planner";
 import {
     createTransformContext,
-    drawRink,
+    FULL_RINK,
     TransformContext,
     rinkToCanvas,
-    canvasToRink,
+    screenToRink,
 } from "@/lib/utils/canvas/rink-renderer";
-import { drawAllElements, drawStroke } from "@/lib/utils/canvas/drawing-utils";
+import { drawBoardScene, drawStroke } from "@/lib/utils/canvas/drawing-utils";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
+import { areaRect, editViewport, withArea } from "@/lib/utils/ice-area";
 import {
     findElement,
     finishStroke,
@@ -44,7 +46,8 @@ import {
     HistoryManager,
     hitTest,
     getMousePosition,
-    clampToRinkBounds,
+    clampToRect,
+    dragTarget,
 } from "@/lib/utils/canvas/interaction-utils";
 
 /**
@@ -81,6 +84,8 @@ export interface RinkBoardHandle {
     clear: () => void;
     /** Patches an element's editable fields; recorded in undo history */
     updateElement: (id: string, patch: ElementPatch) => void;
+    /** Sets the drill's ice area (undefined = full ice); recorded in undo history */
+    setArea: (area: IceArea | undefined) => void;
 }
 
 /**
@@ -191,14 +196,8 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
             }
             if (!canvasPos) return null;
 
-            // Apply inverse transformation to account for zoom and pan
-            const currentScale = scaleRef.current;
-            const currentPan = panOffsetRef.current;
-            const transformedX = (canvasPos.x - currentPan.x) / currentScale;
-            const transformedY = (canvasPos.y - currentPan.y) / currentScale;
-            const transformedCanvasPos = { x: transformedX, y: transformedY };
-
-            return canvasToRink(transformedCanvasPos, transformCtx);
+            // Undo zoom/pan, then the viewport transform
+            return screenToRink(canvasPos, transformCtx, scaleRef.current, panOffsetRef.current);
         },
         []
     );
@@ -237,12 +236,23 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
     }, [handleResize]);
 
     /**
-     * Update transform context when canvas size changes
+     * Viewport: in edit mode, the drill's ice area plus a 5 ft margin (the
+     * whole rink for full ice); in view mode, always the whole rink. Keyed on
+     * the four numbers, not the area object, which is new on every edit.
      */
+    const viewport = mode === "edit" ? editViewport(playData.area) : FULL_RINK;
+    const { x: viewX, y: viewY, w: viewW, h: viewH } = viewport;
     useEffect(() => {
-        const newTransform = createTransformContext(canvasSize.width, canvasSize.height);
-        setTransform(newTransform);
-    }, [canvasSize]);
+        setTransform(
+            createTransformContext(canvasSize.width, canvasSize.height, 20, { x: viewX, y: viewY, w: viewW, h: viewH })
+        );
+    }, [canvasSize, viewX, viewY, viewW, viewH]);
+
+    // A new viewport starts unzoomed: a pinch-zoom/pan made for the old one would misframe it.
+    useEffect(() => {
+        setScale(1);
+        setPanOffset({ x: 0, y: 0 });
+    }, [viewX, viewY, viewW, viewH]);
 
     /**
      * Initialize history with initial play data
@@ -268,14 +278,15 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         // Clear canvas
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // Draw rink background
-        drawRink(ctx, transform);
-
         // Drag preview is visual only; the move is committed on mouseUp
         const renderData = isDragging && selectedElementId && dragPreviewPosition
             ? moveElement(playData, selectedElementId, dragPreviewPosition)
             : playData;
-        drawAllElements(ctx, renderData, transform, selectedElementId || undefined, scale);
+        drawBoardScene(ctx, transform, renderData, {
+            selectedId: selectedElementId || undefined,
+            zoom: scale,
+            maskRect: areaRect(playData.area),
+        });
 
         // Draw current stroke in progress
         if (isDrawing && currentDrawingPoints.length > 1) {
@@ -386,7 +397,8 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
     const handleClear = useCallback(() => {
         if (mode === "view") return;
 
-        const clearedData: PlayData = createEmptyPlayData();
+        // Clear removes the drawing, not the drill's setup: the ice area stays
+        const clearedData: PlayData = withArea(createEmptyPlayData(), playDataRef.current.area);
 
         if (onPlayDataChange) {
             onPlayDataChange(clearedData);
@@ -413,6 +425,11 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         updateElement: (id: string, patch: ElementPatch) => {
             const current = playDataRef.current;
             const next = applyElementPatch(current, id, patch);
+            if (next !== current) updatePlayData(next);
+        },
+        setArea: (area: IceArea | undefined) => {
+            const current = playDataRef.current;
+            const next = withArea(current, area);
             if (next !== current) updatePlayData(next);
         },
     }), [handleUndo, handleRedo, handleClear, updatePlayData]);
@@ -464,7 +481,11 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
             const rinkPos = getTransformedRinkPosition(event.nativeEvent, canvasRef.current, transform);
             if (!rinkPos) return;
 
-            const clampedPos = clampToRinkBounds(rinkPos);
+            // Hit tests use the pointer clamped only to the rink, so an element
+            // outside the drill's ice area stays selectable and erasable.
+            // Anything placed is clamped to the area.
+            const hitPos = clampToRect(rinkPos, FULL_RINK);
+            const clampedPos = clampToRect(rinkPos, areaRect(playData.area));
 
             // Handle different tools
             switch (selectedTool) {
@@ -478,7 +499,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
                     setDragOffset(null);
                     setIsDrawing(false);
                     setCurrentDrawingPoints([]);
-                    const hitResult = hitTest(clampedPos, playData, minHitRadiusFt());
+                    const hitResult = hitTest(hitPos, playData, minHitRadiusFt());
                     if (hitResult.hit && hitResult.elementId) {
                         setSelectedElementId(hitResult.elementId);
                         setIsDragging(true);
@@ -488,8 +509,8 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
                         const found = findElement(playData, hitResult.elementId);
                         if (found && found.kind !== "drawing") {
                             setDragOffset({
-                                x: clampedPos.x - found.element.position.x,
-                                y: clampedPos.y - found.element.position.y,
+                                x: hitPos.x - found.element.position.x,
+                                y: hitPos.y - found.element.position.y,
                             });
                         }
                     } else {
@@ -547,7 +568,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
                 case "eraser": {
                     // Erase element
                     // Requirements: 5.4
-                    const eraserHitResult = hitTest(clampedPos, playData, minHitRadiusFt());
+                    const eraserHitResult = hitTest(hitPos, playData, minHitRadiusFt());
                     if (eraserHitResult.hit && eraserHitResult.elementId) {
                         updatePlayData(removeElement(playData, eraserHitResult.elementId));
                     }
@@ -586,25 +607,19 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
             const rinkPos = getTransformedRinkPosition(event.nativeEvent, canvasRef.current, transform);
             if (!rinkPos) return;
 
-            const clampedPos = clampToRinkBounds(rinkPos);
+            const area = areaRect(playDataRef.current.area);
 
-            // Continue drawing if in drawing mode
+            // Continue drawing if in drawing mode; stroke points stay in the area
             if (isDrawing && selectedTool === "stroke") {
-                setCurrentDrawingPoints((prev) => [...prev, clampedPos]);
+                setCurrentDrawingPoints((prev) => [...prev, clampToRect(rinkPos, area)]);
             }
 
-            // Handle dragging selected elements - using refs to avoid stale closures
+            // Drag preview: pointer clamped only to the rink, minus the grab
+            // offset, then clamped to the area, so the element can reach the
+            // area's edge exactly. Committed on mouseUp.
             // Requirements: 5.4
-            // Only update visual preview during drag - commit on mouseUp for performance
             if (isDraggingRef.current && selectedElementIdRef.current && dragOffsetRef.current) {
-                const newPosition = {
-                    x: clampedPos.x - dragOffsetRef.current.x,
-                    y: clampedPos.y - dragOffsetRef.current.y,
-                };
-                const clampedNewPos = clampToRinkBounds(newPosition);
-
-                // Update preview position only (visual feedback during drag)
-                setDragPreviewPosition(clampedNewPos);
+                setDragPreviewPosition(dragTarget(clampToRect(rinkPos, FULL_RINK), dragOffsetRef.current, area));
             }
         },
         [mode, transform, isDrawing, selectedTool, getTransformedRinkPosition]

@@ -77,6 +77,22 @@ describe("drawAreaMask", () => {
         expect(calls.find((c) => c.name === "strokeRect")?.args).toEqual([tl.x, tl.y, br.x - tl.x, br.y - tl.y]);
         expect((ctx as unknown as Record<string, unknown>).strokeStyle).toBe("#1976D2");
     });
+
+    it("draws a 2 px, [8, 6] outline at zoom 1 (thumbnails)", () => {
+        const calls: Call[] = [];
+        const ctx = recordingCtx(calls);
+        drawAreaMask(ctx, areaRect({ kind: "zone-left" }), t);
+        expect((ctx as unknown as Record<string, unknown>).lineWidth).toBe(2);
+        expect(calls.find((c) => c.name === "setLineDash")?.args).toEqual([[8, 6]]);
+    });
+
+    it("divides the outline width and dash by the board zoom, so they stay constant on screen", () => {
+        const calls: Call[] = [];
+        const ctx = recordingCtx(calls);
+        drawAreaMask(ctx, areaRect({ kind: "zone-left" }), t, 2);
+        expect((ctx as unknown as Record<string, unknown>).lineWidth).toBe(1);
+        expect(calls.find((c) => c.name === "setLineDash")?.args).toEqual([[4, 3]]);
+    });
 });
 
 describe("drawBoardScene", () => {
@@ -114,5 +130,16 @@ describe("drawBoardScene", () => {
         const calls: Call[] = [];
         drawBoardScene(recordingCtx(calls), createTransformContext(800, 400), createEmptyPlayData());
         expect(calls.some((c) => c.name === "setLineDash")).toBe(false);
+    });
+
+    it("passes the zoom to the mask outline", () => {
+        const calls: Call[] = [];
+        const ctx = recordingCtx(calls);
+        drawBoardScene(ctx, createTransformContext(800, 400), createEmptyPlayData(), {
+            maskRect: areaRect({ kind: "zone-left" }),
+            zoom: 0.5,
+        });
+        expect((ctx as unknown as Record<string, unknown>).lineWidth).toBe(4);
+        expect(calls.find((c) => c.name === "setLineDash")?.args).toEqual([[16, 12]]);
     });
 });

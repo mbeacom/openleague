@@ -285,6 +285,7 @@ export function drawAllElements(
 /** Ink (#212121) at 35%: shades the ice outside a drill's area. */
 const AREA_MASK_FILL = "rgba(33, 33, 33, 0.35)";
 const AREA_OUTLINE_DASH = [8, 6];
+const AREA_OUTLINE_WIDTH = 2;
 
 function coversRink(rect: RinkRect): boolean {
     return rect.x <= 0 && rect.y <= 0 && rect.x + rect.w >= FULL_RINK.w && rect.y + rect.h >= FULL_RINK.h;
@@ -293,9 +294,15 @@ function coversRink(rect: RinkRect): boolean {
 /**
  * Shades the rink outside `rect` (even-odd fill of the rink rectangle minus
  * the area) and outlines the area, dashed, in Action Blue. Draws nothing when
- * `rect` covers the whole rink.
+ * `rect` covers the whole rink. `zoom` is the caller's canvas zoom: the
+ * outline's width and dash are divided by it so they stay the same on screen.
  */
-export function drawAreaMask(ctx: CanvasRenderingContext2D, rect: RinkRect, transform: TransformContext): void {
+export function drawAreaMask(
+    ctx: CanvasRenderingContext2D,
+    rect: RinkRect,
+    transform: TransformContext,
+    zoom: number = 1
+): void {
     if (coversRink(rect)) return;
     const rinkTopLeft = rinkToCanvas({ x: 0, y: 0 }, transform);
     const rinkBottomRight = rinkToCanvas({ x: FULL_RINK.w, y: FULL_RINK.h }, transform);
@@ -309,8 +316,8 @@ export function drawAreaMask(ctx: CanvasRenderingContext2D, rect: RinkRect, tran
     ctx.rect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
     ctx.fill("evenodd");
     ctx.strokeStyle = BOARD_COLORS.actionBlue;
-    ctx.lineWidth = 2;
-    ctx.setLineDash(AREA_OUTLINE_DASH);
+    ctx.lineWidth = AREA_OUTLINE_WIDTH / zoom;
+    ctx.setLineDash(AREA_OUTLINE_DASH.map((d) => d / zoom));
     ctx.strokeRect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
     ctx.restore();
 }
@@ -318,7 +325,7 @@ export function drawAreaMask(ctx: CanvasRenderingContext2D, rect: RinkRect, tran
 export interface BoardSceneOptions {
     /** Element drawn with the selection highlight */
     selectedId?: string;
-    /** Canvas zoom applied by the caller (keeps minimum glyph size on screen) */
+    /** Canvas zoom applied by the caller (keeps minimum glyph size and the mask outline constant on screen) */
     zoom?: number;
     /** Rectangle left unshaded; omitted, or covering the rink, means no mask */
     maskRect?: RinkRect;
@@ -337,5 +344,5 @@ export function drawBoardScene(
 ): void {
     drawRink(ctx, transform);
     drawAllElements(ctx, playData, transform, options.selectedId, options.zoom ?? 1);
-    if (options.maskRect) drawAreaMask(ctx, options.maskRect, transform);
+    if (options.maskRect) drawAreaMask(ctx, options.maskRect, transform, options.zoom ?? 1);
 }
