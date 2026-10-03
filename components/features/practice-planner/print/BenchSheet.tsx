@@ -11,7 +11,7 @@ import { useCallback, useState } from "react";
 import { Box, Button, Stack, Typography } from "@mui/material";
 import { ArrowBack as ArrowBackIcon, PrintOutlined as PrintIcon } from "@mui/icons-material";
 import { LinkButton } from "@/components/ui/NextLinkComposites";
-import type { PracticeSessionDetail } from "@/lib/actions/practice-session-queries";
+import type { PracticeSessionView } from "@/types/practice-planner";
 import { buildSchedule } from "@/lib/utils/session-timeline";
 import { combinedLegendData } from "@/lib/utils/canvas/station-map";
 import { sessionStart, sessionTimeZone } from "@/lib/utils/date";
@@ -21,7 +21,7 @@ import { BenchSheetDrill, drillText } from "./BenchSheetDrill";
 import { printPixelRatio } from "./PrintDiagram";
 import { LegendList } from "./LegendList";
 
-export type BenchSheetSession = PracticeSessionDetail["session"];
+export type BenchSheetSession = PracticeSessionView;
 
 export const NO_DRILLS_MESSAGE = "No drills planned";
 export const PREPARING_DIAGRAMS = "Preparing diagrams…";

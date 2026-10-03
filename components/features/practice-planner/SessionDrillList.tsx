@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import type { SegmentKind } from "@prisma/client";
+import type { SegmentKind } from "@/types/segments";
 import { Alert, Box, Button, Paper, Stack, Tooltip, Typography } from "@mui/material";
 import { Add as AddIcon, Draw as DrawIcon } from "@mui/icons-material";
 import type { PlayInSession } from "@/types/practice-planner";

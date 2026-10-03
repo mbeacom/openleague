@@ -50,8 +50,7 @@ import { PlayLegend } from "@/components/features/practice-planner/PlayLegend";
 import { StationMap } from "@/components/features/practice-planner/StationMap";
 import { SessionTimeline } from "@/components/features/practice-planner/SessionTimeline";
 import { ExportPlanMenu } from "@/components/features/practice-planner/ExportPlanMenu";
-import type { PlayData } from "@/types/practice-planner";
-import type { SegmentKind } from "@prisma/client";
+import type { PracticeSessionView, PracticeSessionViewPlay } from "@/types/practice-planner";
 import {
   SEGMENT_KIND_FIT_LABELS,
   groupStations,
@@ -66,45 +65,8 @@ import {
   sharePracticeSession,
 } from "@/lib/actions/practice-sessions";
 
-interface SessionPlay {
-  id: string;
-  sequence: number;
-  duration: number;
-  instructions: string | null;
-  runsWithPrevious: boolean;
-  play: {
-    id: string;
-    name: string;
-    description: string | null;
-    thumbnail: string | null;
-    playData: PlayData | null;
-  };
-}
-
-interface SessionData {
-  id: string;
-  title: string;
-  date: string;
-  duration: number;
-  isShared: boolean;
-  createdByName: string;
-  teamId: string;
-  teamName: string;
-  // Optional venue attachment (feature 006, FR-019)
-  venueId?: string | null;
-  venueName?: string | null;
-  venueTimezone?: string | null;
-  surfaceId?: string | null;
-  surfaceName?: string | null;
-  segmentId?: string | null;
-  segmentName?: string | null;
-  segmentKind?: SegmentKind | null;
-  startAt?: string | null;
-  plays: SessionPlay[];
-}
-
 interface SessionDetailViewProps {
-  session: SessionData;
+  session: PracticeSessionView;
   isAdmin: boolean;
 }
 
@@ -741,7 +703,7 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
 }
 
 interface SidebarPlayCardProps {
-  sp: SessionPlay;
+  sp: PracticeSessionViewPlay;
   index: number;
   active: boolean;
   onSelect: () => void;

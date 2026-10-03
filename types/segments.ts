@@ -1,4 +1,10 @@
-import type { SegmentKind } from "@prisma/client";
+/**
+ * A segment's shape class. It mirrors Prisma's `SegmentKind` enum, so portable
+ * planner code (ADR-0020) needs no @prisma/client import. The two types are
+ * assignable both ways, and __tests__/types/planner-portable-types.test.ts
+ * fails type-check if the schema enum gains a value.
+ */
+export type SegmentKind = "HALF" | "CROSS" | "CUSTOM";
 
 /** Normalized (0-1) rectangle on a surface or venue schematic. */
 export interface SegmentGeometry {

@@ -15,7 +15,7 @@
  * ends in `normalizeGroups`.
  */
 
-import type { SegmentKind } from "@prisma/client";
+import type { SegmentKind } from "@/types/segments";
 import type { IceArea } from "@/types/practice-planner";
 import { areaRect, isFullIce } from "@/lib/utils/ice-area";
 import { BLUE_LINES, RINK_DIMENSIONS } from "@/lib/utils/canvas/rink-renderer";
