@@ -26,7 +26,7 @@ import {
     rinkToCanvas,
     canvasToRink,
 } from "@/lib/utils/canvas/rink-renderer";
-import { drawAllElements } from "@/lib/utils/canvas/drawing-utils";
+import { drawAllElements, drawStroke } from "@/lib/utils/canvas/drawing-utils";
 import { createEmptyPlayData, strokeFromV1Type } from "@/lib/utils/play-data";
 import {
     HistoryManager,
@@ -264,22 +264,8 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         );
 
         // Draw current drawing in progress
-        if (isDrawing && currentDrawingPoints.length > 0) {
-            ctx.strokeStyle = selectedColor;
-            ctx.lineWidth = 2;
-            ctx.lineCap = "round";
-            ctx.lineJoin = "round";
-
-            ctx.beginPath();
-            const startCanvas = rinkToCanvas(currentDrawingPoints[0], transform);
-            ctx.moveTo(startCanvas.x, startCanvas.y);
-
-            for (let i = 1; i < currentDrawingPoints.length; i++) {
-                const pointCanvas = rinkToCanvas(currentDrawingPoints[i], transform);
-                ctx.lineTo(pointCanvas.x, pointCanvas.y);
-            }
-
-            ctx.stroke();
+        if (isDrawing && currentDrawingPoints.length > 1) {
+            drawStroke(ctx, { ...strokeFromV1Type(selectedTool as "line" | "curve" | "arrow"), points: currentDrawingPoints, color: selectedColor, strokeWidth: 2 }, transform);
         }
     }, [
         transform,
@@ -290,6 +276,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         dragPreviewPosition,
         currentDrawingPoints,
         selectedColor,
+        selectedTool,
     ]);
 
     /**

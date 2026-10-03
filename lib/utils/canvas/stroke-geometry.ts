@@ -1,0 +1,177 @@
+/**
+ * Pure geometry for practice-board strokes. Inputs and outputs are canvas px;
+ * `pxPerFt` scales feet-based pattern sizes. No canvas access, so every
+ * pattern is unit-testable.
+ */
+import type { Position, StrokeAction, StrokeEnd, StrokeOptions } from "@/types/practice-planner";
+
+export type StrokePattern = "solid" | "ticks" | "wave" | "dashed" | "double" | "zigzag" | "thin";
+
+export const ACTION_PATTERN: Record<StrokeAction, StrokePattern> = {
+    skate: "solid",
+    backskate: "ticks",
+    carry: "wave",
+    pass: "dashed",
+    shot: "double",
+    lateral: "zigzag",
+    line: "thin",
+};
+
+export interface StrokeGeometry {
+    polylines: Position[][];
+    lineWidth: number;
+    end: { type: Exclude<StrokeEnd, "none">; tip: Position; angle: number } | null;
+}
+
+const ft = (feet: number, pxPerFt: number, minPx: number) => Math.max(feet * pxPerFt, minPx);
+
+export function smoothPath(points: Position[], iterations = 2): Position[] {
+    let pts = points;
+    for (let n = 0; n < iterations && pts.length > 2; n++) {
+        const next: Position[] = [pts[0]];
+        for (let i = 0; i < pts.length - 1; i++) {
+            const a = pts[i];
+            const b = pts[i + 1];
+            next.push({ x: 0.75 * a.x + 0.25 * b.x, y: 0.75 * a.y + 0.25 * b.y });
+            next.push({ x: 0.25 * a.x + 0.75 * b.x, y: 0.25 * a.y + 0.75 * b.y });
+        }
+        next.push(pts[pts.length - 1]);
+        pts = next;
+    }
+    return pts;
+}
+
+function pathLength(points: Position[]): number {
+    let len = 0;
+    for (let i = 1; i < points.length; i++) len += Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y);
+    return len;
+}
+
+/** Evenly spaced samples along the polyline; always includes the last point. */
+export function resampleByArcLength(points: Position[], spacing: number): Position[] {
+    const total = pathLength(points);
+    if (total === 0 || spacing <= 0) return [points[0]];
+    const count = Math.max(1, Math.round(total / spacing));
+    const step = total / count;
+    const out: Position[] = [{ ...points[0] }];
+    let seg = 1;
+    let segStart = 0; // arc length at points[seg - 1]
+    for (let k = 1; k < count; k++) {
+        const target = k * step;
+        while (seg < points.length) {
+            const a = points[seg - 1];
+            const b = points[seg];
+            const segLen = Math.hypot(b.x - a.x, b.y - a.y);
+            if (segStart + segLen >= target) {
+                const t = segLen === 0 ? 0 : (target - segStart) / segLen;
+                out.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+                break;
+            }
+            segStart += segLen;
+            seg++;
+        }
+    }
+    out.push({ ...points[points.length - 1] });
+    return out;
+}
+
+/** Unit normals at each sample, from neighbor differences. */
+function normals(samples: Position[]): Position[] {
+    return samples.map((_, i) => {
+        const a = samples[Math.max(0, i - 1)];
+        const b = samples[Math.min(samples.length - 1, i + 1)];
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const len = Math.hypot(dx, dy) || 1;
+        return { x: -dy / len, y: dx / len };
+    });
+}
+
+function offsetAlong(samples: Position[], offset: (i: number) => number): Position[] {
+    const ns = normals(samples);
+    return samples.map((p, i) => ({ x: p.x + ns[i].x * offset(i), y: p.y + ns[i].y * offset(i) }));
+}
+
+export function buildStrokeGeometry(
+    stroke: StrokeOptions & { points: Position[]; strokeWidth: number },
+    pxPerFt: number
+): StrokeGeometry {
+    const base = stroke.path === "freehand" ? smoothPath(stroke.points) : stroke.points.map((p) => ({ ...p }));
+    const total = pathLength(base);
+    const pattern = ACTION_PATTERN[stroke.action];
+    const lineWidth = pattern === "thin" ? stroke.strokeWidth * 0.75 : stroke.strokeWidth;
+    if (base.length < 2 || total === 0) return { polylines: [], lineWidth, end: null };
+
+    let polylines: Position[][];
+    switch (pattern) {
+        case "solid":
+        case "thin":
+            polylines = [base];
+            break;
+        case "wave": {
+            const amp = ft(1.0, pxPerFt, 1.5);
+            const wavelength = ft(4, pxPerFt, 6);
+            const samples = resampleByArcLength(base, wavelength / 12);
+            const spacing = total / (samples.length - 1);
+            polylines = [offsetAlong(samples, (i) => amp * Math.sin((2 * Math.PI * i * spacing) / wavelength))];
+            break;
+        }
+        case "zigzag": {
+            const amp = ft(1.2, pxPerFt, 1.5);
+            const half = ft(3, pxPerFt, 5) / 2;
+            const samples = resampleByArcLength(base, half);
+            polylines = [offsetAlong(samples, (i) => (i === 0 || i === samples.length - 1 ? 0 : i % 2 ? amp : -amp))];
+            break;
+        }
+        case "dashed": {
+            const dash = ft(2.5, pxPerFt, 4);
+            const gap = ft(1.5, pxPerFt, 3);
+            const samples = resampleByArcLength(base, Math.min(dash, gap) / 2);
+            const spacing = total / (samples.length - 1);
+            polylines = [];
+            let current: Position[] = [];
+            samples.forEach((p, i) => {
+                const inDash = (i * spacing) % (dash + gap) <= dash;
+                if (inDash) current.push(p);
+                else if (current.length) {
+                    if (current.length > 1) polylines.push(current);
+                    current = [];
+                }
+            });
+            if (current.length > 1) polylines.push(current);
+            break;
+        }
+        case "double": {
+            const rail = ft(0.7, pxPerFt, 1.5);
+            const samples = resampleByArcLength(base, ft(1, pxPerFt, 2));
+            polylines = [offsetAlong(samples, () => rail), offsetAlong(samples, () => -rail)];
+            break;
+        }
+        case "ticks": {
+            const every = ft(4, pxPerFt, 6);
+            const half = ft(1.2, pxPerFt, 2);
+            const samples = resampleByArcLength(base, every);
+            const ns = normals(samples);
+            polylines = [base];
+            for (let i = 1; i < samples.length - 1; i++) {
+                const p = samples[i];
+                polylines.push([
+                    { x: p.x + ns[i].x * half, y: p.y + ns[i].y * half },
+                    { x: p.x - ns[i].x * half, y: p.y - ns[i].y * half },
+                ]);
+            }
+            break;
+        }
+    }
+
+    let end: StrokeGeometry["end"] = null;
+    if (stroke.end !== "none") {
+        const tip = base[base.length - 1];
+        let k = base.length - 2;
+        while (k > 0 && base[k].x === tip.x && base[k].y === tip.y) k--;
+        const from = base[k];
+        end = { type: stroke.end, tip: { ...tip }, angle: Math.atan2(tip.y - from.y, tip.x - from.x) };
+    }
+
+    return { polylines, lineWidth, end };
+}

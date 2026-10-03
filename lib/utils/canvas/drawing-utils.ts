@@ -2,7 +2,7 @@
  * Drawing utilities for the Hockey Practice Planner
  *
  * This module provides functions to draw various elements on the rink board:
- * - Lines, curves, and arrows with directional indicators
+ * - Strokes by hockey action (skate, carry, pass, shot, ...) with end caps
  * - Player icons with labels and colors
  * - Text annotations
  *
@@ -15,7 +15,9 @@ import {
     DrawingElement,
     TextAnnotation,
 } from "@/types/practice-planner";
+import type { StrokeOptions } from "@/types/practice-planner";
 import { TransformContext, rinkToCanvas } from "./rink-renderer";
+import { buildStrokeGeometry } from "./stroke-geometry";
 
 /**
  * Visual constants for drawing
@@ -24,140 +26,46 @@ const PLAYER_ICON_RADIUS = 12; // feet in rink coordinates
 const SELECTION_COLOR = "#FFD700"; // Gold highlight for selected elements
 
 /**
- * Draws a line with optional directional arrow
- * Requirements: 5.1
- *
- * @param ctx - Canvas 2D rendering context
- * @param points - Array of positions defining the line path
- * @param color - Line color (hex format)
- * @param strokeWidth - Line width in pixels
- * @param transform - Transformation context for coordinate conversion
- * @param showArrow - Whether to show directional arrow at the end
+ * Draws a stroke by hockey action (pattern), path style and end cap.
+ * Geometry is computed in canvas px by `buildStrokeGeometry`.
  */
-export function drawLine(
+export function drawStroke(
     ctx: CanvasRenderingContext2D,
-    points: Position[],
-    color: string,
-    strokeWidth: number,
-    transform: TransformContext,
-    showArrow: boolean = false
-): void {
-    if (points.length < 2) return;
-
-    ctx.strokeStyle = color;
-    ctx.lineWidth = strokeWidth;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-
-    ctx.beginPath();
-    const startCanvas = rinkToCanvas(points[0], transform);
-    ctx.moveTo(startCanvas.x, startCanvas.y);
-
-    for (let i = 1; i < points.length; i++) {
-        const pointCanvas = rinkToCanvas(points[i], transform);
-        ctx.lineTo(pointCanvas.x, pointCanvas.y);
-    }
-
-    ctx.stroke();
-
-    // Draw arrow at the end if requested
-    if (showArrow && points.length >= 2) {
-        const lastPoint = rinkToCanvas(points[points.length - 1], transform);
-        const secondLastPoint = rinkToCanvas(points[points.length - 2], transform);
-        drawArrowHead(ctx, secondLastPoint, lastPoint, color, strokeWidth);
-    }
-}
-
-/**
- * Draws a curved path with optional directional arrow
- * Requirements: 5.2
- *
- * @param ctx - Canvas 2D rendering context
- * @param points - Array of positions defining the curve path
- * @param color - Curve color (hex format)
- * @param strokeWidth - Curve width in pixels
- * @param transform - Transformation context for coordinate conversion
- * @param showArrow - Whether to show directional arrow at the end
- */
-export function drawCurve(
-    ctx: CanvasRenderingContext2D,
-    points: Position[],
-    color: string,
-    strokeWidth: number,
-    transform: TransformContext,
-    showArrow: boolean = false
-): void {
-    if (points.length < 2) return;
-
-    ctx.strokeStyle = color;
-    ctx.lineWidth = strokeWidth;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-
-    ctx.beginPath();
-
-    if (points.length < 3) {
-        // Just draw a straight line if there are only 2 points
-        const startCanvas = rinkToCanvas(points[0], transform);
-        ctx.moveTo(startCanvas.x, startCanvas.y);
-        if (points.length === 2) {
-            const endCanvas = rinkToCanvas(points[1], transform);
-            ctx.lineTo(endCanvas.x, endCanvas.y);
-        }
-    } else {
-        // Use quadratic curves for a smooth path through all points
-        // Technique: use midpoints as destinations and actual points as control points
-        const canvasPoints = points.map(p => rinkToCanvas(p, transform));
-
-        // Start at the first point
-        ctx.moveTo(canvasPoints[0].x, canvasPoints[0].y);
-
-        // Curve through all middle points
-        for (let i = 1; i < canvasPoints.length - 2; i++) {
-            const xc = (canvasPoints[i].x + canvasPoints[i + 1].x) / 2;
-            const yc = (canvasPoints[i].y + canvasPoints[i + 1].y) / 2;
-            ctx.quadraticCurveTo(canvasPoints[i].x, canvasPoints[i].y, xc, yc);
-        }
-
-        // For the last segment, curve to the final point
-        const last = canvasPoints.length - 1;
-        ctx.quadraticCurveTo(
-            canvasPoints[last - 1].x,
-            canvasPoints[last - 1].y,
-            canvasPoints[last].x,
-            canvasPoints[last].y
-        );
-    }
-
-    ctx.stroke();
-
-    // Draw arrow at the end if requested
-    if (showArrow && points.length >= 2) {
-        const lastPoint = rinkToCanvas(points[points.length - 1], transform);
-        const secondLastPoint = rinkToCanvas(points[points.length - 2], transform);
-        drawArrowHead(ctx, secondLastPoint, lastPoint, color, strokeWidth);
-    }
-}
-
-/**
- * Draws an arrow (line with directional indicator)
- * Requirements: 5.1
- *
- * @param ctx - Canvas 2D rendering context
- * @param points - Array of positions defining the arrow path
- * @param color - Arrow color (hex format)
- * @param strokeWidth - Arrow width in pixels
- * @param transform - Transformation context for coordinate conversion
- */
-export function drawArrow(
-    ctx: CanvasRenderingContext2D,
-    points: Position[],
-    color: string,
-    strokeWidth: number,
+    stroke: StrokeOptions & { points: Position[]; color: string; strokeWidth: number },
     transform: TransformContext
 ): void {
-    // Draw the line with arrow head
-    drawLine(ctx, points, color, strokeWidth, transform, true);
+    if (stroke.points.length < 2) return;
+    const pxPerFt = Math.min(transform.scaleX, transform.scaleY);
+    const geometry = buildStrokeGeometry(
+        { ...stroke, points: stroke.points.map((p) => rinkToCanvas(p, transform)) },
+        pxPerFt
+    );
+
+    ctx.strokeStyle = stroke.color;
+    ctx.lineWidth = geometry.lineWidth;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    for (const line of geometry.polylines) {
+        ctx.beginPath();
+        ctx.moveTo(line[0].x, line[0].y);
+        for (let i = 1; i < line.length; i++) ctx.lineTo(line[i].x, line[i].y);
+        ctx.stroke();
+    }
+
+    if (!geometry.end) return;
+    const { tip, angle, type } = geometry.end;
+    if (type === "arrow") {
+        const from = { x: tip.x - Math.cos(angle), y: tip.y - Math.sin(angle) };
+        drawArrowHead(ctx, from, tip, stroke.color, geometry.lineWidth);
+    } else {
+        const half = Math.max(1.8 * pxPerFt, 4);
+        const nx = -Math.sin(angle);
+        const ny = Math.cos(angle);
+        ctx.beginPath();
+        ctx.moveTo(tip.x + nx * half, tip.y + ny * half);
+        ctx.lineTo(tip.x - nx * half, tip.y - ny * half);
+        ctx.stroke();
+    }
 }
 
 /**
@@ -330,13 +238,7 @@ export function drawElement(
         ctx.globalAlpha = 1.0;
     }
 
-    // Draw the actual element
-    const showArrow = element.end === "arrow";
-    if (element.path === "freehand") {
-        drawCurve(ctx, element.points, element.color, element.strokeWidth, transform, showArrow);
-    } else {
-        drawLine(ctx, element.points, element.color, element.strokeWidth, transform, showArrow);
-    }
+    drawStroke(ctx, element, transform);
 }
 
 /**
