@@ -17,7 +17,34 @@ export function canRegisterServiceWorker() {
   return window.location.protocol === 'https:' || isLocalhost(window.location.hostname);
 }
 
+/**
+ * The dev server's chunk names are not content-hashed, so sw.js serving
+ * /_next/static/ cache-first would keep running stale code after every edit.
+ * Development never registers, and drops any worker an earlier session left.
+ */
+function isDevelopment() {
+  return process.env.NODE_ENV === 'development';
+}
+
+export async function unregisterServiceWorkers() {
+  if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
+    return;
+  }
+
+  try {
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(registrations.map((registration) => registration.unregister()));
+  } catch (error) {
+    console.warn('Service worker unregistration failed:', error);
+  }
+}
+
 export async function registerServiceWorker() {
+  if (isDevelopment()) {
+    await unregisterServiceWorkers();
+    return null;
+  }
+
   if (!canRegisterServiceWorker()) {
     return null;
   }

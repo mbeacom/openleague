@@ -32,6 +32,22 @@ describe('ServiceWorkerProvider', () => {
     expect(register).toHaveBeenCalledWith('/sw.js', { scope: '/' });
   });
 
+  it('never registers in development and drops a worker left by an earlier session', async () => {
+    vi.stubEnv('NODE_ENV', 'development');
+    const unregister = vi.fn().mockResolvedValue(true);
+    const register = vi.fn();
+    Object.defineProperty(window.navigator, 'serviceWorker', {
+      configurable: true,
+      value: { register, getRegistrations: vi.fn().mockResolvedValue([{ unregister }]) },
+    });
+
+    await expect(registerServiceWorker()).resolves.toBeNull();
+
+    expect(register).not.toHaveBeenCalled();
+    expect(unregister).toHaveBeenCalledTimes(1);
+    vi.unstubAllEnvs();
+  });
+
   it('does not register when service workers are unsupported', async () => {
     Reflect.deleteProperty(window.navigator, 'serviceWorker');
 
