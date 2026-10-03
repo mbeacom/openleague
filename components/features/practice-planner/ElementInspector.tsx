@@ -6,7 +6,7 @@
  * the parent applies them through RinkBoardHandle.updateElement so they are
  * undoable.
  */
-import React, { useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Box, Paper, Stack, TextField, Typography, ButtonBase } from "@mui/material";
 import { OptionGroup } from "./OptionGroup";
 import type { ElementPatch, SelectedElement } from "@/lib/utils/canvas/element-ops";
@@ -36,13 +36,27 @@ function CommitField({ label, value, maxLength, allowEmpty, onCommit }: {
     // Enter then blur would otherwise commit the same draft twice before the
     // parent re-renders with the new value; any typing clears this.
     const committed = useRef<{ draft: string; value: string } | null>(null);
+    const isPending = (d: string, v: string) =>
+        d !== v && !(committed.current?.draft === d && committed.current.value === v);
     const commit = () => {
-        if (draft === value) return;
-        if (committed.current?.draft === draft && committed.current.value === value) return;
+        if (!isPending(draft, value)) return;
         if (!allowEmpty && draft.trim() === "") { setDraft(value); return; }
         committed.current = { draft, value };
         onCommit(draft);
     };
+    // The inspector is keyed by element, so a selection change unmounts this
+    // field. A draft still pending then (no blur happened) commits through the
+    // onCommit of the element it was typed for, never the next selection.
+    const latest = useRef({ draft, value, allowEmpty, onCommit, isPending });
+    useLayoutEffect(() => {
+        latest.current = { draft, value, allowEmpty, onCommit, isPending };
+    });
+    useEffect(() => () => {
+        const l = latest.current;
+        if (!l.isPending(l.draft, l.value)) return;
+        if (!l.allowEmpty && l.draft.trim() === "") return;
+        l.onCommit(l.draft);
+    }, []);
     return (
         <TextField
             label={label}

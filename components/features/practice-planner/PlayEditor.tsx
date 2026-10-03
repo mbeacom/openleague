@@ -385,7 +385,9 @@ export function PlayEditor({
             </Paper>
 
             {/* Element inspector sits BELOW the board so selecting never shifts the canvas */}
+            {/* Keyed by element so a pending label draft can never carry over to another element */}
             <ElementInspector
+                key={selectedElementId ?? "none"}
                 selected={selectedElementId ? findElement(playData, selectedElementId) : null}
                 onChange={(patch) => selectedElementId && rinkBoardRef.current?.updateElement(selectedElementId, patch)}
             />

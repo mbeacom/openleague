@@ -452,6 +452,14 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         (event: React.MouseEvent<HTMLCanvasElement>) => {
             if (mode === "view" || !transform || !canvasRef.current) return;
 
+            // Touch taps never move focus off a text field (touchend is
+            // preventDefault-ed), so blur it here: its blur commit then lands
+            // on the element selected *before* this press changes the selection.
+            const active = document.activeElement;
+            if (active instanceof HTMLElement && isEditableTarget(active) && !canvasRef.current.contains(active)) {
+                active.blur();
+            }
+
             const rinkPos = getTransformedRinkPosition(event.nativeEvent, canvasRef.current, transform);
             if (!rinkPos) return;
 
@@ -462,6 +470,13 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
                 case "select":
                     // Handle selection
                     // Requirements: 5.4
+                    // A gesture whose release was never seen (e.g. released
+                    // outside the window) must not leak its preview into this one.
+                    setDragPreviewPosition(null);
+                    setIsDragging(false);
+                    setDragOffset(null);
+                    setIsDrawing(false);
+                    setCurrentDrawingPoints([]);
                     const hitResult = hitTest(clampedPos, playData, minHitRadiusFt());
                     if (hitResult.hit && hitResult.elementId) {
                         setSelectedElementId(hitResult.elementId);
@@ -646,6 +661,21 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
             generateId,
         ]
     );
+
+    /**
+     * A drag or stroke released outside the canvas ends the same way a canvas
+     * release does. Releases on the canvas are left to its own handler (they
+     * also bubble here, before React has re-rendered).
+     */
+    useEffect(() => {
+        if (!isDragging && !isDrawing) return;
+        const onWindowMouseUp = (event: MouseEvent) => {
+            if (event.target instanceof Node && canvasRef.current?.contains(event.target)) return;
+            handleMouseUp();
+        };
+        window.addEventListener("mouseup", onWindowMouseUp);
+        return () => window.removeEventListener("mouseup", onWindowMouseUp);
+    }, [isDragging, isDrawing, handleMouseUp]);
 
     /**
      * Handle keyboard delete key for selected elements

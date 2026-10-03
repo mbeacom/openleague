@@ -346,6 +346,47 @@ describe("hockey notation tools", () => {
         expect(moved.y).toBeCloseTo(50, 0);
     });
 
+    it("a drag released outside the canvas leaves no stale preview for the next click", () => {
+        const start = {
+            ...createEmptyPlayData(),
+            equipment: [
+                { id: "a", kind: "cone" as const, position: { x: 100, y: 40 }, rotation: 0 },
+                { id: "b", kind: "cone" as const, position: { x: 50, y: 40 }, rotation: 0 },
+            ],
+        };
+        const { canvas, at, onPlayDataChange } = setup({ playData: start, selectedTool: "select" });
+        fireEvent.mouseDown(canvas, at(100, 40));
+        fireEvent.mouseMove(canvas, at(120, 50));
+        fireEvent.mouseUp(window); // released off the canvas
+        // The window release ends the gesture like a canvas release: A is moved.
+        expect(onPlayDataChange).toHaveBeenCalledTimes(1);
+        expect(onPlayDataChange.mock.calls[0][0].equipment[0].position.x).toBeCloseTo(120, 0);
+        onPlayDataChange.mockClear();
+
+        // Click B without moving: nothing is committed, B does not jump.
+        fireEvent.mouseDown(canvas, at(50, 40));
+        fireEvent.mouseUp(canvas);
+        expect(onPlayDataChange).not.toHaveBeenCalled();
+    });
+
+    it("clears a stale drag preview even if the release was never seen", () => {
+        const start = {
+            ...createEmptyPlayData(),
+            equipment: [
+                { id: "a", kind: "cone" as const, position: { x: 100, y: 40 }, rotation: 0 },
+                { id: "b", kind: "cone" as const, position: { x: 50, y: 40 }, rotation: 0 },
+            ],
+        };
+        const { canvas, at, onPlayDataChange } = setup({ playData: start, selectedTool: "select" });
+        fireEvent.mouseDown(canvas, at(100, 40));
+        fireEvent.mouseMove(canvas, at(120, 50));
+        // No mouseup anywhere (e.g. released outside the browser window).
+        fireEvent.mouseDown(canvas, at(50, 40));
+        fireEvent.mouseUp(canvas);
+        const movedB = onPlayDataChange.mock.calls.some(([d]) => d.equipment[1].position.x !== 50);
+        expect(movedB).toBe(false);
+    });
+
     it("erases equipment", () => {
         const start = { ...createEmptyPlayData(), equipment: [{ id: "c", kind: "cone" as const, position: { x: 100, y: 40 }, rotation: 0 }] };
         const { canvas, at, onPlayDataChange } = setup({ playData: start, selectedTool: "eraser" });
@@ -393,6 +434,22 @@ describe("hockey notation tools", () => {
             fireEvent.keyDown(area, { key: "z", ctrlKey: true });
             expect(ctx.onPlayDataChange).not.toHaveBeenCalled();
             area.remove();
+        });
+
+        it("blurs a focused input outside the board before changing the selection (touch taps don't)", () => {
+            const order: string[] = [];
+            const start = { ...withCone(), players: [{ id: "p", position: { x: 50, y: 40 }, role: "X" as const, label: "", color: "#000000" }] };
+            const ctx = setup({ playData: start, selectedTool: "select", onSelectionChange: (id) => order.push(`select:${id}`) });
+            select(ctx);
+            const input = document.createElement("input");
+            input.addEventListener("blur", () => order.push("blur"));
+            document.body.appendChild(input);
+            input.focus();
+            order.length = 0;
+            fireEvent.mouseDown(ctx.canvas, ctx.at(50, 40));
+            expect(document.activeElement).not.toBe(input);
+            expect(order).toEqual(["blur", "select:p"]);
+            input.remove();
         });
 
         it("clears the selection when the selected element disappears", () => {
