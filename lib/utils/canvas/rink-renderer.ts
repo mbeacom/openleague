@@ -218,13 +218,34 @@ function getCachedRinkCanvas(transform: TransformContext): HTMLCanvasElement {
     return canvas;
 }
 
+export interface DrawRinkOptions {
+    /**
+     * Draw from the cached viewport-sized background (default). Pass false
+     * when the caller has a zoom/pan transform on the context: the cached
+     * image covers only the canvas-sized rectangle at the origin, so under
+     * zoom < 1 or a pan it leaves part of the screen undrawn. The direct path
+     * fills the base white over the whole canvas under an identity transform,
+     * then draws the rink's markings through the caller's transform.
+     */
+    cache?: boolean;
+}
+
 /**
  * Draws the complete hockey rink with all markings
  *
  * @param ctx - Canvas 2D rendering context
  * @param transform - Transformation context for coordinate conversion
  */
-export function drawRink(ctx: CanvasRenderingContext2D, transform: TransformContext): void {
+export function drawRink(ctx: CanvasRenderingContext2D, transform: TransformContext, options: DrawRinkOptions = {}): void {
+    if (options.cache === false) {
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillRect(0, 0, transform.canvasWidth, transform.canvasHeight);
+        ctx.restore();
+        drawRinkMarkings(ctx, transform);
+        return;
+    }
     // Use cached background if available
     try {
         const cachedCanvas = getCachedRinkCanvas(transform);
@@ -247,6 +268,11 @@ function drawRinkBackground(ctx: CanvasRenderingContext2D, transform: TransformC
     ctx.fillStyle = "#FFFFFF";
     ctx.fillRect(0, 0, transform.canvasWidth, transform.canvasHeight);
 
+    drawRinkMarkings(ctx, transform);
+}
+
+/** The ice, boards, lines, circles and creases, without the white base. */
+function drawRinkMarkings(ctx: CanvasRenderingContext2D, transform: TransformContext): void {
     // Draw ice surface
     drawIceSurface(ctx, transform);
 

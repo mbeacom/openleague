@@ -329,6 +329,8 @@ export interface BoardSceneOptions {
     zoom?: number;
     /** Rectangle left unshaded; omitted, or covering the rink, means no mask */
     maskRect?: RinkRect;
+    /** Draw the rink from its cached background (default true); see DrawRinkOptions.cache */
+    cachedRink?: boolean;
 }
 
 /**
@@ -342,7 +344,39 @@ export function drawBoardScene(
     playData: PlayData,
     options: BoardSceneOptions = {}
 ): void {
-    drawRink(ctx, transform);
+    drawRink(ctx, transform, { cache: options.cachedRink ?? true });
     drawAllElements(ctx, playData, transform, options.selectedId, options.zoom ?? 1);
     if (options.maskRect) drawAreaMask(ctx, options.maskRect, transform, options.zoom ?? 1);
+}
+
+export interface BoardFrameOptions extends BoardSceneOptions {
+    /** Board pan in screen pixels, applied with `zoom` (default none) */
+    pan?: Position;
+}
+
+/**
+ * One RinkBoard animation frame. Clears the whole canvas under an identity
+ * transform (a clear under the zoom/pan transform misses part of the screen,
+ * and the 35% area mask then stacks on the uncleared pixels every frame),
+ * applies the zoom/pan transform for drawing, then draws the scene once.
+ * Zoomed or panned, the rink is drawn directly, because the cached background
+ * only covers a canvas-sized rectangle at the origin; at zoom 1 with no pan
+ * the cache is used as before. The transform is left applied so the caller
+ * can draw an in-progress stroke on top.
+ */
+export function drawBoardFrame(
+    ctx: CanvasRenderingContext2D,
+    transform: TransformContext,
+    playData: PlayData,
+    options: BoardFrameOptions = {}
+): void {
+    const zoom = options.zoom ?? 1;
+    const pan = options.pan ?? { x: 0, y: 0 };
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, transform.canvasWidth, transform.canvasHeight);
+    ctx.restore();
+    ctx.setTransform(zoom, 0, 0, zoom, pan.x, pan.y);
+    const shifted = zoom !== 1 || pan.x !== 0 || pan.y !== 0;
+    drawBoardScene(ctx, transform, playData, { ...options, zoom, cachedRink: !shifted });
 }

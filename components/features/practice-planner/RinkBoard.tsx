@@ -27,7 +27,7 @@ import {
     TransformContext,
     screenToRink,
 } from "@/lib/utils/canvas/rink-renderer";
-import { drawBoardScene, drawStroke } from "@/lib/utils/canvas/drawing-utils";
+import { drawBoardFrame, drawStroke } from "@/lib/utils/canvas/drawing-utils";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import { areaMaskRect, areaRect, editViewport, withArea } from "@/lib/utils/ice-area";
 import {
@@ -291,16 +291,16 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
 
-        // Clear canvas
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-        // Drag preview is visual only; the move is committed on mouseUp
+        // Drag preview is visual only; the move is committed on mouseUp.
+        // drawBoardFrame clears under an identity transform, then sets the
+        // zoom/pan transform every frame (a resize resets context state).
         const renderData = isDragging && selectedElementId && dragPreviewPosition
             ? moveElement(playData, selectedElementId, dragPreviewPosition)
             : playData;
-        drawBoardScene(ctx, transform, renderData, {
+        drawBoardFrame(ctx, transform, renderData, {
             selectedId: selectedElementId || undefined,
             zoom: scale,
+            pan: panOffset,
             maskRect: areaMaskRect(areaDrag, playData.area),
         });
 
@@ -322,6 +322,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         selectedColor,
         strokeOptions,
         scale,
+        panOffset,
         areaDrag,
     ]);
 
@@ -940,20 +941,6 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         },
         [handleMouseUp]
     );
-
-    /**
-     * Apply zoom and pan transformations to canvas context
-     */
-    useEffect(() => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return;
-
-        // Apply transformations
-        ctx.setTransform(scale, 0, 0, scale, panOffset.x, panOffset.y);
-    }, [scale, panOffset]);
 
     return (
         <div

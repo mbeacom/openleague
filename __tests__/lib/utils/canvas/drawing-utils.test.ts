@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
-import { drawStroke, drawAreaMask, drawBoardScene } from "@/lib/utils/canvas/drawing-utils";
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
+import { drawStroke, drawAreaMask, drawBoardScene, drawBoardFrame } from "@/lib/utils/canvas/drawing-utils";
 import { clearRinkCache, createTransformContext, FULL_RINK, rinkToCanvas } from "@/lib/utils/canvas/rink-renderer";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import { areaRect } from "@/lib/utils/ice-area";
@@ -141,5 +141,67 @@ describe("drawBoardScene", () => {
         });
         expect((ctx as unknown as Record<string, unknown>).lineWidth).toBe(4);
         expect(calls.find((c) => c.name === "setLineDash")?.args).toEqual([[16, 12]]);
+    });
+});
+
+describe("drawBoardFrame", () => {
+    let built: number;
+    beforeEach(() => {
+        clearRinkCache();
+        built = 0;
+        const real = document.createElement.bind(document);
+        vi.spyOn(document, "createElement").mockImplementation(((tag: string) => {
+            if (tag !== "canvas") return real(tag);
+            built++;
+            const cacheCtx = recordingCtx([]);
+            return { width: 0, height: 0, getContext: () => cacheCtx } as unknown as HTMLCanvasElement;
+        }) as typeof document.createElement);
+    });
+    afterEach(() => {
+        vi.restoreAllMocks();
+        clearRinkCache();
+    });
+
+    const t = createTransformContext(800, 400, 20, { x: 95, y: 25, w: 30, h: 30 });
+    const zoned = { ...createEmptyPlayData(), area: { kind: "custom" as const, rect: { x: 100, y: 30, w: 20, h: 20 } } };
+    const scene = { maskRect: areaRect(zoned.area) };
+
+    it("clears the whole canvas under an identity transform, then applies zoom/pan, before drawing", () => {
+        const calls: Call[] = [];
+        drawBoardFrame(recordingCtx(calls), t, zoned, { ...scene, zoom: 0.5, pan: { x: 30, y: -12 } });
+        const names = calls.map((c) => c.name);
+        const identity = calls.findIndex((c) => c.name === "setTransform" && c.args.join() === "1,0,0,1,0,0");
+        const clear = names.indexOf("clearRect");
+        const view = calls.findIndex((c) => c.name === "setTransform" && c.args.join() === "0.5,0,0,0.5,30,-12");
+        expect(identity).toBeGreaterThanOrEqual(0);
+        expect(clear).toBe(identity + 1);
+        expect(calls[clear].args).toEqual([0, 0, 800, 400]);
+        expect(view).toBeGreaterThan(clear);
+        const firstDraw = names.findIndex((n) => ["fill", "fillRect", "drawImage", "stroke", "roundRect"].includes(n));
+        expect(firstDraw).toBeGreaterThan(clear);
+    });
+
+    it("draws the mask exactly once per frame", () => {
+        const calls: Call[] = [];
+        drawBoardFrame(recordingCtx(calls), t, zoned, { ...scene, zoom: 2, pan: { x: -100, y: -40 } });
+        expect(calls.filter((c) => c.name === "fill" && c.args[0] === "evenodd")).toHaveLength(1);
+    });
+
+    it("draws the rink directly, not from the viewport-sized cache, when zoomed or panned", () => {
+        for (const view of [{ zoom: 0.5, pan: { x: 0, y: 0 } }, { zoom: 1, pan: { x: 25, y: 0 } }]) {
+            const calls: Call[] = [];
+            drawBoardFrame(recordingCtx(calls), t, zoned, { ...scene, ...view });
+            expect(calls.some((c) => c.name === "drawImage")).toBe(false);
+            expect(calls.some((c) => c.name === "roundRect")).toBe(true); // the ice surface
+        }
+        expect(built).toBe(0);
+    });
+
+    it("still uses the cached rink at zoom 1 with no pan", () => {
+        const calls: Call[] = [];
+        drawBoardFrame(recordingCtx(calls), t, zoned, { ...scene, zoom: 1, pan: { x: 0, y: 0 } });
+        expect(built).toBe(1);
+        expect(calls.some((c) => c.name === "drawImage")).toBe(true);
+        expect(calls.some((c) => c.name === "roundRect")).toBe(false);
     });
 });

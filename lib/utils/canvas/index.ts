@@ -22,6 +22,7 @@ export {
     screenToRink,
     clearRinkCache,
     drawRink,
+    type DrawRinkOptions,
 } from "./rink-renderer";
 
 // Drawing utilities
@@ -34,7 +35,9 @@ export {
     drawAllElements,
     drawAreaMask,
     drawBoardScene,
+    drawBoardFrame,
     type BoardSceneOptions,
+    type BoardFrameOptions,
 } from "./drawing-utils";
 
 // Interaction utilities
