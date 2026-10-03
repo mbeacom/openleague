@@ -76,13 +76,7 @@ export function generateThumbnail(
     drawRink(ctx, transform);
 
     // Draw all play elements
-    drawAllElements(
-        ctx,
-        playData.players,
-        playData.drawings,
-        playData.annotations,
-        transform
-    );
+    drawAllElements(ctx, playData, transform);
 
     // Export as base64 PNG
     return canvas.toDataURL("image/png");

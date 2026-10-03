@@ -127,6 +127,11 @@ describe("hitTestPlayer", () => {
     expect(hitTestPlayer({ x: 105, y: 50 }, player)).toBe(true);
   });
 
+  it("uses the 6 ft player radius", () => {
+    expect(hitTestPlayer({ x: 105.9, y: 50 }, player)).toBe(true);
+    expect(hitTestPlayer({ x: 106.5, y: 50 }, player)).toBe(false);
+  });
+
   it("returns false when point is far from player", () => {
     expect(hitTestPlayer({ x: 200, y: 200 }, player)).toBe(false);
   });

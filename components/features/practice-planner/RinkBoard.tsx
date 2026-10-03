@@ -256,9 +256,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         // Draw all elements (with preview position during drag)
         drawAllElements(
             ctx,
-            renderPlayers,
-            playData.drawings,
-            renderAnnotations,
+            { ...playData, players: renderPlayers, annotations: renderAnnotations },
             transform,
             selectedElementId || undefined
         );

@@ -17,11 +17,11 @@ import {
     PlayData,
 } from "@/types/practice-planner";
 import { TransformContext, canvasToRink } from "./rink-renderer";
+import { PLAYER_RADIUS_FT } from "./glyph-metrics";
 
 /**
  * Hit detection constants
  */
-const PLAYER_ICON_RADIUS = 12; // feet in rink coordinates (must match drawing-utils)
 const HIT_THRESHOLD = 5; // Hit detection threshold in rink coordinates
 
 /**
@@ -227,7 +227,7 @@ export function hitTestPlayer(
     const distance = Math.sqrt(
         Math.pow(point.x - player.position.x, 2) + Math.pow(point.y - player.position.y, 2)
     );
-    return distance <= PLAYER_ICON_RADIUS;
+    return distance <= PLAYER_RADIUS_FT;
 }
 
 /**

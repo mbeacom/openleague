@@ -24,6 +24,7 @@ export {
 export {
     drawStroke,
     drawPlayerIcon,
+    drawEquipmentItem,
     drawTextAnnotation,
     drawElement,
     drawAllElements,

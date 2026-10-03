@@ -14,15 +14,18 @@ import {
     PlayerIcon,
     DrawingElement,
     TextAnnotation,
+    EquipmentItem,
+    PlayData,
 } from "@/types/practice-planner";
 import type { StrokeOptions } from "@/types/practice-planner";
 import { TransformContext, rinkToCanvas } from "./rink-renderer";
 import { buildStrokeGeometry } from "./stroke-geometry";
+import { drawPlayerGlyph, drawEquipmentGlyph } from "./glyphs";
+import { EQUIPMENT_RADIUS_FT, PLAYER_RADIUS_FT, glyphRadiusPx } from "./glyph-metrics";
 
 /**
  * Visual constants for drawing
  */
-const PLAYER_ICON_RADIUS = 12; // feet in rink coordinates
 const SELECTION_COLOR = "#FFD700"; // Gold highlight for selected elements
 
 /**
@@ -126,33 +129,33 @@ export function drawPlayerIcon(
     transform: TransformContext,
     isSelected: boolean = false
 ): void {
-    const canvasPos = rinkToCanvas(player.position, transform);
-    const radius = PLAYER_ICON_RADIUS * Math.min(transform.scaleX, transform.scaleY);
+    const pxPerFt = Math.min(transform.scaleX, transform.scaleY);
+    drawPlayerGlyph(
+        ctx,
+        player,
+        rinkToCanvas(player.position, transform),
+        glyphRadiusPx(PLAYER_RADIUS_FT, pxPerFt),
+        isSelected
+    );
+}
 
-    // Draw selection highlight if selected
-    if (isSelected) {
-        ctx.strokeStyle = SELECTION_COLOR;
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.arc(canvasPos.x, canvasPos.y, radius + 4, 0, Math.PI * 2);
-        ctx.stroke();
-    }
-
-    // Draw player circle
-    ctx.fillStyle = player.color;
-    ctx.strokeStyle = "#000000";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(canvasPos.x, canvasPos.y, radius, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-
-    // Draw label text
-    ctx.fillStyle = "#FFFFFF";
-    ctx.font = `bold ${Math.floor(radius * 1.2)}px Arial`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(player.label, canvasPos.x, canvasPos.y);
+/**
+ * Draws an equipment item (puck, cone, net, ...)
+ */
+export function drawEquipmentItem(
+    ctx: CanvasRenderingContext2D,
+    item: EquipmentItem,
+    transform: TransformContext,
+    isSelected: boolean = false
+): void {
+    const pxPerFt = Math.min(transform.scaleX, transform.scaleY);
+    drawEquipmentGlyph(
+        ctx,
+        item,
+        rinkToCanvas(item.position, transform),
+        glyphRadiusPx(EQUIPMENT_RADIUS_FT[item.kind], pxPerFt),
+        isSelected
+    );
 }
 
 /**
@@ -242,35 +245,21 @@ export function drawElement(
 }
 
 /**
- * Draws all elements from play data
+ * Draws all elements from play data: drawings, equipment, players, annotations
  *
  * @param ctx - Canvas 2D rendering context
- * @param players - Array of player icons
- * @param drawings - Array of drawing elements
- * @param annotations - Array of text annotations
+ * @param playData - Play data to render
  * @param transform - Transformation context
  * @param selectedId - ID of currently selected element (if any)
  */
 export function drawAllElements(
     ctx: CanvasRenderingContext2D,
-    players: PlayerIcon[],
-    drawings: DrawingElement[],
-    annotations: TextAnnotation[],
+    playData: PlayData,
     transform: TransformContext,
     selectedId?: string
 ): void {
-    // Draw drawings first (bottom layer)
-    drawings.forEach((drawing) => {
-        drawElement(ctx, drawing, transform, drawing.id === selectedId);
-    });
-
-    // Draw players (middle layer)
-    players.forEach((player) => {
-        drawPlayerIcon(ctx, player, transform, player.id === selectedId);
-    });
-
-    // Draw annotations last (top layer)
-    annotations.forEach((annotation) => {
-        drawTextAnnotation(ctx, annotation, transform, annotation.id === selectedId);
-    });
+    playData.drawings.forEach((d) => drawElement(ctx, d, transform, d.id === selectedId));
+    playData.equipment.forEach((e) => drawEquipmentItem(ctx, e, transform, e.id === selectedId));
+    playData.players.forEach((p) => drawPlayerIcon(ctx, p, transform, p.id === selectedId));
+    playData.annotations.forEach((a) => drawTextAnnotation(ctx, a, transform, a.id === selectedId));
 }
