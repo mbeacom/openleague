@@ -1,6 +1,7 @@
 /** Session detail view with station blocks (practice planner 2b). */
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import type { IceArea } from "@/types/practice-planner";
@@ -101,6 +102,29 @@ describe("SessionDetailView stations (2b)", () => {
     it("shows the fit warning next to the booking line", () => {
         renderView();
         expect(screen.getByText("1 drill larger than the booked half ice")).toBeInTheDocument();
+    });
+});
+
+describe("SessionDetailView sidebar keyboard access", () => {
+    /** Tabs forward until `target` has focus, as a keyboard user would. */
+    async function tabTo(user: ReturnType<typeof userEvent.setup>, target: HTMLElement) {
+        for (let i = 0; i < 40 && document.activeElement !== target; i++) await user.tab();
+        expect(document.activeElement).toBe(target);
+    }
+
+    it.each([["Enter", "{Enter}"], ["Space", " "]])("selects a sidebar drill with %s", async (_key, keys) => {
+        const user = userEvent.setup();
+        renderView();
+        const shooting = screen.getByRole("button", { name: /^3 Shooting/ });
+        expect(screen.getByRole("button", { name: /^1 Breakout/ })).toHaveAttribute("aria-current", "true");
+        expect(shooting).not.toHaveAttribute("aria-current");
+
+        await tabTo(user, shooting);
+        await user.keyboard(keys);
+
+        expect(screen.getByText("Play 3 of 3")).toBeInTheDocument();
+        expect(shooting).toHaveAttribute("aria-current", "true");
+        expect(screen.getByRole("button", { name: /^1 Breakout/ })).not.toHaveAttribute("aria-current");
     });
 });
 

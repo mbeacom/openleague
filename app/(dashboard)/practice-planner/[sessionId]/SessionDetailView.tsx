@@ -11,6 +11,7 @@ import {
   Stack,
   Paper,
   Card,
+  CardActionArea,
   CardContent,
   Chip,
   Alert,
@@ -748,9 +749,7 @@ interface SidebarPlayCardProps {
 function SidebarPlayCard({ sp, index, active, onSelect }: SidebarPlayCardProps) {
   return (
     <Card
-      onClick={onSelect}
       sx={{
-        cursor: "pointer",
         border: "2px solid",
         borderColor: active ? "primary.main" : "transparent",
         bgcolor: active ? "rgba(25, 118, 210, 0.04)" : "background.paper",
@@ -762,6 +761,11 @@ function SidebarPlayCard({ sp, index, active, onSelect }: SidebarPlayCardProps) 
         },
       }}
     >
+      <CardActionArea
+        onClick={onSelect}
+        aria-current={active ? "true" : undefined}
+        sx={{ "&.Mui-focusVisible": { outline: "2px solid", outlineColor: "primary.main", outlineOffset: -2 } }}
+      >
       <CardContent sx={{ p: 1.5, "&:last-child": { pb: 1.5 } }}>
         <Stack direction="row" alignItems="center" spacing={1.5}>
           {/* Play number */}
@@ -834,6 +838,7 @@ function SidebarPlayCard({ sp, index, active, onSelect }: SidebarPlayCardProps) 
           </Box>
         </Stack>
       </CardContent>
+      </CardActionArea>
     </Card>
   );
 }
