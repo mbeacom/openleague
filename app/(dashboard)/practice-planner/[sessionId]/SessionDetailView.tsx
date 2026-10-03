@@ -29,6 +29,7 @@ import useMediaQuery from "@mui/material/useMediaQuery";
 import {
   ArrowBack as ArrowBackIcon,
   Edit as EditIcon,
+  ContentCopy as DuplicateIcon,
   Delete as DeleteIcon,
   Share as ShareIcon,
   LinkOff as UnshareIcon,
@@ -42,6 +43,7 @@ import {
   Place as PlaceIcon,
 } from "@mui/icons-material";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { DuplicateSessionDialog } from "@/components/features/practice-planner/DuplicateSessionDialog";
 import { PlayLegend } from "@/components/features/practice-planner/PlayLegend";
 import type { PlayData } from "@/types/practice-planner";
 import {
@@ -96,6 +98,7 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
   const [activePlayIndex, setActivePlayIndex] = useState(0);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showShareDialog, setShowShareDialog] = useState(false);
+  const [showDuplicateDialog, setShowDuplicateDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -299,6 +302,14 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
                 size={isMobile ? "small" : "medium"}
               >
                 Edit
+              </Button>
+              <Button
+                variant="outlined"
+                startIcon={<DuplicateIcon />}
+                onClick={() => setShowDuplicateDialog(true)}
+                size={isMobile ? "small" : "medium"}
+              >
+                Duplicate
               </Button>
               <Button
                 variant="outlined"
@@ -643,6 +654,16 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
             )}
           </Box>
         </Stack>
+      )}
+
+      {isAdmin && showDuplicateDialog && (
+        <DuplicateSessionDialog
+          open
+          sessionId={session.id}
+          teamId={session.teamId}
+          sourceDate={session.date}
+          onClose={() => setShowDuplicateDialog(false)}
+        />
       )}
 
       {/* Delete dialog */}

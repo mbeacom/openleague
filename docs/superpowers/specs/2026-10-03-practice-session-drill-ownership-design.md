@@ -1,7 +1,7 @@
 # Practice Sessions: Drill Ownership, Inline Editing & Duplication — Design
 
 **Date:** 2026-10-03
-**Status:** Draft for review
+**Status:** Implemented (3a)
 **Phase:** 3a of the practice-planner iteration. Build order: hotfix → **3a** → 2a → 2b → 3b.
 **Depends on:** phase 1 (`2026-10-02-practice-board-notation-design.md`, PR #369) and the hotfix branch `fix/practice-planner-session-bugs`, which adds the `notify` flag on session updates and normalizes edit-query sequences.
 
@@ -122,9 +122,11 @@ It is not a Server Action. It runs inside the caller's transaction:
 
 ```ts
 materializeSessionDrills(tx, { sessionId, teamId, userId, items })
-// items: { playId, clientKey }[]
-// returns: { clientKey, sequence, playId }[]
+// items: { playId, clientKey, sequence }[]
+// returns: { mapping: { clientKey, sequence, playId }[], previousPlayIds: string[] }
 ```
+
+`previousPlayIds` is the set of play ids the session referenced before this save. Orphan cleanup is a separate export, `deleteOrphanedSessionDrills`, which the update action calls after the session plays are rewritten (the helper returns before the rewrite, so it cannot clean up itself). The cloning itself is `cloneDrillsIntoSessions` (one round trip, a session per copy), shared by the helper, detach-on-write, and `duplicatePracticeSession`.
 
 1. Load the referenced plays, restricted to this team.
 2. Classify each item:
@@ -135,14 +137,15 @@ materializeSessionDrills(tx, { sessionId, teamId, userId, items })
    - Copy the name, description, thumbnail, and raw `playData`. The data may still be v1; reads upgrade it.
    - Set `isTemplate=false`, `sessionId=S`, and `createdById` = the current user.
    - Set `sourcePlayId` to the source's own `sourcePlayId` if it has one, otherwise to the source's id.
-4. Return the `clientKey → playId` mapping.
-5. After the session plays are rewritten, delete owned plays of S that S referenced before this save and that nothing references now (drop-only orphan cleanup). A copy S has never referenced, such as one the drill dialog just created, is never deleted by a save. That way an autosave already in flight can't remove it. Copies that are never referenced go with the session's cascade.
+   - Verify the result order. PostgreSQL returns `INSERT … RETURNING` rows in `VALUES` order, but Prisma does not document it. The call selects `id, name, sourcePlayId, sessionId`, matches the result to the input by index, and checks `name`, `sourcePlayId`, and `sessionId` at each index. A mismatch aborts the transaction instead of mapping a drill to the wrong card.
+4. Return the `clientKey → playId` mapping, plus `previousPlayIds`.
+5. After the session plays are rewritten, `deleteOrphanedSessionDrills` deletes owned plays of S that S referenced before this save (`previousPlayIds`) and that nothing references now (drop-only orphan cleanup, no time window). A copy S has never referenced, such as one the drill dialog just created, is never deleted by a save. That way an autosave already in flight can't remove it. Copies that are never referenced go with the session's cascade.
 
 ### Actions
 
 - **`createPracticeSession` / `updatePracticeSession`**
   - Call the helper inside the existing transaction, before the session plays are created.
-  - Play items gain `clientKey: z.string().max(64)`.
+  - Play items gain a required `clientKey` (1–64 characters). The client sends the card's existing `PlayInSession.id` (a server session-play id, or `play-<ts>-<rand>` for a new card), so no new field is added. The schema rejects a payload whose keys are not unique.
   - Return `plays: { clientKey, playId }[]` in `data`.
   - The existing team-ownership check on referenced plays moves into the helper.
   - Auth, validation, and reservation logic are otherwise unchanged.
@@ -150,38 +153,43 @@ materializeSessionDrills(tx, { sessionId, teamId, userId, items })
   - **`saveSessionDrill({ sessionId, teamId, playId?, name, description, thumbnail, playData })`**
     - If `playId` is owned by the session: update it.
     - Otherwise (a library play, a legacy reference, or a brand-new drill): create an owned copy, setting `sourcePlayId` when forking.
-    - Returns `{ playId }`. Validates with `playDataSchema` and the existing play field schemas. Sends no email. Does not touch session plays; the next session save persists the reference.
-  - **`copySessionDrillToLibrary({ playId, teamId })`**: creates a new library play from an owned copy.
+    - Returns `{ playId }`. Validates with `playDataSchema` and the existing play field schemas, and sanitizes `playData` with `sanitizePlayDataForWrite` (`lib/utils/play-data.ts`), the same write hygiene as `createPlay` and `updatePlay`. Sends no email. Does not touch session plays; the next session save persists the reference.
+  - **`copySessionDrillToLibrary({ playId, teamId })`**: creates a new library play from an owned copy. It looks the play up with `session: { teamId }`, so a play owned by another team's session is not found.
   - **`duplicatePracticeSession({ id, teamId, date })`**
     - Creates a new session titled "Copy of …" with the same `duration`. It is unshared, with no venue, surface, segment, `startAt`, or reservation (ADR-0007).
     - Clones every drill into the new session's owned plays.
     - Copies every session-play scalar except ids and foreign keys, so columns added later (e.g. phase 2b's `runsWithPrevious`) are carried over. A test fails if a new column is not copied.
     - Returns the new session's id.
 - **Detach-on-write: `updatePlay` and `deletePlay`** (`lib/actions/plays.ts`). Product-owner decision, 2026-10-03; replaces retire-on-delete.
-  - Before a library play is updated or deleted, every session whose session-play rows still reference it gets its own owned copy of the play's *current* content. That is one copy per session, made with the helper's clone logic (`cloneDrillsIntoSessions`), and that session's rows are repointed to the copy.
+  - "Library play" here means any unowned play (`sessionId` null), not only `isTemplate` ones, so pre-3a rows saved with `isTemplate=false` are detached too. Before such a play is updated or deleted, every session whose session-play rows still reference it gets its own owned copy of the play's *current* content. That is one copy per session, made with the helper's clone logic (`cloneDrillsIntoSessions`), and that session's rows are repointed to the copy.
   - The detach and the update or delete run in one transaction.
-  - After detaching, `deletePlay` really deletes the library row.
+  - A session that references the play in several rows gets one copy for all of them. If that session is saved later, the helper keeps the first row and clones the rest, as with any repeated owned drill.
+  - After detaching, `deletePlay` really deletes the library row and returns `{ id, detachedSessions }` (the number of sessions that received a copy).
+  - `deletePlay` rejects a session-owned play ("This drill belongs to a practice session. Remove it from that session.").
   - Library edits and deletes therefore never reach any session, re-saved or not.
   - `updatePlay` rejects a session-owned play ("This drill belongs to a practice session. Edit it from that session.").
   - The dialog copy becomes: "Sessions that use this drill keep their own copy."
-- **Library listings** keep filtering on `isTemplate: true`, and also on `sessionId: null`, so session-owned plays never appear in the library.
+- **Library listings** keep filtering on `isTemplate: true`, and also on `sessionId: null`, so session-owned plays never appear in the library. `getPlaysByTeam` always filters `sessionId: null`, not only when `isTemplate: true` is passed; no caller lists session copies.
 
 ## Components
 
 - **Split `PracticeSessionEditor.tsx` (~1600 lines) first, with no behavior change**, under the existing tests:
-  - `SessionDrillCard.tsx`, extracted from `PlayCard`. It shows the drill's name instead of "Play {n}", plus duration, instructions, and an "Edit diagram" button.
-  - `VenueBookingFields.tsx` and a `useVenueBooking` hook, extracted from the booking state and UI.
+  - The structural step (Task 1) changes no behavior. `SessionDrillCard.tsx` is extracted from `PlayCard`; showing the drill's name instead of "Play {n}" is a behavior change and lands with `PlayInSession.name`.
+  - `SessionDrillList.tsx`, `VenueBookingFields.tsx` (including `BookingConflictAlert`), and a `useVenueBooking` hook are extracted from the list, booking state, and UI. The hook lives next to the editor in `components/features/practice-planner/`, because `lib/hooks/` holds only app-wide hooks.
+  - Characterization tests are written before extracting, because the branch had no `PracticeSessionEditor` tests.
+  - Later tasks extracted more modules to hold the line budget: `useSingleFlightSave` (single-flight saves), `useSessionDrillDialog.ts` (dialog state and how a dialog save lands on the cards), and `ShareSessionDialog.tsx` (the share confirmation).
   - Target: the editor ends up under 900 lines.
-- **`PlayInSession`** gains `name: string` and `clientKey: string`.
-  - `playId` is replaced from the mapping each save returns.
-  - Saves are single-flight: autosave is skipped while a save is in flight, and a "dirty again" ref triggers one follow-up save.
+- **`PlayInSession`** gains `name: string` and an optional `description` (the drill dialog needs it; without it, forking a library drill would blank its description). The existing `id` is the `clientKey`.
+  - `playId` is replaced from the mapping each save returns, except for a card whose `playId` changed since the save was sent (for example, the dialog forked it meanwhile); that card keeps its newer id.
+  - Saves are single-flight, in the `useSingleFlightSave` hook: autosave is skipped while a save is in flight, and a queued save runs once afterwards. Queued Save and "Book anyway" intent is OR-merged, so a queued explicit save is never downgraded. No follow-up save runs on create (there is no `sessionId` yet).
 - **Instructions limit:** raised to 2000 in the UI to match the server.
 - **`SessionDrillDialog`**: a full-screen MUI `Dialog` that hosts `PlayEditor`.
   - `PlayEditor` gets `lockTemplate` and a new `autoSave={false}` prop. Its built-in autosave would otherwise fork a new copy on every save.
-  - The dialog has an "Also add to library" checkbox, which calls `copySessionDrillToLibrary` after a successful save.
+  - The dialog has an "Also add to library" checkbox. It calls `copySessionDrillToLibrary` once per dialog opening, after the first successful save with the box checked, not on every save. If the session save succeeds and the library copy fails, `onSaved` still runs (the session has the change), the error is shown, and the next save retries the copy.
+  - A drill dialog's state lives in `useSessionDrillDialog.ts`.
   - Entry points: "Edit diagram" on each drill card, and "New drill" next to "Add from library".
-  - It is enabled only once the session has an id. Creating a session redirects to its edit page, where diagram editing is available.
-- **Duplicate:** a button on the session detail view (admins only) and on the session list. A dialog asks for the date (default: original date + 7 days), then routes to the new session's edit page.
+  - It is enabled only once the session has an id, and is disabled while the editor is saving or sharing (both "New drill" and "Edit diagram"). Creating a session redirects to its edit page (`/practice-planner/<id>/edit`, previously the detail page), where diagram editing is available.
+- **Duplicate:** a button on the session detail view (admins only) and on the session list (`PracticePlannerList` takes a required `teamId`). `DuplicateSessionDialog` asks for the date (default: original date + 7 days, same local wall-clock time), then routes to the new session's edit page. The copy's title is "Copy of <title>", truncated to 100 characters.
 
 ## Error handling
 

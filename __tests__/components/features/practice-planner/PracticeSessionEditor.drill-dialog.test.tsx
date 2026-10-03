@@ -105,13 +105,15 @@ describe("PracticeSessionEditor drill dialog wiring", () => {
                 .mockResolvedValue({ success: true, plays: [] });
             renderEditor(onSave, [drill("k1", LIB)]);
 
+            // The dialog is already open when the autosave starts ("Edit diagram" is
+            // disabled while a save is in flight).
+            fireEvent.click(screen.getByRole("button", { name: /edit diagram/i }));
             fireEvent.change(screen.getByLabelText(/session title/i), { target: { value: "Practice v2" } });
             await act(async () => {
                 await vi.advanceTimersByTimeAsync(2100);
             });
             expect(onSave.mock.calls[0][0].plays[0].playId).toBe(LIB);
 
-            fireEvent.click(screen.getByRole("button", { name: /edit diagram/i }));
             fireEvent.click(screen.getByRole("button", { name: "stub save drill" }));
 
             await act(async () => {

@@ -20,6 +20,7 @@ export default async function PracticePlannerPage() {
     <PageContainer>
       <PracticePlannerList
         sessions={data.sessions}
+        teamId={data.teamId}
         isAdmin={data.isAdmin}
         teamName={data.teamName}
       />

@@ -131,6 +131,7 @@ export function SessionDrillList({
                                 onMoveUp={onMoveUp}
                                 onMoveDown={onMoveDown}
                                 canEditDiagram={canEditDiagram}
+                                disabled={disabled}
                                 onEditDiagram={onEditDiagram}
                             />
                         ))}

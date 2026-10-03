@@ -46,6 +46,8 @@ export interface SessionDrillCardProps {
     onMoveDown: (index: number) => void;
     /** Diagram editing needs a saved session. */
     canEditDiagram: boolean;
+    /** The list is busy (saving or sharing). */
+    disabled?: boolean;
     onEditDiagram: (clientKey: string) => void;
 }
 
@@ -67,6 +69,7 @@ export function SessionDrillCard({
     onMoveUp,
     onMoveDown,
     canEditDiagram,
+    disabled = false,
     onEditDiagram,
 }: SessionDrillCardProps) {
     // Local state for editing
@@ -218,7 +221,7 @@ export function SessionDrillCard({
                                     size="small"
                                     startIcon={<DrawIcon />}
                                     onClick={() => onEditDiagram(play.id)}
-                                    disabled={!canEditDiagram}
+                                    disabled={disabled || !canEditDiagram}
                                     aria-label={`Edit diagram for ${play.name || `drill ${index + 1}`}`}
                                     sx={{ minHeight: 44 }}
                                 >

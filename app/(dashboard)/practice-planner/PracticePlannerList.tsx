@@ -10,6 +10,7 @@ import {
   Card,
   CardContent,
   CardActionArea,
+  CardActions,
   Chip,
   TextField,
   InputAdornment,
@@ -35,6 +36,8 @@ import CalendarTodayIcon from "@mui/icons-material/CalendarToday";
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
 import PersonIcon from "@mui/icons-material/Person";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import { DuplicateSessionDialog } from "@/components/features/practice-planner/DuplicateSessionDialog";
 
 interface SessionSummary {
   id: string;
@@ -49,6 +52,7 @@ interface SessionSummary {
 
 interface PracticePlannerListProps {
   sessions: SessionSummary[];
+  teamId: string;
   isAdmin: boolean;
   teamName: string;
 }
@@ -58,6 +62,7 @@ type SortDirection = "asc" | "desc";
 
 export default function PracticePlannerList({
   sessions,
+  teamId,
   isAdmin,
   teamName,
 }: PracticePlannerListProps) {
@@ -67,6 +72,7 @@ export default function PracticePlannerList({
   const [search, setSearch] = useState("");
   const [timeFilter, setTimeFilter] = useState<TimeFilter>("upcoming");
   const [sortDir, setSortDir] = useState<SortDirection>("asc");
+  const [duplicating, setDuplicating] = useState<SessionSummary | null>(null);
 
   const now = useMemo(() => new Date(), []);
 
@@ -266,9 +272,20 @@ export default function PracticePlannerList({
               isUpcoming={isUpcoming(session.date)}
               formatDate={formatDate}
               formatTime={formatTime}
+              isAdmin={isAdmin}
+              onDuplicate={setDuplicating}
             />
           ))}
         </Box>
+      )}
+      {duplicating && (
+        <DuplicateSessionDialog
+          open
+          sessionId={duplicating.id}
+          teamId={teamId}
+          sourceDate={duplicating.date}
+          onClose={() => setDuplicating(null)}
+        />
       )}
     </>
   );
@@ -279,11 +296,15 @@ function SessionCard({
   isUpcoming,
   formatDate,
   formatTime,
+  isAdmin,
+  onDuplicate,
 }: {
   session: SessionSummary;
   isUpcoming: boolean;
   formatDate: (iso: string) => string;
   formatTime: (iso: string) => string;
+  isAdmin: boolean;
+  onDuplicate: (session: SessionSummary) => void;
 }) {
   return (
     <Card
@@ -407,6 +428,18 @@ function SessionCard({
           </Stack>
         </CardContent>
       </CardActionArea>
+      {isAdmin && (
+        <CardActions sx={{ justifyContent: "flex-end", pt: 0 }}>
+          <Button
+            size="small"
+            startIcon={<ContentCopyIcon />}
+            onClick={() => onDuplicate(session)}
+            sx={{ minHeight: 44 }}
+          >
+            Duplicate
+          </Button>
+        </CardActions>
+      )}
     </Card>
   );
 }

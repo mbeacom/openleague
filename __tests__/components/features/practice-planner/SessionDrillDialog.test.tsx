@@ -97,4 +97,20 @@ describe("SessionDrillDialog", () => {
         await expect(captured.props?.onSave?.(saved)).rejects.toThrow("Invalid play data");
         expect(onSaved).not.toHaveBeenCalled();
     });
+    it("keeps the session save when the library copy fails, then retries the copy on the next save", async () => {
+        actions.copySessionDrillToLibrary
+            .mockResolvedValueOnce({ success: false, error: "Library unavailable" })
+            .mockResolvedValueOnce({ success: true, data: { playId: "clibcopyxxxxxxxxxxxxxxxxx" } });
+        const { onSaved } = renderDialog(LIB);
+        fireEvent.click(screen.getByLabelText("Also add to library"));
+
+        await expect(captured.props?.onSave?.(saved)).rejects.toThrow(
+            "Saved to this session, but not added to the library: Library unavailable",
+        );
+        expect(onSaved).toHaveBeenCalledTimes(1);
+
+        await saveFromEditor();
+        expect(actions.copySessionDrillToLibrary).toHaveBeenCalledTimes(2);
+        expect(actions.copySessionDrillToLibrary).toHaveBeenLastCalledWith({ playId: OWNED, teamId: TEAM });
+    });
 });
