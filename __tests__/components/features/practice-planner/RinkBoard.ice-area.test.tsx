@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from "vite
 import { render, fireEvent, act } from "@testing-library/react";
 import { RinkBoard, type RinkBoardHandle, type RinkBoardProps } from "@/components/features/practice-planner/RinkBoard";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
-import { createTransformContext, rinkToCanvas } from "@/lib/utils/canvas/rink-renderer";
+import { createTransformContext, FULL_RINK, rinkToCanvas } from "@/lib/utils/canvas/rink-renderer";
 import { editViewport } from "@/lib/utils/ice-area";
 import type { IceArea, PlayData } from "@/types/practice-planner";
 
@@ -173,5 +173,116 @@ describe("RinkBoard ice area", () => {
         const cleared = onPlayDataChange.mock.calls.at(-1)![0];
         expect(cleared.equipment).toHaveLength(0);
         expect(cleared.area).toEqual({ kind: "zone-left" });
+    });
+
+    it("draws a snapped custom area over the whole rink with the area tool", () => {
+        const onAreaDrawn = vi.fn();
+        const { canvas, onPlayDataChange } = setup({
+            playData: { ...createEmptyPlayData(), area: { kind: "zone-left" } },
+            selectedTool: "player",
+            areaTool: true,
+            onAreaDrawn,
+        });
+        // The area tool shows the whole rink, whatever the current area.
+        const full = createTransformContext(800, 400, 20, FULL_RINK);
+        const atFull = (x: number, y: number) => {
+            const p = rinkToCanvas({ x, y }, full);
+            return { clientX: p.x, clientY: p.y };
+        };
+        fireEvent.mouseDown(canvas, atFull(122, 33));
+        fireEvent.mouseMove(canvas, atFull(148, 61));
+        fireEvent.mouseUp(canvas);
+
+        expect(onPlayDataChange).toHaveBeenCalledTimes(1);
+        const drawn = onPlayDataChange.mock.calls[0][0];
+        expect(drawn.area).toEqual({ kind: "custom", rect: { x: 120, y: 35, w: 30, h: 25 } });
+        expect(drawn.players).toHaveLength(0);
+        expect(onAreaDrawn).toHaveBeenCalledTimes(1);
+    });
+
+    it("finishes an area drag released outside the canvas", () => {
+        const onAreaDrawn = vi.fn();
+        const { canvas, onPlayDataChange } = setup({ areaTool: true, onAreaDrawn });
+        const full = createTransformContext(800, 400, 20, FULL_RINK);
+        const start = rinkToCanvas({ x: 10, y: 10 }, full);
+        const end = rinkToCanvas({ x: 16, y: 18 }, full); // a real drag, still under the 20 ft minimum
+        fireEvent.mouseDown(canvas, { clientX: start.x, clientY: start.y });
+        fireEvent.mouseMove(canvas, { clientX: end.x, clientY: end.y });
+        fireEvent.mouseUp(window);
+        expect(onPlayDataChange).toHaveBeenCalledTimes(1);
+        expect(onPlayDataChange.mock.calls[0][0].area).toEqual({ kind: "custom", rect: { x: 10, y: 10, w: 20, h: 20 } });
+        expect(onAreaDrawn).toHaveBeenCalledTimes(1);
+    });
+
+    it("records nothing for an area-tool click (no drag)", () => {
+        const onAreaDrawn = vi.fn();
+        const { canvas, onPlayDataChange } = setup({ areaTool: true, onAreaDrawn });
+        const full = createTransformContext(800, 400, 20, FULL_RINK);
+        const start = rinkToCanvas({ x: 40, y: 40 }, full);
+        const jitter = rinkToCanvas({ x: 40.5, y: 40.5 }, full); // under 1 ft in both axes
+        fireEvent.mouseDown(canvas, { clientX: start.x, clientY: start.y });
+        fireEvent.mouseMove(canvas, { clientX: jitter.x, clientY: jitter.y });
+        fireEvent.mouseUp(canvas);
+        fireEvent.mouseDown(canvas, { clientX: start.x, clientY: start.y });
+        fireEvent.mouseUp(window);
+        expect(onPlayDataChange).not.toHaveBeenCalled();
+        expect(onAreaDrawn).not.toHaveBeenCalled();
+    });
+
+    it("resets pinch-zoom and pan when the viewport changes", () => {
+        const { canvas, ref, onPlayDataChange, rerender } = setup({ selectedTool: "player" });
+        // Pinch to 2x around an off-center point, which also pans.
+        fireEvent.touchStart(canvas, { touches: [{ clientX: 300, clientY: 200 }, { clientX: 400, clientY: 200 }] });
+        fireEvent.touchMove(canvas, { touches: [{ clientX: 300, clientY: 200 }, { clientX: 500, clientY: 200 }] });
+        fireEvent.touchEnd(canvas, { touches: [] });
+        act(() => ref.current!.setArea({ kind: "zone-left" }));
+        const zoned: PlayData = onPlayDataChange.mock.calls.at(-1)![0];
+        rerender(
+            <RinkBoard ref={ref} mode="edit" width={800} height={400} selectedTool="player"
+                playData={zoned} onPlayDataChange={onPlayDataChange} />
+        );
+        const zone = createTransformContext(800, 400, 20, editViewport({ kind: "zone-left" }));
+        const p = rinkToCanvas({ x: 40, y: 50 }, zone);
+        fireEvent.mouseDown(canvas, { clientX: p.x, clientY: p.y });
+        const placed = onPlayDataChange.mock.calls.at(-1)![0].players[0].position;
+        expect(placed.x).toBeCloseTo(40, 6);
+        expect(placed.y).toBeCloseTo(50, 6);
+    });
+
+    it("follows the viewport back to the whole rink on undo", () => {
+        const { canvas, ref, onPlayDataChange, rerender } = setup({ selectedTool: "player" });
+        const board = (data: PlayData) => (
+            <RinkBoard ref={ref} mode="edit" width={800} height={400} selectedTool="player"
+                playData={data} onPlayDataChange={onPlayDataChange} />
+        );
+        act(() => ref.current!.setArea({ kind: "zone-left" }));
+        rerender(board(onPlayDataChange.mock.calls.at(-1)![0]));
+        act(() => ref.current!.undo());
+        const restored: PlayData = onPlayDataChange.mock.calls.at(-1)![0];
+        expect("area" in restored).toBe(false);
+        rerender(board(restored));
+        const full = createTransformContext(800, 400, 20, FULL_RINK);
+        const p = rinkToCanvas({ x: 150, y: 40 }, full);
+        fireEvent.mouseDown(canvas, { clientX: p.x, clientY: p.y });
+        const placed = onPlayDataChange.mock.calls.at(-1)![0].players[0].position;
+        expect(placed.x).toBeCloseTo(150, 6);
+        expect(placed.y).toBeCloseTo(40, 6);
+    });
+
+    it("clamps mid-stroke points to the area", () => {
+        const { canvas, at, onPlayDataChange } = setup({
+            playData: { ...createEmptyPlayData(), area: { kind: "zone-left" } },
+            selectedTool: "stroke",
+            strokeOptions: { action: "skate", path: "freehand", end: "arrow" },
+        });
+        fireEvent.mouseDown(canvas, at(40, 40));
+        fireEvent.mouseMove(canvas, at(60, 40));
+        fireEvent.mouseMove(canvas, at(79, 20)); // in the 5 ft margin, outside the area
+        fireEvent.mouseMove(canvas, at(79, 60));
+        fireEvent.mouseUp(canvas);
+        const points: { x: number; y: number }[] = onPlayDataChange.mock.calls[0][0].drawings[0].points;
+        expect(points.length).toBeGreaterThan(2);
+        expect(Math.max(...points.map((pt) => pt.x))).toBeCloseTo(75, 6);
+        expect(points.at(-1)!.x).toBeCloseTo(75, 6);
     });
 });

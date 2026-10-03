@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { findElement, updateElement, removeElement, moveElement, placePlayer, placeEquipment, finishStroke, limitMessage, rectFromDrag } from "@/lib/utils/canvas/element-ops";
+import { findElement, updateElement, removeElement, moveElement, placePlayer, placeEquipment, finishStroke, limitMessage, rectFromDrag, isAreaClick } from "@/lib/utils/canvas/element-ops";
 import { ROLE_DEFAULT_COLORS } from "@/lib/utils/canvas/notation";
 import { createEmptyPlayData, iceAreaSchema } from "@/lib/utils/play-data";
 import { VALIDATION_CONSTRAINTS, type PlayData } from "@/types/practice-planner";
@@ -138,5 +138,17 @@ describe("rectFromDrag", () => {
                 expect(iceAreaSchema.safeParse({ kind: "custom", rect }).success).toBe(true);
             }
         }
+    });
+});
+
+describe("isAreaClick", () => {
+    it("treats a release under 1 ft from the press in both axes as a click", () => {
+        expect(isAreaClick({ x: 40, y: 40 }, { x: 40, y: 40 })).toBe(true);
+        expect(isAreaClick({ x: 40, y: 40 }, { x: 40.9, y: 39.1 })).toBe(true);
+    });
+
+    it("treats 1 ft or more in either axis as a drag", () => {
+        expect(isAreaClick({ x: 40, y: 40 }, { x: 41, y: 40 })).toBe(false);
+        expect(isAreaClick({ x: 40, y: 40 }, { x: 40, y: 38.5 })).toBe(false);
     });
 });

@@ -189,3 +189,14 @@ export function rectFromDrag(
     const [y0, y1] = snappedSpan(start.y, end.y, snapFt, minFt, RINK_HEIGHT_FT);
     return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
 }
+
+/** An area-tool press released under this far from where it started, in both axes, is a click. */
+const AREA_CLICK_FT = 1;
+
+/**
+ * True when an area-tool gesture from `start` to `end` (rink feet) is a click,
+ * not a drag: it moved less than 1 ft in both axes. A click records no area.
+ */
+export function isAreaClick(start: Position, end: Position): boolean {
+    return Math.abs(end.x - start.x) < AREA_CLICK_FT && Math.abs(end.y - start.y) < AREA_CLICK_FT;
+}

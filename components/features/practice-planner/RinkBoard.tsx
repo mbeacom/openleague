@@ -25,7 +25,6 @@ import {
     createTransformContext,
     FULL_RINK,
     TransformContext,
-    rinkToCanvas,
     screenToRink,
 } from "@/lib/utils/canvas/rink-renderer";
 import { drawBoardScene, drawStroke } from "@/lib/utils/canvas/drawing-utils";
@@ -34,10 +33,12 @@ import { areaRect, editViewport, withArea } from "@/lib/utils/ice-area";
 import {
     findElement,
     finishStroke,
+    isAreaClick,
     limitMessage,
     moveElement,
     placeEquipment,
     placePlayer,
+    rectFromDrag,
     removeElement,
     updateElement as applyElementPatch,
     type ElementPatch,
@@ -72,6 +73,10 @@ export interface RinkBoardProps {
     onSelectionChange?: (id: string | null) => void;
     /** Fires with a user-facing message when an add is blocked by a play limit */
     onLimitReached?: (message: string) => void;
+    /** While true, a drag draws the drill's custom ice area over the whole rink */
+    areaTool?: boolean;
+    /** Fires once each time the area tool finishes a rectangle */
+    onAreaDrawn?: () => void;
 }
 
 /**
@@ -129,6 +134,8 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         equipmentKind = "cone",
         onSelectionChange,
         onLimitReached,
+        areaTool = false,
+        onAreaDrawn,
     },
     ref
 ) {
@@ -148,6 +155,9 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
 
     // Temporary drag position state (for visual feedback during drag, committed on mouseUp)
     const [dragPreviewPosition, setDragPreviewPosition] = useState<Position | null>(null);
+
+    // Area-tool drag in progress (rink feet, clamped to the rink)
+    const [areaDrag, setAreaDrag] = useState<{ start: Position; end: Position } | null>(null);
 
     // Touch interaction state
     const [touchStartDistance, setTouchStartDistance] = useState<number | null>(null);
@@ -237,10 +247,11 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
 
     /**
      * Viewport: in edit mode, the drill's ice area plus a 5 ft margin (the
-     * whole rink for full ice); in view mode, always the whole rink. Keyed on
-     * the four numbers, not the area object, which is new on every edit.
+     * whole rink for full ice); in view mode, and while the area tool is on,
+     * always the whole rink. Keyed on the four numbers, not the area object,
+     * which is new on every edit.
      */
-    const viewport = mode === "edit" ? editViewport(playData.area) : FULL_RINK;
+    const viewport = mode === "edit" && !areaTool ? editViewport(playData.area) : FULL_RINK;
     const { x: viewX, y: viewY, w: viewW, h: viewH } = viewport;
     useEffect(() => {
         setTransform(
@@ -285,7 +296,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         drawBoardScene(ctx, transform, renderData, {
             selectedId: selectedElementId || undefined,
             zoom: scale,
-            maskRect: areaRect(playData.area),
+            maskRect: areaDrag ? rectFromDrag(areaDrag.start, areaDrag.end) : areaRect(playData.area),
         });
 
         // Draw current stroke in progress
@@ -306,6 +317,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         selectedColor,
         strokeOptions,
         scale,
+        areaDrag,
     ]);
 
     /**
@@ -444,10 +456,11 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
     }, [playData, selectedElementId]);
     useEffect(() => { onSelectionChange?.(selectedElementId); }, [selectedElementId, onSelectionChange]);
     useEffect(() => {
-        if (selectedTool !== "select") setSelectedElementId(null);
+        if (selectedTool !== "select" || areaTool) setSelectedElementId(null);
         setIsDrawing(false);
         setCurrentDrawingPoints([]);
-    }, [selectedTool]);
+        setAreaDrag(null);
+    }, [selectedTool, areaTool]);
 
     /** Hit radius in feet that stays MIN_HIT_RADIUS_PX on screen at any zoom */
     const minHitRadiusFt = useCallback(
@@ -486,6 +499,12 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
             // Anything placed is clamped to the area.
             const hitPos = clampToRect(rinkPos, FULL_RINK);
             const clampedPos = clampToRect(rinkPos, areaRect(playData.area));
+
+            if (areaTool) {
+                // The area tool works over the whole rink, whatever the current area
+                setAreaDrag({ start: hitPos, end: hitPos });
+                return;
+            }
 
             // Handle different tools
             switch (selectedTool) {
@@ -579,6 +598,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         [
             mode,
             transform,
+            areaTool,
             selectedTool,
             selectedColor,
             playData,
@@ -609,6 +629,11 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
 
             const area = areaRect(playDataRef.current.area);
 
+            if (areaDrag) {
+                setAreaDrag({ start: areaDrag.start, end: clampToRect(rinkPos, FULL_RINK) });
+                return;
+            }
+
             // Continue drawing if in drawing mode; stroke points stay in the area
             if (isDrawing && selectedTool === "stroke") {
                 setCurrentDrawingPoints((prev) => [...prev, clampToRect(rinkPos, area)]);
@@ -622,7 +647,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
                 setDragPreviewPosition(dragTarget(clampToRect(rinkPos, FULL_RINK), dragOffsetRef.current, area));
             }
         },
-        [mode, transform, isDrawing, selectedTool, getTransformedRinkPosition]
+        [mode, transform, isDrawing, selectedTool, areaDrag, getTransformedRinkPosition]
     );
 
     /**
@@ -631,10 +656,22 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
      *
      * Commits drag changes to playData on mouseUp (performance optimization).
      * During drag, only the preview position is updated for visual feedback.
+     * An area-tool drag commits the custom area (undoable) and reports it;
+     * a click (under 1 ft in both axes) records nothing and leaves the tool on.
      */
     const handleMouseUp = useCallback(
         () => {
             if (mode === "view" || !transform) return;
+
+            if (areaDrag) {
+                setAreaDrag(null);
+                if (isAreaClick(areaDrag.start, areaDrag.end)) return;
+                const current = playDataRef.current;
+                const next = withArea(current, { kind: "custom", rect: rectFromDrag(areaDrag.start, areaDrag.end) });
+                if (next !== current) updatePlayData(next);
+                onAreaDrawn?.();
+                return;
+            }
 
             // Finish drawing (taps shorter than 1 ft come back unchanged and are dropped)
             if (isDrawing && selectedTool === "stroke") {
@@ -663,6 +700,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         [
             mode,
             transform,
+            areaDrag,
             isDrawing,
             isDragging,
             selectedElementId,
@@ -673,25 +711,26 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
             strokeOptions,
             playData,
             onLimitReached,
+            onAreaDrawn,
             updatePlayData,
             generateId,
         ]
     );
 
     /**
-     * A drag or stroke released outside the canvas ends the same way a canvas
+     * A drag, stroke or area drag released outside the canvas ends the same way a canvas
      * release does. Releases on the canvas are left to its own handler (they
      * also bubble here, before React has re-rendered).
      */
     useEffect(() => {
-        if (!isDragging && !isDrawing) return;
+        if (!isDragging && !isDrawing && !areaDrag) return;
         const onWindowMouseUp = (event: MouseEvent) => {
             if (event.target instanceof Node && canvasRef.current?.contains(event.target)) return;
             handleMouseUp();
         };
         window.addEventListener("mouseup", onWindowMouseUp);
         return () => window.removeEventListener("mouseup", onWindowMouseUp);
-    }, [isDragging, isDrawing, handleMouseUp]);
+    }, [isDragging, isDrawing, areaDrag, handleMouseUp]);
 
     /**
      * Handle keyboard delete key for selected elements

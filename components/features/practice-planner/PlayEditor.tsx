@@ -9,7 +9,7 @@
  * Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 4.1
  */
 
-import React, { useState, useRef, useCallback, useEffect } from "react";
+import React, { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import {
     Box,
     Paper,
@@ -19,9 +19,14 @@ import {
     CircularProgress,
     Alert,
     Checkbox,
+    FormControl,
     FormControlLabel,
+    InputLabel,
+    MenuItem,
+    Select,
     Stack,
     Snackbar,
+    type SelectChangeEvent,
 } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
@@ -32,7 +37,18 @@ import { PlayLegend } from "./PlayLegend";
 import { DrawingToolbar } from "./DrawingToolbar";
 import { ElementInspector } from "./ElementInspector";
 import { findElement } from "@/lib/utils/canvas/element-ops";
-import { PlayData, DrawingTool, SavedPlay, PlayerRole, StrokeOptions, EquipmentKind } from "@/types/practice-planner";
+import {
+    ICE_AREA_PRESETS,
+    type DrawingTool,
+    type EquipmentKind,
+    type IceAreaPreset,
+    type PlayData,
+    type PlayerRole,
+    type SavedPlay,
+    type StrokeOptions,
+} from "@/types/practice-planner";
+import { areaRect, countElementsOutside, isFullIce } from "@/lib/utils/ice-area";
+import { ICE_AREA_LABELS } from "@/lib/utils/canvas/notation";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import { generateThumbnail } from "@/lib/utils/canvas/thumbnail-generator";
 
@@ -54,6 +70,13 @@ export interface PlayEditorProps {
     onCancel?: () => void;
     /** Fires whenever the unsaved-changes flag flips, so a host can guard closing. */
     onDirtyChange?: (dirty: boolean) => void;
+}
+
+type IceAreaChoice = IceAreaPreset | "custom";
+
+/** Inline flag for elements outside the drill's ice area. */
+export function outsideAreaMessage(count: number): string {
+    return count === 1 ? "1 element is outside the ice area." : `${count} elements are outside the ice area.`;
 }
 
 /**
@@ -96,6 +119,25 @@ export function PlayEditor({
     const [limitNotice, setLimitNotice] = useState<string | null>(null);
     const [canUndo, setCanUndo] = useState(false);
     const [canRedo, setCanRedo] = useState(false);
+
+    // Ice area (2a): the custom-area tool stays on until one rectangle is drawn or it is cancelled
+    const [areaTool, setAreaTool] = useState(false);
+    const areaChoice: IceAreaChoice = playData.area?.kind ?? "full";
+    const outsideCount = useMemo(
+        () => (isFullIce(playData.area) ? 0 : countElementsOutside(playData, areaRect(playData.area))),
+        [playData]
+    );
+    const handleAreaChange = (event: SelectChangeEvent<IceAreaChoice>) => {
+        const value = event.target.value as IceAreaChoice;
+        if (value === "custom") {
+            setAreaTool(true);
+            return;
+        }
+        setAreaTool(false);
+        // Through the board so the change is undoable; full ice removes the key
+        rinkBoardRef.current?.setArea(value === "full" ? undefined : { kind: value });
+    };
+    const handleAreaDrawn = useCallback(() => setAreaTool(false), []);
 
     // Save state
     const [isSaving, setIsSaving] = useState(false);
@@ -335,6 +377,32 @@ export function PlayEditor({
                         helperText={`${description.length}/500 characters`}
                     />
 
+                    {/* Ice area (2a) */}
+                    <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems={{ sm: "center" }}>
+                        <FormControl sx={{ minWidth: 220 }}>
+                            <InputLabel id="play-ice-area-label">Ice area</InputLabel>
+                            <Select<IceAreaChoice>
+                                labelId="play-ice-area-label"
+                                id="play-ice-area"
+                                label="Ice area"
+                                value={areaTool ? "custom" : areaChoice}
+                                onChange={handleAreaChange}
+                            >
+                                {ICE_AREA_PRESETS.map((preset) => (
+                                    <MenuItem key={preset} value={preset}>
+                                        {ICE_AREA_LABELS[preset]}
+                                    </MenuItem>
+                                ))}
+                                <MenuItem value="custom">Custom area…</MenuItem>
+                            </Select>
+                        </FormControl>
+                        {areaChoice === "custom" && !areaTool && (
+                            <Button variant="text" onClick={() => setAreaTool(true)} sx={{ minHeight: 44 }}>
+                                Redraw custom area
+                            </Button>
+                        )}
+                    </Stack>
+
                     {/* Save to Library Checkbox */}
                     {/* Requirements: 4.1 */}
                     {!lockTemplate && (
@@ -375,6 +443,25 @@ export function PlayEditor({
             {/* Rink Board */}
             {/* Requirements: 1.1, 1.2, 1.3, 1.4 */}
             <Paper elevation={2} sx={{ p: 2 }}>
+                {areaTool && (
+                    <Alert
+                        severity="info"
+                        role="status"
+                        sx={{ mb: 2 }}
+                        action={
+                            <Button color="inherit" size="small" onClick={() => setAreaTool(false)} sx={{ minHeight: 44 }}>
+                                Cancel
+                            </Button>
+                        }
+                    >
+                        Drag on the rink to draw the ice area.
+                    </Alert>
+                )}
+                {outsideCount > 0 && (
+                    <Alert severity="info" role="status" sx={{ mb: 2 }}>
+                        {outsideAreaMessage(outsideCount)}
+                    </Alert>
+                )}
                 <RinkBoardErrorBoundary height={isMobile ? 400 : 600}>
                     <RinkBoard
                         ref={rinkBoardRef}
@@ -389,6 +476,8 @@ export function PlayEditor({
                         equipmentKind={equipmentKind}
                         onSelectionChange={setSelectedElementId}
                         onLimitReached={setLimitNotice}
+                        areaTool={areaTool}
+                        onAreaDrawn={handleAreaDrawn}
                         height={isMobile ? 400 : 600}
                     />
                 </RinkBoardErrorBoundary>
