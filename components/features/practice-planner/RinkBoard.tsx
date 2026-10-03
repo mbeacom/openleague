@@ -271,8 +271,10 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         );
     }, [canvasSize, viewX, viewY, viewW, viewH]);
 
-    // A new viewport starts unzoomed: a pinch-zoom/pan made for the old one would misframe it.
+    // A new viewport starts unzoomed: a pinch-zoom/pan made for the old one would
+    // misframe it. A pinch in progress ends too, or its next move would re-apply it.
     useEffect(() => {
+        pinchStartRef.current = null;
         setScale(1);
         setPanOffset({ x: 0, y: 0 });
     }, [viewX, viewY, viewW, viewH]);

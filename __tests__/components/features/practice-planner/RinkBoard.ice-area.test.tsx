@@ -363,6 +363,27 @@ describe("RinkBoard ice area", () => {
         expect(placed.y).toBeCloseTo(50, 6);
     });
 
+    it("ends a pinch in progress when the viewport changes, so its next move can't re-zoom the new one", () => {
+        const { canvas, ref, onPlayDataChange, rerender } = setup({ selectedTool: "player" });
+        fireEvent.touchStart(canvas, { touches: [{ clientX: 300, clientY: 200 }, { clientX: 400, clientY: 200 }] });
+        fireEvent.touchMove(canvas, { touches: [{ clientX: 300, clientY: 200 }, { clientX: 500, clientY: 200 }] });
+        // The area changes mid-pinch (the fingers are still down).
+        act(() => ref.current!.setArea({ kind: "zone-left" }));
+        const zoned: PlayData = onPlayDataChange.mock.calls.at(-1)![0];
+        rerender(
+            <RinkBoard ref={ref} mode="edit" width={800} height={400} selectedTool="player"
+                playData={zoned} onPlayDataChange={onPlayDataChange} />
+        );
+        fireEvent.touchMove(canvas, { touches: [{ clientX: 300, clientY: 200 }, { clientX: 520, clientY: 200 }] });
+        fireEvent.touchEnd(canvas, { touches: [] });
+        const zone = createTransformContext(800, 400, 20, editViewport({ kind: "zone-left" }));
+        const p = rinkToCanvas({ x: 40, y: 50 }, zone);
+        fireEvent.mouseDown(canvas, { clientX: p.x, clientY: p.y });
+        const placed = onPlayDataChange.mock.calls.at(-1)![0].players[0].position;
+        expect(placed.x).toBeCloseTo(40, 6);
+        expect(placed.y).toBeCloseTo(50, 6);
+    });
+
     it("follows the viewport back to the whole rink on undo", () => {
         const { canvas, ref, onPlayDataChange, rerender } = setup({ selectedTool: "player" });
         const board = (data: PlayData) => (
