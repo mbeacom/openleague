@@ -164,6 +164,45 @@ describe("updatePracticeSession with stations (2b)", () => {
     });
 });
 
+describe("updatePracticeSession rejects an invalid station timeline before any write (2b)", () => {
+    function expectNoWrites() {
+        expect(models.practiceSessionPlay.deleteMany).not.toHaveBeenCalled();
+        expect(models.practiceSessionPlay.createMany).not.toHaveBeenCalled();
+        expect(models.play.deleteMany).not.toHaveBeenCalled();
+        expect(models.play.createManyAndReturn).not.toHaveBeenCalled();
+        expect(models.practiceSession.update).not.toHaveBeenCalled();
+    }
+
+    it("rejects a first drill (by sequence) that runs with a previous one", async () => {
+        const result = await updatePracticeSession({ id: SESSION, ...input(60, [
+            { sequence: 1, runsWithPrevious: false },
+            { sequence: 0, runsWithPrevious: true },
+        ]) });
+
+        expect(result).toEqual({ success: false, error: FIRST_DRILL_STATION_ERROR });
+        expectNoWrites();
+    });
+
+    it("rejects a five-drill block", async () => {
+        const five: Drill[] = [{}, ...Array.from({ length: 4 }, () => ({ runsWithPrevious: true }))];
+        const result = await updatePracticeSession({ id: SESSION, ...input(60, five) });
+
+        expect(result).toEqual({ success: false, error: STATION_GROUP_CAP_ERROR });
+        expectNoWrites();
+    });
+
+    it("rejects a station block whose wall time (its longest drill) exceeds the session", async () => {
+        const result = await updatePracticeSession({ id: SESSION, ...input(20, [
+            { duration: 10 },
+            { duration: 25, runsWithPrevious: true },
+            { duration: 5, runsWithPrevious: true },
+        ]) });
+
+        expect(result).toEqual({ success: false, error: "Practice timeline (25 min) exceeds session duration (20 min)" });
+        expectNoWrites();
+    });
+});
+
 describe("getPracticeSessionById (2b)", () => {
     it("reads each drill's station flag and the booked segment's kind", async () => {
         models.practiceSession.findUnique.mockResolvedValue({

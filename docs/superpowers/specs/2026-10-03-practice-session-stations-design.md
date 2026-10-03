@@ -15,7 +15,7 @@ A practice session is a strictly sequential list of drills:
 
 - `PracticeSessionPlay` has `sequence`, `duration`, `instructions` and `playId`, with `@@unique([sessionId, sequence])`.
 - The server requires `sequence` to be unique and consecutive from 0 (`validatePlaySequence`).
-- The server also requires the sum of drill durations to be at most the session duration (`validateTotalDuration`).
+- The server also required (before 2b) the sum of drill durations to be at most the session duration (`validateTotalDuration`).
 
 Real practices often run **stations**: for example, three drills at once, each in its own zone, with players rotating. Under the sum rule, three 15-minute stations count as 45 minutes, so a 20-minute block of stations can't be saved.
 
@@ -162,9 +162,11 @@ Rules:
 - **PracticeSessionEditor (≤ 900 lines; put new logic in `SessionDrillList`, `SessionDrillCard` or a small hook):**
   - `PlayInSession` gains `runsWithPrevious: boolean`.
   - Every card after the first gets a "Run as a station with the previous drill" switch.
-    - It is disabled when it would exceed 4, with the tooltip `A station block holds at most 4 drills`.
+    - It is disabled when it would exceed 4. The reason, `A station block holds at most 4 drills`, shows as visible helper text and is linked to the switch with `aria-describedby` (a tooltip on a disabled switch can't be reached by keyboard or screen reader).
     - It has a 44px touch target.
-  - Grouped cards render inside one outlined block, "Stations · N · M min", with the warnings shown inline.
+    - Every switch shares one label, so it is also described by its drill's name.
+  - Grouped cards are marked as one block, "Stations · N · M min", with the warnings shown inline.
+    - **Flat list (final review, I1):** the list renders as one flat array in a single parent, every card keyed by its clientKey. The block header (with its warnings) is a keyed sibling, not a wrapper, and grouped cards get a left border and tint. A wrapper would remount a card whenever it joined, left or started a block, dropping keyboard focus from the switch just pressed and resetting a sibling's inline-edit draft. Grouped cards point at their header with `aria-describedby` instead of sitting in a `role="group"`.
   - Move up/down and delete use the `session-timeline` helpers.
   - The duration summary uses `sessionWallMinutes`. The editor keeps its `Total Play Time: X minutes` and `Total play time (X min) exceeds session duration (Y min)` copy, where X is now wall time. For sequential sessions the numbers are unchanged.
   - Overlap warning: `Stations A and B overlap on the ice` (A and B are 1-based positions inside the block).
@@ -190,6 +192,7 @@ Rules:
 - The client prevents an invalid group structure: the switch refuses past the cap and never appears on the first drill. A wall time over the session duration is warned inline in the editor and rejected by the server, with its message shown on save. It is not blocked before the request, because `validateForm` can only show a generic message and autosave would become a silent no-op.
 - Warnings never block.
 - If a drill in a group can't be read (`playData` is null), its station is outlined over the whole rink with the "This play's diagram couldn't be read." message, and the map still renders. Such a drill is skipped by the overlap and fit warnings.
+- **Unreadable drills in the editor (final review, M1):** the edit loader still gives an unreadable drill an empty board, but flags it `playDataUnreadable: true` on `PlayInSession`. The editor passes `area: null` for it to `stationWarnings`, so it is skipped rather than read as full ice (an empty board has no `area`). Saving a fresh diagram from the drill dialog clears the flag.
 
 ## Testing
 
@@ -208,7 +211,7 @@ Rules:
   - Warnings.
   - Moves within and across groups.
   - The detail view shows the station map for grouped drills.
-- **`StationMap`** (mocked context): one clip region per station, plus labels.
+- **`StationMap`** (mocked context): two clip regions per station (drawing, label), active outline drawn last.
 - **Migration:** applies on a migrated database (CI, ADR-0019).
 - **Gates:** `bun run type-check`, `lint`, `test`, `build`.
 
