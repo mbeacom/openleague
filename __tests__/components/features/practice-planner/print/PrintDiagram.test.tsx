@@ -74,6 +74,16 @@ describe("PrintDiagram", () => {
         expect(onReady).toHaveBeenCalledTimes(1);
     });
 
+    it("treats an image that fails to decode as unavailable, and reports ready once", () => {
+        vi.spyOn(console, "warn").mockImplementation(() => {});
+        const onReady = vi.fn();
+        render(wrap(<PrintDiagram playData={createEmptyPlayData()} name="Breakout" onReady={onReady} />));
+        fireEvent.error(screen.getByRole("img", { name: "Diagram: Breakout" }));
+        expect(screen.queryByRole("img", { name: "Diagram: Breakout" })).not.toBeInTheDocument();
+        expect(screen.getByText("Diagram unavailable")).toBeInTheDocument();
+        expect(onReady).toHaveBeenCalledTimes(1);
+    });
+
     it("shows the placeholder for an unreadable drill without rendering", () => {
         render(wrap(<PrintDiagram playData={null} name="Lost" />));
         expect(screen.getByText("Diagram unavailable")).toBeInTheDocument();

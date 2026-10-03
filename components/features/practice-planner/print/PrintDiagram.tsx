@@ -7,9 +7,10 @@
  * long sessions (printPixelRatio) to bound decoded-image memory. It is
  * computed in a memo after mount: there is no canvas on the server, and a memo
  * avoids a setState in an effect. onReady fires once: when the image loads,
- * or when there is no diagram to wait for (unreadable or failed).
+ * or when there is no diagram to wait for (unreadable, failed to render, or an
+ * image that fails to decode, which then shows the unavailable box).
  */
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Box, Typography } from "@mui/material";
 import type { PlayData } from "@/types/practice-planner";
 import { generateThumbnail } from "@/lib/utils/canvas/thumbnail-generator";
@@ -74,13 +75,16 @@ export function PrintDiagram({ playData, name, pixelRatio = PRINT_DIAGRAM_SIZE.p
         () => (mounted && playData ? renderDiagram(playData, name, pixelRatio) : null),
         [mounted, playData, name, pixelRatio]
     );
+    // The src whose <img> failed to decode (e.g. toDataURL gave "data:" under memory pressure).
+    const [brokenSrc, setBrokenSrc] = useState<string | null>(null);
     const reported = useRef(false);
     const report = () => {
         if (reported.current) return;
         reported.current = true;
         onReady?.();
     };
-    const unavailable = !playData || (diagram !== null && "failed" in diagram);
+    const unavailable =
+        !playData || (diagram !== null && ("failed" in diagram || diagram.src === brokenSrc));
 
     useEffect(() => {
         if (!unavailable || reported.current) return;
@@ -102,6 +106,11 @@ export function PrintDiagram({ playData, name, pixelRatio = PRINT_DIAGRAM_SIZE.p
             height={PRINT_DIAGRAM_SIZE.height}
             style={{ width: "100%", height: "auto", display: "block" }}
             onLoad={report}
+            onError={() => {
+                console.warn(`Bench sheet: the diagram image for "${name}" failed to load.`);
+                setBrokenSrc(diagram.src);
+                report();
+            }}
         />
     );
 }

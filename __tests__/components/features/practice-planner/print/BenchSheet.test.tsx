@@ -187,6 +187,18 @@ describe("BenchSheet", () => {
         expect(print).toHaveBeenCalledTimes(1);
     });
 
+    it("enables Print once the other drills are ready when one image fails to decode", () => {
+        vi.spyOn(console, "warn").mockImplementation(() => {});
+        renderSheet();
+        const button = screen.getByRole("button", { name: "Print" });
+        const [broken, ...rest] = screen.getAllByRole("img", { name: /^Diagram: / });
+        fireEvent.error(broken);
+        expect(within(drills()[0]).getByText("Diagram unavailable")).toBeInTheDocument();
+        expect(button).toBeDisabled();
+        rest.forEach((img) => fireEvent.load(img));
+        expect(button).toBeEnabled();
+    });
+
     it("enables Print at once when no drill has a readable diagram", () => {
         renderSheet({ ...SESSION, plays: [sessionPlay("Lost", 0, false, 5, { playData: null })] });
         expect(screen.getByRole("button", { name: "Print" })).toBeEnabled();
