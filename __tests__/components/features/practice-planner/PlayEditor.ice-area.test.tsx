@@ -6,6 +6,7 @@
 import React, { forwardRef, useImperativeHandle } from "react";
 import { describe, it, expect, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import type { RinkBoardProps } from "@/components/features/practice-planner/RinkBoard";
 import { withArea } from "@/lib/utils/ice-area";
@@ -73,9 +74,11 @@ describe("PlayEditor ice area", () => {
         expect(screen.queryByText(/outside the ice area/)).not.toBeInTheDocument();
     });
 
-    it("turns the area tool on for Custom area… and off once a rectangle is drawn", async () => {
+    it("leaves the drag tool off for Custom area…; Draw area on rink turns it on until a rectangle is drawn", async () => {
         renderEditor();
         await chooseArea("Custom area…");
+        expect(boardProps.current!.areaTool).toBe(false);
+        fireEvent.click(screen.getByRole("button", { name: "Draw area on rink" }));
         expect(boardProps.current!.areaTool).toBe(true);
         expect(screen.getByText("Drag on the rink to draw the ice area.")).toBeInTheDocument();
         act(() => boardProps.current!.onAreaDrawn!());
@@ -86,14 +89,15 @@ describe("PlayEditor ice area", () => {
     it("cancels the area tool and keeps the custom area that Custom area… applied", async () => {
         renderEditor();
         await chooseArea("Custom area…");
+        fireEvent.click(screen.getByRole("button", { name: "Draw area on rink" }));
         fireEvent.click(screen.getByRole("button", { name: "Stop drawing area" }));
         expect(boardProps.current!.areaTool).toBe(false);
         expect(boardProps.current!.playData.area).toEqual({ kind: "custom", rect: { x: 0, y: 0, w: 75, h: 85 } });
     });
 
-    it("offers a redraw for a drill that already has a custom area", () => {
+    it("offers drawing on the rink for a drill that already has a custom area", () => {
         renderEditor({ ...createEmptyPlayData(), area: { kind: "custom", rect: { x: 100, y: 30, w: 20, h: 20 } } });
-        fireEvent.click(screen.getByRole("button", { name: "Redraw custom area" }));
+        fireEvent.click(screen.getByRole("button", { name: "Draw area on rink" }));
         expect(boardProps.current!.areaTool).toBe(true);
     });
 
@@ -161,6 +165,56 @@ describe("PlayEditor ice area", () => {
             // Undo arrives from the board as the previous playData
             act(() => boardProps.current!.onPlayDataChange!(before));
             expect(field("Area left (ft)").value).toBe("100");
+        });
+
+        it("keeps focus moving to the next field on Tab, and applies the edit", async () => {
+            const user = userEvent.setup();
+            renderEditor({ ...createEmptyPlayData(), area: { kind: "custom", rect: { x: 100, y: 30, w: 40, h: 40 } } });
+            await user.click(field("Area left (ft)"));
+            await user.clear(field("Area left (ft)"));
+            await user.type(field("Area left (ft)"), "51");
+            await user.tab();
+            expect(boardProps.current!.playData.area).toEqual({ kind: "custom", rect: { x: 50, y: 30, w: 40, h: 40 } });
+            expect(document.activeElement).toBe(field("Area top (ft)"));
+            expect(field("Area left (ft)").value).toBe("50");
+        });
+
+        it("keeps focus on the field on Enter", async () => {
+            const user = userEvent.setup();
+            renderEditor({ ...createEmptyPlayData(), area: { kind: "custom", rect: { x: 100, y: 30, w: 40, h: 40 } } });
+            await user.click(field("Area width (ft)"));
+            await user.clear(field("Area width (ft)"));
+            await user.type(field("Area width (ft)"), "61{Enter}");
+            expect(boardProps.current!.playData.area).toEqual({ kind: "custom", rect: { x: 100, y: 30, w: 60, h: 40 } });
+            expect(document.activeElement).toBe(field("Area width (ft)"));
+            expect(field("Area width (ft)").value).toBe("60");
+        });
+
+        it("does not commit on blur when nothing was edited (legacy unsnapped data stays as-is)", async () => {
+            const user = userEvent.setup();
+            const onDirtyChange = vi.fn();
+            const rect = { x: 101, y: 31, w: 41, h: 41 };
+            renderEditor({ ...createEmptyPlayData(), area: { kind: "custom", rect } }, onDirtyChange);
+            await user.click(field("Area left (ft)"));
+            await user.tab();
+            await user.tab();
+            await user.tab();
+            await user.tab();
+            expect(boardProps.current!.playData.area).toEqual({ kind: "custom", rect });
+            expect(onDirtyChange).not.toHaveBeenCalledWith(true);
+        });
+
+        it("shows the restored values after an undo", async () => {
+            const user = userEvent.setup();
+            const before: PlayData = { ...createEmptyPlayData(), area: { kind: "custom", rect: { x: 100, y: 30, w: 40, h: 40 } } };
+            renderEditor(before);
+            await user.click(field("Area height (ft)"));
+            await user.clear(field("Area height (ft)"));
+            await user.type(field("Area height (ft)"), "20{Enter}");
+            expect(field("Area height (ft)").value).toBe("20");
+            act(() => boardProps.current!.onPlayDataChange!(before));
+            expect(field("Area height (ft)").value).toBe("40");
+            expect(document.activeElement).toBe(field("Area height (ft)"));
         });
 
         it("gives each field a 44px touch target", () => {

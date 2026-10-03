@@ -133,8 +133,7 @@ export function PlayEditor({
         const value = event.target.value as IceAreaChoice;
         if (value === "custom") {
             // Apply a custom area right away so a keyboard-only choice is savable
-            // as-is; the numeric fields then edit it, and the drag tool redraws it.
-            setAreaTool(true);
+            // as-is; the numeric fields edit it, and "Draw area on rink" redraws it.
             if (playData.area?.kind !== "custom") {
                 const start = areaRect(isFullIce(playData.area) ? { kind: "zone-left" } : playData.area);
                 rinkBoardRef.current?.setArea({ kind: "custom", rect: rectFromFields(start) });
@@ -410,13 +409,12 @@ export function PlayEditor({
                         </FormControl>
                         {areaChoice === "custom" && !areaTool && (
                             <Button variant="text" onClick={() => setAreaTool(true)} sx={{ minHeight: 44 }}>
-                                Redraw custom area
+                                Draw area on rink
                             </Button>
                         )}
                     </Stack>
                     {playData.area?.kind === "custom" && (
                         <CustomAreaFields
-                            key={JSON.stringify(playData.area.rect)}
                             rect={playData.area.rect}
                             onCommit={handleAreaFieldsCommit}
                         />
