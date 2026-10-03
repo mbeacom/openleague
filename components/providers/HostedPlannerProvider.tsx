@@ -4,8 +4,10 @@
  * Hosted implementation of the practice planner's seam (ADR-0020). The store
  * is the server actions themselves (ADR-0002), with no wrapper, so arguments,
  * results, timing and errors are exactly what the components saw before the
- * seam. Typing it as PlannerStore makes tsc prove that the store's inputs are
- * assignable to the actions' inputs.
+ * seam. PlannerStore declares its members as function properties, so under
+ * strictFunctionTypes typing this object as PlannerStore makes tsc prove that
+ * the store's inputs are assignable to the actions' inputs (method syntax would
+ * check parameters bivariantly and prove nothing).
  */
 import type { ReactNode } from "react";
 import { PlannerProvider, type PlannerStore } from "@/lib/planner-store";

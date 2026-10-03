@@ -92,16 +92,16 @@ export interface SessionShare extends SessionRef {
 }
 
 export interface PlannerStore {
-    getPlaysByTeam(input: LibraryQuery): Promise<ActionResult<LibraryPage>>;
-    getPlayById(input: PlayRef): Promise<ActionResult<LibraryPlay>>;
-    createPlay(input: NewLibraryPlay): Promise<ActionResult<{ id: string; name: string; isTemplate: boolean }>>;
-    deletePlay(input: PlayRef): Promise<ActionResult<{ id: string; detachedSessions: number }>>;
-    saveSessionDrill(input: SessionDrillSave): Promise<ActionResult<{ playId: string }>>;
-    copySessionDrillToLibrary(input: SessionDrillRef): Promise<ActionResult<{ playId: string }>>;
-    duplicatePracticeSession(input: SessionCopy): Promise<ActionResult<{ id: string }>>;
-    deletePracticeSession(input: SessionRef): Promise<ActionResult<{ id: string }>>;
+    getPlaysByTeam: (input: LibraryQuery) => Promise<ActionResult<LibraryPage>>;
+    getPlayById: (input: PlayRef) => Promise<ActionResult<LibraryPlay>>;
+    createPlay: (input: NewLibraryPlay) => Promise<ActionResult<{ id: string; name: string; isTemplate: boolean }>>;
+    deletePlay: (input: PlayRef) => Promise<ActionResult<{ id: string; detachedSessions: number }>>;
+    saveSessionDrill: (input: SessionDrillSave) => Promise<ActionResult<{ playId: string }>>;
+    copySessionDrillToLibrary: (input: SessionDrillRef) => Promise<ActionResult<{ playId: string }>>;
+    duplicatePracticeSession: (input: SessionCopy) => Promise<ActionResult<{ id: string }>>;
+    deletePracticeSession: (input: SessionRef) => Promise<ActionResult<{ id: string }>>;
     /** Team sharing is hosted-only. A store without it hides the Share control. */
-    sharePracticeSession?(input: SessionShare): Promise<ActionResult<{ id: string; isShared: boolean }>>;
+    sharePracticeSession?: (input: SessionShare) => Promise<ActionResult<{ id: string; isShared: boolean }>>;
 }
 
 export type PlannerLinkProps = Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "href"> & {
