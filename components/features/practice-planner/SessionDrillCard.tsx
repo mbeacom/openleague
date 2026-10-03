@@ -48,6 +48,8 @@ export interface SessionDrillCardProps {
     canEditDiagram: boolean;
     /** The list is busy (saving or sharing). */
     disabled?: boolean;
+    /** The session is being created: nothing on the card may change. */
+    locked?: boolean;
     onEditDiagram: (clientKey: string) => void;
 }
 
@@ -70,6 +72,7 @@ export function SessionDrillCard({
     onMoveDown,
     canEditDiagram,
     disabled = false,
+    locked = false,
     onEditDiagram,
 }: SessionDrillCardProps) {
     // Local state for editing
@@ -162,6 +165,7 @@ export function SessionDrillCard({
                             value={editDuration}
                             onChange={(e) => setEditDuration(parseInt(e.target.value, 10) || 0)}
                             size="small"
+                            disabled={locked}
                             inputProps={{
                                 min: VALIDATION_CONSTRAINTS.MIN_DURATION,
                                 max: VALIDATION_CONSTRAINTS.MAX_DURATION,
@@ -189,6 +193,7 @@ export function SessionDrillCard({
                             multiline
                             rows={3}
                             size="small"
+                            disabled={locked}
                             fullWidth
                             inputProps={{ maxLength: 2000 }}
                             helperText={`${editInstructions.length}/2000 characters`}
@@ -241,6 +246,7 @@ export function SessionDrillCard({
                                 size="small"
                                 variant="contained"
                                 onClick={handleSaveEdits}
+                                disabled={locked}
                             >
                                 Save
                             </Button>
@@ -256,7 +262,7 @@ export function SessionDrillCard({
                     <IconButton
                         size="small"
                         onClick={() => onMoveUp(index)}
-                        disabled={index === 0}
+                        disabled={locked || index === 0}
                         aria-label={`Move play ${index + 1} up`}
                     >
                         <ArrowUpwardIcon />
@@ -264,7 +270,7 @@ export function SessionDrillCard({
                     <IconButton
                         size="small"
                         onClick={() => onMoveDown(index)}
-                        disabled={index === totalPlays - 1}
+                        disabled={locked || index === totalPlays - 1}
                         aria-label={`Move play ${index + 1} down`}
                     >
                         <ArrowDownwardIcon />
@@ -273,6 +279,7 @@ export function SessionDrillCard({
                         size="small"
                         color="primary"
                         onClick={() => onEdit(play.id)}
+                        disabled={locked}
                         aria-label={`Edit play ${index + 1}`}
                     >
                         <EditIcon />
@@ -281,6 +288,7 @@ export function SessionDrillCard({
                         size="small"
                         color="error"
                         onClick={() => onDelete(play.id)}
+                        disabled={locked}
                         aria-label={`Delete play ${index + 1}`}
                     >
                         <DeleteIcon />

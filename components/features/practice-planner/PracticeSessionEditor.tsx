@@ -486,21 +486,22 @@ export function PracticeSessionEditor({
      * Requirements: 2.2 - Remove plays from session
      */
     const handleDeletePlay = useCallback((playId: string) => {
+        if (creating) return; // A create redirects; this edit would be lost.
         setPlays((prevPlays) =>
             prevPlays
                 .filter((p) => p.id !== playId)
                 .map((play, idx) => ({ ...play, sequence: idx }))
         );
         markDirty();
-    }, [markDirty]);
+    }, [markDirty, creating]);
 
     /**
      * Handle edit play
      * Requirements: 2.4 - Edit play in session
      */
     const handleEditPlay = useCallback((playId: string) => {
-        setEditingPlayId(playId);
-    }, []);
+        if (!creating) setEditingPlayId(playId);
+    }, [creating]);
 
     /**
      * Handle update play in session
@@ -508,6 +509,7 @@ export function PracticeSessionEditor({
      */
     const handleUpdatePlayInSession = useCallback(
         (playId: string, updates: Partial<PlayInSession>) => {
+            if (creating) return;
             setPlays((prevPlays) =>
                 prevPlays.map((play) =>
                     play.id === playId ? { ...play, ...updates } : play
@@ -516,7 +518,7 @@ export function PracticeSessionEditor({
             markDirty();
             setEditingPlayId(null);
         },
-        [markDirty]
+        [markDirty, creating]
     );
 
     /**
@@ -574,7 +576,7 @@ export function PracticeSessionEditor({
      * Requirements: 2.5 - Reorder plays, update sequence numbers
      */
     const handleMovePlayUp = useCallback((index: number) => {
-        if (index === 0) return;
+        if (creating || index === 0) return;
 
         setPlays((prevPlays) => {
             const newPlays = [...prevPlays];
@@ -587,13 +589,14 @@ export function PracticeSessionEditor({
             }));
         });
         markDirty();
-    }, [markDirty]);
+    }, [markDirty, creating]);
 
     /**
      * Handle move play down
      * Requirements: 2.5 - Reorder plays, update sequence numbers
      */
     const handleMovePlayDown = useCallback((index: number) => {
+        if (creating) return;
         setPlays((prevPlays) => {
             if (index === prevPlays.length - 1) return prevPlays;
 
@@ -607,7 +610,7 @@ export function PracticeSessionEditor({
             }));
         });
         markDirty();
-    }, [markDirty]);
+    }, [markDirty, creating]);
 
     // Cleanup success timeout on unmount
     useEffect(() => {
@@ -723,6 +726,7 @@ export function PracticeSessionEditor({
                 duration={duration}
                 editingPlayId={editingPlayId}
                 disabled={busy}
+                locked={creating}
                 onOpenLibrary={handleOpenLibrary}
                 onDelete={handleDeletePlay}
                 onEdit={handleEditPlay}
