@@ -15,7 +15,8 @@ const { mockPrisma, tx } = vi.hoisted(() => {
         tx,
         mockPrisma: {
             $transaction: vi.fn(async (fn: (client: typeof tx) => unknown) => fn(tx)),
-            play: { findUnique: vi.fn(), findMany: vi.fn(), count: vi.fn(), update: tx.play.update },
+            // Distinct from tx.play.*: writes must go through the transaction client.
+            play: { findUnique: vi.fn(), findMany: vi.fn(), count: vi.fn(), update: vi.fn(), delete: vi.fn() },
         },
     };
 });
@@ -29,6 +30,11 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 import { deletePlay, getPlaysByTeam, updatePlay } from "@/lib/actions/plays";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
+
+function expectNoWritesOutsideTransaction() {
+    expect(mockPrisma.play.update).not.toHaveBeenCalled();
+    expect(mockPrisma.play.delete).not.toHaveBeenCalled();
+}
 
 const TEAM = "cteamxxxxxxxxxxxxxxxxxxxx";
 const PLAY = "cplayxxxxxxxxxxxxxxxxxxxx";
@@ -67,6 +73,7 @@ describe("updatePlay detaches sessions before editing a library drill", () => {
         });
         expect(tx.play.update.mock.invocationCallOrder[0])
             .toBeGreaterThan(tx.practiceSessionPlay.updateMany.mock.invocationCallOrder[0]);
+        expectNoWritesOutsideTransaction();
     });
 
     it("refuses to edit a session's private copy from the library", async () => {
@@ -79,6 +86,7 @@ describe("updatePlay detaches sessions before editing a library drill", () => {
         });
         expect(tx.play.update).not.toHaveBeenCalled();
         expect(tx.play.createManyAndReturn).not.toHaveBeenCalled();
+        expectNoWritesOutsideTransaction();
     });
 });
 
@@ -91,6 +99,21 @@ describe("deletePlay detaches, then hard-deletes", () => {
         expect(tx.play.delete).toHaveBeenCalledWith({ where: { id: PLAY } });
         expect(tx.play.delete.mock.invocationCallOrder[0])
             .toBeGreaterThan(tx.practiceSessionPlay.updateMany.mock.invocationCallOrder[0]);
+        expectNoWritesOutsideTransaction();
+    });
+
+    it("refuses to delete a session's private copy before any write", async () => {
+        mockPrisma.play.findUnique.mockResolvedValue({ teamId: TEAM, sessionId: "csessionxxxxxxxxxxxxxxxxx", isTemplate: false });
+        const result = await deletePlay({ id: PLAY, teamId: TEAM });
+
+        expect(result).toEqual({
+            success: false,
+            error: "This drill belongs to a practice session. Remove it from that session.",
+        });
+        expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+        expect(tx.play.delete).not.toHaveBeenCalled();
+        expect(tx.play.createManyAndReturn).not.toHaveBeenCalled();
+        expectNoWritesOutsideTransaction();
     });
 
     it("deletes an unreferenced play directly", async () => {
@@ -99,6 +122,7 @@ describe("deletePlay detaches, then hard-deletes", () => {
         expect(result).toEqual({ success: true, data: { id: PLAY, detachedSessions: 0 } });
         expect(tx.play.createManyAndReturn).not.toHaveBeenCalled();
         expect(tx.play.delete).toHaveBeenCalledWith({ where: { id: PLAY } });
+        expectNoWritesOutsideTransaction();
     });
 
     it("gives each referencing session its own copy (one per session)", async () => {
@@ -120,16 +144,36 @@ describe("deletePlay detaches, then hard-deletes", () => {
     });
 });
 
-describe("only library plays are detached", () => {
-    it("does not detach a non-template play on update or delete", async () => {
+describe("any unowned play is detached, not only templates", () => {
+    // A legacy (pre-3a) unowned non-template play a session still references.
+    beforeEach(() => {
         referencedBy("csessionaxxxxxxxxxxxxxxxx");
         mockPrisma.play.findUnique.mockResolvedValue({ teamId: TEAM, sessionId: null, isTemplate: false });
+        tx.play.findUniqueOrThrow.mockResolvedValue({
+            id: PLAY, name: "Breakout", description: null, thumbnail: null, playData: OLD_DIAGRAM,
+            sourcePlayId: null, isTemplate: false, sessionId: null,
+        });
+    });
 
-        await updatePlay({ id: PLAY, teamId: TEAM, name: "Drill", playData: createEmptyPlayData() });
-        await deletePlay({ id: PLAY, teamId: TEAM });
+    it("detaches a legacy non-template play before updating it", async () => {
+        const result = await updatePlay({ id: PLAY, teamId: TEAM, name: "Drill", playData: createEmptyPlayData() });
 
-        expect(tx.practiceSessionPlay.findMany).not.toHaveBeenCalled();
-        expect(tx.play.createManyAndReturn).not.toHaveBeenCalled();
+        expect(result.success).toBe(true);
+        expect(tx.play.createManyAndReturn.mock.calls[0][0].data[0]).toMatchObject({
+            sessionId: "csessionaxxxxxxxxxxxxxxxx", playData: OLD_DIAGRAM, sourcePlayId: PLAY, isTemplate: false,
+        });
+        expect(tx.play.update.mock.invocationCallOrder[0])
+            .toBeGreaterThan(tx.practiceSessionPlay.updateMany.mock.invocationCallOrder[0]);
+        expectNoWritesOutsideTransaction();
+    });
+
+    it("detaches a legacy non-template play before deleting it", async () => {
+        const result = await deletePlay({ id: PLAY, teamId: TEAM });
+
+        expect(result).toEqual({ success: true, data: { id: PLAY, detachedSessions: 1 } });
+        expect(tx.play.delete.mock.invocationCallOrder[0])
+            .toBeGreaterThan(tx.practiceSessionPlay.updateMany.mock.invocationCallOrder[0]);
+        expectNoWritesOutsideTransaction();
     });
 });
 

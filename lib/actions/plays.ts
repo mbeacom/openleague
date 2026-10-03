@@ -214,12 +214,11 @@ export async function updatePlay(
         if (!sanitizedResult.ok) return sanitizedResult.result;
         const sanitizedPlayData = sanitizedResult.data;
 
-        // Detach-on-write: sessions still pointing at this library row keep
-        // the version they were planned with.
+        // Detach-on-write: sessions still pointing at this unowned row (a
+        // library drill, or a legacy pre-3a non-template play) keep the
+        // version they were planned with. Owned plays were rejected above.
         const play = await prisma.$transaction(async (tx) => {
-            if (existingPlay.isTemplate) {
-                await detachLibraryPlay(tx, { playId: validated.id, teamId: existingPlay.teamId, userId });
-            }
+            await detachLibraryPlay(tx, { playId: validated.id, teamId: existingPlay.teamId, userId });
             return tx.play.update({
                 where: { id: validated.id },
                 data: {
@@ -312,15 +311,23 @@ export async function deletePlay(
             };
         }
 
-        const isLibraryPlay = existingPlay.isTemplate && existingPlay.sessionId === null;
+        // A session's private copy is removed from its session (orphan
+        // cleanup deletes it), never from the library.
+        if (existingPlay.sessionId !== null) {
+            return {
+                success: false,
+                error: "This drill belongs to a practice session. Remove it from that session.",
+            };
+        }
+
+        // Any unowned play is detached: a library drill, or a legacy pre-3a
+        // non-template play a session still references.
         const detachedSessions = await prisma.$transaction(async (tx) => {
-            const detached = isLibraryPlay
-                ? await detachLibraryPlay(tx, {
-                    playId: validated.id,
-                    teamId: existingPlay.teamId,
-                    userId,
-                })
-                : 0;
+            const detached = await detachLibraryPlay(tx, {
+                playId: validated.id,
+                teamId: existingPlay.teamId,
+                userId,
+            });
             await tx.play.delete({ where: { id: validated.id } });
             return detached;
         });
