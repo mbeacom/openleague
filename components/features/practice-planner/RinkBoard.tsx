@@ -994,7 +994,10 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
      */
     const handleTouchEnd = useCallback(
         (event: React.TouchEvent<HTMLCanvasElement>) => {
-            event.preventDefault();
+            // Suppresses the compatibility mouse events and click after a tap.
+            // A touchend the browser marks non-cancelable logs an error if
+            // cancelled, so only cancel when it can be.
+            if (event.cancelable) event.preventDefault();
 
             if (event.touches.length === 0) {
                 // A still one-finger tap with a place / erase / text tool acts now
