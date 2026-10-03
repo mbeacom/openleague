@@ -275,6 +275,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
     // misframe it. A pinch in progress ends too, or its next move would re-apply it.
     useEffect(() => {
         pinchStartRef.current = null;
+        pendingTapRef.current = null;
         setScale(1);
         setPanOffset({ x: 0, y: 0 });
     }, [viewX, viewY, viewW, viewH]);
@@ -875,6 +876,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
             event.preventDefault();
 
             if (event.touches.length === 1) {
+                pendingTapRef.current = null; // never replay an older, unfinished tap
                 const { clientX, clientY } = event.touches[0];
                 // Place / erase / text act on touchend, and only for a still,
                 // one-finger tap: this finger may be the first of a pinch.
@@ -976,6 +978,12 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         [handleMouseUp, simulateMouseDown, capturePinch]
     );
 
+    /** The browser took the touches away (e.g. a system gesture): drop the pending tap and the pinch. */
+    const handleTouchCancel = useCallback(() => {
+        pendingTapRef.current = null;
+        pinchStartRef.current = null;
+    }, []);
+
     return (
         <div
             ref={containerRef}
@@ -997,6 +1005,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
                 onTouchStart={handleTouchStart}
                 onTouchMove={handleTouchMove}
                 onTouchEnd={handleTouchEnd}
+                onTouchCancel={handleTouchCancel}
                 style={{
                     display: "block",
                     cursor: mode === "edit" ? "crosshair" : "default",

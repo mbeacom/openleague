@@ -556,6 +556,14 @@ describe("RinkBoard ice area", () => {
             }
         });
 
+        it("drops a pending tap on touchcancel, so a later touchend places nothing", () => {
+            const { canvas, at, onPlayDataChange } = setup({ selectedTool: "player" });
+            fireEvent.touchStart(canvas, { touches: [at(40, 40)] });
+            fireEvent.touchCancel(canvas, { touches: [] });
+            fireEvent.touchEnd(canvas, { touches: [] });
+            expect(onPlayDataChange).not.toHaveBeenCalled();
+        });
+
         it("still places on mouse down (mouse input is unchanged)", () => {
             const { canvas, at, onPlayDataChange } = setup({ selectedTool: "player" });
             fireEvent.mouseDown(canvas, at(40, 40));
