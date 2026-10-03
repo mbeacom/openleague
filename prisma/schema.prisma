@@ -1620,7 +1620,10 @@ model PracticeSession {
   venueReservationId String?           @unique
   venueReservation   VenueReservation? @relation(fields: [venueReservationId], references: [id], onDelete: SetNull)
 
-  plays PracticeSessionPlay[]
+  plays      PracticeSessionPlay[]
+  // Private drill copies this session owns (Play.sessionId). Deleting the
+  // session deletes them in the same statement.
+  ownedPlays Play[]                @relation("SessionOwnedPlays")
 
   @@index([teamId, date])
   @@index([venueId, startAt])
@@ -1642,8 +1645,11 @@ model PracticeSessionPlay {
   session   PracticeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   playId String
-  // Cascade delete to preserve session integrity when library play is deleted (Req 4.5)
-  play   Play   @relation(fields: [playId], references: [id], onDelete: Cascade)
+  // NO ACTION (defense in depth): a play still referenced by a session can't
+  // be deleted — deletePlay detaches the sessions first. Deleting the session still
+  // works: its session plays and owned plays go in one statement, and NO
+  // ACTION is only checked at the end of the statement.
+  play   Play   @relation(fields: [playId], references: [id], onDelete: NoAction)
 
   @@unique([sessionId, sequence])
   @@index([sessionId])
@@ -1657,7 +1663,7 @@ model Play {
   description String?
   thumbnail   String? // Base64 encoded PNG thumbnail (generated server-side from canvas export)
   playData    Json // Serialized PlayData structure
-  isTemplate  Boolean  @default(false) // Library plays vs session-specific
+  isTemplate  Boolean  @default(false) // true = library; false = session-owned (sessionId set)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -1669,7 +1675,16 @@ model Play {
 
   sessions PracticeSessionPlay[]
 
+  // Owner when this play is a session's private copy (isTemplate = false).
+  sessionId    String?
+  session      PracticeSession? @relation("SessionOwnedPlays", fields: [sessionId], references: [id], onDelete: Cascade)
+  // Library play this copy came from. Provenance only; never followed for rendering.
+  sourcePlayId String?
+  sourcePlay   Play?            @relation("PlayCopies", fields: [sourcePlayId], references: [id], onDelete: SetNull)
+  copies       Play[]           @relation("PlayCopies")
+
   @@index([teamId, isTemplate])
+  @@index([sessionId])
   @@map("plays")
 }
 
