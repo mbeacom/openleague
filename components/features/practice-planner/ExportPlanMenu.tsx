@@ -20,6 +20,7 @@ import {
     LINK_TOO_LARGE_MESSAGE,
     PlanLinkTooLargeError,
     encodePlanLink,
+    parsePlan,
     planFileName,
     serializePlan,
     type PlanDocument,
@@ -72,6 +73,17 @@ export function unreadableDiagramNotice(count: number): string | null {
         : `${count} drills had unreadable diagrams and were exported blank.`;
 }
 
+/**
+ * A hosted session can exceed what a plan file may hold (more than
+ * MAX_PLAN_DRILLS drills, say). The file still downloads; this says why it
+ * won't import as-is, naming the first problem.
+ */
+export function importProblemNotice(doc: PlanDocument): string | null {
+    const result = parsePlan(JSON.parse(JSON.stringify(doc)));
+    if (result.ok) return null;
+    return `This file can't be imported as-is: ${result.error.issues?.[0] ?? result.error.message}`;
+}
+
 type Notice = { severity: "success" | "info" | "warning" | "error"; text: string };
 
 interface ExportPlanMenuProps {
@@ -97,7 +109,8 @@ export function ExportPlanMenu({ session, size = "medium" }: ExportPlanMenuProps
         link.remove();
         // Safari and Firefox can cut the download short if the URL is revoked right away.
         window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-        setNotice(unreadable ? { severity: "warning", text: unreadable } : null);
+        const warnings = [unreadable, importProblemNotice(doc)].filter((text): text is string => text !== null);
+        setNotice(warnings.length > 0 ? { severity: "warning", text: warnings.join(" ") } : null);
     };
 
     const copyLink = async () => {

@@ -7,7 +7,7 @@ import {
     unreadableDiagramNotice,
     type ExportableSession,
 } from "@/components/features/practice-planner/ExportPlanMenu";
-import { LINK_TOO_LARGE_MESSAGE, decodePlanLink, parsePlan } from "@/lib/plan-document";
+import { LINK_TOO_LARGE_MESSAGE, MAX_PLAN_DRILLS, decodePlanLink, parsePlan } from "@/lib/plan-document";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import { formatDateTimeLocalInput, resolveTimeZone } from "@/lib/utils/date";
 
@@ -113,6 +113,30 @@ describe("ExportPlanMenu", () => {
         } finally {
             vi.useRealTimers();
         }
+    });
+
+    it("still downloads a plan that can't be imported as-is, and warns with its first problem", async () => {
+        const tooMany: ExportableSession = {
+            ...SESSION,
+            duration: 300,
+            plays: Array.from({ length: MAX_PLAN_DRILLS + 1 }, (_, i) => ({ ...sessionPlay(`Drill ${i}`, i), duration: 1 })),
+        };
+        render(<ExportPlanMenu session={tooMany} />);
+        openMenu();
+        fireEvent.click(screen.getByRole("menuitem", { name: "Download plan file" }));
+
+        expect(clicks).toHaveLength(1);
+        const alert = await screen.findByRole("alert");
+        expect(alert).toHaveTextContent(
+            `This file can't be imported as-is: A plan can hold at most ${MAX_PLAN_DRILLS} drills`,
+        );
+    });
+
+    it("downloads a valid plan without an import warning", () => {
+        render(<ExportPlanMenu session={SESSION} />);
+        openMenu();
+        fireEvent.click(screen.getByRole("menuitem", { name: "Download plan file" }));
+        expect(screen.queryByText(/can't be imported as-is/)).not.toBeInTheDocument();
     });
 
     it("warns when drills were exported blank", async () => {
