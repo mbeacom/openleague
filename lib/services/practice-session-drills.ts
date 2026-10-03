@@ -107,6 +107,9 @@ export async function cloneDrillsIntoSession(
  * unowned L maps to C when: S referenced C before this save, C came from L,
  * no payload item sends C itself, and S no longer references L.
  *
+ * A further occurrence of that L (a legacy session that held L on several
+ * rows got one copy for all of them) clones C, not L's new content.
+ *
  * Trade-off: removing a copy's card and re-adding the same library drill in
  * one save window also lands here, so it reuses the existing copy (with its
  * session edits) instead of taking a fresh library copy.
@@ -117,8 +120,8 @@ async function findReusableCopies(
     items: SessionDrillItem[],
     plays: Array<{ id: string; sessionId: string | null }>,
     previousPlayIds: string[],
-): Promise<Map<string, string[]>> {
-    const reusable = new Map<string, string[]>();
+): Promise<Map<string, CloneSource[]>> {
+    const reusable = new Map<string, CloneSource[]>();
     const referenced = new Set(previousPlayIds);
     const payloadIds = new Set(items.map((item) => item.playId));
     const staleSources = plays
@@ -129,14 +132,14 @@ async function findReusableCopies(
 
     const copies = await tx.play.findMany({
         where: { sessionId, id: { in: candidates }, sourcePlayId: { in: staleSources } },
-        select: { id: true, sessionId: true, sourcePlayId: true },
+        select: CLONE_SOURCE_SELECT,
         orderBy: { createdAt: "asc" },
     });
     for (const copy of copies) {
         // Re-checked here: the where clause is the contract, this is the guard.
         if (copy.sessionId !== sessionId || !copy.sourcePlayId || !staleSources.includes(copy.sourcePlayId)) continue;
         if (!candidates.includes(copy.id)) continue;
-        reusable.set(copy.sourcePlayId, [...(reusable.get(copy.sourcePlayId) ?? []), copy.id]);
+        reusable.set(copy.sourcePlayId, [...(reusable.get(copy.sourcePlayId) ?? []), copy]);
     }
     return reusable;
 }
@@ -173,6 +176,8 @@ export async function materializeSessionDrills(
     const referenced = new Set(previousPlayIds);
     const kept = new Set<string>();
     const reusable = await findReusableCopies(tx, input.sessionId, input.items, plays, previousPlayIds);
+    // The copy last reused for each stale L: further occurrences of L clone it.
+    const reusedFor = new Map<string, CloneSource>();
 
     // For each item: the owned id it keeps, or the index of its clone source.
     const resolved: Array<{ item: SessionDrillItem; keptId: string } | { item: SessionDrillItem; cloneIndex: number }> = [];
@@ -190,8 +195,15 @@ export async function materializeSessionDrills(
 
         const reused = play.sessionId === null ? reusable.get(play.id)?.shift() : undefined;
         if (reused) {
-            kept.add(reused);
-            resolved.push({ item, keptId: reused });
+            kept.add(reused.id);
+            reusedFor.set(play.id, reused);
+            resolved.push({ item, keptId: reused.id });
+            continue;
+        }
+        const reusedCopy = reusedFor.get(play.id);
+        if (reusedCopy) {
+            resolved.push({ item, cloneIndex: sources.length });
+            sources.push(reusedCopy);
             continue;
         }
 
