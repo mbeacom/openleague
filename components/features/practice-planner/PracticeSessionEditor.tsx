@@ -143,6 +143,11 @@ export function PracticeSessionEditor({
     const [showLibrary, setShowLibrary] = useState(false);
     const [editingPlayId, setEditingPlayId] = useState<string | null>(null);
     const [showShareDialog, setShowShareDialog] = useState(false);
+    // A create has no follow-up save and redirects on success, so the form is
+    // locked from its start until it fails (or the redirect replaces the page).
+    const [created, setCreated] = useState(false);
+    const busy = isSaving || isSharing || (!sessionId && created);
+    const creating = !sessionId && (isSaving || created);
 
     // Auto-save state
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -346,6 +351,7 @@ export function PracticeSessionEditor({
                 return;
             }
 
+            if (!sessionId) setCreated(true);
             setPlays((current) => applySavedPlayIds(current, sentPlayIds, result.plays));
             if (!saveFlight.editedSince(startedVersion)) {
                 setHasUnsavedChanges(false);
@@ -636,6 +642,7 @@ export function PracticeSessionEditor({
                         onChange={handleTitleChange}
                         fullWidth
                         required
+                        disabled={creating}
                         placeholder="Enter session title"
                         inputProps={{ maxLength: 100 }}
                         helperText={
@@ -650,7 +657,7 @@ export function PracticeSessionEditor({
                         label="Practice Date & Time"
                         value={date}
                         onChange={handleDateChange}
-                        disabled={Boolean(booking.selectedReservation)}
+                        disabled={creating || Boolean(booking.selectedReservation)}
                         slotProps={{
                             textField: {
                                 fullWidth: true,
@@ -671,7 +678,7 @@ export function PracticeSessionEditor({
                         onChange={handleDurationChange}
                         fullWidth
                         required
-                        disabled={Boolean(booking.selectedReservation)}
+                        disabled={creating || Boolean(booking.selectedReservation)}
                         sx={{ "& .MuiInputBase-root": { minHeight: 44 } }}
                         inputProps={{
                             min: VALIDATION_CONSTRAINTS.MIN_DURATION,
@@ -701,14 +708,14 @@ export function PracticeSessionEditor({
                 initialVenueId={initialData?.venueId}
                 duration={duration}
                 validationErrors={validationErrors}
-                disabled={isSaving || isSharing}
+                disabled={busy}
             />
 
             <SessionDrillList
                 plays={plays}
                 duration={duration}
                 editingPlayId={editingPlayId}
-                disabled={isSaving || isSharing}
+                disabled={busy}
                 onOpenLibrary={handleOpenLibrary}
                 onDelete={handleDeletePlay}
                 onEdit={handleEditPlay}
@@ -735,7 +742,7 @@ export function PracticeSessionEditor({
                         booking={booking}
                         validationErrors={validationErrors}
                         clearValidationError={clearValidationError}
-                        disabled={isSaving || isSharing}
+                        disabled={busy}
                         onOverride={() => handleSave(true, true)}
                     />
 
@@ -769,7 +776,7 @@ export function PracticeSessionEditor({
                             <Button
                                 variant="outlined"
                                 onClick={onCancel}
-                                disabled={isSaving || isSharing}
+                                disabled={busy}
                             >
                                 Cancel
                             </Button>
@@ -779,7 +786,7 @@ export function PracticeSessionEditor({
                             variant="contained"
                             color="primary"
                             onClick={() => handleSave(false, true)}
-                            disabled={isSaving || isSharing || !title.trim()}
+                            disabled={busy || !title.trim()}
                             startIcon={
                                 isSaving ? (
                                     <CircularProgress size={20} color="inherit" />
