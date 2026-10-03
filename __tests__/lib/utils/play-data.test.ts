@@ -82,6 +82,22 @@ describe("upgradePlayData", () => {
         expect(out[out.length - 1]).toEqual(points[points.length - 1]);
     });
 
+    it("clamps an oversized v1 annotation fontSize to 200", () => {
+        const v2 = upgradePlayData({
+            ...v1Play,
+            annotations: [{ id: "a1", text: "Hi", position: { x: 5, y: 5 }, fontSize: 500, color: "#000000" }],
+        });
+        expect(v2.annotations[0].fontSize).toBe(200);
+    });
+
+    it("truncates over-long v1 ids to 100 characters", () => {
+        const v2 = upgradePlayData({
+            ...v1Play,
+            players: [{ id: "x".repeat(150), position: { x: 5, y: 5 }, label: "A", color: "#000000" }],
+        });
+        expect(v2.players[0].id).toHaveLength(100);
+    });
+
     it("throws PlayDataError for garbage", () => {
         expect(() => upgradePlayData("nope")).toThrow(PlayDataError);
         expect(() => upgradePlayData({ players: "x" })).toThrow(PlayDataError);
@@ -157,5 +173,10 @@ describe("simplifyPoints", () => {
 
     it("never returns fewer than two points for a two-point input", () => {
         expect(simplifyPoints([{ x: 1, y: 1 }, { x: 1.1, y: 1 }], 0.5)).toHaveLength(2);
+    });
+
+    it("does not divide by zero when maxPoints is below 2", () => {
+        const pts = [0, 1, 2, 3, 4].map((x) => ({ x: x * 10, y: 0 }));
+        expect(simplifyPoints(pts, 0, 1)).toEqual([pts[0], pts[4]]);
     });
 });

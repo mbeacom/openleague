@@ -5,6 +5,7 @@ import { LinkButton } from "@/components/ui/NextLinkComposites";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { getPlayLibraryContext } from "@/lib/actions/practice-session-queries";
 import { getPlayById } from "@/lib/actions/plays";
+import { PLAY_DATA_UNREADABLE_CODE } from "@/lib/utils/play-data";
 import { PlayEditorWrapper } from "../../PlayEditorWrapper";
 import type { SavedPlay } from "@/types/practice-planner";
 import type { Metadata } from "next";
@@ -46,7 +47,18 @@ export default async function EditPlayPage({ params }: PageProps) {
   const result = await getPlayById({ id: playId, teamId: context.teamId });
 
   if (!result.success) {
-    notFound();
+    const details = result.details as { code?: string } | undefined;
+    if (details?.code !== PLAY_DATA_UNREADABLE_CODE) notFound();
+    return (
+      <PageContainer>
+        <Alert severity="error">
+          {result.error} Editing is disabled so the stored drawing isn&apos;t overwritten.
+        </Alert>
+        <LinkButton href="/practice-planner/library" startIcon={<ArrowBackIcon />} sx={{ mt: 2 }}>
+          Back to Play Library
+        </LinkButton>
+      </PageContainer>
+    );
   }
 
   const play: SavedPlay = {

@@ -26,6 +26,8 @@ export const RINK_WIDTH_FT = 200;
 export const RINK_HEIGHT_FT = 85;
 
 const MAX_STROKE_WIDTH = 20;
+const MAX_FONT_SIZE = 200;
+const MAX_ID_LENGTH = 100;
 const HEX_COLOR = /^#[0-9A-Fa-f]{6}$/;
 
 export class PlayDataError extends Error {
@@ -35,7 +37,7 @@ export class PlayDataError extends Error {
     }
 }
 
-const idSchema = z.string().min(1).max(100);
+const idSchema = z.string().min(1).max(MAX_ID_LENGTH);
 const colorSchema = z.string().regex(HEX_COLOR);
 const positionSchema = z.object({
     x: z.number().min(0).max(RINK_WIDTH_FT),
@@ -71,7 +73,7 @@ const annotationSchema = z.object({
     id: idSchema,
     text: z.string().max(C.MAX_ANNOTATION_LENGTH).refine((t) => t.trim().length > 0, "Text is required"),
     position: positionSchema,
-    fontSize: z.number().positive().max(200),
+    fontSize: z.number().positive().max(MAX_FONT_SIZE),
     color: colorSchema,
 });
 
@@ -139,6 +141,7 @@ export function simplifyPoints(
     maxPoints: number = C.MAX_STROKE_POINTS
 ): Position[] {
     if (points.length <= 2) return points.map((p) => ({ ...p }));
+    maxPoints = Math.max(2, maxPoints);
     const kept: Position[] = [{ ...points[0] }];
     for (let i = 1; i < points.length - 1; i++) {
         const last = kept[kept.length - 1];
@@ -177,23 +180,32 @@ export function upgradePlayData(raw: unknown): PlayData {
     return parseV2({
         version: PLAY_DATA_VERSION,
         players: v1.data.players.map((p) => ({
-            id: p.id,
+            id: p.id.slice(0, MAX_ID_LENGTH),
             position: clampToRink(p.position),
             role: "X",
             label: p.label.slice(0, C.MAX_PLAYER_LABEL_LENGTH),
             color: p.color,
         })),
         drawings: v1.data.drawings.map((d) => ({
-            id: d.id,
+            id: d.id.slice(0, MAX_ID_LENGTH),
             ...strokeFromV1Type(d.type),
             points: simplifyPoints(d.points.map(clampToRink), 0),
             color: d.color,
             strokeWidth: Math.min(MAX_STROKE_WIDTH, d.strokeWidth),
         })),
         equipment: [],
-        annotations: v1.data.annotations.map((a) => ({ ...a, position: clampToRink(a.position) })),
+        annotations: v1.data.annotations.map((a) => ({
+            ...a,
+            id: a.id.slice(0, MAX_ID_LENGTH),
+            text: a.text.slice(0, C.MAX_ANNOTATION_LENGTH),
+            fontSize: Math.min(MAX_FONT_SIZE, a.fontSize),
+            position: clampToRink(a.position),
+        })),
     });
 }
+
+export const PLAY_DATA_UNREADABLE_MESSAGE = "This play's diagram couldn't be read.";
+export const PLAY_DATA_UNREADABLE_CODE = "PLAY_DATA_UNREADABLE";
 
 export type ParsedPlayData = { ok: true; data: PlayData } | { ok: false; error: PlayDataError };
 
@@ -207,4 +219,15 @@ export function parseStoredPlayData(raw: unknown): ParsedPlayData {
             error: error instanceof PlayDataError ? error : new PlayDataError("Unreadable play data", error),
         };
     }
+}
+
+/**
+ * For session read paths where plays' playData is display/carry-only and is
+ * never written back: an unreadable play becomes an empty board, logged.
+ */
+export function playDataOrEmpty(raw: unknown, context: string): PlayData {
+    const parsed = parseStoredPlayData(raw);
+    if (parsed.ok) return parsed.data;
+    console.error(`Unreadable playData (${context}):`, parsed.error);
+    return createEmptyPlayData();
 }

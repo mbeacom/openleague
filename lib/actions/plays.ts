@@ -18,6 +18,11 @@ import {
     type GetPlaysByTeamInput,
 } from "@/lib/utils/validation";
 import { VALIDATION_CONSTRAINTS, type PlayData } from "@/types/practice-planner";
+import {
+    PLAY_DATA_UNREADABLE_CODE,
+    PLAY_DATA_UNREADABLE_MESSAGE,
+    parseStoredPlayData,
+} from "@/lib/utils/play-data";
 
 export type ActionResult<T> =
     | { success: true; data: T }
@@ -349,6 +354,16 @@ export async function getPlayById(input: GetPlayByIdInput): Promise<ActionResult
             };
         }
 
+        const parsed = parseStoredPlayData(play.playData);
+        if (!parsed.ok) {
+            console.error(`Unreadable playData for play ${play.id}:`, parsed.error);
+            return {
+                success: false,
+                error: PLAY_DATA_UNREADABLE_MESSAGE,
+                details: { code: PLAY_DATA_UNREADABLE_CODE },
+            };
+        }
+
         return {
             success: true,
             data: {
@@ -356,7 +371,7 @@ export async function getPlayById(input: GetPlayByIdInput): Promise<ActionResult
                 name: play.name,
                 description: play.description,
                 thumbnail: play.thumbnail,
-                playData: play.playData as unknown as PlayData,
+                playData: parsed.data,
                 isTemplate: play.isTemplate,
                 createdAt: play.createdAt,
                 updatedAt: play.updatedAt,
