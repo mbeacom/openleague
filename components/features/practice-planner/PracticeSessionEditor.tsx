@@ -37,7 +37,7 @@ import {
 import type { BookingConflict } from "@/types/segments";
 import { applySavedPlayIds, describeSaveError, type SavedDrillId } from "@/lib/utils/session-drill-ids";
 import { PlayLibrary } from "./PlayLibrary";
-import { useSingleFlightSave } from "./useSingleFlightSave";
+import { useSingleFlightSave, type SaveOutcome } from "./useSingleFlightSave";
 import { SessionDrillList } from "./SessionDrillList";
 import { SessionDrillDialog } from "./SessionDrillDialog";
 import { useSessionDrillDialog } from "./useSessionDrillDialog";
@@ -299,6 +299,7 @@ export function PracticeSessionEditor({
         // Validate form (includes date validation)
         if (!validateForm(overrideConflicts)) {
             setSaveError("Please fix the validation errors");
+            saveFlight.abandon("Please fix the session's validation errors");
             return;
         }
 
@@ -313,6 +314,7 @@ export function PracticeSessionEditor({
                 startTime: "Enter a valid start time",
             }));
             setSaveError("Please fix the validation errors");
+            saveFlight.abandon("Please enter a valid start time for the session");
             return;
         }
 
@@ -322,6 +324,8 @@ export function PracticeSessionEditor({
         setSaveError(null);
         setSaveSuccess(false);
         booking.setBookingConflicts(null);
+        // Reported to a drill dialog waiting on this save (useSingleFlightSave.request).
+        let outcome: SaveOutcome = { ok: false, error: "Failed to save session" };
 
         try {
             const sessionData: PracticeSessionSubmitData = {
@@ -342,6 +346,7 @@ export function PracticeSessionEditor({
                 : { success: true };
 
             if (!result.success) {
+                outcome = { ok: false, error: describeSaveError(result.error) };
                 if (result.conflicts && result.conflicts.length > 0) {
                     // FR-019/US5: warn and let the coach explicitly book anyway.
                     booking.setBookingConflicts(result.conflicts);
@@ -351,6 +356,7 @@ export function PracticeSessionEditor({
                 return;
             }
 
+            outcome = { ok: true };
             if (!sessionId) setCreated(true);
             setPlays((current) => applySavedPlayIds(current, sentPlayIds, result.plays));
             if (!saveFlight.editedSince(startedVersion)) {
@@ -372,9 +378,10 @@ export function PracticeSessionEditor({
             setSaveError(
                 error instanceof Error ? error.message : "Failed to save session"
             );
+            if (error instanceof Error) outcome = { ok: false, error: error.message };
         } finally {
             setIsSaving(false);
-            saveFlight.finish();
+            saveFlight.finish(outcome);
         }
     }, [title, date, duration, plays, isShared, sessionId, booking, onSave, validateForm, saveFlight]);
 

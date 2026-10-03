@@ -11,13 +11,14 @@ import type { PlayInSession } from "@/types/practice-planner";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import { upsertSessionDrill, type SessionDrillPatch } from "@/lib/utils/session-drill-ids";
 import type { SessionDrillDialogDrill } from "./SessionDrillDialog";
+import type { SaveOutcome } from "./useSingleFlightSave";
 
 export function useSessionDrillDialog(
     plays: PlayInSession[],
     setPlays: Dispatch<SetStateAction<PlayInSession[]>>,
     markDirty: () => void,
-    /** Saves the session now (single-flight: runs, or queues behind a running save). */
-    saveNow: () => void,
+    /** Saves the session now (single-flight: runs, or queues behind a running save); settles with that save's outcome. */
+    saveNow: () => Promise<SaveOutcome>,
 ) {
     const [drill, setDrill] = useState<SessionDrillDialogDrill | null>(null);
 
@@ -49,12 +50,26 @@ export function useSessionDrillDialog(
     // session already owns changed only that row, so autosave can follow. A fork
     // (library or legacy drill) or a new drill is a new id the session doesn't
     // reference yet: save it now, not after the autosave timer, which a failed
-    // earlier save leaves unarmed. Until then, leaving the page loses the edit.
-    const onSaved = useCallback((clientKey: string, patch: SessionDrillPatch) => {
-        const isNewId = plays.find((play) => play.id === clientKey)?.playId !== patch.playId;
+    // earlier save leaves unarmed, and report that save's outcome to the dialog.
+    //
+    // If that save fails, the card is rolled back (a new drill's card removed),
+    // so the dialog's retry is again a new id and saves the session again; a
+    // card left on the copy would make the retry look like an in-place edit and
+    // report success with the drill still unlinked. The copy the dialog created
+    // stays unreferenced and goes with the session (drop-only cleanup).
+    const onSaved = useCallback(async (clientKey: string, patch: SessionDrillPatch): Promise<SaveOutcome> => {
+        const previous = plays.find((play) => play.id === clientKey);
         setPlays((prev) => upsertSessionDrill(prev, clientKey, patch));
         markDirty();
-        if (isNewId) saveNow();
+        if (previous?.playId === patch.playId) return { ok: true };
+
+        const outcome = await saveNow();
+        if (!outcome.ok) {
+            setPlays((prev) => previous
+                ? prev.map((play) => (play.id === clientKey ? previous : play))
+                : prev.filter((play) => play.id !== clientKey));
+        }
+        return outcome;
     }, [plays, setPlays, markDirty, saveNow]);
 
     const close = useCallback(() => setDrill(null), []);

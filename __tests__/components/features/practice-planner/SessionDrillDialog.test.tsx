@@ -27,7 +27,7 @@ const saved: SavedPlay = {
     playData: createEmptyPlayData(), isTemplate: false, createdAt: new Date(), updatedAt: new Date(),
 };
 
-function renderDialog(playId: string | null, onSaved = vi.fn(), onClose = vi.fn()) {
+function renderDialog(playId: string | null, onSaved = vi.fn().mockResolvedValue({ ok: true }), onClose = vi.fn()) {
     render(
         <SessionDrillDialog
             open
@@ -97,6 +97,27 @@ describe("SessionDrillDialog", () => {
         await expect(captured.props?.onSave?.(saved)).rejects.toThrow("Invalid play data");
         expect(onSaved).not.toHaveBeenCalled();
     });
+    it("reports a failed session save inside the dialog and stays open", async () => {
+        const onSaved = vi.fn().mockResolvedValue({ ok: false, error: "Total drill time exceeds the session duration" });
+        const { onClose } = renderDialog(null, onSaved);
+        fireEvent.click(screen.getByLabelText("Also add to library"));
+
+        await act(async () => {
+            await expect(captured.props?.onSave?.(saved)).rejects.toThrow(
+                "The drill was saved, but not added to this session: Total drill time exceeds the session duration",
+            );
+        });
+        expect(onClose).not.toHaveBeenCalled();
+        expect(screen.getByRole("dialog")).toBeTruthy();
+        expect(actions.copySessionDrillToLibrary).not.toHaveBeenCalled();
+
+        // A retry updates the copy the first attempt created; it never forks again.
+        await act(async () => {
+            await expect(captured.props?.onSave?.(saved)).rejects.toThrow();
+        });
+        expect(actions.saveSessionDrill).toHaveBeenLastCalledWith(expect.objectContaining({ playId: OWNED }));
+    });
+
     it("keeps the session save when the library copy fails, then retries the copy on the next save", async () => {
         actions.copySessionDrillToLibrary
             .mockResolvedValueOnce({ success: false, error: "Library unavailable" })

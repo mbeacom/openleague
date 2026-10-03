@@ -8,16 +8,26 @@
  * `followUp` changes once per settled save that has queued work, and once per
  * `request` made while idle; the editor runs it from an effect declared after
  * its latest-handleSave ref is updated.
+ *
+ * `request` returns a promise that settles with the outcome of the save that
+ * carries it: the next save to start (the follow-up, or the queued save behind
+ * a running one), or `abandon` when that save stops before it starts.
  */
 
 import { useMemo, useRef, useState } from "react";
 
 export type SaveIntent = { overrideConflicts: boolean; notify: boolean };
+export type SaveOutcome = { ok: true } | { ok: false; error: string };
+
+type Waiter = (outcome: SaveOutcome) => void;
 
 export function useSingleFlightSave() {
     const inFlightRef = useRef(false);
     const queuedRef = useRef<SaveIntent | null>(null);
     const editVersionRef = useRef(0);
+    // Requests waiting for the next save to start, and those the running save carries.
+    const waitingRef = useRef<Waiter[]>([]);
+    const carriedRef = useRef<Waiter[]>([]);
     const [followUp, setFollowUp] = useState<SaveIntent | null>(null);
 
     const controls = useMemo(() => {
@@ -29,6 +39,9 @@ export function useSingleFlightSave() {
                 notify: intent.notify || Boolean(queued?.notify),
             };
         };
+        const settle = (waiters: Waiter[], outcome: SaveOutcome) => {
+            for (const resolve of waiters) resolve(outcome);
+        };
         return {
             /** Records an edit, so a save that started earlier knows it is stale. */
             markEdited() {
@@ -39,24 +52,38 @@ export function useSingleFlightSave() {
             /** Marks a save as running and returns the edit version it covers. */
             start() {
                 inFlightRef.current = true;
+                carriedRef.current = waitingRef.current;
+                waitingRef.current = [];
                 return editVersionRef.current;
             },
             /**
              * Asks for a save now, without waiting for the autosave timer: queued
              * behind a running save, otherwise published as a follow-up so it
-             * runs after the render that holds the latest edits.
+             * runs after the render that holds the latest edits. Resolves with
+             * that save's outcome.
              */
-            request(intent: SaveIntent) {
+            request(intent: SaveIntent): Promise<SaveOutcome> {
+                const outcome = new Promise<SaveOutcome>((resolve) => waitingRef.current.push(resolve));
                 if (inFlightRef.current) {
                     queue(intent);
                 } else {
                     setFollowUp({ ...intent });
                 }
+                return outcome;
+            },
+            /** A save stopped before it started (e.g. validation): fails the waiting requests. */
+            abandon(error: string) {
+                const waiting = waitingRef.current;
+                waitingRef.current = [];
+                settle(waiting, { ok: false, error });
             },
             editedSince: (version: number) => editVersionRef.current !== version,
-            /** Ends the running save and publishes any queued follow-up. */
-            finish() {
+            /** Ends the running save, settles what it carried, and publishes any queued follow-up. */
+            finish(outcome: SaveOutcome = { ok: true }) {
                 inFlightRef.current = false;
+                const carried = carriedRef.current;
+                carriedRef.current = [];
+                settle(carried, outcome);
                 const queued = queuedRef.current;
                 if (queued) {
                     queuedRef.current = null;

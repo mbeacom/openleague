@@ -23,6 +23,7 @@ import type { PlayData, SavedPlay } from "@/types/practice-planner";
 import type { SessionDrillPatch } from "@/lib/utils/session-drill-ids";
 import { copySessionDrillToLibrary, saveSessionDrill } from "@/lib/actions/practice-session-drills";
 import { PlayEditor } from "./PlayEditor";
+import type { SaveOutcome } from "./useSingleFlightSave";
 
 export interface SessionDrillDialogDrill {
     clientKey: string;
@@ -39,8 +40,11 @@ export interface SessionDrillDialogProps {
     sessionId: string;
     teamId: string;
     drill: SessionDrillDialogDrill | null;
-    /** Every successful save: the editor updates (or appends) the card. */
-    onSaved: (clientKey: string, patch: SessionDrillPatch) => void;
+    /**
+     * Every successful save: the editor updates (or appends) the card. For a new
+     * drill or a fork it also saves the session, and resolves with that outcome.
+     */
+    onSaved: (clientKey: string, patch: SessionDrillPatch) => Promise<SaveOutcome>;
     onClose: () => void;
 }
 
@@ -78,14 +82,18 @@ export function SessionDrillDialog({ open, sessionId, teamId, drill, onSaved, on
         // PlayEditor catches this and shows it in its error alert; the dialog stays open.
         if (!result.success) throw new Error(result.error);
 
+        // A retry updates this copy rather than forking again.
         setPlayId(result.data.playId);
-        onSaved(drill.clientKey, {
+        const linked = await onSaved(drill.clientKey, {
             playId: result.data.playId,
             name: saved.name,
             description: saved.description,
             thumbnail: saved.thumbnail,
             playData: saved.playData,
         });
+        // The session save that links the drill failed: report it here, not
+        // behind the full-screen dialog, and keep the dialog open.
+        if (!linked.ok) throw new Error(`The drill was saved, but not added to this session: ${linked.error}`);
 
         if (alsoAddToLibrary && !addedToLibrary) {
             const copy = await copySessionDrillToLibrary({ playId: result.data.playId, teamId });

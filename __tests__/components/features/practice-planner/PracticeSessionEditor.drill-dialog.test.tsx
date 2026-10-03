@@ -27,22 +27,26 @@ vi.mock("@/lib/actions/plays", () => ({
 }));
 
 const FORK = "cforkxxxxxxxxxxxxxxxxxxxx";
+// What the last stub save's onSaved returned (the session-save outcome).
+const lastOutcome = vi.hoisted(() => ({ promise: null as Promise<unknown> | null }));
 
 // Stand-in for the dialog: one button that reports a successful drill save.
 vi.mock("@/components/features/practice-planner/SessionDrillDialog", () => ({
     SessionDrillDialog: ({ open, drill, onSaved }: {
         open: boolean;
         drill: { clientKey: string } | null;
-        onSaved: (clientKey: string, patch: Record<string, unknown>) => void;
+        onSaved: (clientKey: string, patch: Record<string, unknown>) => Promise<unknown>;
     }) => {
         if (!open || !drill) return null;
         const clientKey = drill.clientKey;
         return (
             <button
                 type="button"
-                onClick={() => onSaved(clientKey, {
-                    playId: "cforkxxxxxxxxxxxxxxxxxxxx", name: "Forked", description: "", thumbnail: "", playData: { version: 2, players: [], drawings: [], equipment: [], annotations: [] },
-                })}
+                onClick={() => {
+                    lastOutcome.promise = onSaved(clientKey, {
+                        playId: "cforkxxxxxxxxxxxxxxxxxxxx", name: "Forked", description: "", thumbnail: "", playData: { version: 2, players: [], drawings: [], equipment: [], annotations: [] },
+                    });
+                }}
             >
                 stub save drill
             </button>
@@ -196,5 +200,48 @@ describe("PracticeSessionEditor saves a dialog fork right away", () => {
         } finally {
             vi.useRealTimers();
         }
+    });
+});
+
+// A new drill or fork is only linked once the session save succeeds; the
+// dialog must hear about a failure instead of reporting success.
+describe("PracticeSessionEditor reports the session save to the drill dialog", () => {
+    const DURATION_ERROR = "Total drill time exceeds the session duration";
+
+    async function stubSaveOutcome(): Promise<unknown> {
+        fireEvent.click(screen.getByRole("button", { name: "stub save drill" }));
+        let outcome: unknown;
+        await act(async () => {
+            outcome = await lastOutcome.promise;
+        });
+        return outcome;
+    }
+
+    it("resolves ok once the session save that carries the fork succeeds", async () => {
+        renderEditor(vi.fn<SaveFn>().mockResolvedValue({ success: true, plays: [] }), [drill("k1", LIB)]);
+        fireEvent.click(screen.getByRole("button", { name: /edit diagram/i }));
+
+        expect(await stubSaveOutcome()).toEqual({ ok: true });
+    });
+
+    it("reports a rejected session save and rolls the card back", async () => {
+        const onSave = vi.fn<SaveFn>().mockResolvedValue({ success: false, error: DURATION_ERROR });
+        renderEditor(onSave, [drill("k1", LIB)]);
+        fireEvent.click(screen.getByRole("button", { name: /edit diagram/i }));
+
+        expect(await stubSaveOutcome()).toEqual({ ok: false, error: expect.stringContaining(DURATION_ERROR) });
+        expect(onSave.mock.calls[0][0].plays[0].playId).toBe(FORK);
+        // The card is back on the library drill, so a retry from the dialog is
+        // again a new id and saves the session again.
+        expect(screen.queryByRole("heading", { name: "Forked" })).toBeNull();
+        expect(screen.getByRole("heading", { name: "Breakout" })).toBeInTheDocument();
+    });
+
+    it("removes a brand-new drill's card when its session save fails", async () => {
+        renderEditor(vi.fn<SaveFn>().mockResolvedValue({ success: false, error: DURATION_ERROR }), []);
+        fireEvent.click(screen.getByRole("button", { name: /new drill/i }));
+
+        expect(await stubSaveOutcome()).toMatchObject({ ok: false });
+        expect(screen.queryByRole("heading", { name: "Forked" })).toBeNull();
     });
 });
