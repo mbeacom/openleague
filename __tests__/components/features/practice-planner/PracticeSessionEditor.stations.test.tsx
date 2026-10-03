@@ -1,6 +1,6 @@
 /** Station grouping in the session editor (practice planner 2b). */
 import { describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
@@ -91,12 +91,26 @@ describe("PracticeSessionEditor stations (2b)", () => {
         fireEvent.click(screen.getAllByLabelText(SWITCH)[1]);
 
         expect(screen.getByText("Stations · 3 · 15 min")).toBeInTheDocument();
-        // The block is decoration over a flat list: each grouped card is described by its header.
-        expect(screen.getByRole("heading", { name: "Drill b" }).closest(".MuiCard-root"))
-            .toHaveAccessibleDescription("Stations · 3 · 15 min");
+        // The block is decoration over a flat list: each grouped card is a group named by its header and title.
+        expect(screen.getByRole("group", { name: "Stations · 3 · 15 min Drill b" }))
+            .toBe(screen.getByRole("heading", { name: "Drill b" }).closest(".MuiCard-root"));
         expect(screen.getByText("Total Play Time: 15 minutes")).toBeInTheDocument();
         expect(screen.queryByText(/exceeds/)).not.toBeInTheDocument();
         expect(await savedOrder(onSave)).toBe("a b+ c+");
+    });
+
+    it("makes each block a heading over grouped cards, and leaves standalone cards ungrouped", () => {
+        renderEditor(drills("a b+ c"));
+
+        // Outline: h2 "Plays in Session" > h3 block header > h4 grouped drill; a standalone drill stays h3.
+        expect(screen.getByRole("heading", { level: 3, name: "Stations · 2 · 15 min" })).toBeInTheDocument();
+        expect(screen.getByRole("heading", { level: 4, name: "Drill a" })).toBeInTheDocument();
+        expect(screen.getByRole("heading", { level: 3, name: "Drill c" })).toBeInTheDocument();
+
+        const groups = screen.getAllByRole("group", { name: /^Stations · 2 · 15 min / });
+        expect(groups.map((group) => within(group).getByRole("heading", { level: 4 }).textContent))
+            .toEqual(["Drill a", "Drill b"]);
+        expect(screen.getByRole("heading", { name: "Drill c" }).closest(".MuiCard-root")).not.toHaveAttribute("role");
     });
 
     it("disables the switch that would make a fifth station, but not one that leaves the block", () => {

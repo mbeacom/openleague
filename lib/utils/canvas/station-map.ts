@@ -34,6 +34,29 @@ export function stationLabel(position: number, name: string): string {
     return `${position} · ${name}`;
 }
 
+interface Box {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+}
+
+const boxesOverlap = (a: Box, b: Box) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+
+/**
+ * Where a station's label block goes: its area's top-left corner, stepped
+ * down a line at a time while it overlaps a label already placed (stations
+ * sharing or nearly sharing a corner). It stops at the area's bottom edge;
+ * the label is clipped to its area either way.
+ */
+function placeLabel(box: Box, placed: Box[], areaBottom: number): Box {
+    const next = { ...box };
+    while (placed.some((other) => boxesOverlap(next, other)) && next.y + LABEL_LINE_PX < areaBottom) {
+        next.y += LABEL_LINE_PX;
+    }
+    return next;
+}
+
 function drawLabelLine(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, font: string, color: string): void {
     ctx.font = font;
     const width = ctx.measureText(text).width;
@@ -46,7 +69,7 @@ function drawLabelLine(ctx: CanvasRenderingContext2D, text: string, x: number, y
 /**
  * Draws the whole rink, then each station: its elements clipped to its area,
  * a dashed outline (solid and thicker for the active station), and its label.
- * Labels of stations that share a top-left corner stack instead of overlapping.
+ * Labels that would overlap an earlier station's label stack below it instead.
  */
 export function drawStationMap(
     ctx: CanvasRenderingContext2D,
@@ -55,7 +78,7 @@ export function drawStationMap(
     activeIndex: number,
 ): void {
     drawRink(ctx, transform, { cache: false });
-    const labelOffsets = new Map<string, number>();
+    const placedLabels: Box[] = [];
 
     const outline = (topLeft: { x: number; y: number }, width: number, height: number, active: boolean) => {
         ctx.save();
@@ -84,11 +107,27 @@ export function drawStationMap(
 
         const active = i === activeIndex;
         const color = active ? BOARD_COLORS.actionBlue : BOARD_COLORS.ink;
-        const corner = `${rect.x},${rect.y}`;
-        const offset = labelOffsets.get(corner) ?? 0;
-        labelOffsets.set(corner, offset + (station.playData ? 1 : 2) * LABEL_LINE_PX);
-        const textX = topLeft.x + LABEL_INSET_PX;
-        const textY = topLeft.y + LABEL_INSET_PX + offset;
+        const label = stationLabel(i + 1, station.name);
+        ctx.font = LABEL_FONT;
+        let labelWidth = ctx.measureText(label).width;
+        if (!station.playData) {
+            ctx.font = MESSAGE_FONT;
+            labelWidth = Math.max(labelWidth, ctx.measureText(PLAY_DATA_UNREADABLE_MESSAGE).width);
+        }
+        // The box matches drawLabelLine's backing rects: 2px of padding round the text.
+        const box = placeLabel(
+            {
+                x: topLeft.x + LABEL_INSET_PX - 2,
+                y: topLeft.y + LABEL_INSET_PX - 2,
+                w: labelWidth + 4,
+                h: (station.playData ? 1 : 2) * LABEL_LINE_PX,
+            },
+            placedLabels,
+            topLeft.y + height,
+        );
+        placedLabels.push(box);
+        const textX = box.x + 2;
+        const textY = box.y + 2;
 
         // Labels are clipped to the station's area so long names can't spill into neighbours.
         ctx.save();
@@ -97,7 +136,7 @@ export function drawStationMap(
         ctx.clip();
         ctx.textAlign = "left";
         ctx.textBaseline = "top";
-        drawLabelLine(ctx, stationLabel(i + 1, station.name), textX, textY, LABEL_FONT, color);
+        drawLabelLine(ctx, label, textX, textY, LABEL_FONT, color);
         if (!station.playData) {
             drawLabelLine(ctx, PLAY_DATA_UNREADABLE_MESSAGE, textX, textY + LABEL_LINE_PX, MESSAGE_FONT, color);
         }

@@ -53,8 +53,8 @@ export interface SessionDrillCardProps {
     onToggleStation: (index: number) => void;
     /**
      * The id of the station block header this drill belongs to, when it is one
-     * of several stations (2b). The card is styled as part of the block and
-     * described by the header; the list stays flat so cards never remount.
+     * of several stations (2b). The card is styled as part of the block and is
+     * a group labelled by the header; the list stays flat so cards never remount.
      */
     blockHeaderId?: string;
     /** Advisory: the drill is larger than the booked ice segment (2b). Never blocks a save. */
@@ -135,7 +135,10 @@ export function SessionDrillCard({
 
     return (
         <Card
-            aria-describedby={blockHeaderId}
+            // A grouped card can't sit inside a wrapper (moving it in or out would remount it),
+            // so each one is its own group, named by the block header and its title.
+            role={blockHeaderId ? "group" : undefined}
+            aria-labelledby={blockHeaderId ? `${blockHeaderId} ${titleId}` : undefined}
             sx={{
                 display: "flex",
                 flexDirection: { xs: "column", sm: "row" },
@@ -190,7 +193,7 @@ export function SessionDrillCard({
             {/* Content */}
             <CardContent sx={{ flexGrow: 1, py: 1 }}>
                 <Stack spacing={1}>
-                    <Typography id={titleId} variant="h6" component="h3">
+                    <Typography id={titleId} variant="h6" component={blockHeaderId ? "h4" : "h3"}>
                         {play.name || `Drill ${index + 1}`}
                     </Typography>
 

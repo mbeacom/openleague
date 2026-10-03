@@ -20,6 +20,9 @@ import {
   dragTarget,
   pxToRinkFt,
   pastDragThreshold,
+  pinchView,
+  PINCH_ZOOM_MIN,
+  PINCH_ZOOM_MAX,
 } from "@/lib/utils/canvas/interaction-utils";
 import { strokeFromV1Type, createEmptyPlayData } from "@/lib/utils/play-data";
 import { areaRect } from "@/lib/utils/ice-area";
@@ -321,5 +324,57 @@ describe("drag threshold", () => {
     expect(pastDragThreshold(grab, grab, 0.5)).toBe(false);
     expect(pastDragThreshold(grab, { x: 97.3, y: 40.3 }, 0.5)).toBe(false);
     expect(pastDragThreshold(grab, { x: 97.5, y: 40 }, 0.5)).toBe(true);
+  });
+});
+
+describe("pinchView", () => {
+  // The canvas point under the pinch's starting midpoint, in unzoomed canvas space.
+  const under = (screen: { x: number; y: number }, view: { zoom: number; pan: { x: number; y: number } }) => ({
+    x: (screen.x - view.pan.x) / view.zoom,
+    y: (screen.y - view.pan.y) / view.zoom,
+  });
+  const start = { zoom: 1.5, pan: { x: -40, y: 10 }, center: { x: 300, y: 180 }, distance: 100 };
+
+  it("keeps the point under a still midpoint fixed while zooming in", () => {
+    const view = pinchView(start, { center: start.center, distance: 160 });
+    expect(view.zoom).toBeCloseTo(2.4, 9);
+    const before = under(start.center, start);
+    const after = under(start.center, view);
+    expect(after.x).toBeCloseTo(before.x, 9);
+    expect(after.y).toBeCloseTo(before.y, 9);
+  });
+
+  it("carries the anchored point with a moving midpoint (zoom and pan together)", () => {
+    const center = { x: 340, y: 150 };
+    const view = pinchView(start, { center, distance: 80 });
+    expect(view.zoom).toBeCloseTo(1.2, 9);
+    const before = under(start.center, start);
+    const after = under(center, view);
+    expect(after.x).toBeCloseTo(before.x, 9);
+    expect(after.y).toBeCloseTo(before.y, 9);
+  });
+
+  it("is a pure pan when the fingers keep their distance", () => {
+    const view = pinchView(start, { center: { x: 320, y: 170 }, distance: 100 });
+    expect(view.zoom).toBe(1.5);
+    expect(view.pan).toEqual({ x: -20, y: 0 });
+  });
+
+  it("clamps the zoom first and anchors with the clamped value", () => {
+    const zoomedIn = pinchView(start, { center: start.center, distance: 1000 });
+    expect(zoomedIn.zoom).toBe(PINCH_ZOOM_MAX);
+    const zoomedOut = pinchView(start, { center: start.center, distance: 1 });
+    expect(zoomedOut.zoom).toBe(PINCH_ZOOM_MIN);
+    for (const view of [zoomedIn, zoomedOut]) {
+      const after = under(start.center, view);
+      const before = under(start.center, start);
+      expect(after.x).toBeCloseTo(before.x, 9);
+      expect(after.y).toBeCloseTo(before.y, 9);
+    }
+  });
+
+  it("leaves the view unchanged for a degenerate (zero-distance) start", () => {
+    const view = pinchView({ ...start, distance: 0 }, { center: { x: 0, y: 0 }, distance: 50 });
+    expect(view).toEqual({ zoom: start.zoom, pan: start.pan });
   });
 });

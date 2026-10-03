@@ -1,5 +1,7 @@
 /** The bench-sheet route (3b): the detail page's gate, no dashboard chrome, light scheme. */
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { render, screen } from "@testing-library/react";
 
 const { mockGetDetail, mockNotFound, mockRequireAuth } = vi.hoisted(() => ({
@@ -61,5 +63,22 @@ describe("print layout", () => {
         render(await PrintLayout({ children: <p>sheet</p> }));
         expect(screen.getByText("sheet").closest("[data-mui-color-scheme='light']")).not.toBeNull();
         expect(mockRequireAuth).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe("print scoping", () => {
+    it("marks the layout's main so print.css can target it without a bare main selector", async () => {
+        render(await PrintLayout({ children: <p>sheet</p> }));
+        expect(screen.getByText("sheet").closest("main")).toHaveClass("bench-print-root");
+    });
+
+    it("keeps every print.css rule scoped to the bench sheet", () => {
+        const css = readFileSync(join(process.cwd(), "app/(print)/print.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+        expect(css).toMatch(/@page bench\s*\{/);
+        expect(css).not.toMatch(/@page\s*\{/);
+        expect(css).toMatch(/\.bench-sheet\s*\{\s*page:\s*bench;/);
+        expect(css).toMatch(/html:has\(\.bench-sheet\)/);
+        expect(css).not.toMatch(/(^|[\s,{}])main\s*\{/);
+        expect(css).not.toMatch(/(^|[\s,{}])(html|body)\s*[,{]/);
     });
 });

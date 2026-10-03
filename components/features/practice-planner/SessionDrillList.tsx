@@ -46,7 +46,8 @@ export interface SessionDrillListProps {
  * warnings (2b). It is a sibling of the block's cards, not their parent: the
  * list renders flat so a drill joining, leaving or heading a block never
  * remounts its card (which would drop keyboard focus and inline-edit drafts).
- * The grouped cards point at `id` with aria-describedby.
+ * It is an h3 like a standalone card's title; each grouped card is a
+ * role="group" labelled by `id` plus its own (h4) title.
  */
 function StationBlockHeader({ id, label, warnings }: { id: string; label: string; warnings: string[] }) {
     return (
@@ -54,7 +55,7 @@ function StationBlockHeader({ id, label, warnings }: { id: string; label: string
             <Typography
                 id={id}
                 variant="subtitle2"
-                component="p"
+                component="h3"
                 sx={{ fontWeight: 800, color: "primary.main", textTransform: "uppercase", letterSpacing: 1 }}
             >
                 {label}

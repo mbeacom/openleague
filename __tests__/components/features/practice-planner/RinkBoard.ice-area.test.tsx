@@ -244,6 +244,149 @@ describe("RinkBoard ice area", () => {
         expect(onAreaDrawn).not.toHaveBeenCalled();
     });
 
+    it("abandons an element drag when a second touch starts: the element stays put, nothing is recorded", () => {
+        const onUndoRedoStateChange = vi.fn();
+        const { canvas, at, onPlayDataChange, onSelectionChange } = setup({
+            playData: { ...createEmptyPlayData(), area: CUSTOM, equipment: [cone(110)] },
+            selectedTool: "select",
+            onUndoRedoStateChange,
+        });
+        const grab = at(110, 40);
+        const moved = at(104, 40); // well past the drag threshold
+        fireEvent.touchStart(canvas, { touches: [grab] });
+        fireEvent.touchMove(canvas, { touches: [moved] });
+        // A second finger lands: the pinch takes over and the drag is cancelled.
+        fireEvent.touchStart(canvas, { touches: [moved, at(115, 45)] });
+        fireEvent.touchEnd(canvas, { touches: [] });
+        expect(onPlayDataChange).not.toHaveBeenCalled();
+        expect(onUndoRedoStateChange).not.toHaveBeenCalled();
+        // The pinch cancels the drag, not the selection.
+        expect(onSelectionChange).toHaveBeenLastCalledWith("c");
+    });
+
+    it("does not resume an abandoned drag when one finger of the pinch lifts and the other moves", () => {
+        const { canvas, at, onPlayDataChange } = setup({
+            playData: { ...createEmptyPlayData(), area: CUSTOM, equipment: [cone(110)] },
+            selectedTool: "select",
+        });
+        fireEvent.touchStart(canvas, { touches: [at(110, 40)] });
+        fireEvent.touchMove(canvas, { touches: [at(104, 40)] });
+        fireEvent.touchStart(canvas, { touches: [at(104, 40), at(115, 45)] });
+        fireEvent.touchEnd(canvas, { touches: [at(104, 40)] });
+        fireEvent.touchMove(canvas, { touches: [at(102, 35)] });
+        fireEvent.touchEnd(canvas, { touches: [] });
+        expect(onPlayDataChange).not.toHaveBeenCalled();
+    });
+
+    it("abandons an element drag on touchcancel: the element stays put, later input commits nothing", () => {
+        const onUndoRedoStateChange = vi.fn();
+        const { canvas, at, onPlayDataChange } = setup({
+            playData: { ...createEmptyPlayData(), area: CUSTOM, equipment: [cone(110)] },
+            selectedTool: "select",
+            onUndoRedoStateChange,
+        });
+        fireEvent.touchStart(canvas, { touches: [at(110, 40)] });
+        fireEvent.touchMove(canvas, { touches: [at(104, 40)] });
+        fireEvent.touchCancel(canvas, { touches: [] });
+        fireEvent.touchMove(canvas, { touches: [at(100, 35)] });
+        fireEvent.mouseMove(canvas, at(100, 35));
+        fireEvent.touchEnd(canvas, { touches: [] });
+        fireEvent.mouseUp(window);
+        expect(onPlayDataChange).not.toHaveBeenCalled();
+        expect(onUndoRedoStateChange).not.toHaveBeenCalled();
+    });
+
+    it("abandons a stroke in progress on touchcancel", () => {
+        const { canvas, at, onPlayDataChange } = setup({ selectedTool: "stroke" });
+        fireEvent.touchStart(canvas, { touches: [at(40, 40)] });
+        fireEvent.touchMove(canvas, { touches: [at(60, 40)] });
+        fireEvent.touchMove(canvas, { touches: [at(80, 40)] });
+        fireEvent.touchCancel(canvas, { touches: [] });
+        fireEvent.touchEnd(canvas, { touches: [] });
+        fireEvent.mouseUp(window);
+        expect(onPlayDataChange).not.toHaveBeenCalled();
+    });
+
+    it("abandons an area drag on touchcancel", () => {
+        const onAreaDrawn = vi.fn();
+        const { canvas, onPlayDataChange } = setup({ areaTool: true, onAreaDrawn });
+        const full = createTransformContext(800, 400, 20, FULL_RINK);
+        const a = rinkToCanvas({ x: 20, y: 10 }, full);
+        const b = rinkToCanvas({ x: 60, y: 50 }, full);
+        fireEvent.touchStart(canvas, { touches: [{ clientX: a.x, clientY: a.y }] });
+        fireEvent.touchMove(canvas, { touches: [{ clientX: b.x, clientY: b.y }] });
+        fireEvent.touchCancel(canvas, { touches: [] });
+        fireEvent.touchEnd(canvas, { touches: [] });
+        fireEvent.mouseUp(window);
+        expect(onPlayDataChange).not.toHaveBeenCalled();
+        expect(onAreaDrawn).not.toHaveBeenCalled();
+    });
+
+    it("abandons a stroke in progress when a second touch starts", () => {
+        const { canvas, at, onPlayDataChange } = setup({ selectedTool: "stroke" });
+        fireEvent.touchStart(canvas, { touches: [at(40, 40)] });
+        fireEvent.touchMove(canvas, { touches: [at(60, 40)] });
+        fireEvent.touchMove(canvas, { touches: [at(80, 40)] });
+        fireEvent.touchStart(canvas, { touches: [at(80, 40), at(90, 50)] });
+        fireEvent.touchEnd(canvas, { touches: [] });
+        expect(onPlayDataChange).not.toHaveBeenCalled();
+    });
+
+    it("zooms about the pinch midpoint: the rink point under the fingers stays under them", () => {
+        const { canvas, at, onPlayDataChange } = setup({ selectedTool: "player" });
+        const full = createTransformContext(800, 400, 20, FULL_RINK);
+        const mid = at(150, 40);
+        // Fingers 100 px apart around the point, spread to 200 px: 2x about the midpoint.
+        fireEvent.touchStart(canvas, { touches: [{ clientX: mid.clientX - 50, clientY: mid.clientY }, { clientX: mid.clientX + 50, clientY: mid.clientY }] });
+        fireEvent.touchMove(canvas, { touches: [{ clientX: mid.clientX - 100, clientY: mid.clientY }, { clientX: mid.clientX + 100, clientY: mid.clientY }] });
+        fireEvent.touchEnd(canvas, { touches: [] });
+        fireEvent.mouseDown(canvas, mid);
+        const placed = onPlayDataChange.mock.calls.at(-1)![0].players[0].position;
+        expect(placed.x).toBeCloseTo(150, 6);
+        expect(placed.y).toBeCloseTo(40, 6);
+        // A point away from the midpoint is now twice as far from it on screen.
+        const off = rinkToCanvas({ x: 160, y: 40 }, full);
+        fireEvent.mouseDown(canvas, { clientX: mid.clientX + 2 * (off.x - mid.clientX), clientY: mid.clientY });
+        const second = onPlayDataChange.mock.calls.at(-1)![0].players.at(-1).position;
+        expect(second.x).toBeCloseTo(160, 6);
+    });
+
+    it("anchors the pinch on a canvas that is offset on the page (client vs canvas coordinates)", () => {
+        const { canvas, at, onPlayDataChange } = setup({ selectedTool: "player" });
+        const [left, top] = [120, 60];
+        canvas.getBoundingClientRect = () => ({ left, top, width: 800, height: 400, right: left + 800, bottom: top + 400, x: left, y: top, toJSON: () => ({}) });
+        const p = at(150, 40);
+        const mid = { clientX: p.clientX + left, clientY: p.clientY + top };
+        fireEvent.touchStart(canvas, { touches: [{ clientX: mid.clientX - 50, clientY: mid.clientY }, { clientX: mid.clientX + 50, clientY: mid.clientY }] });
+        fireEvent.touchMove(canvas, { touches: [{ clientX: mid.clientX - 100, clientY: mid.clientY }, { clientX: mid.clientX + 100, clientY: mid.clientY }] });
+        fireEvent.touchEnd(canvas, { touches: [] });
+        fireEvent.mouseDown(canvas, mid);
+        const placed = onPlayDataChange.mock.calls.at(-1)![0].players[0].position;
+        expect(placed.x).toBeCloseTo(150, 6);
+        expect(placed.y).toBeCloseTo(40, 6);
+    });
+
+    it("re-anchors when the finger count changes, so the view doesn't jump", () => {
+        const { canvas, at, onPlayDataChange } = setup({ selectedTool: "player" });
+        const a = { clientX: 300, clientY: 200 };
+        const b = { clientX: 400, clientY: 200 };
+        const c = { clientX: 400, clientY: 300 };
+        fireEvent.touchStart(canvas, { touches: [a, b] });
+        // A third finger lands, then the first lifts: the remaining pair is a
+        // different pair, so holding it still must not move the view.
+        fireEvent.touchStart(canvas, { touches: [a, b, c] });
+        fireEvent.touchMove(canvas, { touches: [a, b, c] });
+        fireEvent.touchEnd(canvas, { touches: [b, c] });
+        fireEvent.touchMove(canvas, { touches: [b, c] });
+        fireEvent.touchEnd(canvas, { touches: [] });
+        expect(onPlayDataChange).not.toHaveBeenCalled();
+        // Still zoom 1, no pan: a click maps straight through the viewport.
+        fireEvent.mouseDown(canvas, at(150, 40));
+        const placed = onPlayDataChange.mock.calls.at(-1)![0].players[0].position;
+        expect(placed.x).toBeCloseTo(150, 6);
+        expect(placed.y).toBeCloseTo(40, 6);
+    });
+
     it("resets pinch-zoom and pan when the viewport changes", () => {
         const { canvas, ref, onPlayDataChange, rerender } = setup({ selectedTool: "player" });
         // Pinch to 2x around an off-center point, which also pans.
@@ -256,6 +399,27 @@ describe("RinkBoard ice area", () => {
             <RinkBoard ref={ref} mode="edit" width={800} height={400} selectedTool="player"
                 playData={zoned} onPlayDataChange={onPlayDataChange} />
         );
+        const zone = createTransformContext(800, 400, 20, editViewport({ kind: "zone-left" }));
+        const p = rinkToCanvas({ x: 40, y: 50 }, zone);
+        fireEvent.mouseDown(canvas, { clientX: p.x, clientY: p.y });
+        const placed = onPlayDataChange.mock.calls.at(-1)![0].players[0].position;
+        expect(placed.x).toBeCloseTo(40, 6);
+        expect(placed.y).toBeCloseTo(50, 6);
+    });
+
+    it("ends a pinch in progress when the viewport changes, so its next move can't re-zoom the new one", () => {
+        const { canvas, ref, onPlayDataChange, rerender } = setup({ selectedTool: "player" });
+        fireEvent.touchStart(canvas, { touches: [{ clientX: 300, clientY: 200 }, { clientX: 400, clientY: 200 }] });
+        fireEvent.touchMove(canvas, { touches: [{ clientX: 300, clientY: 200 }, { clientX: 500, clientY: 200 }] });
+        // The area changes mid-pinch (the fingers are still down).
+        act(() => ref.current!.setArea({ kind: "zone-left" }));
+        const zoned: PlayData = onPlayDataChange.mock.calls.at(-1)![0];
+        rerender(
+            <RinkBoard ref={ref} mode="edit" width={800} height={400} selectedTool="player"
+                playData={zoned} onPlayDataChange={onPlayDataChange} />
+        );
+        fireEvent.touchMove(canvas, { touches: [{ clientX: 300, clientY: 200 }, { clientX: 520, clientY: 200 }] });
+        fireEvent.touchEnd(canvas, { touches: [] });
         const zone = createTransformContext(800, 400, 20, editViewport({ kind: "zone-left" }));
         const p = rinkToCanvas({ x: 40, y: 50 }, zone);
         fireEvent.mouseDown(canvas, { clientX: p.x, clientY: p.y });
@@ -369,6 +533,85 @@ describe("RinkBoard ice area", () => {
             fireEvent.mouseMove(canvas, at(124, 54));
             fireEvent.mouseUp(canvas);
             expect(onPlayDataChange).not.toHaveBeenCalled();
+        });
+    });
+
+    describe("touch taps for place / erase / text wait for the finger to lift", () => {
+        it("places nothing and records nothing when a pinch starts on the player tool", () => {
+            const onUndoRedoStateChange = vi.fn();
+            const { canvas, at, onPlayDataChange } = setup({ selectedTool: "player", onUndoRedoStateChange });
+            fireEvent.touchStart(canvas, { touches: [at(40, 40)] });
+            fireEvent.touchStart(canvas, { touches: [at(40, 40), at(60, 50)] });
+            fireEvent.touchEnd(canvas, { touches: [at(60, 50)] });
+            fireEvent.touchEnd(canvas, { touches: [] });
+            expect(onPlayDataChange).not.toHaveBeenCalled();
+            expect(onUndoRedoStateChange).not.toHaveBeenCalled();
+        });
+
+        it("places once, on touchend, for a single tap", () => {
+            const { canvas, at, onPlayDataChange } = setup({ selectedTool: "equipment" });
+            const p = at(40, 40);
+            fireEvent.touchStart(canvas, { touches: [p] });
+            expect(onPlayDataChange).not.toHaveBeenCalled();
+            fireEvent.touchMove(canvas, { touches: [{ clientX: p.clientX + 2, clientY: p.clientY + 1 }] });
+            fireEvent.touchEnd(canvas, { touches: [] });
+            expect(onPlayDataChange).toHaveBeenCalledTimes(1);
+            const placed = onPlayDataChange.mock.calls[0][0].equipment;
+            expect(placed).toHaveLength(1);
+            expect(placed[0].position.x).toBeCloseTo(40, 6);
+            expect(placed[0].position.y).toBeCloseTo(40, 6);
+        });
+
+        it("places nothing when the finger travels past the drag threshold", () => {
+            const { canvas, at, onPlayDataChange } = setup({ selectedTool: "player" });
+            fireEvent.touchStart(canvas, { touches: [at(40, 40)] });
+            fireEvent.touchMove(canvas, { touches: [at(60, 40)] });
+            fireEvent.touchEnd(canvas, { touches: [] });
+            expect(onPlayDataChange).not.toHaveBeenCalled();
+        });
+
+        it("erases nothing when a pinch starts on the eraser", () => {
+            const { canvas, at, onPlayDataChange } = setup({
+                playData: { ...createEmptyPlayData(), equipment: [cone(40)] },
+                selectedTool: "eraser",
+            });
+            fireEvent.touchStart(canvas, { touches: [at(40, 40)] });
+            fireEvent.touchStart(canvas, { touches: [at(40, 40), at(60, 50)] });
+            fireEvent.touchEnd(canvas, { touches: [] });
+            expect(onPlayDataChange).not.toHaveBeenCalled();
+        });
+
+        it("does not open the text prompt when a pinch starts on the text tool", () => {
+            const promptSpy = vi.spyOn(window, "prompt").mockReturnValue("Hi");
+            try {
+                const { canvas, at, onPlayDataChange } = setup({ selectedTool: "text" });
+                fireEvent.touchStart(canvas, { touches: [at(40, 40)] });
+                fireEvent.touchStart(canvas, { touches: [at(40, 40), at(60, 50)] });
+                fireEvent.touchEnd(canvas, { touches: [] });
+                expect(promptSpy).not.toHaveBeenCalled();
+                // A plain tap still asks, once the finger lifts.
+                fireEvent.touchStart(canvas, { touches: [at(40, 40)] });
+                expect(promptSpy).not.toHaveBeenCalled();
+                fireEvent.touchEnd(canvas, { touches: [] });
+                expect(promptSpy).toHaveBeenCalledTimes(1);
+                expect(onPlayDataChange.mock.calls.at(-1)![0].annotations).toHaveLength(1);
+            } finally {
+                promptSpy.mockRestore();
+            }
+        });
+
+        it("drops a pending tap on touchcancel, so a later touchend places nothing", () => {
+            const { canvas, at, onPlayDataChange } = setup({ selectedTool: "player" });
+            fireEvent.touchStart(canvas, { touches: [at(40, 40)] });
+            fireEvent.touchCancel(canvas, { touches: [] });
+            fireEvent.touchEnd(canvas, { touches: [] });
+            expect(onPlayDataChange).not.toHaveBeenCalled();
+        });
+
+        it("still places on mouse down (mouse input is unchanged)", () => {
+            const { canvas, at, onPlayDataChange } = setup({ selectedTool: "player" });
+            fireEvent.mouseDown(canvas, at(40, 40));
+            expect(onPlayDataChange).toHaveBeenCalledTimes(1);
         });
     });
 });

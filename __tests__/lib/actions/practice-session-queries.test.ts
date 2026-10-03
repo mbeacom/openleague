@@ -179,16 +179,17 @@ describe("getPracticeSessionDetail: venue timezone and unchanged access (3b)", (
   });
 
   it.each([
-    ["an admin, unshared", { role: "ADMIN" as const }, false, true],
-    ["a member, shared", { role: "MEMBER" as const }, true, true],
-    ["a member, unshared", { role: "MEMBER" as const }, false, false],
-    ["a non-member, shared", null, true, false],
-  ])("keeps the access rule: %s", async (_label, sessionTeam, isShared, visible) => {
+    ["an admin, unshared", { role: "ADMIN" as const }, false, true, true],
+    ["a member, shared", { role: "MEMBER" as const }, true, true, false],
+    ["a member, unshared", { role: "MEMBER" as const }, false, false, undefined],
+    ["a non-member, shared", null, true, false, undefined],
+  ])("keeps the access rule: %s", async (_label, sessionTeam, isShared, visible, isAdmin) => {
     memberships(sessionTeam);
     mockPrisma.practiceSession.findUnique.mockResolvedValue(detailRow({ isShared }));
 
     const result = await getPracticeSessionDetail("s1");
 
     expect(result !== null).toBe(visible);
+    if (visible) expect(result?.isAdmin).toBe(isAdmin);
   });
 });

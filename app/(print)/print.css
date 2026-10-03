@@ -1,12 +1,19 @@
 /*
  * Bench sheet print rules (practice planner 3b). Imported only by
- * app/(print)/layout.tsx. The @page rule and html,body rule in @media print
- * are global and persist in the tab after client-side navigation (accepted
- * behaviour, plan Ruling 12). All other rules are scoped to bench-* and
- * no-print classes.
+ * app/(print)/layout.tsx, but a client-side "Back to session" keeps this
+ * stylesheet loaded in the tab, so every rule is scoped to the bench sheet and
+ * none can affect another page:
+ *   - the page margin uses a named page (`page: bench` on .bench-sheet),
+ *   - the html/body print rule applies only while a .bench-sheet is present,
+ *   - the main override targets .bench-print-root, set by the (print) layout.
+ * The remaining rules are keyed to bench-* and no-print classes.
  */
-@page {
+@page bench {
   margin: 12mm;
+}
+
+.bench-sheet {
+  page: bench;
 }
 
 .bench-timeline table {
@@ -39,13 +46,13 @@
 }
 
 @media print {
-  html,
-  body {
+  html:has(.bench-sheet),
+  body:has(.bench-sheet) {
     background: #fff !important;
     color: #000 !important;
   }
 
-  main {
+  .bench-print-root {
     min-height: auto !important;
   }
 

@@ -485,15 +485,26 @@ export function PracticeSessionEditor({
     }, [sessionId, onShare]);
 
     /**
+     * Applies a list edit from the timeline helpers, which return the list
+     * itself when they refuse (a capped toggle, a move off the end): a refused
+     * edit changes nothing and must not mark the editor dirty. Computed from
+     * the rendered list; React renders between discrete clicks.
+     */
+    const applyListEdit = useCallback((next: PlayInSession[]) => {
+        if (next === plays) return;
+        setPlays(next);
+        markDirty();
+    }, [plays, markDirty]);
+
+    /**
      * Handle delete play
      * Requirements: 2.2 - Remove plays from session
      */
     const handleDeletePlay = useCallback((playId: string) => {
         if (creating) return; // A create redirects; this edit would be lost.
         // Removing a block's first drill keeps its stations grouped (2b).
-        setPlays((prevPlays) => removeItem(prevPlays, prevPlays.findIndex((p) => p.id === playId)));
-        markDirty();
-    }, [markDirty, creating]);
+        applyListEdit(removeItem(plays, plays.findIndex((p) => p.id === playId)));
+    }, [applyListEdit, plays, creating]);
 
     /**
      * Handle edit play
@@ -578,16 +589,12 @@ export function PracticeSessionEditor({
      * moves within its block, and a standalone drill hops over whole blocks.
      */
     const handleMovePlay = useCallback((index: number, dir: -1 | 1) => {
-        if (creating) return;
-        setPlays((prevPlays) => moveItem(prevPlays, index, dir));
-        markDirty();
-    }, [markDirty, creating]);
+        if (!creating) applyListEdit(moveItem(plays, index, dir));
+    }, [applyListEdit, plays, creating]);
 
     const handleToggleStation = useCallback((index: number) => {
-        if (creating) return;
-        setPlays((prevPlays) => toggleRunsWithPrevious(prevPlays, index));
-        markDirty();
-    }, [markDirty, creating]);
+        if (!creating) applyListEdit(toggleRunsWithPrevious(plays, index));
+    }, [applyListEdit, plays, creating]);
 
     // Cleanup success timeout on unmount
     useEffect(() => {

@@ -222,3 +222,23 @@ describe("BenchSheet", () => {
         );
     });
 });
+
+describe("BenchSheet chrome and place line", () => {
+    it("marks the toolbar no-print so the Print and Back controls never reach paper", () => {
+        renderSheet();
+        const toolbar = screen.getByRole("button", { name: "Print" }).closest(".no-print");
+        expect(toolbar).not.toBeNull();
+        expect(within(toolbar as HTMLElement).getByRole("link", { name: /back to session/i })).toBeInTheDocument();
+    });
+
+    it("shows the place line as venue, surface and segment", () => {
+        renderSheet();
+        expect(screen.getByText("Test Rink · Main · Half A")).toBeInTheDocument();
+    });
+
+    it("omits the place line when the session has no venue", () => {
+        renderSheet({ ...SESSION, venueId: null, venueName: null, surfaceId: null, surfaceName: null, segmentId: null, segmentName: null, segmentKind: null, startAt: null, venueTimezone: null });
+        expect(screen.queryByText(/Test Rink|Main|Half A/)).toBeNull();
+    });
+
+});
