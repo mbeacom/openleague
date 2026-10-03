@@ -22,7 +22,17 @@ export const FORBIDDEN_IN_BUNDLE: ReadonlyArray<{ pattern: string; reason: strin
     { pattern: "vitals.vercel", reason: "analytics are not allowed in the static planner" },
 ];
 
-export const REQUIRED_IN_BUNDLE = ["openleague.practice-plan"];
+export const REQUIRED_IN_BUNDLE = ["openleague.practice-plan", "word/document.xml"];
+
+/** Code that must load only on demand, by a literal only it contains. */
+export const LAZY_ONLY_IN_BUNDLE: ReadonlyArray<{ pattern: string; reason: string }> = [
+    { pattern: "word/document.xml", reason: "the Word export (docx) must load only through import(), on click" },
+];
+
+/** The module scripts index.html loads up front, relative to outDir. */
+function entryScripts(html: string): string[] {
+    return Array.from(html.matchAll(/<script\b[^>]*\bsrc="\.\/([^"]+\.js)"/g), (match) => match[1]);
+}
 
 /** `process.env`, `process?.env`, `process["env"]` and `process?.["env"]`, capturing what precedes `process`. */
 const PROCESS_ENV = /(\.\s*)?\bprocess\s*(\?\.\s*env\b|\.\s*env\b|(\?\.)?\s*\[\s*["']env["']\s*\])/g;
@@ -92,9 +102,16 @@ export async function checkPlannerBuild(outDir: string): Promise<string[]> {
             if (text.includes(pattern)) problems.push(`${file} contains "${pattern}": ${reason}`);
         }
     }
+    for (const entry of entryScripts(html)) {
+        const text = contents.find(([file]) => file.split(path.sep).join("/") === entry)?.[1];
+        if (text === undefined) continue;
+        for (const { pattern, reason } of LAZY_ONLY_IN_BUNDLE) {
+            if (text.includes(pattern)) problems.push(`${entry} (the entry chunk) contains "${pattern}": ${reason}`);
+        }
+    }
     for (const needle of REQUIRED_IN_BUNDLE) {
         if (!contents.some(([, text]) => text.includes(needle))) {
-            problems.push(`no emitted file contains "${needle}": the plan-document module is missing from the bundle`);
+            problems.push(`no emitted file contains "${needle}": a required module is missing from the bundle`);
         }
     }
     return problems;

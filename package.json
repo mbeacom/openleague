@@ -74,6 +74,7 @@
     "@vercel/oidc-aws-credentials-provider": "^3.3.8",
     "bcryptjs": "^3.0.3",
     "date-fns": "^4.4.0",
+    "docx": "^9.8.1",
     "next": "^16.3.5",
     "next-auth": "^5.0.0-beta.32",
     "react": "19.2.4",
