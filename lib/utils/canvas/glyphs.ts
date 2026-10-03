@@ -57,7 +57,7 @@ export function drawPlayerGlyph(
 ): void {
     if (isSelected) selectionRing(ctx, c, r);
     const shape = PLAYER_GLYPH_SHAPE[player.role];
-    const text = player.label || player.role;
+    const text = player.label.trim() || player.role;
     let textColor = contrastText(player.color);
 
     ctx.lineWidth = Math.max(1.5, r * 0.12);

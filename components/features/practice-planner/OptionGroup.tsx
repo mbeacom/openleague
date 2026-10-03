@@ -8,7 +8,8 @@ import { ToggleButtonGroup, ToggleButton, Tooltip } from "@mui/material";
  * and a tooltip. Wrapping in Tooltip is safe here: ToggleButtonGroup passes
  * value/onChange to its buttons through context, not by cloning children.
  */
-export const OPTION_SX = { minWidth: 44, minHeight: 44, px: 1.25, fontWeight: 800 } as const;
+export const TOUCH_TARGET_SX = { minWidth: 44, minHeight: 44 } as const;
+export const OPTION_SX = { ...TOUCH_TARGET_SX, px: 1.25, fontWeight: 800 } as const;
 
 export function OptionGroup<T extends string>({ label, value, options, labels, onChange }: {
     label: string;

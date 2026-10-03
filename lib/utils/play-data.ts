@@ -173,6 +173,28 @@ function isNotBlankAnnotation(a: unknown): boolean {
     return typeof text !== "string" || text.trim().length > 0;
 }
 
+/**
+ * Returns a resolver for v1 element ids. Ids of at most MAX_ID_LENGTH that are
+ * not yet taken are kept as is; over-long or duplicate ids get a deterministic
+ * `v1-<kind>-<index>` id (suffixed until unique). The board selects, updates and
+ * removes elements by id, so truncation (which can collide) is never used.
+ */
+function createV1IdResolver(allIds: string[]) {
+    const reserved = new Set(allIds.filter((id) => id.length <= MAX_ID_LENGTH));
+    const used = new Set<string>();
+    return (id: string, kind: string, index: number): string => {
+        if (id.length <= MAX_ID_LENGTH && !used.has(id)) {
+            used.add(id);
+            return id;
+        }
+        const base = `v1-${kind}-${index}`;
+        let candidate = base;
+        for (let n = 2; reserved.has(candidate) || used.has(candidate); n++) candidate = `${base}-${n}`;
+        used.add(candidate);
+        return candidate;
+    };
+}
+
 /** Converts stored play data of any supported version to v2. Throws PlayDataError. */
 export function upgradePlayData(raw: unknown): PlayData {
     if (typeof raw !== "object" || raw === null) throw new PlayDataError("Play data must be an object");
@@ -188,17 +210,23 @@ export function upgradePlayData(raw: unknown): PlayData {
     const v1 = v1Schema.safeParse(raw);
     if (!v1.success) throw new PlayDataError("Unrecognized play data", v1.error);
 
+    const resolveId = createV1IdResolver([
+        ...v1.data.players.map((p) => p.id),
+        ...v1.data.drawings.map((d) => d.id),
+        ...v1.data.annotations.map((a) => a.id),
+    ]);
+
     return parseV2({
         version: PLAY_DATA_VERSION,
-        players: v1.data.players.map((p) => ({
-            id: p.id.slice(0, MAX_ID_LENGTH),
+        players: v1.data.players.map((p, i) => ({
+            id: resolveId(p.id, "player", i),
             position: clampToRink(p.position),
             role: "X",
             label: p.label.slice(0, C.MAX_PLAYER_LABEL_LENGTH),
             color: p.color,
         })),
-        drawings: v1.data.drawings.map((d) => ({
-            id: d.id.slice(0, MAX_ID_LENGTH),
+        drawings: v1.data.drawings.map((d, i) => ({
+            id: resolveId(d.id, "drawing", i),
             ...strokeFromV1Type(d.type),
             points: simplifyPoints(d.points.map(clampToRink), 0),
             color: d.color,
@@ -206,9 +234,9 @@ export function upgradePlayData(raw: unknown): PlayData {
         })),
         equipment: [],
         annotations: v1.data.annotations
-            .map((a) => ({
+            .map((a, i) => ({
                 ...a,
-                id: a.id.slice(0, MAX_ID_LENGTH),
+                id: resolveId(a.id, "annotation", i),
                 text: a.text.slice(0, C.MAX_ANNOTATION_LENGTH),
                 fontSize: Math.min(MAX_FONT_SIZE, a.fontSize),
                 position: clampToRink(a.position),

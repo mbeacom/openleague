@@ -11,7 +11,7 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
-import { DrawingToolbar, DrawingToolbarProps, OPTION_SX } from "@/components/features/practice-planner/DrawingToolbar";
+import { DrawingToolbar, DrawingToolbarProps, OPTION_SX, TOUCH_TARGET_SX } from "@/components/features/practice-planner/DrawingToolbar";
 import { DrawingTool } from "@/types/practice-planner";
 
 // Create a theme for consistent testing
@@ -415,6 +415,14 @@ describe("DrawingToolbar", () => {
             expect(screen.getByLabelText("Cone")).toBeInTheDocument();
             expect(OPTION_SX.minWidth).toBe(44);
             expect(OPTION_SX.minHeight).toBe(44);
+        });
+
+        it("primary tool buttons share the 44px touch target", () => {
+            renderWithTheme(createDefaultProps());
+            expect(TOUCH_TARGET_SX).toEqual({ minWidth: 44, minHeight: 44 });
+            for (const name of ["select tool", "player tool", "movement tool", "equipment tool", "text tool", "eraser tool", "color picker", "undo", "redo", "clear canvas"]) {
+                expect(screen.getByLabelText(name)).toBeInTheDocument();
+            }
         });
     });
 });

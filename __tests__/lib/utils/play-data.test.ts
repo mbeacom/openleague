@@ -109,12 +109,45 @@ describe("upgradePlayData", () => {
         expect(v2.annotations[0].fontSize).toBe(200);
     });
 
-    it("truncates over-long v1 ids to 100 characters", () => {
+    it("replaces an over-long v1 id with a deterministic id of at most 100 characters", () => {
         const v2 = upgradePlayData({
             ...v1Play,
             players: [{ id: "x".repeat(150), position: { x: 5, y: 5 }, label: "A", color: "#000000" }],
         });
-        expect(v2.players[0].id).toHaveLength(100);
+        expect(v2.players[0].id.length).toBeLessThanOrEqual(100);
+        expect(v2.players[0].id).toBe("v1-player-0");
+    });
+
+    it("keeps two long v1 ids that share a 100-char prefix distinct", () => {
+        const prefix = "y".repeat(100);
+        const v2 = upgradePlayData({
+            ...v1Play,
+            players: [
+                { id: `${prefix}A${"z".repeat(49)}`, position: { x: 5, y: 5 }, label: "A", color: "#000000" },
+                { id: `${prefix}B${"z".repeat(49)}`, position: { x: 6, y: 6 }, label: "B", color: "#000000" },
+            ],
+        });
+        expect(new Set(v2.players.map((p) => p.id)).size).toBe(2);
+    });
+
+    it("keeps short unique v1 ids unchanged and de-duplicates across kinds", () => {
+        const v2 = upgradePlayData({
+            players: [{ id: "p1", position: { x: 5, y: 5 }, label: "A", color: "#000000" }],
+            drawings: [{ id: "d1", type: "line", points: [{ x: 1, y: 1 }, { x: 2, y: 2 }], color: "#000000", strokeWidth: 2 }],
+            annotations: [{ id: "p1", text: "Hi", position: { x: 5, y: 5 }, fontSize: 12, color: "#000000" }],
+        });
+        expect(v2.players[0].id).toBe("p1");
+        expect(v2.drawings[0].id).toBe("d1");
+        const ids = [...v2.players, ...v2.drawings, ...v2.annotations].map((e) => e.id);
+        expect(new Set(ids).size).toBe(3);
+    });
+
+    it("is idempotent for upgraded long ids", () => {
+        const v2 = upgradePlayData({
+            ...v1Play,
+            players: [{ id: "x".repeat(150), position: { x: 5, y: 5 }, label: "A", color: "#000000" }],
+        });
+        expect(upgradePlayData(v2)).toEqual(v2);
     });
 
     it("throws PlayDataError for garbage", () => {

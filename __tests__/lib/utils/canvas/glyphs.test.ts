@@ -42,9 +42,18 @@ describe("glyph metrics", () => {
         expect(glyphRadiusPx(0.75, 1)).toBe(MIN_GLYPH_RADIUS_PX);
         expect(glyphRadiusPx(6, 4)).toBe(24);
     });
+    it("enforces the minimum on screen, not in zoomed user space", () => {
+        expect(glyphRadiusPx(0.75, 1, 0.5)).toBe(16);
+        expect(glyphRadiusPx(6, 4, 2)).toBe(24);
+    });
 });
 
 describe("drawPlayerGlyph", () => {
+    it("falls back to the role letter for a whitespace-only label", () => {
+        const ctx = mockCtx();
+        drawPlayerGlyph(ctx, player("F", "#1976D2", "   "), P, 10, false);
+        expect(ctx.events).toContain("text:F");
+    });
     it("has a shape for every role", () => {
         for (const role of PLAYER_ROLES) expect(PLAYER_GLYPH_SHAPE[role]).toBeDefined();
     });
@@ -157,6 +166,22 @@ describe("drawEquipmentGlyph", () => {
 });
 
 describe("drawAllElements", () => {
+    it("scales the minimum glyph radius up when zoomed out", () => {
+        const data = {
+            ...createEmptyPlayData(),
+            equipment: [{ id: "pk", kind: "puck" as const, position: { x: 50, y: 40 }, rotation: 0 }],
+        };
+        const radii = (zoom?: number) => {
+            const ctx = mockCtx();
+            drawAllElements(ctx, data, createTransformContext(800, 400), undefined, zoom);
+            return (ctx.arc as unknown as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[2] as number);
+        };
+        // The puck's body arc is 0.6 of the glyph radius: 0.6 * 16 user px at zoom 0.5 (8 screen px).
+        const zoomedOut = Math.max(...radii(0.5));
+        expect(zoomedOut).toBeCloseTo(0.6 * 16);
+        expect(zoomedOut).toBeCloseTo(2 * Math.max(...radii()));
+    });
+
     it("paints drawings, then equipment, then players, then annotations", () => {
         const ctx = mockCtx();
         const data = {

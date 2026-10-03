@@ -275,7 +275,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         const renderData = isDragging && selectedElementId && dragPreviewPosition
             ? moveElement(playData, selectedElementId, dragPreviewPosition)
             : playData;
-        drawAllElements(ctx, renderData, transform, selectedElementId || undefined);
+        drawAllElements(ctx, renderData, transform, selectedElementId || undefined, scale);
 
         // Draw current stroke in progress
         if (isDrawing && currentDrawingPoints.length > 1) {
@@ -294,6 +294,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         currentDrawingPoints,
         selectedColor,
         strokeOptions,
+        scale,
     ]);
 
     /**

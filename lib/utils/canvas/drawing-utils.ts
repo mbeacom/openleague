@@ -140,14 +140,15 @@ export function drawPlayerIcon(
     ctx: CanvasRenderingContext2D,
     player: PlayerIcon,
     transform: TransformContext,
-    isSelected: boolean = false
+    isSelected: boolean = false,
+    zoom: number = 1
 ): void {
     const pxPerFt = Math.min(transform.scaleX, transform.scaleY);
     drawPlayerGlyph(
         ctx,
         player,
         rinkToCanvas(player.position, transform),
-        glyphRadiusPx(PLAYER_RADIUS_FT, pxPerFt),
+        glyphRadiusPx(PLAYER_RADIUS_FT, pxPerFt, zoom),
         isSelected
     );
 }
@@ -159,14 +160,15 @@ export function drawEquipmentItem(
     ctx: CanvasRenderingContext2D,
     item: EquipmentItem,
     transform: TransformContext,
-    isSelected: boolean = false
+    isSelected: boolean = false,
+    zoom: number = 1
 ): void {
     const pxPerFt = Math.min(transform.scaleX, transform.scaleY);
     drawEquipmentGlyph(
         ctx,
         item,
         rinkToCanvas(item.position, transform),
-        glyphRadiusPx(EQUIPMENT_RADIUS_FT[item.kind], pxPerFt),
+        glyphRadiusPx(EQUIPMENT_RADIUS_FT[item.kind], pxPerFt, zoom),
         isSelected
     );
 }
@@ -264,15 +266,17 @@ export function drawElement(
  * @param playData - Play data to render
  * @param transform - Transformation context
  * @param selectedId - ID of currently selected element (if any)
+ * @param zoom - Canvas zoom applied by the caller (keeps minimum glyph size on screen)
  */
 export function drawAllElements(
     ctx: CanvasRenderingContext2D,
     playData: PlayData,
     transform: TransformContext,
-    selectedId?: string
+    selectedId?: string,
+    zoom: number = 1
 ): void {
     playData.drawings.forEach((d) => drawElement(ctx, d, transform, d.id === selectedId));
-    playData.equipment.forEach((e) => drawEquipmentItem(ctx, e, transform, e.id === selectedId));
-    playData.players.forEach((p) => drawPlayerIcon(ctx, p, transform, p.id === selectedId));
+    playData.equipment.forEach((e) => drawEquipmentItem(ctx, e, transform, e.id === selectedId, zoom));
+    playData.players.forEach((p) => drawPlayerIcon(ctx, p, transform, p.id === selectedId, zoom));
     playData.annotations.forEach((a) => drawTextAnnotation(ctx, a, transform, a.id === selectedId));
 }

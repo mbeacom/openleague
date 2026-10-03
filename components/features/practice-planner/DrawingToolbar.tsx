@@ -56,9 +56,9 @@ import {
     EQUIPMENT_LABELS,
     DEFAULT_END_FOR_ACTION,
 } from "@/lib/utils/canvas/notation";
-import { OptionGroup, OPTION_SX } from "./OptionGroup";
+import { OptionGroup, OPTION_SX, TOUCH_TARGET_SX } from "./OptionGroup";
 
-export { OPTION_SX };
+export { OPTION_SX, TOUCH_TARGET_SX };
 
 /**
  * Props for the DrawingToolbar component
@@ -260,32 +260,32 @@ export function DrawingToolbar({
                     }}
                 >
                     <Tooltip title="Select">
-                        <ToggleButton value="select" aria-label="select tool">
+                        <ToggleButton value="select" aria-label="select tool" sx={TOUCH_TARGET_SX}>
                             <SelectIcon />
                         </ToggleButton>
                     </Tooltip>
                     <Tooltip title="Add Player">
-                        <ToggleButton value="player" aria-label="player tool">
+                        <ToggleButton value="player" aria-label="player tool" sx={TOUCH_TARGET_SX}>
                             <PlayerIcon />
                         </ToggleButton>
                     </Tooltip>
                     <Tooltip title="Movement">
-                        <ToggleButton value="stroke" aria-label="movement tool">
+                        <ToggleButton value="stroke" aria-label="movement tool" sx={TOUCH_TARGET_SX}>
                             <MovementIcon />
                         </ToggleButton>
                     </Tooltip>
                     <Tooltip title="Equipment">
-                        <ToggleButton value="equipment" aria-label="equipment tool">
+                        <ToggleButton value="equipment" aria-label="equipment tool" sx={TOUCH_TARGET_SX}>
                             <EquipmentIcon />
                         </ToggleButton>
                     </Tooltip>
                     <Tooltip title="Add Text">
-                        <ToggleButton value="text" aria-label="text tool">
+                        <ToggleButton value="text" aria-label="text tool" sx={TOUCH_TARGET_SX}>
                             <TextIcon />
                         </ToggleButton>
                     </Tooltip>
                     <Tooltip title="Eraser">
-                        <ToggleButton value="eraser" aria-label="eraser tool">
+                        <ToggleButton value="eraser" aria-label="eraser tool" sx={TOUCH_TARGET_SX}>
                             <EraserIcon />
                         </ToggleButton>
                     </Tooltip>
@@ -298,6 +298,7 @@ export function DrawingToolbar({
                         onClick={handleColorPickerClick}
                         aria-label="color picker"
                         sx={{
+                            ...TOUCH_TARGET_SX,
                             border: `2px solid ${selectedColor}`,
                             backgroundColor: selectedColor,
                             "&:hover": {
@@ -324,6 +325,7 @@ export function DrawingToolbar({
                                 disabled={!canUndo}
                                 aria-label="undo"
                                 size={isMobile ? "small" : "medium"}
+                                sx={TOUCH_TARGET_SX}
                             >
                                 <UndoIcon />
                             </IconButton>
@@ -336,6 +338,7 @@ export function DrawingToolbar({
                                 disabled={!canRedo}
                                 aria-label="redo"
                                 size={isMobile ? "small" : "medium"}
+                                sx={TOUCH_TARGET_SX}
                             >
                                 <RedoIcon />
                             </IconButton>
@@ -351,6 +354,7 @@ export function DrawingToolbar({
                         aria-label="clear canvas"
                         color="error"
                         size={isMobile ? "small" : "medium"}
+                        sx={TOUCH_TARGET_SX}
                     >
                         <ClearIcon />
                     </IconButton>
