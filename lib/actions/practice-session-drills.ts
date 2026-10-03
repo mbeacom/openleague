@@ -12,12 +12,20 @@ import { prisma } from "@/lib/db/prisma";
 import { requireTeamAdmin } from "@/lib/auth/session";
 import {
     copySessionDrillToLibrarySchema,
+    duplicatePracticeSessionSchema,
     saveSessionDrillSchema,
     type CopySessionDrillToLibraryInput,
+    type DuplicatePracticeSessionInput,
     type SaveSessionDrillInput,
 } from "@/lib/utils/validation";
 import { sanitizePlayDataForWrite } from "@/lib/utils/play-data";
-import { SessionDrillError } from "@/lib/services/practice-session-drills";
+import {
+    CLONE_SOURCE_SELECT,
+    SessionDrillError,
+    cloneDrillsIntoSession,
+    copySessionPlayScalars,
+    duplicateSessionTitle,
+} from "@/lib/services/practice-session-drills";
 
 export type ActionResult<T> =
     | { success: true; data: T }
@@ -131,7 +139,7 @@ export async function copySessionDrillToLibrary(
         const userId = await requireTeamAdmin(validated.teamId);
 
         const play = await prisma.play.findFirst({
-            where: { id: validated.playId, teamId: validated.teamId },
+            where: { id: validated.playId, teamId: validated.teamId, session: { teamId: validated.teamId } },
             select: { name: true, description: true, thumbnail: true, playData: true, sessionId: true },
         });
         if (!play || play.sessionId === null) {
@@ -155,5 +163,72 @@ export async function copySessionDrillToLibrary(
         return { success: true, data: { playId: created.id } };
     } catch (error) {
         return failure(error, "Failed to add drill to the library. Please try again.");
+    }
+}
+
+/**
+ * Duplicate a session onto a new date: same duration and drills (each cloned
+ * into the new session), same per-drill duration/instructions and every other
+ * session-play column. Unshared, and never booked: no venue, surface,
+ * segment, start time, reservation, or Event (ADR-0007).
+ */
+export async function duplicatePracticeSession(
+    input: DuplicatePracticeSessionInput,
+): Promise<ActionResult<{ id: string }>> {
+    try {
+        const validated = duplicatePracticeSessionSchema.parse(input);
+        const userId = await requireTeamAdmin(validated.teamId);
+
+        const source = await prisma.practiceSession.findUnique({
+            where: { id: validated.id },
+            select: {
+                teamId: true,
+                title: true,
+                duration: true,
+                plays: {
+                    orderBy: { sequence: "asc" },
+                    include: { play: { select: CLONE_SOURCE_SELECT } },
+                },
+            },
+        });
+        if (!source || source.teamId !== validated.teamId) {
+            return { success: false, error: "Practice session not found" };
+        }
+
+        const created = await prisma.$transaction(async (tx) => {
+            const session = await tx.practiceSession.create({
+                data: {
+                    title: duplicateSessionTitle(source.title),
+                    date: validated.date,
+                    duration: source.duration,
+                    isShared: false,
+                    teamId: validated.teamId,
+                    createdById: userId,
+                },
+                select: { id: true },
+            });
+
+            const playIds = await cloneDrillsIntoSession(tx, {
+                sessionId: session.id,
+                teamId: validated.teamId,
+                userId,
+                sources: source.plays.map((row) => row.play),
+            });
+            if (source.plays.length > 0) {
+                await tx.practiceSessionPlay.createMany({
+                    data: source.plays.map((row, index) => ({
+                        ...copySessionPlayScalars(row),
+                        sessionId: session.id,
+                        playId: playIds[index],
+                    })),
+                });
+            }
+            return session;
+        });
+
+        revalidatePath("/practice-planner");
+        return { success: true, data: { id: created.id } };
+    } catch (error) {
+        return failure(error, "Failed to duplicate practice session. Please try again.");
     }
 }

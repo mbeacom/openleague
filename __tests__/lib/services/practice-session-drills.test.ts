@@ -268,3 +268,31 @@ describe("team scoping (a session never references another team's play)", () => 
         expect(mocks.play.createManyAndReturn).not.toHaveBeenCalled();
     });
 });
+
+import { Prisma as PrismaRuntime } from "@prisma/client";
+import {
+    SESSION_PLAY_FIELDS_NOT_COPIED,
+    copySessionPlayScalars,
+    duplicateSessionTitle,
+} from "@/lib/services/practice-session-drills";
+
+describe("copySessionPlayScalars", () => {
+    it("copies every session-play scalar except ids, foreign keys, and timestamps", () => {
+        const row: Record<string, unknown> = { play: { id: "relation, not a scalar" } };
+        for (const field of Object.values(PrismaRuntime.PracticeSessionPlayScalarFieldEnum)) row[field] = `value-${field}`;
+
+        const copied = copySessionPlayScalars(row) as Record<string, unknown>;
+        for (const field of Object.values(PrismaRuntime.PracticeSessionPlayScalarFieldEnum)) {
+            if (SESSION_PLAY_FIELDS_NOT_COPIED.has(field)) expect(copied).not.toHaveProperty(field);
+            else expect(copied).toHaveProperty(field, `value-${field}`);
+        }
+        expect(copied).not.toHaveProperty("play");
+    });
+});
+
+describe("duplicateSessionTitle", () => {
+    it("prefixes and keeps the 100-character limit", () => {
+        expect(duplicateSessionTitle("Tuesday")).toBe("Copy of Tuesday");
+        expect(duplicateSessionTitle("x".repeat(100))).toHaveLength(100);
+    });
+});

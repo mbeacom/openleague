@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { Prisma } from "@prisma/client";
 
 const { mockAuth, tx, mockPrisma } = vi.hoisted(() => {
     const tx = {
@@ -20,7 +21,7 @@ vi.mock("@/lib/auth/session", () => mockAuth);
 vi.mock("@/lib/db/prisma", () => ({ prisma: mockPrisma }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
-import { copySessionDrillToLibrary, saveSessionDrill } from "@/lib/actions/practice-session-drills";
+import { copySessionDrillToLibrary, duplicatePracticeSession, saveSessionDrill } from "@/lib/actions/practice-session-drills";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 
 const TEAM = "cteamxxxxxxxxxxxxxxxxxxxx";
@@ -47,6 +48,7 @@ describe("saveSessionDrill", () => {
         tx.play.findFirst.mockResolvedValue({ id: OWNED, sessionId: SESSION, isTemplate: false, sourcePlayId: LIB });
         const result = await saveSessionDrill(drillInput(OWNED));
 
+        expect(tx.play.findFirst.mock.calls[0][0].where).toMatchObject({ id: OWNED, teamId: TEAM });
         expect(result).toEqual({ success: true, data: { playId: OWNED } });
         expect(tx.play.update).toHaveBeenCalledWith({
             where: { id: OWNED },
@@ -103,6 +105,7 @@ describe("copySessionDrillToLibrary", () => {
         tx.play.findFirst.mockResolvedValue({ name: "Breakout", description: null, thumbnail: null, playData: { v: 1 }, sessionId: SESSION });
         const result = await copySessionDrillToLibrary({ playId: OWNED, teamId: TEAM });
 
+        expect(tx.play.findFirst.mock.calls[0][0].where).toEqual({ id: OWNED, teamId: TEAM, session: { teamId: TEAM } });
         expect(result).toEqual({ success: true, data: { playId: NEW_ID } });
         expect(tx.play.create.mock.calls[0][0].data).toEqual({
             name: "Breakout", description: null, thumbnail: null, playData: { v: 1 },
@@ -114,5 +117,82 @@ describe("copySessionDrillToLibrary", () => {
         tx.play.findFirst.mockResolvedValue({ name: "Lib", description: null, thumbnail: null, playData: {}, sessionId: null });
         const result = await copySessionDrillToLibrary({ playId: LIB, teamId: TEAM });
         expect(result).toEqual({ success: false, error: "Drill not found in this session" });
+    });
+});
+
+describe("duplicatePracticeSession", () => {
+    const SOURCE = "csourcexxxxxxxxxxxxxxxxxx";
+    const COPY = "ccopyxxxxxxxxxxxxxxxxxxxx";
+    const DATE = new Date("2026-04-14T22:00:00.000Z");
+
+    // One source session-play row carrying EVERY scalar column the generated
+    // client knows — so a column added later (e.g. runsWithPrevious) is in
+    // the fixture automatically and must come out the other side.
+    function sourceRow(index: number) {
+        const row: Record<string, unknown> = {};
+        for (const field of Object.values(Prisma.PracticeSessionPlayScalarFieldEnum)) row[field] = `${field}-${index}`;
+        return {
+            ...row,
+            sequence: index,
+            duration: 10 + index,
+            instructions: `Do ${index}`,
+            play: { id: `cplay${index}xxxxxxxxxxxxxxxxxxx`, name: `Drill ${index}`, description: null, thumbnail: null, playData: {}, sourcePlayId: null },
+        };
+    }
+
+    beforeEach(() => {
+        mockPrisma.practiceSession.findUnique.mockResolvedValue({
+            teamId: TEAM, title: "Tuesday", duration: 75, plays: [sourceRow(0), sourceRow(1)],
+        });
+        tx.practiceSession.create.mockResolvedValue({ id: COPY });
+        tx.play.createManyAndReturn.mockImplementation(async ({ data }: { data: Array<{ name: string; sourcePlayId: string; sessionId: string }> }) =>
+            data.map((d, i) => ({ id: `cclone${i}xxxxxxxxxxxxxxxxxx`, name: d.name, sourcePlayId: d.sourcePlayId, sessionId: d.sessionId })));
+        tx.practiceSessionPlay.createMany.mockResolvedValue({ count: 2 });
+    });
+
+    it("creates an unshared, unbooked copy on the chosen date", async () => {
+        const result = await duplicatePracticeSession({ id: SOURCE, teamId: TEAM, date: DATE });
+
+        expect(result).toEqual({ success: true, data: { id: COPY } });
+        const data = tx.practiceSession.create.mock.calls[0][0].data;
+        expect(data).toEqual({
+            title: "Copy of Tuesday", date: DATE, duration: 75, isShared: false, teamId: TEAM, createdById: USER,
+        });
+        for (const key of ["venueId", "surfaceId", "segmentId", "startAt", "venueReservationId", "conflictOverriddenById"]) {
+            expect(data).not.toHaveProperty(key);
+        }
+    });
+
+    it("clones every drill into the new session", async () => {
+        await duplicatePracticeSession({ id: SOURCE, teamId: TEAM, date: DATE });
+        expect(tx.play.createManyAndReturn.mock.calls[0][0].data.map((d: { sessionId: string }) => d.sessionId))
+            .toEqual([COPY, COPY]);
+    });
+
+    it("copies every session-play column except ids and foreign keys (new-column guard)", async () => {
+        await duplicatePracticeSession({ id: SOURCE, teamId: TEAM, date: DATE });
+        const copied: Array<Record<string, unknown>> = tx.practiceSessionPlay.createMany.mock.calls[0][0].data;
+        const source = sourceRow(0) as Record<string, unknown>;
+
+        expect(copied[0].sessionId).toBe(COPY);
+        expect(copied[0].playId).toBe("cclone0xxxxxxxxxxxxxxxxxx");
+        for (const field of Object.values(Prisma.PracticeSessionPlayScalarFieldEnum)) {
+            if (["id", "createdAt", "updatedAt"].includes(field)) expect(copied[0]).not.toHaveProperty(field);
+            else if (field !== "sessionId" && field !== "playId") expect(copied[0][field]).toEqual(source[field]);
+        }
+    });
+
+    it("refuses a session of another team", async () => {
+        mockPrisma.practiceSession.findUnique.mockResolvedValue({ teamId: "cotherteamxxxxxxxxxxxxxxx", title: "x", duration: 60, plays: [] });
+        const result = await duplicatePracticeSession({ id: SOURCE, teamId: TEAM, date: DATE });
+        expect(result).toEqual({ success: false, error: "Practice session not found" });
+        expect(tx.practiceSession.create).not.toHaveBeenCalled();
+    });
+
+    it("requires a team admin", async () => {
+        mockAuth.requireTeamAdmin.mockRejectedValue(new Error("Unauthorized: Only team admins can perform this action"));
+        const result = await duplicatePracticeSession({ id: SOURCE, teamId: TEAM, date: DATE });
+        expect(result.success).toBe(false);
+        expect(tx.practiceSession.create).not.toHaveBeenCalled();
     });
 });

@@ -1430,6 +1430,12 @@ export const copySessionDrillToLibrarySchema = z.object({
   teamId: z.string().cuid("Invalid team ID format"),
 });
 
+export const duplicatePracticeSessionSchema = z.object({
+  id: z.string().cuid("Invalid session ID format"),
+  teamId: z.string().cuid("Invalid team ID format"),
+  date: z.coerce.date({ message: "Valid date is required" }),
+});
+
 // Type exports for practice planner
 export type CreatePlayInput = z.infer<typeof createPlaySchema>;
 export type UpdatePlayInput = z.infer<typeof updatePlaySchema>;
@@ -1448,6 +1454,7 @@ export type GetPracticeSessionsByTeamInput = z.infer<typeof getPracticeSessionsB
 export type SharePracticeSessionInput = z.infer<typeof sharePracticeSessionSchema>;
 export type SaveSessionDrillInput = z.infer<typeof saveSessionDrillSchema>;
 export type CopySessionDrillToLibraryInput = z.infer<typeof copySessionDrillToLibrarySchema>;
+export type DuplicatePracticeSessionInput = z.input<typeof duplicatePracticeSessionSchema>;
 
 // --- Signup events (feature 004) ---
 

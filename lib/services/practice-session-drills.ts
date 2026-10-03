@@ -5,7 +5,7 @@
  * sessionId=S, sourcePlayId=provenance). These helpers run INSIDE the calling
  * Server Action's transaction; they are not actions themselves (ADR-0002).
  */
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
 export const SESSION_DRILL_REJECTED_MESSAGE =
     "One or more drills not found or do not belong to this session";
@@ -228,4 +228,36 @@ export async function detachLibraryPlay(
         });
     }
     return sessionIds.length;
+}
+
+/** Session-play columns a duplicate never copies: ids, foreign keys, timestamps. */
+export const SESSION_PLAY_FIELDS_NOT_COPIED: ReadonlySet<string> = new Set([
+    "id",
+    "sessionId",
+    "playId",
+    "createdAt",
+    "updatedAt",
+]);
+
+export type CopiedSessionPlayFields = Omit<
+    Prisma.PracticeSessionPlayCreateManyInput,
+    "id" | "sessionId" | "playId" | "createdAt" | "updatedAt"
+>;
+
+/**
+ * Copies every PracticeSessionPlay scalar column except ids, foreign keys and
+ * timestamps. Driven by the generated scalar-field enum, so a column added
+ * later (e.g. phase 2b's runsWithPrevious) is carried without editing this.
+ */
+export function copySessionPlayScalars(row: Record<string, unknown>): CopiedSessionPlayFields {
+    const copy: Record<string, unknown> = {};
+    for (const field of Object.values(Prisma.PracticeSessionPlayScalarFieldEnum)) {
+        if (!SESSION_PLAY_FIELDS_NOT_COPIED.has(field)) copy[field] = row[field];
+    }
+    return copy as CopiedSessionPlayFields;
+}
+
+/** "Copy of <title>", kept within the 100-character title limit. */
+export function duplicateSessionTitle(title: string): string {
+    return `Copy of ${title}`.slice(0, 100);
 }
