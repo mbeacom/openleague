@@ -163,7 +163,7 @@ function OptionGroup<T extends string>({ label, value, options, labels, onChange
 /**
  * DrawingToolbar Component
  *
- * Requirements: 5.1 - Tool selection for line and curve tools
+ * Requirements: 5.1 - Tool selection for players, strokes, equipment, and text
  * Requirements: 5.2 - Color selection for drawings
  * Requirements: 5.3 - Clear canvas functionality
  * Requirements: 5.4 - Eraser tool

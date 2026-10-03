@@ -21,6 +21,7 @@ import {
     Checkbox,
     FormControlLabel,
     Stack,
+    Snackbar,
 } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
@@ -74,10 +75,13 @@ export function PlayEditor({
 
     // Drawing tool state
     const [selectedTool, setSelectedTool] = useState<DrawingTool>("select");
-    const [selectedColor, setSelectedColor] = useState("#000000");
+    const [selectedColor, setSelectedColor] = useState("#212121");
     const [playerRole, setPlayerRole] = useState<PlayerRole>("X");
     const [strokeOptions, setStrokeOptions] = useState<StrokeOptions>({ action: "skate", path: "freehand", end: "arrow" });
     const [equipmentKind, setEquipmentKind] = useState<EquipmentKind>("cone");
+    // Consumed by the element inspector (Task 8)
+    const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
+    const [limitNotice, setLimitNotice] = useState<string | null>(null);
     const [canUndo, setCanUndo] = useState(false);
     const [canRedo, setCanRedo] = useState(false);
 
@@ -364,6 +368,11 @@ export function PlayEditor({
                         selectedTool={selectedTool}
                         selectedColor={selectedColor}
                         onUndoRedoStateChange={handleUndoRedoStateChange}
+                        playerRole={playerRole}
+                        strokeOptions={strokeOptions}
+                        equipmentKind={equipmentKind}
+                        onSelectionChange={setSelectedElementId}
+                        onLimitReached={setLimitNotice}
                         height={isMobile ? 400 : 600}
                     />
                 </RinkBoardErrorBoundary>
@@ -432,6 +441,17 @@ export function PlayEditor({
                     </Stack>
                 </Stack>
             </Paper>
+
+            {/* Play limit notices from the board */}
+            <Snackbar
+                open={limitNotice !== null}
+                autoHideDuration={4000}
+                onClose={() => setLimitNotice(null)}
+            >
+                <Alert severity="warning" onClose={() => setLimitNotice(null)} sx={{ width: "100%" }}>
+                    {limitNotice}
+                </Alert>
+            </Snackbar>
         </Box>
     );
 }

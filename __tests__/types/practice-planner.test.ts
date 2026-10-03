@@ -152,13 +152,12 @@ describe("Hockey Practice Planner Types", () => {
             const tools: DrawingTool[] = [
                 "select",
                 "player",
-                "line",
-                "curve",
-                "arrow",
+                "stroke",
+                "equipment",
                 "text",
                 "eraser",
             ];
-            expect(tools).toHaveLength(7);
+            expect(tools).toHaveLength(6);
         });
     });
 
