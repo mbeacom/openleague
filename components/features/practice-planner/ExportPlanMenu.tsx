@@ -30,6 +30,7 @@ import {
     type PlanGenerator,
 } from "@/lib/plan-document";
 import { usePlannerPlatform, type PlannerPlanLink } from "@/lib/planner-store";
+import { downloadBlob } from "./export/download";
 
 export interface ExportableSession {
     title: string;
@@ -117,15 +118,7 @@ export function ExportPlanMenu({ session, size = "medium" }: ExportPlanMenuProps
         setAnchor(null);
         const doc = buildPlanDocument(session, new Date(), planGenerator);
         const text = JSON.stringify(doc, null, 2);
-        const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = planFileName(session.title);
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        // Safari and Firefox can cut the download short if the URL is revoked right away.
-        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+        downloadBlob(new Blob([text], { type: "application/json" }), planFileName(session.title));
         const warnings = [unreadable, importProblemNotice(doc, text)].filter((text): text is string => text !== null);
         setNotice(warnings.length > 0 ? { severity: "warning", text: warnings.join(" ") } : null);
     };
