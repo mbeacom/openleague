@@ -10,8 +10,8 @@ Each phase gets its own spec, then a plan, then implementation, in this order:
 | 2 | Hotfix: live session bugs | Branch `fix/practice-planner-session-bugs` |
 | 3 | 3a: drill ownership, inline editing, duplication | Spec `2026-10-03-practice-session-drill-ownership-design.md` |
 | 4 | 2a: drill ice area | Spec to write |
-| 5 | 2b: stations | Spec `2026-10-03-practice-session-stations-design.md`; implemented on `feat/practice-stations` |
-| 6 | 3b: timeline and bench sheet | Spec to write |
+| 5 | 2b: stations | Merged, PR #379 |
+| 6 | 3b: timeline and bench sheet | Spec `2026-10-03-practice-session-timeline-bench-sheet-design.md` |
 
 The hotfix covers three bugs that exist today:
 - Shared sessions email the team only on an explicit Save, not on every autosave.
