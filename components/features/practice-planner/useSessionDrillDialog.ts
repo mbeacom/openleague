@@ -16,6 +16,8 @@ export function useSessionDrillDialog(
     plays: PlayInSession[],
     setPlays: Dispatch<SetStateAction<PlayInSession[]>>,
     markDirty: () => void,
+    /** Saves the session now (single-flight: runs, or queues behind a running save). */
+    saveNow: () => void,
 ) {
     const [drill, setDrill] = useState<SessionDrillDialogDrill | null>(null);
 
@@ -43,11 +45,17 @@ export function useSessionDrillDialog(
         });
     }, []);
 
-    // Every dialog save: point the card at the saved copy and let autosave persist it.
+    // Every dialog save points the card at the saved copy. Editing a copy the
+    // session already owns changed only that row, so autosave can follow. A fork
+    // (library or legacy drill) or a new drill is a new id the session doesn't
+    // reference yet: save it now, not after the autosave timer, which a failed
+    // earlier save leaves unarmed. Until then, leaving the page loses the edit.
     const onSaved = useCallback((clientKey: string, patch: SessionDrillPatch) => {
+        const isNewId = plays.find((play) => play.id === clientKey)?.playId !== patch.playId;
         setPlays((prev) => upsertSessionDrill(prev, clientKey, patch));
         markDirty();
-    }, [setPlays, markDirty]);
+        if (isNewId) saveNow();
+    }, [plays, setPlays, markDirty, saveNow]);
 
     const close = useCallback(() => setDrill(null), []);
 

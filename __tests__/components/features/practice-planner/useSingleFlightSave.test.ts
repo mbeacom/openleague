@@ -32,6 +32,28 @@ describe("useSingleFlightSave", () => {
         expect(result.current.followUp).toBe(previous);
     });
 
+    it("request publishes a fresh follow-up at once when idle", () => {
+        const { result } = renderHook(() => useSingleFlightSave());
+        act(() => result.current.request({ overrideConflicts: false, notify: false }));
+        const first = result.current.followUp;
+        expect(first).toEqual({ overrideConflicts: false, notify: false });
+
+        // A second request is a new object, so the editor's effect runs again.
+        const { request } = result.current; // safe to pass around unbound
+        act(() => request({ overrideConflicts: false, notify: false }));
+        expect(result.current.followUp).not.toBe(first);
+    });
+
+    it("request queues behind a running save and publishes on finish", () => {
+        const { result } = renderHook(() => useSingleFlightSave());
+        result.current.start();
+        act(() => result.current.request({ overrideConflicts: false, notify: false }));
+        expect(result.current.followUp).toBeNull();
+        result.current.queue({ overrideConflicts: true, notify: false });
+        act(() => result.current.finish());
+        expect(result.current.followUp).toEqual({ overrideConflicts: true, notify: false });
+    });
+
     it("keeps the same object between follow-ups", () => {
         const { result, rerender } = renderHook(() => useSingleFlightSave());
         const first = result.current;

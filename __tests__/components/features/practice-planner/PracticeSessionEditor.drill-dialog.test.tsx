@@ -87,9 +87,9 @@ describe("PracticeSessionEditor drill dialog wiring", () => {
         fireEvent.click(screen.getByRole("button", { name: "stub save drill" }));
 
         expect(screen.getByRole("heading", { name: "Forked" })).toBeInTheDocument();
-        await act(async () => {
-            fireEvent.click(screen.getByRole("button", { name: /^save session/i }));
-        });
+        // A new drill's id is saved into the session right away (no Save click).
+        await act(async () => {});
+        expect(onSave).toHaveBeenCalledTimes(1);
         expect(onSave.mock.calls[0][0].plays.map((p) => p.playId)).toEqual([FORK]);
     });
 
@@ -122,6 +122,77 @@ describe("PracticeSessionEditor drill dialog wiring", () => {
             });
             expect(onSave).toHaveBeenCalledTimes(2);
             expect(onSave.mock.calls[1][0].plays[0].playId).toBe(FORK);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+});
+
+// A fork only exists in the session once a session save sends its id; until
+// then a coach who leaves the page loses the edit.
+describe("PracticeSessionEditor saves a dialog fork right away", () => {
+    it("saves the fork without waiting for the autosave timer", async () => {
+        vi.useFakeTimers();
+        try {
+            const onSave = vi.fn<SaveFn>().mockResolvedValue({ success: true, plays: [] });
+            renderEditor(onSave, [drill("k1", LIB)]);
+
+            fireEvent.click(screen.getByRole("button", { name: /edit diagram/i }));
+            fireEvent.click(screen.getByRole("button", { name: "stub save drill" }));
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(0);
+            });
+
+            expect(onSave).toHaveBeenCalledTimes(1);
+            expect(onSave.mock.calls[0][0].plays[0].playId).toBe(FORK);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it("saves the fork right away even after a failed save left the session dirty", async () => {
+        vi.useFakeTimers();
+        try {
+            const onSave = vi.fn<SaveFn>()
+                .mockResolvedValueOnce({ success: false, error: "Network down" })
+                .mockResolvedValue({ success: true, plays: [] });
+            renderEditor(onSave, [drill("k1", LIB)]);
+
+            // An autosave fails: the session stays dirty, so the autosave timer
+            // does not re-arm on the next edit.
+            fireEvent.change(screen.getByLabelText(/session title/i), { target: { value: "Practice v2" } });
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(2100);
+            });
+            expect(onSave).toHaveBeenCalledTimes(1);
+            expect(screen.getByText("Network down")).toBeInTheDocument();
+
+            fireEvent.click(screen.getByRole("button", { name: /edit diagram/i }));
+            fireEvent.click(screen.getByRole("button", { name: "stub save drill" }));
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(0);
+            });
+
+            expect(onSave).toHaveBeenCalledTimes(2);
+            expect(onSave.mock.calls[1][0].plays[0].playId).toBe(FORK);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it("does not save the session again when an owned drill is edited in place", async () => {
+        vi.useFakeTimers();
+        try {
+            const onSave = vi.fn<SaveFn>().mockResolvedValue({ success: true, plays: [] });
+            renderEditor(onSave, [drill("k1", FORK)]);
+
+            fireEvent.click(screen.getByRole("button", { name: /edit diagram/i }));
+            fireEvent.click(screen.getByRole("button", { name: "stub save drill" }));
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(0);
+            });
+
+            expect(onSave).not.toHaveBeenCalled();
         } finally {
             vi.useRealTimers();
         }

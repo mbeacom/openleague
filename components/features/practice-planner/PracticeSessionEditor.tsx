@@ -169,7 +169,8 @@ export function PracticeSessionEditor({
     }, []);
 
     // Edit a drill's diagram, or build a new drill, in the session (3a).
-    const drillDialog = useSessionDrillDialog(plays, setPlays, markDirty);
+    const saveNow = useCallback(() => saveFlight.request({ overrideConflicts: false, notify: false }), [saveFlight]);
+    const drillDialog = useSessionDrillDialog(plays, setPlays, markDirty, saveNow);
 
     // Optional ice booking (feature 006, FR-019).
     const booking = useVenueBooking({
