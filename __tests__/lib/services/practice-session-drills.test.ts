@@ -62,7 +62,7 @@ function fakeTx(plays: Row[], referencing: Array<{ sessionId: string; playId: st
                 if (!row) throw new Error("not found");
                 return row;
             }),
-            createManyAndReturn: vi.fn(async ({ data }: { data: Array<{ id: string; name: string; sourcePlayId: string | null; sessionId: string }> }) =>
+            createManyAndReturn: vi.fn(async ({ data }: { data: Array<{ id: string; name: string; sourcePlayId: string | null; sessionId: string; playData?: unknown }> }) =>
                 data.map((row) => ({ id: row.id, name: row.name, sourcePlayId: row.sourcePlayId, sessionId: row.sessionId }))),
             deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
         },
@@ -174,14 +174,14 @@ describe("materializeSessionDrills", () => {
         const first = play("o1", { isTemplate: false, sessionId: SESSION, sourcePlayId: "lib", name: "Breakout", playData: { diagram: "first" } });
         const second = play("o2", { isTemplate: false, sessionId: SESSION, sourcePlayId: "lib", name: "Breakout", playData: { diagram: "second" } });
         const { mocks, tx } = fakeTx([first, second]);
-        mocks.play.createManyAndReturn.mockImplementationOnce(async ({ data }: { data: Array<{ id: string; name: string; sourcePlayId: string; sessionId: string }> }) =>
+        mocks.play.createManyAndReturn.mockImplementationOnce(async ({ data }: { data: Array<{ id: string; name: string; sourcePlayId: string | null; sessionId: string; playData?: unknown }> }) =>
             data.map((row) => ({ id: row.id, name: row.name, sourcePlayId: row.sourcePlayId, sessionId: row.sessionId })).reverse());
 
         const result = await materializeSessionDrills(tx, {
             sessionId: SESSION, teamId: TEAM, userId: USER, items: items("o1", "o2", "o1", "o2"),
         });
 
-        const data: Array<{ id: string; playData: unknown }> = mocks.play.createManyAndReturn.mock.calls[0][0].data;
+        const data: Array<{ id: string; playData?: unknown }> = mocks.play.createManyAndReturn.mock.calls[0][0].data;
         const diagramOf = (id: string) => data.find((row) => row.id === id)?.playData;
         expect(diagramOf(result.mapping[2].playId)).toEqual({ diagram: "first" });
         expect(diagramOf(result.mapping[3].playId)).toEqual({ diagram: "second" });
