@@ -118,8 +118,15 @@ export function normalizeGroups<T extends TimelinePlay>(plays: readonly T[]): T[
     });
 }
 
-/** The half-open range [start, end) of the block holding `index`, by array position. */
+/**
+ * The half-open range [start, end) of the block holding `index`, by array
+ * position. Throws a RangeError for an index that isn't a position in `plays`:
+ * every caller here bounds-checks first, so one only reaches it by misuse.
+ */
 export function groupRange(plays: readonly TimelinePlay[], index: number): { start: number; end: number } {
+    if (!Number.isInteger(index) || index < 0 || index >= plays.length) {
+        throw new RangeError(`groupRange: index ${index} is out of range for ${plays.length} drill(s)`);
+    }
     let start = index;
     while (start > 0 && plays[start].runsWithPrevious) start--;
     let end = index + 1;

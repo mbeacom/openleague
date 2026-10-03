@@ -157,6 +157,14 @@ describe("groupRange", () => {
         expect(groupRange(plays, 3)).toEqual({ start: 1, end: 4 });
         expect(groupRange(plays, 4)).toEqual({ start: 4, end: 5 });
     });
+
+    it("throws a RangeError for an index outside the list, instead of a bogus range", () => {
+        const plays = cards("a b+ c");
+        expect(() => groupRange(plays, -1)).toThrow(RangeError);
+        expect(() => groupRange(plays, 3)).toThrow(/out of range/);
+        expect(() => groupRange(plays, 1.5)).toThrow(RangeError);
+        expect(() => groupRange([], 0)).toThrow(RangeError);
+    });
 });
 
 describe("toggleRunsWithPrevious", () => {
