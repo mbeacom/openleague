@@ -49,6 +49,7 @@ import { DuplicateSessionDialog } from "@/components/features/practice-planner/D
 import { PlayLegend } from "@/components/features/practice-planner/PlayLegend";
 import { StationMap } from "@/components/features/practice-planner/StationMap";
 import { SessionTimeline } from "@/components/features/practice-planner/SessionTimeline";
+import { ExportPlanMenu } from "@/components/features/practice-planner/ExportPlanMenu";
 import type { PlayData } from "@/types/practice-planner";
 import type { SegmentKind } from "@prisma/client";
 import {
@@ -325,6 +326,7 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
             >
               Print bench sheet
             </Button>
+            <ExportPlanMenu session={session} size={isMobile ? "small" : "medium"} />
             {isAdmin && (
               <>
                 <Tooltip title={isShared ? "Unshare from team" : "Share with team"}>
