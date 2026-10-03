@@ -37,6 +37,7 @@ import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
 import PersonIcon from "@mui/icons-material/Person";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import FileUploadOutlinedIcon from "@mui/icons-material/FileUploadOutlined";
 import { DuplicateSessionDialog } from "@/components/features/practice-planner/DuplicateSessionDialog";
 
 interface SessionSummary {
@@ -54,6 +55,8 @@ interface PracticePlannerListProps {
   sessions: SessionSummary[];
   teamId: string;
   isAdmin: boolean;
+  /** The user can schedule practices for at least one team (getPlanImportTeams). */
+  canImport: boolean;
   teamName: string;
 }
 
@@ -64,6 +67,7 @@ export default function PracticePlannerList({
   sessions,
   teamId,
   isAdmin,
+  canImport,
   teamName,
 }: PracticePlannerListProps) {
   const theme = useTheme();
@@ -133,26 +137,41 @@ export default function PracticePlannerList({
         title="Practice Planner"
         subtitle={teamName}
         actions={
-          isAdmin ? (
+          isAdmin || canImport ? (
             <>
-              <Button
-                component={Link}
-                href="/practice-planner/library"
-                variant="outlined"
-                startIcon={<LibraryBooksIcon />}
-                size={isMobile ? "small" : "medium"}
-              >
-                Play Library
-              </Button>
-              <Button
-                component={Link}
-                href="/practice-planner/new"
-                variant="contained"
-                startIcon={<AddIcon />}
-                size={isMobile ? "small" : "medium"}
-              >
-                New Session
-              </Button>
+              {canImport && (
+                <Button
+                  component={Link}
+                  href="/practice-planner/import"
+                  variant="outlined"
+                  startIcon={<FileUploadOutlinedIcon />}
+                  size={isMobile ? "small" : "medium"}
+                >
+                  Import plan
+                </Button>
+              )}
+              {isAdmin && (
+                <>
+                  <Button
+                    component={Link}
+                    href="/practice-planner/library"
+                    variant="outlined"
+                    startIcon={<LibraryBooksIcon />}
+                    size={isMobile ? "small" : "medium"}
+                  >
+                    Play Library
+                  </Button>
+                  <Button
+                    component={Link}
+                    href="/practice-planner/new"
+                    variant="contained"
+                    startIcon={<AddIcon />}
+                    size={isMobile ? "small" : "medium"}
+                  >
+                    New Session
+                  </Button>
+                </>
+              )}
             </>
           ) : undefined
         }

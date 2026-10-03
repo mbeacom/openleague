@@ -254,3 +254,35 @@ describe('scrubTelemetryPayload', () => {
     expect(scrubTelemetryPayload(undefined)).toBeUndefined();
   });
 });
+
+describe('practice plan fragments (ADR-0020)', () => {
+  const PLAN = 'eJzLSM3JyQcABiwCFQ_-x';
+
+  it('redacts a #plan= fragment on the import page and on login', () => {
+    expect(scrubCapabilityTokens(`https://openleague.app/practice-planner/import#plan=${PLAN}`)).toBe(
+      `https://openleague.app/practice-planner/import#plan=${CAPABILITY_TOKEN_REDACTION}`
+    );
+    expect(scrubCapabilityTokens(`/login#plan=${PLAN}`)).toBe(`/login#plan=${CAPABILITY_TOKEN_REDACTION}`);
+  });
+
+  it('redacts a percent-encoded plan fragment nested in another URL', () => {
+    expect(scrubCapabilityTokens(`/login?callbackUrl=%2Fpractice-planner%2Fimport%23plan%3D${PLAN}`)).toBe(
+      `/login?callbackUrl=%2Fpractice-planner%2Fimport%23plan%3D${CAPABILITY_TOKEN_REDACTION}`
+    );
+  });
+
+  it('scrubs a Sentry-shaped browser event: request.url and a navigation breadcrumb', () => {
+    const event = {
+      request: { url: `https://openleague.app/practice-planner/import#plan=${PLAN}` },
+      breadcrumbs: [{ category: 'navigation', data: { from: `/login#plan=${PLAN}`, to: '/practice-planner/import' } }],
+    };
+    scrubTelemetryPayload(event);
+    expect(event.request.url).toBe(`https://openleague.app/practice-planner/import#plan=${CAPABILITY_TOKEN_REDACTION}`);
+    expect(event.breadcrumbs[0].data.from).toBe(`/login#plan=${CAPABILITY_TOKEN_REDACTION}`);
+  });
+
+  it('leaves other fragments alone', () => {
+    expect(scrubCapabilityTokens('/docs#planning')).toBe('/docs#planning');
+    expect(scrubCapabilityTokens('/practice-planner#plans')).toBe('/practice-planner#plans');
+  });
+});

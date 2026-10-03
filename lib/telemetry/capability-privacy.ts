@@ -11,6 +11,10 @@
  * `callbackUrl` query parameter) leaks the credential to a third-party
  * processor.
  *
+ * The same scrub also redacts `#plan=` practice-plan fragments (ADR-0020):
+ * not credentials, but user content that must not reach a processor.
+ * Analytics needs no change: page views send a bare pathname.
+ *
  * This module is deliberately isomorphic and dependency-free: the same
  * redaction runs in the browser bundle (`instrumentation-client.ts`), on the
  * Node server (`sentry.server.config.ts`), and on the edge runtime
@@ -104,6 +108,18 @@ const ENCODED_QUERY_PATTERNS = PUBLIC_CAPABILITY_QUERY_PARAMS.map(
     new RegExp(`((?:%3F|%26)${escapeRegExp(param)}%3D)([^&#\\s"'\`\\\\%]+)`, 'gi')
 );
 
+/**
+ * `#plan=<data>` (ADR-0020) carries a whole practice plan in a URL fragment.
+ * It is coach content, not a credential, but Sentry's browser SDK records
+ * `location.href` (fragment included) in request URLs and navigation
+ * breadcrumbs, so the value is redacted on the way out. Raw and
+ * percent-encoded (a fragment nested in a `callbackUrl`).
+ */
+const PLAN_FRAGMENT_PATTERNS = [
+  /(#plan=)([^&#\s"'`\\]+)/gi,
+  /(%23plan%3D)([^&#\s"'`\\%]+)/gi,
+];
+
 /** Next.js renders parameterized routes as `/gear-wishlist/[token]` — already safe. */
 function isPlaceholderSegment(segment: string): boolean {
   return /^\[.*\]$/.test(segment) || segment === CAPABILITY_TOKEN_REDACTION;
@@ -141,6 +157,7 @@ export function scrubCapabilityTokens(value: string): string {
     ...ENCODED_TOKEN_PATTERNS,
     ...RAW_QUERY_PATTERNS,
     ...ENCODED_QUERY_PATTERNS,
+    ...PLAN_FRAGMENT_PATTERNS,
   ]) {
     // Reset explicitly: these patterns are module-level and /g is stateful.
     pattern.lastIndex = 0;
