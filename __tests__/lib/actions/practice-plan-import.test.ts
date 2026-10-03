@@ -161,6 +161,7 @@ describe("importPracticePlan", () => {
             { sessionId: SESSION, playId: "cowned2xxxxxxxxxxxxxxxxxx", sequence: 2, duration: 10, instructions: null, runsWithPrevious: true },
         ]);
         expect(mockCache.revalidatePath).toHaveBeenCalledWith("/practice-planner");
+        expect(mockCache.revalidatePath).toHaveBeenCalledWith("/calendar");
     });
 
     it("adds separate library copies when asked", async () => {

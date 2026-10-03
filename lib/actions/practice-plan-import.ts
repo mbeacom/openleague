@@ -127,6 +127,7 @@ export async function importPracticePlan(
         });
 
         revalidatePath("/practice-planner");
+        revalidatePath("/calendar");
         if (addToLibrary) revalidatePath("/practice-planner/library");
 
         return { success: true, data: { sessionId } };
