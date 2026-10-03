@@ -36,6 +36,20 @@ export interface ThumbnailOptions {
     height?: number;
     quality?: number; // 0-1, for JPEG quality (not used for PNG)
     backgroundColor?: string;
+    /**
+     * Backing-store scale for print (3b). Default 1; clamped to [1, 4]; a
+     * non-finite value means 1. Geometry and stroke widths stay in logical
+     * pixels, so they scale uniformly.
+     */
+    pixelRatio?: number;
+}
+
+/** The largest pixelRatio generateThumbnail accepts. */
+export const MAX_THUMBNAIL_PIXEL_RATIO = 4;
+
+function clampPixelRatio(value: number | undefined): number {
+    if (value === undefined || !Number.isFinite(value)) return 1;
+    return Math.min(MAX_THUMBNAIL_PIXEL_RATIO, Math.max(1, value));
 }
 
 /**
@@ -55,25 +69,32 @@ export function generateThumbnail(
         height = THUMBNAIL_DIMENSIONS.height,
         backgroundColor = "#FFFFFF",
     } = options;
+    const pixelRatio = clampPixelRatio(options.pixelRatio);
+    const scaled = pixelRatio !== 1;
 
-    // Create off-screen canvas
+    // Create off-screen canvas. At ratio 1 the size is assigned exactly as before (byte-identical output).
     const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
+    canvas.width = scaled ? Math.round(width * pixelRatio) : width;
+    canvas.height = scaled ? Math.round(height * pixelRatio) : height;
 
     const ctx = canvas.getContext("2d");
     if (!ctx) {
         throw new Error("Failed to get 2D context for thumbnail generation");
     }
 
+    // Scale before any drawing, so everything below works in logical pixels.
+    if (scaled) ctx.scale(pixelRatio, pixelRatio);
+
     // Fill background
     ctx.fillStyle = backgroundColor;
     ctx.fillRect(0, 0, width, height);
 
     // Thumbnails always show the whole rink, so card sizes stay consistent;
-    // the drill's area is shown by shading everything outside it.
+    // the drill's area is shown by shading everything outside it. The cached
+    // rink is a logical-size bitmap that would print blurry under scale(), so
+    // a scaled thumbnail draws the rink as vectors.
     const transform = createTransformContext(width, height, 10);
-    drawBoardScene(ctx, transform, playData, { maskRect: areaRect(playData.area) });
+    drawBoardScene(ctx, transform, playData, { maskRect: areaRect(playData.area), cachedRink: !scaled });
 
     // Export as base64 PNG
     return canvas.toDataURL("image/png");
