@@ -138,7 +138,8 @@ export default function PracticePlannerList({
         subtitle={teamName}
         actions={
           isAdmin || canImport ? (
-            <>
+            // PageHeader's action row doesn't wrap; three labeled buttons overflow a phone without this.
+            <Box sx={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: 1, maxWidth: "100%" }}>
               {canImport && (
                 <Button
                   component={Link}
@@ -172,7 +173,7 @@ export default function PracticePlannerList({
                   </Button>
                 </>
               )}
-            </>
+            </Box>
           ) : undefined
         }
       />

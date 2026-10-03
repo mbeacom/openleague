@@ -26,4 +26,11 @@ describe("PracticePlannerList Import plan", () => {
         renderList({ isAdmin: false, canImport: false });
         expect(screen.queryByRole("link", { name: /import plan/i })).not.toBeInTheDocument();
     });
+
+    it("lets the header actions wrap so three buttons don't overflow a phone", () => {
+        renderList({ isAdmin: true, canImport: true });
+        const row = screen.getByRole("link", { name: /import plan/i }).parentElement as HTMLElement;
+        expect(row).toContainElement(screen.getByRole("link", { name: /new session/i }));
+        expect(row).toHaveStyle({ flexWrap: "wrap" });
+    });
 });
