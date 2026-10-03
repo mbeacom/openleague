@@ -1,7 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { IDBFactory } from "fake-indexeddb";
 import { createMemoryRepo } from "@/apps/planner/src/store/memory-repo";
-import { openIdbRepo } from "@/apps/planner/src/store/idb-repo";
+import { OPEN_TIMEOUT_MS, openIdbRepo } from "@/apps/planner/src/store/idb-repo";
 import type { PlannerRepo, StoredPlay, StoredSession } from "@/apps/planner/src/store/records";
 
 let dbSeq = 0;
@@ -129,5 +129,70 @@ describe("IndexedDB repo", () => {
             request.onerror = () => reject(request.error);
         });
         expect(notified).toBe(true);
+    });
+
+    it("tells the app when the browser closes the connection", async () => {
+        const { factory, request } = stalledFactory();
+        let notified = false;
+        const opening = openIdbRepo({ factory, name: "closed", onVersionChange: () => (notified = true) });
+        const db = fakeDb();
+        settle(request, db);
+        await opening;
+        db.onclose?.(new Event("close"));
+        expect(notified).toBe(true);
+    });
+});
+
+/** An IDBFactory whose open request only settles when the test says so. */
+function stalledFactory() {
+    const request = {} as IDBOpenDBRequest;
+    const factory = { open: () => request } as unknown as IDBFactory;
+    return { factory, request };
+}
+
+function fakeDb() {
+    return { close: vi.fn(), onclose: null, onversionchange: null } as unknown as IDBDatabase & { close: ReturnType<typeof vi.fn> };
+}
+
+function settle(request: IDBOpenDBRequest, db: IDBDatabase) {
+    Object.defineProperty(request, "result", { value: db });
+    request.onsuccess?.(new Event("success"));
+}
+
+describe("IndexedDB open timeout", () => {
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it("rejects when the open request never settles", async () => {
+        vi.useFakeTimers();
+        const { factory } = stalledFactory();
+        const opening = openIdbRepo({ factory, name: "stalled" });
+        const outcome = expect(opening).rejects.toThrow(/didn't open/);
+        await vi.advanceTimersByTimeAsync(OPEN_TIMEOUT_MS);
+        await outcome;
+    });
+
+    it("closes a connection that opens after the timeout", async () => {
+        vi.useFakeTimers();
+        const { factory, request } = stalledFactory();
+        const opening = openIdbRepo({ factory, name: "late" });
+        const outcome = expect(opening).rejects.toThrow();
+        await vi.advanceTimersByTimeAsync(OPEN_TIMEOUT_MS);
+        await outcome;
+        const db = fakeDb();
+        settle(request, db);
+        expect(db.close).toHaveBeenCalledTimes(1);
+    });
+
+    it("opens normally before the timeout", async () => {
+        vi.useFakeTimers();
+        const { factory, request } = stalledFactory();
+        const opening = openIdbRepo({ factory, name: "quick" });
+        const db = fakeDb();
+        settle(request, db);
+        await expect(opening).resolves.toMatchObject({ durable: true });
+        await vi.advanceTimersByTimeAsync(OPEN_TIMEOUT_MS);
+        expect(db.close).not.toHaveBeenCalled();
     });
 });

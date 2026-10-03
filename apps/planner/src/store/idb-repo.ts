@@ -107,10 +107,19 @@ function run<T>(db: IDBDatabase, mode: IDBTransactionMode, work: (tx: RepoTx) =>
     });
 }
 
+/**
+ * Some WebKit builds never fire success, error or blocked on indexedDB.open.
+ * Past this, the open is treated as failed so boot falls back to memory.
+ */
+export const OPEN_TIMEOUT_MS = 4000;
+
 export interface IdbRepoOptions {
     factory?: IDBFactory;
     name?: string;
-    /** A newer tab upgraded the schema: this connection is closed and the app must reload. */
+    /**
+     * The connection is gone and the app must reload: a newer tab upgraded the
+     * schema, or the browser closed it (for example, site data was cleared).
+     */
     onVersionChange?: () => void;
 }
 
@@ -127,15 +136,31 @@ export function openIdbRepo({ factory = globalThis.indexedDB, name = DB_NAME, on
             reject(error);
             return;
         }
+        let settled = false;
+        const fail = (error: unknown) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            reject(error);
+        };
+        const timer = setTimeout(() => fail(new Error("IndexedDB didn't open in time")), OPEN_TIMEOUT_MS);
         open.onupgradeneeded = (event) => upgradeDatabase(open.result, event.oldVersion);
-        open.onblocked = () => reject(new StorageBlockedError());
-        open.onerror = () => reject(open.error ?? new Error("IndexedDB failed to open"));
+        open.onblocked = () => fail(new StorageBlockedError());
+        open.onerror = () => fail(open.error ?? new Error("IndexedDB failed to open"));
         open.onsuccess = () => {
             const db = open.result;
+            if (settled) {
+                // Opened after the timeout or a block: the app already moved on without it.
+                db.close();
+                return;
+            }
+            settled = true;
+            clearTimeout(timer);
             db.onversionchange = () => {
                 db.close();
                 onVersionChange?.();
             };
+            db.onclose = () => onVersionChange?.();
             resolve({
                 durable: true,
                 read: (work) => run(db, "readonly", work),
