@@ -47,7 +47,8 @@ export interface SessionDrillListProps {
  * list renders flat so a drill joining, leaving or heading a block never
  * remounts its card (which would drop keyboard focus and inline-edit drafts).
  * It is an h3 like a standalone card's title; each grouped card is a
- * role="group" labelled by `id` plus its own (h4) title.
+ * role="group" named "Station k of N: <title>" (its own h4), so the header
+ * is announced once rather than repeated on every card.
  */
 function StationBlockHeader({ id, label, warnings }: { id: string; label: string; warnings: string[] }) {
     return (
@@ -116,14 +117,14 @@ export function SessionDrillList({
 
     // The editor keeps array order equal to sequence order, so a drill's
     // position in `plays` is its card number and its move/toggle index.
-    const renderCard = (play: PlayInSession, blockHeaderId?: string) => {
+    const renderCard = (play: PlayInSession, stationSlot?: { position: number; count: number }) => {
         const index = plays.indexOf(play);
         return (
             <SessionDrillCard
                 key={play.id}
                 play={play}
                 index={index}
-                blockHeaderId={blockHeaderId}
+                stationSlot={stationSlot}
                 canMoveUp={canMove(plays, index, -1)}
                 canMoveDown={canMove(plays, index, 1)}
                 station={index === 0 ? null : {
@@ -234,7 +235,8 @@ export function SessionDrillList({
                                     label={stationBlockLabel(group.stations.length, group.wallMinutes)}
                                     warnings={overlapMessages(group, warnings.overlaps)}
                                 />,
-                                ...group.stations.map((play) => renderCard(play, headerId)),
+                                ...group.stations.map((play, slot) =>
+                                    renderCard(play, { position: slot + 1, count: group.stations.length })),
                             ];
                         })}
                     </Stack>

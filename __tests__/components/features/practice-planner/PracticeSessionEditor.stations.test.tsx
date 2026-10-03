@@ -91,8 +91,9 @@ describe("PracticeSessionEditor stations (2b)", () => {
         fireEvent.click(screen.getAllByLabelText(SWITCH)[1]);
 
         expect(screen.getByText("Stations · 3 · 15 min")).toBeInTheDocument();
-        // The block is decoration over a flat list: each grouped card is a group named by its header and title.
-        expect(screen.getByRole("group", { name: "Stations · 3 · 15 min Drill b" }))
+        // The block is decoration over a flat list: each grouped card is a group named by its
+        // place in the block and its title (not the whole header again, on every card).
+        expect(screen.getByRole("group", { name: "Station 2 of 3: Drill b" }))
             .toBe(screen.getByRole("heading", { name: "Drill b" }).closest(".MuiCard-root"));
         expect(screen.getByText("Total Play Time: 15 minutes")).toBeInTheDocument();
         expect(screen.queryByText(/exceeds/)).not.toBeInTheDocument();
@@ -107,9 +108,11 @@ describe("PracticeSessionEditor stations (2b)", () => {
         expect(screen.getByRole("heading", { level: 4, name: "Drill a" })).toBeInTheDocument();
         expect(screen.getByRole("heading", { level: 3, name: "Drill c" })).toBeInTheDocument();
 
-        const groups = screen.getAllByRole("group", { name: /^Stations · 2 · 15 min / });
+        const groups = screen.getAllByRole("group", { name: /^Station \d of 2: / });
         expect(groups.map((group) => within(group).getByRole("heading", { level: 4 }).textContent))
             .toEqual(["Drill a", "Drill b"]);
+        expect(screen.getByRole("group", { name: "Station 1 of 2: Drill a" })).toBe(groups[0]);
+        expect(screen.getByRole("group", { name: "Station 2 of 2: Drill b" })).toBe(groups[1]);
         expect(screen.getByRole("heading", { name: "Drill c" }).closest(".MuiCard-root")).not.toHaveAttribute("role");
     });
 

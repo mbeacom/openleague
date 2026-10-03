@@ -35,6 +35,20 @@ import Image from "next/image";
 import { VALIDATION_CONSTRAINTS, type PlayInSession } from "@/types/practice-planner";
 import { MAX_STATIONS_PER_GROUP } from "@/lib/utils/session-timeline";
 
+/** Hidden from sight but read by screen readers (the standard clip pattern). */
+const VISUALLY_HIDDEN = {
+    position: "absolute",
+    // Strings, not numbers: sx reads width 1 as 100% and m as theme spacing.
+    width: "1px",
+    height: "1px",
+    padding: 0,
+    margin: "-1px",
+    overflow: "hidden",
+    clip: "rect(0 0 0 0)",
+    whiteSpace: "nowrap",
+    border: 0,
+} as const;
+
 export const STATION_SWITCH_LABEL = "Run as a station with the previous drill";
 export const STATION_CAP_TOOLTIP = `A station block holds at most ${MAX_STATIONS_PER_GROUP} drills`;
 
@@ -52,11 +66,13 @@ export interface SessionDrillCardProps {
     station: { checked: boolean; canToggle: boolean } | null;
     onToggleStation: (index: number) => void;
     /**
-     * The id of the station block header this drill belongs to, when it is one
-     * of several stations (2b). The card is styled as part of the block and is
-     * a group labelled by the header; the list stays flat so cards never remount.
+     * This drill's place in its station block, when it is one of several
+     * stations (2b): `position` is 1-based within the block, `count` the block
+     * size. The card is styled as part of the block and is a group named
+     * "Station k of N: <title>" (the block header is announced once, as its own
+     * h3); the list stays flat so cards never remount.
      */
-    blockHeaderId?: string;
+    stationSlot?: { position: number; count: number };
     /** Advisory: the drill is larger than the booked ice segment (2b). Never blocks a save. */
     fitWarning?: string | null;
     isEditing: boolean;
@@ -88,7 +104,7 @@ export function SessionDrillCard({
     canMoveDown,
     station,
     onToggleStation,
-    blockHeaderId,
+    stationSlot,
     fitWarning = null,
     isEditing,
     onDelete,
@@ -107,6 +123,8 @@ export function SessionDrillCard({
     const [editInstructions, setEditInstructions] = useState(play.instructions);
 
     const titleId = useId();
+    const slotLabelId = useId();
+    const grouped = stationSlot !== undefined;
     const capReasonId = useId();
     const capped = station !== null && !station.canToggle;
 
@@ -136,14 +154,14 @@ export function SessionDrillCard({
     return (
         <Card
             // A grouped card can't sit inside a wrapper (moving it in or out would remount it),
-            // so each one is its own group, named by the block header and its title.
-            role={blockHeaderId ? "group" : undefined}
-            aria-labelledby={blockHeaderId ? `${blockHeaderId} ${titleId}` : undefined}
+            // so each one is its own group, named by its place in the block and its title.
+            role={grouped ? "group" : undefined}
+            aria-labelledby={grouped ? `${slotLabelId} ${titleId}` : undefined}
             sx={{
                 display: "flex",
                 flexDirection: { xs: "column", sm: "row" },
                 gap: 2,
-                ...(blockHeaderId && {
+                ...(grouped && {
                     borderLeft: 4,
                     borderColor: "primary.main",
                     bgcolor: "action.hover",
@@ -151,6 +169,13 @@ export function SessionDrillCard({
                 }),
             }}
         >
+            {stationSlot && (
+                // Out of flow (absolute), so it takes no flex gap; read as part of the group's name.
+                <Box component="span" id={slotLabelId} sx={VISUALLY_HIDDEN}>
+                    {`Station ${stationSlot.position} of ${stationSlot.count}:`}
+                </Box>
+            )}
+
             {/* Thumbnail */}
             <CardMedia
                 component="div"
@@ -193,7 +218,7 @@ export function SessionDrillCard({
             {/* Content */}
             <CardContent sx={{ flexGrow: 1, py: 1 }}>
                 <Stack spacing={1}>
-                    <Typography id={titleId} variant="h6" component={blockHeaderId ? "h4" : "h3"}>
+                    <Typography id={titleId} variant="h6" component={grouped ? "h4" : "h3"}>
                         {play.name || `Drill ${index + 1}`}
                     </Typography>
 
