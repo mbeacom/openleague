@@ -32,6 +32,10 @@ export function createStaleSignal(): StaleSignal {
     };
 }
 
+function isVersionError(error: unknown): boolean {
+    return typeof error === "object" && error !== null && (error as { name?: unknown }).name === "VersionError";
+}
+
 export interface OpenStoreOptions {
     open?: () => Promise<PlannerRepo>;
     stale?: StaleSignal;
@@ -43,7 +47,9 @@ export async function openPlannerStore({ open, stale, storeOptions }: OpenStoreO
     try {
         repo = await (open ?? (() => openIdbRepo({ onVersionChange: () => stale?.markStale() })))();
     } catch (error) {
-        if (error instanceof StorageBlockedError) stale?.markStale();
+        // Blocked by an older tab, or the database is already at a newer version
+        // (this tab is an older cached planner): either way, this tab must reload.
+        if (error instanceof StorageBlockedError || isVersionError(error)) stale?.markStale();
         console.error("The planner can't use IndexedDB here; keeping work in memory for this tab:", error);
         repo = createMemoryRepo();
     }

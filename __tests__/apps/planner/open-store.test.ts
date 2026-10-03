@@ -29,6 +29,27 @@ describe("openPlannerStore", () => {
         expect(stale.isStale()).toBe(true);
         error.mockRestore();
     });
+
+    it("marks the tab stale when a newer planner already upgraded the database, and still renders from memory", async () => {
+        const error = vi.spyOn(console, "error").mockImplementation(() => {});
+        const stale = createStaleSignal();
+        const { store, durable } = await openPlannerStore({
+            open: () => Promise.reject(new DOMException("The requested version is less than the existing version.", "VersionError")),
+            stale,
+        });
+        expect(stale.isStale()).toBe(true);
+        expect(durable).toBe(false);
+        expect((await store.listSessions()).success).toBe(true);
+        error.mockRestore();
+    });
+
+    it("does not mark the tab stale for other open failures", async () => {
+        const error = vi.spyOn(console, "error").mockImplementation(() => {});
+        const stale = createStaleSignal();
+        await openPlannerStore({ open: () => Promise.reject(new DOMException("denied", "SecurityError")), stale });
+        expect(stale.isStale()).toBe(false);
+        error.mockRestore();
+    });
 });
 
 describe("createStaleSignal", () => {
