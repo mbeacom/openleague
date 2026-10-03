@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
     AREA_EDIT_MARGIN_FT,
+    areaMaskRect,
     areaRect,
     countElementsOutside,
     editViewport,
@@ -128,5 +129,18 @@ describe("ICE_AREA_LABELS", () => {
         expect(ICE_AREA_LABELS.custom).toBe("Custom area");
         expect(iceAreaLabel(undefined)).toBe("Full ice");
         expect(iceAreaLabel({ kind: "zone-neutral" })).toBe("Neutral zone");
+    });
+});
+
+describe("areaMaskRect", () => {
+    const area = { kind: "zone-left" as const };
+    it("falls back to the stored area for no drag or a bare click", () => {
+        expect(areaMaskRect(null, area)).toEqual(areaRect(area));
+        const p = { x: 40, y: 40 };
+        expect(areaMaskRect({ start: p, end: p }, area)).toEqual(areaRect(area));
+        expect(areaMaskRect({ start: p, end: { x: 40.5, y: 40.4 } }, undefined)).toEqual(areaRect(undefined));
+    });
+    it("previews the snapped rectangle once the drag is past a click", () => {
+        expect(areaMaskRect({ start: { x: 40, y: 10 }, end: { x: 70, y: 40 } }, area)).toEqual({ x: 40, y: 10, w: 30, h: 30 });
     });
 });

@@ -2,14 +2,15 @@
 
 /** Collapsible legend listing only the notation a drill actually uses. */
 import React, { useEffect, useRef } from "react";
-import { Accordion, AccordionDetails, AccordionSummary, Box, Typography } from "@mui/material";
+import { Accordion, AccordionDetails, AccordionSummary, Box, Chip, Stack, Typography } from "@mui/material";
 import { ExpandMore as ExpandMoreIcon } from "@mui/icons-material";
 import type { PlayData, StrokeAction } from "@/types/practice-planner";
 import { buildLegend, type LegendEntry } from "@/lib/utils/canvas/legend";
 import { buildStrokeGeometry } from "@/lib/utils/canvas/stroke-geometry";
 import { paintStrokeGeometry } from "@/lib/utils/canvas/drawing-utils";
 import { drawEquipmentGlyph, drawPlayerGlyph } from "@/lib/utils/canvas/glyphs";
-import { BOARD_COLORS, ROLE_DEFAULT_COLORS } from "@/lib/utils/canvas/notation";
+import { BOARD_COLORS, ROLE_DEFAULT_COLORS, iceAreaLabel } from "@/lib/utils/canvas/notation";
+import { isFullIce } from "@/lib/utils/ice-area";
 
 const W = 40;
 const H = 20;
@@ -51,22 +52,33 @@ function Swatch({ entry }: { entry: LegendEntry }) {
 export function PlayLegend({ playData, defaultExpanded = false }: { playData: PlayData | null; defaultExpanded?: boolean }) {
     if (!playData) return null;
     const entries = buildLegend(playData);
-    if (entries.length === 0) return null;
+    const showArea = !isFullIce(playData.area);
+    if (entries.length === 0 && !showArea) return null;
     return (
-        <Accordion defaultExpanded={defaultExpanded} disableGutters elevation={0} sx={{ border: 1, borderColor: "divider" }}>
-            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>{`Legend (${entries.length})`}</Typography>
-            </AccordionSummary>
-            <AccordionDetails>
-                <Box component="ul" sx={{ listStyle: "none", m: 0, p: 0, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 1 }}>
-                    {entries.map((entry) => (
-                        <Box component="li" key={entry.key} sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                            <Swatch entry={entry} />
-                            <Typography variant="body2">{entry.label}</Typography>
-                        </Box>
-                    ))}
+        <Stack spacing={1}>
+            {/* Outside the accordion so the area shows while the legend is collapsed */}
+            {showArea && (
+                <Box>
+                    <Chip size="small" color="primary" variant="outlined" label={iceAreaLabel(playData.area)} />
                 </Box>
-            </AccordionDetails>
-        </Accordion>
+            )}
+            {entries.length > 0 && (
+                <Accordion defaultExpanded={defaultExpanded} disableGutters elevation={0} sx={{ border: 1, borderColor: "divider" }}>
+                    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>{`Legend (${entries.length})`}</Typography>
+                    </AccordionSummary>
+                    <AccordionDetails>
+                        <Box component="ul" sx={{ listStyle: "none", m: 0, p: 0, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 1 }}>
+                            {entries.map((entry) => (
+                                <Box component="li" key={entry.key} sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                                    <Swatch entry={entry} />
+                                    <Typography variant="body2">{entry.label}</Typography>
+                                </Box>
+                            ))}
+                        </Box>
+                    </AccordionDetails>
+                </Accordion>
+            )}
+        </Stack>
     );
 }

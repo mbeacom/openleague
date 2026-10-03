@@ -86,7 +86,7 @@ describe("PlayEditor ice area", () => {
     it("cancels the area tool without changing the area", async () => {
         renderEditor();
         await chooseArea("Custom area…");
-        fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+        fireEvent.click(screen.getByRole("button", { name: "Stop drawing area" }));
         expect(boardProps.current!.areaTool).toBe(false);
         expect("area" in boardProps.current!.playData).toBe(false);
     });

@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import { STARTER_PLAYS } from "@/lib/data/starter-plays";
 import { playDataSchema } from "@/lib/utils/play-data";
 import { RINK_DIMENSIONS } from "@/lib/utils/canvas/rink-renderer";
+import { areaRect, countElementsOutside } from "@/lib/utils/ice-area";
+import type { IceAreaPreset } from "@/types/practice-planner";
 
 const withinRink = ({ x, y }: { x: number; y: number }) =>
     x >= 0 && x <= RINK_DIMENSIONS.width && y >= 0 && y <= RINK_DIMENSIONS.height;
@@ -73,4 +75,27 @@ describe("Starter plays pack", () => {
             });
         }
     );
+});
+
+describe("Starter play ice areas", () => {
+    const EXPECTED: Record<string, IceAreaPreset | undefined> = {
+        "starter-breakout-5man": "half-left",
+        "starter-3man-weave": undefined,
+        "starter-pp-umbrella": "zone-right",
+        "starter-pk-box": "zone-left",
+        "starter-122-forecheck": undefined,
+        "starter-low-cycle": "zone-right",
+        "starter-point-shot-screen": "zone-right",
+        "starter-dzone-coverage": "zone-left",
+        "starter-nz-regroup": undefined,
+    };
+
+    it("gives the obvious set plays an explicit area and leaves full-ice drills unset", () => {
+        const actual = Object.fromEntries(STARTER_PLAYS.map((p) => [p.id, p.playData.area?.kind]));
+        expect(actual).toEqual(EXPECTED);
+    });
+
+    it.each(STARTER_PLAYS.map((p) => [p.name, p] as const))("%s has no element outside its area", (_name, play) => {
+        expect(countElementsOutside(play.playData, areaRect(play.playData.area))).toBe(0);
+    });
 });

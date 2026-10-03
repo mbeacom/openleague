@@ -450,7 +450,7 @@ export function PlayEditor({
                         sx={{ mb: 2 }}
                         action={
                             <Button color="inherit" size="small" onClick={() => setAreaTool(false)} sx={{ minHeight: 44 }}>
-                                Cancel
+                                Stop drawing area
                             </Button>
                         }
                     >

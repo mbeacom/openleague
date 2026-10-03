@@ -29,7 +29,7 @@ import {
 } from "@/lib/utils/canvas/rink-renderer";
 import { drawBoardScene, drawStroke } from "@/lib/utils/canvas/drawing-utils";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
-import { areaRect, editViewport, withArea } from "@/lib/utils/ice-area";
+import { areaMaskRect, areaRect, editViewport, withArea } from "@/lib/utils/ice-area";
 import {
     findElement,
     finishStroke,
@@ -296,7 +296,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         drawBoardScene(ctx, transform, renderData, {
             selectedId: selectedElementId || undefined,
             zoom: scale,
-            maskRect: areaDrag ? rectFromDrag(areaDrag.start, areaDrag.end) : areaRect(playData.area),
+            maskRect: areaMaskRect(areaDrag, playData.area),
         });
 
         // Draw current stroke in progress
@@ -834,6 +834,9 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
 
                 const center = getTouchCenter(event.touches[0], event.touches[1]);
                 setLastTouchCenter(center);
+                // The pinch takes over: abandon any area drag so the final
+                // touchend cannot commit a rectangle the coach never meant.
+                setAreaDrag(null);
             }
         },
         [transform, scale, getTouchDistance, getTouchCenter, handleMouseDown]

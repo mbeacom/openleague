@@ -5,6 +5,7 @@
  * module is that contract.
  */
 import type { IceArea, IceAreaPreset, PlayData, Position, RinkRect } from "@/types/practice-planner";
+import { isAreaClick, rectFromDrag } from "@/lib/utils/canvas/element-ops";
 import { BLUE_LINES, FULL_RINK, RINK_DIMENSIONS } from "@/lib/utils/canvas/rink-renderer";
 
 /** Margin the edit board shows around a drill's area, in feet. */
@@ -87,4 +88,14 @@ export function withArea(data: PlayData, area: IceArea | undefined): PlayData {
     if (!area || isFullIce(area)) return next;
     next.area = area.kind === "custom" ? { kind: "custom", rect: { ...area.rect } } : { kind: area.kind };
     return next;
+}
+
+/**
+ * The rectangle the board masks to. While an area-tool drag is past a bare
+ * click it previews the snapped rectangle; otherwise it is the stored area, so
+ * a mouse-down alone never flashes a minimum-size preview.
+ */
+export function areaMaskRect(drag: { start: Position; end: Position } | null, area?: IceArea): RinkRect {
+    if (drag && !isAreaClick(drag.start, drag.end)) return rectFromDrag(drag.start, drag.end);
+    return areaRect(area);
 }

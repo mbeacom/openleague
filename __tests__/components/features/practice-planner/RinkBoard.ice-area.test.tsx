@@ -229,6 +229,21 @@ describe("RinkBoard ice area", () => {
         expect(onAreaDrawn).not.toHaveBeenCalled();
     });
 
+    it("cancels an area drag when a second touch starts, so the final touchend commits nothing", () => {
+        const onAreaDrawn = vi.fn();
+        const { canvas, onPlayDataChange } = setup({ areaTool: true, onAreaDrawn });
+        const full = createTransformContext(800, 400, 20, FULL_RINK);
+        const a = rinkToCanvas({ x: 20, y: 10 }, full);
+        const b = rinkToCanvas({ x: 60, y: 50 }, full);
+        fireEvent.touchStart(canvas, { touches: [{ clientX: a.x, clientY: a.y }] });
+        fireEvent.touchMove(canvas, { touches: [{ clientX: b.x, clientY: b.y }] });
+        // A second finger lands: the pinch takes over and the drag is abandoned.
+        fireEvent.touchStart(canvas, { touches: [{ clientX: b.x, clientY: b.y }, { clientX: a.x, clientY: a.y }] });
+        fireEvent.touchEnd(canvas, { touches: [] });
+        expect(onPlayDataChange).not.toHaveBeenCalled();
+        expect(onAreaDrawn).not.toHaveBeenCalled();
+    });
+
     it("resets pinch-zoom and pan when the viewport changes", () => {
         const { canvas, ref, onPlayDataChange, rerender } = setup({ selectedTool: "player" });
         // Pinch to 2x around an off-center point, which also pans.
