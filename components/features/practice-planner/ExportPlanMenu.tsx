@@ -1,10 +1,11 @@
 "use client";
 
 /**
- * "Export plan" (ADR-0020): downloads the session as a portable plan file and,
- * when NEXT_PUBLIC_STATIC_PLANNER_URL is set, copies an "Open in planner" link
- * carrying the plan in its #plan= fragment. Built from the page's own session
- * data: no new server read.
+ * "Export plan" (ADR-0020). Downloads the session as a portable plan file and,
+ * when the platform offers one (PlannerPlatform.planLink), hands the plan off
+ * through a #plan= link: hosted copies an "Open in planner" link, the static
+ * planner opens the hosted import page. Built from the page's own session data:
+ * no new server read.
  */
 
 import { useState } from "react";
@@ -13,6 +14,7 @@ import {
     FileDownloadOutlined as DownloadIcon,
     IosShareOutlined as ExportIcon,
     LinkOutlined as LinkIcon,
+    OpenInNew as OpenIcon,
 } from "@mui/icons-material";
 import type { PlayData } from "@/types/practice-planner";
 import { formatDateTimeLocalInput, resolveTimeZone, sessionStart } from "@/lib/utils/date";
@@ -25,7 +27,9 @@ import {
     planFileName,
     serializePlan,
     type PlanDocument,
+    type PlanGenerator,
 } from "@/lib/plan-document";
+import { usePlannerPlatform, type PlannerPlanLink } from "@/lib/planner-store";
 
 export interface ExportableSession {
     title: string;
@@ -43,7 +47,11 @@ export interface ExportableSession {
 }
 
 /** Local date and start come from sessionStart in the venue's zone when booked, else the viewer's. */
-export function buildPlanDocument(session: ExportableSession, now: Date = new Date()): PlanDocument {
+export function buildPlanDocument(
+    session: ExportableSession,
+    now: Date = new Date(),
+    generator: PlanGenerator = "openleague-hosted",
+): PlanDocument {
     const local = formatDateTimeLocalInput(sessionStart(session), resolveTimeZone(session.venueTimezone));
     const [date, startTime] = local ? local.split("T") : [null, null];
     return serializePlan(
@@ -62,7 +70,7 @@ export function buildPlanDocument(session: ExportableSession, now: Date = new Da
                 playData: sp.play.playData,
             })),
         },
-        "openleague-hosted",
+        generator,
         now,
     );
 }
@@ -96,15 +104,18 @@ interface ExportPlanMenuProps {
     size?: ButtonProps["size"];
 }
 
+export const LINK_COPIED_NOTICE = "Link copied. Paste it to open this plan in the planner.";
+export const OPENED_IN_HOSTED_NOTICE = "Opened OpenLeague in a new tab. Sign in there to save this plan to a team.";
+
 export function ExportPlanMenu({ session, size = "medium" }: ExportPlanMenuProps) {
-    const plannerUrl = process.env.NEXT_PUBLIC_STATIC_PLANNER_URL?.trim();
+    const { planGenerator, planLink, navigate } = usePlannerPlatform();
     const [anchor, setAnchor] = useState<HTMLElement | null>(null);
     const [notice, setNotice] = useState<Notice | null>(null);
     const unreadable = unreadableDiagramNotice(session.plays.filter((sp) => sp.play.playData === null).length);
 
     const download = () => {
         setAnchor(null);
-        const doc = buildPlanDocument(session);
+        const doc = buildPlanDocument(session, new Date(), planGenerator);
         const text = JSON.stringify(doc, null, 2);
         const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));
         const link = document.createElement("a");
@@ -119,29 +130,43 @@ export function ExportPlanMenu({ session, size = "medium" }: ExportPlanMenuProps
         setNotice(warnings.length > 0 ? { severity: "warning", text: warnings.join(" ") } : null);
     };
 
-    const copyLink = async () => {
+    const handOff = async (link: PlannerPlanLink) => {
         setAnchor(null);
-        if (!plannerUrl) return;
-        const doc = buildPlanDocument(session);
-        // A link the import page would refuse is worse than none: warn instead of copying.
+        const doc = buildPlanDocument(session, new Date(), planGenerator);
+        // A link the import page would refuse is worse than none: warn instead.
         const problem = importProblemNotice(doc);
         if (problem) {
             setNotice({ severity: "warning", text: problem });
             return;
         }
+        // "open" must open its tab inside the click, before any await, or popup blockers refuse it.
+        const tab = link.mode === "open" ? window.open("", "_blank") : null;
+        if (tab) tab.opener = null;
         try {
-            const encoded = await encodePlanLink(doc);
-            await navigator.clipboard.writeText(`${plannerUrl.split("#")[0]}#plan=${encoded}`);
-            setNotice(
-                unreadable
-                    ? { severity: "warning", text: unreadable }
-                    : { severity: "success", text: "Link copied. Paste it to open this plan in the planner." },
-            );
+            const url = `${link.baseUrl.split("#")[0]}#plan=${await encodePlanLink(doc)}`;
+            if (link.mode === "copy") {
+                await navigator.clipboard.writeText(url);
+            } else if (tab) {
+                tab.location.replace(url);
+            } else {
+                // The browser blocked the new tab: go in this one.
+                navigate(url);
+                return;
+            }
+            const done = link.mode === "copy" ? LINK_COPIED_NOTICE : OPENED_IN_HOSTED_NOTICE;
+            setNotice(unreadable ? { severity: "warning", text: unreadable } : { severity: "success", text: done });
         } catch (error) {
+            tab?.close();
             setNotice(
                 error instanceof PlanLinkTooLargeError
                     ? { severity: "info", text: LINK_TOO_LARGE_MESSAGE }
-                    : { severity: "error", text: "Couldn't copy the link. Download the file instead." },
+                    : {
+                          severity: "error",
+                          text:
+                              link.mode === "copy"
+                                  ? "Couldn't copy the link. Download the file instead."
+                                  : "Couldn't open OpenLeague. Download the file instead.",
+                      },
             );
         }
     };
@@ -166,12 +191,12 @@ export function ExportPlanMenu({ session, size = "medium" }: ExportPlanMenuProps
                     </ListItemIcon>
                     <ListItemText>Download plan file</ListItemText>
                 </MenuItem>
-                {plannerUrl && (
-                    <MenuItem onClick={() => void copyLink()}>
+                {planLink && (
+                    <MenuItem onClick={() => void handOff(planLink)}>
                         <ListItemIcon>
-                            <LinkIcon fontSize="small" />
+                            {planLink.mode === "open" ? <OpenIcon fontSize="small" /> : <LinkIcon fontSize="small" />}
                         </ListItemIcon>
-                        <ListItemText>Copy “Open in planner” link</ListItemText>
+                        <ListItemText>{planLink.label}</ListItemText>
                     </MenuItem>
                 )}
             </Menu>

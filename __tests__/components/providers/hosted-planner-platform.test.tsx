@@ -56,4 +56,22 @@ describe("hosted planner platform", () => {
             unoptimized: true,
         });
     });
+
+    it("hands plans off with the copy-link item only when NEXT_PUBLIC_STATIC_PLANNER_URL is set", () => {
+        try {
+            vi.stubEnv("NEXT_PUBLIC_STATIC_PLANNER_URL", "");
+            expect(renderHook(() => useHostedPlannerPlatform()).result.current).toMatchObject({
+                planGenerator: "openleague-hosted",
+                planLink: null,
+            });
+            vi.stubEnv("NEXT_PUBLIC_STATIC_PLANNER_URL", " https://openleague.dev/planner/ ");
+            expect(renderHook(() => useHostedPlannerPlatform()).result.current.planLink).toEqual({
+                label: "Copy “Open in planner” link",
+                mode: "copy",
+                baseUrl: "https://openleague.dev/planner/",
+            });
+        } finally {
+            vi.unstubAllEnvs();
+        }
+    });
 });

@@ -27,6 +27,19 @@ affects:
   - type: path
     pattern: "lib/planner-store/**"
     note: The client-side store and platform seam the static app implements; hosted implements it with the server actions.
+  - type: path
+    pattern: "components/features/practice-planner/**"
+    note: The portable planner components both deployables render.
+  - type: path
+    # `*`, not `[sessionId]`: brackets are a glob character class and would match nothing.
+    pattern: "app/(dashboard)/practice-planner/*/SessionDetailView.tsx"
+    note: The portable session detail view, imported by the static app.
+  - type: path
+    pattern: "components/providers/HostedPlannerProvider.tsx"
+    note: The hosted PlannerStore (the server actions).
+  - type: path
+    pattern: "components/providers/hosted-planner-platform.tsx"
+    note: The hosted PlannerPlatform (next/link, next/image, router, plan hand-off).
 provenance:
   authoredBy: agent-drafted
   ratifiedBy: "@mbeacom"

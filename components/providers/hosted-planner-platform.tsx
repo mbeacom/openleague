@@ -10,7 +10,7 @@ import { useMemo } from "react";
 import NextImage from "next/image";
 import NextLink from "next/link";
 import { useRouter } from "next/navigation";
-import type { PlannerImageProps, PlannerLinkProps, PlannerPlatform, PlannerRoutes } from "@/lib/planner-store";
+import type { PlannerImageProps, PlannerLinkProps, PlannerPlanLink, PlannerPlatform, PlannerRoutes } from "@/lib/planner-store";
 
 export const hostedPlannerRoutes: PlannerRoutes = {
     list: () => "/practice-planner",
@@ -31,14 +31,25 @@ export function HostedImage({ src, alt, fit }: PlannerImageProps) {
     return <NextImage src={src} alt={alt} fill style={{ objectFit: fit }} unoptimized />;
 }
 
+/**
+ * The Export menu's "Open in planner" item, only when the static planner's URL
+ * is configured. Next inlines NEXT_PUBLIC_* at build; tests stub the env.
+ */
+export function hostedPlanLink(url: string | undefined = process.env.NEXT_PUBLIC_STATIC_PLANNER_URL): PlannerPlanLink | null {
+    const baseUrl = url?.trim();
+    return baseUrl ? { label: "Copy “Open in planner” link", mode: "copy", baseUrl } : null;
+}
+
 export function useHostedPlannerPlatform(): PlannerPlatform {
     const router = useRouter();
-    return useMemo(
+    return useMemo<PlannerPlatform>(
         () => ({
             Link: HostedLink,
             Image: HostedImage,
             navigate: (href: string) => router.push(href),
             routes: hostedPlannerRoutes,
+            planGenerator: "openleague-hosted",
+            planLink: hostedPlanLink(),
         }),
         [router],
     );
