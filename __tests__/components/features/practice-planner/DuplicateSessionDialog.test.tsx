@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, screen } from "@testing-library/react";
+import { createMockPlannerStore, renderWithPlanner } from "@/__tests__/helpers/planner";
 
 const push = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
-const actions = vi.hoisted(() => ({ duplicatePracticeSession: vi.fn() }));
-vi.mock("@/lib/actions/practice-session-drills", () => actions);
 
 import { DuplicateSessionDialog } from "@/components/features/practice-planner/DuplicateSessionDialog";
+const actions = createMockPlannerStore();
 
 const SESSION = "csessionxxxxxxxxxxxxxxxxx";
 const TEAM = "cteamxxxxxxxxxxxxxxxxxxxx";
@@ -23,7 +23,7 @@ beforeEach(() => vi.clearAllMocks());
 describe("DuplicateSessionDialog", () => {
     it("defaults to a week later and opens the copy's edit page", async () => {
         actions.duplicatePracticeSession.mockResolvedValue({ success: true, data: { id: "ccopyxxxxxxxxxxxxxxxxxxxx" } });
-        render(<DuplicateSessionDialog open sessionId={SESSION} teamId={TEAM} sourceDate={SOURCE_DATE} onClose={vi.fn()} />);
+        renderWithPlanner(<DuplicateSessionDialog open sessionId={SESSION} teamId={TEAM} sourceDate={SOURCE_DATE} onClose={vi.fn()} />, { store: actions });
 
         await act(async () => {
             fireEvent.click(screen.getByRole("button", { name: "Duplicate" }));
@@ -37,7 +37,7 @@ describe("DuplicateSessionDialog", () => {
 
     it("shows the error and stays open when duplication fails", async () => {
         actions.duplicatePracticeSession.mockResolvedValue({ success: false, error: "Practice session not found" });
-        render(<DuplicateSessionDialog open sessionId={SESSION} teamId={TEAM} sourceDate={SOURCE_DATE} onClose={vi.fn()} />);
+        renderWithPlanner(<DuplicateSessionDialog open sessionId={SESSION} teamId={TEAM} sourceDate={SOURCE_DATE} onClose={vi.fn()} />, { store: actions });
 
         await act(async () => {
             fireEvent.click(screen.getByRole("button", { name: "Duplicate" }));

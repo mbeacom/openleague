@@ -64,17 +64,6 @@ function scanPortability(entries: readonly string[]): { violations: string[]; vi
     return { violations: [...found].sort(), visited: seen.size };
 }
 
-// Tasks 3 and 4 move these components behind lib/planner-store; each deletes its lines here.
-const KNOWN_VIOLATIONS = [
-    "app/(dashboard)/practice-planner/[sessionId]/SessionDetailView.tsx -> @/lib/actions/practice-sessions",
-    "app/(dashboard)/practice-planner/[sessionId]/SessionDetailView.tsx -> next/image",
-    "app/(dashboard)/practice-planner/[sessionId]/SessionDetailView.tsx -> next/link",
-    "app/(dashboard)/practice-planner/[sessionId]/SessionDetailView.tsx -> next/navigation",
-    "components/features/practice-planner/DuplicateSessionDialog.tsx -> @/lib/actions/practice-session-drills",
-    "components/features/practice-planner/DuplicateSessionDialog.tsx -> next/navigation",
-    "components/ui/NextLinkComposites.tsx -> next/link",
-];
-
 describe("portable practice-planner import graph (ADR-0020)", () => {
     const { violations, visited } = scanPortability(ENTRIES);
 
@@ -82,11 +71,7 @@ describe("portable practice-planner import graph (ADR-0020)", () => {
         expect(visited).toBeGreaterThan(40);
     });
 
-    it("reaches no server, Prisma, auth or Next.js runtime module beyond the known list", () => {
-        expect(violations.filter((violation) => !KNOWN_VIOLATIONS.includes(violation))).toEqual([]);
-    });
-
-    it("keeps the known list current (delete a line once its import is gone)", () => {
-        expect(KNOWN_VIOLATIONS.filter((violation) => !violations.includes(violation))).toEqual([]);
+    it("reaches no server, Prisma, auth or Next.js runtime module", () => {
+        expect(violations).toEqual([]);
     });
 });

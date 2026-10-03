@@ -1,13 +1,12 @@
 /** Session detail view with station blocks (practice planner 2b). */
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, screen, within } from "@testing-library/react";
+import { renderWithPlanner } from "@/__tests__/helpers/planner";
 import userEvent from "@testing-library/user-event";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import type { IceArea } from "@/types/practice-planner";
 
-vi.mock("@/lib/actions/practice-sessions", () => ({ deletePracticeSession: vi.fn(), sharePracticeSession: vi.fn() }));
-vi.mock("@/lib/actions/practice-session-drills", () => ({ duplicatePracticeSession: vi.fn() }));
 // The map's canvas drawing is tested in StationMap.test.tsx; here, only what it is given.
 vi.mock("@/components/features/practice-planner/StationMap", () => ({
     StationMap: ({ stations, activeIndex }: { stations: Array<{ name: string }>; activeIndex: number }) => (
@@ -58,7 +57,7 @@ const SESSION = {
 type SessionProp = React.ComponentProps<typeof SessionDetailView>["session"];
 
 function renderView(session: SessionProp = SESSION) {
-    render(
+    renderWithPlanner(
         <ThemeProvider theme={createTheme()}>
             <SessionDetailView session={session} isAdmin={false} />
         </ThemeProvider>,

@@ -10,7 +10,7 @@
 import { useCallback, useState } from "react";
 import { Box, Button, Stack, Typography } from "@mui/material";
 import { ArrowBack as ArrowBackIcon, PrintOutlined as PrintIcon } from "@mui/icons-material";
-import { LinkButton } from "@/components/ui/NextLinkComposites";
+import { usePlannerPlatform } from "@/lib/planner-store";
 import type { PracticeSessionView } from "@/types/practice-planner";
 import { buildSchedule } from "@/lib/utils/session-timeline";
 import { combinedLegendData } from "@/lib/utils/canvas/station-map";
@@ -34,6 +34,7 @@ function chunk<T>(items: T[], size: number): T[][] {
 }
 
 export function BenchSheet({ session }: { session: BenchSheetSession }) {
+    const { Link, routes } = usePlannerPlatform();
     const start = sessionStart(session);
     const end = new Date(start.getTime() + session.duration * MS_PER_MINUTE);
     const { timeZone, showZone } = sessionTimeZone(session);
@@ -69,9 +70,9 @@ export function BenchSheet({ session }: { session: BenchSheetSession }) {
                 >
                     Print
                 </Button>
-                <LinkButton href={`/practice-planner/${session.id}`} variant="outlined" startIcon={<ArrowBackIcon />}>
+                <Button component={Link} href={routes.session(session.id)} variant="outlined" startIcon={<ArrowBackIcon />}>
                     Back to session
-                </LinkButton>
+                </Button>
                 {!allReady && (
                     <Typography variant="body2" role="status" sx={{ color: "text.secondary" }}>
                         {PREPARING_DIAGRAMS}

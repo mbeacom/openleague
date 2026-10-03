@@ -2,8 +2,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 
-vi.mock("@/lib/actions/practice-session-drills", () => ({ duplicatePracticeSession: vi.fn() }));
-
 import PracticePlannerList from "@/app/(dashboard)/practice-planner/PracticePlannerList";
 
 function renderList(props: { isAdmin: boolean; canImport: boolean }) {
