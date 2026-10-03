@@ -1,8 +1,9 @@
 /*
  * Bench sheet print rules (practice planner 3b). Imported only by
- * app/(print)/layout.tsx. Every rule is print-only or scoped to bench-* and
- * no-print classes, so the sheet stays harmless if a client navigation keeps
- * it loaded.
+ * app/(print)/layout.tsx. The @page rule and html,body rule in @media print
+ * are global and persist in the tab after client-side navigation (accepted
+ * behaviour, plan Ruling 12). All other rules are scoped to bench-* and
+ * no-print classes.
  */
 @page {
   margin: 12mm;
@@ -43,6 +44,10 @@
   body {
     background: #fff !important;
     color: #000 !important;
+  }
+
+  main {
+    min-height: auto !important;
   }
 
   .no-print {
