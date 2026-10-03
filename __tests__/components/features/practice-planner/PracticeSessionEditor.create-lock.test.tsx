@@ -41,6 +41,9 @@ function renderNewSession(onSave: SaveFn) {
                         plays: [{
                             id: "k1", playId: "clibraryxxxxxxxxxxxxxxxxx", name: "Breakout", sequence: 0, duration: 10,
                             instructions: "", playData: createEmptyPlayData(), thumbnail: "",
+                        }, {
+                            id: "k2", playId: "clibrary2xxxxxxxxxxxxxxxx", name: "Regroup", sequence: 1, duration: 10,
+                            instructions: "", playData: createEmptyPlayData(), thumbnail: "",
                         }],
                     }}
                     onSave={onSave}
@@ -55,6 +58,11 @@ function expectLocked() {
     expect(screen.getByLabelText(/session duration/i)).toBeDisabled();
     expect(screen.getByRole("button", { name: /add from library/i })).toBeDisabled();
     expect(screen.getByRole("button", { name: /^(save session|saving)/i })).toBeDisabled();
+    // Every drill card control: reorder, inline edit, delete.
+    expect(screen.getByRole("button", { name: "Move play 1 down" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Move play 2 up" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Edit play 2" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Delete play 1" })).toBeDisabled();
 }
 
 // A create has no follow-up save and redirects on success, so an edit made
@@ -69,6 +77,18 @@ describe("PracticeSessionEditor while creating a new session", () => {
 
         expect(onSave).toHaveBeenCalledTimes(1);
         expectLocked();
+    });
+
+    it("locks a drill's open inline editor while the create is in flight", async () => {
+        renderNewSession(vi.fn<SaveFn>(() => new Promise<PracticeSessionSaveResult>(() => {})));
+        fireEvent.click(screen.getByRole("button", { name: "Edit play 1" }));
+
+        fireEvent.click(screen.getByRole("button", { name: /save session/i }));
+        await act(async () => {});
+
+        expect(screen.getByLabelText("Duration (minutes)")).toBeDisabled();
+        expect(screen.getByLabelText("Instructions")).toBeDisabled();
+        expect(screen.getByRole("button", { name: /^save$/i })).toBeDisabled();
     });
 
     it("stays locked after a successful create, until the redirect lands", async () => {

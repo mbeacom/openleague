@@ -220,12 +220,15 @@ describe("materializeSessionDrills", () => {
             expect(mocks.play.createManyAndReturn.mock.calls[0][0].data[0].playData).toEqual({ diagram: "edited library" });
         });
 
-        it("reuses a copy at most once", async () => {
-            const { mocks, tx } = fakeTx([L, A], refs("A"));
+        it("reuses a copy at most once, cloning that copy (not L's new content) for further occurrences", async () => {
+            // A legacy session held L on two rows; detach made one copy A for both.
+            const { mocks, tx } = fakeTx([L, A], refs("A", "A"));
             const result = await materializeSessionDrills(tx, { sessionId: SESSION, teamId: TEAM, userId: USER, items: items("L", "L") });
 
             expect(result.mapping.map((m) => m.playId)).toEqual(["A", "clone-0"]);
-            expect(mocks.play.createManyAndReturn.mock.calls[0][0].data).toHaveLength(1);
+            const data = mocks.play.createManyAndReturn.mock.calls[0][0].data;
+            expect(data).toHaveLength(1);
+            expect(data[0]).toMatchObject({ playData: { diagram: "detached" }, sourcePlayId: "L" });
         });
 
         it("does not reuse a copy while the session still references the library drill itself", async () => {
