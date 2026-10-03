@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -45,7 +45,16 @@ import {
 import { EmptyState } from "@/components/ui/EmptyState";
 import { DuplicateSessionDialog } from "@/components/features/practice-planner/DuplicateSessionDialog";
 import { PlayLegend } from "@/components/features/practice-planner/PlayLegend";
+import { StationMap } from "@/components/features/practice-planner/StationMap";
 import type { PlayData } from "@/types/practice-planner";
+import type { SegmentKind } from "@prisma/client";
+import {
+  SEGMENT_KIND_FIT_LABELS,
+  groupStations,
+  sessionWallMinutes,
+  stationBlockLabel,
+  stationWarnings,
+} from "@/lib/utils/session-timeline";
 import {
   deletePracticeSession,
   sharePracticeSession,
@@ -56,6 +65,7 @@ interface SessionPlay {
   sequence: number;
   duration: number;
   instructions: string | null;
+  runsWithPrevious: boolean;
   play: {
     id: string;
     name: string;
@@ -81,6 +91,7 @@ interface SessionData {
   surfaceName?: string | null;
   segmentId?: string | null;
   segmentName?: string | null;
+  segmentKind?: SegmentKind | null;
   startAt?: string | null;
   plays: SessionPlay[];
 }
@@ -149,7 +160,8 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
     setActivePlayIndex((prev) => Math.min(session.plays.length - 1, prev + 1));
   }, [session.plays.length]);
 
-  const totalPlayTime = session.plays.reduce((sum, p) => sum + p.duration, 0);
+  // Station blocks run at the same time, so time allocation is wall time (2b).
+  const totalPlayTime = sessionWallMinutes(session.plays);
   const durationPercent = Math.min(
     (totalPlayTime / session.duration) * 100,
     100
@@ -157,6 +169,29 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
   const isOverTime = totalPlayTime > session.duration;
   const sessionDate = new Date(session.date);
   const activePlay = session.plays[activePlayIndex] ?? null;
+  const groups = useMemo(() => groupStations(session.plays), [session.plays]);
+  const activeGroup = activePlay
+    ? groups.find((group) => group.stations.includes(activePlay)) ?? null
+    : null;
+  const stationMapStations = useMemo(
+    () =>
+      activeGroup && activeGroup.stations.length > 1
+        ? activeGroup.stations.map((sp) => ({ name: sp.play.name, playData: sp.play.playData }))
+        : null,
+    [activeGroup]
+  );
+  // Advisory fit check against the booked segment's kind (2b); unreadable drills are skipped.
+  const fitLabel = session.segmentKind ? SEGMENT_KIND_FIT_LABELS[session.segmentKind] : null;
+  const tooBigCount = useMemo(
+    () =>
+      stationWarnings(
+        groupStations(
+          session.plays.map((sp) => ({ ...sp, area: sp.play.playData ? sp.play.playData.area : null }))
+        ),
+        session.segmentKind ?? null
+      ).tooBig.length,
+    [session.plays, session.segmentKind]
+  );
 
   const formatDate = (d: Date) =>
     d.toLocaleDateString("en-US", {
@@ -275,6 +310,14 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
                       .filter(Boolean)
                       .join(" · ")}
                   </Typography>
+                  {fitLabel && tooBigCount > 0 && (
+                    <Chip
+                      size="small"
+                      color="warning"
+                      variant="outlined"
+                      label={`${tooBigCount} drill${tooBigCount === 1 ? "" : "s"} larger than the booked ${fitLabel}`}
+                    />
+                  )}
                 </Stack>
               )}
             </Stack>
@@ -396,115 +439,45 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
               Play Sequence
             </Typography>
             <Stack spacing={1}>
-              {session.plays.map((sp, index) => (
-                <Card
-                  key={sp.id}
-                  onClick={() => setActivePlayIndex(index)}
-                  sx={{
-                    cursor: "pointer",
-                    border: "2px solid",
-                    borderColor:
-                      index === activePlayIndex ? "primary.main" : "transparent",
-                    bgcolor:
-                      index === activePlayIndex
-                        ? "rgba(25, 118, 210, 0.04)"
-                        : "background.paper",
-                    boxShadow: index === activePlayIndex ? 2 : 0,
-                    transition: "all 0.15s ease",
-                    "&:hover": {
-                      borderColor:
-                        index === activePlayIndex
-                          ? "primary.main"
-                          : "primary.light",
-                      bgcolor: "rgba(25, 118, 210, 0.04)",
-                    },
-                  }}
-                >
-                  <CardContent sx={{ p: 1.5, "&:last-child": { pb: 1.5 } }}>
-                    <Stack direction="row" alignItems="center" spacing={1.5}>
-                      {/* Play number */}
-                      <Box
-                        sx={{
-                          width: 28,
-                          height: 28,
-                          borderRadius: "50%",
-                          bgcolor:
-                            index === activePlayIndex
-                              ? "primary.main"
-                              : "grey.200",
-                          color:
-                            index === activePlayIndex
-                              ? "primary.contrastText"
-                              : "text.secondary",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          flexShrink: 0,
-                          fontSize: "0.75rem",
-                          fontWeight: 700,
-                        }}
-                      >
-                        {index + 1}
-                      </Box>
-
-                      {/* Thumbnail */}
-                      <Box
-                        sx={{
-                          width: 48,
-                          height: 32,
-                          borderRadius: 1,
-                          bgcolor: "grey.100",
-                          overflow: "hidden",
-                          position: "relative",
-                          flexShrink: 0,
-                        }}
-                      >
-                        {sp.play.thumbnail ? (
-                          <Image
-                            src={sp.play.thumbnail}
-                            alt=""
-                            fill
-                            style={{ objectFit: "cover" }}
-                            unoptimized
-                          />
-                        ) : (
-                          <Box
-                            sx={{
-                              width: "100%",
-                              height: "100%",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                            }}
-                          >
-                            <HockeyIcon
-                              sx={{ fontSize: 14, color: "grey.400" }}
-                            />
-                          </Box>
-                        )}
-                      </Box>
-
-                      {/* Name & duration */}
-                      <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <Typography
-                          variant="body2"
-                          fontWeight={600}
-                          noWrap
-                          sx={{ fontSize: "0.8rem" }}
-                        >
-                          {sp.play.name}
-                        </Typography>
-                        <Typography
-                          variant="caption"
-                          color="text.secondary"
-                        >
-                          {sp.duration} min
-                        </Typography>
-                      </Box>
-                    </Stack>
-                  </CardContent>
-                </Card>
-              ))}
+              {groups.map((group) => {
+                const cards = group.stations.map((sp) => {
+                  const index = session.plays.indexOf(sp);
+                  return (
+                    <SidebarPlayCard
+                      key={sp.id}
+                      sp={sp}
+                      index={index}
+                      active={index === activePlayIndex}
+                      onSelect={() => setActivePlayIndex(index)}
+                    />
+                  );
+                });
+                if (group.stations.length === 1) return cards[0];
+                const label = stationBlockLabel(group.stations.length, group.wallMinutes);
+                return (
+                  <Box
+                    key={`stations-${group.stations[0].id}`}
+                    role="group"
+                    aria-label={label}
+                    sx={{ border: 2, borderColor: "primary.main", borderRadius: 1, p: 1 }}
+                  >
+                    <Typography
+                      variant="caption"
+                      component="p"
+                      sx={{
+                        mb: 1,
+                        fontWeight: 800,
+                        color: "primary.main",
+                        textTransform: "uppercase",
+                        letterSpacing: 1,
+                      }}
+                    >
+                      {label}
+                    </Typography>
+                    <Stack spacing={1}>{cards}</Stack>
+                  </Box>
+                );
+              })}
             </Stack>
           </Box>
 
@@ -550,6 +523,16 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
                     </IconButton>
                   </Stack>
                 </Stack>
+
+                {/* Station map (2b): the active drill's whole block, this station highlighted */}
+                {stationMapStations && activeGroup && (
+                  <Box sx={{ px: 3, pt: 2 }}>
+                    <StationMap
+                      stations={stationMapStations}
+                      activeIndex={activeGroup.stations.indexOf(activePlay)}
+                    />
+                  </Box>
+                )}
 
                 {/* Thumbnail / rink preview */}
                 <Box
@@ -734,5 +717,106 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
         </DialogActions>
       </Dialog>
     </Box>
+  );
+}
+
+interface SidebarPlayCardProps {
+  sp: SessionPlay;
+  index: number;
+  active: boolean;
+  onSelect: () => void;
+}
+
+/** One drill in the sidebar's play sequence; standalone or inside a station block (2b). */
+function SidebarPlayCard({ sp, index, active, onSelect }: SidebarPlayCardProps) {
+  return (
+    <Card
+      onClick={onSelect}
+      sx={{
+        cursor: "pointer",
+        border: "2px solid",
+        borderColor: active ? "primary.main" : "transparent",
+        bgcolor: active ? "rgba(25, 118, 210, 0.04)" : "background.paper",
+        boxShadow: active ? 2 : 0,
+        transition: "all 0.15s ease",
+        "&:hover": {
+          borderColor: active ? "primary.main" : "primary.light",
+          bgcolor: "rgba(25, 118, 210, 0.04)",
+        },
+      }}
+    >
+      <CardContent sx={{ p: 1.5, "&:last-child": { pb: 1.5 } }}>
+        <Stack direction="row" alignItems="center" spacing={1.5}>
+          {/* Play number */}
+          <Box
+            sx={{
+              width: 28,
+              height: 28,
+              borderRadius: "50%",
+              bgcolor: active ? "primary.main" : "grey.200",
+              color: active ? "primary.contrastText" : "text.secondary",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+              fontSize: "0.75rem",
+              fontWeight: 700,
+            }}
+          >
+            {index + 1}
+          </Box>
+
+          {/* Thumbnail */}
+          <Box
+            sx={{
+              width: 48,
+              height: 32,
+              borderRadius: 1,
+              bgcolor: "grey.100",
+              overflow: "hidden",
+              position: "relative",
+              flexShrink: 0,
+            }}
+          >
+            {sp.play.thumbnail ? (
+              <Image
+                src={sp.play.thumbnail}
+                alt=""
+                fill
+                style={{ objectFit: "cover" }}
+                unoptimized
+              />
+            ) : (
+              <Box
+                sx={{
+                  width: "100%",
+                  height: "100%",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <HockeyIcon sx={{ fontSize: 14, color: "grey.400" }} />
+              </Box>
+            )}
+          </Box>
+
+          {/* Name & duration */}
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography
+              variant="body2"
+              fontWeight={600}
+              noWrap
+              sx={{ fontSize: "0.8rem" }}
+            >
+              {sp.play.name}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {sp.duration} min
+            </Typography>
+          </Box>
+        </Stack>
+      </CardContent>
+    </Card>
   );
 }
