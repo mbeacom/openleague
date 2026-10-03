@@ -2,7 +2,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { generateThumbnail } from "@/lib/utils/canvas/thumbnail-generator";
-import { PlannerApp } from "./App";
+import { CRASH_MESSAGE, PlannerApp } from "./App";
 import { createStaleSignal, openPlannerStore } from "./store/open-store";
 import "./static.css";
 
@@ -21,4 +21,11 @@ async function boot(): Promise<void> {
     );
 }
 
-void boot();
+/** A boot failure must never leave a blank page: say so in plain text. */
+function showBootFailure(error: unknown): void {
+    console.error("The planner failed to start:", error);
+    const target = document.getElementById("root") ?? document.body;
+    target.textContent = CRASH_MESSAGE;
+}
+
+boot().catch(showBootFailure);
