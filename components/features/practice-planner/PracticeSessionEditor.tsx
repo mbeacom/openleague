@@ -100,12 +100,22 @@ export interface PracticeVenueAttachment {
     startAt: Date | null;
 }
 
+/** Next free play sequence: max + 1 (robust to gaps), 0 for an empty list. */
+export function nextPlaySequence(plays: ReadonlyArray<{ sequence: number }>): number {
+    return plays.reduce((max, p) => Math.max(max, p.sequence), -1) + 1;
+}
+
 /** Full payload handed to onSave: session data + booking + override flag. */
 export interface PracticeSessionSubmitData
     extends PracticeSessionData,
         PracticeVenueAttachment {
     overrideConflicts: boolean;
     overrideReason: string;
+    /**
+     * True only for an explicit Save click (not autosave); gates the
+     * "practice plan updated" team notification on shared sessions.
+     */
+    notify: boolean;
 }
 
 /**
@@ -464,7 +474,7 @@ export function PracticeSessionEditor({
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
     const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
     const successTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-    const handleSaveRef = useRef<((overrideConflicts?: boolean) => Promise<void>) | undefined>(undefined);
+    const handleSaveRef = useRef<((overrideConflicts?: boolean, notify?: boolean) => Promise<void>) | undefined>(undefined);
 
     // Timezone the booking start time is entered in (the venue's zone,
     // matching GameForm's wall-clock handling).
@@ -668,7 +678,7 @@ export function PracticeSessionEditor({
      * FR-019: pass `overrideConflicts: true` (via "Book anyway") to save
      * despite venue booking conflicts.
      */
-    const handleSave = useCallback(async (overrideConflicts: boolean = false) => {
+    const handleSave = useCallback(async (overrideConflicts: boolean = false, notify: boolean = false) => {
         // Validate form (includes date validation)
         if (!validateForm(overrideConflicts)) {
             setSaveError("Please fix the validation errors");
@@ -720,6 +730,7 @@ export function PracticeSessionEditor({
                 startAt,
                 overrideConflicts,
                 overrideReason: overrideConflicts ? overrideReason.trim() : "",
+                notify,
             };
 
             // Call onSave callback if provided
@@ -930,18 +941,21 @@ export function PracticeSessionEditor({
         const playInstance: PlayInSession = {
             id: `play-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
             playId: savedPlay.id,
-            sequence: plays.length, // Requirements: 2.2 - Assign sequence number automatically (0-based)
+            sequence: 0, // Assigned below from the current list (max + 1) so gaps cannot collide
             duration: 10, // Default duration
             instructions: savedPlay.description || "",
             playData: JSON.parse(JSON.stringify(savedPlay.playData)), // Deep copy to prevent library play mutation
             thumbnail: savedPlay.thumbnail || "", // Copy thumbnail from library play
         };
 
-        setPlays((prevPlays) => [...prevPlays, playInstance]);
+        setPlays((prevPlays) => [
+            ...prevPlays,
+            { ...playInstance, sequence: nextPlaySequence(prevPlays) },
+        ]);
         setHasUnsavedChanges(true);
         setSaveSuccess(false);
         setShowLibrary(false); // Close library after adding
-    }, [plays.length]);
+    }, []);
 
     /**
      * Handle open library
@@ -1395,7 +1409,7 @@ export function PracticeSessionEditor({
                                         || isSharing
                                         || !overrideReason.trim()
                                     }
-                                    onClick={() => handleSave(true)}
+                                    onClick={() => handleSave(true, true)}
                                     sx={{ minHeight: 44 }}
                                 >
                                     Override conflict
@@ -1481,7 +1495,7 @@ export function PracticeSessionEditor({
                         <Button
                             variant="contained"
                             color="primary"
-                            onClick={() => handleSave()}
+                            onClick={() => handleSave(false, true)}
                             disabled={isSaving || isSharing || !title.trim()}
                             startIcon={
                                 isSaving ? (

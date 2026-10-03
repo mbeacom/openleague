@@ -137,31 +137,37 @@ export function canvasToRink(canvasPos: Position, transform: TransformContext): 
  * Cached rink background for performance optimization
  */
 let cachedRinkCanvas: HTMLCanvasElement | null = null;
-let cachedRinkTransform: TransformContext | null = null;
+let cachedRinkKey: string | null = null;
 
 /**
  * Clears the cached rink background
  */
 export function clearRinkCache(): void {
     cachedRinkCanvas = null;
-    cachedRinkTransform = null;
+    cachedRinkKey = null;
 }
 
 /**
- * Gets or creates a cached rink background canvas
+ * Cache key covering every transform field that affects how the rink is drawn
+ * (canvas size, scale, offsets/padding).
+ */
+export function rinkCacheKey(t: TransformContext): string {
+    return [t.canvasWidth, t.canvasHeight, t.scaleX, t.scaleY, t.offsetX, t.offsetY].join("|");
+}
+
+/**
+ * Gets or creates a cached rink background canvas for the given transform
  *
- * @param width - Canvas width in pixels
- * @param height - Canvas height in pixels
+ * @param transform - Transform the elements will be drawn with; the rink is built from it
  * @returns Cached canvas with rink background
  */
-function getCachedRinkCanvas(width: number, height: number): HTMLCanvasElement {
-    // Check if we can reuse the cached canvas
-    if (
-        cachedRinkCanvas &&
-        cachedRinkTransform &&
-        cachedRinkCanvas.width === width &&
-        cachedRinkCanvas.height === height
-    ) {
+function getCachedRinkCanvas(transform: TransformContext): HTMLCanvasElement {
+    const width = transform.canvasWidth;
+    const height = transform.canvasHeight;
+    const key = rinkCacheKey(transform);
+
+    // Reuse only when size AND transform match
+    if (cachedRinkCanvas && cachedRinkKey === key) {
         return cachedRinkCanvas;
     }
 
@@ -175,11 +181,10 @@ function getCachedRinkCanvas(width: number, height: number): HTMLCanvasElement {
         throw new Error("Failed to get 2D context for rink cache");
     }
 
-    const transform = createTransformContext(width, height);
     drawRinkBackground(ctx, transform);
 
     cachedRinkCanvas = canvas;
-    cachedRinkTransform = transform;
+    cachedRinkKey = key;
 
     return canvas;
 }
@@ -193,7 +198,7 @@ function getCachedRinkCanvas(width: number, height: number): HTMLCanvasElement {
 export function drawRink(ctx: CanvasRenderingContext2D, transform: TransformContext): void {
     // Use cached background if available
     try {
-        const cachedCanvas = getCachedRinkCanvas(transform.canvasWidth, transform.canvasHeight);
+        const cachedCanvas = getCachedRinkCanvas(transform);
         ctx.drawImage(cachedCanvas, 0, 0);
     } catch (error) {
         // Fallback to direct rendering if caching fails

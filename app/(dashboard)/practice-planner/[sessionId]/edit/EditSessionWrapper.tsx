@@ -55,6 +55,7 @@ export function EditSessionWrapper({
         startAt: session.startAt || undefined,
         overrideConflicts: session.overrideConflicts,
         overrideReason: session.overrideReason || undefined,
+        notify: session.notify,
       });
 
       if (!result.success) {

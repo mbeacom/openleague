@@ -975,8 +975,9 @@ export async function updatePracticeSession(
         revalidatePath(`/practice-planner/${validated.id}`);
         revalidatePath("/calendar");
 
-        // Send update notifications if session is shared (Requirements: 6.3)
-        if (existingSession.isShared) {
+        // Send update notifications if session is shared (Requirements: 6.3),
+        // but only on an explicit Save — never on autosave.
+        if (existingSession.isShared && validated.notify) {
             const { sendPracticePlanNotifications } = await import("@/lib/email/templates");
 
             sendPracticePlanNotifications(validated.id, validated.teamId, "updated").catch((error) => {
