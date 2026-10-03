@@ -1,5 +1,5 @@
 /** The practice-planner list offers "Import plan" to anyone who can schedule for at least one team (ADR-0020). */
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 
 import PracticePlannerList from "@/app/(dashboard)/practice-planner/PracticePlannerList";
