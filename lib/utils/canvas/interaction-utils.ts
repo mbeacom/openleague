@@ -486,6 +486,40 @@ export function pxToRinkFt(px: number, transform: Pick<TransformContext, "scaleX
     return px / (Math.min(transform.scaleX, transform.scaleY) * zoom);
 }
 
+/** Board zoom limits for a pinch */
+export const PINCH_ZOOM_MIN = 0.5;
+export const PINCH_ZOOM_MAX = 3;
+
+/** The board's zoom/pan: a canvas point p appears on screen at zoom * p + pan. */
+export interface BoardView {
+    zoom: number;
+    pan: Position;
+}
+
+/**
+ * The view for a pinch in progress, from the view and the fingers' midpoint
+ * (canvas-relative CSS pixels) and distance when the pinch started. The zoom
+ * scales with the finger distance, clamped to [PINCH_ZOOM_MIN, PINCH_ZOOM_MAX]
+ * first; the pan then keeps the canvas point that was under the starting
+ * midpoint under the current one, so a still pinch zooms about the fingers
+ * and a moving one zooms and pans together.
+ */
+export function pinchView(
+    start: BoardView & { center: Position; distance: number },
+    current: { center: Position; distance: number }
+): BoardView {
+    if (!(start.distance > 0) || !(start.zoom > 0)) return { zoom: start.zoom, pan: start.pan };
+    const zoom = Math.max(PINCH_ZOOM_MIN, Math.min(PINCH_ZOOM_MAX, (start.zoom * current.distance) / start.distance));
+    const ratio = zoom / start.zoom;
+    return {
+        zoom,
+        pan: {
+            x: current.center.x - (start.center.x - start.pan.x) * ratio,
+            y: current.center.y - (start.center.y - start.pan.y) * ratio,
+        },
+    };
+}
+
 /** True once `pointer` is at least `thresholdFt` from `grab` (rink feet). */
 export function pastDragThreshold(grab: Position, pointer: Position, thresholdFt: number): boolean {
     return Math.hypot(pointer.x - grab.x, pointer.y - grab.y) >= thresholdFt;

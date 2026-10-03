@@ -288,6 +288,25 @@ describe("RinkBoard ice area", () => {
         expect(onPlayDataChange).not.toHaveBeenCalled();
     });
 
+    it("zooms about the pinch midpoint: the rink point under the fingers stays under them", () => {
+        const { canvas, at, onPlayDataChange } = setup({ selectedTool: "player" });
+        const full = createTransformContext(800, 400, 20, FULL_RINK);
+        const mid = at(150, 40);
+        // Fingers 100 px apart around the point, spread to 200 px: 2x about the midpoint.
+        fireEvent.touchStart(canvas, { touches: [{ clientX: mid.clientX - 50, clientY: mid.clientY }, { clientX: mid.clientX + 50, clientY: mid.clientY }] });
+        fireEvent.touchMove(canvas, { touches: [{ clientX: mid.clientX - 100, clientY: mid.clientY }, { clientX: mid.clientX + 100, clientY: mid.clientY }] });
+        fireEvent.touchEnd(canvas, { touches: [] });
+        fireEvent.mouseDown(canvas, mid);
+        const placed = onPlayDataChange.mock.calls.at(-1)![0].players[0].position;
+        expect(placed.x).toBeCloseTo(150, 6);
+        expect(placed.y).toBeCloseTo(40, 6);
+        // A point away from the midpoint is now twice as far from it on screen.
+        const off = rinkToCanvas({ x: 160, y: 40 }, full);
+        fireEvent.mouseDown(canvas, { clientX: mid.clientX + 2 * (off.x - mid.clientX), clientY: mid.clientY });
+        const second = onPlayDataChange.mock.calls.at(-1)![0].players.at(-1).position;
+        expect(second.x).toBeCloseTo(160, 6);
+    });
+
     it("resets pinch-zoom and pan when the viewport changes", () => {
         const { canvas, ref, onPlayDataChange, rerender } = setup({ selectedTool: "player" });
         // Pinch to 2x around an off-center point, which also pans.

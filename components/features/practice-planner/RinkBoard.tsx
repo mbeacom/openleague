@@ -52,6 +52,7 @@ import {
     DRAG_THRESHOLD_PX,
     pastDragThreshold,
     pxToRinkFt,
+    pinchView,
 } from "@/lib/utils/canvas/interaction-utils";
 
 /**
@@ -162,12 +163,11 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
     // Area-tool drag in progress (rink feet, clamped to the rink)
     const [areaDrag, setAreaDrag] = useState<{ start: Position; end: Position } | null>(null);
 
-    // Touch interaction state
-    const [touchStartDistance, setTouchStartDistance] = useState<number | null>(null);
-    const [initialScale, setInitialScale] = useState(1);
+    // Zoom/pan (pinch) state
     const [scale, setScale] = useState(1);
     const [panOffset, setPanOffset] = useState<Position>({ x: 0, y: 0 });
-    const [lastTouchCenter, setLastTouchCenter] = useState<Position | null>(null);
+    // The view and fingers when the current pinch began (null = no pinch)
+    const pinchStartRef = useRef<{ zoom: number; pan: Position; center: Position; distance: number } | null>(null);
 
     // Refs to avoid stale closures in event handlers
     // These refs hold the latest values without triggering callback recreation
@@ -813,12 +813,14 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
     }, []);
 
     /**
-     * Calculate center point between two touches
+     * Center point between two touches, relative to the canvas (the space
+     * the zoom/pan transform works in)
      */
     const getTouchCenter = useCallback((touch1: React.Touch, touch2: React.Touch): Position => {
+        const rect = canvasRef.current?.getBoundingClientRect();
         return {
-            x: (touch1.clientX + touch2.clientX) / 2,
-            y: (touch1.clientY + touch2.clientY) / 2,
+            x: (touch1.clientX + touch2.clientX) / 2 - (rect?.left ?? 0),
+            y: (touch1.clientY + touch2.clientY) / 2 - (rect?.top ?? 0),
         };
     }, []);
 
@@ -848,12 +850,12 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
             } else if (event.touches.length === 2) {
                 // Two touches - pinch to zoom or pan
                 // Requirements: 3.5
-                const distance = getTouchDistance(event.touches[0], event.touches[1]);
-                setTouchStartDistance(distance);
-                setInitialScale(scale);
-
-                const center = getTouchCenter(event.touches[0], event.touches[1]);
-                setLastTouchCenter(center);
+                pinchStartRef.current = {
+                    zoom: scaleRef.current,
+                    pan: panOffsetRef.current,
+                    center: getTouchCenter(event.touches[0], event.touches[1]),
+                    distance: getTouchDistance(event.touches[0], event.touches[1]),
+                };
                 // The pinch takes over: abandon any area drag, element drag or
                 // stroke so the final touchend cannot commit a rectangle, a move
                 // or a line the coach never meant. A drag's preview is visual
@@ -869,7 +871,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
                 setCurrentDrawingPoints([]);
             }
         },
-        [transform, scale, getTouchDistance, getTouchCenter, handleMouseDown]
+        [transform, getTouchDistance, getTouchCenter, handleMouseDown]
     );
 
     /**
@@ -893,39 +895,21 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
                     preventDefault: () => { },
                     stopPropagation: () => { },
                 } as React.MouseEvent<HTMLCanvasElement>);
-            } else if (event.touches.length === 2 && touchStartDistance !== null) {
-                // Two touches - handle pinch zoom and pan
+            } else if (event.touches.length === 2 && pinchStartRef.current) {
+                // Two touches: zoom about the fingers' midpoint and pan with it
                 // Requirements: 3.5
-                const currentDistance = getTouchDistance(event.touches[0], event.touches[1]);
-                const currentCenter = getTouchCenter(event.touches[0], event.touches[1]);
-
-                // Calculate zoom
-                const zoomFactor = currentDistance / touchStartDistance;
-                const newScale = Math.max(0.5, Math.min(3, initialScale * zoomFactor));
-                setScale(newScale);
-
-                // Calculate pan
-                if (lastTouchCenter) {
-                    const dx = currentCenter.x - lastTouchCenter.x;
-                    const dy = currentCenter.y - lastTouchCenter.y;
-                    setPanOffset((prev) => ({
-                        x: prev.x + dx,
-                        y: prev.y + dy,
-                    }));
-                }
-
-                setLastTouchCenter(currentCenter);
+                const view = pinchView(pinchStartRef.current, {
+                    center: getTouchCenter(event.touches[0], event.touches[1]),
+                    distance: getTouchDistance(event.touches[0], event.touches[1]),
+                });
+                // The refs follow at once, so a tap right after the pinch maps through the new view.
+                scaleRef.current = view.zoom;
+                panOffsetRef.current = view.pan;
+                setScale(view.zoom);
+                setPanOffset(view.pan);
             }
         },
-        [
-            transform,
-            touchStartDistance,
-            initialScale,
-            lastTouchCenter,
-            getTouchDistance,
-            getTouchCenter,
-            handleMouseMove,
-        ]
+        [transform, getTouchDistance, getTouchCenter, handleMouseMove]
     );
 
     /**
@@ -939,14 +923,10 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
             if (event.touches.length === 0) {
                 // All touches ended - treat like mouse up
                 handleMouseUp();
-
-                // Reset touch state
-                setTouchStartDistance(null);
-                setLastTouchCenter(null);
+                pinchStartRef.current = null;
             } else if (event.touches.length === 1) {
-                // One touch remaining - reset pinch state
-                setTouchStartDistance(null);
-                setLastTouchCenter(null);
+                // One touch remaining - the pinch is over
+                pinchStartRef.current = null;
             }
         },
         [handleMouseUp]
