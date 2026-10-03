@@ -912,7 +912,9 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         (event: React.TouchEvent<HTMLCanvasElement>) => {
             if (!transform || !canvasRef.current) return;
 
-            event.preventDefault();
+            // No preventDefault here: React registers touchstart/touchmove as
+            // passive listeners, so it would throw on every move. The canvas's
+            // `touch-action: none` is what stops scrolling and browser zoom.
 
             if (event.touches.length === 1) {
                 pendingTapRef.current = null; // never replay an older, unfinished tap
@@ -946,7 +948,9 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         (event: React.TouchEvent<HTMLCanvasElement>) => {
             if (!transform || !canvasRef.current) return;
 
-            event.preventDefault();
+            // No preventDefault here: React registers touchstart/touchmove as
+            // passive listeners, so it would throw on every move. The canvas's
+            // `touch-action: none` is what stops scrolling and browser zoom.
 
             if (event.touches.length === 1) {
                 // A pending tap that travels past the drag threshold is not a tap
