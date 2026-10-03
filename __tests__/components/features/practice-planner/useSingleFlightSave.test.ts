@@ -58,7 +58,7 @@ describe("useSingleFlightSave", () => {
         const { result } = renderHook(() => useSingleFlightSave());
         let outcome: Promise<unknown> = Promise.resolve();
         act(() => { outcome = result.current.request({ overrideConflicts: false, notify: false }); });
-        result.current.start();
+        result.current.start({ carriesRequests: true });
         act(() => result.current.finish({ ok: false, error: "Too long" }));
         await expect(outcome).resolves.toEqual({ ok: false, error: "Too long" });
     });
@@ -72,10 +72,28 @@ describe("useSingleFlightSave", () => {
         await Promise.resolve();
         expect(settled).toEqual([]);
 
-        result.current.start();
+        result.current.start({ carriesRequests: true });
         act(() => result.current.finish({ ok: true }));
         await Promise.resolve();
         expect(settled).toEqual([{ ok: true }]);
+    });
+
+    it("does not let a save that was not started for requests (a stale autosave timer) settle them", async () => {
+        const { result } = renderHook(() => useSingleFlightSave());
+        const settled: unknown[] = [];
+        act(() => { void result.current.request({ overrideConflicts: false, notify: false }).then((o) => settled.push(o)); });
+
+        // An autosave armed before the request fires with the old plays.
+        result.current.start();
+        act(() => result.current.finish({ ok: true }));
+        await Promise.resolve();
+        expect(settled).toEqual([]);
+
+        // The follow-up the request triggered carries it.
+        result.current.start({ carriesRequests: true });
+        act(() => result.current.finish({ ok: false, error: "Too long" }));
+        await Promise.resolve();
+        expect(settled).toEqual([{ ok: false, error: "Too long" }]);
     });
 
     it("fails a waiting request when the save stops before it starts", async () => {

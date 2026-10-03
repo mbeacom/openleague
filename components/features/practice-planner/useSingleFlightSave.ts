@@ -10,8 +10,8 @@
  * its latest-handleSave ref is updated.
  *
  * `request` returns a promise that settles with the outcome of the save that
- * carries it: the next save to start (the follow-up, or the queued save behind
- * a running one), or `abandon` when that save stops before it starts.
+ * carries it: the next follow-up save to start (`start({ carriesRequests })`),
+ * or `abandon` when that save stops before it starts.
  */
 
 import { useMemo, useRef, useState } from "react";
@@ -49,11 +49,18 @@ export function useSingleFlightSave() {
             },
             isRunning: () => inFlightRef.current,
             queue,
-            /** Marks a save as running and returns the edit version it covers. */
-            start() {
+            /**
+             * Marks a save as running and returns the edit version it covers.
+             * Only a save run for a published `followUp` carries the waiting
+             * requests: an autosave timer armed earlier can fire before the
+             * editor's latest-handleSave ref refreshes and send stale state.
+             */
+            start({ carriesRequests = false }: { carriesRequests?: boolean } = {}) {
                 inFlightRef.current = true;
-                carriedRef.current = waitingRef.current;
-                waitingRef.current = [];
+                if (carriesRequests) {
+                    carriedRef.current = waitingRef.current;
+                    waitingRef.current = [];
+                }
                 return editVersionRef.current;
             },
             /**

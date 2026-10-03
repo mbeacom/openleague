@@ -10,6 +10,8 @@ export interface SessionDrillListProps {
     duration: number;
     editingPlayId: string | null;
     disabled: boolean;
+    /** The session is being created: every card control is locked. */
+    locked?: boolean;
     onOpenLibrary: () => void;
     onDelete: (playId: string) => void;
     onEdit: (playId: string) => void;
@@ -29,6 +31,7 @@ export function SessionDrillList({
     duration,
     editingPlayId,
     disabled,
+    locked = false,
     onOpenLibrary,
     onDelete,
     onEdit,
@@ -132,6 +135,7 @@ export function SessionDrillList({
                                 onMoveDown={onMoveDown}
                                 canEditDiagram={canEditDiagram}
                                 disabled={disabled}
+                                locked={locked}
                                 onEditDiagram={onEditDiagram}
                             />
                         ))}

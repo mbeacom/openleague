@@ -153,7 +153,7 @@ export function PracticeSessionEditor({
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
     const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
     const successTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-    const handleSaveRef = useRef<((overrideConflicts?: boolean, notify?: boolean) => Promise<void>) | undefined>(undefined);
+    const handleSaveRef = useRef<((overrideConflicts?: boolean, notify?: boolean, isFollowUp?: boolean) => Promise<void>) | undefined>(undefined);
 
     // Single-flight saves: a save requested while one is running is queued
     // and runs once, after the running save's state has rendered.
@@ -289,7 +289,8 @@ export function PracticeSessionEditor({
      * FR-019: pass `overrideConflicts: true` (via "Book anyway") to save
      * despite venue booking conflicts.
      */
-    const handleSave = useCallback(async (overrideConflicts: boolean = false, notify: boolean = false) => {
+    // isFollowUp: run for a published followUp, so it carries waiting requests.
+    const handleSave = useCallback(async (overrideConflicts: boolean = false, notify: boolean = false, isFollowUp = false) => {
         if (saveFlight.isRunning()) {
             // A create redirects to its edit page, which loads the saved state.
             if (sessionId) saveFlight.queue({ overrideConflicts, notify });
@@ -299,7 +300,7 @@ export function PracticeSessionEditor({
         // Validate form (includes date validation)
         if (!validateForm(overrideConflicts)) {
             setSaveError("Please fix the validation errors");
-            saveFlight.abandon("Please fix the session's validation errors");
+            if (isFollowUp) saveFlight.abandon("Please fix the session's validation errors");
             return;
         }
 
@@ -314,11 +315,11 @@ export function PracticeSessionEditor({
                 startTime: "Enter a valid start time",
             }));
             setSaveError("Please fix the validation errors");
-            saveFlight.abandon("Please enter a valid start time for the session");
+            if (isFollowUp) saveFlight.abandon("Please enter a valid start time for the session");
             return;
         }
 
-        const startedVersion = saveFlight.start();
+        const startedVersion = saveFlight.start({ carriesRequests: isFollowUp });
         const sentPlayIds = new Map(plays.map((play) => [play.id, play.playId]));
         setIsSaving(true);
         setSaveError(null);
@@ -393,7 +394,7 @@ export function PracticeSessionEditor({
     // Run a queued save after the previous save's state updates have rendered.
     const { followUp } = saveFlight;
     useEffect(() => {
-        if (followUp) void handleSaveRef.current?.(followUp.overrideConflicts, followUp.notify);
+        if (followUp) void handleSaveRef.current?.(followUp.overrideConflicts, followUp.notify, true);
     }, [followUp]);
 
     /**
@@ -486,21 +487,22 @@ export function PracticeSessionEditor({
      * Requirements: 2.2 - Remove plays from session
      */
     const handleDeletePlay = useCallback((playId: string) => {
+        if (creating) return; // A create redirects; this edit would be lost.
         setPlays((prevPlays) =>
             prevPlays
                 .filter((p) => p.id !== playId)
                 .map((play, idx) => ({ ...play, sequence: idx }))
         );
         markDirty();
-    }, [markDirty]);
+    }, [markDirty, creating]);
 
     /**
      * Handle edit play
      * Requirements: 2.4 - Edit play in session
      */
     const handleEditPlay = useCallback((playId: string) => {
-        setEditingPlayId(playId);
-    }, []);
+        if (!creating) setEditingPlayId(playId);
+    }, [creating]);
 
     /**
      * Handle update play in session
@@ -508,6 +510,7 @@ export function PracticeSessionEditor({
      */
     const handleUpdatePlayInSession = useCallback(
         (playId: string, updates: Partial<PlayInSession>) => {
+            if (creating) return;
             setPlays((prevPlays) =>
                 prevPlays.map((play) =>
                     play.id === playId ? { ...play, ...updates } : play
@@ -516,7 +519,7 @@ export function PracticeSessionEditor({
             markDirty();
             setEditingPlayId(null);
         },
-        [markDirty]
+        [markDirty, creating]
     );
 
     /**
@@ -574,7 +577,7 @@ export function PracticeSessionEditor({
      * Requirements: 2.5 - Reorder plays, update sequence numbers
      */
     const handleMovePlayUp = useCallback((index: number) => {
-        if (index === 0) return;
+        if (creating || index === 0) return;
 
         setPlays((prevPlays) => {
             const newPlays = [...prevPlays];
@@ -587,13 +590,14 @@ export function PracticeSessionEditor({
             }));
         });
         markDirty();
-    }, [markDirty]);
+    }, [markDirty, creating]);
 
     /**
      * Handle move play down
      * Requirements: 2.5 - Reorder plays, update sequence numbers
      */
     const handleMovePlayDown = useCallback((index: number) => {
+        if (creating) return;
         setPlays((prevPlays) => {
             if (index === prevPlays.length - 1) return prevPlays;
 
@@ -607,7 +611,7 @@ export function PracticeSessionEditor({
             }));
         });
         markDirty();
-    }, [markDirty]);
+    }, [markDirty, creating]);
 
     // Cleanup success timeout on unmount
     useEffect(() => {
@@ -723,6 +727,7 @@ export function PracticeSessionEditor({
                 duration={duration}
                 editingPlayId={editingPlayId}
                 disabled={busy}
+                locked={creating}
                 onOpenLibrary={handleOpenLibrary}
                 onDelete={handleDeletePlay}
                 onEdit={handleEditPlay}
