@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { findElement, updateElement, removeElement, moveElement, placePlayer, placeEquipment, finishStroke, limitMessage } from "@/lib/utils/canvas/element-ops";
 import { ROLE_DEFAULT_COLORS } from "@/lib/utils/canvas/notation";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
-import type { PlayData } from "@/types/practice-planner";
+import { VALIDATION_CONSTRAINTS, type PlayData } from "@/types/practice-planner";
 
 const data: PlayData = {
     ...createEmptyPlayData(),
@@ -75,6 +75,13 @@ describe("placement", () => {
 
     it("ignores taps shorter than 1 ft", () => {
         expect(finishStroke(empty, [{ x: 5, y: 5 }, { x: 5.4, y: 5 }], { action: "skate", path: "freehand", end: "arrow" }, "#000000", "s")).toBe(empty);
+    });
+
+    it("caps a 3000-point freehand stroke at MAX_STROKE_POINTS", () => {
+        const raw = Array.from({ length: 3000 }, (_, i) => ({ x: i * 0.6, y: 20 + Math.sin(i / 7) * 10 }));
+        const next = finishStroke(empty, raw, { action: "skate", path: "freehand", end: "arrow" }, "#212121", "s");
+        expect(next.drawings).toHaveLength(1);
+        expect(next.drawings[0].points.length).toBeLessThanOrEqual(VALIDATION_CONSTRAINTS.MAX_STROKE_POINTS);
     });
 
     it("ignores a single point", () => {

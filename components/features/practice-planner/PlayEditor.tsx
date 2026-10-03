@@ -29,6 +29,8 @@ import { Save as SaveIcon } from "@mui/icons-material";
 import { RinkBoard, RinkBoardHandle } from "./RinkBoard";
 import { RinkBoardErrorBoundary } from "./RinkBoardErrorBoundary";
 import { DrawingToolbar } from "./DrawingToolbar";
+import { ElementInspector } from "./ElementInspector";
+import { findElement } from "@/lib/utils/canvas/element-ops";
 import { PlayData, DrawingTool, SavedPlay, PlayerRole, StrokeOptions, EquipmentKind } from "@/types/practice-planner";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import { generateThumbnail } from "@/lib/utils/canvas/thumbnail-generator";
@@ -355,6 +357,12 @@ export function PlayEditor({
                     onEquipmentKindChange={setEquipmentKind}
                 />
             </Paper>
+
+            {/* Element inspector: edits the selected board element */}
+            <ElementInspector
+                selected={selectedElementId ? findElement(playData, selectedElementId) : null}
+                onChange={(patch) => selectedElementId && rinkBoardRef.current?.updateElement(selectedElementId, patch)}
+            />
 
             {/* Rink Board */}
             {/* Requirements: 1.1, 1.2, 1.3, 1.4 */}

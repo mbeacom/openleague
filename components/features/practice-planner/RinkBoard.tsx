@@ -88,7 +88,18 @@ export interface RinkBoardHandle {
  */
 const DEFAULT_WIDTH = 800;
 const DEFAULT_HEIGHT = 400;
-const DEFAULT_COLOR = "#000000";
+/** True when a key event came from a text-entry control (shortcuts must not fire). */
+function isEditableTarget(target: EventTarget | null): boolean {
+    if (!(target instanceof HTMLElement)) return false;
+    return (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        target.isContentEditable
+    );
+}
+
+const DEFAULT_COLOR = "#212121";
 const DEFAULT_STROKE_OPTIONS: StrokeOptions = { action: "skate", path: "freehand", end: "arrow" };
 /** Minimum on-screen hit radius in CSS pixels, so small glyphs stay tappable */
 const MIN_HIT_RADIUS_PX = 22;
@@ -409,6 +420,10 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
      * Report selection changes; leaving the select tool clears the selection
      * and abandons any stroke in progress.
      */
+    // Undo/redo/eraser can remove the selected element; drop the stale selection.
+    useEffect(() => {
+        if (selectedElementId && !findElement(playData, selectedElementId)) setSelectedElementId(null);
+    }, [playData, selectedElementId]);
     useEffect(() => { onSelectionChange?.(selectedElementId); }, [selectedElementId, onSelectionChange]);
     useEffect(() => {
         if (selectedTool !== "select") setSelectedElementId(null);
@@ -640,6 +655,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         if (mode === "view" || !selectedElementId) return;
 
         const handleKeyDown = (event: KeyboardEvent) => {
+            if (isEditableTarget(event.target)) return;
             if (event.key === "Delete" || event.key === "Backspace") {
                 event.preventDefault();
 
@@ -661,6 +677,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         if (mode === "view") return;
 
         const handleKeyDown = (event: KeyboardEvent) => {
+            if (isEditableTarget(event.target)) return;
             // Undo: Ctrl+Z (Windows/Linux) or Cmd+Z (Mac)
             if ((event.ctrlKey || event.metaKey) && event.key === "z" && !event.shiftKey) {
                 event.preventDefault();

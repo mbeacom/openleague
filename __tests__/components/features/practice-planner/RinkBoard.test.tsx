@@ -362,4 +362,47 @@ describe("hockey notation tools", () => {
         rerender(<RinkBoard mode="edit" width={800} height={400} playData={start} onPlayDataChange={onPlayDataChange} selectedTool="player" onSelectionChange={onSelectionChange} />);
         expect(onSelectionChange).toHaveBeenLastCalledWith(null);
     });
+
+    describe("keyboard safety and stale selection", () => {
+        const withCone = () => ({ ...createEmptyPlayData(), equipment: [{ id: "c", kind: "cone" as const, position: { x: 100, y: 40 }, rotation: 0 }] });
+        const select = (ctx: ReturnType<typeof setup>) => {
+            fireEvent.mouseDown(ctx.canvas, ctx.at(100, 40));
+            fireEvent.mouseUp(ctx.canvas);
+        };
+
+        it("ignores Backspace typed in an input but deletes on the window", () => {
+            const ctx = setup({ playData: withCone(), selectedTool: "select" });
+            select(ctx);
+            const input = document.createElement("input");
+            document.body.appendChild(input);
+            input.focus();
+            fireEvent.keyDown(input, { key: "Backspace" });
+            expect(ctx.onPlayDataChange).not.toHaveBeenCalled();
+            fireEvent.keyDown(document.body, { key: "Backspace" });
+            expect(ctx.onPlayDataChange).toHaveBeenCalledTimes(1);
+            expect(ctx.onPlayDataChange.mock.calls[0][0].equipment).toHaveLength(0);
+            input.remove();
+        });
+
+        it("ignores undo shortcuts typed in a textarea", () => {
+            const ctx = setup({ playData: withCone(), selectedTool: "select" });
+            act(() => ctx.ref.current!.updateElement("c", { rotation: 90 }));
+            ctx.onPlayDataChange.mockClear();
+            const area = document.createElement("textarea");
+            document.body.appendChild(area);
+            fireEvent.keyDown(area, { key: "z", ctrlKey: true });
+            expect(ctx.onPlayDataChange).not.toHaveBeenCalled();
+            area.remove();
+        });
+
+        it("clears the selection when the selected element disappears", () => {
+            const onSelectionChange = vi.fn();
+            const start = withCone();
+            const ctx = setup({ playData: start, selectedTool: "select", onSelectionChange });
+            select(ctx);
+            expect(onSelectionChange).toHaveBeenLastCalledWith("c");
+            ctx.rerender(<RinkBoard mode="edit" width={800} height={400} playData={createEmptyPlayData()} onPlayDataChange={ctx.onPlayDataChange} selectedTool="select" onSelectionChange={onSelectionChange} />);
+            expect(onSelectionChange).toHaveBeenLastCalledWith(null);
+        });
+    });
 });

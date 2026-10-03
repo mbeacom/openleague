@@ -56,6 +56,9 @@ import {
     EQUIPMENT_LABELS,
     DEFAULT_END_FOR_ACTION,
 } from "@/lib/utils/canvas/notation";
+import { OptionGroup, OPTION_SX } from "./OptionGroup";
+
+export { OPTION_SX };
 
 /**
  * Props for the DrawingToolbar component
@@ -130,35 +133,6 @@ const COLOR_PALETTE = [
     "#6A1B9A",
     "#FFFFFF",
 ];
-
-/** Option buttons keep a 44px minimum touch target. */
-export const OPTION_SX = { minWidth: 44, minHeight: 44, px: 1.25, fontWeight: 800 } as const;
-
-function OptionGroup<T extends string>({ label, value, options, labels, onChange }: {
-    label: string;
-    value: T;
-    options: readonly T[];
-    labels: Record<T, string>;
-    onChange: (value: T) => void;
-}) {
-    return (
-        <ToggleButtonGroup
-            value={value}
-            exclusive
-            onChange={(_e, next: T | null) => next !== null && onChange(next)}
-            aria-label={label}
-            role="group"
-            size="small"
-            sx={{ flexWrap: "wrap" }}
-        >
-            {options.map((option) => (
-                <ToggleButton key={option} value={option} aria-label={labels[option]} sx={OPTION_SX}>
-                    {labels[option]}
-                </ToggleButton>
-            ))}
-        </ToggleButtonGroup>
-    );
-}
 
 /**
  * DrawingToolbar Component
