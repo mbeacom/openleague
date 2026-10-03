@@ -136,6 +136,30 @@ describe("PlannerApp", () => {
         expect(await screen.findByRole("heading", { name: "Linked Practice" })).toBeInTheDocument();
     });
 
+    it("re-reads the same #plan= link pasted again after choosing a file", async () => {
+        const { store } = memoryStore();
+        const input = {
+            durationMinutes: 60,
+            date: "2026-10-06",
+            startTime: "19:00",
+            drills: [{ sequence: 0, duration: 10, runsWithPrevious: false, instructions: null, name: "Breakout", description: null, playData: createEmptyPlayData() }],
+        };
+        const link = `#plan=${await encodePlanLink(serializePlan({ ...input, title: "Linked Practice" }, "openleague-hosted"))}`;
+        window.history.replaceState(null, "", `/${link}`);
+        render(app(store));
+        expect(await screen.findByText("Linked Practice")).toBeInTheDocument();
+        expect(window.location.hash).toBe("#/import");
+        const file = new File([JSON.stringify(serializePlan({ ...input, title: "From A File" }, "openleague-hosted"))], "file.olplan.json");
+        fireEvent.change(screen.getByTestId("plan-file-input"), { target: { files: [file] } });
+        expect(await screen.findByText("From A File")).toBeInTheDocument();
+        rtlAct(() => {
+            window.history.replaceState(null, "", `/${link}`);
+            window.dispatchEvent(new HashChangeEvent("hashchange"));
+        });
+        expect(await screen.findByText("Linked Practice")).toBeInTheDocument();
+        await waitFor(() => expect(window.location.hash).toBe("#/import"));
+    });
+
     it("warns when the browser isn't letting the planner save", async () => {
         const { store } = memoryStore();
         render(app(store, false));

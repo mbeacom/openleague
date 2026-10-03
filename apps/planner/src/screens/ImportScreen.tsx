@@ -4,6 +4,7 @@
  * address bar is replaced with #/import, so the plan never lingers in the
  * URL or history. One instance serves both routes (App keys it "import"), and
  * the pending link lives in state, so the URL change can't cancel decoding.
+ * Leaving #plan= clears the pending link, so pasting the same link again reads it again.
  */
 import { useEffect, useRef, useState } from "react";
 import { Alert, Box, Button, Checkbox, FormControlLabel, Paper, Stack, Typography } from "@mui/material";
@@ -14,6 +15,7 @@ import { usePlannerPlatform } from "@/lib/planner-store";
 import { readPlanFile, readPlanLink, type ParsePlanResult, type PlanDocument, type PlanError } from "@/lib/plan-document";
 import { parseDateTimeLocalToUtc, resolveTimeZone } from "@/lib/utils/date";
 import { PRIVACY_NOTE } from "../config";
+import { replaceHash } from "../platform";
 import { staticRoutes } from "../routes";
 import type { LocalPlannerStore } from "../store/types";
 
@@ -39,22 +41,25 @@ export function ImportScreen({ store, linkValue }: { store: LocalPlannerStore; l
     if (linkValue && linkValue !== pending) {
         setPending(linkValue);
         setState({ kind: "reading" });
+    } else if (!linkValue && pending) {
+        // The route moved to #/import: forget the link (the screen keeps what it shows).
+        setPending(null);
     }
+    // The link whose result may still be shown; a newer link or a chosen file supersedes it.
+    const latestLink = useRef<string | null>(null);
     const [addToLibrary, setAddToLibrary] = useState(false);
     const [saving, setSaving] = useState(false);
     const [saveError, setSaveError] = useState<string | null>(null);
 
     useEffect(() => {
         if (!pending) return;
-        // The plan must not linger in the address bar or history (no hashchange fires).
-        window.history.replaceState(window.history.state, "", staticRoutes.importPlan());
-        let cancelled = false;
+        latestLink.current = pending;
+        // The plan must not linger in the address bar or history. This routes to
+        // #/import and clears `pending`, so the read below must outlive it.
+        replaceHash(staticRoutes.importPlan());
         void readPlanLink(pending).then((result) => {
-            if (!cancelled) setState(toViewState(result));
+            if (latestLink.current === pending) setState(toViewState(result));
         });
-        return () => {
-            cancelled = true;
-        };
     }, [pending]);
 
     const chooseFile = () => fileInput.current?.click();
@@ -63,6 +68,7 @@ export function ImportScreen({ store, linkValue }: { store: LocalPlannerStore; l
         const file = event.target.files?.[0];
         event.target.value = ""; // choosing the same file again still fires change
         if (!file) return;
+        latestLink.current = null;
         setSaveError(null);
         setState(toViewState(await readPlanFile(file)));
     };

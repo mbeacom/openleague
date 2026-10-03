@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { memoryStore, renderScreen, wrapScreen } from "./render-screen";
 import { ImportScreen, planStartDate } from "@/apps/planner/src/screens/ImportScreen";
@@ -79,5 +79,35 @@ describe("ImportScreen", () => {
         // A new link pasted into the address bar replaces it.
         view.rerender(wrapScreen(<ImportScreen store={store} linkValue={second} />, store));
         expect(await screen.findByText("Thursday Skating")).toBeInTheDocument();
+    });
+
+    it("tells the hash route the link was replaced, so the router doesn't keep #plan=", async () => {
+        const { store } = memoryStore();
+        const value = await encodePlanLink(PLAN);
+        window.history.replaceState(null, "", `/#plan=${value}`);
+        const onHashChange = vi.fn(() => window.location.hash);
+        window.addEventListener("hashchange", onHashChange);
+        try {
+            renderScreen(<ImportScreen store={store} linkValue={value} />, store);
+            expect(await screen.findByText("Tuesday Skills")).toBeInTheDocument();
+            expect(onHashChange).toHaveReturnedWith("#/import");
+        } finally {
+            window.removeEventListener("hashchange", onHashChange);
+        }
+    });
+
+    it("re-reads the same link pasted again after a file was chosen", async () => {
+        const { store } = memoryStore();
+        const value = await encodePlanLink(PLAN);
+        window.history.replaceState(null, "", `/#plan=${value}`);
+        const view = renderScreen(<ImportScreen store={store} linkValue={value} />, store);
+        expect(await screen.findByText("Tuesday Skills")).toBeInTheDocument();
+        view.rerender(wrapScreen(<ImportScreen store={store} linkValue={null} />, store));
+        chooseFile(new File([JSON.stringify(serializePlan({ ...INPUT, title: "From A File" }, "openleague-hosted"))], "file.olplan.json"));
+        expect(await screen.findByText("From A File")).toBeInTheDocument();
+        window.history.replaceState(null, "", `/#plan=${value}`);
+        view.rerender(wrapScreen(<ImportScreen store={store} linkValue={value} />, store));
+        expect(await screen.findByText("Tuesday Skills")).toBeInTheDocument();
+        expect(window.location.hash).toBe("#/import");
     });
 });

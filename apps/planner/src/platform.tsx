@@ -29,6 +29,15 @@ export function navigateTo(href: string): void {
     else window.location.assign(href);
 }
 
+/**
+ * Swap the current hash without a history entry. replaceState fires no
+ * hashchange, so announce one: useHashRoute would otherwise keep the old hash.
+ */
+export function replaceHash(href: string): void {
+    window.history.replaceState(window.history.state, "", href);
+    window.dispatchEvent(new Event("hashchange"));
+}
+
 export const staticPlannerPlatform: PlannerPlatform = {
     Link: StaticLink,
     Image: StaticImage,
