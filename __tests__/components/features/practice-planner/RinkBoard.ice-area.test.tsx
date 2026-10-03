@@ -278,6 +278,50 @@ describe("RinkBoard ice area", () => {
         expect(onPlayDataChange).not.toHaveBeenCalled();
     });
 
+    it("abandons an element drag on touchcancel: the element stays put, later input commits nothing", () => {
+        const onUndoRedoStateChange = vi.fn();
+        const { canvas, at, onPlayDataChange } = setup({
+            playData: { ...createEmptyPlayData(), area: CUSTOM, equipment: [cone(110)] },
+            selectedTool: "select",
+            onUndoRedoStateChange,
+        });
+        fireEvent.touchStart(canvas, { touches: [at(110, 40)] });
+        fireEvent.touchMove(canvas, { touches: [at(104, 40)] });
+        fireEvent.touchCancel(canvas, { touches: [] });
+        fireEvent.touchMove(canvas, { touches: [at(100, 35)] });
+        fireEvent.mouseMove(canvas, at(100, 35));
+        fireEvent.touchEnd(canvas, { touches: [] });
+        fireEvent.mouseUp(window);
+        expect(onPlayDataChange).not.toHaveBeenCalled();
+        expect(onUndoRedoStateChange).not.toHaveBeenCalled();
+    });
+
+    it("abandons a stroke in progress on touchcancel", () => {
+        const { canvas, at, onPlayDataChange } = setup({ selectedTool: "stroke" });
+        fireEvent.touchStart(canvas, { touches: [at(40, 40)] });
+        fireEvent.touchMove(canvas, { touches: [at(60, 40)] });
+        fireEvent.touchMove(canvas, { touches: [at(80, 40)] });
+        fireEvent.touchCancel(canvas, { touches: [] });
+        fireEvent.touchEnd(canvas, { touches: [] });
+        fireEvent.mouseUp(window);
+        expect(onPlayDataChange).not.toHaveBeenCalled();
+    });
+
+    it("abandons an area drag on touchcancel", () => {
+        const onAreaDrawn = vi.fn();
+        const { canvas, onPlayDataChange } = setup({ areaTool: true, onAreaDrawn });
+        const full = createTransformContext(800, 400, 20, FULL_RINK);
+        const a = rinkToCanvas({ x: 20, y: 10 }, full);
+        const b = rinkToCanvas({ x: 60, y: 50 }, full);
+        fireEvent.touchStart(canvas, { touches: [{ clientX: a.x, clientY: a.y }] });
+        fireEvent.touchMove(canvas, { touches: [{ clientX: b.x, clientY: b.y }] });
+        fireEvent.touchCancel(canvas, { touches: [] });
+        fireEvent.touchEnd(canvas, { touches: [] });
+        fireEvent.mouseUp(window);
+        expect(onPlayDataChange).not.toHaveBeenCalled();
+        expect(onAreaDrawn).not.toHaveBeenCalled();
+    });
+
     it("abandons a stroke in progress when a second touch starts", () => {
         const { canvas, at, onPlayDataChange } = setup({ selectedTool: "stroke" });
         fireEvent.touchStart(canvas, { touches: [at(40, 40)] });

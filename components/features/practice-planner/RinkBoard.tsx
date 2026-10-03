@@ -866,6 +866,24 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
     );
 
     /**
+     * Abandons any area drag, element drag or stroke in progress, so a later
+     * touchend or mouse event cannot commit a rectangle, a move or a line the
+     * coach never meant. A drag's preview is visual only, so dropping it leaves
+     * the element where it was, with no history entry; the selection stays.
+     * Shared by the pinch takeover and touchcancel so they cannot drift.
+     */
+    const abandonTransientInteraction = useCallback(() => {
+        setAreaDrag(null);
+        setIsDragging(false);
+        isDraggingRef.current = false;
+        setDragOffset(null);
+        setDragPreviewPosition(null);
+        grabPointRef.current = null;
+        setIsDrawing(false);
+        setCurrentDrawingPoints([]);
+    }, []);
+
+    /**
      * Handle touch start event
      * Requirements: 3.5
      */
@@ -891,22 +909,12 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
                 // Two touches pinch to zoom or pan (Requirements: 3.5); a third
                 // finger ends the pinch until the count is back to two.
                 capturePinch(event.touches);
-                // The pinch takes over: abandon any area drag, element drag or
-                // stroke so the final touchend cannot commit a rectangle, a move
-                // or a line the coach never meant. A drag's preview is visual
-                // only, so dropping it leaves the element where it was, with no
-                // history entry; the selection stays.
-                setAreaDrag(null);
-                setIsDragging(false);
-                isDraggingRef.current = false;
-                setDragOffset(null);
-                setDragPreviewPosition(null);
-                grabPointRef.current = null;
-                setIsDrawing(false);
-                setCurrentDrawingPoints([]);
+                // The pinch takes over: nothing the coach was dragging or
+                // drawing may commit on the final touchend.
+                abandonTransientInteraction();
             }
         },
-        [transform, areaTool, selectedTool, capturePinch, simulateMouseDown]
+        [transform, areaTool, selectedTool, capturePinch, simulateMouseDown, abandonTransientInteraction]
     );
 
     /**
@@ -978,11 +986,12 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         [handleMouseUp, simulateMouseDown, capturePinch]
     );
 
-    /** The browser took the touches away (e.g. a system gesture): drop the pending tap and the pinch. */
+    /** The browser took the touches away (e.g. a system gesture): drop the pending tap, the pinch and any interaction in progress. */
     const handleTouchCancel = useCallback(() => {
         pendingTapRef.current = null;
         pinchStartRef.current = null;
-    }, []);
+        abandonTransientInteraction();
+    }, [abandonTransientInteraction]);
 
     return (
         <div
