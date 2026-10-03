@@ -12,7 +12,7 @@ const TEAM = "cjld2cjxh0000qzrmn831i7rn";
 const PLAY = "cjld2cyuq0000t3rmniod1foy";
 const row = (playData: unknown) => ({
     id: PLAY, name: "Old drill", description: null, thumbnail: null, playData,
-    isTemplate: true, teamId: TEAM, createdAt: new Date(), updatedAt: new Date(),
+    isTemplate: true, sessionId: null, teamId: TEAM, createdAt: new Date(), updatedAt: new Date(),
 });
 
 describe("getPlayById read path", () => {
@@ -44,5 +44,14 @@ describe("getPlayById read path", () => {
         });
         expect(spy).toHaveBeenCalled();
         spy.mockRestore();
+    });
+
+    it("does not return a session-owned copy", async () => {
+        vi.mocked(prisma.play.findUnique).mockResolvedValue({
+            ...row({ players: [], drawings: [], annotations: [] }), isTemplate: false, sessionId: "csessionxxxxxxxxxxxxxxxxx",
+        } as never);
+        const result = await getPlayById({ id: PLAY, teamId: TEAM });
+        expect(result).toEqual({ success: false, error: "Play not found" });
+        expect(vi.mocked(prisma.play.findUnique).mock.calls[0][0]).toMatchObject({ where: { id: PLAY, sessionId: null } });
     });
 });

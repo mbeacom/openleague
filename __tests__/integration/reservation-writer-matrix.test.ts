@@ -556,6 +556,8 @@ beforeEach(() => {
   mockPrisma.practiceSession.update.mockResolvedValue(practiceRecord());
   mockPrisma.practiceSessionPlay.deleteMany.mockResolvedValue({ count: 0 });
   mockPrisma.play.findMany.mockResolvedValue([]);
+  mockPrisma.practiceSessionPlay.findMany.mockResolvedValue([]);
+  mockPrisma.play.deleteMany.mockResolvedValue({ count: 0 });
   mockPrisma.auditLog.create.mockResolvedValue({ id: "audit-1" });
   mockPrisma.notificationOutbox.createMany.mockResolvedValue({ count: 0 });
 });

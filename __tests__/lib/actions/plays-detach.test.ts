@@ -1,0 +1,233 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+// Clone ids are generated before insert; a per-test counter keeps them readable.
+const playIds = vi.hoisted(() => ({ next: 0 }));
+vi.mock("@/lib/services/play-ids", () => ({ newPlayId: () => `ccopy${playIds.next++}xxxxxxxxxxxxxxxxxxx` }));
+import { Prisma } from "@prisma/client";
+
+const { mockPrisma, tx } = vi.hoisted(() => {
+    const tx = {
+        practiceSessionPlay: { findMany: vi.fn(), updateMany: vi.fn() },
+        play: {
+            findUniqueOrThrow: vi.fn(),
+            createManyAndReturn: vi.fn(),
+            update: vi.fn(),
+            delete: vi.fn(),
+        },
+    };
+    return {
+        tx,
+        mockPrisma: {
+            $transaction: vi.fn(async (fn: (client: typeof tx) => unknown) => fn(tx)),
+            // Distinct from tx.play.*: writes must go through the transaction client.
+            play: { findUnique: vi.fn(), findMany: vi.fn(), count: vi.fn(), update: vi.fn(), delete: vi.fn() },
+        },
+    };
+});
+
+vi.mock("@/lib/db/prisma", () => ({ prisma: mockPrisma }));
+vi.mock("@/lib/auth/session", () => ({
+    requireTeamMember: vi.fn().mockResolvedValue("cuserxxxxxxxxxxxxxxxxxxxx"),
+    requireTeamAdmin: vi.fn().mockResolvedValue("cuserxxxxxxxxxxxxxxxxxxxx"),
+}));
+vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+
+import { deletePlay, getPlaysByTeam, updatePlay } from "@/lib/actions/plays";
+import { createEmptyPlayData } from "@/lib/utils/play-data";
+
+function expectNoWritesOutsideTransaction() {
+    expect(mockPrisma.play.update).not.toHaveBeenCalled();
+    expect(mockPrisma.play.delete).not.toHaveBeenCalled();
+}
+
+const TEAM = "cteamxxxxxxxxxxxxxxxxxxxx";
+const PLAY = "cplayxxxxxxxxxxxxxxxxxxxx";
+const OLD_DIAGRAM = { version: 2, players: [{ id: "old" }], drawings: [], equipment: [], annotations: [] };
+
+function referencedBy(...sessionIds: string[]) {
+    tx.practiceSessionPlay.findMany.mockResolvedValue(sessionIds.map((sessionId) => ({ sessionId })));
+}
+
+beforeEach(() => {
+    vi.clearAllMocks();
+    mockPrisma.play.findUnique.mockResolvedValue({ teamId: TEAM, sessionId: null, isTemplate: true });
+    referencedBy();
+    tx.play.findUniqueOrThrow.mockResolvedValue({
+        id: PLAY, name: "Breakout", description: null, thumbnail: null, playData: OLD_DIAGRAM,
+        sourcePlayId: null, isTemplate: true, sessionId: null,
+    });
+    playIds.next = 0;
+    tx.play.createManyAndReturn.mockImplementation(async ({ data }: { data: Array<{ id: string; name: string; sourcePlayId: string; sessionId: string }> }) =>
+        data.map((d) => ({ id: d.id, name: d.name, sourcePlayId: d.sourcePlayId, sessionId: d.sessionId })));
+    tx.practiceSessionPlay.updateMany.mockResolvedValue({ count: 1 });
+    tx.play.update.mockResolvedValue({ id: PLAY, name: "Breakout v2", isTemplate: true });
+    tx.play.delete.mockResolvedValue({ id: PLAY });
+});
+
+describe("updatePlay detaches sessions before editing a library drill", () => {
+    it("copies the OLD diagram into each referencing session, repoints it, then updates the library row", async () => {
+        referencedBy("csessionaxxxxxxxxxxxxxxxx");
+        const result = await updatePlay({ id: PLAY, teamId: TEAM, name: "Breakout v2", playData: createEmptyPlayData() });
+
+        expect(result.success).toBe(true);
+        const copy = tx.play.createManyAndReturn.mock.calls[0][0].data[0];
+        expect(copy).toMatchObject({ sessionId: "csessionaxxxxxxxxxxxxxxxx", playData: OLD_DIAGRAM, sourcePlayId: PLAY, isTemplate: false });
+        expect(tx.practiceSessionPlay.updateMany).toHaveBeenCalledWith({
+            where: { sessionId: "csessionaxxxxxxxxxxxxxxxx", playId: PLAY },
+            data: { playId: "ccopy0xxxxxxxxxxxxxxxxxxx" },
+        });
+        expect(tx.play.update.mock.invocationCallOrder[0])
+            .toBeGreaterThan(tx.practiceSessionPlay.updateMany.mock.invocationCallOrder[0]);
+        expectNoWritesOutsideTransaction();
+    });
+
+    it("refuses to edit a session's private copy from the library", async () => {
+        mockPrisma.play.findUnique.mockResolvedValue({ teamId: TEAM, sessionId: "csessionxxxxxxxxxxxxxxxxx", isTemplate: false });
+        const result = await updatePlay({ id: PLAY, teamId: TEAM, name: "Drill", playData: createEmptyPlayData() });
+
+        expect(result).toEqual({
+            success: false,
+            error: "This drill belongs to a practice session. Edit it from that session.",
+        });
+        expect(tx.play.update).not.toHaveBeenCalled();
+        expect(tx.play.createManyAndReturn).not.toHaveBeenCalled();
+        expectNoWritesOutsideTransaction();
+    });
+});
+
+describe("deletePlay detaches, then hard-deletes", () => {
+    it("detaches a referenced play, then deletes it", async () => {
+        referencedBy("csessionaxxxxxxxxxxxxxxxx");
+        const result = await deletePlay({ id: PLAY, teamId: TEAM });
+
+        expect(result).toEqual({ success: true, data: { id: PLAY, detachedSessions: 1 } });
+        expect(tx.play.delete).toHaveBeenCalledWith({ where: { id: PLAY } });
+        expect(tx.play.delete.mock.invocationCallOrder[0])
+            .toBeGreaterThan(tx.practiceSessionPlay.updateMany.mock.invocationCallOrder[0]);
+        expectNoWritesOutsideTransaction();
+    });
+
+    it("refuses to delete a session's private copy before any write", async () => {
+        mockPrisma.play.findUnique.mockResolvedValue({ teamId: TEAM, sessionId: "csessionxxxxxxxxxxxxxxxxx", isTemplate: false });
+        const result = await deletePlay({ id: PLAY, teamId: TEAM });
+
+        expect(result).toEqual({
+            success: false,
+            error: "This drill belongs to a practice session. Remove it from that session.",
+        });
+        expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+        expect(tx.play.delete).not.toHaveBeenCalled();
+        expect(tx.play.createManyAndReturn).not.toHaveBeenCalled();
+        expectNoWritesOutsideTransaction();
+    });
+
+    it("deletes an unreferenced play directly", async () => {
+        const result = await deletePlay({ id: PLAY, teamId: TEAM });
+
+        expect(result).toEqual({ success: true, data: { id: PLAY, detachedSessions: 0 } });
+        expect(tx.play.createManyAndReturn).not.toHaveBeenCalled();
+        expect(tx.play.delete).toHaveBeenCalledWith({ where: { id: PLAY } });
+        expectNoWritesOutsideTransaction();
+    });
+
+    it("gives each referencing session its own copy (one per session)", async () => {
+        referencedBy("csessionaxxxxxxxxxxxxxxxx", "csessionaxxxxxxxxxxxxxxxx", "csessionbxxxxxxxxxxxxxxxx");
+        const result = await deletePlay({ id: PLAY, teamId: TEAM });
+
+        expect(result).toEqual({ success: true, data: { id: PLAY, detachedSessions: 2 } });
+        const sessions = tx.play.createManyAndReturn.mock.calls[0][0].data.map((d: { sessionId: string }) => d.sessionId);
+        expect(sessions).toEqual(["csessionaxxxxxxxxxxxxxxxx", "csessionbxxxxxxxxxxxxxxxx"]);
+        expect(tx.practiceSessionPlay.updateMany).toHaveBeenCalledTimes(2);
+    });
+
+    it("maps a racing reference (FK P2003) to a friendly error", async () => {
+        tx.play.delete.mockRejectedValue(
+            new Prisma.PrismaClientKnownRequestError("fk", { code: "P2003", clientVersion: "7.10.0" }),
+        );
+        const result = await deletePlay({ id: PLAY, teamId: TEAM });
+        expect(result).toEqual({ success: false, error: "This drill is still used by a session" });
+    });
+
+    // practice_session_plays_playId_fkey is DEFERRABLE INITIALLY DEFERRED, so a
+    // racing reference fails at COMMIT. Inside an interactive $transaction the
+    // adapter's raw DriverAdapterError reaches the caller (shape observed
+    // against PostgreSQL 17 with @prisma/adapter-pg), not a P2003.
+    function commitTimeFkViolation(kind = "ForeignKeyConstraintViolation") {
+        return Object.assign(new Error(kind), {
+            name: "DriverAdapterError",
+            cause: {
+                originalCode: "23503",
+                originalMessage: 'update or delete on table "plays" violates foreign key constraint "practice_session_plays_playId_fkey" on table "practice_session_plays"',
+                kind,
+                constraint: { index: "practice_session_plays_playId_fkey" },
+            },
+        });
+    }
+
+    it("maps a racing reference that fails at commit (deferred FK) to a friendly error", async () => {
+        mockPrisma.$transaction.mockRejectedValueOnce(commitTimeFkViolation());
+        const result = await deletePlay({ id: PLAY, teamId: TEAM });
+        expect(result).toEqual({ success: false, error: "This drill is still used by a session" });
+    });
+
+    it("maps a commit-time FK violation on update to the same friendly error", async () => {
+        mockPrisma.$transaction.mockRejectedValueOnce(commitTimeFkViolation());
+        const result = await updatePlay({ id: PLAY, teamId: TEAM, name: "Drill", playData: createEmptyPlayData() });
+        expect(result).toEqual({ success: false, error: "This drill is still used by a session" });
+    });
+
+    it("does not map other driver adapter errors to the still-referenced message", async () => {
+        const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+        mockPrisma.$transaction.mockRejectedValueOnce(commitTimeFkViolation("TransactionWriteConflict"));
+        const result = await deletePlay({ id: PLAY, teamId: TEAM });
+        expect(result).toEqual({ success: false, error: expect.not.stringContaining("still used") });
+        consoleError.mockRestore();
+    });
+});
+
+describe("any unowned play is detached, not only templates", () => {
+    // A legacy (pre-3a) unowned non-template play a session still references.
+    beforeEach(() => {
+        referencedBy("csessionaxxxxxxxxxxxxxxxx");
+        mockPrisma.play.findUnique.mockResolvedValue({ teamId: TEAM, sessionId: null, isTemplate: false });
+        tx.play.findUniqueOrThrow.mockResolvedValue({
+            id: PLAY, name: "Breakout", description: null, thumbnail: null, playData: OLD_DIAGRAM,
+            sourcePlayId: null, isTemplate: false, sessionId: null,
+        });
+    });
+
+    it("detaches a legacy non-template play before updating it", async () => {
+        const result = await updatePlay({ id: PLAY, teamId: TEAM, name: "Drill", playData: createEmptyPlayData() });
+
+        expect(result.success).toBe(true);
+        expect(tx.play.createManyAndReturn.mock.calls[0][0].data[0]).toMatchObject({
+            sessionId: "csessionaxxxxxxxxxxxxxxxx", playData: OLD_DIAGRAM, sourcePlayId: PLAY, isTemplate: false,
+        });
+        expect(tx.play.update.mock.invocationCallOrder[0])
+            .toBeGreaterThan(tx.practiceSessionPlay.updateMany.mock.invocationCallOrder[0]);
+        expectNoWritesOutsideTransaction();
+    });
+
+    it("detaches a legacy non-template play before deleting it", async () => {
+        const result = await deletePlay({ id: PLAY, teamId: TEAM });
+
+        expect(result).toEqual({ success: true, data: { id: PLAY, detachedSessions: 1 } });
+        expect(tx.play.delete.mock.invocationCallOrder[0])
+            .toBeGreaterThan(tx.practiceSessionPlay.updateMany.mock.invocationCallOrder[0]);
+        expectNoWritesOutsideTransaction();
+    });
+});
+
+describe("library listing", () => {
+    it("never lists session-owned plays", async () => {
+        mockPrisma.play.findMany.mockResolvedValue([]);
+        mockPrisma.play.count.mockResolvedValue(0);
+        await getPlaysByTeam({ teamId: TEAM, isTemplate: true, page: 1, limit: 20, dateFilter: "all" });
+
+        expect(mockPrisma.play.findMany.mock.calls[0][0].where).toMatchObject({
+            teamId: TEAM,
+            sessionId: null,
+            isTemplate: true,
+        });
+    });
+});

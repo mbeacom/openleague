@@ -32,6 +32,7 @@ export function PracticeSessionEditorWrapper({
         teamId,
         plays: session.plays.map((play) => ({
           playId: play.playId,
+          clientKey: play.id,
           sequence: play.sequence,
           duration: play.duration,
           instructions: play.instructions || "",
@@ -54,8 +55,8 @@ export function PracticeSessionEditorWrapper({
         };
       }
 
-      // Navigate to the newly created session
-      router.push(`/practice-planner/${result.data.id}`);
+      // Diagram editing needs a saved session, so continue on its edit page.
+      router.push(`/practice-planner/${result.data.id}/edit`);
       return { success: true };
     },
     [teamId, router]

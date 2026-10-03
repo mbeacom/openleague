@@ -52,4 +52,14 @@ describe("getPracticeSessionForEdit", () => {
     expect(result?.initialData.plays.map((p) => p.sequence)).toEqual([0, 1]);
     expect(result?.initialData.plays.map((p) => p.id)).toEqual(["a", "b"]);
   });
+
+  it("returns each drill's name and description", async () => {
+    mockPrisma.practiceSession.findUnique.mockResolvedValue({
+      id: "s1", teamId: "t1", title: "T", date: new Date("2026-01-01T00:00:00Z"), duration: 60, isShared: false,
+      venueId: null, surfaceId: null, segmentId: null, startAt: null,
+      plays: [row("a", 0)],
+    });
+    const result = await getPracticeSessionForEdit("s1");
+    expect(result?.initialData.plays[0]).toMatchObject({ name: "a", description: "" });
+  });
 });

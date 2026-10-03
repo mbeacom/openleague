@@ -1344,6 +1344,23 @@ export const practiceVenueAttachmentSchema = z
   .object(practiceVenueAttachmentFields)
   .refine(practiceHasStartAtWhenVenueSet, practiceStartAtRequiredIssue);
 
+// One drill in a practice-session save. clientKey is the editor's stable
+// per-card key (PlayInSession.id); the save returns clientKey → owned playId.
+const practiceSessionPlayItemsSchema = z
+  .array(z.object({
+    playId: z.string().cuid("Invalid play ID format"),
+    clientKey: z.string().min(1, "Drill key is required").max(64, "Drill key is too long"),
+    sequence: z.number().int().min(0),
+    duration: z.number().int().min(1, "Play duration must be at least 1 minute").max(300, "Play duration must be less than 300 minutes"),
+    instructions: optionalSanitizedString(2000),
+  }))
+  .refine(
+    (plays) => new Set(plays.map((play) => play.clientKey)).size === plays.length,
+    { message: "Each drill needs a unique key" },
+  )
+  .optional()
+  .default([]);
+
 // Practice session validation schemas
 export const createPracticeSessionSchema = z.object({
   title: sanitizedStringWithMin(1, 100),
@@ -1352,12 +1369,7 @@ export const createPracticeSessionSchema = z.object({
   }),
   duration: z.number().int().min(1, "Duration must be at least 1 minute").max(300, "Duration must be less than 300 minutes"),
   teamId: z.string().cuid("Invalid team ID format"),
-  plays: z.array(z.object({
-    playId: z.string().cuid("Invalid play ID format"),
-    sequence: z.number().int().min(0),
-    duration: z.number().int().min(1, "Play duration must be at least 1 minute").max(300, "Play duration must be less than 300 minutes"),
-    instructions: optionalSanitizedString(2000),
-  })).optional().default([]),
+  plays: practiceSessionPlayItemsSchema,
   ...practiceVenueAttachmentFields,
 }).refine(practiceHasStartAtWhenVenueSet, practiceStartAtRequiredIssue);
 
@@ -1369,12 +1381,7 @@ export const updatePracticeSessionSchema = z.object({
   }),
   duration: z.number().int().min(1, "Duration must be at least 1 minute").max(300, "Duration must be less than 300 minutes"),
   teamId: z.string().cuid("Invalid team ID format"),
-  plays: z.array(z.object({
-    playId: z.string().cuid("Invalid play ID format"),
-    sequence: z.number().int().min(0),
-    duration: z.number().int().min(1, "Play duration must be at least 1 minute").max(300, "Play duration must be less than 300 minutes"),
-    instructions: optionalSanitizedString(2000),
-  })).optional().default([]),
+  plays: practiceSessionPlayItemsSchema,
   // Explicit Save only; autosave omits it so shared sessions do not email the
   // team on every debounce.
   notify: z.boolean().optional().default(false),
@@ -1405,6 +1412,30 @@ export const sharePracticeSessionSchema = z.object({
   isShared: z.boolean(),
 });
 
+// A drill's diagram edited inside a session (practice planner 3a).
+// playId: the drill being edited (owned → updated in place; library or
+// legacy reference → forked); omitted for a brand-new drill.
+export const saveSessionDrillSchema = z.object({
+  sessionId: z.string().cuid("Invalid session ID format"),
+  teamId: z.string().cuid("Invalid team ID format"),
+  playId: z.string().cuid("Invalid play ID format").optional(),
+  name: sanitizedStringWithMin(1, 100),
+  description: optionalSanitizedString(1000),
+  thumbnail: base64ImageSchema,
+  playData: playDataSchema,
+});
+
+export const copySessionDrillToLibrarySchema = z.object({
+  playId: z.string().cuid("Invalid play ID format"),
+  teamId: z.string().cuid("Invalid team ID format"),
+});
+
+export const duplicatePracticeSessionSchema = z.object({
+  id: z.string().cuid("Invalid session ID format"),
+  teamId: z.string().cuid("Invalid team ID format"),
+  date: z.coerce.date({ message: "Valid date is required" }),
+});
+
 // Type exports for practice planner
 export type CreatePlayInput = z.infer<typeof createPlaySchema>;
 export type UpdatePlayInput = z.infer<typeof updatePlaySchema>;
@@ -1421,6 +1452,9 @@ export type DeletePracticeSessionInput = z.infer<typeof deletePracticeSessionSch
 export type GetPracticeSessionByIdInput = z.infer<typeof getPracticeSessionByIdSchema>;
 export type GetPracticeSessionsByTeamInput = z.infer<typeof getPracticeSessionsByTeamSchema>;
 export type SharePracticeSessionInput = z.infer<typeof sharePracticeSessionSchema>;
+export type SaveSessionDrillInput = z.infer<typeof saveSessionDrillSchema>;
+export type CopySessionDrillToLibraryInput = z.infer<typeof copySessionDrillToLibrarySchema>;
+export type DuplicatePracticeSessionInput = z.input<typeof duplicatePracticeSessionSchema>;
 
 // --- Signup events (feature 004) ---
 

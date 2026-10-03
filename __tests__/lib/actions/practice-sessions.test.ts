@@ -29,14 +29,14 @@ const { mockAuth, mockTx, mockPrisma, serviceAssignVenueReservation, serviceCrea
   // fails because the expected call never happens - not because of which
   // client reference the (current or future) implementation calls through.
   const models = {
-    play: { findMany: vi.fn() },
+    play: { findMany: vi.fn(), createManyAndReturn: vi.fn(), deleteMany: vi.fn() },
     practiceSession: {
       create: vi.fn(),
       delete: vi.fn(),
       findUnique: vi.fn(),
       update: vi.fn(),
     },
-    practiceSessionPlay: { deleteMany: vi.fn() },
+    practiceSessionPlay: { deleteMany: vi.fn(), findMany: vi.fn(), createMany: vi.fn() },
     event: {
       create: vi.fn(),
       delete: vi.fn(),
@@ -160,6 +160,9 @@ beforeEach(() => {
   });
   serviceAssignVenueReservation.mockResolvedValue({ ok: true });
   serviceCreateVenueReservation.mockResolvedValue({ id: RESERVATION_ID, status: "CONFIRMED" });
+  mockTx.practiceSessionPlay.findMany.mockResolvedValue([]);
+  mockTx.play.findMany.mockResolvedValue([]);
+  mockTx.play.deleteMany.mockResolvedValue({ count: 0 });
 });
 
 describe("createPracticeSession authorization (already enforced today)", () => {

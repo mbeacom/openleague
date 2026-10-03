@@ -835,8 +835,7 @@ export function PlayLibrary({
                 <DialogContent>
                     <DialogContentText id="delete-dialog-description">
                         Are you sure you want to delete this play from your library? This
-                        action cannot be undone. This will also remove this play from all
-                        practice sessions where it&apos;s used.
+                        action cannot be undone. Sessions that use this drill keep their own copy.
                     </DialogContentText>
                 </DialogContent>
                 <DialogActions>

@@ -45,8 +45,15 @@ export interface PlayEditorProps {
     initialData?: Partial<SavedPlay>;
     /** Hide the "save to library" checkbox and keep isTemplate at its initial value. */
     lockTemplate?: boolean;
+    /**
+     * Debounced autosave of an existing play (default true). The session drill
+     * dialog turns it off: each save there could fork a new session copy.
+     */
+    autoSave?: boolean;
     onSave?: (play: SavedPlay) => Promise<void>;
     onCancel?: () => void;
+    /** Fires whenever the unsaved-changes flag flips, so a host can guard closing. */
+    onDirtyChange?: (dirty: boolean) => void;
 }
 
 /**
@@ -59,8 +66,10 @@ export function PlayEditor({
     playId,
     initialData,
     lockTemplate = false,
+    autoSave = true,
     onSave,
     onCancel,
+    onDirtyChange,
 }: PlayEditorProps) {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down("md"));
@@ -96,6 +105,10 @@ export function PlayEditor({
     // Auto-save state
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
     const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+    useEffect(() => {
+        onDirtyChange?.(hasUnsavedChanges);
+    }, [hasUnsavedChanges, onDirtyChange]);
     const successTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const handleSaveRef = useRef<(() => Promise<void>) | undefined>(undefined);
 
@@ -258,7 +271,7 @@ export function PlayEditor({
         }
 
         // Only auto-save if there are unsaved changes and we have a playId (editing existing play)
-        if (hasUnsavedChanges && playId) {
+        if (autoSave && hasUnsavedChanges && playId) {
             autoSaveTimerRef.current = setTimeout(() => {
                 handleSaveRef.current?.();
             }, 2000); // 2 second debounce
@@ -269,7 +282,7 @@ export function PlayEditor({
                 clearTimeout(autoSaveTimerRef.current);
             }
         };
-    }, [hasUnsavedChanges, playId]);
+    }, [autoSave, hasUnsavedChanges, playId]);
 
     // Cleanup success timeout on unmount to prevent memory leak
     useEffect(() => {

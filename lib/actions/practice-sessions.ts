@@ -32,6 +32,12 @@ import {
     VenueReservationLifecycleError,
 } from "@/lib/services/venue-reservations";
 import { runVenueReservationTransaction } from "@/lib/services/venue-reservation-transaction";
+import {
+    SessionDrillError,
+    deleteOrphanedSessionDrills,
+    materializeSessionDrills,
+    type SessionDrillMapping,
+} from "@/lib/services/practice-session-drills";
 import { FALLBACK_TIME_ZONE } from "@/lib/utils/date";
 
 export type ActionResult<T> =
@@ -428,6 +434,17 @@ function normalizePracticeAttachment(validated: {
     };
 }
 
+/** Drill key and owned play id, returned so the editor can swap ids. */
+type SavedDrill = { clientKey: string; playId: string };
+
+function drillItems(plays: Array<{ playId: string; clientKey: string; sequence: number }>) {
+    return plays.map(({ playId, clientKey, sequence }) => ({ playId, clientKey, sequence }));
+}
+
+function toSavedDrills(mapping: SessionDrillMapping[]): SavedDrill[] {
+    return mapping.map(({ clientKey, playId }) => ({ clientKey, playId }));
+}
+
 /**
  * Create a new practice session
  * Only ADMIN role can create sessions
@@ -435,7 +452,7 @@ function normalizePracticeAttachment(validated: {
  */
 export async function createPracticeSession(
     input: CreatePracticeSessionActionInput
-): Promise<ActionResult<{ id: string; title: string; date: Date; conflictsOverridden: boolean }>> {
+): Promise<ActionResult<{ id: string; title: string; date: Date; conflictsOverridden: boolean; plays: SavedDrill[] }>> {
     try {
         const validated = createPracticeSessionSchema.parse(input);
         const reservationInput = reservationFields(input);
@@ -458,22 +475,6 @@ export async function createPracticeSession(
                 return {
                     success: false,
                     error: durationValidation.error || "Invalid total duration",
-                };
-            }
-
-            const playIds = validated.plays.map(p => p.playId);
-            const plays = await prisma.play.findMany({
-                where: {
-                    id: { in: playIds },
-                    teamId: validated.teamId,
-                },
-                select: { id: true },
-            });
-
-            if (plays.length !== playIds.length) {
-                return {
-                    success: false,
-                    error: "One or more plays not found or do not belong to this team",
                 };
             }
         }
@@ -568,19 +569,30 @@ export async function createPracticeSession(
                     surfaceId: canonical.surfaceId,
                     segmentId: canonical.segmentId,
                     startAt: canonical.startAt,
-                    plays: validated.plays.length > 0 ? {
-                        create: validated.plays.map(play => ({
-                            playId: play.playId,
-                            sequence: play.sequence,
-                            duration: play.duration,
-                            instructions: play.instructions
-                                ? sanitizeText(play.instructions, 2000)
-                                : null,
-                        })),
-                    } : undefined,
                 },
                 select: { id: true, title: true, date: true },
             });
+
+            // Every drill becomes a copy this session owns (needs the session id).
+            const { mapping } = await materializeSessionDrills(tx, {
+                sessionId: createdSession.id,
+                teamId: validated.teamId,
+                userId,
+                items: drillItems(validated.plays),
+            });
+            if (mapping.length > 0) {
+                await tx.practiceSessionPlay.createMany({
+                    data: validated.plays.map((play, index) => ({
+                        sessionId: createdSession.id,
+                        playId: mapping[index].playId,
+                        sequence: play.sequence,
+                        duration: play.duration,
+                        instructions: play.instructions
+                            ? sanitizeText(play.instructions, 2000)
+                            : null,
+                    })),
+                });
+            }
 
             if (reservation) {
                 await assignVenueReservation(tx, {
@@ -600,7 +612,7 @@ export async function createPracticeSession(
                     overrideReason: reservationInput.overrideReason,
                 });
             }
-            return createdSession;
+            return { ...createdSession, plays: toSavedDrills(mapping) };
         });
 
         revalidatePath("/practice-planner");
@@ -637,6 +649,13 @@ export async function createPracticeSession(
             };
         }
 
+        if (error instanceof SessionDrillError) {
+            return {
+                success: false,
+                error: error.message,
+            };
+        }
+
         if (error instanceof Error && error.message.includes("Unauthorized")) {
             return {
                 success: false,
@@ -659,7 +678,7 @@ export async function createPracticeSession(
  */
 export async function updatePracticeSession(
     input: UpdatePracticeSessionActionInput
-): Promise<ActionResult<{ id: string; title: string; date: Date; conflictsOverridden: boolean }>> {
+): Promise<ActionResult<{ id: string; title: string; date: Date; conflictsOverridden: boolean; plays: SavedDrill[] }>> {
     try {
         const validated = updatePracticeSessionSchema.parse(input);
         const parsedReservation = reservationFields(input);
@@ -738,22 +757,6 @@ export async function updatePracticeSession(
                 return {
                     success: false,
                     error: durationValidation.error || "Invalid total duration",
-                };
-            }
-
-            const playIds = validated.plays.map(p => p.playId);
-            const plays = await prisma.play.findMany({
-                where: {
-                    id: { in: playIds },
-                    teamId: validated.teamId,
-                },
-                select: { id: true },
-            });
-
-            if (plays.length !== playIds.length) {
-                return {
-                    success: false,
-                    error: "One or more plays not found or do not belong to this team",
                 };
             }
         }
@@ -894,6 +897,15 @@ export async function updatePracticeSession(
                 });
             }
 
+            // Before the old session plays are deleted: the helper reads them
+            // to recognize legacy references it may clone.
+            const { mapping, previousPlayIds } = await materializeSessionDrills(tx, {
+                sessionId: validated.id,
+                teamId: validated.teamId,
+                userId,
+                items: drillItems(validated.plays),
+            });
+
             await tx.practiceSessionPlay.deleteMany({
                 where: { sessionId: validated.id },
             });
@@ -925,8 +937,8 @@ export async function updatePracticeSession(
                         ? new Date()
                         : null,
                     plays: validated.plays.length > 0 ? {
-                        create: validated.plays.map(play => ({
-                            playId: play.playId,
+                        create: validated.plays.map((play, index) => ({
+                            playId: mapping[index].playId,
                             sequence: play.sequence,
                             duration: play.duration,
                             instructions: play.instructions ? sanitizeText(play.instructions, 2000) : null,
@@ -939,12 +951,17 @@ export async function updatePracticeSession(
                     date: true,
                 },
             });
+            await deleteOrphanedSessionDrills(tx, {
+                sessionId: validated.id,
+                previousPlayIds,
+            });
+            const saved = { ...updated, plays: toSavedDrills(mapping) };
 
             if (!reservation) {
                 if (oldEvent) {
                     await tx.event.delete({ where: { id: oldEvent.id } });
                 }
-                return updated;
+                return saved;
             }
 
             if (reservationRelationChanged) {
@@ -968,7 +985,7 @@ export async function updatePracticeSession(
                 assignEventReservation:
                     reservationRelationChanged || !oldEvent,
             });
-            return updated;
+            return saved;
         });
 
         revalidatePath("/practice-planner");
@@ -1013,6 +1030,13 @@ export async function updatePracticeSession(
                         ? { details: { conflicts: error.conflicts } }
                         : {}
                 ),
+            };
+        }
+
+        if (error instanceof SessionDrillError) {
+            return {
+                success: false,
+                error: error.message,
             };
         }
 
