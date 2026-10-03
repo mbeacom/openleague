@@ -272,7 +272,7 @@ const MAX_SLUG_LENGTH = 60;
 export function planFileName(title: string): string {
     const slug = title
         .normalize("NFKD")
-        .replace(/[̀-ͯ]/g, "")
+        .replace(/[\u0300-\u036f]/g, "")
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-+|-+$/g, "")
