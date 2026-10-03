@@ -78,3 +78,27 @@ export function matchRoute(hash: string): StaticRoute {
     if (section === "import" && second === undefined) return { name: "import" };
     return NOT_FOUND;
 }
+
+/** The app bar's sections. */
+export type NavSection = "practices" | "library" | "import";
+
+/** Which app bar section a route belongs to, for aria-current; null when none does. */
+export function navSection(route: StaticRoute): NavSection | null {
+    switch (route.name) {
+        case "list":
+        case "sessionNew":
+        case "session":
+        case "sessionEdit":
+        case "sessionPrint":
+            return "practices";
+        case "library":
+        case "libraryNew":
+        case "libraryEdit":
+            return "library";
+        case "import":
+        case "planLink":
+            return "import";
+        case "notFound":
+            return null;
+    }
+}

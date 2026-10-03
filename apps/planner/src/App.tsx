@@ -7,7 +7,7 @@ import { Component, type ErrorInfo, type ReactNode } from "react";
 import { Alert, Box, Button } from "@mui/material";
 import { PlannerProvider } from "@/lib/planner-store";
 import { staticPlannerPlatform, useHashRoute } from "./platform";
-import type { StaticRoute } from "./routes";
+import { navSection, type StaticRoute } from "./routes";
 import type { StaleSignal } from "./store/open-store";
 import type { LocalPlannerStore } from "./store/types";
 import { StaticThemeProvider } from "./theme";
@@ -93,7 +93,7 @@ export function PlannerApp({ store, durable, stale }: PlannerAppProps) {
                     {route.name === "sessionPrint" ? (
                         <BenchSheetScreen key={route.id} store={store} id={route.id} />
                     ) : (
-                        <AppShell durable={durable} stale={stale}>
+                        <AppShell durable={durable} stale={stale} section={navSection(route)}>
                             <RouteView route={route} store={store} />
                         </AppShell>
                     )}

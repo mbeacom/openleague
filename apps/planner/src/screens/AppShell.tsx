@@ -5,14 +5,31 @@
 import { useSyncExternalStore, type ReactNode } from "react";
 import { Alert, AppBar, Box, Button, Container, Link, Stack, Toolbar, Typography } from "@mui/material";
 import { HOSTED_URL, PRIVACY_NOTE } from "../config";
-import { staticRoutes } from "../routes";
+import { staticRoutes, type NavSection } from "../routes";
 import type { StaleSignal } from "../store/open-store";
 
 export const NOT_SAVING_MESSAGE =
     "This browser isn't letting the planner save. Your work will be lost when you close this tab. Download plan files to keep it.";
 export const STALE_TAB_MESSAGE = "The planner was updated in another tab. Reload to continue.";
 
-export function AppShell({ durable, stale, children }: { durable: boolean; stale: StaleSignal; children: ReactNode }) {
+const NAV_ITEMS: ReadonlyArray<{ section: NavSection; label: string; href: string }> = [
+    { section: "practices", label: "Practices", href: staticRoutes.list() },
+    { section: "library", label: "Drill library", href: staticRoutes.library() },
+    { section: "import", label: "Import", href: staticRoutes.importPlan() },
+];
+
+export function AppShell({
+    durable,
+    stale,
+    section = null,
+    children,
+}: {
+    durable: boolean;
+    stale: StaleSignal;
+    /** The current route's section, marked aria-current in the nav. */
+    section?: NavSection | null;
+    children: ReactNode;
+}) {
     const isStale = useSyncExternalStore(stale.subscribe, stale.isStale, () => false);
     return (
         <Box sx={{ minHeight: "100vh", display: "flex", flexDirection: "column", bgcolor: "background.default" }}>
@@ -21,24 +38,46 @@ export function AppShell({ durable, stale, children }: { durable: boolean; stale
                 elevation={0}
                 sx={{ borderBottom: "4px solid", borderImage: "linear-gradient(90deg, #0D47A1 0%, #1976D2 50%, #42A5F5 100%) 1" }}
             >
-                <Toolbar sx={{ gap: 1, flexWrap: "wrap", py: { xs: 1, sm: 0 } }}>
+                {/* Phones: the title, then the nav as one compact row of equal buttons; wider screens: one row. */}
+                <Toolbar sx={{ flexWrap: { xs: "wrap", sm: "nowrap" }, columnGap: 1, px: { xs: 1.5, sm: 2 }, py: { xs: 0.5, sm: 0 } }}>
                     <Typography
                         component="a"
                         href={staticRoutes.list()}
                         variant="h6"
-                        sx={{ fontWeight: 800, letterSpacing: "-0.02em", color: "inherit", flexGrow: 1 }}
+                        sx={{
+                            fontWeight: 800,
+                            letterSpacing: "-0.02em",
+                            color: "inherit",
+                            flexGrow: 1,
+                            flexBasis: { xs: "100%", sm: "auto" },
+                            fontSize: { xs: "1.0625rem", sm: "1.25rem" },
+                            lineHeight: { xs: "36px", sm: "inherit" },
+                        }}
                     >
                         OpenLeague Planner
                     </Typography>
-                    <Button color="inherit" href={staticRoutes.list()}>
-                        Practices
-                    </Button>
-                    <Button color="inherit" href={staticRoutes.library()}>
-                        Drill library
-                    </Button>
-                    <Button color="inherit" href={staticRoutes.importPlan()}>
-                        Import
-                    </Button>
+                    <Box component="nav" aria-label="Planner" sx={{ display: "flex", gap: 0.5, width: { xs: "100%", sm: "auto" } }}>
+                        {NAV_ITEMS.map((item) => {
+                            const active = item.section === section;
+                            return (
+                                <Button
+                                    key={item.section}
+                                    color="inherit"
+                                    href={item.href}
+                                    aria-current={active ? "page" : undefined}
+                                    sx={{
+                                        flex: { xs: 1, sm: "none" },
+                                        minHeight: 44,
+                                        px: { xs: 1, sm: 1.5 },
+                                        whiteSpace: "nowrap",
+                                        bgcolor: active ? "rgba(255, 255, 255, 0.16)" : undefined,
+                                    }}
+                                >
+                                    {item.label}
+                                </Button>
+                            );
+                        })}
+                    </Box>
                 </Toolbar>
             </AppBar>
             {!durable && (

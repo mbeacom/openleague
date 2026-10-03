@@ -1,6 +1,6 @@
 import { StrictMode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { act as rtlAct, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act as rtlAct, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { PlannerApp } from "@/apps/planner/src/App";
 import { PRIVACY_NOTE } from "@/apps/planner/src/config";
 import { NOT_SAVING_MESSAGE, STALE_TAB_MESSAGE } from "@/apps/planner/src/screens/AppShell";
@@ -68,6 +68,17 @@ describe("PlannerApp", () => {
         await screen.findByRole("heading", { name: "Drill library" });
         view.rerender(app(store, true, stale));
         await waitFor(() => expect(plays).toHaveBeenCalledTimes(1));
+    });
+
+    it("marks the active section in the navigation", async () => {
+        const { store } = memoryStore();
+        window.location.hash = "#/library";
+        render(app(store));
+        await screen.findByRole("heading", { name: "Drill library" });
+        const nav = screen.getByRole("navigation");
+        expect(within(nav).getByRole("link", { name: "Drill library" })).toHaveAttribute("aria-current", "page");
+        expect(within(nav).getByRole("link", { name: "Practices" })).not.toHaveAttribute("aria-current");
+        expect(within(nav).getByRole("link", { name: "Import" })).not.toHaveAttribute("aria-current");
     });
 
     it("shows a session's detail without team sharing", async () => {
