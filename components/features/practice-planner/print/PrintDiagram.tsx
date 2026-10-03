@@ -2,12 +2,14 @@
 
 /**
  * A drill's diagram on the bench sheet (3b): drawn once into a PNG at 720×306
- * logical px with a 3× backing store, and shown as an <img>, which browsers
- * print more reliably than a live canvas. It is computed in a memo after
- * mount: there is no canvas on the server, and a memo avoids a setState in an
- * effect.
+ * logical px, and shown as an <img>, which browsers print more reliably than a
+ * live canvas. The backing store is 3× by default; BenchSheet lowers it for
+ * long sessions (printPixelRatio) to bound decoded-image memory. It is
+ * computed in a memo after mount: there is no canvas on the server, and a memo
+ * avoids a setState in an effect. onReady fires once: when the image loads,
+ * or when there is no diagram to wait for (unreadable or failed).
  */
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { Box, Typography } from "@mui/material";
 import type { PlayData } from "@/types/practice-planner";
 import { generateThumbnail } from "@/lib/utils/canvas/thumbnail-generator";
@@ -16,11 +18,21 @@ import { useMounted } from "@/lib/hooks/useClockText";
 export const PRINT_DIAGRAM_SIZE = { width: 720, height: 306, pixelRatio: 3 } as const;
 export const DIAGRAM_UNAVAILABLE = "Diagram unavailable";
 
+/**
+ * Backing-store scale for a sheet with this many readable diagrams. Each 3×
+ * diagram decodes to ~7.6 MiB, so big sessions trade sharpness for memory.
+ */
+export function printPixelRatio(readableCount: number): number {
+    if (readableCount <= 12) return 3;
+    if (readableCount <= 40) return 2;
+    return 1;
+}
+
 type Diagram = { src: string } | { failed: true };
 
-function renderDiagram(playData: PlayData, name: string): Diagram {
+function renderDiagram(playData: PlayData, name: string, pixelRatio: number): Diagram {
     try {
-        return { src: generateThumbnail(playData, { ...PRINT_DIAGRAM_SIZE }) };
+        return { src: generateThumbnail(playData, { ...PRINT_DIAGRAM_SIZE, pixelRatio }) };
     } catch (error) {
         console.warn(`Bench sheet: couldn't render the diagram for "${name}":`, error);
         return { failed: true };
@@ -47,14 +59,36 @@ function DiagramBox({ text, busy = false }: { text: string; busy?: boolean }) {
     );
 }
 
-export function PrintDiagram({ playData, name }: { playData: PlayData | null; name: string }) {
+export interface PrintDiagramProps {
+    playData: PlayData | null;
+    name: string;
+    /** Backing-store scale; defaults to PRINT_DIAGRAM_SIZE.pixelRatio */
+    pixelRatio?: number;
+    /** Called once, when the diagram is ready to print or there is none to wait for */
+    onReady?: () => void;
+}
+
+export function PrintDiagram({ playData, name, pixelRatio = PRINT_DIAGRAM_SIZE.pixelRatio, onReady }: PrintDiagramProps) {
     const mounted = useMounted();
     const diagram = useMemo(
-        () => (mounted && playData ? renderDiagram(playData, name) : null),
-        [mounted, playData, name]
+        () => (mounted && playData ? renderDiagram(playData, name, pixelRatio) : null),
+        [mounted, playData, name, pixelRatio]
     );
+    const reported = useRef(false);
+    const report = () => {
+        if (reported.current) return;
+        reported.current = true;
+        onReady?.();
+    };
+    const unavailable = !playData || (diagram !== null && "failed" in diagram);
 
-    if (!playData || (diagram && "failed" in diagram)) return <DiagramBox text={DIAGRAM_UNAVAILABLE} />;
+    useEffect(() => {
+        if (!unavailable || reported.current) return;
+        reported.current = true;
+        onReady?.();
+    }, [unavailable, onReady]);
+
+    if (unavailable) return <DiagramBox text={DIAGRAM_UNAVAILABLE} />;
     if (!diagram) return <DiagramBox text="Rendering diagram…" busy />;
     return (
         // A data URL printed as-is: next/image would lazy-load it and could miss the printout.
@@ -67,6 +101,7 @@ export function PrintDiagram({ playData, name }: { playData: PlayData | null; na
             width={PRINT_DIAGRAM_SIZE.width}
             height={PRINT_DIAGRAM_SIZE.height}
             style={{ width: "100%", height: "auto", display: "block" }}
+            onLoad={report}
         />
     );
 }

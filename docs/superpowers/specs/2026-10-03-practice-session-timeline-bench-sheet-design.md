@@ -1,7 +1,7 @@
 # Practice Sessions: Timeline & Bench Sheet — Design
 
 **Date:** 2026-10-03
-**Status:** Draft
+**Status:** Implemented (3b)
 **Phase:** 3b, the last phase of the practice-planner iteration. Build order: hotfix ✓ → 3a ✓ → 2a ✓ → 2b ✓ (#379) → **3b**.
 **Depends on:**
 - 2b `lib/utils/session-timeline.ts`. `groupStations` already yields `startMinute` and `wallMinutes` for each block.

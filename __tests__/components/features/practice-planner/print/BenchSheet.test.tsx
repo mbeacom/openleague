@@ -1,4 +1,4 @@
-/** BenchSheet (3b): header, timeline, one legend, then two drills per page. */
+/** BenchSheet (3b): header, timeline, one legend, then drills paired into pages. */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
@@ -106,19 +106,19 @@ describe("BenchSheet", () => {
         expect(within(legend).getAllByText("Pass")).toHaveLength(1);
     });
 
-    it("starts drills on a new page and breaks after every second drill, never after the last", () => {
+    it("starts drills on a new page and pairs them, two per page", () => {
         renderSheet();
-        expect(screen.getByRole("region", { name: "Drills" })).toHaveClass("bench-page-break");
-        expect(drills().map((article) => article.classList.contains("bench-drill--page-end"))).toEqual([
-            false, true, false, true, false,
-        ]);
+        const region = screen.getByRole("region", { name: "Drills" });
+        expect(region).toHaveClass("bench-page-break");
+        const pages = region.querySelectorAll(".bench-page");
+        expect(Array.from(pages, (page) => page.querySelectorAll("article").length)).toEqual([2, 2, 1]);
+        expect(region.querySelector(".bench-drill--page-end")).toBeNull();
     });
 
-    it("leaves no blank trailing page for an even number of drills", () => {
+    it("leaves no partial trailing page for an even number of drills", () => {
         renderSheet({ ...SESSION, plays: SESSION.plays.slice(0, 4) });
-        expect(drills().map((article) => article.classList.contains("bench-drill--page-end"))).toEqual([
-            false, true, false, false,
-        ]);
+        const pages = screen.getByRole("region", { name: "Drills" }).querySelectorAll(".bench-page");
+        expect(Array.from(pages, (page) => page.querySelectorAll("article").length)).toEqual([2, 2]);
     });
 
     it("tags stations with the block's start and prints each drill's own minutes", () => {
@@ -164,9 +164,43 @@ describe("BenchSheet", () => {
         expect(firstCell.textContent).toMatch(/^\d{1,2}:\d{2} [AP]M$/);
     });
 
+    it("lowers the diagram pixel ratio for a large session", () => {
+        const plays = Array.from({ length: 13 }, (_, i) => sessionPlay(`Drill${i}`, i, false, 1));
+        renderSheet({ ...SESSION, duration: 60, plays });
+        expect(mockGenerate).toHaveBeenCalledTimes(13);
+        expect(mockGenerate).toHaveBeenCalledWith(expect.anything(), { width: 720, height: 306, pixelRatio: 2 });
+    });
+
+    it("holds Print until every diagram has loaded", () => {
+        const print = vi.spyOn(window, "print").mockImplementation(() => {});
+        renderSheet();
+        const button = screen.getByRole("button", { name: "Print" });
+        expect(button).toBeDisabled();
+        expect(screen.getByText("Preparing diagrams…")).toBeInTheDocument();
+        const images = screen.getAllByRole("img", { name: /^Diagram: / });
+        images.slice(0, -1).forEach((img) => fireEvent.load(img));
+        expect(button).toBeDisabled();
+        fireEvent.load(images[images.length - 1]);
+        expect(button).toBeEnabled();
+        expect(screen.queryByText("Preparing diagrams…")).not.toBeInTheDocument();
+        fireEvent.click(button);
+        expect(print).toHaveBeenCalledTimes(1);
+    });
+
+    it("enables Print at once when no drill has a readable diagram", () => {
+        renderSheet({ ...SESSION, plays: [sessionPlay("Lost", 0, false, 5, { playData: null })] });
+        expect(screen.getByRole("button", { name: "Print" })).toBeEnabled();
+    });
+
+    it("enables Print for an empty session", () => {
+        renderSheet({ ...SESSION, plays: [] });
+        expect(screen.getByRole("button", { name: "Print" })).toBeEnabled();
+    });
+
     it("prints on request only, and links back to the session", () => {
         const print = vi.spyOn(window, "print").mockImplementation(() => {});
         renderSheet();
+        screen.getAllByRole("img", { name: /^Diagram: / }).forEach((img) => fireEvent.load(img));
         expect(print).not.toHaveBeenCalled();
         fireEvent.click(screen.getByRole("button", { name: "Print" }));
         expect(print).toHaveBeenCalledTimes(1);

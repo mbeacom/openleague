@@ -1,6 +1,6 @@
 /** PrintDiagram (3b): one high-resolution PNG per drill, or "Diagram unavailable". */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
@@ -8,7 +8,7 @@ import { createEmptyPlayData } from "@/lib/utils/play-data";
 const { mockGenerate } = vi.hoisted(() => ({ mockGenerate: vi.fn(() => "data:image/png;base64,AA==") }));
 vi.mock("@/lib/utils/canvas/thumbnail-generator", () => ({ generateThumbnail: mockGenerate }));
 
-import { PrintDiagram } from "@/components/features/practice-planner/print/PrintDiagram";
+import { PrintDiagram, printPixelRatio } from "@/components/features/practice-planner/print/PrintDiagram";
 
 const wrap = (ui: React.ReactElement) => <ThemeProvider theme={createTheme()}>{ui}</ThemeProvider>;
 
@@ -16,6 +16,18 @@ afterEach(() => {
     vi.restoreAllMocks();
     mockGenerate.mockReset();
     mockGenerate.mockReturnValue("data:image/png;base64,AA==");
+});
+
+describe("printPixelRatio", () => {
+    it.each([
+        [0, 3],
+        [12, 3],
+        [13, 2],
+        [40, 2],
+        [41, 1],
+    ])("%i readable drills -> pixel ratio %i", (count, ratio) => {
+        expect(printPixelRatio(count)).toBe(ratio);
+    });
 });
 
 describe("PrintDiagram", () => {
@@ -26,6 +38,40 @@ describe("PrintDiagram", () => {
         expect(img).toHaveAttribute("src", "data:image/png;base64,AA==");
         expect(img).toHaveAttribute("loading", "eager");
         expect(mockGenerate).toHaveBeenCalledWith(data, { width: 720, height: 306, pixelRatio: 3 });
+    });
+
+    it("renders at the pixel ratio it is given", () => {
+        const data = createEmptyPlayData();
+        render(wrap(<PrintDiagram playData={data} name="Breakout" pixelRatio={1} />));
+        expect(mockGenerate).toHaveBeenCalledWith(data, { width: 720, height: 306, pixelRatio: 1 });
+    });
+
+    it("reports ready once, when its image loads", () => {
+        const onReady = vi.fn();
+        const { rerender } = render(wrap(<PrintDiagram playData={createEmptyPlayData()} name="Breakout" onReady={onReady} />));
+        expect(onReady).not.toHaveBeenCalled();
+        const img = screen.getByRole("img", { name: "Diagram: Breakout" });
+        fireEvent.load(img);
+        fireEvent.load(img);
+        rerender(wrap(<PrintDiagram playData={createEmptyPlayData()} name="Breakout" onReady={() => onReady()} />));
+        expect(onReady).toHaveBeenCalledTimes(1);
+    });
+
+    it("reports ready once for an unreadable drill", () => {
+        const onReady = vi.fn();
+        const { rerender } = render(wrap(<PrintDiagram playData={null} name="Lost" onReady={onReady} />));
+        rerender(wrap(<PrintDiagram playData={null} name="Lost" onReady={() => onReady()} />));
+        expect(onReady).toHaveBeenCalledTimes(1);
+    });
+
+    it("reports ready when rendering fails", () => {
+        vi.spyOn(console, "warn").mockImplementation(() => {});
+        mockGenerate.mockImplementation(() => {
+            throw new Error("no context");
+        });
+        const onReady = vi.fn();
+        render(wrap(<PrintDiagram playData={createEmptyPlayData()} name="Breakout" onReady={onReady} />));
+        expect(onReady).toHaveBeenCalledTimes(1);
     });
 
     it("shows the placeholder for an unreadable drill without rendering", () => {

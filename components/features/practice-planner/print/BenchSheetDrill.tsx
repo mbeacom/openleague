@@ -1,6 +1,6 @@
 "use client";
 
-/** One drill on the bench sheet (3b). print.css keeps it on one page and breaks after every second drill. */
+/** One drill on the bench sheet (3b). print.css keeps it on one page; BenchSheet pairs drills into pages. */
 import { Box, Stack, Typography } from "@mui/material";
 import type { PlayData } from "@/types/practice-planner";
 import { PrintDiagram } from "./PrintDiagram";
@@ -28,16 +28,18 @@ export interface BenchSheetDrillProps {
     playData: PlayData | null;
     /** drillText(instructions, description) */
     text: string | null;
-    /** This drill ends a printed page (every second drill, never the last) */
-    breakAfter: boolean;
+    /** Backing-store scale for the diagram (printPixelRatio) */
+    pixelRatio?: number;
+    /** The diagram is ready to print (PrintDiagram onReady) */
+    onReady?: () => void;
 }
 
-export function BenchSheetDrill({ number, name, startLabel, minutes, station, playData, text, breakAfter }: BenchSheetDrillProps) {
+export function BenchSheetDrill({ number, name, startLabel, minutes, station, playData, text, pixelRatio, onReady }: BenchSheetDrillProps) {
     return (
         <Box
             component="article"
             aria-label={`Drill ${number}: ${name}`}
-            className={breakAfter ? "bench-drill bench-drill--page-end" : "bench-drill"}
+            className="bench-drill"
             sx={{ mb: 3 }}
         >
             <Stack direction="row" alignItems="baseline" spacing={1.5} flexWrap="wrap" useFlexGap sx={{ mb: 1 }}>
@@ -51,7 +53,7 @@ export function BenchSheetDrill({ number, name, startLabel, minutes, station, pl
                     </Typography>
                 )}
             </Stack>
-            <PrintDiagram playData={playData} name={name} />
+            <PrintDiagram playData={playData} name={name} pixelRatio={pixelRatio} onReady={onReady} />
             {text && (
                 <Typography variant="body2" className="bench-drill-text" sx={{ mt: 1, whiteSpace: "pre-wrap" }}>
                     {text}

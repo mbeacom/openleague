@@ -2,10 +2,12 @@
 
 /**
  * Bench sheet (practice planner 3b). Page 1: the header, the timeline and one
- * combined legend. Then the drills, two per page. app/(print)/print.css does
- * the paging. Nothing auto-prints: the toolbar's Print button calls
- * window.print(), and the toolbar itself is hidden in print.
+ * combined legend. Then the drills, paired into .bench-page containers that
+ * app/(print)/print.css starts on fresh pages. Nothing auto-prints: the
+ * toolbar's Print button calls window.print(), and stays disabled until every
+ * drill's diagram is ready. The toolbar itself is hidden in print.
  */
+import { useCallback, useState } from "react";
 import { Box, Button, Stack, Typography } from "@mui/material";
 import { ArrowBack as ArrowBackIcon, PrintOutlined as PrintIcon } from "@mui/icons-material";
 import { LinkButton } from "@/components/ui/NextLinkComposites";
@@ -16,13 +18,20 @@ import { sessionStart, sessionTimeZone } from "@/lib/utils/date";
 import { useClockText } from "@/lib/hooks/useClockText";
 import { SessionTimeline } from "../SessionTimeline";
 import { BenchSheetDrill, drillText } from "./BenchSheetDrill";
+import { printPixelRatio } from "./PrintDiagram";
 import { LegendList } from "./LegendList";
 
 export type BenchSheetSession = PracticeSessionDetail["session"];
 
 export const NO_DRILLS_MESSAGE = "No drills planned";
+export const PREPARING_DIAGRAMS = "Preparing diagrams…";
 
 const MS_PER_MINUTE = 60_000;
+const DRILLS_PER_PAGE = 2;
+
+function chunk<T>(items: T[], size: number): T[][] {
+    return Array.from({ length: Math.ceil(items.length / size) }, (_, i) => items.slice(i * size, (i + 1) * size));
+}
 
 export function BenchSheet({ session }: { session: BenchSheetSession }) {
     const start = sessionStart(session);
@@ -38,16 +47,36 @@ export function BenchSheet({ session }: { session: BenchSheetSession }) {
             station: row.group.stations.length > 1 ? { position: k + 1, count: row.group.stations.length } : null,
         }))
     );
+    const pixelRatio = printPixelRatio(drills.filter(({ sp }) => sp.play.playData !== null).length);
+
+    // Keyed by session-play row id: a session may schedule the same play twice.
+    const [readyIds, setReadyIds] = useState<ReadonlySet<string>>(() => new Set());
+    const markReady = useCallback(
+        (id: string) => setReadyIds((prev) => (prev.has(id) ? prev : new Set(prev).add(id))),
+        []
+    );
+    const allReady = drills.every(({ sp }) => readyIds.has(sp.id));
 
     return (
         <Box className="bench-sheet" sx={{ maxWidth: 820, mx: "auto", p: { xs: 2, sm: 4 }, bgcolor: "#fff", color: "#000" }}>
-            <Stack direction="row" spacing={1} className="no-print" sx={{ mb: 3 }}>
-                <Button variant="contained" startIcon={<PrintIcon />} onClick={() => window.print()}>
+            <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap className="no-print" sx={{ mb: 3 }}>
+                <Button
+                    variant="contained"
+                    startIcon={<PrintIcon />}
+                    onClick={() => window.print()}
+                    disabled={!allReady}
+                    aria-busy={!allReady || undefined}
+                >
                     Print
                 </Button>
                 <LinkButton href={`/practice-planner/${session.id}`} variant="outlined" startIcon={<ArrowBackIcon />}>
                     Back to session
                 </LinkButton>
+                {!allReady && (
+                    <Typography variant="body2" role="status" sx={{ color: "text.secondary" }}>
+                        {PREPARING_DIAGRAMS}
+                    </Typography>
+                )}
             </Stack>
 
             <Box component="header" sx={{ mb: 3 }}>
@@ -79,18 +108,23 @@ export function BenchSheet({ session }: { session: BenchSheetSession }) {
                     />
                     <LegendList playData={legend} />
                     <Box component="section" aria-label="Drills" className="bench-page-break" sx={{ mt: 4 }}>
-                        {drills.map(({ sp, startsAt, station }, i) => (
-                            <BenchSheetDrill
-                                key={sp.id}
-                                number={i + 1}
-                                name={sp.play.name}
-                                startLabel={clock.time(startsAt)}
-                                minutes={sp.duration}
-                                station={station}
-                                playData={sp.play.playData}
-                                text={drillText(sp.instructions, sp.play.description)}
-                                breakAfter={i % 2 === 1 && i < drills.length - 1}
-                            />
+                        {chunk(drills, DRILLS_PER_PAGE).map((page, p) => (
+                            <div className="bench-page" key={page[0].sp.id}>
+                                {page.map(({ sp, startsAt, station }, k) => (
+                                    <BenchSheetDrill
+                                        key={sp.id}
+                                        number={p * DRILLS_PER_PAGE + k + 1}
+                                        name={sp.play.name}
+                                        startLabel={clock.time(startsAt)}
+                                        minutes={sp.duration}
+                                        station={station}
+                                        playData={sp.play.playData}
+                                        text={drillText(sp.instructions, sp.play.description)}
+                                        pixelRatio={pixelRatio}
+                                        onReady={() => markReady(sp.id)}
+                                    />
+                                ))}
+                            </div>
                         ))}
                     </Box>
                 </>

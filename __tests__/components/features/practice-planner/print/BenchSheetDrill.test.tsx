@@ -16,7 +16,6 @@ const BASE = {
     station: { position: 2, count: 2 },
     playData: createEmptyPlayData(),
     text: "Hard tape-to-tape passes.",
-    breakAfter: false,
 };
 
 function renderDrill(props: Partial<React.ComponentProps<typeof BenchSheetDrill>> = {}) {
@@ -48,16 +47,11 @@ describe("BenchSheetDrill", () => {
     it("shows its number, name, block start, minutes, station tag, diagram and text", () => {
         const article = renderDrill();
         expect(article).toHaveClass("bench-drill");
-        expect(article).not.toHaveClass("bench-drill--page-end");
         expect(screen.getByRole("heading", { name: "2. Regroup" })).toBeInTheDocument();
         expect(screen.getByText("6:00 PM MDT · 10 min")).toBeInTheDocument();
         expect(screen.getByText("Station 2 of 2")).toBeInTheDocument();
         expect(screen.getByRole("img", { name: "Diagram: Regroup" })).toBeInTheDocument();
         expect(screen.getByText("Hard tape-to-tape passes.")).toBeInTheDocument();
-    });
-
-    it("carries the page-end class when it closes a page", () => {
-        expect(renderDrill({ breakAfter: true })).toHaveClass("bench-drill--page-end");
     });
 
     it("drops the tag for a standalone drill and the text block when there is none", () => {
