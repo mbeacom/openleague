@@ -358,12 +358,6 @@ export function PlayEditor({
                 />
             </Paper>
 
-            {/* Element inspector: edits the selected board element */}
-            <ElementInspector
-                selected={selectedElementId ? findElement(playData, selectedElementId) : null}
-                onChange={(patch) => selectedElementId && rinkBoardRef.current?.updateElement(selectedElementId, patch)}
-            />
-
             {/* Rink Board */}
             {/* Requirements: 1.1, 1.2, 1.3, 1.4 */}
             <Paper elevation={2} sx={{ p: 2 }}>
@@ -385,6 +379,12 @@ export function PlayEditor({
                     />
                 </RinkBoardErrorBoundary>
             </Paper>
+
+            {/* Element inspector sits BELOW the board so selecting never shifts the canvas */}
+            <ElementInspector
+                selected={selectedElementId ? findElement(playData, selectedElementId) : null}
+                onChange={(patch) => selectedElementId && rinkBoardRef.current?.updateElement(selectedElementId, patch)}
+            />
 
             {/* Save Status and Actions */}
             <Paper elevation={2} sx={{ p: 2 }}>

@@ -6,7 +6,7 @@
  * the parent applies them through RinkBoardHandle.updateElement so they are
  * undoable.
  */
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { Box, Paper, Stack, TextField, Typography, ButtonBase } from "@mui/material";
 import { OptionGroup } from "./OptionGroup";
 import type { ElementPatch, SelectedElement } from "@/lib/utils/canvas/element-ops";
@@ -33,9 +33,14 @@ function CommitField({ label, value, maxLength, allowEmpty, onCommit }: {
         setSeen(value);
         setDraft(value);
     }
+    // Enter then blur would otherwise commit the same draft twice before the
+    // parent re-renders with the new value; any typing clears this.
+    const committed = useRef<{ draft: string; value: string } | null>(null);
     const commit = () => {
         if (draft === value) return;
+        if (committed.current?.draft === draft && committed.current.value === value) return;
         if (!allowEmpty && draft.trim() === "") { setDraft(value); return; }
+        committed.current = { draft, value };
         onCommit(draft);
     };
     return (
@@ -44,7 +49,7 @@ function CommitField({ label, value, maxLength, allowEmpty, onCommit }: {
             size="small"
             value={draft}
             inputProps={{ maxLength }}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={(e) => { committed.current = null; setDraft(e.target.value); }}
             onBlur={commit}
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commit(); } }}
         />

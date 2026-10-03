@@ -33,4 +33,16 @@ describe("PlayEditor + inspector", () => {
         await userEvent.click(screen.getByLabelText("Faces right"));
         expect(screen.getByTestId("board")).toHaveAttribute("data-rotation", "180");
     });
+
+    it("places the inspector after the board so selecting never shifts the canvas", async () => {
+        const playData = { ...createEmptyPlayData(), equipment: [{ id: "n", kind: "net" as const, position: { x: 100, y: 40 }, rotation: 0 }] };
+        render(
+            <ThemeProvider theme={createTheme()}>
+                <PlayEditor teamId="t" initialData={{ name: "Drill", playData }} />
+            </ThemeProvider>
+        );
+        const region = await screen.findByRole("region", { name: "selected element" });
+        const board = screen.getByTestId("board");
+        expect(board.compareDocumentPosition(region) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
 });

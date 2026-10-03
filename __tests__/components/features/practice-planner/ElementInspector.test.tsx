@@ -55,4 +55,11 @@ describe("ElementInspector", () => {
         await userEvent.tab();
         expect(onChange).not.toHaveBeenCalledWith({ text: "" });
     });
+
+    it("commits a label once when Enter is followed by blur", async () => {
+        const onChange = wrap({ kind: "player", element: { id: "p", role: "X", label: "", color: "#1976D2", position: { x: 1, y: 1 } } });
+        await userEvent.type(screen.getByLabelText("Label"), "G1{Enter}");
+        await userEvent.tab();
+        expect(onChange.mock.calls.filter(([p]) => "label" in p)).toEqual([[{ label: "G1" }]]);
+    });
 });
