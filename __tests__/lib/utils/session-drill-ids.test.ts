@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applySavedPlayIds, upsertSessionDrill } from "@/lib/utils/session-drill-ids";
+import { applySavedPlayIds, describeSaveError, upsertSessionDrill } from "@/lib/utils/session-drill-ids";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import type { PlayInSession } from "@/types/practice-planner";
 
@@ -41,5 +41,18 @@ describe("upsertSessionDrill", () => {
     it("appends a new card at max sequence + 1", () => {
         const next = upsertSessionDrill([card("a", "x", 0), card("b", "y", 2)], "k9", patch);
         expect(next[2]).toMatchObject({ id: "k9", playId: "new", sequence: 3, duration: 10, instructions: "" });
+    });
+});
+
+describe("describeSaveError", () => {
+    const STALE = "One or more drills not found or do not belong to this session";
+
+    it("adds reload guidance to the stale-drill rejection, keeping the server text verbatim", () => {
+        expect(describeSaveError(STALE)).toBe(`${STALE}. Reload the page to get the latest drills.`);
+    });
+
+    it("leaves every other error untouched", () => {
+        expect(describeSaveError("Failed to save practice session")).toBe("Failed to save practice session");
+        expect(describeSaveError(`${STALE} (extra)`)).toBe(`${STALE} (extra)`);
     });
 });

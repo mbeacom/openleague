@@ -6,9 +6,9 @@
  * Server Action's transaction; they are not actions themselves (ADR-0002).
  */
 import { Prisma } from "@prisma/client";
+import { SESSION_DRILL_REJECTED_MESSAGE } from "@/lib/utils/session-drill-ids";
 
-export const SESSION_DRILL_REJECTED_MESSAGE =
-    "One or more drills not found or do not belong to this session";
+export { SESSION_DRILL_REJECTED_MESSAGE };
 
 /** A drill in the payload the session may not use. Aborts the whole save. */
 export class SessionDrillError extends Error {

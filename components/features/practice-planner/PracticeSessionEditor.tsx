@@ -35,7 +35,7 @@ import {
     VALIDATION_CONSTRAINTS,
 } from "@/types/practice-planner";
 import type { BookingConflict } from "@/types/segments";
-import { applySavedPlayIds, type SavedDrillId } from "@/lib/utils/session-drill-ids";
+import { applySavedPlayIds, describeSaveError, type SavedDrillId } from "@/lib/utils/session-drill-ids";
 import { PlayLibrary } from "./PlayLibrary";
 import { useSingleFlightSave } from "./useSingleFlightSave";
 import { SessionDrillList } from "./SessionDrillList";
@@ -341,7 +341,7 @@ export function PracticeSessionEditor({
                     // FR-019/US5: warn and let the coach explicitly book anyway.
                     booking.setBookingConflicts(result.conflicts);
                 } else {
-                    setSaveError(result.error);
+                    setSaveError(describeSaveError(result.error));
                 }
                 return;
             }

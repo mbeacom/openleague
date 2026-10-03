@@ -6,6 +6,25 @@ import type { PlayData, PlayInSession } from "@/types/practice-planner";
 
 export type SavedDrillId = { clientKey: string; playId: string };
 
+/**
+ * The session save's rejection when a drill id isn't usable by the session
+ * (verbatim; the server sends it). Lives here, not in the Prisma-importing
+ * service, so the client editor can match it.
+ */
+export const SESSION_DRILL_REJECTED_MESSAGE =
+    "One or more drills not found or do not belong to this session";
+
+/**
+ * A save error as the editor shows it. The stale-drill rejection repeats on
+ * every save until reload (a library drill deleted while this editor still
+ * holds its id), so it gets reload guidance; the server text stays as sent.
+ */
+export function describeSaveError(error: string): string {
+    return error === SESSION_DRILL_REJECTED_MESSAGE
+        ? `${error}. Reload the page to get the latest drills.`
+        : error;
+}
+
 export type SessionDrillPatch = {
     playId: string;
     name: string;
