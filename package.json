@@ -42,10 +42,11 @@
     "planner:dev": "vite --config apps/planner/vite.config.ts",
     "planner:build": "vite build --config apps/planner/vite.config.ts",
     "planner:preview": "vite preview --config apps/planner/vite.config.ts",
+    "planner:check": "bun scripts/check-planner-build.ts",
     "uptime:check": "tsx scripts/check-uptime.ts",
     "validate-deployment-config": "tsx scripts/validate-deployment-config.ts",
     "smoke": "bun scripts/smoke-test.ts",
-    "deployment:check": "bun run validate-deployment-config && bun run docs:build-pages"
+    "deployment:check": "bun run validate-deployment-config && bun run docs:build-pages && bun run planner:build && bun run planner:check"
   },
   "dependencies": {
     "@aws-sdk/client-sesv2": "^3.1131.0",

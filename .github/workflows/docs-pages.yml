@@ -9,6 +9,15 @@ on:
       - 'components/features/docs/**'
       - 'docs/**'
       - 'lib/docs/**'
+      # The static planner (ADR-0020) bundles shared components, utilities and
+      # types, so any of them can change the deployed /planner/ build.
+      - 'apps/planner/**'
+      - 'components/**'
+      - 'lib/**'
+      - 'types/**'
+      - 'app/(dashboard)/practice-planner/**'
+      - 'app/(print)/**'
+      - 'scripts/check-planner-build.ts'
       # Only top-level docs/*.md are published, so ADR records cannot change
       # the built site. Excluded to avoid a no-op Pages deploy per record.
       - '!docs/adr/**'
@@ -49,6 +58,16 @@ jobs:
 
       - name: Build docs pages artifact
         run: bun run docs:build-pages
+
+      - name: Build the static planner
+        run: bun run planner:build
+
+      - name: Check the static planner bundle
+        run: bun run planner:check
+
+      # The docs build empties dist/docs-pages first, so the planner goes in last.
+      - name: Add the planner to the Pages artifact
+        run: cp -R dist/planner dist/docs-pages/planner
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5

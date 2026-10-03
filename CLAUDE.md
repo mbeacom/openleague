@@ -17,6 +17,8 @@ bun run build            # Production build
 bun run start            # Start production server
 bun run type-check       # TypeScript type checking (run before commits)
 bun run lint             # ESLint
+bun run planner:dev      # Static practice planner (apps/planner, Vite) at localhost:5173
+bun run planner:build    # Build it to dist/planner; bun run planner:check verifies the bundle
 
 # Testing
 bun run test             # Run tests with Vitest
@@ -89,6 +91,11 @@ app/                              # Next.js App Router
 │   ├── leagues/                 # League API (team listing)
 │   └── roster/export/           # CSV roster export (GET endpoint — file download, not a mutation)
 └── docs/                        # Documentation pages
+
+apps/
+└── planner/                     # Static, local-first practice planner (ADR-0020): Vite SPA,
+                                 # IndexedDB store, hash routes; reuses components via @/;
+                                 # deployed to openleague.dev/planner/ by docs-pages.yml
 
 components/                      # React components
 ├── features/                    # Feature-specific components (grouped by domain)
