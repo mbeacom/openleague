@@ -115,6 +115,11 @@ function isEditableTarget(target: EventTarget | null): boolean {
 
 const DEFAULT_COLOR = "#212121";
 const DEFAULT_STROKE_OPTIONS: StrokeOptions = { action: "skate", path: "freehand", end: "arrow" };
+/**
+ * Tools whose touch tap acts once (place, erase, ask for text). On touch they
+ * wait for the finger to lift, so the first finger of a pinch never acts.
+ */
+const TAP_TOOLS: ReadonlySet<DrawingTool> = new Set<DrawingTool>(["player", "equipment", "eraser", "text"]);
 /** Minimum on-screen hit radius in CSS pixels, so small glyphs stay tappable */
 const MIN_HIT_RADIUS_PX = 22;
 
@@ -168,6 +173,8 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
     const [panOffset, setPanOffset] = useState<Position>({ x: 0, y: 0 });
     // The view and fingers when the current pinch began (null = no pinch)
     const pinchStartRef = useRef<{ zoom: number; pan: Position; center: Position; distance: number } | null>(null);
+    // A touch tap with a TAP_TOOLS tool, waiting for touchend (client px; null = none)
+    const pendingTapRef = useRef<{ clientX: number; clientY: number } | null>(null);
 
     // Refs to avoid stale closures in event handlers
     // These refs hold the latest values without triggering callback recreation
@@ -824,6 +831,18 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         };
     }, []);
 
+    /** Runs handleMouseDown for a touch point (it maps the point through zoom/pan). */
+    const simulateMouseDown = useCallback(
+        (clientX: number, clientY: number) => {
+            handleMouseDown({
+                nativeEvent: new MouseEvent("mousedown", { clientX, clientY }),
+                preventDefault: () => { /* No-op: touch preventDefault handled at parent level */ },
+                stopPropagation: () => { /* No-op: propagation control not needed for simulated events */ },
+            } as React.MouseEvent<HTMLCanvasElement>);
+        },
+        [handleMouseDown]
+    );
+
     /**
      * Handle touch start event
      * Requirements: 3.5
@@ -835,19 +854,17 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
             event.preventDefault();
 
             if (event.touches.length === 1) {
-                // Single touch - treat like mouse down
-                // Use getTransformedRinkPosition to account for zoom/pan
-                const mouseEvent = new MouseEvent("mousedown", {
-                    clientX: event.touches[0].clientX,
-                    clientY: event.touches[0].clientY,
-                });
-                // Simulate mouse event for single touch (handleMouseDown uses getTransformedRinkPosition)
-                handleMouseDown({
-                    nativeEvent: mouseEvent,
-                    preventDefault: () => { /* No-op: touch preventDefault handled at parent level */ },
-                    stopPropagation: () => { /* No-op: propagation control not needed for simulated events */ },
-                } as React.MouseEvent<HTMLCanvasElement>);
+                const { clientX, clientY } = event.touches[0];
+                // Place / erase / text act on touchend, and only for a still,
+                // one-finger tap: this finger may be the first of a pinch.
+                if (!areaTool && TAP_TOOLS.has(selectedTool)) {
+                    pendingTapRef.current = { clientX, clientY };
+                    return;
+                }
+                // Select (drag), stroke and the area tool start now, like a mouse down
+                simulateMouseDown(clientX, clientY);
             } else if (event.touches.length === 2) {
+                pendingTapRef.current = null;
                 // Two touches - pinch to zoom or pan
                 // Requirements: 3.5
                 pinchStartRef.current = {
@@ -871,7 +888,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
                 setCurrentDrawingPoints([]);
             }
         },
-        [transform, getTouchDistance, getTouchCenter, handleMouseDown]
+        [transform, areaTool, selectedTool, getTouchDistance, getTouchCenter, simulateMouseDown]
     );
 
     /**
@@ -885,6 +902,12 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
             event.preventDefault();
 
             if (event.touches.length === 1) {
+                // A pending tap that travels past the drag threshold is not a tap
+                const tap = pendingTapRef.current;
+                const touch = event.touches[0];
+                if (tap && Math.hypot(touch.clientX - tap.clientX, touch.clientY - tap.clientY) >= DRAG_THRESHOLD_PX) {
+                    pendingTapRef.current = null;
+                }
                 // Single touch - treat like mouse move
                 const mouseEvent = new MouseEvent("mousemove", {
                     clientX: event.touches[0].clientX,
@@ -921,6 +944,10 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
             event.preventDefault();
 
             if (event.touches.length === 0) {
+                // A still one-finger tap with a place / erase / text tool acts now
+                const tap = pendingTapRef.current;
+                pendingTapRef.current = null;
+                if (tap) simulateMouseDown(tap.clientX, tap.clientY);
                 // All touches ended - treat like mouse up
                 handleMouseUp();
                 pinchStartRef.current = null;
@@ -929,7 +956,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
                 pinchStartRef.current = null;
             }
         },
-        [handleMouseUp]
+        [handleMouseUp, simulateMouseDown]
     );
 
     return (

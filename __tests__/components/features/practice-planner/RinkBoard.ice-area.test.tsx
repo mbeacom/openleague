@@ -449,4 +449,75 @@ describe("RinkBoard ice area", () => {
             expect(onPlayDataChange).not.toHaveBeenCalled();
         });
     });
+
+    describe("touch taps for place / erase / text wait for the finger to lift", () => {
+        it("places nothing and records nothing when a pinch starts on the player tool", () => {
+            const onUndoRedoStateChange = vi.fn();
+            const { canvas, at, onPlayDataChange } = setup({ selectedTool: "player", onUndoRedoStateChange });
+            fireEvent.touchStart(canvas, { touches: [at(40, 40)] });
+            fireEvent.touchStart(canvas, { touches: [at(40, 40), at(60, 50)] });
+            fireEvent.touchEnd(canvas, { touches: [at(60, 50)] });
+            fireEvent.touchEnd(canvas, { touches: [] });
+            expect(onPlayDataChange).not.toHaveBeenCalled();
+            expect(onUndoRedoStateChange).not.toHaveBeenCalled();
+        });
+
+        it("places once, on touchend, for a single tap", () => {
+            const { canvas, at, onPlayDataChange } = setup({ selectedTool: "equipment" });
+            const p = at(40, 40);
+            fireEvent.touchStart(canvas, { touches: [p] });
+            expect(onPlayDataChange).not.toHaveBeenCalled();
+            fireEvent.touchMove(canvas, { touches: [{ clientX: p.clientX + 2, clientY: p.clientY + 1 }] });
+            fireEvent.touchEnd(canvas, { touches: [] });
+            expect(onPlayDataChange).toHaveBeenCalledTimes(1);
+            const placed = onPlayDataChange.mock.calls[0][0].equipment;
+            expect(placed).toHaveLength(1);
+            expect(placed[0].position.x).toBeCloseTo(40, 6);
+            expect(placed[0].position.y).toBeCloseTo(40, 6);
+        });
+
+        it("places nothing when the finger travels past the drag threshold", () => {
+            const { canvas, at, onPlayDataChange } = setup({ selectedTool: "player" });
+            fireEvent.touchStart(canvas, { touches: [at(40, 40)] });
+            fireEvent.touchMove(canvas, { touches: [at(60, 40)] });
+            fireEvent.touchEnd(canvas, { touches: [] });
+            expect(onPlayDataChange).not.toHaveBeenCalled();
+        });
+
+        it("erases nothing when a pinch starts on the eraser", () => {
+            const { canvas, at, onPlayDataChange } = setup({
+                playData: { ...createEmptyPlayData(), equipment: [cone(40)] },
+                selectedTool: "eraser",
+            });
+            fireEvent.touchStart(canvas, { touches: [at(40, 40)] });
+            fireEvent.touchStart(canvas, { touches: [at(40, 40), at(60, 50)] });
+            fireEvent.touchEnd(canvas, { touches: [] });
+            expect(onPlayDataChange).not.toHaveBeenCalled();
+        });
+
+        it("does not open the text prompt when a pinch starts on the text tool", () => {
+            const promptSpy = vi.spyOn(window, "prompt").mockReturnValue("Hi");
+            try {
+                const { canvas, at, onPlayDataChange } = setup({ selectedTool: "text" });
+                fireEvent.touchStart(canvas, { touches: [at(40, 40)] });
+                fireEvent.touchStart(canvas, { touches: [at(40, 40), at(60, 50)] });
+                fireEvent.touchEnd(canvas, { touches: [] });
+                expect(promptSpy).not.toHaveBeenCalled();
+                // A plain tap still asks, once the finger lifts.
+                fireEvent.touchStart(canvas, { touches: [at(40, 40)] });
+                expect(promptSpy).not.toHaveBeenCalled();
+                fireEvent.touchEnd(canvas, { touches: [] });
+                expect(promptSpy).toHaveBeenCalledTimes(1);
+                expect(onPlayDataChange.mock.calls.at(-1)![0].annotations).toHaveLength(1);
+            } finally {
+                promptSpy.mockRestore();
+            }
+        });
+
+        it("still places on mouse down (mouse input is unchanged)", () => {
+            const { canvas, at, onPlayDataChange } = setup({ selectedTool: "player" });
+            fireEvent.mouseDown(canvas, at(40, 40));
+            expect(onPlayDataChange).toHaveBeenCalledTimes(1);
+        });
+    });
 });
