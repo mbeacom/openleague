@@ -1,5 +1,7 @@
 /** Pure, immutable edits on PlayData elements by id. */
 import {
+    AREA_SNAP_FT,
+    MIN_AREA_FT,
     VALIDATION_CONSTRAINTS as C,
     type DrawingElement,
     type EquipmentItem,
@@ -8,10 +10,11 @@ import {
     type PlayerIcon,
     type PlayerRole,
     type Position,
+    type RinkRect,
     type StrokeOptions,
     type TextAnnotation,
 } from "@/types/practice-planner";
-import { simplifyPoints } from "@/lib/utils/play-data";
+import { RINK_HEIGHT_FT, RINK_WIDTH_FT, simplifyPoints } from "@/lib/utils/play-data";
 import { ROLE_DEFAULT_COLORS } from "@/lib/utils/canvas/notation";
 
 export type ElementKind = "player" | "drawing" | "equipment" | "annotation";
@@ -145,4 +148,44 @@ export function limitMessage(data: PlayData, kind: ElementKind): string | null {
     const total = data.players.length + data.drawings.length + data.equipment.length + data.annotations.length;
     if (total >= C.MAX_ELEMENTS_PER_PLAY) return `A play can have at most ${C.MAX_ELEMENTS_PER_PLAY} elements in total.`;
     return null;
+}
+
+// ============================================================================
+// Custom ice area (area tool)
+// ============================================================================
+
+const snapTo = (value: number, step: number) => Math.round(value / step) * step;
+
+/**
+ * One axis of a dragged rectangle: both edges snapped and clamped to
+ * [0, max]; a span under `minFt` grows from its low edge, shifted back
+ * inside the rink if that overflows.
+ */
+function snappedSpan(a: number, b: number, snapFt: number, minFt: number, max: number): [number, number] {
+    let lo = Math.min(max, Math.max(0, snapTo(Math.min(a, b), snapFt)));
+    let hi = Math.min(max, Math.max(0, snapTo(Math.max(a, b), snapFt)));
+    if (hi - lo < minFt) {
+        hi = lo + minFt;
+        if (hi > max) {
+            hi = max;
+            lo = max - minFt;
+        }
+    }
+    return [lo, hi];
+}
+
+/**
+ * The custom area a drag from `start` to `end` (rink feet, either direction)
+ * describes: snapped to `snapFt`, at least `minFt` on each side, inside the
+ * rink. Always valid for `iceAreaSchema`.
+ */
+export function rectFromDrag(
+    start: Position,
+    end: Position,
+    snapFt: number = AREA_SNAP_FT,
+    minFt: number = MIN_AREA_FT
+): RinkRect {
+    const [x0, x1] = snappedSpan(start.x, end.x, snapFt, minFt, RINK_WIDTH_FT);
+    const [y0, y1] = snappedSpan(start.y, end.y, snapFt, minFt, RINK_HEIGHT_FT);
+    return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
 }

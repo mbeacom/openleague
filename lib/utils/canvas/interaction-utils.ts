@@ -16,6 +16,7 @@ import {
     TextAnnotation,
     PlayData,
     EquipmentItem,
+    RinkRect,
 } from "@/types/practice-planner";
 import { TransformContext, canvasToRink } from "./rink-renderer";
 import { PLAYER_RADIUS_FT, EQUIPMENT_RADIUS_FT } from "./glyph-metrics";
@@ -435,7 +436,17 @@ export function isWithinRinkBounds(
 }
 
 /**
- * Clamps a position to stay within rink bounds
+ * Clamps a position to an axis-aligned rectangle in rink feet.
+ */
+export function clampToRect(position: Position, rect: RinkRect): Position {
+    return {
+        x: Math.max(rect.x, Math.min(rect.x + rect.w, position.x)),
+        y: Math.max(rect.y, Math.min(rect.y + rect.h, position.y)),
+    };
+}
+
+/**
+ * Clamps a position to stay within rink bounds: `clampToRect` over the rink.
  *
  * @param position - Position to clamp
  * @param rinkWidth - Rink width (default: 200)
@@ -447,10 +458,16 @@ export function clampToRinkBounds(
     rinkWidth: number = 200,
     rinkHeight: number = 85
 ): Position {
-    return {
-        x: Math.max(0, Math.min(rinkWidth, position.x)),
-        y: Math.max(0, Math.min(rinkHeight, position.y)),
-    };
+    return clampToRect(position, { x: 0, y: 0, w: rinkWidth, h: rinkHeight });
+}
+
+/**
+ * Where a dragged element lands: the pointer (clamped only to the rink by the
+ * caller) minus the grab offset, then clamped to `rect`. Clamping the pointer
+ * to `rect` first would stop the element `grabOffset` feet short of the edge.
+ */
+export function dragTarget(pointer: Position, grabOffset: Position, rect: RinkRect): Position {
+    return clampToRect({ x: pointer.x - grabOffset.x, y: pointer.y - grabOffset.y }, rect);
 }
 
 /**

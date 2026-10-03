@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { findElement, updateElement, removeElement, moveElement, placePlayer, placeEquipment, finishStroke, limitMessage } from "@/lib/utils/canvas/element-ops";
+import { findElement, updateElement, removeElement, moveElement, placePlayer, placeEquipment, finishStroke, limitMessage, rectFromDrag } from "@/lib/utils/canvas/element-ops";
 import { ROLE_DEFAULT_COLORS } from "@/lib/utils/canvas/notation";
-import { createEmptyPlayData } from "@/lib/utils/play-data";
+import { createEmptyPlayData, iceAreaSchema } from "@/lib/utils/play-data";
 import { VALIDATION_CONSTRAINTS, type PlayData } from "@/types/practice-planner";
 
 const data: PlayData = {
@@ -107,5 +107,36 @@ describe("limitMessage", () => {
     it("blocks anything past the total element cap", () => {
         const players = Array.from({ length: 50 }, (_, i) => ({ id: `p${i}`, position: { x: 1, y: 1 }, role: "X" as const, label: "", color: "#000000" }));
         expect(limitMessage({ ...createEmptyPlayData(), players, equipment: cones(50) }, "annotation")).toMatch(/100/);
+    });
+});
+
+describe("rectFromDrag", () => {
+    it("snaps both corners to 5 ft", () => {
+        expect(rectFromDrag({ x: 12, y: 7 }, { x: 48, y: 33 })).toEqual({ x: 10, y: 5, w: 40, h: 30 });
+    });
+
+    it("gives the same rectangle for a reversed drag", () => {
+        expect(rectFromDrag({ x: 48, y: 33 }, { x: 12, y: 7 })).toEqual({ x: 10, y: 5, w: 40, h: 30 });
+    });
+
+    it("grows a short drag to the 20 ft minimum", () => {
+        expect(rectFromDrag({ x: 100, y: 40 }, { x: 101, y: 41 })).toEqual({ x: 100, y: 40, w: 20, h: 20 });
+    });
+
+    it("keeps a minimum-size rectangle inside the rink at the far corner", () => {
+        expect(rectFromDrag({ x: 199, y: 84 }, { x: 197, y: 83 })).toEqual({ x: 180, y: 65, w: 20, h: 20 });
+    });
+
+    it("clamps a drag that leaves the rink", () => {
+        expect(rectFromDrag({ x: -10, y: -10 }, { x: 300, y: 100 })).toEqual({ x: 0, y: 0, w: 200, h: 85 });
+    });
+
+    it("always yields a custom area the schema accepts", () => {
+        for (let x = -10; x <= 210; x += 17) {
+            for (let y = -10; y <= 95; y += 13) {
+                const rect = rectFromDrag({ x, y }, { x: 200 - x / 2, y: 85 - y / 3 });
+                expect(iceAreaSchema.safeParse({ kind: "custom", rect }).success).toBe(true);
+            }
+        }
     });
 });
