@@ -31,13 +31,21 @@ function selectionRing(ctx: CanvasRenderingContext2D, c: Position, r: number) {
     ctx.stroke();
 }
 
-function fitText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number, startPx: number) {
+/** Shrinks the font to fit; at the minimum size, truncates with an ellipsis. Returns the text to draw. */
+function fitText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number, startPx: number): string {
+    const MIN_FONT_PX = 6;
     let size = startPx;
     ctx.font = `800 ${size}px ${FONT_FAMILY}`;
-    while (size > 6 && ctx.measureText(text).width > maxWidth) {
+    while (size > MIN_FONT_PX && ctx.measureText(text).width > maxWidth) {
         size -= 1;
         ctx.font = `800 ${size}px ${FONT_FAMILY}`;
     }
+    if (ctx.measureText(text).width <= maxWidth) return text;
+    let shown = text;
+    while (shown.length > 1 && ctx.measureText(`${shown}\u2026`).width > maxWidth) {
+        shown = shown.slice(0, -1);
+    }
+    return `${shown}\u2026`;
 }
 
 export function drawPlayerGlyph(
@@ -90,11 +98,11 @@ export function drawPlayerGlyph(
             break;
     }
 
-    fitText(ctx, text, r * 1.6, Math.floor(r * 1.05));
+    const shownText = fitText(ctx, text, r * 1.6, Math.floor(r * 1.05));
     ctx.fillStyle = textColor;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(text, c.x, shape === "triangle" ? c.y + r * 0.15 : c.y);
+    ctx.fillText(shownText, c.x, shape === "triangle" ? c.y + r * 0.15 : c.y);
 }
 
 export function drawEquipmentGlyph(
