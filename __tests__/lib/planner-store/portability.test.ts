@@ -40,7 +40,24 @@ function resolveSource(spec: string, from: string): string | null {
     return null;
 }
 
-const USE_SERVER = /^\s*(?:(?:\/\/[^\n]*\n|\/\*[\s\S]*?\*\/)\s*)*["']use server["']/;
+/** True when the source opens with a "use server" directive, after any leading comments. A linear scan, not a regex, to avoid backtracking. */
+function hasUseServerDirective(source: string): boolean {
+    let i = 0;
+    for (;;) {
+        while (i < source.length && /\s/.test(source[i])) i++;
+        if (source.startsWith("//", i)) {
+            const end = source.indexOf("\n", i);
+            if (end === -1) return false;
+            i = end + 1;
+        } else if (source.startsWith("/*", i)) {
+            const end = source.indexOf("*/", i + 2);
+            if (end === -1) return false;
+            i = end + 2;
+        } else {
+            return source.startsWith('"use server"', i) || source.startsWith("'use server'", i);
+        }
+    }
+}
 
 /** File access seam so the walk can run against fixtures. */
 interface GraphIO {
@@ -67,7 +84,7 @@ export function scanPortability(entries: readonly string[], io: GraphIO = diskIO
         if (seenValue.has(file) || (typeContext && seenType.has(file))) return;
         (typeContext ? seenType : seenValue).add(file);
         const source = io.read(file);
-        if (!typeContext && USE_SERVER.test(source)) found.add(`${io.label(file)} -> "use server" module`);
+        if (!typeContext && hasUseServerDirective(source)) found.add(`${io.label(file)} -> "use server" module`);
         const imports: Array<{ spec: string; typeOnly: boolean }> = [];
         for (const match of source.matchAll(STATIC_IMPORT)) imports.push({ spec: match[2], typeOnly: Boolean(match[1]) });
         for (const match of source.matchAll(DYNAMIC_IMPORT)) imports.push({ spec: match[1], typeOnly: false });
