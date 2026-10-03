@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make every drill in a practice session a session-owned `Play` copy, so a coach can edit a drill's diagram for one practice, build new drills inside a session, and duplicate a past practice, while library edits and deletes never reach a converted session.
+**Goal:** Make every drill in a practice session a session-owned `Play` copy, so a coach can edit a drill's diagram for one practice, build new drills inside a session, and duplicate a past practice, while library edits and deletes never reach any session (detach-on-write).
 
 **Architecture:** `Play` gains `sessionId` (owner) and `sourcePlayId` (provenance). One server-only service (`lib/services/practice-session-drills.ts`) runs inside the existing create/update transaction: it keeps drills the session owns, clones library and legacy references into owned copies with `createManyAndReturn`, returns a `clientKey → playId` mapping, and cleans up owned orphans after the session plays are rewritten. A new action file adds `saveSessionDrill`, `copySessionDrillToLibrary`, and `duplicatePracticeSession`. The 1,600-line session editor is first split (no behavior change, under new characterization tests), then gains single-flight autosave, the playId swap, and a full-screen `SessionDrillDialog` that hosts `PlayEditor` with autosave off.
 
@@ -27,7 +27,7 @@
 - Error copy, verbatim:
   - helper rejection: `One or more drills not found or do not belong to this session`
   - `deletePlay` FK race (Prisma `P2003`): `This drill is still used by a session`
-  - library delete dialog: `Sessions that use this drill keep their copy.`
+  - library delete dialog: `Sessions that use this drill keep their own copy.`
   - `updatePlay` on a session-owned play: `This drill belongs to a practice session. Edit it from that session.`
 - Instructions limit in the session UI is **2000** (matches `optionalSanitizedString(2000)` on the server).
 - Duplicate defaults: date = source date + 7 calendar days (local wall-clock), title `Copy of <title>` truncated to 100 characters, unshared, unbooked.
@@ -38,35 +38,37 @@
   `Claude-Session: https://claude.ai/code/session_01TqKuhs6SuVkWyirkz3ZdQX`.
 - `bun run type-check` and each task's own Vitest files must be green at the end of every task.
 
+## Product-owner decisions (2026-10-03, already folded into the spec)
+
+- **Detach-on-write replaces retire-on-delete.** Before `updatePlay` or `deletePlay` changes a library play, every session whose rows still reference it gets its own copy of the current content (one per session) and is repointed to it, in the same transaction. A delete is then a real delete; there is no retired state (I4's "retired" row is gone). The NO ACTION FK stays as defense in depth with a friendly `P2003` message. Library edits and deletes never reach any session, so the success criterion holds without a backfill.
+- **`Copy of …` titles are truncated to 100 characters.**
+
 ## Spec deviations (decided during planning — fold into the spec in Task 10)
 
 1. **`clientKey` is the existing `PlayInSession.id`.** `PlayInSession` already carries a stable client-side `id` (a session-play id from the server, or `play-<ts>-<rand>` for a new card), so no new field is added. Wrappers send `clientKey: play.id`. The schema requires `clientKey` (1–64 chars) and rejects a payload whose keys are not unique.
 2. **Helper shape.** `materializeSessionDrills(tx, { sessionId, teamId, userId, items })` takes `items: { playId, clientKey, sequence }[]` and returns `{ mapping: { clientKey, sequence, playId }[], previousPlayIds: string[] }` (`previousPlayIds` = the play ids this session referenced before the save). Orphan cleanup is a separate export, `deleteOrphanedSessionDrills`, that `updatePracticeSession` calls after the session plays are rewritten (the helper returns before the rewrite, so it cannot do step 5 itself).
-3. **Orphan cleanup has a grace window.** It deletes an owned play of S with no session plays only if S referenced it before this save **or** it has not been updated for 15 minutes (`ORPHAN_GRACE_MS`). Without this, a drill that `saveSessionDrill` just created (not yet referenced, because the editor's next autosave hasn't run) could be deleted by an autosave already in flight, and the following save would fail with the rejection error.
-4. **Clone order is verified.** `createManyAndReturn` is called with `select: { id, name, sourcePlayId }` and the result is matched to the input by index. PostgreSQL returns `INSERT … RETURNING` rows in `VALUES` order but Prisma does not document it, so the helper checks `name` and `sourcePlayId` at each index and aborts the transaction on a mismatch instead of mis-mapping a drill.
+3. **Orphan cleanup is drop-only (no time window).** `deleteOrphanedSessionDrills` deletes an owned play of S only if S referenced it *before* this save and no session play references it *after*. The race it prevents: the coach saves a new drill in the dialog, so `saveSessionDrill` commits owned play Z, which no session play references yet, while an autosave whose payload predates Z is already in flight. A spec-literal "delete every unreferenced owned play" cleanup in that autosave would delete Z. The editor's next save would then send Z and fail with the rejection error, and the drawing would be lost. A 15-minute grace window (the first draft) narrows this to "Z untouched for 15 minutes", but it is time-based and still deletes a drill whose dialog stays open longer than that. Drop-only closes the race with no clock: Z was never in that save's `previousPlayIds`, so the autosave cannot touch it. Everything that should go still goes: a card the coach removed, a stale clone left by an ignored `clientKey`, and the extra copy left by Review Focus 1 were all referenced by an earlier save. The only thing never collected is a drill created in the dialog and then abandoned before any session save references it. It is invisible and is deleted with its session (`ON DELETE CASCADE`).
+
+   The alternative of having `saveSessionDrill` for a new drill also append its session-play row in the same transaction was **rejected**, because the client payload owns the session-play rows. Every session save deletes all of S's rows and recreates them from the payload. An autosave in flight with a payload that lacks Z would therefore delete Z's row: if it commits after the dialog's transaction, Z is now in its `previousPlayIds`, so even drop-only cleanup would delete it. Under the serializable venue-reservation transaction, an overlap is instead retried and gives the same result. Appending the row also doesn't cover forking an existing card through "Edit diagram", where the fork is likewise unreferenced until the next save. Keeping row ownership with the payload, and making cleanup unable to delete anything a save didn't drop, is the simpler invariant.
+4. **Clone order is verified.** `createManyAndReturn` is called with `select: { id, name, sourcePlayId, sessionId }` and the result is matched to the input by index. PostgreSQL returns `INSERT … RETURNING` rows in `VALUES` order but Prisma does not document it, so the helper checks `name`, `sourcePlayId`, and `sessionId` at each index and aborts the transaction on a mismatch instead of mis-mapping a drill.
 5. **Task 1 is purely structural.** The spec's "SessionDrillCard shows the drill's name" is a behavior change and lands in Task 8, with `PlayInSession.name`. Task 1 also extracts `SessionDrillList.tsx` and `BookingConflictAlert` (in `VenueBookingFields.tsx`) so the editor gets under 900 lines. `useVenueBooking` lives next to the editor in `components/features/practice-planner/` (`lib/hooks/` holds only app-wide hooks). There were **no** `PracticeSessionEditor` tests on this branch (the hotfix adds one), so Task 1 writes characterization tests before extracting.
 6. **`PlayInSession` also gains `description?: string`.** The drill dialog needs it; without it, forking a library drill would blank its description.
 7. **`updatePlay` rejects session-owned plays** (`sessionId != null`). Otherwise the library edit page (`/practice-planner/library/<id>/edit`) could edit a session's private copy and, via `isTemplate`, break invariant I1.
 8. **`getPlaysByTeam` always filters `sessionId: null`**, not only when `isTemplate: true` is passed. No caller lists session copies.
 9. **Play-data sanitizing moves to `lib/utils/play-data.ts`** as `sanitizePlayDataForWrite`, so `saveSessionDrill` uses the same write hygiene as `createPlay`/`updatePlay`.
 10. **"Also add to library" adds one library copy per dialog opening**, on the first successful save with the box checked, not on every save.
-11. **`deletePlay` returns `{ id, retired: boolean }`.**
+11. **`deletePlay` returns `{ id, detachedSessions: number }`.** The clone logic is factored into `cloneDrillsIntoSessions` (one round trip, a session per copy), shared by `materializeSessionDrills`, `detachLibraryPlay`, and `duplicatePracticeSession`. A session that references the detached play in several rows gets one copy for all of them. If that session is saved later, the helper keeps the first row and clones the rest, as with any repeated owned drill.
+14. **The legacy-reference rule stays, narrowed.** Since no retired rows are created any more, "an unowned play S already references" only matches pre-3a rows saved with `isTemplate=false` through the API. It still lets those sessions save.
 12. **`lib/services/` already exists**, so the helper goes where the spec says. No location deviation.
 13. **Creating a session now redirects to `/practice-planner/<id>/edit`** (was the detail page), as the spec requires for diagram editing.
-
-## Open questions for the product owner (not resolved by this plan)
-
-- **Success criterion vs. no backfill.** "Deleting or editing a library drill never changes … a drill in any session" holds for deletes (retire-on-delete) and for every session saved after this ships. A legacy session that is never re-saved still points at the library row, so **editing** that library drill changes its diagram. Options: accept it (the spec's "two shapes coexist" risk), or have `updatePlay` first fork the old version into each referencing session (copy-on-library-write).
-- **Retired plays are never garbage-collected.** Once the last legacy session that referenced a retired play is re-saved, the retired row stays forever (hidden). This plan leaves them.
-- **`Copy of …` title length.** The plan truncates to 100 characters (the title max). The alternative is to reject, or to drop the prefix for long titles.
 
 ## Review Focus
 
 1. **Autosave racing a save that changes playIds.** An autosave is in flight with library id L for card K; meanwhile the coach saves the drill dialog, which forks owned copy X onto card K. When the autosave returns `K → Y`, card K must keep X, and the follow-up save must send X (Y is cleaned up). Owned by Task 8 (`applySavedPlayIds` keeps a card whose `playId` changed since the save was sent) and Task 9 (editor-level race test with the dialog stubbed).
-2. **Legacy sessions referencing library plays (including plays retired after the reference was made).** The first save after deploy must succeed and convert every drill to an owned copy (I2); a session that never referenced a retired play must not be able to adopt it. Owned by Task 4 (helper classification tests) and Task 5 (action-level I2 test).
-3. **Retire-on-delete.** Deleting a library drill used by any session must keep it in the session and hide it from the library; deleting an unused one must remove it; a concurrent reference (NO ACTION FK, `P2003`) must give a friendly error, not a 500. Owned by Task 3.
+2. **Legacy sessions referencing library plays.** The first save after deploy must succeed and convert every drill to an owned copy (I2); a session must not be able to adopt an unowned non-library play it never referenced. Owned by Task 3 (helper classification tests) and Task 5 (action-level I2 test).
+3. **Detach-on-write.** Editing a library drill that un-resaved sessions still use must leave those sessions' diagrams exactly as they were; deleting it must leave them their own copy and then really delete it; a play used by several sessions gets one copy per session; an unused play is deleted directly; a concurrent reference (NO ACTION FK, `P2003`) gives a friendly error, not a 500. Owned by Task 3 (`detachLibraryPlay` tests) and Task 4 (`updatePlay`/`deletePlay` tests).
 4. **Duplicate copying columns added later** (phase 2b's `runsWithPrevious`). A session-play column added to the schema must be carried by `duplicatePracticeSession` without anyone editing it. Owned by Task 7 (guard test driven by `Prisma.PracticeSessionPlayScalarFieldEnum`).
-5. **Orphan cleanup deleting a drill the dialog just created.** An unreferenced owned play updated within the last 15 minutes must survive cleanup; one that this save dropped, or that is stale, must be deleted. Owned by Task 4 (`deleteOrphanedSessionDrills` filter test) and Task 9 (new-drill flow test).
+5. **Orphan cleanup deleting a drill the dialog just created.** An owned play the session has never referenced must survive any save's cleanup; one that this save dropped must be deleted. Owned by Task 3 (drop-only `deleteOrphanedSessionDrills` tests) and Task 9 (new-drill flow test).
 
 ---
 
@@ -1110,13 +1112,13 @@ with
 
 ```prisma
   // NO ACTION (defense in depth): a play still referenced by a session can't
-  // be deleted — deletePlay retires it instead. Deleting the session still
+  // be deleted — deletePlay detaches the sessions first. Deleting the session still
   // works: its session plays and owned plays go in one statement, and NO
   // ACTION is only checked at the end of the statement.
   play   Play   @relation(fields: [playId], references: [id], onDelete: NoAction)
 ```
 
-In `model Play`, replace `  isTemplate  Boolean  @default(false) // Library plays vs session-specific` with `  isTemplate  Boolean  @default(false) // true = library; false = session-owned (sessionId set) or retired (sessionId null)`, and replace
+In `model Play`, replace `  isTemplate  Boolean  @default(false) // Library plays vs session-specific` with `  isTemplate  Boolean  @default(false) // true = library; false = session-owned (sessionId set)`, and replace
 
 ```prisma
   sessions PracticeSessionPlay[]
@@ -1201,272 +1203,7 @@ Claude-Session: https://claude.ai/code/session_01TqKuhs6SuVkWyirkz3ZdQX"
 
 ---
 
-### Task 3: Retire-on-delete, library filters, and owned-play guard
-
-**Files:**
-- Modify: `lib/actions/plays.ts` (`updatePlay` :163-250, `deletePlay` :252-325, `getPlaysByTeam` where :455-461)
-- Modify: `components/features/practice-planner/PlayLibrary.tsx:836-840` (delete dialog copy)
-- Test: `__tests__/lib/actions/plays-delete.test.ts` (create)
-
-**Interfaces:**
-- Consumes: Task 2 (`Play.sessionId`, NO ACTION FK).
-- Produces: `deletePlay(input): Promise<ActionResult<{ id: string; retired: boolean }>>`; `getPlaysByTeam` never returns plays with `sessionId != null`; `updatePlay` returns `{ success: false, error: "This drill belongs to a practice session. Edit it from that session." }` for owned plays.
-
-- [ ] **Step 1: Write the failing tests**
-
-Create `__tests__/lib/actions/plays-delete.test.ts`:
-
-```ts
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { Prisma } from "@prisma/client";
-
-const { mockPrisma, tx } = vi.hoisted(() => {
-    const tx = {
-        practiceSessionPlay: { count: vi.fn() },
-        play: { update: vi.fn(), delete: vi.fn() },
-    };
-    return {
-        tx,
-        mockPrisma: {
-            $transaction: vi.fn(async (fn: (client: typeof tx) => unknown) => fn(tx)),
-            play: { findUnique: vi.fn(), findMany: vi.fn(), count: vi.fn(), update: vi.fn() },
-        },
-    };
-});
-
-vi.mock("@/lib/db/prisma", () => ({ prisma: mockPrisma }));
-vi.mock("@/lib/auth/session", () => ({
-    requireTeamMember: vi.fn().mockResolvedValue("cuserxxxxxxxxxxxxxxxxxxxx"),
-    requireTeamAdmin: vi.fn().mockResolvedValue("cuserxxxxxxxxxxxxxxxxxxxx"),
-}));
-vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
-
-import { deletePlay, getPlaysByTeam, updatePlay } from "@/lib/actions/plays";
-import { createEmptyPlayData } from "@/lib/utils/play-data";
-
-const TEAM = "cteamxxxxxxxxxxxxxxxxxxxx";
-const PLAY = "cplayxxxxxxxxxxxxxxxxxxxx";
-
-beforeEach(() => {
-    vi.clearAllMocks();
-    mockPrisma.play.findUnique.mockResolvedValue({ teamId: TEAM, sessionId: null });
-});
-
-describe("deletePlay retires plays that sessions still use", () => {
-    it("retires (isTemplate=false) instead of deleting when a session references the play", async () => {
-        tx.practiceSessionPlay.count.mockResolvedValue(2);
-        const result = await deletePlay({ id: PLAY, teamId: TEAM });
-
-        expect(result).toEqual({ success: true, data: { id: PLAY, retired: true } });
-        expect(tx.play.update).toHaveBeenCalledWith({ where: { id: PLAY }, data: { isTemplate: false } });
-        expect(tx.play.delete).not.toHaveBeenCalled();
-    });
-
-    it("deletes an unreferenced play", async () => {
-        tx.practiceSessionPlay.count.mockResolvedValue(0);
-        const result = await deletePlay({ id: PLAY, teamId: TEAM });
-
-        expect(result).toEqual({ success: true, data: { id: PLAY, retired: false } });
-        expect(tx.play.delete).toHaveBeenCalledWith({ where: { id: PLAY } });
-    });
-
-    it("maps a racing reference (FK P2003) to a friendly error", async () => {
-        tx.practiceSessionPlay.count.mockResolvedValue(0);
-        tx.play.delete.mockRejectedValue(
-            new Prisma.PrismaClientKnownRequestError("fk", { code: "P2003", clientVersion: "7.10.0" }),
-        );
-        const result = await deletePlay({ id: PLAY, teamId: TEAM });
-        expect(result).toEqual({ success: false, error: "This drill is still used by a session" });
-    });
-});
-
-describe("library listing", () => {
-    it("never lists session-owned plays", async () => {
-        mockPrisma.play.findMany.mockResolvedValue([]);
-        mockPrisma.play.count.mockResolvedValue(0);
-        await getPlaysByTeam({ teamId: TEAM, isTemplate: true });
-
-        expect(mockPrisma.play.findMany.mock.calls[0][0].where).toMatchObject({
-            teamId: TEAM,
-            sessionId: null,
-            isTemplate: true,
-        });
-    });
-});
-
-describe("updatePlay", () => {
-    it("refuses to edit a session's private copy from the library", async () => {
-        mockPrisma.play.findUnique.mockResolvedValue({ teamId: TEAM, sessionId: "csessionxxxxxxxxxxxxxxxxx" });
-        const result = await updatePlay({ id: PLAY, teamId: TEAM, name: "Drill", playData: createEmptyPlayData() });
-
-        expect(result).toEqual({
-            success: false,
-            error: "This drill belongs to a practice session. Edit it from that session.",
-        });
-        expect(mockPrisma.play.update).not.toHaveBeenCalled();
-    });
-});
-```
-
-- [ ] **Step 2: Run them to verify they fail**
-
-Run: `bun run test __tests__/lib/actions/plays-delete.test.ts`
-Expected: FAIL (`deletePlay` calls `prisma.play.delete`, there is no `retired`, the where clause has no `sessionId`, `updatePlay` updates the owned play).
-
-- [ ] **Step 3: Implement**
-
-In `lib/actions/plays.ts`:
-
-1. Change `import type { Prisma } from "@prisma/client";` to `import { Prisma } from "@prisma/client";`.
-
-2. In `updatePlay`, change the `existingPlay` select to `select: { teamId: true, sessionId: true },` and, directly after the `if (existingPlay.teamId !== validated.teamId) { … }` block, add:
-
-```ts
-        // A session's private copy is edited from its session (SessionDrillDialog),
-        // never from the library editor, which would also let it become a template.
-        if (existingPlay.sessionId) {
-            return {
-                success: false,
-                error: "This drill belongs to a practice session. Edit it from that session.",
-            };
-        }
-```
-
-3. Replace `deletePlay` (the JSDoc and function, :252-325) with:
-
-```ts
-/**
- * Delete a play from the library.
- * Only ADMIN role can delete plays.
- * A play that any practice session still references is retired
- * (isTemplate=false: hidden from the library) instead of deleted, so practice
- * history never loses a drill. PracticeSessionPlay.play is ON DELETE NO
- * ACTION, so a reference that appears between the count and the delete
- * fails the delete (P2003) instead of removing the drill from that session.
- */
-export async function deletePlay(
-    input: DeletePlayInput
-): Promise<ActionResult<{ id: string; retired: boolean }>> {
-    try {
-        const validated = deletePlaySchema.parse(input);
-
-        const existingPlay = await prisma.play.findUnique({
-            where: { id: validated.id },
-            select: { teamId: true },
-        });
-
-        if (!existingPlay) {
-            return {
-                success: false,
-                error: "Play not found",
-            };
-        }
-
-        // Authorize against the play's actual teamId, not user-provided input
-        await requireTeamAdmin(existingPlay.teamId);
-
-        if (existingPlay.teamId !== validated.teamId) {
-            return {
-                success: false,
-                error: "Unauthorized: Play does not belong to this team",
-            };
-        }
-
-        const retired = await prisma.$transaction(async (tx) => {
-            const references = await tx.practiceSessionPlay.count({
-                where: { playId: validated.id },
-            });
-            if (references > 0) {
-                await tx.play.update({
-                    where: { id: validated.id },
-                    data: { isTemplate: false },
-                });
-                return true;
-            }
-            await tx.play.delete({ where: { id: validated.id } });
-            return false;
-        });
-
-        revalidatePath("/practice-planner");
-        revalidatePath("/practice-planner/library");
-
-        return {
-            success: true,
-            data: { id: validated.id, retired },
-        };
-    } catch (error) {
-        if (error instanceof z.ZodError) {
-            return {
-                success: false,
-                error: "Invalid input",
-                details: error.issues,
-            };
-        }
-
-        if (
-            error instanceof Prisma.PrismaClientKnownRequestError
-            && error.code === "P2003"
-        ) {
-            return {
-                success: false,
-                error: "This drill is still used by a session",
-            };
-        }
-
-        if (error instanceof Error && error.message.includes("Unauthorized")) {
-            return {
-                success: false,
-                error: error.message,
-            };
-        }
-
-        console.error("Error deleting play:", error);
-        return {
-            success: false,
-            error: "Failed to delete play. Please try again.",
-        };
-    }
-}
-```
-
-4. In `getPlaysByTeam`, change the initial where to:
-
-```ts
-        const where: Prisma.PlayWhereInput = {
-            teamId: validated.teamId,
-            // Session-owned copies never appear in any listing; retired plays
-            // are excluded by the isTemplate: true filter the library passes.
-            sessionId: null,
-        };
-```
-
-In `components/features/practice-planner/PlayLibrary.tsx` (:836-840), replace the dialog text with:
-
-```tsx
-                    <DialogContentText id="delete-dialog-description">
-                        Are you sure you want to delete this play from your library? This
-                        action cannot be undone. Sessions that use this drill keep their copy.
-                    </DialogContentText>
-```
-
-- [ ] **Step 4: Run the tests**
-
-Run: `bun run test __tests__/lib/actions/plays-delete.test.ts __tests__/lib/actions/plays-write.test.ts __tests__/lib/actions/plays-read.test.ts __tests__/components/features/practice-planner/PlayLibrary.test.tsx`
-Expected: PASS. Run `bun run type-check` — expected: no errors (`PlayLibrary` reads only `result.success` / `result.error` from `deletePlay`).
-Run: `grep -n "remove this play from all" -r components __tests__` — expected: no output.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add lib/actions/plays.ts components/features/practice-planner/PlayLibrary.tsx __tests__/lib/actions/plays-delete.test.ts
-git commit -m "feat(practice-planner): retire library drills that sessions use instead of deleting them
-
-Claude-Session: https://claude.ai/code/session_01TqKuhs6SuVkWyirkz3ZdQX"
-```
-
----
-
-### Task 4: `materializeSessionDrills` and orphan cleanup service
+### Task 3: Session-drill service — clone, materialize, drop-only cleanup, detach
 
 **Files:**
 - Create: `lib/services/practice-session-drills.ts`
@@ -1481,10 +1218,11 @@ Claude-Session: https://claude.ai/code/session_01TqKuhs6SuVkWyirkz3ZdQX"
   - `type SessionDrillMapping = { clientKey: string; sequence: number; playId: string }`
   - `type CloneSource = { id: string; name: string; description: string | null; thumbnail: string | null; playData: Prisma.JsonValue; sourcePlayId: string | null }`
   - `const CLONE_SOURCE_SELECT` (Prisma select for a `CloneSource` plus `isTemplate`, `sessionId`)
-  - `const ORPHAN_GRACE_MS = 15 * 60_000`
-  - `cloneDrillsIntoSession(tx: Prisma.TransactionClient, input: { sessionId: string; teamId: string; userId: string; sources: CloneSource[] }): Promise<string[]>` (new ids, same order as `sources`)
+  - `cloneDrillsIntoSessions(tx: Prisma.TransactionClient, input: { teamId: string; userId: string; copies: Array<{ sessionId: string; source: CloneSource }> }): Promise<string[]>` (new ids, same order as `copies`; one round trip)
+  - `cloneDrillsIntoSession(tx, input: { sessionId: string; teamId: string; userId: string; sources: CloneSource[] }): Promise<string[]>` (single-session convenience wrapper)
   - `materializeSessionDrills(tx, input: { sessionId: string; teamId: string; userId: string; items: SessionDrillItem[] }): Promise<{ mapping: SessionDrillMapping[]; previousPlayIds: string[] }>` (mapping in `items` order)
-  - `deleteOrphanedSessionDrills(tx, input: { sessionId: string; previousPlayIds: string[]; now?: Date }): Promise<void>`
+  - `deleteOrphanedSessionDrills(tx, input: { sessionId: string; previousPlayIds: string[] }): Promise<void>` — drop-only (see Spec deviation 3)
+  - `detachLibraryPlay(tx, input: { playId: string; teamId: string; userId: string }): Promise<number>` — gives every session that still references library play `playId` its own copy (one per session), repoints that session's rows to it, and returns the number of sessions detached
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1494,10 +1232,10 @@ Create `__tests__/lib/services/practice-session-drills.test.ts`:
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Prisma } from "@prisma/client";
 import {
-    ORPHAN_GRACE_MS,
     SESSION_DRILL_REJECTED_MESSAGE,
     SessionDrillError,
     deleteOrphanedSessionDrills,
+    detachLibraryPlay,
     materializeSessionDrills,
 } from "@/lib/services/practice-session-drills";
 
@@ -1531,18 +1269,28 @@ function play(id: string, overrides: Partial<Row> = {}): Row {
     };
 }
 
-function fakeTx(plays: Row[], referencedPlayIds: string[] = []) {
+/** referencing: the session-play rows ({ sessionId, playId }) that exist. */
+function fakeTx(plays: Row[], referencing: Array<{ sessionId: string; playId: string }> = []) {
     let next = 0;
     const mocks = {
         practiceSessionPlay: {
-            findMany: vi.fn().mockResolvedValue(referencedPlayIds.map((playId) => ({ playId }))),
+            findMany: vi.fn(async ({ where }: { where: { sessionId?: string; playId?: string } }) =>
+                referencing.filter((r) =>
+                    (where.sessionId === undefined || r.sessionId === where.sessionId)
+                    && (where.playId === undefined || r.playId === where.playId))),
+            updateMany: vi.fn().mockResolvedValue({ count: 1 }),
         },
         play: {
             // The real query filters by teamId; rows of other teams are simply absent here.
             findMany: vi.fn(async ({ where }: { where: { id: { in: string[] } } }) =>
                 plays.filter((p) => where.id.in.includes(p.id))),
-            createManyAndReturn: vi.fn(async ({ data }: { data: Array<{ name: string; sourcePlayId: string | null }> }) =>
-                data.map((row) => ({ id: `clone-${next++}`, name: row.name, sourcePlayId: row.sourcePlayId }))),
+            findUniqueOrThrow: vi.fn(async ({ where }: { where: { id: string } }) => {
+                const row = plays.find((p) => p.id === where.id);
+                if (!row) throw new Error("not found");
+                return row;
+            }),
+            createManyAndReturn: vi.fn(async ({ data }: { data: Array<{ name: string; sourcePlayId: string | null; sessionId: string }> }) =>
+                data.map((row) => ({ id: `clone-${next++}`, name: row.name, sourcePlayId: row.sourcePlayId, sessionId: row.sessionId }))),
             deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
         },
     };
@@ -1552,6 +1300,8 @@ function fakeTx(plays: Row[], referencedPlayIds: string[] = []) {
 function items(...ids: string[]) {
     return ids.map((playId, sequence) => ({ playId, clientKey: `k${sequence}`, sequence }));
 }
+
+const refs = (...playIds: string[]) => playIds.map((playId) => ({ sessionId: SESSION, playId }));
 
 describe("materializeSessionDrills", () => {
     beforeEach(() => vi.clearAllMocks());
@@ -1592,18 +1342,18 @@ describe("materializeSessionDrills", () => {
         expect(mocks.play.createManyAndReturn.mock.calls[0][0].data[0].sourcePlayId).toBe("lib9");
     });
 
-    it("clones a legacy reference to a play retired after the session used it", async () => {
-        const { tx } = fakeTx([play("ret", { isTemplate: false })], ["ret"]);
-        const result = await materializeSessionDrills(tx, { sessionId: SESSION, teamId: TEAM, userId: USER, items: items("ret") });
+    it("clones an unowned non-library play this session already references (pre-3a data)", async () => {
+        const { tx } = fakeTx([play("old", { isTemplate: false })], refs("old"));
+        const result = await materializeSessionDrills(tx, { sessionId: SESSION, teamId: TEAM, userId: USER, items: items("old") });
 
         expect(result.mapping[0].playId).toBe("clone-0");
-        expect(result.previousPlayIds).toEqual(["ret"]);
+        expect(result.previousPlayIds).toEqual(["old"]);
     });
 
-    it("rejects a retired play this session never referenced", async () => {
-        const { mocks, tx } = fakeTx([play("ret", { isTemplate: false })]);
+    it("rejects an unowned non-library play this session never referenced", async () => {
+        const { mocks, tx } = fakeTx([play("old", { isTemplate: false })]);
         await expect(
-            materializeSessionDrills(tx, { sessionId: SESSION, teamId: TEAM, userId: USER, items: items("ret") }),
+            materializeSessionDrills(tx, { sessionId: SESSION, teamId: TEAM, userId: USER, items: items("old") }),
         ).rejects.toThrow(SESSION_DRILL_REJECTED_MESSAGE);
         expect(mocks.play.createManyAndReturn).not.toHaveBeenCalled();
     });
@@ -1645,8 +1395,8 @@ describe("materializeSessionDrills", () => {
     it("aborts instead of mis-mapping when clones come back out of order", async () => {
         const { mocks, tx } = fakeTx([play("a"), play("b")]);
         mocks.play.createManyAndReturn.mockResolvedValueOnce([
-            { id: "x", name: "Drill b", sourcePlayId: "b" },
-            { id: "y", name: "Drill a", sourcePlayId: "a" },
+            { id: "x", name: "Drill b", sourcePlayId: "b", sessionId: SESSION },
+            { id: "y", name: "Drill a", sourcePlayId: "a", sessionId: SESSION },
         ]);
         await expect(
             materializeSessionDrills(tx, { sessionId: SESSION, teamId: TEAM, userId: USER, items: items("a", "b") }),
@@ -1654,29 +1404,55 @@ describe("materializeSessionDrills", () => {
     });
 
     it("reads nothing but the previous references for an empty payload", async () => {
-        const { mocks, tx } = fakeTx([], ["old"]);
+        const { mocks, tx } = fakeTx([], refs("old"));
         const result = await materializeSessionDrills(tx, { sessionId: SESSION, teamId: TEAM, userId: USER, items: [] });
         expect(result).toEqual({ mapping: [], previousPlayIds: ["old"] });
         expect(mocks.play.findMany).not.toHaveBeenCalled();
     });
 });
 
-describe("deleteOrphanedSessionDrills", () => {
-    it("deletes unreferenced owned plays this save dropped, or that are stale; keeps fresh ones", async () => {
+describe("deleteOrphanedSessionDrills (drop-only)", () => {
+    it("deletes only owned plays this save dropped that nothing references", async () => {
         const { mocks, tx } = fakeTx([]);
-        const now = new Date("2026-10-03T12:00:00.000Z");
-        await deleteOrphanedSessionDrills(tx, { sessionId: SESSION, previousPlayIds: ["dropped"], now });
+        await deleteOrphanedSessionDrills(tx, { sessionId: SESSION, previousPlayIds: ["dropped", "kept"] });
 
         expect(mocks.play.deleteMany).toHaveBeenCalledWith({
-            where: {
-                sessionId: SESSION,
-                sessions: { none: {} },
-                OR: [
-                    { id: { in: ["dropped"] } },
-                    { updatedAt: { lt: new Date(now.getTime() - ORPHAN_GRACE_MS) } },
-                ],
-            },
+            where: { sessionId: SESSION, id: { in: ["dropped", "kept"] }, sessions: { none: {} } },
         });
+    });
+
+    it("never touches a drill the session has not referenced yet (e.g. one the dialog just created)", async () => {
+        const { mocks, tx } = fakeTx([]);
+        await deleteOrphanedSessionDrills(tx, { sessionId: SESSION, previousPlayIds: [] });
+        expect(mocks.play.deleteMany).not.toHaveBeenCalled();
+    });
+});
+
+describe("detachLibraryPlay", () => {
+    const LIB = play("lib", { playData: { players: [{ id: "old-diagram" }] } });
+
+    it("does nothing for a play no session references", async () => {
+        const { mocks, tx } = fakeTx([LIB]);
+        await expect(detachLibraryPlay(tx, { playId: "lib", teamId: TEAM, userId: USER })).resolves.toBe(0);
+        expect(mocks.play.createManyAndReturn).not.toHaveBeenCalled();
+        expect(mocks.practiceSessionPlay.updateMany).not.toHaveBeenCalled();
+    });
+
+    it("gives each referencing session one copy of the current content and repoints its rows", async () => {
+        const { mocks, tx } = fakeTx([LIB], [
+            { sessionId: "sA", playId: "lib" },
+            { sessionId: "sA", playId: "lib" },
+            { sessionId: "sB", playId: "lib" },
+        ]);
+        await expect(detachLibraryPlay(tx, { playId: "lib", teamId: TEAM, userId: USER })).resolves.toBe(2);
+
+        const data = mocks.play.createManyAndReturn.mock.calls[0][0].data;
+        expect(data.map((d: { sessionId: string }) => d.sessionId)).toEqual(["sA", "sB"]);
+        expect(data[0]).toMatchObject({ isTemplate: false, sourcePlayId: "lib", playData: { players: [{ id: "old-diagram" }] } });
+        expect(mocks.practiceSessionPlay.updateMany.mock.calls).toEqual([
+            [{ where: { sessionId: "sA", playId: "lib" }, data: { playId: "clone-0" } }],
+            [{ where: { sessionId: "sB", playId: "lib" }, data: { playId: "clone-1" } }],
+        ]);
     });
 });
 ```
@@ -1735,29 +1511,23 @@ export const CLONE_SOURCE_SELECT = {
     sessionId: true,
 } as const;
 
-/**
- * An unreferenced owned play younger than this survives cleanup: the drill
- * dialog may have just created it, and the editor's next save will reference it.
- */
-export const ORPHAN_GRACE_MS = 15 * 60_000;
-
 /** A copy's provenance is the library play it ultimately came from. */
 function provenanceOf(source: CloneSource): string {
     return source.sourcePlayId ?? source.id;
 }
 
 /**
- * Creates one owned copy per source, in one round trip. Returns the new ids
- * in `sources` order.
+ * Creates one owned copy per entry, each in its own session, in one round
+ * trip. Returns the new ids in `copies` order.
  */
-export async function cloneDrillsIntoSession(
+export async function cloneDrillsIntoSessions(
     tx: Prisma.TransactionClient,
-    input: { sessionId: string; teamId: string; userId: string; sources: CloneSource[] },
+    input: { teamId: string; userId: string; copies: Array<{ sessionId: string; source: CloneSource }> },
 ): Promise<string[]> {
-    if (input.sources.length === 0) return [];
+    if (input.copies.length === 0) return [];
 
     const created = await tx.play.createManyAndReturn({
-        data: input.sources.map((source) => ({
+        data: input.copies.map(({ sessionId, source }) => ({
             name: source.name,
             description: source.description,
             thumbnail: source.thumbnail,
@@ -1765,20 +1535,21 @@ export async function cloneDrillsIntoSession(
             isTemplate: false,
             teamId: input.teamId,
             createdById: input.userId,
-            sessionId: input.sessionId,
+            sessionId,
             sourcePlayId: provenanceOf(source),
         })),
-        select: { id: true, name: true, sourcePlayId: true },
+        select: { id: true, name: true, sourcePlayId: true, sessionId: true },
     });
 
     // PostgreSQL returns INSERT … RETURNING rows in VALUES order, but Prisma
     // does not document it: verify, and abort rather than mis-map a drill.
     const inOrder =
-        created.length === input.sources.length
+        created.length === input.copies.length
         && created.every(
             (row, index) =>
-                row.name === input.sources[index].name
-                && row.sourcePlayId === provenanceOf(input.sources[index]),
+                row.name === input.copies[index].source.name
+                && row.sourcePlayId === provenanceOf(input.copies[index].source)
+                && row.sessionId === input.copies[index].sessionId,
         );
     if (!inOrder) {
         throw new Error("Drill copies came back out of order");
@@ -1786,12 +1557,24 @@ export async function cloneDrillsIntoSession(
     return created.map((row) => row.id);
 }
 
+/** cloneDrillsIntoSessions for a single session. */
+export async function cloneDrillsIntoSession(
+    tx: Prisma.TransactionClient,
+    input: { sessionId: string; teamId: string; userId: string; sources: CloneSource[] },
+): Promise<string[]> {
+    return cloneDrillsIntoSessions(tx, {
+        teamId: input.teamId,
+        userId: input.userId,
+        copies: input.sources.map((source) => ({ sessionId: input.sessionId, source })),
+    });
+}
+
 /**
  * Resolves a save payload to plays session S owns:
  * - owned by S: kept (a second occurrence of the same id is cloned);
- * - a library play, or a legacy play S already references: cloned;
+ * - a library play, or an unowned play S already references (pre-3a data): cloned;
  * - anything else (another session's copy, another team's play, a missing
- *   play, a retired play S never referenced): SessionDrillError.
+ *   play, an unowned non-library play S never referenced): SessionDrillError.
  *
  * Must run BEFORE the caller deletes S's session plays: it reads them to know
  * the legacy references. Returns the mapping in `items` order and the play
@@ -1857,33 +1640,68 @@ export async function materializeSessionDrills(
 }
 
 /**
- * After S's session plays are rewritten: deletes S's owned plays that no
- * session play references, if S referenced them before this save or they
- * have not been touched for ORPHAN_GRACE_MS. Fresh unreferenced copies are
- * kept: the drill dialog may have just created one.
+ * After S's session plays are rewritten: deletes owned plays that S
+ * referenced before this save and that no session play references now.
+ * Drop-only by design: a copy S has never referenced (one the drill dialog
+ * just created, not yet sent by the editor) is never deleted here, so an
+ * autosave already in flight cannot remove it. Never-referenced copies go
+ * with the session (ON DELETE CASCADE).
  */
 export async function deleteOrphanedSessionDrills(
     tx: Prisma.TransactionClient,
-    input: { sessionId: string; previousPlayIds: string[]; now?: Date },
+    input: { sessionId: string; previousPlayIds: string[] },
 ): Promise<void> {
-    const cutoff = new Date((input.now ?? new Date()).getTime() - ORPHAN_GRACE_MS);
+    if (input.previousPlayIds.length === 0) return;
     await tx.play.deleteMany({
         where: {
             sessionId: input.sessionId,
+            id: { in: input.previousPlayIds },
             sessions: { none: {} },
-            OR: [
-                { id: { in: input.previousPlayIds } },
-                { updatedAt: { lt: cutoff } },
-            ],
         },
     });
+}
+
+/**
+ * Detach-on-write: before a library play is updated or deleted, every
+ * session whose rows still reference it (sessions not re-saved since 3a)
+ * gets its own copy of the CURRENT content — one per session — and its rows
+ * are repointed to that copy. Library edits and deletes then never reach a
+ * session. Returns the number of sessions detached.
+ */
+export async function detachLibraryPlay(
+    tx: Prisma.TransactionClient,
+    input: { playId: string; teamId: string; userId: string },
+): Promise<number> {
+    const rows = await tx.practiceSessionPlay.findMany({
+        where: { playId: input.playId },
+        select: { sessionId: true },
+    });
+    const sessionIds = [...new Set(rows.map((row) => row.sessionId))];
+    if (sessionIds.length === 0) return 0;
+
+    const source = await tx.play.findUniqueOrThrow({
+        where: { id: input.playId },
+        select: CLONE_SOURCE_SELECT,
+    });
+    const copyIds = await cloneDrillsIntoSessions(tx, {
+        teamId: input.teamId,
+        userId: input.userId,
+        copies: sessionIds.map((sessionId) => ({ sessionId, source })),
+    });
+    for (const [index, sessionId] of sessionIds.entries()) {
+        await tx.practiceSessionPlay.updateMany({
+            where: { sessionId, playId: input.playId },
+            data: { playId: copyIds[index] },
+        });
+    }
+    return sessionIds.length;
 }
 ```
 
 - [ ] **Step 4: Run the tests and type-check**
 
 Run: `bun run test __tests__/lib/services/practice-session-drills.test.ts`
-Expected: PASS (11 tests).
+Expected: PASS (14 tests).
 Run: `bun run type-check`
 Expected: no errors.
 
@@ -1891,7 +1709,357 @@ Expected: no errors.
 
 ```bash
 git add lib/services/practice-session-drills.ts __tests__/lib/services/practice-session-drills.test.ts
-git commit -m "feat(practice-planner): materialize session drills as owned copies
+git commit -m "feat(practice-planner): session-drill service: owned copies, drop-only cleanup, detach
+
+Claude-Session: https://claude.ai/code/session_01TqKuhs6SuVkWyirkz3ZdQX"
+```
+
+---
+
+### Task 4: Detach-on-write for library edits and deletes, library filters, owned-play guard
+
+**Files:**
+- Modify: `lib/actions/plays.ts` (`updatePlay` :163-250, `deletePlay` :252-325, `getPlaysByTeam` where :455-461)
+- Modify: `components/features/practice-planner/PlayLibrary.tsx:836-840` (delete dialog copy)
+- Test: `__tests__/lib/actions/plays-detach.test.ts` (create)
+
+**Interfaces:**
+- Consumes: Task 2 (`Play.sessionId`, NO ACTION FK), Task 3 (`detachLibraryPlay`).
+- Produces:
+  - `updatePlay` detaches referencing sessions, then updates, in one transaction (return shape unchanged)
+  - `deletePlay(input): Promise<ActionResult<{ id: string; detachedSessions: number }>>` — detaches, then hard-deletes, in one transaction; `P2003` → `This drill is still used by a session`
+  - `getPlaysByTeam` never returns plays with `sessionId != null`
+  - `updatePlay` returns `{ success: false, error: "This drill belongs to a practice session. Edit it from that session." }` for owned plays
+
+- [ ] **Step 1: Write the failing tests**
+
+Create `__tests__/lib/actions/plays-detach.test.ts`:
+
+```ts
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { Prisma } from "@prisma/client";
+
+const { mockPrisma, tx } = vi.hoisted(() => {
+    const tx = {
+        practiceSessionPlay: { findMany: vi.fn(), updateMany: vi.fn() },
+        play: {
+            findUniqueOrThrow: vi.fn(),
+            createManyAndReturn: vi.fn(),
+            update: vi.fn(),
+            delete: vi.fn(),
+        },
+    };
+    return {
+        tx,
+        mockPrisma: {
+            $transaction: vi.fn(async (fn: (client: typeof tx) => unknown) => fn(tx)),
+            play: { findUnique: vi.fn(), findMany: vi.fn(), count: vi.fn(), update: tx.play.update },
+        },
+    };
+});
+
+vi.mock("@/lib/db/prisma", () => ({ prisma: mockPrisma }));
+vi.mock("@/lib/auth/session", () => ({
+    requireTeamMember: vi.fn().mockResolvedValue("cuserxxxxxxxxxxxxxxxxxxxx"),
+    requireTeamAdmin: vi.fn().mockResolvedValue("cuserxxxxxxxxxxxxxxxxxxxx"),
+}));
+vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+
+import { deletePlay, getPlaysByTeam, updatePlay } from "@/lib/actions/plays";
+import { createEmptyPlayData } from "@/lib/utils/play-data";
+
+const TEAM = "cteamxxxxxxxxxxxxxxxxxxxx";
+const PLAY = "cplayxxxxxxxxxxxxxxxxxxxx";
+const OLD_DIAGRAM = { version: 2, players: [{ id: "old" }], drawings: [], equipment: [], annotations: [] };
+
+function referencedBy(...sessionIds: string[]) {
+    tx.practiceSessionPlay.findMany.mockResolvedValue(sessionIds.map((sessionId) => ({ sessionId })));
+}
+
+beforeEach(() => {
+    vi.clearAllMocks();
+    mockPrisma.play.findUnique.mockResolvedValue({ teamId: TEAM, sessionId: null });
+    referencedBy();
+    tx.play.findUniqueOrThrow.mockResolvedValue({
+        id: PLAY, name: "Breakout", description: null, thumbnail: null, playData: OLD_DIAGRAM,
+        sourcePlayId: null, isTemplate: true, sessionId: null,
+    });
+    tx.play.createManyAndReturn.mockImplementation(async ({ data }: { data: Array<{ name: string; sourcePlayId: string; sessionId: string }> }) =>
+        data.map((d, i) => ({ id: `ccopy${i}xxxxxxxxxxxxxxxxxxx`, name: d.name, sourcePlayId: d.sourcePlayId, sessionId: d.sessionId })));
+    tx.practiceSessionPlay.updateMany.mockResolvedValue({ count: 1 });
+    tx.play.update.mockResolvedValue({ id: PLAY, name: "Breakout v2", isTemplate: true });
+    tx.play.delete.mockResolvedValue({ id: PLAY });
+});
+
+describe("updatePlay detaches sessions before editing a library drill", () => {
+    it("copies the OLD diagram into each referencing session, repoints it, then updates the library row", async () => {
+        referencedBy("csessionaxxxxxxxxxxxxxxxx");
+        const result = await updatePlay({ id: PLAY, teamId: TEAM, name: "Breakout v2", playData: createEmptyPlayData() });
+
+        expect(result.success).toBe(true);
+        const copy = tx.play.createManyAndReturn.mock.calls[0][0].data[0];
+        expect(copy).toMatchObject({ sessionId: "csessionaxxxxxxxxxxxxxxxx", playData: OLD_DIAGRAM, sourcePlayId: PLAY, isTemplate: false });
+        expect(tx.practiceSessionPlay.updateMany).toHaveBeenCalledWith({
+            where: { sessionId: "csessionaxxxxxxxxxxxxxxxx", playId: PLAY },
+            data: { playId: "ccopy0xxxxxxxxxxxxxxxxxxx" },
+        });
+        expect(tx.play.update.mock.invocationCallOrder[0])
+            .toBeGreaterThan(tx.practiceSessionPlay.updateMany.mock.invocationCallOrder[0]);
+    });
+
+    it("refuses to edit a session's private copy from the library", async () => {
+        mockPrisma.play.findUnique.mockResolvedValue({ teamId: TEAM, sessionId: "csessionxxxxxxxxxxxxxxxxx" });
+        const result = await updatePlay({ id: PLAY, teamId: TEAM, name: "Drill", playData: createEmptyPlayData() });
+
+        expect(result).toEqual({
+            success: false,
+            error: "This drill belongs to a practice session. Edit it from that session.",
+        });
+        expect(tx.play.update).not.toHaveBeenCalled();
+        expect(tx.play.createManyAndReturn).not.toHaveBeenCalled();
+    });
+});
+
+describe("deletePlay detaches, then hard-deletes", () => {
+    it("detaches a referenced play, then deletes it", async () => {
+        referencedBy("csessionaxxxxxxxxxxxxxxxx");
+        const result = await deletePlay({ id: PLAY, teamId: TEAM });
+
+        expect(result).toEqual({ success: true, data: { id: PLAY, detachedSessions: 1 } });
+        expect(tx.play.delete).toHaveBeenCalledWith({ where: { id: PLAY } });
+        expect(tx.play.delete.mock.invocationCallOrder[0])
+            .toBeGreaterThan(tx.practiceSessionPlay.updateMany.mock.invocationCallOrder[0]);
+    });
+
+    it("deletes an unreferenced play directly", async () => {
+        const result = await deletePlay({ id: PLAY, teamId: TEAM });
+
+        expect(result).toEqual({ success: true, data: { id: PLAY, detachedSessions: 0 } });
+        expect(tx.play.createManyAndReturn).not.toHaveBeenCalled();
+        expect(tx.play.delete).toHaveBeenCalledWith({ where: { id: PLAY } });
+    });
+
+    it("gives each referencing session its own copy (one per session)", async () => {
+        referencedBy("csessionaxxxxxxxxxxxxxxxx", "csessionaxxxxxxxxxxxxxxxx", "csessionbxxxxxxxxxxxxxxxx");
+        const result = await deletePlay({ id: PLAY, teamId: TEAM });
+
+        expect(result).toEqual({ success: true, data: { id: PLAY, detachedSessions: 2 } });
+        const sessions = tx.play.createManyAndReturn.mock.calls[0][0].data.map((d: { sessionId: string }) => d.sessionId);
+        expect(sessions).toEqual(["csessionaxxxxxxxxxxxxxxxx", "csessionbxxxxxxxxxxxxxxxx"]);
+        expect(tx.practiceSessionPlay.updateMany).toHaveBeenCalledTimes(2);
+    });
+
+    it("maps a racing reference (FK P2003) to a friendly error", async () => {
+        tx.play.delete.mockRejectedValue(
+            new Prisma.PrismaClientKnownRequestError("fk", { code: "P2003", clientVersion: "7.10.0" }),
+        );
+        const result = await deletePlay({ id: PLAY, teamId: TEAM });
+        expect(result).toEqual({ success: false, error: "This drill is still used by a session" });
+    });
+});
+
+describe("library listing", () => {
+    it("never lists session-owned plays", async () => {
+        mockPrisma.play.findMany.mockResolvedValue([]);
+        mockPrisma.play.count.mockResolvedValue(0);
+        await getPlaysByTeam({ teamId: TEAM, isTemplate: true });
+
+        expect(mockPrisma.play.findMany.mock.calls[0][0].where).toMatchObject({
+            teamId: TEAM,
+            sessionId: null,
+            isTemplate: true,
+        });
+    });
+});
+```
+
+- [ ] **Step 2: Run them to verify they fail**
+
+Run: `bun run test __tests__/lib/actions/plays-detach.test.ts`
+Expected: FAIL (no detach, `prisma.play.delete` outside a transaction, no `detachedSessions`, no `sessionId` filter, owned play updated).
+
+- [ ] **Step 3: Implement**
+
+In `lib/actions/plays.ts`:
+
+1. Change `import type { Prisma } from "@prisma/client";` to `import { Prisma } from "@prisma/client";` and add `import { detachLibraryPlay } from "@/lib/services/practice-session-drills";`.
+
+2. Add a shared P2003 mapper after `sanitizeAndRevalidate`:
+
+```ts
+/** NO ACTION FK on practice_session_plays.playId: a session referenced the play mid-write. */
+function isStillReferenced(error: unknown): boolean {
+    return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003";
+}
+```
+
+3. In `updatePlay`: keep `const userId = await requireTeamAdmin(existingPlay.teamId);` (capture the returned id; today the result is discarded), change the `existingPlay` select to `select: { teamId: true, sessionId: true },`, and directly after the `if (existingPlay.teamId !== validated.teamId) { … }` block add:
+
+```ts
+        // A session's private copy is edited from its session (SessionDrillDialog),
+        // never from the library editor, which would also let it become a template.
+        if (existingPlay.sessionId) {
+            return {
+                success: false,
+                error: "This drill belongs to a practice session. Edit it from that session.",
+            };
+        }
+```
+
+Then replace `const play = await prisma.play.update({ … });` with:
+
+```ts
+        // Detach-on-write: sessions still pointing at this library row keep
+        // the version they were planned with.
+        const play = await prisma.$transaction(async (tx) => {
+            await detachLibraryPlay(tx, { playId: validated.id, teamId: existingPlay.teamId, userId });
+            return tx.play.update({
+                where: { id: validated.id },
+                data: {
+                    name: validated.name,
+                    description: validated.description || null,
+                    thumbnail: validated.thumbnail || null,
+                    playData: sanitizedPlayData as unknown as Prisma.InputJsonValue,
+                    ...(validated.isTemplate !== undefined && { isTemplate: validated.isTemplate }),
+                },
+                select: {
+                    id: true,
+                    name: true,
+                    isTemplate: true,
+                },
+            });
+        });
+```
+
+and in its `catch`, before the `"Unauthorized"` branch, add:
+
+```ts
+        if (isStillReferenced(error)) {
+            return { success: false, error: "This drill is still used by a session" };
+        }
+```
+
+4. Replace `deletePlay` (the JSDoc and function, :252-325) with:
+
+```ts
+/**
+ * Delete a play from the library.
+ * Only ADMIN role can delete plays.
+ * Detach-on-write: every session that still references the play first gets
+ * its own copy (one per session) and is repointed to it; then the library
+ * row is really deleted — all in one transaction. PracticeSessionPlay.play is
+ * ON DELETE NO ACTION, so a reference that appears mid-transaction fails the
+ * delete (P2003) instead of removing the drill from that session.
+ */
+export async function deletePlay(
+    input: DeletePlayInput
+): Promise<ActionResult<{ id: string; detachedSessions: number }>> {
+    try {
+        const validated = deletePlaySchema.parse(input);
+
+        const existingPlay = await prisma.play.findUnique({
+            where: { id: validated.id },
+            select: { teamId: true },
+        });
+
+        if (!existingPlay) {
+            return {
+                success: false,
+                error: "Play not found",
+            };
+        }
+
+        // Authorize against the play's actual teamId, not user-provided input
+        const userId = await requireTeamAdmin(existingPlay.teamId);
+
+        if (existingPlay.teamId !== validated.teamId) {
+            return {
+                success: false,
+                error: "Unauthorized: Play does not belong to this team",
+            };
+        }
+
+        const detachedSessions = await prisma.$transaction(async (tx) => {
+            const detached = await detachLibraryPlay(tx, {
+                playId: validated.id,
+                teamId: existingPlay.teamId,
+                userId,
+            });
+            await tx.play.delete({ where: { id: validated.id } });
+            return detached;
+        });
+
+        revalidatePath("/practice-planner");
+        revalidatePath("/practice-planner/library");
+
+        return {
+            success: true,
+            data: { id: validated.id, detachedSessions },
+        };
+    } catch (error) {
+        if (error instanceof z.ZodError) {
+            return {
+                success: false,
+                error: "Invalid input",
+                details: error.issues,
+            };
+        }
+
+        if (isStillReferenced(error)) {
+            return {
+                success: false,
+                error: "This drill is still used by a session",
+            };
+        }
+
+        if (error instanceof Error && error.message.includes("Unauthorized")) {
+            return {
+                success: false,
+                error: error.message,
+            };
+        }
+
+        console.error("Error deleting play:", error);
+        return {
+            success: false,
+            error: "Failed to delete play. Please try again.",
+        };
+    }
+}
+```
+
+5. In `getPlaysByTeam`, change the initial where to:
+
+```ts
+        const where: Prisma.PlayWhereInput = {
+            teamId: validated.teamId,
+            // Session-owned copies never appear in any listing.
+            sessionId: null,
+        };
+```
+
+In `components/features/practice-planner/PlayLibrary.tsx` (:836-840), replace the dialog text with:
+
+```tsx
+                    <DialogContentText id="delete-dialog-description">
+                        Are you sure you want to delete this play from your library? This
+                        action cannot be undone. Sessions that use this drill keep their own copy.
+                    </DialogContentText>
+```
+
+`__tests__/lib/actions/plays-write.test.ts` mocks `prisma` without `$transaction`; its `updatePlay` case returns before the transaction (invalid play data), so the mock needs no change. Step 4 runs it to confirm.
+
+- [ ] **Step 4: Run the tests**
+
+Run: `bun run test __tests__/lib/actions/plays-detach.test.ts __tests__/lib/actions/plays-write.test.ts __tests__/lib/actions/plays-read.test.ts __tests__/components/features/practice-planner/PlayLibrary.test.tsx`
+Expected: PASS. Run `bun run type-check` — expected: no errors (`PlayLibrary` reads only `result.success` / `result.error` from `deletePlay`).
+Run: `grep -rn "remove this play from all" components __tests__` — expected: no output.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add lib/actions/plays.ts components/features/practice-planner/PlayLibrary.tsx __tests__/lib/actions/plays-detach.test.ts
+git commit -m "feat(practice-planner): detach sessions before a library drill is edited or deleted
 
 Claude-Session: https://claude.ai/code/session_01TqKuhs6SuVkWyirkz3ZdQX"
 ```
@@ -1908,7 +2076,7 @@ Claude-Session: https://claude.ai/code/session_01TqKuhs6SuVkWyirkz3ZdQX"
 - Test: `__tests__/lib/actions/practice-sessions-ownership.test.ts` (create)
 
 **Interfaces:**
-- Consumes: Task 4 (`materializeSessionDrills`, `deleteOrphanedSessionDrills`, `SessionDrillError`, `SessionDrillMapping`).
+- Consumes: Task 3 (`materializeSessionDrills`, `deleteOrphanedSessionDrills`, `SessionDrillError`, `SessionDrillMapping`).
 - Produces:
   - session play items require `clientKey: string` (1–64 chars, unique per payload)
   - `createPracticeSession` / `updatePracticeSession` return `data: { id; title; date; conflictsOverridden; plays: Array<{ clientKey: string; playId: string }> }`
@@ -2257,7 +2425,7 @@ Claude-Session: https://claude.ai/code/session_01TqKuhs6SuVkWyirkz3ZdQX"
 - Test: `__tests__/lib/actions/practice-session-drills.test.ts` (create), `__tests__/lib/utils/play-data.test.ts` (append)
 
 **Interfaces:**
-- Consumes: Task 4 (`SessionDrillError`).
+- Consumes: Task 3 (`SessionDrillError`).
 - Produces:
   - `@/lib/utils/play-data`: `sanitizePlayDataForWrite(playData: PlayData): { ok: true; data: PlayData } | { ok: false; issues: z.ZodError["issues"] }`
   - `@/lib/utils/validation`: `saveSessionDrillSchema`, `type SaveSessionDrillInput` (`{ sessionId; teamId; playId?; name; description?; thumbnail?; playData }`), `copySessionDrillToLibrarySchema`, `type CopySessionDrillToLibraryInput` (`{ playId; teamId }`)
@@ -2360,7 +2528,7 @@ describe("saveSessionDrill", () => {
         });
     });
 
-    it("forks a retired play only when this session references it", async () => {
+    it("forks an unowned non-library play only when this session references it (pre-3a data)", async () => {
         tx.play.findFirst.mockResolvedValue({ id: LIB, sessionId: null, isTemplate: false, sourcePlayId: null });
         tx.practiceSessionPlay.findFirst.mockResolvedValue(null);
         const result = await saveSessionDrill(drillInput(LIB));
@@ -2551,7 +2719,7 @@ function failure(error: unknown, fallback: string): { success: false; error: str
 /**
  * Save a drill's diagram for one session.
  * - playId owned by the session: updated in place.
- * - playId is a library play, or a retired play this session references:
+ * - playId is a library play, or an unowned play this session references (pre-3a data):
  *   forked into a new owned copy (sourcePlayId = provenance).
  * - no playId: a brand-new owned drill.
  * Does not touch the session's plays: the editor's next session save
@@ -2696,7 +2864,7 @@ Claude-Session: https://claude.ai/code/session_01TqKuhs6SuVkWyirkz3ZdQX"
 - Test: `__tests__/lib/actions/practice-session-drills.test.ts` (append), `__tests__/lib/services/practice-session-drills.test.ts` (append)
 
 **Interfaces:**
-- Consumes: Task 4 (`cloneDrillsIntoSession`, `CLONE_SOURCE_SELECT`), Task 6 (action file, `failure`).
+- Consumes: Task 3 (`cloneDrillsIntoSession`, `CLONE_SOURCE_SELECT`), Task 6 (action file, `failure`).
 - Produces:
   - `@/lib/services/practice-session-drills`: `SESSION_PLAY_FIELDS_NOT_COPIED: ReadonlySet<string>` (`id`, `sessionId`, `playId`, `createdAt`, `updatedAt`), `type CopiedSessionPlayFields`, `copySessionPlayScalars(row: Record<string, unknown>): CopiedSessionPlayFields`, `duplicateSessionTitle(title: string): string`
   - `@/lib/utils/validation`: `duplicatePracticeSessionSchema`, `type DuplicatePracticeSessionInput` (`{ id; teamId; date }`)
@@ -4178,7 +4346,7 @@ and, before the `{/* Delete dialog */}` comment:
 
 - [ ] **Step 5: Amend the spec**
 
-In `docs/superpowers/specs/2026-10-03-practice-session-drill-ownership-design.md`, fold the thirteen "Spec deviations" items at the top of this plan into the relevant sections (Server → Helper: signature, grace window, order check; Server → Actions: `clientKey` = `PlayInSession.id`, unique keys, `updatePlay` guard, `getPlaysByTeam` filter, `deletePlay` return; Components: structural Task 1, extra extracted modules, `description`, library-copy-once, edit-page redirect), add an "Open questions" section with the three items from this plan, and set the Status line to `Implemented (3a)`.
+In `docs/superpowers/specs/2026-10-03-practice-session-drill-ownership-design.md`, fold the fourteen "Spec deviations" items at the top of this plan into the relevant sections (Server → Helper: signature, drop-only cleanup, order check, shared `cloneDrillsIntoSessions`; Server → Actions: `clientKey` = `PlayInSession.id`, unique keys, `updatePlay` guard, `getPlaysByTeam` filter, `deletePlay` return; Components: structural Task 1, extra extracted modules, `description`, library-copy-once, edit-page redirect), and set the Status line to `Implemented (3a)`. The product-owner decisions (detach-on-write, title truncation) are already in the spec.
 
 - [ ] **Step 6: Run every gate**
 
@@ -4207,28 +4375,28 @@ Claude-Session: https://claude.ai/code/session_01TqKuhs6SuVkWyirkz3ZdQX"
 | Spec requirement | Task |
 |---|---|
 | `Play.sessionId`/`sourcePlayId`, relations, index; `PracticeSessionPlay.play` NO ACTION; verified constraint name | 2 |
-| Invariants I1 (owned ⇒ non-template, same team) | 4 (clones set `isTemplate=false`, `teamId`), 3 (`updatePlay` guard), 6 |
-| I2 (every session play owned after save) | 4, 5 (I2 test), 7 (duplicate clones all) |
-| I3 (owned by S referenced only by S) | 4 (another session's copy rejected) |
-| I4 states (library / retired / owned) | 3 (retire), 4 (classification) |
-| Helper classification, `createManyAndReturn`, provenance, mapping, orphan cleanup | 4 |
+| Invariants I1 (owned ⇒ non-template, same team) | 3 (clones set `isTemplate=false`, `teamId`), 4 (`updatePlay` guard), 6 |
+| I2 (every session play owned after save) | 3, 5 (I2 test), 7 (duplicate clones all); 4 (detach repoints legacy rows) |
+| I3 (owned by S referenced only by S) | 3 (another session's copy rejected; detach makes one copy per session) |
+| I4 states (library / owned; no retired state) | 3 (classification), 4 (detach then hard delete) |
+| Helper classification, `createManyAndReturn`, provenance, mapping, orphan cleanup (drop-only) | 3 |
 | Create/update call the helper inside the transaction; `clientKey`; return mapping; ownership check moved | 5 |
 | `saveSessionDrill`, `copySessionDrillToLibrary` | 6 |
 | `duplicatePracticeSession` incl. new-column guard; no venue/reservation/share | 7 |
-| `deletePlay` retire-on-delete; dialog copy | 3 |
-| Library listings exclude owned and retired | 3 |
+| Detach-on-write in `updatePlay` and `deletePlay` (one transaction, one copy per session, then real delete); P2003 message; dialog copy | 3 (`detachLibraryPlay`), 4 |
+| Library listings exclude owned plays | 4 |
 | Editor split first, no behavior change, <900 lines | 1 (verified again in 8, 9, 10) |
 | `PlayInSession.name` (+ clientKey); playId swap; single-flight autosave | 8 |
 | Instructions 2000 in UI | 8 |
 | `SessionDrillDialog`, `PlayEditor` `autoSave={false}`/`lockTemplate`, "Also add to library", entry points, disabled before first save, create → edit redirect | 8 (redirect), 9 |
 | Duplicate button on detail view (admins) and list; date dialog (+7 days); route to edit | 10 |
-| Error handling: rejection message, dialog keeps errors, P2003 message, unknown clientKey ignored | 5, 9, 3, 8 |
-| Testing list (helper, actions, editor, migration via CI, gates) | 4-10; migration applied by CI (ADR-0019) |
+| Error handling: rejection message, dialog keeps errors, P2003 message, unknown clientKey ignored | 5, 9, 4, 8 |
+| Testing list (helper, actions, editor, migration via CI, gates) | 3-10; migration applied by CI (ADR-0019) |
 
 No gaps.
 
 **2. Placeholder scan.** No "TBD"/"TODO"/"similar to Task N". Three steps move existing code verbatim by exact post-merge line range with listed substitutions (Task 1 Steps 5, 6; Task 1 Step 9's conditional share-dialog move). That is deliberate: retyping ~400 lines of unchanged JSX would risk silent drift, and the characterization tests guard the result.
 
-**3. Type consistency.** `SessionDrillItem`/`SessionDrillMapping` (Task 4) are used by `drillItems`/`toSavedDrills` (Task 5). The action's `plays: { clientKey; playId }[]` (Task 5) matches `SavedDrillId` (Task 8). `SessionDrillPatch` (Task 8) is used by `SessionDrillDialog.onSaved` and `handleDrillSaved` (Task 9). `CLONE_SOURCE_SELECT` and `cloneDrillsIntoSession` (Task 4) are reused by `duplicatePracticeSession` (Task 7). `markDirty` is introduced in Task 1, changed in Task 8, and consumed in Task 9. `PlayEditorProps.autoSave` (Task 9) matches the dialog's usage. `PracticePlannerList.teamId` is added and passed in the same task (10).
+**3. Type consistency.** `SessionDrillItem`/`SessionDrillMapping` (Task 3) are used by `drillItems`/`toSavedDrills` (Task 5). The action's `plays: { clientKey; playId }[]` (Task 5) matches `SavedDrillId` (Task 8). `SessionDrillPatch` (Task 8) is used by `SessionDrillDialog.onSaved` and `handleDrillSaved` (Task 9). `CLONE_SOURCE_SELECT` and `cloneDrillsIntoSession(s)` (Task 3) are reused by `detachLibraryPlay` (Task 3, called in Task 4) and `duplicatePracticeSession` (Task 7). `deletePlay`'s `detachedSessions` (Task 4) is not read by `PlayLibrary`. `markDirty` is introduced in Task 1, changed in Task 8, and consumed in Task 9. `PlayEditorProps.autoSave` (Task 9) matches the dialog's usage. `PracticePlannerList.teamId` is added and passed in the same task (10).
 
-**4. Review Focus.** Each of the five lines has its test in its owning task: (1) Task 8 `applySavedPlayIds` "keeps a card whose playId changed…" + Task 9 "keeps the dialog's fork…"; (2) Task 4 legacy-retired / never-referenced tests + Task 5 I2 test; (3) Task 3 retire / delete / P2003 tests; (4) Task 7 enum-driven guard tests (service and action); (5) Task 4 `deleteOrphanedSessionDrills` filter test + Task 9 new-drill flow.
+**4. Review Focus.** Each of the five lines has its test in its owning task: (1) Task 8 `applySavedPlayIds` "keeps a card whose playId changed…" + Task 9 "keeps the dialog's fork…"; (2) Task 3 legacy-reference / never-referenced tests + Task 5 I2 test; (3) Task 3 `detachLibraryPlay` tests + Task 4 edit-keeps-old-diagram / detach-then-delete / unreferenced-delete / one-copy-per-session / P2003 tests; (4) Task 7 enum-driven guard tests (service and action); (5) Task 3 drop-only cleanup tests + Task 9 new-drill flow.

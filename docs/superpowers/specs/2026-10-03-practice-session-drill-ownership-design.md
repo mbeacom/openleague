@@ -29,7 +29,7 @@ A session's drills belong to that session. A coach can tweak a drill's diagram f
 - A drill built inside a session can optionally also be added to the library ("Also add to library", off by default).
 - Deleting or editing a library drill never changes or removes a drill in any session.
 - "Duplicate" creates a new session with the same drills, durations, and instructions on a chosen date (default: original date + 7 days). The new session is unbooked and unshared.
-- Existing sessions keep working without a data backfill. A session converts to owned copies on its next save.
+- Existing sessions keep working without a data backfill. A session converts to owned copies on its next save, or earlier if a library drill it references is edited or deleted (detach-on-write).
 
 ### Non-goals
 
@@ -110,8 +110,9 @@ The implementation plan must verify the actual constraint name before dropping i
   | State | `isTemplate` | `sessionId` | Meaning |
   |---|---|---|---|
   | Library | `true` | `null` | Listed in the play library |
-  | Retired | `false` | `null` | Hidden from the library; still readable through older sessions' references until those sessions are next saved |
   | Session-owned | `false` | set | A session's private copy |
+
+  There is no "retired" state (product-owner decision, 2026-10-03): a library play is detached from its sessions before it is changed, so a delete is always a real delete. `isTemplate = false` with `sessionId = null` occurs only in pre-3a rows written through the API. The helper still clones such a row when the session already references it.
 
 ## Server
 
@@ -135,7 +136,7 @@ materializeSessionDrills(tx, { sessionId, teamId, userId, items })
    - Set `isTemplate=false`, `sessionId=S`, and `createdById` = the current user.
    - Set `sourcePlayId` to the source's own `sourcePlayId` if it has one, otherwise to the source's id.
 4. Return the `clientKey → playId` mapping.
-5. After the session plays are rewritten, delete owned plays of S that are no longer referenced (orphan cleanup).
+5. After the session plays are rewritten, delete owned plays of S that S referenced before this save and that nothing references now (drop-only orphan cleanup). A copy S has never referenced, such as one the drill dialog just created, is never deleted by a save. That way an autosave already in flight can't remove it. Copies that are never referenced go with the session's cascade.
 
 ### Actions
 
@@ -156,10 +157,14 @@ materializeSessionDrills(tx, { sessionId, teamId, userId, items })
     - Clones every drill into the new session's owned plays.
     - Copies every session-play scalar except ids and foreign keys, so columns added later (e.g. phase 2b's `runsWithPrevious`) are carried over. A test fails if a new column is not copied.
     - Returns the new session's id.
-- **`deletePlay`** (`lib/actions/plays.ts`)
-  - Inside a transaction: if any session play references the play, retire it (`isTemplate=false`) instead of deleting it. Otherwise delete it.
-  - The dialog copy becomes: "Sessions that use this drill keep their copy."
-- **Library listings** keep filtering on `isTemplate: true`, and also on `sessionId: null`, so owned and retired plays never appear in the library.
+- **Detach-on-write: `updatePlay` and `deletePlay`** (`lib/actions/plays.ts`). Product-owner decision, 2026-10-03; replaces retire-on-delete.
+  - Before a library play is updated or deleted, every session whose session-play rows still reference it gets its own owned copy of the play's *current* content. That is one copy per session, made with the helper's clone logic (`cloneDrillsIntoSessions`), and that session's rows are repointed to the copy.
+  - The detach and the update or delete run in one transaction.
+  - After detaching, `deletePlay` really deletes the library row.
+  - Library edits and deletes therefore never reach any session, re-saved or not.
+  - `updatePlay` rejects a session-owned play ("This drill belongs to a practice session. Edit it from that session.").
+  - The dialog copy becomes: "Sessions that use this drill keep their own copy."
+- **Library listings** keep filtering on `isTemplate: true`, and also on `sessionId: null`, so session-owned plays never appear in the library.
 
 ## Components
 
@@ -182,8 +187,8 @@ materializeSessionDrills(tx, { sessionId, teamId, userId, items })
 
 - **The helper rejects a play the session can't use** → `ActionResult` error "One or more drills not found or do not belong to this session". A clone failure aborts the whole transaction, so a session is never half-saved.
 - **`saveSessionDrill` validation errors** show inside the dialog through `PlayEditor`'s existing save-error UI, and the dialog stays open.
-- **A `P2003` from `deletePlay`** (a referenced play) → "This drill is still used by a session". Retire-on-delete should make this unreachable.
-- **An unknown `clientKey` in a save response** is ignored. The next save re-sends the library id, which clones again; orphan cleanup removes the extra row.
+- **A `P2003` from `deletePlay` or `updatePlay`**, meaning a session referenced the play between the detach and the write (the NO ACTION FK stays as defense in depth) → "This drill is still used by a session". The coach retries; the retry detaches the new reference.
+- **An unknown `clientKey` in a save response** is ignored. The next save re-sends the library id, which clones again; drop-only cleanup removes the extra row, because the earlier save referenced it.
 
 ## Testing
 
@@ -193,15 +198,17 @@ materializeSessionDrills(tx, { sessionId, teamId, userId, items })
   - Legacy references are cloned.
   - A duplicated owned id is cloned once.
   - Another session's or another team's play is rejected.
-  - Orphans are deleted.
+  - Orphans this save dropped are deleted; a never-referenced copy survives.
+  - Detach makes one copy per referencing session, copies the current content, and repoints the rows.
   - The mapping is keyed by `clientKey`.
 - **Actions:**
   - Create and update return the mapping, and afterwards no session play points at a library play (I2).
-  - `deletePlay` retires referenced plays and deletes unreferenced ones.
+  - Editing a library play detaches referencing sessions first, and their `playData` is unchanged afterwards.
+  - Deleting a referenced play detaches it, then hard-deletes it. An unreferenced play is deleted directly. A play referenced by several sessions gets one copy per session.
   - `duplicatePracticeSession` copies drills and session-play fields, and never the venue, reservation, or shared flag. It includes the new-column guard test.
   - `saveSessionDrill` updates owned copies and forks non-owned ones.
   - `copySessionDrillToLibrary` creates a library play.
-  - Library listings exclude owned and retired plays.
+  - Library listings exclude session-owned plays.
 - **Editor** (Testing Library):
   - `playId`s are swapped after a save.
   - Autosave is single-flight.
@@ -214,8 +221,9 @@ materializeSessionDrills(tx, { sessionId, teamId, userId, items })
 
 ## Risks
 
-- **Row growth.** Each drill in each session is one `Play` row, and a thumbnail is typically ≤ ~30 KB. Orphan cleanup and the session cascade keep it bounded.
-- **Two shapes coexist** (legacy library references) until each session is next saved. Reads are identical; only the save path differs, and it converges after one save.
+- **Row growth.** Each drill in each session is one `Play` row, and a thumbnail is typically ≤ ~30 KB. Drop-only cleanup and the session cascade keep it bounded. The only uncollected rows are dialog-created drills that were abandoned before any save; they go with their session.
+- **Two shapes coexist** (legacy library references) until each session is next saved, or until the library drill is edited or deleted, which detaches it. Reads are identical. Library writes never leak into a legacy session.
+- **Detach cost on library writes.** The library editor autosaves, so `updatePlay` runs the detach query on every save. Only the first save after a session last referenced the play actually clones; later saves find no rows (one indexed `findMany`). A library drill used by many old sessions makes its first edit or delete clone once per session, in one `createManyAndReturn` plus one `updateMany` per session.
 - **Transaction length.** Clones run inside the venue-reservation transaction on Neon. `createManyAndReturn` keeps that to one round trip.
 - **Editor refactor regressions.** Extract with no behavior change first, under the existing tests, before adding features.
 - **Phase-2 coupling.** Ice area travels inside `playData` copies, and duplicate copies all session-play scalars.
