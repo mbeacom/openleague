@@ -1,8 +1,9 @@
 "use client";
 
 /**
- * One drill in a practice session: thumbnail, duration, instructions, and the
- * reorder / edit / delete controls. Extracted from PracticeSessionEditor.
+ * One drill in a practice session: thumbnail, duration, instructions, the
+ * station switch (2b), and the reorder / edit / delete controls. Extracted
+ * from PracticeSessionEditor.
  */
 
 import { useState } from "react";
@@ -14,8 +15,10 @@ import {
     CardContent,
     CardMedia,
     Chip,
+    FormControlLabel,
     IconButton,
     Stack,
+    Switch,
     TextField,
     Tooltip,
     Typography,
@@ -29,14 +32,24 @@ import {
 } from "@mui/icons-material";
 import Image from "next/image";
 import { VALIDATION_CONSTRAINTS, type PlayInSession } from "@/types/practice-planner";
+import { MAX_STATIONS_PER_GROUP } from "@/lib/utils/session-timeline";
+
+export const STATION_SWITCH_LABEL = "Run as a station with the previous drill";
+export const STATION_CAP_TOOLTIP = `A station block holds at most ${MAX_STATIONS_PER_GROUP} drills`;
 
 /**
  * Props for the SessionDrillCard component
  */
 export interface SessionDrillCardProps {
     play: PlayInSession;
+    /** Position in the whole session (not within a station block). */
     index: number;
-    totalPlays: number;
+    /** Whether Move up / Move down would change the order (station-aware, 2b). */
+    canMoveUp: boolean;
+    canMoveDown: boolean;
+    /** The station switch; null for the first drill, which always runs on its own. */
+    station: { checked: boolean; canToggle: boolean } | null;
+    onToggleStation: (index: number) => void;
     isEditing: boolean;
     onDelete: (playId: string) => void;
     onEdit: (playId: string) => void;
@@ -62,7 +75,10 @@ export interface SessionDrillCardProps {
 export function SessionDrillCard({
     play,
     index,
-    totalPlays,
+    canMoveUp,
+    canMoveDown,
+    station,
+    onToggleStation,
     isEditing,
     onDelete,
     onEdit,
@@ -236,6 +252,25 @@ export function SessionDrillCard({
                         </Tooltip>
                     )}
 
+                    {/* Station grouping (2b): runs at the same time as the drill before it */}
+                    {!isEditing && station && (
+                        <Tooltip title={station.canToggle ? "" : STATION_CAP_TOOLTIP}>
+                            <span>
+                                <FormControlLabel
+                                    control={
+                                        <Switch
+                                            checked={station.checked}
+                                            onChange={() => onToggleStation(index)}
+                                        />
+                                    }
+                                    label={STATION_SWITCH_LABEL}
+                                    disabled={locked || !station.canToggle}
+                                    sx={{ minHeight: 44, ml: 0 }}
+                                />
+                            </span>
+                        </Tooltip>
+                    )}
+
                     {/* Edit Actions */}
                     {isEditing && (
                         <Stack direction="row" spacing={1} justifyContent="flex-end">
@@ -258,11 +293,11 @@ export function SessionDrillCard({
             {/* Actions */}
             {!isEditing && (
                 <CardActions sx={{ flexDirection: "column", justifyContent: "center", p: 1, gap: 0.5 }}>
-                    {/* Requirements: 2.5 - Reordering controls */}
+                    {/* Requirements: 2.5 - Reordering controls (station-aware, 2b) */}
                     <IconButton
                         size="small"
                         onClick={() => onMoveUp(index)}
-                        disabled={locked || index === 0}
+                        disabled={locked || !canMoveUp}
                         aria-label={`Move play ${index + 1} up`}
                     >
                         <ArrowUpwardIcon />
@@ -270,7 +305,7 @@ export function SessionDrillCard({
                     <IconButton
                         size="small"
                         onClick={() => onMoveDown(index)}
-                        disabled={locked || index === totalPlays - 1}
+                        disabled={locked || !canMoveDown}
                         aria-label={`Move play ${index + 1} down`}
                     >
                         <ArrowDownwardIcon />

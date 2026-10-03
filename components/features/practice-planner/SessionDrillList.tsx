@@ -1,8 +1,16 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { Alert, Box, Button, Paper, Stack, Tooltip, Typography } from "@mui/material";
 import { Add as AddIcon, Draw as DrawIcon } from "@mui/icons-material";
 import type { PlayInSession } from "@/types/practice-planner";
+import {
+    canMove,
+    canToggleRunsWithPrevious,
+    groupStations,
+    sessionWallMinutes,
+    stationBlockLabel,
+} from "@/lib/utils/session-timeline";
 import { SessionDrillCard } from "./SessionDrillCard";
 
 export interface SessionDrillListProps {
@@ -19,13 +27,41 @@ export interface SessionDrillListProps {
     onCancelEdit: () => void;
     onMoveUp: (index: number) => void;
     onMoveDown: (index: number) => void;
+    /** Flips "Run as a station with the previous drill" on the drill at this position (2b). */
+    onToggleStation: (index: number) => void;
     /** Diagram editing and new drills need a saved session. */
     canEditDiagram: boolean;
     onEditDiagram: (clientKey: string) => void;
     onNewDrill: () => void;
 }
 
-/** Plays in Session: totals, empty state, and one card per drill (Requirements 2.2-2.5). */
+/** Drills that run at the same time: one outlined block headed "Stations · N · M min" (2b). */
+function StationBlock({ label, children }: { label: string; children: ReactNode }) {
+    return (
+        <Box
+            role="group"
+            aria-label={label}
+            sx={{ border: 2, borderColor: "primary.main", borderRadius: 1, p: 1.5 }}
+        >
+            <Stack spacing={1.5}>
+                <Typography
+                    variant="subtitle2"
+                    component="p"
+                    sx={{ fontWeight: 800, color: "primary.main", textTransform: "uppercase", letterSpacing: 1 }}
+                >
+                    {label}
+                </Typography>
+                {children}
+            </Stack>
+        </Box>
+    );
+}
+
+/**
+ * Plays in Session: totals, empty state, and one card per drill
+ * (Requirements 2.2-2.5). Drills that run together render as one station
+ * block; the total is the session's wall time (2b).
+ */
 export function SessionDrillList({
     plays,
     duration,
@@ -39,11 +75,44 @@ export function SessionDrillList({
     onCancelEdit,
     onMoveUp,
     onMoveDown,
+    onToggleStation,
     canEditDiagram,
     onEditDiagram,
     onNewDrill,
 }: SessionDrillListProps) {
-    const totalPlayTime = plays.reduce((sum, play) => sum + play.duration, 0);
+    const totalPlayTime = sessionWallMinutes(plays);
+    const groups = groupStations(plays);
+
+    // The editor keeps array order equal to sequence order, so a drill's
+    // position in `plays` is its card number and its move/toggle index.
+    const renderCard = (play: PlayInSession) => {
+        const index = plays.indexOf(play);
+        return (
+            <SessionDrillCard
+                key={play.id}
+                play={play}
+                index={index}
+                canMoveUp={canMove(plays, index, -1)}
+                canMoveDown={canMove(plays, index, 1)}
+                station={index === 0 ? null : {
+                    checked: play.runsWithPrevious,
+                    canToggle: canToggleRunsWithPrevious(plays, index),
+                }}
+                onToggleStation={onToggleStation}
+                isEditing={editingPlayId === play.id}
+                onDelete={onDelete}
+                onEdit={onEdit}
+                onUpdate={onUpdate}
+                onCancelEdit={onCancelEdit}
+                onMoveUp={onMoveUp}
+                onMoveDown={onMoveDown}
+                canEditDiagram={canEditDiagram}
+                disabled={disabled}
+                locked={locked}
+                onEditDiagram={onEditDiagram}
+            />
+        );
+    };
 
     return (
         <Paper elevation={2} sx={{ p: 2 }}>
@@ -120,25 +189,18 @@ export function SessionDrillList({
 
                 {plays.length > 0 && (
                     <Stack spacing={2}>
-                        {plays.map((play, index) => (
-                            <SessionDrillCard
-                                key={play.id}
-                                play={play}
-                                index={index}
-                                totalPlays={plays.length}
-                                isEditing={editingPlayId === play.id}
-                                onDelete={onDelete}
-                                onEdit={onEdit}
-                                onUpdate={onUpdate}
-                                onCancelEdit={onCancelEdit}
-                                onMoveUp={onMoveUp}
-                                onMoveDown={onMoveDown}
-                                canEditDiagram={canEditDiagram}
-                                disabled={disabled}
-                                locked={locked}
-                                onEditDiagram={onEditDiagram}
-                            />
-                        ))}
+                        {groups.map((group) =>
+                            group.stations.length > 1 ? (
+                                <StationBlock
+                                    key={`stations-${group.stations[0].id}`}
+                                    label={stationBlockLabel(group.stations.length, group.wallMinutes)}
+                                >
+                                    {group.stations.map(renderCard)}
+                                </StationBlock>
+                            ) : (
+                                renderCard(group.stations[0])
+                            )
+                        )}
                     </Stack>
                 )}
             </Stack>

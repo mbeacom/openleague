@@ -36,6 +36,7 @@ import {
 } from "@/types/practice-planner";
 import type { BookingConflict } from "@/types/segments";
 import { applySavedPlayIds, describeSaveError, type SavedDrillId } from "@/lib/utils/session-drill-ids";
+import { moveItem, removeItem, toggleRunsWithPrevious } from "@/lib/utils/session-timeline";
 import { PlayLibrary } from "./PlayLibrary";
 import { useSingleFlightSave, type SaveOutcome } from "./useSingleFlightSave";
 import { SessionDrillList } from "./SessionDrillList";
@@ -488,11 +489,8 @@ export function PracticeSessionEditor({
      */
     const handleDeletePlay = useCallback((playId: string) => {
         if (creating) return; // A create redirects; this edit would be lost.
-        setPlays((prevPlays) =>
-            prevPlays
-                .filter((p) => p.id !== playId)
-                .map((play, idx) => ({ ...play, sequence: idx }))
-        );
+        // Removing a block's first drill keeps its stations grouped (2b).
+        setPlays((prevPlays) => removeItem(prevPlays, prevPlays.findIndex((p) => p.id === playId)));
         markDirty();
     }, [markDirty, creating]);
 
@@ -574,43 +572,19 @@ export function PracticeSessionEditor({
     }, []);
 
     /**
-     * Handle move play up
-     * Requirements: 2.5 - Reorder plays, update sequence numbers
+     * Reorder (Requirements 2.5) and station grouping (2b) through the shared
+     * timeline rules: a block's first drill moves the whole block, a station
+     * moves within its block, and a standalone drill hops over whole blocks.
      */
-    const handleMovePlayUp = useCallback((index: number) => {
-        if (creating || index === 0) return;
-
-        setPlays((prevPlays) => {
-            const newPlays = [...prevPlays];
-            // Swap with previous play
-            [newPlays[index - 1], newPlays[index]] = [newPlays[index], newPlays[index - 1]];
-            // Update sequence numbers (0-based to match server validation)
-            return newPlays.map((play, idx) => ({
-                ...play,
-                sequence: idx,
-            }));
-        });
+    const handleMovePlay = useCallback((index: number, dir: -1 | 1) => {
+        if (creating) return;
+        setPlays((prevPlays) => moveItem(prevPlays, index, dir));
         markDirty();
     }, [markDirty, creating]);
 
-    /**
-     * Handle move play down
-     * Requirements: 2.5 - Reorder plays, update sequence numbers
-     */
-    const handleMovePlayDown = useCallback((index: number) => {
+    const handleToggleStation = useCallback((index: number) => {
         if (creating) return;
-        setPlays((prevPlays) => {
-            if (index === prevPlays.length - 1) return prevPlays;
-
-            const newPlays = [...prevPlays];
-            // Swap with next play
-            [newPlays[index], newPlays[index + 1]] = [newPlays[index + 1], newPlays[index]];
-            // Update sequence numbers (0-based to match server validation)
-            return newPlays.map((play, idx) => ({
-                ...play,
-                sequence: idx,
-            }));
-        });
+        setPlays((prevPlays) => toggleRunsWithPrevious(prevPlays, index));
         markDirty();
     }, [markDirty, creating]);
 
@@ -734,8 +708,9 @@ export function PracticeSessionEditor({
                 onEdit={handleEditPlay}
                 onUpdate={handleUpdatePlayInSession}
                 onCancelEdit={handleCancelEdit}
-                onMoveUp={handleMovePlayUp}
-                onMoveDown={handleMovePlayDown}
+                onMoveUp={(index) => handleMovePlay(index, -1)}
+                onMoveDown={(index) => handleMovePlay(index, 1)}
+                onToggleStation={handleToggleStation}
                 canEditDiagram={Boolean(sessionId)}
                 onEditDiagram={drillDialog.editDiagram}
                 onNewDrill={drillDialog.newDrill}
