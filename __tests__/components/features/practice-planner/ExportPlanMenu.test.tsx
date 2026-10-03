@@ -100,6 +100,21 @@ describe("ExportPlanMenu", () => {
         expect(blob.type).toBe("application/json");
     });
 
+    it("revokes the download's object URL only after a delay, so the browser can start the download", () => {
+        vi.useFakeTimers();
+        try {
+            render(<ExportPlanMenu session={SESSION} />);
+            openMenu();
+            fireEvent.click(screen.getByRole("menuitem", { name: "Download plan file" }));
+            vi.advanceTimersByTime(999);
+            expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+            vi.advanceTimersByTime(1);
+            expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:plan");
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
     it("warns when drills were exported blank", async () => {
         render(<ExportPlanMenu session={{ ...SESSION, plays: [sessionPlay("Broken", 0, false, false)] }} />);
         openMenu();

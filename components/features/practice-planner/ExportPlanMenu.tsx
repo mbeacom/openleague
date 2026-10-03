@@ -95,7 +95,8 @@ export function ExportPlanMenu({ session, size = "medium" }: ExportPlanMenuProps
         document.body.appendChild(link);
         link.click();
         link.remove();
-        window.setTimeout(() => URL.revokeObjectURL(url), 0);
+        // Safari and Firefox can cut the download short if the URL is revoked right away.
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
         setNotice(unreadable ? { severity: "warning", text: unreadable } : null);
     };
 
