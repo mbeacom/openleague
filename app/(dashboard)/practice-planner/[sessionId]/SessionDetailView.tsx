@@ -41,11 +41,13 @@ import {
   Person as PersonIcon,
   PlayArrow as PlayIcon,
   Place as PlaceIcon,
+  PrintOutlined as PrintIcon,
 } from "@mui/icons-material";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { DuplicateSessionDialog } from "@/components/features/practice-planner/DuplicateSessionDialog";
 import { PlayLegend } from "@/components/features/practice-planner/PlayLegend";
 import { StationMap } from "@/components/features/practice-planner/StationMap";
+import { SessionTimeline } from "@/components/features/practice-planner/SessionTimeline";
 import type { PlayData } from "@/types/practice-planner";
 import type { SegmentKind } from "@prisma/client";
 import {
@@ -55,6 +57,8 @@ import {
   stationBlockLabel,
   stationWarnings,
 } from "@/lib/utils/session-timeline";
+import { sessionStart, sessionTimeZone } from "@/lib/utils/date";
+import { useClockText } from "@/lib/hooks/useClockText";
 import {
   deletePracticeSession,
   sharePracticeSession,
@@ -87,6 +91,7 @@ interface SessionData {
   // Optional venue attachment (feature 006, FR-019)
   venueId?: string | null;
   venueName?: string | null;
+  venueTimezone?: string | null;
   surfaceId?: string | null;
   surfaceName?: string | null;
   segmentId?: string | null;
@@ -162,12 +167,13 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
 
   // Station blocks run at the same time, so time allocation is wall time (2b).
   const totalPlayTime = sessionWallMinutes(session.plays);
-  const durationPercent = Math.min(
-    (totalPlayTime / session.duration) * 100,
-    100
-  );
-  const isOverTime = totalPlayTime > session.duration;
-  const sessionDate = new Date(session.date);
+  // A zero-minute session (bad stored data) reads as full, not NaN%.
+  const durationPercent =
+    session.duration > 0 ? Math.min((totalPlayTime / session.duration) * 100, 100) : 100;
+  // Booked: startAt in the venue's zone, with its short name; else date in the viewer's zone (3b).
+  const start = sessionStart(session);
+  const { timeZone, showZone } = sessionTimeZone(session);
+  const clock = useClockText(timeZone, showZone);
   const activePlay = session.plays[activePlayIndex] ?? null;
   const groups = useMemo(() => groupStations(session.plays), [session.plays]);
   const activeGroup = activePlay
@@ -192,17 +198,6 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
       ).tooBig.length,
     [session.plays, session.segmentKind]
   );
-
-  const formatDate = (d: Date) =>
-    d.toLocaleDateString("en-US", {
-      weekday: "long",
-      month: "long",
-      day: "numeric",
-      year: "numeric",
-    });
-
-  const formatTime = (d: Date) =>
-    d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
@@ -275,7 +270,7 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
               <Stack direction="row" alignItems="center" spacing={0.5}>
                 <CalendarIcon sx={{ fontSize: 16 }} />
                 <Typography variant="body2">
-                  {formatDate(sessionDate)} at {formatTime(sessionDate)}
+                  {clock.longDate(start)} at {clock.time(start)}
                 </Typography>
               </Stack>
               <Stack direction="row" alignItems="center" spacing={0.5}>
@@ -299,14 +294,7 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
                 <Stack direction="row" alignItems="center" spacing={0.5}>
                   <PlaceIcon sx={{ fontSize: 16 }} />
                   <Typography variant="body2">
-                    {[
-                      session.venueName,
-                      session.surfaceName,
-                      session.segmentName,
-                      session.startAt
-                        ? formatTime(new Date(session.startAt))
-                        : null,
-                    ]
+                    {[session.venueName, session.surfaceName, session.segmentName]
                       .filter(Boolean)
                       .join(" · ")}
                   </Typography>
@@ -323,70 +311,75 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
             </Stack>
           </Box>
 
-          {/* Admin actions */}
-          {isAdmin && (
-            <Stack direction="row" spacing={1} flexShrink={0}>
-              <Tooltip title={isShared ? "Unshare from team" : "Share with team"}>
+          {/* Actions: the bench sheet for everyone who can see the session (3b); the rest for admins */}
+          <Stack direction="row" spacing={1} flexShrink={0} flexWrap="wrap" useFlexGap>
+            <Button
+              component="a"
+              href={`/practice-planner/${session.id}/print`}
+              target="_blank"
+              rel="noopener"
+              variant="outlined"
+              startIcon={<PrintIcon />}
+              size={isMobile ? "small" : "medium"}
+            >
+              Print bench sheet
+            </Button>
+            {isAdmin && (
+              <>
+                <Tooltip title={isShared ? "Unshare from team" : "Share with team"}>
+                  <Button
+                    variant="outlined"
+                    startIcon={isShared ? <UnshareIcon /> : <ShareIcon />}
+                    onClick={() => setShowShareDialog(true)}
+                    disabled={isSharing}
+                    size={isMobile ? "small" : "medium"}
+                  >
+                    {isSharing ? "..." : isShared ? "Unshare" : "Share"}
+                  </Button>
+                </Tooltip>
                 <Button
-                  variant="outlined"
-                  startIcon={isShared ? <UnshareIcon /> : <ShareIcon />}
-                  onClick={() => setShowShareDialog(true)}
-                  disabled={isSharing}
+                  component={Link}
+                  href={`/practice-planner/${session.id}/edit`}
+                  variant="contained"
+                  startIcon={<EditIcon />}
                   size={isMobile ? "small" : "medium"}
                 >
-                  {isSharing ? "..." : isShared ? "Unshare" : "Share"}
+                  Edit
                 </Button>
-              </Tooltip>
-              <Button
-                component={Link}
-                href={`/practice-planner/${session.id}/edit`}
-                variant="contained"
-                startIcon={<EditIcon />}
-                size={isMobile ? "small" : "medium"}
-              >
-                Edit
-              </Button>
-              <Button
-                variant="outlined"
-                startIcon={<DuplicateIcon />}
-                onClick={() => setShowDuplicateDialog(true)}
-                size={isMobile ? "small" : "medium"}
-              >
-                Duplicate
-              </Button>
-              <Button
-                variant="outlined"
-                color="error"
-                startIcon={<DeleteIcon />}
-                onClick={() => setShowDeleteDialog(true)}
-                disabled={isDeleting}
-                size={isMobile ? "small" : "medium"}
-              >
-                Delete
-              </Button>
-            </Stack>
-          )}
+                <Button
+                  variant="outlined"
+                  startIcon={<DuplicateIcon />}
+                  onClick={() => setShowDuplicateDialog(true)}
+                  size={isMobile ? "small" : "medium"}
+                >
+                  Duplicate
+                </Button>
+                <Button
+                  variant="outlined"
+                  color="error"
+                  startIcon={<DeleteIcon />}
+                  onClick={() => setShowDeleteDialog(true)}
+                  disabled={isDeleting}
+                  size={isMobile ? "small" : "medium"}
+                >
+                  Delete
+                </Button>
+              </>
+            )}
+          </Stack>
         </Stack>
 
         {/* Duration progress bar */}
         <Box sx={{ mt: 2.5 }}>
-          <Stack direction="row" justifyContent="space-between" sx={{ mb: 0.5 }}>
-            <Typography variant="caption" color="text.secondary">
-              Time allocation
-            </Typography>
-            <Typography
-              variant="caption"
-              color={isOverTime ? "error.main" : "text.secondary"}
-              fontWeight={isOverTime ? 700 : 400}
-            >
-              {totalPlayTime} / {session.duration} min
-              {isOverTime && " (over time!)"}
-            </Typography>
-          </Stack>
+          {/* The numbers are in the timeline's "Planned X of Y min" footer (3b) */}
+          <Typography variant="caption" color="text.secondary" component="p" sx={{ mb: 0.5 }}>
+            Time allocation
+          </Typography>
           <LinearProgress
             variant="determinate"
+            aria-label="Time allocation"
             value={durationPercent}
-            color={isOverTime ? "error" : "primary"}
+            color={totalPlayTime > session.duration ? "error" : "primary"}
             sx={{
               height: 6,
               borderRadius: 3,
@@ -395,6 +388,30 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
           />
         </Box>
       </Paper>
+
+      {/* Timeline (3b): when each block runs */}
+      {session.plays.length > 0 && (
+        <Paper sx={{ p: { xs: 2, md: 3 } }}>
+          <Typography
+            variant="subtitle2"
+            color="text.secondary"
+            sx={{ mb: 1, textTransform: "uppercase", letterSpacing: 1 }}
+          >
+            Timeline
+          </Typography>
+          <SessionTimeline
+            plays={session.plays}
+            sessionStart={start}
+            timeZone={timeZone}
+            showZone={showZone}
+            durationMinutes={session.duration}
+            activePlayId={activePlay?.id}
+            onSelectPlay={(id) =>
+              setActivePlayIndex(Math.max(0, session.plays.findIndex((sp) => sp.id === id)))
+            }
+          />
+        </Paper>
+      )}
 
       {/* Content area */}
       {session.plays.length === 0 ? (

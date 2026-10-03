@@ -1,0 +1,83 @@
+/*
+ * Bench sheet print rules (practice planner 3b). Imported only by
+ * app/(print)/layout.tsx. The @page rule and html,body rule in @media print
+ * are global and persist in the tab after client-side navigation (accepted
+ * behaviour, plan Ruling 12). All other rules are scoped to bench-* and
+ * no-print classes.
+ */
+@page {
+  margin: 12mm;
+}
+
+.bench-timeline table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.bench-timeline th,
+.bench-timeline td {
+  border-bottom: 1px solid #999;
+  padding: 4px 6px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.bench-timeline ul {
+  margin: 2px 0 0;
+  padding-left: 1.1em;
+}
+
+.bench-over-time {
+  font-weight: 700;
+}
+
+/* A drill never splits across pages. */
+.bench-drill {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+@media print {
+  html,
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  main {
+    min-height: auto !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  /* Drills start on page 2. */
+  .bench-page-break {
+    break-before: page;
+    page-break-before: always;
+  }
+
+  /* BenchSheet pairs drills into .bench-page containers; each pair after the
+     first starts a fresh page, so there is no trailing blank page. A pair
+     taller than one page lets its second drill flow to the next page; the
+     next pair still starts on a fresh page. */
+  .bench-page + .bench-page {
+    break-before: page;
+    page-break-before: always;
+  }
+
+  /* Cap the diagram so a typical pair with its text fits one page. !important
+     beats PrintDiagram's inline width: 100%; height stays auto (aspect kept). */
+  .bench-drill img {
+    max-height: 85mm;
+    width: auto !important;
+    max-width: 100%;
+  }
+
+  .bench-sheet {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+}

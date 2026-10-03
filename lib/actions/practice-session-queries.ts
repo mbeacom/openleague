@@ -90,6 +90,8 @@ export async function getPracticeSessionDetail(sessionId: string): Promise<{
     // Optional venue attachment (FR-019, feature 006)
     venueId: string | null;
     venueName: string | null;
+    /** The booked venue's IANA zone (3b); null when no venue is attached. */
+    venueTimezone: string | null;
     surfaceId: string | null;
     surfaceName: string | null;
     segmentId: string | null;
@@ -142,7 +144,7 @@ export async function getPracticeSessionDetail(sessionId: string): Promise<{
         },
       },
       team: { select: { id: true, name: true } },
-      venue: { select: { name: true } },
+      venue: { select: { name: true, timezone: true } },
       surface: { select: { name: true } },
       segment: { select: { name: true, kind: true } },
     },
@@ -171,6 +173,7 @@ export async function getPracticeSessionDetail(sessionId: string): Promise<{
       teamName: session.team.name,
       venueId: session.venueId,
       venueName: session.venue?.name ?? null,
+      venueTimezone: session.venue?.timezone ?? null,
       surfaceId: session.surfaceId,
       surfaceName: session.surface?.name ?? null,
       segmentId: session.segmentId,
@@ -199,6 +202,9 @@ export async function getPracticeSessionDetail(sessionId: string): Promise<{
     isAdmin,
   };
 }
+
+/** What the session detail page and the bench sheet read (3b). */
+export type PracticeSessionDetail = NonNullable<Awaited<ReturnType<typeof getPracticeSessionDetail>>>;
 
 /**
  * An unreadable diagram becomes an empty board (logged) flagged

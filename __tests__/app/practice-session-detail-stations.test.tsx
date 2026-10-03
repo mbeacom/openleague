@@ -95,7 +95,7 @@ describe("SessionDetailView stations (2b)", () => {
 
     it("measures time allocation by wall time", () => {
         renderView();
-        expect(screen.getByText("25 / 60 min")).toBeInTheDocument();
+        expect(screen.getByText("Planned 25 of 60 min")).toBeInTheDocument();
     });
 
     it("shows the fit warning next to the booking line", () => {
@@ -118,7 +118,7 @@ describe("SessionDetailView without stations or with unreadable drills (2b)", ()
         expect(screen.queryByRole("group", { name: /^Stations/ })).not.toBeInTheDocument();
         expect(screen.queryByTestId("station-map")).not.toBeInTheDocument();
         expect(screen.queryByText(/larger than the booked/)).not.toBeInTheDocument();
-        expect(screen.getByText("45 / 60 min")).toBeInTheDocument();
+        expect(screen.getByText("Planned 45 of 60 min")).toBeInTheDocument();
     });
 
     it("still renders a block with an unreadable drill, and skips it in the fit warning", () => {

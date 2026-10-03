@@ -17,7 +17,8 @@ const H = 20;
 // Swatches are drawn in raw canvas px; a small pxPerFt makes the patterns' px minimums bind.
 const SWATCH_PX_PER_FT = 0.5;
 
-function Swatch({ entry }: { entry: LegendEntry }) {
+/** One symbol's sample, drawn on a small canvas. Exported for the bench sheet's LegendList (3b). */
+export function LegendSwatch({ entry }: { entry: LegendEntry }) {
     const ref = useRef<HTMLCanvasElement>(null);
     useEffect(() => {
         const ctx = ref.current?.getContext("2d");
@@ -71,7 +72,7 @@ export function PlayLegend({ playData, defaultExpanded = false }: { playData: Pl
                         <Box component="ul" sx={{ listStyle: "none", m: 0, p: 0, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 1 }}>
                             {entries.map((entry) => (
                                 <Box component="li" key={entry.key} sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                                    <Swatch entry={entry} />
+                                    <LegendSwatch entry={entry} />
                                     <Typography variant="body2">{entry.label}</Typography>
                                 </Box>
                             ))}
