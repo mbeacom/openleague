@@ -543,6 +543,7 @@ export function PracticeSessionEditor({
             name: savedPlay.name,
             description: savedPlay.description || "",
             sequence: 0, // Assigned below from the current list (max + 1) so gaps cannot collide
+            runsWithPrevious: false, // Runs on its own until the coach groups it (2b)
             duration: 10, // Default duration
             instructions: savedPlay.description || "",
             playData: JSON.parse(JSON.stringify(savedPlay.playData)), // Deep copy to prevent library play mutation

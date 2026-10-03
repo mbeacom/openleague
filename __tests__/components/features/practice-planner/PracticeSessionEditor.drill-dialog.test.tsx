@@ -58,7 +58,7 @@ type SaveFn = (data: PracticeSessionSubmitData) => Promise<PracticeSessionSaveRe
 const LIB = "clibraryxxxxxxxxxxxxxxxxx";
 
 function drill(id: string, playId: string): PlayInSession {
-    return { id, playId, name: "Breakout", sequence: 0, duration: 10, instructions: "", playData: createEmptyPlayData(), thumbnail: "" };
+    return { id, playId, name: "Breakout", sequence: 0, duration: 10, runsWithPrevious: false, instructions: "", playData: createEmptyPlayData(), thumbnail: "" };
 }
 
 // sessionId null = a session that has never been saved.

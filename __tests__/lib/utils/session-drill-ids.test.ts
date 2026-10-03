@@ -4,7 +4,7 @@ import { createEmptyPlayData } from "@/lib/utils/play-data";
 import type { PlayInSession } from "@/types/practice-planner";
 
 function card(id: string, playId: string, sequence = 0): PlayInSession {
-    return { id, playId, name: id, sequence, duration: 10, instructions: "", playData: createEmptyPlayData(), thumbnail: "" };
+    return { id, playId, name: id, sequence, runsWithPrevious: false, duration: 10, instructions: "", playData: createEmptyPlayData(), thumbnail: "" };
 }
 
 describe("applySavedPlayIds", () => {

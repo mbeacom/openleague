@@ -44,6 +44,7 @@ export function EditSessionWrapper({
           playId: play.playId,
           clientKey: play.id,
           sequence: play.sequence,
+          runsWithPrevious: play.runsWithPrevious,
           duration: play.duration,
           instructions: play.instructions || "",
         })),

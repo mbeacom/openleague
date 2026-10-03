@@ -5,7 +5,7 @@ import { createEmptyPlayData } from "@/lib/utils/play-data";
 import type { PlayInSession } from "@/types/practice-planner";
 
 const play: PlayInSession = {
-    id: "k1", playId: "cplayxxxxxxxxxxxxxxxxxxxx", name: "Breakout", sequence: 0, duration: 10,
+    id: "k1", playId: "cplayxxxxxxxxxxxxxxxxxxxx", name: "Breakout", sequence: 0, duration: 10, runsWithPrevious: false,
     instructions: "", playData: createEmptyPlayData(),
 };
 

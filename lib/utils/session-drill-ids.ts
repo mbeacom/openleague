@@ -66,5 +66,5 @@ export function upsertSessionDrill(
         return plays.map((play) => (play.id === clientKey ? { ...play, ...patch } : play));
     }
     const sequence = plays.reduce((max, play) => Math.max(max, play.sequence), -1) + 1;
-    return [...plays, { id: clientKey, ...patch, sequence, duration: 10, instructions: "" }];
+    return [...plays, { id: clientKey, ...patch, sequence, runsWithPrevious: false, duration: 10, instructions: "" }];
 }

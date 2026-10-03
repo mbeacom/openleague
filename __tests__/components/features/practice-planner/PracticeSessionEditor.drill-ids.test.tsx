@@ -38,7 +38,7 @@ const LIB = "clibraryxxxxxxxxxxxxxxxxx";
 const OWNED = "cownedxxxxxxxxxxxxxxxxxxx";
 
 function drill(id: string, playId: string): PlayInSession {
-    return { id, playId, name: "Breakout", sequence: 0, duration: 10, instructions: "", playData: createEmptyPlayData(), thumbnail: "" };
+    return { id, playId, name: "Breakout", sequence: 0, duration: 10, runsWithPrevious: false, instructions: "", playData: createEmptyPlayData(), thumbnail: "" };
 }
 
 function renderEditor(onSave: SaveFn, plays: PlayInSession[] = [], sessionId: string | null = "csessionxxxxxxxxxxxxxxxxx") {

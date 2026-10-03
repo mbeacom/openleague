@@ -42,7 +42,7 @@ function renderEditor(onSave: SaveFn) {
                     teamId="cteamxxxxxxxxxxxxxxxxxxxx"
                     initialData={{
                         title: "Practice", duration: 60, date: new Date("2026-04-07T22:00:00Z"),
-                        plays: [{ id: "k1", playId: "cdeletedxxxxxxxxxxxxxxxxx", name: "Breakout", sequence: 0, duration: 10, instructions: "", playData: createEmptyPlayData(), thumbnail: "" }],
+                        plays: [{ id: "k1", playId: "cdeletedxxxxxxxxxxxxxxxxx", name: "Breakout", sequence: 0, duration: 10, runsWithPrevious: false, instructions: "", playData: createEmptyPlayData(), thumbnail: "" }],
                     }}
                     onSave={onSave}
                 />
