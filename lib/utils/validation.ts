@@ -1346,14 +1346,19 @@ export const practiceVenueAttachmentSchema = z
 
 // One drill in a practice-session save. clientKey is the editor's stable
 // per-card key (PlayInSession.id); the save returns clientKey → owned playId.
+// runsWithPrevious (2b): the drill runs at the same time as the previous drill
+// by sequence (a station). Absent means sequential, so older clients still work.
+export const practiceSessionPlayInputSchema = z.object({
+  playId: z.string().cuid("Invalid play ID format"),
+  clientKey: z.string().min(1, "Drill key is required").max(64, "Drill key is too long"),
+  sequence: z.number().int().min(0),
+  duration: z.number().int().min(1, "Play duration must be at least 1 minute").max(300, "Play duration must be less than 300 minutes"),
+  instructions: optionalSanitizedString(2000),
+  runsWithPrevious: z.boolean().default(false),
+});
+
 const practiceSessionPlayItemsSchema = z
-  .array(z.object({
-    playId: z.string().cuid("Invalid play ID format"),
-    clientKey: z.string().min(1, "Drill key is required").max(64, "Drill key is too long"),
-    sequence: z.number().int().min(0),
-    duration: z.number().int().min(1, "Play duration must be at least 1 minute").max(300, "Play duration must be less than 300 minutes"),
-    instructions: optionalSanitizedString(2000),
-  }))
+  .array(practiceSessionPlayInputSchema)
   .refine(
     (plays) => new Set(plays.map((play) => play.clientKey)).size === plays.length,
     { message: "Each drill needs a unique key" },
