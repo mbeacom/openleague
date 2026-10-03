@@ -9,8 +9,9 @@
  */
 
 import { PlayData } from "@/types/practice-planner";
-import { createTransformContext, drawRink } from "./rink-renderer";
-import { drawAllElements } from "./drawing-utils";
+import { createTransformContext } from "./rink-renderer";
+import { drawBoardScene } from "./drawing-utils";
+import { areaRect } from "@/lib/utils/ice-area";
 
 /**
  * Default thumbnail dimensions
@@ -69,14 +70,10 @@ export function generateThumbnail(
     ctx.fillStyle = backgroundColor;
     ctx.fillRect(0, 0, width, height);
 
-    // Create transform context for thumbnail size
+    // Thumbnails always show the whole rink, so card sizes stay consistent;
+    // the drill's area is shown by shading everything outside it.
     const transform = createTransformContext(width, height, 10);
-
-    // Draw rink
-    drawRink(ctx, transform);
-
-    // Draw all play elements
-    drawAllElements(ctx, playData, transform);
+    drawBoardScene(ctx, transform, playData, { maskRect: areaRect(playData.area) });
 
     // Export as base64 PNG
     return canvas.toDataURL("image/png");

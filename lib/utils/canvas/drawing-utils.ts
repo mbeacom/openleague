@@ -17,11 +17,12 @@ import {
     EquipmentItem,
     PlayData,
 } from "@/types/practice-planner";
-import type { StrokeOptions } from "@/types/practice-planner";
-import { TransformContext, rinkToCanvas } from "./rink-renderer";
+import type { RinkRect, StrokeOptions } from "@/types/practice-planner";
+import { FULL_RINK, TransformContext, drawRink, rinkToCanvas } from "./rink-renderer";
 import { buildStrokeGeometry, type StrokeGeometry } from "./stroke-geometry";
 import { drawPlayerGlyph, drawEquipmentGlyph } from "./glyphs";
 import { EQUIPMENT_RADIUS_FT, PLAYER_RADIUS_FT, glyphRadiusPx } from "./glyph-metrics";
+import { BOARD_COLORS } from "./notation";
 
 /**
  * Visual constants for drawing
@@ -279,4 +280,62 @@ export function drawAllElements(
     playData.equipment.forEach((e) => drawEquipmentItem(ctx, e, transform, e.id === selectedId, zoom));
     playData.players.forEach((p) => drawPlayerIcon(ctx, p, transform, p.id === selectedId, zoom));
     playData.annotations.forEach((a) => drawTextAnnotation(ctx, a, transform, a.id === selectedId));
+}
+
+/** Ink (#212121) at 35%: shades the ice outside a drill's area. */
+const AREA_MASK_FILL = "rgba(33, 33, 33, 0.35)";
+const AREA_OUTLINE_DASH = [8, 6];
+
+function coversRink(rect: RinkRect): boolean {
+    return rect.x <= 0 && rect.y <= 0 && rect.x + rect.w >= FULL_RINK.w && rect.y + rect.h >= FULL_RINK.h;
+}
+
+/**
+ * Shades the rink outside `rect` (even-odd fill of the rink rectangle minus
+ * the area) and outlines the area, dashed, in Action Blue. Draws nothing when
+ * `rect` covers the whole rink.
+ */
+export function drawAreaMask(ctx: CanvasRenderingContext2D, rect: RinkRect, transform: TransformContext): void {
+    if (coversRink(rect)) return;
+    const rinkTopLeft = rinkToCanvas({ x: 0, y: 0 }, transform);
+    const rinkBottomRight = rinkToCanvas({ x: FULL_RINK.w, y: FULL_RINK.h }, transform);
+    const topLeft = rinkToCanvas({ x: rect.x, y: rect.y }, transform);
+    const bottomRight = rinkToCanvas({ x: rect.x + rect.w, y: rect.y + rect.h }, transform);
+
+    ctx.save();
+    ctx.fillStyle = AREA_MASK_FILL;
+    ctx.beginPath();
+    ctx.rect(rinkTopLeft.x, rinkTopLeft.y, rinkBottomRight.x - rinkTopLeft.x, rinkBottomRight.y - rinkTopLeft.y);
+    ctx.rect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
+    ctx.fill("evenodd");
+    ctx.strokeStyle = BOARD_COLORS.actionBlue;
+    ctx.lineWidth = 2;
+    ctx.setLineDash(AREA_OUTLINE_DASH);
+    ctx.strokeRect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
+    ctx.restore();
+}
+
+export interface BoardSceneOptions {
+    /** Element drawn with the selection highlight */
+    selectedId?: string;
+    /** Canvas zoom applied by the caller (keeps minimum glyph size on screen) */
+    zoom?: number;
+    /** Rectangle left unshaded; omitted, or covering the rink, means no mask */
+    maskRect?: RinkRect;
+}
+
+/**
+ * The board's draw sequence, shared by RinkBoard and thumbnails: rink, then
+ * elements, then the area mask on top, so elements outside the area are
+ * dimmed with the ice they sit on.
+ */
+export function drawBoardScene(
+    ctx: CanvasRenderingContext2D,
+    transform: TransformContext,
+    playData: PlayData,
+    options: BoardSceneOptions = {}
+): void {
+    drawRink(ctx, transform);
+    drawAllElements(ctx, playData, transform, options.selectedId, options.zoom ?? 1);
+    if (options.maskRect) drawAreaMask(ctx, options.maskRect, transform);
 }

@@ -82,32 +82,32 @@ export interface TransformContext {
 }
 
 /**
- * Creates a transformation context for converting between rink coordinates
- * and canvas coordinates with responsive scaling
+ * Creates a transformation context that fits `viewport` (rink feet; default
+ * the whole rink) into the canvas, preserving aspect ratio and centering it.
+ * rinkToCanvas/canvasToRink read only scale and offsets, so they work
+ * unchanged for any viewport; shapes outside it are clipped by the canvas.
  *
  * @param canvasWidth - Width of the canvas element in pixels
  * @param canvasHeight - Height of the canvas element in pixels
- * @param padding - Padding around the rink in pixels (default: 20)
+ * @param padding - Padding around the viewport in pixels (default: 20)
+ * @param viewport - Rink rectangle to fit (default: FULL_RINK)
  * @returns Transformation context for coordinate conversions
  */
 export function createTransformContext(
     canvasWidth: number,
     canvasHeight: number,
-    padding: number = 20
+    padding: number = 20,
+    viewport: RinkRect = FULL_RINK
 ): TransformContext {
     const availableWidth = canvasWidth - padding * 2;
     const availableHeight = canvasHeight - padding * 2;
 
-    // Calculate scale to fit rink in available space while maintaining aspect ratio
-    const scaleX = availableWidth / RINK_DIMENSIONS.width;
-    const scaleY = availableHeight / RINK_DIMENSIONS.height;
-    const scale = Math.min(scaleX, scaleY);
+    // Scale that fits the viewport in the available space at its aspect ratio
+    const scale = Math.min(availableWidth / viewport.w, availableHeight / viewport.h);
 
-    // Calculate offsets to center the rink
-    const scaledWidth = RINK_DIMENSIONS.width * scale;
-    const scaledHeight = RINK_DIMENSIONS.height * scale;
-    const offsetX = (canvasWidth - scaledWidth) / 2;
-    const offsetY = (canvasHeight - scaledHeight) / 2;
+    // Center the viewport: rink x=viewport.x sits at the left of the fitted box
+    const offsetX = (canvasWidth - viewport.w * scale) / 2 - viewport.x * scale;
+    const offsetY = (canvasHeight - viewport.h * scale) / 2 - viewport.y * scale;
 
     return {
         canvasWidth,
@@ -145,6 +145,21 @@ export function canvasToRink(canvasPos: Position, transform: TransformContext): 
         x: (canvasPos.x - transform.offsetX) / transform.scaleX,
         y: (canvasPos.y - transform.offsetY) / transform.scaleY,
     };
+}
+
+/**
+ * Board zoom/pan sits on top of the transform: RinkBoard calls
+ * ctx.setTransform(zoom, 0, 0, zoom, pan.x, pan.y) before drawing, so a rink
+ * point appears on screen at zoom * rinkToCanvas(p) + pan.
+ */
+export function rinkToScreen(p: Position, transform: TransformContext, zoom: number, pan: Position): Position {
+    const c = rinkToCanvas(p, transform);
+    return { x: c.x * zoom + pan.x, y: c.y * zoom + pan.y };
+}
+
+/** Inverse of rinkToScreen: undo pan and zoom, then the viewport transform. */
+export function screenToRink(p: Position, transform: TransformContext, zoom: number, pan: Position): Position {
+    return canvasToRink({ x: (p.x - pan.x) / zoom, y: (p.y - pan.y) / zoom }, transform);
 }
 
 /**
