@@ -18,51 +18,17 @@ import {
     type GetPlayByIdInput,
     type GetPlaysByTeamInput,
 } from "@/lib/utils/validation";
-import { VALIDATION_CONSTRAINTS, type PlayData } from "@/types/practice-planner";
+import type { PlayData } from "@/types/practice-planner";
 import {
     PLAY_DATA_UNREADABLE_CODE,
     PLAY_DATA_UNREADABLE_MESSAGE,
     parseStoredPlayData,
-    playDataSchema,
+    sanitizePlayDataForWrite,
 } from "@/lib/utils/play-data";
 
 export type ActionResult<T> =
     | { success: true; data: T }
     | { success: false; error: string; details?: unknown };
-
-/**
- * Sanitize text input by removing control characters and trimming
- * Requirements: 1.5
- */
-function sanitizeText(text: string | null | undefined, maxLength: number): string {
-    if (!text) return "";
-
-    // Remove control characters and trim
-    const sanitized = text
-        .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "")
-        .trim();
-
-    // Truncate to max length
-    return sanitized.slice(0, maxLength);
-}
-
-/**
- * Sanitize PlayData by sanitizing all text annotations and player labels
- * Requirements: 1.5
- */
-function sanitizePlayData(playData: PlayData): PlayData {
-    return {
-        ...playData,
-        players: playData.players.map(player => ({
-            ...player,
-            label: sanitizeText(player.label, VALIDATION_CONSTRAINTS.MAX_PLAYER_LABEL_LENGTH),
-        })),
-        annotations: playData.annotations.map(annotation => ({
-            ...annotation,
-            text: sanitizeText(annotation.text, VALIDATION_CONSTRAINTS.MAX_ANNOTATION_LENGTH),
-        })),
-    };
-}
 
 /**
  * Sanitizes PlayData, then re-validates the result: sanitizing can empty a
@@ -74,12 +40,11 @@ function sanitizePlayData(playData: PlayData): PlayData {
 function sanitizeAndRevalidate(
     playData: PlayData
 ): { ok: true; data: PlayData } | { ok: false; result: { success: false; error: string; details: unknown } } {
-    const sanitized = sanitizePlayData(playData);
-    const check = playDataSchema.safeParse(sanitized);
-    if (!check.success) {
-        return { ok: false, result: { success: false, error: "Invalid play data", details: check.error.issues } };
+    const result = sanitizePlayDataForWrite(playData);
+    if (!result.ok) {
+        return { ok: false, result: { success: false, error: "Invalid play data", details: result.issues } };
     }
-    return { ok: true, data: sanitized };
+    return { ok: true, data: result.data };
 }
 
 /** NO ACTION FK on practice_session_plays.playId: a session referenced the play mid-write. */
@@ -177,7 +142,7 @@ export async function updatePlay(
         // This prevents authorization bypass by providing a different teamId
         const existingPlay = await prisma.play.findUnique({
             where: { id: validated.id },
-            select: { teamId: true, sessionId: true, isTemplate: true },
+            select: { teamId: true, sessionId: true },
         });
 
         if (!existingPlay) {
@@ -291,7 +256,7 @@ export async function deletePlay(
         // Fetch the play first to authorize against its actual teamId
         const existingPlay = await prisma.play.findUnique({
             where: { id: validated.id },
-            select: { teamId: true, sessionId: true, isTemplate: true },
+            select: { teamId: true, sessionId: true },
         });
 
         if (!existingPlay) {

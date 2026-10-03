@@ -272,3 +272,35 @@ export function playDataOrEmpty(raw: unknown, context: string): PlayData {
     console.error(`Unreadable playData (${context}):`, parsed.error);
     return createEmptyPlayData();
 }
+
+/** Write-path text hygiene: strip control characters, trim, truncate. */
+function cleanText(text: string | null | undefined, maxLength: number): string {
+    if (!text) return "";
+    return text
+        .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "")
+        .trim()
+        .slice(0, maxLength);
+}
+
+/**
+ * Sanitizes player labels and annotation text, then re-validates: sanitizing
+ * can blank a field the schema checked as non-blank (e.g. "\u0001"), and
+ * storing that would leave a play the strict read path rejects.
+ */
+export function sanitizePlayDataForWrite(
+    playData: PlayData,
+): { ok: true; data: PlayData } | { ok: false; issues: z.ZodError["issues"] } {
+    const sanitized: PlayData = {
+        ...playData,
+        players: playData.players.map((player) => ({
+            ...player,
+            label: cleanText(player.label, C.MAX_PLAYER_LABEL_LENGTH),
+        })),
+        annotations: playData.annotations.map((annotation) => ({
+            ...annotation,
+            text: cleanText(annotation.text, C.MAX_ANNOTATION_LENGTH),
+        })),
+    };
+    const check = playDataSchema.safeParse(sanitized);
+    return check.success ? { ok: true, data: sanitized } : { ok: false, issues: check.error.issues };
+}

@@ -9,6 +9,7 @@ import {
     PlayDataError,
     RINK_WIDTH_FT,
     RINK_HEIGHT_FT,
+    sanitizePlayDataForWrite,
 } from "@/lib/utils/play-data";
 import { RINK_DIMENSIONS } from "@/lib/utils/canvas/rink-renderer";
 import { VALIDATION_CONSTRAINTS } from "@/types/practice-planner";
@@ -230,5 +231,24 @@ describe("simplifyPoints", () => {
     it("does not divide by zero when maxPoints is below 2", () => {
         const pts = [0, 1, 2, 3, 4].map((x) => ({ x: x * 10, y: 0 }));
         expect(simplifyPoints(pts, 0, 1)).toEqual([pts[0], pts[4]]);
+    });
+});
+
+describe("sanitizePlayDataForWrite", () => {
+    it("strips control characters from labels and annotation text", () => {
+        const data = {
+            ...createEmptyPlayData(),
+            annotations: [{ id: "a", text: "Go\u0001", position: { x: 5, y: 5 }, fontSize: 8, color: "#000000" }],
+        };
+        const result = sanitizePlayDataForWrite(data);
+        expect(result.ok && result.data.annotations[0].text).toBe("Go");
+    });
+
+    it("rejects data that sanitizes to blank", () => {
+        const data = {
+            ...createEmptyPlayData(),
+            annotations: [{ id: "a", text: "\u0001", position: { x: 5, y: 5 }, fontSize: 8, color: "#000000" }],
+        };
+        expect(sanitizePlayDataForWrite(data).ok).toBe(false);
     });
 });

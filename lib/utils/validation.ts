@@ -1412,6 +1412,24 @@ export const sharePracticeSessionSchema = z.object({
   isShared: z.boolean(),
 });
 
+// A drill's diagram edited inside a session (practice planner 3a).
+// playId: the drill being edited (owned → updated in place; library or
+// legacy reference → forked); omitted for a brand-new drill.
+export const saveSessionDrillSchema = z.object({
+  sessionId: z.string().cuid("Invalid session ID format"),
+  teamId: z.string().cuid("Invalid team ID format"),
+  playId: z.string().cuid("Invalid play ID format").optional(),
+  name: sanitizedStringWithMin(1, 100),
+  description: optionalSanitizedString(1000),
+  thumbnail: base64ImageSchema,
+  playData: playDataSchema,
+});
+
+export const copySessionDrillToLibrarySchema = z.object({
+  playId: z.string().cuid("Invalid play ID format"),
+  teamId: z.string().cuid("Invalid team ID format"),
+});
+
 // Type exports for practice planner
 export type CreatePlayInput = z.infer<typeof createPlaySchema>;
 export type UpdatePlayInput = z.infer<typeof updatePlaySchema>;
@@ -1428,6 +1446,8 @@ export type DeletePracticeSessionInput = z.infer<typeof deletePracticeSessionSch
 export type GetPracticeSessionByIdInput = z.infer<typeof getPracticeSessionByIdSchema>;
 export type GetPracticeSessionsByTeamInput = z.infer<typeof getPracticeSessionsByTeamSchema>;
 export type SharePracticeSessionInput = z.infer<typeof sharePracticeSessionSchema>;
+export type SaveSessionDrillInput = z.infer<typeof saveSessionDrillSchema>;
+export type CopySessionDrillToLibraryInput = z.infer<typeof copySessionDrillToLibrarySchema>;
 
 // --- Signup events (feature 004) ---
 

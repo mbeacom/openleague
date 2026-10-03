@@ -43,8 +43,10 @@ const SESSION = "csessionxxxxxxxxxxxxxxxxx";
 const LIB = "clibraryxxxxxxxxxxxxxxxxx";
 const OWNED = "cownedxxxxxxxxxxxxxxxxxxx";
 const FOREIGN = "cforeignxxxxxxxxxxxxxxxxx";
+const OTHER_TEAM_PLAY = "cotherteamplayxxxxxxxxxx";
+const LEGACY = "clegacyxxxxxxxxxxxxxxxxxx";
 
-type Row = { id: string; name: string; isTemplate: boolean; sessionId: string | null; sourcePlayId: string | null };
+type Row = { teamId?: string; id: string; name: string; isTemplate: boolean; sessionId: string | null; sourcePlayId: string | null };
 let rows: Row[] = [];
 
 function input(plays: Array<{ playId: string; clientKey: string }>) {
@@ -62,6 +64,8 @@ beforeEach(() => {
     rows = [
         { id: LIB, name: "Library drill", isTemplate: true, sessionId: null, sourcePlayId: null },
         { id: OWNED, name: "Owned drill", isTemplate: false, sessionId: SESSION, sourcePlayId: LIB },
+        { id: LEGACY, name: "Legacy drill", isTemplate: false, sessionId: null, sourcePlayId: null },
+        { id: OTHER_TEAM_PLAY, name: "Other team", isTemplate: true, sessionId: null, sourcePlayId: null, teamId: "cotherteamxxxxxxxxxxxxxxx" },
         { id: FOREIGN, name: "Other session", isTemplate: false, sessionId: "cothersessionxxxxxxxxxxxx", sourcePlayId: null },
     ];
     mockAuth.requireTeamAdmin.mockResolvedValue(USER);
@@ -73,8 +77,9 @@ beforeEach(() => {
     models.practiceSessionPlay.deleteMany.mockResolvedValue({ count: 0 });
     models.practiceSessionPlay.createMany.mockResolvedValue({ count: 0 });
     models.play.deleteMany.mockResolvedValue({ count: 0 });
-    models.play.findMany.mockImplementation(async ({ where }: { where: { id: { in: string[] } } }) =>
-        rows.filter((r) => where.id.in.includes(r.id)).map((r) => ({ ...r, description: null, thumbnail: null, playData: {} })));
+    // Honors where.teamId like the database: rows below belong to TEAM unless marked.
+    models.play.findMany.mockImplementation(async ({ where }: { where: { id: { in: string[] }; teamId?: string } }) =>
+        rows.filter((r) => where.id.in.includes(r.id) && (where.teamId === undefined || (r.teamId ?? TEAM) === where.teamId)).map((r) => ({ ...r, description: null, thumbnail: null, playData: {} })));
     let next = 0;
     // Echo sessionId: the helper verifies name, sourcePlayId and sessionId per index.
     models.play.createManyAndReturn.mockImplementation(async ({ data }: { data: Array<{ name: string; sourcePlayId: string; sessionId: string }> }) =>
@@ -132,6 +137,27 @@ describe("updatePracticeSession owns its drills", () => {
         expect(result).toEqual({ success: false, error: "One or more drills not found or do not belong to this session" });
         expect(models.practiceSessionPlay.deleteMany).not.toHaveBeenCalled();
         expect(models.practiceSession.update).not.toHaveBeenCalled();
+    });
+
+    it("reads previous references before deleting session plays", async () => {
+        await updatePracticeSession({ id: SESSION, ...input([{ playId: OWNED, clientKey: "k1" }]) });
+        expect(models.practiceSessionPlay.findMany.mock.invocationCallOrder[0])
+            .toBeLessThan(models.practiceSessionPlay.deleteMany.mock.invocationCallOrder[0]);
+    });
+
+    it("converts a legacy unowned non-template play the session already references", async () => {
+        models.practiceSessionPlay.findMany.mockResolvedValue([{ playId: LEGACY }]);
+        const result = await updatePracticeSession({ id: SESSION, ...input([{ playId: LEGACY, clientKey: "k1" }]) });
+        expect(result).toMatchObject({ success: true, data: { plays: [{ clientKey: "k1", playId: "cclone0xxxxxxxxxxxxxxxxxx" }] } });
+    });
+
+    it("rejects a play of another team without a destructive write", async () => {
+        const result = await updatePracticeSession({ id: SESSION, ...input([{ playId: OTHER_TEAM_PLAY, clientKey: "k1" }]) });
+        expect(result).toEqual({ success: false, error: "One or more drills not found or do not belong to this session" });
+        expect(models.practiceSessionPlay.deleteMany).not.toHaveBeenCalled();
+        expect(models.practiceSession.update).not.toHaveBeenCalled();
+        expect(models.play.deleteMany).not.toHaveBeenCalled();
+        expect(models.play.createManyAndReturn).not.toHaveBeenCalled();
     });
 
     it("rejects a payload whose clientKeys repeat", async () => {
