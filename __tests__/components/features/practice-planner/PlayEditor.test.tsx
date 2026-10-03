@@ -72,8 +72,10 @@ describe("PlayEditor", () => {
                 description: "Test Description",
                 isTemplate: true,
                 playData: {
+                    version: 2,
                     players: [],
                     drawings: [],
+                    equipment: [],
                     annotations: [],
                 },
             };

@@ -331,30 +331,11 @@ export function drawElement(
     }
 
     // Draw the actual element
-    switch (element.type) {
-        case "line":
-            drawLine(
-                ctx,
-                element.points,
-                element.color,
-                element.strokeWidth,
-                transform,
-                false
-            );
-            break;
-        case "curve":
-            drawCurve(
-                ctx,
-                element.points,
-                element.color,
-                element.strokeWidth,
-                transform,
-                false
-            );
-            break;
-        case "arrow":
-            drawArrow(ctx, element.points, element.color, element.strokeWidth, transform);
-            break;
+    const showArrow = element.end === "arrow";
+    if (element.path === "freehand") {
+        drawCurve(ctx, element.points, element.color, element.strokeWidth, transform, showArrow);
+    } else {
+        drawLine(ctx, element.points, element.color, element.strokeWidth, transform, showArrow);
     }
 }
 

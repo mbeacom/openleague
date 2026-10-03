@@ -17,9 +17,10 @@ import {
   isWithinRinkBounds,
   clampToRinkBounds,
 } from "@/lib/utils/canvas/interaction-utils";
+import { strokeFromV1Type } from "@/lib/utils/play-data";
 import type { PlayData, PlayerIcon, DrawingElement, TextAnnotation } from "@/types/practice-planner";
 
-const emptyPlayData: PlayData = { players: [], drawings: [], annotations: [] };
+const emptyPlayData: PlayData = { version: 2, players: [], drawings: [], equipment: [], annotations: [] };
 
 describe("HistoryManager", () => {
   it("starts empty with no undo/redo available", () => {
@@ -32,7 +33,9 @@ describe("HistoryManager", () => {
   it("can push and retrieve state", () => {
     const history = new HistoryManager();
     const state: PlayData = {
-      players: [{ id: "p1", position: { x: 50, y: 50 }, label: "C", color: "#FF0000" }],
+      version: 2,
+      equipment: [],
+      players: [{ id: "p1", position: { x: 50, y: 50 }, role: "X", label: "C", color: "#FF0000" }],
       drawings: [],
       annotations: [],
     };
@@ -43,8 +46,8 @@ describe("HistoryManager", () => {
 
   it("supports undo", () => {
     const history = new HistoryManager();
-    const state1: PlayData = { ...emptyPlayData, players: [{ id: "p1", position: { x: 10, y: 10 }, label: "A", color: "#F00" }] };
-    const state2: PlayData = { ...emptyPlayData, players: [{ id: "p2", position: { x: 20, y: 20 }, label: "B", color: "#0F0" }] };
+    const state1: PlayData = { ...emptyPlayData, players: [{ id: "p1", position: { x: 10, y: 10 }, role: "X", label: "A", color: "#F00" }] };
+    const state2: PlayData = { ...emptyPlayData, players: [{ id: "p2", position: { x: 20, y: 20 }, role: "X", label: "B", color: "#0F0" }] };
 
     history.push(state1);
     history.push(state2);
@@ -57,7 +60,7 @@ describe("HistoryManager", () => {
   it("supports redo after undo", () => {
     const history = new HistoryManager();
     const state1: PlayData = { ...emptyPlayData };
-    const state2: PlayData = { ...emptyPlayData, players: [{ id: "p1", position: { x: 0, y: 0 }, label: "X", color: "#000" }] };
+    const state2: PlayData = { ...emptyPlayData, players: [{ id: "p1", position: { x: 0, y: 0 }, role: "X", label: "X", color: "#000" }] };
 
     history.push(state1);
     history.push(state2);
@@ -71,8 +74,8 @@ describe("HistoryManager", () => {
   it("clears redo stack when new state is pushed after undo", () => {
     const history = new HistoryManager();
     const state1: PlayData = { ...emptyPlayData };
-    const state2: PlayData = { ...emptyPlayData, players: [{ id: "p1", position: { x: 0, y: 0 }, label: "A", color: "#000" }] };
-    const state3: PlayData = { ...emptyPlayData, players: [{ id: "p2", position: { x: 5, y: 5 }, label: "B", color: "#FFF" }] };
+    const state2: PlayData = { ...emptyPlayData, players: [{ id: "p1", position: { x: 0, y: 0 }, role: "X", label: "A", color: "#000" }] };
+    const state3: PlayData = { ...emptyPlayData, players: [{ id: "p2", position: { x: 5, y: 5 }, role: "X", label: "B", color: "#FFF" }] };
 
     history.push(state1);
     history.push(state2);
@@ -111,6 +114,7 @@ describe("hitTestPlayer", () => {
   const player: PlayerIcon = {
     id: "p1",
     position: { x: 100, y: 50 },
+    role: "X",
     label: "C",
     color: "#FF0000",
   };
@@ -131,7 +135,7 @@ describe("hitTestPlayer", () => {
 describe("hitTestDrawing", () => {
   const drawing: DrawingElement = {
     id: "d1",
-    type: "line",
+    ...strokeFromV1Type("line"),
     points: [{ x: 0, y: 0 }, { x: 100, y: 0 }],
     color: "#0000FF",
     strokeWidth: 2,
@@ -177,7 +181,9 @@ describe("hitTest", () => {
 
   it("detects player hits", () => {
     const playData: PlayData = {
-      players: [{ id: "p1", position: { x: 50, y: 50 }, label: "C", color: "#F00" }],
+      version: 2,
+      equipment: [],
+      players: [{ id: "p1", position: { x: 50, y: 50 }, role: "X", label: "C", color: "#F00" }],
       drawings: [],
       annotations: [],
     };

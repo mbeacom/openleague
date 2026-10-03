@@ -8,6 +8,7 @@ import { describe, it, expect, vi, beforeAll } from "vitest";
 import { render } from "@testing-library/react";
 import { RinkBoard } from "@/components/features/practice-planner/RinkBoard";
 import { PlayData } from "@/types/practice-planner";
+import { strokeFromV1Type } from "@/lib/utils/play-data";
 
 // Mock ResizeObserver
 class ResizeObserverMock {
@@ -74,8 +75,10 @@ beforeAll(() => {
 
 describe("RinkBoard", () => {
     const mockPlayData: PlayData = {
+        version: 2,
         players: [],
         drawings: [],
+        equipment: [],
         annotations: [],
     };
 
@@ -141,10 +144,13 @@ describe("RinkBoard", () => {
 
     it("renders with player icons", () => {
         const playDataWithPlayer: PlayData = {
+            version: 2,
+            equipment: [],
             players: [
                 {
                     id: "player-1",
                     position: { x: 100, y: 42.5 },
+                    role: "X",
                     label: "C",
                     color: "#FF0000",
                 },
@@ -163,11 +169,13 @@ describe("RinkBoard", () => {
 
     it("renders with drawings", () => {
         const playDataWithDrawing: PlayData = {
+            version: 2,
+            equipment: [],
             players: [],
             drawings: [
                 {
                     id: "draw-1",
-                    type: "arrow",
+                    ...strokeFromV1Type("arrow"),
                     points: [
                         { x: 100, y: 42.5 },
                         { x: 150, y: 42.5 },
@@ -189,6 +197,8 @@ describe("RinkBoard", () => {
 
     it("renders with annotations", () => {
         const playDataWithAnnotation: PlayData = {
+            version: 2,
+            equipment: [],
             players: [],
             drawings: [],
             annotations: [

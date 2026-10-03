@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { playDataSchema } from "@/lib/utils/play-data";
 import { isValidTimeZone } from "@/lib/utils/date";
 import { MIN_SEGMENT_DIMENSION } from "@/lib/utils/segment-geometry";
 
@@ -1285,7 +1286,7 @@ export const createPlaySchema = z.object({
   name: sanitizedStringWithMin(1, 100),
   description: optionalSanitizedString(1000),
   thumbnail: base64ImageSchema,
-  playData: z.any(), // Will be validated separately with custom validation
+  playData: playDataSchema,
   isTemplate: z.boolean().default(false),
   teamId: z.string().cuid("Invalid team ID format"),
 });
@@ -1295,7 +1296,7 @@ export const updatePlaySchema = z.object({
   name: sanitizedStringWithMin(1, 100),
   description: optionalSanitizedString(1000),
   thumbnail: base64ImageSchema,
-  playData: z.any(), // Will be validated separately with custom validation
+  playData: playDataSchema,
   isTemplate: z.boolean().optional(),
   teamId: z.string().cuid("Invalid team ID format"),
 });

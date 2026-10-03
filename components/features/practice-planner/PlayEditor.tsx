@@ -29,6 +29,7 @@ import { RinkBoard, RinkBoardHandle } from "./RinkBoard";
 import { RinkBoardErrorBoundary } from "./RinkBoardErrorBoundary";
 import { DrawingToolbar } from "./DrawingToolbar";
 import { PlayData, DrawingTool, SavedPlay } from "@/types/practice-planner";
+import { createEmptyPlayData } from "@/lib/utils/play-data";
 import { generateThumbnail } from "@/lib/utils/canvas/thumbnail-generator";
 
 /**
@@ -68,11 +69,7 @@ export function PlayEditor({
 
     // Play data state
     const [playData, setPlayData] = useState<PlayData>(
-        initialData?.playData || {
-            players: [],
-            drawings: [],
-            annotations: [],
-        }
+        initialData?.playData || createEmptyPlayData()
     );
 
     // Drawing tool state

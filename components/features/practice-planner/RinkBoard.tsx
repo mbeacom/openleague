@@ -27,6 +27,7 @@ import {
     canvasToRink,
 } from "@/lib/utils/canvas/rink-renderer";
 import { drawAllElements } from "@/lib/utils/canvas/drawing-utils";
+import { createEmptyPlayData, strokeFromV1Type } from "@/lib/utils/play-data";
 import {
     HistoryManager,
     hitTest,
@@ -380,11 +381,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
     const handleClear = useCallback(() => {
         if (mode === "view") return;
 
-        const clearedData: PlayData = {
-            players: [],
-            drawings: [],
-            annotations: [],
-        };
+        const clearedData: PlayData = createEmptyPlayData();
 
         if (onPlayDataChange) {
             onPlayDataChange(clearedData);
@@ -472,6 +469,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
                     const newPlayer: PlayerIcon = {
                         id: generateId(),
                         position: clampedPos,
+                        role: "X",
                         label: String.fromCharCode(65 + playData.players.length % 26), // A, B, C, etc.
                         color: selectedColor,
                     };
@@ -598,7 +596,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
             if (isDrawing && currentDrawingPoints.length >= 2) {
                 const newDrawing: DrawingElement = {
                     id: generateId(),
-                    type: selectedTool as "line" | "curve" | "arrow",
+                    ...strokeFromV1Type(selectedTool as "line" | "curve" | "arrow"),
                     points: currentDrawingPoints,
                     color: selectedColor,
                     strokeWidth: 2,

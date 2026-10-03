@@ -143,17 +143,7 @@ export class HistoryManager {
      * Deep clones play data to prevent mutations
      */
     private deepClone(playData: PlayData): PlayData {
-        return {
-            players: playData.players.map((p) => ({ ...p, position: { ...p.position } })),
-            drawings: playData.drawings.map((d) => ({
-                ...d,
-                points: d.points.map((pt) => ({ ...pt })),
-            })),
-            annotations: playData.annotations.map((a) => ({
-                ...a,
-                position: { ...a.position },
-            })),
-        };
+        return structuredClone(playData);
     }
 }
 

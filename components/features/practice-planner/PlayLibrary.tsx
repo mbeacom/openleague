@@ -52,6 +52,7 @@ import { useRouter } from "next/navigation";
 import { SavedPlay } from "@/types/practice-planner";
 import { getPlaysByTeam, getPlayById, deletePlay, createPlay } from "@/lib/actions/plays";
 import { STARTER_PLAYS, type StarterPlay } from "@/lib/data/starter-plays";
+import { createEmptyPlayData } from "@/lib/utils/play-data";
 import { generateThumbnail } from "@/lib/utils/canvas/thumbnail-generator";
 import { formatDistanceToNow } from "date-fns";
 import { useDebouncedCallback } from "use-debounce";
@@ -389,7 +390,7 @@ export function PlayLibrary({
                     ...play,
                     description: play.description ?? "",
                     thumbnail: play.thumbnail ?? "",
-                    playData: { players: [], drawings: [], annotations: [] }, // Will be loaded when needed
+                    playData: createEmptyPlayData(), // Will be loaded when needed
                 })) as SavedPlay[];
 
                 setPlays(playsData);

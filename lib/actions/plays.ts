@@ -17,11 +17,7 @@ import {
     type GetPlayByIdInput,
     type GetPlaysByTeamInput,
 } from "@/lib/utils/validation";
-import {
-    validatePlayData,
-    VALIDATION_CONSTRAINTS,
-    type PlayData,
-} from "@/types/practice-planner";
+import { VALIDATION_CONSTRAINTS, type PlayData } from "@/types/practice-planner";
 
 export type ActionResult<T> =
     | { success: true; data: T }
@@ -44,11 +40,6 @@ function sanitizeText(text: string | null | undefined, maxLength: number): strin
 }
 
 /**
- * Maximum length for player labels
- */
-const MAX_PLAYER_LABEL_LENGTH = 50;
-
-/**
  * Sanitize PlayData by sanitizing all text annotations and player labels
  * Requirements: 1.5
  */
@@ -57,7 +48,7 @@ function sanitizePlayData(playData: PlayData): PlayData {
         ...playData,
         players: playData.players.map(player => ({
             ...player,
-            label: sanitizeText(player.label, MAX_PLAYER_LABEL_LENGTH),
+            label: sanitizeText(player.label, VALIDATION_CONSTRAINTS.MAX_PLAYER_LABEL_LENGTH),
         })),
         annotations: playData.annotations.map(annotation => ({
             ...annotation,
@@ -84,18 +75,8 @@ export async function createPlay(
         // Note: name and description are already sanitized by Zod schema
         // (sanitizedStringWithMin and optionalSanitizedString)
 
-        // Validate PlayData structure
-        const playDataValidation = validatePlayData(validated.playData);
-        if (!playDataValidation.valid) {
-            return {
-                success: false,
-                error: "Invalid play data",
-                details: playDataValidation.errors,
-            };
-        }
-
         // Sanitize PlayData
-        const sanitizedPlayData = sanitizePlayData(validated.playData as PlayData);
+        const sanitizedPlayData = sanitizePlayData(validated.playData);
 
         // Create play
         const play = await prisma.play.create({
@@ -125,9 +106,10 @@ export async function createPlay(
         };
     } catch (error) {
         if (error instanceof z.ZodError) {
+            const isPlayData = error.issues.some((issue) => issue.path[0] === "playData");
             return {
                 success: false,
-                error: "Invalid input",
+                error: isPlayData ? "Invalid play data" : "Invalid input",
                 details: error.issues,
             };
         }
@@ -186,18 +168,8 @@ export async function updatePlay(
 
         // Note: name and description are already sanitized by Zod schema
 
-        // Validate PlayData structure
-        const playDataValidation = validatePlayData(validated.playData);
-        if (!playDataValidation.valid) {
-            return {
-                success: false,
-                error: "Invalid play data",
-                details: playDataValidation.errors,
-            };
-        }
-
         // Sanitize PlayData
-        const sanitizedPlayData = sanitizePlayData(validated.playData as PlayData);
+        const sanitizedPlayData = sanitizePlayData(validated.playData);
 
         // Update play
         const play = await prisma.play.update({
@@ -226,9 +198,10 @@ export async function updatePlay(
         };
     } catch (error) {
         if (error instanceof z.ZodError) {
+            const isPlayData = error.issues.some((issue) => issue.path[0] === "playData");
             return {
                 success: false,
-                error: "Invalid input",
+                error: isPlayData ? "Invalid play data" : "Invalid input",
                 details: error.issues,
             };
         }
