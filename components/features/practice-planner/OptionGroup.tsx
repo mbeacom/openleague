@@ -1,9 +1,13 @@
 "use client";
 
 import React from "react";
-import { ToggleButtonGroup, ToggleButton } from "@mui/material";
+import { ToggleButtonGroup, ToggleButton, Tooltip } from "@mui/material";
 
-/** Option buttons keep a 44px minimum touch target. */
+/**
+ * Option buttons keep a 44px minimum touch target. Each has an accessible name
+ * and a tooltip. Wrapping in Tooltip is safe here: ToggleButtonGroup passes
+ * value/onChange to its buttons through context, not by cloning children.
+ */
 export const OPTION_SX = { minWidth: 44, minHeight: 44, px: 1.25, fontWeight: 800 } as const;
 
 export function OptionGroup<T extends string>({ label, value, options, labels, onChange }: {
@@ -24,9 +28,11 @@ export function OptionGroup<T extends string>({ label, value, options, labels, o
             sx={{ flexWrap: "wrap" }}
         >
             {options.map((option) => (
-                <ToggleButton key={option} value={option} aria-label={labels[option]} sx={OPTION_SX}>
-                    {labels[option]}
-                </ToggleButton>
+                <Tooltip key={option} title={labels[option]}>
+                    <ToggleButton value={option} aria-label={labels[option]} sx={OPTION_SX}>
+                        {labels[option]}
+                    </ToggleButton>
+                </Tooltip>
             ))}
         </ToggleButtonGroup>
     );
