@@ -97,14 +97,8 @@ export interface PlayData {
  * Available drawing tools in the practice planner
  * Requirements: 5.1, 5.2, 5.4
  */
-export type DrawingTool =
-    | "select"
-    | "player"
-    | "line"
-    | "curve"
-    | "arrow"
-    | "text"
-    | "eraser";
+/** Legacy "line" | "curve" | "arrow" are removed in Task 7 once RinkBoard switches to "stroke". */
+export type DrawingTool = "select" | "player" | "stroke" | "equipment" | "text" | "eraser" | "line" | "curve" | "arrow";
 
 // ============================================================================
 // Practice Session Types

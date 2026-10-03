@@ -11,7 +11,7 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
-import { DrawingToolbar, DrawingToolbarProps } from "@/components/features/practice-planner/DrawingToolbar";
+import { DrawingToolbar, DrawingToolbarProps, OPTION_SX } from "@/components/features/practice-planner/DrawingToolbar";
 import { DrawingTool } from "@/types/practice-planner";
 
 // Create a theme for consistent testing
@@ -37,6 +37,12 @@ const createDefaultProps = (overrides?: Partial<DrawingToolbarProps>): DrawingTo
     onClear: vi.fn(),
     canUndo: false,
     canRedo: false,
+    playerRole: "X",
+    onPlayerRoleChange: vi.fn(),
+    strokeOptions: { action: "skate", path: "straight", end: "arrow" },
+    onStrokeOptionsChange: vi.fn(),
+    equipmentKind: "cone",
+    onEquipmentKindChange: vi.fn(),
     ...overrides,
 });
 
@@ -47,9 +53,8 @@ describe("DrawingToolbar", () => {
 
             expect(screen.getByLabelText("select tool")).toBeInTheDocument();
             expect(screen.getByLabelText("player tool")).toBeInTheDocument();
-            expect(screen.getByLabelText("line tool")).toBeInTheDocument();
-            expect(screen.getByLabelText("curve tool")).toBeInTheDocument();
-            expect(screen.getByLabelText("arrow tool")).toBeInTheDocument();
+            expect(screen.getByLabelText("movement tool")).toBeInTheDocument();
+            expect(screen.getByLabelText("equipment tool")).toBeInTheDocument();
             expect(screen.getByLabelText("text tool")).toBeInTheDocument();
             expect(screen.getByLabelText("eraser tool")).toBeInTheDocument();
         });
@@ -76,17 +81,17 @@ describe("DrawingToolbar", () => {
             const onToolChange = vi.fn();
             renderWithTheme(createDefaultProps({ onToolChange }));
 
-            const lineButton = screen.getByLabelText("line tool");
-            await userEvent.click(lineButton);
+            const movementButton = screen.getByLabelText("movement tool");
+            await userEvent.click(movementButton);
 
-            expect(onToolChange).toHaveBeenCalledWith("line");
+            expect(onToolChange).toHaveBeenCalledWith("stroke");
         });
 
         it("shows selected tool as active", () => {
-            renderWithTheme(createDefaultProps({ selectedTool: "curve" }));
+            renderWithTheme(createDefaultProps({ selectedTool: "stroke" }));
 
-            const curveButton = screen.getByLabelText("curve tool");
-            expect(curveButton).toHaveAttribute("aria-pressed", "true");
+            const movementButton = screen.getByLabelText("movement tool");
+            expect(movementButton).toHaveAttribute("aria-pressed", "true");
         });
 
         it("allows selecting different tool types", async () => {
@@ -96,9 +101,8 @@ describe("DrawingToolbar", () => {
             // Test a selection of tools (not all, since select is already selected)
             const toolsToTest: Array<{ label: string; value: DrawingTool }> = [
                 { label: "player tool", value: "player" },
-                { label: "line tool", value: "line" },
-                { label: "curve tool", value: "curve" },
-                { label: "arrow tool", value: "arrow" },
+                { label: "movement tool", value: "stroke" },
+                { label: "equipment tool", value: "equipment" },
                 { label: "text tool", value: "text" },
                 { label: "eraser tool", value: "eraser" },
             ];
@@ -120,8 +124,8 @@ describe("DrawingToolbar", () => {
             await userEvent.click(colorButton);
 
             // Check that color palette is visible in the popover
-            expect(screen.getByLabelText("select color #000000")).toBeInTheDocument();
-            expect(screen.getByLabelText("select color #FF0000")).toBeInTheDocument();
+            expect(screen.getByLabelText("select color #212121")).toBeInTheDocument();
+            expect(screen.getByLabelText("select color #D32F2F")).toBeInTheDocument();
         });
 
         it("calls onColorChange when color is selected", async () => {
@@ -132,9 +136,9 @@ describe("DrawingToolbar", () => {
             await userEvent.click(screen.getByLabelText("color picker"));
 
             // Select red color
-            await userEvent.click(screen.getByLabelText("select color #FF0000"));
+            await userEvent.click(screen.getByLabelText("select color #D32F2F"));
 
-            expect(onColorChange).toHaveBeenCalledWith("#FF0000");
+            expect(onColorChange).toHaveBeenCalledWith("#D32F2F");
         });
 
         it("closes popover after color selection", async () => {
@@ -144,7 +148,7 @@ describe("DrawingToolbar", () => {
             await userEvent.click(screen.getByLabelText("color picker"));
 
             // Verify popover is open
-            const redColorButton = screen.getByLabelText("select color #FF0000");
+            const redColorButton = screen.getByLabelText("select color #D32F2F");
             expect(redColorButton).toBeVisible();
 
             // Select a color
@@ -152,26 +156,26 @@ describe("DrawingToolbar", () => {
 
             // Popover should close - the color button should no longer be in the document
             await waitFor(() => {
-                expect(screen.queryByLabelText("select color #FF0000")).not.toBeInTheDocument();
+                expect(screen.queryByLabelText("select color #D32F2F")).not.toBeInTheDocument();
             });
         });
 
         it("displays current color on color picker button", () => {
-            renderWithTheme(createDefaultProps({ selectedColor: "#FF0000" }));
+            renderWithTheme(createDefaultProps({ selectedColor: "#D32F2F" }));
 
             const colorButton = screen.getByLabelText("color picker");
             // Check that the button has the selected color as background
-            expect(colorButton).toHaveStyle({ backgroundColor: "#FF0000" });
+            expect(colorButton).toHaveStyle({ backgroundColor: "#D32F2F" });
         });
 
-        it("shows all 10 palette colors", async () => {
+        it("shows all 8 palette colors", async () => {
             renderWithTheme(createDefaultProps());
 
             await userEvent.click(screen.getByLabelText("color picker"));
 
             const expectedColors = [
-                "#000000", "#FF0000", "#0000FF", "#00FF00", "#FFFF00",
-                "#FF00FF", "#00FFFF", "#FFA500", "#800080", "#FFFFFF",
+                "#212121", "#0D47A1", "#1976D2", "#D32F2F",
+                "#2E7D32", "#F57C00", "#6A1B9A", "#FFFFFF",
             ];
 
             for (const color of expectedColors) {
@@ -304,9 +308,8 @@ describe("DrawingToolbar", () => {
             // Tool buttons
             expect(screen.getByLabelText("select tool")).toBeInTheDocument();
             expect(screen.getByLabelText("player tool")).toBeInTheDocument();
-            expect(screen.getByLabelText("line tool")).toBeInTheDocument();
-            expect(screen.getByLabelText("curve tool")).toBeInTheDocument();
-            expect(screen.getByLabelText("arrow tool")).toBeInTheDocument();
+            expect(screen.getByLabelText("movement tool")).toBeInTheDocument();
+            expect(screen.getByLabelText("equipment tool")).toBeInTheDocument();
             expect(screen.getByLabelText("text tool")).toBeInTheDocument();
             expect(screen.getByLabelText("eraser tool")).toBeInTheDocument();
 
@@ -362,6 +365,56 @@ describe("DrawingToolbar", () => {
 
             // Component should render without errors for cyan
             expect(screen.getByLabelText("color picker")).toBeInTheDocument();
+        });
+    });
+
+    describe("Contextual options", () => {
+        it("shows role options only for the player tool", () => {
+            const { unmount } = renderWithTheme(createDefaultProps({ selectedTool: "player" }));
+            expect(screen.getByRole("group", { name: "player role" })).toBeInTheDocument();
+            expect(screen.queryByRole("group", { name: "stroke action" })).not.toBeInTheDocument();
+            unmount();
+            renderWithTheme(createDefaultProps({ selectedTool: "select" }));
+            expect(screen.queryByRole("group", { name: "player role" })).not.toBeInTheDocument();
+        });
+
+        it("picking a role reports it", async () => {
+            const onPlayerRoleChange = vi.fn();
+            renderWithTheme(createDefaultProps({ selectedTool: "player", onPlayerRoleChange }));
+            await userEvent.click(screen.getByLabelText("Defense"));
+            expect(onPlayerRoleChange).toHaveBeenCalledWith("D");
+        });
+
+        it("picking an action also applies that action's default end", async () => {
+            const onStrokeOptionsChange = vi.fn();
+            renderWithTheme(createDefaultProps({
+                selectedTool: "stroke",
+                strokeOptions: { action: "skate", path: "freehand", end: "arrow" },
+                onStrokeOptionsChange,
+            }));
+            await userEvent.click(screen.getByLabelText("Line"));
+            expect(onStrokeOptionsChange).toHaveBeenCalledWith({ action: "line", path: "freehand", end: "none" });
+        });
+
+        it("path and end are independent of action", async () => {
+            const onStrokeOptionsChange = vi.fn();
+            renderWithTheme(createDefaultProps({ selectedTool: "stroke", onStrokeOptionsChange }));
+            await userEvent.click(screen.getByLabelText("Stop"));
+            expect(onStrokeOptionsChange).toHaveBeenCalledWith({ action: "skate", path: "straight", end: "stop" });
+        });
+
+        it("picking equipment reports it", async () => {
+            const onEquipmentKindChange = vi.fn();
+            renderWithTheme(createDefaultProps({ selectedTool: "equipment", onEquipmentKindChange }));
+            await userEvent.click(screen.getByLabelText("Net"));
+            expect(onEquipmentKindChange).toHaveBeenCalledWith("net");
+        });
+
+        it("option buttons meet the 44px touch target", () => {
+            renderWithTheme(createDefaultProps({ selectedTool: "equipment" }));
+            expect(screen.getByLabelText("Cone")).toBeInTheDocument();
+            expect(OPTION_SX.minWidth).toBe(44);
+            expect(OPTION_SX.minHeight).toBe(44);
         });
     });
 });

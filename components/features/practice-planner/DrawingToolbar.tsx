@@ -29,9 +29,8 @@ import useMediaQuery from "@mui/material/useMediaQuery";
 import {
     PanTool as SelectIcon,
     PersonAdd as PlayerIcon,
-    Timeline as LineIcon,
-    ShowChart as CurveIcon,
-    ArrowForward as ArrowIcon,
+    Timeline as MovementIcon,
+    SportsHockey as EquipmentIcon,
     TextFields as TextIcon,
     Delete as EraserIcon,
     Undo as UndoIcon,
@@ -39,7 +38,24 @@ import {
     Clear as ClearIcon,
     Palette as PaletteIcon,
 } from "@mui/icons-material";
-import { DrawingTool } from "@/types/practice-planner";
+import {
+    DrawingTool,
+    PLAYER_ROLES,
+    STROKE_ACTIONS,
+    STROKE_PATHS,
+    STROKE_ENDS,
+    EQUIPMENT_KINDS,
+    PlayerRole,
+    EquipmentKind,
+    StrokeOptions,
+} from "@/types/practice-planner";
+import {
+    ROLE_LABELS,
+    ACTION_LABELS,
+    END_LABELS,
+    EQUIPMENT_LABELS,
+    DEFAULT_END_FOR_ACTION,
+} from "@/lib/utils/canvas/notation";
 
 /**
  * Props for the DrawingToolbar component
@@ -54,6 +70,12 @@ export interface DrawingToolbarProps {
     onClear: () => void;
     canUndo: boolean;
     canRedo: boolean;
+    playerRole: PlayerRole;
+    onPlayerRoleChange: (role: PlayerRole) => void;
+    strokeOptions: StrokeOptions;
+    onStrokeOptionsChange: (options: StrokeOptions) => void;
+    equipmentKind: EquipmentKind;
+    onEquipmentKindChange: (kind: EquipmentKind) => void;
 }
 
 /**
@@ -99,17 +121,44 @@ function getContrastingColor(backgroundColor: string): string {
  * Requirements: 5.2
  */
 const COLOR_PALETTE = [
-    "#000000", // Black
-    "#FF0000", // Red
-    "#0000FF", // Blue
-    "#00FF00", // Green
-    "#FFFF00", // Yellow
-    "#FF00FF", // Magenta
-    "#00FFFF", // Cyan
-    "#FFA500", // Orange
-    "#800080", // Purple
-    "#FFFFFF", // White
+    "#212121",
+    "#0D47A1",
+    "#1976D2",
+    "#D32F2F",
+    "#2E7D32",
+    "#F57C00",
+    "#6A1B9A",
+    "#FFFFFF",
 ];
+
+/** Option buttons keep a 44px minimum touch target. */
+export const OPTION_SX = { minWidth: 44, minHeight: 44, px: 1.25, fontWeight: 800 } as const;
+
+function OptionGroup<T extends string>({ label, value, options, labels, onChange }: {
+    label: string;
+    value: T;
+    options: readonly T[];
+    labels: Record<T, string>;
+    onChange: (value: T) => void;
+}) {
+    return (
+        <ToggleButtonGroup
+            value={value}
+            exclusive
+            onChange={(_e, next: T | null) => next !== null && onChange(next)}
+            aria-label={label}
+            role="group"
+            size="small"
+            sx={{ flexWrap: "wrap" }}
+        >
+            {options.map((option) => (
+                <ToggleButton key={option} value={option} aria-label={labels[option]} sx={OPTION_SX}>
+                    {labels[option]}
+                </ToggleButton>
+            ))}
+        </ToggleButtonGroup>
+    );
+}
 
 /**
  * DrawingToolbar Component
@@ -130,6 +179,12 @@ export function DrawingToolbar({
     onClear,
     canUndo,
     canRedo,
+    playerRole,
+    onPlayerRoleChange,
+    strokeOptions,
+    onStrokeOptionsChange,
+    equipmentKind,
+    onEquipmentKindChange,
 }: DrawingToolbarProps) {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down("md"));
@@ -240,19 +295,14 @@ export function DrawingToolbar({
                             <PlayerIcon />
                         </ToggleButton>
                     </Tooltip>
-                    <Tooltip title="Draw Line">
-                        <ToggleButton value="line" aria-label="line tool">
-                            <LineIcon />
+                    <Tooltip title="Movement">
+                        <ToggleButton value="stroke" aria-label="movement tool">
+                            <MovementIcon />
                         </ToggleButton>
                     </Tooltip>
-                    <Tooltip title="Draw Curve">
-                        <ToggleButton value="curve" aria-label="curve tool">
-                            <CurveIcon />
-                        </ToggleButton>
-                    </Tooltip>
-                    <Tooltip title="Draw Arrow">
-                        <ToggleButton value="arrow" aria-label="arrow tool">
-                            <ArrowIcon />
+                    <Tooltip title="Equipment">
+                        <ToggleButton value="equipment" aria-label="equipment tool">
+                            <EquipmentIcon />
                         </ToggleButton>
                     </Tooltip>
                     <Tooltip title="Add Text">
@@ -332,6 +382,42 @@ export function DrawingToolbar({
                     </IconButton>
                 </Tooltip>
             </Box>
+
+            {selectedTool === "player" && (
+                <Box sx={{ mt: 1, display: "flex", gap: 1, flexWrap: "wrap" }}>
+                    <OptionGroup label="player role" value={playerRole} options={PLAYER_ROLES} labels={ROLE_LABELS} onChange={onPlayerRoleChange} />
+                </Box>
+            )}
+            {selectedTool === "stroke" && (
+                <Box sx={{ mt: 1, display: "flex", gap: 1, flexWrap: "wrap" }}>
+                    <OptionGroup
+                        label="stroke action"
+                        value={strokeOptions.action}
+                        options={STROKE_ACTIONS}
+                        labels={ACTION_LABELS}
+                        onChange={(action) => onStrokeOptionsChange({ ...strokeOptions, action, end: DEFAULT_END_FOR_ACTION[action] })}
+                    />
+                    <OptionGroup
+                        label="stroke path"
+                        value={strokeOptions.path}
+                        options={STROKE_PATHS}
+                        labels={{ straight: "Straight", freehand: "Freehand" }}
+                        onChange={(path) => onStrokeOptionsChange({ ...strokeOptions, path })}
+                    />
+                    <OptionGroup
+                        label="stroke end"
+                        value={strokeOptions.end}
+                        options={STROKE_ENDS}
+                        labels={END_LABELS}
+                        onChange={(end) => onStrokeOptionsChange({ ...strokeOptions, end })}
+                    />
+                </Box>
+            )}
+            {selectedTool === "equipment" && (
+                <Box sx={{ mt: 1, display: "flex", gap: 1, flexWrap: "wrap" }}>
+                    <OptionGroup label="equipment kind" value={equipmentKind} options={EQUIPMENT_KINDS} labels={EQUIPMENT_LABELS} onChange={onEquipmentKindChange} />
+                </Box>
+            )}
 
             {/* Color Picker Popover */}
             {/* Requirements: 5.2 - Color selection interface */}

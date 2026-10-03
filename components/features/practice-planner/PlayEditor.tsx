@@ -28,7 +28,7 @@ import { Save as SaveIcon } from "@mui/icons-material";
 import { RinkBoard, RinkBoardHandle } from "./RinkBoard";
 import { RinkBoardErrorBoundary } from "./RinkBoardErrorBoundary";
 import { DrawingToolbar } from "./DrawingToolbar";
-import { PlayData, DrawingTool, SavedPlay } from "@/types/practice-planner";
+import { PlayData, DrawingTool, SavedPlay, PlayerRole, StrokeOptions, EquipmentKind } from "@/types/practice-planner";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import { generateThumbnail } from "@/lib/utils/canvas/thumbnail-generator";
 
@@ -75,6 +75,9 @@ export function PlayEditor({
     // Drawing tool state
     const [selectedTool, setSelectedTool] = useState<DrawingTool>("select");
     const [selectedColor, setSelectedColor] = useState("#000000");
+    const [playerRole, setPlayerRole] = useState<PlayerRole>("X");
+    const [strokeOptions, setStrokeOptions] = useState<StrokeOptions>({ action: "skate", path: "freehand", end: "arrow" });
+    const [equipmentKind, setEquipmentKind] = useState<EquipmentKind>("cone");
     const [canUndo, setCanUndo] = useState(false);
     const [canRedo, setCanRedo] = useState(false);
 
@@ -340,6 +343,12 @@ export function PlayEditor({
                     onClear={handleClear}
                     canUndo={canUndo}
                     canRedo={canRedo}
+                    playerRole={playerRole}
+                    onPlayerRoleChange={setPlayerRole}
+                    strokeOptions={strokeOptions}
+                    onStrokeOptionsChange={setStrokeOptions}
+                    equipmentKind={equipmentKind}
+                    onEquipmentKindChange={setEquipmentKind}
                 />
             </Paper>
 
