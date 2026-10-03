@@ -52,6 +52,7 @@ beforeEach(() => {
 
 afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
 });
 
 function renderMap(activeIndex = 0) {
@@ -94,5 +95,37 @@ describe("StationMap", () => {
     it("shows one legend combining every station's symbols", () => {
         renderMap();
         expect(screen.getByText("Legend (2)")).toBeInTheDocument();
+    });
+});
+
+describe("StationMap pixel ratio", () => {
+    const mapCanvas = () => screen.getByRole("img", { name: /^Station map:/ }) as HTMLCanvasElement;
+
+    it.each([
+        [2, 2],
+        [4, 3], // clamped high
+        [0.5, 1], // clamped low
+    ])("at devicePixelRatio %s, sizes the backing store by %s and scales before drawing", (dpr, ratio) => {
+        vi.stubGlobal("devicePixelRatio", dpr);
+        renderMap();
+        const canvas = mapCanvas();
+        const calls = byCanvas.get(canvas) ?? [];
+
+        expect([canvas.width, canvas.height]).toEqual([960 * ratio, 420 * ratio]);
+        expect(calls[0]).toEqual({ name: "setTransform", args: [ratio, 0, 0, ratio, 0, 0] });
+        // Drawing stays in logical (CSS) pixels: the clear covers the intrinsic size, not the backing store.
+        expect(calls.find((c) => c.name === "clearRect")?.args).toEqual([0, 0, 960, 420]);
+    });
+
+    it("draws the rink as vectors when scaled, never blitting a cached rink bitmap", () => {
+        vi.stubGlobal("devicePixelRatio", 2);
+        renderMap();
+        expect((byCanvas.get(mapCanvas()) ?? []).some((c) => c.name === "drawImage")).toBe(false);
+    });
+
+    it("keeps the CSS size: the canvas still fills its container's width", () => {
+        vi.stubGlobal("devicePixelRatio", 3);
+        renderMap();
+        expect(mapCanvas().style.width).toBe("100%");
     });
 });
