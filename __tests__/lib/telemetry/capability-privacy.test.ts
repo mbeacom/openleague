@@ -281,6 +281,26 @@ describe('practice plan fragments (ADR-0020)', () => {
     expect(event.breadcrumbs[0].data.from).toBe(`/login#plan=${CAPABILITY_TOKEN_REDACTION}`);
   });
 
+  it('redacts plan= when it is not the first fragment parameter', () => {
+    expect(scrubCapabilityTokens(`/practice-planner/import#x=1&plan=${PLAN}`)).toBe(
+      `/practice-planner/import#x=1&plan=${CAPABILITY_TOKEN_REDACTION}`
+    );
+    expect(scrubCapabilityTokens(`/login#x=1&plan=${PLAN}&y=2`)).toBe(
+      `/login#x=1&plan=${CAPABILITY_TOKEN_REDACTION}&y=2`
+    );
+  });
+
+  it('redacts a percent-encoded non-first plan= in a nested fragment', () => {
+    expect(scrubCapabilityTokens(`/login?callbackUrl=%2Fpractice-planner%2Fimport%23x%3D1%26plan%3D${PLAN}`)).toBe(
+      `/login?callbackUrl=%2Fpractice-planner%2Fimport%23x%3D1%26plan%3D${CAPABILITY_TOKEN_REDACTION}`
+    );
+  });
+
+  it('leaves a plan= query parameter outside any fragment alone', () => {
+    expect(scrubCapabilityTokens('/practice-planner?team=1&plan=abc')).toBe('/practice-planner?team=1&plan=abc');
+    expect(scrubCapabilityTokens('/x?callbackUrl=%2Fy%3Fa%3D1%26plan%3Dabc')).toBe('/x?callbackUrl=%2Fy%3Fa%3D1%26plan%3Dabc');
+  });
+
   it('leaves other fragments alone', () => {
     expect(scrubCapabilityTokens('/docs#planning')).toBe('/docs#planning');
     expect(scrubCapabilityTokens('/practice-planner#plans')).toBe('/practice-planner#plans');

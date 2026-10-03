@@ -113,11 +113,15 @@ const ENCODED_QUERY_PATTERNS = PUBLIC_CAPABILITY_QUERY_PARAMS.map(
  * It is coach content, not a credential, but Sentry's browser SDK records
  * `location.href` (fragment included) in request URLs and navigation
  * breadcrumbs, so the value is redacted on the way out. Raw and
- * percent-encoded (a fragment nested in a `callbackUrl`).
+ * percent-encoded (a fragment nested in a `callbackUrl`), as the first
+ * fragment parameter or a later one (`#x=1&plan=`); the lookbehind keeps a
+ * `plan=` query parameter outside any fragment untouched.
  */
 const PLAN_FRAGMENT_PATTERNS = [
   /(#plan=)([^&#\s"'`\\]+)/gi,
+  /(?<=#[^#\s"'`\\]*)(&plan=)([^&#\s"'`\\]+)/gi,
   /(%23plan%3D)([^&#\s"'`\\%]+)/gi,
+  /(?<=%23[^#&\s"'`\\]*)(%26plan%3D)([^&#\s"'`\\%]+)/gi,
 ];
 
 /** Next.js renders parameterized routes as `/gear-wishlist/[token]` — already safe. */
