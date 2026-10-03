@@ -24,6 +24,9 @@ affects:
   - type: path
     pattern: "apps/planner/**"
     note: The static, local-first planner deployed to GitHub Pages.
+  - type: path
+    pattern: "lib/planner-store/**"
+    note: The client-side store and platform seam the static app implements; hosted implements it with the server actions.
 provenance:
   authoredBy: agent-drafted
   ratifiedBy: "@mbeacom"

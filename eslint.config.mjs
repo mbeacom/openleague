@@ -56,6 +56,25 @@ const rawSqlSelectors = [
 /** The source extensions ESLint parses, used to scope the path-restricted block. */
 const SOURCE_GLOB = "*.{js,jsx,mjs,cjs,ts,tsx}";
 
+/**
+ * ADR-0020: the static planner (apps/planner, sub-project 3) reuses these
+ * modules, so they reach server actions and Next.js only through
+ * usePlannerStore()/usePlannerPlatform() from lib/planner-store. Type imports
+ * are banned too: the portable code declares its own types (SegmentKind in
+ * types/segments.ts, PracticeSessionView in types/practice-planner.ts).
+ *
+ * This is the per-file, authoring-time half. The transitive half, which
+ * catches a shared components/ui or lib/utils module that pulls in next/*, is
+ * __tests__/lib/planner-store/portability.test.ts, and that is the gate.
+ */
+const PLANNER_PORTABILITY_MESSAGE =
+  "Portable practice-planner code (ADR-0020) must not import server actions, Prisma, auth " +
+  "or Next.js runtime modules. Use usePlannerStore()/usePlannerPlatform() from " +
+  "@/lib/planner-store, and local types.";
+
+/** Glob-escaped: `[sessionId]` would otherwise be a character class and match nothing. */
+const SESSION_DETAIL_VIEW = "app/\\(dashboard\\)/practice-planner/\\[sessionId\\]/SessionDetailView.tsx";
+
 const eslintConfig = [
   ...nextConfig,
   {
@@ -136,6 +155,42 @@ const eslintConfig = [
         "error",
         ...unsafeRawSqlSelectors,
         ...rawSqlSelectors,
+      ],
+    },
+  },
+  {
+    name: "adr-0020/portable-practice-planner",
+    files: [
+      `components/features/practice-planner/**/${SOURCE_GLOB}`,
+      SESSION_DETAIL_VIEW,
+      `lib/planner-store/**/${SOURCE_GLOB}`,
+      `lib/plan-document/**/${SOURCE_GLOB}`,
+      "lib/utils/session-timeline.ts",
+      "types/segments.ts",
+      "types/practice-planner.ts",
+    ],
+    // The hosted import flow (sub-project 1): it calls importPracticePlan and useRouter by design.
+    ignores: ["components/features/practice-planner/PlanImportView.tsx"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            "next",
+            "@/auth",
+            "@prisma/client",
+            "server-only",
+            "@/components/ui/NextLinkComposites",
+            "@/components/providers/HostedPlannerProvider",
+            "@/components/providers/hosted-planner-platform",
+          ].map((name) => ({ name, message: PLANNER_PORTABILITY_MESSAGE })),
+          patterns: [
+            {
+              group: ["next/*", "@/lib/actions/*", "@/lib/db/*", "@/lib/auth/*"],
+              message: PLANNER_PORTABILITY_MESSAGE,
+            },
+          ],
+        },
       ],
     },
   },
