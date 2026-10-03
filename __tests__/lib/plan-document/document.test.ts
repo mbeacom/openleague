@@ -9,6 +9,7 @@ import {
     PLAN_FORMAT,
     PLAN_VERSION,
     parsePlan,
+    planByteLength,
     planFileName,
     planToEditorSession,
     serializePlan,
@@ -286,5 +287,13 @@ describe("planToEditorSession", () => {
         const groups = groupStations(session.plays);
         expect(groups.map((g) => g.stations.map((p) => p.name))).toEqual([["Warmup Laps"], ["Breakout", "Regroup"]]);
         expect(new Set(session.plays.map((p) => p.key)).size).toBe(3);
+    });
+});
+
+describe("planByteLength", () => {
+    it("is the UTF-8 byte length of the plan's JSON, which is what the import action is sent", () => {
+        const doc = serializePlan(input({ title: "Été drills" }), "openleague-hosted", NOW);
+        expect(planByteLength(doc)).toBe(new TextEncoder().encode(JSON.stringify(doc)).byteLength);
+        expect(planByteLength(doc)).toBeGreaterThan(JSON.stringify(doc).length); // "É" and "é" are 2 bytes each
     });
 });

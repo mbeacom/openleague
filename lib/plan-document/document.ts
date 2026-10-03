@@ -15,7 +15,12 @@ import { sessionWallMinutes, stationGroupError } from "@/lib/utils/session-timel
 export const PLAN_FORMAT = "openleague.practice-plan" as const;
 export const PLAN_VERSION = 1 as const;
 export const MAX_PLAN_DRILLS = 50;
-export const MAX_PLAN_FILE_BYTES = 2_000_000;
+/**
+ * Kept under Next's default 1 MB server-action body limit (next.config.ts sets
+ * no serverActions.bodySizeLimit): an imported plan is sent to the import
+ * action as JSON, so a larger file would preview and then fail on Import.
+ */
+export const MAX_PLAN_FILE_BYTES = 900_000;
 export const MAX_PLAN_LINK_BYTES = 65_536;
 
 const MAX_TITLE_LENGTH = 100;
@@ -206,6 +211,11 @@ export function serializePlan(input: PlanSessionInput, generator: PlanGenerator,
             drills,
         },
     };
+}
+
+/** UTF-8 byte length of the plan's JSON: roughly what the import action's request body carries. */
+export function planByteLength(plan: PlanDocument): number {
+    return new TextEncoder().encode(JSON.stringify(plan)).byteLength;
 }
 
 // ---------------------------------------------------------------------------

@@ -64,7 +64,7 @@ The static planner (sub-project 3) uses the same module.
 - **Wall time** (`sessionWallMinutes`) must be ≤ `durationMinutes`. Station-group rules match the server.
 
 **Module API** (`lib/plan-document/index.ts`)
-- `PLAN_FORMAT = "openleague.practice-plan"`, `PLAN_VERSION = 1`, `MAX_PLAN_DRILLS = 50`, `MAX_PLAN_FILE_BYTES = 2_000_000`, `MAX_PLAN_LINK_BYTES = 65_536`
+- `PLAN_FORMAT = "openleague.practice-plan"`, `PLAN_VERSION = 1`, `MAX_PLAN_DRILLS = 50`, `MAX_PLAN_FILE_BYTES = 900_000` (under the 1 MB server-action body limit), `MAX_PLAN_LINK_BYTES = 65_536`
 - `planDocumentSchema`, the Zod v4 schema, which reuses `playDataSchema` and `upgradePlayData`
 - `type PlanDocument`, inferred from the schema after upgrade
 - `serializePlan(input: PlanSessionInput, generator): PlanDocument`

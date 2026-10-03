@@ -7,6 +7,14 @@ const nav = vi.hoisted(() => ({ push: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: nav.push }) }));
 const actions = vi.hoisted(() => ({ importPracticePlan: vi.fn() }));
 vi.mock("@/lib/actions/practice-plan-import", () => actions);
+const planBytes = vi.hoisted(() => ({ override: null as number | null }));
+vi.mock("@/lib/plan-document", async (importOriginal) => {
+    const original = await importOriginal<typeof import("@/lib/plan-document")>();
+    return {
+        ...original,
+        planByteLength: (plan: Parameters<typeof original.planByteLength>[0]) => planBytes.override ?? original.planByteLength(plan),
+    };
+});
 vi.mock("@/lib/utils/canvas/thumbnail-generator", () => ({
     generateThumbnail: vi.fn(() => "data:image/png;base64,AA=="),
 }));
@@ -14,6 +22,7 @@ vi.mock("@/lib/utils/canvas/thumbnail-generator", () => ({
 import {
     FILE_TOO_LARGE_MESSAGE,
     NO_IMPORT_TEAMS_MESSAGE,
+    PLAN_TOO_LARGE_TO_IMPORT_MESSAGE,
     PlanImportView,
 } from "@/components/features/practice-planner/PlanImportView";
 import {
@@ -64,6 +73,7 @@ const title = () => screen.findByRole("heading", { name: "Tuesday Skills Practic
 
 beforeEach(() => {
     vi.clearAllMocks();
+    planBytes.override = null;
     sessionStorage.clear();
     window.history.replaceState(null, "", "/practice-planner/import");
 });
@@ -142,6 +152,15 @@ describe("PlanImportView: errors", () => {
         expect(await screen.findByText(FILE_TOO_LARGE_MESSAGE)).toBeInTheDocument();
     });
 
+    it("caps plan files at 900 KB, under the 1 MB server-action body limit", async () => {
+        expect(MAX_PLAN_FILE_BYTES).toBe(900_000);
+        expect(FILE_TOO_LARGE_MESSAGE).toBe("This file is too large to be a practice plan (the limit is 900 KB).");
+        render(<PlanImportView teams={[LIONS]} />);
+        upload(new Uint8Array(MAX_PLAN_FILE_BYTES)); // at the cap: read, then refused as not a plan
+        expect(await screen.findByText(NOT_A_PLAN_MESSAGE)).toBeInTheDocument();
+        expect(screen.queryByText(FILE_TOO_LARGE_MESSAGE)).not.toBeInTheDocument();
+    });
+
     it("shows a damaged link as unreadable", async () => {
         window.history.replaceState(null, "", "/practice-planner/import#plan=@@@");
         render(<PlanImportView teams={[LIONS]} />);
@@ -196,6 +215,18 @@ describe("PlanImportView: form", () => {
         fireEvent.click(screen.getByRole("button", { name: "Import plan" }));
         expect(await screen.findByText("You can't schedule practices for this team.")).toBeInTheDocument();
         expect(nav.push).not.toHaveBeenCalled();
+    });
+
+    it("refuses to send a plan whose JSON is over the cap, without calling the action", async () => {
+        render(<PlanImportView teams={[LIONS]} />);
+        upload(JSON.stringify(plan()));
+        await title();
+        planBytes.override = MAX_PLAN_FILE_BYTES + 1;
+        fireEvent.click(screen.getByRole("button", { name: "Import plan" }));
+        expect(await screen.findByText(PLAN_TOO_LARGE_TO_IMPORT_MESSAGE)).toBeInTheDocument();
+        expect(PLAN_TOO_LARGE_TO_IMPORT_MESSAGE).toBe("This plan is too large to import (over 900 KB).");
+        expect(actions.importPracticePlan).not.toHaveBeenCalled();
+        expect(screen.getByRole("button", { name: "Import plan" })).toBeEnabled();
     });
 
     it("explains when the user can't import into any team", async () => {

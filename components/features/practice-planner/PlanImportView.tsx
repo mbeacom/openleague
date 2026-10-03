@@ -19,6 +19,7 @@ import {
     MAX_PLAN_FILE_BYTES,
     NOT_A_PLAN_MESSAGE,
     parsePlan,
+    planByteLength,
     readPlanLink,
     type ParsePlanResult,
     type PlanDocument,
@@ -26,7 +27,8 @@ import {
 } from "@/lib/plan-document";
 import { takeIncomingPlan } from "@/lib/plan-document/pending";
 
-export const FILE_TOO_LARGE_MESSAGE = `This file is too large to be a practice plan (the limit is ${MAX_PLAN_FILE_BYTES / 1_000_000} MB).`;
+export const FILE_TOO_LARGE_MESSAGE = `This file is too large to be a practice plan (the limit is ${MAX_PLAN_FILE_BYTES / 1000} KB).`;
+export const PLAN_TOO_LARGE_TO_IMPORT_MESSAGE = `This plan is too large to import (over ${MAX_PLAN_FILE_BYTES / 1000} KB).`;
 export const NO_IMPORT_TEAMS_MESSAGE = "Only team admins can import practice plans. Ask an admin of your team to import it.";
 
 /** Size check first, then JSON, then parsePlan. Never throws. */
@@ -164,6 +166,11 @@ function PlanImportForm({ plan, teams, onChooseAnother, onImported }: PlanImport
 
     const submit = async () => {
         if (!teamId || !when) return;
+        // The action's request body is capped at 1 MB; refuse here rather than fail as a network error.
+        if (planByteLength(plan) > MAX_PLAN_FILE_BYTES) {
+            setError({ message: PLAN_TOO_LARGE_TO_IMPORT_MESSAGE, details: [] });
+            return;
+        }
         setSubmitting(true);
         setError(null);
         try {
