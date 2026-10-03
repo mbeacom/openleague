@@ -19,7 +19,7 @@ import {
 } from "@/types/practice-planner";
 import type { StrokeOptions } from "@/types/practice-planner";
 import { TransformContext, rinkToCanvas } from "./rink-renderer";
-import { buildStrokeGeometry } from "./stroke-geometry";
+import { buildStrokeGeometry, type StrokeGeometry } from "./stroke-geometry";
 import { drawPlayerGlyph, drawEquipmentGlyph } from "./glyphs";
 import { EQUIPMENT_RADIUS_FT, PLAYER_RADIUS_FT, glyphRadiusPx } from "./glyph-metrics";
 
@@ -44,7 +44,20 @@ export function drawStroke(
         pxPerFt
     );
 
-    ctx.strokeStyle = stroke.color;
+    paintStrokeGeometry(ctx, geometry, stroke.color, pxPerFt);
+}
+
+/**
+ * Paints precomputed stroke geometry (canvas px): the pattern polylines, then
+ * the end cap. Shared by the board and the drill legend swatches.
+ */
+export function paintStrokeGeometry(
+    ctx: CanvasRenderingContext2D,
+    geometry: StrokeGeometry,
+    color: string,
+    pxPerFt: number
+): void {
+    ctx.strokeStyle = color;
     ctx.lineWidth = geometry.lineWidth;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
@@ -59,7 +72,7 @@ export function drawStroke(
     const { tip, angle, type } = geometry.end;
     if (type === "arrow") {
         const from = { x: tip.x - Math.cos(angle), y: tip.y - Math.sin(angle) };
-        drawArrowHead(ctx, from, tip, stroke.color, geometry.lineWidth);
+        drawArrowHead(ctx, from, tip, color, geometry.lineWidth);
     } else {
         const half = Math.max(1.8 * pxPerFt, 4);
         const nx = -Math.sin(angle);

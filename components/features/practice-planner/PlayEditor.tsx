@@ -28,6 +28,7 @@ import useMediaQuery from "@mui/material/useMediaQuery";
 import { Save as SaveIcon } from "@mui/icons-material";
 import { RinkBoard, RinkBoardHandle } from "./RinkBoard";
 import { RinkBoardErrorBoundary } from "./RinkBoardErrorBoundary";
+import { PlayLegend } from "./PlayLegend";
 import { DrawingToolbar } from "./DrawingToolbar";
 import { ElementInspector } from "./ElementInspector";
 import { findElement } from "@/lib/utils/canvas/element-ops";
@@ -378,6 +379,9 @@ export function PlayEditor({
                         height={isMobile ? 400 : 600}
                     />
                 </RinkBoardErrorBoundary>
+                <Box sx={{ mt: 2 }}>
+                    <PlayLegend playData={playData} />
+                </Box>
             </Paper>
 
             {/* Element inspector sits BELOW the board so selecting never shifts the canvas */}
