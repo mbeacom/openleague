@@ -244,6 +244,50 @@ describe("RinkBoard ice area", () => {
         expect(onAreaDrawn).not.toHaveBeenCalled();
     });
 
+    it("abandons an element drag when a second touch starts: the element stays put, nothing is recorded", () => {
+        const onUndoRedoStateChange = vi.fn();
+        const { canvas, at, onPlayDataChange, onSelectionChange } = setup({
+            playData: { ...createEmptyPlayData(), area: CUSTOM, equipment: [cone(110)] },
+            selectedTool: "select",
+            onUndoRedoStateChange,
+        });
+        const grab = at(110, 40);
+        const moved = at(104, 40); // well past the drag threshold
+        fireEvent.touchStart(canvas, { touches: [grab] });
+        fireEvent.touchMove(canvas, { touches: [moved] });
+        // A second finger lands: the pinch takes over and the drag is cancelled.
+        fireEvent.touchStart(canvas, { touches: [moved, at(115, 45)] });
+        fireEvent.touchEnd(canvas, { touches: [] });
+        expect(onPlayDataChange).not.toHaveBeenCalled();
+        expect(onUndoRedoStateChange).not.toHaveBeenCalled();
+        // The pinch cancels the drag, not the selection.
+        expect(onSelectionChange).toHaveBeenLastCalledWith("c");
+    });
+
+    it("does not resume an abandoned drag when one finger of the pinch lifts and the other moves", () => {
+        const { canvas, at, onPlayDataChange } = setup({
+            playData: { ...createEmptyPlayData(), area: CUSTOM, equipment: [cone(110)] },
+            selectedTool: "select",
+        });
+        fireEvent.touchStart(canvas, { touches: [at(110, 40)] });
+        fireEvent.touchMove(canvas, { touches: [at(104, 40)] });
+        fireEvent.touchStart(canvas, { touches: [at(104, 40), at(115, 45)] });
+        fireEvent.touchEnd(canvas, { touches: [at(104, 40)] });
+        fireEvent.touchMove(canvas, { touches: [at(102, 35)] });
+        fireEvent.touchEnd(canvas, { touches: [] });
+        expect(onPlayDataChange).not.toHaveBeenCalled();
+    });
+
+    it("abandons a stroke in progress when a second touch starts", () => {
+        const { canvas, at, onPlayDataChange } = setup({ selectedTool: "stroke" });
+        fireEvent.touchStart(canvas, { touches: [at(40, 40)] });
+        fireEvent.touchMove(canvas, { touches: [at(60, 40)] });
+        fireEvent.touchMove(canvas, { touches: [at(80, 40)] });
+        fireEvent.touchStart(canvas, { touches: [at(80, 40), at(90, 50)] });
+        fireEvent.touchEnd(canvas, { touches: [] });
+        expect(onPlayDataChange).not.toHaveBeenCalled();
+    });
+
     it("resets pinch-zoom and pan when the viewport changes", () => {
         const { canvas, ref, onPlayDataChange, rerender } = setup({ selectedTool: "player" });
         // Pinch to 2x around an off-center point, which also pans.

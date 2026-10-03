@@ -854,9 +854,19 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
 
                 const center = getTouchCenter(event.touches[0], event.touches[1]);
                 setLastTouchCenter(center);
-                // The pinch takes over: abandon any area drag so the final
-                // touchend cannot commit a rectangle the coach never meant.
+                // The pinch takes over: abandon any area drag, element drag or
+                // stroke so the final touchend cannot commit a rectangle, a move
+                // or a line the coach never meant. A drag's preview is visual
+                // only, so dropping it leaves the element where it was, with no
+                // history entry; the selection stays.
                 setAreaDrag(null);
+                setIsDragging(false);
+                isDraggingRef.current = false;
+                setDragOffset(null);
+                setDragPreviewPosition(null);
+                grabPointRef.current = null;
+                setIsDrawing(false);
+                setCurrentDrawingPoints([]);
             }
         },
         [transform, scale, getTouchDistance, getTouchCenter, handleMouseDown]
