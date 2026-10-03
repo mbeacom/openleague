@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { findElement, updateElement, removeElement, moveElement } from "@/lib/utils/canvas/element-ops";
+import { findElement, updateElement, removeElement, moveElement, placePlayer, placeEquipment, finishStroke, limitMessage } from "@/lib/utils/canvas/element-ops";
+import { ROLE_DEFAULT_COLORS } from "@/lib/utils/canvas/notation";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import type { PlayData } from "@/types/practice-planner";
 
@@ -43,5 +44,54 @@ describe("element-ops", () => {
     it("moves equipment, players, annotations", () => {
         expect(moveElement(data, "e", { x: 1, y: 2 }).equipment[0].position).toEqual({ x: 1, y: 2 });
         expect(moveElement(data, "d", { x: 1, y: 2 })).toEqual(data);
+    });
+});
+
+describe("placement", () => {
+    const empty = createEmptyPlayData();
+
+    it("places a player with the role's default color and empty label", () => {
+        expect(placePlayer(empty, { x: 5, y: 5 }, "D", "p").players[0]).toEqual({
+            id: "p", position: { x: 5, y: 5 }, role: "D", label: "", color: ROLE_DEFAULT_COLORS.D,
+        });
+    });
+
+    it("places equipment unrotated", () => {
+        expect(placeEquipment(empty, { x: 5, y: 5 }, "net", "n").equipment[0]).toEqual({ id: "n", kind: "net", position: { x: 5, y: 5 }, rotation: 0 });
+    });
+
+    it("stores a straight stroke as its endpoints", () => {
+        const raw = [{ x: 20, y: 20 }, { x: 40, y: 30 }, { x: 60, y: 20 }];
+        const s = finishStroke(empty, raw, { action: "pass", path: "straight", end: "arrow" }, "#1976D2", "s").drawings[0];
+        expect(s).toMatchObject({ action: "pass", path: "straight", end: "arrow", color: "#1976D2", strokeWidth: 2 });
+        expect(s.points).toEqual([{ x: 20, y: 20 }, { x: 60, y: 20 }]);
+    });
+
+    it("simplifies freehand strokes", () => {
+        const raw = Array.from({ length: 200 }, (_, i) => ({ x: 10 + i * 0.1, y: 10 }));
+        const s = finishStroke(empty, raw, { action: "carry", path: "freehand", end: "arrow" }, "#000000", "s").drawings[0];
+        expect(s.points.length).toBeLessThan(raw.length);
+    });
+
+    it("ignores taps shorter than 1 ft", () => {
+        expect(finishStroke(empty, [{ x: 5, y: 5 }, { x: 5.4, y: 5 }], { action: "skate", path: "freehand", end: "arrow" }, "#000000", "s")).toBe(empty);
+    });
+
+    it("ignores a single point", () => {
+        expect(finishStroke(empty, [{ x: 5, y: 5 }], { action: "skate", path: "straight", end: "arrow" }, "#000000", "s")).toBe(empty);
+    });
+});
+
+describe("limitMessage", () => {
+    const cones = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `c${i}`, kind: "cone" as const, position: { x: 1, y: 1 }, rotation: 0 }));
+
+    it("blocks the 51st equipment item", () => {
+        expect(limitMessage({ ...createEmptyPlayData(), equipment: cones(50) }, "equipment")).toMatch(/50 equipment/);
+        expect(limitMessage({ ...createEmptyPlayData(), equipment: cones(49) }, "equipment")).toBeNull();
+    });
+
+    it("blocks anything past the total element cap", () => {
+        const players = Array.from({ length: 50 }, (_, i) => ({ id: `p${i}`, position: { x: 1, y: 1 }, role: "X" as const, label: "", color: "#000000" }));
+        expect(limitMessage({ ...createEmptyPlayData(), players, equipment: cones(50) }, "annotation")).toMatch(/100/);
     });
 });
