@@ -1,0 +1,42 @@
+import { describe, expect, it } from "vitest";
+import { matchRoute, staticRoutes, type StaticRoute } from "@/apps/planner/src/routes";
+
+describe("matchRoute", () => {
+    it.each<[string, StaticRoute]>([
+        ["", { name: "list" }],
+        ["#", { name: "list" }],
+        ["#/", { name: "list" }],
+        ["#/sessions/new", { name: "sessionNew" }],
+        ["#/sessions/abc", { name: "session", id: "abc" }],
+        ["#/sessions/abc/edit", { name: "sessionEdit", id: "abc" }],
+        ["#/sessions/abc/print", { name: "sessionPrint", id: "abc" }],
+        ["#/sessions/a%20b", { name: "session", id: "a b" }],
+        ["#/library", { name: "library" }],
+        ["#/library/", { name: "library" }],
+        ["#/library/new", { name: "libraryNew" }],
+        ["#/library/p1/edit", { name: "libraryEdit", id: "p1" }],
+        ["#/import", { name: "import" }],
+        ["#plan=abc_-1", { name: "planLink", value: "abc_-1" }],
+        ["#/plan=abc", { name: "planLink", value: "abc" }],
+        ["#plan=", { name: "notFound" }],
+        ["#/sessions/a%2Fb", { name: "notFound" }],
+        ["#/sessions/%E0%A4%A", { name: "notFound" }],
+        ["#/sessions/abc/delete", { name: "notFound" }],
+        ["#/library/p1", { name: "notFound" }],
+        ["#/nope", { name: "notFound" }],
+    ])("%s", (hash, expected) => {
+        expect(matchRoute(hash)).toEqual(expected);
+    });
+
+    it("matches every href staticRoutes builds", () => {
+        expect(matchRoute(staticRoutes.list())).toEqual({ name: "list" });
+        expect(matchRoute(staticRoutes.session("s-1"))).toEqual({ name: "session", id: "s-1" });
+        expect(matchRoute(staticRoutes.sessionEdit("s-1"))).toEqual({ name: "sessionEdit", id: "s-1" });
+        expect(matchRoute(staticRoutes.sessionPrint("s-1"))).toEqual({ name: "sessionPrint", id: "s-1" });
+        expect(matchRoute(staticRoutes.libraryNew())).toEqual({ name: "libraryNew" });
+        expect(matchRoute(staticRoutes.libraryEdit("p-1"))).toEqual({ name: "libraryEdit", id: "p-1" });
+        expect(matchRoute(staticRoutes.library())).toEqual({ name: "library" });
+        expect(matchRoute(staticRoutes.sessionNew())).toEqual({ name: "sessionNew" });
+        expect(matchRoute(staticRoutes.importPlan())).toEqual({ name: "import" });
+    });
+});

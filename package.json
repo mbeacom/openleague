@@ -39,6 +39,9 @@
     "adr:explain": "adrkit explain",
     "adr:graph": "adrkit graph",
     "docs:build-pages": "tsx scripts/build-docs-pages.ts",
+    "planner:dev": "vite --config apps/planner/vite.config.ts",
+    "planner:build": "vite build --config apps/planner/vite.config.ts",
+    "planner:preview": "vite preview --config apps/planner/vite.config.ts",
     "uptime:check": "tsx scripts/check-uptime.ts",
     "validate-deployment-config": "tsx scripts/validate-deployment-config.ts",
     "smoke": "bun scripts/smoke-test.ts",
@@ -104,6 +107,7 @@
     "tailwindcss": "^4.3.3",
     "tsx": "^4.23.13",
     "typescript": "^5.9.3",
+    "vite": "^7.1.9",
     "vitest": "^4.1.11",
     "yaml": "^2.9.1"
   }
