@@ -1344,6 +1344,23 @@ export const practiceVenueAttachmentSchema = z
   .object(practiceVenueAttachmentFields)
   .refine(practiceHasStartAtWhenVenueSet, practiceStartAtRequiredIssue);
 
+// One drill in a practice-session save. clientKey is the editor's stable
+// per-card key (PlayInSession.id); the save returns clientKey → owned playId.
+const practiceSessionPlayItemsSchema = z
+  .array(z.object({
+    playId: z.string().cuid("Invalid play ID format"),
+    clientKey: z.string().min(1, "Drill key is required").max(64, "Drill key is too long"),
+    sequence: z.number().int().min(0),
+    duration: z.number().int().min(1, "Play duration must be at least 1 minute").max(300, "Play duration must be less than 300 minutes"),
+    instructions: optionalSanitizedString(2000),
+  }))
+  .refine(
+    (plays) => new Set(plays.map((play) => play.clientKey)).size === plays.length,
+    { message: "Each drill needs a unique key" },
+  )
+  .optional()
+  .default([]);
+
 // Practice session validation schemas
 export const createPracticeSessionSchema = z.object({
   title: sanitizedStringWithMin(1, 100),
@@ -1352,12 +1369,7 @@ export const createPracticeSessionSchema = z.object({
   }),
   duration: z.number().int().min(1, "Duration must be at least 1 minute").max(300, "Duration must be less than 300 minutes"),
   teamId: z.string().cuid("Invalid team ID format"),
-  plays: z.array(z.object({
-    playId: z.string().cuid("Invalid play ID format"),
-    sequence: z.number().int().min(0),
-    duration: z.number().int().min(1, "Play duration must be at least 1 minute").max(300, "Play duration must be less than 300 minutes"),
-    instructions: optionalSanitizedString(2000),
-  })).optional().default([]),
+  plays: practiceSessionPlayItemsSchema,
   ...practiceVenueAttachmentFields,
 }).refine(practiceHasStartAtWhenVenueSet, practiceStartAtRequiredIssue);
 
@@ -1369,12 +1381,7 @@ export const updatePracticeSessionSchema = z.object({
   }),
   duration: z.number().int().min(1, "Duration must be at least 1 minute").max(300, "Duration must be less than 300 minutes"),
   teamId: z.string().cuid("Invalid team ID format"),
-  plays: z.array(z.object({
-    playId: z.string().cuid("Invalid play ID format"),
-    sequence: z.number().int().min(0),
-    duration: z.number().int().min(1, "Play duration must be at least 1 minute").max(300, "Play duration must be less than 300 minutes"),
-    instructions: optionalSanitizedString(2000),
-  })).optional().default([]),
+  plays: practiceSessionPlayItemsSchema,
   // Explicit Save only; autosave omits it so shared sessions do not email the
   // team on every debounce.
   notify: z.boolean().optional().default(false),

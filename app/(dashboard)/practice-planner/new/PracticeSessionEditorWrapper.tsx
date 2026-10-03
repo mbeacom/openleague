@@ -32,6 +32,7 @@ export function PracticeSessionEditorWrapper({
         teamId,
         plays: session.plays.map((play) => ({
           playId: play.playId,
+          clientKey: play.id,
           sequence: play.sequence,
           duration: play.duration,
           instructions: play.instructions || "",
