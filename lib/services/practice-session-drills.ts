@@ -6,10 +6,10 @@
  * Server Action's transaction; they are not actions themselves (ADR-0002).
  */
 import { Prisma } from "@prisma/client";
-import { SESSION_DRILL_REJECTED_MESSAGE } from "@/lib/utils/session-drill-ids";
+import { SESSION_DRILL_REJECTED_MESSAGE, duplicateSessionTitle } from "@/lib/utils/session-drill-ids";
 import { newPlayId } from "@/lib/services/play-ids";
 
-export { SESSION_DRILL_REJECTED_MESSAGE };
+export { SESSION_DRILL_REJECTED_MESSAGE, duplicateSessionTitle };
 
 /** A drill in the payload the session may not use. Aborts the whole save. */
 export class SessionDrillError extends Error {
@@ -318,9 +318,4 @@ export function copySessionPlayScalars(row: Record<string, unknown>): CopiedSess
         if (!SESSION_PLAY_FIELDS_NOT_COPIED.has(field)) copy[field] = row[field];
     }
     return copy as CopiedSessionPlayFields;
-}
-
-/** "Copy of <title>", kept within the 100-character title limit. */
-export function duplicateSessionTitle(title: string): string {
-    return `Copy of ${title}`.slice(0, 100);
 }

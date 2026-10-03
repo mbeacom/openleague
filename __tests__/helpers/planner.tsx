@@ -65,6 +65,8 @@ export function createHashPlatform(): PlannerPlatform & { navigate: Mock } {
             libraryNew: () => "#/library/new",
             libraryEdit: (playId) => `#/library/${playId}/edit`,
         },
+        planGenerator: "openleague-static",
+        planLink: null,
     };
 }
 

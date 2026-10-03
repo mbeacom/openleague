@@ -69,3 +69,8 @@ export function upsertSessionDrill(
     const sequence = plays.reduce((max, play) => Math.max(max, play.sequence), -1) + 1;
     return [...plays, { id: clientKey, ...patch, sequence, runsWithPrevious: false, duration: 10, instructions: "" }];
 }
+
+/** "Copy of <title>", kept within the 100-character title limit (hosted and static duplicates). */
+export function duplicateSessionTitle(title: string): string {
+    return `Copy of ${title}`.slice(0, 100);
+}

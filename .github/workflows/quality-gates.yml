@@ -92,6 +92,14 @@ jobs:
       - name: Unit tests
         run: bun run test
 
+      # ADR-0020: shared planner code also ships in the static planner. A change
+      # that breaks its bundle fails here, not in the next Pages deploy.
+      - name: Build the static planner
+        run: bun run planner:build
+
+      - name: Check the static planner bundle
+        run: bun run planner:check
+
   # A separate job rather than a step in `quality`, and deliberately without
   # `bun install`: the check imports only node: builtins and makes no network
   # calls, precisely so it cannot be defeated by a dependency or install

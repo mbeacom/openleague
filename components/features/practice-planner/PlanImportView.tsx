@@ -16,10 +16,10 @@ import { PlanPreview } from "@/components/features/practice-planner/PlanPreview"
 import { importPracticePlan } from "@/lib/actions/practice-plan-import";
 import { parseDateTimeLocalToUtc, resolveTimeZone } from "@/lib/utils/date";
 import {
+    FILE_TOO_LARGE_MESSAGE,
     MAX_PLAN_FILE_BYTES,
-    NOT_A_PLAN_MESSAGE,
-    parsePlan,
     planByteLength,
+    readPlanFile,
     readPlanLink,
     type ParsePlanResult,
     type PlanDocument,
@@ -27,23 +27,10 @@ import {
 } from "@/lib/plan-document";
 import { takeIncomingPlan } from "@/lib/plan-document/pending";
 
-export const FILE_TOO_LARGE_MESSAGE = `This file is too large to be a practice plan (the limit is ${MAX_PLAN_FILE_BYTES / 1000} KB).`;
+export { FILE_TOO_LARGE_MESSAGE, readPlanFile };
+
 export const PLAN_TOO_LARGE_TO_IMPORT_MESSAGE = `This plan is too large to import (over ${MAX_PLAN_FILE_BYTES / 1000} KB).`;
 export const NO_IMPORT_TEAMS_MESSAGE = "Only team admins can import practice plans. Ask an admin of your team to import it.";
-
-/** Size check first, then JSON, then parsePlan. Never throws. */
-export async function readPlanFile(file: File): Promise<ParsePlanResult> {
-    if (file.size > MAX_PLAN_FILE_BYTES) {
-        return { ok: false, error: { code: "invalid", message: FILE_TOO_LARGE_MESSAGE } };
-    }
-    let raw: unknown;
-    try {
-        raw = JSON.parse(await file.text());
-    } catch {
-        return { ok: false, error: { code: "not-a-plan", message: NOT_A_PLAN_MESSAGE } };
-    }
-    return parsePlan(raw);
-}
 
 type ViewState = { kind: "pick" } | { kind: "error"; error: PlanError } | { kind: "ready"; plan: PlanDocument };
 

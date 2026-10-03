@@ -10,6 +10,7 @@
  */
 import type { AnchorHTMLAttributes, ComponentType, Ref } from "react";
 import type { PlayData } from "@/types/practice-planner";
+import type { PlanGenerator } from "@/lib/plan-document";
 
 /** Same shape as the ActionResult each lib/actions file declares. */
 export type ActionResult<T> =
@@ -125,9 +126,24 @@ export interface PlannerRoutes {
     libraryEdit(playId: string): string;
 }
 
+/**
+ * The Export menu's hand-off item (ADR-0020). Hosted copies an "Open in
+ * planner" link to the static app; the static app opens the hosted import
+ * page. The menu appends `#plan=<encoded>` to `baseUrl` (dropping any fragment).
+ */
+export interface PlannerPlanLink {
+    label: string;
+    mode: "copy" | "open";
+    baseUrl: string;
+}
+
 export interface PlannerPlatform {
     Link: ComponentType<PlannerLinkProps>;
     Image: ComponentType<PlannerImageProps>;
     navigate(href: string): void;
     routes: PlannerRoutes;
+    /** Written into exported plan documents. */
+    planGenerator: PlanGenerator;
+    /** The Export menu's link item; null hides it. */
+    planLink: PlannerPlanLink | null;
 }

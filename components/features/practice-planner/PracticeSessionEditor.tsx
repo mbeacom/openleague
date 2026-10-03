@@ -797,7 +797,7 @@ export function PracticeSessionEditor({
 
                         {/* Share Button */}
                         {/* Requirements: 3.1 - Share button with confirmation */}
-                        {sessionId && (
+                        {sessionId && onShare && (
                             <Button
                                 variant="contained"
                                 color="secondary"
