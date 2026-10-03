@@ -8,8 +8,7 @@
  */
 
 import { useState, type ChangeEvent } from "react";
-import type { SegmentKind } from "@prisma/client";
-import type { BookingConflict } from "@/types/segments";
+import type { BookingConflict, SegmentKind } from "@/types/segments";
 import {
     formatDateTimeLocalInput,
     parseDateTimeLocalToUtc,

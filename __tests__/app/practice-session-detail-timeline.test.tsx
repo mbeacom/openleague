@@ -1,12 +1,11 @@
 /** Session detail view (3b): timeline, venue-zone header and the bench-sheet link. */
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, screen, within } from "@testing-library/react";
+import { renderWithPlanner } from "@/__tests__/helpers/planner";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import { formatClockTime, formatLongDate } from "@/lib/utils/date";
 
-vi.mock("@/lib/actions/practice-sessions", () => ({ deletePracticeSession: vi.fn(), sharePracticeSession: vi.fn() }));
-vi.mock("@/lib/actions/practice-session-drills", () => ({ duplicatePracticeSession: vi.fn() }));
 vi.mock("@/components/features/practice-planner/StationMap", () => ({
     StationMap: () => <div data-testid="station-map" />,
 }));
@@ -54,7 +53,7 @@ const BOOKED = {
 type SessionProp = React.ComponentProps<typeof SessionDetailView>["session"];
 
 function renderView(session: SessionProp = SESSION) {
-    render(
+    renderWithPlanner(
         <ThemeProvider theme={createTheme()}>
             <SessionDetailView session={session} isAdmin={false} />
         </ThemeProvider>,

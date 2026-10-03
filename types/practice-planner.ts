@@ -8,6 +8,8 @@
  * - Validation schemas
  */
 
+import type { SegmentKind } from "@/types/segments";
+
 // ============================================================================
 // Core Play Data Types
 // ============================================================================
@@ -165,6 +167,50 @@ export interface PracticeSessionData {
     duration: number; // minutes
     plays: PlayInSession[];
     isShared: boolean;
+}
+
+/**
+ * One drill row on the read-only session views (the detail page and the bench sheet).
+ * playData is null when the stored diagram can't be read.
+ */
+export interface PracticeSessionViewPlay {
+    id: string;
+    sequence: number;
+    duration: number;
+    instructions: string | null;
+    runsWithPrevious: boolean;
+    play: {
+        id: string;
+        name: string;
+        description: string | null;
+        thumbnail: string | null;
+        playData: PlayData | null;
+    };
+}
+
+/**
+ * A session as the detail page and the bench sheet show it. The venue fields
+ * are absent or null for an unbooked practice (feature 006, FR-019).
+ */
+export interface PracticeSessionView {
+    id: string;
+    title: string;
+    date: string;
+    duration: number;
+    isShared: boolean;
+    createdByName: string;
+    teamId: string;
+    teamName: string;
+    venueId?: string | null;
+    venueName?: string | null;
+    venueTimezone?: string | null;
+    surfaceId?: string | null;
+    surfaceName?: string | null;
+    segmentId?: string | null;
+    segmentName?: string | null;
+    segmentKind?: SegmentKind | null;
+    startAt?: string | null;
+    plays: PracticeSessionViewPlay[];
 }
 
 /**

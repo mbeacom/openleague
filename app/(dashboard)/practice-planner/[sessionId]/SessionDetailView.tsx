@@ -1,9 +1,6 @@
 "use client";
 
 import { useState, useCallback, useMemo } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
-import Image from "next/image";
 import {
   Box,
   Typography,
@@ -50,8 +47,7 @@ import { PlayLegend } from "@/components/features/practice-planner/PlayLegend";
 import { StationMap } from "@/components/features/practice-planner/StationMap";
 import { SessionTimeline } from "@/components/features/practice-planner/SessionTimeline";
 import { ExportPlanMenu } from "@/components/features/practice-planner/ExportPlanMenu";
-import type { PlayData } from "@/types/practice-planner";
-import type { SegmentKind } from "@prisma/client";
+import type { PracticeSessionView, PracticeSessionViewPlay } from "@/types/practice-planner";
 import {
   SEGMENT_KIND_FIT_LABELS,
   groupStations,
@@ -61,55 +57,16 @@ import {
 } from "@/lib/utils/session-timeline";
 import { sessionStart, sessionTimeZone } from "@/lib/utils/date";
 import { useClockText } from "@/lib/hooks/useClockText";
-import {
-  deletePracticeSession,
-  sharePracticeSession,
-} from "@/lib/actions/practice-sessions";
-
-interface SessionPlay {
-  id: string;
-  sequence: number;
-  duration: number;
-  instructions: string | null;
-  runsWithPrevious: boolean;
-  play: {
-    id: string;
-    name: string;
-    description: string | null;
-    thumbnail: string | null;
-    playData: PlayData | null;
-  };
-}
-
-interface SessionData {
-  id: string;
-  title: string;
-  date: string;
-  duration: number;
-  isShared: boolean;
-  createdByName: string;
-  teamId: string;
-  teamName: string;
-  // Optional venue attachment (feature 006, FR-019)
-  venueId?: string | null;
-  venueName?: string | null;
-  venueTimezone?: string | null;
-  surfaceId?: string | null;
-  surfaceName?: string | null;
-  segmentId?: string | null;
-  segmentName?: string | null;
-  segmentKind?: SegmentKind | null;
-  startAt?: string | null;
-  plays: SessionPlay[];
-}
+import { usePlannerPlatform, usePlannerStore } from "@/lib/planner-store";
 
 interface SessionDetailViewProps {
-  session: SessionData;
+  session: PracticeSessionView;
   isAdmin: boolean;
 }
 
 export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) {
-  const router = useRouter();
+  const store = usePlannerStore();
+  const { Link, Image, navigate, routes } = usePlannerPlatform();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
 
@@ -126,26 +83,28 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
     setIsDeleting(true);
     setError(null);
 
-    const result = await deletePracticeSession({
+    const result = await store.deletePracticeSession({
       id: session.id,
       teamId: session.teamId,
     });
 
     if (result.success) {
-      router.push("/practice-planner");
+      navigate(routes.list());
     } else {
       setError(result.error);
       setIsDeleting(false);
       setShowDeleteDialog(false);
     }
-  }, [session.id, session.teamId, router]);
+  }, [session.id, session.teamId, store, navigate, routes]);
 
   const handleShare = useCallback(async () => {
+    // Team sharing is hosted-only; the button is hidden when the store lacks it.
+    if (!store.sharePracticeSession) return;
     setIsSharing(true);
     setError(null);
     setShowShareDialog(false);
 
-    const result = await sharePracticeSession({
+    const result = await store.sharePracticeSession({
       id: session.id,
       teamId: session.teamId,
       isShared: !isShared,
@@ -157,7 +116,7 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
       setError(result.error);
     }
     setIsSharing(false);
-  }, [session.id, session.teamId, isShared]);
+  }, [session.id, session.teamId, isShared, store]);
 
   const handlePrevPlay = useCallback(() => {
     setActivePlayIndex((prev) => Math.max(0, prev - 1));
@@ -206,7 +165,7 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
       {/* Back navigation */}
       <Button
         component={Link}
-        href="/practice-planner"
+        href={routes.list()}
         startIcon={<ArrowBackIcon />}
         variant="text"
         sx={{ alignSelf: "flex-start", ml: -1 }}
@@ -317,7 +276,7 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
           <Stack direction="row" spacing={1} flexShrink={0} flexWrap="wrap" useFlexGap>
             <Button
               component="a"
-              href={`/practice-planner/${session.id}/print`}
+              href={routes.sessionPrint(session.id)}
               target="_blank"
               rel="noopener"
               variant="outlined"
@@ -329,20 +288,22 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
             <ExportPlanMenu session={session} size={isMobile ? "small" : "medium"} />
             {isAdmin && (
               <>
-                <Tooltip title={isShared ? "Unshare from team" : "Share with team"}>
-                  <Button
-                    variant="outlined"
-                    startIcon={isShared ? <UnshareIcon /> : <ShareIcon />}
-                    onClick={() => setShowShareDialog(true)}
-                    disabled={isSharing}
-                    size={isMobile ? "small" : "medium"}
-                  >
-                    {isSharing ? "..." : isShared ? "Unshare" : "Share"}
-                  </Button>
-                </Tooltip>
+                {store.sharePracticeSession && (
+                  <Tooltip title={isShared ? "Unshare from team" : "Share with team"}>
+                    <Button
+                      variant="outlined"
+                      startIcon={isShared ? <UnshareIcon /> : <ShareIcon />}
+                      onClick={() => setShowShareDialog(true)}
+                      disabled={isSharing}
+                      size={isMobile ? "small" : "medium"}
+                    >
+                      {isSharing ? "..." : isShared ? "Unshare" : "Share"}
+                    </Button>
+                  </Tooltip>
+                )}
                 <Button
                   component={Link}
-                  href={`/practice-planner/${session.id}/edit`}
+                  href={routes.sessionEdit(session.id)}
                   variant="contained"
                   startIcon={<EditIcon />}
                   size={isMobile ? "small" : "medium"}
@@ -431,7 +392,7 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
               isAdmin ? (
                 <Button
                   component={Link}
-                  href={`/practice-planner/${session.id}/edit`}
+                  href={routes.sessionEdit(session.id)}
                   variant="contained"
                   startIcon={<EditIcon />}
                 >
@@ -567,13 +528,7 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
                   }}
                 >
                   {activePlay.play.thumbnail ? (
-                    <Image
-                      src={activePlay.play.thumbnail}
-                      alt={activePlay.play.name}
-                      fill
-                      style={{ objectFit: "contain" }}
-                      unoptimized
-                    />
+                    <Image src={activePlay.play.thumbnail} alt={activePlay.play.name} fit="contain" />
                   ) : (
                     <Stack alignItems="center" spacing={1}>
                       <HockeyIcon sx={{ fontSize: 48, color: "grey.300" }} />
@@ -741,7 +696,7 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
 }
 
 interface SidebarPlayCardProps {
-  sp: SessionPlay;
+  sp: PracticeSessionViewPlay;
   index: number;
   active: boolean;
   onSelect: () => void;
@@ -749,6 +704,7 @@ interface SidebarPlayCardProps {
 
 /** One drill in the sidebar's play sequence; standalone or inside a station block (2b). */
 function SidebarPlayCard({ sp, index, active, onSelect }: SidebarPlayCardProps) {
+  const { Image } = usePlannerPlatform();
   return (
     <Card
       sx={{
@@ -802,13 +758,7 @@ function SidebarPlayCard({ sp, index, active, onSelect }: SidebarPlayCardProps) 
             }}
           >
             {sp.play.thumbnail ? (
-              <Image
-                src={sp.play.thumbnail}
-                alt=""
-                fill
-                style={{ objectFit: "cover" }}
-                unoptimized
-              />
+              <Image src={sp.play.thumbnail} alt="" fit="cover" />
             ) : (
               <Box
                 sx={{

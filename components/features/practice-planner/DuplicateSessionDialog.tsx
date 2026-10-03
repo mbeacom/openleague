@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import {
     Alert,
     Button,
@@ -15,7 +14,7 @@ import {
 } from "@mui/material";
 import { DateTimeField } from "@/components/ui/date";
 import { formatDateTimeValue, parseDateTimeValue } from "@/components/ui/date/internal";
-import { duplicatePracticeSession } from "@/lib/actions/practice-session-drills";
+import { usePlannerPlatform, usePlannerStore } from "@/lib/planner-store";
 
 export interface DuplicateSessionDialogProps {
     open: boolean;
@@ -34,7 +33,8 @@ function aWeekLater(iso: string): string {
 }
 
 export function DuplicateSessionDialog({ open, sessionId, teamId, sourceDate, onClose }: DuplicateSessionDialogProps) {
-    const router = useRouter();
+    const store = usePlannerStore();
+    const { navigate, routes } = usePlannerPlatform();
     const [value, setValue] = useState(() => aWeekLater(sourceDate));
     const [isDuplicating, setIsDuplicating] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -47,13 +47,13 @@ export function DuplicateSessionDialog({ open, sessionId, teamId, sourceDate, on
         }
         setIsDuplicating(true);
         setError(null);
-        const result = await duplicatePracticeSession({ id: sessionId, teamId, date });
+        const result = await store.duplicatePracticeSession({ id: sessionId, teamId, date });
         if (!result.success) {
             setError(result.error);
             setIsDuplicating(false);
             return;
         }
-        router.push(`/practice-planner/${result.data.id}/edit`);
+        navigate(routes.sessionEdit(result.data.id));
     };
 
     return (

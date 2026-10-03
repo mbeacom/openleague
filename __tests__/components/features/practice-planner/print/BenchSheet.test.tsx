@@ -1,6 +1,7 @@
 /** BenchSheet (3b): header, timeline, one legend, then drills paired into pages. */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, screen, within } from "@testing-library/react";
+import { renderWithPlanner } from "@/__tests__/helpers/planner";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import type { PlayData } from "@/types/practice-planner";
@@ -75,7 +76,7 @@ const SESSION: BenchSheetSession = {
 };
 
 function renderSheet(session: BenchSheetSession = SESSION) {
-    render(
+    renderWithPlanner(
         <ThemeProvider theme={createTheme()}>
             <BenchSheet session={session} />
         </ThemeProvider>,

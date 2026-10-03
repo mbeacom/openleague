@@ -1,6 +1,7 @@
 /** The station switch on a session drill card (practice planner 2b). */
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
+import { renderWithPlanner } from "@/__tests__/helpers/planner";
 import {
     SessionDrillCard,
     STATION_CAP_TOOLTIP,
@@ -11,7 +12,7 @@ import { createEmptyPlayData } from "@/lib/utils/play-data";
 
 function renderCard(props: Partial<SessionDrillCardProps> = {}) {
     const onToggleStation = vi.fn();
-    render(
+    renderWithPlanner(
         <SessionDrillCard
             play={{
                 id: "k2", playId: "cplayxxxxxxxxxxxxxxxxxxxx", name: "Breakout", sequence: 1, duration: 10,

@@ -1,6 +1,7 @@
 /** Station grouping in the session editor (practice planner 2b). */
 import { describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, screen, within } from "@testing-library/react";
+import { renderWithPlanner } from "@/__tests__/helpers/planner";
 import userEvent from "@testing-library/user-event";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
@@ -13,15 +14,6 @@ import {
 } from "@/components/features/practice-planner/PracticeSessionEditor";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import type { IceArea, PlayInSession } from "@/types/practice-planner";
-
-vi.mock("@/lib/actions/plays", () => ({
-    getPlaysByTeam: vi.fn().mockResolvedValue({ success: true, data: { plays: [], total: 0 } }),
-    getPlayById: vi.fn(),
-    deletePlay: vi.fn(),
-    createPlay: vi.fn(),
-}));
-// The drill dialog's actions import the auth stack; the editor tests never call them.
-vi.mock("@/lib/actions/practice-session-drills", () => ({ saveSessionDrill: vi.fn(), copySessionDrillToLibrary: vi.fn() }));
 
 type SaveFn = (data: PracticeSessionSubmitData) => Promise<PracticeSessionSaveResult>;
 
@@ -54,7 +46,7 @@ function renderEditor(
     duration = 60,
 ) {
     const onSave = vi.fn<SaveFn>().mockResolvedValue({ success: true });
-    render(
+    renderWithPlanner(
         <ThemeProvider theme={createTheme()}>
             <LocalizationProvider dateAdapter={AdapterDateFns}>
                 <PracticeSessionEditor
