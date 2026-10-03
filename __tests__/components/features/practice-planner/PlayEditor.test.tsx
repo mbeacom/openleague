@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { PlayEditor, PlayEditorProps } from "@/components/features/practice-planner/PlayEditor";
@@ -304,6 +304,28 @@ describe("PlayEditor", () => {
             await waitFor(() => {
                 expect(screen.queryByText("Unsaved changes")).not.toBeInTheDocument();
             });
+        });
+    });
+
+    describe("autoSave={false}", () => {
+        it("never saves on its own, even for an existing play", async () => {
+            vi.useFakeTimers();
+            try {
+                const onSave = vi.fn().mockResolvedValue(undefined);
+                renderWithTheme(createDefaultProps({
+                    playId: "play-123",
+                    autoSave: false,
+                    initialData: { name: "Drill", playData: { version: 2, players: [], drawings: [], equipment: [], annotations: [] } },
+                    onSave,
+                }));
+                fireEvent.change(screen.getByLabelText(/Play Name/i), { target: { value: "Drill 2" } });
+                await act(async () => {
+                    await vi.advanceTimersByTimeAsync(2500);
+                });
+                expect(onSave).not.toHaveBeenCalled();
+            } finally {
+                vi.useRealTimers();
+            }
         });
     });
 });

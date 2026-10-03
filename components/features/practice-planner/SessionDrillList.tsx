@@ -1,7 +1,7 @@
 "use client";
 
-import { Alert, Box, Button, Paper, Stack, Typography } from "@mui/material";
-import { Add as AddIcon } from "@mui/icons-material";
+import { Alert, Box, Button, Paper, Stack, Tooltip, Typography } from "@mui/material";
+import { Add as AddIcon, Draw as DrawIcon } from "@mui/icons-material";
 import type { PlayInSession } from "@/types/practice-planner";
 import { SessionDrillCard } from "./SessionDrillCard";
 
@@ -17,6 +17,10 @@ export interface SessionDrillListProps {
     onCancelEdit: () => void;
     onMoveUp: (index: number) => void;
     onMoveDown: (index: number) => void;
+    /** Diagram editing and new drills need a saved session. */
+    canEditDiagram: boolean;
+    onEditDiagram: (clientKey: string) => void;
+    onNewDrill: () => void;
 }
 
 /** Plays in Session: totals, empty state, and one card per drill (Requirements 2.2-2.5). */
@@ -32,6 +36,9 @@ export function SessionDrillList({
     onCancelEdit,
     onMoveUp,
     onMoveDown,
+    canEditDiagram,
+    onEditDiagram,
+    onNewDrill,
 }: SessionDrillListProps) {
     const totalPlayTime = plays.reduce((sum, play) => sum + play.duration, 0);
 
@@ -42,14 +49,30 @@ export function SessionDrillList({
                     <Typography variant="h6" component="h2">
                         Plays in Session
                     </Typography>
-                    <Button
-                        variant="outlined"
-                        startIcon={<AddIcon />}
-                        onClick={onOpenLibrary}
-                        disabled={disabled}
-                    >
-                        Add Play
-                    </Button>
+                    <Stack direction="row" spacing={1}>
+                        <Tooltip title={canEditDiagram ? "" : "Save the session first"}>
+                            <span>
+                                <Button
+                                    variant="outlined"
+                                    startIcon={<DrawIcon />}
+                                    onClick={onNewDrill}
+                                    disabled={disabled || !canEditDiagram}
+                                    sx={{ minHeight: 44 }}
+                                >
+                                    New drill
+                                </Button>
+                            </span>
+                        </Tooltip>
+                        <Button
+                            variant="outlined"
+                            startIcon={<AddIcon />}
+                            onClick={onOpenLibrary}
+                            disabled={disabled}
+                            sx={{ minHeight: 44 }}
+                        >
+                            Add from library
+                        </Button>
+                    </Stack>
                 </Stack>
 
                 {plays.length > 0 && (
@@ -107,6 +130,8 @@ export function SessionDrillList({
                                 onCancelEdit={onCancelEdit}
                                 onMoveUp={onMoveUp}
                                 onMoveDown={onMoveDown}
+                                canEditDiagram={canEditDiagram}
+                                onEditDiagram={onEditDiagram}
                             />
                         ))}
                     </Stack>

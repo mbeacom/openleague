@@ -22,8 +22,6 @@ import {
     Dialog,
     DialogTitle,
     DialogContent,
-    DialogContentText,
-    DialogActions,
 } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
@@ -41,6 +39,9 @@ import { applySavedPlayIds, type SavedDrillId } from "@/lib/utils/session-drill-
 import { PlayLibrary } from "./PlayLibrary";
 import { useSingleFlightSave } from "./useSingleFlightSave";
 import { SessionDrillList } from "./SessionDrillList";
+import { SessionDrillDialog } from "./SessionDrillDialog";
+import { useSessionDrillDialog } from "./useSessionDrillDialog";
+import { ShareSessionDialog } from "./ShareSessionDialog";
 import { BookingConflictAlert, VenueBookingFields } from "./VenueBookingFields";
 import {
     useVenueBooking,
@@ -166,6 +167,9 @@ export function PracticeSessionEditor({
                 : prev
         );
     }, []);
+
+    // Edit a drill's diagram, or build a new drill, in the session (3a).
+    const drillDialog = useSessionDrillDialog(plays, setPlays, markDirty);
 
     // Optional ice booking (feature 006, FR-019).
     const booking = useVenueBooking({
@@ -711,6 +715,9 @@ export function PracticeSessionEditor({
                 onCancelEdit={handleCancelEdit}
                 onMoveUp={handleMovePlayUp}
                 onMoveDown={handleMovePlayDown}
+                canEditDiagram={Boolean(sessionId)}
+                onEditDiagram={drillDialog.editDiagram}
+                onNewDrill={drillDialog.newDrill}
             />
 
             {/* Save Status and Actions */}
@@ -806,6 +813,18 @@ export function PracticeSessionEditor({
                 </Stack>
             </Paper>
 
+            {sessionId && (
+                <SessionDrillDialog
+                    key={drillDialog.drill?.clientKey ?? "closed"}
+                    open={drillDialog.drill !== null}
+                    sessionId={sessionId}
+                    teamId={teamId}
+                    drill={drillDialog.drill}
+                    onSaved={drillDialog.onSaved}
+                    onClose={drillDialog.close}
+                />
+            )}
+
             {/* Play Library Dialog */}
             {/* Requirements: 4.3 - Integrate PlayLibrary component in selection mode */}
             {/* Using MUI Dialog for accessibility: focus trapping, scroll locking, Escape key handling */}
@@ -842,53 +861,13 @@ export function PracticeSessionEditor({
 
             {/* Share Confirmation Dialog */}
             {/* Requirements: 3.1 - Share button with confirmation */}
-            <Dialog
+            <ShareSessionDialog
                 open={showShareDialog}
+                isShared={isShared}
+                isSharing={isSharing}
                 onClose={handleCloseShareDialog}
-                aria-labelledby="share-dialog-title"
-                aria-describedby="share-dialog-description"
-            >
-                <DialogTitle id="share-dialog-title">
-                    Share Practice Session?
-                </DialogTitle>
-                <DialogContent>
-                    <DialogContentText id="share-dialog-description">
-                        This will share the practice session with all team members. They
-                        will receive an email notification with a link to view the
-                        session.
-                        {isShared && (
-                            <>
-                                <br />
-                                <br />
-                                <strong>
-                                    Note: This session is already shared. Sharing again will
-                                    send update notifications to team members.
-                                </strong>
-                            </>
-                        )}
-                    </DialogContentText>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleCloseShareDialog} disabled={isSharing}>
-                        Cancel
-                    </Button>
-                    <Button
-                        onClick={handleShare}
-                        color="primary"
-                        variant="contained"
-                        disabled={isSharing}
-                        startIcon={
-                            isSharing ? (
-                                <CircularProgress size={20} color="inherit" />
-                            ) : (
-                                <ShareIcon />
-                            )
-                        }
-                    >
-                        {isSharing ? "Sharing..." : "Share"}
-                    </Button>
-                </DialogActions>
-            </Dialog>
+                onConfirm={handleShare}
+            />
         </Box>
     );
 }

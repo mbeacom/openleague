@@ -17,12 +17,14 @@ import {
     IconButton,
     Stack,
     TextField,
+    Tooltip,
     Typography,
 } from "@mui/material";
 import {
     ArrowDownward as ArrowDownwardIcon,
     ArrowUpward as ArrowUpwardIcon,
     Delete as DeleteIcon,
+    Draw as DrawIcon,
     Edit as EditIcon,
 } from "@mui/icons-material";
 import Image from "next/image";
@@ -42,6 +44,9 @@ export interface SessionDrillCardProps {
     onCancelEdit: () => void;
     onMoveUp: (index: number) => void;
     onMoveDown: (index: number) => void;
+    /** Diagram editing needs a saved session. */
+    canEditDiagram: boolean;
+    onEditDiagram: (clientKey: string) => void;
 }
 
 /**
@@ -61,6 +66,8 @@ export function SessionDrillCard({
     onCancelEdit,
     onMoveUp,
     onMoveDown,
+    canEditDiagram,
+    onEditDiagram,
 }: SessionDrillCardProps) {
     // Local state for editing
     const [editDuration, setEditDuration] = useState(play.duration);
@@ -202,6 +209,23 @@ export function SessionDrillCard({
                                 </Typography>
                             </Box>
                         )
+                    )}
+
+                    {!isEditing && (
+                        <Tooltip title={canEditDiagram ? "" : "Save the session first"}>
+                            <span>
+                                <Button
+                                    size="small"
+                                    startIcon={<DrawIcon />}
+                                    onClick={() => onEditDiagram(play.id)}
+                                    disabled={!canEditDiagram}
+                                    aria-label={`Edit diagram for ${play.name || `drill ${index + 1}`}`}
+                                    sx={{ minHeight: 44 }}
+                                >
+                                    Edit diagram
+                                </Button>
+                            </span>
+                        </Tooltip>
                     )}
 
                     {/* Edit Actions */}

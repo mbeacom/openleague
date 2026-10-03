@@ -27,6 +27,12 @@ vi.mock("@/lib/actions/plays", () => ({
   deletePlay: vi.fn(),
 }));
 
+// The editor hosts SessionDrillDialog, which imports these server actions.
+vi.mock("@/lib/actions/practice-session-drills", () => ({
+  saveSessionDrill: vi.fn(),
+  copySessionDrillToLibrary: vi.fn(),
+}));
+
 function renderEditor(onSave: (s: PracticeSessionSubmitData) => Promise<{ success: true }>) {
   return render(
     <ThemeProvider theme={createTheme()}>

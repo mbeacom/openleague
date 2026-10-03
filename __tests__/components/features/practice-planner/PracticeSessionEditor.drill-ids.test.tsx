@@ -26,6 +26,12 @@ vi.mock("@/lib/actions/plays", () => ({
     createPlay: vi.fn(),
 }));
 
+// The editor hosts SessionDrillDialog, which imports these server actions.
+vi.mock("@/lib/actions/practice-session-drills", () => ({
+    saveSessionDrill: vi.fn(),
+    copySessionDrillToLibrary: vi.fn(),
+}));
+
 type SaveFn = (data: PracticeSessionSubmitData) => Promise<PracticeSessionSaveResult>;
 
 const LIB = "clibraryxxxxxxxxxxxxxxxxx";
