@@ -27,7 +27,7 @@ const saved: SavedPlay = {
     playData: createEmptyPlayData(), isTemplate: false, createdAt: new Date(), updatedAt: new Date(),
 };
 
-function renderDialog(playId: string | null, onSaved = vi.fn()) {
+function renderDialog(playId: string | null, onSaved = vi.fn(), onClose = vi.fn()) {
     render(
         <SessionDrillDialog
             open
@@ -35,10 +35,10 @@ function renderDialog(playId: string | null, onSaved = vi.fn()) {
             teamId={TEAM}
             drill={{ clientKey: "k1", playId, name: "Breakout", description: "Quick", playData: createEmptyPlayData(), thumbnail: "" }}
             onSaved={onSaved}
-            onClose={vi.fn()}
+            onClose={onClose}
         />,
     );
-    return { onSaved };
+    return { onSaved, onClose };
 }
 
 async function saveFromEditor() {
@@ -112,5 +112,47 @@ describe("SessionDrillDialog", () => {
         await saveFromEditor();
         expect(actions.copySessionDrillToLibrary).toHaveBeenCalledTimes(2);
         expect(actions.copySessionDrillToLibrary).toHaveBeenLastCalledWith({ playId: OWNED, teamId: TEAM });
+    });
+
+    describe("closing with unsaved changes", () => {
+        const setDirty = (dirty: boolean) => act(() => captured.props?.onDirtyChange?.(dirty));
+        const pressEscape = () => fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+
+        it("closes immediately when the drill is clean", () => {
+            const { onClose } = renderDialog(LIB);
+            act(() => captured.props?.onCancel?.());
+            expect(onClose).toHaveBeenCalledTimes(1);
+            expect(screen.queryByText("Discard unsaved changes to this drill?")).toBeNull();
+        });
+
+        it("asks before closing on Escape, and Keep editing leaves it open", () => {
+            const { onClose } = renderDialog(LIB);
+            setDirty(true);
+            pressEscape();
+            expect(screen.getByText("Discard unsaved changes to this drill?")).toBeTruthy();
+            expect(onClose).not.toHaveBeenCalled();
+            fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
+            expect(onClose).not.toHaveBeenCalled();
+        });
+
+        it("asks before closing from the editor's cancel control, and Discard closes", () => {
+            const { onClose } = renderDialog(LIB);
+            setDirty(true);
+            act(() => captured.props?.onCancel?.());
+            expect(screen.getByText("Discard unsaved changes to this drill?")).toBeTruthy();
+            expect(onClose).not.toHaveBeenCalled();
+            fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+            expect(onClose).toHaveBeenCalledTimes(1);
+        });
+
+        it("closes immediately after a successful save makes the drill clean again", async () => {
+            const { onClose } = renderDialog(LIB);
+            setDirty(true);
+            await saveFromEditor();
+            setDirty(false); // PlayEditor clears its flag once onSave resolves
+            act(() => captured.props?.onCancel?.());
+            expect(onClose).toHaveBeenCalledTimes(1);
+            expect(screen.queryByText("Discard unsaved changes to this drill?")).toBeNull();
+        });
     });
 });

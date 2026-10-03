@@ -8,7 +8,17 @@
  */
 
 import { useState } from "react";
-import { Box, Checkbox, Dialog, FormControlLabel } from "@mui/material";
+import {
+    Box,
+    Button,
+    Checkbox,
+    Dialog,
+    DialogActions,
+    DialogContent,
+    DialogContentText,
+    DialogTitle,
+    FormControlLabel,
+} from "@mui/material";
 import type { PlayData, SavedPlay } from "@/types/practice-planner";
 import type { SessionDrillPatch } from "@/lib/utils/session-drill-ids";
 import { copySessionDrillToLibrary, saveSessionDrill } from "@/lib/actions/practice-session-drills";
@@ -38,8 +48,22 @@ export function SessionDrillDialog({ open, sessionId, teamId, drill, onSaved, on
     const [playId, setPlayId] = useState<string | null>(drill?.playId ?? null);
     const [alsoAddToLibrary, setAlsoAddToLibrary] = useState(false);
     const [addedToLibrary, setAddedToLibrary] = useState(false);
+    const [dirty, setDirty] = useState(false);
+    const [confirmingDiscard, setConfirmingDiscard] = useState(false);
 
     if (!drill) return null;
+
+    // Escape, backdrop click and Cancel all land here; unsaved diagram edits need a confirm.
+    const requestClose = () => {
+        if (dirty) setConfirmingDiscard(true);
+        else onClose();
+    };
+
+    const handleDiscard = () => {
+        setConfirmingDiscard(false);
+        setDirty(false);
+        onClose();
+    };
 
     const handleSave = async (saved: SavedPlay) => {
         const result = await saveSessionDrill({
@@ -73,7 +97,7 @@ export function SessionDrillDialog({ open, sessionId, teamId, drill, onSaved, on
     };
 
     return (
-        <Dialog open={open} onClose={onClose} fullScreen aria-label="Edit drill diagram">
+        <Dialog open={open} onClose={requestClose} fullScreen aria-label="Edit drill diagram">
             <Box sx={{ px: { xs: 2, md: 3 }, pt: 2 }}>
                 <FormControlLabel
                     control={
@@ -99,8 +123,23 @@ export function SessionDrillDialog({ open, sessionId, teamId, drill, onSaved, on
                 lockTemplate
                 autoSave={false}
                 onSave={handleSave}
-                onCancel={onClose}
+                onCancel={requestClose}
+                onDirtyChange={setDirty}
             />
+            <Dialog open={confirmingDiscard} onClose={() => setConfirmingDiscard(false)} aria-labelledby="discard-drill-title">
+                <DialogTitle id="discard-drill-title">Discard unsaved changes to this drill?</DialogTitle>
+                <DialogContent>
+                    <DialogContentText>Your edits to this drill&apos;s diagram have not been saved.</DialogContentText>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setConfirmingDiscard(false)} sx={{ minHeight: 44, minWidth: 44 }}>
+                        Keep editing
+                    </Button>
+                    <Button onClick={handleDiscard} color="error" sx={{ minHeight: 44, minWidth: 44 }}>
+                        Discard
+                    </Button>
+                </DialogActions>
+            </Dialog>
         </Dialog>
     );
 }

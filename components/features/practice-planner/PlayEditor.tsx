@@ -52,6 +52,8 @@ export interface PlayEditorProps {
     autoSave?: boolean;
     onSave?: (play: SavedPlay) => Promise<void>;
     onCancel?: () => void;
+    /** Fires whenever the unsaved-changes flag flips, so a host can guard closing. */
+    onDirtyChange?: (dirty: boolean) => void;
 }
 
 /**
@@ -67,6 +69,7 @@ export function PlayEditor({
     autoSave = true,
     onSave,
     onCancel,
+    onDirtyChange,
 }: PlayEditorProps) {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down("md"));
@@ -102,6 +105,10 @@ export function PlayEditor({
     // Auto-save state
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
     const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+    useEffect(() => {
+        onDirtyChange?.(hasUnsavedChanges);
+    }, [hasUnsavedChanges, onDirtyChange]);
     const successTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const handleSaveRef = useRef<(() => Promise<void>) | undefined>(undefined);
 
