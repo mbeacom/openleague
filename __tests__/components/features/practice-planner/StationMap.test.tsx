@@ -54,12 +54,12 @@ afterEach(() => {
     vi.restoreAllMocks();
 });
 
-function renderMap() {
+function renderMap(activeIndex = 0) {
     render(
         <ThemeProvider theme={createTheme()}>
             <StationMap
                 stations={[{ name: "Breakout", playData: breakout }, { name: "Regroup", playData: regroup }]}
-                activeIndex={0}
+                activeIndex={activeIndex}
             />
         </ThemeProvider>,
     );
@@ -68,13 +68,27 @@ function renderMap() {
 describe("StationMap", () => {
     it("draws one clipped region per station and names the stations for screen readers", () => {
         renderMap();
-        const map = screen.getByRole("img", { name: "Station map: 1 · Breakout, 2 · Regroup" });
+        const map = screen.getByRole("img", { name: "Station map: 1 · Breakout (current), 2 · Regroup" });
         const calls = byCanvas.get(map as HTMLCanvasElement) ?? [];
 
-        expect(calls.filter((c) => c.name === "clip")).toHaveLength(2);
+        expect(calls.filter((c) => c.name === "clip")).toHaveLength(4);
         expect(calls.filter((c) => c.name === "fillText").map((c) => c.args[0])).toEqual(
             expect.arrayContaining(["1 · Breakout", "2 · Regroup"]),
         );
+    });
+
+    it("marks the current station in the accessible name", () => {
+        renderMap(1);
+        expect(screen.getByRole("img", { name: "Station map: 1 · Breakout, 2 · Regroup (current)" })).toBeInTheDocument();
+    });
+
+    it("renders nothing for an empty block", () => {
+        const { container } = render(
+            <ThemeProvider theme={createTheme()}>
+                <StationMap stations={[]} activeIndex={0} />
+            </ThemeProvider>,
+        );
+        expect(container).toBeEmptyDOMElement();
     });
 
     it("shows one legend combining every station's symbols", () => {

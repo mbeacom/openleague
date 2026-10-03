@@ -38,7 +38,11 @@ export function StationMap({ stations, activeIndex }: StationMapProps) {
         drawStationMap(ctx, createTransformContext(MAP_WIDTH, MAP_HEIGHT, MAP_PADDING), stations, activeIndex);
     }, [stations, activeIndex]);
 
-    const description = stations.map((station, index) => stationLabel(index + 1, station.name)).join(", ");
+    if (stations.length === 0) return null;
+
+    const description = stations
+        .map((station, index) => `${stationLabel(index + 1, station.name)}${index === activeIndex ? " (current)" : ""}`)
+        .join(", ");
 
     return (
         <Stack spacing={1}>

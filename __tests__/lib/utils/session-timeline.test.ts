@@ -191,6 +191,12 @@ describe("toggleRunsWithPrevious", () => {
         expect(toggleRunsWithPrevious(plays, 3)).toBe(plays);
     });
 
+    it("allows a toggle that makes a block of exactly four", () => {
+        const plays = cards("a b+ c+ d");
+        expect(canToggleRunsWithPrevious(plays, 3)).toBe(true);
+        expect(show(toggleRunsWithPrevious(plays, 3))).toBe("a b+ c+ d+");
+    });
+
     it("always allows turning a station off", () => {
         expect(canToggleRunsWithPrevious(cards("a b+ c+ d+"), 3)).toBe(true);
     });
@@ -370,5 +376,40 @@ describe("stationWarnings", () => {
 
     it("names booked segment kinds for the fit warning", () => {
         expect(SEGMENT_KIND_FIT_LABELS).toEqual({ HALF: "half ice", CROSS: "cross ice", CUSTOM: "ice segment" });
+    });
+});
+
+describe("immutability", () => {
+    const snapshot = (plays: Card[]) => JSON.stringify(plays);
+
+    it("moveItem, removeItem and toggleRunsWithPrevious leave their input untouched", () => {
+        const plays = cards("a b+ c+ d e+");
+        const before = snapshot(plays);
+        const objects = [...plays];
+        const ops: Array<() => Card[]> = [
+            () => moveItem(plays, 2, -1),
+            () => moveItem(plays, 0, 1),
+            () => moveItem(plays, 3, -1),
+            () => removeItem(plays, 0),
+            () => removeItem(plays, 2),
+            () => toggleRunsWithPrevious(plays, 1),
+            () => toggleRunsWithPrevious(plays, 3),
+        ];
+        for (const op of ops) op();
+
+        expect(snapshot(plays)).toBe(before);
+        plays.forEach((play, i) => expect(play).toBe(objects[i]));
+    });
+});
+
+describe("removeItem edge cases", () => {
+    it("removes the last drill", () => {
+        const removed = removeItem(cards("a b+ c"), 2);
+        expect(show(removed)).toBe("a b+");
+        expectNormalized(removed);
+    });
+
+    it("removes the only drill, leaving an empty list", () => {
+        expect(removeItem(cards("a"), 0)).toEqual([]);
     });
 });

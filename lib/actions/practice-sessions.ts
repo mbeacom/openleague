@@ -482,7 +482,7 @@ export async function createPracticeSession(
             if (!durationValidation.valid) {
                 return {
                     success: false,
-                    error: durationValidation.error || "Invalid total duration",
+                    error: durationValidation.error || "Practice timeline exceeds session duration",
                 };
             }
         }
@@ -770,7 +770,7 @@ export async function updatePracticeSession(
             if (!durationValidation.valid) {
                 return {
                     success: false,
-                    error: durationValidation.error || "Invalid total duration",
+                    error: durationValidation.error || "Practice timeline exceeds session duration",
                 };
             }
         }

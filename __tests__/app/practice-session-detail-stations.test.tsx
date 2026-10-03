@@ -54,10 +54,12 @@ const SESSION = {
     ],
 };
 
-function renderView() {
+type SessionProp = React.ComponentProps<typeof SessionDetailView>["session"];
+
+function renderView(session: SessionProp = SESSION) {
     render(
         <ThemeProvider theme={createTheme()}>
-            <SessionDetailView session={SESSION} isAdmin={false} />
+            <SessionDetailView session={session} isAdmin={false} />
         </ThemeProvider>,
     );
 }
@@ -99,5 +101,36 @@ describe("SessionDetailView stations (2b)", () => {
     it("shows the fit warning next to the booking line", () => {
         renderView();
         expect(screen.getByText("1 drill larger than the booked half ice")).toBeInTheDocument();
+    });
+});
+
+describe("SessionDetailView without stations or with unreadable drills (2b)", () => {
+    it("leaves a purely sequential session as it was", () => {
+        renderView({
+            ...SESSION,
+            segmentName: null,
+            segmentKind: null,
+            duration: 60,
+            plays: [sessionPlay("One", 0, false, 15), sessionPlay("Two", 1, false, 10), sessionPlay("Three", 2, false, 20)],
+        });
+
+        expect(screen.queryByText(/^Stations ·/)).not.toBeInTheDocument();
+        expect(screen.queryByRole("group", { name: /^Stations/ })).not.toBeInTheDocument();
+        expect(screen.queryByTestId("station-map")).not.toBeInTheDocument();
+        expect(screen.queryByText(/larger than the booked/)).not.toBeInTheDocument();
+        expect(screen.getByText("45 / 60 min")).toBeInTheDocument();
+    });
+
+    it("still renders a block with an unreadable drill, and skips it in the fit warning", () => {
+        const lost = sessionPlay("Lost", 1, true, 10);
+        const unreadable = { ...lost, play: { ...lost.play, playData: null } };
+        renderView({
+            ...SESSION,
+            plays: [sessionPlay("Breakout", 0, false, 15, { kind: "zone-left" }), unreadable],
+        });
+
+        expect(screen.getByRole("group", { name: "Stations · 2 · 15 min" })).toBeInTheDocument();
+        expect(screen.getByTestId("station-map")).toHaveTextContent("0:Breakout|Lost");
+        expect(screen.queryByText(/larger than the booked/)).not.toBeInTheDocument();
     });
 });

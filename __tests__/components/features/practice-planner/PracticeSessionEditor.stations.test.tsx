@@ -170,6 +170,31 @@ describe("PracticeSessionEditor station warnings (2b)", () => {
         expect(screen.getAllByText("Larger than the booked half ice")).toHaveLength(1);
     });
 
+    it("flags a drill larger than a booked reservation's segment kind", () => {
+        const [a, b] = drills("a b");
+        renderEditor([withArea(a), withArea(b, { kind: "half-left" })], {
+            ...booking,
+            reservations: [{
+                id: "cresxxxxxxxxxxxxxxxxxxxxx",
+                startsAt: START.toISOString(),
+                endsAt: new Date(START.getTime() + 60 * 60_000).toISOString(),
+                timezone: "America/New_York",
+                venueId: VENUE,
+                venueName: "Test Rink",
+                surfaceId: SURFACE,
+                surfaceName: "Main",
+                segmentId: SEGMENT,
+                segmentName: "Half A",
+                segmentKind: "HALF",
+                ownerType: "team",
+            }],
+        });
+        expect(screen.queryByText(/Larger than the booked/)).not.toBeInTheDocument();
+        fireEvent.mouseDown(screen.getByRole("combobox", { name: /Confirmed reservation/ }));
+        fireEvent.click(screen.getByRole("option", { name: /Test Rink/ }));
+        expect(screen.getAllByText("Larger than the booked half ice")).toHaveLength(1);
+    });
+
     it("flags nothing when the whole surface is booked", () => {
         const [a] = drills("a");
         renderEditor([withArea(a)], {

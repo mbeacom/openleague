@@ -59,8 +59,11 @@ describe("drawStationMap", () => {
     it("clips each station's drawing to its own area", () => {
         const calls = draw([{ name: "Breakout", playData: breakout }, { name: "Regroup", playData: regroup }]);
 
-        expect(calls.filter((c) => c.name === "clip")).toHaveLength(2);
-        const clipRects = calls.filter((c, i) => c.name === "rect" && calls[i + 1]?.name === "clip");
+        // Two clips per station: its drawing, then its label.
+        expect(calls.filter((c) => c.name === "clip")).toHaveLength(4);
+        const clipRects = calls
+            .filter((c, i) => c.name === "rect" && calls[i + 1]?.name === "clip")
+            .filter((_, i) => i % 2 === 0);
         const origin = rinkToCanvas({ x: 0, y: 0 }, t);
         expect(clipRects[0].args[0]).toBeCloseTo(origin.x, 9);
         expect(clipRects[0].args[2]).toBeCloseTo(rinkToCanvas({ x: 75, y: 0 }, t).x - origin.x, 9);
@@ -69,7 +72,7 @@ describe("drawStationMap", () => {
 
     it("draws a station's elements between its clip and the restore", () => {
         const calls = draw([{ name: "Breakout", playData: breakout }, { name: "Empty", playData: createEmptyPlayData() }]);
-        const clips = calls.flatMap((c, i) => (c.name === "clip" ? [i] : []));
+        const clips = calls.flatMap((c, i) => (c.name === "clip" ? [i] : [])).filter((_, i) => i % 2 === 0);
         const nextRestore = (from: number) => calls.findIndex((c, i) => i > from && c.name === "restore");
 
         expect(nextRestore(clips[0]) - clips[0]).toBeGreaterThan(1);
@@ -88,9 +91,50 @@ describe("drawStationMap", () => {
     it("still outlines and labels an unreadable station, with the unreadable message", () => {
         const calls = draw([{ name: "Breakout", playData: breakout }, { name: "Lost", playData: null }]);
 
-        expect(calls.filter((c) => c.name === "clip")).toHaveLength(2);
+        expect(calls.filter((c) => c.name === "clip")).toHaveLength(4);
         expect(calls.filter((c) => c.name === "strokeRect")).toHaveLength(2);
         expect(texts(calls)).toEqual(expect.arrayContaining(["2 · Lost", PLAY_DATA_UNREADABLE_MESSAGE]));
+    });
+
+    it("draws the active station's outline last, whichever station is active", () => {
+        for (const active of [0, 1]) {
+            const calls = draw([{ name: "Breakout", playData: breakout }, { name: "Regroup", playData: regroup }], active);
+            const outlines = calls.flatMap((c, i) => (c.name === "strokeRect" ? [calls[i - 1].args[0]] : []));
+            expect(outlines).toHaveLength(2);
+            expect(outlines[1]).toEqual([]);
+            expect(outlines[0]).toEqual([8, 6]);
+        }
+    });
+
+    it("clips each label to its station's area", () => {
+        const stations = [{ name: "A very long breakout drill name", playData: breakout }, { name: "Regroup", playData: regroup }];
+        const calls = draw(stations);
+        const origin = rinkToCanvas({ x: 0, y: 0 }, t);
+        const rightZone = rinkToCanvas({ x: 125, y: 0 }, t);
+        const labelIndexes = calls.flatMap((c, i) => (c.name === "fillText" && typeof c.args[0] === "string" && /^\d · /.test(c.args[0]) ? [i] : []));
+        expect(labelIndexes).toHaveLength(2);
+
+        const clipRectFor = (index: number) => {
+            // The innermost open clip: the nearest earlier clip with no restore between it and the text.
+            for (let i = index - 1; i >= 0; i--) {
+                if (calls[i].name === "restore") return null;
+                if (calls[i].name === "clip") return calls[i - 1].args as number[];
+            }
+            return null;
+        };
+        expect(clipRectFor(labelIndexes[0])?.[0]).toBeCloseTo(origin.x, 9);
+        expect(clipRectFor(labelIndexes[1])?.[0]).toBeCloseTo(rightZone.x, 9);
+    });
+
+    it("clips the unreadable message to its station too", () => {
+        const calls = draw([{ name: "Lost", playData: null }]);
+        const i = calls.findIndex((c) => c.name === "fillText" && c.args[0] === PLAY_DATA_UNREADABLE_MESSAGE);
+        let clipped = false;
+        for (let j = i - 1; j >= 0; j--) {
+            if (calls[j].name === "restore") break;
+            if (calls[j].name === "clip") { clipped = true; break; }
+        }
+        expect(clipped).toBe(true);
     });
 
     it("stacks the labels of stations that share a corner", () => {

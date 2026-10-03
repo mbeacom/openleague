@@ -57,12 +57,23 @@ export function drawStationMap(
     drawRink(ctx, transform, { cache: false });
     const labelOffsets = new Map<string, number>();
 
+    const outline = (topLeft: { x: number; y: number }, width: number, height: number, active: boolean) => {
+        ctx.save();
+        ctx.strokeStyle = active ? BOARD_COLORS.actionBlue : BOARD_COLORS.ink;
+        ctx.lineWidth = active ? ACTIVE_OUTLINE_PX : OUTLINE_PX;
+        ctx.setLineDash(active ? [] : OUTLINE_DASH);
+        ctx.strokeRect(topLeft.x, topLeft.y, width, height);
+        ctx.restore();
+    };
+    const geometry: { topLeft: { x: number; y: number }; width: number; height: number }[] = [];
+
     stations.forEach((station, i) => {
         const rect = areaRect(station.playData?.area);
         const topLeft = rinkToCanvas({ x: rect.x, y: rect.y }, transform);
         const bottomRight = rinkToCanvas({ x: rect.x + rect.w, y: rect.y + rect.h }, transform);
         const width = bottomRight.x - topLeft.x;
         const height = bottomRight.y - topLeft.y;
+        geometry.push({ topLeft, width, height });
 
         ctx.save();
         ctx.beginPath();
@@ -79,11 +90,11 @@ export function drawStationMap(
         const textX = topLeft.x + LABEL_INSET_PX;
         const textY = topLeft.y + LABEL_INSET_PX + offset;
 
+        // Labels are clipped to the station's area so long names can't spill into neighbours.
         ctx.save();
-        ctx.strokeStyle = color;
-        ctx.lineWidth = active ? ACTIVE_OUTLINE_PX : OUTLINE_PX;
-        ctx.setLineDash(active ? [] : OUTLINE_DASH);
-        ctx.strokeRect(topLeft.x, topLeft.y, width, height);
+        ctx.beginPath();
+        ctx.rect(topLeft.x, topLeft.y, width, height);
+        ctx.clip();
         ctx.textAlign = "left";
         ctx.textBaseline = "top";
         drawLabelLine(ctx, stationLabel(i + 1, station.name), textX, textY, LABEL_FONT, color);
@@ -91,7 +102,13 @@ export function drawStationMap(
             drawLabelLine(ctx, PLAY_DATA_UNREADABLE_MESSAGE, textX, textY + LABEL_LINE_PX, MESSAGE_FONT, color);
         }
         ctx.restore();
+
+        if (!active) outline(topLeft, width, height, false);
     });
+
+    // Second pass: the active outline goes last so neighbouring outlines can't paint over it.
+    const current = geometry[activeIndex];
+    if (current) outline(current.topLeft, current.width, current.height, true);
 }
 
 /** One PlayData holding every readable station's symbols, for a single legend; null when none can be read. */
