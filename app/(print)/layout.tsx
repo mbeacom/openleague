@@ -12,7 +12,7 @@ import "./print.css";
 export default async function PrintLayout({ children }: { children: ReactNode }) {
   await requireAuth();
   return (
-    <LightThemeScope component="main" sx={{ minHeight: "100vh", bgcolor: "#fff", color: "#000" }}>
+    <LightThemeScope component="main" className="bench-print-root" sx={{ minHeight: "100vh", bgcolor: "#fff", color: "#000" }}>
       {children}
     </LightThemeScope>
   );
