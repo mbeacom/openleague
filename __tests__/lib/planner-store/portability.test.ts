@@ -18,6 +18,7 @@ const ENTRIES = [
     "components/features/practice-planner/print/BenchSheet.tsx",
     "app/(dashboard)/practice-planner/[sessionId]/SessionDetailView.tsx",
     "lib/plan-document/index.ts",
+    "lib/planner-store/index.ts",
 ];
 
 /** Forbidden even as `import type`: the static app has no generated Prisma client. */
