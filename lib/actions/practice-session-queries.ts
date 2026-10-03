@@ -340,3 +340,19 @@ export async function getPlayLibraryContext(): Promise<{
     isAdmin: teamMember.role === "ADMIN",
   };
 }
+
+/**
+ * Teams the current user may import a practice plan into (ADR-0020): those
+ * where createPracticeSession's scheduler check passes without a reservation,
+ * i.e. a team ADMIN membership (requireTeamAdmin has no isActive filter, so
+ * neither does this).
+ */
+export async function getPlanImportTeams(): Promise<Array<{ id: string; name: string }>> {
+  const userId = await requireUserId();
+  const memberships = await prisma.teamMember.findMany({
+    where: { userId, role: "ADMIN" },
+    select: { team: { select: { id: true, name: true } } },
+    orderBy: { team: { name: "asc" } },
+  });
+  return memberships.map((membership) => membership.team);
+}

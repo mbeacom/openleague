@@ -72,6 +72,11 @@ describe("SessionDetailView timeline and print (3b)", () => {
         expect(link).toHaveAttribute("rel", "noopener");
     });
 
+    it("offers Export plan to members too (ADR-0020)", () => {
+        renderView();
+        expect(screen.getByRole("button", { name: "Export plan" })).toBeInTheDocument();
+    });
+
     it("formats a booked session's header and timeline in the venue's zone", () => {
         renderView(BOOKED);
         expect(screen.getByText("Tuesday, April 7, 2026 at 6:00 PM MDT")).toBeInTheDocument();

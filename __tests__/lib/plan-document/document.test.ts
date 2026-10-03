@@ -1,0 +1,299 @@
+/** The portable practice-plan document (ADR-0020): parse, serialize, limits, file name. */
+import { describe, expect, it } from "vitest";
+import {
+    INVALID_PLAN_MESSAGE,
+    MAX_DRILL_DESCRIPTION_LENGTH,
+    MAX_PLAN_DRILLS,
+    NEWER_VERSION_MESSAGE,
+    NOT_A_PLAN_MESSAGE,
+    PLAN_FORMAT,
+    PLAN_VERSION,
+    parsePlan,
+    planByteLength,
+    planFileName,
+    planToEditorSession,
+    serializePlan,
+    type PlanSessionInput,
+} from "@/lib/plan-document";
+import { createEmptyPlayData } from "@/lib/utils/play-data";
+import { FIRST_DRILL_STATION_ERROR, STATION_GROUP_CAP_ERROR, groupStations } from "@/lib/utils/session-timeline";
+import type { PlayData } from "@/types/practice-planner";
+
+const NOW = new Date("2026-10-03T18:00:00.000Z");
+
+const BOARD: PlayData = {
+    version: 2,
+    players: [{ id: "p1", position: { x: 50, y: 40 }, role: "X", label: "F1", color: "#1976D2" }],
+    drawings: [],
+    equipment: [],
+    annotations: [],
+};
+
+/** A v1 diagram: no version key, a player off the rink, an old-style arrow. */
+const V1_BOARD = {
+    players: [{ id: "p1", position: { x: 250, y: 40 }, label: "A", color: "#FF0000" }],
+    drawings: [{ id: "d1", type: "arrow", points: [{ x: 10, y: 10 }, { x: 20, y: 20 }], color: "#000000", strokeWidth: 2 }],
+    annotations: [],
+};
+
+function input(overrides: Partial<PlanSessionInput> = {}): PlanSessionInput {
+    return {
+        title: "Tuesday Skills Practice",
+        durationMinutes: 60,
+        date: "2026-10-06",
+        startTime: "19:00",
+        drills: [
+            { sequence: 0, duration: 10, runsWithPrevious: false, instructions: "Two laps", name: "Warmup Laps", description: "", playData: BOARD },
+            { sequence: 1, duration: 15, runsWithPrevious: false, instructions: null, name: "Breakout", description: "D to D", playData: BOARD },
+            { sequence: 2, duration: 10, runsWithPrevious: true, instructions: "", name: "Regroup", description: null, playData: null },
+        ],
+        ...overrides,
+    };
+}
+
+type RawDrill = {
+    sequence: unknown;
+    durationMinutes: unknown;
+    runsWithPrevious: unknown;
+    instructions: unknown;
+    drill: { name: unknown; description: unknown; playData: unknown; [key: string]: unknown };
+    [key: string]: unknown;
+};
+type RawDoc = {
+    format: unknown;
+    version: unknown;
+    session: { title: unknown; durationMinutes: unknown; date?: unknown; startTime?: unknown; drills: RawDrill[]; [key: string]: unknown };
+    [key: string]: unknown;
+};
+
+/** A serialized document as plain JSON, so a test can break it the way a hand-edited file would. */
+function rawDoc(mutate?: (doc: RawDoc) => void): RawDoc {
+    const doc = JSON.parse(JSON.stringify(serializePlan(input(), "openleague-hosted", NOW))) as RawDoc;
+    mutate?.(doc);
+    return doc;
+}
+
+function drill(sequence: number, overrides: Partial<RawDrill> = {}): RawDrill {
+    return {
+        sequence,
+        durationMinutes: 1,
+        runsWithPrevious: false,
+        instructions: "",
+        drill: { name: `Drill ${sequence}`, description: "", playData: BOARD },
+        ...overrides,
+    };
+}
+
+function issuesOf(raw: unknown): string[] {
+    const result = parsePlan(raw);
+    if (result.ok) throw new Error("expected the plan to be rejected");
+    expect(result.error.code).toBe("invalid");
+    expect(result.error.message).toBe(INVALID_PLAN_MESSAGE);
+    return result.error.issues ?? [];
+}
+
+describe("serializePlan", () => {
+    it("builds the documented envelope", () => {
+        const doc = serializePlan(input(), "openleague-hosted", NOW);
+        expect(doc.format).toBe(PLAN_FORMAT);
+        expect(doc.version).toBe(PLAN_VERSION);
+        expect(doc.exportedAt).toBe("2026-10-03T18:00:00.000Z");
+        expect(doc.generator).toBe("openleague-hosted");
+        expect(doc.session).toMatchObject({ title: "Tuesday Skills Practice", durationMinutes: 60, date: "2026-10-06", startTime: "19:00" });
+    });
+
+    it("sorts by sequence, renumbers from 0, and never flags the first drill", () => {
+        const doc = serializePlan(
+            input({
+                drills: [
+                    { sequence: 7, duration: 5, runsWithPrevious: false, instructions: null, name: "Late", description: null, playData: BOARD },
+                    { sequence: 3, duration: 5, runsWithPrevious: true, instructions: null, name: "Early", description: null, playData: BOARD },
+                ],
+            }),
+            "openleague-static",
+            NOW,
+        );
+        expect(doc.session.drills.map((d) => [d.sequence, d.drill.name, d.runsWithPrevious])).toEqual([
+            [0, "Early", false],
+            [1, "Late", false],
+        ]);
+    });
+
+    it("fills a missing diagram with an empty board and nulls with empty strings", () => {
+        const regroup = serializePlan(input(), "openleague-hosted", NOW).session.drills[2];
+        expect(regroup.drill.playData).toEqual(createEmptyPlayData());
+        expect(regroup.drill.description).toBe("");
+        expect(regroup.instructions).toBe("");
+    });
+
+    it("carries no ids, thumbnails or other extra fields", () => {
+        const base = input();
+        const withIds = Object.assign({}, base.drills[0], { id: "row-1", playId: "cplayxxxxxxxxxxxxxxxxxxxx", thumbnail: "data:image/png;base64,AA==" });
+        const doc = serializePlan(Object.assign({}, base, { drills: [withIds], teamId: "cteamxxxxxxxxxxxxxxxxxxxx" }), "openleague-hosted", NOW);
+        expect(Object.keys(doc).sort()).toEqual(["exportedAt", "format", "generator", "session", "version"]);
+        expect(Object.keys(doc.session).sort()).toEqual(["date", "drills", "durationMinutes", "startTime", "title"]);
+        expect(Object.keys(doc.session.drills[0]).sort()).toEqual(["drill", "durationMinutes", "instructions", "runsWithPrevious", "sequence"]);
+        expect(Object.keys(doc.session.drills[0].drill).sort()).toEqual(["description", "name", "playData"]);
+    });
+});
+
+describe("parsePlan", () => {
+    it("round-trips: parse(serialize(x)) equals the normalized document", () => {
+        const doc = serializePlan(input(), "openleague-hosted", NOW);
+        const result = parsePlan(JSON.parse(JSON.stringify(doc)));
+        expect(result).toEqual({ ok: true, plan: doc });
+    });
+
+    it("accepts a plan with no drills", () => {
+        const result = parsePlan(rawDoc((doc) => { doc.session.drills = []; }));
+        expect(result.ok && result.plan.session.drills).toEqual([]);
+    });
+
+    it("upgrades a v1 diagram", () => {
+        const result = parsePlan(rawDoc((doc) => { doc.session.drills[0].drill.playData = V1_BOARD; }));
+        if (!result.ok) throw new Error(JSON.stringify(result.error));
+        const board = result.plan.session.drills[0].drill.playData;
+        expect(board.version).toBe(2);
+        expect(board.players[0].position.x).toBe(200);
+        expect(board.drawings[0]).toMatchObject({ action: "skate", end: "arrow" });
+    });
+
+    it("strips unknown keys at every level", () => {
+        const result = parsePlan(
+            rawDoc((doc) => {
+                doc.teamId = "cteamxxxxxxxxxxxxxxxxxxxx";
+                doc.session.id = "csessionxxxxxxxxxxxxxxxxx";
+                doc.session.venueId = "cvenuexxxxxxxxxxxxxxxxxxx";
+                doc.session.drills[0].playId = "cplayxxxxxxxxxxxxxxxxxxxx";
+                doc.session.drills[0].drill.thumbnail = "data:image/png;base64,AA==";
+                doc.session.drills[0].drill.id = "cplayxxxxxxxxxxxxxxxxxxxx";
+            }),
+        );
+        if (!result.ok) throw new Error(JSON.stringify(result.error));
+        expect(result.plan).not.toHaveProperty("teamId");
+        expect(result.plan.session).not.toHaveProperty("id");
+        expect(result.plan.session).not.toHaveProperty("venueId");
+        expect(result.plan.session.drills[0]).not.toHaveProperty("playId");
+        expect(result.plan.session.drills[0].drill).not.toHaveProperty("thumbnail");
+        expect(result.plan.session.drills[0].drill).not.toHaveProperty("id");
+    });
+
+    it("returns drills in sequence order", () => {
+        const result = parsePlan(rawDoc((doc) => { doc.session.drills.reverse(); }));
+        expect(result.ok && result.plan.session.drills.map((d) => d.drill.name)).toEqual(["Warmup Laps", "Breakout", "Regroup"]);
+    });
+
+    it("reads a missing date, start time, instructions or description as empty", () => {
+        const result = parsePlan(
+            rawDoc((doc) => {
+                delete doc.session.date;
+                delete doc.session.startTime;
+                delete doc.session.drills[0].instructions;
+                delete doc.session.drills[0].drill.description;
+            }),
+        );
+        if (!result.ok) throw new Error(JSON.stringify(result.error));
+        expect([result.plan.session.date, result.plan.session.startTime]).toEqual([null, null]);
+        expect([result.plan.session.drills[0].instructions, result.plan.session.drills[0].drill.description]).toEqual(["", ""]);
+    });
+
+    it.each([null, [], "plan", 42, {}, { format: "openleague.something-else", version: 1 }])("rejects %j as not a plan", (raw) => {
+        expect(parsePlan(raw)).toEqual({ ok: false, error: { code: "not-a-plan", message: NOT_A_PLAN_MESSAGE } });
+    });
+
+    it("rejects a newer version before looking at anything else", () => {
+        expect(parsePlan({ format: PLAN_FORMAT, version: 2 })).toEqual({
+            ok: false,
+            error: { code: "newer-version", message: NEWER_VERSION_MESSAGE },
+        });
+    });
+
+    it("treats a non-integer version as invalid, not newer", () => {
+        expect(issuesOf(rawDoc((doc) => { doc.version = "1"; })).length).toBeGreaterThan(0);
+    });
+
+    it("names the drill whose diagram can't be read", () => {
+        const issues = issuesOf(rawDoc((doc) => { doc.session.drills[1].drill.playData = { version: 2, players: "nope" }; }));
+        expect(issues).toContain('Drill 2 ("Breakout"): The diagram can\'t be read');
+    });
+
+    it.each([
+        ["an empty title", (doc: RawDoc) => { doc.session.title = "   "; }, "Title is required"],
+        ["a 101-character title", (doc: RawDoc) => { doc.session.title = "x".repeat(101); }, "Title must be at most 100 characters"],
+        ["a 0-minute session", (doc: RawDoc) => { doc.session.durationMinutes = 0; }, "Session length must be at least 1 minute"],
+        ["a 301-minute session", (doc: RawDoc) => { doc.session.durationMinutes = 301; }, "Session length must be at most 300 minutes"],
+        ["a fractional drill length", (doc: RawDoc) => { doc.session.drills[0].durationMinutes = 1.5; }, 'Drill 1 ("Warmup Laps"): Drill length must be a whole number of minutes'],
+        ["a 0-minute drill", (doc: RawDoc) => { doc.session.drills[0].durationMinutes = 0; }, 'Drill 1 ("Warmup Laps"): Drill length must be at least 1 minute'],
+        ["2001-character instructions", (doc: RawDoc) => { doc.session.drills[0].instructions = "x".repeat(2001); }, 'Drill 1 ("Warmup Laps"): Instructions must be at most 2000 characters'],
+        ["a 1001-character description", (doc: RawDoc) => { doc.session.drills[0].drill.description = "x".repeat(1001); }, 'Drill 1 ("Warmup Laps"): Description must be at most 1000 characters'],
+        ["a blank drill name", (doc: RawDoc) => { doc.session.drills[0].drill.name = ""; }, "Drill 1: Drill name is required"],
+        ["an impossible date", (doc: RawDoc) => { doc.session.date = "2026-02-30"; }, "Date must be a real calendar date (YYYY-MM-DD)"],
+        ["a 24:00 start", (doc: RawDoc) => { doc.session.startTime = "24:00"; }, "Start time must be HH:mm (24-hour)"],
+        ["a sequence gap", (doc: RawDoc) => { doc.session.drills[2].sequence = 5; }, "Drill sequences must run 0, 1, 2… with no gaps or repeats"],
+        ["a flagged first drill", (doc: RawDoc) => { doc.session.drills[0].runsWithPrevious = true; }, FIRST_DRILL_STATION_ERROR],
+        ["a timeline longer than the session", (doc: RawDoc) => { doc.session.durationMinutes = 20; }, "Practice timeline (25 min) exceeds session duration (20 min)"],
+        ["a bad exportedAt", (doc: RawDoc) => { doc.exportedAt = "yesterday"; }, "exportedAt must be an ISO date-time"],
+    ])("rejects %s", (_label, mutate, message) => {
+        expect(issuesOf(rawDoc(mutate))).toContain(message);
+    });
+
+    it(`accepts a ${MAX_DRILL_DESCRIPTION_LENGTH}-character description (hosted plays allow 1000)`, () => {
+        expect(parsePlan(rawDoc((doc) => { doc.session.drills[0].drill.description = "x".repeat(1000); })).ok).toBe(true);
+    });
+
+    it(`accepts ${MAX_PLAN_DRILLS} drills and rejects ${MAX_PLAN_DRILLS + 1}`, () => {
+        const withDrills = (count: number) =>
+            rawDoc((doc) => {
+                doc.session.durationMinutes = 300;
+                doc.session.drills = Array.from({ length: count }, (_, i) => drill(i));
+            });
+        expect(parsePlan(withDrills(MAX_PLAN_DRILLS)).ok).toBe(true);
+        expect(issuesOf(withDrills(MAX_PLAN_DRILLS + 1))).toContain("A plan can hold at most 50 drills");
+    });
+
+    it("rejects a station block of five", () => {
+        const issues = issuesOf(
+            rawDoc((doc) => {
+                doc.session.drills = Array.from({ length: 5 }, (_, i) => drill(i, { runsWithPrevious: i > 0 }));
+            }),
+        );
+        expect(issues).toContain(STATION_GROUP_CAP_ERROR);
+    });
+});
+
+describe("planFileName", () => {
+    it.each([
+        ["Tuesday Skills Practice", "tuesday-skills-practice.olplan.json"],
+        ["  Équipe Été!!  ", "equipe-ete.olplan.json"],
+        ["U12 / Power-Play #2", "u12-power-play-2.olplan.json"],
+        ["🏒🏒", "practice-plan.olplan.json"],
+        ["", "practice-plan.olplan.json"],
+    ])("slugs %j", (title, expected) => {
+        expect(planFileName(title)).toBe(expected);
+    });
+
+    it("caps the slug at 60 characters without a trailing hyphen", () => {
+        const name = planFileName("ab ".repeat(40));
+        const slug = name.replace(/\.olplan\.json$/, "");
+        expect(slug.length).toBeLessThanOrEqual(60);
+        expect(slug.endsWith("-")).toBe(false);
+    });
+});
+
+describe("planToEditorSession", () => {
+    it("maps drills to timeline plays that groupStations understands", () => {
+        const session = planToEditorSession(serializePlan(input(), "openleague-hosted", NOW));
+        expect(session).toMatchObject({ title: "Tuesday Skills Practice", duration: 60, date: "2026-10-06", startTime: "19:00" });
+        const groups = groupStations(session.plays);
+        expect(groups.map((g) => g.stations.map((p) => p.name))).toEqual([["Warmup Laps"], ["Breakout", "Regroup"]]);
+        expect(new Set(session.plays.map((p) => p.key)).size).toBe(3);
+    });
+});
+
+describe("planByteLength", () => {
+    it("is the UTF-8 byte length of the plan's JSON, which is what the import action is sent", () => {
+        const doc = serializePlan(input({ title: "Été drills" }), "openleague-hosted", NOW);
+        expect(planByteLength(doc)).toBe(new TextEncoder().encode(JSON.stringify(doc)).byteLength);
+        expect(planByteLength(doc)).toBeGreaterThan(JSON.stringify(doc).length); // "É" and "é" are 2 bytes each
+    });
+});

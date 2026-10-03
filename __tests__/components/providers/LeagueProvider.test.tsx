@@ -72,6 +72,12 @@ describe('LeagueProvider getBreadcrumbs', () => {
       expect(screen.getByTestId('crumbs')).toHaveTextContent(expected);
     });
 
+    it('labels the practice plan import page', () => {
+      mocks.pathname.mockReturnValue('/practice-planner/import');
+      renderCrumbs(singleTeamData);
+      expect(screen.getByTestId('crumbs')).toHaveTextContent('Dashboard > Practice Planner > Import Plan');
+    });
+
     it('labels nested new/edit pages', () => {
       mocks.pathname.mockReturnValue('/venues/venue-1/edit');
       renderCrumbs(singleTeamData);
