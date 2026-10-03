@@ -147,7 +147,7 @@ materializeSessionDrills(tx, { sessionId, teamId, userId, items })
    - Copy the name, description, thumbnail, and raw `playData`. The data may still be v1; reads upgrade it.
    - Set `isTemplate=false`, `sessionId=S`, and `createdById` = the current user.
    - Set `sourcePlayId` to the source's own `sourcePlayId` if it has one, otherwise to the source's id.
-   - Verify the result order. PostgreSQL returns `INSERT … RETURNING` rows in `VALUES` order, but Prisma does not document it. The call selects `id, name, sourcePlayId, sessionId`, matches the result to the input by index, and checks `name`, `sourcePlayId`, and `sessionId` at each index. A mismatch aborts the transaction instead of mapping a drill to the wrong card.
+   - Generate each copy's id before the insert (`newPlayId`, cuid-shaped) and map copies to sources by that id, not by result position. Prisma does not document the order of `createManyAndReturn` rows, and two copies can share a name, provenance, and session while carrying different diagrams (duplicating a session that holds two edited copies of one library drill). Every generated id must come back, or the transaction aborts instead of mapping a drill to the wrong card.
 4. Return the `clientKey → playId` mapping, plus `previousPlayIds`.
 5. After the session plays are rewritten, `deleteOrphanedSessionDrills` deletes owned plays of S that S referenced before this save (`previousPlayIds`) and that nothing references now (drop-only orphan cleanup, no time window). A copy S has never referenced, such as one the drill dialog just created, is never deleted by a save. That way an autosave already in flight can't remove it. Copies that are never referenced go with the session's cascade.
 

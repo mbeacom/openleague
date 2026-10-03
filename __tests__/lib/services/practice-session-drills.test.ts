@@ -8,6 +8,10 @@ import {
     materializeSessionDrills,
 } from "@/lib/services/practice-session-drills";
 
+// Clone ids are generated before the insert; a counter keeps them readable.
+const ids = vi.hoisted(() => ({ next: 0 }));
+vi.mock("@/lib/services/play-ids", () => ({ newPlayId: () => `clone-${ids.next++}` }));
+
 const SESSION = "s1";
 const OTHER_SESSION = "s2";
 const TEAM = "t1";
@@ -40,7 +44,7 @@ function play(id: string, overrides: Partial<Row> = {}): Row {
 
 /** referencing: the session-play rows ({ sessionId, playId }) that exist. */
 function fakeTx(plays: Row[], referencing: Array<{ sessionId: string; playId: string }> = []) {
-    let next = 0;
+    ids.next = 0;
     const mocks = {
         practiceSessionPlay: {
             findMany: vi.fn(async ({ where }: { where: { sessionId?: string; playId?: string } }) =>
@@ -58,8 +62,8 @@ function fakeTx(plays: Row[], referencing: Array<{ sessionId: string; playId: st
                 if (!row) throw new Error("not found");
                 return row;
             }),
-            createManyAndReturn: vi.fn(async ({ data }: { data: Array<{ name: string; sourcePlayId: string | null; sessionId: string }> }) =>
-                data.map((row) => ({ id: `clone-${next++}`, name: row.name, sourcePlayId: row.sourcePlayId, sessionId: row.sessionId }))),
+            createManyAndReturn: vi.fn(async ({ data }: { data: Array<{ id: string; name: string; sourcePlayId: string | null; sessionId: string }> }) =>
+                data.map((row) => ({ id: row.id, name: row.name, sourcePlayId: row.sourcePlayId, sessionId: row.sessionId }))),
             deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
         },
     };
@@ -90,6 +94,7 @@ describe("materializeSessionDrills", () => {
         expect(mocks.play.findMany.mock.calls[0][0].where).toEqual({ id: { in: ["lib1"] }, teamId: TEAM });
         expect(result.mapping).toEqual([{ clientKey: "k0", sequence: 0, playId: "clone-0" }]);
         expect(mocks.play.createManyAndReturn.mock.calls[0][0].data).toEqual([{
+            id: "clone-0",
             name: "Drill lib1",
             description: null,
             thumbnail: null,
@@ -163,15 +168,34 @@ describe("materializeSessionDrills", () => {
         ]);
     });
 
-    it("aborts instead of mis-mapping when clones come back out of order", async () => {
+    it("maps clones by id, so same-name same-provenance copies returned out of order stay matched", async () => {
+        // Two independently edited copies of one library drill; a second
+        // occurrence of each is cloned in one insert.
+        const first = play("o1", { isTemplate: false, sessionId: SESSION, sourcePlayId: "lib", name: "Breakout", playData: { diagram: "first" } });
+        const second = play("o2", { isTemplate: false, sessionId: SESSION, sourcePlayId: "lib", name: "Breakout", playData: { diagram: "second" } });
+        const { mocks, tx } = fakeTx([first, second]);
+        mocks.play.createManyAndReturn.mockImplementationOnce(async ({ data }: { data: Array<{ id: string; name: string; sourcePlayId: string; sessionId: string }> }) =>
+            data.map((row) => ({ id: row.id, name: row.name, sourcePlayId: row.sourcePlayId, sessionId: row.sessionId })).reverse());
+
+        const result = await materializeSessionDrills(tx, {
+            sessionId: SESSION, teamId: TEAM, userId: USER, items: items("o1", "o2", "o1", "o2"),
+        });
+
+        const data: Array<{ id: string; playData: unknown }> = mocks.play.createManyAndReturn.mock.calls[0][0].data;
+        const diagramOf = (id: string) => data.find((row) => row.id === id)?.playData;
+        expect(diagramOf(result.mapping[2].playId)).toEqual({ diagram: "first" });
+        expect(diagramOf(result.mapping[3].playId)).toEqual({ diagram: "second" });
+    });
+
+    it("aborts instead of mis-mapping when a generated clone id does not come back", async () => {
         const { mocks, tx } = fakeTx([play("a"), play("b")]);
         mocks.play.createManyAndReturn.mockResolvedValueOnce([
-            { id: "x", name: "Drill b", sourcePlayId: "b", sessionId: SESSION },
-            { id: "y", name: "Drill a", sourcePlayId: "a", sessionId: SESSION },
+            { id: "clone-0", name: "Drill a", sourcePlayId: "a", sessionId: SESSION },
+            { id: "unexpected", name: "Drill b", sourcePlayId: "b", sessionId: SESSION },
         ]);
         await expect(
             materializeSessionDrills(tx, { sessionId: SESSION, teamId: TEAM, userId: USER, items: items("a", "b") }),
-        ).rejects.toThrow("out of order");
+        ).rejects.toThrow("Drill copies");
     });
 
     it("reads nothing but the previous references for an empty payload", async () => {

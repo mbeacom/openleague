@@ -7,6 +7,7 @@
  */
 import { Prisma } from "@prisma/client";
 import { SESSION_DRILL_REJECTED_MESSAGE } from "@/lib/utils/session-drill-ids";
+import { newPlayId } from "@/lib/services/play-ids";
 
 export { SESSION_DRILL_REJECTED_MESSAGE };
 
@@ -57,8 +58,13 @@ export async function cloneDrillsIntoSessions(
 ): Promise<string[]> {
     if (input.copies.length === 0) return [];
 
+    // Ids are generated here, so each copy is matched to its source by id:
+    // returned row order is not documented, and two copies can share a name,
+    // provenance and session while carrying different diagrams.
+    const ids = input.copies.map(() => newPlayId());
     const created = await tx.play.createManyAndReturn({
-        data: input.copies.map(({ sessionId, source }) => ({
+        data: input.copies.map(({ sessionId, source }, index) => ({
+            id: ids[index],
             name: source.name,
             description: source.description,
             thumbnail: source.thumbnail,
@@ -69,23 +75,14 @@ export async function cloneDrillsIntoSessions(
             sessionId,
             sourcePlayId: provenanceOf(source),
         })),
-        select: { id: true, name: true, sourcePlayId: true, sessionId: true },
+        select: { id: true },
     });
 
-    // PostgreSQL returns INSERT … RETURNING rows in VALUES order, but Prisma
-    // does not document it: verify, and abort rather than mis-map a drill.
-    const inOrder =
-        created.length === input.copies.length
-        && created.every(
-            (row, index) =>
-                row.name === input.copies[index].source.name
-                && row.sourcePlayId === provenanceOf(input.copies[index].source)
-                && row.sessionId === input.copies[index].sessionId,
-        );
-    if (!inOrder) {
-        throw new Error("Drill copies came back out of order");
+    const returned = new Set(created.map((row) => row.id));
+    if (created.length !== ids.length || ids.some((id) => !returned.has(id))) {
+        throw new Error("Drill copies did not come back as created");
     }
-    return created.map((row) => row.id);
+    return ids;
 }
 
 /** cloneDrillsIntoSessions for a single session. */

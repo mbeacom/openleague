@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+// Clone ids are generated before insert; a per-test counter keeps them readable.
+const playIds = vi.hoisted(() => ({ next: 0 }));
+vi.mock("@/lib/services/play-ids", () => ({ newPlayId: () => `cclone${playIds.next++}xxxxxxxxxxxxxxxxxx` }));
+
 const { mockAuth, models, mockPrisma } = vi.hoisted(() => {
     const models = {
         play: { findMany: vi.fn(), createManyAndReturn: vi.fn(), deleteMany: vi.fn() },
@@ -80,10 +84,10 @@ beforeEach(() => {
     // Honors where.teamId like the database: rows below belong to TEAM unless marked.
     models.play.findMany.mockImplementation(async ({ where }: { where: { id: { in: string[] }; teamId?: string } }) =>
         rows.filter((r) => where.id.in.includes(r.id) && (where.teamId === undefined || (r.teamId ?? TEAM) === where.teamId)).map((r) => ({ ...r, description: null, thumbnail: null, playData: {} })));
-    let next = 0;
-    // Echo sessionId: the helper verifies name, sourcePlayId and sessionId per index.
-    models.play.createManyAndReturn.mockImplementation(async ({ data }: { data: Array<{ name: string; sourcePlayId: string; sessionId: string }> }) =>
-        data.map((d) => ({ id: `cclone${next++}xxxxxxxxxxxxxxxxxx`, name: d.name, sourcePlayId: d.sourcePlayId, sessionId: d.sessionId })));
+    playIds.next = 0;
+    // Echo the generated id: the helper matches returned rows by id.
+    models.play.createManyAndReturn.mockImplementation(async ({ data }: { data: Array<{ id: string; name: string; sourcePlayId: string; sessionId: string }> }) =>
+        data.map((d) => ({ id: d.id, name: d.name, sourcePlayId: d.sourcePlayId, sessionId: d.sessionId })));
 });
 
 describe("createPracticeSession owns its drills", () => {

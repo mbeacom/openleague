@@ -1,4 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+// Clone ids are generated before insert; a per-test counter keeps them readable.
+const playIds = vi.hoisted(() => ({ next: 0 }));
+vi.mock("@/lib/services/play-ids", () => ({ newPlayId: () => `ccopy${playIds.next++}xxxxxxxxxxxxxxxxxxx` }));
 import { Prisma } from "@prisma/client";
 
 const { mockPrisma, tx } = vi.hoisted(() => {
@@ -52,8 +56,9 @@ beforeEach(() => {
         id: PLAY, name: "Breakout", description: null, thumbnail: null, playData: OLD_DIAGRAM,
         sourcePlayId: null, isTemplate: true, sessionId: null,
     });
-    tx.play.createManyAndReturn.mockImplementation(async ({ data }: { data: Array<{ name: string; sourcePlayId: string; sessionId: string }> }) =>
-        data.map((d, i) => ({ id: `ccopy${i}xxxxxxxxxxxxxxxxxxx`, name: d.name, sourcePlayId: d.sourcePlayId, sessionId: d.sessionId })));
+    playIds.next = 0;
+    tx.play.createManyAndReturn.mockImplementation(async ({ data }: { data: Array<{ id: string; name: string; sourcePlayId: string; sessionId: string }> }) =>
+        data.map((d) => ({ id: d.id, name: d.name, sourcePlayId: d.sourcePlayId, sessionId: d.sessionId })));
     tx.practiceSessionPlay.updateMany.mockResolvedValue({ count: 1 });
     tx.play.update.mockResolvedValue({ id: PLAY, name: "Breakout v2", isTemplate: true });
     tx.play.delete.mockResolvedValue({ id: PLAY });

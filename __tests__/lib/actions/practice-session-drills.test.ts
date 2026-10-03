@@ -1,4 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+// Clone ids are generated before insert; a per-test counter keeps them readable.
+const playIds = vi.hoisted(() => ({ next: 0 }));
+vi.mock("@/lib/services/play-ids", () => ({ newPlayId: () => `cclone${playIds.next++}xxxxxxxxxxxxxxxxxx` }));
 import { Prisma } from "@prisma/client";
 
 const { mockAuth, tx, mockPrisma } = vi.hoisted(() => {
@@ -145,8 +149,9 @@ describe("duplicatePracticeSession", () => {
             teamId: TEAM, title: "Tuesday", duration: 75, plays: [sourceRow(0), sourceRow(1)],
         });
         tx.practiceSession.create.mockResolvedValue({ id: COPY });
-        tx.play.createManyAndReturn.mockImplementation(async ({ data }: { data: Array<{ name: string; sourcePlayId: string; sessionId: string }> }) =>
-            data.map((d, i) => ({ id: `cclone${i}xxxxxxxxxxxxxxxxxx`, name: d.name, sourcePlayId: d.sourcePlayId, sessionId: d.sessionId })));
+        playIds.next = 0;
+        tx.play.createManyAndReturn.mockImplementation(async ({ data }: { data: Array<{ id: string; name: string; sourcePlayId: string; sessionId: string }> }) =>
+            data.map((d) => ({ id: d.id, name: d.name, sourcePlayId: d.sourcePlayId, sessionId: d.sessionId })));
         tx.practiceSessionPlay.createMany.mockResolvedValue({ count: 2 });
     });
 
