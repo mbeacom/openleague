@@ -19,7 +19,7 @@ import {
     type RotationTable,
 } from "@/lib/utils/session-timeline";
 import { sessionForDisplay } from "@/lib/utils/drill-tags";
-import { blockTitle, drillRows, isBlockRow } from "@/lib/utils/session-rows";
+import { blockTitle, drillRows, isBlockRow, rotationColumnName } from "@/lib/utils/session-rows";
 import { formatClockTime, formatLongDate, sessionStart, sessionTimeZone } from "@/lib/utils/date";
 import { plannedLabel, stationsLabel } from "../SessionTimeline";
 import { drillText, stationTag } from "../print/BenchSheetDrill";
@@ -185,7 +185,7 @@ export function buildBenchSheetModel(
                     minutes: group.wallMinutes,
                     label: rotationBlockLabel(grid.minutes, group.wallMinutes),
                     stations: stations.map((sp) => `${sp.play.name}${staysSuffix(sp.stays)}`),
-                    grid: rotationTable(grid, (row) => (isBlockRow(row) ? blockTitle(row.kind, row.label) : row.play.name), (_, round) => time(roundStarts[round])),
+                    grid: rotationTable(grid, rotationColumnName, (_, round) => time(roundStarts[round])),
                 };
             }
             const block = stations.length > 1;

@@ -17,6 +17,7 @@ import {
     needsStoredTiming,
     newBlockItem,
     toBlockLabel,
+    rotationColumnName,
     toDrillRowInput,
     toRotateEveryMinutes,
     toRowKind,
@@ -70,6 +71,10 @@ describe("block text and lenient readers", () => {
         expect(toBlockLabel("  Stretch\u0007 ")).toBe("Stretch");
         expect(toBlockLabel("")).toBeNull();
         expect(toBlockLabel(7)).toBeNull();
+        // A rotation grid's column: a drill's name, or a block's title.
+        expect(rotationColumnName({ play: { name: "Skate A" } })).toBe("Skate A");
+        expect(rotationColumnName({ kind: "drill", play: { name: "Goalie" } })).toBe("Goalie");
+        expect(rotationColumnName({ kind: "break", label: null })).toBe("Water break");
         expect(toBlockLabel("x".repeat(70))).toHaveLength(60);
         // Never cut through an emoji: a pair that doesn't fit the 60 is dropped whole,
         // so the label still passes every 60-character check (they count UTF-16 units).

@@ -69,6 +69,10 @@ function stationParagraphs(label: string, stations: readonly string[]): Paragrap
     ];
 }
 
+/** The timeline's Drill column is 8180 twips; the grid nested in it leaves room for the cell's margins. */
+const GRID_WIDTH = 7900;
+const GRID_START_WIDTH = 1300;
+
 /** A rotation block's grid as a real table (spec R10): Start plus one column per station. */
 function gridTable(grid: RotationTable): Table {
     const head = new TableRow({
@@ -85,7 +89,13 @@ function gridTable(grid: RotationTable): Table {
                 ],
             }),
     );
-    return new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: [head, ...rows] });
+    // Explicit columns (twips): a narrow Start, the stations sharing the rest of the Drill cell.
+    const stationWidth = Math.floor((GRID_WIDTH - GRID_START_WIDTH) / Math.max(1, grid.columns.length));
+    return new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        columnWidths: [GRID_START_WIDTH, ...grid.columns.map(() => stationWidth)],
+        rows: [head, ...rows],
+    });
 }
 
 function timeline(model: BenchSheetModel): Array<Paragraph | Table> {

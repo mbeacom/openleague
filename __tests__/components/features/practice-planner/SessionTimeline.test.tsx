@@ -143,6 +143,8 @@ describe("SessionTimeline: a rotating station block (spec R9)", () => {
         render(ui({ plays: ROTATING }));
         const [block, gridRow] = bodyRows();
         expect(within(block).getByText("Rotates every 5 min")).toBeInTheDocument();
+        // The caption line is upper case; the chip keeps its sentence case.
+        expect(within(block).getByText("Rotates every 5 min").closest(".MuiChip-root")).toHaveStyle({ textTransform: "none" });
         // The chip is a div: its caption line must not be a <p> (invalid nesting, a React 19 hydration error).
         expect(block.querySelector("p .MuiChip-root")).toBeNull();
         expect(within(block).getByText(/stays/)).toBeInTheDocument();
@@ -161,5 +163,7 @@ describe("SessionTimeline: a rotating station block (spec R9)", () => {
         expect(html).toContain("Goalie · stays");
         expect(html).toContain('class="bench-rotation"');
         expect(html).toMatch(/<td>all<\/td>/);
+        // The block's row stays on the page with its grid (app/(print)/print.css).
+        expect(html).toMatch(/<tr class="bench-keep-with-grid"><td>[^<]*<\/td><td>10<\/td>/);
     });
 });

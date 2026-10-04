@@ -38,7 +38,9 @@ function chunk<T>(items: T[], size: number): T[][] {
 export function BenchSheet({ session: stored }: { session: BenchSheetSession }) {
     // Goalie markers hidden at render time only (spec R7); the stored session is untouched.
     const session = useMemo(() => sessionForDisplay(stored), [stored]);
-    const { Link, routes } = usePlannerPlatform();
+    const { Link, routes, planGenerator } = usePlannerPlatform();
+    // The static planner's team is the placeholder "This device", not a name (as the exports omit it).
+    const teamName = planGenerator === "openleague-static" ? null : session.teamName;
     const start = sessionStart(session);
     const end = new Date(start.getTime() + session.duration * MS_PER_MINUTE);
     const { timeZone, showZone } = sessionTimeZone(session);
@@ -46,11 +48,13 @@ export function BenchSheet({ session: stored }: { session: BenchSheetSession }) 
     const place = [session.venueName, session.surfaceName, session.segmentName].filter(Boolean).join(" · ");
     const gap = session.transitionMinutes ?? 0;
     const legend = combinedLegendData(drillRows(session.plays).map((sp) => ({ name: sp.play.name, playData: sp.play.playData })));
-    // One page per drill; a block (warm-up, break…) is a timeline row only.
-    const drills = buildSchedule(session.plays, start, gap).flatMap((row) => {
+    // One page per drill; a block (warm-up, break…) is a timeline row only. Start times come
+    // from the stored rows, as the timeline's do; each page draws the display copy of its drill.
+    const shown = new Map(drillRows(session.plays).map((sp) => [sp.id, sp]));
+    const drills = buildSchedule(stored.plays, start, gap).flatMap((row) => {
         const stations = drillRows(row.group.stations);
         return stations.map((sp, k) => ({
-            sp,
+            sp: shown.get(sp.id) ?? sp,
             startsAt: row.startsAt,
             station: stations.length > 1 ? { position: k + 1, count: stations.length } : null,
         }));
@@ -91,9 +95,11 @@ export function BenchSheet({ session: stored }: { session: BenchSheetSession }) 
                 <Typography variant="h4" component="h1" sx={{ fontWeight: 800 }}>
                     {session.title}
                 </Typography>
-                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                    {session.teamName}
-                </Typography>
+                {teamName && (
+                    <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                        {teamName}
+                    </Typography>
+                )}
                 <Typography variant="body1">
                     {`${clock.longDate(start)} · ${clock.time(start, false)} – ${clock.time(end)}`}
                 </Typography>

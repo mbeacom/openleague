@@ -701,6 +701,16 @@ export function rotatesEveryLabel(minutes: number): string {
     return `Rotates every ${minutes} min`;
 }
 
+/**
+ * A station's timing beside its name in a list of a block's stations (the
+ * session sidebar, the import preview): in a rotating block "Rotates every 5
+ * min", or STAYS_MARK for a station that stays; elsewhere its own minutes.
+ */
+export function stationTimingLabel(row: TimelinePlay, rotation: { minutes: number } | null): string {
+    if (!rotation) return `${row.duration} min`;
+    return row.stays ? STAYS_MARK : rotatesEveryLabel(rotation.minutes);
+}
+
 /** "2 min between blocks". */
 export function betweenBlocksLabel(minutes: number): string {
     return `${minutes} min between blocks`;

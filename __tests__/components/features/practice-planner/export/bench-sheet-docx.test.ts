@@ -159,5 +159,11 @@ describe("renderBenchSheetDocx: rotation and the gap (spec R10)", () => {
         // The timeline table, plus the grid nested in its third cell.
         expect(xml.match(/<w:tbl>/g)).toHaveLength(2);
         expect(xml).toMatch(/>all</);
+        // The grid sets its own columns: a narrow Start, the stations sharing the rest.
+        const grid = xml.slice(xml.lastIndexOf("<w:tbl>"));
+        const widths = [...grid.matchAll(/<w:gridCol w:w="(\d+)"\/>/g)].map((match) => Number(match[1]));
+        expect(widths).toHaveLength(4);
+        expect(widths[0]).toBeLessThan(widths[1]);
+        expect(new Set(widths.slice(1)).size).toBe(1);
     });
 });

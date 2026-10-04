@@ -78,7 +78,11 @@ describe("SessionDetailView: a rotating station block", () => {
                 <SessionDetailView session={rotating} isAdmin={false} />
             </ThemeProvider>,
         );
-        expect(screen.getByRole("group", { name: "Stations · rotate every 5 min · 10 min" })).toBeInTheDocument();
+        const block = screen.getByRole("group", { name: "Stations · rotate every 5 min · 10 min" });
+        // Each station says how it runs, as the timeline does, not its stored minutes.
+        expect(within(block).getAllByText("Rotates every 5 min")).toHaveLength(2);
+        expect(within(block).getByText("stays")).toBeInTheDocument();
+        expect(within(block).queryByText("10 min")).toBeNull();
         expect(screen.getByRole("table", { name: /^Rotation grid/ })).toBeInTheDocument();
     });
 });

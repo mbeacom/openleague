@@ -47,6 +47,17 @@
   text-align: center;
 }
 
+/* A rotation grid never splits across pages, and its block's row stays with it. */
+.bench-timeline .bench-rotation {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.bench-timeline .bench-keep-with-grid {
+  break-after: avoid;
+  page-break-after: avoid;
+}
+
 .bench-over-time {
   font-weight: 700;
 }

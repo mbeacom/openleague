@@ -22,6 +22,8 @@ describe("RotationGridTable", () => {
         const table = screen.getByRole("table", { name: "Rotation grid: Stations · 3 · 10 min" });
         expect(within(table).getAllByRole("columnheader").map((cell) => cell.textContent)).toEqual(["Start", "Goalie", "Skate A", "Skate B"]);
         expect(within(table).getAllByRole("row").slice(1).map((row) => row.textContent)).toEqual(["6:00 PMallAB", "6:05 PMallBA"]);
+        // Each round's start heads its row.
+        expect(within(table).getAllByRole("rowheader").map((cell) => cell.textContent)).toEqual(["6:00 PM", "6:05 PM"]);
     });
 
     it("prints as a plain table", () => {
@@ -29,5 +31,6 @@ describe("RotationGridTable", () => {
         expect(html).toContain('class="bench-rotation"');
         expect(html).toContain("<th scope=\"col\">Skate A</th>");
         expect(html).toMatch(/<td>all<\/td>/);
+        expect(html).toContain('<th scope="row">6:00 PM</th>');
     });
 });

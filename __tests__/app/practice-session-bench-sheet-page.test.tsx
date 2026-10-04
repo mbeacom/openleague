@@ -81,4 +81,10 @@ describe("print scoping", () => {
         expect(css).not.toMatch(/(^|[\s,{}])main\s*\{/);
         expect(css).not.toMatch(/(^|[\s,{}])(html|body)\s*[,{]/);
     });
+
+    it("never splits a rotation grid, and keeps a station block's row with its grid", () => {
+        const css = readFileSync(join(process.cwd(), "app/(print)/print.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+        expect(css).toMatch(/\.bench-rotation\s*\{[^}]*break-inside:\s*avoid;/);
+        expect(css).toMatch(/\.bench-keep-with-grid\s*\{[^}]*break-after:\s*avoid;/);
+    });
 });

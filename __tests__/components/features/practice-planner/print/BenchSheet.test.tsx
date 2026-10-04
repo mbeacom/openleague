@@ -1,7 +1,7 @@
 /** BenchSheet (3b): header, timeline, one legend, then drills paired into pages. */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
-import { renderWithPlanner } from "@/__tests__/helpers/planner";
+import { createHashPlatform, renderWithPlanner } from "@/__tests__/helpers/planner";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import type { DrillRow, PlayData } from "@/types/practice-planner";
@@ -262,6 +262,19 @@ describe("BenchSheet goalie markers", () => {
         await waitFor(() => expect(mockGenerate).toHaveBeenCalled());
         const drawnPlayers = (mockGenerate.mock.calls[0] as unknown as [PlayData])[0].players;
         expect(drawnPlayers.map((p) => p.role)).toEqual(["F"]);
+    });
+});
+
+describe("BenchSheet in the static planner", () => {
+    it("leaves out the placeholder team, as the exports do", () => {
+        renderWithPlanner(
+            <ThemeProvider theme={createTheme()}>
+                <BenchSheet session={{ ...SESSION, teamName: "This device" }} />
+            </ThemeProvider>,
+            { platform: createHashPlatform() },
+        );
+        expect(screen.getByRole("heading", { level: 1, name: "Tuesday Skills" })).toBeInTheDocument();
+        expect(screen.queryByText("This device")).toBeNull();
     });
 });
 

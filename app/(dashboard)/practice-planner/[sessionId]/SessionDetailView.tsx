@@ -57,6 +57,7 @@ import {
   rotationBlockLabel,
   sessionWallMinutes,
   stationBlockLabel,
+  stationTimingLabel,
   stationWarnings,
 } from "@/lib/utils/session-timeline";
 import { sessionStart, sessionTimeZone } from "@/lib/utils/date";
@@ -458,6 +459,7 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
                       key={sp.id}
                       sp={sp}
                       drawn={drawnAt(index)}
+                      timing={stationTimingLabel(sp, group.rotation)}
                       index={index}
                       active={index === activePlayIndex}
                       onSelect={() => setActivePlayIndex(index)}

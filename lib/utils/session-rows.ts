@@ -64,6 +64,11 @@ export function blockTitle(kind: BlockKind, label: string | null | undefined): s
     return label?.trim() || BLOCK_DEFAULTS[kind].label;
 }
 
+/** A rotation grid's column: a station's drill name (or a block's title, which never joins a station block). */
+export function rotationColumnName(row: { kind?: "drill"; play: { name: string } } | { kind: BlockKind; label: string | null }): string {
+    return isBlockRow(row) ? blockTitle(row.kind, row.label) : row.play.name;
+}
+
 /**
  * Control characters the write paths strip (the same pattern as validation.ts's
  * sanitizedString and play-data's cleanText). The one copy the practice-timing

@@ -33,13 +33,15 @@ interface SidebarPlayCardProps {
   sp: PracticeSessionViewPlay;
   /** The diagram as drawn for this session (goalie hidden when none attend) */
   drawn: PlayData | null;
+  /** The line under the name: its minutes, or in a rotating block how it rotates (stationTimingLabel) */
+  timing: string;
   index: number;
   active: boolean;
   onSelect: () => void;
 }
 
 /** One drill in the sidebar's play sequence; standalone or inside a station block (2b). */
-export function SidebarPlayCard({ sp, drawn, index, active, onSelect }: SidebarPlayCardProps) {
+export function SidebarPlayCard({ sp, drawn, timing, index, active, onSelect }: SidebarPlayCardProps) {
   const { Image } = usePlannerPlatform();
   const thumbnail = useDrawnThumbnail(sp.play.thumbnail, sp.play.playData, drawn);
   return (
@@ -111,7 +113,7 @@ export function SidebarPlayCard({ sp, drawn, index, active, onSelect }: SidebarP
             )}
           </Box>
 
-          {/* Name & duration */}
+          {/* Name & timing */}
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography
               variant="body2"
@@ -122,7 +124,7 @@ export function SidebarPlayCard({ sp, drawn, index, active, onSelect }: SidebarP
               {sp.play.name}
             </Typography>
             <Typography variant="caption" color="text.secondary">
-              {sp.duration} min
+              {timing}
             </Typography>
           </Box>
         </Stack>

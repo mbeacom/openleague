@@ -5,13 +5,12 @@
 import { useMemo } from "react";
 import { Box, Paper, Stack, Typography } from "@mui/material";
 import {
-    STAYS_MARK,
     betweenBlocksLabel,
     groupStations,
-    rotatesEveryLabel,
     rotationBlockLabel,
     sessionWallMinutes,
     stationBlockLabel,
+    stationTimingLabel,
 } from "@/lib/utils/session-timeline";
 import { generateThumbnail } from "@/lib/utils/canvas/thumbnail-generator";
 import { useMounted } from "@/lib/hooks/useClockText";
@@ -89,7 +88,7 @@ export function PlanPreview({ plan }: { plan: PlanDocument }) {
                                 <Stack spacing={1}>
                                     {stations.map((play) => {
                                         const src = thumbnails.get(play.key);
-                                        const timing = rotation ? (play.stays ? STAYS_MARK : rotatesEveryLabel(rotation.minutes)) : `${play.duration} min`;
+                                        const timing = stationTimingLabel(play, rotation);
                                         return (
                                             <Stack key={play.key} direction="row" spacing={1.5} alignItems="center">
                                                 {src ? (

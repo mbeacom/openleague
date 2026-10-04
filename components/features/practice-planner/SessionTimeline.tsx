@@ -22,7 +22,7 @@ import {
     type RotationGrid,
     type TimelinePlay,
 } from "@/lib/utils/session-timeline";
-import { blockTitle, drillRows, isBlockRow } from "@/lib/utils/session-rows";
+import { blockTitle, drillRows, isBlockRow, rotationColumnName } from "@/lib/utils/session-rows";
 import { useClockText } from "@/lib/hooks/useClockText";
 import { RotationGridTable } from "./RotationGridTable";
 
@@ -81,7 +81,7 @@ export function blockLine(row: SessionTimelineBlock): string {
 
 /** The grid as a table, each round at its clock time (spec R9). */
 function gridTable(grid: RotationGrid<SessionTimelinePlay>, roundStarts: Date[], time: (date: Date) => string) {
-    return rotationTable(grid, (row) => (isBlockRow(row) ? blockTitle(row.kind, row.label) : row.play.name), (_, round) => time(roundStarts[round]));
+    return rotationTable(grid, rotationColumnName, (_, round) => time(roundStarts[round]));
 }
 
 function DrillName({ id, name, onSelect }: { id: string; name: string; onSelect?: (id: string) => void }) {
@@ -153,7 +153,8 @@ export function SessionTimeline<T extends SessionTimelinePlay>({
                             const drills = drillRows(stations);
                             return (
                                 <Fragment key={head.id}>
-                                    <tr>
+                                    {/* A rotating block's row stays on the page with its grid (print.css). */}
+                                    <tr className={grid ? "bench-keep-with-grid" : undefined}>
                                         <td>{clock.time(startsAt)}</td>
                                         <td>{group.wallMinutes}</td>
                                         <td>
@@ -240,7 +241,16 @@ export function SessionTimeline<T extends SessionTimelinePlay>({
                                                     }}
                                                 >
                                                     {stationsLabel(drills.length)}
-                                                    {grid && <Chip size="small" variant="outlined" color="secondary" label={rotatesEveryLabel(grid.minutes)} />}
+                                                    {grid && (
+                                                        // The caption is upper case; the chip keeps its own case.
+                                                        <Chip
+                                                            size="small"
+                                                            variant="outlined"
+                                                            color="secondary"
+                                                            label={rotatesEveryLabel(grid.minutes)}
+                                                            sx={{ textTransform: "none", letterSpacing: "normal" }}
+                                                        />
+                                                    )}
                                                 </Typography>
                                                 <Box component="ul" sx={{ m: 0, pl: 2 }}>
                                                     {drills.map((sp) => (

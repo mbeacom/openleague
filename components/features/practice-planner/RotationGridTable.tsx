@@ -27,7 +27,7 @@ export function RotationGridTable({ table, caption, variant = "screen" }: { tabl
                     <tbody>
                         {table.rows.map((row, round) => (
                             <tr key={round}>
-                                <td>{row.start}</td>
+                                <th scope="row">{row.start}</th>
                                 {row.cells.map((cell, index) => (
                                     <td key={index}>{cell}</td>
                                 ))}
@@ -55,7 +55,9 @@ export function RotationGridTable({ table, caption, variant = "screen" }: { tabl
                 <TableBody>
                     {table.rows.map((row, round) => (
                         <TableRow key={round}>
-                            <TableCell sx={{ whiteSpace: "nowrap", fontFamily: "var(--font-mono), monospace" }}>{row.start}</TableCell>
+                            <TableCell component="th" scope="row" sx={{ whiteSpace: "nowrap", fontFamily: "var(--font-mono), monospace" }}>
+                                {row.start}
+                            </TableCell>
                             {row.cells.map((cell, index) => (
                                 <TableCell key={index} sx={cell === ROTATION_ALL ? { color: "text.secondary" } : { fontWeight: 800, color: "secondary.main" }}>
                                     {cell}

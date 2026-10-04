@@ -231,5 +231,7 @@ describe("renderBenchSheetHtml: rotation and the gap (spec R10)", () => {
             "6:05 PMallBA",
         ]);
         expect(doc.querySelector("g")).toBeNull();
+        // A round's start time never wraps.
+        expect(doc.querySelector("style")?.textContent).toMatch(/\.rotation \.time\s*\{\s*white-space:\s*nowrap;/);
     });
 });
