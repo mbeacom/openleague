@@ -29,9 +29,14 @@ export const LAZY_ONLY_IN_BUNDLE: ReadonlyArray<{ pattern: string; reason: strin
     { pattern: "word/document.xml", reason: "the Word export (docx) must load only through import(), on click" },
 ];
 
-/** The module scripts index.html loads up front, relative to outDir. */
+/** The module scripts and modulepreload chunks index.html loads up front, relative to outDir. */
 function entryScripts(html: string): string[] {
-    return Array.from(html.matchAll(/<script\b[^>]*\bsrc="\.\/([^"]+\.js)"/g), (match) => match[1]);
+    const scripts = Array.from(html.matchAll(/<script\b[^>]*\bsrc="\.\/([^"]+\.js)"/g), (match) => match[1]);
+    const preloads = Array.from(html.matchAll(/<link\b[^>]*>/g), (match) => match[0])
+        .filter((tag) => /\brel="modulepreload"/.test(tag))
+        .map((tag) => /\bhref="\.\/([^"]+\.js)"/.exec(tag)?.[1])
+        .filter((href): href is string => href !== undefined);
+    return Array.from(new Set([...scripts, ...preloads]));
 }
 
 /** `process.env`, `process?.env`, `process["env"]` and `process?.["env"]`, capturing what precedes `process`. */
@@ -156,7 +161,10 @@ export async function checkPlannerBuild(outDir: string): Promise<string[]> {
     }
     for (const entry of entryScripts(html)) {
         const text = contents.find(([file]) => file.split(path.sep).join("/") === entry)?.[1];
-        if (text === undefined) continue;
+        if (text === undefined) {
+            problems.push(`${entry} is referenced by index.html but missing from the build`);
+            continue;
+        }
         for (const { pattern, reason } of LAZY_ONLY_IN_BUNDLE) {
             if (text.includes(pattern)) problems.push(`${entry} (the entry chunk) contains "${pattern}": ${reason}`);
         }
