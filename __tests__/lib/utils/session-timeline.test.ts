@@ -1,14 +1,23 @@
 import { describe, expect, it } from "vitest";
 import type { SegmentKind } from "@prisma/client";
-import type { IceArea, PlayData, PlayFocus, PlayGoalies } from "@/types/practice-planner";
+import type { BlockKind, IceArea, PlayData, PlayFocus, PlayGoalies } from "@/types/practice-planner";
 import {
+    BLOCK_ROW_FIELDS_ERROR,
+    BLOCK_STATION_ERROR,
     FIRST_DRILL_STATION_ERROR,
     MAX_STATIONS_PER_GROUP,
+    ROTATION_PLACEMENT_ERROR,
+    ROTATION_TOO_FEW_ERROR,
     SEGMENT_KIND_FIT_LABELS,
     STATION_GROUP_CAP_ERROR,
     STATION_OVERLAP_TOLERANCE_FT,
+    STAYS_MARK,
+    betweenBlocksLabel,
+    blockMinutes,
+    buildSchedule,
     canMove,
     canToggleRunsWithPrevious,
+    defaultRotationMinutes,
     drillFootprint,
     goalieShortMessage,
     goalieShortSummary,
@@ -19,10 +28,20 @@ import {
     moveItem,
     normalizeGroups,
     removeItem,
+    rotatesEveryLabel,
+    rotationBlockLabel,
+    rotationGrid,
+    rotationMinutes,
+    rotationRoundLabel,
+    rotationSummary,
+    rotationTable,
+    sessionRowsError,
     sessionWallMinutes,
+    settleRotations,
     stationBlockLabel,
     stationGroupError,
     stationWarnings,
+    staysSuffix,
     toggleRunsWithPrevious,
     type GoalieNeeds,
     type StationArea,
@@ -485,5 +504,280 @@ describe("goalieWarnings", () => {
         expect(goaliesUnusedMessage(2)).toBe("2 goalies attending, but no drill uses a goalie");
         expect(goalieShortSummary(1, 0)).toBe("1 drill or station block needs a goalie, but none are attending");
         expect(goalieShortSummary(2, 1)).toBe("2 drills or station blocks need more goalies than the 1 attending");
+    });
+});
+
+type Row = TimelinePlay & { id: string };
+
+const solo = (id: string, sequence: number, duration = 10, extra: Partial<TimelinePlay> = {}): Row =>
+    ({ id, sequence, duration, runsWithPrevious: false, ...extra });
+const block = (id: string, sequence: number, kind: BlockKind, duration: number, extra: Partial<TimelinePlay> = {}): Row =>
+    ({ id, sequence, duration, runsWithPrevious: false, kind, ...extra });
+/** One station block starting at `start`: its first drill carries the rotation. */
+function stations(start: number, specs: Array<{ id: string; duration?: number; stays?: boolean }>, rotateEveryMinutes: number | null = null): Row[] {
+    return specs.map((spec, k) => ({
+        id: spec.id,
+        sequence: start + k,
+        duration: spec.duration ?? 10,
+        runsWithPrevious: k > 0,
+        stays: spec.stays ?? false,
+        rotateEveryMinutes: k === 0 ? rotateEveryMinutes : null,
+    }));
+}
+const groupsOf = (grid: ReturnType<typeof rotationGrid<Row>>) => grid?.rounds.map((round) => round.stations.map((cell) => cell.group));
+
+describe("blockMinutes and rotationGrid (spec R4)", () => {
+    it("a lone row lasts its minutes; a block that doesn't rotate lasts its longest station", () => {
+        expect(blockMinutes([solo("a", 0, 12)])).toBe(12);
+        expect(blockMinutes([block("w", 0, "warmup", 8)])).toBe(8);
+        expect(blockMinutes(stations(0, [{ id: "a", duration: 15 }, { id: "b", duration: 10 }]))).toBe(15);
+        expect(rotationGrid(stations(0, [{ id: "a" }, { id: "b" }]))).toBeNull();
+    });
+
+    it("rotates 3 stations: M × 3, group g at station (g + r) mod 3", () => {
+        const rows = stations(0, [{ id: "a" }, { id: "b" }, { id: "c" }], 5);
+        expect(blockMinutes(rows)).toBe(15);
+        const grid = rotationGrid(rows);
+        expect(grid?.minutes).toBe(5);
+        expect(grid?.groups).toEqual(["A", "B", "C"]);
+        expect(grid?.rounds.map((round) => round.start)).toEqual([0, 5, 10]);
+        expect(groupsOf(grid)).toEqual([["A", "B", "C"], ["C", "A", "B"], ["B", "C", "A"]]);
+        expect(grid?.rounds[1].stations.map((cell) => cell.row.id)).toEqual(["a", "b", "c"]);
+    });
+
+    it("rotates 4 stations", () => {
+        const rows = stations(0, [{ id: "a" }, { id: "b" }, { id: "c" }, { id: "d" }], 4);
+        expect(blockMinutes(rows)).toBe(16);
+        expect(groupsOf(rotationGrid(rows))?.[1]).toEqual(["D", "A", "B", "C"]);
+    });
+
+    it("keeps a stays station out of the rotation: it shows all in every round", () => {
+        const rows = stations(0, [{ id: "g", stays: true }, { id: "b" }, { id: "c" }], 5);
+        expect(blockMinutes(rows)).toBe(10);
+        expect(rotationGrid(rows)?.groups).toEqual(["A", "B"]);
+        expect(groupsOf(rotationGrid(rows))).toEqual([["all", "A", "B"], ["all", "B", "A"]]);
+        const four = stations(0, [{ id: "g", stays: true }, { id: "a" }, { id: "b" }, { id: "c" }], 6);
+        expect([blockMinutes(four), rotationGrid(four)?.groups.join("")]).toEqual([18, "ABC"]);
+    });
+
+    it("doesn't rotate with fewer than 2 rotating stations, or on a lone drill", () => {
+        const rows = stations(0, [{ id: "g", stays: true, duration: 12 }, { id: "b", duration: 5 }], 5);
+        expect(rotationMinutes(rows)).toBeNull();
+        expect(blockMinutes(rows)).toBe(12);
+        expect(rotationGrid([solo("a", 0, 10, { rotateEveryMinutes: 5 })])).toBeNull();
+    });
+
+    it("lays the grid out as a table: one column per station, one row per round", () => {
+        const rows = stations(0, [{ id: "g", stays: true }, { id: "b" }, { id: "c" }], 5);
+        const grid = rotationGrid(rows);
+        expect(grid && rotationTable(grid, (row) => row.id.toUpperCase(), (start) => rotationRoundLabel(start, 5))).toEqual({
+            columns: ["G", "B", "C"],
+            rows: [
+                { start: "0–5 min", cells: ["all", "A", "B"] },
+                { start: "5–10 min", cells: ["all", "B", "A"] },
+            ],
+        });
+    });
+});
+
+describe("groupStations, buildSchedule and sessionWallMinutes with blocks and gaps (spec R4)", () => {
+    const START = new Date("2026-10-06T23:00:00.000Z");
+    const rows = [
+        block("w", 0, "warmup", 8),
+        ...stations(1, [{ id: "a" }, { id: "b" }], 5),
+        block("c", 3, "cooldown", 5),
+    ];
+
+    it("never joins a block row to a station block, even with a stray flag", () => {
+        const groups = groupStations([solo("a", 0), block("w", 1, "warmup", 8, { runsWithPrevious: true }), solo("b", 2, 10, { runsWithPrevious: true })]);
+        expect(groups.map((group) => group.stations.map((row) => row.id))).toEqual([["a"], ["w"], ["b"]]);
+    });
+
+    it("adds the gap between blocks, never after the last one", () => {
+        expect(groupStations(rows, 2).map((group) => [group.startMinute, group.wallMinutes])).toEqual([[0, 8], [10, 10], [22, 5]]);
+        expect(sessionWallMinutes(rows, 2)).toBe(27);
+        expect(sessionWallMinutes(rows)).toBe(23);
+        expect(sessionWallMinutes([], 3)).toBe(0);
+    });
+
+    it("schedules each block and each rotation round", () => {
+        const minutes = (date: Date) => (date.getTime() - START.getTime()) / 60_000;
+        const schedule = buildSchedule(rows, START, 2);
+        expect(schedule.map((row) => [minutes(row.startsAt), minutes(row.endsAt)])).toEqual([[0, 8], [10, 20], [22, 27]]);
+        expect(schedule.map((row) => row.roundStarts.map(minutes))).toEqual([[], [10, 15], []]);
+    });
+});
+
+describe("normalizeGroups: row rules (spec R3)", () => {
+    it("a block row never runs with, stays or rotates, and the drill after it starts a new block", () => {
+        const [, w, b] = normalizeGroups([
+            solo("a", 0),
+            block("w", 1, "warmup", 8, { runsWithPrevious: true, stays: true, rotateEveryMinutes: 5 }),
+            solo("b", 2, 10, { runsWithPrevious: true }),
+        ]);
+        expect([w.runsWithPrevious, w.stays, w.rotateEveryMinutes]).toEqual([false, false, null]);
+        expect(b.runsWithPrevious).toBe(false);
+    });
+
+    it("keeps a rotation only on the first drill of a block of 2 or more", () => {
+        expect(normalizeGroups([solo("a", 0, 10, { rotateEveryMinutes: 5 })])[0].rotateEveryMinutes).toBeNull();
+        const rows = stations(0, [{ id: "a" }, { id: "b" }]);
+        rows[1] = { ...rows[1], rotateEveryMinutes: 5 };
+        expect(normalizeGroups(rows).map((row) => row.rotateEveryMinutes)).toEqual([null, null]);
+    });
+
+    it("clears stays outside a rotating block", () => {
+        expect(normalizeGroups(stations(0, [{ id: "a" }, { id: "b", stays: true }]))[1].stays).toBe(false);
+    });
+
+    it("writes the minutes of a rotating block: M per rotating station, the block's length for a stays station", () => {
+        const rows = normalizeGroups(stations(0, [{ id: "g", stays: true, duration: 7 }, { id: "a", duration: 7 }, { id: "b", duration: 9 }], 6));
+        expect(rows.map((row) => row.duration)).toEqual([12, 6, 6]);
+    });
+
+    it("leaves a block that can't rotate as the coach set it, and unchanged rows as the same objects", () => {
+        const cantRotate = stations(0, [{ id: "g", stays: true, duration: 12 }, { id: "a", duration: 5 }], 5);
+        const normalized = normalizeGroups(cantRotate);
+        expect(normalized[0]).toBe(cantRotate[0]);
+        expect(normalized[1]).toBe(cantRotate[1]);
+        // Normalized once over the whole list (an inner call would renumber the stations from 0).
+        const valid = normalizeGroups([block("w", 0, "warmup", 8), ...stations(1, [{ id: "a" }, { id: "b" }], 5)]);
+        normalizeGroups(valid).forEach((row, index) => expect(row).toBe(valid[index]));
+    });
+});
+
+describe("settleRotations", () => {
+    it("clears a rotation that can't run (fewer than 2 rotating stations) and its stays flags", () => {
+        const rows = stations(0, [{ id: "g", stays: true }, { id: "a" }], 5);
+        const settled = settleRotations(rows);
+        expect(settled.map((row) => [row.rotateEveryMinutes, row.stays])).toEqual([[null, false], [null, false]]);
+    });
+
+    it("returns the list itself when every rotation can run", () => {
+        const rows = normalizeGroups(stations(0, [{ id: "a" }, { id: "b" }], 5));
+        expect(settleRotations(rows)).toBe(rows);
+    });
+});
+
+describe("sessionRowsError (server, static store and importer)", () => {
+    it("accepts blocks, rotation and stays where they belong, whatever the array order", () => {
+        const rows = [block("w", 0, "warmup", 8), ...stations(1, [{ id: "g", stays: true }, { id: "a" }, { id: "b" }], 5)];
+        expect(sessionRowsError([...rows].reverse())).toBeNull();
+    });
+
+    it("keeps the station rules", () => {
+        expect(sessionRowsError([solo("a", 0, 10, { runsWithPrevious: true })])).toBe(FIRST_DRILL_STATION_ERROR);
+    });
+
+    it("rejects a block in a station block, before or after", () => {
+        expect(sessionRowsError([solo("a", 0), block("w", 1, "warmup", 8, { runsWithPrevious: true })])).toBe(BLOCK_STATION_ERROR);
+        expect(sessionRowsError([block("w", 0, "warmup", 8), solo("a", 1, 10, { runsWithPrevious: true })])).toBe(BLOCK_STATION_ERROR);
+    });
+
+    it("rejects a block that stays or rotates", () => {
+        expect(sessionRowsError([block("w", 0, "warmup", 8, { stays: true })])).toBe(BLOCK_ROW_FIELDS_ERROR);
+        expect(sessionRowsError([block("w", 0, "warmup", 8, { rotateEveryMinutes: 5 })])).toBe(BLOCK_ROW_FIELDS_ERROR);
+    });
+
+    it("rejects a rotation anywhere but the first drill of a block of 2 or more", () => {
+        expect(sessionRowsError([solo("a", 0, 10, { rotateEveryMinutes: 5 })])).toBe(ROTATION_PLACEMENT_ERROR);
+        const rows = stations(0, [{ id: "a" }, { id: "b" }]);
+        rows[1] = { ...rows[1], rotateEveryMinutes: 5 };
+        expect(sessionRowsError(rows)).toBe(ROTATION_PLACEMENT_ERROR);
+    });
+
+    it("rejects a rotation with fewer than 2 rotating stations, and ignores stays outside a rotation", () => {
+        expect(sessionRowsError(stations(0, [{ id: "g", stays: true }, { id: "a" }], 5))).toBe(ROTATION_TOO_FEW_ERROR);
+        expect(sessionRowsError(stations(0, [{ id: "a" }, { id: "b", stays: true }]))).toBeNull();
+    });
+});
+
+describe("list edits around block rows", () => {
+    it("a block can't join a station block, and a drill can't join a block", () => {
+        const rows = [solo("a", 0), block("w", 1, "warmup", 8), solo("b", 2)];
+        expect(canToggleRunsWithPrevious(rows, 1)).toBe(false);
+        expect(canToggleRunsWithPrevious(rows, 2)).toBe(false);
+        expect(toggleRunsWithPrevious(rows, 2)).toBe(rows);
+    });
+
+    it("a block moves as one unit over a whole station block", () => {
+        const rows = [block("w", 0, "warmup", 8), ...stations(1, [{ id: "a" }, { id: "b" }])];
+        expect(moveItem(rows, 0, 1).map((row) => `${row.id}${row.runsWithPrevious ? "+" : ""}`)).toEqual(["a", "b+", "w"]);
+    });
+});
+
+describe("list edits keep a block's rotation on its first drill (ruling R4)", () => {
+    const shape = (rows: Row[]) => rows.map((row) => [row.id, row.runsWithPrevious, row.rotateEveryMinutes, Boolean(row.stays)]);
+    // g stays, a and b rotate every 5 minutes; g holds the rotation.
+    const rotating = () => normalizeGroups(stations(0, [{ id: "g", stays: true }, { id: "a" }, { id: "b" }], 5));
+
+    it("a station moved up to the top takes the rotation, and the stays tick stays", () => {
+        expect(shape(moveItem(rotating(), 1, -1))).toEqual([
+            ["a", false, 5, false],
+            ["g", true, null, true],
+            ["b", true, null, false],
+        ]);
+    });
+
+    it("deleting the first drill hands the rotation to the next station", () => {
+        expect(shape(removeItem(rotating(), 0))).toEqual([
+            ["a", false, 5, false],
+            ["b", true, null, false],
+        ]);
+    });
+
+    it("a rotating block joined onto a drill gives the merged block its rotation", () => {
+        const rows = normalizeGroups([solo("x", 0), ...stations(1, [{ id: "a" }, { id: "b" }], 5)]);
+        expect(shape(toggleRunsWithPrevious(rows, 1))).toEqual([
+            ["x", false, 5, false],
+            ["a", true, null, false],
+            ["b", true, null, false],
+        ]);
+    });
+
+    it("splitting a block leaves the rotation on its first drill; the split-off station starts a block that doesn't rotate", () => {
+        const rows = normalizeGroups(stations(0, [{ id: "a" }, { id: "b" }, { id: "c" }, { id: "d", stays: true }], 4));
+        expect(shape(toggleRunsWithPrevious(rows, 3))).toEqual([
+            ["a", false, 4, false],
+            ["b", true, null, false],
+            ["c", true, null, false],
+            ["d", false, null, false],
+        ]);
+    });
+});
+
+describe("goalieWarnings with blocks and rotation", () => {
+    const G: PlayData = {
+        ...createEmptyPlayData(),
+        players: [{ id: "g", role: "G", label: "G", position: { x: 14, y: 42.5 }, color: "#212121" }],
+    };
+
+    it("skips block rows", () => {
+        const rows = [block("w", 0, "warmup", 8), { ...solo("a", 1), goalies: "required" as const, playData: G }];
+        expect(goalieWarnings(groupStations(rows), 0).short).toEqual([{ groupIndex: 1, sequences: [1], needed: 1 }]);
+        expect(goalieWarnings(groupStations([block("w", 0, "warmup", 8)]), 2)).toEqual({ short: [], unused: false });
+    });
+
+    it("counts a rotating block like any block: a stays goalie station plus each rotating station that needs one", () => {
+        const [g, a, b] = stations(0, [{ id: "g", stays: true }, { id: "a" }, { id: "b" }], 5);
+        const rows = [{ ...g, goalies: "required" as const, playData: G }, { ...a, goalies: "required" as const, playData: G }, { ...b, goalies: "optional" as const, playData: G }];
+        expect(goalieWarnings(groupStations(rows), 1).short).toEqual([{ groupIndex: 0, sequences: [0, 1], needed: 2 }]);
+    });
+});
+
+describe("rotation labels", () => {
+    it("words the block header, the summary, the chip, the gap and a round", () => {
+        expect(rotationBlockLabel(5, 15)).toBe("Stations · rotate every 5 min · 15 min");
+        expect(rotationSummary(3, 5)).toBe("3 stations × 5 min = 15 min · groups A–C");
+        expect(rotationSummary(2, 6)).toBe("2 stations × 6 min = 12 min · groups A–B");
+        expect(rotatesEveryLabel(5)).toBe("Rotates every 5 min");
+        expect(betweenBlocksLabel(1)).toBe("1 min between blocks");
+        expect(rotationRoundLabel(5, 5)).toBe("5–10 min");
+        expect([STAYS_MARK, staysSuffix(true), staysSuffix(false), staysSuffix(undefined)]).toEqual(["stays", " · stays", "", ""]);
+    });
+
+    it("suggests an interval that keeps the block about as long as it was", () => {
+        const at = (...durations: number[]) => defaultRotationMinutes(durations.map((duration, k) => solo(`s${k}`, k, duration)));
+        expect([at(15, 15, 15), at(10, 10), at(40, 10), at(90, 90), at(1, 1, 1)]).toEqual([5, 5, 20, 30, 1]);
     });
 });

@@ -61,6 +61,33 @@ export const DEFAULT_PLAY_GOALIES: PlayGoalies = "optional";
 /** A session's goalie count is a whole number from 0 to this, or null (not set). */
 export const MAX_GOALIES_ATTENDING = 10;
 
+// ============================================================================
+// Session rows: drills and blocks (practice timing)
+// ============================================================================
+
+export const SESSION_ROW_KINDS = ["drill", "warmup", "break", "transition", "cooldown"] as const;
+/** What a row on the practice timeline is: a drill, or a block of non-drill time (spec R1). */
+export type SessionRowKind = (typeof SESSION_ROW_KINDS)[number];
+
+export const BLOCK_KINDS = ["warmup", "break", "transition", "cooldown"] as const;
+/** A row with no drill and no diagram. */
+export type BlockKind = (typeof BLOCK_KINDS)[number];
+
+/** Each block kind's label when the coach leaves it empty, and its starting minutes. */
+export const BLOCK_DEFAULTS: Record<BlockKind, { label: string; minutes: number }> = {
+    warmup: { label: "Warm-up", minutes: 8 },
+    break: { label: "Water break", minutes: 2 },
+    transition: { label: "Transition", minutes: 2 },
+    cooldown: { label: "Cool-down", minutes: 5 },
+};
+
+export const MAX_BLOCK_LABEL_LENGTH = 60;
+/** A station block rotates groups every 1–30 minutes. */
+export const MIN_ROTATE_MINUTES = 1;
+export const MAX_ROTATE_MINUTES = 30;
+/** The gap between blocks: 0–5 minutes. */
+export const MAX_TRANSITION_MINUTES = 5;
+
 export interface PlayerIcon {
     id: string;
     position: Position;
@@ -162,6 +189,12 @@ export interface PlayInSession {
     sequence: number;
     /** Runs at the same time as the previous drill: a station (2b). */
     runsWithPrevious: boolean;
+    /** Absent = a drill: every row saved before practice timing. */
+    kind?: "drill";
+    /** In a rotating station block: this station's group doesn't rotate (spec R3). */
+    stays?: boolean;
+    /** On the first drill of a station block: groups rotate every this many minutes. */
+    rotateEveryMinutes?: number | null;
     duration: number; // minutes
     instructions: string;
     playData: PlayData;
@@ -178,6 +211,26 @@ export interface PlayInSession {
 }
 
 /**
+ * A warm-up, water break, transition or cool-down in the session editor
+ * (spec R1, R8). No drill, no diagram; `instructions` is its note.
+ */
+export interface BlockInSession {
+    /** Stable client-side key; sent to the server as clientKey. */
+    id: string;
+    kind: BlockKind;
+    /** "" = the kind's default label. */
+    label: string;
+    sequence: number;
+    duration: number; // minutes
+    instructions: string;
+    /** Always false: a block never runs as a station (spec R3). */
+    runsWithPrevious: boolean;
+}
+
+/** One row in the session editor. Narrow with isDrillRow before reading drill fields. */
+export type SessionItem = PlayInSession | BlockInSession;
+
+/**
  * Complete practice session data
  * Requirements: 2.1, 2.2, 2.3, 2.5
  */
@@ -190,6 +243,8 @@ export interface PracticeSessionData {
     isShared: boolean;
     /** Goalies expected at this practice; null or absent = not set (spec R6, R7). */
     goaliesAttending?: number | null;
+    /** Minutes between blocks (0–5). Absent = unchanged on save; reads as 0. */
+    transitionMinutes?: number;
 }
 
 /**
@@ -202,6 +257,9 @@ export interface PracticeSessionViewPlay {
     duration: number;
     instructions: string | null;
     runsWithPrevious: boolean;
+    kind?: "drill";
+    stays?: boolean;
+    rotateEveryMinutes?: number | null;
     play: {
         id: string;
         name: string;
@@ -212,6 +270,24 @@ export interface PracticeSessionViewPlay {
         goalies?: PlayGoalies;
     };
 }
+
+/** A block row on the read-only session views: a label and minutes, no drill. */
+export interface PracticeSessionViewBlock {
+    id: string;
+    kind: BlockKind;
+    /** null = the kind's default label */
+    label: string | null;
+    sequence: number;
+    duration: number;
+    /** The block's note */
+    instructions: string | null;
+    runsWithPrevious: boolean;
+}
+
+export type DrillRow = PracticeSessionViewPlay;
+export type BlockRow = PracticeSessionViewBlock;
+/** One row on the read-only views. A BlockRow has no `play`: narrow on `kind` first. */
+export type SessionRow = DrillRow | BlockRow;
 
 /**
  * A session as the detail page and the bench sheet show it. The venue fields
@@ -236,6 +312,8 @@ export interface PracticeSessionView {
     segmentKind?: SegmentKind | null;
     startAt?: string | null;
     goaliesAttending?: number | null;
+    /** Minutes between blocks (0–5); absent reads as 0. */
+    transitionMinutes?: number;
     plays: PracticeSessionViewPlay[];
 }
 

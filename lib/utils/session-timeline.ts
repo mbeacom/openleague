@@ -16,7 +16,16 @@
  */
 
 import type { SegmentKind } from "@/types/segments";
-import type { IceArea, PlayData, PlayFocus, PlayGoalies } from "@/types/practice-planner";
+import {
+    MAX_ROTATE_MINUTES,
+    MIN_ROTATE_MINUTES,
+    type IceArea,
+    type PlayData,
+    type PlayFocus,
+    type PlayGoalies,
+    type SessionRowKind,
+} from "@/types/practice-planner";
+import { isBlockKind } from "@/lib/utils/session-rows";
 import { goalieDemand, toPlayGoalies } from "@/lib/utils/drill-tags";
 import { areaRect, isFullIce } from "@/lib/utils/ice-area";
 import { BLUE_LINES, RINK_DIMENSIONS } from "@/lib/utils/canvas/rink-renderer";
@@ -31,17 +40,25 @@ export interface TimelinePlay {
     sequence: number;
     duration: number;
     runsWithPrevious: boolean;
+    /** Absent = a drill (rows saved before practice timing). A block row never joins a station block. */
+    kind?: SessionRowKind;
+    /** In a rotating block: this station's group stays all block (spec R3). Ignored elsewhere. */
+    stays?: boolean;
+    /** On the first drill of a station block of 2 or more: groups rotate every this many minutes (spec R4). */
+    rotateEveryMinutes?: number | null;
 }
 
 export interface StationGroup<T extends TimelinePlay> {
     /** 0-based block index */
     index: number;
-    /** Offset from the session start, in minutes */
+    /** Offset from the session start, in minutes, gaps between blocks included */
     startMinute: number;
-    /** The group's longest drill, in minutes */
+    /** The block's length: its longest drill, or M × rotating stations when it rotates */
     wallMinutes: number;
-    /** At least one drill, in sequence order (the caller's objects); more than one is a station block */
+    /** At least one row, in sequence order (the caller's objects); more than one is a station block */
     stations: T[];
+    /** The block's rotation, or null when it doesn't rotate */
+    rotation: RotationGrid<T> | null;
 }
 
 /** Header of a station block: "Stations · 3 · 15 min". */
@@ -53,28 +70,37 @@ function bySequence<T extends TimelinePlay>(plays: readonly T[]): T[] {
     return [...plays].sort((a, b) => a.sequence - b.sequence);
 }
 
-/**
- * Groups drills by sequence. A flagged first drill (bad stored data) starts a
- * group rather than being dropped; `stationGroupError` rejects it on save.
- */
-export function groupStations<T extends TimelinePlay>(plays: readonly T[]): StationGroup<T>[] {
-    const groups: StationGroup<T>[] = [];
-    for (const play of bySequence(plays)) {
-        const current = groups[groups.length - 1];
-        if (current && play.runsWithPrevious) {
-            current.stations.push(play);
-            current.wallMinutes = Math.max(current.wallMinutes, play.duration);
-        } else {
-            const startMinute = current ? current.startMinute + current.wallMinutes : 0;
-            groups.push({ index: groups.length, startMinute, wallMinutes: play.duration, stations: [play] });
-        }
-    }
-    return groups;
+/** A row may join the block in progress only when both are drills. */
+function joinsBlock(head: TimelinePlay, row: TimelinePlay): boolean {
+    return row.runsWithPrevious && !isBlockKind(head.kind) && !isBlockKind(row.kind);
 }
 
-/** The session's planned length: each group counts once, for its longest drill. */
-export function sessionWallMinutes(plays: readonly TimelinePlay[]): number {
-    return groupStations(plays).reduce((total, group) => total + group.wallMinutes, 0);
+/**
+ * Groups rows by sequence. A flagged first row (bad stored data) starts a
+ * group rather than being dropped; sessionRowsError rejects it on save. A
+ * block row is always its own group. `transitionMinutes` separates
+ * consecutive groups (never after the last).
+ */
+export function groupStations<T extends TimelinePlay>(plays: readonly T[], transitionMinutes = 0): StationGroup<T>[] {
+    const blocks: T[][] = [];
+    for (const play of bySequence(plays)) {
+        const current = blocks[blocks.length - 1];
+        if (current && joinsBlock(current[0], play)) current.push(play);
+        else blocks.push([play]);
+    }
+    let startMinute = 0;
+    return blocks.map((stations, index) => {
+        const group = { index, startMinute, wallMinutes: blockMinutes(stations), stations, rotation: rotationGrid(stations) };
+        startMinute += group.wallMinutes + transitionMinutes;
+        return group;
+    });
+}
+
+/** The session's planned length: each block once, plus the gaps between blocks. */
+export function sessionWallMinutes(plays: readonly TimelinePlay[], transitionMinutes = 0): number {
+    const groups = groupStations(plays, transitionMinutes);
+    const last = groups[groups.length - 1];
+    return last ? last.startMinute + last.wallMinutes : 0;
 }
 
 const MS_PER_MINUTE = 60_000;
@@ -85,18 +111,25 @@ export interface ScheduleRow<T extends TimelinePlay> {
     startsAt: Date;
     /** startsAt + group.wallMinutes */
     endsAt: Date;
+    /** Each rotation round's start; empty when the block doesn't rotate */
+    roundStarts: Date[];
 }
 
 /**
- * Each block's start and end instant (3b). Instants only: formatting, and so
- * the timezone, belong to the caller (lib/utils/date.ts), which keeps this
- * module zone-free.
+ * Each block's start and end instant, and each rotation round's start (3b,
+ * spec R4). Instants only: formatting, and so the timezone, belong to the
+ * caller (lib/utils/date.ts), which keeps this module zone-free.
  */
-export function buildSchedule<T extends TimelinePlay>(plays: readonly T[], sessionStart: Date): ScheduleRow<T>[] {
+export function buildSchedule<T extends TimelinePlay>(plays: readonly T[], sessionStart: Date, transitionMinutes = 0): ScheduleRow<T>[] {
     const base = sessionStart.getTime();
-    return groupStations(plays).map((group) => {
+    return groupStations(plays, transitionMinutes).map((group) => {
         const startsAt = new Date(base + group.startMinute * MS_PER_MINUTE);
-        return { group, startsAt, endsAt: new Date(startsAt.getTime() + group.wallMinutes * MS_PER_MINUTE) };
+        return {
+            group,
+            startsAt,
+            endsAt: new Date(startsAt.getTime() + group.wallMinutes * MS_PER_MINUTE),
+            roundStarts: (group.rotation?.rounds ?? []).map((round) => new Date(startsAt.getTime() + round.start * MS_PER_MINUTE)),
+        };
     });
 }
 
@@ -109,14 +142,52 @@ export function stationGroupError(plays: readonly TimelinePlay[]): string | null
         : null;
 }
 
-/** Sequence = position, and the first drill never runs with a previous one. Unchanged drills keep their object. */
+/** The row itself when every change is already true of it, else a copy with the changes. */
+function withChanges<T extends TimelinePlay>(row: T, changes: Partial<TimelinePlay>): T {
+    const keys = Object.keys(changes) as Array<keyof TimelinePlay>;
+    return keys.every((key) => row[key] === changes[key]) ? row : { ...row, ...changes };
+}
+
+/**
+ * The editor's list rules, applied after every edit (2b, spec R3), by array order:
+ * - sequence = position;
+ * - the first row, a block row, and a drill right after a block row never run with a previous row;
+ * - a block row never stays or rotates;
+ * - only the first drill of a block of 2 or more keeps a rotation;
+ * - in a rotating block, each rotating station lasts M and each stays station the whole block;
+ * - outside a rotating block nothing stays.
+ * A block set to rotate with fewer than 2 rotating stations keeps the coach's
+ * settings while editing (the editor explains why); settleRotations clears it on save.
+ * Unchanged rows keep their object.
+ */
 export function normalizeGroups<T extends TimelinePlay>(plays: readonly T[]): T[] {
-    return plays.map((play, index) => {
-        const runsWithPrevious = index === 0 ? false : play.runsWithPrevious;
-        return play.sequence === index && play.runsWithPrevious === runsWithPrevious
-            ? play
-            : { ...play, sequence: index, runsWithPrevious };
+    const next = plays.map((play, index) => {
+        const block = isBlockKind(play.kind);
+        const afterBlock = index > 0 && isBlockKind(plays[index - 1].kind);
+        return withChanges(play, {
+            sequence: index,
+            runsWithPrevious: index > 0 && !block && !afterBlock && play.runsWithPrevious,
+            ...(block && play.stays && { stays: false }),
+            ...(block && play.rotateEveryMinutes != null && { rotateEveryMinutes: null }),
+        });
     });
+    for (let start = 0; start < next.length; ) {
+        const { end } = groupRange(next, start);
+        const stations = next.slice(start, end);
+        const head = stations[0];
+        const setToRotate = !isBlockKind(head.kind) && stations.length >= MIN_ROTATING_STATIONS && head.rotateEveryMinutes != null;
+        const minutes = rotationMinutes(stations);
+        const rotating = rotatingStations(stations).length;
+        stations.forEach((row, k) => {
+            const changes: Partial<TimelinePlay> = {};
+            if ((k > 0 || !setToRotate) && row.rotateEveryMinutes != null) changes.rotateEveryMinutes = null;
+            if (!setToRotate && row.stays) changes.stays = false;
+            if (minutes !== null) changes.duration = row.stays ? minutes * rotating : minutes;
+            next[start + k] = withChanges(row, changes);
+        });
+        start = end;
+    }
+    return next;
 }
 
 /**
@@ -142,18 +213,42 @@ export function groupRange(plays: readonly TimelinePlay[], index: number): { sta
  */
 export function canToggleRunsWithPrevious(plays: readonly TimelinePlay[], index: number): boolean {
     if (index <= 0 || index >= plays.length) return false;
+    // A block row never joins, and is never joined by, a station block (spec R3).
+    if (isBlockKind(plays[index].kind) || isBlockKind(plays[index - 1].kind)) return false;
     if (plays[index].runsWithPrevious) return true;
     const before = groupRange(plays, index - 1);
     const after = groupRange(plays, index);
     return before.end - before.start + (after.end - after.start) <= MAX_STATIONS_PER_GROUP;
 }
 
-/** Flips the drill's flag; returns `plays` itself when that isn't allowed. */
+/**
+ * A block's rotation lives on its first drill (spec R3). After an edit that
+ * gives the block a new first drill, that drill takes the rotation; the old
+ * holder, now a later station, loses it in normalizeGroups. The block still
+ * rotates, so its stays ticks stay. A no-op for a block row or no rotation.
+ */
+function carryRotation<T extends TimelinePlay>(rows: T[], head: number, rotateEveryMinutes: number | null | undefined): T[] {
+    const row = rows[head];
+    if (rotateEveryMinutes == null || !row || isBlockKind(row.kind) || row.rotateEveryMinutes === rotateEveryMinutes) return rows;
+    const next = [...rows];
+    next[head] = { ...row, rotateEveryMinutes };
+    return next;
+}
+
+/**
+ * Flips the drill's flag; returns `plays` itself when that isn't allowed.
+ * Joining the block before: the merged block keeps that block's rotation, else
+ * takes the joining block's. Leaving a block: the block keeps its rotation on
+ * its first drill; the drill that left starts a block with none (so nothing in
+ * it stays, R3).
+ */
 export function toggleRunsWithPrevious<T extends TimelinePlay>(plays: T[], index: number): T[] {
     if (!canToggleRunsWithPrevious(plays, index)) return plays;
-    return normalizeGroups(
-        plays.map((play, i) => (i === index ? { ...play, runsWithPrevious: !play.runsWithPrevious } : play)),
-    );
+    const joining = !plays[index].runsWithPrevious;
+    const next = plays.map((play, i) => (i === index ? { ...play, runsWithPrevious: !play.runsWithPrevious } : play));
+    if (!joining) return normalizeGroups(next);
+    const head = groupRange(plays, index - 1).start;
+    return normalizeGroups(plays[head].rotateEveryMinutes != null ? next : carryRotation(next, head, plays[index].rotateEveryMinutes));
 }
 
 /**
@@ -177,7 +272,8 @@ export function moveItem<T extends TimelinePlay>(plays: T[], index: number, dir:
             const runsWithPrevious = i !== group.start;
             if (next[i].runsWithPrevious !== runsWithPrevious) next[i] = { ...next[i], runsWithPrevious };
         }
-        return normalizeGroups(next);
+        // A station moved up to the top takes the block's rotation.
+        return normalizeGroups(carryRotation(next, group.start, plays[group.start].rotateEveryMinutes));
     }
 
     if (dir === -1 ? group.start === 0 : group.end === plays.length) return plays;
@@ -198,14 +294,18 @@ export function canMove(plays: TimelinePlay[], index: number, dir: -1 | 1): bool
 
 /**
  * Removes the drill at `index`. Removing a block's first drill makes the next
- * station the head of what is left, so it never joins the block before it.
+ * station the head of what is left, so it never joins the block before it, and
+ * hands it the block's rotation.
  */
 export function removeItem<T extends TimelinePlay>(plays: T[], index: number): T[] {
     if (index < 0 || index >= plays.length) return plays;
     const removedHead = index === 0 || !plays[index].runsWithPrevious;
     const next = plays.filter((_, i) => i !== index);
     const follower = next[index];
-    if (removedHead && follower?.runsWithPrevious) next[index] = { ...follower, runsWithPrevious: false };
+    if (removedHead && follower?.runsWithPrevious) {
+        next[index] = { ...follower, runsWithPrevious: false };
+        return normalizeGroups(carryRotation(next, index, plays[index].rotateEveryMinutes));
+    }
     return normalizeGroups(next);
 }
 
@@ -289,7 +389,8 @@ export function stationWarnings(
 export interface GoalieNeeds {
     focus?: PlayFocus;
     goalies?: PlayGoalies;
-    playData: PlayData | null;
+    /** null = unreadable (needs one goalie if required); absent on a block row */
+    playData?: PlayData | null;
 }
 
 export interface GoalieShortfall {
@@ -323,8 +424,10 @@ export function goalieWarnings(
         let needed = 0;
         const sequences: number[] = [];
         for (const station of group.stations) {
+            // A block row has no drill: it neither needs nor uses a goalie.
+            if (isBlockKind(station.kind)) continue;
             drills++;
-            const demand = goalieDemand(station);
+            const demand = goalieDemand({ focus: station.focus, goalies: station.goalies, playData: station.playData ?? null });
             // A goalie-focus drill uses a goalie even when tagged "none".
             if (toPlayGoalies(station.goalies) !== "none" || demand > 0) anyUsesGoalie = true;
             if (demand > 0) {
@@ -353,4 +456,189 @@ export function goaliesUnusedMessage(attending: number): string {
 export function goalieShortSummary(count: number, attending: number): string {
     const subject = count === 1 ? "1 drill or station block needs" : `${count} drills or station blocks need`;
     return attending === 0 ? `${subject} a goalie, but none are attending` : `${subject} more goalies than the ${attending} attending`;
+}
+
+// ---------------------------------------------------------------------------
+// Station rotation (practice timing, spec R4)
+// ---------------------------------------------------------------------------
+
+/** A rotating block needs at least this many stations that rotate. */
+export const MIN_ROTATING_STATIONS = 2;
+/** A stays station's cell in every round. */
+export const ROTATION_ALL = "all";
+
+export const BLOCK_STATION_ERROR = "A warm-up, break, transition or cool-down can't be part of a station block";
+export const BLOCK_ROW_FIELDS_ERROR = "A warm-up, break, transition or cool-down can't rotate or stay";
+export const ROTATION_PLACEMENT_ERROR = "Only the first drill of a station block can set a rotation";
+export const ROTATION_TOO_FEW_ERROR = `A rotating station block needs at least ${MIN_ROTATING_STATIONS} stations that rotate`;
+
+export interface RotationCell<T> {
+    row: T;
+    /** "A", "B", … or ROTATION_ALL */
+    group: string;
+}
+
+export interface RotationRound<T> {
+    /** Minutes from the block's start */
+    start: number;
+    /** One cell per station, in station order */
+    stations: RotationCell<T>[];
+}
+
+export interface RotationGrid<T> {
+    minutes: number;
+    /** One group per rotating station: "A", "B", … */
+    groups: string[];
+    rounds: RotationRound<T>[];
+}
+
+/** The grid as rows of text: a Start column plus one column per station. */
+export interface RotationTable {
+    columns: string[];
+    rows: Array<{ start: string; cells: string[] }>;
+}
+
+/** The stations that rotate (not marked stays). */
+export function rotatingStations<T extends TimelinePlay>(stations: readonly T[]): T[] {
+    return stations.filter((station) => !station.stays);
+}
+
+/** M when the block rotates: set on its first drill, with at least 2 rotating stations; else null. */
+export function rotationMinutes(stations: readonly TimelinePlay[]): number | null {
+    const head = stations[0];
+    if (!head || isBlockKind(head.kind) || stations.length < MIN_ROTATING_STATIONS || head.rotateEveryMinutes == null) return null;
+    return rotatingStations(stations).length >= MIN_ROTATING_STATIONS ? head.rotateEveryMinutes : null;
+}
+
+/** A lone row's minutes; a station block's longest station; a rotating block's M × rotating stations. */
+export function blockMinutes(stations: readonly TimelinePlay[]): number {
+    const minutes = rotationMinutes(stations);
+    if (minutes !== null) return minutes * rotatingStations(stations).length;
+    return stations.reduce((longest, station) => Math.max(longest, station.duration), 0);
+}
+
+function groupLetter(index: number): string {
+    return String.fromCharCode(65 + index);
+}
+
+/**
+ * Who is where in a rotating block: one group per rotating station, and in
+ * round r group g is at rotating station (g + r) mod n, so every group visits
+ * every rotating station once. A stays station shows ROTATION_ALL.
+ */
+export function rotationGrid<T extends TimelinePlay>(stations: readonly T[]): RotationGrid<T> | null {
+    const minutes = rotationMinutes(stations);
+    if (minutes === null) return null;
+    const rotating = rotatingStations(stations);
+    const n = rotating.length;
+    const groups = rotating.map((_, g) => groupLetter(g));
+    const rounds = Array.from({ length: n }, (_, r) => ({
+        start: r * minutes,
+        stations: stations.map((row) => {
+            if (row.stays) return { row, group: ROTATION_ALL };
+            // Station s holds the group g with (g + r) mod n = s.
+            return { row, group: groups[(rotating.indexOf(row) - r + n) % n] };
+        }),
+    }));
+    return { minutes, groups, rounds };
+}
+
+export function rotationTable<T extends TimelinePlay>(
+    grid: RotationGrid<T>,
+    name: (row: T) => string,
+    start: (offsetMinutes: number, round: number) => string,
+): RotationTable {
+    return {
+        columns: (grid.rounds[0]?.stations ?? []).map((cell) => name(cell.row)),
+        rows: grid.rounds.map((round, index) => ({ start: start(round.start, index), cells: round.stations.map((cell) => cell.group) })),
+    };
+}
+
+/** The interval offered when Rotate is switched on: the block keeps about its length. */
+export function defaultRotationMinutes(stations: readonly TimelinePlay[]): number {
+    const longest = stations.reduce((max, station) => Math.max(max, station.duration), 0);
+    const each = Math.round(longest / Math.max(1, stations.length));
+    return Math.min(MAX_ROTATE_MINUTES, Math.max(MIN_ROTATE_MINUTES, each));
+}
+
+/**
+ * On save (spec R3): a block set to rotate that can't (fewer than 2 rotating
+ * stations) loses its rotation and its stays flags. Returns `plays` itself
+ * when nothing changes.
+ */
+export function settleRotations<T extends TimelinePlay>(plays: T[]): T[] {
+    let changed = false;
+    const next = [...plays];
+    for (let start = 0; start < next.length; ) {
+        const { end } = groupRange(next, start);
+        const head = next[start];
+        if (head.rotateEveryMinutes != null && rotationMinutes(next.slice(start, end)) === null) {
+            changed = true;
+            next[start] = { ...head, rotateEveryMinutes: null };
+        }
+        start = end;
+    }
+    return changed ? normalizeGroups(next) : plays;
+}
+
+/**
+ * The save and import rules (spec R3), by sequence: the station rules, then
+ * block rows outside station blocks with no timing, and rotation only on the
+ * first drill of a block with at least 2 rotating stations. `stays` outside a
+ * rotating block is ignored, not rejected.
+ */
+export function sessionRowsError(plays: readonly TimelinePlay[]): string | null {
+    const rows = bySequence(plays);
+    const stationError = stationGroupError(rows);
+    if (stationError) return stationError;
+    for (const [index, row] of rows.entries()) {
+        const previous = rows[index - 1];
+        if (isBlockKind(row.kind)) {
+            if (row.runsWithPrevious) return BLOCK_STATION_ERROR;
+            if (row.stays || row.rotateEveryMinutes != null) return BLOCK_ROW_FIELDS_ERROR;
+        } else if (row.runsWithPrevious && previous && isBlockKind(previous.kind)) {
+            return BLOCK_STATION_ERROR;
+        }
+    }
+    for (const group of groupStations(rows)) {
+        const [head, ...rest] = group.stations;
+        if (rest.some((row) => row.rotateEveryMinutes != null)) return ROTATION_PLACEMENT_ERROR;
+        if (head.rotateEveryMinutes == null) continue;
+        if (group.stations.length < MIN_ROTATING_STATIONS) return ROTATION_PLACEMENT_ERROR;
+        if (rotatingStations(group.stations).length < MIN_ROTATING_STATIONS) return ROTATION_TOO_FEW_ERROR;
+    }
+    return null;
+}
+
+/** The bench sheet's rotation header: "Stations · rotate every 5 min · 15 min". */
+export function rotationBlockLabel(rotateEvery: number, minutes: number): string {
+    return `Stations · rotate every ${rotateEvery} min · ${minutes} min`;
+}
+
+/** The editor's summary: "3 stations × 5 min = 15 min · groups A–C". */
+export function rotationSummary(rotating: number, rotateEvery: number): string {
+    return `${rotating} stations × ${rotateEvery} min = ${rotating * rotateEvery} min · groups A–${groupLetter(rotating - 1)}`;
+}
+
+/** The session page's chip: "Rotates every 5 min". */
+export function rotatesEveryLabel(minutes: number): string {
+    return `Rotates every ${minutes} min`;
+}
+
+/** "2 min between blocks". */
+export function betweenBlocksLabel(minutes: number): string {
+    return `${minutes} min between blocks`;
+}
+
+/** A round's minutes within its block, where no clock time is known: "5–10 min". */
+export function rotationRoundLabel(start: number, minutes: number): string {
+    return `${start}–${start + minutes} min`;
+}
+
+/** The mark of a station whose group doesn't rotate (session page, bench sheet, import preview). */
+export const STAYS_MARK = "stays";
+
+/** What follows a station's name in a rotating block: " · stays", or nothing (its minutes are the rotation's). */
+export function staysSuffix(stays: boolean | undefined): string {
+    return stays ? ` · ${STAYS_MARK}` : "";
 }
