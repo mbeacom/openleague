@@ -61,7 +61,8 @@ export function matchRoute(hash: string): StaticRoute {
     if (rest.length > 0) return NOT_FOUND;
 
     if (section === "sessions") {
-        if (second === "new" && third === undefined) return { name: "sessionNew" };
+        // "new" is the create route, never a session id: /sessions/new/edit is no route.
+        if (second === "new") return third === undefined ? { name: "sessionNew" } : NOT_FOUND;
         const id = second === undefined ? null : decodeId(second);
         if (!id) return NOT_FOUND;
         if (third === undefined) return { name: "session", id };
@@ -71,7 +72,7 @@ export function matchRoute(hash: string): StaticRoute {
     }
     if (section === "library") {
         if (second === undefined) return { name: "library" };
-        if (second === "new" && third === undefined) return { name: "libraryNew" };
+        if (second === "new") return third === undefined ? { name: "libraryNew" } : NOT_FOUND;
         const id = decodeId(second);
         return id && third === "edit" ? { name: "libraryEdit", id } : NOT_FOUND;
     }

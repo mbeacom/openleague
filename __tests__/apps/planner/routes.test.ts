@@ -23,6 +23,9 @@ describe("matchRoute", () => {
         ["#/sessions/%E0%A4%A", { name: "notFound" }],
         ["#/sessions/abc/delete", { name: "notFound" }],
         ["#/library/p1", { name: "notFound" }],
+        ["#/sessions/new/edit", { name: "notFound" }],
+        ["#/sessions/new/print", { name: "notFound" }],
+        ["#/library/new/edit", { name: "notFound" }],
         ["#/nope", { name: "notFound" }],
     ])("%s", (hash, expected) => {
         expect(matchRoute(hash)).toEqual(expected);
