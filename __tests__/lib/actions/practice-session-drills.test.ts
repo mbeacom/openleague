@@ -11,6 +11,8 @@ const { mockAuth, tx, mockPrisma } = vi.hoisted(() => {
         practiceSessionPlay: { findFirst: vi.fn(), findMany: vi.fn(), createMany: vi.fn() },
         practiceSessionStaff: { createMany: vi.fn() },
         practiceSessionPlayStaff: { createMany: vi.fn() },
+        teamOfficial: { findMany: vi.fn() },
+        teamMember: { findMany: vi.fn() },
         play: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn(), createManyAndReturn: vi.fn() },
     };
     return {
@@ -264,6 +266,8 @@ describe("duplicatePracticeSession", () => {
             tx.practiceSessionPlay.findMany.mockResolvedValue([{ id: "ccopyrow0", sequence: 0 }, { id: "ccopyrow1", sequence: 1 }]);
             tx.practiceSessionStaff.createMany.mockResolvedValue({ count: 2 });
             tx.practiceSessionPlayStaff.createMany.mockResolvedValue({ count: 3 });
+            tx.teamOfficial.findMany.mockResolvedValue([{ id: OFFICIAL }]);
+            tx.teamMember.findMany.mockResolvedValue([]);
         });
 
         it("copies the list with new ids, links kept, and each row's staff onto the copied rows", async () => {
@@ -296,11 +300,42 @@ describe("duplicatePracticeSession", () => {
             }
         });
 
+        it("drops a link the team no longer allows, keeping the name (the save would refuse it)", async () => {
+            mockPrisma.practiceSession.findUnique.mockResolvedValue({
+                teamId: TEAM, title: "Tuesday", duration: 75,
+                staff: [
+                    { id: "cstaffa", name: "Coach Lee", position: 0, teamOfficialId: OFFICIAL, userId: null },
+                    { id: "cstaffb", name: "Alex", position: 1, teamOfficialId: null, userId: "cadminxxxxxxxxxxxxxxxxxxx" },
+                    { id: "cstaffc", name: "Jo", position: 2, teamOfficialId: null, userId: "cdemotedxxxxxxxxxxxxxxxxx" },
+                ],
+                plays: [sourceRow(0)],
+            });
+            tx.teamOfficial.findMany.mockResolvedValue([]);
+            tx.teamMember.findMany.mockResolvedValue([{ userId: "cadminxxxxxxxxxxxxxxxxxxx" }]);
+            await duplicatePracticeSession({ id: SOURCE, teamId: TEAM, date: DATE });
+            expect(tx.teamOfficial.findMany).toHaveBeenCalledWith({
+                where: { id: { in: [OFFICIAL] }, teamId: TEAM, status: { in: ["ACTIVE", "INVITED"] } },
+                select: { id: true },
+            });
+            expect(tx.teamMember.findMany).toHaveBeenCalledWith({
+                where: { userId: { in: ["cadminxxxxxxxxxxxxxxxxxxx", "cdemotedxxxxxxxxxxxxxxxxx"] }, teamId: TEAM, role: "ADMIN" },
+                select: { userId: true },
+            });
+            const written: Array<{ name: string; teamOfficialId: string | null; userId: string | null }> = tx.practiceSessionStaff.createMany.mock.calls[0][0].data;
+            expect(written.map((member) => [member.name, member.teamOfficialId, member.userId])).toEqual([
+                ["Coach Lee", null, null],
+                ["Alex", null, "cadminxxxxxxxxxxxxxxxxxxx"],
+                ["Jo", null, null],
+            ]);
+        });
+
         it("writes no staff for a practice without any", async () => {
             mockPrisma.practiceSession.findUnique.mockResolvedValue({ teamId: TEAM, title: "Tuesday", duration: 75, staff: [], plays: [sourceRow(0)] });
             await duplicatePracticeSession({ id: SOURCE, teamId: TEAM, date: DATE });
             expect(tx.practiceSessionStaff.createMany).not.toHaveBeenCalled();
             expect(tx.practiceSessionPlayStaff.createMany).not.toHaveBeenCalled();
+            expect(tx.teamOfficial.findMany).not.toHaveBeenCalled();
+            expect(tx.teamMember.findMany).not.toHaveBeenCalled();
         });
     });
 });

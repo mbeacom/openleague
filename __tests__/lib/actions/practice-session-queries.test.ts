@@ -15,6 +15,7 @@ vi.mock("@/lib/auth/session", () => ({
 
 import { getPracticePlannerListData, getPracticeSessionDetail, getPracticeSessionForEdit, getPracticeStaffOptions } from "@/lib/actions/practice-session-queries";
 import { drillRows, isDrillRow } from "@/lib/utils/session-rows";
+import { requireUserId } from "@/lib/auth/session";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 
 function row(id: string, sequence: number, runsWithPrevious = false) {
@@ -337,6 +338,8 @@ describe("practice staff in the session queries (spec R4, R9)", () => {
 });
 
 describe("getPracticeStaffOptions (spec R4)", () => {
+    const TEAM_ID = "cteamxxxxxxxxxxxxxxxxxxxx";
+
     beforeEach(() => {
         vi.clearAllMocks();
         mockPrisma.teamMember.findFirst.mockResolvedValue({ id: "m" });
@@ -352,21 +355,21 @@ describe("getPracticeStaffOptions (spec R4)", () => {
     });
 
     it("lists active and invited officials, then admins who aren't officials, never an unnamed admin", async () => {
-        const options = await getPracticeStaffOptions("t1");
+        const options = await getPracticeStaffOptions(TEAM_ID);
         expect(options).toEqual([
             { kind: "official", id: "o1", name: "Lee Park", roleLabel: "Head Coach" },
             { kind: "official", id: "o2", name: "x".repeat(60), roleLabel: "Parent Volunteer" },
             { kind: "admin", id: "u2", name: "Alex Admin", roleLabel: "Team admin" },
         ]);
         expect(mockPrisma.teamOfficial.findMany).toHaveBeenCalledWith({
-            where: { teamId: "t1", status: { in: ["ACTIVE", "INVITED"] } },
+            where: { teamId: TEAM_ID, status: { in: ["ACTIVE", "INVITED"] } },
             orderBy: [{ role: "asc" }, { name: "asc" }],
             select: { id: true, name: true, role: true, userId: true },
         });
     });
 
     it("never selects or returns an email", async () => {
-        const options = await getPracticeStaffOptions("t1");
+        const options = await getPracticeStaffOptions(TEAM_ID);
         expect(JSON.stringify(mockPrisma.teamOfficial.findMany.mock.calls)).not.toContain("email");
         expect(JSON.stringify(mockPrisma.teamMember.findMany.mock.calls)).not.toContain("email");
         for (const option of options) expect(Object.keys(option).sort()).toEqual(["id", "kind", "name", "roleLabel"]);
@@ -374,11 +377,32 @@ describe("getPracticeStaffOptions (spec R4)", () => {
 
     it("gives a caller who isn't an admin of the team nothing, without reading anyone", async () => {
         mockPrisma.teamMember.findFirst.mockResolvedValue(null);
-        expect(await getPracticeStaffOptions("t1")).toEqual([]);
+        expect(await getPracticeStaffOptions(TEAM_ID)).toEqual([]);
         expect(mockPrisma.teamMember.findFirst).toHaveBeenCalledWith({
-            where: { userId: "cuserxxxxxxxxxxxxxxxxxxxx", teamId: "t1", role: "ADMIN" },
+            where: { userId: "cuserxxxxxxxxxxxxxxxxxxxx", teamId: TEAM_ID, role: "ADMIN" },
             select: { id: true },
         });
+        expect(mockPrisma.teamOfficial.findMany).not.toHaveBeenCalled();
+    });
+
+    it("leaves out an official whose name cleans to nothing", async () => {
+        mockPrisma.teamOfficial.findMany.mockResolvedValue([
+            { id: "o1", name: "\u0001 ", role: "HEAD_COACH", userId: null },
+            { id: "o2", name: "Lee Park", role: "ASSISTANT_COACH", userId: null },
+        ]);
+        mockPrisma.teamMember.findMany.mockResolvedValue([]);
+        expect((await getPracticeStaffOptions(TEAM_ID)).map((option) => option.id)).toEqual(["o2"]);
+    });
+
+    it.each([
+        ["an object", { not: "x" }],
+        ["an array", [TEAM_ID]],
+        ["a string that isn't a cuid", "t1"],
+    ])("validates its team id: %s gets nothing and reads nothing", async (_label, teamId) => {
+        expect(await getPracticeStaffOptions(teamId as unknown as string)).toEqual([]);
+        expect(requireUserId).not.toHaveBeenCalled();
+        expect(mockPrisma.teamMember.findFirst).not.toHaveBeenCalled();
+        expect(mockPrisma.teamMember.findMany).not.toHaveBeenCalled();
         expect(mockPrisma.teamOfficial.findMany).not.toHaveBeenCalled();
     });
 });

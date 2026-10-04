@@ -161,6 +161,46 @@ export const ROW_STAFF_FIELDS_NOT_COPIED: ReadonlySet<string> = new Set(["playRo
 type StaffCopySource = { id: string; name: string; position: number; teamOfficialId: string | null; userId: string | null };
 
 /**
+ * The staff with any link the team no longer allows (an official not ACTIVE or
+ * INVITED, a user no longer an ADMIN) set to null, names kept: the same rule
+ * staffLinkError applies on save, so a copy never stores a link a save of it
+ * would refuse. Reads nothing when nobody is linked.
+ */
+export async function withLiveStaffLinks<T extends StaffLink>(
+    tx: Prisma.TransactionClient,
+    teamId: string,
+    staff: readonly T[],
+): Promise<T[]> {
+    const officialIds = [...new Set(staff.flatMap((member) => (member.teamOfficialId ? [member.teamOfficialId] : [])))];
+    const userIds = [...new Set(staff.flatMap((member) => (member.userId ? [member.userId] : [])))];
+    const liveOfficials = new Set(
+        officialIds.length === 0
+            ? []
+            : (
+                  await tx.teamOfficial.findMany({
+                      where: { id: { in: officialIds }, teamId, status: { in: ["ACTIVE", "INVITED"] } },
+                      select: { id: true },
+                  })
+              ).map((official) => official.id),
+    );
+    const admins = new Set(
+        userIds.length === 0
+            ? []
+            : (
+                  await tx.teamMember.findMany({
+                      where: { userId: { in: userIds }, teamId, role: "ADMIN" },
+                      select: { userId: true },
+                  })
+              ).map((admin) => admin.userId),
+    );
+    return staff.map((member) => ({
+        ...member,
+        teamOfficialId: member.teamOfficialId && liveOfficials.has(member.teamOfficialId) ? member.teamOfficialId : null,
+        userId: member.userId && admins.has(member.userId) ? member.userId : null,
+    }));
+}
+
+/**
  * Duplicate (spec R5): a practice's staff into another practice of the same
  * team, new ids, links kept. Every staff column but the id and the practice is
  * copied, driven by the generated scalar-field enum (the guard test fails when

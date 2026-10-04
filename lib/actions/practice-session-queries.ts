@@ -1,5 +1,6 @@
 "use server";
 
+import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
 import { requireUserId } from "@/lib/auth/session";
 import type { PlayData, SessionItem, SessionRow, SessionStaffMember, StaffOption } from "@/types/practice-planner";
@@ -407,14 +408,20 @@ export async function getPlanImportTeams(): Promise<Array<{ id: string; name: st
   return memberships.map((membership) => membership.team);
 }
 
+// Not exported: a "use server" file may export only async functions.
+const staffOptionsTeamIdSchema = z.string().cuid("Invalid team ID format");
+
 /**
  * The hosted Staff picker (spec R4): the team's active and invited officials,
  * then its admins who aren't officials, by display name and role label. Admin
  * callers only; nothing here selects or returns an email. An official who is
  * also an admin appears once, as the official; an admin with no name is left
- * out (a coach can type one). Names are offered cut to 60 characters.
+ * out (a coach can type one), as is an official whose name cleans to nothing.
+ * Names are offered cut to 60 characters. A team id that isn't a cuid string
+ * gets nothing, before any query.
  */
 export async function getPracticeStaffOptions(teamId: string): Promise<StaffOption[]> {
+  if (!staffOptionsTeamIdSchema.safeParse(teamId).success) return [];
   const userId = await requireUserId();
   const admin = await prisma.teamMember.findFirst({
     where: { userId, teamId, role: "ADMIN" },
@@ -436,12 +443,10 @@ export async function getPracticeStaffOptions(teamId: string): Promise<StaffOpti
   ]);
   const officialUsers = new Set(officials.flatMap((official) => (official.userId ? [official.userId] : [])));
   return [
-    ...officials.map((official): StaffOption => ({
-      kind: "official",
-      id: official.id,
-      name: toStaffName(official.name),
-      roleLabel: TEAM_OFFICIAL_ROLE_LABELS[official.role],
-    })),
+    ...officials.flatMap((official): StaffOption[] => {
+      const name = toStaffName(official.name);
+      return name ? [{ kind: "official", id: official.id, name, roleLabel: TEAM_OFFICIAL_ROLE_LABELS[official.role] }] : [];
+    }),
     ...admins.flatMap((member): StaffOption[] => {
       const name = toStaffName(member.user.name ?? "");
       return name && !officialUsers.has(member.userId) ? [{ kind: "admin", id: member.userId, name, roleLabel: "Team admin" }] : [];

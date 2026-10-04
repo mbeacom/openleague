@@ -26,7 +26,7 @@ import {
     copySessionPlayScalars,
     duplicateSessionTitle,
 } from "@/lib/services/practice-session-drills";
-import { PRACTICE_STAFF_COPY_SELECT, ROW_STAFF_COPY_SELECT, copySessionStaff, writeRowStaff } from "@/lib/services/practice-session-staff";
+import { PRACTICE_STAFF_COPY_SELECT, ROW_STAFF_COPY_SELECT, copySessionStaff, withLiveStaffLinks, writeRowStaff } from "@/lib/services/practice-session-staff";
 
 export type ActionResult<T> =
     | { success: true; data: T }
@@ -244,14 +244,19 @@ export async function duplicatePracticeSession(
                     })),
                 });
             }
-            // Staff and who runs each row (spec R5): new ids, links kept (same team), rows found by sequence.
-            const staffIds = await copySessionStaff(tx, session.id, source.staff);
+            // Staff and who runs each row (spec R5): new ids, links kept (same team) while still
+            // valid, a stale one dropped with its name kept; rows found by sequence.
+            const staffIds = await copySessionStaff(tx, session.id, await withLiveStaffLinks(tx, validated.teamId, source.staff));
             await writeRowStaff(
                 tx,
                 session.id,
                 source.plays.map((row) => ({
                     sequence: row.sequence,
-                    staffIds: row.staff.map((assignment) => staffIds.get(assignment.staffId) as string),
+                    staffIds: row.staff.map((assignment) => {
+                        const staffId = staffIds.get(assignment.staffId);
+                        if (staffId === undefined) throw new Error(`No staff member copied for row ${row.sequence}`);
+                        return staffId;
+                    }),
                 })),
             );
             return session;
