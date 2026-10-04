@@ -104,4 +104,22 @@ describe("unguardedProcessEnvCount", () => {
         expect(unguardedProcessEnvCount("globalThis.process?.env.A")).toBe(0);
         expect(unguardedProcessEnvCount("globalThis.process.env.A")).toBe(1);
     });
+
+    it("treats the block directly under a typeof-process if as guarded", () => {
+        expect(unguardedProcessEnvCount('if(typeof process<"u"){process.env.A}')).toBe(0);
+        expect(unguardedProcessEnvCount('if (typeof process !== "undefined") { setup(); const a = process.env.A; }')).toBe(0);
+        expect(unguardedProcessEnvCount("if(typeof process!='undefined'){x=1,y=process.env.A}")).toBe(0);
+        expect(unguardedProcessEnvCount('if(typeof process==="object"){process.env.A}')).toBe(0);
+    });
+
+    it("stays strict about everything else an if touches", () => {
+        // the else branch, a nested block, an object literal, an escape hatch, a negated check, a later statement
+        expect(unguardedProcessEnvCount('if(typeof process<"u"){}else{process.env.A}')).toBe(1);
+        expect(unguardedProcessEnvCount('if(typeof process<"u"){if(x){process.env.A}}')).toBe(1);
+        expect(unguardedProcessEnvCount('if(typeof process<"u"){f({a:process.env.A})}')).toBe(1);
+        expect(unguardedProcessEnvCount('if(typeof process<"u"||y){process.env.A}')).toBe(1);
+        expect(unguardedProcessEnvCount('if(typeof process==="undefined"){process.env.A}')).toBe(1);
+        expect(unguardedProcessEnvCount('if(typeof process<"u"){a()}process.env.B')).toBe(1);
+        expect(unguardedProcessEnvCount('elif(typeof process<"u"){process.env.A}')).toBe(1);
+    });
 });

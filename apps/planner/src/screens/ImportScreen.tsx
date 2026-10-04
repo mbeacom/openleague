@@ -14,7 +14,6 @@ import { PlanPreview } from "@/components/features/practice-planner/PlanPreview"
 import { usePlannerPlatform } from "@/lib/planner-store";
 import { readPlanFile, readPlanLink, type ParsePlanResult, type PlanDocument, type PlanError } from "@/lib/plan-document";
 import { parseDateTimeLocalToUtc, resolveTimeZone } from "@/lib/utils/date";
-import { PRIVACY_NOTE } from "../config";
 import { replaceHash } from "../platform";
 import { staticRoutes } from "../routes";
 import type { LocalPlannerStore } from "../store/types";
@@ -45,20 +44,21 @@ export function ImportScreen({ store, linkValue }: { store: LocalPlannerStore; l
         // The route moved to #/import: forget the link (the screen keeps what it shows).
         setPending(null);
     }
-    // The link whose result may still be shown; a newer link or a chosen file supersedes it.
-    const latestLink = useRef<string | null>(null);
+    // The newest choice (a link read or a file pick); an older one's result is dropped when it lands.
+    const latestChoice = useRef<symbol | null>(null);
     const [addToLibrary, setAddToLibrary] = useState(false);
     const [saving, setSaving] = useState(false);
     const [saveError, setSaveError] = useState<string | null>(null);
 
     useEffect(() => {
         if (!pending) return;
-        latestLink.current = pending;
+        const choice = Symbol("link");
+        latestChoice.current = choice;
         // The plan must not linger in the address bar or history. This routes to
         // #/import and clears `pending`, so the read below must outlive it.
         replaceHash(staticRoutes.importPlan());
         void readPlanLink(pending).then((result) => {
-            if (latestLink.current === pending) setState(toViewState(result));
+            if (latestChoice.current === choice) setState(toViewState(result));
         });
     }, [pending]);
 
@@ -68,9 +68,12 @@ export function ImportScreen({ store, linkValue }: { store: LocalPlannerStore; l
         const file = event.target.files?.[0];
         event.target.value = ""; // choosing the same file again still fires change
         if (!file) return;
-        latestLink.current = null;
+        const choice = Symbol("file");
+        latestChoice.current = choice;
         setSaveError(null);
-        setState(toViewState(await readPlanFile(file)));
+        const result = await readPlanFile(file);
+        // A link pasted while the file was being read wins.
+        if (latestChoice.current === choice) setState(toViewState(result));
     };
 
     const save = async (plan: PlanDocument) => {
@@ -151,10 +154,6 @@ export function ImportScreen({ store, linkValue }: { store: LocalPlannerStore; l
                         </Stack>
                     </Paper>
                 )}
-
-                <Typography variant="body2" color="text.secondary">
-                    {PRIVACY_NOTE}
-                </Typography>
             </Stack>
         </>
     );
