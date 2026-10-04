@@ -108,6 +108,7 @@ function legend(model: BenchSheetModel): Paragraph[] {
 function drills(model: BenchSheetModel): Paragraph[] {
     return model.drills.flatMap((drill, index) => {
         const startsPage = index % 2 === 0;
+        const hasText = Boolean(drill.text); // "" is no text: gates keepNext and the text paragraph alike
         return [
             new Paragraph({
                 heading: HeadingLevel.HEADING_2,
@@ -124,8 +125,8 @@ function drills(model: BenchSheetModel): Paragraph[] {
                 ],
             }),
             isPngDataUri(drill.diagram)
-                ? new Paragraph({ keepNext: drill.text !== null, children: [picture(drill.diagram, DIAGRAM, `Diagram: ${drill.name}`)] })
-                : new Paragraph({ keepNext: drill.text !== null, children: textRuns(DIAGRAM_UNAVAILABLE_TEXT, { italics: true }) }),
+                ? new Paragraph({ keepNext: hasText, children: [picture(drill.diagram, DIAGRAM, `Diagram: ${drill.name}`)] })
+                : new Paragraph({ keepNext: hasText, children: textRuns(DIAGRAM_UNAVAILABLE_TEXT, { italics: true }) }),
             ...(drill.text ? [new Paragraph({ children: textRuns(drill.text) })] : []),
         ];
     });
