@@ -24,6 +24,15 @@ export const TRANSITION_MINUTES_MESSAGE = `Between blocks must be a whole number
 export const BLOCK_LABEL_MESSAGE = `Label must be at most ${MAX_BLOCK_LABEL_LENGTH} characters`;
 export const BLOCK_HAS_NO_DRILL_MESSAGE = "A warm-up, break, transition or cool-down has no drill";
 export const DRILL_NEEDS_PLAY_MESSAGE = "A drill needs a play";
+/** A row's instructions limit (practiceSessionPlayInputSchema). */
+export const MAX_ROW_INSTRUCTIONS_LENGTH = 2000;
+// The row schema's field messages, shared so the static store refuses in the same words.
+// The last three are Zod's own wording, made explicit in the schema.
+export const PLAY_DURATION_MIN_MESSAGE = "Play duration must be at least 1 minute";
+export const PLAY_DURATION_MAX_MESSAGE = "Play duration must be less than 300 minutes";
+export const PLAY_DURATION_INT_MESSAGE = "Invalid input: expected int, received number";
+export const ROW_INSTRUCTIONS_MESSAGE = `Too big: expected string to have <=${MAX_ROW_INSTRUCTIONS_LENGTH} characters`;
+export const ROW_KIND_MESSAGE = `Invalid option: expected one of ${SESSION_ROW_KINDS.map((kind) => `"${kind}"`).join("|")}`;
 
 export function isBlockKind(value: unknown): value is BlockKind {
     return (BLOCK_KINDS as readonly unknown[]).includes(value);

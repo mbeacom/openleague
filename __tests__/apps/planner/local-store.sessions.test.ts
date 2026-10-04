@@ -15,12 +15,17 @@ import {
     BLOCK_HAS_NO_DRILL_MESSAGE,
     BLOCK_LABEL_MESSAGE,
     DRILL_NEEDS_PLAY_MESSAGE,
+    PLAY_DURATION_INT_MESSAGE,
+    PLAY_DURATION_MAX_MESSAGE,
+    PLAY_DURATION_MIN_MESSAGE,
+    ROW_INSTRUCTIONS_MESSAGE,
+    ROW_KIND_MESSAGE,
     TRANSITION_MINUTES_MESSAGE,
     drillRows,
     isDrillRow,
     type DrillRowInput,
 } from "@/lib/utils/session-rows";
-import { BLOCK_STATION_ERROR, ROTATION_PLACEMENT_ERROR, ROTATION_TOO_FEW_ERROR } from "@/lib/utils/session-timeline";
+import { BLOCK_ROW_FIELDS_ERROR, BLOCK_STATION_ERROR, ROTATION_PLACEMENT_ERROR, ROTATION_TOO_FEW_ERROR } from "@/lib/utils/session-timeline";
 
 const T = LOCAL_TEAM_ID;
 
@@ -426,6 +431,55 @@ describe.each(REPOS)("sessions (%s)", (_name, open) => {
         const blockWithDrill = { kind: "break" as const, clientKey: "kb", sequence: 0, duration: 2, instructions: "", label: null, playId: a };
         expect(await store.createSession(save([blockWithDrill]))).toEqual({ success: false, error: BLOCK_HAS_NO_DRILL_MESSAGE });
         expect(data(await store.listSessions())).toEqual([]);
+    });
+
+    describe("refuses the rows hosted's row schema refuses, in its words, writing nothing", () => {
+        // Hand-made payloads (an older or foreign client): the fields a block row never carries.
+        const breakRow = { kind: "break" as const, clientKey: "kb", sequence: 1, duration: 2, instructions: "", label: null };
+        const cases: Array<[string, (play: string) => LocalSessionDrill[], string]> = [
+            ["a fractional duration", (p) => [drill(p, "k1", 0, { duration: 1.5 })], PLAY_DURATION_INT_MESSAGE],
+            ["a 0-minute row", (p) => [drill(p, "k1", 0), { ...breakRow, duration: 0 }], PLAY_DURATION_MIN_MESSAGE],
+            ["a row over 300 minutes", (p) => [drill(p, "k1", 0, { duration: 301 })], PLAY_DURATION_MAX_MESSAGE],
+            ["instructions over 2000 characters", (p) => [drill(p, "k1", 0), { ...breakRow, instructions: "x".repeat(2001) }], ROW_INSTRUCTIONS_MESSAGE],
+            ["a block row run as a station", (p) => [drill(p, "k1", 0), { ...breakRow, runsWithPrevious: true }], BLOCK_STATION_ERROR],
+            ["a block row that stays", (p) => [drill(p, "k1", 0), { ...breakRow, stays: true }], BLOCK_ROW_FIELDS_ERROR],
+            ["a block row that rotates", (p) => [drill(p, "k1", 0), { ...breakRow, rotateEveryMinutes: 5 }], BLOCK_ROW_FIELDS_ERROR],
+            ["an unknown row kind", (p) => [drill(p, "k1", 0), { ...breakRow, kind: "scrimmage" } as unknown as LocalSessionDrill], ROW_KIND_MESSAGE],
+        ];
+        it.each(cases)("%s", async (_rule, rows, error) => {
+            const { store } = await setup();
+            const a = await addLibraryPlay(store, "A");
+            expect(await store.createSession(save(rows(a)))).toEqual({ success: false, error });
+            const kept = data(await store.createSession(save([drill(a, "k1", 0)])));
+            const [owned] = kept.plays.map((p) => p.playId);
+            expect(await store.updateSession(kept.id, save(rows(owned)))).toEqual({ success: false, error });
+            expect(data(await store.listSessions())).toHaveLength(1);
+        });
+    });
+
+    it("imports a plan with warm-up, drill, break, drill: each drill on its own copy, the break as it was", async () => {
+        const { store } = await setup();
+        const a = await addLibraryPlay(store, "A");
+        const b = await addLibraryPlay(store, "B");
+        const source = data(await store.createSession(save([
+            { kind: "warmup", clientKey: "kw", sequence: 0, duration: 8, instructions: "Laps", label: null },
+            drill(a, "k1", 1, { duration: 12, instructions: "First" }),
+            { kind: "break", clientKey: "kb", sequence: 2, duration: 3, instructions: "", label: "Water + tape" },
+            drill(b, "k2", 3, { duration: 15, instructions: "Second" }),
+        ], { transitionMinutes: 1 })));
+        const doc = buildPlanDocument(data(await store.getSessionView(source.id)), new Date(), "openleague-static");
+        const { sessionId } = data(await store.importPlan(JSON.parse(JSON.stringify(doc)), { date: new Date("2026-10-13T19:00:00"), addToLibrary: false }));
+        const view = data(await store.getSessionView(sessionId));
+        expect(view.transitionMinutes).toBe(1);
+        expect(view.plays.map((row) => (isDrillRow(row) ? [row.play.name, row.duration, row.instructions] : [row.kind, row.duration, row.label]))).toEqual([
+            ["warmup", 8, null],
+            ["A", 12, "First"],
+            ["break", 3, "Water + tape"],
+            ["B", 15, "Second"],
+        ]);
+        const ids = view.plays.flatMap((row) => (isDrillRow(row) ? [row.play.id] : []));
+        expect(new Set(ids).size).toBe(2);
+        for (const id of ids) expect(source.plays.map((p) => p.playId)).not.toContain(id);
     });
 
     it("duplicates block rows as they are, each drill to its own clone, and the gap", async () => {

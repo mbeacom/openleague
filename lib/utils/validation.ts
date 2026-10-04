@@ -18,7 +18,13 @@ import {
   BLOCK_LABEL_MESSAGE,
   CONTROL_CHARS,
   DRILL_NEEDS_PLAY_MESSAGE,
+  MAX_ROW_INSTRUCTIONS_LENGTH,
+  PLAY_DURATION_INT_MESSAGE,
+  PLAY_DURATION_MAX_MESSAGE,
+  PLAY_DURATION_MIN_MESSAGE,
   ROTATE_MINUTES_MESSAGE,
+  ROW_INSTRUCTIONS_MESSAGE,
+  ROW_KIND_MESSAGE,
   TRANSITION_MINUTES_MESSAGE,
 } from "@/lib/utils/session-rows";
 import { BLOCK_ROW_FIELDS_ERROR, BLOCK_STATION_ERROR } from "@/lib/utils/session-timeline";
@@ -166,11 +172,11 @@ export function pickField<T extends z.ZodObject<z.ZodRawShape>>(
 }
 
 // Helper to sanitize string input by trimming and removing dangerous characters
-function sanitizedString(maxLength: number = 255) {
+function sanitizedString(maxLength: number = 255, maxMessage?: string) {
   return z
     .string()
     .trim()
-    .max(maxLength)
+    .max(maxLength, maxMessage)
     .transform((str) => {
       // Remove null bytes and other control characters that could be dangerous
       return str.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
@@ -1400,12 +1406,12 @@ const rotateEveryMinutesSchema = z
 
 export const practiceSessionPlayInputSchema = z
   .object({
-    kind: z.enum(SESSION_ROW_KINDS).default("drill"),
+    kind: z.enum(SESSION_ROW_KINDS, { message: ROW_KIND_MESSAGE }).default("drill"),
     playId: z.string().cuid("Invalid play ID format").optional(),
     clientKey: z.string().min(1, "Drill key is required").max(64, "Drill key is too long"),
     sequence: z.number().int().min(0),
-    duration: z.number().int().min(1, "Play duration must be at least 1 minute").max(300, "Play duration must be less than 300 minutes"),
-    instructions: optionalSanitizedString(2000),
+    duration: z.number().int(PLAY_DURATION_INT_MESSAGE).min(1, PLAY_DURATION_MIN_MESSAGE).max(300, PLAY_DURATION_MAX_MESSAGE),
+    instructions: sanitizedString(MAX_ROW_INSTRUCTIONS_LENGTH, ROW_INSTRUCTIONS_MESSAGE).optional().or(z.literal("")),
     runsWithPrevious: z.boolean().default(false),
     label: blockLabelSchema.nullable().optional(),
     stays: z.boolean().optional(),

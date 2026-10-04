@@ -4,17 +4,30 @@
  * Every stored session is a valid plan document, so it always exports.
  */
 import type { PlayData, PracticeSessionView, SessionItem, SessionRow } from "@/types/practice-planner";
-import { MAX_BLOCK_LABEL_LENGTH } from "@/types/practice-planner";
+import { MAX_BLOCK_LABEL_LENGTH, VALIDATION_CONSTRAINTS } from "@/types/practice-planner";
 import { parsePlan, serializePlan, type PlanBlockInput, type PlanDrillInput } from "@/lib/plan-document";
 import { createEmptyPlayData, parseStoredPlayData } from "@/lib/utils/play-data";
 import { drillTags, toPlayFocus, toPlayGoalies } from "@/lib/utils/drill-tags";
-import { normalizeGroups, sessionRowsError, sessionWallMinutes, settleInheritedTiming } from "@/lib/utils/session-timeline";
+import {
+    BLOCK_ROW_FIELDS_ERROR,
+    BLOCK_STATION_ERROR,
+    normalizeGroups,
+    sessionRowsError,
+    sessionWallMinutes,
+    settleInheritedTiming,
+} from "@/lib/utils/session-timeline";
 import {
     BLOCK_HAS_NO_DRILL_MESSAGE,
     BLOCK_LABEL_MESSAGE,
     CONTROL_CHARS,
     DRILL_NEEDS_PLAY_MESSAGE,
+    MAX_ROW_INSTRUCTIONS_LENGTH,
+    PLAY_DURATION_INT_MESSAGE,
+    PLAY_DURATION_MAX_MESSAGE,
+    PLAY_DURATION_MIN_MESSAGE,
     ROTATE_MINUTES_MESSAGE,
+    ROW_INSTRUCTIONS_MESSAGE,
+    ROW_KIND_MESSAGE,
     TRANSITION_MINUTES_MESSAGE,
     isBlockKind,
     isBlockRow,
@@ -64,17 +77,28 @@ function checkRows(plays: LocalSessionDrill[]): void {
     if (sequences.some((sequence, index) => sequence !== index)) {
         throw new StoreRefusal("Drill sequences must run 0, 1, 2… with no gaps or repeats");
     }
-    // Hosted's row schema, rule for rule and in its words (practiceSessionPlayInputSchema).
+    // Hosted's row schema, rule for rule and in its words (practiceSessionPlayInputSchema):
+    // the fields first, then the drill / block rules. Checked on the rows as sent, before
+    // resolveRows fills or settles anything, so a value a block row must not carry is refused.
     for (const row of plays) {
+        const sent: Partial<Record<"kind" | "playId" | "runsWithPrevious" | "stays" | "rotateEveryMinutes", unknown>> = row;
+        if (sent.kind !== undefined && toRowKind(sent.kind) !== sent.kind) throw new StoreRefusal(ROW_KIND_MESSAGE);
+        if (!Number.isInteger(row.duration)) throw new StoreRefusal(PLAY_DURATION_INT_MESSAGE);
+        if (row.duration < 1) throw new StoreRefusal(PLAY_DURATION_MIN_MESSAGE);
+        if (row.duration > VALIDATION_CONSTRAINTS.MAX_DURATION) throw new StoreRefusal(PLAY_DURATION_MAX_MESSAGE);
+        if ((row.instructions ?? "").trim().length > MAX_ROW_INSTRUCTIONS_LENGTH) throw new StoreRefusal(ROW_INSTRUCTIONS_MESSAGE);
         if (isBlockRow(row)) {
-            // A payload built outside the editor may still name a play on a block row.
-            if ("playId" in row && row.playId != null) throw new StoreRefusal(BLOCK_HAS_NO_DRILL_MESSAGE);
             if ((row.label ?? "").replace(CONTROL_CHARS, "").trim().length > MAX_BLOCK_LABEL_LENGTH) throw new StoreRefusal(BLOCK_LABEL_MESSAGE);
+            if (sent.rotateEveryMinutes != null && toRotateEveryMinutes(sent.rotateEveryMinutes) === null) throw new StoreRefusal(ROTATE_MINUTES_MESSAGE);
+            // A payload built outside the editor may still carry drill fields on a block row.
+            if (sent.playId != null && sent.playId !== "") throw new StoreRefusal(BLOCK_HAS_NO_DRILL_MESSAGE);
+            if (sent.runsWithPrevious === true) throw new StoreRefusal(BLOCK_STATION_ERROR);
+            if (sent.stays === true || sent.rotateEveryMinutes != null) throw new StoreRefusal(BLOCK_ROW_FIELDS_ERROR);
         } else {
-            if (!row.playId) throw new StoreRefusal(DRILL_NEEDS_PLAY_MESSAGE);
             if (row.rotateEveryMinutes != null && toRotateEveryMinutes(row.rotateEveryMinutes) === null) {
                 throw new StoreRefusal(ROTATE_MINUTES_MESSAGE);
             }
+            if (!row.playId) throw new StoreRefusal(DRILL_NEEDS_PLAY_MESSAGE);
         }
     }
 }
