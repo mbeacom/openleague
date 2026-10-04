@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { STARTER_TEMPLATES, starterTemplatePlan } from "@/lib/data/starter-templates";
 import { STARTER_PLAYS } from "@/lib/data/starter-plays";
 import { parsePlan } from "@/lib/plan-document";
+import { goalieMarkerCount } from "@/lib/utils/drill-tags";
 import {
     MAX_STATIONS_PER_GROUP,
     goalieWarnings,
@@ -56,8 +57,17 @@ describe("starter templates", () => {
             expect(stationWarnings(groupStations(withAreas), null).overlaps).toEqual([]);
         });
 
-        it("runs with a single goalie", () => {
-            expect(goalieWarnings(groupStations(drills), 1).short).toEqual([]);
+        it("is built for one goalie and says so, so warnings work right after import", () => {
+            expect(template.session.goaliesAttending).toBe(1);
+            expect(goalieWarnings(groupStations(drills), template.session.goaliesAttending ?? null).short).toEqual([]);
+        });
+
+        it("never sends skaters to an empty net that the diagram shows a goalie in, without the second-goalie option", () => {
+            for (const drill of drills) {
+                if (!drill.playData || goalieMarkerCount(drill.playData) === 0) continue;
+                const instructions = drill.instructions ?? "";
+                if (instructions.includes("empty net")) expect(instructions, drill.name).toMatch(/second goalie/);
+            }
         });
 
         it("gives each drill the time its own description states", () => {

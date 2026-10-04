@@ -31,7 +31,11 @@ function starter(id: string): StarterPlay {
     return found;
 }
 
-/** Each inner array is one block: its first drill runs on its own, the rest run with it as stations. */
+/**
+ * Each inner array is one block: its first drill runs on its own, the rest run with it as stations.
+ * Every template is built for one goalie, so goalies attending starts at 1 and the goalie
+ * warnings work as soon as it is imported; the coach can change it in Edit.
+ */
 function practice(title: string, durationMinutes: number, blocks: Station[][]): PlanSessionInput {
     const drills = blocks
         .flatMap((block) => block.map((station, slot) => ({ station, runsWithPrevious: slot > 0 })))
@@ -49,12 +53,12 @@ function practice(title: string, durationMinutes: number, blocks: Station[][]): 
                 playData: play.playData,
             };
         });
-    return { title, durationMinutes, date: null, startTime: null, goaliesAttending: null, drills };
+    return { title, durationMinutes, date: null, startTime: null, goaliesAttending: 1, drills };
 }
 
 const GOALIE_STAYS = (minutes: number) => `Goalies stay at this station; skater groups rotate every ${minutes} minutes.`;
 const ROTATE = (minutes: number) => `Skater groups rotate every ${minutes} minutes.`;
-const EMPTY_NET = "With one goalie, shoot at an empty net or targets.";
+const EMPTY_NET = "If a second goalie is free, put them in net; otherwise shoot at the empty net or targets.";
 
 export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
     {
