@@ -1,7 +1,9 @@
 /** Import a practice plan (ADR-0020): file or #plan= link → preview → team → new session. */
 import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
+// The view reads the plan generator from the planner platform (the real hosted one here).
+import { renderWithPlanner as render } from "@/__tests__/helpers/planner";
 
 const nav = vi.hoisted(() => ({ push: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: nav.push }) }));
@@ -235,5 +237,33 @@ describe("PlanImportView: form", () => {
         upload(JSON.stringify(plan()));
         await title();
         expect(screen.getByRole("button", { name: "Import plan" })).toBeDisabled();
+    });
+});
+
+describe("PlanImportView: starter templates", () => {
+    it("previews a template and imports it into the chosen team as a hosted plan", async () => {
+        actions.importPracticePlan.mockResolvedValue({ success: true, data: { sessionId: NEW_SESSION } });
+        render(<PlanImportView teams={[LIONS]} />);
+        fireEvent.click(screen.getByRole("button", { name: "Use template: Skills Stations" }));
+        expect(await screen.findByRole("heading", { name: "Skills Stations" })).toBeInTheDocument();
+
+        // Templates carry no date: the coach picks one, as for any undated plan.
+        fireEvent.change(screen.getByLabelText(/^date/i), { target: { value: "2026-10-06" } });
+        fireEvent.change(screen.getByLabelText(/start time/i), { target: { value: "19:00" } });
+        fireEvent.click(screen.getByRole("button", { name: "Import plan" }));
+
+        await waitFor(() => expect(nav.push).toHaveBeenCalledWith(`/practice-planner/${NEW_SESSION}/edit`));
+        const sent = actions.importPracticePlan.mock.calls[0][0];
+        expect(sent.teamId).toBe(LIONS.id);
+        expect(sent.document).toMatchObject({ generator: "openleague-hosted", session: { title: "Skills Stations" } });
+        expect(sent.document.session.drills.some((d: { drill: { goalies: string } }) => d.drill.goalies === "required")).toBe(true);
+    });
+
+    it("offers templates only while no plan is chosen", async () => {
+        render(<PlanImportView teams={[LIONS]} />);
+        expect(screen.getByRole("heading", { name: "Start from a template" })).toBeInTheDocument();
+        upload(JSON.stringify(plan()));
+        await title();
+        expect(screen.queryByRole("heading", { name: "Start from a template" })).toBeNull();
     });
 });

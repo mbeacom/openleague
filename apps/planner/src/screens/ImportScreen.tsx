@@ -11,6 +11,7 @@ import { Alert, Box, Button, Checkbox, FormControlLabel, Paper, Stack, Typograph
 import { FileUploadOutlined as UploadIcon } from "@mui/icons-material";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PlanPreview } from "@/components/features/practice-planner/PlanPreview";
+import { StarterTemplatePicker, starterTemplateImport } from "@/components/features/practice-planner/StarterTemplatePicker";
 import { usePlannerPlatform } from "@/lib/planner-store";
 import { readPlanFile, readPlanLink, type ParsePlanResult, type PlanDocument, type PlanError } from "@/lib/plan-document";
 import { parseDateTimeLocalToUtc, resolveTimeZone } from "@/lib/utils/date";
@@ -32,7 +33,7 @@ function toViewState(result: ParsePlanResult): ViewState {
 }
 
 export function ImportScreen({ store, linkValue }: { store: LocalPlannerStore; linkValue: string | null }) {
-    const { navigate } = usePlannerPlatform();
+    const { navigate, planGenerator } = usePlannerPlatform();
     const fileInput = useRef<HTMLInputElement>(null);
     const [pending, setPending] = useState<string | null>(linkValue);
     const [state, setState] = useState<ViewState>(linkValue ? { kind: "reading" } : { kind: "pick" });
@@ -107,6 +108,17 @@ export function ImportScreen({ store, linkValue }: { store: LocalPlannerStore; l
                             Choose plan file
                         </Button>
                     </Paper>
+                )}
+
+                {state.kind === "pick" && (
+                    <StarterTemplatePicker
+                        onUse={(template) => {
+                            // Newest choice wins, as for a file or a link.
+                            latestChoice.current = Symbol("template");
+                            setSaveError(null);
+                            setState(toViewState(starterTemplateImport(template, planGenerator)));
+                        }}
+                    />
                 )}
 
                 {state.kind === "reading" && <Typography color="text.secondary">Reading the plan…</Typography>}

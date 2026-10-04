@@ -13,6 +13,7 @@ import { Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, Paper, Stack,
 import { FileUploadOutlined as UploadIcon } from "@mui/icons-material";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PlanPreview } from "@/components/features/practice-planner/PlanPreview";
+import { StarterTemplatePicker, starterTemplateImport } from "@/components/features/practice-planner/StarterTemplatePicker";
 import { importPracticePlan } from "@/lib/actions/practice-plan-import";
 import { parseDateTimeLocalToUtc, resolveTimeZone } from "@/lib/utils/date";
 import {
@@ -26,6 +27,7 @@ import {
     type PlanError,
 } from "@/lib/plan-document";
 import { takeIncomingPlan } from "@/lib/plan-document/pending";
+import { usePlannerPlatform } from "@/lib/planner-store";
 
 export { FILE_TOO_LARGE_MESSAGE, readPlanFile };
 
@@ -46,6 +48,7 @@ interface PlanImportViewProps {
 
 export function PlanImportView({ teams }: PlanImportViewProps) {
     const router = useRouter();
+    const { planGenerator } = usePlannerPlatform();
     const fileInput = useRef<HTMLInputElement>(null);
     // undefined = not looked yet. takeIncomingPlan consumes the hash and the
     // stash, so StrictMode's effect replay must reuse this value, not take again.
@@ -95,6 +98,10 @@ export function PlanImportView({ teams }: PlanImportViewProps) {
                             Choose plan file
                         </Button>
                     </Paper>
+                )}
+
+                {state.kind === "pick" && (
+                    <StarterTemplatePicker onUse={(template) => setState(toViewState(starterTemplateImport(template, planGenerator)))} />
                 )}
 
                 {state.kind === "error" && (

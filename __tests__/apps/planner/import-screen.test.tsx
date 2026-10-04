@@ -5,6 +5,12 @@ import { ImportScreen, planStartDate } from "@/apps/planner/src/screens/ImportSc
 import { PRIVACY_NOTE } from "@/apps/planner/src/config";
 import { FILE_TOO_LARGE_MESSAGE, MAX_PLAN_FILE_BYTES, NOT_A_PLAN_MESSAGE, encodePlanLink, serializePlan, type PlanSessionInput } from "@/lib/plan-document";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
+import { STARTER_PLAYS } from "@/lib/data/starter-plays";
+
+// jsdom has no canvas; the preview's diagrams (a template's are not empty) draw as a stub.
+vi.mock("@/lib/utils/canvas/thumbnail-generator", () => ({
+    generateThumbnail: vi.fn(() => "data:image/png;base64,AA=="),
+}));
 
 const INPUT: PlanSessionInput = {
     title: "Tuesday Skills",
@@ -129,4 +135,68 @@ describe("ImportScreen", () => {
         expect(screen.queryByText("Tuesday Skills")).toBeNull();
         expect(screen.getByText("Thursday Skating")).toBeInTheDocument();
     });
+
+    it("saves a starter template as a practice in this browser", async () => {
+        const { store } = memoryStore();
+        renderScreen(<ImportScreen store={store} linkValue={null} />, store);
+        fireEvent.click(screen.getByRole("button", { name: "Use template: Goalie & Skater Rotation" }));
+        expect(await screen.findByText("Goalie & Skater Rotation")).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: /save to my practices/i }));
+        await waitFor(() => expect(window.location.hash).toMatch(/^#\/sessions\/[^/]+$/));
+        const sessions = await store.listSessions();
+        expect(sessions.success && sessions.data.map((s) => s.title)).toEqual(["Goalie & Skater Rotation"]);
+    });
+
+    it("stores fresh drills, so editing a practice made from a template never changes the starter drills", async () => {
+        const before = structuredClone(STARTER_PLAYS);
+        const { store } = memoryStore();
+        renderScreen(<ImportScreen store={store} linkValue={null} />, store);
+        fireEvent.click(screen.getByRole("button", { name: "Use template: Skills Stations" }));
+        await screen.findByText("Skills Stations");
+        fireEvent.click(screen.getByRole("checkbox", { name: /also add these drills to my library/i }));
+        fireEvent.click(screen.getByRole("button", { name: /save to my practices/i }));
+        await waitFor(() => expect(window.location.hash).toMatch(/^#\/sessions\/[^/]+$/));
+        const sessionId = window.location.hash.slice("#/sessions/".length);
+
+        const edit = await store.getSessionForEdit(sessionId);
+        expect(edit.success).toBe(true);
+        if (!edit.success) return;
+        const { initialData } = edit.data;
+        for (const play of initialData.plays) {
+            for (const starter of STARTER_PLAYS) expect(play.playData).not.toBe(starter.playData);
+            // Edit every drill in place, as the board does, and store it.
+            play.playData.players.length = 0;
+            play.playData.annotations.push({ id: "note", text: "Edited", position: { x: 50, y: 40 }, fontSize: 14, color: "#000000" });
+            const saved = await store.saveSessionDrill({ sessionId, teamId: "local", playId: play.playId, name: `${play.name} (edited)`, playData: play.playData });
+            expect(saved).toMatchObject({ success: true });
+        }
+        // And the library copies the import added.
+        const library = await store.getPlaysByTeam({ teamId: "local", isTemplate: true, page: 1, limit: 100, dateFilter: "all" });
+        expect(library.success && library.data.plays.length).toBeGreaterThan(0);
+        for (const summary of library.success ? library.data.plays : []) {
+            const play = await store.getPlayById({ id: summary.id, teamId: "local" });
+            expect(play.success).toBe(true);
+            if (!play.success) continue;
+            for (const starter of STARTER_PLAYS) expect(play.data.playData).not.toBe(starter.playData);
+            play.data.playData.drawings.length = 0;
+            expect((await store.updatePlay({ id: summary.id, name: `${summary.name} (edited)`, playData: play.data.playData })).success).toBe(true);
+        }
+        const updated = await store.updateSession(sessionId, {
+            title: "Edited",
+            date: initialData.date,
+            duration: initialData.duration,
+            plays: initialData.plays.map((play) => ({
+                playId: play.playId,
+                clientKey: play.id,
+                sequence: play.sequence,
+                runsWithPrevious: play.runsWithPrevious,
+                duration: play.duration + 1,
+                instructions: "Changed",
+            })),
+        });
+        expect(updated.success).toBe(true);
+
+        expect(STARTER_PLAYS).toEqual(before);
+    });
 });
+
