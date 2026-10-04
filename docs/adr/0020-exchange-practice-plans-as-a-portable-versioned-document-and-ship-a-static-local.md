@@ -82,6 +82,10 @@ Nothing lets a plan leave the hosted database. There is no export and no import,
 - It exchanges plans as files and as fragment links to the hosted import page.
 - It supplements the hosted platform: team features stay hosted-only.
 
+**Document exports (sub-project 4).**
+- Both deployables export a session as a self-contained HTML bench sheet (inline CSS, PNG data-URI diagrams, no script, no external request, a restrictive CSP meta) and as a Word document.
+- The Word document is built by `docx` (MIT), the planner's only runtime dependency. Exactly one module imports it, and only through `import()` on click, so neither main bundle carries it. ESLint forbids static imports of it in portable code, and the static build check fails if the entry chunk contains it.
+
 ## Options considered
 
 ### Option A: Portable document, plus a static Vite planner (chosen)
@@ -125,6 +129,8 @@ Plans stay locked in the hosted database, and coaches without an account can't u
 
 **Two GitHub Pages sources share one site.** The docs and the planner deploy together, so a planner build failure can block a docs deploy.
 
+**One lazy runtime dependency.** `docx` (≈ 118 KB gzip with `jszip`) is a supply-chain and upgrade cost the planner did not have. It loads only when a coach asks for a Word file, and a Word file is the one format Word imports reliably with images; HTML alone is not.
+
 ## Consequences
 
 - Easier:
@@ -149,5 +155,5 @@ Plans stay locked in the hosted database, and coaches without an account can't u
 1. [ ] Sub-project 1: plan document plus hosted export and import (`docs/superpowers/specs/2026-10-03-plan-document-design.md`).
 2. [ ] Sub-project 2: `PlannerStore` seam.
 3. [x] Sub-project 3: static app and Pages deploy.
-4. [ ] Sub-project 4: HTML and `.docx` exports.
+4. [x] Sub-project 4: HTML and `.docx` exports.
 5. [ ] Sub-project 5: Drive and OneDrive saving, once the OAuth apps are registered.
