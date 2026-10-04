@@ -136,6 +136,31 @@ describe("ImportScreen", () => {
         expect(screen.getByText("Thursday Skating")).toBeInTheDocument();
     });
 
+    it("says an undated plan will be dated now and can be changed in Edit", async () => {
+        const { store } = memoryStore();
+        renderScreen(<ImportScreen store={store} linkValue={null} />, store);
+        chooseFile(new File([JSON.stringify(PLAN)], "tuesday.olplan.json", { type: "application/json" }));
+        await screen.findByText("Tuesday Skills");
+        expect(screen.queryByText(/no date/i)).toBeNull();
+
+        const undated = serializePlan({ ...INPUT, date: null, startTime: null }, "openleague-hosted");
+        chooseFile(new File([JSON.stringify(undated)], "undated.olplan.json", { type: "application/json" }));
+        expect(await screen.findByText(/this plan has no date.*change the date in edit/i)).toBeInTheDocument();
+    });
+
+    it("offers Start over, not a library copy, for a template, and dates it now", async () => {
+        const { store } = memoryStore();
+        renderScreen(<ImportScreen store={store} linkValue={null} />, store);
+        fireEvent.click(screen.getByRole("button", { name: "Use template: Skills Stations" }));
+        await screen.findByText("Skills Stations");
+        expect(screen.getByText(/this plan has no date.*change the date in edit/i)).toBeInTheDocument();
+        expect(screen.queryByRole("checkbox", { name: /also add these drills/i })).toBeNull();
+        expect(screen.queryByRole("button", { name: "Choose another file" })).toBeNull();
+        fireEvent.click(screen.getByRole("button", { name: "Start over" }));
+        expect(screen.getByRole("heading", { name: "Start from a template" })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Choose plan file" })).toBeInTheDocument();
+    });
+
     it("saves a starter template as a practice in this browser", async () => {
         const { store } = memoryStore();
         renderScreen(<ImportScreen store={store} linkValue={null} />, store);
@@ -153,7 +178,6 @@ describe("ImportScreen", () => {
         renderScreen(<ImportScreen store={store} linkValue={null} />, store);
         fireEvent.click(screen.getByRole("button", { name: "Use template: Skills Stations" }));
         await screen.findByText("Skills Stations");
-        fireEvent.click(screen.getByRole("checkbox", { name: /also add these drills to my library/i }));
         fireEvent.click(screen.getByRole("button", { name: /save to my practices/i }));
         await waitFor(() => expect(window.location.hash).toMatch(/^#\/sessions\/[^/]+$/));
         const sessionId = window.location.hash.slice("#/sessions/".length);
@@ -170,17 +194,9 @@ describe("ImportScreen", () => {
             const saved = await store.saveSessionDrill({ sessionId, teamId: "local", playId: play.playId, name: `${play.name} (edited)`, playData: play.playData });
             expect(saved).toMatchObject({ success: true });
         }
-        // And the library copies the import added.
+        // A template adds nothing to the library: its drills are already offered there as starters.
         const library = await store.getPlaysByTeam({ teamId: "local", isTemplate: true, page: 1, limit: 100, dateFilter: "all" });
-        expect(library.success && library.data.plays.length).toBeGreaterThan(0);
-        for (const summary of library.success ? library.data.plays : []) {
-            const play = await store.getPlayById({ id: summary.id, teamId: "local" });
-            expect(play.success).toBe(true);
-            if (!play.success) continue;
-            for (const starter of STARTER_PLAYS) expect(play.data.playData).not.toBe(starter.playData);
-            play.data.playData.drawings.length = 0;
-            expect((await store.updatePlay({ id: summary.id, name: `${summary.name} (edited)`, playData: play.data.playData })).success).toBe(true);
-        }
+        expect(library.success && library.data.total).toBe(0);
         const updated = await store.updateSession(sessionId, {
             title: "Edited",
             date: initialData.date,

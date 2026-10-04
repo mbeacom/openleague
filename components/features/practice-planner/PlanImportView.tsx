@@ -34,10 +34,10 @@ export { FILE_TOO_LARGE_MESSAGE, readPlanFile };
 export const PLAN_TOO_LARGE_TO_IMPORT_MESSAGE = `This plan is too large to import (over ${MAX_PLAN_FILE_BYTES / 1000} KB).`;
 export const NO_IMPORT_TEAMS_MESSAGE = "Only team admins can import practice plans. Ask an admin of your team to import it.";
 
-type ViewState = { kind: "pick" } | { kind: "error"; error: PlanError } | { kind: "ready"; plan: PlanDocument };
+type ViewState = { kind: "pick" } | { kind: "error"; error: PlanError } | { kind: "ready"; plan: PlanDocument; fromTemplate: boolean };
 
-function toViewState(result: ParsePlanResult): ViewState {
-    return result.ok ? { kind: "ready", plan: result.plan } : { kind: "error", error: result.error };
+function toViewState(result: ParsePlanResult, fromTemplate = false): ViewState {
+    return result.ok ? { kind: "ready", plan: result.plan, fromTemplate } : { kind: "error", error: result.error };
 }
 
 type Team = { id: string; name: string };
@@ -101,7 +101,7 @@ export function PlanImportView({ teams }: PlanImportViewProps) {
                 )}
 
                 {state.kind === "pick" && (
-                    <StarterTemplatePicker onUse={(template) => setState(toViewState(starterTemplateImport(template, planGenerator)))} />
+                    <StarterTemplatePicker onUse={(template) => setState(toViewState(starterTemplateImport(template, planGenerator), true))} />
                 )}
 
                 {state.kind === "error" && (
@@ -130,7 +130,9 @@ export function PlanImportView({ teams }: PlanImportViewProps) {
                         key={state.plan.exportedAt + state.plan.session.title}
                         plan={state.plan}
                         teams={teams}
+                        fromTemplate={state.fromTemplate}
                         onChooseAnother={chooseFile}
+                        onStartOver={() => setState({ kind: "pick" })}
                         onImported={(sessionId) => router.push(`/practice-planner/${sessionId}/edit`)}
                     />
                 )}
@@ -142,11 +144,14 @@ export function PlanImportView({ teams }: PlanImportViewProps) {
 interface PlanImportFormProps {
     plan: PlanDocument;
     teams: Team[];
+    /** A starter template: no library copy (its drills are already starters), and Start over instead of another file. */
+    fromTemplate: boolean;
     onChooseAnother: () => void;
+    onStartOver: () => void;
     onImported: (sessionId: string) => void;
 }
 
-function PlanImportForm({ plan, teams, onChooseAnother, onImported }: PlanImportFormProps) {
+function PlanImportForm({ plan, teams, fromTemplate, onChooseAnother, onStartOver, onImported }: PlanImportFormProps) {
     const [teamId, setTeamId] = useState(teams.length === 1 ? teams[0].id : "");
     const [date, setDate] = useState(plan.session.date ?? "");
     const [startTime, setStartTime] = useState(plan.session.startTime ?? "");
@@ -168,7 +173,7 @@ function PlanImportForm({ plan, teams, onChooseAnother, onImported }: PlanImport
         setSubmitting(true);
         setError(null);
         try {
-            const result = await importPracticePlan({ teamId, document: plan, date: when.toISOString(), addToLibrary });
+            const result = await importPracticePlan({ teamId, document: plan, date: when.toISOString(), addToLibrary: addToLibrary && !fromTemplate });
             if (result.success) {
                 onImported(result.data.sessionId); // stays "submitting" while the editor loads
                 return;
@@ -216,10 +221,12 @@ function PlanImportForm({ plan, teams, onChooseAnother, onImported }: PlanImport
                             fullWidth
                         />
                     </Stack>
-                    <FormControlLabel
-                        control={<Checkbox checked={addToLibrary} onChange={(event) => setAddToLibrary(event.target.checked)} />}
-                        label="Also add these drills to the team library"
-                    />
+                    {!fromTemplate && (
+                        <FormControlLabel
+                            control={<Checkbox checked={addToLibrary} onChange={(event) => setAddToLibrary(event.target.checked)} />}
+                            label="Also add these drills to the team library"
+                        />
+                    )}
                     {error && (
                         <Alert severity="error">
                             {error.message}
@@ -233,7 +240,7 @@ function PlanImportForm({ plan, teams, onChooseAnother, onImported }: PlanImport
                         </Alert>
                     )}
                     <Stack direction="row" spacing={1} justifyContent="flex-end">
-                        <Button onClick={onChooseAnother}>Choose another file</Button>
+                        {fromTemplate ? <Button onClick={onStartOver}>Start over</Button> : <Button onClick={onChooseAnother}>Choose another file</Button>}
                         <Button variant="contained" disabled={!canImport} onClick={() => void submit()}>
                             Import plan
                         </Button>

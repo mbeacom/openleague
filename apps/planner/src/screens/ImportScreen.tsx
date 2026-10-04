@@ -26,11 +26,17 @@ export function planStartDate(plan: PlanDocument, now: Date = new Date()): Date 
     return parseDateTimeLocalToUtc(`${date}T${startTime ?? "00:00"}`, resolveTimeZone(null)) ?? now;
 }
 
-type ViewState = { kind: "pick" } | { kind: "reading" } | { kind: "error"; error: PlanError } | { kind: "ready"; plan: PlanDocument };
+type ViewState =
+    | { kind: "pick" }
+    | { kind: "reading" }
+    | { kind: "error"; error: PlanError }
+    | { kind: "ready"; plan: PlanDocument; fromTemplate: boolean };
 
-function toViewState(result: ParsePlanResult): ViewState {
-    return result.ok ? { kind: "ready", plan: result.plan } : { kind: "error", error: result.error };
+function toViewState(result: ParsePlanResult, fromTemplate = false): ViewState {
+    return result.ok ? { kind: "ready", plan: result.plan, fromTemplate } : { kind: "error", error: result.error };
 }
+
+const UNDATED_PLAN_NOTE = "This plan has no date, so it will be saved with today's date and time. You can change the date in Edit.";
 
 export function ImportScreen({ store, linkValue }: { store: LocalPlannerStore; linkValue: string | null }) {
     const { navigate, planGenerator } = usePlannerPlatform();
@@ -65,6 +71,13 @@ export function ImportScreen({ store, linkValue }: { store: LocalPlannerStore; l
 
     const chooseFile = () => fileInput.current?.click();
 
+    // Back to the import page, with the templates offered again.
+    const startOver = () => {
+        latestChoice.current = null;
+        setSaveError(null);
+        setState({ kind: "pick" });
+    };
+
     const onFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         event.target.value = ""; // choosing the same file again still fires change
@@ -77,10 +90,11 @@ export function ImportScreen({ store, linkValue }: { store: LocalPlannerStore; l
         if (latestChoice.current === choice) setState(toViewState(result));
     };
 
-    const save = async (plan: PlanDocument) => {
+    const save = async (plan: PlanDocument, fromTemplate: boolean) => {
         setSaving(true);
         setSaveError(null);
-        const result = await store.importPlan(plan, { date: planStartDate(plan), addToLibrary });
+        // A template's drills are already offered in the library as starters.
+        const result = await store.importPlan(plan, { date: planStartDate(plan), addToLibrary: addToLibrary && !fromTemplate });
         setSaving(false);
         if (!result.success) {
             setSaveError(result.error);
@@ -116,7 +130,7 @@ export function ImportScreen({ store, linkValue }: { store: LocalPlannerStore; l
                             // Newest choice wins, as for a file or a link.
                             latestChoice.current = Symbol("template");
                             setSaveError(null);
-                            setState(toViewState(starterTemplateImport(template, planGenerator)));
+                            setState(toViewState(starterTemplateImport(template, planGenerator), true));
                         }}
                     />
                 )}
@@ -146,23 +160,36 @@ export function ImportScreen({ store, linkValue }: { store: LocalPlannerStore; l
                 {state.kind === "ready" && (
                     <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>
                         <PlanPreview plan={state.plan} />
-                        <FormControlLabel
-                            sx={{ mt: 2 }}
-                            control={<Checkbox checked={addToLibrary} onChange={(event) => setAddToLibrary(event.target.checked)} />}
-                            label="Also add these drills to my library"
-                        />
+                        {!state.plan.session.date && (
+                            <Alert severity="info" sx={{ mt: 2 }}>
+                                {UNDATED_PLAN_NOTE}
+                            </Alert>
+                        )}
+                        {!state.fromTemplate && (
+                            <FormControlLabel
+                                sx={{ mt: 2 }}
+                                control={<Checkbox checked={addToLibrary} onChange={(event) => setAddToLibrary(event.target.checked)} />}
+                                label="Also add these drills to my library"
+                            />
+                        )}
                         {saveError && (
                             <Alert severity="error" sx={{ mt: 2 }}>
                                 {saveError}
                             </Alert>
                         )}
                         <Stack direction="row" spacing={1} sx={{ mt: 2 }} flexWrap="wrap" useFlexGap>
-                            <Button variant="contained" disabled={saving} onClick={() => void save(state.plan)}>
+                            <Button variant="contained" disabled={saving} onClick={() => void save(state.plan, state.fromTemplate)}>
                                 {saving ? "Saving…" : "Save to my practices"}
                             </Button>
-                            <Button onClick={chooseFile} disabled={saving}>
-                                Choose another file
-                            </Button>
+                            {state.fromTemplate ? (
+                                <Button onClick={startOver} disabled={saving}>
+                                    Start over
+                                </Button>
+                            ) : (
+                                <Button onClick={chooseFile} disabled={saving}>
+                                    Choose another file
+                                </Button>
+                            )}
                         </Stack>
                     </Paper>
                 )}

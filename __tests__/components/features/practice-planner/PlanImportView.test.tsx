@@ -257,6 +257,35 @@ describe("PlanImportView: starter templates", () => {
         expect(sent.teamId).toBe(LIONS.id);
         expect(sent.document).toMatchObject({ generator: "openleague-hosted", session: { title: "Skills Stations" } });
         expect(sent.document.session.drills.some((d: { drill: { goalies: string } }) => d.drill.goalies === "required")).toBe(true);
+        // Station blocks and drill tags survive the trip to the action; the template is built for one goalie.
+        expect(sent.document.session).toMatchObject({ goaliesAttending: 1 });
+        expect(sent.document.session.drills).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ runsWithPrevious: true, drill: expect.objectContaining({ name: "Stickhandling: Cone Weave", focus: "skaters", goalies: "none" }) }),
+                expect.objectContaining({ runsWithPrevious: false, drill: expect.objectContaining({ name: "Angles & Depth: Five-Spot Shooting", focus: "goalies", goalies: "required" }) }),
+            ]),
+        );
+        expect(sent.addToLibrary).toBe(false);
+    });
+
+    it("offers Start over, not a library copy, for a template", async () => {
+        render(<PlanImportView teams={[LIONS]} />);
+        fireEvent.click(screen.getByRole("button", { name: "Use template: Skills Stations" }));
+        await screen.findByRole("heading", { name: "Skills Stations" });
+        expect(screen.queryByRole("checkbox", { name: /also add these drills/i })).toBeNull();
+        expect(screen.queryByRole("button", { name: "Choose another file" })).toBeNull();
+        fireEvent.click(screen.getByRole("button", { name: "Start over" }));
+        expect(screen.getByRole("heading", { name: "Start from a template" })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Choose plan file" })).toBeInTheDocument();
+    });
+
+    it("keeps Choose another file and the library copy for a plan file", async () => {
+        render(<PlanImportView teams={[LIONS]} />);
+        upload(JSON.stringify(plan()));
+        await title();
+        expect(screen.getByRole("checkbox", { name: /also add these drills/i })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Choose another file" })).toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "Start over" })).toBeNull();
     });
 
     it("offers templates only while no plan is chosen", async () => {
