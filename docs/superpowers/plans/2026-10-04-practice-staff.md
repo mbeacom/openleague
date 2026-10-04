@@ -30,11 +30,11 @@
 - **Row identity (spec R3), verified against the code:**
   - *Hosted.* `updatePracticeSession` deletes every row (`practiceSessionPlay.deleteMany`) and creates them again, so row ids never survive a save, and `practice_session_play_staff.playRowId` cascades, so the delete removes every assignment. When `staff` is absent the action reads the stored assignments **before** that delete (`readCarriedRowStaff`) and writes them to the new rows (`carryRowStaff`, then `writeRowStaff`):
     - a drill row is identified by its owned play id. Evidence: `getPracticeSessionForEdit` loads `playId: sp.play.id`; `applySavedPlayIds` swaps the editor to the owned id after a save; `materializeSessionDrills` keeps an owned copy's id for its first row (`play.sessionId === input.sessionId && !kept.has(play.id)` → `keptId: play.id`) and `sessionPlayData` writes it. A session's stored drill rows each point at their own copy: the accepted invariant `withStoredTiming` already rests on (first match wins), documented by its test in `__tests__/lib/utils/session-rows.test.ts`;
-    - a block row is identified by its place among the stored block rows (the k-th warm-up, break, transition or cool-down), and is carried only when the new k-th block row is the same kind. Accepted loss: an older editor that reorders, inserts or deletes block rows can drop (never move to another kind of block) a block's assignments. Every editor built with this change sends `staff`, so the identity is never used for it.
+    - a block row is identified by its place among the block rows (the k-th warm-up, break, transition or cool-down), and only when the save keeps the stored block layout exactly: `carryRowStaff` compares the new block rows' kinds, in sequence order, with every stored block row's kind (`readCarriedRowStaff` reads them all, staffed or not), element by element and with the same count. Equal: the k-th stored block's staff go to the k-th new block (drills may be added, removed or moved around the blocks). Not equal (an older editor reordered, inserted or deleted a block row): every block's assignments are dropped, because a place can't tell which of two same-kind blocks survived, and staff are never moved to a block they didn't run. Drills carry either way. Accepted loss: block staff in that case. Only an editor tab opened before this deploy saves without `staff` (every editor built with this change sends it, and the stale-editor guard already refuses pre-timing editors when blocks exist), so the loss is limited to tabs open across the deploy.
     - New row ids are read back by `sequence` after the rows are written (`@@unique([sessionId, sequence])`), never matched by position.
   - *Static.* A stored row's `id` is the editor's `clientKey` and survives every save, so `updateSession` carries a row's staff by row id.
-- **Staff ids (spec R3).** Hosted: a sent key that is a stored staff id of this practice keeps that id; any other key gets a new id (`newPlayId()`, the repository's cuid-shaped pre-insert id). The save returns no key → id mapping: a person added in this sitting gets a new id on every save until the editor reloads (accepted; the editor's keys stay consistent within its own payloads). Static: the key is the stored id.
-- Links (spec R4): a `teamOfficialId` must be an `ACTIVE` or `INVITED` official of the practice's team, a `userId` an `ADMIN` member of it, never both (CHECK). Checked inside the save's transaction, after authentication and authorization. The edit loader unlinks a stale link (a `REMOVED` official, an admin no longer `ADMIN`), so an open editor's autosave isn't refused forever. Plan files, exports and the static store hold names only; the static store refuses any link with the hosted message.
+- **Staff ids (spec R3).** Hosted: a sent key that is a stored staff id of this practice keeps that id; any other key gets a new id (`newPlayId()`, the repository's cuid-shaped pre-insert id). `createPracticeSession` and `updatePracticeSession` return the mapping as `data.staff: SavedStaffId[]` (`{ key, id }` per sent person, in list order; `[]` when the save sends no `staff`). `EditSessionWrapper` passes it to the editor, which swaps keys to ids beside `applySavedPlayIds` (`useSessionStaff().applySaved`, built on the pure `applySavedStaffIds`): on the list and on every row, applied to the current state, skipping a key the editor no longer holds. So a person keeps one id from their first completed save on. The section keys each row on the person's first key (`renderKeys`), never on `id`, so the swap doesn't remount a row and a Name field being typed in keeps focus. Static: the key is the stored id, so its save returns no mapping.
+- Links (spec R4): a `teamOfficialId` must be an `ACTIVE` or `INVITED` official of the practice's team, a `userId` an `ADMIN` member of it, never both (CHECK). Checked inside the save's transaction, after authentication and authorization. The edit loader unlinks a stale link (a `REMOVED` official, an admin no longer `ADMIN`), so an open editor's autosave isn't refused forever. Plan files, exports and the static store hold names only; the static store refuses any link that isn't null or absent (an empty-string id included, as hosted's cuid check refuses it) with the hosted message.
 - Picker privacy (spec R4): `getPracticeStaffOptions` selects explicit columns; no query result, prop or payload in this feature carries an email.
 - Hosted/static parity: the static store refuses everything hosted refuses, with the same message constants from `lib/utils/session-staff.ts`, checked on the payload as sent (before any carry or normalization).
 - Copy paths (spec R5): duplicate (hosted and static) copies staff and assignments, links kept within the same team; detach (`detachLibraryPlay`) repoints rows in place and so keeps assignments (tested); materialize maps play ids only (identity above); plan export writes names; plan import (both apps) creates typed staff from names. The duplicate's columns come from `PRACTICE_STAFF_COPY_SELECT` and `ROW_STAFF_COPY_SELECT`, and a guard test built from those selects and the Prisma scalar-field enums fails when a column is added but not copied.
@@ -57,7 +57,7 @@
 
 ## Review Focus
 
-1. **An untouched editor, and a save from an older client,** keep the staff list and every row's assignments: an older hosted editor's save (no `staff`) across the row rewrite, including a drill whose play id is unchanged and a warm-up still first among the blocks; a static update without `staff`; an editor loaded with staff and assignments, an unrelated edit, the payload carries them unchanged. Tests: Task 3 (hosted carry), Task 6 (static), Task 7 (editor).
+1. **An untouched editor, and a save from an older client,** keep the staff list and every row's assignments: an older hosted editor's save (no `staff`) across the row rewrite, including a drill whose play id is unchanged and a warm-up in an unchanged block layout (a changed layout drops block staff, never moves it); a static update without `staff`; an editor loaded with staff and assignments, an unrelated edit, the payload carries them unchanged. Tests: Task 3 (hosted carry), Task 6 (static), Task 7 (editor).
 2. **A link that goes stale while an editor is open** (an official set to `REMOVED`, an admin demoted) never locks autosave into a generic failure: the edit loader returns the person unlinked, and a save that still sends the link is refused with `STAFF_OFFICIAL_MESSAGE` / `STAFF_ADMIN_MESSAGE`. Tests: Task 3 (refusal), Task 4 (loader unlinks).
 3. **Two names that differ only in case, or that JavaScript and PostgreSQL lower differently,** are refused with `STAFF_NAME_TAKEN_MESSAGE` everywhere: the editor's helper text, hosted (the pure check, and a `P2002` from the expression index mapped to the same message), the static store and the plan file. Tests: Tasks 1, 2, 3, 6 and 7.
 4. **Removing someone who runs rows** removes their key from every row before the next save, so no payload names a person the list no longer has; with no assignments it removes at once, without a dialog. Tests: Task 1 (`withoutStaffMember`), Task 7 (editor).
@@ -68,7 +68,7 @@
 | File | Responsibility | Task |
 |---|---|---|
 | `types/practice-planner.ts` | limits; `SessionStaffMember`, `StaffOption`; `staff?` on `PlayInSession`, `BlockInSession`, `PracticeSessionData`, `PracticeSessionViewPlay`, `PracticeSessionViewBlock`, `PracticeSessionView` | 1 |
-| `lib/utils/session-staff.ts` (new) | messages, `cleanStaffName`, `staffNameKey`, `toStaffName`, list/row/session checks, names and labels, editor list edits, `namedStaffPayload`, save inputs, hosted row-identity carry, "Your stations" | 1 |
+| `lib/utils/session-staff.ts` (new) | messages, `cleanStaffName`, `staffNameKey`, `isNamedStaff`, `toStaffName`, list/row/session checks, names and labels, editor list edits, `namedStaffPayload`, save inputs, the saved key → id swap (`applySavedStaffIds`), hosted row-identity carry, "Your stations" | 1 |
 | `lib/utils/session-rows.ts` | rows carry `staff` keys into the save payload | 1 |
 | `lib/utils/validation.ts` | `staff` on the row and session schemas | 2 |
 | `lib/plan-document/document.ts`, `components/features/practice-planner/ExportPlanMenu.tsx`, `export/bench-sheet-model.ts` (types only), `docs/adr/0020-…md` | plan files carry names; export writes them; ADR amendment | 2 |
@@ -106,9 +106,11 @@ The pure layer every later task imports. No component, action or store changes b
   - `cleanStaffName(name: string): string`, `staffNameKey(name: string): string`, `toStaffName(value: string): string`;
   - `staffListError(staff: ReadonlyArray<{ key: string; name: string }>): string | null`, `rowStaffError(keys: readonly string[], known: ReadonlySet<string>): string | null`, `sessionStaffError(staff, rows: ReadonlyArray<{ staff?: readonly string[] }>): string | null`;
   - `staffNames(keys: readonly string[] | undefined, staff: ReadonlyArray<{ id: string; name: string }> | undefined): string[]`, `runByText(names): string | null`, `runBySuffix(names): string`, `runByLabel(names): string | null`, `staffHeaderLabel(staff: ReadonlyArray<{ name: string }> | undefined): string | null`, `removeStaffPrompt(name: string, rows: number): string`;
+  - `isNamedStaff(member: { name: string }): boolean` (the one "has a name" test: `namedStaffPayload`, `RunByField` and `SessionDrillList` all use it);
   - `assignmentCount(rows, key): number`, `withoutStaffMember<T extends { staff?: string[] }>(rows: readonly T[], key: string): T[]`, `namedStaffPayload<T>(staff, rows): { staff: SessionStaffMember[]; rows: T[] }`;
   - `SessionStaffInput { key: string; name: string; teamOfficialId?: string | null; userId?: string | null }`, `toSessionStaffInputs(staff: readonly SessionStaffMember[]): SessionStaffInput[]`;
-  - `StoredRowStaff { playId: string | null; kind: SessionRowKind; sequence: number; staffIds: string[] }`, `carryRowStaff(stored, storedBlockSequences: readonly number[], next: ReadonlyArray<{ kind: SessionRowKind; playId: string | null; sequence: number }>): Array<{ sequence: number; staffIds: string[] }>`;
+  - `SavedStaffId = { key: string; id: string }` (a hosted save's staff key → stored id, Task 3 returns it), `applySavedStaffIds<T extends { staff?: string[] }>(staff: SessionStaffMember[], rows: T[], saved: readonly SavedStaffId[] | undefined): { staff: SessionStaffMember[]; rows: T[] }` (the input arrays themselves when nothing changes; Task 7 applies it);
+  - `StoredRowStaff { playId: string | null; kind: SessionRowKind; sequence: number; staffIds: string[] }`, `StoredBlock = { sequence: number; kind: SessionRowKind }`, `carryRowStaff(stored: readonly StoredRowStaff[], storedBlocks: readonly StoredBlock[], next: ReadonlyArray<{ kind: SessionRowKind; playId: string | null; sequence: number }>): Array<{ sequence: number; staffIds: string[] }>`;
   - `StationStart { title: string; startsAt: Date }`, `yourStations<T>(rows, options: { start: Date; transitionMinutes: number; staffIds: ReadonlySet<string>; title: (row: T) => string }): StationStart[]`, `yourStationsText(stations: readonly StationStart[], timeZone: string): string | null`, `YOUR_STATIONS_LABEL = "Your stations"`.
 - Produces, from `lib/utils/session-rows.ts`: `staff?: string[]` on `DrillRowInput` and `BlockRowInput`, sent only when the editor row holds it.
 
@@ -129,9 +131,11 @@ import {
     STAFF_NAME_LENGTH_MESSAGE,
     STAFF_NAME_REQUIRED_MESSAGE,
     STAFF_NAME_TAKEN_MESSAGE,
+    applySavedStaffIds,
     assignmentCount,
     carryRowStaff,
     cleanStaffName,
+    isNamedStaff,
     namedStaffPayload,
     removeStaffPrompt,
     rowStaffError,
@@ -159,6 +163,10 @@ describe("staff names", () => {
         expect(cleanStaffName("  Coach\u0007 Lee ")).toBe("Coach Lee");
         expect(staffNameKey(" Sam ")).toBe(staffNameKey("SAM"));
         expect(STAFF_NAME_MAX).toBe(60);
+    });
+
+    it("counts a person as named once their cleaned name has a character", () => {
+        expect([isNamedStaff({ name: "Sam" }), isNamedStaff({ name: " \u0007 " }), isNamedStaff({ name: "" })]).toEqual([true, false, false]);
     });
 
     it("offers a long official's name cut to 60, never half an emoji", () => {
@@ -259,33 +267,100 @@ describe("editor list edits (Review Focus 4, 5)", () => {
     });
 });
 
+describe("applySavedStaffIds: a hosted save's keys become stored ids (spec R3, parity with applySavedPlayIds)", () => {
+    const staff: SessionStaffMember[] = [
+        { id: "cstored1", name: "Coach Lee", teamOfficialId: "coff" },
+        { id: "staff-new-1", name: "Sam" },
+    ];
+    const rows = [{ id: "r1", staff: ["staff-new-1", "cstored1"] }, { id: "r2", staff: ["cstored1"] }, { id: "r3" }];
+
+    it("swaps a new person's key for their id on the list and on every row, keeping everything else", () => {
+        const next = applySavedStaffIds(staff, rows, [{ key: "cstored1", id: "cstored1" }, { key: "staff-new-1", id: "cnew1" }]);
+        expect(next.staff).toEqual([staff[0], { id: "cnew1", name: "Sam" }]);
+        expect(next.staff[0]).toBe(staff[0]);
+        expect(next.rows.map((row) => row.staff)).toEqual([["cnew1", "cstored1"], ["cstored1"], undefined]);
+        expect(next.rows[1]).toBe(rows[1]);
+        expect(next.rows[2]).toBe(rows[2]);
+    });
+
+    it("skips a key the editor no longer holds (removed while the save was in flight)", () => {
+        const held = [staff[0]];
+        const heldRows = withoutStaffMember(rows, "staff-new-1");
+        const next = applySavedStaffIds(held, heldRows, [{ key: "staff-new-1", id: "cnew1" }]);
+        expect(next.staff).toBe(held);
+        expect(next.rows).toBe(heldRows);
+    });
+
+    it("returns the same arrays when nothing changes: no mapping, or only stored ids", () => {
+        for (const saved of [undefined, [], [{ key: "cstored1", id: "cstored1" }]]) {
+            const next = applySavedStaffIds(staff, rows, saved);
+            expect(next.staff).toBe(staff);
+            expect(next.rows).toBe(rows);
+        }
+    });
+
+    it("can swap the list and the rows on their own: remove takes a key off both at once, so each sees the same keys", () => {
+        const saved = [{ key: "staff-new-1", id: "cnew1" }];
+        const both = applySavedStaffIds(staff, rows, saved);
+        expect(applySavedStaffIds(staff, [], saved).staff).toEqual(both.staff);
+        expect(applySavedStaffIds([], rows, saved).rows).toEqual(both.rows);
+    });
+});
+
 describe("carryRowStaff: absent staff across a row rewrite (spec R3, Global Constraints)", () => {
     const stored = [
         { playId: null, kind: "warmup" as const, sequence: 0, staffIds: ["s2"] },
         { playId: "cplaya", kind: "drill" as const, sequence: 1, staffIds: ["s1", "s3"] },
         { playId: null, kind: "break" as const, sequence: 3, staffIds: ["s3"] },
     ];
-    const blocks = [0, 3];
+    /** Every stored block row in sequence order, staffed or not: the break at 2 ran nobody. */
+    const blocks = [
+        { sequence: 0, kind: "warmup" as const },
+        { sequence: 2, kind: "break" as const },
+        { sequence: 3, kind: "break" as const },
+    ];
 
-    it("carries a drill by its owned play and a block by its place among the blocks", () => {
+    it("carries a drill by its owned play, and each block to the same place when the block kinds are identical, drills added around them", () => {
         expect(carryRowStaff(stored, blocks, [
             { kind: "warmup", playId: null, sequence: 0 },
             { kind: "drill", playId: "cplaya", sequence: 1 },
             { kind: "drill", playId: "cplayb", sequence: 2 },
             { kind: "break", playId: null, sequence: 3 },
+            { kind: "break", playId: null, sequence: 4 },
         ])).toEqual([
             { sequence: 0, staffIds: ["s2"] },
             { sequence: 1, staffIds: ["s1", "s3"] },
-            { sequence: 3, staffIds: ["s3"] },
+            { sequence: 4, staffIds: ["s3"] },
         ]);
     });
 
-    it("follows a drill that moved, and never hands a block's staff to a different kind of block", () => {
+    it("drops every block's staff when the blocks are reordered, and still follows the drill", () => {
         expect(carryRowStaff(stored, blocks, [
             { kind: "break", playId: null, sequence: 0 },
             { kind: "warmup", playId: null, sequence: 1 },
             { kind: "drill", playId: "cplaya", sequence: 2 },
+            { kind: "break", playId: null, sequence: 3 },
         ])).toEqual([{ sequence: 2, staffIds: ["s1", "s3"] }]);
+    });
+
+    it("drops every block's staff when a block is inserted, even one of a kind already there", () => {
+        expect(carryRowStaff(stored, blocks, [
+            { kind: "warmup", playId: null, sequence: 0 },
+            { kind: "break", playId: null, sequence: 1 },
+            { kind: "drill", playId: "cplaya", sequence: 2 },
+            { kind: "break", playId: null, sequence: 3 },
+            { kind: "break", playId: null, sequence: 4 },
+        ])).toEqual([{ sequence: 2, staffIds: ["s1", "s3"] }]);
+    });
+
+    it("drops rather than moves when a block of the same kind is deleted (Sam never lands on Lee's break)", () => {
+        const breaks = [
+            { playId: null, kind: "break" as const, sequence: 0, staffIds: ["sam"] },
+            { playId: null, kind: "break" as const, sequence: 1, staffIds: ["lee"] },
+        ];
+        const storedBreaks = [{ sequence: 0, kind: "break" as const }, { sequence: 1, kind: "break" as const }];
+        // An older editor deleted the first break; the second is now the only one.
+        expect(carryRowStaff(breaks, storedBreaks, [{ kind: "break", playId: null, sequence: 0 }])).toEqual([]);
     });
 
     it("carries nothing when nothing was assigned", () => {
@@ -294,7 +369,10 @@ describe("carryRowStaff: absent staff across a row rewrite (spec R3, Global Cons
 });
 
 describe("yourStations (spec R10)", () => {
-    type Row = TimelinePlay & { id: string; kind?: "drill" | BlockKind; name?: string; label?: string | null; staff?: string[] };
+    // A union, so isBlockRow narrows: a block row has a kind and a label, a drill row a name.
+    type DrillRow = TimelinePlay & { id: string; kind?: "drill"; name: string; staff?: string[] };
+    type BlockRow = TimelinePlay & { id: string; kind: BlockKind; label: string | null; staff?: string[] };
+    type Row = DrillRow | BlockRow;
     // 6:00 PM EDT on Tuesday, October 6, 2026.
     const START = new Date("2026-10-06T22:00:00.000Z");
     const rows: Row[] = [
@@ -304,7 +382,7 @@ describe("yourStations (spec R10)", () => {
         { id: "x", kind: "break", label: "Water", sequence: 3, duration: 2, runsWithPrevious: false, staff: [] },
         { id: "c", name: "Scrimmage", sequence: 4, duration: 5, runsWithPrevious: false, staff: ["s1"] },
     ];
-    const title = (row: Row) => (isBlockRow(row) ? blockTitle(row.kind, row.label) : row.name ?? "");
+    const title = (row: Row) => (isBlockRow(row) ? blockTitle(row.kind, row.label) : row.name);
 
     it("lists the rows a person runs in schedule order, each station at its block's start, with the gap", () => {
         // Blocks start at 0, 10 (8 + gap 2), 22 and 26 minutes.
@@ -465,6 +543,11 @@ export function staffNameKey(name: string): string {
     return cleanStaffName(name).toLowerCase();
 }
 
+/** Has a name once cleaned: only named people are saved, offered on a row, or make Run by appear. */
+export function isNamedStaff(member: { name: string }): boolean {
+    return cleanStaffName(member.name).length > 0;
+}
+
 /**
  * A name the hosted picker offers: cleaned and cut to 60 characters (a team
  * official's name may be 100). Counts UTF-16 units, as every name check does,
@@ -582,7 +665,7 @@ export function namedStaffPayload<T extends Staffed>(
     staff: readonly SessionStaffMember[],
     rows: readonly T[],
 ): { staff: SessionStaffMember[]; rows: T[] } {
-    const named = staff.filter((member) => cleanStaffName(member.name).length > 0);
+    const named = staff.filter(isNamedStaff);
     if (named.length === staff.length) return { staff: [...staff], rows: [...rows] };
     const kept = new Set(named.map((member) => member.id));
     return {
@@ -612,6 +695,43 @@ export function toSessionStaffInputs(staff: readonly SessionStaffMember[]): Sess
     }));
 }
 
+/** A hosted save's staff key and the id it is stored under (spec R3): createPracticeSession and updatePracticeSession return one per sent person. */
+export type SavedStaffId = { key: string; id: string };
+
+/**
+ * Applies a save's staff key → id mapping (parity with applySavedPlayIds), so
+ * a person added in this sitting keeps one id from their first save on. A
+ * member whose id is a sent key takes the stored id, and every row's key
+ * follows. A key the editor no longer holds (removed while the save was in
+ * flight) is skipped: remove takes a key off the list and every row at once,
+ * so the list and the rows can each be swapped on their own and still agree.
+ * Returns the input arrays themselves, and each untouched member and row, when
+ * nothing changes.
+ */
+export function applySavedStaffIds<T extends Staffed>(
+    staff: SessionStaffMember[],
+    rows: T[],
+    saved: readonly SavedStaffId[] | undefined,
+): { staff: SessionStaffMember[]; rows: T[] } {
+    const byKey = new Map((saved ?? []).filter((entry) => entry.key !== entry.id).map((entry) => [entry.key, entry.id]));
+    if (byKey.size === 0) return { staff, rows };
+    let staffChanged = false;
+    const nextStaff = staff.map((member) => {
+        const id = byKey.get(member.id);
+        if (id === undefined) return member;
+        staffChanged = true;
+        return { ...member, id };
+    });
+    let rowsChanged = false;
+    const nextRows = rows.map((row) => {
+        const keys = row.staff;
+        if (!keys?.some((key) => byKey.has(key))) return row;
+        rowsChanged = true;
+        return { ...row, staff: keys.map((key) => byKey.get(key) ?? key) };
+    });
+    return { staff: staffChanged ? nextStaff : staff, rows: rowsChanged ? nextRows : rows };
+}
+
 /** A stored row's assignment, read before updatePracticeSession deletes the rows. */
 export interface StoredRowStaff {
     playId: string | null;
@@ -621,43 +741,46 @@ export interface StoredRowStaff {
     staffIds: string[];
 }
 
+/** A stored block row (any kind but drill), staffed or not: carryRowStaff compares the layouts. */
+export type StoredBlock = { sequence: number; kind: SessionRowKind };
+
 /**
  * Absent staff = unchanged (spec R3) across updatePracticeSession's
  * delete-and-recreate of the rows (row ids don't survive it). The identity:
  * - a drill row: its owned play id (materializeSessionDrills keeps an owned
  *   copy's id, and a session's stored drill rows each have their own copy,
  *   the invariant withStoredTiming rests on);
- * - a block row: its place among the stored block rows, carried only when the
- *   new block row in that place is the same kind (a reorder by an older editor
- *   drops a block's staff rather than giving it to a different kind of block).
+ * - a block row: its place among the block rows, and only when the save keeps
+ *   the stored block layout exactly: the new block rows' kinds, in sequence
+ *   order, equal the stored block rows' kinds element by element, with the same
+ *   count (drills may come and go around them). Any other layout (a block
+ *   reordered, inserted or deleted by an older editor) drops every block's
+ *   staff: a place can't tell which of two breaks survived, and staff must never
+ *   land on a block they didn't run. Drills carry either way.
  * Returns each new row's staff ids by sequence; rows nobody runs are left out.
  */
 export function carryRowStaff(
     stored: readonly StoredRowStaff[],
-    storedBlockSequences: readonly number[],
+    storedBlocks: readonly StoredBlock[],
     next: ReadonlyArray<{ kind: SessionRowKind; playId: string | null; sequence: number }>,
 ): Array<{ sequence: number; staffIds: string[] }> {
+    const ordered = [...next].sort((a, b) => a.sequence - b.sequence);
+    const oldBlocks = [...storedBlocks].sort((a, b) => a.sequence - b.sequence);
+    const newBlocks = ordered.filter((row) => isBlockKind(row.kind));
+    const sameBlocks = newBlocks.length === oldBlocks.length && newBlocks.every((row, place) => row.kind === oldBlocks[place].kind);
     const byPlay = new Map<string, string[]>();
-    const byBlock = new Map<number, StoredRowStaff>();
+    const byBlockSequence = new Map<number, string[]>();
     for (const row of stored) {
-        if (isBlockKind(row.kind)) {
-            const place = storedBlockSequences.indexOf(row.sequence);
-            if (place >= 0) byBlock.set(place, row);
-        } else if (row.playId && !byPlay.has(row.playId)) {
-            byPlay.set(row.playId, row.staffIds);
-        }
+        if (isBlockKind(row.kind)) byBlockSequence.set(row.sequence, row.staffIds);
+        else if (row.playId && !byPlay.has(row.playId)) byPlay.set(row.playId, row.staffIds);
     }
     let place = 0;
-    return [...next]
-        .sort((a, b) => a.sequence - b.sequence)
-        .flatMap((row) => {
-            if (isBlockKind(row.kind)) {
-                const carried = byBlock.get(place++);
-                return carried && carried.kind === row.kind && carried.staffIds.length > 0 ? [{ sequence: row.sequence, staffIds: carried.staffIds }] : [];
-            }
-            const carried = row.playId ? byPlay.get(row.playId) : undefined;
-            return carried && carried.length > 0 ? [{ sequence: row.sequence, staffIds: carried }] : [];
-        });
+    return ordered.flatMap((row) => {
+        const carried = isBlockKind(row.kind)
+            ? sameBlocks ? byBlockSequence.get(oldBlocks[place++].sequence) : undefined
+            : row.playId ? byPlay.get(row.playId) : undefined;
+        return carried && carried.length > 0 ? [{ sequence: row.sequence, staffIds: carried }] : [];
+    });
 }
 
 /** The practice emails' label for the line below. */
@@ -715,7 +838,7 @@ Run: `bun run test __tests__/lib/utils/session-staff.test.ts __tests__/lib/utils
 Expected: PASS.
 
 Run: `bun run type-check`
-Expected: exit 0 (every new field is optional).
+Expected: exit 0. Every new field is optional, and the test's `Row` is a union (`DrillRow | BlockRow`), so `isBlockRow` narrows it to the block arm; with a single intersection type it would narrow to `never` and fail with TS2339 on `row.kind` / `row.label`.
 
 - [ ] **Step 8: Commit**
 
@@ -1054,10 +1177,16 @@ At the top of `planSessionSchema`'s `.superRefine((session, ctx) => {`, before t
             listed.add(key);
         }
         session.drills.forEach((entry, index) => {
+            // A row over the limit already has its issue from the entry's .max(MAX_ROW_STAFF):
+            // that issue is continuable, so this refine still runs, and checking it again
+            // would report ROW_STAFF_LIMIT_MESSAGE twice on the same path.
+            if (entry.staff.length > MAX_ROW_STAFF) return;
             const error = rowStaffError(entry.staff.map(staffNameKey), listed);
             if (error) ctx.addIssue({ code: "custom", path: ["drills", index, "staff"], message: error });
         });
 ```
+
+`rowStaffError`'s own limit check stays (the hosted action and the static store rely on it); only this refine skips a row the schema already refused, so "rejects a row run by more than 4 people" sees exactly one issue.
 
 In `PlanDrillInput` (after `rotateEveryMinutes?`) and `PlanBlockInput` (after `label`), add:
 
@@ -1214,15 +1343,16 @@ Spec R2 and R3. After this task the hosted database has the two tables, and `cre
 - Modify: `prisma/schema.prisma` (`model User`, `model TeamOfficial`, `model PracticeSession`, `model PracticeSessionPlay`; two new models after `PracticeSessionPlay`)
 - Create: `prisma/migrations/20261005120000_practice_session_staff/migration.sql`
 - Create: `lib/services/practice-session-staff.ts`
-- Modify: `lib/actions/practice-sessions.ts` (imports; new `staffSaveError`, `writeSentStaff`; `createPracticeSession`, `updatePracticeSession` and both catch blocks)
+- Modify: `lib/actions/practice-sessions.ts` (imports; new `staffSaveError`, `writeSentStaff`; `createPracticeSession`, `updatePracticeSession` (their return types and returned `staff`) and both catch blocks)
 - Test (create): `__tests__/prisma/practice-staff-migration.test.ts`, `__tests__/lib/actions/practice-sessions-staff.test.ts`
 - Test (modify: the update path now reads `practiceSessionPlayStaff`, so each harness gains the model, resolving `[]`): `__tests__/lib/actions/practice-sessions-ownership.test.ts`, `__tests__/lib/actions/practice-sessions-stations.test.ts`, `__tests__/lib/actions/practice-sessions.test.ts`, `__tests__/integration/reservation-writer-matrix.test.ts`
 
 **Interfaces:**
-- Consumes (Task 1): `sessionStaffError`, `carryRowStaff`, `StoredRowStaff`, `STAFF_NAME_TAKEN_MESSAGE`, `STAFF_OFFICIAL_MESSAGE`, `STAFF_ADMIN_MESSAGE`. (Task 2): `SessionStaffSaveInput`, the `staff` fields on the schemas.
+- Consumes (Task 1): `sessionStaffError`, `carryRowStaff`, `StoredRowStaff`, `StoredBlock`, `SavedStaffId`, `STAFF_NAME_TAKEN_MESSAGE`, `STAFF_OFFICIAL_MESSAGE`, `STAFF_ADMIN_MESSAGE`. (Task 2): `SessionStaffSaveInput`, the `staff` fields on the schemas.
 - Produces:
   - Prisma `PracticeSessionStaff { id; sessionId; name; position; teamOfficialId: string | null; userId: string | null }` (table `practice_session_staff`), `PracticeSessionPlayStaff { playRowId; staffId; position }` (table `practice_session_play_staff`); relations `PracticeSession.staff`, `PracticeSessionPlay.staff`, `TeamOfficial.practiceStaff`, `User.practiceStaff`;
-  - from `lib/services/practice-session-staff.ts`: `StaffNameConflictError`, `staffLinkError(tx, teamId, staff): Promise<string | null>`, `replaceSessionStaff(tx, sessionId, staff): Promise<Map<string, string>>` (key → id), `writeRowStaff(tx, sessionId, assignments: ReadonlyArray<{ sequence: number; staffIds: readonly string[] }>): Promise<void>`, `readCarriedRowStaff(tx, sessionId): Promise<{ stored: StoredRowStaff[]; storedBlockSequences: number[] }>`.
+  - from `lib/services/practice-session-staff.ts`: `StaffNameConflictError`, `staffLinkError(tx, teamId, staff): Promise<string | null>`, `replaceSessionStaff(tx, sessionId, staff): Promise<Map<string, string>>` (key → id), `writeRowStaff(tx, sessionId, assignments: ReadonlyArray<{ sequence: number; staffIds: readonly string[] }>): Promise<void>`, `readCarriedRowStaff(tx, sessionId): Promise<{ stored: StoredRowStaff[]; storedBlocks: StoredBlock[] }>`;
+  - `createPracticeSession` and `updatePracticeSession` succeed with `data: { id; title; date; conflictsOverridden; plays: SavedDrill[]; staff: SavedStaffId[] }`: one `{ key, id }` per sent person in list order (a stored id maps to itself), `[]` when the save sends no `staff`. Task 7's editor swaps its keys to these ids (`applySavedStaffIds`), so a person keeps one id from their first save on.
 
 - [ ] **Step 1: Write the failing migration test**
 
@@ -1539,7 +1669,8 @@ beforeEach(() => {
     models.practiceSessionPlay.createMany.mockResolvedValue({ count: 2 });
     models.practiceSessionPlay.findMany.mockImplementation(async (args: { where: { sequence?: { in: number[] }; kind?: unknown } }) => {
         if (args.where.sequence) return WRITTEN.filter((row) => args.where.sequence?.in.includes(row.sequence));
-        if (args.where.kind) return [{ sequence: 0 }];
+        // The stored block rows (readCarriedRowStaff): one warm-up, as rows() sends.
+        if (args.where.kind) return [{ sequence: 0, kind: "warmup" }];
         return [{ playId: null, kind: "warmup", stays: false, rotateEveryMinutes: null }, { playId: OWNED, kind: "drill", stays: false, rotateEveryMinutes: null }];
     });
     models.practiceSessionStaff.findMany.mockResolvedValue([]);
@@ -1567,6 +1698,8 @@ describe("createPracticeSession with staff (spec R3)", () => {
             { id: id(0), sessionId: SESSION, name: "Coach Lee", position: 0, teamOfficialId: null, userId: null },
             { id: id(1), sessionId: SESSION, name: "Sam", position: 1, teamOfficialId: null, userId: null },
         ]);
+        // Returned so the editor swaps its keys to the stored ids (Task 7).
+        expect(result.success && result.data.staff).toEqual([{ key: "k-lee", id: id(0) }, { key: "k-sam", id: id(1) }]);
         expect(assignmentsWritten()).toEqual([
             { playRowId: "crow0", staffId: id(1), position: 0 },
             { playRowId: "crow1", staffId: id(0), position: 0 },
@@ -1575,7 +1708,8 @@ describe("createPracticeSession with staff (spec R3)", () => {
     });
 
     it("stores no staff when the create sends none", async () => {
-        await createPracticeSession(save());
+        const result = await createPracticeSession(save());
+        expect(result.success && result.data.staff).toEqual([]);
         expect(models.practiceSessionStaff.createMany).not.toHaveBeenCalled();
         expect(models.practiceSessionPlayStaff.createMany).not.toHaveBeenCalled();
     });
@@ -1641,10 +1775,11 @@ describe("updatePracticeSession: checks after authentication and authorization (
 describe("updatePracticeSession: writing a sent list (spec R3)", () => {
     it("keeps a stored person's id, gives a new person a new id, and replaces the list whole", async () => {
         models.practiceSessionStaff.findMany.mockResolvedValue([{ id: STORED }]);
-        await updatePracticeSession({ id: SESSION, ...save({
+        const result = await updatePracticeSession({ id: SESSION, ...save({
             staff: [{ key: STORED, name: "Coach Lee" }, { key: "k-new", name: "Sam" }],
             plays: rows([[STORED], ["k-new"]]),
         }) });
+        expect(result.success && result.data.staff).toEqual([{ key: STORED, id: STORED }, { key: "k-new", id: id(0) }]);
         expect(models.practiceSessionStaff.findMany).toHaveBeenCalledWith({ where: { sessionId: SESSION }, select: { id: true } });
         expect(models.practiceSessionStaff.deleteMany).toHaveBeenCalledWith({ where: { sessionId: SESSION } });
         expect(staffWritten().map((row: { id: string }) => row.id)).toEqual([STORED, id(0)]);
@@ -1656,7 +1791,8 @@ describe("updatePracticeSession: writing a sent list (spec R3)", () => {
     });
 
     it("clears the list and every assignment with an explicit []", async () => {
-        await updatePracticeSession({ id: SESSION, ...save({ staff: [] }) });
+        const result = await updatePracticeSession({ id: SESSION, ...save({ staff: [] }) });
+        expect(result.success && result.data.staff).toEqual([]);
         expect(models.practiceSessionStaff.deleteMany).toHaveBeenCalledWith({ where: { sessionId: SESSION } });
         expect(models.practiceSessionStaff.createMany).not.toHaveBeenCalled();
         expect(models.practiceSessionPlayStaff.createMany).not.toHaveBeenCalled();
@@ -1682,6 +1818,8 @@ describe("updatePracticeSession without staff: unchanged across the row rewrite 
         // An editor built before practice staff: no `staff` on the session; stray row keys are ignored.
         const result = await updatePracticeSession({ id: SESSION, ...save({ plays: rows([["stray"]]) }) });
         expect(result.success).toBe(true);
+        // Nothing was sent, so there is no key to map.
+        expect(result.success && result.data.staff).toEqual([]);
         expect(models.practiceSessionStaff.deleteMany).not.toHaveBeenCalled();
         expect(models.practiceSessionStaff.createMany).not.toHaveBeenCalled();
         expect(models.practiceSessionPlayStaff.findMany).toHaveBeenCalledWith({
@@ -1705,11 +1843,30 @@ describe("updatePracticeSession without staff: unchanged across the row rewrite 
             .toBeGreaterThan(models.practiceSession.update.mock.invocationCallOrder[0]);
     });
 
-    it("drops a block's staff rather than giving it to a different kind of block", async () => {
+    it("drops the blocks' staff when the block kinds changed, and still carries the drill", async () => {
         models.practiceSessionPlayStaff.findMany.mockResolvedValue(stored);
         const plays = rows();
         plays[0] = { ...plays[0], kind: "break" };
         await updatePracticeSession({ id: SESSION, ...save({ plays }) });
+        expect(assignmentsWritten()).toEqual([
+            { playRowId: "crow1", staffId: "cstafflee", position: 0 },
+            { playRowId: "crow1", staffId: "cstaffsam", position: 1 },
+        ]);
+    });
+
+    it("drops the blocks' staff when an older editor deleted a block of the same kind, never moving it to the block that stayed", async () => {
+        models.practiceSessionPlayStaff.findMany.mockResolvedValue(stored);
+        const readRows = models.practiceSessionPlay.findMany.getMockImplementation()!;
+        // Stored: a warm-up at 0 (Sam runs it) and a second warm-up at 2. The save keeps one warm-up:
+        // its place can't say which of the two it is.
+        models.practiceSessionPlay.findMany.mockImplementation(async (args: { where: { kind?: unknown } }) =>
+            args.where.kind ? [{ sequence: 0, kind: "warmup" }, { sequence: 2, kind: "warmup" }] : readRows(args));
+        await updatePracticeSession({ id: SESSION, ...save() });
+        expect(models.practiceSessionPlay.findMany).toHaveBeenCalledWith({
+            where: { sessionId: SESSION, kind: { not: "drill" } },
+            orderBy: { sequence: "asc" },
+            select: { sequence: true, kind: true },
+        });
         expect(assignmentsWritten()).toEqual([
             { playRowId: "crow1", staffId: "cstafflee", position: 0 },
             { playRowId: "crow1", staffId: "cstaffsam", position: 1 },
@@ -1745,7 +1902,7 @@ Expected: FAIL (no staff is written, nothing is refused, nothing is carried).
 import type { Prisma } from "@prisma/client";
 import { newPlayId } from "@/lib/services/play-ids";
 import { isBlockKind, toRowKind } from "@/lib/utils/session-rows";
-import { STAFF_ADMIN_MESSAGE, STAFF_NAME_TAKEN_MESSAGE, STAFF_OFFICIAL_MESSAGE, type StoredRowStaff } from "@/lib/utils/session-staff";
+import { STAFF_ADMIN_MESSAGE, STAFF_NAME_TAKEN_MESSAGE, STAFF_OFFICIAL_MESSAGE, type StoredBlock, type StoredRowStaff } from "@/lib/utils/session-staff";
 
 /** The database refused a name (the unique index on lower("name")): shown as the name message. */
 export class StaffNameConflictError extends Error {
@@ -1849,19 +2006,20 @@ export async function writeRowStaff(
 
 /**
  * The stored assignments, read BEFORE the rows are deleted (spec R3: the delete
- * cascades them), grouped by row in each row's order, with the stored block
- * rows' sequences when a block had anyone (carryRowStaff's block identity).
+ * cascades them), grouped by row in each row's order, with every stored block
+ * row's sequence and kind when a block had anyone (carryRowStaff carries block
+ * staff only when the save keeps that block layout exactly).
  */
 export async function readCarriedRowStaff(
     tx: Prisma.TransactionClient,
     sessionId: string,
-): Promise<{ stored: StoredRowStaff[]; storedBlockSequences: number[] }> {
+): Promise<{ stored: StoredRowStaff[]; storedBlocks: StoredBlock[] }> {
     const assigned = await tx.practiceSessionPlayStaff.findMany({
         where: { playRow: { sessionId } },
         orderBy: { position: "asc" },
         select: { staffId: true, playRowId: true, playRow: { select: { playId: true, kind: true, sequence: true } } },
     });
-    if (assigned.length === 0) return { stored: [], storedBlockSequences: [] };
+    if (assigned.length === 0) return { stored: [], storedBlocks: [] };
     const byRow = new Map<string, StoredRowStaff>();
     for (const entry of assigned) {
         const row = byRow.get(entry.playRowId) ?? {
@@ -1874,16 +2032,16 @@ export async function readCarriedRowStaff(
         byRow.set(entry.playRowId, row);
     }
     const stored = [...byRow.values()];
-    const storedBlockSequences = stored.some((row) => isBlockKind(row.kind))
+    const storedBlocks = stored.some((row) => isBlockKind(row.kind))
         ? (
               await tx.practiceSessionPlay.findMany({
                   where: { sessionId, kind: { not: "drill" } },
                   orderBy: { sequence: "asc" },
-                  select: { sequence: true },
+                  select: { sequence: true, kind: true },
               })
-          ).map((row) => row.sequence)
+          ).map((row) => ({ sequence: row.sequence, kind: toRowKind(row.kind) }))
         : [];
-    return { stored, storedBlockSequences };
+    return { stored, storedBlocks };
 }
 ```
 
@@ -1892,7 +2050,7 @@ export async function readCarriedRowStaff(
 Add the imports:
 
 ```ts
-import { carryRowStaff, sessionStaffError } from "@/lib/utils/session-staff";
+import { carryRowStaff, sessionStaffError, type SavedStaffId } from "@/lib/utils/session-staff";
 import {
     StaffNameConflictError,
     readCarriedRowStaff,
@@ -1921,8 +2079,12 @@ async function staffSaveError(
     return sessionStaffError(staff, rows) ?? (await staffLinkError(tx, teamId, staff));
 }
 
-/** Writes a sent list and each row's staff (spec R3): keys become ids; a row without `staff` has nobody. */
-async function writeSentStaff(tx: Prisma.TransactionClient, sessionId: string, staff: SessionStaffSaveInput[], rows: ResolvedRow[]): Promise<void> {
+/**
+ * Writes a sent list and each row's staff (spec R3): keys become ids; a row
+ * without `staff` has nobody. Returns every sent key with its stored id, in list
+ * order, so the editor can swap its keys (parity with toSavedDrills).
+ */
+async function writeSentStaff(tx: Prisma.TransactionClient, sessionId: string, staff: SessionStaffSaveInput[], rows: ResolvedRow[]): Promise<SavedStaffId[]> {
     const ids = await replaceSessionStaff(tx, sessionId, staff);
     await writeRowStaff(
         tx,
@@ -1936,6 +2098,7 @@ async function writeSentStaff(tx: Prisma.TransactionClient, sessionId: string, s
             }),
         })),
     );
+    return [...ids].map(([key, id]) => ({ key, id }));
 }
 ```
 
@@ -1952,8 +2115,17 @@ In `createPracticeSession`, at the top of the `runVenueReservationTransaction(as
 and after the `if (rows.length > 0) { await tx.practiceSessionPlay.createMany(…) }` block, add:
 
 ```ts
-            if (validated.staff) await writeSentStaff(tx, createdSession.id, validated.staff, rows);
+            // Every sent key with its new id, for the editor's swap; none when no staff was sent.
+            const savedStaff = validated.staff ? await writeSentStaff(tx, createdSession.id, validated.staff, rows) : [];
 ```
+
+Replace the callback's `return { ...createdSession, plays: toSavedDrills(mapping) };` with:
+
+```ts
+            return { ...createdSession, plays: toSavedDrills(mapping), staff: savedStaff };
+```
+
+and in both `createPracticeSession`'s and `updatePracticeSession`'s return types, change `plays: SavedDrill[] }>>` to `plays: SavedDrill[]; staff: SavedStaffId[] }>>`.
 
 In its `catch`, replace `if (error instanceof SessionDrillError) {` with:
 
@@ -1977,16 +2149,18 @@ In `updatePracticeSession`, right after `const rows = withRotationMinutes(resolv
 After `await deleteOrphanedSessionDrills(tx, { … });`, add:
 
 ```ts
+            let savedStaff: SavedStaffId[] = [];
             if (validated.staff) {
-                await writeSentStaff(tx, validated.id, validated.staff, rows);
+                savedStaff = await writeSentStaff(tx, validated.id, validated.staff, rows);
             } else if (carried) {
-                // Row identity (Global Constraints): a drill by its owned play id, a block by its place among the blocks.
+                // Row identity (Global Constraints): a drill by its owned play id; a block by its place,
+                // only when the block kinds are unchanged in order and count.
                 await writeRowStaff(
                     tx,
                     validated.id,
                     carryRowStaff(
                         carried.stored,
-                        carried.storedBlockSequences,
+                        carried.storedBlocks,
                         rows.map((row) => ({
                             kind: row.kind,
                             playId: row.kind === "drill" ? ownedByKey.get(row.clientKey) ?? null : null,
@@ -1995,6 +2169,13 @@ After `await deleteOrphanedSessionDrills(tx, { … });`, add:
                     ),
                 );
             }
+```
+
+Then replace `const saved = { ...updated, plays: toSavedDrills(mapping) };` (just below) with:
+
+```ts
+            // Both `return saved` paths (with and without a booking) hand the editor its staff ids.
+            const saved = { ...updated, plays: toSavedDrills(mapping), staff: savedStaff };
 ```
 
 In its `catch`, replace `if (error instanceof SessionDrillError || error instanceof SessionRowsRejected) {` with:
@@ -2033,7 +2214,7 @@ Spec R4, R5 and R9's data. After this task the session page and the editor load 
 - Modify: `lib/services/practice-session-staff.ts` (new `PRACTICE_STAFF_COPY_SELECT`, `STAFF_FIELDS_NOT_COPIED`, `ROW_STAFF_COPY_SELECT`, `ROW_STAFF_FIELDS_NOT_COPIED`, `copySessionStaff`)
 - Modify: `lib/actions/practice-session-drills.ts` (`duplicatePracticeSession`)
 - Modify: `lib/actions/practice-plan-import.ts` (`importPracticePlan`)
-- Test (append; and add `staff: []` to `row()`, to `blockRow`, and to every `practiceSession.findUnique` session fixture: the six in `describe("getPracticeSessionForEdit")`, the two in `describe("getPracticeSessionDetail")`, `detailRow()`, and `base` in both the goaltender and the practice-timing describes; add `staff: []` to the two exact `toEqual` block rows near lines 253 and 263; add `teamOfficial: { findMany: vi.fn() }` and `findMany: vi.fn()` on `teamMember` to `mockPrisma`): `__tests__/lib/actions/practice-session-queries.test.ts`
+- Test (append; and add `staff: []` to `row()`, to `blockRow`, and to every `practiceSession.findUnique` session fixture in the file (each one, since the readers now call `session.staff.map`: today the four in `describe("getPracticeSessionForEdit")`, the two in `describe("getPracticeSessionDetail")`, `detailRow()`, and `base` in both the goaltender and the practice-timing describes; find them with `grep -n "practiceSession.findUnique.mockResolvedValue"` rather than trusting these counts); add `staff: []` to the two exact `toEqual` block rows near lines 253 and 263; add `teamOfficial: { findMany: vi.fn() }` and `findMany: vi.fn()` on `teamMember` to `mockPrisma`): `__tests__/lib/actions/practice-session-queries.test.ts`
 - Test (append; and add `staff: []` to `sourceRow()`'s return and to every source session the duplicate describe resolves: its `beforeEach` and the goalie-count, station-flag, other-team and block-row tests; add `practiceSessionPlay.findMany`, `practiceSessionStaff.createMany` and `practiceSessionPlayStaff.createMany` to `tx`): `__tests__/lib/actions/practice-session-drills.test.ts`
 - Test (append; add `findMany: vi.fn()` to `models.practiceSessionPlay` and `practiceSessionStaff: { createMany: vi.fn() }`, `practiceSessionPlayStaff: { createMany: vi.fn() }` to `models`): `__tests__/lib/actions/practice-plan-import.test.ts`
 - Test (append): `__tests__/lib/services/practice-session-drills.test.ts` (detach keeps every row)
@@ -2863,6 +3044,8 @@ import {
     ROW_STAFF_LIMIT_MESSAGE,
     ROW_STAFF_UNKNOWN_MESSAGE,
     STAFF_ADMIN_MESSAGE,
+    STAFF_KEY_DUPLICATE_MESSAGE,
+    STAFF_KEY_MESSAGE,
     STAFF_LIMIT_MESSAGE,
     STAFF_NAME_LENGTH_MESSAGE,
     STAFF_NAME_REQUIRED_MESSAGE,
@@ -2914,17 +3097,26 @@ Append inside `describe.each(REPOS)(…)`:
             expect(view.plays.map((row) => [row.id, row.staff])).toEqual([["kb", []], ["kw", ["st-sam"]], ["ka", ["st-lee", "st-sam"]]]);
         });
 
-        it("clears the list and every row's staff with [], and gives a row without staff nobody when a list is sent", async () => {
+        it("gives a row without staff nobody when a list is sent", async () => {
             const { store, id } = await staffed();
             const plays = toSessionRowInputs(data(await store.getSessionForEdit(id)).initialData.plays);
             const unstaffed = plays.map((row) => ({ ...row, staff: undefined }));
             data(await store.updateSession(id, save(unstaffed, { staff: [LEE] })));
-            let view = data(await store.getSessionView(id));
+            const view = data(await store.getSessionView(id));
             expect(view.staff).toEqual([{ id: "st-lee", name: "Coach Lee" }]);
             expect(view.plays.every((row) => row.staff?.length === 0)).toBe(true);
-            data(await store.updateSession(id, save(unstaffed, { staff: [] })));
-            view = data(await store.getSessionView(id));
+        });
+
+        it("clears the list and every row's staff with [], from rows that had staff", async () => {
+            const { store, id } = await staffed();
+            const before = data(await store.getSessionView(id));
+            // Not vacuous: two rows are staffed before the clear.
+            expect(before.plays.filter((row) => (row.staff ?? []).length > 0)).toHaveLength(2);
+            const plays = toSessionRowInputs(data(await store.getSessionForEdit(id)).initialData.plays);
+            data(await store.updateSession(id, save(plays.map((row) => ({ ...row, staff: undefined })), { staff: [] })));
+            const view = data(await store.getSessionView(id));
             expect(view.staff).toEqual([]);
+            expect(view.plays.map((row) => row.staff)).toEqual([[], [], []]);
         });
 
         it("refuses what hosted refuses, in hosted's words, before writing anything", async () => {
@@ -2944,8 +3136,14 @@ Append inside `describe.each(REPOS)(…)`:
             expect(await refusal([{ ...LEE, teamOfficialId: "cofficialxxxxxxxxxxxxxxxx" }])).toBe(STAFF_OFFICIAL_MESSAGE);
             expect(await refusal([{ ...LEE, userId: "cuserxxxxxxxxxxxxxxxxxxxx" }])).toBe(STAFF_ADMIN_MESSAGE);
             expect(await refusal([{ ...LEE, teamOfficialId: "cofficialxxxxxxxxxxxxxxxx", userId: "cuserxxxxxxxxxxxxxxxxxxxx" }])).toBe(STAFF_ONE_LINK_MESSAGE);
+            // An empty link is still a link (hosted's cuid check refuses ""), never stored as a typed name.
+            expect(await refusal([{ ...LEE, teamOfficialId: "" }])).toBe(STAFF_OFFICIAL_MESSAGE);
+            expect(await refusal([{ ...LEE, userId: "" }])).toBe(STAFF_ADMIN_MESSAGE);
+            expect(await refusal([{ key: "", name: "Sam" }])).toBe(STAFF_KEY_MESSAGE);
+            expect(await refusal([LEE, { key: "st-lee", name: "Sam" }])).toBe(STAFF_KEY_DUPLICATE_MESSAGE);
             // A row's keys are shaped even when the save sends no list, as hosted's row schema does.
             expect(await refusal(undefined, [["a", "b", "c", "d", "e"]])).toBe(ROW_STAFF_LIMIT_MESSAGE);
+            expect(await refusal(undefined, [[""]])).toBe(STAFF_KEY_MESSAGE);
             expect(data(await store.listSessions())).toEqual([]);
         });
 
@@ -3067,6 +3265,7 @@ import {
     sessionStaffError,
     staffNameKey,
     staffNames,
+    type SessionStaffInput,
 } from "@/lib/utils/session-staff";
 ```
 
@@ -3088,11 +3287,14 @@ function checkStaff(input: LocalSessionSave): StoredStaffMember[] | undefined {
         if (row.staff?.some((key) => key.length < 1 || key.length > STAFF_KEY_MAX)) throw new StoreRefusal(STAFF_KEY_MESSAGE);
     }
     if (input.staff === undefined) return undefined;
-    if (input.staff.some((member) => member.teamOfficialId && member.userId)) throw new StoreRefusal(STAFF_ONE_LINK_MESSAGE);
+    // Any link that isn't null or absent counts, "" included: hosted's cuid check refuses an empty id.
+    const official = (member: SessionStaffInput) => member.teamOfficialId != null;
+    const admin = (member: SessionStaffInput) => member.userId != null;
+    if (input.staff.some((member) => official(member) && admin(member))) throw new StoreRefusal(STAFF_ONE_LINK_MESSAGE);
     const error = sessionStaffError(input.staff, input.plays);
     if (error) throw new StoreRefusal(error);
-    if (input.staff.some((member) => member.teamOfficialId)) throw new StoreRefusal(STAFF_OFFICIAL_MESSAGE);
-    if (input.staff.some((member) => member.userId)) throw new StoreRefusal(STAFF_ADMIN_MESSAGE);
+    if (input.staff.some(official)) throw new StoreRefusal(STAFF_OFFICIAL_MESSAGE);
+    if (input.staff.some(admin)) throw new StoreRefusal(STAFF_ADMIN_MESSAGE);
     return input.staff.map((member) => ({ id: member.key, name: cleanStaffName(member.name) }));
 }
 
@@ -3209,7 +3411,7 @@ Expected: exit 0.
 
 ### Task 7: Editor, part 1: the Staff section and the save payloads
 
-Spec R3 (what the editor sends), R4 (the hosted picker) and R8 (the Staff section). After this task a coach lists staff in both planners: officials and admins from a picker on hosted, typed names in both. The editor sends `staff` whenever it holds a list, so a current editor never relies on the carry path.
+Spec R3 (what the editor sends), R4 (the hosted picker) and R8 (the Staff section). After this task a coach lists staff in both planners: officials and admins from a picker on hosted, typed names in both. The editor sends `staff` whenever it holds a list, so a current editor never relies on the carry path, and after a hosted save it swaps a new person's key to the stored id the save returns (Task 3), so ids are stable from the first save on.
 
 **Files:**
 - Create: `components/features/practice-planner/PlayLibraryDialog.tsx` (extracted first, for the line budget)
@@ -3223,10 +3425,10 @@ Spec R3 (what the editor sends), R4 (the hosted picker) and R8 (the Staff sectio
 - Test (append): `__tests__/apps/planner/editor-screens.test.tsx`
 
 **Interfaces:**
-- Consumes (Task 1): `SessionStaffMember`, `StaffOption`, `MAX_SESSION_STAFF`, `STAFF_NAME_MAX`, `assignmentCount`, `withoutStaffMember`, `namedStaffPayload`, `toSessionStaffInputs`, `toStaffName`, `cleanStaffName`, `staffNameKey`, `removeStaffPrompt`, `STAFF_NAME_TAKEN_MESSAGE`. (Task 4): `getPracticeStaffOptions`, `initialData.staff`. (Task 6): `LocalSessionSave.staff`.
+- Consumes (Task 1): `SessionStaffMember`, `StaffOption`, `MAX_SESSION_STAFF`, `STAFF_NAME_MAX`, `assignmentCount`, `withoutStaffMember`, `namedStaffPayload` (which filters with `isNamedStaff`), `toSessionStaffInputs`, `toStaffName`, `cleanStaffName`, `staffNameKey`, `removeStaffPrompt`, `STAFF_NAME_TAKEN_MESSAGE`, `SavedStaffId`, `applySavedStaffIds`. (Task 3): `updatePracticeSession`'s `data.staff: SavedStaffId[]`. (Task 4): `getPracticeStaffOptions`, `initialData.staff`. (Task 6): `LocalSessionSave.staff`.
 - Produces:
-  - `PracticeSessionEditorProps.staffOptions?: StaffOption[]`; `PracticeSessionSubmitData.staff?: SessionStaffMember[]` (via `PracticeSessionData`);
-  - `useSessionStaff({ initial, plays, setPlays, markDirty, locked })` → `{ staff: SessionStaffMember[] | undefined; addOption(option: StaffOption): void; addTyped(): string; rename(key: string, name: string): void; remove(key: string): void; setRowStaff(rowId: string, keys: string[]): void; assignments(key: string): number }`;
+  - `PracticeSessionEditorProps.staffOptions?: StaffOption[]`; `PracticeSessionSubmitData.staff?: SessionStaffMember[]` (via `PracticeSessionData`); `PracticeSessionSaveResult`'s success branch `{ success: true; plays?: SavedDrillId[]; staff?: SavedStaffId[] }` (`EditSessionWrapper` passes `result.data.staff`; the create wrapper redirects and the static screen's keys already are its stored ids, so both return none);
+  - `useSessionStaff({ initial, plays, setPlays, markDirty, locked })` → `{ staff: SessionStaffMember[] | undefined; renderKeys: ReadonlyMap<string, string>; addOption(option: StaffOption): void; addTyped(): string; rename(key: string, name: string): void; remove(key: string): void; setRowStaff(rowId: string, keys: string[]): void; assignments(key: string): number; applySaved(saved: readonly SavedStaffId[] | undefined): void }`. `renderKeys` maps a swapped id to the person's first key: the section's React key, kept separate from `id` so a save never remounts a row (a Name field being typed in keeps focus);
   - `SessionStaffSection` (props in Step 4) and its exported copy constants;
   - `PlayLibraryDialog({ open, teamId, fullScreen, onClose, onSelectPlay })`;
   - `renderEditor(plays, extra?, onSave?, props?: Partial<PracticeSessionEditorProps>)`.
@@ -3299,8 +3501,8 @@ Create `__tests__/components/features/practice-planner/PracticeSessionEditor.sta
 
 ```tsx
 /** The editor's Staff section (practice staff, spec R3, R4, R8). */
-import { beforeAll, describe, expect, it } from "vitest";
-import { fireEvent, screen, within } from "@testing-library/react";
+import { beforeAll, describe, expect, it, vi } from "vitest";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { drill, renderEditor, save, stubResizeObserver } from "@/__tests__/helpers/session-editor";
 import { STAFF_NAME_TAKEN_MESSAGE } from "@/lib/utils/session-staff";
 import { MAX_SESSION_STAFF, type SessionItem, type SessionStaffMember, type StaffOption } from "@/types/practice-planner";
@@ -3318,7 +3520,8 @@ const STAFFED: SessionItem[] = [
 const OPTIONS: StaffOption[] = [
     { kind: "official", id: "coff1", name: "Coach Lee", roleLabel: "Head Coach" },
     { kind: "official", id: "coff2", name: "Pat Park", roleLabel: "Assistant Coach" },
-    { kind: "admin", id: "cuser3", name: "Alex Admin", roleLabel: "Team admin" },
+    // An email the option must never show or send (a stray field, as a careless query could add one).
+    { kind: "admin", id: "cuser3", name: "Alex Admin", roleLabel: "Team admin", email: "alex@example.com" } as StaffOption,
 ];
 
 const sent = (onSave: { mock: { calls: unknown[][] } }) => onSave.mock.calls[0][0] as { staff?: SessionStaffMember[]; plays: SessionItem[] };
@@ -3378,10 +3581,35 @@ describe("PracticeSessionEditor: the Staff section", () => {
         expect(sent(onSave).plays).toEqual(STAFFED);
     });
 
-    it("sends no staff when the editor never held a list (absent = unchanged)", async () => {
+    it("sends no staff when the editor never held a list, even after opening Add staff (absent = unchanged)", async () => {
         const onSave = renderEditor([drill("k1", 0)]);
+        // Fails before the section exists (no Add staff), and opening the menu must not start a list.
+        const menu = await openAddStaff();
+        fireEvent.keyDown(menu, { key: "Escape" });
+        await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
         await save();
         expect(sent(onSave).staff).toBeUndefined();
+    });
+
+    it("swaps a new person's key for the id the save returns, on the list and the rows, without remounting their Name field", async () => {
+        // As EditSessionWrapper returns a hosted save: every sent key with its stored id (a stored id maps to itself).
+        const onSave = vi.fn().mockImplementation(async (session: { staff?: SessionStaffMember[] }) => ({
+            success: true,
+            staff: (session.staff ?? []).map((member) => ({ key: member.id, id: member.id.startsWith("k-") ? `cstored-${member.id}` : member.id })),
+        }));
+        // Pat was added in this sitting: the editor still holds their key, on the list and on a row.
+        renderEditor([drill("k1", 0, { staff: ["k-new", "st2"] })], { staff: [SAM, { id: "k-new", name: "Pat" }] }, onSave);
+        const field = screen.getAllByRole("textbox", { name: "Name" })[1];
+        field.focus();
+        await save();
+        // The same element, still focused: the row kept its React key when its id changed.
+        expect(screen.getAllByRole("textbox", { name: "Name" })[1]).toBe(field);
+        expect(field).toHaveFocus();
+        fireEvent.change(field, { target: { value: "Pat Park" } });
+        await save();
+        const second = onSave.mock.calls[1][0] as { staff?: SessionStaffMember[]; plays: SessionItem[] };
+        expect(second.staff).toEqual([SAM, { id: "cstored-k-new", name: "Pat Park" }]);
+        expect(second.plays[0].staff).toEqual(["cstored-k-new", "st2"]);
     });
 
     it("removes someone who runs nothing at once, and asks before removing someone who runs rows (Review Focus 4)", async () => {
@@ -3394,10 +3622,14 @@ describe("PracticeSessionEditor: the Staff section", () => {
         const dialog = await screen.findByRole("dialog", { name: "Remove staff member" });
         expect(dialog).toHaveTextContent("Remove Sam? They run 2 rows.");
         fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+        // MUI's Dialog closes after its exit transition and keeps the page aria-hidden until then,
+        // so a role query right after Cancel or Remove would miss (as in PlayLibrary.test.tsx).
+        await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
         expect(screen.getByRole("button", { name: "Remove Sam" })).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole("button", { name: "Remove Sam" }));
         fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Remove" }));
+        await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
         await save();
         expect(sent(onSave).staff?.map((member) => member.name)).toEqual(["Coach Lee"]);
         expect(sent(onSave).plays.map((row) => row.staff)).toEqual([[], ["st1"], []]);
@@ -3434,6 +3666,13 @@ describe("hosted wrappers: practice staff (spec R3, R4)", () => {
             { key: "k-new", name: "Sam" },
         ]);
         expect(sentSave.plays[0].staff).toEqual(["k-new"]);
+    });
+
+    it("EditSessionWrapper hands the editor the save's staff ids, for the key → id swap", async () => {
+        const saved = [{ key: "cstaffxxxxxxxxxxxxxxxxxxx", id: "cstaffxxxxxxxxxxxxxxxxxxx" }, { key: "k-new", id: "cstaffnewxxxxxxxxxxxxxxxx" }];
+        actions.updatePracticeSession.mockResolvedValue({ success: true, data: { id: SESSION, plays: [], staff: saved } });
+        render(<EditSessionWrapper sessionId={SESSION} teamId={TEAM} initialData={LOADED} bookingOptions={BOOKING as never} />);
+        await expect(captured.props!.onSave({ ...submitted, plays: ROWS, staff: STAFF })).resolves.toEqual({ success: true, plays: [], staff: saved });
     });
 
     it("EditSessionWrapper and PracticeSessionEditorWrapper leave staff out when the editor holds none", async () => {
@@ -3495,7 +3734,7 @@ Create `components/features/practice-planner/useSessionStaff.ts`:
  */
 import { useCallback, useState, type Dispatch, type SetStateAction } from "react";
 import type { SessionItem, SessionStaffMember, StaffOption } from "@/types/practice-planner";
-import { assignmentCount, toStaffName, withoutStaffMember } from "@/lib/utils/session-staff";
+import { applySavedStaffIds, assignmentCount, toStaffName, withoutStaffMember, type SavedStaffId } from "@/lib/utils/session-staff";
 
 let lastKey = 0;
 /** An editor key for someone not saved yet; a save keeps a stored id and maps a new key to a new one. */
@@ -3519,6 +3758,9 @@ export function useSessionStaff({
     locked: boolean;
 }) {
     const [staff, setStaff] = useState<SessionStaffMember[] | undefined>(initial);
+    // A swapped id → the person's first key, which stays their React key: a save that swaps a
+    // new person's key to the stored id never remounts their row (a Name field keeps focus).
+    const [renderKeys, setRenderKeys] = useState<ReadonlyMap<string, string>>(() => new Map());
 
     const edit = useCallback(
         (change: (current: SessionStaffMember[]) => SessionStaffMember[]) => {
@@ -3571,7 +3813,30 @@ export function useSessionStaff({
 
     const assignments = useCallback((key: string) => assignmentCount(plays, key), [plays]);
 
-    return { staff, addOption, addTyped, rename, remove, setRowStaff, assignments };
+    /**
+     * After a hosted save (parity with applySavedPlayIds): a person added in this sitting
+     * takes the id the save stored them under, on the list and on every row, so the next
+     * save keeps that id instead of minting another. Applied to the current list and rows,
+     * never the save's snapshot (a person removed while it was in flight stays removed).
+     * Not an edit: nothing is marked unsaved.
+     */
+    const applySaved = useCallback(
+        (saved: readonly SavedStaffId[] | undefined) => {
+            const swaps = (saved ?? []).filter((entry) => entry.key !== entry.id);
+            if (swaps.length === 0) return;
+            setRenderKeys((current) => {
+                const next = new Map(current);
+                for (const { key, id } of swaps) next.set(id, current.get(key) ?? key);
+                return next;
+            });
+            // Each on its own: remove takes a key off the list and every row at once (applySavedStaffIds).
+            setStaff((current) => (current ? applySavedStaffIds(current, [], saved).staff : current));
+            setPlays((rows) => applySavedStaffIds([], rows, saved).rows);
+        },
+        [setPlays],
+    );
+
+    return { staff, renderKeys, addOption, addTyped, rename, remove, setRowStaff, assignments, applySaved };
 }
 ```
 
@@ -3623,8 +3888,12 @@ export const REMOVE_STAFF_TITLE = "Remove staff member";
 
 const TARGET = { minWidth: 44, minHeight: 44 } as const;
 
+const NO_RENDER_KEYS: ReadonlyMap<string, string> = new Map();
+
 export interface SessionStaffSectionProps {
     staff: readonly SessionStaffMember[];
+    /** A swapped id → the person's first key (useSessionStaff), so a save never remounts their row. */
+    renderKeys?: ReadonlyMap<string, string>;
     /** Hosted: the team's officials and admins. The static planner passes none. */
     options: readonly StaffOption[];
     /** How many rows a person runs. */
@@ -3637,7 +3906,7 @@ export interface SessionStaffSectionProps {
     onRemove: (key: string) => void;
 }
 
-export function SessionStaffSection({ staff, options, assignments, disabled, onAddOption, onAddTyped, onRename, onRemove }: SessionStaffSectionProps) {
+export function SessionStaffSection({ staff, renderKeys = NO_RENDER_KEYS, options, assignments, disabled, onAddOption, onAddTyped, onRename, onRemove }: SessionStaffSectionProps) {
     const headingId = useId();
     const menuId = useId();
     const dialogTitleId = useId();
@@ -3689,8 +3958,10 @@ export function SessionStaffSection({ staff, options, assignments, disabled, onA
                             const name = cleanStaffName(member.name);
                             const linked = Boolean(member.teamOfficialId || member.userId);
                             const clash = clashes(member);
+                            // Not member.id: a save swaps a new person's key to their stored id.
+                            const rowKey = renderKeys.get(member.id) ?? member.id;
                             return (
-                                <Stack component="li" key={member.id} direction="row" spacing={1.5} alignItems="center" sx={{ minHeight: 44 }}>
+                                <Stack component="li" key={rowKey} direction="row" spacing={1.5} alignItems="center" sx={{ minHeight: 44 }}>
                                     <Box
                                         aria-hidden
                                         sx={{
@@ -3726,7 +3997,7 @@ export function SessionStaffSection({ staff, options, assignments, disabled, onA
                                             size="small"
                                             value={member.name}
                                             onChange={(event) => onRename(member.id, event.target.value)}
-                                            autoFocus={member.id === focusKey}
+                                            autoFocus={rowKey === focusKey}
                                             disabled={disabled}
                                             error={clash}
                                             helperText={clash ? STAFF_NAME_TAKEN_MESSAGE : name === "" ? UNSAVED_NAME_HELP : undefined}
@@ -3812,7 +4083,13 @@ export function SessionStaffSection({ staff, options, assignments, disabled, onA
 
 - [ ] **Step 5: Wire the section and the payload into `PracticeSessionEditor.tsx`**
 
-- Imports: add `StaffOption` to the `@/types/practice-planner` import; add `import { namedStaffPayload } from "@/lib/utils/session-staff";`, `import { SessionStaffSection } from "./SessionStaffSection";` and `import { useSessionStaff } from "./useSessionStaff";`.
+- Imports: add `StaffOption` to the `@/types/practice-planner` import; add `import { namedStaffPayload, type SavedStaffId } from "@/lib/utils/session-staff";`, `import { SessionStaffSection } from "./SessionStaffSection";` and `import { useSessionStaff } from "./useSessionStaff";`.
+- In `PracticeSessionSaveResult`, change the success branch to:
+
+```ts
+    | { success: true; plays?: SavedDrillId[]; staff?: SavedStaffId[] }
+```
+
 - In `PracticeSessionEditorProps`, after `wholeLabelBySurface?`, add:
 
 ```ts
@@ -3842,12 +4119,19 @@ export function SessionStaffSection({ staff, options, assignments, disabled, onA
                 staff: staffed?.staff,
 ```
 
-  and add `staff.staff` to `handleSave`'s dependency list.
+  right after `setPlays((current) => applySavedPlayIds(current, sentPlayIds, result.plays));`, add:
+
+```ts
+            staff.applySaved(result.staff);
+```
+
+  and add `staff.staff` and `staff.applySaved` to `handleSave`'s dependency list.
 - After `<SessionDetailsFields … />`, add:
 
 ```tsx
             <SessionStaffSection
                 staff={staff.staff ?? []}
+                renderKeys={staff.renderKeys}
                 options={staffOptions}
                 assignments={staff.assignments}
                 disabled={busy}
@@ -3883,6 +4167,13 @@ In `EditSessionWrapper.tsx`:
         ...(session.staff !== undefined && { staff: toSessionStaffInputs(session.staff) }),
 ```
 
+  and replace `return { success: true, plays: result.data.plays };` with:
+
+```ts
+      // The editor swaps drill keys and staff keys to the ids this save stored.
+      return { success: true, plays: result.data.plays, staff: result.data.staff };
+```
+
 In `edit/page.tsx`, import `getPracticeStaffOptions` from `@/lib/actions/practice-session-queries`, add `const staffOptions = await getPracticeStaffOptions(data.teamId);` after `bookingOptions`, and pass `staffOptions={staffOptions}` to `<EditSessionWrapper>`.
 
 In `PracticeSessionEditorWrapper.tsx`, add the same `toSessionStaffInputs` import and `StaffOption` type import, a `staffOptions?: StaffOption[]` prop (destructured with `= []`, passed to the editor), and the same `staff` spread in `createPracticeSession({ … })`. In `new/page.tsx`, import `getPracticeStaffOptions`, add `const staffOptions = await getPracticeStaffOptions(context.teamId);`, and pass `staffOptions={staffOptions}`.
@@ -3902,7 +4193,7 @@ Run: `bun run test __tests__/components/features/practice-planner __tests__/app 
 Expected: PASS, including both line-budget tests.
 
 Run: `bun run type-check && wc -l components/features/practice-planner/PracticeSessionEditor.tsx`
-Expected: exit 0; the editor is about 795 lines (≤ 900).
+Expected: exit 0; the editor is about 795 lines (≤ 900), including the save's `staff.applySaved` call.
 
 - [ ] **Step 8: Screenshots (light and dark, desktop and mobile)**
 
@@ -3986,7 +4277,7 @@ Spec R8's row picker. After this task each drill card and block card has a Run b
 - Test (append): `__tests__/components/features/practice-planner/PracticeSessionEditor.staff.test.tsx`
 
 **Interfaces:**
-- Consumes (Task 1): `MAX_ROW_STAFF`, `cleanStaffName`. (Task 7): `useSessionStaff().staff`, `.setRowStaff`.
+- Consumes (Task 1): `MAX_ROW_STAFF`, `isNamedStaff` (the same "has a name" test `namedStaffPayload` uses). (Task 7): `useSessionStaff().staff`, `.setRowStaff`.
 - Produces: `RunByField({ staff, value, onChange, title, disabled? })`, `RUN_BY_LABEL = "Run by"`, `RUN_BY_FULL_HELP = "At most 4 people per row"`; `RowRunBy = { staff: readonly SessionStaffMember[]; value: readonly string[]; onChange: (keys: string[]) => void }` exported from `RunByField.tsx`; `runBy?: RowRunBy | null` on `SessionDrillCardProps` and `BlockRowCardProps`; `staff?: SessionStaffMember[]`, `onSetRowStaff?: (rowId: string, keys: string[]) => void` on `SessionDrillListProps` (optional, so existing list renders keep compiling).
 
 - [ ] **Step 1: Write the failing tests**
@@ -4098,7 +4389,7 @@ Expected: FAIL (`RunByField` cannot be resolved; no Run by on the cards).
  */
 import { Autocomplete, Chip, TextField } from "@mui/material";
 import { MAX_ROW_STAFF, type SessionStaffMember } from "@/types/practice-planner";
-import { cleanStaffName } from "@/lib/utils/session-staff";
+import { isNamedStaff } from "@/lib/utils/session-staff";
 
 export const RUN_BY_LABEL = "Run by";
 export const RUN_BY_FULL_HELP = `At most ${MAX_ROW_STAFF} people per row`;
@@ -4118,7 +4409,7 @@ export interface RunByFieldProps extends RowRunBy {
 
 export function RunByField({ staff, value, onChange, title, disabled = false }: RunByFieldProps) {
     // Only named people are offered; a key no longer on the list is skipped (spec R11).
-    const named = staff.filter((member) => cleanStaffName(member.name).length > 0);
+    const named = staff.filter(isNamedStaff);
     const selected = value.flatMap((key) => named.filter((member) => member.id === key));
     const full = selected.length >= MAX_ROW_STAFF;
     return (
@@ -4182,7 +4473,7 @@ In `BlockRowCard.tsx`:
 - replace the closing note `<Box sx={{ px: 2, pb: 2 }}>` wrapper with `<Stack spacing={1.5} sx={{ px: 2, pb: 2 }}>`, keep the Note `TextField` inside it, then add `{runBy && <RunByField {...runBy} title={title} disabled={locked} />}` and close with `</Stack>`.
 
 In `SessionDrillList.tsx`:
-- import `type SessionStaffMember` with the other `@/types/practice-planner` types, `import { cleanStaffName } from "@/lib/utils/session-staff";` and `import type { RowRunBy } from "./RunByField";`;
+- import `type SessionStaffMember` with the other `@/types/practice-planner` types, `import { isNamedStaff } from "@/lib/utils/session-staff";` and `import type { RowRunBy } from "./RunByField";`;
 - add to `SessionDrillListProps`, after `onSetStays`:
 
 ```ts
@@ -4196,7 +4487,7 @@ In `SessionDrillList.tsx`:
 
 ```ts
     // Run by appears on every card once the practice has a named person (spec R8).
-    const staffed = Boolean(staff?.some((member) => cleanStaffName(member.name).length > 0));
+    const staffed = Boolean(staff?.some(isNamedStaff));
     const runByFor = (row: SessionItem): RowRunBy | null =>
         staffed && staff && onSetRowStaff ? { staff, value: row.staff ?? [], onChange: (keys) => onSetRowStaff(row.id, keys) } : null;
 ```
@@ -4959,7 +5250,7 @@ wc -l components/features/practice-planner/PracticeSessionEditor.tsx "app/(dashb
 ```
 
 Expected:
-- both files are ≤ 900 lines (the editor about 795 after Task 8, the session page about 740);
+- both files are ≤ 900 lines (the editor about 800 after Task 8, the session page about 740);
 - `git status` shows nothing. If `CLAUDE.md` appears modified by `next dev`, leave it out of every commit.
 
 - [ ] **Step 7: Final screenshots for the PR**
@@ -4985,7 +5276,7 @@ Only if Steps 1–7 required changes. Stage the exact files by path:
 |---|---|
 | R1 per-practice list, assignments per row | 1 (types), 3 (tables), 7, 8 (editor) |
 | R2 tables, CHECKs (name 1–60, position ≥ 0, one link), unique `(sessionId, lower(name))` expression index, FKs and cascades, limits 12 / 4 / 60 as exported constants | 1 (constants), 3 (schema, migration, migration test) |
-| R3 save shape (`staff` with keys, each row's keys), keys mapped to ids, absent = unchanged across the row rewrite with a defined and verified row identity, `[]` clears, a row without `staff` gets none, server checks after authorization, no new stale rule | 1 (`carryRowStaff`, `sessionStaffError`), 2 (schemas), 3 (actions, carry, refusals), 6 (static, by row id), 7 (editor and wrappers send the list) |
+| R3 save shape (`staff` with keys, each row's keys), keys mapped to ids and the mapping returned for the editor's swap, absent = unchanged across the row rewrite with a defined and verified row identity, `[]` clears, a row without `staff` gets none, server checks after authorization, no new stale rule | 1 (`carryRowStaff`, `sessionStaffError`, `applySavedStaffIds`), 2 (schemas), 3 (actions, carry, refusals, returned `staff`), 6 (static, by row id), 7 (editor and wrappers send the list; the editor swaps keys to ids) |
 | R4 hosted picker of active/invited officials and admins, by name and role, no email, official-and-admin once; names only in files, exports and the static store; typed names never linked | 4 (`getPracticeStaffOptions`, stale links unlinked), 6 (static refuses links), 7 (picker UI, wrappers) |
 | R5 copy paths: duplicate (links kept), detach, materialize, import; links dropped on export; guard from the copied select | 2 (export names), 3 (materialize identity), 4 (duplicate, import, detach test, guard), 6 (static duplicate and import) |
 | R6 plan document fields, limits, case-insensitive membership, older files, "Drill N" issue, ADR-0020 amendment | 2 |
@@ -4998,8 +5289,8 @@ Only if Steps 1–7 required changes. Stage the exact files by path:
 | Testing: pure; Zod and plan document; migration; actions (auth first, cross-team, absent across rewrite, `[]`, older editor, duplicate/detach/import, guard); emails; static (both repos); components (Staff section, Run by max 4, untouched editor, picker without emails); bench sheet model/HTML/Word; visual | 1; 2; 3; 3/4; 5; 6; 7/8; 9/10; 7–11 |
 
 **Spec gaps and conflicts, and how this plan resolves them:**
-- **R3 row identity** (the spec asks the plan to define and verify it): a drill row by its owned play id (verified in `materializeSessionDrills`, `sessionPlayData` and the editor's `applySavedPlayIds`; the same accepted invariant as `withStoredTiming`), a block row by its place among the stored block rows, carried only to a block of the same kind. Accepted loss: an editor built before this change that reorders, inserts or deletes block rows can drop a block's staff (never hand it to another kind of block). Every current editor sends `staff`, so the identity never applies to it. New row ids are read back by `sequence`. Static rows keep their ids, so the static store carries by row id.
-- **Staff ids:** keys that are stored ids keep them; new keys get new ids on every save, and the save returns no key → id mapping (the editor's keys stay self-consistent until it reloads). Accepted: nothing reads a staff id across saves.
+- **R3 row identity** (the spec asks the plan to define and verify it): a drill row by its owned play id (verified in `materializeSessionDrills`, `sessionPlayData` and the editor's `applySavedPlayIds`; the same accepted invariant as `withStoredTiming`), a block row by its place among the block rows, carried only when the new block kinds equal the stored ones in order and count (`carryRowStaff`; tested for an identical layout with drills added around it, a reorder, an insert and a same-kind delete). Accepted loss: an editor built before this change that reorders, inserts or deletes a block row drops every block's staff; a block's staff never move to another block, of any kind. Only tabs open across the deploy save without `staff`, so the identity never applies to a current editor. New row ids are read back by `sequence`. Static rows keep their ids, so the static store carries by row id.
+- **Staff ids:** keys that are stored ids keep them; a new key gets a new id, and the hosted save returns every key with its id (`data.staff: SavedStaffId[]`, Task 3). The editor swaps its keys to those ids after the save (`applySavedStaffIds` via `useSessionStaff().applySaved`, Task 7), beside `applySavedPlayIds`, so ids are stable from the first completed save on. Two saves in flight can't confuse it: a key the editor no longer holds is skipped, and the next save sends whatever the editor holds. The Staff section keys rows on a render key kept apart from `id`, so the swap never remounts a focused Name field.
 - **Linked names:** the server stores the name sent (the picker offers the team name, cut to 60). A later rename of the official doesn't change a saved practice.
 - **Stale links:** R4 allows only active or invited officials and current admins. The edit loader unlinks a stale one (Task 4), so an open editor's autosave isn't refused forever; a save that still sends it gets the specific message.
 - **Admins without a name** are not offered (there's nothing to show but an email, which is never shown); a coach can type the name.
@@ -5016,7 +5307,9 @@ Only if Steps 1–7 required changes. Stage the exact files by path:
 - `SessionStaffMember`, `StaffOption`, `MAX_SESSION_STAFF`, `MAX_ROW_STAFF`, `STAFF_NAME_MAX` (Task 1) are used with the same shapes in Tasks 2–10.
 - `staff?: string[]` (keys) on editor items, view rows, row inputs and export rows; `staff?: SessionStaffMember[]` on `PracticeSessionData`, `PracticeSessionView` and `ExportSession`; `staff: string[]` (names) only in the plan document and its editor session.
 - `SessionStaffInput { key, name, teamOfficialId?, userId? }` (Task 1) is what `toSessionStaffInputs` produces, what `sessionStaffInputSchema` (Task 2) parses into `SessionStaffSaveInput`, and what `LocalSessionSave.staff` (Task 6) carries.
-- `writeRowStaff(tx, sessionId, Array<{ sequence, staffIds }>)` and `replaceSessionStaff` (Task 3) are reused by duplicate and import (Task 4); `carryRowStaff`'s `StoredRowStaff` is what `readCarriedRowStaff` returns.
+- `writeRowStaff(tx, sessionId, Array<{ sequence, staffIds }>)` and `replaceSessionStaff` (Task 3) are reused by duplicate and import (Task 4); `carryRowStaff(stored: StoredRowStaff[], storedBlocks: StoredBlock[], next)` takes exactly what `readCarriedRowStaff` returns (`{ stored, storedBlocks }`).
+- `SavedStaffId { key, id }` (Task 1) is what `writeSentStaff` returns and both actions put in `data.staff` (Task 3), what `PracticeSessionSaveResult.staff` carries from `EditSessionWrapper`, and what `useSessionStaff().applySaved` hands `applySavedStaffIds` (Task 7).
+- `isNamedStaff` (Task 1) is the only "has a name" test: `namedStaffPayload` (Task 1), `RunByField` and `SessionDrillList` (Task 8).
 - `useSessionStaff`'s `staff`, `setRowStaff` (Task 7) feed `SessionDrillList`'s `staff`, `onSetRowStaff` (Task 8); `RowRunBy` is the cards' `runBy` prop.
 - `BenchSheetModel.staff` and the rows' optional `runBy` (Task 10) are read by both exporters in the same task.
 
