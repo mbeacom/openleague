@@ -65,15 +65,15 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
         session: practice("Skills Stations", 60, [
             [
                 { drill: "starter-goalie-warmup", minutes: 8, instructions: "A coach warms up the goalies while the skaters work edges." },
-                { drill: "starter-skate-edges-crossovers", minutes: 10 },
+                { drill: "starter-skate-edges-crossovers", minutes: 8 },
             ],
             [
                 { drill: "starter-goalie-angles-depth", minutes: 15, instructions: GOALIE_STAYS(5) },
                 { drill: "starter-skate-stickhandling", minutes: 15, instructions: ROTATE(5) },
                 { drill: "starter-skate-wrist-shots", minutes: 15, instructions: `${ROTATE(5)} ${EMPTY_NET}` },
             ],
-            [{ drill: "starter-skate-passing-lanes", minutes: 10 }],
-            [{ drill: "starter-skate-small-area-2v2", minutes: 15, instructions: "Goalie in net; 30–40 second shifts." }],
+            [{ drill: "starter-skate-passing-lanes", minutes: 8 }],
+            [{ drill: "starter-skate-small-area-2v2", minutes: 12, instructions: "Goalie in net; 30–40 second shifts." }],
             [{ drill: "starter-skate-stops-starts", minutes: 5 }],
         ]),
     },
@@ -81,15 +81,15 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
         id: "template-goalie-skater-rotation",
         name: "Goalie & Skater Rotation",
         description:
-            "A 45-minute practice that keeps the goalie working the whole time: three stations at once on separate ice (goalie work, skating, puck skills), then breakaways and a small-area game to finish.",
+            "A 45-minute practice that keeps the goalie working the whole time: a goalie warm-up beside two skating stations, then goalie angles beside stickhandling and puck-protection stations, then breakaways and a small-area game to finish.",
         session: practice("Goalie & Skater Rotation", 45, [
             [
                 { drill: "starter-goalie-warmup", minutes: 8, instructions: "A coach warms up the goalies." },
-                { drill: "starter-skate-transitions", minutes: 8, instructions: "Half the skaters; switch with edges at 4 minutes." },
-                { drill: "starter-skate-edges-crossovers", minutes: 8, instructions: "Half the skaters; switch with transitions at 4 minutes." },
+                { drill: "starter-skate-transitions", minutes: 8, instructions: "Half the skaters; the other half work edges." },
+                { drill: "starter-skate-edges-crossovers", minutes: 8, instructions: "Half the skaters; the other half work pivots." },
             ],
             [
-                { drill: "starter-goalie-butterfly-recovery", minutes: 12, instructions: "Goalies stay at this station with a coach." },
+                { drill: "starter-goalie-angles-depth", minutes: 12, instructions: "Goalies stay at this station; a coach shoots from the five spots." },
                 { drill: "starter-skate-stickhandling", minutes: 12, instructions: "Switch with puck protection at 6 minutes." },
                 { drill: "starter-skate-puck-protection", minutes: 12, instructions: "Switch with stickhandling at 6 minutes." },
             ],
@@ -101,12 +101,13 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
         id: "template-team-stations",
         name: "Team Practice with Stations",
         description:
-            "A 60-minute team practice: two three-station skill blocks, each with a goalie station, then the full team on point shots with a screen, breakouts and the 3-man weave.",
+            "A 60-minute team practice: the 3-man weave to warm up skaters and goalie, two three-station skill blocks, each with a goalie station, then the full team on point shots with a screen and breakouts.",
         session: practice("Team Practice with Stations", 60, [
+            [{ drill: "starter-3man-weave", minutes: 8, instructions: "Finish on the goalie to warm everyone up." }],
             [
                 { drill: "starter-goalie-angles-depth", minutes: 15, instructions: GOALIE_STAYS(5) },
                 { drill: "starter-skate-transitions", minutes: 15, instructions: ROTATE(5) },
-                { drill: "starter-skate-small-area-2v2", minutes: 15, instructions: `${ROTATE(5)} ${EMPTY_NET}` },
+                { drill: "starter-skate-puck-protection", minutes: 15, instructions: ROTATE(5) },
             ],
             [
                 { drill: "starter-goalie-rebound-control", minutes: 15, instructions: GOALIE_STAYS(5) },
@@ -115,7 +116,6 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
             ],
             [{ drill: "starter-point-shot-screen", minutes: 10 }],
             [{ drill: "starter-breakout-5man", minutes: 10 }],
-            [{ drill: "starter-3man-weave", minutes: 8 }],
         ]),
     },
 ];

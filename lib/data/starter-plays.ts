@@ -357,7 +357,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
         id: "starter-goalie-angles-depth",
         name: "Angles & Depth: Five-Spot Shooting",
         description:
-            "Five shooters on an arc from post to post. The coach points to a shooter; the goalie shuffles to square up, sets the feet and finds depth at the top of the crease before the release. Shooters wait until the goalie is set and shoot to the body first, then the corners. Teach: lead with the eyes, short shuffles between neighboring spots (T-pushes for bigger moves), shoulders square to the puck, and back off toward the post as the angle gets sharper. 8–10 min; rotate goalies every 10 shots.",
+            "Five shooters on an arc from post to post. The coach points to a shooter; the goalie shuffles to square up, sets the feet and finds depth at the top of the crease before the release. Shooters wait until the goalie is set and shoot to the body first, then the corners. Teach: lead with the eyes, short shuffles between neighboring spots (T-pushes for bigger moves), shoulders square to the puck, and back off toward the post as the angle gets sharper. 10–15 min; rotate goalies every 10 shots.",
         focus: "goalies",
         goalies: "required",
         playData: {
@@ -439,7 +439,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
         id: "starter-goalie-rebound-control",
         name: "Rebound Control: Steer to the Corners",
         description:
-            "A shooter in the high slot shoots low to the pads while F1 and F2 crash the posts on every shot. The goalie angles the pad or the stick blade so the rebound kicks to the corner cones, never back into the slot. Anything left in front, the forwards bury. Count the rebounds that reach the cones. Progress to shots at the body (absorb and cover) and the blocker (deflect to the corner). 8 min.",
+            "A shooter in the high slot shoots low to the pads while F1 and F2 crash the posts on every shot. The goalie angles the pad or the stick blade so the rebound kicks to the corner cones, never back into the slot. Anything left in front, the forwards bury. Count the rebounds that reach the cones. Progress to shots at the body (absorb and cover) and the blocker (deflect to the corner). 10–15 min.",
         focus: "goalies",
         goalies: "required",
         playData: {
@@ -594,7 +594,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
         id: "starter-skate-edges-crossovers",
         name: "Edges & Crossovers: Circle Figure-Eights",
         description:
-            "Forward crossovers around both right-end circles in a figure eight, switching direction through the middle so both edges work. Teach: knees bent, a full push from the outside leg, the crossover leg pushing under the body on its outside edge, shoulders level, head and stick up. Second time through, backward crossovers. Add a puck once the pattern is clean. 6–8 min.",
+            "Forward crossovers around both right-end circles in a figure eight, switching direction through the middle so both edges work. Teach: knees bent, a full push from the outside leg, the inside leg pushing under the body on its outside edge, shoulders level, head and stick up. Second time through, backward crossovers. Add a puck once the pattern is clean. 6–8 min.",
         focus: "skaters",
         goalies: "none",
         playData: {
@@ -623,7 +623,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
         id: "starter-skate-transitions",
         name: "Pivots & Transitions: Cone Box",
         description:
-            "Skate forward up one side of the box, open the hips and pivot to backward at the cone, skate backward across the top, pivot to forward down the far side, and so on around the box. Teach: pivot at the cone, not after it; turn the hips and shoulders together; keep the stick on the ice and the eyes up the ice; quick feet out of every pivot. Run both directions so the pivots go both ways. 6 min.",
+            "Skate forward up one side of the box, open the hips and pivot to backward at the cone, skate backward across the top, pivot to forward down the far side, and so on around the box. Teach: pivot at the cone, not after it; turn the hips and shoulders together; keep the stick on the ice and the eyes up the ice; quick feet out of every pivot. Run both directions so the pivots go both ways. 5–8 min.",
         focus: "skaters",
         goalies: "none",
         playData: {
@@ -676,7 +676,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
         id: "starter-skate-wrist-shots",
         name: "Wrist-Shot Lanes",
         description:
-            "Three lines at the tops of the circles and the high slot. On the whistle, each shooter takes a short pull-in carry and shoots a wrist shot in stride, lines alternating. Teach: the puck starts at the heel of the blade beside the back foot; weight moves from the back foot to the front; roll the wrists and follow through at the target, low for low shots and high for the top corners. Pick a spot before the release. 8 min; rotate lines every five shots.",
+            "Three lines at the tops of the circles and the high slot. On the whistle, each shooter takes a short pull-in carry and shoots a wrist shot in stride, lines alternating. Teach: the puck starts at the heel of the blade beside the back foot; weight moves from the back foot to the front; roll the wrists and follow through at the target, low for low shots and high for the top corners. Pick a spot before the release. 5–8 min; rotate lines every five shots.",
         focus: "skaters",
         goalies: "optional",
         playData: {
@@ -704,7 +704,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
         id: "starter-skate-puck-protection",
         name: "Puck Protection: Wall Battle",
         description:
-            "The coach spots a puck into the corner. F1 wins it and protects it along the wall for 10 seconds against a live defender, staying inside the cones. Teach: wide base and bent knees, the puck on the far side of the body from the defender's stick, the inside arm and hip holding the defender off (legal body position, no hooking), and a cut back when the defender overcommits. Defender: stick on the puck, body between the puck and the net. Swap roles every rep. 6 min.",
+            "The coach spots a puck into the corner. F1 wins it and protects it along the wall for 10 seconds against a live defender, staying inside the cones. Teach: wide base and bent knees, the puck on the far side of the body from the defender's stick, the inside arm and hip holding the defender off (legal body position, no hooking), and a cut back when the defender overcommits. Defender: stick on the puck, body between the puck and the net. Swap roles every rep. 5–6 min.",
         focus: "skaters",
         goalies: "none",
         playData: {
@@ -715,9 +715,9 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
                 coach("pr-c", 163.5, 51),
             ],
             drawings: [
-                pass("pr-pass", [168, 56], [184, 68]),
-                carry("pr-carry", [180, 80], [189, 76], [194, 66]),
-                carry("pr-cutback", [192, 61], [182, 59]),
+                pass("pr-pass", [168, 56], [186, 72]),
+                carry("pr-carry", [186, 72], [193, 65], [194, 58]),
+                carry("pr-cutback", [192, 57], [182, 58]),
                 opponentRoute("pr-o1-route", [170, 70], [181, 74]),
             ],
             equipment: [cone("pr-cone1", 157, 60), cone("pr-cone2", 157, 82), pucks("pr-pucks", 157, 51)],
@@ -782,7 +782,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
         id: "starter-skate-stickhandling",
         name: "Stickhandling: Cone Weave",
         description:
-            "Carry the puck through the cones with quick side-to-side handles, finish around the last cone with a toe drag, and pass to the next skater. Teach: the puck in the middle of the blade, a loose bottom hand, the top hand doing the work, the puck moving wider than the body, and the eyes up between cones (glance down, don't stare). Progress: forehand only, backhand only, then one hand on the stick. 6 min.",
+            "Carry the puck through the cones with quick side-to-side handles, finish around the last cone with a toe drag, and pass to the next skater. Teach: the puck in the middle of the blade, a loose bottom hand, the top hand doing the work, the puck moving wider than the body, and the eyes up between cones (glance down, don't stare). Progress: forehand only, backhand only, then one hand on the stick. 5–6 min.",
         focus: "skaters",
         goalies: "none",
         playData: {
@@ -794,8 +794,8 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
             ],
             drawings: [
                 carry("st-weave", [84, 21], [82, 30], [86, 36], [96, 49], [106, 36], [116, 49], [122, 42.5], [119, 33]),
-                pass("st-pass", [117, 29], [104, 20]),
-                skate("st-s2-next", [94, 20], [88, 27]),
+                pass("st-pass", [117, 29], [92, 29]),
+                skate("st-s2-next", [95, 21], [92, 28]),
             ],
             equipment: [cone("st-cone1", 86, 42.5), cone("st-cone2", 96, 42.5), cone("st-cone3", 106, 42.5), cone("st-cone4", 116, 42.5), pucks("st-pucks", 78, 6)],
             annotations: [note("st-note", "Eyes up", 88, 70, "#000000", 6)],

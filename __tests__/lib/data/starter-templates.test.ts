@@ -60,6 +60,23 @@ describe("starter templates", () => {
             expect(goalieWarnings(groupStations(drills), 1).short).toEqual([]);
         });
 
+        it("gives each drill the time its own description states", () => {
+            // Time one group spends on the drill: a station that goalies stay at runs the whole block;
+            // otherwise a rotation or switch interval ("every 5 minutes", "at 6 minutes") if one is given.
+            for (const drill of drills) {
+                const stated = (drill.description ?? "").match(/(\d+)(?:–(\d+))? min\b/);
+                if (!stated) continue;
+                const [lo, hi] = [Number(stated[1]), Number(stated[2] ?? stated[1])];
+                const instructions = drill.instructions ?? "";
+                const interval = instructions.startsWith("Goalies stay")
+                    ? null
+                    : instructions.match(/(?:every|at) (\d+) minutes/);
+                const minutes = interval ? Number(interval[1]) : drill.duration;
+                expect(minutes, drill.name).toBeGreaterThanOrEqual(lo);
+                expect(minutes, drill.name).toBeLessThanOrEqual(hi);
+            }
+        });
+
         it("uses starter drills verbatim", () => {
             for (const drill of drills) {
                 const starter = STARTER_PLAYS.find((p) => p.name === drill.name);
