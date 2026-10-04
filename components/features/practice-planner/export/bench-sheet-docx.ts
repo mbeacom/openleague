@@ -3,7 +3,8 @@
  * module that imports `docx`, and export-bench-sheet.ts reaches it only through
  * import() on click, so neither the hosted nor the static main bundle carries
  * the library (ESLint and scripts/check-planner-build.ts enforce both halves).
- * `docx` escapes all text itself; images come only from PNG data URIs.
+ * `docx` escapes markup itself but writes characters XML 1.0 forbids verbatim, so
+ * every user string goes through xmlSafe(); images come only from PNG data URIs.
  */
 // eslint-disable-next-line no-restricted-imports -- the one module allowed to load docx; reached only through import()
 import { Document, HeadingLevel, ImageRun, Packer, Paragraph, Table, TableCell, TableRow, TextRun, WidthType } from "docx";
@@ -30,12 +31,18 @@ interface RunStyle {
     color?: string;
 }
 
-/** One run per line, joined by line breaks (\r\n or \n). */
-function textRuns(text: string, style: RunStyle = {}): TextRun[] {
-    return text.split(/\r?\n/).map((line, index) => new TextRun({ ...style, text: line, break: index > 0 ? 1 : undefined }));
+/** Strips the characters XML 1.0 forbids (C0 controls but tab/LF/CR, U+FFFE, U+FFFF); Word refuses a file containing them. */
+function xmlSafe(text: string): string {
+    return text.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g, "");
 }
 
-function picture(dataUri: string, size: { width: number; height: number }, alt: string): ImageRun {
+/** One run per line, joined by line breaks (\r\n or \n). */
+function textRuns(text: string, style: RunStyle = {}): TextRun[] {
+    return xmlSafe(text).split(/\r?\n/).map((line, index) => new TextRun({ ...style, text: line, break: index > 0 ? 1 : undefined }));
+}
+
+function picture(dataUri: string, size: { width: number; height: number }, rawAlt: string): ImageRun {
+    const alt = xmlSafe(rawAlt);
     return new ImageRun({ type: "png", data: pngDataUriToBytes(dataUri), transformation: size, altText: { name: alt || "Symbol", title: alt, description: alt } });
 }
 
@@ -130,7 +137,7 @@ function benchSheetDocument(model: BenchSheetModel): Document {
             ? [...header(model), new Paragraph({ children: textRuns(NO_DRILLS_TEXT, { bold: true }) })]
             : [...header(model), ...timeline(model), ...legend(model), ...drills(model)];
     return new Document({
-        title: model.title,
+        title: xmlSafe(model.title),
         creator: "OpenLeague",
         sections: [{ properties: { page: PAGE }, children: body }],
     });

@@ -90,6 +90,27 @@ describe("renderBenchSheetDocx", () => {
         expect(xml).not.toContain("<w:tbl>");
     });
 
+    it("drops characters XML 1.0 forbids from text, alt text and the title", async () => {
+        const bad = "\u0001\u000B\uFFFE\uFFFF";
+        const model: BenchSheetModel = {
+            ...MODEL,
+            title: `Ses${bad}sion`,
+            teamName: `Hawks${bad} U12`,
+            legend: [{ label: `Pa${bad}ss`, image: PNG }],
+            drills: [drill(1, { name: `Break${bad}out`, text: `Line${bad} one` })],
+        };
+        const zip = await renderBenchSheetDocxBytes(model);
+        const xml = new TextDecoder().decode(unzipEntry(zip, "word/document.xml") ?? new Uint8Array());
+        const core = new TextDecoder().decode(unzipEntry(zip, "docProps/core.xml") ?? new Uint8Array());
+        for (const part of [xml, core]) {
+            expect(part).not.toMatch(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/);
+        }
+        expect(core).toContain("<dc:title>Session</dc:title>");
+        for (const text of ["Session", "Hawks U12", "Pass", "1. Breakout", "Line one", 'descr="Diagram: Breakout"']) {
+            expect(xml).toContain(text);
+        }
+    });
+
     it("imports only types from the model, so the lazy Word chunk carries no React or MUI code", () => {
         const source = readFileSync(path.join(process.cwd(), "components/features/practice-planner/export/bench-sheet-docx.ts"), "utf8");
         const modelImports = source.match(/^import\b[^;]*from\s+"\.\/bench-sheet-model";/gm) ?? [];
