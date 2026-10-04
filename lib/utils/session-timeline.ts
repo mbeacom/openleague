@@ -610,6 +610,44 @@ export function sessionRowsError(plays: readonly TimelinePlay[]): string | null 
     return null;
 }
 
+/**
+ * Spec R3 for an older client: a rotation or stays flag it never sent but
+ * inherited from the stored row may no longer fit the plan (a station was
+ * moved or removed). The inherited value gives way instead of failing a save
+ * the coach didn't make invalid; values the client sent are still checked.
+ * `rows` are withStoredTiming's output for `sent`, in the same order. Hosted
+ * and the static store both settle before checking (sessionRowsError).
+ */
+export function settleInheritedTiming<R extends TimelinePlay & { stays: boolean; rotateEveryMinutes: number | null }>(
+    rows: readonly R[],
+    sent: readonly { sequence: number; stays?: boolean; rotateEveryMinutes?: number | null }[],
+): R[] {
+    const inheritsRotation = new Set(rows.filter((_, index) => sent[index].rotateEveryMinutes === undefined));
+    const inheritsStays = new Set(rows.filter((_, index) => sent[index].stays === undefined));
+    const settled = new Map<R, R>();
+    for (const { stations } of groupStations(rows)) {
+        const [head, ...rest] = stations;
+        for (const station of rest) {
+            if (station.rotateEveryMinutes != null && inheritsRotation.has(station)) {
+                settled.set(station, { ...station, rotateEveryMinutes: null });
+            }
+        }
+        if (head.rotateEveryMinutes == null || rotationMinutes(stations) !== null) continue;
+        if (inheritsRotation.has(head)) {
+            settled.set(head, { ...head, rotateEveryMinutes: null });
+            continue;
+        }
+        // The rotation was sent: inherited stays flags give way if that lets it run.
+        if (stations.length < MIN_ROTATING_STATIONS) continue;
+        const freed = stations.map((station) => (station.stays && inheritsStays.has(station) ? { ...station, stays: false } : station));
+        if (rotatingStations(freed).length < MIN_ROTATING_STATIONS) continue;
+        freed.forEach((station, index) => {
+            if (station !== stations[index]) settled.set(stations[index], station);
+        });
+    }
+    return rows.map((row) => settled.get(row) ?? row);
+}
+
 /** The bench sheet's rotation header: "Stations · rotate every 5 min · 15 min". */
 export function rotationBlockLabel(rotateEvery: number, minutes: number): string {
     return `Stations · rotate every ${rotateEvery} min · ${minutes} min`;

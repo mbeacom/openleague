@@ -8,7 +8,7 @@ import { MAX_BLOCK_LABEL_LENGTH } from "@/types/practice-planner";
 import { parsePlan, serializePlan } from "@/lib/plan-document";
 import { createEmptyPlayData, parseStoredPlayData } from "@/lib/utils/play-data";
 import { drillTags, toPlayFocus, toPlayGoalies } from "@/lib/utils/drill-tags";
-import { normalizeGroups, sessionRowsError, sessionWallMinutes } from "@/lib/utils/session-timeline";
+import { normalizeGroups, sessionRowsError, sessionWallMinutes, settleInheritedTiming } from "@/lib/utils/session-timeline";
 import {
     BLOCK_HAS_NO_DRILL_MESSAGE,
     BLOCK_LABEL_MESSAGE,
@@ -54,8 +54,8 @@ function validDate(date: Date): Date {
     return date;
 }
 
-/** A save row with its timing resolved: sent, else stored (update), else the default. */
-type ResolvedRow = SessionRowInput & { stays: boolean; rotateEveryMinutes: number | null };
+/** A save row with its timing resolved: sent, else stored (update), else the default. A block row never runs with the previous one. */
+type ResolvedRow = SessionRowInput & { runsWithPrevious: boolean; stays: boolean; rotateEveryMinutes: number | null };
 
 /** Checks the payload's shape before the transaction starts. */
 function checkRows(plays: LocalSessionDrill[]): void {
@@ -79,12 +79,20 @@ function checkRows(plays: LocalSessionDrill[]): void {
     }
 }
 
+/**
+ * As updatePracticeSession: each drill's timing is the one sent, else the stored
+ * row's (absent = unchanged), and inherited timing that no longer fits gives way.
+ */
+function resolveRows(plays: LocalSessionDrill[], stored: StoredTiming[]): ResolvedRow[] {
+    const resolved = withStoredTiming(plays, stored).map((row) => ({ ...row, runsWithPrevious: isBlockRow(row) ? false : row.runsWithPrevious }));
+    return settleInheritedTiming(resolved, plays);
+}
+
 /** Hosted's rules on the resolved rows (updatePracticeSession): station, block and rotation rules, then the wall time with the gap. */
 function checkTimeline(rows: ResolvedRow[], duration: number, transitionMinutes: number): void {
-    const timeline = rows.map((row) => ({ ...row, runsWithPrevious: isBlockRow(row) ? false : row.runsWithPrevious }));
-    const ruleError = sessionRowsError(timeline);
+    const ruleError = sessionRowsError(rows);
     if (ruleError) throw new StoreRefusal(ruleError);
-    const wall = sessionWallMinutes(timeline, transitionMinutes);
+    const wall = sessionWallMinutes(rows, transitionMinutes);
     if (wall > duration) throw new StoreRefusal(`Practice timeline (${wall} min) exceeds session duration (${duration} min)`);
 }
 
@@ -345,7 +353,7 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                 const goaliesAttending = checkedGoalieCount(input.goaliesAttending) ?? null;
                 const transitionMinutes = checkedTransition(input.transitionMinutes) ?? 0;
                 // A create has nothing stored: absent timing takes the defaults.
-                const resolved = withStoredTiming(input.plays, []);
+                const resolved = resolveRows(input.plays, []);
                 checkTimeline(resolved, meta.duration, transitionMinutes);
                 const saved = await write(ctx, async (tx) => {
                     const at = ctx.now();
@@ -370,7 +378,7 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                     // Absent = unchanged: an editor opened before a field existed autosaves without it.
                     const goaliesAttending = count === undefined ? (existing.goaliesAttending ?? null) : count;
                     const transitionMinutes = sentGap ?? existing.transitionMinutes ?? 0;
-                    const resolved = withStoredTiming(input.plays, storedTiming(existing));
+                    const resolved = resolveRows(input.plays, storedTiming(existing));
                     checkTimeline(resolved, meta.duration, transitionMinutes);
                     const at = ctx.now();
                     const { rows, plays, mapping } = await materialize(tx, ctx, id, resolved, at);

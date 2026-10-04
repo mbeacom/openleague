@@ -20,7 +20,7 @@ import {
     isDrillRow,
     type DrillRowInput,
 } from "@/lib/utils/session-rows";
-import { BLOCK_STATION_ERROR, ROTATION_TOO_FEW_ERROR } from "@/lib/utils/session-timeline";
+import { BLOCK_STATION_ERROR, ROTATION_PLACEMENT_ERROR, ROTATION_TOO_FEW_ERROR } from "@/lib/utils/session-timeline";
 
 const T = LOCAL_TEAM_ID;
 
@@ -375,6 +375,32 @@ describe.each(REPOS)("sessions (%s)", (_name, open) => {
         const cleared = data(await store.getSessionView(created.id));
         expect(cleared.transitionMinutes).toBe(0);
         expect(cleared.plays.map((row) => isDrillRow(row) && row.rotateEveryMinutes)).toEqual([null]);
+    });
+
+    it("lets inherited timing that no longer fits give way, as hosted, and still refuses timing that was sent", async () => {
+        const { store } = await setup();
+        const [a, b, c] = [await addLibraryPlay(store, "A"), await addLibraryPlay(store, "B"), await addLibraryPlay(store, "C")];
+        const created = data(await store.createSession(save([
+            drill(a, "ka", 0, { stays: false, rotateEveryMinutes: 5 }),
+            drill(b, "kb", 1, { runsWithPrevious: true, stays: false, rotateEveryMinutes: null }),
+            drill(c, "kc", 2, { runsWithPrevious: true, stays: true, rotateEveryMinutes: null }),
+        ])));
+        const [ownedA, , ownedC] = created.plays.map((p) => p.playId);
+        const timing = async () => data(await store.getSessionView(created.id)).plays.map((row) => isDrillRow(row) && [row.rotateEveryMinutes, row.stays]);
+
+        // A sent rotation that can't run is refused, whether the rule it breaks is the count or the placement.
+        expect(await store.updateSession(created.id, save([drill(ownedA, "ka", 0, { rotateEveryMinutes: 5 }), drill(ownedC, "kc", 1, { runsWithPrevious: true, stays: true })])))
+            .toEqual({ success: false, error: ROTATION_TOO_FEW_ERROR });
+        expect(await store.updateSession(created.id, save([drill(ownedA, "ka", 0, { rotateEveryMinutes: 5 })])))
+            .toEqual({ success: false, error: ROTATION_PLACEMENT_ERROR });
+
+        // B removed, the rotation sent: C's inherited "stays" gives way so the rotation can run.
+        data(await store.updateSession(created.id, save([drill(ownedA, "ka", 0, { rotateEveryMinutes: 5 }), drill(ownedC, "kc", 1, { runsWithPrevious: true })])));
+        expect(await timing()).toEqual([[5, false], [null, false]]);
+
+        // C removed and nothing sent: A's inherited rotation gives way instead of failing the save.
+        data(await store.updateSession(created.id, save([drill(ownedA, "ka", 0)])));
+        expect(await timing()).toEqual([[null, false]]);
     });
 
     it("refuses what hosted refuses, writing nothing", async () => {

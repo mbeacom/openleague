@@ -42,12 +42,9 @@ import {
 } from "@/lib/services/practice-session-drills";
 import { FALLBACK_TIME_ZONE } from "@/lib/utils/date";
 import {
-    MIN_ROTATING_STATIONS,
-    groupStations,
-    rotatingStations,
-    rotationMinutes,
     sessionRowsError,
     sessionWallMinutes,
+    settleInheritedTiming,
     type TimelinePlay,
 } from "@/lib/utils/session-timeline";
 import { isBlockKind, needsStoredTiming, toBlockLabel, toRowKind, withStoredTiming } from "@/lib/utils/session-rows";
@@ -495,39 +492,6 @@ function sessionPlayData(row: ResolvedRow, ownedByKey: ReadonlyMap<string, strin
 
 /** A save the session's rows refuse (a rule, the wall time, a stale editor): its message is shown as is. */
 class SessionRowsRejected extends Error {}
-
-/**
- * Spec R3 for an older client: a rotation or stays flag it never sent but
- * inherited from the stored row may no longer fit the plan (a station was
- * moved or removed). The inherited value gives way instead of failing a save
- * the coach didn't make invalid; values the client sent are still checked.
- */
-function settleInheritedTiming(rows: ResolvedRow[], sent: readonly PracticeSessionRowInput[]): ResolvedRow[] {
-    const inheritsRotation = new Set(rows.filter((_, index) => sent[index].rotateEveryMinutes === undefined));
-    const inheritsStays = new Set(rows.filter((_, index) => sent[index].stays === undefined));
-    const settled = new Map<ResolvedRow, ResolvedRow>();
-    for (const { stations } of groupStations(rows)) {
-        const [head, ...rest] = stations;
-        for (const station of rest) {
-            if (station.rotateEveryMinutes != null && inheritsRotation.has(station)) {
-                settled.set(station, { ...station, rotateEveryMinutes: null });
-            }
-        }
-        if (head.rotateEveryMinutes == null || rotationMinutes(stations) !== null) continue;
-        if (inheritsRotation.has(head)) {
-            settled.set(head, { ...head, rotateEveryMinutes: null });
-            continue;
-        }
-        // The rotation was sent: inherited stays flags give way if that lets it run.
-        if (stations.length < MIN_ROTATING_STATIONS) continue;
-        const freed = stations.map((station) => (station.stays && inheritsStays.has(station) ? { ...station, stays: false } : station));
-        if (rotatingStations(freed).length < MIN_ROTATING_STATIONS) continue;
-        freed.forEach((station, index) => {
-            if (station !== stations[index]) settled.set(stations[index], station);
-        });
-    }
-    return settled.size > 0 ? rows.map((row) => settled.get(row) ?? row) : rows;
-}
 
 /**
  * Create a new practice session
