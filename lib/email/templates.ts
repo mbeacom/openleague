@@ -1664,17 +1664,26 @@ ${sessionLink}`,
 /**
  * Each recipient's "Your stations" text (spec R10), by user id: only for a
  * recipient whose account is linked to an assigned staff member, as a team
- * admin (userId) or through a team official (teamOfficial.userId). Rows use
+ * admin (userId) or through a team official (teamOfficial.userId), and only
+ * while that link is live: the official ACTIVE or INVITED on the team, the
+ * admin still an ADMIN member of it (the rule the save and edit loader use).
+ * Rows use
  * the bench sheet's titles and buildSchedule starts; times are in the venue's
  * zone when booked, else FALLBACK_TIME_ZONE (Team has no zone of its own).
  */
 async function practiceStationLines(
-  session: { id: string; date: Date; startAt: Date | null; transitionMinutes: number; venue: { timezone: string } | null },
+  session: { id: string; teamId: string; date: Date; startAt: Date | null; transitionMinutes: number; venue: { timezone: string } | null },
   userIds: string[],
 ): Promise<Map<string, string>> {
   const lines = new Map<string, string>();
   const linked = await prisma.practiceSessionStaff.findMany({
-    where: { sessionId: session.id, OR: [{ userId: { in: userIds } }, { teamOfficial: { userId: { in: userIds } } }] },
+    where: {
+      sessionId: session.id,
+      OR: [
+        { userId: { in: userIds }, user: { teamMembers: { some: { teamId: session.teamId, role: "ADMIN" } } } },
+        { teamOfficial: { userId: { in: userIds }, teamId: session.teamId, status: { in: ["ACTIVE", "INVITED"] } } },
+      ],
+    },
     select: { id: true, userId: true, teamOfficial: { select: { userId: true } } },
   });
   if (linked.length === 0) return lines;
@@ -1796,18 +1805,28 @@ export async function sendPracticePlanNotifications(
   const send = type === "shared" ? sendPracticePlanSharedEmail : sendPracticePlanUpdatedEmail;
   // Practice staff (spec R10): the same message for everyone, plus a "Your stations" line for a
   // recipient linked to an assigned staff member, in their own send. Preferences already applied.
-  const stations = await practiceStationLines(session, recipients.map((recipient) => recipient.userId));
+  // The team always gets the plan: a failed staff read means nobody gets a personal line.
+  let stations = new Map<string, string>();
+  try {
+    stations = await practiceStationLines(session, recipients.map((recipient) => recipient.userId));
+  } catch (error) {
+    console.error("Error reading practice staff for practice plan emails:", error);
+  }
+  // A recipient whose personal send fails falls back to the shared send, so nobody gets neither.
+  const shared: string[] = [];
   for (const recipient of recipients) {
     const line = stations.get(recipient.userId);
-    if (!line) continue;
+    if (!line) {
+      shared.push(recipient.email);
+      continue;
+    }
     try {
       await send({ ...sessionData, emails: [recipient.email], yourStations: line });
     } catch (error) {
-      // One person's send failing must not keep the others or the shared send from going out.
       console.error("Error sending a practice plan email with stations:", error);
+      shared.push(recipient.email);
     }
   }
-  const shared = recipients.filter((recipient) => !stations.has(recipient.userId)).map((recipient) => recipient.email);
   if (shared.length > 0) await send({ ...sessionData, emails: shared });
 }
 

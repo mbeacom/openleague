@@ -62,7 +62,13 @@ describe("sendPracticePlanNotifications: Your stations (spec R10)", () => {
         expect(to(1)).toEqual(["parent@example.com"]);
         expect(mockSendEmail.mock.calls[1][0].text).not.toContain("Your stations");
         expect(mockPrisma.practiceSessionStaff.findMany).toHaveBeenCalledWith({
-            where: { sessionId: "sess1", OR: [{ userId: { in: ["coach", "parent"] } }, { teamOfficial: { userId: { in: ["coach", "parent"] } } }] },
+            where: {
+                sessionId: "sess1",
+                OR: [
+                    { userId: { in: ["coach", "parent"] }, user: { teamMembers: { some: { teamId: "team1", role: "ADMIN" } } } },
+                    { teamOfficial: { userId: { in: ["coach", "parent"] }, teamId: "team1", status: { in: ["ACTIVE", "INVITED"] } } },
+                ],
+            },
             select: { id: true, userId: true, teamOfficial: { select: { userId: true } } },
         });
     });
@@ -103,7 +109,7 @@ describe("sendPracticePlanNotifications: Your stations (spec R10)", () => {
         expect(mockPrisma.practiceSessionPlay.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { sessionId: "sess1" }, orderBy: { sequence: "asc" } }));
     });
 
-    it("leaves out a linked person who runs nothing, and keeps going when one personal send fails", async () => {
+    it("leaves out a linked person who runs nothing, and falls back to the shared email when a personal send fails", async () => {
         const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
         mockPrisma.practiceSessionStaff.findMany.mockResolvedValue([
             { id: "st-coach", userId: "coach", teamOfficial: null },
@@ -111,10 +117,82 @@ describe("sendPracticePlanNotifications: Your stations (spec R10)", () => {
         ]);
         mockSendEmail.mockRejectedValueOnce(new Error("provider down"));
         await sendPracticePlanNotifications("sess1", "team1", "shared");
-        // coach's own email failed (logged); parent runs nothing, so gets the shared one.
+        // coach's own email failed (logged), so coach joins the shared one; parent runs nothing, so gets the shared one.
         expect(mockSendEmail).toHaveBeenCalledTimes(2);
-        expect(to(1)).toEqual(["parent@example.com"]);
+        expect(to(0)).toEqual(["coach@example.com"]);
+        expect(to(1)).toEqual(["coach@example.com", "parent@example.com"]);
+        expect(mockSendEmail.mock.calls[1][0].text).not.toContain("Your stations");
         expect(consoleError).toHaveBeenCalled();
         consoleError.mockRestore();
+    });
+
+    it("keeps going after a failed personal send: the next person still gets theirs, and nobody is sent the shared email twice", async () => {
+        const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+        mockPrisma.practiceSessionStaff.findMany.mockResolvedValue([
+            { id: "st-coach", userId: "coach", teamOfficial: null },
+            { id: "st-other", userId: "parent", teamOfficial: null },
+        ]);
+        mockSendEmail.mockRejectedValueOnce(new Error("provider down"));
+        await sendPracticePlanNotifications("sess1", "team1", "shared");
+        expect(mockSendEmail).toHaveBeenCalledTimes(3);
+        expect(to(1)).toEqual(["parent@example.com"]);
+        expect(mockSendEmail.mock.calls[1][0].text).toContain("Your stations: <Breakout> (6:10 PM)");
+        expect(to(2)).toEqual(["coach@example.com"]);
+        consoleError.mockRestore();
+    });
+
+    it("sends the shared email to everyone eligible when the staff read fails", async () => {
+        const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+        mockPrisma.practiceSessionStaff.findMany.mockRejectedValue(new Error("db down"));
+        await sendPracticePlanNotifications("sess1", "team1", "shared");
+        expect(mockSendEmail).toHaveBeenCalledTimes(1);
+        expect(to(0)).toEqual(["coach@example.com", "parent@example.com"]);
+        expect(mockSendEmail.mock.calls[0][0].text).not.toContain("Your stations");
+        expect(consoleError).toHaveBeenCalled();
+        consoleError.mockRestore();
+    });
+
+    it.each([
+        ["REMOVED", ["coach@example.com", "parent@example.com"], 1],
+        ["INVITED", ["parent@example.com"], 2],
+    ] as const)("gives stations only through a live link: an official %s on the team (a demoted admin never)", async (status, sharedTo, sends) => {
+        const consoleError = vi.spyOn(console, "error");
+        // A stand-in for the database: applies the query's link rules to stored staff.
+        const stored = [
+            { id: "st-coach", userId: null, teamOfficial: { userId: "coach", teamId: "team1", status }, user: null },
+            { id: "st-other", userId: "parent", teamOfficial: null, user: { memberships: [{ teamId: "team1", role: "MEMBER" }] } },
+        ];
+        // Like Prisma, a filter the query leaves out matches everything.
+        type Where = { OR: [
+            { userId: { in: string[] }; user?: { teamMembers: { some: { teamId: string; role: string } } } },
+            { teamOfficial: { userId: { in: string[] }; teamId?: string; status?: { in: string[] } } },
+        ] };
+        mockPrisma.practiceSessionStaff.findMany.mockImplementation(async ({ where }: { where: Where }) => {
+            const [byUser, byOfficial] = where.OR;
+            const admin = byUser.user?.teamMembers.some;
+            const official = byOfficial.teamOfficial;
+            return stored
+                .filter((member) =>
+                    (member.userId !== null && byUser.userId.in.includes(member.userId) &&
+                        (!admin || member.user!.memberships.some((m) => m.teamId === admin.teamId && m.role === admin.role))) ||
+                    (member.teamOfficial !== null && official.userId.in.includes(member.teamOfficial.userId) &&
+                        (official.teamId === undefined || member.teamOfficial.teamId === official.teamId) &&
+                        (official.status === undefined || official.status.in.includes(member.teamOfficial.status))))
+                .map(({ id, userId, teamOfficial }) => ({ id, userId, teamOfficial: teamOfficial && { userId: teamOfficial.userId } }));
+        });
+        await sendPracticePlanNotifications("sess1", "team1", "shared");
+        expect(consoleError).not.toHaveBeenCalled();
+        expect(mockSendEmail).toHaveBeenCalledTimes(sends);
+        if (sends === 2) expect(to(0)).toEqual(["coach@example.com"]);
+        expect(to(sends - 1)).toEqual(sharedTo);
+        expect(mockSendEmail.mock.calls[sends - 1][0].text).not.toContain("Your stations");
+        consoleError.mockRestore();
+    });
+
+    it("counts each gap between blocks in a later row's start", async () => {
+        mockPrisma.practiceSessionStaff.findMany.mockResolvedValue([{ id: "st-muted", userId: "coach", teamOfficial: null }]);
+        await sendPracticePlanNotifications("sess1", "team1", "shared");
+        // 6:00 + 8 min warm-up + 2 min gap + 10 min Breakout + 2 min gap.
+        expect(mockSendEmail.mock.calls[0][0].text).toContain("Your stations: Scrimmage (6:22 PM)\n");
     });
 });
