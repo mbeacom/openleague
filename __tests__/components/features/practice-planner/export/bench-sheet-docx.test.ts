@@ -90,6 +90,15 @@ describe("renderBenchSheetDocx", () => {
         expect(xml).not.toContain("<w:tbl>");
     });
 
+    it("keeps the diagram with its text only when there is text to keep it with", async () => {
+        const keepNexts = async (text: string | null) =>
+            (await documentXml({ ...MODEL, drills: [drill(1, { text })] })).match(/<w:keepNext\/>/g)?.length ?? 0;
+        // The heading and the time line always keep with what follows.
+        expect(await keepNexts(null)).toBe(2);
+        expect(await keepNexts("")).toBe(2);
+        expect(await keepNexts("Line")).toBe(3);
+    });
+
     it("drops characters XML 1.0 forbids from text, alt text and the title", async () => {
         const bad = "\u0001\u000B\uFFFE\uFFFF";
         const model: BenchSheetModel = {

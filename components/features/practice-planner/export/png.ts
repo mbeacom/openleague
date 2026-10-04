@@ -5,8 +5,15 @@
  */
 const PNG_DATA_URI = /^data:image\/png;base64,([A-Za-z0-9+/]+={0,2})$/;
 
+/**
+ * Longest URI treated as an image (characters). A diagram canvas encodes to a
+ * few hundred KB at most; the cap keeps a pathological or hostile imported plan
+ * from forcing a multi-megabyte regex scan, base64 decode and document embed.
+ */
+export const MAX_PNG_DATA_URI_LENGTH = 2_000_000;
+
 export function isPngDataUri(value: string | null | undefined): value is string {
-    if (!value) return false;
+    if (!value || value.length > MAX_PNG_DATA_URI_LENGTH) return false;
     const match = PNG_DATA_URI.exec(value);
     return match !== null && match[1].length % 4 === 0;
 }

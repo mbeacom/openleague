@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { playDataSchema } from "@/lib/utils/play-data";
 import { isValidTimeZone } from "@/lib/utils/date";
+import { MAX_THUMBNAIL_SIZE, THUMBNAIL_DATA_URL } from "@/lib/utils/thumbnail-rules";
 import { MIN_SEGMENT_DIMENSION } from "@/lib/utils/segment-geometry";
 
 /**
@@ -1269,14 +1270,11 @@ export type VenueAvailabilityInput = z.infer<typeof venueAvailabilitySchema>;
 
 // Practice planner validation schemas
 
-// Maximum thumbnail size (1MB in base64 is ~1.37MB, so limit to ~750KB base64)
-const MAX_THUMBNAIL_SIZE = 1000000;
-
 // Base64 image validation helper
 const base64ImageSchema = z
   .string()
   .regex(
-    /^data:image\/(png|jpeg|jpg|webp);base64,/,
+    THUMBNAIL_DATA_URL,
     "Thumbnail must be a base64-encoded image (PNG, JPEG, or WebP)"
   )
   .max(MAX_THUMBNAIL_SIZE, "Thumbnail must be less than 1MB")

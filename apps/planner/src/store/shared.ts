@@ -1,5 +1,6 @@
 /** Helpers every local-store operation shares (ADR-0020). */
 import type { ActionResult, LibraryPlaySummary } from "@/lib/planner-store";
+import { MAX_THUMBNAIL_SIZE, isAcceptableThumbnail } from "@/lib/utils/thumbnail-rules";
 import { sanitizePlayDataForWrite } from "@/lib/utils/play-data";
 import type { PlayData } from "@/types/practice-planner";
 import type { PlannerRepo, RepoTx, StoredPlay } from "./records";
@@ -113,15 +114,10 @@ export function writablePlayData(playData: PlayData): PlayData {
     return sanitized.data;
 }
 
-/**
- * Hosted's thumbnail rule (base64ImageSchema and MAX_THUMBNAIL_SIZE in
- * lib/utils/validation.ts). Copied, not imported: that module isn't exported
- * piecemeal and pulls in unrelated validation for the static bundle.
- */
-export const MAX_THUMBNAIL_SIZE = 1000000;
-const THUMBNAIL_DATA_URL = /^data:image\/(png|jpeg|jpg|webp);base64,/;
+/** Hosted's thumbnail rule, shared through lib/utils/thumbnail-rules.ts (a pure module the static bundle can import). */
+export { MAX_THUMBNAIL_SIZE };
 
 /** Only thumbnails hosted would accept are kept; anything else is dropped rather than stored. */
 export function thumbnailOrNull(value: string | null | undefined): string | null {
-    return value && value.length <= MAX_THUMBNAIL_SIZE && THUMBNAIL_DATA_URL.test(value) ? value : null;
+    return value && isAcceptableThumbnail(value) ? value : null;
 }

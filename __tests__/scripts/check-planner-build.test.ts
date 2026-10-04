@@ -54,7 +54,7 @@ describe("checkPlannerBuild", () => {
         const guarded = 'const m = typeof process !== "undefined" && process.env.DEBUG;';
         expect(
             await checkPlannerBuild(
-                await fixture({ "index.html": GOOD_HTML, "assets/a.js": `${GOOD_JS}\n${guarded}`, "assets/docx-abc.js": LAZY_JS }),
+                await fixture({ "index.html": GOOD_HTML, "assets/index-abc.js": `${GOOD_JS}\n${guarded}`, "assets/docx-abc.js": LAZY_JS }),
             ),
         ).toEqual([]);
         const bare = "const m = process.env.DEBUG;";
@@ -70,6 +70,22 @@ describe("checkPlannerBuild", () => {
     it("fails when the Word export is in the entry chunk instead of its own lazy chunk", async () => {
         const problems = await checkPlannerBuild(await fixture({ "index.html": GOOD_HTML, "assets/index-abc.js": `${GOOD_JS}\n${LAZY_JS}` }));
         expect(problems.join("\n")).toMatch(/assets\/index-abc\.js \(the entry chunk\) contains "word\/document\.xml"/);
+    });
+
+    it("treats a modulepreload target as an entry chunk", async () => {
+        const html = GOOD_HTML.replace("</head>", '<link rel="modulepreload" crossorigin href="./assets/vendor-abc.js"></head>');
+        const problems = await checkPlannerBuild(
+            await fixture({ "index.html": html, "assets/index-abc.js": GOOD_JS, "assets/vendor-abc.js": LAZY_JS }),
+        );
+        expect(problems.join("\n")).toMatch(/assets\/vendor-abc\.js \(the entry chunk\) contains "word\/document\.xml"/);
+    });
+
+    it("fails when an entry script or modulepreload target is missing from the build", async () => {
+        const html = GOOD_HTML.replace("</head>", '<link rel="modulepreload" href="./assets/vendor-abc.js"></head>');
+        const problems = await checkPlannerBuild(await fixture({ "index.html": html, "assets/docx-abc.js": `${GOOD_JS}\n${LAZY_JS}` }));
+        const text = problems.join("\n");
+        expect(text).toMatch(/assets\/index-abc\.js.*missing/);
+        expect(text).toMatch(/assets\/vendor-abc\.js.*missing/);
     });
 
     it("fails when no chunk carries the Word export", async () => {
