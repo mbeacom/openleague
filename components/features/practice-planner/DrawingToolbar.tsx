@@ -56,12 +56,14 @@ import {
     EQUIPMENT_LABELS,
     DEFAULT_END_FOR_ACTION,
 } from "@/lib/utils/canvas/notation";
-import { OptionGroup, OPTION_SX, TOUCH_TARGET_SX, FOCUS_RING_SX } from "./OptionGroup";
+import { OptionGroup, OPTION_SX, TOUCH_TARGET_SX, FOCUS_RING_SX, SELECTED_SX } from "./OptionGroup";
 
 export { OPTION_SX, TOUCH_TARGET_SX };
 
-/** Tool and action buttons: 44px touch target plus the shared focus ring. */
+/** Action buttons: 44px touch target plus the shared focus ring. */
 const TOOL_BUTTON_SX = { ...TOUCH_TARGET_SX, ...FOCUS_RING_SX } as const;
+/** Tool toggles additionally get the primary-filled selected state. */
+const TOOL_TOGGLE_SX = { ...TOOL_BUTTON_SX, ...SELECTED_SX } as const;
 
 /**
  * Props for the DrawingToolbar component
@@ -267,32 +269,32 @@ export function DrawingToolbar({
                     }}
                 >
                     <Tooltip title="Select">
-                        <ToggleButton value="select" aria-label="select tool" sx={TOOL_BUTTON_SX}>
+                        <ToggleButton value="select" aria-label="select tool" sx={TOOL_TOGGLE_SX}>
                             <SelectIcon />
                         </ToggleButton>
                     </Tooltip>
                     <Tooltip title="Add Player">
-                        <ToggleButton value="player" aria-label="player tool" sx={TOOL_BUTTON_SX}>
+                        <ToggleButton value="player" aria-label="player tool" sx={TOOL_TOGGLE_SX}>
                             <PlayerIcon />
                         </ToggleButton>
                     </Tooltip>
                     <Tooltip title="Movement">
-                        <ToggleButton value="stroke" aria-label="movement tool" sx={TOOL_BUTTON_SX}>
+                        <ToggleButton value="stroke" aria-label="movement tool" sx={TOOL_TOGGLE_SX}>
                             <MovementIcon />
                         </ToggleButton>
                     </Tooltip>
                     <Tooltip title="Equipment">
-                        <ToggleButton value="equipment" aria-label="equipment tool" sx={TOOL_BUTTON_SX}>
+                        <ToggleButton value="equipment" aria-label="equipment tool" sx={TOOL_TOGGLE_SX}>
                             <EquipmentIcon />
                         </ToggleButton>
                     </Tooltip>
                     <Tooltip title="Add Text">
-                        <ToggleButton value="text" aria-label="text tool" sx={TOOL_BUTTON_SX}>
+                        <ToggleButton value="text" aria-label="text tool" sx={TOOL_TOGGLE_SX}>
                             <TextIcon />
                         </ToggleButton>
                     </Tooltip>
                     <Tooltip title="Eraser">
-                        <ToggleButton value="eraser" aria-label="eraser tool" sx={TOOL_BUTTON_SX}>
+                        <ToggleButton value="eraser" aria-label="eraser tool" sx={TOOL_TOGGLE_SX}>
                             <EraserIcon />
                         </ToggleButton>
                     </Tooltip>

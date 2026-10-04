@@ -63,11 +63,24 @@ describe("DrawingToolbar in the dark color scheme", () => {
         const selected = screen.getByLabelText("movement tool");
         expect(selected).toHaveAttribute("aria-pressed", "true");
         const style = getComputedStyle(selected);
-        expect(style.color).toContain("--mui-palette-text-primary");
-        expect(style.backgroundColor).toContain("--mui-palette");
+        // Primary fill + contrast text, so the active tool stands out from its
+        // unselected neighbours in both schemes (not MUI's faint 8%/16% tint).
+        expect(style.color.toLowerCase()).toContain("--mui-palette-primary-contrasttext");
+        expect(style.backgroundColor).toContain("--mui-palette-primary-main");
         expect(LIGHT_LITERALS).not.toContain(style.color.toLowerCase());
 
         const unselected = getComputedStyle(screen.getByLabelText("select tool"));
         expect(unselected.color).toContain("--mui-palette-action-active");
+    });
+
+    it("fills the selected stroke option with primary.main and its contrast text", () => {
+        renderDark();
+        const group = screen.getByRole("group", { name: "stroke action" });
+        const selected = group.querySelector('button[aria-pressed="true"]') as HTMLElement;
+        const style = getComputedStyle(selected);
+        expect(style.backgroundColor).toContain("--mui-palette-primary-main");
+        expect(style.color.toLowerCase()).toContain("--mui-palette-primary-contrasttext");
+        const unselected = group.querySelector('button[aria-pressed="false"]') as HTMLElement;
+        expect(getComputedStyle(unselected).backgroundColor).not.toContain("--mui-palette-primary-main");
     });
 });
