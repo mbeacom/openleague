@@ -8,6 +8,8 @@ const GOOD_HTML =
     '<html><head><meta http-equiv="Content-Security-Policy" content="default-src \'self\'">' +
     '<script type="module" src="./assets/index-abc.js"></script></head><body></body></html>';
 const GOOD_JS = 'const FORMAT = "openleague.practice-plan"; export {};';
+/** The lazily loaded Word export chunk. */
+const LAZY_JS = 'const PART = "word/document.xml"; export {};';
 
 async function fixture(files: Record<string, string>): Promise<string> {
     const dir = await mkdtemp(path.join(os.tmpdir(), "planner-build-"));
@@ -20,7 +22,9 @@ async function fixture(files: Record<string, string>): Promise<string> {
 
 describe("checkPlannerBuild", () => {
     it("passes a relative, CSP-protected, telemetry-free bundle", async () => {
-        expect(await checkPlannerBuild(await fixture({ "index.html": GOOD_HTML, "assets/index-abc.js": GOOD_JS }))).toEqual([]);
+        expect(
+            await checkPlannerBuild(await fixture({ "index.html": GOOD_HTML, "assets/index-abc.js": GOOD_JS, "assets/docx-abc.js": LAZY_JS })),
+        ).toEqual([]);
     });
 
     it("fails when nothing was built", async () => {
@@ -48,7 +52,11 @@ describe("checkPlannerBuild", () => {
 
     it("fails on an unguarded process.env read, but not a guarded one", async () => {
         const guarded = 'const m = typeof process !== "undefined" && process.env.DEBUG;';
-        expect(await checkPlannerBuild(await fixture({ "index.html": GOOD_HTML, "assets/a.js": `${GOOD_JS}\n${guarded}` }))).toEqual([]);
+        expect(
+            await checkPlannerBuild(
+                await fixture({ "index.html": GOOD_HTML, "assets/a.js": `${GOOD_JS}\n${guarded}`, "assets/docx-abc.js": LAZY_JS }),
+            ),
+        ).toEqual([]);
         const bare = "const m = process.env.DEBUG;";
         const problems = await checkPlannerBuild(await fixture({ "index.html": GOOD_HTML, "assets/a.js": `${GOOD_JS}\n${bare}` }));
         expect(problems.join("\n")).toMatch(/process\.env/);
@@ -57,6 +65,16 @@ describe("checkPlannerBuild", () => {
     it("fails when the plan-document module is missing from the bundle", async () => {
         const problems = await checkPlannerBuild(await fixture({ "index.html": GOOD_HTML, "assets/a.js": "export {};" }));
         expect(problems.join("\n")).toMatch(/openleague\.practice-plan/);
+    });
+
+    it("fails when the Word export is in the entry chunk instead of its own lazy chunk", async () => {
+        const problems = await checkPlannerBuild(await fixture({ "index.html": GOOD_HTML, "assets/index-abc.js": `${GOOD_JS}\n${LAZY_JS}` }));
+        expect(problems.join("\n")).toMatch(/assets\/index-abc\.js \(the entry chunk\) contains "word\/document\.xml"/);
+    });
+
+    it("fails when no chunk carries the Word export", async () => {
+        const problems = await checkPlannerBuild(await fixture({ "index.html": GOOD_HTML, "assets/index-abc.js": GOOD_JS }));
+        expect(problems.join("\n")).toMatch(/word\/document\.xml/);
     });
 });
 
@@ -85,5 +103,30 @@ describe("unguardedProcessEnvCount", () => {
     it("allows an optional read off another object (property access can't throw a ReferenceError)", () => {
         expect(unguardedProcessEnvCount("globalThis.process?.env.A")).toBe(0);
         expect(unguardedProcessEnvCount("globalThis.process.env.A")).toBe(1);
+    });
+
+    it("treats the block directly under a typeof-process if as guarded", () => {
+        expect(unguardedProcessEnvCount('if(typeof process<"u"){process.env.A}')).toBe(0);
+        expect(unguardedProcessEnvCount('if (typeof process !== "undefined") { setup(); const a = process.env.A; }')).toBe(0);
+        expect(unguardedProcessEnvCount("if(typeof process!='undefined'){x=1,y=process.env.A}")).toBe(0);
+        expect(unguardedProcessEnvCount('if(typeof process==="object"){process.env.A}')).toBe(0);
+        expect(unguardedProcessEnvCount('if(typeof process<"u"&&x){process.env.A}')).toBe(0);
+        expect(unguardedProcessEnvCount('if(x){}else if (typeof process!=="undefined"){process.env.A}')).toBe(0);
+    });
+
+    it("stays strict about everything else an if touches", () => {
+        // the else branch, a nested block, an object literal, an escape hatch, a negated check, a later statement
+        expect(unguardedProcessEnvCount('if(typeof process<"u"){}else{process.env.A}')).toBe(1);
+        expect(unguardedProcessEnvCount('if(typeof process<"u"){if(x){process.env.A}}')).toBe(1);
+        expect(unguardedProcessEnvCount('if(typeof process<"u"){f({a:process.env.A})}')).toBe(1);
+        expect(unguardedProcessEnvCount('if(typeof process<"u"||y){process.env.A}')).toBe(1);
+        expect(unguardedProcessEnvCount('if(typeof process==="undefined"){process.env.A}')).toBe(1);
+        expect(unguardedProcessEnvCount('if(typeof process<"u"){a()}process.env.B')).toBe(1);
+        expect(unguardedProcessEnvCount('if(!(typeof process!=="undefined")){process.env.A}')).toBe(1);
+        expect(unguardedProcessEnvCount('if(y?0:typeof process<"u"){process.env.A}')).toBe(1);
+        expect(unguardedProcessEnvCount('if(f(typeof process<"u")){process.env.A}')).toBe(1);
+        expect(unguardedProcessEnvCount('if(a,typeof process<"u"){process.env.A}')).toBe(1);
+        expect(unguardedProcessEnvCount('if(typeof process<"u"|y){process.env.A}')).toBe(1);
+        expect(unguardedProcessEnvCount('elif(typeof process<"u"){process.env.A}')).toBe(1);
     });
 });

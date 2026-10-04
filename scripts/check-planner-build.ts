@@ -22,11 +22,69 @@ export const FORBIDDEN_IN_BUNDLE: ReadonlyArray<{ pattern: string; reason: strin
     { pattern: "vitals.vercel", reason: "analytics are not allowed in the static planner" },
 ];
 
-export const REQUIRED_IN_BUNDLE = ["openleague.practice-plan"];
+export const REQUIRED_IN_BUNDLE = ["openleague.practice-plan", "word/document.xml"];
+
+/** Code that must load only on demand, by a literal only it contains. */
+export const LAZY_ONLY_IN_BUNDLE: ReadonlyArray<{ pattern: string; reason: string }> = [
+    { pattern: "word/document.xml", reason: "the Word export (docx) must load only through import(), on click" },
+];
+
+/** The module scripts index.html loads up front, relative to outDir. */
+function entryScripts(html: string): string[] {
+    return Array.from(html.matchAll(/<script\b[^>]*\bsrc="\.\/([^"]+\.js)"/g), (match) => match[1]);
+}
 
 /** `process.env`, `process?.env`, `process["env"]` and `process?.["env"]`, capturing what precedes `process`. */
 const PROCESS_ENV = /(\.\s*)?\bprocess\s*(\?\.\s*env\b|\.\s*env\b|(\?\.)?\s*\[\s*["']env["']\s*\])/g;
 const TYPEOF_PROCESS = /\btypeof\s+process\b/;
+
+/** An if condition that proves `process` exists: `!== "undefined"`, `!= "undefined"`, minified `<"u"`, or `=== "object"`. */
+const PROCESS_EXISTS = /^typeof\s+process\s*(?:!==?\s*["']undefined["']|<\s*["']u["']|===?\s*["']object["'])$/;
+
+/** The `{` of the innermost block or object literal still open at `index`, or -1. Strings aren't parsed. */
+function enclosingBrace(text: string, index: number): number {
+    let depth = 0;
+    for (let i = index - 1; i >= 0; i--) {
+        if (text[i] === "}") depth++;
+        else if (text[i] === "{") {
+            if (depth === 0) return i;
+            depth--;
+        }
+    }
+    return -1;
+}
+
+/**
+ * True when the `{` at `brace` opens the block of `if (cond)` and `cond` proves
+ * `process` exists in its first `&&` operand, with no way around it. Bundlers keep guards like
+ * `if(typeof process<"u"){…process.env…}`. Deliberately strict: only that
+ * block's own statements count, never an `else` block, a nested block, function
+ * or object literal, or anything after the closing `}`.
+ */
+function opensProcessGuardedIf(text: string, brace: number): boolean {
+    if (brace < 0) return false;
+    let close = brace - 1;
+    while (close >= 0 && /\s/.test(text[close])) close--;
+    if (text[close] !== ")") return false;
+    let depth = 0;
+    let open = -1;
+    for (let i = close; i >= 0; i--) {
+        if (text[i] === ")") depth++;
+        else if (text[i] === "(" && --depth === 0) {
+            open = i;
+            break;
+        }
+    }
+    if (open < 0) return false;
+    let keyword = open - 1;
+    while (keyword >= 0 && /\s/.test(text[keyword])) keyword--;
+    if (text.slice(keyword - 1, keyword + 1) !== "if" || /[\w$]/.test(text[keyword - 2] ?? "")) return false;
+    let condition = text.slice(open + 1, close).trim();
+    if (condition.startsWith("(") && condition.endsWith(")")) condition = condition.slice(1, -1).trim();
+    // A pure `&&` chain whose first operand is the check: no `|`, `?:`, comma or negation to escape it.
+    if (/[|?,]/.test(condition) || condition.startsWith("!")) return false;
+    return PROCESS_EXISTS.test(condition.split("&&")[0].trim());
+}
 
 /**
  * The text from the start of the statement-level expression containing `index`:
@@ -48,13 +106,17 @@ function enclosingExpression(text: string, index: number): string {
  * Reads of `process.env` (Vite has no `process`) not governed by a `typeof process`
  * check in the same expression. `process &&` is no guard: an undeclared `process`
  * throws. An optional read off another object (`globalThis.process?.env`) can't throw.
+ * A read in the block directly under a process-proving `if` is guarded too (opensProcessGuardedIf).
  */
 export function unguardedProcessEnvCount(text: string): number {
     let count = 0;
     for (const match of text.matchAll(PROCESS_ENV)) {
         const [, member, access, optionalBracket] = match;
         if (member && (access.startsWith("?.") || optionalBracket)) continue;
-        if (!TYPEOF_PROCESS.test(enclosingExpression(text, match.index))) count++;
+        const guarded =
+            TYPEOF_PROCESS.test(enclosingExpression(text, match.index)) ||
+            opensProcessGuardedIf(text, enclosingBrace(text, match.index));
+        if (!guarded) count++;
     }
     return count;
 }
@@ -92,9 +154,16 @@ export async function checkPlannerBuild(outDir: string): Promise<string[]> {
             if (text.includes(pattern)) problems.push(`${file} contains "${pattern}": ${reason}`);
         }
     }
+    for (const entry of entryScripts(html)) {
+        const text = contents.find(([file]) => file.split(path.sep).join("/") === entry)?.[1];
+        if (text === undefined) continue;
+        for (const { pattern, reason } of LAZY_ONLY_IN_BUNDLE) {
+            if (text.includes(pattern)) problems.push(`${entry} (the entry chunk) contains "${pattern}": ${reason}`);
+        }
+    }
     for (const needle of REQUIRED_IN_BUNDLE) {
         if (!contents.some(([, text]) => text.includes(needle))) {
-            problems.push(`no emitted file contains "${needle}": the plan-document module is missing from the bundle`);
+            problems.push(`no emitted file contains "${needle}": a required module is missing from the bundle`);
         }
     }
     return problems;

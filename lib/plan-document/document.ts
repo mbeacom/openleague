@@ -278,8 +278,8 @@ export function parsePlan(raw: unknown): ParsePlanResult {
 
 const MAX_SLUG_LENGTH = 60;
 
-/** `<slug>.olplan.json`: lowercase ASCII, hyphen-joined, ≤ 60 chars, else `practice-plan`. */
-export function planFileName(title: string): string {
+/** The title as a file-name slug: lowercase ASCII, hyphen-joined, ≤ 60 chars, else `practice-plan`. */
+export function planSlug(title: string): string {
     const slug = title
         .normalize("NFKD")
         .replace(/[\u0300-\u036f]/g, "")
@@ -288,7 +288,19 @@ export function planFileName(title: string): string {
         .replace(/^-+|-+$/g, "")
         .slice(0, MAX_SLUG_LENGTH)
         .replace(/-+$/, "");
-    return `${slug || "practice-plan"}.olplan.json`;
+    return slug || "practice-plan";
+}
+
+/** `<slug>.olplan.json`. */
+export function planFileName(title: string): string {
+    return `${planSlug(title)}.olplan.json`;
+}
+
+export type PlanExportExtension = "html" | "docx";
+
+/** `<slug>.html` / `<slug>.docx`: the bench sheet exports (sub-project 4). */
+export function planExportFileName(title: string, extension: PlanExportExtension): string {
+    return `${planSlug(title)}.${extension}`;
 }
 
 export interface PlanEditorDrill {

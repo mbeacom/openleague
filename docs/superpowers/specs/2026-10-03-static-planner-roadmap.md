@@ -24,5 +24,5 @@ The goal is a zero-account practice planner on GitHub Pages that any coach can u
 | 1 | Plan document format, plus hosted export and import (file and fragment link) | Built: spec `2026-10-03-plan-document-design.md`, plan `../plans/2026-10-03-plan-document.md` |
 | 2 | `PlannerStore` seam. Hosted implements it with server actions. Library, drill dialog, duplicate, and detail view go through it. `next/link`, `next/image`, and router go behind adapters. | Built: spec `2026-10-03-planner-store-design.md`, plan `../plans/2026-10-03-planner-store.md` |
 | 3 | Static app: IndexedDB store, starter drills, file import/export, "Open in OpenLeague", Pages deploy | Built: spec `2026-10-03-static-planner-app-design.md`, plan `../plans/2026-10-03-static-planner-app.md` |
-| 4 | Document exports: self-contained HTML bench sheet (opens in Google Docs and Word), optional lazy-loaded `.docx` | Spec to write |
+| 4 | Document exports: self-contained HTML bench sheet (opens in Google Docs and Word), optional lazy-loaded `.docx` | Built: spec `2026-10-03-plan-doc-exports-design.md`, plan `../plans/2026-10-03-plan-doc-exports.md` |
 | 5 | Direct Google Drive / OneDrive save via pickers with narrow file scopes | Later; needs OAuth app registration |

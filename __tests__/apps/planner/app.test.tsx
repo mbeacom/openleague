@@ -175,4 +175,12 @@ describe("PlannerApp", () => {
         expect(await screen.findByText(STALE_TAB_MESSAGE)).toBeInTheDocument();
         expect(screen.getByRole("button", { name: "Reload" })).toBeInTheDocument();
     });
+
+    it("shows the privacy note once on the import screen (the footer's)", async () => {
+        const { store } = memoryStore();
+        window.history.replaceState(null, "", "/#/import");
+        render(app(store));
+        await screen.findByRole("button", { name: /choose plan file/i });
+        expect(document.body.textContent?.split(PRIVACY_NOTE)).toHaveLength(2);
+    });
 });

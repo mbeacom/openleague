@@ -1,0 +1,158 @@
+/** buildBenchSheetModel: the bench sheet as plain strings and images, shared by the HTML and Word exports. */
+import { describe, expect, it, vi } from "vitest";
+import {
+    buildBenchSheetModel,
+    type BenchSheetRenderers,
+    type ExportSession,
+} from "@/components/features/practice-planner/export/bench-sheet-model";
+import { DIAGRAM_UNAVAILABLE_TEXT, NO_DRILLS_TEXT } from "@/components/features/practice-planner/export/labels";
+import { NO_DRILLS_MESSAGE } from "@/components/features/practice-planner/print/BenchSheet";
+import { DIAGRAM_UNAVAILABLE } from "@/components/features/practice-planner/print/PrintDiagram";
+import { buildLegend } from "@/lib/utils/canvas/legend";
+import { formatClockTime, formatLongDate } from "@/lib/utils/date";
+import { createEmptyPlayData } from "@/lib/utils/play-data";
+import type { PlayData } from "@/types/practice-planner";
+
+const pass = (id: string) => ({
+    id,
+    action: "pass" as const,
+    path: "straight" as const,
+    end: "arrow" as const,
+    points: [{ x: 0, y: 0 }, { x: 10, y: 10 }],
+    color: "#000000",
+    strokeWidth: 2,
+});
+const withPass = (id: string): PlayData => ({ ...createEmptyPlayData(), drawings: [pass(id)] });
+
+function play(
+    name: string,
+    sequence: number,
+    duration: number,
+    runsWithPrevious = false,
+    extra: { instructions?: string | null; description?: string | null; playData?: PlayData | null } = {},
+): ExportSession["plays"][number] {
+    return {
+        sequence,
+        duration,
+        runsWithPrevious,
+        instructions: extra.instructions ?? null,
+        play: { name, description: extra.description ?? null, playData: extra.playData === undefined ? createEmptyPlayData() : extra.playData },
+    };
+}
+
+const BOOKED: ExportSession = {
+    title: "Tuesday Skills",
+    date: "2026-04-07T22:00:00.000Z",
+    duration: 60,
+    startAt: "2026-04-08T00:00:00.000Z", // 6:00 PM MDT on Tuesday, April 7
+    venueTimezone: "America/Denver",
+    teamName: "Hawks U12",
+    venueName: "Ice House",
+    surfaceName: "Rink A",
+    segmentName: null,
+    plays: [
+        play("Breakout", 0, 10, false, { instructions: "Hard to the net", playData: withPass("a") }),
+        play("Regroup", 1, 8, true, { description: "Neutral zone", playData: withPass("b") }),
+        play("Shooting", 2, 15, false, { playData: null }),
+    ],
+};
+
+const UNBOOKED: ExportSession = { ...BOOKED, startAt: null, venueTimezone: null, venueName: null, surfaceName: null };
+
+function renderers(overrides: Partial<BenchSheetRenderers> = {}): BenchSheetRenderers {
+    return {
+        diagram: vi.fn((_data: PlayData, ratio: number) => `data:image/png;base64,DIA${ratio}`),
+        swatch: vi.fn(() => "data:image/png;base64,SWAT"),
+        ...overrides,
+    };
+}
+
+describe("buildBenchSheetModel", () => {
+    it("formats a booked session in the venue's zone with its short name", () => {
+        const model = buildBenchSheetModel(BOOKED, renderers());
+        expect(model.title).toBe("Tuesday Skills");
+        expect(model.teamName).toBe("Hawks U12");
+        expect(model.when).toBe("Tuesday, April 7, 2026 · 6:00 PM – 7:00 PM MDT");
+        expect(model.place).toBe("Ice House · Rink A");
+    });
+
+    it("formats an unbooked session in the viewer's zone with no suffix and no place", () => {
+        const start = new Date(UNBOOKED.date);
+        const end = new Date(start.getTime() + 60 * 60_000);
+        const model = buildBenchSheetModel(UNBOOKED, renderers());
+        expect(model.when).toBe(`${formatLongDate(start)} · ${formatClockTime(start)} – ${formatClockTime(end)}`);
+        expect(model.place).toBeNull();
+        expect(model.timeline[0].start).toBe(formatClockTime(start));
+    });
+
+    it("omits the team when asked (static planner) or when it is blank", () => {
+        expect(buildBenchSheetModel(BOOKED, renderers(), { omitTeam: true }).teamName).toBeNull();
+        expect(buildBenchSheetModel({ ...BOOKED, teamName: "   " }, renderers()).teamName).toBeNull();
+    });
+
+    it("lists one timeline row per block, with station blocks expanded", () => {
+        const model = buildBenchSheetModel(BOOKED, renderers());
+        expect(model.timeline).toEqual([
+            { start: "6:00 PM MDT", minutes: 10, label: "Stations · 2", stations: ["Breakout · 10 min", "Regroup · 8 min"] },
+            { start: "6:10 PM MDT", minutes: 15, label: "Shooting", stations: null },
+        ]);
+        expect(model.planned).toBe("Planned 25 of 60 min");
+        expect(model.overTime).toBe(false);
+    });
+
+    it("flags a plan longer than the booking", () => {
+        const model = buildBenchSheetModel({ ...BOOKED, duration: 20 }, renderers());
+        expect(model.planned).toBe("Planned 25 of 20 min (over time!)");
+        expect(model.overTime).toBe(true);
+    });
+
+    it("numbers drills in schedule order with station tags, block starts and text fallback", () => {
+        const model = buildBenchSheetModel(BOOKED, renderers());
+        expect(model.drills.map(({ number, name, start, minutes, station, text }) => ({ number, name, start, minutes, station, text }))).toEqual([
+            { number: 1, name: "Breakout", start: "6:00 PM MDT", minutes: 10, station: "Station 1 of 2", text: "Hard to the net" },
+            { number: 2, name: "Regroup", start: "6:00 PM MDT", minutes: 8, station: "Station 2 of 2", text: "Neutral zone" },
+            { number: 3, name: "Shooting", start: "6:10 PM MDT", minutes: 15, station: null, text: null },
+        ]);
+    });
+
+    it("draws readable diagrams at the bench sheet's pixel ratio and skips unreadable ones", () => {
+        const r = renderers();
+        const model = buildBenchSheetModel(BOOKED, r);
+        expect(model.drills.map((d) => d.diagram)).toEqual(["data:image/png;base64,DIA3", "data:image/png;base64,DIA3", null]);
+        expect(r.diagram).toHaveBeenCalledTimes(2);
+    });
+
+    it.each([
+        [12, 3],
+        [13, 2],
+        [41, 1],
+    ])("uses pixel ratio for %i readable drills: %i", (count, ratio) => {
+        const plays = Array.from({ length: count }, (_, i) => play(`Drill ${i}`, i, 1));
+        const r = renderers();
+        buildBenchSheetModel({ ...BOOKED, duration: 300, plays }, r);
+        expect(vi.mocked(r.diagram).mock.calls.every(([, used]) => used === ratio)).toBe(true);
+    });
+
+    it("leaves a diagram the renderer couldn't draw as null", () => {
+        const model = buildBenchSheetModel(BOOKED, renderers({ diagram: () => null }));
+        expect(model.drills.every((d) => d.diagram === null)).toBe(true);
+    });
+
+    it("builds one legend across all drills, each symbol once", () => {
+        const model = buildBenchSheetModel(BOOKED, renderers());
+        expect(model.legend).toEqual(buildLegend(withPass("x")).map((entry) => ({ label: entry.label, image: "data:image/png;base64,SWAT" })));
+    });
+
+    it("gives an empty session no rows, drills or legend", () => {
+        const model = buildBenchSheetModel({ ...BOOKED, plays: [] }, renderers());
+        expect([model.timeline, model.drills, model.legend]).toEqual([[], [], []]);
+        expect(model.planned).toBe("Planned 0 of 60 min");
+    });
+});
+
+describe("export copy", () => {
+    it("matches the on-screen bench sheet", () => {
+        expect(NO_DRILLS_TEXT).toBe(NO_DRILLS_MESSAGE);
+        expect(DIAGRAM_UNAVAILABLE_TEXT).toBe(DIAGRAM_UNAVAILABLE);
+    });
+});

@@ -10,7 +10,9 @@ import {
     PLAN_VERSION,
     parsePlan,
     planByteLength,
+    planExportFileName,
     planFileName,
+    planSlug,
     planToEditorSession,
     serializePlan,
     type PlanSessionInput,
@@ -295,5 +297,22 @@ describe("planByteLength", () => {
         const doc = serializePlan(input({ title: "Été drills" }), "openleague-hosted", NOW);
         expect(planByteLength(doc)).toBe(new TextEncoder().encode(JSON.stringify(doc)).byteLength);
         expect(planByteLength(doc)).toBeGreaterThan(JSON.stringify(doc).length); // "É" and "é" are 2 bytes each
+    });
+});
+
+describe("planExportFileName", () => {
+    it.each([
+        ["Tuesday Skills Practice", "html", "tuesday-skills-practice.html"],
+        ["U12 / Power-Play #2", "docx", "u12-power-play-2.docx"],
+        ["🏒🏒", "html", "practice-plan.html"],
+        ["!!!", "docx", "practice-plan.docx"],
+    ] as const)("names %j as .%s", (title, extension, expected) => {
+        expect(planExportFileName(title, extension)).toBe(expected);
+    });
+
+    it("shares the plan file's slug", () => {
+        const title = "  Équipe Été!!  ";
+        expect(planSlug(title)).toBe("equipe-ete");
+        expect(planFileName(title)).toBe(`${planSlug(title)}.olplan.json`);
     });
 });

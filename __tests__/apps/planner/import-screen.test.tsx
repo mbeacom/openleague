@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { memoryStore, renderScreen, wrapScreen } from "./render-screen";
 import { ImportScreen, planStartDate } from "@/apps/planner/src/screens/ImportScreen";
 import { PRIVACY_NOTE } from "@/apps/planner/src/config";
@@ -39,7 +39,8 @@ describe("ImportScreen", () => {
     it("imports a plan file and opens the new practice", async () => {
         const { store } = memoryStore();
         renderScreen(<ImportScreen store={store} linkValue={null} />, store);
-        expect(screen.getByText(PRIVACY_NOTE)).toBeInTheDocument();
+        // AppShell's footer carries the note; the screen doesn't repeat it.
+        expect(screen.queryByText(PRIVACY_NOTE)).toBeNull();
         chooseFile(new File([JSON.stringify(PLAN)], "tuesday.olplan.json", { type: "application/json" }));
         expect(await screen.findByText("Tuesday Skills")).toBeInTheDocument();
         fireEvent.click(screen.getByRole("checkbox", { name: /also add these drills to my library/i }));
@@ -109,5 +110,23 @@ describe("ImportScreen", () => {
         view.rerender(wrapScreen(<ImportScreen store={store} linkValue={value} />, store));
         expect(await screen.findByText("Tuesday Skills")).toBeInTheDocument();
         expect(window.location.hash).toBe("#/import");
+    });
+
+    it("keeps a link pasted while a chosen file is still being read", async () => {
+        const { store } = memoryStore();
+        const view = renderScreen(<ImportScreen store={store} linkValue={null} />, store);
+        let finishRead!: (text: string) => void;
+        const slow = new File(["{}"], "slow.olplan.json", { type: "application/json" });
+        Object.defineProperty(slow, "text", { value: () => new Promise<string>((resolve) => (finishRead = resolve)) });
+        chooseFile(slow);
+
+        const link = await encodePlanLink(serializePlan({ ...INPUT, title: "Thursday Skating" }, "openleague-hosted"));
+        window.history.replaceState(null, "", `/#plan=${link}`);
+        view.rerender(wrapScreen(<ImportScreen store={store} linkValue={link} />, store));
+        expect(await screen.findByText("Thursday Skating")).toBeInTheDocument();
+
+        await act(async () => finishRead(JSON.stringify(PLAN)));
+        expect(screen.queryByText("Tuesday Skills")).toBeNull();
+        expect(screen.getByText("Thursday Skating")).toBeInTheDocument();
     });
 });

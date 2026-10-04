@@ -71,6 +71,8 @@ const PLANNER_PORTABILITY_MESSAGE =
   "Portable practice-planner code (ADR-0020) must not import server actions, Prisma, auth " +
   "or Next.js runtime modules. Use usePlannerStore()/usePlannerPlatform() from " +
   "@/lib/planner-store, and local types.";
+const LAZY_DOCX_MESSAGE =
+  "Load the Word export with import(\"./bench-sheet-docx\") inside the click, never statically: docx must stay out of the main bundles (ADR-0020).";
 
 /** Glob-escaped: `[sessionId]` would otherwise be a character class and match nothing. */
 const SESSION_DETAIL_VIEW = "app/\\(dashboard\\)/practice-planner/\\[sessionId\\]/SessionDetailView.tsx";
@@ -185,12 +187,15 @@ const eslintConfig = [
             "@/components/ui/NextLinkComposites",
             "@/components/providers/HostedPlannerProvider",
             "@/components/providers/hosted-planner-platform",
-          ].map((name) => ({ name, message: PLANNER_PORTABILITY_MESSAGE })),
+          ]
+            .map((name) => ({ name, message: PLANNER_PORTABILITY_MESSAGE }))
+            .concat([{ name: "docx", message: LAZY_DOCX_MESSAGE }]),
           patterns: [
             {
               group: ["next/*", "@/lib/actions/*", "@/lib/db/*", "@/lib/auth/*"],
               message: PLANNER_PORTABILITY_MESSAGE,
             },
+            { group: ["**/bench-sheet-docx", "docx/*"], message: LAZY_DOCX_MESSAGE },
           ],
         },
       ],
