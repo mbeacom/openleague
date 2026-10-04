@@ -38,6 +38,7 @@ model User {
   notificationBatches          NotificationBatch[]
   auditLogs                    AuditLog[]
   practiceSessions             PracticeSession[]
+  practiceStaff                PracticeSessionStaff[]
   plays                        Play[]
   venues                       Venue[]
   createdSeasons               Season[]                     @relation("SeasonCreator")
@@ -295,6 +296,10 @@ model TeamOfficial {
 
   userId String? // Linked when the email matches a User (at create or invitation acceptance)
   user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  // Practice staff entries linked to this official (spec R4). Deleting the
+  // official leaves the name, unlinked (onDelete: SetNull on the other side).
+  practiceStaff PracticeSessionStaff[]
 
   // Postgres treats NULLs as distinct, so email-less entries never collide here
   @@unique([teamId, email, role])
@@ -1632,6 +1637,8 @@ model PracticeSession {
   // Private drill copies this session owns (Play.sessionId). Deleting the
   // session deletes them in the same statement.
   ownedPlays Play[]                @relation("SessionOwnedPlays")
+  // The practice's staff list (practice staff, spec R2).
+  staff      PracticeSessionStaff[]
 
   @@index([teamId, date])
   @@index([venueId, startAt])
@@ -1678,11 +1685,62 @@ model PracticeSessionPlay {
   // nested statement; an immediate check would depend on trigger order.
   // Deferred, it runs once at commit, so a stray delete still fails (P2003).
   play   Play?  @relation(fields: [playId], references: [id], onDelete: NoAction)
+  // Who runs this row (practice staff). Rows are deleted and recreated on
+  // every save, which cascades these; updatePracticeSession carries them.
+  staff  PracticeSessionPlayStaff[]
 
   @@unique([sessionId, sequence])
   @@index([sessionId])
   @@index([playId])
   @@map("practice_session_plays")
+}
+
+// A person on a practice's staff (practice staff, spec R2): a team official,
+// a team admin, or a typed name. Hand-written migration
+// 20261005120000_practice_session_staff also adds what Prisma can't model:
+// CHECK (char_length("name") BETWEEN 1 AND 60), CHECK ("position" >= 0),
+// CHECK (num_nonnulls("teamOfficialId", "userId") <= 1), and the unique index
+// on ("sessionId", lower("name")). Keep them by hand if regenerated.
+model PracticeSessionStaff {
+  id       String @id @default(cuid())
+  /// 1-60 characters, cleaned; unique per practice ignoring case.
+  name     String
+  /// Order in the practice's list, unique per practice.
+  position Int
+
+  sessionId String
+  session   PracticeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  /// Linked team official (ACTIVE or INVITED when saved). Never both links.
+  teamOfficialId String?
+  teamOfficial   TeamOfficial? @relation(fields: [teamOfficialId], references: [id], onDelete: SetNull)
+
+  /// A team admin who isn't an official.
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  assignments PracticeSessionPlayStaff[]
+
+  @@unique([sessionId, position])
+  @@index([teamOfficialId])
+  @@index([userId])
+  @@map("practice_session_staff")
+}
+
+// One person running one row, in order within the row (practice staff).
+// CHECK ("position" >= 0) is in the hand-written migration.
+model PracticeSessionPlayStaff {
+  playRowId String
+  playRow   PracticeSessionPlay @relation(fields: [playRowId], references: [id], onDelete: Cascade)
+
+  staffId String
+  staff   PracticeSessionStaff @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  position Int
+
+  @@id([playRowId, staffId])
+  @@index([staffId])
+  @@map("practice_session_play_staff")
 }
 
 // Reusable play model for practice planner

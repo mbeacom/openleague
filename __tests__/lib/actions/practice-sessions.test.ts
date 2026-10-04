@@ -39,6 +39,7 @@ const { mockAuth, mockTx, mockPrisma, serviceAssignVenueReservation, serviceCrea
       update: vi.fn(),
     },
     practiceSessionPlay: { deleteMany: vi.fn(), findMany: vi.fn(), createMany: vi.fn() },
+    practiceSessionPlayStaff: { findMany: vi.fn(), createMany: vi.fn() },
     event: {
       create: vi.fn(),
       delete: vi.fn(),
@@ -165,6 +166,7 @@ beforeEach(() => {
   serviceAssignVenueReservation.mockResolvedValue({ ok: true });
   serviceCreateVenueReservation.mockResolvedValue({ id: RESERVATION_ID, status: "CONFIRMED" });
   mockTx.practiceSessionPlay.findMany.mockResolvedValue([]);
+  mockTx.practiceSessionPlayStaff.findMany.mockResolvedValue([]);
   mockTx.play.findMany.mockResolvedValue([]);
   mockTx.play.deleteMany.mockResolvedValue({ count: 0 });
 });
