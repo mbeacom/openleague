@@ -132,7 +132,7 @@ describe("ExportPlanMenu", () => {
         expect(clicks).toHaveLength(1);
         const alert = await screen.findByRole("alert");
         expect(alert).toHaveTextContent(
-            `This file can't be imported as-is: A plan can hold at most ${MAX_PLAN_DRILLS} drills`,
+            `This file can't be imported as-is: A plan can hold at most ${MAX_PLAN_DRILLS} rows (drills and blocks)`,
         );
     });
 
@@ -204,7 +204,7 @@ describe("ExportPlanMenu", () => {
         fireEvent.click(screen.getByRole("menuitem", { name: /open in planner/i }));
 
         expect(await screen.findByRole("alert")).toHaveTextContent(
-            `This file can't be imported as-is: A plan can hold at most ${MAX_PLAN_DRILLS} drills`,
+            `This file can't be imported as-is: A plan can hold at most ${MAX_PLAN_DRILLS} rows (drills and blocks)`,
         );
         expect(writeText).not.toHaveBeenCalled();
     });

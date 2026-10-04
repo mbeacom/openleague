@@ -180,7 +180,7 @@ const planSessionSchema = z
         startTime: localTimeSchema,
         goaliesAttending: goaliesAttendingSchema,
         transitionMinutes: transitionMinutesSchema,
-        drills: z.array(planEntrySchema).max(MAX_PLAN_DRILLS, `A plan can hold at most ${MAX_PLAN_DRILLS} drills`),
+        drills: z.array(planEntrySchema).max(MAX_PLAN_DRILLS, `A plan can hold at most ${MAX_PLAN_DRILLS} rows (drills and blocks)`),
     })
     .superRefine((session, ctx) => {
         // The same rules the hosted save enforces (createPracticeSession).

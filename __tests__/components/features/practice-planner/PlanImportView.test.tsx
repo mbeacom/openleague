@@ -340,6 +340,12 @@ describe("PlanImportView: block rows in the preview", () => {
         expect(within(list).getByText("Warm-up")).toBeInTheDocument();
         expect(within(list).getByText("8 min · Laps")).toBeInTheDocument();
         expect(within(list).queryByRole("img", { name: /Warm-up/ })).toBeNull();
+        // No diagram of any name, and no image element at all, in the block's item; the drill's item has one.
+        const [blockItem, drillItem] = within(list).getAllByRole("listitem");
+        expect(within(blockItem).getByText("Warm-up")).toBeInTheDocument();
+        expect(within(blockItem).queryAllByRole("img")).toHaveLength(0);
+        expect(blockItem.querySelector("img")).toBeNull();
+        expect(within(drillItem).getAllByRole("img").length).toBeGreaterThan(0);
         expect(screen.getByText(/Planned 20 of 60 min/)).toBeInTheDocument();
     });
 });

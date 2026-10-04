@@ -188,8 +188,10 @@ The document gains, without a version bump:
 
 **Rules:**
 - A row without a `kind` is a drill, so every earlier file reads as before, with a 0-minute gap.
-- A block row carries `sequence`, `durationMinutes`, `kind`, `label` and `instructions` (its note) and nothing else: no drill, diagram or tags. It counts toward `MAX_PLAN_DRILLS`.
-- `stays`, `rotateEveryMinutes`, `label` and `transitionMinutes` read leniently (an unrecognized value takes its default). An unknown `kind` is an error, never read as a drill. The row rules (a block never runs as a station; a rotation only on the first drill of a block with at least 2 rotating stations) are enforced as the hosted save enforces them.
+- A block row carries `sequence`, `durationMinutes`, `kind`, `label` and `instructions` (its note) and nothing else: no drill, diagram or tags. It counts toward `MAX_PLAN_DRILLS`: a plan holds at most 50 rows, drills and blocks together.
+- On import, a block row's stray fields (`stays`, `rotateEveryMinutes`, `runsWithPrevious`, a drill or tags) are dropped, not rejected, and a label longer than 60 characters is cut to 60.
+- `stays`, `rotateEveryMinutes`, `label` and `transitionMinutes` read leniently (an unrecognized value takes its default). A missing or `null` `kind` reads as a drill; any other unknown `kind` is an error, never read as a drill. The row rules (a block never runs as a station; a rotation only on the first drill of a block with at least 2 rotating stations) are enforced as the hosted save enforces them.
+- A rotating station's `durationMinutes` is read as the rotation's minutes (the whole block for a station that stays), as the editor shows it.
 - Writers always emit every field.
 
 **Compatibility:** a reader built before this amendment strips the drill rows' new keys and reads such a file as before, but rejects a file that contains a block row (it has no `drill`) with its normal "can't open this plan" message. That one-way break is accepted: a bump would make older readers reject every new file, including those without blocks.

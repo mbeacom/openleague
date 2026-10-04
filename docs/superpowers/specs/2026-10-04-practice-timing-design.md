@@ -125,10 +125,10 @@ Every path that copies session rows carries `kind`, `label`, `stays` and `rotate
 ### R6. Plan document (PLAN_VERSION stays 1)
 
 **Optional fields, read leniently with `z.preprocess` like the goalie fields:**
-- Per entry: `kind` (default `drill`), `label`, `stays` (default false), `rotateEveryMinutes` (default null).
+- Per entry: `kind` (`drill` when missing or null; any other unknown kind is an error, never read as a drill), `label`, `stays` (default false), `rotateEveryMinutes` (default null).
 - Per session: `transitionMinutes` (default 0).
 
-**Shape of a non-drill entry:** it carries `sequence`, `duration`, `kind`, `label` and `instructions`, and no `name`, `description`, `playData` or tags. It still counts toward `MAX_PLAN_DRILLS`.
+**Shape of a non-drill entry:** it carries `sequence`, `duration`, `kind`, `label` and `instructions`, and no `name`, `description`, `playData` or tags. It still counts toward `MAX_PLAN_DRILLS`: a plan holds at most 50 rows, drills and blocks together.
 
 **Compatibility:**
 - Files written before this change import unchanged, as all drills with a 0-minute gap.

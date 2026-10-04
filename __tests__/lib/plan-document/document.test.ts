@@ -252,7 +252,7 @@ describe("parsePlan", () => {
                 doc.session.drills = Array.from({ length: count }, (_, i) => drill(i));
             });
         expect(parsePlan(withDrills(MAX_PLAN_DRILLS)).ok).toBe(true);
-        expect(issuesOf(withDrills(MAX_PLAN_DRILLS + 1))).toContain("A plan can hold at most 50 drills");
+        expect(issuesOf(withDrills(MAX_PLAN_DRILLS + 1))).toContain("A plan can hold at most 50 rows (drills and blocks)");
     });
 
     it("rejects a station block of five", () => {
