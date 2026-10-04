@@ -271,13 +271,22 @@ function drawRinkBackground(ctx: CanvasRenderingContext2D, transform: TransformC
     drawRinkMarkings(ctx, transform);
 }
 
-/** The ice, boards, lines, circles and creases, without the white base. */
+/**
+ * The ice, lines, circles, creases and boards, without the white base.
+ *
+ * Every interior marking is drawn under a clip to the rink outline: the goal
+ * lines (11 ft from the end boards) and any marking near the ends otherwise
+ * run straight past the 28 ft rounded corners and off the ice. The boards are
+ * stroked last, after the clip is restored, so their full line width stays
+ * crisp on top of the markings it trims.
+ */
 function drawRinkMarkings(ctx: CanvasRenderingContext2D, transform: TransformContext): void {
     // Draw ice surface
     drawIceSurface(ctx, transform);
 
-    // Draw boards (outline)
-    drawBoards(ctx, transform);
+    ctx.save();
+    traceRinkOutline(ctx, transform);
+    ctx.clip();
 
     // Draw lines
     drawCenterRedLine(ctx, transform);
@@ -291,25 +300,51 @@ function drawRinkMarkings(ctx: CanvasRenderingContext2D, transform: TransformCon
 
     // Draw goal creases
     drawGoalCreases(ctx, transform);
+
+    ctx.restore();
+
+    // Draw boards (outline) on top of the clipped markings
+    drawBoards(ctx, transform);
+}
+
+/** The rink outline in canvas pixels: the rounded rectangle the boards follow. */
+export interface RinkOutline {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    radius: number;
+}
+
+/** Rink outline (rounded rectangle) for `transform`, in canvas pixels. */
+export function rinkOutline(transform: TransformContext): RinkOutline {
+    const topLeft = rinkToCanvas({ x: 0, y: 0 }, transform);
+    const bottomRight = rinkToCanvas(
+        { x: RINK_DIMENSIONS.width, y: RINK_DIMENSIONS.height },
+        transform
+    );
+    return {
+        x: topLeft.x,
+        y: topLeft.y,
+        width: bottomRight.x - topLeft.x,
+        height: bottomRight.y - topLeft.y,
+        radius: ZONE_DIMENSIONS.cornerRadius * transform.scaleX,
+    };
+}
+
+/** Starts a new path holding the rink outline; the caller fills, strokes or clips it. */
+function traceRinkOutline(ctx: CanvasRenderingContext2D, transform: TransformContext): void {
+    const o = rinkOutline(transform);
+    ctx.beginPath();
+    ctx.roundRect(o.x, o.y, o.width, o.height, o.radius);
 }
 
 /**
  * Draws the ice surface
  */
 function drawIceSurface(ctx: CanvasRenderingContext2D, transform: TransformContext): void {
-    const topLeft = rinkToCanvas({ x: 0, y: 0 }, transform);
-    const bottomRight = rinkToCanvas(
-        { x: RINK_DIMENSIONS.width, y: RINK_DIMENSIONS.height },
-        transform
-    );
-
-    const width = bottomRight.x - topLeft.x;
-    const height = bottomRight.y - topLeft.y;
-    const cornerRadius = ZONE_DIMENSIONS.cornerRadius * transform.scaleX;
-
     ctx.fillStyle = "#E8F4F8"; // Light ice blue
-    ctx.beginPath();
-    ctx.roundRect(topLeft.x, topLeft.y, width, height, cornerRadius);
+    traceRinkOutline(ctx, transform);
     ctx.fill();
 }
 
@@ -317,20 +352,9 @@ function drawIceSurface(ctx: CanvasRenderingContext2D, transform: TransformConte
  * Draws the boards (rink outline)
  */
 function drawBoards(ctx: CanvasRenderingContext2D, transform: TransformContext): void {
-    const topLeft = rinkToCanvas({ x: 0, y: 0 }, transform);
-    const bottomRight = rinkToCanvas(
-        { x: RINK_DIMENSIONS.width, y: RINK_DIMENSIONS.height },
-        transform
-    );
-
-    const width = bottomRight.x - topLeft.x;
-    const height = bottomRight.y - topLeft.y;
-    const cornerRadius = ZONE_DIMENSIONS.cornerRadius * transform.scaleX;
-
     ctx.strokeStyle = "#000000";
     ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.roundRect(topLeft.x, topLeft.y, width, height, cornerRadius);
+    traceRinkOutline(ctx, transform);
     ctx.stroke();
 }
 

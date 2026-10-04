@@ -72,7 +72,8 @@ describe("StationMap", () => {
         const map = screen.getByRole("img", { name: "Station map: 1 · Breakout (current), 2 · Regroup" });
         const calls = byCanvas.get(map as HTMLCanvasElement) ?? [];
 
-        expect(calls.filter((c) => c.name === "clip")).toHaveLength(4);
+        // Two rectangular clips per station; the rink's rounded-outline clip is separate.
+        expect(calls.filter((c, i) => c.name === "clip" && calls[i - 1]?.name === "rect")).toHaveLength(4);
         expect(calls.filter((c) => c.name === "fillText").map((c) => c.args[0])).toEqual(
             expect.arrayContaining(["1 · Breakout", "2 · Regroup"]),
         );
