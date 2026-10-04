@@ -20,10 +20,41 @@ export class VenueReservationContentionError extends Error {
   }
 }
 
+const SERIALIZATION_FAILURE_SQLSTATES = new Set(["40001", "40P01"]);
+
+/**
+ * Prisma 7 driver adapters raise a `DriverAdapterError` whose `cause` carries
+ * the mapped failure. A serialization failure on a query inside the
+ * transaction is rethrown as `PrismaClientKnownRequestError` P2034, but one
+ * raised by the `COMMIT` itself (Postgres SSI can abort the second committer
+ * there) reaches the caller as the raw adapter error. Detected by shape, not
+ * `instanceof`, because the class lives in a transitive package.
+ */
+function isDriverAdapterWriteConflict(error: unknown): boolean {
+  if (!(error instanceof Error) || error.name !== "DriverAdapterError") {
+    return false;
+  }
+  const cause = (error as { cause?: unknown }).cause;
+  if (typeof cause !== "object" || cause === null) return false;
+  const { kind, originalCode, code } = cause as {
+    kind?: unknown;
+    originalCode?: unknown;
+    code?: unknown;
+  };
+  return (
+    kind === "TransactionWriteConflict"
+    || (typeof originalCode === "string" && SERIALIZATION_FAILURE_SQLSTATES.has(originalCode))
+    || (kind === "postgres" && typeof code === "string" && SERIALIZATION_FAILURE_SQLSTATES.has(code))
+  );
+}
+
 export function isRetryableVenueReservationConflict(error: unknown): boolean {
   return (
-    error instanceof Prisma.PrismaClientKnownRequestError
-    && (error.code === "P2034" || error.code === "P2028")
+    (
+      error instanceof Prisma.PrismaClientKnownRequestError
+      && (error.code === "P2034" || error.code === "P2028")
+    )
+    || isDriverAdapterWriteConflict(error)
   );
 }
 
