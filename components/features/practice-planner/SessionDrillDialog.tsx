@@ -19,7 +19,7 @@ import {
     DialogTitle,
     FormControlLabel,
 } from "@mui/material";
-import type { PlayData, SavedPlay } from "@/types/practice-planner";
+import type { PlayData, PlayFocus, PlayGoalies, SavedPlay } from "@/types/practice-planner";
 import type { SessionDrillPatch } from "@/lib/utils/session-drill-ids";
 import { usePlannerStore } from "@/lib/planner-store";
 import { PlayEditor } from "./PlayEditor";
@@ -33,6 +33,8 @@ export interface SessionDrillDialogDrill {
     description: string;
     playData: PlayData;
     thumbnail: string;
+    focus?: PlayFocus;
+    goalies?: PlayGoalies;
 }
 
 export interface SessionDrillDialogProps {
@@ -79,6 +81,8 @@ export function SessionDrillDialog({ open, sessionId, teamId, drill, onSaved, on
             description: saved.description || undefined,
             thumbnail: saved.thumbnail || undefined,
             playData: saved.playData,
+            focus: saved.focus,
+            goalies: saved.goalies,
         });
         // PlayEditor catches this and shows it in its error alert; the dialog stays open.
         if (!result.success) throw new Error(result.error);
@@ -91,6 +95,8 @@ export function SessionDrillDialog({ open, sessionId, teamId, drill, onSaved, on
             description: saved.description,
             thumbnail: saved.thumbnail,
             playData: saved.playData,
+            focus: saved.focus,
+            goalies: saved.goalies,
         });
         // The session save that links the drill failed: report it here, not
         // behind the full-screen dialog, and keep the dialog open.
@@ -127,6 +133,8 @@ export function SessionDrillDialog({ open, sessionId, teamId, drill, onSaved, on
                     description: drill.description,
                     playData: drill.playData,
                     thumbnail: drill.thumbnail,
+                    focus: drill.focus,
+                    goalies: drill.goalies,
                     isTemplate: false,
                 }}
                 lockTemplate

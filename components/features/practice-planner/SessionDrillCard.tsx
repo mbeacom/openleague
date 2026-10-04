@@ -34,6 +34,8 @@ import {
 import { usePlannerPlatform } from "@/lib/planner-store";
 import { VALIDATION_CONSTRAINTS, type PlayInSession } from "@/types/practice-planner";
 import { MAX_STATIONS_PER_GROUP } from "@/lib/utils/session-timeline";
+import { drillTags } from "@/lib/utils/drill-tags";
+import { GoalieBadge } from "./GoalieBadge";
 
 /** Hidden from sight but read by screen readers (the standard clip pattern). */
 const VISUALLY_HIDDEN = {
@@ -208,6 +210,7 @@ export function SessionDrillCard({
                         left: 8,
                     }}
                 />
+                {drillTags(play).goalies === "required" && <GoalieBadge sx={{ position: "absolute", top: 8, right: 8 }} />}
             </CardMedia>
 
             {/* Content */}

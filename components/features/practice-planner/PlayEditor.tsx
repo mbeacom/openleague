@@ -37,6 +37,8 @@ import { PlayLegend } from "./PlayLegend";
 import { DrawingToolbar } from "./DrawingToolbar";
 import { ElementInspector } from "./ElementInspector";
 import { CustomAreaFields, rectFromFields } from "./CustomAreaFields";
+import { DrillTagFields, type DrillTagValues } from "./DrillTagFields";
+import { drillTags } from "@/lib/utils/drill-tags";
 import { findElement } from "@/lib/utils/canvas/element-ops";
 import {
     ICE_AREA_PRESETS,
@@ -104,6 +106,7 @@ export function PlayEditor({
     const [name, setName] = useState(initialData?.name || "");
     const [description, setDescription] = useState(initialData?.description || "");
     const [isTemplate, setIsTemplate] = useState(initialData?.isTemplate || false);
+    const [tags, setTags] = useState<DrillTagValues>(() => drillTags(initialData));
 
     // Play data state
     const [playData, setPlayData] = useState<PlayData>(
@@ -233,6 +236,12 @@ export function PlayEditor({
         setSaveSuccess(false);
     };
 
+    const handleTagsChange = (next: DrillTagValues) => {
+        setTags(next);
+        setHasUnsavedChanges(true);
+        setSaveSuccess(false);
+    };
+
     /**
      * Handle save action
      * Requirements: 1.5, 4.1, 4.2
@@ -278,6 +287,7 @@ export function PlayEditor({
                 thumbnail,
                 playData,
                 isTemplate,
+                ...tags,
                 createdAt: initialData?.createdAt || new Date(),
                 updatedAt: new Date(),
             };
@@ -305,7 +315,7 @@ export function PlayEditor({
         } finally {
             setIsSaving(false);
         }
-    }, [name, description, playData, isTemplate, playId, initialData, onSave]);
+    }, [name, description, playData, isTemplate, tags, playId, initialData, onSave]);
 
     // Keep handleSaveRef updated with latest handleSave function
     useEffect(() => {
@@ -387,6 +397,9 @@ export function PlayEditor({
                         inputProps={{ maxLength: 500 }}
                         helperText={`${description.length}/500 characters`}
                     />
+
+                    {/* Drill tags (goaltender-aware drills) */}
+                    <DrillTagFields value={tags} onChange={handleTagsChange} />
 
                     {/* Ice area (2a) */}
                     <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems={{ sm: "center" }}>

@@ -9,7 +9,7 @@
  * Requirements: 4.2, 4.3, 4.5
  */
 
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
     Box,
     Grid,
@@ -48,12 +48,37 @@ import {
     Add as AddIcon,
 } from "@mui/icons-material";
 import { SavedPlay } from "@/types/practice-planner";
-import { usePlannerPlatform, usePlannerStore } from "@/lib/planner-store";
+import { usePlannerPlatform, usePlannerStore, type PlannerStore } from "@/lib/planner-store";
 import { STARTER_PLAYS, type StarterPlay } from "@/lib/data/starter-plays";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import { generateThumbnail } from "@/lib/utils/canvas/thumbnail-generator";
 import { formatDistanceToNow } from "date-fns";
 import { useDebouncedCallback } from "use-debounce";
+import { DrillFilterChips, type DrillFilters } from "./DrillFilterChips";
+import { GoalieBadge } from "./GoalieBadge";
+
+/** The most rows one library query may ask for (getPlaysByTeamSchema). */
+const NAMES_PAGE_SIZE = 100;
+
+const nameKey = (name: string) => name.trim().toLowerCase();
+
+/**
+ * Every drill name in the team's library, whatever the current page, search
+ * or filters, so a starter already copied stays hidden however large the
+ * library grows. Pages through the unfiltered library query.
+ */
+async function loadLibraryNames(store: PlannerStore, teamId: string): Promise<Set<string> | null> {
+    const names = new Set<string>();
+    let pages = 1;
+    for (let page = 1; page <= pages; page++) {
+        const result = await store.getPlaysByTeam({ teamId, isTemplate: true, page, limit: NAMES_PAGE_SIZE, dateFilter: "all" });
+        if (!result.success) return null;
+        for (const play of result.data.plays) names.add(nameKey(play.name));
+        // Bounded by the first answer's total, so the loop always ends.
+        if (page === 1) pages = Math.ceil(result.data.total / NAMES_PAGE_SIZE);
+    }
+    return names;
+}
 
 /**
  * Props for the PlayLibrary component
@@ -136,6 +161,7 @@ function PlayCard({
                         No preview
                     </Typography>
                 )}
+                {play.goalies === "required" && <GoalieBadge sx={{ position: "absolute", top: 8, left: 8 }} />}
                 {isSelected && (
                     <Chip
                         label={isLoading ? "Loading..." : "Selected"}
@@ -266,6 +292,7 @@ function StarterPlayCard({
                         No preview
                     </Typography>
                 )}
+                {starter.goalies === "required" && <GoalieBadge sx={{ position: "absolute", top: 8, left: 8 }} />}
                 <Chip
                     label="Starter"
                     color="secondary"
@@ -338,6 +365,8 @@ export function PlayLibrary({
     const [selectedPlayId, setSelectedPlayId] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState("");
     const [dateFilter, setDateFilter] = useState<"all" | "today" | "week" | "month">("all");
+    const [filters, setFilters] = useState<DrillFilters>({});
+    const filtersActive = Boolean(filters.focus || filters.goalies);
     const [isLoading, setIsLoading] = useState(true);
     const [isSelecting, setIsSelecting] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -349,6 +378,9 @@ export function PlayLibrary({
     const [starterThumbnails, setStarterThumbnails] = useState<Record<string, string>>({});
     const [addingStarterId, setAddingStarterId] = useState<string | null>(null);
     const [copiedStarterNames, setCopiedStarterNames] = useState<Set<string>>(new Set());
+    // Every drill name in the library; null until loaded (or if that fails).
+    const [libraryNames, setLibraryNames] = useState<Set<string> | null>(null);
+    const libraryNamesLoaded = useRef(false);
 
     // Pagination state
     // Requirements: 4.2 - Pagination for large libraries (20 per page)
@@ -357,10 +389,31 @@ export function PlayLibrary({
     const playsPerPage = 20;
 
     /**
+     * The whole library's drill names, for the starter list (manage mode only).
+     * An unfiltered first page that holds the whole library already has them;
+     * otherwise this pages through the library. A failure falls back to the
+     * loaded page's names.
+     */
+    const refreshLibraryNames = useCallback(async (page: { plays: { name: string }[]; total: number } | null) => {
+        if (mode !== "manage") return;
+        libraryNamesLoaded.current = true;
+        if (page && page.total <= page.plays.length) {
+            setLibraryNames(new Set(page.plays.map((play) => nameKey(play.name))));
+            return;
+        }
+        try {
+            setLibraryNames(await loadLibraryNames(store, teamId));
+        } catch (err) {
+            console.error("Error loading library names:", err);
+            setLibraryNames(null);
+        }
+    }, [mode, store, teamId]);
+
+    /**
      * Load plays from the server with search and filter parameters
      * Requirements: 4.2, 8.4 - Server-side search and filtering
      */
-    const loadPlays = useCallback(async (search: string, dateFilterValue: "all" | "today" | "week" | "month") => {
+    const loadPlays = useCallback(async (search: string, dateFilterValue: "all" | "today" | "week" | "month", drillFilters: DrillFilters, refreshNames = false) => {
         setIsLoading(true);
         setError(null);
 
@@ -372,6 +425,8 @@ export function PlayLibrary({
                 limit: playsPerPage,
                 search: search.trim() || undefined,
                 dateFilter: dateFilterValue,
+                ...(drillFilters.focus && { focus: drillFilters.focus }),
+                ...(drillFilters.goalies && { goalies: drillFilters.goalies }),
             });
 
             if (result.success) {
@@ -384,6 +439,10 @@ export function PlayLibrary({
 
                 setPlays(playsData);
                 setTotalPages(Math.ceil(result.data.total / playsPerPage));
+                if (refreshNames) {
+                    const unfiltered = !search.trim() && dateFilterValue === "all" && !drillFilters.focus && !drillFilters.goalies;
+                    await refreshLibraryNames(unfiltered && currentPage === 1 ? result.data : null);
+                }
             } else {
                 setError(result.error);
             }
@@ -393,21 +452,21 @@ export function PlayLibrary({
         } finally {
             setIsLoading(false);
         }
-    }, [store, teamId, currentPage]);
+    }, [store, teamId, currentPage, refreshLibraryNames]);
 
     // Debounced search to avoid too many server requests
     const debouncedSearch = useDebouncedCallback(
         (search: string) => {
             setCurrentPage(1); // Reset to first page on search
-            loadPlays(search, dateFilter);
+            loadPlays(search, dateFilter, filters);
         },
         300
     );
 
-    // Load plays on mount and when page or dateFilter changes
+    // Load plays on mount and when page or a filter changes; the first load also reads the library's names
     useEffect(() => {
-        loadPlays(searchQuery, dateFilter);
-    }, [currentPage, dateFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+        loadPlays(searchQuery, dateFilter, filters, !libraryNamesLoaded.current);
+    }, [currentPage, dateFilter, filters]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Render starter play thumbnails client-side once (manage mode only)
     useEffect(() => {
@@ -426,14 +485,15 @@ export function PlayLibrary({
     }, [mode]);
 
     /**
-     * Starter plays not yet copied into the team's library.
-     * Name matching is a simple client-side check against the currently
-     * loaded plays plus starters added during this session.
+     * Starter plays not yet copied into the team's library, matched by name
+     * against the whole library (plus the loaded page and starters added this
+     * session), then narrowed by the search and the drill-tag chips.
      */
     const visibleStarters = useMemo(() => {
         if (mode !== "manage") return [];
 
-        const existingNames = new Set(plays.map((play) => play.name.trim().toLowerCase()));
+        const existingNames = new Set(plays.map((play) => nameKey(play.name)));
+        libraryNames?.forEach((name) => existingNames.add(name));
         const query = searchQuery.trim().toLowerCase();
 
         return STARTER_PLAYS.filter((starter) => {
@@ -446,9 +506,11 @@ export function PlayLibrary({
             ) {
                 return false;
             }
+            if (filters.focus && starter.focus !== filters.focus) return false;
+            if (filters.goalies && starter.goalies !== filters.goalies) return false;
             return true;
         });
-    }, [mode, plays, copiedStarterNames, searchQuery]);
+    }, [mode, plays, libraryNames, copiedStarterNames, searchQuery, filters]);
 
     /**
      * Copy a starter play into the team's library as an editable template
@@ -464,6 +526,8 @@ export function PlayLibrary({
                     description: starter.description,
                     thumbnail: starterThumbnails[starter.id] || undefined,
                     playData: starter.playData,
+                    focus: starter.focus,
+                    goalies: starter.goalies,
                     isTemplate: true,
                     teamId,
                 });
@@ -474,7 +538,7 @@ export function PlayLibrary({
                         next.add(starter.name.toLowerCase());
                         return next;
                     });
-                    await loadPlays(searchQuery, dateFilter);
+                    await loadPlays(searchQuery, dateFilter, filters, true);
                 } else {
                     setError(result.error);
                 }
@@ -485,7 +549,7 @@ export function PlayLibrary({
                 setAddingStarterId(null);
             }
         },
-        [store, starterThumbnails, teamId, loadPlays, searchQuery, dateFilter]
+        [store, starterThumbnails, teamId, loadPlays, searchQuery, dateFilter, filters]
     );
 
     /**
@@ -504,6 +568,14 @@ export function PlayLibrary({
         const value = e.target.value as "all" | "today" | "week" | "month";
         setDateFilter(value);
         setCurrentPage(1); // Reset to first page on filter change
+    }, []);
+
+    /**
+     * Handle a drill-tag chip change
+     */
+    const handleFiltersChange = useCallback((next: DrillFilters) => {
+        setFilters(next);
+        setCurrentPage(1); // a filtered result starts at its first page
     }, []);
 
     /**
@@ -527,6 +599,8 @@ export function PlayLibrary({
                             description: result.data.description ?? "",
                             thumbnail: result.data.thumbnail ?? "",
                             playData: result.data.playData,
+                            focus: result.data.focus,
+                            goalies: result.data.goalies,
                             isTemplate: result.data.isTemplate,
                             createdAt: result.data.createdAt,
                             updatedAt: result.data.updatedAt,
@@ -590,8 +664,8 @@ export function PlayLibrary({
             });
 
             if (result.success) {
-                // Reload plays after deletion
-                await loadPlays(searchQuery, dateFilter);
+                // Reload plays after deletion; a deleted starter copy can be added again
+                await loadPlays(searchQuery, dateFilter, filters, true);
                 setDeleteDialogOpen(false);
                 setPlayToDelete(null);
             } else {
@@ -603,7 +677,7 @@ export function PlayLibrary({
         } finally {
             setIsDeleting(false);
         }
-    }, [store, playToDelete, teamId, loadPlays, searchQuery, dateFilter]);
+    }, [store, playToDelete, teamId, loadPlays, searchQuery, dateFilter, filters]);
 
     /**
      * Handle delete dialog close
@@ -685,6 +759,11 @@ export function PlayLibrary({
                 </FormControl>
             </Stack>
 
+            {/* Drill-tag filters (goaltender-aware drills) */}
+            <Box sx={{ mb: 3 }}>
+                <DrillFilterChips value={filters} onChange={handleFiltersChange} />
+            </Box>
+
             {/* Error Alert */}
             {error && (
                 <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 3 }}>
@@ -721,16 +800,16 @@ export function PlayLibrary({
                     }}
                 >
                     <Typography variant="h6" color="text.secondary" gutterBottom>
-                        {searchQuery || dateFilter !== "all"
+                        {searchQuery || dateFilter !== "all" || filtersActive
                             ? "No plays found"
                             : "No plays in your library yet"}
                     </Typography>
                     <Typography variant="body2" color="text.secondary" mb={2}>
-                        {searchQuery || dateFilter !== "all"
+                        {searchQuery || dateFilter !== "all" || filtersActive
                             ? "Try adjusting your search or filter settings"
                             : "Create your first play to get started"}
                     </Typography>
-                    {mode === "manage" && !searchQuery && dateFilter === "all" && (
+                    {mode === "manage" && !searchQuery && dateFilter === "all" && !filtersActive && (
                         <Button
                             variant="contained"
                             startIcon={<AddIcon />}
