@@ -35,6 +35,18 @@
   padding-left: 1.1em;
 }
 
+/* A rotation grid under its station block (practice timing). */
+.bench-timeline .bench-rotation table {
+  width: auto;
+  margin: 4px 0 2px;
+}
+
+.bench-timeline .bench-rotation th,
+.bench-timeline .bench-rotation td {
+  border: 1px solid #999;
+  text-align: center;
+}
+
 .bench-over-time {
   font-weight: 700;
 }

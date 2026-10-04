@@ -292,3 +292,24 @@ describe("BenchSheet: block rows", () => {
         expect(screen.getByRole("button", { name: "Print" })).toBeEnabled();
     });
 });
+
+describe("BenchSheet: rotation and the gap", () => {
+    it("says the gap in the header and prints the rotation grid on the timeline", () => {
+        renderSheet({
+            ...SESSION,
+            transitionMinutes: 2,
+            plays: [
+                { ...sessionPlay("Goalie", 0, false, 10), stays: true, rotateEveryMinutes: 5 },
+                { ...sessionPlay("Skate A", 1, true, 5), stays: false, rotateEveryMinutes: null },
+                { ...sessionPlay("Skate B", 2, true, 5), stays: false, rotateEveryMinutes: null },
+            ],
+        });
+        expect(screen.getByText("2 min between blocks")).toBeInTheDocument();
+        expect(screen.getByRole("table", { name: /^Rotation grid/ })).toBeInTheDocument();
+    });
+
+    it("says nothing about a gap when there is none", () => {
+        renderSheet();
+        expect(screen.queryByText(/between blocks/)).toBeNull();
+    });
+});

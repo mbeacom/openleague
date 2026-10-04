@@ -62,3 +62,23 @@ describe("SessionDetailView: block rows", () => {
         expect(screen.getByText("Play 2 of 2")).toBeInTheDocument();
     });
 });
+
+describe("SessionDetailView: a rotating station block", () => {
+    it("names the rotation in the play sequence and shows the grid on the timeline", () => {
+        const rotating: PracticeSessionView = {
+            ...SESSION,
+            plays: [
+                { ...drill("row-g", "Goalie", 0), stays: true, rotateEveryMinutes: 5 },
+                { ...drill("row-a", "Skate A", 1), runsWithPrevious: true, stays: false, rotateEveryMinutes: null },
+                { ...drill("row-b", "Skate B", 2), runsWithPrevious: true, stays: false, rotateEveryMinutes: null },
+            ],
+        };
+        renderWithPlanner(
+            <ThemeProvider theme={createTheme()}>
+                <SessionDetailView session={rotating} isAdmin={false} />
+            </ThemeProvider>,
+        );
+        expect(screen.getByRole("group", { name: "Stations · rotate every 5 min · 10 min" })).toBeInTheDocument();
+        expect(screen.getByRole("table", { name: /^Rotation grid/ })).toBeInTheDocument();
+    });
+});

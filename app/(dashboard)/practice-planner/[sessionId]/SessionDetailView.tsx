@@ -54,6 +54,7 @@ import type { PracticeSessionView } from "@/types/practice-planner";
 import {
   SEGMENT_KIND_FIT_LABELS,
   groupStations,
+  rotationBlockLabel,
   sessionWallMinutes,
   stationBlockLabel,
   stationWarnings,
@@ -464,7 +465,9 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
                   );
                 });
                 if (group.stations.length === 1) return cards[0];
-                const label = stationBlockLabel(group.stations.length, group.wallMinutes);
+                const label = group.rotation
+                  ? rotationBlockLabel(group.rotation.minutes, group.wallMinutes)
+                  : stationBlockLabel(group.stations.length, group.wallMinutes);
                 return (
                   <Box
                     key={`stations-${group.stations[0].id}`}

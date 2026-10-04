@@ -12,7 +12,7 @@ import { Box, Button, Stack, Typography } from "@mui/material";
 import { ArrowBack as ArrowBackIcon, PrintOutlined as PrintIcon } from "@mui/icons-material";
 import { usePlannerPlatform } from "@/lib/planner-store";
 import type { PracticeSessionView } from "@/types/practice-planner";
-import { buildSchedule } from "@/lib/utils/session-timeline";
+import { betweenBlocksLabel, buildSchedule } from "@/lib/utils/session-timeline";
 import { sessionForDisplay } from "@/lib/utils/drill-tags";
 import { drillRows } from "@/lib/utils/session-rows";
 import { combinedLegendData } from "@/lib/utils/canvas/station-map";
@@ -98,6 +98,7 @@ export function BenchSheet({ session: stored }: { session: BenchSheetSession }) 
                     {`${clock.longDate(start)} · ${clock.time(start, false)} – ${clock.time(end)}`}
                 </Typography>
                 {place && <Typography variant="body1">{place}</Typography>}
+                {gap > 0 && <Typography variant="body1">{betweenBlocksLabel(gap)}</Typography>}
             </Box>
 
             {session.plays.length === 0 ? (
@@ -106,9 +107,10 @@ export function BenchSheet({ session: stored }: { session: BenchSheetSession }) 
                 </Typography>
             ) : (
                 <>
+                    {/* Timing reads the stored rows; the display copy only redraws diagrams. */}
                     <SessionTimeline
                         variant="print"
-                        plays={session.plays}
+                        plays={stored.plays}
                         sessionStart={start}
                         timeZone={timeZone}
                         showZone={showZone}

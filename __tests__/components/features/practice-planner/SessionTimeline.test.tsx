@@ -131,3 +131,35 @@ describe("SessionTimeline: block rows and the gap between blocks", () => {
         expect(html).toContain("Planned 32 of 60 min");
     });
 });
+
+describe("SessionTimeline: a rotating station block (spec R9)", () => {
+    const ROTATING = [
+        { ...play("Goalie", 0, 10), stays: true, rotateEveryMinutes: 5 },
+        { ...play("Skate A", 1, 5, true), stays: false, rotateEveryMinutes: null },
+        { ...play("Skate B", 2, 5, true), stays: false, rotateEveryMinutes: null },
+    ];
+
+    it("chips the interval, marks the stays station, and puts the grid with clock times under the block", () => {
+        render(ui({ plays: ROTATING }));
+        const [block, gridRow] = bodyRows();
+        expect(within(block).getByText("Rotates every 5 min")).toBeInTheDocument();
+        // The chip is a div: its caption line must not be a <p> (invalid nesting, a React 19 hydration error).
+        expect(block.querySelector("p .MuiChip-root")).toBeNull();
+        expect(within(block).getByText(/stays/)).toBeInTheDocument();
+        expect(within(block).getByText("10")).toBeInTheDocument();
+        const grid = within(gridRow).getByRole("table", { name: /^Rotation grid/ });
+        expect(within(grid).getAllByRole("row").map((row) => row.textContent)).toEqual([
+            "StartGoalieSkate ASkate B",
+            "6:00 PM EDTallAB",
+            "6:05 PM EDTallBA",
+        ]);
+    });
+
+    it("prints the rotation header, the stays mark and the grid", () => {
+        const html = renderToStaticMarkup(ui({ plays: ROTATING, variant: "print" }));
+        expect(html).toContain("Stations · rotate every 5 min · 10 min");
+        expect(html).toContain("Goalie · stays");
+        expect(html).toContain('class="bench-rotation"');
+        expect(html).toMatch(/<td>all<\/td>/);
+    });
+});

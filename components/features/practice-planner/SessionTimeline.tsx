@@ -9,11 +9,22 @@
  * MUI table whose drill names select the drill. The print variant is a plain
  * table for the bench sheet, styled by app/(print)/print.css.
  */
-import { Box, Link, Stack, Table, TableBody, TableCell, TableHead, TableRow, Typography } from "@mui/material";
+import { Fragment } from "react";
+import { Box, Chip, Link, Stack, Table, TableBody, TableCell, TableHead, TableRow, Typography } from "@mui/material";
 import type { BlockKind } from "@/types/practice-planner";
-import { buildSchedule, sessionWallMinutes, type TimelinePlay } from "@/lib/utils/session-timeline";
+import {
+    buildSchedule,
+    rotationBlockLabel,
+    rotatesEveryLabel,
+    rotationTable,
+    sessionWallMinutes,
+    staysSuffix,
+    type RotationGrid,
+    type TimelinePlay,
+} from "@/lib/utils/session-timeline";
 import { blockTitle, drillRows, isBlockRow } from "@/lib/utils/session-rows";
 import { useClockText } from "@/lib/hooks/useClockText";
+import { RotationGridTable } from "./RotationGridTable";
 
 /** A drill row: its name selects it on screen. */
 export interface SessionTimelineDrill extends TimelinePlay {
@@ -66,6 +77,11 @@ export function plannedLabel(planned: number, booked: number): string {
 export function blockLine(row: SessionTimelineBlock): string {
     const note = row.instructions?.trim();
     return `${blockTitle(row.kind, row.label)}${note ? ` · ${note}` : ""}`;
+}
+
+/** The grid as a table, each round at its clock time (spec R9). */
+function gridTable(grid: RotationGrid<SessionTimelinePlay>, roundStarts: Date[], time: (date: Date) => string) {
+    return rotationTable(grid, (row) => (isBlockRow(row) ? blockTitle(row.kind, row.label) : row.play.name), (_, round) => time(roundStarts[round]));
 }
 
 function DrillName({ id, name, onSelect }: { id: string; name: string; onSelect?: (id: string) => void }) {
@@ -129,32 +145,46 @@ export function SessionTimeline<T extends SessionTimelinePlay>({
                         </tr>
                     </thead>
                     <tbody>
-                        {rows.map(({ group, startsAt }) => {
+                        {rows.map(({ group, startsAt, roundStarts }) => {
                             // Upcast: narrowing works on the concrete union, not on T.
                             const stations: readonly SessionTimelinePlay[] = group.stations;
+                            const grid: RotationGrid<SessionTimelinePlay> | null = group.rotation;
                             const head = stations[0];
                             const drills = drillRows(stations);
                             return (
-                                <tr key={head.id}>
-                                    <td>{clock.time(startsAt)}</td>
-                                    <td>{group.wallMinutes}</td>
-                                    <td>
-                                        {isBlockRow(head) ? (
-                                            blockLine(head)
-                                        ) : drills.length > 1 ? (
-                                            <>
-                                                <strong>{stationsLabel(drills.length)}</strong>
-                                                <ul>
-                                                    {drills.map((sp) => (
-                                                        <li key={sp.id}>{`${sp.play.name} · ${sp.duration} min`}</li>
-                                                    ))}
-                                                </ul>
-                                            </>
-                                        ) : (
-                                            drills[0].play.name
-                                        )}
-                                    </td>
-                                </tr>
+                                <Fragment key={head.id}>
+                                    <tr>
+                                        <td>{clock.time(startsAt)}</td>
+                                        <td>{group.wallMinutes}</td>
+                                        <td>
+                                            {isBlockRow(head) ? (
+                                                blockLine(head)
+                                            ) : drills.length > 1 ? (
+                                                <>
+                                                    <strong>{grid ? rotationBlockLabel(grid.minutes, group.wallMinutes) : stationsLabel(drills.length)}</strong>
+                                                    <ul>
+                                                        {drills.map((sp) => (
+                                                            <li key={sp.id}>{`${sp.play.name}${grid ? staysSuffix(sp.stays) : ` · ${sp.duration} min`}`}</li>
+                                                        ))}
+                                                    </ul>
+                                                </>
+                                            ) : (
+                                                drills[0].play.name
+                                            )}
+                                        </td>
+                                    </tr>
+                                    {grid && (
+                                        <tr>
+                                            <td colSpan={3}>
+                                                <RotationGridTable
+                                                    variant="print"
+                                                    table={gridTable(grid, roundStarts, (date) => clock.time(date))}
+                                                    caption={`Rotation grid: ${rotationBlockLabel(grid.minutes, group.wallMinutes)}`}
+                                                />
+                                            </td>
+                                        </tr>
+                                    )}
+                                </Fragment>
                             );
                         })}
                     </tbody>
@@ -177,44 +207,68 @@ export function SessionTimeline<T extends SessionTimelinePlay>({
                     </TableRow>
                 </TableHead>
                 <TableBody>
-                    {rows.map(({ group, startsAt }) => {
+                    {rows.map(({ group, startsAt, roundStarts }) => {
                         const stations: readonly SessionTimelinePlay[] = group.stations;
+                        const grid: RotationGrid<SessionTimelinePlay> | null = group.rotation;
                         const head = stations[0];
                         const drills = drillRows(stations);
                         return (
-                            <TableRow key={head.id} selected={stations.some((sp) => sp.id === activePlayId)}>
-                                <TableCell sx={{ whiteSpace: "nowrap", fontFamily: "var(--font-mono), monospace" }}>
-                                    {clock.time(startsAt)}
-                                </TableCell>
-                                <TableCell align="right">{group.wallMinutes}</TableCell>
-                                <TableCell>
-                                    {isBlockRow(head) ? (
-                                        <BlockText row={head} />
-                                    ) : drills.length > 1 ? (
-                                        <>
-                                            <Typography
-                                                variant="caption"
-                                                component="p"
-                                                sx={{ fontWeight: 800, color: "primary.main", textTransform: "uppercase", letterSpacing: 1 }}
-                                            >
-                                                {stationsLabel(drills.length)}
-                                            </Typography>
-                                            <Box component="ul" sx={{ m: 0, pl: 2 }}>
-                                                {drills.map((sp) => (
-                                                    <li key={sp.id}>
-                                                        <DrillName id={sp.id} name={sp.play.name} onSelect={onSelectPlay} />
-                                                        <Typography component="span" variant="caption" color="text.secondary">
-                                                            {` · ${sp.duration} min`}
-                                                        </Typography>
-                                                    </li>
-                                                ))}
-                                            </Box>
-                                        </>
-                                    ) : (
-                                        <DrillName id={head.id} name={drills[0].play.name} onSelect={onSelectPlay} />
-                                    )}
-                                </TableCell>
-                            </TableRow>
+                            <Fragment key={head.id}>
+                                <TableRow selected={stations.some((sp) => sp.id === activePlayId)}>
+                                    <TableCell sx={{ whiteSpace: "nowrap", fontFamily: "var(--font-mono), monospace" }}>
+                                        {clock.time(startsAt)}
+                                    </TableCell>
+                                    <TableCell align="right">{group.wallMinutes}</TableCell>
+                                    <TableCell>
+                                        {isBlockRow(head) ? (
+                                            <BlockText row={head} />
+                                        ) : drills.length > 1 ? (
+                                            <>
+                                                {/* A div, not a p: the chip is a div (invalid inside a p). */}
+                                                <Typography
+                                                    variant="caption"
+                                                    component="div"
+                                                    sx={{
+                                                        fontWeight: 800,
+                                                        color: "primary.main",
+                                                        textTransform: "uppercase",
+                                                        letterSpacing: 1,
+                                                        display: "flex",
+                                                        alignItems: "center",
+                                                        flexWrap: "wrap",
+                                                        gap: 1,
+                                                    }}
+                                                >
+                                                    {stationsLabel(drills.length)}
+                                                    {grid && <Chip size="small" variant="outlined" color="secondary" label={rotatesEveryLabel(grid.minutes)} />}
+                                                </Typography>
+                                                <Box component="ul" sx={{ m: 0, pl: 2 }}>
+                                                    {drills.map((sp) => (
+                                                        <li key={sp.id}>
+                                                            <DrillName id={sp.id} name={sp.play.name} onSelect={onSelectPlay} />
+                                                            <Typography component="span" variant="caption" color="text.secondary">
+                                                                {grid ? staysSuffix(sp.stays) : ` · ${sp.duration} min`}
+                                                            </Typography>
+                                                        </li>
+                                                    ))}
+                                                </Box>
+                                            </>
+                                        ) : (
+                                            <DrillName id={head.id} name={drills[0].play.name} onSelect={onSelectPlay} />
+                                        )}
+                                    </TableCell>
+                                </TableRow>
+                                {grid && (
+                                    <TableRow>
+                                        <TableCell colSpan={3} sx={{ pt: 0 }}>
+                                            <RotationGridTable
+                                                table={gridTable(grid, roundStarts, (date) => clock.time(date))}
+                                                caption={`Rotation grid: ${rotationBlockLabel(grid.minutes, group.wallMinutes)}`}
+                                            />
+                                        </TableCell>
+                                    </TableRow>
+                                )}
+                            </Fragment>
                         );
                     })}
                 </TableBody>
