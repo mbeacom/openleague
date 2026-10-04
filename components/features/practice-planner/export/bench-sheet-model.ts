@@ -5,23 +5,49 @@
  * else the viewer's), printPixelRatio for diagrams, one combined legend.
  * Images come from injected renderers, so this module never touches a canvas.
  */
-import type { PlayData, PlayFocus, PlayGoalies } from "@/types/practice-planner";
+import type { BlockKind, PlayData, PlayFocus, PlayGoalies } from "@/types/practice-planner";
 import { buildLegend, type LegendEntry } from "@/lib/utils/canvas/legend";
 import { combinedLegendData } from "@/lib/utils/canvas/station-map";
-import { buildSchedule, sessionWallMinutes } from "@/lib/utils/session-timeline";
+import {
+    betweenBlocksLabel,
+    buildSchedule,
+    rotationBlockLabel,
+    rotationTable,
+    sessionWallMinutes,
+    staysSuffix,
+    type RotationGrid,
+    type RotationTable,
+} from "@/lib/utils/session-timeline";
 import { sessionForDisplay } from "@/lib/utils/drill-tags";
+import { blockTitle, drillRows, isBlockRow, rotationColumnName } from "@/lib/utils/session-rows";
 import { formatClockTime, formatLongDate, sessionStart, sessionTimeZone } from "@/lib/utils/date";
 import { plannedLabel, stationsLabel } from "../SessionTimeline";
 import { drillText, stationTag } from "../print/BenchSheetDrill";
 import { printPixelRatio } from "../print/PrintDiagram";
 
 export interface ExportSessionPlay {
+    kind?: "drill";
     sequence: number;
     duration: number;
     instructions: string | null;
     runsWithPrevious: boolean;
+    stays?: boolean;
+    rotateEveryMinutes?: number | null;
     play: { name: string; description: string | null; playData: PlayData | null; focus?: PlayFocus; goalies?: PlayGoalies };
 }
+
+/** A warm-up, break, transition or cool-down: a timeline row with no drill. */
+export interface ExportSessionBlock {
+    kind: BlockKind;
+    sequence: number;
+    duration: number;
+    /** The block's note */
+    instructions: string | null;
+    runsWithPrevious: boolean;
+    label: string | null;
+}
+
+export type ExportSessionRow = ExportSessionPlay | ExportSessionBlock;
 
 /** What the session page hands the Export menu (a PracticeSessionView fits). */
 export interface ExportSession {
@@ -35,17 +61,41 @@ export interface ExportSession {
     surfaceName?: string | null;
     segmentName?: string | null;
     goaliesAttending?: number | null;
-    plays: ExportSessionPlay[];
+    /** Minutes between blocks; absent reads as 0 */
+    transitionMinutes?: number;
+    plays: ExportSessionRow[];
 }
 
-export interface BenchSheetTimelineRow {
-    start: string;
-    minutes: number;
-    /** The drill's name, or "Stations · N" for a station block */
-    label: string;
-    /** "Name · N min" per station, or null for a lone drill */
-    stations: string[] | null;
-}
+export type BenchSheetTimelineRow =
+    | {
+          kind?: "drill";
+          start: string;
+          minutes: number;
+          /** The drill's name, or "Stations · N" for a station block */
+          label: string;
+          /** "Name · N min" per station, or null for a lone drill */
+          stations: string[] | null;
+      }
+    | {
+          kind: "block";
+          start: string;
+          minutes: number;
+          /** The block's label, else its kind's default */
+          label: string;
+          note: string | null;
+          stations: null;
+      }
+    | {
+          kind: "rotation";
+          start: string;
+          minutes: number;
+          /** "Stations · rotate every 5 min · 15 min" */
+          label: string;
+          /** "Name", or "Name · stays" for a station that doesn't rotate */
+          stations: string[];
+          /** A Start column (each round's clock time) plus one column per station */
+          grid: RotationTable;
+      };
 
 export interface BenchSheetDrillItem {
     /** 1-based, in schedule order */
@@ -70,6 +120,8 @@ export interface BenchSheetModel {
     when: string;
     /** "Venue · Surface · Segment", or null when unbooked */
     place: string | null;
+    /** "2 min between blocks", or null when there is no gap */
+    gap: string | null;
     timeline: BenchSheetTimelineRow[];
     planned: string;
     overTime: boolean;
@@ -98,17 +150,19 @@ export function buildBenchSheetModel(
     const { timeZone, showZone } = sessionTimeZone(session);
     const time = (date: Date, withZone = showZone) => formatClockTime(date, timeZone, withZone);
 
-    const rows = buildSchedule(session.plays, start);
-    const ordered = rows.flatMap((row) =>
-        row.group.stations.map((sp, k) => ({
+    const gap = session.transitionMinutes ?? 0;
+    const rows = buildSchedule(session.plays, start, gap);
+    const ordered = rows.flatMap((row) => {
+        const stations = drillRows(row.group.stations);
+        return stations.map((sp, k) => ({
             sp,
             startsAt: row.startsAt,
-            station: row.group.stations.length > 1 ? stationTag(k + 1, row.group.stations.length) : null,
-        })),
-    );
+            station: stations.length > 1 ? stationTag(k + 1, stations.length) : null,
+        }));
+    });
     const pixelRatio = printPixelRatio(ordered.filter(({ sp }) => sp.play.playData !== null).length);
-    const legendData = combinedLegendData(session.plays.map((sp) => ({ name: sp.play.name, playData: sp.play.playData })));
-    const planned = sessionWallMinutes(session.plays);
+    const legendData = combinedLegendData(drillRows(session.plays).map((sp) => ({ name: sp.play.name, playData: sp.play.playData })));
+    const planned = sessionWallMinutes(session.plays, gap);
     const team = session.teamName?.trim();
 
     return {
@@ -116,13 +170,30 @@ export function buildBenchSheetModel(
         teamName: options.omitTeam || !team ? null : team,
         when: `${formatLongDate(start, timeZone)} · ${time(start, false)} – ${time(end)}`,
         place: [session.venueName, session.surfaceName, session.segmentName].filter(Boolean).join(" · ") || null,
-        timeline: rows.map(({ group, startsAt }) => {
-            const block = group.stations.length > 1;
+        gap: gap > 0 ? betweenBlocksLabel(gap) : null,
+        timeline: rows.map(({ group, startsAt, roundStarts }): BenchSheetTimelineRow => {
+            const head = group.stations[0];
+            if (isBlockRow(head)) {
+                return { kind: "block", start: time(startsAt), minutes: group.wallMinutes, label: blockTitle(head.kind, head.label), note: head.instructions?.trim() || null, stations: null };
+            }
+            const stations = drillRows(group.stations);
+            const grid: RotationGrid<ExportSessionRow> | null = group.rotation;
+            if (grid) {
+                return {
+                    kind: "rotation",
+                    start: time(startsAt),
+                    minutes: group.wallMinutes,
+                    label: rotationBlockLabel(grid.minutes, group.wallMinutes),
+                    stations: stations.map((sp) => `${sp.play.name}${staysSuffix(sp.stays)}`),
+                    grid: rotationTable(grid, rotationColumnName, (_, round) => time(roundStarts[round])),
+                };
+            }
+            const block = stations.length > 1;
             return {
                 start: time(startsAt),
                 minutes: group.wallMinutes,
-                label: block ? stationsLabel(group.stations.length) : group.stations[0].play.name,
-                stations: block ? group.stations.map((sp) => `${sp.play.name} · ${sp.duration} min`) : null,
+                label: block ? stationsLabel(stations.length) : stations[0].play.name,
+                stations: block ? stations.map((sp) => `${sp.play.name} · ${sp.duration} min`) : null,
             };
         }),
         planned: plannedLabel(planned, session.duration),

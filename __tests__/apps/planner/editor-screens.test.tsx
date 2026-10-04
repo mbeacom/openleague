@@ -32,7 +32,7 @@ describe("toLocalSessionSave", () => {
             date,
             duration: 60,
             goaliesAttending: 2,
-            plays: [{ playId: "p1", clientKey: "k1", sequence: 0, runsWithPrevious: false, duration: 10, instructions: "" }],
+            plays: [{ kind: "drill", playId: "p1", clientKey: "k1", sequence: 0, runsWithPrevious: false, duration: 10, instructions: "" }],
         });
     });
 
@@ -40,6 +40,15 @@ describe("toLocalSessionSave", () => {
         const submitted = { title: "Tuesday", date: new Date("2026-10-06T19:00:00"), duration: 60, isShared: false, plays: [] } as unknown as PracticeSessionSubmitData;
         expect(toLocalSessionSave(submitted)).not.toHaveProperty("goaliesAttending");
         expect(toLocalSessionSave({ ...submitted, goaliesAttending: null })).toHaveProperty("goaliesAttending", null);
+    });
+
+    it("sends block rows and the gap, and leaves the gap out when the editor holds none", () => {
+        const submitted = {
+            title: "T", date: new Date("2026-10-06T19:00:00"), duration: 60, isShared: false, transitionMinutes: 2,
+            plays: [{ id: "kw", kind: "warmup", label: "", sequence: 0, duration: 8, instructions: "", runsWithPrevious: false }],
+        } as unknown as PracticeSessionSubmitData;
+        expect(toLocalSessionSave(submitted)).toMatchObject({ transitionMinutes: 2, plays: [{ kind: "warmup", clientKey: "kw", label: null }] });
+        expect(toLocalSessionSave({ ...submitted, transitionMinutes: undefined })).not.toHaveProperty("transitionMinutes");
     });
 });
 

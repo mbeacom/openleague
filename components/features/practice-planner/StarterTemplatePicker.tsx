@@ -4,6 +4,7 @@ import { Box, Button, Card, CardActions, CardContent, Chip, Grid, Stack, Typogra
 import { STARTER_TEMPLATES, starterTemplatePlan, type StarterTemplate } from "@/lib/data/starter-templates";
 import { parsePlan, type ParsePlanResult, type PlanGenerator } from "@/lib/plan-document";
 import { groupStations } from "@/lib/utils/session-timeline";
+import { drillRows } from "@/lib/utils/session-rows";
 
 /**
  * A template as the import views receive a plan file: stamped with the running
@@ -45,7 +46,7 @@ export function StarterTemplatePicker({ onUse, disabled = false }: { onUse: (tem
                                     </Typography>
                                     <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ my: 1 }}>
                                         <Chip size="small" label={`${template.session.durationMinutes} min`} />
-                                        <Chip size="small" label={`${template.session.drills.length} drills`} />
+                                        <Chip size="small" label={`${drillRows(template.session.drills).length} drills`} />
                                         <Chip size="small" label={`${blocks} station ${blocks === 1 ? "block" : "blocks"}`} />
                                     </Stack>
                                     <Typography variant="body2" color="text.secondary">

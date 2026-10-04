@@ -14,6 +14,7 @@ import {
     CardActions,
     CardContent,
     CardMedia,
+    Checkbox,
     Chip,
     FormControlLabel,
     FormHelperText,
@@ -35,6 +36,7 @@ import { usePlannerPlatform } from "@/lib/planner-store";
 import { VALIDATION_CONSTRAINTS, type PlayInSession } from "@/types/practice-planner";
 import { MAX_STATIONS_PER_GROUP } from "@/lib/utils/session-timeline";
 import { needsGoalie } from "@/lib/utils/drill-tags";
+import type { RowEdit } from "@/lib/utils/session-rows";
 import { GoalieBadge } from "./GoalieBadge";
 
 /** Hidden from sight but read by screen readers (the standard clip pattern). */
@@ -53,14 +55,18 @@ const VISUALLY_HIDDEN = {
 
 export const STATION_SWITCH_LABEL = "Run as a station with the previous drill";
 export const STATION_CAP_TOOLTIP = `A station block holds at most ${MAX_STATIONS_PER_GROUP} drills`;
+export const STAYS_LABEL = "Stays";
+export const STAYS_HELP = "Doesn't rotate, e.g. goalie station";
 
 /**
  * Props for the SessionDrillCard component
  */
 export interface SessionDrillCardProps {
     play: PlayInSession;
-    /** Position in the whole session (not within a station block). */
+    /** Position in the whole session (not within a station block): the move / toggle index. */
     index: number;
+    /** 1-based number among the session's drills (block rows aren't counted); defaults to index + 1. */
+    number?: number;
     /** Whether Move up / Move down would change the order (station-aware, 2b). */
     canMoveUp: boolean;
     canMoveDown: boolean;
@@ -79,10 +85,15 @@ export interface SessionDrillCardProps {
     fitWarning?: string | null;
     /** Advisory goalie shortfall for a standalone drill. Never blocks a save. */
     goalieWarning?: string | null;
+    /**
+     * Set while this drill's station block rotates (spec R8): the Stays
+     * checkbox replaces the minutes, which the rotation sets.
+     */
+    stays?: { checked: boolean; onToggle: () => void } | null;
     isEditing: boolean;
     onDelete: (playId: string) => void;
     onEdit: (playId: string) => void;
-    onUpdate: (playId: string, updates: Partial<PlayInSession>) => void;
+    onUpdate: (playId: string, edit: RowEdit) => void;
     onCancelEdit: () => void;
     onMoveUp: (index: number) => void;
     onMoveDown: (index: number) => void;
@@ -104,6 +115,7 @@ export interface SessionDrillCardProps {
 export function SessionDrillCard({
     play,
     index,
+    number = index + 1,
     canMoveUp,
     canMoveDown,
     station,
@@ -111,6 +123,7 @@ export function SessionDrillCard({
     stationSlot,
     fitWarning = null,
     goalieWarning = null,
+    stays = null,
     isEditing,
     onDelete,
     onEdit,
@@ -133,6 +146,7 @@ export function SessionDrillCard({
     const grouped = stationSlot !== undefined;
     const capReasonId = useId();
     const capped = station !== null && !station.canToggle;
+    const staysHelpId = useId();
 
     // Get thumbnail from play instance (copied from library play when added)
     const thumbnail = play.thumbnail || "";
@@ -142,10 +156,8 @@ export function SessionDrillCard({
      * Requirements: 2.4 - Save inline edits
      */
     const handleSaveEdits = () => {
-        onUpdate(play.id, {
-            duration: editDuration,
-            instructions: editInstructions,
-        });
+        // While the block rotates, the rotation owns the minutes.
+        onUpdate(play.id, { ...(stays ? {} : { duration: editDuration }), instructions: editInstructions });
     };
 
     /**
@@ -188,7 +200,7 @@ export function SessionDrillCard({
                 sx={{
                     width: { xs: "100%", sm: 200 },
                     height: { xs: 150, sm: 120 },
-                    bgcolor: "grey.100",
+                    bgcolor: "action.hover",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
@@ -197,14 +209,14 @@ export function SessionDrillCard({
                 }}
             >
                 {thumbnail ? (
-                    <Image src={thumbnail} alt={play.name || `Drill ${index + 1}`} fit="contain" />
+                    <Image src={thumbnail} alt={play.name || `Drill ${number}`} fit="contain" />
                 ) : (
                     <Typography variant="body2" color="text.secondary">
-                        Play {index + 1}
+                        Play {number}
                     </Typography>
                 )}
                 <Chip
-                    label={`#${index + 1}`}
+                    label={`#${number}`}
                     color="primary"
                     size="small"
                     sx={{
@@ -220,7 +232,7 @@ export function SessionDrillCard({
             <CardContent sx={{ flexGrow: 1, py: 1 }}>
                 <Stack spacing={1}>
                     <Typography id={titleId} variant="h6" component={grouped ? "h4" : "h3"}>
-                        {play.name || `Drill ${index + 1}`}
+                        {play.name || `Drill ${number}`}
                     </Typography>
 
                     {fitWarning && (
@@ -236,9 +248,27 @@ export function SessionDrillCard({
                         <Chip label={goalieWarning} color="warning" size="small" variant="outlined" sx={{ alignSelf: "flex-start" }} />
                     )}
 
-                    {/* Duration - Editable */}
+                    {/* Duration - Editable; while the block rotates, Stays in its place (spec R8) */}
                     {/* Requirements: 2.4 - Duration input for each play */}
-                    {isEditing ? (
+                    {stays ? (
+                        <Box>
+                            <FormControlLabel
+                                control={
+                                    <Checkbox
+                                        checked={stays.checked}
+                                        onChange={stays.onToggle}
+                                        slotProps={{ input: { "aria-describedby": `${titleId} ${staysHelpId}` } }}
+                                    />
+                                }
+                                label={STAYS_LABEL}
+                                disabled={locked}
+                                sx={{ minHeight: 44, ml: 0 }}
+                            />
+                            <FormHelperText id={staysHelpId} sx={{ mt: 0 }}>
+                                {STAYS_HELP}
+                            </FormHelperText>
+                        </Box>
+                    ) : isEditing ? (
                         <TextField
                             label="Duration (minutes)"
                             type="number"
@@ -307,7 +337,7 @@ export function SessionDrillCard({
                                     startIcon={<DrawIcon />}
                                     onClick={() => onEditDiagram(play.id)}
                                     disabled={disabled || !canEditDiagram}
-                                    aria-label={`Edit diagram for ${play.name || `drill ${index + 1}`}`}
+                                    aria-label={`Edit diagram for ${play.name || `drill ${number}`}`}
                                     sx={{ minHeight: 44 }}
                                 >
                                     Edit diagram
@@ -386,7 +416,7 @@ export function SessionDrillCard({
                         size="small"
                         onClick={() => onMoveUp(index)}
                         disabled={locked || !canMoveUp}
-                        aria-label={`Move play ${index + 1} up`}
+                        aria-label={`Move play ${number} up`}
                     >
                         <ArrowUpwardIcon />
                     </IconButton>
@@ -394,7 +424,7 @@ export function SessionDrillCard({
                         size="small"
                         onClick={() => onMoveDown(index)}
                         disabled={locked || !canMoveDown}
-                        aria-label={`Move play ${index + 1} down`}
+                        aria-label={`Move play ${number} down`}
                     >
                         <ArrowDownwardIcon />
                     </IconButton>
@@ -403,7 +433,7 @@ export function SessionDrillCard({
                         color="primary"
                         onClick={() => onEdit(play.id)}
                         disabled={locked}
-                        aria-label={`Edit play ${index + 1}`}
+                        aria-label={`Edit play ${number}`}
                     >
                         <EditIcon />
                     </IconButton>
@@ -412,7 +442,7 @@ export function SessionDrillCard({
                         color="error"
                         onClick={() => onDelete(play.id)}
                         disabled={locked}
-                        aria-label={`Delete play ${index + 1}`}
+                        aria-label={`Delete play ${number}`}
                     >
                         <DeleteIcon />
                     </IconButton>

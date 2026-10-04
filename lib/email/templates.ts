@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db/prisma";
 import { FALLBACK_TIME_ZONE, formatDateTime } from "@/lib/utils/date";
 import { getBaseUrl } from "@/lib/env";
 import { notificationService } from "@/lib/services/notification";
+import { blockTitle, isBlockKind, toRowKind } from "@/lib/utils/session-rows";
 
 const BASE_URL = getBaseUrl();
 
@@ -1505,8 +1506,15 @@ interface PracticePlanSharedEmailData {
   sessionDate: string;
   duration: number;
   playCount: number;
+  /** Block rows (warm-up, break…), listed by label with minutes (spec R11). */
+  blocks: Array<{ title: string; minutes: number }>;
   sessionId: string;
   teamId: string;
+}
+
+/** "Warm-up · 8 min, Water break · 2 min": a plan's block rows (spec R11). */
+function plannedBlocks(blocks: ReadonlyArray<{ title: string; minutes: number }>): string {
+  return blocks.map((block) => `${block.title} · ${block.minutes} min`).join(", ");
 }
 
 /**
@@ -1529,6 +1537,7 @@ export async function sendPracticePlanSharedEmail(data: PracticePlanSharedEmailD
           <p style="margin: 10px 0;"><strong>Date:</strong> ${data.sessionDate}</p>
           <p style="margin: 10px 0;"><strong>Duration:</strong> ${data.duration} minutes</p>
           <p style="margin: 10px 0;"><strong>Number of Drills:</strong> ${data.playCount}</p>
+          ${data.blocks.length > 0 ? `<p style="margin: 10px 0;"><strong>Also planned:</strong> ${escapeHtml(plannedBlocks(data.blocks))}</p>` : ""}
         </div>
 
         <p>Review the practice plan to see the drills and prepare for the upcoming practice.</p>
@@ -1553,7 +1562,7 @@ A new practice plan has been shared with ${data.teamName}.
 ${data.sessionTitle}
 Date: ${data.sessionDate}
 Duration: ${data.duration} minutes
-Number of Drills: ${data.playCount}
+Number of Drills: ${data.playCount}${data.blocks.length > 0 ? `\nAlso planned: ${plannedBlocks(data.blocks)}` : ""}
 
 Review the practice plan to see the drills and prepare for the upcoming practice.
 
@@ -1577,6 +1586,8 @@ interface PracticePlanUpdatedEmailData {
   sessionDate: string;
   duration: number;
   playCount: number;
+  /** Block rows (warm-up, break…), listed by label with minutes (spec R11). */
+  blocks: Array<{ title: string; minutes: number }>;
   sessionId: string;
   teamId: string;
 }
@@ -1601,6 +1612,7 @@ export async function sendPracticePlanUpdatedEmail(data: PracticePlanUpdatedEmai
           <p style="margin: 10px 0;"><strong>Date:</strong> ${data.sessionDate}</p>
           <p style="margin: 10px 0;"><strong>Duration:</strong> ${data.duration} minutes</p>
           <p style="margin: 10px 0;"><strong>Number of Drills:</strong> ${data.playCount}</p>
+          ${data.blocks.length > 0 ? `<p style="margin: 10px 0;"><strong>Also planned:</strong> ${escapeHtml(plannedBlocks(data.blocks))}</p>` : ""}
         </div>
 
         <p>The practice plan has been modified. Please review the updated drills and instructions.</p>
@@ -1625,7 +1637,7 @@ A practice plan for ${data.teamName} has been updated.
 ${data.sessionTitle}
 Date: ${data.sessionDate}
 Duration: ${data.duration} minutes
-Number of Drills: ${data.playCount}
+Number of Drills: ${data.playCount}${data.blocks.length > 0 ? `\nAlso planned: ${plannedBlocks(data.blocks)}` : ""}
 
 The practice plan has been modified. Please review the updated drills and instructions.
 
@@ -1676,10 +1688,12 @@ export async function sendPracticePlanNotifications(
           },
         },
       },
-      _count: {
-        select: {
-          plays: true,
-        },
+      // Drills only: block rows are listed by label instead (spec R11).
+      _count: { select: { plays: { where: { kind: "drill" } } } },
+      plays: {
+        where: { kind: { not: "drill" } },
+        orderBy: { sequence: "asc" },
+        select: { kind: true, label: true, duration: true },
       },
     },
   });
@@ -1711,6 +1725,10 @@ export async function sendPracticePlanNotifications(
     sessionDate: formatDateTime(session.date),
     duration: session.duration,
     playCount: session._count.plays,
+    blocks: session.plays.flatMap((row) => {
+      const kind = toRowKind(row.kind);
+      return isBlockKind(kind) ? [{ title: blockTitle(kind, row.label), minutes: row.duration }] : [];
+    }),
     sessionId: session.id,
     teamId: session.teamId,
   };

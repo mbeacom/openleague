@@ -8,10 +8,11 @@
  */
 
 import { z } from "zod";
-import { PLAY_FOCUS, PLAY_GOALIES, type PlayData, type PlayFocus, type PlayGoalies } from "@/types/practice-planner";
+import { BLOCK_KINDS, PLAY_FOCUS, PLAY_GOALIES, type BlockKind, type PlayData, type PlayFocus, type PlayGoalies } from "@/types/practice-planner";
 import { drillTags, toGoaliesAttending, toPlayFocus, toPlayGoalies } from "@/lib/utils/drill-tags";
 import { createEmptyPlayData, parseStoredPlayData } from "@/lib/utils/play-data";
-import { sessionWallMinutes, stationGroupError } from "@/lib/utils/session-timeline";
+import { CONTROL_CHARS, isBlockRow, toBlockLabel, toRotateEveryMinutes, toTransitionMinutes } from "@/lib/utils/session-rows";
+import { normalizeGroups, sessionRowsError, sessionWallMinutes, settleRotations, withRotationMinutes } from "@/lib/utils/session-timeline";
 
 export const PLAN_FORMAT = "openleague.practice-plan" as const;
 export const PLAN_VERSION = 1 as const;
@@ -35,6 +36,8 @@ const MAX_GENERATOR_LENGTH = 100;
 export const NOT_A_PLAN_MESSAGE = "This file isn't an OpenLeague practice plan.";
 export const NEWER_VERSION_MESSAGE = "This plan was made by a newer version of OpenLeague. Update to open it.";
 export const INVALID_PLAN_MESSAGE = "This practice plan has problems and can't be opened.";
+/** A plan row's kind is unknown (session-rows has its own ROW_KIND_MESSAGE for the save schema). */
+export const PLAN_ROW_KIND_MESSAGE = "Row kind must be drill, warmup, break, transition or cooldown";
 
 export type PlanGenerator = "openleague-hosted" | "openleague-static";
 
@@ -42,7 +45,6 @@ export type PlanGenerator = "openleague-hosted" | "openleague-static";
 // Field schemas
 // ---------------------------------------------------------------------------
 
-const CONTROL_CHARS = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g;
 const clean = (text: string) => text.replace(CONTROL_CHARS, "").trim();
 
 function requiredText(max: number, label: string) {
@@ -110,11 +112,24 @@ const focusSchema = z.preprocess(toPlayFocus, z.enum(PLAY_FOCUS));
 const goaliesSchema = z.preprocess(toPlayGoalies, z.enum(PLAY_GOALIES));
 const goaliesAttendingSchema = z.preprocess(toGoaliesAttending, z.number().int().nullable());
 
+// Practice timing (spec R6): read leniently like the goalie fields, so a stray
+// value never makes a plan unreadable. A rotation on the wrong row is still a
+// rule violation (superRefine below), not a value problem.
+const staysSchema = z.preprocess((value) => value === true, z.boolean());
+const rotateEveryMinutesSchema = z.preprocess(toRotateEveryMinutes, z.number().int().nullable());
+const blockLabelSchema = z.preprocess(toBlockLabel, z.string().nullable());
+const transitionMinutesSchema = z.preprocess(toTransitionMinutes, z.number().int());
+
+const sequenceSchema = z.number({ message: "Sequence must be a number" }).int("Sequence must be a whole number").min(0, "Sequence can't be negative");
+
 const planDrillSchema = z.object({
-    sequence: z.number({ message: "Sequence must be a number" }).int("Sequence must be a whole number").min(0, "Sequence can't be negative"),
+    kind: z.literal("drill"),
+    sequence: sequenceSchema,
     durationMinutes: minutes("Drill length"),
     runsWithPrevious: z.boolean({ message: "runsWithPrevious must be true or false" }).nullish().transform((value) => value ?? false),
     instructions: optionalText(MAX_INSTRUCTIONS_LENGTH, "Instructions"),
+    stays: staysSchema,
+    rotateEveryMinutes: rotateEveryMinutesSchema,
     drill: z.object({
         name: requiredText(MAX_DRILL_NAME_LENGTH, "Drill name"),
         description: optionalText(MAX_DRILL_DESCRIPTION_LENGTH, "Description"),
@@ -124,6 +139,39 @@ const planDrillSchema = z.object({
     }),
 });
 
+/** A warm-up, break, transition or cool-down: no drill, no diagram, no tags (unknown keys are stripped). */
+const planBlockSchema = z.object({
+    kind: z.enum(BLOCK_KINDS),
+    sequence: sequenceSchema,
+    durationMinutes: minutes("Block length"),
+    instructions: optionalText(MAX_INSTRUCTIONS_LENGTH, "Note"),
+    label: blockLabelSchema,
+});
+
+/** A row without a kind is a drill: every file written before practice timing. */
+function withDefaultKind(raw: unknown): unknown {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return raw;
+    const kind = (raw as { kind?: unknown }).kind;
+    return kind === undefined || kind === null ? { ...(raw as object), kind: "drill" } : raw;
+}
+
+const planEntrySchema = z.preprocess(
+    withDefaultKind,
+    z.discriminatedUnion("kind", [planDrillSchema, planBlockSchema], { message: PLAN_ROW_KIND_MESSAGE }),
+);
+
+/** A plan row as a timeline row: what the row rules and the rotation's minutes read. */
+function timelineRow(entry: z.output<typeof planEntrySchema>) {
+    return {
+        sequence: entry.sequence,
+        duration: entry.durationMinutes,
+        kind: entry.kind,
+        runsWithPrevious: entry.kind === "drill" ? entry.runsWithPrevious : false,
+        stays: entry.kind === "drill" ? entry.stays : false,
+        rotateEveryMinutes: entry.kind === "drill" ? entry.rotateEveryMinutes : null,
+    };
+}
+
 const planSessionSchema = z
     .object({
         title: requiredText(MAX_TITLE_LENGTH, "Title"),
@@ -131,23 +179,20 @@ const planSessionSchema = z
         date: localDateSchema,
         startTime: localTimeSchema,
         goaliesAttending: goaliesAttendingSchema,
-        drills: z.array(planDrillSchema).max(MAX_PLAN_DRILLS, `A plan can hold at most ${MAX_PLAN_DRILLS} drills`),
+        transitionMinutes: transitionMinutesSchema,
+        drills: z.array(planEntrySchema).max(MAX_PLAN_DRILLS, `A plan can hold at most ${MAX_PLAN_DRILLS} rows (drills and blocks)`),
     })
     .superRefine((session, ctx) => {
         // The same rules the hosted save enforces (createPracticeSession).
-        const timeline = session.drills.map((d) => ({
-            sequence: d.sequence,
-            duration: d.durationMinutes,
-            runsWithPrevious: d.runsWithPrevious,
-        }));
+        const timeline = session.drills.map(timelineRow);
         const sequences = timeline.map((t) => t.sequence).sort((a, b) => a - b);
         if (sequences.some((sequence, index) => sequence !== index)) {
             ctx.addIssue({ code: "custom", path: ["drills"], message: "Drill sequences must run 0, 1, 2… with no gaps or repeats" });
             return;
         }
-        const groupError = stationGroupError(timeline);
-        if (groupError) ctx.addIssue({ code: "custom", path: ["drills"], message: groupError });
-        const wall = sessionWallMinutes(timeline);
+        const ruleError = sessionRowsError(timeline);
+        if (ruleError) ctx.addIssue({ code: "custom", path: ["drills"], message: ruleError });
+        const wall = sessionWallMinutes(timeline, session.transitionMinutes);
         if (wall > session.durationMinutes) {
             ctx.addIssue({
                 code: "custom",
@@ -156,7 +201,18 @@ const planSessionSchema = z
             });
         }
     })
-    .transform((session) => ({ ...session, drills: [...session.drills].sort((a, b) => a.sequence - b.sequence) }));
+    .transform((session) => {
+        // Sorted, and each rotating station at the minutes the editor shows (M, or the whole
+        // block when it stays), so both importers store what every view shows (spec R3).
+        const drills = [...session.drills].sort((a, b) => a.sequence - b.sequence);
+        const timed = withRotationMinutes(drills.map(timelineRow));
+        return {
+            ...session,
+            drills: drills.map((entry, index) =>
+                timed[index].duration === entry.durationMinutes ? entry : { ...entry, durationMinutes: timed[index].duration },
+            ),
+        };
+    });
 
 export const planDocumentSchema = z.object({
     format: z.literal(PLAN_FORMAT),
@@ -167,11 +223,45 @@ export const planDocumentSchema = z.object({
 });
 
 export type PlanDocument = z.output<typeof planDocumentSchema>;
-export type PlanDrill = PlanDocument["session"]["drills"][number];
+/** One row of a plan: a drill or a block. */
+export type PlanEntry = PlanDocument["session"]["drills"][number];
+export type PlanDrill = Extract<PlanEntry, { kind: "drill" }>;
+export type PlanBlock = Extract<PlanEntry, { kind: BlockKind }>;
 
 // ---------------------------------------------------------------------------
 // Serialize
 // ---------------------------------------------------------------------------
+
+/** A drill row an exporter supplies. */
+export interface PlanDrillInput {
+    kind?: "drill";
+    sequence: number;
+    duration: number;
+    runsWithPrevious: boolean;
+    instructions: string | null;
+    name: string;
+    description: string | null;
+    /** Absent = the default tag */
+    focus?: PlayFocus;
+    goalies?: PlayGoalies;
+    /** Absent = false / null */
+    stays?: boolean;
+    rotateEveryMinutes?: number | null;
+    /** null = unreadable; exported as an empty board */
+    playData: PlayData | null;
+}
+
+/** A block row an exporter supplies: no drill fields. */
+export interface PlanBlockInput {
+    kind: BlockKind;
+    sequence: number;
+    duration: number;
+    /** Always false (spec R3); present so a plan's rows are timeline rows. Never written to the document. */
+    runsWithPrevious: false;
+    /** The block's note */
+    instructions: string | null;
+    label: string | null;
+}
 
 /** The minimal session view an exporter supplies (hosted detail page, static store). */
 export interface PlanSessionInput {
@@ -183,41 +273,39 @@ export interface PlanSessionInput {
     startTime: string | null;
     /** null or absent = not set */
     goaliesAttending?: number | null;
-    drills: Array<{
-        sequence: number;
-        duration: number;
-        runsWithPrevious: boolean;
-        instructions: string | null;
-        name: string;
-        description: string | null;
-        /** Absent = the default tag */
-        focus?: PlayFocus;
-        goalies?: PlayGoalies;
-        /** null = unreadable; exported as an empty board */
-        playData: PlayData | null;
-    }>;
+    /** Minutes between blocks; absent = 0 */
+    transitionMinutes?: number;
+    drills: Array<PlanDrillInput | PlanBlockInput>;
 }
 
 /**
  * Builds a document from a session. Picks fields explicitly, so ids and
- * thumbnails on the input never leak; sorts and renumbers sequences; the
- * first drill never runs with a previous one.
+ * thumbnails on the input never leak. Sorts and renumbers, and applies the
+ * editor's row rules (the first row and a row after a block never run with a
+ * previous one; a rotation that can't run is dropped), so every export imports.
  */
 export function serializePlan(input: PlanSessionInput, generator: PlanGenerator, now: Date = new Date()): PlanDocument {
-    const drills = [...input.drills]
-        .sort((a, b) => a.sequence - b.sequence)
-        .map((d, index) => ({
+    const rows = settleRotations(normalizeGroups([...input.drills].sort((a, b) => a.sequence - b.sequence)));
+    const drills = rows.map((row, index): PlanEntry => {
+        if (isBlockRow(row)) {
+            return { kind: row.kind, sequence: index, durationMinutes: row.duration, instructions: row.instructions ?? "", label: toBlockLabel(row.label) };
+        }
+        return {
+            kind: "drill",
             sequence: index,
-            durationMinutes: d.duration,
-            runsWithPrevious: index === 0 ? false : d.runsWithPrevious,
-            instructions: d.instructions ?? "",
+            durationMinutes: row.duration,
+            runsWithPrevious: row.runsWithPrevious,
+            instructions: row.instructions ?? "",
+            stays: row.stays ?? false,
+            rotateEveryMinutes: row.rotateEveryMinutes ?? null,
             drill: {
-                name: d.name,
-                description: d.description ?? "",
-                ...drillTags(d),
-                playData: d.playData ?? createEmptyPlayData(),
+                name: row.name,
+                description: row.description ?? "",
+                ...drillTags(row),
+                playData: row.playData ?? createEmptyPlayData(),
             },
-        }));
+        };
+    });
     return {
         format: PLAN_FORMAT,
         version: PLAN_VERSION,
@@ -229,6 +317,7 @@ export function serializePlan(input: PlanSessionInput, generator: PlanGenerator,
             date: input.date,
             startTime: input.startTime,
             goaliesAttending: toGoaliesAttending(input.goaliesAttending),
+            transitionMinutes: toTransitionMinutes(input.transitionMinutes),
             drills,
         },
     };
@@ -325,8 +414,9 @@ export function planExportFileName(title: string, extension: PlanExportExtension
 }
 
 export interface PlanEditorDrill {
-    /** Stable per-drill key for React lists */
+    /** Stable per-row key for React lists */
     key: string;
+    kind: "drill";
     sequence: number;
     duration: number;
     runsWithPrevious: boolean;
@@ -335,7 +425,19 @@ export interface PlanEditorDrill {
     description: string;
     focus: PlayFocus;
     goalies: PlayGoalies;
+    stays: boolean;
+    rotateEveryMinutes: number | null;
     playData: PlayData;
+}
+
+export interface PlanEditorBlock {
+    key: string;
+    kind: BlockKind;
+    sequence: number;
+    duration: number;
+    runsWithPrevious: false;
+    instructions: string;
+    label: string | null;
 }
 
 export interface PlanEditorSession {
@@ -344,10 +446,11 @@ export interface PlanEditorSession {
     date: string | null;
     startTime: string | null;
     goaliesAttending: number | null;
-    plays: PlanEditorDrill[];
+    transitionMinutes: number;
+    plays: Array<PlanEditorDrill | PlanEditorBlock>;
 }
 
-/** The plan as timeline plays (TimelinePlay-compatible), for the import preview. */
+/** The plan as timeline rows (TimelinePlay-compatible), for the import preview. */
 export function planToEditorSession(plan: PlanDocument): PlanEditorSession {
     return {
         title: plan.session.title,
@@ -355,17 +458,33 @@ export function planToEditorSession(plan: PlanDocument): PlanEditorSession {
         date: plan.session.date,
         startTime: plan.session.startTime,
         goaliesAttending: plan.session.goaliesAttending,
-        plays: plan.session.drills.map((d) => ({
-            key: `plan-drill-${d.sequence}`,
-            sequence: d.sequence,
-            duration: d.durationMinutes,
-            runsWithPrevious: d.runsWithPrevious,
-            instructions: d.instructions,
-            name: d.drill.name,
-            description: d.drill.description,
-            focus: d.drill.focus,
-            goalies: d.drill.goalies,
-            playData: d.drill.playData,
-        })),
+        transitionMinutes: plan.session.transitionMinutes,
+        plays: plan.session.drills.map((entry): PlanEditorDrill | PlanEditorBlock =>
+            entry.kind === "drill"
+                ? {
+                      key: `plan-row-${entry.sequence}`,
+                      kind: "drill",
+                      sequence: entry.sequence,
+                      duration: entry.durationMinutes,
+                      runsWithPrevious: entry.runsWithPrevious,
+                      instructions: entry.instructions,
+                      name: entry.drill.name,
+                      description: entry.drill.description,
+                      focus: entry.drill.focus,
+                      goalies: entry.drill.goalies,
+                      stays: entry.stays,
+                      rotateEveryMinutes: entry.rotateEveryMinutes,
+                      playData: entry.drill.playData,
+                  }
+                : {
+                      key: `plan-row-${entry.sequence}`,
+                      kind: entry.kind,
+                      sequence: entry.sequence,
+                      duration: entry.durationMinutes,
+                      runsWithPrevious: false,
+                      instructions: entry.instructions,
+                      label: entry.label,
+                  },
+        ),
     };
 }

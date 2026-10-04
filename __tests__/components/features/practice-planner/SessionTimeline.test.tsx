@@ -98,3 +98,72 @@ describe("SessionTimeline (print)", () => {
         expect(screen.getByText("Planned 25 of 60 min")).toBeInTheDocument();
     });
 });
+
+describe("SessionTimeline: block rows and the gap between blocks", () => {
+    const ROWS = [
+        { id: "row-w", sequence: 0, duration: 8, runsWithPrevious: false, kind: "warmup" as const, label: null, instructions: "Easy laps" },
+        play("Breakout", 1, 15),
+        { id: "row-c", sequence: 2, duration: 5, runsWithPrevious: false, kind: "cooldown" as const, label: "Stretch", instructions: null },
+    ];
+
+    it("shows a block by its label and note, never as a link, and folds the gap into start times", () => {
+        render(
+            <ThemeProvider theme={createTheme()}>
+                <SessionTimeline plays={ROWS} sessionStart={START} timeZone="America/New_York" showZone durationMinutes={60} transitionMinutes={2} onSelectPlay={vi.fn()} />
+            </ThemeProvider>,
+        );
+        const [warmup, breakout, cooldown] = bodyRows();
+        expect(within(warmup).getByText("Warm-up")).toBeInTheDocument();
+        expect(within(warmup).getByText(/Easy laps/)).toBeInTheDocument();
+        expect(within(warmup).queryByRole("button")).toBeNull();
+        expect(within(breakout).getByText("6:10 PM EDT")).toBeInTheDocument();
+        expect(within(breakout).getByRole("button", { name: "Breakout" })).toBeInTheDocument();
+        expect(within(cooldown).getByText("6:27 PM EDT")).toBeInTheDocument();
+        expect(within(cooldown).getByText("Stretch")).toBeInTheDocument();
+        expect(screen.getByText("Planned 32 of 60 min")).toBeInTheDocument();
+    });
+
+    it("prints a block as plain text", () => {
+        const html = renderToStaticMarkup(
+            <SessionTimeline variant="print" plays={ROWS} sessionStart={START} timeZone="America/New_York" showZone durationMinutes={60} transitionMinutes={2} />,
+        );
+        expect(html).toContain("Warm-up · Easy laps");
+        expect(html).toContain("Planned 32 of 60 min");
+    });
+});
+
+describe("SessionTimeline: a rotating station block (spec R9)", () => {
+    const ROTATING = [
+        { ...play("Goalie", 0, 10), stays: true, rotateEveryMinutes: 5 },
+        { ...play("Skate A", 1, 5, true), stays: false, rotateEveryMinutes: null },
+        { ...play("Skate B", 2, 5, true), stays: false, rotateEveryMinutes: null },
+    ];
+
+    it("chips the interval, marks the stays station, and puts the grid with clock times under the block", () => {
+        render(ui({ plays: ROTATING }));
+        const [block, gridRow] = bodyRows();
+        expect(within(block).getByText("Rotates every 5 min")).toBeInTheDocument();
+        // The caption line is upper case; the chip keeps its sentence case.
+        expect(within(block).getByText("Rotates every 5 min").closest(".MuiChip-root")).toHaveStyle({ textTransform: "none" });
+        // The chip is a div: its caption line must not be a <p> (invalid nesting, a React 19 hydration error).
+        expect(block.querySelector("p .MuiChip-root")).toBeNull();
+        expect(within(block).getByText(/stays/)).toBeInTheDocument();
+        expect(within(block).getByText("10")).toBeInTheDocument();
+        const grid = within(gridRow).getByRole("table", { name: /^Rotation grid/ });
+        expect(within(grid).getAllByRole("row").map((row) => row.textContent)).toEqual([
+            "StartGoalieSkate ASkate B",
+            "6:00 PM EDTallAB",
+            "6:05 PM EDTallBA",
+        ]);
+    });
+
+    it("prints the rotation header, the stays mark and the grid", () => {
+        const html = renderToStaticMarkup(ui({ plays: ROTATING, variant: "print" }));
+        expect(html).toContain("Stations · rotate every 5 min · 10 min");
+        expect(html).toContain("Goalie · stays");
+        expect(html).toContain('class="bench-rotation"');
+        expect(html).toMatch(/<td>all<\/td>/);
+        // The block's row stays on the page with its grid (app/(print)/print.css).
+        expect(html).toMatch(/<tr class="bench-keep-with-grid"><td>[^<]*<\/td><td>10<\/td>/);
+    });
+});

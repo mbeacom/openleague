@@ -3,7 +3,31 @@ import { playDataSchema } from "@/lib/utils/play-data";
 import { isValidTimeZone } from "@/lib/utils/date";
 import { MAX_THUMBNAIL_SIZE, THUMBNAIL_DATA_URL } from "@/lib/utils/thumbnail-rules";
 import { MIN_SEGMENT_DIMENSION } from "@/lib/utils/segment-geometry";
-import { MAX_GOALIES_ATTENDING, PLAY_FOCUS, PLAY_GOALIES } from "@/types/practice-planner";
+import {
+  MAX_BLOCK_LABEL_LENGTH,
+  MAX_GOALIES_ATTENDING,
+  MAX_ROTATE_MINUTES,
+  MAX_TRANSITION_MINUTES,
+  MIN_ROTATE_MINUTES,
+  PLAY_FOCUS,
+  PLAY_GOALIES,
+  SESSION_ROW_KINDS,
+} from "@/types/practice-planner";
+import {
+  BLOCK_HAS_NO_DRILL_MESSAGE,
+  BLOCK_LABEL_MESSAGE,
+  CONTROL_CHARS,
+  DRILL_NEEDS_PLAY_MESSAGE,
+  MAX_ROW_INSTRUCTIONS_LENGTH,
+  PLAY_DURATION_INT_MESSAGE,
+  PLAY_DURATION_MAX_MESSAGE,
+  PLAY_DURATION_MIN_MESSAGE,
+  ROTATE_MINUTES_MESSAGE,
+  ROW_INSTRUCTIONS_MESSAGE,
+  ROW_KIND_MESSAGE,
+  TRANSITION_MINUTES_MESSAGE,
+} from "@/lib/utils/session-rows";
+import { BLOCK_ROW_FIELDS_ERROR, BLOCK_STATION_ERROR } from "@/lib/utils/session-timeline";
 import { GOALIES_ATTENDING_MESSAGE } from "@/lib/utils/drill-tags";
 
 /**
@@ -148,11 +172,11 @@ export function pickField<T extends z.ZodObject<z.ZodRawShape>>(
 }
 
 // Helper to sanitize string input by trimming and removing dangerous characters
-function sanitizedString(maxLength: number = 255) {
+function sanitizedString(maxLength: number = 255, maxMessage?: string) {
   return z
     .string()
     .trim()
-    .max(maxLength)
+    .max(maxLength, maxMessage)
     .transform((str) => {
       // Remove null bytes and other control characters that could be dangerous
       return str.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
@@ -1360,18 +1384,65 @@ export const practiceVenueAttachmentSchema = z
   .object(practiceVenueAttachmentFields)
   .refine(practiceHasStartAtWhenVenueSet, practiceStartAtRequiredIssue);
 
-// One drill in a practice-session save. clientKey is the editor's stable
-// per-card key (PlayInSession.id); the save returns clientKey → owned playId.
+// One row in a practice-session save. clientKey is the editor's stable
+// per-card key; the save returns clientKey → owned playId for drill rows.
 // runsWithPrevious (2b): the drill runs at the same time as the previous drill
 // by sequence (a station). Absent means sequential, so older clients still work.
-export const practiceSessionPlayInputSchema = z.object({
-  playId: z.string().cuid("Invalid play ID format"),
-  clientKey: z.string().min(1, "Drill key is required").max(64, "Drill key is too long"),
-  sequence: z.number().int().min(0),
-  duration: z.number().int().min(1, "Play duration must be at least 1 minute").max(300, "Play duration must be less than 300 minutes"),
-  instructions: optionalSanitizedString(2000),
-  runsWithPrevious: z.boolean().default(false),
-});
+// Practice timing (spec R1–R3): `kind` is drill (the default, for older
+// clients) or a block (warm-up, break, transition, cool-down). A block row has
+// no play and never runs as a station, stays or rotates. Absent stays /
+// rotateEveryMinutes = unchanged on update (the action reads the stored row);
+// null clears a rotation.
+const blockLabelSchema = z
+  .string()
+  .transform((value) => value.replace(CONTROL_CHARS, "").trim())
+  .pipe(z.string().max(MAX_BLOCK_LABEL_LENGTH, BLOCK_LABEL_MESSAGE));
+
+const rotateEveryMinutesSchema = z
+  .number({ message: ROTATE_MINUTES_MESSAGE })
+  .int(ROTATE_MINUTES_MESSAGE)
+  .min(MIN_ROTATE_MINUTES, ROTATE_MINUTES_MESSAGE)
+  .max(MAX_ROTATE_MINUTES, ROTATE_MINUTES_MESSAGE);
+
+export const practiceSessionPlayInputSchema = z
+  .object({
+    kind: z.enum(SESSION_ROW_KINDS, { message: ROW_KIND_MESSAGE }).default("drill"),
+    // "" passes here so a block row that carries one is refused for what it is (below).
+    playId: z.string().cuid("Invalid play ID format").or(z.literal("")).optional(),
+    clientKey: z.string().min(1, "Drill key is required").max(64, "Drill key is too long"),
+    sequence: z.number().int().min(0),
+    duration: z.number().int(PLAY_DURATION_INT_MESSAGE).min(1, PLAY_DURATION_MIN_MESSAGE).max(300, PLAY_DURATION_MAX_MESSAGE),
+    instructions: sanitizedString(MAX_ROW_INSTRUCTIONS_LENGTH, ROW_INSTRUCTIONS_MESSAGE).optional().or(z.literal("")),
+    runsWithPrevious: z.boolean().default(false),
+    label: blockLabelSchema.nullable().optional(),
+    stays: z.boolean().optional(),
+    rotateEveryMinutes: rotateEveryMinutesSchema.nullable().optional(),
+  })
+  .superRefine((row, ctx) => {
+    if (row.kind === "drill") {
+      if (!row.playId) ctx.addIssue({ code: "custom", path: ["playId"], message: DRILL_NEEDS_PLAY_MESSAGE });
+      return;
+    }
+    if (row.playId !== undefined) ctx.addIssue({ code: "custom", path: ["playId"], message: BLOCK_HAS_NO_DRILL_MESSAGE });
+    if (row.runsWithPrevious) ctx.addIssue({ code: "custom", path: ["runsWithPrevious"], message: BLOCK_STATION_ERROR });
+    if (row.stays || row.rotateEveryMinutes != null) ctx.addIssue({ code: "custom", path: ["kind"], message: BLOCK_ROW_FIELDS_ERROR });
+  });
+
+export type PracticeSessionRowInput = z.output<typeof practiceSessionPlayInputSchema>;
+
+/**
+ * An editor from before block rows sends no row `kind`; saving its rows would
+ * delete the practice's warm-ups and breaks, so the save asks for a reload.
+ */
+export const STALE_EDITOR_MESSAGE = "This page is out of date. Reload to keep your warm-ups and breaks.";
+
+// The gap between blocks (practice timing, spec R2). Absent = unchanged on
+// update; a create without it stores 0.
+const transitionMinutesSchema = z
+  .number({ message: TRANSITION_MINUTES_MESSAGE })
+  .int(TRANSITION_MINUTES_MESSAGE)
+  .min(0, TRANSITION_MINUTES_MESSAGE)
+  .max(MAX_TRANSITION_MINUTES, TRANSITION_MINUTES_MESSAGE);
 
 const practiceSessionPlayItemsSchema = z
   .array(practiceSessionPlayInputSchema)
@@ -1393,6 +1464,7 @@ export const createPracticeSessionSchema = z.object({
   plays: practiceSessionPlayItemsSchema,
   // Absent = unchanged on update, null on create; null clears (spec R3).
   goaliesAttending: goaliesAttendingSchema.nullable().optional(),
+  transitionMinutes: transitionMinutesSchema.optional(),
   ...practiceVenueAttachmentFields,
 }).refine(practiceHasStartAtWhenVenueSet, practiceStartAtRequiredIssue);
 
@@ -1407,6 +1479,7 @@ export const updatePracticeSessionSchema = z.object({
   plays: practiceSessionPlayItemsSchema,
   // Absent = unchanged on update, null on create; null clears (spec R3).
   goaliesAttending: goaliesAttendingSchema.nullable().optional(),
+  transitionMinutes: transitionMinutesSchema.optional(),
   // Explicit Save only; autosave omits it so shared sessions do not email the
   // team on every debounce.
   notify: z.boolean().optional().default(false),

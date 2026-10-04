@@ -194,6 +194,7 @@ export async function duplicatePracticeSession(
                 title: true,
                 duration: true,
                 goaliesAttending: true,
+                transitionMinutes: true,
                 plays: {
                     orderBy: { sequence: "asc" },
                     include: { play: { select: CLONE_SOURCE_SELECT } },
@@ -211,6 +212,7 @@ export async function duplicatePracticeSession(
                     date: validated.date,
                     duration: source.duration,
                     goaliesAttending: source.goaliesAttending ?? null,
+                    transitionMinutes: source.transitionMinutes,
                     isShared: false,
                     teamId: validated.teamId,
                     createdById: userId,
@@ -218,18 +220,22 @@ export async function duplicatePracticeSession(
                 select: { id: true },
             });
 
+            // Block rows have no drill: only drill rows are cloned, each matched back by its row id.
+            const drills = source.plays.flatMap((row) => (row.play ? [{ rowId: row.id, play: row.play }] : []));
             const playIds = await cloneDrillsIntoSession(tx, {
                 sessionId: session.id,
                 teamId: validated.teamId,
                 userId,
-                sources: source.plays.map((row) => row.play),
+                sources: drills.map((entry) => entry.play),
             });
+            const copyByRow = new Map(drills.map((entry, index) => [entry.rowId, playIds[index]]));
             if (source.plays.length > 0) {
                 await tx.practiceSessionPlay.createMany({
-                    data: source.plays.map((row, index) => ({
+                    data: source.plays.map((row) => ({
                         ...copySessionPlayScalars(row),
                         sessionId: session.id,
-                        playId: playIds[index],
+                        // A block row has no copy: no play.
+                        playId: copyByRow.get(row.id) ?? null,
                     })),
                 });
             }

@@ -13,7 +13,6 @@ import React, { useState, useCallback, useEffect, useRef } from "react";
 import {
     Box,
     Paper,
-    TextField,
     Typography,
     Button,
     CircularProgress,
@@ -26,24 +25,26 @@ import {
 import { useTheme } from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import { Save as SaveIcon, Share as ShareIcon } from "@mui/icons-material";
-import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker";
 import {
     PracticeSessionData,
     PlayInSession,
     SavedPlay,
+    SessionItem,
     validateSessionDuration,
-    VALIDATION_CONSTRAINTS,
 } from "@/types/practice-planner";
 import type { BookingConflict } from "@/types/segments";
 import { applySavedPlayIds, describeSaveError, type SavedDrillId } from "@/lib/utils/session-drill-ids";
-import { moveItem, removeItem, toggleRunsWithPrevious } from "@/lib/utils/session-timeline";
+import { applyRowEdit, drillRows, type RowEdit } from "@/lib/utils/session-rows";
+import { settleRotations } from "@/lib/utils/session-timeline";
 import { PlayLibrary } from "./PlayLibrary";
 import { useSingleFlightSave, type SaveOutcome } from "./useSingleFlightSave";
 import { SessionDrillList } from "./SessionDrillList";
 import { SessionDrillDialog } from "./SessionDrillDialog";
 import { useSessionDrillDialog } from "./useSessionDrillDialog";
-import { GoaliesAttendingField } from "./GoaliesAttendingField";
 import { useGoaliesAttending } from "./useGoaliesAttending";
+import { SessionDetailsFields } from "./SessionDetailsFields";
+import { useBetweenBlocks } from "./useBetweenBlocks";
+import { useSessionRowEdits } from "./useSessionRowEdits";
 import { ShareSessionDialog } from "./ShareSessionDialog";
 import { BookingConflictAlert, VenueBookingFields } from "./VenueBookingFields";
 import {
@@ -135,7 +136,7 @@ export function PracticeSessionEditor({
     const [title, setTitle] = useState(initialData?.title || "");
     const [date, setDate] = useState<Date | null>(initialData?.date || new Date());
     const [duration, setDuration] = useState(initialData?.duration || 60);
-    const [plays, setPlays] = useState<PlayInSession[]>(initialData?.plays || []);
+    const [plays, setPlays] = useState<SessionItem[]>(initialData?.plays || []);
     const [isShared, setIsShared] = useState(initialData?.isShared || false);
 
     // UI state
@@ -181,6 +182,8 @@ export function PracticeSessionEditor({
     const saveNow = useCallback(() => saveFlight.request({ overrideConflicts: false, notify: false }), [saveFlight]);
     const drillDialog = useSessionDrillDialog(plays, setPlays, markDirty, saveNow);
     const goalies = useGoaliesAttending(initialData?.goaliesAttending, markDirty);
+    const betweenBlocks = useBetweenBlocks(initialData?.transitionMinutes, markDirty);
+    const rowEdits = useSessionRowEdits({ plays, setPlays, markDirty, locked: creating });
 
     // Optional ice booking (feature 006, FR-019).
     const booking = useVenueBooking({
@@ -325,7 +328,7 @@ export function PracticeSessionEditor({
         }
 
         const startedVersion = saveFlight.start({ carriesRequests: isFollowUp });
-        const sentPlayIds = new Map(plays.map((play) => [play.id, play.playId]));
+        const sentPlayIds = new Map(drillRows(plays).map((play) => [play.id, play.playId]));
         setIsSaving(true);
         setSaveError(null);
         setSaveSuccess(false);
@@ -339,9 +342,12 @@ export function PracticeSessionEditor({
                 title: title.trim(),
                 date,
                 duration,
-                plays,
+                // A block that can't rotate saves without its rotation (the screen keeps the ticks and the note).
+                // The list loads in sequence order and every edit keeps it so, as settleRotations groups by position.
+                plays: settleRotations(plays),
                 isShared,
                 goaliesAttending: goalies.goaliesAttending,
+                transitionMinutes: betweenBlocks.transitionMinutes,
                 ...booking.attachment(resolvedStart.startAt),
                 overrideConflicts,
                 overrideReason: overrideConflicts ? booking.overrideReason.trim() : "",
@@ -390,7 +396,7 @@ export function PracticeSessionEditor({
             setIsSaving(false);
             saveFlight.finish(outcome);
         }
-    }, [title, date, duration, plays, isShared, goalies.goaliesAttending, sessionId, booking, onSave, validateForm, saveFlight]);
+    }, [title, date, duration, plays, isShared, goalies.goaliesAttending, betweenBlocks.transitionMinutes, sessionId, booking, onSave, validateForm, saveFlight]);
 
     // Keep handleSaveRef updated with latest handleSave function
     useEffect(() => {
@@ -489,28 +495,6 @@ export function PracticeSessionEditor({
     }, [sessionId, onShare]);
 
     /**
-     * Applies a list edit from the timeline helpers, which return the list
-     * itself when they refuse (a capped toggle, a move off the end): a refused
-     * edit changes nothing and must not mark the editor dirty. Computed from
-     * the rendered list; React renders between discrete clicks.
-     */
-    const applyListEdit = useCallback((next: PlayInSession[]) => {
-        if (next === plays) return;
-        setPlays(next);
-        markDirty();
-    }, [plays, markDirty]);
-
-    /**
-     * Handle delete play
-     * Requirements: 2.2 - Remove plays from session
-     */
-    const handleDeletePlay = useCallback((playId: string) => {
-        if (creating) return; // A create redirects; this edit would be lost.
-        // Removing a block's first drill keeps its stations grouped (2b).
-        applyListEdit(removeItem(plays, plays.findIndex((p) => p.id === playId)));
-    }, [applyListEdit, plays, creating]);
-
-    /**
      * Handle edit play
      * Requirements: 2.4 - Edit play in session
      */
@@ -523,15 +507,12 @@ export function PracticeSessionEditor({
      * Requirements: 2.4, 4.4 - Ensure edits don't affect library play
      */
     const handleUpdatePlayInSession = useCallback(
-        (playId: string, updates: Partial<PlayInSession>) => {
+        (playId: string, edit: RowEdit) => {
             if (creating) return;
-            setPlays((prevPlays) =>
-                prevPlays.map((play) =>
-                    play.id === playId ? { ...play, ...updates } : play
-                )
-            );
+            setPlays((prevPlays) => prevPlays.map((play) => (play.id === playId ? applyRowEdit(play, edit) : play)));
             markDirty();
-            setEditingPlayId(null);
+            // Only the drill being edited closes; a block edits in place (practice timing).
+            setEditingPlayId((current) => (current === playId ? null : current));
         },
         [markDirty, creating]
     );
@@ -588,19 +569,6 @@ export function PracticeSessionEditor({
         setShowLibrary(false);
     }, []);
 
-    /**
-     * Reorder (Requirements 2.5) and station grouping (2b) through the shared
-     * timeline rules: a block's first drill moves the whole block, a station
-     * moves within its block, and a standalone drill hops over whole blocks.
-     */
-    const handleMovePlay = useCallback((index: number, dir: -1 | 1) => {
-        if (!creating) applyListEdit(moveItem(plays, index, dir));
-    }, [applyListEdit, plays, creating]);
-
-    const handleToggleStation = useCallback((index: number) => {
-        if (!creating) applyListEdit(toggleRunsWithPrevious(plays, index));
-    }, [applyListEdit, plays, creating]);
-
     // Cleanup success timeout on unmount
     useEffect(() => {
         return () => {
@@ -626,80 +594,22 @@ export function PracticeSessionEditor({
                 {sessionId ? "Edit Practice Session" : "Create New Practice Session"}
             </Typography>
 
-            {/* Session Metadata Form */}
-            {/* Requirements: 2.1 - Form fields for title, date, and duration */}
-            <Paper elevation={2} sx={{ p: 2 }}>
-                <Stack spacing={2}>
-                    <Typography variant="h6" component="h2">
-                        Session Details
-                    </Typography>
-
-                    {/* Title Field */}
-                    <TextField
-                        label="Session Title"
-                        value={title}
-                        onChange={handleTitleChange}
-                        fullWidth
-                        required
-                        disabled={creating}
-                        placeholder="Enter session title"
-                        inputProps={{ maxLength: 100 }}
-                        helperText={
-                            validationErrors.title ||
-                            `${title.length}/100 characters`
-                        }
-                        error={!!validationErrors.title}
-                    />
-
-                    {/* Date Field */}
-                    <DateTimePicker
-                        label="Practice Date & Time"
-                        value={date}
-                        onChange={handleDateChange}
-                        disabled={creating || Boolean(booking.selectedReservation)}
-                        slotProps={{
-                            textField: {
-                                fullWidth: true,
-                                required: true,
-                                sx: { "& .MuiInputBase-root": { minHeight: 44 } },
-                                error: !!validationErrors.date,
-                                helperText: validationErrors.date,
-                            },
-                        }}
-                    />
-
-                    {/* Duration Field */}
-                    {/* Requirements: 2.1 - Duration validation (1-300 minutes) */}
-                    <TextField
-                        label="Session Duration (minutes)"
-                        type="number"
-                        value={duration}
-                        onChange={handleDurationChange}
-                        fullWidth
-                        required
-                        disabled={creating || Boolean(booking.selectedReservation)}
-                        sx={{ "& .MuiInputBase-root": { minHeight: 44 } }}
-                        inputProps={{
-                            min: VALIDATION_CONSTRAINTS.MIN_DURATION,
-                            max: VALIDATION_CONSTRAINTS.MAX_DURATION,
-                        }}
-                        helperText={
-                            validationErrors.duration ||
-                            `Duration must be between ${VALIDATION_CONSTRAINTS.MIN_DURATION} and ${VALIDATION_CONSTRAINTS.MAX_DURATION} minutes`
-                        }
-                        error={!!validationErrors.duration}
-                    />
-                    <GoaliesAttendingField value={goalies.goaliesAttending} onChange={goalies.setGoaliesAttending} disabled={creating} />
-
-                    {/* Shared Status Indicator */}
-                    {/* Requirements: 3.1 - Show shared status indicator */}
-                    {isShared && (
-                        <Alert severity="info">
-                            This session is shared with your team members
-                        </Alert>
-                    )}
-                </Stack>
-            </Paper>
+            <SessionDetailsFields
+                title={title}
+                onTitleChange={handleTitleChange}
+                date={date}
+                onDateChange={handleDateChange}
+                duration={duration}
+                onDurationChange={handleDurationChange}
+                goaliesAttending={goalies.goaliesAttending}
+                onGoaliesAttendingChange={goalies.setGoaliesAttending}
+                transitionMinutes={betweenBlocks.transitionMinutes ?? 0}
+                onTransitionMinutesChange={betweenBlocks.setTransitionMinutes}
+                isShared={isShared}
+                creating={creating}
+                scheduleLocked={Boolean(booking.selectedReservation)}
+                validationErrors={validationErrors}
+            />
 
             <VenueBookingFields
                 booking={booking}
@@ -720,16 +630,20 @@ export function PracticeSessionEditor({
                 disabled={busy}
                 locked={creating}
                 onOpenLibrary={handleOpenLibrary}
-                onDelete={handleDeletePlay}
+                transitionMinutes={betweenBlocks.transitionMinutes ?? 0}
+                onDelete={rowEdits.deleteRow}
                 onEdit={handleEditPlay}
                 onUpdate={handleUpdatePlayInSession}
                 onCancelEdit={handleCancelEdit}
-                onMoveUp={(index) => handleMovePlay(index, -1)}
-                onMoveDown={(index) => handleMovePlay(index, 1)}
-                onToggleStation={handleToggleStation}
+                onMoveUp={(index) => rowEdits.moveRow(index, -1)}
+                onMoveDown={(index) => rowEdits.moveRow(index, 1)}
+                onToggleStation={rowEdits.toggleStation}
                 canEditDiagram={Boolean(sessionId)}
                 onEditDiagram={drillDialog.editDiagram}
                 onNewDrill={drillDialog.newDrill}
+                onAddBlock={rowEdits.addBlock}
+                onSetRotation={rowEdits.setRotation}
+                onSetStays={rowEdits.setStays}
             />
 
             {/* Save Status and Actions */}

@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import type { PracticeSessionView } from "@/types/practice-planner";
 import { sessionForDisplay } from "@/lib/utils/drill-tags";
+import { isDrillRow } from "@/lib/utils/session-rows";
 import { goalieShortSummary, goalieWarnings, goaliesUnusedMessage, groupStations } from "@/lib/utils/session-timeline";
 
 /**
@@ -16,7 +17,11 @@ export function useSessionGoalies(session: PracticeSessionView): { shown: Practi
         const attending = session.goaliesAttending ?? null;
         if (attending === null) return [];
         const warnings = goalieWarnings(
-            groupStations(session.plays.map((sp) => ({ ...sp, focus: sp.play.focus, goalies: sp.play.goalies, playData: sp.play.playData }))),
+            groupStations(
+                session.plays.map((sp) =>
+                    isDrillRow(sp) ? { ...sp, focus: sp.play.focus, goalies: sp.play.goalies, playData: sp.play.playData } : sp,
+                ),
+            ),
             attending,
         );
         return [

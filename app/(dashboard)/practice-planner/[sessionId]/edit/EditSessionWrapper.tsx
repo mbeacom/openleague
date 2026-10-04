@@ -14,12 +14,18 @@ import {
   sharePracticeSession,
 } from "@/lib/actions/practice-sessions";
 import type { PracticeSessionData } from "@/types/practice-planner";
+import { toSessionRowInputs } from "@/lib/utils/session-rows";
 import type { VenueBookingOptions } from "../../venue-booking-options";
 
 interface EditSessionWrapperProps {
   sessionId: string;
   teamId: string;
-  initialData: Partial<PracticeSessionData> & Partial<PracticeVenueAttachment>;
+  /**
+   * transitionMinutes is required: the editor sends the gap it loaded on every
+   * save, which tells updatePracticeSession the payload comes from an editor
+   * that knows block rows (an empty list then clears them on purpose).
+   */
+  initialData: Partial<PracticeSessionData> & Partial<PracticeVenueAttachment> & { transitionMinutes: number };
   /** Venue/surface/segment options for the optional ice booking (006, FR-019). */
   bookingOptions: VenueBookingOptions;
 }
@@ -42,14 +48,9 @@ export function EditSessionWrapper({
         // Absent = unchanged: the editor may not set it; only an explicit null clears.
         ...(session.goaliesAttending !== undefined && { goaliesAttending: session.goaliesAttending }),
         teamId,
-        plays: session.plays.map((play) => ({
-          playId: play.playId,
-          clientKey: play.id,
-          sequence: play.sequence,
-          runsWithPrevious: play.runsWithPrevious,
-          duration: play.duration,
-          instructions: play.instructions || "",
-        })),
+        plays: toSessionRowInputs(session.plays),
+        // Absent = unchanged: an editor that never loaded or set the gap sends none.
+        ...(session.transitionMinutes !== undefined && { transitionMinutes: session.transitionMinutes }),
         reservationId: session.reservationId ?? undefined,
         // Optional venue booking (006, FR-019); the attachment is replaced
         // wholesale — omitting venueId detaches the practice.

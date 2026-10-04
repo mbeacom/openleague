@@ -36,6 +36,8 @@ import { createEmptyPlayData } from "@/lib/utils/play-data";
 const TEAM = "cteamxxxxxxxxxxxxxxxxxxxx";
 const SESSION = "csessionxxxxxxxxxxxxxxxxx";
 const BOOKING = { venues: [], reservations: [], currentReservationId: null, surfacesByVenue: {}, segmentsBySurface: {}, wholeLabelBySurface: {} };
+/** The edit page always loads the stored gap (getPracticeSessionForEdit), 0 when none was set. */
+const LOADED = { transitionMinutes: 0 };
 const submitted = {
     title: "Tuesday", date: new Date("2026-04-07T22:00:00.000Z"), duration: 60, plays: [], isShared: false,
     goaliesAttending: 0, overrideConflicts: false, overrideReason: "", notify: false,
@@ -50,13 +52,13 @@ beforeEach(() => {
 
 describe("hosted wrappers: goaltender fields", () => {
     it("EditSessionWrapper sends goaliesAttending", async () => {
-        render(<EditSessionWrapper sessionId={SESSION} teamId={TEAM} initialData={{}} bookingOptions={BOOKING as never} />);
+        render(<EditSessionWrapper sessionId={SESSION} teamId={TEAM} initialData={LOADED} bookingOptions={BOOKING as never} />);
         await captured.props!.onSave(submitted);
         expect(actions.updatePracticeSession.mock.calls[0][0]).toMatchObject({ goaliesAttending: 0 });
     });
 
     it("EditSessionWrapper leaves the count alone when the editor omits it (an explicit null still clears)", async () => {
-        render(<EditSessionWrapper sessionId={SESSION} teamId={TEAM} initialData={{}} bookingOptions={BOOKING as never} />);
+        render(<EditSessionWrapper sessionId={SESSION} teamId={TEAM} initialData={LOADED} bookingOptions={BOOKING as never} />);
         const { goaliesAttending: _omitted, ...withoutCount } = submitted;
         await captured.props!.onSave(withoutCount);
         expect(actions.updatePracticeSession.mock.calls[0][0]).not.toHaveProperty("goaliesAttending");
@@ -77,5 +79,51 @@ describe("hosted wrappers: goaltender fields", () => {
             focus: "goalies", goalies: "required", createdAt: new Date(), updatedAt: new Date(),
         });
         expect(actions.createPlay.mock.calls[0][0]).toMatchObject({ focus: "goalies", goalies: "required" });
+    });
+});
+
+describe("hosted wrappers: block rows and the gap", () => {
+    const ROWS = [
+        { id: "kw", kind: "warmup", label: " Laps ", sequence: 0, duration: 8, instructions: "", runsWithPrevious: false },
+        { id: "k1", playId: "cplayxxxxxxxxxxxxxxxxxxxx", name: "A", sequence: 1, runsWithPrevious: false, duration: 10, instructions: "", playData: createEmptyPlayData(), stays: false, rotateEveryMinutes: null },
+    ];
+    const SENT = [
+        { kind: "warmup", clientKey: "kw", sequence: 0, duration: 8, instructions: "", label: "Laps" },
+        { kind: "drill", playId: "cplayxxxxxxxxxxxxxxxxxxxx", clientKey: "k1", sequence: 1, runsWithPrevious: false, duration: 10, instructions: "", stays: false, rotateEveryMinutes: null },
+    ];
+
+    it("EditSessionWrapper sends every row and the gap", async () => {
+        render(<EditSessionWrapper sessionId={SESSION} teamId={TEAM} initialData={LOADED} bookingOptions={BOOKING as never} />);
+        await captured.props!.onSave({ ...submitted, plays: ROWS, transitionMinutes: 2 });
+        const sent = actions.updatePracticeSession.mock.calls[0][0];
+        expect(sent.plays).toEqual(SENT);
+        expect(sent.transitionMinutes).toBe(2);
+    });
+
+    it("EditSessionWrapper hands the editor the loaded gap and sends a 0-minute gap back, so the server knows the editor is current", async () => {
+        render(<EditSessionWrapper sessionId={SESSION} teamId={TEAM} initialData={LOADED} bookingOptions={BOOKING as never} />);
+        expect((captured.props as unknown as { initialData: { transitionMinutes?: number } }).initialData.transitionMinutes).toBe(0);
+        await captured.props!.onSave({ ...submitted, plays: [], transitionMinutes: 0 });
+        expect(actions.updatePracticeSession.mock.calls[0][0]).toMatchObject({ plays: [], transitionMinutes: 0 });
+    });
+
+    it("EditSessionWrapper can't be given a session without its gap (type check)", () => {
+        // @ts-expect-error -- the edit page must load transitionMinutes, so every update says the editor is current.
+        render(<EditSessionWrapper sessionId={SESSION} teamId={TEAM} initialData={{}} bookingOptions={BOOKING as never} />);
+        expect(captured.props).not.toBeNull();
+    });
+
+    it("EditSessionWrapper leaves the gap out when the editor holds none, so the stored gap stays", async () => {
+        render(<EditSessionWrapper sessionId={SESSION} teamId={TEAM} initialData={LOADED} bookingOptions={BOOKING as never} />);
+        await captured.props!.onSave({ ...submitted });
+        expect(actions.updatePracticeSession.mock.calls[0][0]).not.toHaveProperty("transitionMinutes");
+    });
+
+    it("PracticeSessionEditorWrapper sends every row on create", async () => {
+        render(<PracticeSessionEditorWrapper teamId={TEAM} bookingOptions={BOOKING as never} />);
+        await captured.props!.onSave({ ...submitted, plays: ROWS, transitionMinutes: 1 });
+        const sent = actions.createPracticeSession.mock.calls[0][0];
+        expect(sent.plays).toEqual(SENT);
+        expect(sent.transitionMinutes).toBe(1);
     });
 });

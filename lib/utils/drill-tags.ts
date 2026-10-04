@@ -10,10 +10,12 @@ import {
     MAX_GOALIES_ATTENDING,
     PLAY_FOCUS,
     PLAY_GOALIES,
+    type BlockKind,
     type PlayData,
     type PlayFocus,
     type PlayGoalies,
 } from "@/types/practice-planner";
+import { isDrillRow } from "@/lib/utils/session-rows";
 
 export const FOCUS_LABELS: Record<PlayFocus, string> = {
     team: "Team",
@@ -82,17 +84,25 @@ export function displayPlayData<T extends PlayData | null>(
 }
 
 interface DisplayablePlay {
+    kind?: "drill";
     play: { focus?: PlayFocus; goalies?: PlayGoalies; playData: PlayData | null };
+}
+
+/** A block row (practice timing): no drill, nothing to draw. */
+interface DisplayableBlock {
+    kind: BlockKind;
 }
 
 /**
  * The session with every drill's diagram passed through displayPlayData.
  * Render-time only (spec R7): never stored, never exported as plan JSON.
- * Returns the session itself when nothing is hidden, so memos stay stable.
+ * Block rows pass through as they are. Returns the session itself when
+ * nothing is hidden, so memos stay stable.
  */
-export function sessionForDisplay<S extends { goaliesAttending?: number | null; plays: readonly DisplayablePlay[] }>(session: S): S {
+export function sessionForDisplay<S extends { goaliesAttending?: number | null; plays: ReadonlyArray<DisplayablePlay | DisplayableBlock> }>(session: S): S {
     let changed = false;
     const plays = session.plays.map((sp) => {
+        if (!isDrillRow(sp)) return sp;
         const shown = displayPlayData(sp.play.playData, sp.play.goalies, session.goaliesAttending, sp.play.focus);
         if (shown === sp.play.playData) return sp;
         changed = true;

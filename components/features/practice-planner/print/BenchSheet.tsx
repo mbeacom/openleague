@@ -12,8 +12,9 @@ import { Box, Button, Stack, Typography } from "@mui/material";
 import { ArrowBack as ArrowBackIcon, PrintOutlined as PrintIcon } from "@mui/icons-material";
 import { usePlannerPlatform } from "@/lib/planner-store";
 import type { PracticeSessionView } from "@/types/practice-planner";
-import { buildSchedule } from "@/lib/utils/session-timeline";
+import { betweenBlocksLabel, buildSchedule } from "@/lib/utils/session-timeline";
 import { sessionForDisplay } from "@/lib/utils/drill-tags";
+import { drillRows } from "@/lib/utils/session-rows";
 import { combinedLegendData } from "@/lib/utils/canvas/station-map";
 import { sessionStart, sessionTimeZone } from "@/lib/utils/date";
 import { useClockText } from "@/lib/hooks/useClockText";
@@ -37,20 +38,27 @@ function chunk<T>(items: T[], size: number): T[][] {
 export function BenchSheet({ session: stored }: { session: BenchSheetSession }) {
     // Goalie markers hidden at render time only (spec R7); the stored session is untouched.
     const session = useMemo(() => sessionForDisplay(stored), [stored]);
-    const { Link, routes } = usePlannerPlatform();
+    const { Link, routes, planGenerator } = usePlannerPlatform();
+    // The static planner's team is the placeholder "This device", not a name (as the exports omit it).
+    const teamName = planGenerator === "openleague-static" ? null : session.teamName;
     const start = sessionStart(session);
     const end = new Date(start.getTime() + session.duration * MS_PER_MINUTE);
     const { timeZone, showZone } = sessionTimeZone(session);
     const clock = useClockText(timeZone, showZone);
     const place = [session.venueName, session.surfaceName, session.segmentName].filter(Boolean).join(" · ");
-    const legend = combinedLegendData(session.plays.map((sp) => ({ name: sp.play.name, playData: sp.play.playData })));
-    const drills = buildSchedule(session.plays, start).flatMap((row) =>
-        row.group.stations.map((sp, k) => ({
-            sp,
+    const gap = session.transitionMinutes ?? 0;
+    const legend = combinedLegendData(drillRows(session.plays).map((sp) => ({ name: sp.play.name, playData: sp.play.playData })));
+    // One page per drill; a block (warm-up, break…) is a timeline row only. Start times come
+    // from the stored rows, as the timeline's do; each page draws the display copy of its drill.
+    const shown = new Map(drillRows(session.plays).map((sp) => [sp.id, sp]));
+    const drills = buildSchedule(stored.plays, start, gap).flatMap((row) => {
+        const stations = drillRows(row.group.stations);
+        return stations.map((sp, k) => ({
+            sp: shown.get(sp.id) ?? sp,
             startsAt: row.startsAt,
-            station: row.group.stations.length > 1 ? { position: k + 1, count: row.group.stations.length } : null,
-        }))
-    );
+            station: stations.length > 1 ? { position: k + 1, count: stations.length } : null,
+        }));
+    });
     const pixelRatio = printPixelRatio(drills.filter(({ sp }) => sp.play.playData !== null).length);
 
     // Keyed by session-play row id: a session may schedule the same play twice.
@@ -87,30 +95,36 @@ export function BenchSheet({ session: stored }: { session: BenchSheetSession }) 
                 <Typography variant="h4" component="h1" sx={{ fontWeight: 800 }}>
                     {session.title}
                 </Typography>
-                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                    {session.teamName}
-                </Typography>
+                {teamName && (
+                    <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                        {teamName}
+                    </Typography>
+                )}
                 <Typography variant="body1">
                     {`${clock.longDate(start)} · ${clock.time(start, false)} – ${clock.time(end)}`}
                 </Typography>
                 {place && <Typography variant="body1">{place}</Typography>}
+                {gap > 0 && <Typography variant="body1">{betweenBlocksLabel(gap)}</Typography>}
             </Box>
 
-            {drills.length === 0 ? (
+            {session.plays.length === 0 ? (
                 <Typography variant="body1" sx={{ fontWeight: 700 }}>
                     {NO_DRILLS_MESSAGE}
                 </Typography>
             ) : (
                 <>
+                    {/* Timing reads the stored rows; the display copy only redraws diagrams. */}
                     <SessionTimeline
                         variant="print"
-                        plays={session.plays}
+                        plays={stored.plays}
                         sessionStart={start}
                         timeZone={timeZone}
                         showZone={showZone}
                         durationMinutes={session.duration}
+                        transitionMinutes={gap}
                     />
                     <LegendList playData={legend} />
+                    {drills.length > 0 && (
                     <Box component="section" aria-label="Drills" className="bench-page-break" sx={{ mt: 4 }}>
                         {chunk(drills, DRILLS_PER_PAGE).map((page, p) => (
                             <div className="bench-page" key={page[0].sp.id}>
@@ -131,6 +145,7 @@ export function BenchSheet({ session: stored }: { session: BenchSheetSession }) 
                             </div>
                         ))}
                     </Box>
+                    )}
                 </>
             )}
         </Box>

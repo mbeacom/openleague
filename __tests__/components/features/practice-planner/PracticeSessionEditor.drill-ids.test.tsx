@@ -10,6 +10,7 @@ import {
     type PracticeSessionSubmitData,
 } from "@/components/features/practice-planner/PracticeSessionEditor";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
+import { drillRows } from "@/lib/utils/session-rows";
 import type { PlayInSession } from "@/types/practice-planner";
 
 beforeAll(() => {
@@ -61,10 +62,10 @@ describe("PracticeSessionEditor drill ids and autosave", () => {
             renderEditor(onSave, [drill("k1", LIB)]);
 
             await editTitleAndWait("Practice v2");
-            expect(onSave.mock.calls[0][0].plays[0].playId).toBe(LIB);
+            expect(drillRows(onSave.mock.calls[0][0].plays)[0].playId).toBe(LIB);
 
             await editTitleAndWait("Practice v3");
-            expect(onSave.mock.calls[1][0].plays[0].playId).toBe(OWNED);
+            expect(drillRows(onSave.mock.calls[1][0].plays)[0].playId).toBe(OWNED);
         } finally {
             vi.useRealTimers();
         }

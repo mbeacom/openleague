@@ -1595,6 +1595,10 @@ model PracticeSession {
   // warnings and hides optional-drill goalie markers at 0. CHECK in migration
   // 20261003140000_play_drill_tags_and_session_goalies.
   goaliesAttending Int?
+  // Minutes between blocks (0-5; practice timing). Folded into start times
+  // between top-level blocks, never inside a station block or after the last.
+  // CHECK in migration 20261004120000_practice_session_timing.
+  transitionMinutes Int @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1646,13 +1650,25 @@ model PracticeSessionPlay {
   /// (by sequence). Consecutive true rows form one group with the nearest
   /// preceding false row. sequence stays unique and total.
   runsWithPrevious Boolean @default(false)
+  // Row kind (practice timing): drill | warmup | break | transition | cooldown.
+  // A non-drill row has no play. CHECKs in migration
+  // 20261004120000_practice_session_timing keep the vocabulary,
+  // (kind = 'drill') = (playId IS NOT NULL), label <= 60 and rotation 1-30.
+  // Prisma can't model CHECK constraints: keep them by hand if regenerated.
+  kind               String  @default("drill")
+  /// A non-drill row's label; null = the kind's default ("Warm-up"...).
+  label              String?
+  /// In a rotating station block: this station's group doesn't rotate.
+  stays              Boolean @default(false)
+  /// On the first drill of a station block: groups rotate every N minutes.
+  rotateEveryMinutes Int?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt // Track modifications for auditing
 
   sessionId String
   session   PracticeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
-  playId String
+  playId String?
   // NO ACTION (defense in depth): a play still referenced by a session can't
   // be deleted — deletePlay detaches the sessions first. The constraint is
   // DEFERRABLE INITIALLY DEFERRED (set in migration
@@ -1661,7 +1677,7 @@ model PracticeSessionPlay {
   // removes session plays and plays along separate cascade paths, each its own
   // nested statement; an immediate check would depend on trigger order.
   // Deferred, it runs once at commit, so a stray delete still fails (P2003).
-  play   Play   @relation(fields: [playId], references: [id], onDelete: NoAction)
+  play   Play?  @relation(fields: [playId], references: [id], onDelete: NoAction)
 
   @@unique([sessionId, sequence])
   @@index([sessionId])

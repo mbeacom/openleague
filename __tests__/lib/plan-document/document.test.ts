@@ -6,6 +6,7 @@ import {
     MAX_PLAN_DRILLS,
     NEWER_VERSION_MESSAGE,
     NOT_A_PLAN_MESSAGE,
+    PLAN_ROW_KIND_MESSAGE,
     PLAN_FORMAT,
     PLAN_VERSION,
     parsePlan,
@@ -18,7 +19,8 @@ import {
     type PlanSessionInput,
 } from "@/lib/plan-document";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
-import { FIRST_DRILL_STATION_ERROR, STATION_GROUP_CAP_ERROR, groupStations } from "@/lib/utils/session-timeline";
+import { BLOCK_STATION_ERROR, FIRST_DRILL_STATION_ERROR, ROTATION_PLACEMENT_ERROR, STATION_GROUP_CAP_ERROR, groupStations } from "@/lib/utils/session-timeline";
+import { drillRows } from "@/lib/utils/session-rows";
 import type { PlayData } from "@/types/practice-planner";
 
 const NOW = new Date("2026-10-03T18:00:00.000Z");
@@ -115,14 +117,14 @@ describe("serializePlan", () => {
             "openleague-static",
             NOW,
         );
-        expect(doc.session.drills.map((d) => [d.sequence, d.drill.name, d.runsWithPrevious])).toEqual([
+        expect(drillRows(doc.session.drills).map((d) => [d.sequence, d.drill.name, d.runsWithPrevious])).toEqual([
             [0, "Early", false],
             [1, "Late", false],
         ]);
     });
 
     it("fills a missing diagram with an empty board and nulls with empty strings", () => {
-        const regroup = serializePlan(input(), "openleague-hosted", NOW).session.drills[2];
+        const regroup = drillRows(serializePlan(input(), "openleague-hosted", NOW).session.drills)[2];
         expect(regroup.drill.playData).toEqual(createEmptyPlayData());
         expect(regroup.drill.description).toBe("");
         expect(regroup.instructions).toBe("");
@@ -133,9 +135,9 @@ describe("serializePlan", () => {
         const withIds = Object.assign({}, base.drills[0], { id: "row-1", playId: "cplayxxxxxxxxxxxxxxxxxxxx", thumbnail: "data:image/png;base64,AA==" });
         const doc = serializePlan(Object.assign({}, base, { drills: [withIds], teamId: "cteamxxxxxxxxxxxxxxxxxxxx" }), "openleague-hosted", NOW);
         expect(Object.keys(doc).sort()).toEqual(["exportedAt", "format", "generator", "session", "version"]);
-        expect(Object.keys(doc.session).sort()).toEqual(["date", "drills", "durationMinutes", "goaliesAttending", "startTime", "title"]);
-        expect(Object.keys(doc.session.drills[0]).sort()).toEqual(["drill", "durationMinutes", "instructions", "runsWithPrevious", "sequence"]);
-        expect(Object.keys(doc.session.drills[0].drill).sort()).toEqual(["description", "focus", "goalies", "name", "playData"]);
+        expect(Object.keys(doc.session).sort()).toEqual(["date", "drills", "durationMinutes", "goaliesAttending", "startTime", "title", "transitionMinutes"]);
+        expect(Object.keys(doc.session.drills[0]).sort()).toEqual(["drill", "durationMinutes", "instructions", "kind", "rotateEveryMinutes", "runsWithPrevious", "sequence", "stays"]);
+        expect(Object.keys(drillRows(doc.session.drills)[0].drill).sort()).toEqual(["description", "focus", "goalies", "name", "playData"]);
     });
 });
 
@@ -154,7 +156,7 @@ describe("parsePlan", () => {
     it("upgrades a v1 diagram", () => {
         const result = parsePlan(rawDoc((doc) => { doc.session.drills[0].drill.playData = V1_BOARD; }));
         if (!result.ok) throw new Error(JSON.stringify(result.error));
-        const board = result.plan.session.drills[0].drill.playData;
+        const board = drillRows(result.plan.session.drills)[0].drill.playData;
         expect(board.version).toBe(2);
         expect(board.players[0].position.x).toBe(200);
         expect(board.drawings[0]).toMatchObject({ action: "skate", end: "arrow" });
@@ -176,13 +178,13 @@ describe("parsePlan", () => {
         expect(result.plan.session).not.toHaveProperty("id");
         expect(result.plan.session).not.toHaveProperty("venueId");
         expect(result.plan.session.drills[0]).not.toHaveProperty("playId");
-        expect(result.plan.session.drills[0].drill).not.toHaveProperty("thumbnail");
-        expect(result.plan.session.drills[0].drill).not.toHaveProperty("id");
+        expect(drillRows(result.plan.session.drills)[0].drill).not.toHaveProperty("thumbnail");
+        expect(drillRows(result.plan.session.drills)[0].drill).not.toHaveProperty("id");
     });
 
     it("returns drills in sequence order", () => {
         const result = parsePlan(rawDoc((doc) => { doc.session.drills.reverse(); }));
-        expect(result.ok && result.plan.session.drills.map((d) => d.drill.name)).toEqual(["Warmup Laps", "Breakout", "Regroup"]);
+        expect(result.ok && drillRows(result.plan.session.drills).map((d) => d.drill.name)).toEqual(["Warmup Laps", "Breakout", "Regroup"]);
     });
 
     it("reads a missing date, start time, instructions or description as empty", () => {
@@ -196,7 +198,7 @@ describe("parsePlan", () => {
         );
         if (!result.ok) throw new Error(JSON.stringify(result.error));
         expect([result.plan.session.date, result.plan.session.startTime]).toEqual([null, null]);
-        expect([result.plan.session.drills[0].instructions, result.plan.session.drills[0].drill.description]).toEqual(["", ""]);
+        expect([result.plan.session.drills[0].instructions, drillRows(result.plan.session.drills)[0].drill.description]).toEqual(["", ""]);
     });
 
     it.each([null, [], "plan", 42, {}, { format: "openleague.something-else", version: 1 }])("rejects %j as not a plan", (raw) => {
@@ -250,7 +252,7 @@ describe("parsePlan", () => {
                 doc.session.drills = Array.from({ length: count }, (_, i) => drill(i));
             });
         expect(parsePlan(withDrills(MAX_PLAN_DRILLS)).ok).toBe(true);
-        expect(issuesOf(withDrills(MAX_PLAN_DRILLS + 1))).toContain("A plan can hold at most 50 drills");
+        expect(issuesOf(withDrills(MAX_PLAN_DRILLS + 1))).toContain("A plan can hold at most 50 rows (drills and blocks)");
     });
 
     it("rejects a station block of five", () => {
@@ -287,7 +289,7 @@ describe("planToEditorSession", () => {
         const session = planToEditorSession(serializePlan(input(), "openleague-hosted", NOW));
         expect(session).toMatchObject({ title: "Tuesday Skills Practice", duration: 60, date: "2026-10-06", startTime: "19:00" });
         const groups = groupStations(session.plays);
-        expect(groups.map((g) => g.stations.map((p) => p.name))).toEqual([["Warmup Laps"], ["Breakout", "Regroup"]]);
+        expect(groups.map((g) => drillRows(g.stations).map((p) => p.name))).toEqual([["Warmup Laps"], ["Breakout", "Regroup"]]);
         expect(new Set(session.plays.map((p) => p.key)).size).toBe(3);
     });
 });
@@ -335,7 +337,7 @@ describe("goaltender fields (additive, version 1)", () => {
     it("serializes the tags (defaults when absent) and the count (null when unset)", () => {
         const doc = serializePlan(goalieInput({ goaliesAttending: 2 }), "openleague-static", NOW);
         expect(doc.session.goaliesAttending).toBe(2);
-        expect(doc.session.drills.map((d) => [d.drill.focus, d.drill.goalies])).toEqual([["goalies", "required"], ["team", "optional"]]);
+        expect(drillRows(doc.session.drills).map((d) => [d.drill.focus, d.drill.goalies])).toEqual([["goalies", "required"], ["team", "optional"]]);
         expect(serializePlan(goalieInput(), "openleague-static", NOW).session.goaliesAttending).toBeNull();
     });
 
@@ -353,7 +355,7 @@ describe("goaltender fields (additive, version 1)", () => {
         }
         const result = parsePlan(raw);
         expect(result.ok && result.plan.session.goaliesAttending).toBeNull();
-        expect(result.ok && result.plan.session.drills.map((d) => [d.drill.focus, d.drill.goalies])).toEqual([
+        expect(result.ok && drillRows(result.plan.session.drills).map((d) => [d.drill.focus, d.drill.goalies])).toEqual([
             ["team", "optional"],
             ["team", "optional"],
         ]);
@@ -366,7 +368,7 @@ describe("goaltender fields (additive, version 1)", () => {
         raw.session.drills[0].drill.goalies = 3;
         const result = parsePlan(raw);
         expect(result.ok).toBe(true);
-        expect(result.ok && [result.plan.session.goaliesAttending, result.plan.session.drills[0].drill.focus, result.plan.session.drills[0].drill.goalies])
+        expect(result.ok && [result.plan.session.goaliesAttending, drillRows(result.plan.session.drills)[0].drill.focus, drillRows(result.plan.session.drills)[0].drill.goalies])
             .toEqual([null, "team", "optional"]);
     });
 
@@ -374,5 +376,123 @@ describe("goaltender fields (additive, version 1)", () => {
         const editor = planToEditorSession(serializePlan(goalieInput({ goaliesAttending: 1 }), "openleague-static", NOW));
         expect(editor.goaliesAttending).toBe(1);
         expect(editor.plays[0]).toMatchObject({ focus: "goalies", goalies: "required" });
+    });
+});
+
+describe("practice timing fields (additive, version 1)", () => {
+    function timingInput(extra: Partial<PlanSessionInput> = {}): PlanSessionInput {
+        return {
+            title: "Timed practice",
+            durationMinutes: 60,
+            date: null,
+            startTime: null,
+            transitionMinutes: 2,
+            drills: [
+                { kind: "warmup", sequence: 0, duration: 8, instructions: "Laps", label: null, runsWithPrevious: false },
+                { sequence: 1, duration: 5, runsWithPrevious: false, instructions: null, name: "Goalie", description: null, playData: null, stays: true, rotateEveryMinutes: 5 },
+                { sequence: 2, duration: 5, runsWithPrevious: true, instructions: null, name: "Skate A", description: null, playData: null },
+                { sequence: 3, duration: 5, runsWithPrevious: true, instructions: null, name: "Skate B", description: null, playData: null },
+                { kind: "cooldown", sequence: 4, duration: 5, instructions: null, label: "Stretch", runsWithPrevious: false },
+            ],
+            ...extra,
+        };
+    }
+    const raw = (extra: Partial<PlanSessionInput> = {}) => JSON.parse(JSON.stringify(serializePlan(timingInput(extra), "openleague-static", NOW)));
+
+    it("writes block entries without drill fields, drill entries with their timing, and the gap", () => {
+        const doc = serializePlan(timingInput(), "openleague-static", NOW);
+        expect(doc.session.transitionMinutes).toBe(2);
+        expect(doc.session.drills[0]).toEqual({ kind: "warmup", sequence: 0, durationMinutes: 8, instructions: "Laps", label: null });
+        expect(doc.session.drills[4]).toEqual({ kind: "cooldown", sequence: 4, durationMinutes: 5, instructions: "", label: "Stretch" });
+        // The rotation's minutes are written as the editor would: a stays station lasts the block.
+        expect(doc.session.drills[1]).toMatchObject({ kind: "drill", stays: true, rotateEveryMinutes: 5, durationMinutes: 10 });
+        expect(doc.session.drills[2]).toMatchObject({ kind: "drill", stays: false, rotateEveryMinutes: null, runsWithPrevious: true, durationMinutes: 5 });
+    });
+
+    it("round-trips through parsePlan", () => {
+        const doc = serializePlan(timingInput(), "openleague-hosted", NOW);
+        expect(parsePlan(JSON.parse(JSON.stringify(doc)))).toEqual({ ok: true, plan: doc });
+    });
+
+    it("reads a hand-edited file's rotating stations at the rotation's minutes, so both importers store what the editor shows", () => {
+        const file = raw();
+        file.session.drills[1].durationMinutes = 3;
+        file.session.drills[2].durationMinutes = 9;
+        file.session.drills[3].durationMinutes = 7;
+        const result = parsePlan(file);
+        expect(result.ok && result.plan.session.drills.map((entry) => entry.durationMinutes)).toEqual([8, 10, 5, 5, 5]);
+    });
+
+    it("reads a file written before practice timing as drills with no gap", () => {
+        const old = JSON.parse(JSON.stringify(serializePlan(
+            { title: "Old", durationMinutes: 30, date: null, startTime: null, drills: [{ sequence: 0, duration: 10, runsWithPrevious: false, instructions: null, name: "A", description: null, playData: null }] },
+            "openleague-static",
+            NOW,
+        )));
+        delete old.session.transitionMinutes;
+        for (const entry of old.session.drills) {
+            delete entry.kind;
+            delete entry.stays;
+            delete entry.rotateEveryMinutes;
+        }
+        const result = parsePlan(old);
+        expect(result.ok && result.plan.session.transitionMinutes).toBe(0);
+        expect(result.ok && result.plan.session.drills[0]).toMatchObject({ kind: "drill", stays: false, rotateEveryMinutes: null });
+    });
+
+    it("rejects an unknown row kind with a readable issue, never reading it as a drill", () => {
+        const file = raw();
+        file.session.drills[0].kind = "stretch";
+        const result = parsePlan(file);
+        expect(result.ok).toBe(false);
+        expect(!result.ok && result.error.issues?.[0]).toBe(`Drill 1: ${PLAN_ROW_KIND_MESSAGE}`);
+    });
+
+    it("rejects the row rules the hosted save rejects", () => {
+        const misplaced = raw();
+        misplaced.session.drills[2].rotateEveryMinutes = 5;
+        const result = parsePlan(misplaced);
+        expect(!result.ok && result.error.issues).toContain(ROTATION_PLACEMENT_ERROR);
+        const afterBlock = raw();
+        afterBlock.session.drills[1].runsWithPrevious = true;
+        const blocked = parsePlan(afterBlock);
+        expect(!blocked.ok && blocked.error.issues).toContain(BLOCK_STATION_ERROR);
+    });
+
+    it("counts blocks and gaps toward the session length, and blocks toward the row limit", () => {
+        // 8 + 2 + 10 + 2 + 5 = 27
+        const tight = raw();
+        tight.session.durationMinutes = 26;
+        const result = parsePlan(tight);
+        expect(!result.ok && result.error.issues).toContain("Practice timeline (27 min) exceeds session duration (26 min)");
+        const many = serializePlan(
+            { title: "Breaks", durationMinutes: 300, date: null, startTime: null, drills: Array.from({ length: 51 }, (_, sequence) => ({ kind: "break" as const, sequence, duration: 1, instructions: null, label: null, runsWithPrevious: false as const })) },
+            "openleague-static",
+            NOW,
+        );
+        const tooMany = parsePlan(JSON.parse(JSON.stringify(many)));
+        expect(!tooMany.ok && tooMany.error.issues?.[0]).toMatch(/at most 50/);
+    });
+
+    it("reads the new fields leniently and strips drill fields from a block entry", () => {
+        const file = raw();
+        file.session.transitionMinutes = 9;
+        file.session.drills[0].label = "x".repeat(80);
+        file.session.drills[0].drill = { name: "Sneaky", description: "", playData: {} };
+        file.session.drills[1].stays = "yes";
+        const result = parsePlan(file);
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.plan.session.transitionMinutes).toBe(0);
+        expect(result.plan.session.drills[0]).not.toHaveProperty("drill");
+        expect(result.plan.session.drills[0]).toMatchObject({ label: "x".repeat(60) });
+        expect(result.plan.session.drills[1]).toMatchObject({ stays: false });
+    });
+
+    it("maps block rows and the gap into the import preview's session", () => {
+        const editor = planToEditorSession(serializePlan(timingInput(), "openleague-static", NOW));
+        expect(editor.transitionMinutes).toBe(2);
+        expect(editor.plays[0]).toEqual({ key: "plan-row-0", kind: "warmup", sequence: 0, duration: 8, runsWithPrevious: false, instructions: "Laps", label: null });
+        expect(editor.plays[1]).toMatchObject({ key: "plan-row-1", kind: "drill", stays: true, rotateEveryMinutes: 5, name: "Goalie" });
     });
 });

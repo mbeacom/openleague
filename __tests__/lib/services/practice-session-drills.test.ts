@@ -46,7 +46,7 @@ function play(id: string, overrides: Partial<Row> = {}): Row {
 }
 
 /** referencing: the session-play rows ({ sessionId, playId }) that exist. */
-function fakeTx(plays: Row[], referencing: Array<{ sessionId: string; playId: string }> = []) {
+function fakeTx(plays: Row[], referencing: Array<{ sessionId: string; playId: string | null } & Record<string, unknown>> = []) {
     ids.next = 0;
     const mocks = {
         practiceSessionPlay: {
@@ -291,6 +291,19 @@ describe("detachLibraryPlay", () => {
         expect(mocks.practiceSessionPlay.updateMany.mock.calls).toEqual([
             [{ where: { sessionId: "sA", playId: "lib" }, data: { playId: "clone-0" } }],
             [{ where: { sessionId: "sB", playId: "lib" }, data: { playId: "clone-1" } }],
+        ]);
+    });
+
+    it("repoints only the play id, so a row keeps its kind, stays and rotation, and never touches a block row", async () => {
+        const { mocks, tx } = fakeTx([LIB], [
+            { sessionId: "sA", playId: null, kind: "warmup", label: "Laps", stays: false, rotateEveryMinutes: null },
+            { sessionId: "sA", playId: "lib", kind: "drill", label: null, stays: true, rotateEveryMinutes: 5 },
+        ]);
+        await expect(detachLibraryPlay(tx, { playId: "lib", teamId: TEAM, userId: USER })).resolves.toBe(1);
+        expect(mocks.practiceSessionPlay.findMany.mock.calls[0][0].where).toEqual({ playId: "lib", session: { teamId: TEAM } });
+        // The update writes the play id and nothing else: every other column stays as stored.
+        expect(mocks.practiceSessionPlay.updateMany.mock.calls).toEqual([
+            [{ where: { sessionId: "sA", playId: "lib" }, data: { playId: "clone-0" } }],
         ]);
     });
 });

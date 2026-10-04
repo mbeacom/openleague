@@ -3,7 +3,7 @@
  * store logic runs on. Two adapters implement PlannerRepo: IndexedDB (the
  * real one) and memory (the fallback when IndexedDB is unavailable).
  */
-import type { PlayFocus, PlayGoalies } from "@/types/practice-planner";
+import type { PlayFocus, PlayGoalies, SessionRowKind } from "@/types/practice-planner";
 
 export interface StoredPlay {
     id: string;
@@ -24,14 +24,21 @@ export interface StoredPlay {
     updatedAt: Date;
 }
 
-/** One drill in a session. `id` is the editor's clientKey, so card keys survive reloads. */
+/** One row in a session. `id` is the editor's clientKey, so card keys survive reloads. */
 export interface StoredSessionRow {
     id: string;
-    playId: string;
+    /** The session's own drill copy; null for a block row (warm-up, break, transition, cool-down). */
+    playId: string | null;
     sequence: number;
     duration: number;
     instructions: string;
     runsWithPrevious: boolean;
+    /** Practice timing. Absent on rows stored before it: read through toRowKind (a drill that doesn't rotate). */
+    kind?: SessionRowKind;
+    /** A block row's label; null or absent = the kind's default. */
+    label?: string | null;
+    stays?: boolean;
+    rotateEveryMinutes?: number | null;
 }
 
 export interface StoredSession {
@@ -41,6 +48,8 @@ export interface StoredSession {
     duration: number;
     /** Goalies expected (0–10). null = not set; absent on sessions stored before the field existed. */
     goaliesAttending?: number | null;
+    /** Minutes between blocks (0–5). Absent on sessions stored before practice timing: 0. */
+    transitionMinutes?: number;
     rows: StoredSessionRow[];
     createdAt: Date;
     updatedAt: Date;

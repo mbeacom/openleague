@@ -6,6 +6,7 @@ import { PRIVACY_NOTE } from "@/apps/planner/src/config";
 import { FILE_TOO_LARGE_MESSAGE, MAX_PLAN_FILE_BYTES, NOT_A_PLAN_MESSAGE, encodePlanLink, serializePlan, type PlanSessionInput } from "@/lib/plan-document";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import { STARTER_PLAYS } from "@/lib/data/starter-plays";
+import { drillRows, toSessionRowInputs } from "@/lib/utils/session-rows";
 
 // jsdom has no canvas; the preview's diagrams (a template's are not empty) draw as a stub.
 vi.mock("@/lib/utils/canvas/thumbnail-generator", () => ({
@@ -186,7 +187,7 @@ describe("ImportScreen", () => {
         expect(edit.success).toBe(true);
         if (!edit.success) return;
         const { initialData } = edit.data;
-        for (const play of initialData.plays) {
+        for (const play of drillRows(initialData.plays)) {
             for (const starter of STARTER_PLAYS) expect(play.playData).not.toBe(starter.playData);
             // Edit every drill in place, as the board does, and store it.
             play.playData.players.length = 0;
@@ -201,14 +202,8 @@ describe("ImportScreen", () => {
             title: "Edited",
             date: initialData.date,
             duration: initialData.duration,
-            plays: initialData.plays.map((play) => ({
-                playId: play.playId,
-                clientKey: play.id,
-                sequence: play.sequence,
-                runsWithPrevious: play.runsWithPrevious,
-                duration: play.duration + 1,
-                instructions: "Changed",
-            })),
+            // The static store doesn't take block rows yet, so the update carries the drill rows.
+            plays: toSessionRowInputs(initialData.plays).map((row) => ({ ...row, instructions: "Changed" })),
         });
         expect(updated.success).toBe(true);
 

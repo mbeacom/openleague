@@ -10,6 +10,7 @@ import {
     type PracticeSessionSubmitData,
 } from "@/components/features/practice-planner/PracticeSessionEditor";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
+import { drillRows } from "@/lib/utils/session-rows";
 import type { PlayInSession } from "@/types/practice-planner";
 
 beforeAll(() => {
@@ -88,7 +89,7 @@ describe("PracticeSessionEditor drill dialog wiring", () => {
         // A new drill's id is saved into the session right away (no Save click).
         await act(async () => {});
         expect(onSave).toHaveBeenCalledTimes(1);
-        expect(onSave.mock.calls[0][0].plays.map((p) => p.playId)).toEqual([FORK]);
+        expect(drillRows(onSave.mock.calls[0][0].plays).map((p) => p.playId)).toEqual([FORK]);
     });
 
     it("keeps the dialog's fork when an autosave in flight returns an older copy", async () => {
@@ -110,7 +111,7 @@ describe("PracticeSessionEditor drill dialog wiring", () => {
             await act(async () => {
                 await vi.advanceTimersByTimeAsync(2100);
             });
-            expect(onSave.mock.calls[0][0].plays[0].playId).toBe(LIB);
+            expect(drillRows(onSave.mock.calls[0][0].plays)[0].playId).toBe(LIB);
 
             fireEvent.click(screen.getByRole("button", { name: "stub save drill" }));
 
@@ -119,7 +120,7 @@ describe("PracticeSessionEditor drill dialog wiring", () => {
                 await vi.advanceTimersByTimeAsync(0);
             });
             expect(onSave).toHaveBeenCalledTimes(2);
-            expect(onSave.mock.calls[1][0].plays[0].playId).toBe(FORK);
+            expect(drillRows(onSave.mock.calls[1][0].plays)[0].playId).toBe(FORK);
         } finally {
             vi.useRealTimers();
         }
@@ -142,7 +143,7 @@ describe("PracticeSessionEditor saves a dialog fork right away", () => {
             });
 
             expect(onSave).toHaveBeenCalledTimes(1);
-            expect(onSave.mock.calls[0][0].plays[0].playId).toBe(FORK);
+            expect(drillRows(onSave.mock.calls[0][0].plays)[0].playId).toBe(FORK);
         } finally {
             vi.useRealTimers();
         }
@@ -172,7 +173,7 @@ describe("PracticeSessionEditor saves a dialog fork right away", () => {
             });
 
             expect(onSave).toHaveBeenCalledTimes(2);
-            expect(onSave.mock.calls[1][0].plays[0].playId).toBe(FORK);
+            expect(drillRows(onSave.mock.calls[1][0].plays)[0].playId).toBe(FORK);
         } finally {
             vi.useRealTimers();
         }
@@ -224,7 +225,7 @@ describe("PracticeSessionEditor reports the session save to the drill dialog", (
         fireEvent.click(screen.getByRole("button", { name: /edit diagram/i }));
 
         expect(await stubSaveOutcome()).toEqual({ ok: false, error: expect.stringContaining(DURATION_ERROR) });
-        expect(onSave.mock.calls[0][0].plays[0].playId).toBe(FORK);
+        expect(drillRows(onSave.mock.calls[0][0].plays)[0].playId).toBe(FORK);
         // The card is back on the library drill, so a retry from the dialog is
         // again a new id and saves the session again.
         expect(screen.queryByRole("heading", { name: "Forked" })).toBeNull();

@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { StarterTemplatePicker, starterTemplateImport } from "@/components/features/practice-planner/StarterTemplatePicker";
 import { STARTER_TEMPLATES } from "@/lib/data/starter-templates";
 import { STARTER_PLAYS } from "@/lib/data/starter-plays";
+import { drillRows } from "@/lib/utils/session-rows";
 
 describe("StarterTemplatePicker", () => {
     it("lists every template under one heading, with its length and a Use template button", () => {
@@ -46,12 +47,26 @@ describe("starterTemplateImport", () => {
             const result = starterTemplateImport(template, "openleague-hosted");
             expect(result.ok).toBe(true);
             if (!result.ok) return;
-            for (const drill of result.plan.session.drills) {
+            for (const drill of drillRows(result.plan.session.drills)) {
                 for (const play of STARTER_PLAYS) expect(drill.drill.playData).not.toBe(play.playData);
                 drill.drill.playData.players.length = 0;
                 drill.drill.playData.drawings.push(...drill.drill.playData.drawings);
             }
         }
         expect(STARTER_PLAYS).toEqual(before);
+    });
+});
+
+describe("StarterTemplatePicker: counts", () => {
+    it("counts each template's drills, never its cool-down row", () => {
+        render(<StarterTemplatePicker onUse={vi.fn()} />);
+        const chips = STARTER_TEMPLATES.map((template) => {
+            const card = screen.getByRole("heading", { name: template.name }).closest(".MuiCard-root");
+            if (!(card instanceof HTMLElement)) throw new Error(`No card for ${template.name}`);
+            return within(card).getByText(/^\d+ drills$/).textContent;
+        });
+        // Skills Stations 2 + 3 + 1 + 1 + 1 drills, Goalie & Skater 3 + 3 + 1 + 1, Team Practice 1 + 3 + 3 + 1 + 1;
+        // each also has one cool-down row, which would make 9, 9 and 10 if rows were counted.
+        expect(chips).toEqual(["8 drills", "8 drills", "9 drills"]);
     });
 });

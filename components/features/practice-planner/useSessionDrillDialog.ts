@@ -7,15 +7,16 @@
  */
 
 import { useCallback, useState, type Dispatch, type SetStateAction } from "react";
-import type { PlayInSession } from "@/types/practice-planner";
+import type { SessionItem } from "@/types/practice-planner";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
+import { isDrillRow } from "@/lib/utils/session-rows";
 import { upsertSessionDrill, type SessionDrillPatch } from "@/lib/utils/session-drill-ids";
 import type { SessionDrillDialogDrill } from "./SessionDrillDialog";
 import type { SaveOutcome } from "./useSingleFlightSave";
 
 export function useSessionDrillDialog(
-    plays: PlayInSession[],
-    setPlays: Dispatch<SetStateAction<PlayInSession[]>>,
+    plays: SessionItem[],
+    setPlays: Dispatch<SetStateAction<SessionItem[]>>,
     markDirty: () => void,
     /** Saves the session now (single-flight: runs, or queues behind a running save); settles with that save's outcome. */
     saveNow: () => Promise<SaveOutcome>,
@@ -24,7 +25,7 @@ export function useSessionDrillDialog(
 
     const editDiagram = useCallback((clientKey: string) => {
         const play = plays.find((p) => p.id === clientKey);
-        if (!play) return;
+        if (!play || !isDrillRow(play)) return;
         setDrill({
             clientKey,
             playId: play.playId,
@@ -63,7 +64,7 @@ export function useSessionDrillDialog(
         const previous = plays.find((play) => play.id === clientKey);
         setPlays((prev) => upsertSessionDrill(prev, clientKey, patch));
         markDirty();
-        if (previous?.playId === patch.playId) return { ok: true };
+        if (previous && isDrillRow(previous) && previous.playId === patch.playId) return { ok: true };
 
         const outcome = await saveNow();
         if (!outcome.ok) {

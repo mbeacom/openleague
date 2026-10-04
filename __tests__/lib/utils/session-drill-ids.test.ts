@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { applySavedPlayIds, describeSaveError, upsertSessionDrill } from "@/lib/utils/session-drill-ids";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
-import type { PlayInSession } from "@/types/practice-planner";
+import { drillRows } from "@/lib/utils/session-rows";
+import type { BlockInSession, PlayInSession, SessionItem } from "@/types/practice-planner";
 
 function card(id: string, playId: string, sequence = 0): PlayInSession {
     return { id, playId, name: id, sequence, runsWithPrevious: false, duration: 10, instructions: "", playData: createEmptyPlayData(), thumbnail: "" };
@@ -12,14 +13,14 @@ describe("applySavedPlayIds", () => {
         const plays = [card("k1", "lib"), card("k2", "owned")];
         const sent = new Map([["k1", "lib"], ["k2", "owned"]]);
         const next = applySavedPlayIds(plays, sent, [{ clientKey: "k1", playId: "copy" }, { clientKey: "k2", playId: "owned" }]);
-        expect(next.map((p) => p.playId)).toEqual(["copy", "owned"]);
+        expect(drillRows(next).map((p) => p.playId)).toEqual(["copy", "owned"]);
     });
 
     it("keeps a card whose playId changed while the save was in flight", () => {
         const plays = [card("k1", "forked-by-dialog")];
         const sent = new Map([["k1", "lib"]]);
         const next = applySavedPlayIds(plays, sent, [{ clientKey: "k1", playId: "autosave-copy" }]);
-        expect(next[0].playId).toBe("forked-by-dialog");
+        expect(drillRows(next)[0].playId).toBe("forked-by-dialog");
     });
 
     it("ignores unknown clientKeys and a missing mapping", () => {
@@ -40,7 +41,7 @@ describe("upsertSessionDrill", () => {
 
     it("clears the unreadable-diagram flag once a fresh diagram is saved (2b warnings apply again)", () => {
         const next = upsertSessionDrill([{ ...card("k1", "lib"), playDataUnreadable: true }], "k1", patch);
-        expect(next[0].playDataUnreadable).toBeFalsy();
+        expect(drillRows(next)[0].playDataUnreadable).toBeFalsy();
     });
 
     it("appends a new card at max sequence + 1", () => {
@@ -59,5 +60,20 @@ describe("describeSaveError", () => {
     it("leaves every other error untouched", () => {
         expect(describeSaveError("Failed to save practice session")).toBe("Failed to save practice session");
         expect(describeSaveError(`${STALE} (extra)`)).toBe(`${STALE} (extra)`);
+    });
+});
+
+describe("session-drill-ids with block rows", () => {
+    const BLOCK: BlockInSession = { id: "kb", kind: "warmup", label: "", sequence: 0, duration: 8, instructions: "", runsWithPrevious: false };
+    const patch = { playId: "cx", name: "X", description: "", thumbnail: "", playData: createEmptyPlayData() };
+
+    it("never gives a block row a play id", () => {
+        const plays: SessionItem[] = [BLOCK];
+        expect(applySavedPlayIds(plays, new Map(), [{ clientKey: "kb", playId: "cx" }])).toBe(plays);
+        expect(upsertSessionDrill(plays, "kb", patch)[0]).toBe(BLOCK);
+    });
+
+    it("appends a new drill after a block with the next sequence", () => {
+        expect(upsertSessionDrill([BLOCK], "kd", patch)[1]).toMatchObject({ id: "kd", sequence: 1, runsWithPrevious: false, playId: "cx" });
     });
 });

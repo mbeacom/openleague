@@ -3,8 +3,9 @@
 /**
  * Import a portable practice plan (ADR-0020) as a new session. The document
  * is re-parsed here: the client's parse is never trusted. Every drill becomes
- * a session-owned Play copy (3a); "add to library" adds separate library
- * copies. Prisma only (ADR-0003), one transaction.
+ * a session-owned Play copy (3a); a warm-up, break, transition or cool-down
+ * is a row with no play. "add to library" adds separate library copies of the
+ * drills. Prisma only (ADR-0003), one transaction.
  */
 
 import { z } from "zod";
@@ -14,7 +15,7 @@ import { prisma } from "@/lib/db/prisma";
 import { isTeamAdmin, requireUserId } from "@/lib/auth/session";
 import { newPlayId } from "@/lib/services/play-ids";
 import { sanitizePlayDataForWrite } from "@/lib/utils/play-data";
-import { parsePlan } from "@/lib/plan-document";
+import { parsePlan, type PlanDrill } from "@/lib/plan-document";
 import type { PlayData } from "@/types/practice-planner";
 
 export type ActionResult<T> =
@@ -61,17 +62,19 @@ export async function importPracticePlan(
             return { success: false, error: NOT_SCHEDULER_MESSAGE };
         }
 
-        const diagrams: PlayData[] = [];
-        for (const drill of planSession.drills) {
-            const clean = sanitizePlayDataForWrite(drill.drill.playData);
+        // Only drill rows have diagrams and copies; block rows are written as they are.
+        const drillEntries = planSession.drills.filter((entry): entry is PlanDrill => entry.kind === "drill");
+        const diagrams = new Map<number, PlayData>();
+        for (const entry of drillEntries) {
+            const clean = sanitizePlayDataForWrite(entry.drill.playData);
             if (!clean.ok) {
                 return {
                     success: false,
-                    error: `Drill ${drill.sequence + 1} ("${drill.drill.name}") has a diagram that can't be saved.`,
+                    error: `Drill ${entry.sequence + 1} ("${entry.drill.name}") has a diagram that can't be saved.`,
                     details: clean.issues,
                 };
             }
-            diagrams.push(clean.data);
+            diagrams.set(entry.sequence, clean.data);
         }
 
         const sessionId = await prisma.$transaction(async (tx) => {
@@ -81,6 +84,7 @@ export async function importPracticePlan(
                     date: new Date(validated.data.date),
                     duration: planSession.durationMinutes,
                     goaliesAttending: planSession.goaliesAttending,
+                    transitionMinutes: planSession.transitionMinutes,
                     isShared: false,
                     teamId,
                     createdById: userId,
@@ -89,39 +93,61 @@ export async function importPracticePlan(
             });
             if (planSession.drills.length === 0) return session.id;
 
-            const drillFields = planSession.drills.map((drill, index) => ({
-                name: drill.drill.name,
-                description: drill.drill.description || null,
+            const drillFields = drillEntries.map((entry) => ({
+                name: entry.drill.name,
+                description: entry.drill.description || null,
                 thumbnail: null,
-                playData: diagrams[index] as unknown as Prisma.InputJsonValue,
-                focus: drill.drill.focus,
-                goalies: drill.drill.goalies,
+                playData: diagrams.get(entry.sequence) as unknown as Prisma.InputJsonValue,
+                focus: entry.drill.focus,
+                goalies: entry.drill.goalies,
                 teamId,
                 createdById: userId,
                 sourcePlayId: null,
             }));
 
-            // Ids first, so the rows can point at their copies.
-            const ownedIds = planSession.drills.map(() => newPlayId());
-            await tx.play.createMany({
-                data: drillFields.map((fields, index) => ({
-                    id: ownedIds[index],
-                    ...fields,
-                    isTemplate: false,
-                    sessionId: session.id,
-                })),
-            });
+            // Ids first, so the rows can point at their copies; matched by sequence, never by position.
+            const ownedIds = drillEntries.map(() => newPlayId());
+            const ownedBySequence = new Map(drillEntries.map((entry, index) => [entry.sequence, ownedIds[index]]));
+            if (drillEntries.length > 0) {
+                await tx.play.createMany({
+                    data: drillFields.map((fields, index) => ({ id: ownedIds[index], ...fields, isTemplate: false, sessionId: session.id })),
+                });
+            }
+            const ownedCopy = (sequence: number): string => {
+                const id = ownedBySequence.get(sequence);
+                if (id === undefined) throw new Error(`No drill copy for row ${sequence}`);
+                return id;
+            };
             await tx.practiceSessionPlay.createMany({
-                data: planSession.drills.map((drill, index) => ({
-                    sessionId: session.id,
-                    playId: ownedIds[index],
-                    sequence: drill.sequence,
-                    duration: drill.durationMinutes,
-                    instructions: drill.instructions || null,
-                    runsWithPrevious: drill.runsWithPrevious,
-                })),
+                data: planSession.drills.map((entry) =>
+                    entry.kind === "drill"
+                        ? {
+                              sessionId: session.id,
+                              playId: ownedCopy(entry.sequence),
+                              kind: "drill",
+                              label: null,
+                              sequence: entry.sequence,
+                              duration: entry.durationMinutes,
+                              instructions: entry.instructions || null,
+                              runsWithPrevious: entry.runsWithPrevious,
+                              stays: entry.stays,
+                              rotateEveryMinutes: entry.rotateEveryMinutes,
+                          }
+                        : {
+                              sessionId: session.id,
+                              playId: null,
+                              kind: entry.kind,
+                              label: entry.label,
+                              sequence: entry.sequence,
+                              duration: entry.durationMinutes,
+                              instructions: entry.instructions || null,
+                              runsWithPrevious: false,
+                              stays: false,
+                              rotateEveryMinutes: null,
+                          },
+                ),
             });
-            if (addToLibrary) {
+            if (addToLibrary && drillFields.length > 0) {
                 await tx.play.createMany({
                     data: drillFields.map((fields) => ({ ...fields, isTemplate: true, sessionId: null })),
                 });
