@@ -336,7 +336,7 @@ describe("PlanImportView: block rows in the preview", () => {
         );
         render(<PlanImportView teams={[LIONS]} />);
         upload(JSON.stringify(timed));
-        const list = await screen.findByRole("list", { name: "Drills in this plan" });
+        const list = await screen.findByRole("list", { name: "Practice timeline" });
         expect(within(list).getByText("Warm-up")).toBeInTheDocument();
         expect(within(list).getByText("8 min · Laps")).toBeInTheDocument();
         expect(within(list).queryByRole("img", { name: /Warm-up/ })).toBeNull();

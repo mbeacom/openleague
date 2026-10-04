@@ -55,7 +55,7 @@ export function PlanPreview({ plan }: { plan: PlanDocument }) {
             {session.plays.length === 0 ? (
                 <Typography color="text.secondary">No drills in this plan</Typography>
             ) : (
-                <Stack component="ol" aria-label="Drills in this plan" spacing={2} sx={{ listStyle: "none", p: 0, m: 0 }}>
+                <Stack component="ol" aria-label="Practice timeline" spacing={2} sx={{ listStyle: "none", p: 0, m: 0 }}>
                     {groups.map((group) => {
                         const head = group.stations[0];
                         if (isBlockRow(head)) {
