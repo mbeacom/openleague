@@ -237,3 +237,42 @@ describe("buildBenchSheetModel: block rows and the gap", () => {
         expect(model.legend).toEqual(buildLegend(withPass("x")).map((entry) => ({ label: entry.label, image: "data:image/png;base64,SWAT" })));
     });
 });
+
+describe("buildBenchSheetModel: rotation and the gap (spec R10)", () => {
+    const ROTATING: ExportSession = {
+        ...UNBOOKED,
+        transitionMinutes: 2,
+        plays: [
+            { ...play("Goalie", 0, 10, false, { playData: withPass("g") }), stays: true, rotateEveryMinutes: 5 },
+            { ...play("Skate A", 1, 5, true), stays: false, rotateEveryMinutes: null },
+            { ...play("Skate B", 2, 5, true), stays: false, rotateEveryMinutes: null },
+        ],
+    };
+    const at = (minutes: number) => formatClockTime(new Date(new Date(ROTATING.date).getTime() + minutes * 60_000), undefined, false);
+
+    it("emits a rotation row: its header, the stations with stays marked, and the grid at clock times", () => {
+        const model = buildBenchSheetModel(ROTATING, renderers());
+        expect(model.timeline).toEqual([
+            {
+                kind: "rotation",
+                start: at(0),
+                minutes: 10,
+                label: "Stations · rotate every 5 min · 10 min",
+                stations: ["Goalie · stays", "Skate A", "Skate B"],
+                grid: {
+                    columns: ["Goalie", "Skate A", "Skate B"],
+                    rows: [
+                        { start: at(0), cells: ["all", "A", "B"] },
+                        { start: at(5), cells: ["all", "B", "A"] },
+                    ],
+                },
+            },
+        ]);
+        expect(model.drills.map((d) => d.station)).toEqual(["Station 1 of 3", "Station 2 of 3", "Station 3 of 3"]);
+    });
+
+    it("says the gap for the header only when there is one", () => {
+        expect(buildBenchSheetModel(ROTATING, renderers()).gap).toBe("2 min between blocks");
+        expect(buildBenchSheetModel(UNBOOKED, renderers()).gap).toBeNull();
+    });
+});

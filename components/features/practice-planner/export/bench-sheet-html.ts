@@ -8,6 +8,7 @@
  * itself wrapped it as Trusted; image sources must pass isPngDataUri. The CSP
  * meta is defense in depth: even an escaping bug could not run or load anything.
  */
+import type { RotationTable } from "@/lib/utils/session-timeline";
 import type { BenchSheetDrillItem, BenchSheetModel } from "./bench-sheet-model";
 import { DIAGRAM_UNAVAILABLE_TEXT, LEGEND_HEADING, NO_DRILLS_TEXT } from "./labels";
 import { isPngDataUri } from "./png";
@@ -72,6 +73,9 @@ th, td { border: 1px solid #90A4AE; padding: 4px 6px; text-align: left; vertical
 th { background: #E3F2FD; color: #0D47A1; }
 .time, .meta { font-family: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace; }
 td ul { margin: 2px 0 0; padding-left: 1.1em; }
+.rotation { width: auto; margin: 6px 0 2px; }
+.rotation th, .rotation td { text-align: center; }
+.gap { color: #37474F; }
 .planned { margin: 6px 0 0; }
 .planned.over { font-weight: 700; color: #C62828; }
 .legend { margin-top: 14px; }
@@ -95,7 +99,21 @@ function header(model: BenchSheetModel): Trusted {
 ${model.teamName ? html`<p class="team">${model.teamName}</p>` : null}
 <p class="when">${model.when}</p>
 ${model.place ? html`<p class="place">${model.place}</p>` : null}
+${model.gap ? html`<p class="gap">${model.gap}</p>` : null}
 </header>`;
+}
+
+/** A station block's header and its stations: a plain block's and a rotation block's alike. */
+function stationList(label: string, stations: readonly string[]): Trusted {
+    return html`<strong>${label}</strong><ul>${stations.map((station) => html`<li>${station}</li>`)}</ul>`;
+}
+
+/** A rotation block's grid: a Start column plus one column per station, a group or "all" in each cell. */
+function rotationGrid(grid: RotationTable): Trusted {
+    return html`<table class="rotation" border="1" cellpadding="3" cellspacing="0">
+<thead><tr><th scope="col">Start</th>${grid.columns.map((column) => html`<th scope="col">${column}</th>`)}</tr></thead>
+<tbody>${grid.rows.map((row) => html`<tr><td class="time">${row.start}</td>${row.cells.map((value) => html`<td>${value}</td>`)}</tr>`)}</tbody>
+</table>`;
 }
 
 function timeline(model: BenchSheetModel): Trusted {
@@ -103,7 +121,7 @@ function timeline(model: BenchSheetModel): Trusted {
         (row) =>
             html`<tr><td class="time">${row.start}</td><td>${row.minutes}</td><td>${
                 row.stations
-                    ? html`<strong>${row.label}</strong><ul>${row.stations.map((station) => html`<li>${station}</li>`)}</ul>`
+                    ? html`${stationList(row.label, row.stations)}${row.kind === "rotation" ? rotationGrid(row.grid) : null}`
                     : html`${row.label}${row.kind === "block" && row.note ? html` · ${row.note}` : null}`
             }</td></tr>
 `,

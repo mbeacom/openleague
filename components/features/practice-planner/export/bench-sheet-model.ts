@@ -8,7 +8,16 @@
 import type { BlockKind, PlayData, PlayFocus, PlayGoalies } from "@/types/practice-planner";
 import { buildLegend, type LegendEntry } from "@/lib/utils/canvas/legend";
 import { combinedLegendData } from "@/lib/utils/canvas/station-map";
-import { buildSchedule, sessionWallMinutes } from "@/lib/utils/session-timeline";
+import {
+    betweenBlocksLabel,
+    buildSchedule,
+    rotationBlockLabel,
+    rotationTable,
+    sessionWallMinutes,
+    staysSuffix,
+    type RotationGrid,
+    type RotationTable,
+} from "@/lib/utils/session-timeline";
 import { sessionForDisplay } from "@/lib/utils/drill-tags";
 import { blockTitle, drillRows, isBlockRow } from "@/lib/utils/session-rows";
 import { formatClockTime, formatLongDate, sessionStart, sessionTimeZone } from "@/lib/utils/date";
@@ -75,6 +84,17 @@ export type BenchSheetTimelineRow =
           label: string;
           note: string | null;
           stations: null;
+      }
+    | {
+          kind: "rotation";
+          start: string;
+          minutes: number;
+          /** "Stations · rotate every 5 min · 15 min" */
+          label: string;
+          /** "Name", or "Name · stays" for a station that doesn't rotate */
+          stations: string[];
+          /** A Start column (each round's clock time) plus one column per station */
+          grid: RotationTable;
       };
 
 export interface BenchSheetDrillItem {
@@ -100,6 +120,8 @@ export interface BenchSheetModel {
     when: string;
     /** "Venue · Surface · Segment", or null when unbooked */
     place: string | null;
+    /** "2 min between blocks", or null when there is no gap */
+    gap: string | null;
     timeline: BenchSheetTimelineRow[];
     planned: string;
     overTime: boolean;
@@ -148,12 +170,24 @@ export function buildBenchSheetModel(
         teamName: options.omitTeam || !team ? null : team,
         when: `${formatLongDate(start, timeZone)} · ${time(start, false)} – ${time(end)}`,
         place: [session.venueName, session.surfaceName, session.segmentName].filter(Boolean).join(" · ") || null,
-        timeline: rows.map(({ group, startsAt }): BenchSheetTimelineRow => {
+        gap: gap > 0 ? betweenBlocksLabel(gap) : null,
+        timeline: rows.map(({ group, startsAt, roundStarts }): BenchSheetTimelineRow => {
             const head = group.stations[0];
             if (isBlockRow(head)) {
                 return { kind: "block", start: time(startsAt), minutes: group.wallMinutes, label: blockTitle(head.kind, head.label), note: head.instructions?.trim() || null, stations: null };
             }
             const stations = drillRows(group.stations);
+            const grid: RotationGrid<ExportSessionRow> | null = group.rotation;
+            if (grid) {
+                return {
+                    kind: "rotation",
+                    start: time(startsAt),
+                    minutes: group.wallMinutes,
+                    label: rotationBlockLabel(grid.minutes, group.wallMinutes),
+                    stations: stations.map((sp) => `${sp.play.name}${staysSuffix(sp.stays)}`),
+                    grid: rotationTable(grid, (row) => (isBlockRow(row) ? blockTitle(row.kind, row.label) : row.play.name), (_, round) => time(roundStarts[round])),
+                };
+            }
             const block = stations.length > 1;
             return {
                 start: time(startsAt),

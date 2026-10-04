@@ -8,6 +8,7 @@
  */
 // eslint-disable-next-line no-restricted-imports -- the one module allowed to load docx; reached only through import()
 import { Document, HeadingLevel, ImageRun, Packer, Paragraph, Table, TableCell, TableRow, TextRun, WidthType } from "docx";
+import { ROTATION_ALL, type RotationTable } from "@/lib/utils/session-timeline";
 import type { BenchSheetModel } from "./bench-sheet-model";
 import { DIAGRAM_UNAVAILABLE_TEXT, LEGEND_HEADING, NO_DRILLS_TEXT } from "./labels";
 import { isPngDataUri, pngDataUriToBytes } from "./png";
@@ -52,11 +53,39 @@ function header(model: BenchSheetModel): Paragraph[] {
         ...(model.teamName ? [new Paragraph({ children: textRuns(model.teamName, { bold: true }) })] : []),
         new Paragraph({ children: textRuns(model.when) }),
         ...(model.place ? [new Paragraph({ children: textRuns(model.place) })] : []),
+        ...(model.gap ? [new Paragraph({ children: textRuns(model.gap) })] : []),
     ];
 }
 
-function cell(children: Paragraph[], isHeader = false): TableCell {
+function cell(children: Array<Paragraph | Table>, isHeader = false): TableCell {
     return new TableCell({ children, shading: isHeader ? { fill: TABLE_HEADER_FILL } : undefined });
+}
+
+/** A station block's header and its stations: a plain block's and a rotation block's alike. */
+function stationParagraphs(label: string, stations: readonly string[]): Paragraph[] {
+    return [
+        new Paragraph({ children: textRuns(label, { bold: true }) }),
+        ...stations.map((station) => new Paragraph({ children: textRuns(`• ${station}`) })),
+    ];
+}
+
+/** A rotation block's grid as a real table (spec R10): Start plus one column per station. */
+function gridTable(grid: RotationTable): Table {
+    const head = new TableRow({
+        tableHeader: true,
+        children: ["Start", ...grid.columns].map((label) => cell([new Paragraph({ children: textRuns(label, { bold: true, color: LEAGUE_BLUE }) })], true)),
+    });
+    const rows = grid.rows.map(
+        (row) =>
+            new TableRow({
+                cantSplit: true,
+                children: [
+                    cell([new Paragraph({ children: textRuns(row.start, { font: MONO }) })]),
+                    ...row.cells.map((value) => cell([new Paragraph({ children: textRuns(value, value === ROTATION_ALL ? {} : { bold: true }) })])),
+                ],
+            }),
+    );
+    return new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: [head, ...rows] });
 }
 
 function timeline(model: BenchSheetModel): Array<Paragraph | Table> {
@@ -74,8 +103,9 @@ function timeline(model: BenchSheetModel): Array<Paragraph | Table> {
                     cell(
                         row.stations
                             ? [
-                                  new Paragraph({ children: textRuns(row.label, { bold: true }) }),
-                                  ...row.stations.map((station) => new Paragraph({ children: textRuns(`• ${station}`) })),
+                                  ...stationParagraphs(row.label, row.stations),
+                                  // Word wants a paragraph after a table in a cell.
+                                  ...(row.kind === "rotation" ? [gridTable(row.grid), new Paragraph({ children: [] })] : []),
                               ]
                             : [new Paragraph({ children: textRuns(row.kind === "block" && row.note ? `${row.label} · ${row.note}` : row.label) })],
                     ),

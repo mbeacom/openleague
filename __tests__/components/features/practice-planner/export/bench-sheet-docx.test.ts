@@ -21,6 +21,7 @@ const MODEL: BenchSheetModel = {
     teamName: "Hawks U12",
     when: "Tuesday, April 7, 2026 · 6:00 PM – 7:00 PM MDT",
     place: "Ice House · Rink A",
+    gap: null,
     timeline: [{ start: "6:00 PM MDT", minutes: 10, label: "Stations · 2", stations: ["Breakout · 10 min", "Regroup · 8 min"] }],
     planned: "Planned 10 of 60 min",
     overTime: false,
@@ -135,5 +136,28 @@ describe("renderBenchSheetDocx: block rows", () => {
             timeline: [{ kind: "block", start: "5:50 PM", minutes: 8, label: "Warm-up", note: "Easy laps", stations: null }, ...MODEL.timeline],
         });
         expect(xml).toContain("Warm-up · Easy laps");
+    });
+});
+
+describe("renderBenchSheetDocx: rotation and the gap (spec R10)", () => {
+    it("writes the gap in the header and a rotation block's grid as a real table", async () => {
+        const xml = await documentXml({
+            ...MODEL,
+            gap: "2 min between blocks",
+            timeline: [{
+                kind: "rotation",
+                start: "6:00 PM",
+                minutes: 10,
+                label: "Stations · rotate every 5 min · 10 min",
+                stations: ["Goalie · stays", "Skate A", "Skate B"],
+                grid: { columns: ["Goalie", "Skate A", "Skate B"], rows: [{ start: "6:00 PM", cells: ["all", "A", "B"] }, { start: "6:05 PM", cells: ["all", "B", "A"] }] },
+            }],
+        });
+        expect(xml).toContain("2 min between blocks");
+        expect(xml).toContain("Stations · rotate every 5 min · 10 min");
+        expect(xml).toContain("Goalie · stays");
+        // The timeline table, plus the grid nested in its third cell.
+        expect(xml.match(/<w:tbl>/g)).toHaveLength(2);
+        expect(xml).toMatch(/>all</);
     });
 });

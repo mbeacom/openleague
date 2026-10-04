@@ -14,6 +14,7 @@ const MODEL: BenchSheetModel = {
     teamName: "Hawks U12",
     when: "Tuesday, April 7, 2026 · 6:00 PM – 7:00 PM MDT",
     place: "Ice House · Rink A",
+    gap: null,
     timeline: [
         { start: "6:00 PM MDT", minutes: 10, label: "Stations · 2", stations: ["Breakout · 10 min", "Regroup · 8 min"] },
         { start: "6:10 PM MDT", minutes: 15, label: "Shooting", stations: null },
@@ -193,5 +194,42 @@ describe("renderBenchSheetHtml: block rows", () => {
         const doc = parse(renderBenchSheetHtml({ ...MODEL, legend: [], drills: [], timeline: [{ kind: "block", start: "6:00 PM", minutes: 5, label: "Cool-down", note: null, stations: null }] }));
         expect(doc.querySelector(".empty")).toBeNull();
         expect(doc.querySelector("table")?.textContent).toContain("Cool-down");
+    });
+});
+
+describe("renderBenchSheetHtml: rotation and the gap (spec R10)", () => {
+    const ROTATION = {
+        kind: "rotation" as const,
+        start: "6:00 PM",
+        minutes: 10,
+        label: "Stations · rotate every 5 min · 10 min",
+        stations: ["Goalie <G> · stays", "Skate A", "Skate B"],
+        grid: {
+            columns: ["Goalie <G>", "Skate A", "Skate B"],
+            rows: [
+                { start: "6:00 PM", cells: ["all", "A", "B"] },
+                { start: "6:05 PM", cells: ["all", "B", "A"] },
+            ],
+        },
+    };
+
+    it("says the gap in the header", () => {
+        const doc = parse(renderBenchSheetHtml({ ...MODEL, gap: "2 min between blocks" }));
+        expect(doc.querySelector("header .gap")?.textContent).toBe("2 min between blocks");
+        expect(parse(renderBenchSheetHtml(MODEL)).querySelector("header .gap")).toBeNull();
+    });
+
+    it("prints a rotation block's header, its stations and its grid as a table, every name escaped", () => {
+        const doc = parse(renderBenchSheetHtml({ ...MODEL, timeline: [ROTATION] }));
+        const cell = doc.querySelector("tbody td:nth-child(3)");
+        expect(cell?.querySelector("strong")?.textContent).toBe("Stations · rotate every 5 min · 10 min");
+        expect([...(cell?.querySelectorAll("li") ?? [])].map((li) => li.textContent)).toEqual(["Goalie <G> · stays", "Skate A", "Skate B"]);
+        const grid = cell?.querySelector("table.rotation");
+        expect([...(grid?.querySelectorAll("tr") ?? [])].map((tr) => tr.textContent)).toEqual([
+            "StartGoalie <G>Skate ASkate B",
+            "6:00 PMallAB",
+            "6:05 PMallBA",
+        ]);
+        expect(doc.querySelector("g")).toBeNull();
     });
 });
