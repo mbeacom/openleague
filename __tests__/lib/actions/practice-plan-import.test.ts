@@ -8,7 +8,9 @@ const { mockAuth, models, mockPrisma, mockCache } = vi.hoisted(() => {
     const models = {
         practiceSession: { create: vi.fn() },
         play: { createMany: vi.fn() },
-        practiceSessionPlay: { createMany: vi.fn() },
+        practiceSessionPlay: { createMany: vi.fn(), findMany: vi.fn() },
+        practiceSessionStaff: { createMany: vi.fn() },
+        practiceSessionPlayStaff: { createMany: vi.fn() },
     };
     return {
         models,
@@ -207,6 +209,37 @@ describe("importPracticePlan", () => {
         models.practiceSession.create.mockRejectedValue(new Error("connection reset"));
         expect(await call()).toEqual({ success: false, error: "Failed to import the practice plan. Please try again." });
         consoleError.mockRestore();
+    });
+
+    it("creates the plan's staff as typed names and each row's staff, matched by name ignoring case (spec R5, R6)", async () => {
+        models.practiceSessionPlay.findMany.mockResolvedValue([{ id: "crow0", sequence: 0 }, { id: "crow2", sequence: 2 }]);
+        models.practiceSessionStaff.createMany.mockResolvedValue({ count: 2 });
+        models.practiceSessionPlayStaff.createMany.mockResolvedValue({ count: 3 });
+        const document = doc({
+            staff: ["Coach Lee", "Sam"],
+            drills: [
+                { sequence: 0, duration: 10, runsWithPrevious: false, instructions: "Two laps", name: "Warmup Laps", description: "", playData: BOARD, staff: ["Sam"] },
+                { sequence: 1, duration: 15, runsWithPrevious: false, instructions: "", name: "Breakout", description: "D to D", playData: BOARD },
+                { sequence: 2, duration: 10, runsWithPrevious: true, instructions: "", name: "Regroup", description: "", playData: createEmptyPlayData(), staff: ["coach lee", "Sam"] },
+            ],
+        });
+        expect(await call({ document })).toEqual({ success: true, data: { sessionId: SESSION } });
+        // Staff is created right after the session, so it takes the first two ids.
+        expect(models.practiceSessionStaff.createMany.mock.calls[0][0].data).toEqual([
+            { id: "cowned0xxxxxxxxxxxxxxxxxx", sessionId: SESSION, name: "Coach Lee", position: 0, teamOfficialId: null, userId: null },
+            { id: "cowned1xxxxxxxxxxxxxxxxxx", sessionId: SESSION, name: "Sam", position: 1, teamOfficialId: null, userId: null },
+        ]);
+        expect(models.practiceSessionPlayStaff.createMany.mock.calls[0][0].data).toEqual([
+            { playRowId: "crow0", staffId: "cowned1xxxxxxxxxxxxxxxxxx", position: 0 },
+            { playRowId: "crow2", staffId: "cowned0xxxxxxxxxxxxxxxxxx", position: 0 },
+            { playRowId: "crow2", staffId: "cowned1xxxxxxxxxxxxxxxxxx", position: 1 },
+        ]);
+    });
+
+    it("writes no staff for a plan without any", async () => {
+        await call();
+        expect(models.practiceSessionStaff.createMany).not.toHaveBeenCalled();
+        expect(models.practiceSessionPlayStaff.createMany).not.toHaveBeenCalled();
     });
 });
 

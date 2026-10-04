@@ -2,12 +2,14 @@
 
 import { prisma } from "@/lib/db/prisma";
 import { requireUserId } from "@/lib/auth/session";
-import type { PlayData, SessionItem, SessionRow } from "@/types/practice-planner";
+import type { PlayData, SessionItem, SessionRow, SessionStaffMember, StaffOption } from "@/types/practice-planner";
 import { isBlockKind, toRowKind } from "@/lib/utils/session-rows";
 import { drillTags } from "@/lib/utils/drill-tags";
 import { createEmptyPlayData, parseStoredPlayData } from "@/lib/utils/play-data";
 import type { SegmentKind } from "@prisma/client";
 import { normalizeGroups } from "@/lib/utils/session-timeline";
+import { TEAM_OFFICIAL_ROLE_LABELS } from "@/lib/utils/validation";
+import { toStaffName } from "@/lib/utils/session-staff";
 
 /**
  * Get the practice planner list page data for the user's primary team.
@@ -104,6 +106,8 @@ export async function getPracticeSessionDetail(sessionId: string): Promise<{
     goaliesAttending: number | null;
     /** Minutes between blocks (practice timing). */
     transitionMinutes: number;
+    /** The practice's staff (spec R9); rows name them by id. */
+    staff: SessionStaffMember[];
     plays: SessionRow[];
   };
   isAdmin: boolean;
@@ -135,12 +139,14 @@ export async function getPracticeSessionDetail(sessionId: string): Promise<{
               goalies: true,
             },
           },
+          staff: { orderBy: { position: "asc" }, select: { staffId: true } },
         },
       },
       team: { select: { id: true, name: true } },
       venue: { select: { name: true, timezone: true } },
       surface: { select: { name: true } },
       segment: { select: { name: true, kind: true } },
+      staff: { orderBy: { position: "asc" }, select: { id: true, name: true } },
     },
   });
 
@@ -176,10 +182,11 @@ export async function getPracticeSessionDetail(sessionId: string): Promise<{
       startAt: session.startAt ? session.startAt.toISOString() : null,
       goaliesAttending: session.goaliesAttending ?? null,
       transitionMinutes: session.transitionMinutes ?? 0,
+      staff: session.staff.map((member) => ({ id: member.id, name: member.name })),
       plays: session.plays.flatMap((sp): SessionRow[] => {
         const kind = toRowKind(sp.kind);
         if (isBlockKind(kind)) {
-          return [{ id: sp.id, kind, label: sp.label ?? null, sequence: sp.sequence, duration: sp.duration ?? 0, instructions: sp.instructions, runsWithPrevious: false }];
+          return [{ id: sp.id, kind, label: sp.label ?? null, sequence: sp.sequence, duration: sp.duration ?? 0, instructions: sp.instructions, runsWithPrevious: false, staff: sp.staff.map((assignment) => assignment.staffId) }];
         }
         // Every drill row has its play (CHECK practice_session_plays_kind_play_check).
         if (!sp.play) return [];
@@ -192,6 +199,7 @@ export async function getPracticeSessionDetail(sessionId: string): Promise<{
           runsWithPrevious: sp.runsWithPrevious,
           stays: sp.stays ?? false,
           rotateEveryMinutes: sp.rotateEveryMinutes ?? null,
+          staff: sp.staff.map((assignment) => assignment.staffId),
           play: {
             id: play.id,
             name: play.name,
@@ -246,6 +254,8 @@ export async function getPracticeSessionForEdit(sessionId: string): Promise<{
     goaliesAttending: number | null;
     /** Minutes between blocks (practice timing). */
     transitionMinutes: number;
+    /** The practice's staff; a stale link loads unlinked (spec R4). */
+    staff: SessionStaffMember[];
     plays: SessionItem[];
   };
 } | null> {
@@ -268,7 +278,12 @@ export async function getPracticeSessionForEdit(sessionId: string): Promise<{
               goalies: true,
             },
           },
+          staff: { orderBy: { position: "asc" }, select: { staffId: true } },
         },
+      },
+      staff: {
+        orderBy: { position: "asc" },
+        select: { id: true, name: true, teamOfficialId: true, userId: true, teamOfficial: { select: { status: true } } },
       },
     },
   });
@@ -280,6 +295,21 @@ export async function getPracticeSessionForEdit(sessionId: string): Promise<{
   });
 
   if (!membership) return null;
+
+  // A link that went stale (an official removed, an admin demoted) loads unlinked, so this
+  // editor's saves aren't refused for it (spec R4); its next save stores the name typed.
+  const linkedUsers = session.staff.flatMap((member) => (member.userId ? [member.userId] : []));
+  const admins = new Set(
+    linkedUsers.length === 0
+      ? []
+      : (
+          await prisma.teamMember.findMany({
+            where: { teamId: session.teamId, role: "ADMIN", userId: { in: linkedUsers } },
+            select: { userId: true },
+          })
+        ).map((admin) => admin.userId),
+  );
+  const activeOfficial = (status: string | undefined) => status === "ACTIVE" || status === "INVITED";
 
   return {
     sessionId: session.id,
@@ -295,6 +325,12 @@ export async function getPracticeSessionForEdit(sessionId: string): Promise<{
       startAt: session.startAt,
       goaliesAttending: session.goaliesAttending ?? null,
       transitionMinutes: session.transitionMinutes ?? 0,
+      staff: session.staff.map((member) => ({
+        id: member.id,
+        name: member.name,
+        teamOfficialId: member.teamOfficialId && activeOfficial(member.teamOfficial?.status) ? member.teamOfficialId : null,
+        userId: member.userId && admins.has(member.userId) ? member.userId : null,
+      })),
       // Plays are ordered by sequence asc. Before 3a, deleting a library play
       // cascaded its PracticeSessionPlay row away and could leave gaps (e.g.
       // 0,2), which the save validator rejects, or a block's stations without
@@ -303,7 +339,7 @@ export async function getPracticeSessionForEdit(sessionId: string): Promise<{
       plays: normalizeGroups(session.plays.flatMap((sp): SessionItem[] => {
         const kind = toRowKind(sp.kind);
         if (isBlockKind(kind)) {
-          return [{ id: sp.id, kind, label: sp.label ?? "", sequence: sp.sequence, duration: sp.duration ?? 0, instructions: sp.instructions || "", runsWithPrevious: false }];
+          return [{ id: sp.id, kind, label: sp.label ?? "", sequence: sp.sequence, duration: sp.duration ?? 0, instructions: sp.instructions || "", runsWithPrevious: false, staff: sp.staff.map((assignment) => assignment.staffId) }];
         }
         if (!sp.play) return [];
         return [{
@@ -318,6 +354,7 @@ export async function getPracticeSessionForEdit(sessionId: string): Promise<{
           // Loaded so an untouched editor saves them back unchanged.
           stays: sp.stays ?? false,
           rotateEveryMinutes: sp.rotateEveryMinutes ?? null,
+          staff: sp.staff.map((assignment) => assignment.staffId),
           ...drillTags(sp.play),
           ...editorPlayData(sp.play.playData, sp.play.id),
           thumbnail: sp.play.thumbnail || "",
@@ -368,4 +405,46 @@ export async function getPlanImportTeams(): Promise<Array<{ id: string; name: st
     orderBy: { team: { name: "asc" } },
   });
   return memberships.map((membership) => membership.team);
+}
+
+/**
+ * The hosted Staff picker (spec R4): the team's active and invited officials,
+ * then its admins who aren't officials, by display name and role label. Admin
+ * callers only; nothing here selects or returns an email. An official who is
+ * also an admin appears once, as the official; an admin with no name is left
+ * out (a coach can type one). Names are offered cut to 60 characters.
+ */
+export async function getPracticeStaffOptions(teamId: string): Promise<StaffOption[]> {
+  const userId = await requireUserId();
+  const admin = await prisma.teamMember.findFirst({
+    where: { userId, teamId, role: "ADMIN" },
+    select: { id: true },
+  });
+  if (!admin) return [];
+
+  const [officials, admins] = await Promise.all([
+    prisma.teamOfficial.findMany({
+      where: { teamId, status: { in: ["ACTIVE", "INVITED"] } },
+      orderBy: [{ role: "asc" }, { name: "asc" }],
+      select: { id: true, name: true, role: true, userId: true },
+    }),
+    prisma.teamMember.findMany({
+      where: { teamId, role: "ADMIN" },
+      orderBy: { joinedAt: "asc" },
+      select: { userId: true, user: { select: { name: true } } },
+    }),
+  ]);
+  const officialUsers = new Set(officials.flatMap((official) => (official.userId ? [official.userId] : [])));
+  return [
+    ...officials.map((official): StaffOption => ({
+      kind: "official",
+      id: official.id,
+      name: toStaffName(official.name),
+      roleLabel: TEAM_OFFICIAL_ROLE_LABELS[official.role],
+    })),
+    ...admins.flatMap((member): StaffOption[] => {
+      const name = toStaffName(member.user.name ?? "");
+      return name && !officialUsers.has(member.userId) ? [{ kind: "admin", id: member.userId, name, roleLabel: "Team admin" }] : [];
+    }),
+  ];
 }

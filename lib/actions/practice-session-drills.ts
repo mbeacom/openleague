@@ -26,6 +26,7 @@ import {
     copySessionPlayScalars,
     duplicateSessionTitle,
 } from "@/lib/services/practice-session-drills";
+import { PRACTICE_STAFF_COPY_SELECT, ROW_STAFF_COPY_SELECT, copySessionStaff, writeRowStaff } from "@/lib/services/practice-session-staff";
 
 export type ActionResult<T> =
     | { success: true; data: T }
@@ -176,8 +177,8 @@ export async function copySessionDrillToLibrary(
 
 /**
  * Duplicate a session onto a new date: same duration and drills (each cloned
- * into the new session), same per-drill duration/instructions and every other
- * session-play column. Unshared, and never booked: no venue, surface,
+ * into the new session), same per-drill duration/instructions, every other
+ * session-play column, and the staff with who runs each row. Unshared, and never booked: no venue, surface,
  * segment, start time, reservation, or Event (ADR-0007).
  */
 export async function duplicatePracticeSession(
@@ -195,9 +196,13 @@ export async function duplicatePracticeSession(
                 duration: true,
                 goaliesAttending: true,
                 transitionMinutes: true,
+                staff: { orderBy: { position: "asc" }, select: PRACTICE_STAFF_COPY_SELECT },
                 plays: {
                     orderBy: { sequence: "asc" },
-                    include: { play: { select: CLONE_SOURCE_SELECT } },
+                    include: {
+                        play: { select: CLONE_SOURCE_SELECT },
+                        staff: { orderBy: { position: "asc" }, select: ROW_STAFF_COPY_SELECT },
+                    },
                 },
             },
         });
@@ -239,6 +244,16 @@ export async function duplicatePracticeSession(
                     })),
                 });
             }
+            // Staff and who runs each row (spec R5): new ids, links kept (same team), rows found by sequence.
+            const staffIds = await copySessionStaff(tx, session.id, source.staff);
+            await writeRowStaff(
+                tx,
+                session.id,
+                source.plays.map((row) => ({
+                    sequence: row.sequence,
+                    staffIds: row.staff.map((assignment) => staffIds.get(assignment.staffId) as string),
+                })),
+            );
             return session;
         });
 

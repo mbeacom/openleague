@@ -4,8 +4,8 @@
  * Import a portable practice plan (ADR-0020) as a new session. The document
  * is re-parsed here: the client's parse is never trusted. Every drill becomes
  * a session-owned Play copy (3a); a warm-up, break, transition or cool-down
- * is a row with no play. "add to library" adds separate library copies of the
- * drills. Prisma only (ADR-0003), one transaction.
+ * is a row with no play; the plan's staff becomes typed names (never linked).
+ * "add to library" adds separate library copies of the drills. Prisma only (ADR-0003), one transaction.
  */
 
 import { z } from "zod";
@@ -14,6 +14,8 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
 import { isTeamAdmin, requireUserId } from "@/lib/auth/session";
 import { newPlayId } from "@/lib/services/play-ids";
+import { writeRowStaff } from "@/lib/services/practice-session-staff";
+import { staffNameKey } from "@/lib/utils/session-staff";
 import { sanitizePlayDataForWrite } from "@/lib/utils/play-data";
 import { parsePlan, type PlanDrill } from "@/lib/plan-document";
 import type { PlayData } from "@/types/practice-planner";
@@ -91,6 +93,21 @@ export async function importPracticePlan(
                 },
                 select: { id: true },
             });
+            // Staff (spec R5, R6): typed names from the file, never linked; ids made here so rows can name them.
+            const staffIds = planSession.staff.map(() => newPlayId());
+            if (planSession.staff.length > 0) {
+                await tx.practiceSessionStaff.createMany({
+                    data: planSession.staff.map((name, position) => ({
+                        id: staffIds[position],
+                        sessionId: session.id,
+                        name,
+                        position,
+                        teamOfficialId: null,
+                        userId: null,
+                    })),
+                });
+            }
+            const staffByName = new Map(planSession.staff.map((name, index) => [staffNameKey(name), staffIds[index]]));
             if (planSession.drills.length === 0) return session.id;
 
             const drillFields = drillEntries.map((entry) => ({
@@ -147,6 +164,19 @@ export async function importPracticePlan(
                           },
                 ),
             });
+            // parsePlan checked that every row's names are on the list (ignoring case).
+            await writeRowStaff(
+                tx,
+                session.id,
+                planSession.drills.map((entry) => ({
+                    sequence: entry.sequence,
+                    staffIds: entry.staff.map((name) => {
+                        const staffId = staffByName.get(staffNameKey(name));
+                        if (staffId === undefined) throw new Error(`No staff member named in row ${entry.sequence}`);
+                        return staffId;
+                    }),
+                })),
+            );
             if (addToLibrary && drillFields.length > 0) {
                 await tx.play.createMany({
                     data: drillFields.map((fields) => ({ ...fields, isTemplate: true, sessionId: null })),

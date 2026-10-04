@@ -3,7 +3,7 @@
  * Server Action's transaction; these are not actions (ADR-0002). The rules
  * themselves are pure, in lib/utils/session-staff.ts.
  */
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { newPlayId } from "@/lib/services/play-ids";
 import { isBlockKind, toRowKind } from "@/lib/utils/session-rows";
 import { STAFF_ADMIN_MESSAGE, STAFF_NAME_TAKEN_MESSAGE, STAFF_OFFICIAL_MESSAGE, type StoredBlock, type StoredRowStaff } from "@/lib/utils/session-staff";
@@ -146,4 +146,42 @@ export async function readCarriedRowStaff(
           ).map((row) => ({ sequence: row.sequence, kind: toRowKind(row.kind) }))
         : [];
     return { stored, storedBlocks };
+}
+
+/** What a duplicate reads of each staff member: every column but the practice (the id maps assignments). */
+export const PRACTICE_STAFF_COPY_SELECT = { id: true, name: true, position: true, teamOfficialId: true, userId: true } as const;
+/** Staff columns a duplicate never copies: the id (new) and the practice (the copy). */
+export const STAFF_FIELDS_NOT_COPIED: ReadonlySet<string> = new Set(["id", "sessionId"]);
+/** What a duplicate reads of each assignment: the person (mapped to their copy) and the order. */
+export const ROW_STAFF_COPY_SELECT = { staffId: true, position: true } as const;
+/** Assignment columns a duplicate never copies: the row (the copy's row, found by sequence). */
+export const ROW_STAFF_FIELDS_NOT_COPIED: ReadonlySet<string> = new Set(["playRowId"]);
+
+/** A staff member as PRACTICE_STAFF_COPY_SELECT reads it. */
+type StaffCopySource = { id: string; name: string; position: number; teamOfficialId: string | null; userId: string | null };
+
+/**
+ * Duplicate (spec R5): a practice's staff into another practice of the same
+ * team, new ids, links kept. Every staff column but the id and the practice is
+ * copied, driven by the generated scalar-field enum (the guard test fails when
+ * a column is added to the model but not to PRACTICE_STAFF_COPY_SELECT).
+ * Returns old id → new id.
+ */
+export async function copySessionStaff(
+    tx: Prisma.TransactionClient,
+    sessionId: string,
+    source: readonly StaffCopySource[],
+): Promise<Map<string, string>> {
+    const ids = new Map(source.map((member) => [member.id, newPlayId()]));
+    if (source.length === 0) return ids;
+    await tx.practiceSessionStaff.createMany({
+        data: source.map((member) => {
+            const copy: Record<string, unknown> = {};
+            for (const field of Object.values(Prisma.PracticeSessionStaffScalarFieldEnum)) {
+                if (!STAFF_FIELDS_NOT_COPIED.has(field)) copy[field] = (member as Record<string, unknown>)[field];
+            }
+            return { ...copy, id: ids.get(member.id) as string, sessionId } as Prisma.PracticeSessionStaffCreateManyInput;
+        }),
+    });
+    return ids;
 }
