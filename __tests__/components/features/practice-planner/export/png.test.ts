@@ -1,11 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { isPngDataUri, pngDataUriToBytes } from "@/components/features/practice-planner/export/png";
+import { isPngDataUri, MAX_PNG_DATA_URI_LENGTH, pngDataUriToBytes } from "@/components/features/practice-planner/export/png";
 
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
 
 describe("isPngDataUri", () => {
     it("accepts a base64 PNG data URI", () => {
         expect(isPngDataUri(PNG)).toBe(true);
+    });
+
+    it("rejects a URI longer than the cap, however well-formed", () => {
+        const prefix = "data:image/png;base64,";
+        const fits = prefix + "A".repeat(Math.floor((MAX_PNG_DATA_URI_LENGTH - prefix.length) / 4) * 4);
+        expect(fits.length).toBeLessThanOrEqual(MAX_PNG_DATA_URI_LENGTH);
+        expect(isPngDataUri(fits)).toBe(true);
+        expect(isPngDataUri(fits + "AAAAAAAA")).toBe(false);
     });
 
     it.each([
