@@ -40,7 +40,11 @@ vi.mock("@/lib/services/venue-reservations", () => ({
 }));
 
 import { createPracticeSession, updatePracticeSession } from "@/lib/actions/practice-sessions";
-import { ROTATION_TOO_FEW_ERROR } from "@/lib/utils/session-timeline";
+import { ROTATION_PLACEMENT_ERROR, ROTATION_TOO_FEW_ERROR } from "@/lib/utils/session-timeline";
+import { toSessionRowInputs } from "@/lib/utils/session-rows";
+import { STALE_EDITOR_MESSAGE } from "@/lib/utils/validation";
+import { createEmptyPlayData } from "@/lib/utils/play-data";
+import type { SessionItem } from "@/types/practice-planner";
 
 const TEAM = "cteamxxxxxxxxxxxxxxxxxxxx";
 const USER = "cuserxxxxxxxxxxxxxxxxxxxx";
@@ -205,15 +209,15 @@ describe("goalie count (goaltender-aware drills)", () => {
 });
 
 describe("practice timing rows (spec R2, R3, R5)", () => {
-    // Raw wire payloads (older clients, block rows): the action's Zod schema is what checks them.
-    const save = (plays: unknown[], extra: Record<string, unknown> = {}) =>
-        ({ ...input([]), plays, ...extra }) as Parameters<typeof createPracticeSession>[0];
+    // One row as a client sends it (kind and timing optional, as older clients omit them).
+    type SaveRow = NonNullable<Parameters<typeof createPracticeSession>[0]["plays"]>[number];
+    const save = (plays: SaveRow[], extra: { transitionMinutes?: number } = {}) => ({ ...input([]), plays, ...extra });
     const ROWS = [
         { kind: "warmup", clientKey: "kw", sequence: 0, duration: 8, instructions: "Laps", label: "" },
         { playId: LIB, clientKey: "k1", sequence: 1, duration: 10, instructions: "", stays: false, rotateEveryMinutes: null },
         { kind: "break", clientKey: "kb", sequence: 2, duration: 2, instructions: "", label: "Water" },
         { playId: LIB, clientKey: "k2", sequence: 3, duration: 10, instructions: "", stays: false, rotateEveryMinutes: null },
-    ];
+    ] satisfies SaveRow[];
     type Written = { kind: string; playId: string | null; label: string | null };
 
     it("create writes block rows with no play, and maps each drill row to its own copy by key", async () => {
@@ -264,7 +268,7 @@ describe("practice timing rows (spec R2, R3, R5)", () => {
 
     it("update checks the plan against the stored gap when the save leaves the gap out", async () => {
         models.practiceSession.findUnique.mockResolvedValue({ id: SESSION, teamId: TEAM, isShared: false, venueReservationId: null, transitionMinutes: 5 });
-        const tight = [0, 1, 2].map((sequence) => ({ playId: LIB, clientKey: `k${sequence}`, sequence, duration: 18, instructions: "", stays: false, rotateEveryMinutes: null }));
+        const tight = [0, 1, 2].map((sequence): SaveRow => ({ playId: LIB, clientKey: `k${sequence}`, sequence, duration: 18, instructions: "", stays: false, rotateEveryMinutes: null }));
         // 3 × 18 = 54, plus two 5-minute gaps = 64
         expect(await updatePracticeSession({ id: SESSION, ...save(tight) })).toEqual({
             success: false,
@@ -291,5 +295,101 @@ describe("practice timing rows (spec R2, R3, R5)", () => {
         models.practiceSessionPlay.findMany.mockResolvedValue([{ playId: null }, { playId: OWNED }]);
         await updatePracticeSession({ id: SESSION, ...save([]) });
         expect(models.play.deleteMany.mock.calls[0][0].where.id).toEqual({ in: [OWNED] });
+    });
+});
+
+describe("a stale editor can't drop warm-ups and breaks", () => {
+    type SaveRow = NonNullable<Parameters<typeof updatePracticeSession>[0]["plays"]>[number];
+    const update = (plays: SaveRow[]) => updatePracticeSession({ id: SESSION, ...input([]), plays });
+    const stored = (rows: Array<{ playId: string | null; kind: string; stays?: boolean; rotateEveryMinutes?: number | null }>) =>
+        models.practiceSessionPlay.findMany.mockResolvedValue(rows.map((row) => ({ stays: false, rotateEveryMinutes: null, ...row })));
+    // An editor from before block rows: no kind, no stays, no rotation.
+    const legacy = (playId: string, clientKey: string, sequence: number, extra: Partial<SaveRow> = {}): SaveRow =>
+        ({ playId, clientKey, sequence, duration: 10, instructions: "", ...extra });
+
+    it("rejects a save without row kinds when the practice has a block row, inside the transaction, deleting nothing", async () => {
+        stored([{ playId: null, kind: "warmup" }, { playId: OWNED, kind: "drill" }]);
+        const result = await update([legacy(OWNED, "k1", 0)]);
+        expect(result).toEqual({ success: false, error: STALE_EDITOR_MESSAGE });
+        expect(STALE_EDITOR_MESSAGE).toBe("This page is out of date. Reload to keep your warm-ups and breaks.");
+        expect(models.practiceSessionPlay.findMany.mock.calls[0][0].select).toMatchObject({ kind: true });
+        expect(mockPrisma.$transaction.mock.invocationCallOrder[0])
+            .toBeLessThan(models.practiceSessionPlay.findMany.mock.invocationCallOrder[0]);
+        expect(models.practiceSessionPlay.deleteMany).not.toHaveBeenCalled();
+        expect(models.practiceSession.update).not.toHaveBeenCalled();
+    });
+
+    it("saves a payload without row kinds as today when the practice has no block rows", async () => {
+        stored([{ playId: OWNED, kind: "drill" }]);
+        const result = await update([legacy(OWNED, "k1", 0)]);
+        expect(result.success).toBe(true);
+        expect(models.practiceSession.update).toHaveBeenCalledTimes(1);
+    });
+
+    it("saves the current editor's payload, which always carries each row's kind", async () => {
+        stored([{ playId: null, kind: "warmup" }, { playId: OWNED, kind: "drill" }]);
+        const items: SessionItem[] = [
+            { id: "kw", kind: "warmup", label: "", sequence: 0, duration: 8, instructions: "", runsWithPrevious: false },
+            { id: "k1", playId: OWNED, name: "Owned drill", sequence: 1, runsWithPrevious: false, duration: 10, instructions: "", playData: createEmptyPlayData() },
+        ];
+        const plays = toSessionRowInputs(items);
+        expect(plays.every((row) => Object.hasOwn(row, "kind"))).toBe(true);
+        const result = await update(plays);
+        expect(result.success).toBe(true);
+        const created: Array<{ kind: string }> = models.practiceSession.update.mock.calls[0][0].data.plays.create;
+        expect(created.map((row) => row.kind)).toEqual(["warmup", "drill"]);
+    });
+});
+
+describe("inherited timing that no longer fits is settled, not rejected (spec R3)", () => {
+    type SaveRow = NonNullable<Parameters<typeof updatePracticeSession>[0]["plays"]>[number];
+    const update = (plays: SaveRow[]) => updatePracticeSession({ id: SESSION, ...input([]), plays });
+    const row = (playId: string, clientKey: string, sequence: number, extra: Partial<SaveRow> = {}): SaveRow =>
+        ({ kind: "drill", playId, clientKey, sequence, duration: 10, instructions: "", ...extra });
+    const written = () => {
+        const created: Array<{ rotateEveryMinutes: number | null; stays: boolean }> = models.practiceSession.update.mock.calls[0][0].data.plays.create;
+        return created.map((r) => [r.rotateEveryMinutes, r.stays]);
+    };
+
+    it("drops an inherited rotation when its block lost its stations", async () => {
+        models.practiceSessionPlay.findMany.mockResolvedValue([{ playId: OWNED, kind: "drill", stays: false, rotateEveryMinutes: 5 }]);
+        const result = await update([row(OWNED, "k1", 0)]);
+        expect(result.success).toBe(true);
+        expect(written()).toEqual([[null, false]]);
+    });
+
+    it("drops an inherited rotation on a drill that is no longer first in its block", async () => {
+        models.practiceSessionPlay.findMany.mockResolvedValue([{ playId: OWNED, kind: "drill", stays: false, rotateEveryMinutes: 5 }]);
+        const result = await update([
+            row(LIB, "k0", 0, { stays: false, rotateEveryMinutes: null }),
+            row(OWNED, "k1", 1, { runsWithPrevious: true }),
+        ]);
+        expect(result.success).toBe(true);
+        expect(written()).toEqual([[null, false], [null, false]]);
+    });
+
+    it("lets an inherited stays give way to a rotation the client sent", async () => {
+        models.practiceSessionPlay.findMany.mockResolvedValue([{ playId: OWNED, kind: "drill", stays: true, rotateEveryMinutes: null }]);
+        const result = await update([
+            row(LIB, "k0", 0, { stays: false, rotateEveryMinutes: 5 }),
+            row(OWNED, "k1", 1, { runsWithPrevious: true, rotateEveryMinutes: null }),
+        ]);
+        expect(result.success).toBe(true);
+        expect(written()).toEqual([[5, false], [null, false]]);
+    });
+
+    it("still rejects timing the client sent that can't run, writing nothing", async () => {
+        const tooFew = await update([
+            row(LIB, "k0", 0, { stays: false, rotateEveryMinutes: 5 }),
+            row(OWNED, "k1", 1, { runsWithPrevious: true, stays: true, rotateEveryMinutes: null }),
+        ]);
+        expect(tooFew).toEqual({ success: false, error: ROTATION_TOO_FEW_ERROR });
+        const placement = await update([
+            row(LIB, "k0", 0, { stays: false, rotateEveryMinutes: null }),
+            row(OWNED, "k1", 1, { runsWithPrevious: true, stays: false, rotateEveryMinutes: 5 }),
+        ]);
+        expect(placement).toEqual({ success: false, error: ROTATION_PLACEMENT_ERROR });
+        expect(models.practiceSessionPlay.deleteMany).not.toHaveBeenCalled();
+        expect(models.practiceSession.update).not.toHaveBeenCalled();
     });
 });

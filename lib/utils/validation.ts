@@ -1423,6 +1423,12 @@ export const practiceSessionPlayInputSchema = z
 
 export type PracticeSessionRowInput = z.output<typeof practiceSessionPlayInputSchema>;
 
+/**
+ * An editor from before block rows sends no row `kind`; saving its rows would
+ * delete the practice's warm-ups and breaks, so the save asks for a reload.
+ */
+export const STALE_EDITOR_MESSAGE = "This page is out of date. Reload to keep your warm-ups and breaks.";
+
 // The gap between blocks (practice timing, spec R2). Absent = unchanged on
 // update; a create without it stores 0.
 const transitionMinutesSchema = z

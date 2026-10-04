@@ -23,6 +23,7 @@ import {
     type GetPracticeSessionsByTeamInput,
     type SharePracticeSessionInput,
     type PracticeSessionRowInput,
+    STALE_EDITOR_MESSAGE,
 } from "@/lib/utils/validation";
 import type { PlayData, SessionRowKind } from "@/types/practice-planner";
 import { playDataOrEmpty } from "@/lib/utils/play-data";
@@ -41,11 +42,15 @@ import {
 } from "@/lib/services/practice-session-drills";
 import { FALLBACK_TIME_ZONE } from "@/lib/utils/date";
 import {
+    MIN_ROTATING_STATIONS,
+    groupStations,
+    rotatingStations,
+    rotationMinutes,
     sessionRowsError,
     sessionWallMinutes,
     type TimelinePlay,
 } from "@/lib/utils/session-timeline";
-import { needsStoredTiming, toBlockLabel, toRowKind, withStoredTiming } from "@/lib/utils/session-rows";
+import { isBlockKind, needsStoredTiming, toBlockLabel, toRowKind, withStoredTiming } from "@/lib/utils/session-rows";
 
 export type ActionResult<T> =
     | { success: true; data: T }
@@ -488,6 +493,42 @@ function sessionPlayData(row: ResolvedRow, ownedByKey: ReadonlyMap<string, strin
     };
 }
 
+/** A save the session's rows refuse (a rule, the wall time, a stale editor): its message is shown as is. */
+class SessionRowsRejected extends Error {}
+
+/**
+ * Spec R3 for an older client: a rotation or stays flag it never sent but
+ * inherited from the stored row may no longer fit the plan (a station was
+ * moved or removed). The inherited value gives way instead of failing a save
+ * the coach didn't make invalid; values the client sent are still checked.
+ */
+function settleInheritedTiming(rows: ResolvedRow[], sent: readonly PracticeSessionRowInput[]): ResolvedRow[] {
+    const inheritsRotation = new Set(rows.filter((_, index) => sent[index].rotateEveryMinutes === undefined));
+    const inheritsStays = new Set(rows.filter((_, index) => sent[index].stays === undefined));
+    const settled = new Map<ResolvedRow, ResolvedRow>();
+    for (const { stations } of groupStations(rows)) {
+        const [head, ...rest] = stations;
+        for (const station of rest) {
+            if (station.rotateEveryMinutes != null && inheritsRotation.has(station)) {
+                settled.set(station, { ...station, rotateEveryMinutes: null });
+            }
+        }
+        if (head.rotateEveryMinutes == null || rotationMinutes(stations) !== null) continue;
+        if (inheritsRotation.has(head)) {
+            settled.set(head, { ...head, rotateEveryMinutes: null });
+            continue;
+        }
+        // The rotation was sent: inherited stays flags give way if that lets it run.
+        if (stations.length < MIN_ROTATING_STATIONS) continue;
+        const freed = stations.map((station) => (station.stays && inheritsStays.has(station) ? { ...station, stays: false } : station));
+        if (rotatingStations(freed).length < MIN_ROTATING_STATIONS) continue;
+        freed.forEach((station, index) => {
+            if (station !== stations[index]) settled.set(stations[index], station);
+        });
+    }
+    return settled.size > 0 ? rows.map((row) => settled.get(row) ?? row) : rows;
+}
+
 /**
  * Create a new practice session
  * Only ADMIN role can create sessions
@@ -717,7 +758,6 @@ export async function updatePracticeSession(
                 teamId: true,
                 isShared: true,
                 venueReservationId: true,
-                transitionMinutes: true,
             },
         });
 
@@ -771,21 +811,9 @@ export async function updatePracticeSession(
                 ?? await requireTeamAdmin(existingSession.teamId);
         }
 
-        // Absent = unchanged (spec R3): a drill row without stays or
-        // rotateEveryMinutes (an older client) keeps the stored row's values,
-        // read before validating; the gap likewise keeps the stored gap.
-        const stored = needsStoredTiming(validated.plays)
-            ? await prisma.practiceSessionPlay.findMany({
-                where: { sessionId: validated.id },
-                select: { playId: true, stays: true, rotateEveryMinutes: true },
-            })
-            : [];
-        const rows = withStoredTiming(validated.plays, stored);
-        const transitionMinutes = validated.transitionMinutes ?? existingSession.transitionMinutes ?? 0;
-        const rowError = rowsError(rows, validated.duration, transitionMinutes);
-        if (rowError) {
-            return { success: false, error: rowError };
-        }
+        // Rows sent without a kind come from an editor that predates block rows.
+        const sentRows: readonly object[] = Array.isArray(input.plays) ? input.plays : [];
+        const legacyRows = sentRows.length > 0 && sentRows.every((row) => !Object.hasOwn(row, "kind"));
 
         if (
             !selectedReservationId
@@ -806,6 +834,7 @@ export async function updatePracticeSession(
                     id: true,
                     teamId: true,
                     venueReservationId: true,
+                    transitionMinutes: true,
                 },
             });
             if (!current || current.teamId !== validated.teamId) {
@@ -838,6 +867,26 @@ export async function updatePracticeSession(
                     teamId: current.teamId,
                     actorId: userId,
                 });
+            }
+
+            // Read with the write: the stored rows can't change between the
+            // check and the rewrite. Absent = unchanged (spec R3): a drill row
+            // without stays or rotateEveryMinutes (an older client) keeps the
+            // stored row's values; the gap likewise keeps the stored gap.
+            const stored = needsStoredTiming(validated.plays) || legacyRows
+                ? await tx.practiceSessionPlay.findMany({
+                    where: { sessionId: validated.id },
+                    select: { playId: true, kind: true, stays: true, rotateEveryMinutes: true },
+                })
+                : [];
+            if (legacyRows && stored.some((row) => isBlockKind(toRowKind(row.kind)))) {
+                throw new SessionRowsRejected(STALE_EDITOR_MESSAGE);
+            }
+            const rows = settleInheritedTiming(withStoredTiming(validated.plays, stored), validated.plays);
+            const transitionMinutes = validated.transitionMinutes ?? current.transitionMinutes ?? 0;
+            const rowError = rowsError(rows, validated.duration, transitionMinutes);
+            if (rowError) {
+                throw new SessionRowsRejected(rowError);
             }
 
             const oldEvent = current.venueReservationId
@@ -1057,7 +1106,7 @@ export async function updatePracticeSession(
             };
         }
 
-        if (error instanceof SessionDrillError) {
+        if (error instanceof SessionDrillError || error instanceof SessionRowsRejected) {
             return {
                 success: false,
                 error: error.message,
