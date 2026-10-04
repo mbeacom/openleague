@@ -370,7 +370,7 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
             sx={{
               height: 6,
               borderRadius: 3,
-              bgcolor: "grey.100",
+              bgcolor: "action.hover",
             }}
           />
         </Box>
@@ -497,7 +497,7 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
                   sx={{
                     px: 3,
                     py: 1.5,
-                    bgcolor: "grey.50",
+                    bgcolor: "action.hover",
                     borderBottom: "1px solid",
                     borderColor: "divider",
                   }}
@@ -543,7 +543,7 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
                   sx={{
                     width: "100%",
                     height: { xs: 220, sm: 300, md: 360 },
-                    bgcolor: "grey.100",
+                    bgcolor: "action.hover",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
@@ -560,7 +560,7 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
                     <Image src={activePlay.play.thumbnail} alt={activePlay.play.name} fit="contain" />
                   ) : (
                     <Stack alignItems="center" spacing={1}>
-                      <HockeyIcon sx={{ fontSize: 48, color: "grey.300" }} />
+                      <HockeyIcon sx={{ fontSize: 48, color: "text.disabled" }} />
                       <Typography variant="body2" color="text.secondary">
                         No preview available
                       </Typography>
@@ -739,12 +739,12 @@ function SidebarPlayCard({ sp, index, active, onSelect }: SidebarPlayCardProps) 
       sx={{
         border: "2px solid",
         borderColor: active ? "primary.main" : "transparent",
-        bgcolor: active ? "rgba(25, 118, 210, 0.04)" : "background.paper",
+        bgcolor: active ? "action.hover" : "background.paper",
         boxShadow: active ? 2 : 0,
         transition: "all 0.15s ease",
         "&:hover": {
           borderColor: active ? "primary.main" : "primary.light",
-          bgcolor: "rgba(25, 118, 210, 0.04)",
+          bgcolor: "action.hover",
         },
       }}
     >
@@ -761,7 +761,7 @@ function SidebarPlayCard({ sp, index, active, onSelect }: SidebarPlayCardProps) 
               width: 28,
               height: 28,
               borderRadius: "50%",
-              bgcolor: active ? "primary.main" : "grey.200",
+              bgcolor: active ? "primary.main" : "action.selected",
               color: active ? "primary.contrastText" : "text.secondary",
               display: "flex",
               alignItems: "center",
@@ -780,7 +780,7 @@ function SidebarPlayCard({ sp, index, active, onSelect }: SidebarPlayCardProps) 
               width: 48,
               height: 32,
               borderRadius: 1,
-              bgcolor: "grey.100",
+              bgcolor: "action.hover",
               overflow: "hidden",
               position: "relative",
               flexShrink: 0,
@@ -798,7 +798,7 @@ function SidebarPlayCard({ sp, index, active, onSelect }: SidebarPlayCardProps) 
                   justifyContent: "center",
                 }}
               >
-                <HockeyIcon sx={{ fontSize: 14, color: "grey.400" }} />
+                <HockeyIcon sx={{ fontSize: 14, color: "text.disabled" }} />
               </Box>
             )}
           </Box>
