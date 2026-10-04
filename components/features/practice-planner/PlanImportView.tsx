@@ -54,17 +54,25 @@ export function PlanImportView({ teams }: PlanImportViewProps) {
     // stash, so StrictMode's effect replay must reuse this value, not take again.
     const incoming = useRef<string | null | undefined>(undefined);
     const [state, setState] = useState<ViewState>({ kind: "pick" });
+    // Every choice (file, link, template, start over) replaces this; a slower
+    // read that finishes after a newer choice is dropped.
+    const latestChoice = useRef<symbol | null>(null);
+    const choose = (next: ViewState) => {
+        latestChoice.current = null;
+        setState(next);
+    };
 
     useEffect(() => {
         if (incoming.current === undefined) incoming.current = takeIncomingPlan();
         const value = incoming.current;
         if (!value) return;
-        let cancelled = false;
+        const choice = Symbol("link");
+        latestChoice.current = choice;
         void readPlanLink(value).then((result) => {
-            if (!cancelled) setState(toViewState(result));
+            if (latestChoice.current === choice) setState(toViewState(result));
         });
         return () => {
-            cancelled = true;
+            if (latestChoice.current === choice) latestChoice.current = null;
         };
     }, []);
 
@@ -74,7 +82,10 @@ export function PlanImportView({ teams }: PlanImportViewProps) {
         const file = event.target.files?.[0];
         event.target.value = ""; // so choosing the same file again still fires change
         if (!file) return;
-        setState(toViewState(await readPlanFile(file)));
+        const choice = Symbol("file");
+        latestChoice.current = choice;
+        const result = await readPlanFile(file);
+        if (latestChoice.current === choice) setState(toViewState(result));
     };
 
     return (
@@ -101,7 +112,7 @@ export function PlanImportView({ teams }: PlanImportViewProps) {
                 )}
 
                 {state.kind === "pick" && (
-                    <StarterTemplatePicker onUse={(template) => setState(toViewState(starterTemplateImport(template, planGenerator), true))} />
+                    <StarterTemplatePicker onUse={(template) => choose(toViewState(starterTemplateImport(template, planGenerator), true))} />
                 )}
 
                 {state.kind === "error" && (
@@ -132,7 +143,7 @@ export function PlanImportView({ teams }: PlanImportViewProps) {
                         teams={teams}
                         fromTemplate={state.fromTemplate}
                         onChooseAnother={chooseFile}
-                        onStartOver={() => setState({ kind: "pick" })}
+                        onStartOver={() => choose({ kind: "pick" })}
                         onImported={(sessionId) => router.push(`/practice-planner/${sessionId}/edit`)}
                     />
                 )}

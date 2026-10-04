@@ -295,4 +295,29 @@ describe("PlanImportView: starter templates", () => {
         await title();
         expect(screen.queryByRole("heading", { name: "Start from a template" })).toBeNull();
     });
+
+    it("keeps a template chosen while a plan file is still being read", async () => {
+        render(<PlanImportView teams={[LIONS]} />);
+        let finishRead: (text: string) => void = () => {};
+        const file = new File(["{}"], "plan.olplan.json", { type: "application/json" });
+        Object.defineProperty(file, "text", { value: () => new Promise<string>((resolve) => (finishRead = resolve)) });
+        fireEvent.change(screen.getByTestId("plan-file-input"), { target: { files: [file] } });
+        fireEvent.click(screen.getByRole("button", { name: "Use template: Skills Stations" }));
+        await screen.findByRole("heading", { name: "Skills Stations" });
+
+        finishRead(JSON.stringify(plan()));
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        expect(screen.getByRole("heading", { name: "Skills Stations" })).toBeInTheDocument();
+        expect(screen.queryByRole("heading", { name: "Tuesday Skills Practice" })).toBeNull();
+    });
+
+    it("keeps a template chosen while an incoming link is still being read", async () => {
+        window.history.replaceState(null, "", `/practice-planner/import#plan=${await encodePlanLink(plan())}`);
+        render(<PlanImportView teams={[LIONS]} />);
+        fireEvent.click(screen.getByRole("button", { name: "Use template: Skills Stations" }));
+        await screen.findByRole("heading", { name: "Skills Stations" });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        expect(screen.getByRole("heading", { name: "Skills Stations" })).toBeInTheDocument();
+        expect(screen.queryByRole("heading", { name: "Tuesday Skills Practice" })).toBeNull();
+    });
 });
