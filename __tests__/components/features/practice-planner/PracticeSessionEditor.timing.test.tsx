@@ -81,6 +81,15 @@ describe("PracticeSessionEditor: an untouched editor", () => {
         expect(sent.transitionMinutes).toBe(3);
     });
 
+    it("sends the loaded gap even when it is 0 and the list is empty (a coach who cleared the practice)", async () => {
+        const onSave = renderEditor([], { transitionMinutes: 0 });
+        fireEvent.change(screen.getByLabelText(/^Session Title/), { target: { value: "Renamed" } });
+        await save();
+        const sent = onSave.mock.calls[0][0];
+        expect(sent.plays).toEqual([]);
+        expect(sent.transitionMinutes).toBe(0);
+    });
+
     it("shows the block cards between the drills", () => {
         renderEditor(STORED, { transitionMinutes: 3 });
         const laps = screen.getByRole("region", { name: "Laps" });

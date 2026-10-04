@@ -306,8 +306,8 @@ describe("practice timing rows (spec R2, R3, R5)", () => {
     });
 
     it("never treats a stored block row as an orphaned drill", async () => {
-        models.practiceSessionPlay.findMany.mockResolvedValue([{ playId: null }, { playId: OWNED }]);
-        await updatePracticeSession({ id: SESSION, ...save([]) });
+        models.practiceSessionPlay.findMany.mockResolvedValue([{ playId: null, kind: "warmup" }, { playId: OWNED, kind: "drill" }]);
+        await updatePracticeSession({ id: SESSION, ...save([], { transitionMinutes: 0 }) });
         expect(models.play.deleteMany.mock.calls[0][0].where.id).toEqual({ in: [OWNED] });
     });
 });
@@ -338,6 +338,29 @@ describe("a stale editor can't drop warm-ups and breaks", () => {
         const result = await update([legacy(OWNED, "k1", 0, { kind: undefined })]);
         expect(result).toEqual({ success: false, error: STALE_EDITOR_MESSAGE });
         expect(models.practiceSessionPlay.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it("rejects an older editor's empty list when the practice has block rows, deleting nothing", async () => {
+        stored([{ playId: null, kind: "warmup" }]);
+        const result = await update([]);
+        expect(result).toEqual({ success: false, error: STALE_EDITOR_MESSAGE });
+        expect(models.practiceSessionPlay.deleteMany).not.toHaveBeenCalled();
+        expect(models.practiceSession.update).not.toHaveBeenCalled();
+    });
+
+    it("saves the current editor's empty list (it always sends the gap): the coach cleared everything", async () => {
+        stored([{ playId: null, kind: "warmup" }]);
+        const result = await updatePracticeSession({ id: SESSION, ...input([]), plays: [], transitionMinutes: 0 });
+        expect(result.success).toBe(true);
+        expect(models.practiceSessionPlay.deleteMany).toHaveBeenCalledWith({ where: { sessionId: SESSION } });
+        expect(models.practiceSession.update.mock.calls[0][0].data.plays).toBeUndefined();
+    });
+
+    it("saves an older editor's empty list when the practice has no block rows", async () => {
+        stored([{ playId: OWNED, kind: "drill" }]);
+        const result = await update([]);
+        expect(result.success).toBe(true);
+        expect(models.practiceSession.update).toHaveBeenCalledTimes(1);
     });
 
     it("saves a payload without row kinds as today when the practice has no block rows", async () => {

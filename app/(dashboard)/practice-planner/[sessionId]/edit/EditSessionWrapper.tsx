@@ -20,7 +20,12 @@ import type { VenueBookingOptions } from "../../venue-booking-options";
 interface EditSessionWrapperProps {
   sessionId: string;
   teamId: string;
-  initialData: Partial<PracticeSessionData> & Partial<PracticeVenueAttachment>;
+  /**
+   * transitionMinutes is required: the editor sends the gap it loaded on every
+   * save, which tells updatePracticeSession the payload comes from an editor
+   * that knows block rows (an empty list then clears them on purpose).
+   */
+  initialData: Partial<PracticeSessionData> & Partial<PracticeVenueAttachment> & { transitionMinutes: number };
   /** Venue/surface/segment options for the optional ice booking (006, FR-019). */
   bookingOptions: VenueBookingOptions;
 }

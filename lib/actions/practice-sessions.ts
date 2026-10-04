@@ -778,10 +778,14 @@ export async function updatePracticeSession(
                 ?? await requireTeamAdmin(existingSession.teamId);
         }
 
-        // Rows sent without a kind come from an editor that predates block rows.
-        // A kind sent as undefined is a missing kind (Zod reads both as the "drill" default).
+        // A save from an editor that predates block rows: no sent row carries a
+        // kind, and no gap is sent. The current editor sends both (every row's
+        // kind, and the gap it loaded with the session), so an empty list from
+        // it is a coach clearing the practice, while one from an older editor
+        // would silently delete the warm-ups and breaks it can't show.
+        // A kind or gap sent as undefined is a missing one (Zod reads both as absent).
         const sentRows: ReadonlyArray<{ kind?: unknown }> = Array.isArray(input.plays) ? input.plays : [];
-        const legacyRows = sentRows.length > 0 && sentRows.every((row) => row.kind === undefined);
+        const legacyRows = sentRows.every((row) => row.kind === undefined) && input.transitionMinutes === undefined;
 
         if (
             !selectedReservationId
