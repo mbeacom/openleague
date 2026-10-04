@@ -7,12 +7,13 @@
  * toolbar's Print button calls window.print(), and stays disabled until every
  * drill's diagram is ready. The toolbar itself is hidden in print.
  */
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Box, Button, Stack, Typography } from "@mui/material";
 import { ArrowBack as ArrowBackIcon, PrintOutlined as PrintIcon } from "@mui/icons-material";
 import { usePlannerPlatform } from "@/lib/planner-store";
 import type { PracticeSessionView } from "@/types/practice-planner";
 import { buildSchedule } from "@/lib/utils/session-timeline";
+import { sessionForDisplay } from "@/lib/utils/drill-tags";
 import { combinedLegendData } from "@/lib/utils/canvas/station-map";
 import { sessionStart, sessionTimeZone } from "@/lib/utils/date";
 import { useClockText } from "@/lib/hooks/useClockText";
@@ -33,7 +34,9 @@ function chunk<T>(items: T[], size: number): T[][] {
     return Array.from({ length: Math.ceil(items.length / size) }, (_, i) => items.slice(i * size, (i + 1) * size));
 }
 
-export function BenchSheet({ session }: { session: BenchSheetSession }) {
+export function BenchSheet({ session: stored }: { session: BenchSheetSession }) {
+    // Goalie markers hidden at render time only (spec R7); the stored session is untouched.
+    const session = useMemo(() => sessionForDisplay(stored), [stored]);
     const { Link, routes } = usePlannerPlatform();
     const start = sessionStart(session);
     const end = new Date(start.getTime() + session.duration * MS_PER_MINUTE);

@@ -179,3 +179,27 @@ describe("SessionDrillDialog", () => {
         });
     });
 });
+
+describe("SessionDrillDialog: drill tags", () => {
+    it("opens the editor with the drill's tags, and saves them with the session drill and the card patch", async () => {
+        const onSaved = vi.fn().mockResolvedValue({ ok: true });
+        renderWithPlanner(
+            <SessionDrillDialog
+                open
+                sessionId={SESSION}
+                teamId={TEAM}
+                drill={{ clientKey: "k1", playId: OWNED, name: "Warm-up", description: "", playData: createEmptyPlayData(), thumbnail: "", focus: "goalies", goalies: "required" }}
+                onSaved={onSaved}
+                onClose={vi.fn()}
+            />,
+            { store: actions },
+        );
+        expect(captured.props?.initialData).toMatchObject({ focus: "goalies", goalies: "required" });
+
+        await act(async () => {
+            await captured.props?.onSave?.({ ...saved, name: "Warm-up", focus: "goalies", goalies: "optional" });
+        });
+        expect(actions.saveSessionDrill).toHaveBeenLastCalledWith(expect.objectContaining({ focus: "goalies", goalies: "optional" }));
+        expect(onSaved).toHaveBeenCalledWith("k1", expect.objectContaining({ focus: "goalies", goalies: "optional" }));
+    });
+});

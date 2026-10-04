@@ -13,6 +13,7 @@ import { Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, Paper, Stack,
 import { FileUploadOutlined as UploadIcon } from "@mui/icons-material";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PlanPreview } from "@/components/features/practice-planner/PlanPreview";
+import { StarterTemplatePicker, starterTemplateImport } from "@/components/features/practice-planner/StarterTemplatePicker";
 import { importPracticePlan } from "@/lib/actions/practice-plan-import";
 import { parseDateTimeLocalToUtc, resolveTimeZone } from "@/lib/utils/date";
 import {
@@ -26,16 +27,17 @@ import {
     type PlanError,
 } from "@/lib/plan-document";
 import { takeIncomingPlan } from "@/lib/plan-document/pending";
+import { usePlannerPlatform } from "@/lib/planner-store";
 
 export { FILE_TOO_LARGE_MESSAGE, readPlanFile };
 
 export const PLAN_TOO_LARGE_TO_IMPORT_MESSAGE = `This plan is too large to import (over ${MAX_PLAN_FILE_BYTES / 1000} KB).`;
 export const NO_IMPORT_TEAMS_MESSAGE = "Only team admins can import practice plans. Ask an admin of your team to import it.";
 
-type ViewState = { kind: "pick" } | { kind: "error"; error: PlanError } | { kind: "ready"; plan: PlanDocument };
+type ViewState = { kind: "pick" } | { kind: "error"; error: PlanError } | { kind: "ready"; plan: PlanDocument; fromTemplate: boolean };
 
-function toViewState(result: ParsePlanResult): ViewState {
-    return result.ok ? { kind: "ready", plan: result.plan } : { kind: "error", error: result.error };
+function toViewState(result: ParsePlanResult, fromTemplate = false): ViewState {
+    return result.ok ? { kind: "ready", plan: result.plan, fromTemplate } : { kind: "error", error: result.error };
 }
 
 type Team = { id: string; name: string };
@@ -46,22 +48,31 @@ interface PlanImportViewProps {
 
 export function PlanImportView({ teams }: PlanImportViewProps) {
     const router = useRouter();
+    const { planGenerator } = usePlannerPlatform();
     const fileInput = useRef<HTMLInputElement>(null);
     // undefined = not looked yet. takeIncomingPlan consumes the hash and the
     // stash, so StrictMode's effect replay must reuse this value, not take again.
     const incoming = useRef<string | null | undefined>(undefined);
     const [state, setState] = useState<ViewState>({ kind: "pick" });
+    // Every choice (file, link, template, start over) replaces this; a slower
+    // read that finishes after a newer choice is dropped.
+    const latestChoice = useRef<symbol | null>(null);
+    const choose = (next: ViewState) => {
+        latestChoice.current = null;
+        setState(next);
+    };
 
     useEffect(() => {
         if (incoming.current === undefined) incoming.current = takeIncomingPlan();
         const value = incoming.current;
         if (!value) return;
-        let cancelled = false;
+        const choice = Symbol("link");
+        latestChoice.current = choice;
         void readPlanLink(value).then((result) => {
-            if (!cancelled) setState(toViewState(result));
+            if (latestChoice.current === choice) setState(toViewState(result));
         });
         return () => {
-            cancelled = true;
+            if (latestChoice.current === choice) latestChoice.current = null;
         };
     }, []);
 
@@ -71,7 +82,10 @@ export function PlanImportView({ teams }: PlanImportViewProps) {
         const file = event.target.files?.[0];
         event.target.value = ""; // so choosing the same file again still fires change
         if (!file) return;
-        setState(toViewState(await readPlanFile(file)));
+        const choice = Symbol("file");
+        latestChoice.current = choice;
+        const result = await readPlanFile(file);
+        if (latestChoice.current === choice) setState(toViewState(result));
     };
 
     return (
@@ -95,6 +109,10 @@ export function PlanImportView({ teams }: PlanImportViewProps) {
                             Choose plan file
                         </Button>
                     </Paper>
+                )}
+
+                {state.kind === "pick" && (
+                    <StarterTemplatePicker onUse={(template) => choose(toViewState(starterTemplateImport(template, planGenerator), true))} />
                 )}
 
                 {state.kind === "error" && (
@@ -123,7 +141,9 @@ export function PlanImportView({ teams }: PlanImportViewProps) {
                         key={state.plan.exportedAt + state.plan.session.title}
                         plan={state.plan}
                         teams={teams}
+                        fromTemplate={state.fromTemplate}
                         onChooseAnother={chooseFile}
+                        onStartOver={() => choose({ kind: "pick" })}
                         onImported={(sessionId) => router.push(`/practice-planner/${sessionId}/edit`)}
                     />
                 )}
@@ -135,11 +155,14 @@ export function PlanImportView({ teams }: PlanImportViewProps) {
 interface PlanImportFormProps {
     plan: PlanDocument;
     teams: Team[];
+    /** A starter template: no library copy (its drills are already starters), and Start over instead of another file. */
+    fromTemplate: boolean;
     onChooseAnother: () => void;
+    onStartOver: () => void;
     onImported: (sessionId: string) => void;
 }
 
-function PlanImportForm({ plan, teams, onChooseAnother, onImported }: PlanImportFormProps) {
+function PlanImportForm({ plan, teams, fromTemplate, onChooseAnother, onStartOver, onImported }: PlanImportFormProps) {
     const [teamId, setTeamId] = useState(teams.length === 1 ? teams[0].id : "");
     const [date, setDate] = useState(plan.session.date ?? "");
     const [startTime, setStartTime] = useState(plan.session.startTime ?? "");
@@ -161,7 +184,7 @@ function PlanImportForm({ plan, teams, onChooseAnother, onImported }: PlanImport
         setSubmitting(true);
         setError(null);
         try {
-            const result = await importPracticePlan({ teamId, document: plan, date: when.toISOString(), addToLibrary });
+            const result = await importPracticePlan({ teamId, document: plan, date: when.toISOString(), addToLibrary: addToLibrary && !fromTemplate });
             if (result.success) {
                 onImported(result.data.sessionId); // stays "submitting" while the editor loads
                 return;
@@ -209,10 +232,12 @@ function PlanImportForm({ plan, teams, onChooseAnother, onImported }: PlanImport
                             fullWidth
                         />
                     </Stack>
-                    <FormControlLabel
-                        control={<Checkbox checked={addToLibrary} onChange={(event) => setAddToLibrary(event.target.checked)} />}
-                        label="Also add these drills to the team library"
-                    />
+                    {!fromTemplate && (
+                        <FormControlLabel
+                            control={<Checkbox checked={addToLibrary} onChange={(event) => setAddToLibrary(event.target.checked)} />}
+                            label="Also add these drills to the team library"
+                        />
+                    )}
                     {error && (
                         <Alert severity="error">
                             {error.message}
@@ -226,7 +251,7 @@ function PlanImportForm({ plan, teams, onChooseAnother, onImported }: PlanImport
                         </Alert>
                     )}
                     <Stack direction="row" spacing={1} justifyContent="flex-end">
-                        <Button onClick={onChooseAnother}>Choose another file</Button>
+                        {fromTemplate ? <Button onClick={onStartOver}>Start over</Button> : <Button onClick={onChooseAnother}>Choose another file</Button>}
                         <Button variant="contained" disabled={!canImport} onClick={() => void submit()}>
                             Import plan
                         </Button>

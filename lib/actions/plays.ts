@@ -18,7 +18,8 @@ import {
     type GetPlayByIdInput,
     type GetPlaysByTeamInput,
 } from "@/lib/utils/validation";
-import type { PlayData } from "@/types/practice-planner";
+import { drillTags } from "@/lib/utils/drill-tags";
+import type { PlayData, PlayFocus, PlayGoalies } from "@/types/practice-planner";
 import {
     PLAY_DATA_UNREADABLE_CODE,
     PLAY_DATA_UNREADABLE_MESSAGE,
@@ -94,6 +95,8 @@ export async function createPlay(
                 thumbnail: validated.thumbnail || null,
                 playData: sanitizedPlayData as unknown as Prisma.InputJsonValue,
                 isTemplate: validated.isTemplate,
+                focus: validated.focus,
+                goalies: validated.goalies,
                 teamId: validated.teamId,
                 createdById: userId,
             },
@@ -203,6 +206,8 @@ export async function updatePlay(
                     thumbnail: validated.thumbnail || null,
                     playData: sanitizedPlayData as unknown as Prisma.InputJsonValue,
                     ...(validated.isTemplate !== undefined && { isTemplate: validated.isTemplate }),
+                    ...(validated.focus !== undefined && { focus: validated.focus }),
+                    ...(validated.goalies !== undefined && { goalies: validated.goalies }),
                 },
                 select: {
                     id: true,
@@ -358,6 +363,8 @@ export async function getPlayById(input: GetPlayByIdInput): Promise<ActionResult
     thumbnail: string | null;
     playData: PlayData;
     isTemplate: boolean;
+    focus: PlayFocus;
+    goalies: PlayGoalies;
     createdAt: Date;
     updatedAt: Date;
 }>> {
@@ -379,6 +386,8 @@ export async function getPlayById(input: GetPlayByIdInput): Promise<ActionResult
                 thumbnail: true,
                 playData: true,
                 isTemplate: true,
+                focus: true,
+                goalies: true,
                 teamId: true,
                 sessionId: true,
                 createdAt: true,
@@ -420,6 +429,7 @@ export async function getPlayById(input: GetPlayByIdInput): Promise<ActionResult
                 thumbnail: play.thumbnail,
                 playData: parsed.data,
                 isTemplate: play.isTemplate,
+                ...drillTags(play),
                 createdAt: play.createdAt,
                 updatedAt: play.updatedAt,
             },
@@ -460,6 +470,8 @@ export async function getPlaysByTeam(input: GetPlaysByTeamInput): Promise<Action
         description: string | null;
         thumbnail: string | null;
         isTemplate: boolean;
+        focus: PlayFocus;
+        goalies: PlayGoalies;
         createdAt: Date;
         updatedAt: Date;
     }>;
@@ -485,6 +497,10 @@ export async function getPlaysByTeam(input: GetPlaysByTeamInput): Promise<Action
         if (validated.isTemplate !== undefined) {
             where.isTemplate = validated.isTemplate;
         }
+
+        // Drill-tag filters (spec R8). Applied in the database, so total and pages stay exact.
+        if (validated.focus) where.focus = validated.focus;
+        if (validated.goalies) where.goalies = validated.goalies;
 
         // Apply search filter (search by name or description)
         if (validated.search && validated.search.trim()) {
@@ -533,12 +549,13 @@ export async function getPlaysByTeam(input: GetPlaysByTeamInput): Promise<Action
                     description: true,
                     thumbnail: true,
                     isTemplate: true,
+                    focus: true,
+                    goalies: true,
                     createdAt: true,
                     updatedAt: true,
                 },
-                orderBy: {
-                    createdAt: "desc",
-                },
+                // id breaks createdAt ties, so offset pages never skip or repeat a drill
+                orderBy: [{ createdAt: "desc" }, { id: "desc" }],
                 skip,
                 take: validated.limit,
             }),
@@ -548,7 +565,7 @@ export async function getPlaysByTeam(input: GetPlaysByTeamInput): Promise<Action
         return {
             success: true,
             data: {
-                plays,
+                plays: plays.map((play) => ({ ...play, ...drillTags(play) })),
                 total,
                 page: validated.page,
                 limit: validated.limit,

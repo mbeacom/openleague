@@ -7,7 +7,7 @@
 import type { ActionResult, PlannerStore } from "@/lib/planner-store";
 import type { PlanDocument } from "@/lib/plan-document";
 import type { SavedDrillId } from "@/lib/utils/session-drill-ids";
-import type { PlayData, PracticeSessionData, PracticeSessionView } from "@/types/practice-planner";
+import type { PlayData, PlayFocus, PlayGoalies, PracticeSessionData, PracticeSessionView } from "@/types/practice-planner";
 
 export interface LocalSessionSummary {
     id: string;
@@ -32,6 +32,8 @@ export interface LocalSessionSave {
     title: string;
     date: Date;
     duration: number;
+    /** Absent = unchanged on update (null on create); null clears. */
+    goaliesAttending?: number | null;
     plays: LocalSessionDrill[];
 }
 
@@ -52,6 +54,8 @@ export interface LocalPlayUpdate {
     description?: string;
     thumbnail?: string;
     playData: PlayData;
+    focus?: PlayFocus;
+    goalies?: PlayGoalies;
 }
 
 export interface PlanImportOptions {

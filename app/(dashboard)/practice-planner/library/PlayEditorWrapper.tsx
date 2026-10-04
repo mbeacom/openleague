@@ -27,6 +27,8 @@ export function PlayEditorWrapper({ teamId, play }: PlayEditorWrapperProps) {
             description: saved.description || undefined,
             thumbnail: saved.thumbnail || undefined,
             playData: saved.playData,
+            focus: saved.focus,
+            goalies: saved.goalies,
             // Preserve the play's library status; the checkbox is locked in this flow.
             isTemplate: play.isTemplate,
             teamId,
@@ -36,6 +38,8 @@ export function PlayEditorWrapper({ teamId, play }: PlayEditorWrapperProps) {
             description: saved.description || undefined,
             thumbnail: saved.thumbnail || undefined,
             playData: saved.playData,
+            focus: saved.focus,
+            goalies: saved.goalies,
             // Library-created plays must be templates or they won't appear in the library.
             isTemplate: true,
             teamId,

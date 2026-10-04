@@ -20,6 +20,7 @@ describe("toLocalSessionSave", () => {
             title: "Tuesday",
             date,
             duration: 60,
+            goaliesAttending: 2,
             isShared: false,
             plays: [{ id: "k1", playId: "p1", name: "A", sequence: 0, runsWithPrevious: false, duration: 10, instructions: "", playData: createEmptyPlayData() }],
             overrideConflicts: false,
@@ -30,8 +31,15 @@ describe("toLocalSessionSave", () => {
             title: "Tuesday",
             date,
             duration: 60,
+            goaliesAttending: 2,
             plays: [{ playId: "p1", clientKey: "k1", sequence: 0, runsWithPrevious: false, duration: 10, instructions: "" }],
         });
+    });
+
+    it("leaves the goalie count out when the editor sends none, so an update keeps the stored count", () => {
+        const submitted = { title: "Tuesday", date: new Date("2026-10-06T19:00:00"), duration: 60, isShared: false, plays: [] } as unknown as PracticeSessionSubmitData;
+        expect(toLocalSessionSave(submitted)).not.toHaveProperty("goaliesAttending");
+        expect(toLocalSessionSave({ ...submitted, goaliesAttending: null })).toHaveProperty("goaliesAttending", null);
     });
 });
 

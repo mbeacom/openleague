@@ -32,6 +32,7 @@ describe("PlannerApp", () => {
         expect(await screen.findByText("Plan your first practice")).toBeInTheDocument();
         expect(screen.getAllByRole("link", { name: /new practice/i })[0]).toHaveAttribute("href", "#/sessions/new");
         expect(screen.getAllByRole("link", { name: /import plan/i })[0]).toHaveAttribute("href", "#/import");
+        expect(screen.getAllByRole("link", { name: /use a template/i })[0]).toHaveAttribute("href", "#/import");
     });
 
     it("shows the privacy note once on the empty practice list, naming the font hosts", async () => {

@@ -32,3 +32,15 @@ describe("PracticePlannerList Import plan", () => {
         expect(row).toHaveStyle({ flexWrap: "wrap" });
     });
 });
+
+describe("PracticePlannerList Use a template", () => {
+    it("links to the import page, where templates are offered, whenever Import is offered", () => {
+        renderList({ isAdmin: false, canImport: true });
+        expect(screen.getByRole("link", { name: /use a template/i })).toHaveAttribute("href", "/practice-planner/import");
+    });
+
+    it("hides it when the user can't schedule anywhere", () => {
+        renderList({ isAdmin: false, canImport: false });
+        expect(screen.queryByRole("link", { name: /use a template/i })).not.toBeInTheDocument();
+    });
+});

@@ -1,5 +1,6 @@
 /** Helpers every local-store operation shares (ADR-0020). */
 import type { ActionResult, LibraryPlaySummary } from "@/lib/planner-store";
+import { GOALIES_ATTENDING_MESSAGE, drillTags, toGoaliesAttending } from "@/lib/utils/drill-tags";
 import { MAX_THUMBNAIL_SIZE, isAcceptableThumbnail } from "@/lib/utils/thumbnail-rules";
 import { sanitizePlayDataForWrite } from "@/lib/utils/play-data";
 import type { PlayData } from "@/types/practice-planner";
@@ -85,6 +86,7 @@ export function summary(play: StoredPlay): LibraryPlaySummary {
         name: play.name,
         description: play.description,
         thumbnail: play.thumbnail,
+        ...drillTags(play),
         isTemplate: play.isTemplate,
         createdAt: play.createdAt,
         updatedAt: play.updatedAt,
@@ -120,4 +122,11 @@ export { MAX_THUMBNAIL_SIZE };
 /** Only thumbnails hosted would accept are kept; anything else is dropped rather than stored. */
 export function thumbnailOrNull(value: string | null | undefined): string | null {
     return value && isAcceptableThumbnail(value) ? value : null;
+}
+
+/** Hosted's rule (updatePracticeSessionSchema): 0–10 or null; undefined passes through, meaning unchanged. */
+export function checkedGoalieCount(value: number | null | undefined): number | null | undefined {
+    if (value === undefined || value === null) return value;
+    if (toGoaliesAttending(value) === null) throw new StoreRefusal(GOALIES_ATTENDING_MESSAGE);
+    return value;
 }

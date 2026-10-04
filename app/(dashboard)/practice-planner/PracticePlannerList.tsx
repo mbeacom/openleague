@@ -38,6 +38,7 @@ import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
 import PersonIcon from "@mui/icons-material/Person";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import FileUploadOutlinedIcon from "@mui/icons-material/FileUploadOutlined";
+import ViewQuiltOutlinedIcon from "@mui/icons-material/ViewQuiltOutlined";
 import { DuplicateSessionDialog } from "@/components/features/practice-planner/DuplicateSessionDialog";
 
 interface SessionSummary {
@@ -141,15 +142,26 @@ export default function PracticePlannerList({
             // PageHeader's action row doesn't wrap; three labeled buttons overflow a phone without this.
             <Box sx={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: 1, maxWidth: "100%" }}>
               {canImport && (
-                <Button
-                  component={Link}
-                  href="/practice-planner/import"
-                  variant="outlined"
-                  startIcon={<FileUploadOutlinedIcon />}
-                  size={isMobile ? "small" : "medium"}
-                >
-                  Import plan
-                </Button>
+                <>
+                  <Button
+                    component={Link}
+                    href="/practice-planner/import"
+                    variant="outlined"
+                    startIcon={<FileUploadOutlinedIcon />}
+                    size={isMobile ? "small" : "medium"}
+                  >
+                    Import plan
+                  </Button>
+                  <Button
+                    component={Link}
+                    href="/practice-planner/import"
+                    variant="outlined"
+                    startIcon={<ViewQuiltOutlinedIcon />}
+                    size={isMobile ? "small" : "medium"}
+                  >
+                    Use a template
+                  </Button>
+                </>
               )}
               {isAdmin && (
                 <>

@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { Alert, Button, Card, CardActionArea, CardContent, Stack, Typography } from "@mui/material";
-import { Add as AddIcon, FileUploadOutlined as UploadIcon, SportsHockey as HockeyIcon } from "@mui/icons-material";
+import { Add as AddIcon, FileUploadOutlined as UploadIcon, SportsHockey as HockeyIcon, ViewQuiltOutlined as TemplateIcon } from "@mui/icons-material";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { formatClockTime, formatLongDate } from "@/lib/utils/date";
@@ -17,6 +17,9 @@ function Actions() {
             </Button>
             <Button variant="outlined" startIcon={<UploadIcon />} href={staticRoutes.importPlan()}>
                 Import plan
+            </Button>
+            <Button variant="outlined" startIcon={<TemplateIcon />} href={staticRoutes.importPlan()}>
+                Use a template
             </Button>
         </Stack>
     );

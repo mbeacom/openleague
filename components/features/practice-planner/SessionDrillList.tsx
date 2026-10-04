@@ -9,6 +9,9 @@ import {
     SEGMENT_KIND_FIT_LABELS,
     canMove,
     canToggleRunsWithPrevious,
+    goalieShortMessage,
+    goalieWarnings,
+    goaliesUnusedMessage,
     groupStations,
     sessionWallMinutes,
     stationBlockLabel,
@@ -22,6 +25,8 @@ export interface SessionDrillListProps {
     duration: number;
     /** The booked segment's kind, for the fit warning (2b); null = unbooked or the whole surface. */
     segmentKind?: SegmentKind | null;
+    /** Goalies expected (null = not set): drives the goalie warnings (advisory). */
+    goaliesAttending?: number | null;
     editingPlayId: string | null;
     disabled: boolean;
     /** The session is being created: every card control is locked. */
@@ -91,6 +96,7 @@ export function SessionDrillList({
     plays,
     duration,
     segmentKind = null,
+    goaliesAttending = null,
     editingPlayId,
     disabled,
     locked = false,
@@ -113,11 +119,27 @@ export function SessionDrillList({
         groupStations(plays.map((play) => ({ ...play, area: play.playDataUnreadable ? null : play.playData.area }))),
         segmentKind,
     );
+    // Raw diagrams (never the display copy): hidden markers must not hide a shortfall.
+    // An unreadable drill (playData null) needs one goalie if it is tagged so, never zero by accident.
+    const goalieAlerts = goalieWarnings(
+        groupStations(plays.map((play) => ({ ...play, playData: play.playDataUnreadable ? null : play.playData }))),
+        goaliesAttending,
+    );
+    const goalieMessage = (group: StationGroup<PlayInSession>): string | null => {
+        const shortfall = goalieAlerts.short.find((short) => short.groupIndex === group.index);
+        return shortfall && goaliesAttending !== null
+            ? goalieShortMessage(shortfall.needed, goaliesAttending, group.stations.length > 1)
+            : null;
+    };
     const fitLabel = segmentKind ? SEGMENT_KIND_FIT_LABELS[segmentKind] : null;
 
     // The editor keeps array order equal to sequence order, so a drill's
     // position in `plays` is its card number and its move/toggle index.
-    const renderCard = (play: PlayInSession, stationSlot?: { position: number; count: number }) => {
+    const renderCard = (
+        play: PlayInSession,
+        stationSlot?: { position: number; count: number },
+        goalieWarning: string | null = null,
+    ) => {
         const index = plays.indexOf(play);
         return (
             <SessionDrillCard
@@ -133,6 +155,7 @@ export function SessionDrillList({
                 }}
                 onToggleStation={onToggleStation}
                 fitWarning={fitLabel && warnings.tooBig.includes(play.sequence) ? `Larger than the booked ${fitLabel}` : null}
+                goalieWarning={goalieWarning}
                 isEditing={editingPlayId === play.id}
                 onDelete={onDelete}
                 onEdit={onEdit}
@@ -197,6 +220,11 @@ export function SessionDrillList({
                                 session duration ({duration} min)
                             </Alert>
                         )}
+                        {goalieAlerts.unused && goaliesAttending !== null && (
+                            <Alert severity="info" sx={{ mt: 1 }}>
+                                {goaliesUnusedMessage(goaliesAttending)}
+                            </Alert>
+                        )}
                     </Box>
                 )}
 
@@ -226,14 +254,18 @@ export function SessionDrillList({
                 {plays.length > 0 && (
                     <Stack spacing={2}>
                         {groups.flatMap((group): ReactNode[] => {
-                            if (group.stations.length === 1) return [renderCard(group.stations[0])];
+                            if (group.stations.length === 1) return [renderCard(group.stations[0], undefined, goalieMessage(group))];
+                            const blockGoalieMessage = goalieMessage(group);
                             const headerId = `station-block-${group.stations[0].id}`;
                             return [
                                 <StationBlockHeader
                                     key={`header-${group.stations[0].id}`}
                                     id={headerId}
                                     label={stationBlockLabel(group.stations.length, group.wallMinutes)}
-                                    warnings={overlapMessages(group, warnings.overlaps)}
+                                    warnings={[
+                                        ...overlapMessages(group, warnings.overlaps),
+                                        ...(blockGoalieMessage ? [blockGoalieMessage] : []),
+                                    ]}
                                 />,
                                 ...group.stations.map((play, slot) =>
                                     renderCard(play, { position: slot + 1, count: group.stations.length })),

@@ -1,0 +1,57 @@
+import { describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { StarterTemplatePicker, starterTemplateImport } from "@/components/features/practice-planner/StarterTemplatePicker";
+import { STARTER_TEMPLATES } from "@/lib/data/starter-templates";
+import { STARTER_PLAYS } from "@/lib/data/starter-plays";
+
+describe("StarterTemplatePicker", () => {
+    it("lists every template under one heading, with its length and a Use template button", () => {
+        render(<StarterTemplatePicker onUse={vi.fn()} />);
+        expect(screen.getByRole("heading", { name: "Start from a template" })).toBeInTheDocument();
+        for (const template of STARTER_TEMPLATES) {
+            expect(screen.getByRole("heading", { name: template.name })).toBeInTheDocument();
+            expect(screen.getByRole("button", { name: `Use template: ${template.name}` })).toHaveTextContent("Use template");
+        }
+        expect(screen.getAllByText(`${STARTER_TEMPLATES[0].session.durationMinutes} min`).length).toBeGreaterThan(0);
+    });
+
+    it("hands the chosen template back", () => {
+        const onUse = vi.fn();
+        render(<StarterTemplatePicker onUse={onUse} />);
+        fireEvent.click(screen.getByRole("button", { name: `Use template: ${STARTER_TEMPLATES[1].name}` }));
+        expect(onUse).toHaveBeenCalledWith(STARTER_TEMPLATES[1]);
+    });
+
+    it("disables every Use template button while disabled", () => {
+        render(<StarterTemplatePicker onUse={vi.fn()} disabled />);
+        for (const template of STARTER_TEMPLATES) {
+            expect(screen.getByRole("button", { name: `Use template: ${template.name}` })).toBeDisabled();
+        }
+    });
+});
+
+describe("starterTemplateImport", () => {
+    it("parses the template like a plan file, stamped with the running app and the click time", () => {
+        const now = new Date("2026-10-03T18:00:00.000Z");
+        const result = starterTemplateImport(STARTER_TEMPLATES[0], "openleague-static", now);
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.plan).toMatchObject({ generator: "openleague-static", exportedAt: now.toISOString(), session: { title: STARTER_TEMPLATES[0].name } });
+        expect(result.plan.session.drills).toHaveLength(STARTER_TEMPLATES[0].session.drills.length);
+    });
+
+    it("never shares a diagram with the starter drills, so editing the plan leaves them unchanged", () => {
+        const before = structuredClone(STARTER_PLAYS);
+        for (const template of STARTER_TEMPLATES) {
+            const result = starterTemplateImport(template, "openleague-hosted");
+            expect(result.ok).toBe(true);
+            if (!result.ok) return;
+            for (const drill of result.plan.session.drills) {
+                for (const play of STARTER_PLAYS) expect(drill.drill.playData).not.toBe(play.playData);
+                drill.drill.playData.players.length = 0;
+                drill.drill.playData.drawings.push(...drill.drill.playData.drawings);
+            }
+        }
+        expect(STARTER_PLAYS).toEqual(before);
+    });
+});

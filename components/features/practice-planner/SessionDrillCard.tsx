@@ -34,6 +34,8 @@ import {
 import { usePlannerPlatform } from "@/lib/planner-store";
 import { VALIDATION_CONSTRAINTS, type PlayInSession } from "@/types/practice-planner";
 import { MAX_STATIONS_PER_GROUP } from "@/lib/utils/session-timeline";
+import { needsGoalie } from "@/lib/utils/drill-tags";
+import { GoalieBadge } from "./GoalieBadge";
 
 /** Hidden from sight but read by screen readers (the standard clip pattern). */
 const VISUALLY_HIDDEN = {
@@ -75,6 +77,8 @@ export interface SessionDrillCardProps {
     stationSlot?: { position: number; count: number };
     /** Advisory: the drill is larger than the booked ice segment (2b). Never blocks a save. */
     fitWarning?: string | null;
+    /** Advisory goalie shortfall for a standalone drill. Never blocks a save. */
+    goalieWarning?: string | null;
     isEditing: boolean;
     onDelete: (playId: string) => void;
     onEdit: (playId: string) => void;
@@ -106,6 +110,7 @@ export function SessionDrillCard({
     onToggleStation,
     stationSlot,
     fitWarning = null,
+    goalieWarning = null,
     isEditing,
     onDelete,
     onEdit,
@@ -208,6 +213,7 @@ export function SessionDrillCard({
                         left: 8,
                     }}
                 />
+                {needsGoalie(play) && <GoalieBadge sx={{ position: "absolute", top: 8, right: 8 }} />}
             </CardMedia>
 
             {/* Content */}
@@ -225,6 +231,9 @@ export function SessionDrillCard({
                             variant="outlined"
                             sx={{ alignSelf: "flex-start" }}
                         />
+                    )}
+                    {goalieWarning && (
+                        <Chip label={goalieWarning} color="warning" size="small" variant="outlined" sx={{ alignSelf: "flex-start" }} />
                     )}
 
                     {/* Duration - Editable */}

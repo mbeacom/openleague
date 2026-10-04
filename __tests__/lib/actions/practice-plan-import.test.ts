@@ -130,6 +130,7 @@ describe("importPracticePlan", () => {
                 title: "Tuesday Skills Practice",
                 date: new Date(DATE),
                 duration: 60,
+                goaliesAttending: null,
                 isShared: false,
                 teamId: TEAM,
                 createdById: USER,
@@ -146,6 +147,8 @@ describe("importPracticePlan", () => {
             description: null,
             thumbnail: null,
             playData: BOARD,
+            focus: "team",
+            goalies: "optional",
             isTemplate: false,
             teamId: TEAM,
             createdById: USER,
@@ -203,5 +206,24 @@ describe("importPracticePlan", () => {
         models.practiceSession.create.mockRejectedValue(new Error("connection reset"));
         expect(await call()).toEqual({ success: false, error: "Failed to import the practice plan. Please try again." });
         consoleError.mockRestore();
+    });
+});
+
+describe("importPracticePlan: goaltender fields", () => {
+    it("stores the drill tags and the session goalie count", async () => {
+        const document = serializePlan(
+            {
+                title: "Goalie night", durationMinutes: 30, date: "2026-10-06", startTime: "19:00", goaliesAttending: 2,
+                drills: [{ sequence: 0, duration: 10, runsWithPrevious: false, instructions: "", name: "Warm-up", description: "", focus: "goalies", goalies: "required", playData: BOARD }],
+            },
+            "openleague-static",
+            new Date("2026-10-03T18:00:00.000Z"),
+        );
+        const result = await importPracticePlan({ teamId: TEAM, date: DATE, addToLibrary: true, document });
+        expect(result.success).toBe(true);
+        expect(models.practiceSession.create.mock.calls[0][0].data.goaliesAttending).toBe(2);
+        for (const call of models.play.createMany.mock.calls) {
+            expect(call[0].data[0]).toMatchObject({ focus: "goalies", goalies: "required" });
+        }
     });
 });

@@ -6,11 +6,12 @@
 import type { PracticeSessionView, PlayInSession } from "@/types/practice-planner";
 import { parsePlan, serializePlan } from "@/lib/plan-document";
 import { createEmptyPlayData, parseStoredPlayData } from "@/lib/utils/play-data";
+import { drillTags, toPlayFocus, toPlayGoalies } from "@/lib/utils/drill-tags";
 import { normalizeGroups, stationGroupError } from "@/lib/utils/session-timeline";
 import { SESSION_DRILL_REJECTED_MESSAGE, duplicateSessionTitle, type SavedDrillId } from "@/lib/utils/session-drill-ids";
 import { LOCAL_AUTHOR_NAME, LOCAL_TEAM_ID, LOCAL_TEAM_NAME } from "../config";
 import type { RepoTx, StoredPlay, StoredSession, StoredSessionRow } from "./records";
-import { StoreRefusal, attempt, drillText, ok, thumbnailOrNull, writablePlayData, write, type StoreContext } from "./shared";
+import { StoreRefusal, attempt, checkedGoalieCount, drillText, ok, thumbnailOrNull, writablePlayData, write, type StoreContext } from "./shared";
 import type { LocalPlannerStore, LocalSessionDrill, LocalSessionSave } from "./types";
 
 export const SESSION_NOT_ON_DEVICE_MESSAGE = "This practice isn't on this device.";
@@ -49,13 +50,19 @@ function checkDrills(plays: LocalSessionDrill[]): void {
 }
 
 /** Synchronous, so it can run inside a transaction: the session must be a valid plan document. */
-function assertExportable(meta: { title: string; duration: number }, rows: StoredSessionRow[], plays: Map<string, StoredPlay>, at: Date): void {
+function assertExportable(
+    meta: { title: string; duration: number; goaliesAttending?: number | null },
+    rows: StoredSessionRow[],
+    plays: Map<string, StoredPlay>,
+    at: Date,
+): void {
     const doc = serializePlan(
         {
             title: meta.title,
             durationMinutes: meta.duration,
             date: null,
             startTime: null,
+            goaliesAttending: meta.goaliesAttending ?? null,
             drills: rows.map((row) => {
                 const play = plays.get(row.playId);
                 const parsed = parseStoredPlayData(play?.playData);
@@ -66,6 +73,7 @@ function assertExportable(meta: { title: string; duration: number }, rows: Store
                     instructions: row.instructions,
                     name: play?.name ?? "",
                     description: play?.description ?? null,
+                    ...drillTags(play),
                     playData: parsed.ok ? parsed.data : null,
                 };
             }),
@@ -175,6 +183,7 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                     segmentName: null,
                     segmentKind: null,
                     startAt: null,
+                    goaliesAttending: session.goaliesAttending ?? null,
                     plays: sortedRows(session).flatMap((row) => {
                         const play = plays.get(row.playId);
                         if (!play) return [];
@@ -192,6 +201,7 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                                     name: play.name,
                                     description: play.description,
                                     thumbnail: play.thumbnail,
+                                    ...drillTags(play),
                                     playData: parsed.ok ? parsed.data : null,
                                 },
                             },
@@ -221,6 +231,7 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                             runsWithPrevious: row.runsWithPrevious,
                             duration: row.duration,
                             instructions: row.instructions,
+                            ...drillTags(play),
                             ...(parsed.ok ? { playData: parsed.data } : { playData: createEmptyPlayData(), playDataUnreadable: true }),
                             thumbnail: play.thumbnail ?? "",
                         },
@@ -234,6 +245,7 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                         date: session.date,
                         duration: session.duration,
                         isShared: false,
+                        goaliesAttending: session.goaliesAttending ?? null,
                         plays: normalizeGroups(editorPlays),
                     },
                 });
@@ -243,12 +255,13 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
             attempt("Failed to create practice session. Please try again.", async () => {
                 const meta = sessionMeta(input);
                 checkDrills(input.plays);
+                const goaliesAttending = checkedGoalieCount(input.goaliesAttending) ?? null;
                 const saved = await write(ctx, async (tx) => {
                     const at = ctx.now();
                     const id = ctx.newId();
                     const { rows, plays, mapping } = await materialize(tx, ctx, id, input.plays, at);
-                    assertExportable(meta, rows, plays, at);
-                    await tx.putSession({ id, ...meta, rows, createdAt: at, updatedAt: at });
+                    assertExportable({ ...meta, goaliesAttending }, rows, plays, at);
+                    await tx.putSession({ id, ...meta, goaliesAttending, rows, createdAt: at, updatedAt: at });
                     return { id, plays: mapping };
                 });
                 return ok(saved);
@@ -258,13 +271,16 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
             attempt("Failed to update practice session. Please try again.", async () => {
                 const meta = sessionMeta(input);
                 checkDrills(input.plays);
+                const count = checkedGoalieCount(input.goaliesAttending);
                 const saved = await write(ctx, async (tx) => {
                     const existing = await tx.getSession(id);
                     if (!existing) throw new StoreRefusal(SESSION_NOT_FOUND);
+                    // Absent = unchanged: an editor opened before the field existed autosaves without it.
+                    const goaliesAttending = count === undefined ? (existing.goaliesAttending ?? null) : count;
                     const at = ctx.now();
                     const { rows, plays, mapping } = await materialize(tx, ctx, id, input.plays, at);
-                    assertExportable(meta, rows, plays, at);
-                    await tx.putSession({ ...existing, ...meta, rows, updatedAt: at });
+                    assertExportable({ ...meta, goaliesAttending }, rows, plays, at);
+                    await tx.putSession({ ...existing, ...meta, goaliesAttending, rows, updatedAt: at });
                     // Drop-only cleanup: copies this session referenced before and no longer does.
                     // A copy the drill dialog made but the editor hasn't sent is never touched here.
                     const referenced = new Set(rows.map((row) => row.playId));
@@ -288,21 +304,28 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                     if (!session) throw new StoreRefusal(SESSION_NOT_FOUND);
                     const at = ctx.now();
                     const fields = { ...text, thumbnail, playData, updatedAt: at };
+                    // Absent = unchanged: only tags the caller sends replace the stored ones.
+                    const sent = {
+                        ...(input.focus !== undefined && { focus: toPlayFocus(input.focus) }),
+                        ...(input.goalies !== undefined && { goalies: toPlayGoalies(input.goalies) }),
+                    };
                     if (!input.playId) {
-                        const created: StoredPlay = { id: ctx.newId(), ...fields, isTemplate: false, sessionId: session.id, sourcePlayId: null, createdAt: at };
+                        const created: StoredPlay = { id: ctx.newId(), ...fields, ...drillTags(sent), isTemplate: false, sessionId: session.id, sourcePlayId: null, createdAt: at };
                         await tx.putPlay(created);
                         return created.id;
                     }
                     const play = await tx.getPlay(input.playId);
                     if (!play) throw new StoreRefusal(SESSION_DRILL_REJECTED_MESSAGE);
                     if (play.sessionId === session.id) {
-                        await tx.putPlay({ ...play, ...fields });
+                        await tx.putPlay({ ...play, ...fields, ...sent });
                         return play.id;
                     }
                     if (play.sessionId !== null || !play.isTemplate) throw new StoreRefusal(SESSION_DRILL_REJECTED_MESSAGE);
                     const forked: StoredPlay = {
                         id: ctx.newId(),
                         ...fields,
+                        // A fork inherits the library drill's tags unless new ones were sent.
+                        ...drillTags({ ...drillTags(play), ...sent }),
                         isTemplate: false,
                         sessionId: session.id,
                         sourcePlayId: play.sourcePlayId ?? play.id,
@@ -345,7 +368,7 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                         plays.set(copy.id, copy);
                         rows.push({ ...row, id: ctx.newId(), playId: copy.id });
                     }
-                    const meta = { title: duplicateSessionTitle(source.title), date, duration: source.duration };
+                    const meta = { title: duplicateSessionTitle(source.title), date, duration: source.duration, goaliesAttending: source.goaliesAttending ?? null };
                     assertExportable(meta, rows, plays, at);
                     await tx.putSession({ id: newId, ...meta, rows, createdAt: at, updatedAt: at });
                     return newId;
@@ -384,6 +407,8 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                             description: d.drill.description || null,
                             thumbnail,
                             playData,
+                            focus: d.drill.focus,
+                            goalies: d.drill.goalies,
                             sourcePlayId: null,
                             createdAt: at,
                             updatedAt: at,
@@ -407,6 +432,7 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                         title: parsed.plan.session.title,
                         date,
                         duration: parsed.plan.session.durationMinutes,
+                        goaliesAttending: parsed.plan.session.goaliesAttending,
                         rows,
                         createdAt: at,
                         updatedAt: at,

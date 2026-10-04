@@ -2,7 +2,8 @@
 
 import { prisma } from "@/lib/db/prisma";
 import { requireUserId } from "@/lib/auth/session";
-import type { PlayData } from "@/types/practice-planner";
+import type { PlayData, PlayFocus, PlayGoalies } from "@/types/practice-planner";
+import { drillTags } from "@/lib/utils/drill-tags";
 import { createEmptyPlayData, parseStoredPlayData } from "@/lib/utils/play-data";
 import type { SegmentKind } from "@prisma/client";
 import { normalizeGroups } from "@/lib/utils/session-timeline";
@@ -98,6 +99,7 @@ export async function getPracticeSessionDetail(sessionId: string): Promise<{
     segmentName: string | null;
     segmentKind: SegmentKind | null;
     startAt: string | null;
+    goaliesAttending: number | null;
     plays: Array<{
       id: string;
       sequence: number;
@@ -109,6 +111,8 @@ export async function getPracticeSessionDetail(sessionId: string): Promise<{
         name: string;
         description: string | null;
         thumbnail: string | null;
+        focus: PlayFocus;
+        goalies: PlayGoalies;
         /** null = stored data unreadable; hide the legend. */
         playData: PlayData | null;
       };
@@ -139,6 +143,8 @@ export async function getPracticeSessionDetail(sessionId: string): Promise<{
               description: true,
               thumbnail: true,
               playData: true,
+              focus: true,
+              goalies: true,
             },
           },
         },
@@ -180,6 +186,7 @@ export async function getPracticeSessionDetail(sessionId: string): Promise<{
       segmentName: session.segment?.name ?? null,
       segmentKind: session.segment?.kind ?? null,
       startAt: session.startAt ? session.startAt.toISOString() : null,
+      goaliesAttending: session.goaliesAttending ?? null,
       plays: session.plays.map((sp) => ({
         id: sp.id,
         sequence: sp.sequence,
@@ -191,6 +198,7 @@ export async function getPracticeSessionDetail(sessionId: string): Promise<{
           name: sp.play.name,
           description: sp.play.description,
           thumbnail: sp.play.thumbnail,
+          ...drillTags(sp.play),
           playData: (() => {
             const parsed = parseStoredPlayData(sp.play.playData);
             if (!parsed.ok) console.error(`Unreadable playData (play ${sp.play.id}):`, parsed.error);
@@ -235,6 +243,7 @@ export async function getPracticeSessionForEdit(sessionId: string): Promise<{
     surfaceId: string | null;
     segmentId: string | null;
     startAt: Date | null;
+    goaliesAttending: number | null;
     plays: Array<{
       id: string;
       playId: string;
@@ -244,6 +253,8 @@ export async function getPracticeSessionForEdit(sessionId: string): Promise<{
       runsWithPrevious: boolean;
       duration: number;
       instructions: string;
+      focus: PlayFocus;
+      goalies: PlayGoalies;
       playData: PlayData;
       /** The stored diagram couldn't be read; playData is an empty stand-in (2b warnings skip it). */
       playDataUnreadable?: true;
@@ -266,6 +277,8 @@ export async function getPracticeSessionForEdit(sessionId: string): Promise<{
               description: true,
               thumbnail: true,
               playData: true,
+              focus: true,
+              goalies: true,
             },
           },
         },
@@ -293,6 +306,7 @@ export async function getPracticeSessionForEdit(sessionId: string): Promise<{
       surfaceId: session.surfaceId,
       segmentId: session.segmentId,
       startAt: session.startAt,
+      goaliesAttending: session.goaliesAttending ?? null,
       // Plays are ordered by sequence asc. Before 3a, deleting a library play
       // cascaded its PracticeSessionPlay row away and could leave gaps (e.g.
       // 0,2), which the save validator rejects, or a block's stations without
@@ -307,6 +321,7 @@ export async function getPracticeSessionForEdit(sessionId: string): Promise<{
         runsWithPrevious: sp.runsWithPrevious,
         duration: sp.duration ?? 0,
         instructions: sp.instructions || "",
+        ...drillTags(sp.play),
         ...editorPlayData(sp.play.playData, sp.play.id),
         thumbnail: sp.play.thumbnail || "",
       }))),

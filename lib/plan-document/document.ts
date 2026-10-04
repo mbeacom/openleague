@@ -8,7 +8,8 @@
  */
 
 import { z } from "zod";
-import type { PlayData } from "@/types/practice-planner";
+import { PLAY_FOCUS, PLAY_GOALIES, type PlayData, type PlayFocus, type PlayGoalies } from "@/types/practice-planner";
+import { drillTags, toGoaliesAttending, toPlayFocus, toPlayGoalies } from "@/lib/utils/drill-tags";
 import { createEmptyPlayData, parseStoredPlayData } from "@/lib/utils/play-data";
 import { sessionWallMinutes, stationGroupError } from "@/lib/utils/session-timeline";
 
@@ -99,6 +100,16 @@ const diagramSchema = z.unknown().transform((raw, ctx): PlayData => {
     return z.NEVER;
 });
 
+/**
+ * Advisory fields (spec R13): missing, null or unrecognized reads as the
+ * default, so a tag or a count never blocks opening a plan.
+ */
+// z.preprocess, not z.unknown().transform: Zod v4 rejects a missing key for a
+// transform, while a preprocess runs on it, so older files take the defaults.
+const focusSchema = z.preprocess(toPlayFocus, z.enum(PLAY_FOCUS));
+const goaliesSchema = z.preprocess(toPlayGoalies, z.enum(PLAY_GOALIES));
+const goaliesAttendingSchema = z.preprocess(toGoaliesAttending, z.number().int().nullable());
+
 const planDrillSchema = z.object({
     sequence: z.number({ message: "Sequence must be a number" }).int("Sequence must be a whole number").min(0, "Sequence can't be negative"),
     durationMinutes: minutes("Drill length"),
@@ -107,6 +118,8 @@ const planDrillSchema = z.object({
     drill: z.object({
         name: requiredText(MAX_DRILL_NAME_LENGTH, "Drill name"),
         description: optionalText(MAX_DRILL_DESCRIPTION_LENGTH, "Description"),
+        focus: focusSchema,
+        goalies: goaliesSchema,
         playData: diagramSchema,
     }),
 });
@@ -117,6 +130,7 @@ const planSessionSchema = z
         durationMinutes: minutes("Session length"),
         date: localDateSchema,
         startTime: localTimeSchema,
+        goaliesAttending: goaliesAttendingSchema,
         drills: z.array(planDrillSchema).max(MAX_PLAN_DRILLS, `A plan can hold at most ${MAX_PLAN_DRILLS} drills`),
     })
     .superRefine((session, ctx) => {
@@ -167,6 +181,8 @@ export interface PlanSessionInput {
     date: string | null;
     /** HH:mm, local wall clock */
     startTime: string | null;
+    /** null or absent = not set */
+    goaliesAttending?: number | null;
     drills: Array<{
         sequence: number;
         duration: number;
@@ -174,6 +190,9 @@ export interface PlanSessionInput {
         instructions: string | null;
         name: string;
         description: string | null;
+        /** Absent = the default tag */
+        focus?: PlayFocus;
+        goalies?: PlayGoalies;
         /** null = unreadable; exported as an empty board */
         playData: PlayData | null;
     }>;
@@ -195,6 +214,7 @@ export function serializePlan(input: PlanSessionInput, generator: PlanGenerator,
             drill: {
                 name: d.name,
                 description: d.description ?? "",
+                ...drillTags(d),
                 playData: d.playData ?? createEmptyPlayData(),
             },
         }));
@@ -208,6 +228,7 @@ export function serializePlan(input: PlanSessionInput, generator: PlanGenerator,
             durationMinutes: input.durationMinutes,
             date: input.date,
             startTime: input.startTime,
+            goaliesAttending: toGoaliesAttending(input.goaliesAttending),
             drills,
         },
     };
@@ -312,6 +333,8 @@ export interface PlanEditorDrill {
     instructions: string;
     name: string;
     description: string;
+    focus: PlayFocus;
+    goalies: PlayGoalies;
     playData: PlayData;
 }
 
@@ -320,6 +343,7 @@ export interface PlanEditorSession {
     duration: number;
     date: string | null;
     startTime: string | null;
+    goaliesAttending: number | null;
     plays: PlanEditorDrill[];
 }
 
@@ -330,6 +354,7 @@ export function planToEditorSession(plan: PlanDocument): PlanEditorSession {
         duration: plan.session.durationMinutes,
         date: plan.session.date,
         startTime: plan.session.startTime,
+        goaliesAttending: plan.session.goaliesAttending,
         plays: plan.session.drills.map((d) => ({
             key: `plan-drill-${d.sequence}`,
             sequence: d.sequence,
@@ -338,6 +363,8 @@ export function planToEditorSession(plan: PlanDocument): PlanEditorSession {
             instructions: d.instructions,
             name: d.drill.name,
             description: d.drill.description,
+            focus: d.drill.focus,
+            goalies: d.drill.goalies,
             playData: d.drill.playData,
         })),
     };

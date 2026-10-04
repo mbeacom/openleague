@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SegmentKind } from "@prisma/client";
-import type { IceArea } from "@/types/practice-planner";
+import type { IceArea, PlayData, PlayFocus, PlayGoalies } from "@/types/practice-planner";
 import {
     FIRST_DRILL_STATION_ERROR,
     MAX_STATIONS_PER_GROUP,
@@ -10,6 +10,10 @@ import {
     canMove,
     canToggleRunsWithPrevious,
     drillFootprint,
+    goalieShortMessage,
+    goalieShortSummary,
+    goalieWarnings,
+    goaliesUnusedMessage,
     groupRange,
     groupStations,
     moveItem,
@@ -20,9 +24,11 @@ import {
     stationGroupError,
     stationWarnings,
     toggleRunsWithPrevious,
+    type GoalieNeeds,
     type StationArea,
     type TimelinePlay,
 } from "@/lib/utils/session-timeline";
+import { createEmptyPlayData } from "@/lib/utils/play-data";
 
 type Card = TimelinePlay & { id: string };
 
@@ -419,5 +425,65 @@ describe("removeItem edge cases", () => {
 
     it("removes the only drill, leaving an empty list", () => {
         expect(removeItem(cards("a"), 0)).toEqual([]);
+    });
+});
+
+describe("goalieWarnings", () => {
+    const G: PlayData = {
+        ...createEmptyPlayData(),
+        players: [{ id: "g", role: "G", label: "G", position: { x: 14, y: 42.5 }, color: "#212121" }],
+    };
+    type Drill = TimelinePlay & GoalieNeeds;
+    const drill = (sequence: number, goalies: PlayGoalies, runsWithPrevious = false, playData: PlayData | null = G, focus?: PlayFocus): Drill =>
+        ({ sequence, duration: 10, runsWithPrevious, goalies, focus, playData });
+    const warn = (plays: Drill[], attending: number | null) => goalieWarnings(groupStations(plays), attending);
+
+    it("is silent when the count is not set", () => {
+        expect(warn([drill(0, "required")], null)).toEqual({ short: [], unused: false });
+    });
+
+    it("flags a required drill when no goalie attends", () => {
+        expect(warn([drill(0, "required"), drill(1, "optional")], 0)).toEqual({
+            short: [{ groupIndex: 0, sequences: [0], needed: 1 }],
+            unused: false,
+        });
+    });
+
+    it("sums demand across stations that run together", () => {
+        const plays = [drill(0, "required"), drill(1, "required", true), drill(2, "optional", true)];
+        expect(warn(plays, 1).short).toEqual([{ groupIndex: 0, sequences: [0, 1], needed: 2 }]);
+        expect(warn(plays, 2).short).toEqual([]);
+    });
+
+    it("counts a goalie-focus drill as needing a goalie even when tagged optional", () => {
+        expect(warn([drill(0, "optional", false, G, "goalies")], 0).short).toHaveLength(1);
+    });
+
+    it("needs one goalie per G marker, and one for an unreadable diagram", () => {
+        const two: PlayData = { ...G, players: [...G.players, { ...G.players[0], id: "g2", position: { x: 186, y: 42.5 } }] };
+        expect(warn([drill(0, "required", false, two)], 1).short).toEqual([{ groupIndex: 0, sequences: [0], needed: 2 }]);
+        expect(warn([drill(0, "required", false, null)], 0).short[0].needed).toBe(1);
+    });
+
+    it("notices goalies attending when no drill uses one", () => {
+        expect(warn([drill(0, "none"), drill(1, "none")], 2)).toEqual({ short: [], unused: true });
+        expect(warn([drill(0, "none"), drill(1, "optional")], 2).unused).toBe(false);
+        expect(warn([drill(0, "none")], 0).unused).toBe(false);
+        expect(warn([], 2).unused).toBe(false);
+    });
+
+    it("counts a goalie-focus drill as using a goalie even when tagged none", () => {
+        expect(warn([drill(0, "none", false, G, "goalies")], 1)).toEqual({ short: [], unused: false });
+    });
+
+    it("words the drill, block, session and summary messages", () => {
+        expect(goalieShortMessage(1, 0, false)).toBe("Needs a goalie — none attending");
+        expect(goalieShortMessage(2, 1, false)).toBe("Needs 2 goalies — 1 attending");
+        expect(goalieShortMessage(3, 2, true)).toBe("These stations need 3 goalies — 2 attending");
+        expect(goalieShortMessage(1, 0, true)).toBe("These stations need 1 goalie — none attending");
+        expect(goaliesUnusedMessage(1)).toBe("1 goalie attending, but no drill uses a goalie");
+        expect(goaliesUnusedMessage(2)).toBe("2 goalies attending, but no drill uses a goalie");
+        expect(goalieShortSummary(1, 0)).toBe("1 drill or station block needs a goalie, but none are attending");
+        expect(goalieShortSummary(2, 1)).toBe("2 drills or station blocks need more goalies than the 1 attending");
     });
 });

@@ -571,6 +571,7 @@ export async function createPracticeSession(
                         )
                         : validated.duration,
                     isShared: false,
+                    goaliesAttending: validated.goaliesAttending ?? null,
                     teamId: validated.teamId,
                     createdById: userId,
                     venueId: canonical.venueId,
@@ -940,6 +941,8 @@ export async function updatePracticeSession(
                             ) / 60_000,
                         )
                         : validated.duration,
+                    // Absent = unchanged: an editor tab opened before this field existed autosaves without it.
+                    ...(validated.goaliesAttending !== undefined && { goaliesAttending: validated.goaliesAttending }),
                     venueId: canonical.venueId,
                     surfaceId: canonical.surfaceId,
                     segmentId: canonical.segmentId,

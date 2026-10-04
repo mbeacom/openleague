@@ -3,6 +3,7 @@
  * store logic runs on. Two adapters implement PlannerRepo: IndexedDB (the
  * real one) and memory (the fallback when IndexedDB is unavailable).
  */
+import type { PlayFocus, PlayGoalies } from "@/types/practice-planner";
 
 export interface StoredPlay {
     id: string;
@@ -12,6 +13,9 @@ export interface StoredPlay {
     /** Validated on read (parseStoredPlayData), as hosted. */
     playData: unknown;
     isTemplate: boolean;
+    /** Drill tags. Absent on records written before tags existed: read through drillTags(). */
+    focus?: PlayFocus;
+    goalies?: PlayGoalies;
     /** Set: a session-owned copy (practice planner 3a). Null: a library play. */
     sessionId: string | null;
     /** Provenance of a fork or clone. */
@@ -35,6 +39,8 @@ export interface StoredSession {
     title: string;
     date: Date;
     duration: number;
+    /** Goalies expected (0–10). null = not set; absent on sessions stored before the field existed. */
+    goaliesAttending?: number | null;
     rows: StoredSessionRow[];
     createdAt: Date;
     updatedAt: Date;
@@ -67,5 +73,24 @@ export interface PlannerRepo {
     close: () => void;
 }
 
+/** Legacy (boolean): set by builds that seeded the starter pack once, before seeded ids were tracked. Read only. */
 export const META_STARTERS_SEEDED = "startersSeeded";
+/** The starter ids this device has received (string[]), so upgrades add only new starters. */
+export const META_SEEDED_STARTER_IDS = "seededStarterIds";
 export const META_PERSIST_REQUESTED = "persistRequested";
+
+/**
+ * The starters every device seeded under META_STARTERS_SEEDED. Hard-coded on
+ * purpose: STARTER_PLAYS keeps growing, and only these nine were delivered then.
+ */
+export const LEGACY_SEEDED_STARTER_IDS: readonly string[] = [
+    "starter-breakout-5man",
+    "starter-3man-weave",
+    "starter-pp-umbrella",
+    "starter-pk-box",
+    "starter-122-forecheck",
+    "starter-low-cycle",
+    "starter-point-shot-screen",
+    "starter-dzone-coverage",
+    "starter-nz-regroup",
+];

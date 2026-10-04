@@ -155,13 +155,22 @@ describe("duplicatePracticeSession", () => {
         tx.practiceSessionPlay.createMany.mockResolvedValue({ count: 2 });
     });
 
+    it("copies the session's goalie count", async () => {
+        mockPrisma.practiceSession.findUnique.mockResolvedValue({
+            teamId: TEAM, title: "Tuesday", duration: 75, goaliesAttending: 2, plays: [sourceRow(0)],
+        });
+        await duplicatePracticeSession({ id: SOURCE, teamId: TEAM, date: DATE });
+        expect(tx.practiceSession.create.mock.calls[0][0].data.goaliesAttending).toBe(2);
+        expect(mockPrisma.practiceSession.findUnique.mock.calls[0][0].select).toMatchObject({ goaliesAttending: true });
+    });
+
     it("creates an unshared, unbooked copy on the chosen date", async () => {
         const result = await duplicatePracticeSession({ id: SOURCE, teamId: TEAM, date: DATE });
 
         expect(result).toEqual({ success: true, data: { id: COPY } });
         const data = tx.practiceSession.create.mock.calls[0][0].data;
         expect(data).toEqual({
-            title: "Copy of Tuesday", date: DATE, duration: 75, isShared: false, teamId: TEAM, createdById: USER,
+            title: "Copy of Tuesday", date: DATE, duration: 75, goaliesAttending: null, isShared: false, teamId: TEAM, createdById: USER,
         });
         for (const key of ["venueId", "surfaceId", "segmentId", "startAt", "venueReservationId", "conflictOverriddenById"]) {
             expect(data).not.toHaveProperty(key);
@@ -211,5 +220,40 @@ describe("duplicatePracticeSession", () => {
         const result = await duplicatePracticeSession({ id: SOURCE, teamId: TEAM, date: DATE });
         expect(result.success).toBe(false);
         expect(tx.practiceSession.create).not.toHaveBeenCalled();
+    });
+});
+
+describe("saveSessionDrill: drill tags", () => {
+    it("a brand-new drill stores the sent tags", async () => {
+        await saveSessionDrill({ ...drillInput(), focus: "goalies", goalies: "required" });
+        expect(tx.play.create.mock.calls[0][0].data).toMatchObject({ focus: "goalies", goalies: "required" });
+    });
+
+    it("an owned drill keeps its tags when none are sent, and takes the ones that are", async () => {
+        tx.play.findFirst.mockResolvedValue({ id: OWNED, sessionId: SESSION, isTemplate: false, sourcePlayId: LIB, focus: "skaters", goalies: "none" });
+        await saveSessionDrill(drillInput(OWNED));
+        expect(tx.play.update.mock.calls[0][0].data).not.toHaveProperty("focus");
+        expect(tx.play.update.mock.calls[0][0].data).not.toHaveProperty("goalies");
+        await saveSessionDrill({ ...drillInput(OWNED), goalies: "required" });
+        expect(tx.play.update.mock.calls[1][0].data).toMatchObject({ goalies: "required" });
+    });
+
+    it("a fork inherits the source's tags unless new ones are sent", async () => {
+        tx.play.findFirst.mockResolvedValue({ id: LIB, sessionId: null, isTemplate: true, sourcePlayId: null, focus: "goalies", goalies: "required" });
+        await saveSessionDrill(drillInput(LIB));
+        expect(tx.play.findFirst.mock.calls[0][0].select).toMatchObject({ focus: true, goalies: true });
+        expect(tx.play.create.mock.calls[0][0].data).toMatchObject({ focus: "goalies", goalies: "required" });
+        await saveSessionDrill({ ...drillInput(LIB), focus: "team" });
+        expect(tx.play.create.mock.calls[1][0].data).toMatchObject({ focus: "team", goalies: "required" });
+    });
+});
+
+describe("copySessionDrillToLibrary: drill tags", () => {
+    it("copies the tags into the new library play", async () => {
+        tx.play.findFirst.mockResolvedValue({ name: "Warm-up", description: null, thumbnail: null, playData: {}, sessionId: SESSION, focus: "goalies", goalies: "required" });
+        tx.play.create.mockResolvedValue({ id: NEW_ID });
+        await copySessionDrillToLibrary({ playId: OWNED, teamId: TEAM });
+        expect(tx.play.findFirst.mock.calls[0][0].select).toMatchObject({ focus: true, goalies: true });
+        expect(tx.play.create.mock.calls[0][0].data).toMatchObject({ focus: "goalies", goalies: "required", isTemplate: true });
     });
 });

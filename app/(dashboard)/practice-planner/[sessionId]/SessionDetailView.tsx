@@ -47,7 +47,10 @@ import { PlayLegend } from "@/components/features/practice-planner/PlayLegend";
 import { StationMap } from "@/components/features/practice-planner/StationMap";
 import { SessionTimeline } from "@/components/features/practice-planner/SessionTimeline";
 import { ExportPlanMenu } from "@/components/features/practice-planner/ExportPlanMenu";
-import type { PracticeSessionView, PracticeSessionViewPlay } from "@/types/practice-planner";
+import { PRINT_DIAGRAM_SIZE, PrintDiagram } from "@/components/features/practice-planner/print/PrintDiagram";
+import { useSessionGoalies } from "@/components/features/practice-planner/useSessionGoalies";
+import { SidebarPlayCard } from "@/components/features/practice-planner/SidebarPlayCard";
+import type { PracticeSessionView } from "@/types/practice-planner";
 import {
   SEGMENT_KIND_FIT_LABELS,
   groupStations,
@@ -136,6 +139,11 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
   const { timeZone, showZone } = sessionTimeZone(session);
   const clock = useClockText(timeZone, showZone);
   const activePlay = session.plays[activePlayIndex] ?? null;
+  const { shown, messages: goalieMessages } = useSessionGoalies(session);
+  // The diagram as drawn for this session (spec R7); the stored play is never changed.
+  const drawnAt = (index: number) => shown.plays[index]?.play.playData ?? session.plays[index]?.play.playData ?? null;
+  const activeDrawn = activePlay ? drawnAt(activePlayIndex) : null;
+  const goaliesHidden = Boolean(activePlay && activeDrawn !== activePlay.play.playData);
   const groups = useMemo(() => groupStations(session.plays), [session.plays]);
   const activeGroup = activePlay
     ? groups.find((group) => group.stations.includes(activePlay)) ?? null
@@ -143,9 +151,12 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
   const stationMapStations = useMemo(
     () =>
       activeGroup && activeGroup.stations.length > 1
-        ? activeGroup.stations.map((sp) => ({ name: sp.play.name, playData: sp.play.playData }))
+        ? activeGroup.stations.map((sp) => ({
+            name: sp.play.name,
+            playData: shown.plays[session.plays.indexOf(sp)]?.play.playData ?? sp.play.playData,
+          }))
         : null,
-    [activeGroup]
+    [activeGroup, shown, session.plays]
   );
   // Advisory fit check against the booked segment's kind (2b); unreadable drills are skipped.
   const fitLabel = session.segmentKind ? SEGMENT_KIND_FIT_LABELS[session.segmentKind] : null;
@@ -269,6 +280,19 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
                   )}
                 </Stack>
               )}
+              {session.goaliesAttending != null && (
+                <Chip size="small" variant="outlined" label={`Goalies: ${session.goaliesAttending}`} />
+              )}
+              {goalieMessages.map((message) => (
+                <Chip
+                  key={message}
+                  size="small"
+                  color="warning"
+                  variant="outlined"
+                  label={message}
+                  sx={{ height: "auto", maxWidth: "100%", "& .MuiChip-label": { whiteSpace: "normal", py: 0.25 } }}
+                />
+              ))}
             </Stack>
           </Box>
 
@@ -347,7 +371,7 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
             sx={{
               height: 6,
               borderRadius: 3,
-              bgcolor: "grey.100",
+              bgcolor: "action.hover",
             }}
           />
         </Box>
@@ -427,6 +451,7 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
                     <SidebarPlayCard
                       key={sp.id}
                       sp={sp}
+                      drawn={drawnAt(index)}
                       index={index}
                       active={index === activePlayIndex}
                       onSelect={() => setActivePlayIndex(index)}
@@ -474,7 +499,7 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
                   sx={{
                     px: 3,
                     py: 1.5,
-                    bgcolor: "grey.50",
+                    bgcolor: "action.hover",
                     borderBottom: "1px solid",
                     borderColor: "divider",
                   }}
@@ -520,18 +545,24 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
                   sx={{
                     width: "100%",
                     height: { xs: 220, sm: 300, md: 360 },
-                    bgcolor: "grey.100",
+                    bgcolor: "action.hover",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
                     position: "relative",
                   }}
                 >
-                  {activePlay.play.thumbnail ? (
+                  {/* A stored PNG can't drop a hidden goalie marker, so draw it live. */}
+                  {goaliesHidden ? (
+                    // Fit inside the fixed-height preview like the thumbnail's fit="contain".
+                    <Box sx={{ height: "100%", aspectRatio: `${PRINT_DIAGRAM_SIZE.width} / ${PRINT_DIAGRAM_SIZE.height}`, maxWidth: "100%", display: "flex", alignItems: "center" }}>
+                      <PrintDiagram playData={activeDrawn} name={activePlay.play.name} pixelRatio={2} />
+                    </Box>
+                  ) : activePlay.play.thumbnail ? (
                     <Image src={activePlay.play.thumbnail} alt={activePlay.play.name} fit="contain" />
                   ) : (
                     <Stack alignItems="center" spacing={1}>
-                      <HockeyIcon sx={{ fontSize: 48, color: "grey.300" }} />
+                      <HockeyIcon sx={{ fontSize: 48, color: "text.disabled" }} />
                       <Typography variant="body2" color="text.secondary">
                         No preview available
                       </Typography>
@@ -540,7 +571,7 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
                 </Box>
 
                 <Box sx={{ px: 3, pt: 2 }}>
-                  <PlayLegend playData={activePlay.play.playData} />
+                  <PlayLegend playData={activeDrawn} />
                 </Box>
 
                 {/* Play details */}
@@ -692,105 +723,5 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
         </DialogActions>
       </Dialog>
     </Box>
-  );
-}
-
-interface SidebarPlayCardProps {
-  sp: PracticeSessionViewPlay;
-  index: number;
-  active: boolean;
-  onSelect: () => void;
-}
-
-/** One drill in the sidebar's play sequence; standalone or inside a station block (2b). */
-function SidebarPlayCard({ sp, index, active, onSelect }: SidebarPlayCardProps) {
-  const { Image } = usePlannerPlatform();
-  return (
-    <Card
-      sx={{
-        border: "2px solid",
-        borderColor: active ? "primary.main" : "transparent",
-        bgcolor: active ? "rgba(25, 118, 210, 0.04)" : "background.paper",
-        boxShadow: active ? 2 : 0,
-        transition: "all 0.15s ease",
-        "&:hover": {
-          borderColor: active ? "primary.main" : "primary.light",
-          bgcolor: "rgba(25, 118, 210, 0.04)",
-        },
-      }}
-    >
-      <CardActionArea
-        onClick={onSelect}
-        aria-current={active ? "true" : undefined}
-        sx={{ "&.Mui-focusVisible": { outline: "2px solid", outlineColor: "primary.main", outlineOffset: -2 } }}
-      >
-      <CardContent sx={{ p: 1.5, "&:last-child": { pb: 1.5 } }}>
-        <Stack direction="row" alignItems="center" spacing={1.5}>
-          {/* Play number */}
-          <Box
-            sx={{
-              width: 28,
-              height: 28,
-              borderRadius: "50%",
-              bgcolor: active ? "primary.main" : "grey.200",
-              color: active ? "primary.contrastText" : "text.secondary",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              flexShrink: 0,
-              fontSize: "0.75rem",
-              fontWeight: 700,
-            }}
-          >
-            {index + 1}
-          </Box>
-
-          {/* Thumbnail */}
-          <Box
-            sx={{
-              width: 48,
-              height: 32,
-              borderRadius: 1,
-              bgcolor: "grey.100",
-              overflow: "hidden",
-              position: "relative",
-              flexShrink: 0,
-            }}
-          >
-            {sp.play.thumbnail ? (
-              <Image src={sp.play.thumbnail} alt="" fit="cover" />
-            ) : (
-              <Box
-                sx={{
-                  width: "100%",
-                  height: "100%",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <HockeyIcon sx={{ fontSize: 14, color: "grey.400" }} />
-              </Box>
-            )}
-          </Box>
-
-          {/* Name & duration */}
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography
-              variant="body2"
-              fontWeight={600}
-              noWrap
-              sx={{ fontSize: "0.8rem" }}
-            >
-              {sp.play.name}
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              {sp.duration} min
-            </Typography>
-          </Box>
-        </Stack>
-      </CardContent>
-      </CardActionArea>
-    </Card>
   );
 }

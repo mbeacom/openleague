@@ -1,7 +1,9 @@
 /** Import a practice plan (ADR-0020): file or #plan= link → preview → team → new session. */
 import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
+// The view reads the plan generator from the planner platform (the real hosted one here).
+import { renderWithPlanner as render } from "@/__tests__/helpers/planner";
 
 const nav = vi.hoisted(() => ({ push: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: nav.push }) }));
@@ -235,5 +237,87 @@ describe("PlanImportView: form", () => {
         upload(JSON.stringify(plan()));
         await title();
         expect(screen.getByRole("button", { name: "Import plan" })).toBeDisabled();
+    });
+});
+
+describe("PlanImportView: starter templates", () => {
+    it("previews a template and imports it into the chosen team as a hosted plan", async () => {
+        actions.importPracticePlan.mockResolvedValue({ success: true, data: { sessionId: NEW_SESSION } });
+        render(<PlanImportView teams={[LIONS]} />);
+        fireEvent.click(screen.getByRole("button", { name: "Use template: Skills Stations" }));
+        expect(await screen.findByRole("heading", { name: "Skills Stations" })).toBeInTheDocument();
+
+        // Templates carry no date: the coach picks one, as for any undated plan.
+        fireEvent.change(screen.getByLabelText(/^date/i), { target: { value: "2026-10-06" } });
+        fireEvent.change(screen.getByLabelText(/start time/i), { target: { value: "19:00" } });
+        fireEvent.click(screen.getByRole("button", { name: "Import plan" }));
+
+        await waitFor(() => expect(nav.push).toHaveBeenCalledWith(`/practice-planner/${NEW_SESSION}/edit`));
+        const sent = actions.importPracticePlan.mock.calls[0][0];
+        expect(sent.teamId).toBe(LIONS.id);
+        expect(sent.document).toMatchObject({ generator: "openleague-hosted", session: { title: "Skills Stations" } });
+        expect(sent.document.session.drills.some((d: { drill: { goalies: string } }) => d.drill.goalies === "required")).toBe(true);
+        // Station blocks and drill tags survive the trip to the action; the template is built for one goalie.
+        expect(sent.document.session).toMatchObject({ goaliesAttending: 1 });
+        expect(sent.document.session.drills).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ runsWithPrevious: true, drill: expect.objectContaining({ name: "Stickhandling: Cone Weave", focus: "skaters", goalies: "none" }) }),
+                expect.objectContaining({ runsWithPrevious: false, drill: expect.objectContaining({ name: "Angles & Depth: Five-Spot Shooting", focus: "goalies", goalies: "required" }) }),
+            ]),
+        );
+        expect(sent.addToLibrary).toBe(false);
+    });
+
+    it("offers Start over, not a library copy, for a template", async () => {
+        render(<PlanImportView teams={[LIONS]} />);
+        fireEvent.click(screen.getByRole("button", { name: "Use template: Skills Stations" }));
+        await screen.findByRole("heading", { name: "Skills Stations" });
+        expect(screen.queryByRole("checkbox", { name: /also add these drills/i })).toBeNull();
+        expect(screen.queryByRole("button", { name: "Choose another file" })).toBeNull();
+        fireEvent.click(screen.getByRole("button", { name: "Start over" }));
+        expect(screen.getByRole("heading", { name: "Start from a template" })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Choose plan file" })).toBeInTheDocument();
+    });
+
+    it("keeps Choose another file and the library copy for a plan file", async () => {
+        render(<PlanImportView teams={[LIONS]} />);
+        upload(JSON.stringify(plan()));
+        await title();
+        expect(screen.getByRole("checkbox", { name: /also add these drills/i })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Choose another file" })).toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "Start over" })).toBeNull();
+    });
+
+    it("offers templates only while no plan is chosen", async () => {
+        render(<PlanImportView teams={[LIONS]} />);
+        expect(screen.getByRole("heading", { name: "Start from a template" })).toBeInTheDocument();
+        upload(JSON.stringify(plan()));
+        await title();
+        expect(screen.queryByRole("heading", { name: "Start from a template" })).toBeNull();
+    });
+
+    it("keeps a template chosen while a plan file is still being read", async () => {
+        render(<PlanImportView teams={[LIONS]} />);
+        let finishRead: (text: string) => void = () => {};
+        const file = new File(["{}"], "plan.olplan.json", { type: "application/json" });
+        Object.defineProperty(file, "text", { value: () => new Promise<string>((resolve) => (finishRead = resolve)) });
+        fireEvent.change(screen.getByTestId("plan-file-input"), { target: { files: [file] } });
+        fireEvent.click(screen.getByRole("button", { name: "Use template: Skills Stations" }));
+        await screen.findByRole("heading", { name: "Skills Stations" });
+
+        finishRead(JSON.stringify(plan()));
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        expect(screen.getByRole("heading", { name: "Skills Stations" })).toBeInTheDocument();
+        expect(screen.queryByRole("heading", { name: "Tuesday Skills Practice" })).toBeNull();
+    });
+
+    it("keeps a template chosen while an incoming link is still being read", async () => {
+        window.history.replaceState(null, "", `/practice-planner/import#plan=${await encodePlanLink(plan())}`);
+        render(<PlanImportView teams={[LIONS]} />);
+        fireEvent.click(screen.getByRole("button", { name: "Use template: Skills Stations" }));
+        await screen.findByRole("heading", { name: "Skills Stations" });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        expect(screen.getByRole("heading", { name: "Skills Stations" })).toBeInTheDocument();
+        expect(screen.queryByRole("heading", { name: "Tuesday Skills Practice" })).toBeNull();
     });
 });
