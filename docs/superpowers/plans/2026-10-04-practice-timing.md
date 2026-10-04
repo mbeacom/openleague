@@ -22,14 +22,16 @@
 - Migration folder: `prisma/migrations/20261004120000_practice_session_timing/`. It never touches `practice_session_plays_playId_fkey` (deferrable, from `20261003120000_session_owned_plays`).
 - Row kinds, exactly: `drill | warmup | break | transition | cooldown`. Defaults (spec R1): `warmup` "Warm-up" 8 min, `break` "Water break" 2 min, `transition` "Transition" 2 min, `cooldown` "Cool-down" 5 min.
 - Limits: label ≤ 60 characters (empty or null = the kind's default label); `rotateEveryMinutes` an integer 1–30 or null; `transitionMinutes` an integer 0–5 (default 0); a rotating block needs at least 2 rotating stations (`MIN_ROTATING_STATIONS = 2`).
-- Row minutes keep today's range, 1–300 (`VALIDATION_CONSTRAINTS.MAX_DURATION`, the Zod row schema and the plan document all say 300). The spec's "1–120, as today" is a misreading of today's code; this plan keeps 300 and does not change any limit.
+- Row minutes keep today's range, 1–300, as the spec says (`VALIDATION_CONSTRAINTS.MAX_DURATION`, the Zod row schema and the plan document all say 300). This plan changes no limit.
 - **Absent = unchanged, explicit null clears**, on every update path (hosted `updatePracticeSession`, static `updateSession`):
   - a session save without `transitionMinutes` keeps the stored gap;
   - a drill row without `stays` or `rotateEveryMinutes` keeps the stored values of the row with the same `playId` (`withStoredTiming`), and only then is validated;
   - a create fills the defaults.
   Never write `?? null` / `?? false` / `?? 0` for a field the code path does not own; reading a legacy record with defaults is the only place a default is filled.
 - Raw versus display data: goalie warnings and timing maths always read stored rows, never `sessionForDisplay`'s copy.
-- Every copy path carries `kind`, `label`, `stays`, `rotateEveryMinutes` and the session's `transitionMinutes` (spec R5): duplicate, detach-on-write, materialize, plan export and import (both apps), static copies. Block rows never reach `cloneDrillsIntoSessions`. Rows are matched to their drill copies by `clientKey` or row id, never by array index.
+- Every copy path carries `kind`, `label`, `stays`, `rotateEveryMinutes` and the session's `transitionMinutes` (spec R5): duplicate, detach-on-write, materialize, plan export and import (both apps), static copies. Block rows never reach `cloneDrillsIntoSessions`. Rows are matched to their drill copies by `clientKey`, row id or (plan import) `sequence`, never by array index.
+- Stored timing is the one lookup keyed by `playId`: on update, `withStoredTiming` gives a drill row that omits `stays` / `rotateEveryMinutes` the values of the stored row with the same `playId` (first match wins). This rests on an **accepted invariant**: a session's stored drill rows each point at their own Play copy, so a `playId` is unique per stored session row (3a: `materializeSessionDrills` and the static `materialize` clone a repeated play; their "clones a second occurrence" / "clones a second card on the same copy" tests enforce it). Task 1 has a test that documents the invariant. If 3a ever lets two stored rows share a play, `withStoredTiming` must key by row id instead, or timing could cross rows.
+- A task that changes a type or a written shape lists, narrows and stages every existing test the change breaks (named in its Files list and its `git add`), narrowing with `isDrillRow`/`drillRows`, never with a cast. Every task ends with `bun run type-check` and its test suites green (`tsconfig.json` includes `__tests__`, so type-check covers the tests).
 - `components/features/practice-planner/PracticeSessionEditor.tsx` and `app/(dashboard)/practice-planner/[sessionId]/SessionDetailView.tsx` each stay at or under 900 lines (their line-budget tests).
 - Portable components: no `next/*`, `lib/actions/*` or `@prisma/client` import in anything under `components/features/practice-planner/` or `lib/utils/` (the static app renders them). Only palette tokens (`primary.main`, `secondary.main`, `text.secondary`, `divider`, `action.hover`, `action.selected`, `background.paper`, `warning.main`…) in new on-screen components, so dark mode works. Print/export markup keeps its existing black-on-white classes. Every new interactive control is at least 44×44 px. MUI selects get the `GoaliesAttendingField` height fix (`"& .MuiSelect-select.MuiInputBase-input": { minHeight: "1.4375em" }`).
 - Copy, exactly (plain coaching language):
@@ -37,7 +39,7 @@
   - practice settings: select `Between blocks`, options `None`, `1 min` … `5 min`;
   - station header: switch `Rotate`; select `Every`, options `1 min` … `30 min`; summary `rotationSummary()` ("3 stations × 5 min = 15 min · groups A–C"); toggle `Show rotation grid` / `Hide rotation grid`; note `CANT_ROTATE_MESSAGE` = `To rotate, at least 2 stations must rotate. Untick Stays on a station.`;
   - station card: checkbox `Stays`, helper `Doesn't rotate, e.g. goalie station`;
-  - session page chip `rotatesEveryLabel(5)` = `Rotates every 5 min`; stays marker `stays`;
+  - session page chip `rotatesEveryLabel(5)` = `Rotates every 5 min`; stays marker `STAYS_MARK` = `stays`, after a station's name as `staysSuffix(true)` = ` · stays`;
   - bench sheet rotation header `rotationBlockLabel(5, 15)` = `Stations · rotate every 5 min · 15 min`; gap line `betweenBlocksLabel(2)` = `2 min between blocks`;
   - email line `Also planned: Warm-up · 8 min, Water break · 2 min`;
   - errors (exported constants, Task 1): `BLOCK_STATION_ERROR` = `A warm-up, break, transition or cool-down can't be part of a station block`; `BLOCK_ROW_FIELDS_ERROR` = `A warm-up, break, transition or cool-down can't rotate or stay`; `ROTATION_PLACEMENT_ERROR` = `Only the first drill of a station block can set a rotation`; `ROTATION_TOO_FEW_ERROR` = `A rotating station block needs at least 2 stations that rotate`; `ROTATE_MINUTES_MESSAGE` = `Rotation must be a whole number of minutes from 1 to 30`; `TRANSITION_MINUTES_MESSAGE` = `Between blocks must be a whole number of minutes from 0 to 5`; `BLOCK_LABEL_MESSAGE` = `Label must be at most 60 characters`; `BLOCK_HAS_NO_DRILL_MESSAGE` = `A warm-up, break, transition or cool-down has no drill`; `DRILL_NEEDS_PLAY_MESSAGE` = `A drill needs a play`.
@@ -45,7 +47,7 @@
   - S1 `EditSessionWrapper.tsx` and `PracticeSessionEditorWrapper.tsx`: `drillRows(session.plays).map(toDrillRowInput)` → Task 3 `toSessionRowInputs(session.plays)`;
   - S2 `apps/planner/src/screens/SessionEditorScreen.tsx` `toLocalSessionSave`: same call → Task 4;
   - S3 `ExportPlanMenu.tsx` `buildPlanDocument`: `drillRows(session.plays)` → Task 5 `toPlanRows`;
-  - S4 `apps/planner/src/store/sessions.ts` `assertExportable`: serializes drill rows only → Task 5.
+  - S4 `apps/planner/src/store/sessions.ts` `assertExportable`: serializes drill rows only (introduced by Task 4, the first task in which the static store holds block rows) → Task 5.
   No other interim code. Comments at the seams say what they hold back, never "Task N".
 - No new runtime dependencies. No raw SQL outside the migration file (ADR-0003, `bun run check:raw-sql`). MUI is the only component library (ADR-0004).
 - Screenshots (UI tasks): build and serve the static planner, drive it with headless Playwright from the scratchpad harness, and write PNGs to `/private/tmp/claude-501/-Users-markbeacom-github-mbeacom-openleague/3436f415-4c2f-4d80-8aa7-d860be0c7ad8/scratchpad/pwcheck/` (it has `node_modules/playwright`; the Chromium executable is `/Users/markbeacom/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell`). Name files `timing-taskN-<view>-<desktop|mobile>-<light|dark>.png`. Read every PNG before committing.
@@ -55,7 +57,7 @@
 
 1. **An untouched editor, and a save from an older client,** must keep every stored value: blocks and their labels and notes, `stays`, `rotateEveryMinutes` and `transitionMinutes`. Tests: Task 3 (hosted update omitting the fields), Task 4 (static update omitting them), Task 6 (editor loaded with all of them, an unrelated edit, the payload keeps them).
 2. **A block row between two drills** (warm-up, drill, break, drill) must keep each drill on its own copy: create, update, duplicate and both imports map rows to copies by `clientKey` or row id, never by index. Tests: Tasks 3, 4 and 5.
-3. **A practice that opens with a warm-up** must still show the first drill's thumbnail in the hosted list, count only drills in the list, the email and the session header, number drills 1, 2, 3 on the bench sheet, and open the session page on the first drill. Tests: Task 2 (detail view, bench sheet) and Task 3 (list query, email).
+3. **A practice that opens with a warm-up** must still show the first drill's thumbnail in the hosted list, count only drills in the list, the email, the dashboard schedule and the session header, number drills 1, 2, 3 on the bench sheet, and open the session page on the first drill. Tests: Task 2 (detail view, bench sheet) and Task 3 (list query, email, dashboard).
 4. **A rotating block that drops below 2 rotating stations** (a station ticked Stays, or removed) keeps the coach's settings on screen with the "can't rotate" note, saves without the rotation, and a payload that still carries it is rejected by the server, the static store and the importer. Tests: Task 1 (`settleRotations`, `sessionRowsError`), Task 7 (editor), Tasks 3–5 (rejections).
 5. **A plan file written before this change** opens unchanged, as drills with a 0-minute gap; a file with an unknown row kind is rejected with a readable "Drill N" issue rather than read as a drill. Test: Task 5.
 
@@ -64,17 +66,18 @@
 | File | Responsibility | Task |
 |---|---|---|
 | `types/practice-planner.ts` | row kinds, block defaults, limits; `BlockInSession`, `SessionItem`, `PracticeSessionViewBlock`, `DrillRow`, `BlockRow`, `SessionRow`; `transitionMinutes` on the session types | 1 (definitions), 2 (switch `plays`) |
-| `lib/utils/session-rows.ts` (new) | kind guards, `drillRows`, block titles, lenient readers, `newBlockItem`, `applyRowEdit`, row inputs, `withStoredTiming`, messages | 1 |
-| `lib/utils/session-timeline.ts` | `blockMinutes`, `rotationGrid`, `rotationTable`, gaps in `groupStations` / `buildSchedule` / `sessionWallMinutes`, R3 normalization, `settleRotations`, `sessionRowsError`, labels, goalie skip | 1 |
+| `lib/utils/session-rows.ts` (new) | kind guards, `drillRows`, block titles, lenient readers, `newBlockItem`, `applyRowEdit`, row inputs, `withStoredTiming`, messages, the shared `CONTROL_CHARS` | 1 |
+| `lib/utils/session-timeline.ts` | `blockMinutes`, `rotationGrid`, `rotationTable`, gaps in `groupStations` / `buildSchedule` / `sessionWallMinutes`, R3 normalization, list edits that keep a block's rotation, `settleRotations`, `sessionRowsError`, labels (incl. `staysSuffix`), goalie skip | 1 |
 | `lib/utils/drill-tags.ts`, `lib/utils/session-drill-ids.ts`, `components/features/practice-planner/{useSessionDrillDialog,useSessionGoalies}.ts` | union-aware helpers | 2 |
 | `components/features/practice-planner/BlockRowCard.tsx` (new), `SessionDrillList.tsx`, `PracticeSessionEditor.tsx` | editor renders and edits block rows | 2 |
 | `components/features/practice-planner/SessionTimeline.tsx`, `app/(dashboard)/practice-planner/[sessionId]/SessionDetailView.tsx`, `print/BenchSheet.tsx`, `export/bench-sheet-{model,html,docx}.ts`, `ExportPlanMenu.tsx` | read side: block lines, gaps, drills-only sequence and pages | 2 |
 | hosted wrappers, `apps/planner/src/screens/SessionEditorScreen.tsx` | seams S1, S2 | 2 |
 | `prisma/schema.prisma`, migration, `__tests__/prisma/practice-timing-migration.test.ts` | hosted columns and CHECKs | 3 |
-| `lib/utils/validation.ts`, `lib/services/practice-session-drills.ts`, `lib/actions/{practice-sessions,practice-session-drills,practice-session-queries}.ts`, `lib/email/templates.ts`, hosted wrappers | hosted writes, reads, copies, emails | 3 |
+| `lib/utils/validation.ts`, `lib/services/practice-session-drills.ts`, `lib/actions/{practice-sessions,practice-session-drills,practice-session-queries}.ts`, `lib/email/templates.ts`, `lib/data/dashboard.ts`, hosted wrappers | hosted writes, reads, copies, emails, the dashboard's play count | 3 |
 | `apps/planner/src/store/{records,types,sessions}.ts`, `SessionEditorScreen.tsx` | static store | 4 |
 | `lib/plan-document/document.ts`, `lib/actions/practice-plan-import.ts`, `apps/planner/src/store/sessions.ts` (`importPlan`, `assertExportable`), `ExportPlanMenu.tsx`, `PlanPreview.tsx`, `docs/adr/0020-…md` | plan files | 5 |
 | `components/features/practice-planner/{SessionDetailsFields,BetweenBlocksField,AddBlockMenu}.tsx`, `{useSessionRowEdits,useBetweenBlocks}.ts` (new), editor, list | Add block, Between blocks | 6 |
+| `__tests__/helpers/session-editor.tsx` (new) | the shared editor test harness (`drill`, `renderEditor`, `save`) | 6 (created), 7 |
 | `components/features/practice-planner/{StationBlockHeader,RotationGridTable}.tsx` (new), `SessionDrillCard.tsx`, list, hook | rotation controls, Stays, grid | 7 |
 | `SessionTimeline.tsx`, `SessionDetailView.tsx`, `print/BenchSheet.tsx` | rotation on the session page and live bench sheet | 8 |
 | `export/bench-sheet-{model,html,docx}.ts` | rotation grid tables and the gap line in the exports | 9 |
@@ -89,7 +92,7 @@ The pure layer every later task imports. No component, action or store changes b
 **Files:**
 - Modify: `types/practice-planner.ts` (after the drill-tag constants; `PlayInSession`, `PracticeSessionData`, `PracticeSessionViewPlay`, `PracticeSessionView`)
 - Create: `lib/utils/session-rows.ts`
-- Modify: `lib/utils/session-timeline.ts` (imports, `TimelinePlay`, `StationGroup`, `groupStations`, `sessionWallMinutes`, `ScheduleRow`, `buildSchedule`, `normalizeGroups`, `canToggleRunsWithPrevious`, `GoalieNeeds`, `goalieWarnings`; new functions appended)
+- Modify: `lib/utils/session-timeline.ts` (imports, `TimelinePlay`, `StationGroup`, `groupStations`, `sessionWallMinutes`, `ScheduleRow`, `buildSchedule`, `normalizeGroups`, `canToggleRunsWithPrevious`, `toggleRunsWithPrevious`, `moveItem`, `removeItem`, `GoalieNeeds`, `goalieWarnings`; new functions appended)
 - Test (create): `__tests__/lib/utils/session-rows.test.ts`
 - Test (append): `__tests__/lib/utils/session-timeline.test.ts`
 
@@ -111,14 +114,16 @@ The pure layer every later task imports. No component, action or store changes b
   - `DrillRowInput { kind?: "drill"; playId: string; clientKey; sequence; runsWithPrevious; duration; instructions: string; stays?: boolean; rotateEveryMinutes?: number | null }`, `BlockRowInput { kind: BlockKind; clientKey; sequence; duration; instructions: string; label: string | null }`, `SessionRowInput = DrillRowInput | BlockRowInput`;
   - `toDrillRowInput(item: PlayInSession): DrillRowInput`, `toSessionRowInputs(items: readonly SessionItem[]): SessionRowInput[]`;
   - `StoredTiming { playId: string | null; stays: boolean; rotateEveryMinutes: number | null }`, `needsStoredTiming(rows): boolean`, `withStoredTiming<R>(rows: readonly R[], stored: readonly StoredTiming[]): Array<R & { stays: boolean; rotateEveryMinutes: number | null }>`;
-  - message constants `ROTATE_MINUTES_MESSAGE`, `TRANSITION_MINUTES_MESSAGE`, `BLOCK_LABEL_MESSAGE`, `BLOCK_HAS_NO_DRILL_MESSAGE`, `DRILL_NEEDS_PLAY_MESSAGE`.
+  - message constants `ROTATE_MINUTES_MESSAGE`, `TRANSITION_MINUTES_MESSAGE`, `BLOCK_LABEL_MESSAGE`, `BLOCK_HAS_NO_DRILL_MESSAGE`, `DRILL_NEEDS_PLAY_MESSAGE`;
+  - `CONTROL_CHARS` (the control-character pattern the repo's text hygiene strips): the one copy the practice-timing code uses. Task 3's `blockLabelSchema` imports it instead of inlining the regex, and Tasks 4 and 5 replace the private copies in `apps/planner/src/store/sessions.ts` and `lib/plan-document/document.ts` with this import.
 - Produces, from `lib/utils/session-timeline.ts`:
   - `TimelinePlay` gains `kind?: SessionRowKind; stays?: boolean; rotateEveryMinutes?: number | null`; `StationGroup<T>` gains `rotation: RotationGrid<T> | null`; `ScheduleRow<T>` gains `roundStarts: Date[]`;
   - `groupStations(plays, transitionMinutes = 0)`, `sessionWallMinutes(plays, transitionMinutes = 0)`, `buildSchedule(plays, sessionStart, transitionMinutes = 0)`;
   - `MIN_ROTATING_STATIONS = 2`, `ROTATION_ALL = "all"`, `RotationCell<T> { row: T; group: string }`, `RotationRound<T> { start: number; stations: RotationCell<T>[] }`, `RotationGrid<T> { minutes: number; groups: string[]; rounds: RotationRound<T>[] }`, `RotationTable { columns: string[]; rows: Array<{ start: string; cells: string[] }> }`;
   - `rotatingStations(stations)`, `rotationMinutes(stations): number | null`, `blockMinutes(stations): number`, `rotationGrid(stations): RotationGrid<T> | null`, `rotationTable(grid, name, start): RotationTable`, `defaultRotationMinutes(stations): number`;
   - `settleRotations<T>(plays: T[]): T[]`, `sessionRowsError(plays): string | null` and its four error constants;
-  - labels `rotationBlockLabel(rotateEvery, minutes)`, `rotationSummary(rotating, rotateEvery)`, `rotatesEveryLabel(minutes)`, `betweenBlocksLabel(minutes)`, `rotationRoundLabel(start, minutes)`;
+  - labels `rotationBlockLabel(rotateEvery, minutes)`, `rotationSummary(rotating, rotateEvery)`, `rotatesEveryLabel(minutes)`, `betweenBlocksLabel(minutes)`, `rotationRoundLabel(start, minutes)`, `STAYS_MARK = "stays"`, `staysSuffix(stays): string` (` · stays` or ""; the one place the suffix is written, used by Tasks 8, 9 and 10);
+  - `moveItem`, `removeItem` and `toggleRunsWithPrevious` keep a block's rotation with the block (ruling R4): the rotation lives on the block's first drill, so when an edit gives the block a new first drill (a station moved up to the top, the first drill deleted, a block joined onto the one before it) that drill takes the rotation, and the stays ticks stay because the block still rotates. Turning a station's flag off splits the block: the original first drill keeps the rotation, and the split-off stations start a block with no rotation (so, by R3, nothing in it stays);
   - `GoalieNeeds.playData` becomes optional; `goalieWarnings` skips block rows.
 
 - [ ] **Step 1: Write the failing row-helper tests**
@@ -258,13 +263,25 @@ describe("withStoredTiming", () => {
         const [block] = withStoredTiming(rows, stored);
         expect([block.stays, block.rotateEveryMinutes]).toEqual([false, null]);
     });
+
+    it("keys stored timing by play id, which is unique per stored row (accepted invariant, Global Constraints)", () => {
+        // 3a: a save gives every drill row its own copy (materializeSessionDrills and the static
+        // materialize clone a repeated play), so a session never stores two rows on one play id.
+        // Should two ever share one, the first stored row wins for both: key by row id then.
+        const shared = [
+            { playId: "cowned", stays: true, rotateEveryMinutes: 5 },
+            { playId: "cowned", stays: false, rotateEveryMinutes: null },
+        ];
+        const [first, second] = withStoredTiming([{ kind: "drill" as const, playId: "cowned" }, { kind: "drill" as const, playId: "cowned" }], shared);
+        expect([first.stays, first.rotateEveryMinutes, second.stays, second.rotateEveryMinutes]).toEqual([true, 5, true, 5]);
+    });
 });
 ```
 
 - [ ] **Step 2: Write the failing timeline tests**
 
 Append to `__tests__/lib/utils/session-timeline.test.ts`.
-- Add to the existing `@/lib/utils/session-timeline` import: `BLOCK_ROW_FIELDS_ERROR, BLOCK_STATION_ERROR, ROTATION_PLACEMENT_ERROR, ROTATION_TOO_FEW_ERROR, betweenBlocksLabel, blockMinutes, buildSchedule, defaultRotationMinutes, rotatesEveryLabel, rotationBlockLabel, rotationGrid, rotationMinutes, rotationRoundLabel, rotationSummary, rotationTable, sessionRowsError, settleRotations`.
+- Add to the existing `@/lib/utils/session-timeline` import: `BLOCK_ROW_FIELDS_ERROR, BLOCK_STATION_ERROR, ROTATION_PLACEMENT_ERROR, ROTATION_TOO_FEW_ERROR, STAYS_MARK, betweenBlocksLabel, blockMinutes, buildSchedule, defaultRotationMinutes, rotatesEveryLabel, rotationBlockLabel, rotationGrid, rotationMinutes, rotationRoundLabel, rotationSummary, rotationTable, sessionRowsError, settleRotations, staysSuffix` (`moveItem`, `removeItem`, `toggleRunsWithPrevious`, `canToggleRunsWithPrevious` and `normalizeGroups` are already imported).
 - Extend the existing `@/types/practice-planner` type import with `BlockKind`.
 
 ```ts
@@ -401,7 +418,8 @@ describe("normalizeGroups: row rules (spec R3)", () => {
         const normalized = normalizeGroups(cantRotate);
         expect(normalized[0]).toBe(cantRotate[0]);
         expect(normalized[1]).toBe(cantRotate[1]);
-        const valid = [block("w", 0, "warmup", 8), ...normalizeGroups(stations(1, [{ id: "a" }, { id: "b" }], 5))];
+        // Normalized once over the whole list (an inner call would renumber the stations from 0).
+        const valid = normalizeGroups([block("w", 0, "warmup", 8), ...stations(1, [{ id: "a" }, { id: "b" }], 5)]);
         normalizeGroups(valid).forEach((row, index) => expect(row).toBe(valid[index]));
     });
 });
@@ -466,6 +484,46 @@ describe("list edits around block rows", () => {
     });
 });
 
+describe("list edits keep a block's rotation on its first drill (ruling R4)", () => {
+    const shape = (rows: Row[]) => rows.map((row) => [row.id, row.runsWithPrevious, row.rotateEveryMinutes, Boolean(row.stays)]);
+    // g stays, a and b rotate every 5 minutes; g holds the rotation.
+    const rotating = () => normalizeGroups(stations(0, [{ id: "g", stays: true }, { id: "a" }, { id: "b" }], 5));
+
+    it("a station moved up to the top takes the rotation, and the stays tick stays", () => {
+        expect(shape(moveItem(rotating(), 1, -1))).toEqual([
+            ["a", false, 5, false],
+            ["g", true, null, true],
+            ["b", true, null, false],
+        ]);
+    });
+
+    it("deleting the first drill hands the rotation to the next station", () => {
+        expect(shape(removeItem(rotating(), 0))).toEqual([
+            ["a", false, 5, false],
+            ["b", true, null, false],
+        ]);
+    });
+
+    it("a rotating block joined onto a drill gives the merged block its rotation", () => {
+        const rows = normalizeGroups([solo("x", 0), ...stations(1, [{ id: "a" }, { id: "b" }], 5)]);
+        expect(shape(toggleRunsWithPrevious(rows, 1))).toEqual([
+            ["x", false, 5, false],
+            ["a", true, null, false],
+            ["b", true, null, false],
+        ]);
+    });
+
+    it("splitting a block leaves the rotation on its first drill; the split-off station starts a block that doesn't rotate", () => {
+        const rows = normalizeGroups(stations(0, [{ id: "a" }, { id: "b" }, { id: "c" }, { id: "d", stays: true }], 4));
+        expect(shape(toggleRunsWithPrevious(rows, 3))).toEqual([
+            ["a", false, 4, false],
+            ["b", true, null, false],
+            ["c", true, null, false],
+            ["d", false, null, false],
+        ]);
+    });
+});
+
 describe("goalieWarnings with blocks and rotation", () => {
     const G: PlayData = {
         ...createEmptyPlayData(),
@@ -493,6 +551,7 @@ describe("rotation labels", () => {
         expect(rotatesEveryLabel(5)).toBe("Rotates every 5 min");
         expect(betweenBlocksLabel(1)).toBe("1 min between blocks");
         expect(rotationRoundLabel(5, 5)).toBe("5–10 min");
+        expect([STAYS_MARK, staysSuffix(true), staysSuffix(false), staysSuffix(undefined)]).toEqual(["stays", " · stays", "", ""]);
     });
 
     it("suggests an interval that keeps the block about as long as it was", () => {
@@ -681,7 +740,13 @@ export function blockTitle(kind: BlockKind, label: string | null | undefined): s
     return label?.trim() || BLOCK_DEFAULTS[kind].label;
 }
 
-const CONTROL_CHARS = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g;
+/**
+ * Control characters the write paths strip (the same pattern as validation.ts's
+ * sanitizedString and play-data's cleanText). The one copy the practice-timing
+ * code shares: validation.ts, the plan document and the static store import it.
+ * Global: use it with `replace` only, never `test` (a global regex keeps lastIndex).
+ */
+export const CONTROL_CHARS = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g;
 
 /** Cleaned and cut to 60 characters; empty or not text reads as null (the default label). */
 export function toBlockLabel(value: unknown): string | null {
@@ -994,6 +1059,85 @@ In `canToggleRunsWithPrevious`, after the first `if`:
     if (isBlockKind(plays[index].kind) || isBlockKind(plays[index - 1].kind)) return false;
 ```
 
+Keep a block's rotation with the block when a list edit gives it a new first drill (ruling R4: a reorder or delete must never silently drop the coach's rotation and Stays ticks). Add, above `toggleRunsWithPrevious`:
+
+```ts
+/**
+ * A block's rotation lives on its first drill (spec R3). After an edit that
+ * gives the block a new first drill, that drill takes the rotation; the old
+ * holder, now a later station, loses it in normalizeGroups. The block still
+ * rotates, so its stays ticks stay. A no-op for a block row or no rotation.
+ */
+function carryRotation<T extends TimelinePlay>(rows: T[], head: number, rotateEveryMinutes: number | null | undefined): T[] {
+    const row = rows[head];
+    if (rotateEveryMinutes == null || !row || isBlockKind(row.kind) || row.rotateEveryMinutes === rotateEveryMinutes) return rows;
+    const next = [...rows];
+    next[head] = { ...row, rotateEveryMinutes };
+    return next;
+}
+```
+
+Replace `toggleRunsWithPrevious`:
+
+```ts
+/**
+ * Flips the drill's flag; returns `plays` itself when that isn't allowed.
+ * Joining the block before: the merged block keeps that block's rotation, else
+ * takes the joining block's. Leaving a block: the block keeps its rotation on
+ * its first drill; the drill that left starts a block with none (so nothing in
+ * it stays, R3).
+ */
+export function toggleRunsWithPrevious<T extends TimelinePlay>(plays: T[], index: number): T[] {
+    if (!canToggleRunsWithPrevious(plays, index)) return plays;
+    const joining = !plays[index].runsWithPrevious;
+    const next = plays.map((play, i) => (i === index ? { ...play, runsWithPrevious: !play.runsWithPrevious } : play));
+    if (!joining) return normalizeGroups(next);
+    const head = groupRange(plays, index - 1).start;
+    return normalizeGroups(plays[head].rotateEveryMinutes != null ? next : carryRotation(next, head, plays[index].rotateEveryMinutes));
+}
+```
+
+In `moveItem`, the within-block branch keeps the rotation on whichever station now heads the block:
+
+```ts
+    if (index !== group.start) {
+        const target = index + dir;
+        if (target < group.start || target >= group.end) return plays;
+        const next = [...plays];
+        [next[index], next[target]] = [next[target], next[index]];
+        // Flags are positional inside a block: its first drill runs on its own.
+        for (let i = group.start; i < group.end; i++) {
+            const runsWithPrevious = i !== group.start;
+            if (next[i].runsWithPrevious !== runsWithPrevious) next[i] = { ...next[i], runsWithPrevious };
+        }
+        // A station moved up to the top takes the block's rotation.
+        return normalizeGroups(carryRotation(next, group.start, plays[group.start].rotateEveryMinutes));
+    }
+```
+
+(The unit-move branch below it is unchanged: a block that hops over its neighbour keeps its first drill.)
+
+Replace `removeItem`:
+
+```ts
+/**
+ * Removes the drill at `index`. Removing a block's first drill makes the next
+ * station the head of what is left, so it never joins the block before it, and
+ * hands it the block's rotation.
+ */
+export function removeItem<T extends TimelinePlay>(plays: T[], index: number): T[] {
+    if (index < 0 || index >= plays.length) return plays;
+    const removedHead = index === 0 || !plays[index].runsWithPrevious;
+    const next = plays.filter((_, i) => i !== index);
+    const follower = next[index];
+    if (removedHead && follower?.runsWithPrevious) {
+        next[index] = { ...follower, runsWithPrevious: false };
+        return normalizeGroups(carryRotation(next, index, plays[index].rotateEveryMinutes));
+    }
+    return normalizeGroups(next);
+}
+```
+
 Make `GoalieNeeds.playData` optional and skip block rows in `goalieWarnings`:
 
 ```ts
@@ -1194,14 +1338,25 @@ export function betweenBlocksLabel(minutes: number): string {
 export function rotationRoundLabel(start: number, minutes: number): string {
     return `${start}–${start + minutes} min`;
 }
+
+/** The mark of a station whose group doesn't rotate (session page, bench sheet, import preview). */
+export const STAYS_MARK = "stays";
+
+/** What follows a station's name in a rotating block: " · stays", or nothing (its minutes are the rotation's). */
+export function staysSuffix(stays: boolean | undefined): string {
+    return stays ? ` · ${STAYS_MARK}` : "";
+}
 ```
 
-`ROTATION_ALL`, `MIN_ROTATING_STATIONS` and the rotation types are used by `groupStations` and `normalizeGroups` above them; `const` and `interface` declarations at module scope are hoisted for functions that run later, so the order is fine.
+`MIN_ROTATING_STATIONS` is read by `normalizeGroups` and `rotationMinutes`, and the rotation types by `StationGroup`, all above their declarations. That is fine: interfaces are type-only, and a module-scope `const` is initialized when the module loads, before any of these functions runs. `ROTATION_ALL` is read only by `rotationGrid`, below it.
 
 - [ ] **Step 7: Run the tests to verify they pass**
 
 Run: `bun run test __tests__/lib/utils/session-rows.test.ts __tests__/lib/utils/session-timeline.test.ts __tests__/lib/data/starter-templates.test.ts __tests__/lib/plan-document`
-Expected: PASS. The starter-template and plan-document suites use `groupStations` and `sessionWallMinutes`; they must be unchanged.
+Expected: PASS. The starter-template and plan-document suites use `groupStations` and `sessionWallMinutes`; they must be unchanged. The existing `moveItem` / `removeItem` / `toggleRunsWithPrevious` tests pass unchanged: their rows carry no rotation, so `carryRotation` is a no-op.
+
+Run: `bun run test`
+Expected: PASS (the whole suite: today's data has no block rows, rotation or gaps, so every caller's results are unchanged).
 
 Run: `bun run type-check`
 Expected: PASS. Nothing reads the new types yet.
@@ -1236,6 +1391,7 @@ Switch the two session types' `plays` to the unions and make every reader narrow
 - Test (create): `__tests__/components/features/practice-planner/BlockRowCard.test.tsx`, `__tests__/components/features/practice-planner/PracticeSessionEditor.blocks.test.tsx`, `__tests__/app/practice-session-detail-blocks.test.tsx`
 - Test (append): `__tests__/lib/utils/drill-tags.test.ts`, `__tests__/lib/utils/session-drill-ids.test.ts`, `__tests__/components/features/practice-planner/SessionTimeline.test.tsx`, `__tests__/components/features/practice-planner/print/BenchSheet.test.tsx`, `__tests__/components/features/practice-planner/export/bench-sheet-model.test.ts`, `bench-sheet-html.test.ts`, `bench-sheet-docx.test.ts`
 - Test (modify): `__tests__/apps/planner/editor-screens.test.tsx` (the `toLocalSessionSave` expectation)
+- Test (narrow, ruling R1; they read drill-only fields off the new unions and fail type-check otherwise): `__tests__/lib/utils/session-drill-ids.test.ts` (lines 15, 22, 43), `__tests__/components/features/practice-planner/PracticeSessionEditor.drill-dialog.test.tsx` (lines 91, 113, 122, 145, 175, 227), `__tests__/components/features/practice-planner/PracticeSessionEditor.drill-ids.test.tsx` (lines 64, 67), `__tests__/apps/planner/local-store.sessions.test.ts` (lines 38, 178, 202, 241, 266, 277, 279, 284), `__tests__/apps/planner/import-screen.test.tsx` (lines 175–213)
 
 **Interfaces:**
 - Consumes (Task 1): `SessionItem`, `BlockInSession`, `SessionRow`, `BlockKind`, `isDrillRow`, `isBlockRow`, `drillRows`, `blockTitle`, `RowEdit`, `applyRowEdit`, `toDrillRowInput`, `groupStations(plays, transitionMinutes)`, `buildSchedule(plays, start, transitionMinutes)`, `sessionWallMinutes(plays, transitionMinutes)`.
@@ -1282,6 +1438,34 @@ describe("session-drill-ids with block rows", () => {
         expect(upsertSessionDrill([BLOCK], "kd", patch)[1]).toMatchObject({ id: "kd", sequence: 1, runsWithPrevious: false, playId: "cx" });
     });
 });
+```
+
+In the same file (it already imports `createEmptyPlayData`), add `import { drillRows } from "@/lib/utils/session-rows";` and narrow the three existing reads of drill-only fields off the returned `SessionItem[]`:
+- line 15: `expect(drillRows(next).map((p) => p.playId)).toEqual(["copy", "owned"]);`
+- line 22: `expect(drillRows(next)[0].playId).toBe("forked-by-dialog");`
+- line 43: `expect(drillRows(next)[0].playDataUnreadable).toBeFalsy();`
+
+The editor's save payload is `SessionItem[]` now, so the two editor test files narrow their `playId` reads the same way (add `import { drillRows } from "@/lib/utils/session-rows";` to each):
+- `__tests__/components/features/practice-planner/PracticeSessionEditor.drill-dialog.test.tsx`: line 91 becomes `expect(drillRows(onSave.mock.calls[0][0].plays).map((p) => p.playId)).toEqual([FORK]);`, and lines 113, 122, 145, 175 and 227, each `expect(onSave.mock.calls[N][0].plays[0].playId)…`, become `expect(drillRows(onSave.mock.calls[N][0].plays)[0].playId)…` with the same `N` and matcher;
+- `__tests__/components/features/practice-planner/PracticeSessionEditor.drill-ids.test.tsx`: lines 64 and 67 likewise (`drillRows(onSave.mock.calls[0][0].plays)[0].playId`, `drillRows(onSave.mock.calls[1][0].plays)[0].playId`).
+
+`PracticeSessionView.plays` becomes `SessionRow[]`, so `__tests__/apps/planner/local-store.sessions.test.ts` narrows its `.play` reads (add `import { drillRows } from "@/lib/utils/session-rows";`; Tasks 4 and 5 merge their session-rows names into this import):
+- line 38: `return view.success ? drillRows(view.data.plays).map((p) => p.play.id) : [];`
+- line 178: `expect(view.success && drillRows(view.data.plays)[0].play.id).not.toBe(original);`
+- line 202: `expect(view.success && drillRows(view.data.plays)[0].play.playData).toBeNull();`
+- line 241: `expect(view.success && drillRows(view.data.plays).map((p) => [p.play.name, p.runsWithPrevious, p.instructions])).toEqual([`
+- line 266: `expect(drillRows(view.plays)[0].play).toMatchObject({ focus: "goalies", goalies: "required" });`
+- line 277: `const owned = drillRows(view.plays)[0].play.id;`
+- line 279: `expect(drillRows(data(await store.getSessionView(session.id)).plays)[0].play).toMatchObject({ focus: "goalies", goalies: "optional" });`
+- line 284: `expect(drillRows(copy.plays)[0].play).toMatchObject({ focus: "goalies", goalies: "optional" });`
+
+`__tests__/apps/planner/import-screen.test.tsx` ("stores fresh drills…", lines 175–213) reads `.playId`, `.name` and `.playData` on every editor row and rebuilds each row as a drill. Narrow it, and keep each row's minutes (Task 10 makes Skills Stations fill 60 of 60 minutes, so a `+ 1` on every row would no longer fit the session). Add `import { drillRows, toDrillRowInput } from "@/lib/utils/session-rows";` and:
+- line 189: `for (const play of drillRows(initialData.plays)) {`
+- replace the `plays: initialData.plays.map((play) => ({ … duration: play.duration + 1, instructions: "Changed" })),` argument (lines 204–211) with:
+
+```ts
+            // The static store doesn't take block rows yet, so the update carries the drill rows.
+            plays: drillRows(initialData.plays).map((play) => ({ ...toDrillRowInput(play), instructions: "Changed" })),
 ```
 
 - [ ] **Step 2: Write the failing editor tests**
@@ -1573,7 +1757,7 @@ describe("BenchSheet: block rows", () => {
 });
 ```
 
-Append to `__tests__/components/features/practice-planner/export/bench-sheet-model.test.ts` (merge `BlockKind` into its type imports from `@/types/practice-planner`):
+Append to `__tests__/components/features/practice-planner/export/bench-sheet-model.test.ts` (merge `BlockKind` into its type imports from `@/types/practice-planner`; it already imports `buildLegend` and has `withPass` and `renderers()`, whose images are `data:image/png;base64,SWAT`):
 
 ```ts
 describe("buildBenchSheetModel: block rows and the gap", () => {
@@ -1606,7 +1790,8 @@ describe("buildBenchSheetModel: block rows and the gap", () => {
     it("numbers and draws drills only", () => {
         const model = buildBenchSheetModel(WITH_BLOCKS, renderers());
         expect(model.drills.map((d) => [d.number, d.name])).toEqual([[1, "Breakout"], [2, "Shooting"]]);
-        expect(model.legend.length).toBeGreaterThan(0);
+        // Both drills draw one pass: one legend entry, from the drills alone.
+        expect(model.legend).toEqual(buildLegend(withPass("x")).map((entry) => ({ label: entry.label, image: "data:image/png;base64,SWAT" })));
     });
 });
 ```
@@ -2445,8 +2630,8 @@ In `apps/planner/src/screens/SessionEditorScreen.tsx`, the same imports, and in 
 - [ ] **Step 12: Run the tests to verify they pass**
 
 Run the Step 4 command again. Expected: PASS.
-Then: `bun run test __tests__/components/features/practice-planner __tests__/app __tests__/apps/planner __tests__/lib/utils && bun run type-check && bun run lint`
-Expected: PASS, including both line-budget tests. A type error that names `.play` or `playId` on a union is a reader this task missed: narrow it with `isDrillRow`/`drillRows`, never with a cast.
+Then: `bun run test && bun run type-check && bun run lint`
+Expected: PASS, including both line-budget tests and the five narrowed test files. A type error that names `.play` or `playId` on a union is a reader (or a test) this task missed: narrow it with `isDrillRow`/`drillRows`, never with a cast, and stage it.
 
 - [ ] **Step 13: Commit**
 
@@ -2465,7 +2650,10 @@ Expected: PASS, including both line-budget tests. A type error that names `.play
   __tests__/components/features/practice-planner/SessionTimeline.test.tsx __tests__/app/practice-session-detail-blocks.test.tsx \
   __tests__/components/features/practice-planner/print/BenchSheet.test.tsx __tests__/components/features/practice-planner/export/bench-sheet-model.test.ts \
   __tests__/components/features/practice-planner/export/bench-sheet-html.test.ts __tests__/components/features/practice-planner/export/bench-sheet-docx.test.ts \
-  __tests__/apps/planner/editor-screens.test.tsx
+  __tests__/apps/planner/editor-screens.test.tsx \
+  __tests__/components/features/practice-planner/PracticeSessionEditor.drill-dialog.test.tsx \
+  __tests__/components/features/practice-planner/PracticeSessionEditor.drill-ids.test.tsx \
+  __tests__/apps/planner/local-store.sessions.test.ts __tests__/apps/planner/import-screen.test.tsx
 /usr/bin/git commit -m "feat(practice-planner): every session reader handles block rows" -m "Claude-Session: https://claude.ai/code/session_01TqKuhs6SuVkWyirkz3ZdQX"
 ```
 
@@ -2485,15 +2673,17 @@ Every hosted path from spec R2, R3, R5 and R11. After this task the hosted app s
 - Modify: `lib/actions/practice-session-queries.ts` (`getPracticePlannerListData`, `getPracticeSessionDetail`, `getPracticeSessionForEdit`)
 - Modify: `lib/email/templates.ts` (`PracticePlanSharedEmailData`, `PracticePlanUpdatedEmailData`, both senders, `sendPracticePlanNotifications`)
 - Modify: `app/(dashboard)/practice-planner/[sessionId]/edit/EditSessionWrapper.tsx`, `app/(dashboard)/practice-planner/new/PracticeSessionEditorWrapper.tsx` (remove seam S1)
-- Test (create): `__tests__/prisma/practice-timing-migration.test.ts`, `__tests__/lib/email/practice-plan-blocks.test.ts`
-- Test (append or modify): `__tests__/lib/utils/validation-practice-session.test.ts`, `__tests__/lib/actions/practice-sessions-ownership.test.ts`, `__tests__/lib/actions/practice-sessions.test.ts`, `__tests__/lib/actions/practice-session-drills.test.ts`, `__tests__/lib/actions/practice-session-queries.test.ts`, `__tests__/lib/email/templates-preferences-scope.test.ts`, `__tests__/app/practice-planner-hosted-wrappers.test.tsx`
+- Modify: `lib/data/dashboard.ts` (`getUpcomingSchedule`: the practice's play count reads drill rows only, ruling R8)
+- Test (create): `__tests__/prisma/practice-timing-migration.test.ts`, `__tests__/lib/email/practice-plan-blocks.test.ts`, `__tests__/lib/data/dashboard-schedule.test.ts`
+- Test (append or modify): `__tests__/lib/utils/validation-practice-session.test.ts`, `__tests__/lib/actions/practice-sessions-ownership.test.ts`, `__tests__/lib/actions/practice-sessions.test.ts`, `__tests__/lib/actions/practice-session-drills.test.ts`, `__tests__/lib/actions/practice-session-queries.test.ts` (new tests, plus narrowing lines 96, 214 and 222), `__tests__/lib/email/templates-preferences-scope.test.ts`, `__tests__/app/practice-planner-hosted-wrappers.test.tsx`, `__tests__/lib/services/practice-session-drills.test.ts` (detach carries the new fields, ruling R12)
 
 **Interfaces:**
 - Consumes (Task 1): `withStoredTiming`, `needsStoredTiming`, `toBlockLabel`, `toRowKind`, `isBlockKind`, `blockTitle`, `toSessionRowInputs`, `sessionRowsError`, `sessionWallMinutes(rows, transitionMinutes)`, `normalizeGroups`, the message constants. (Task 2): `SessionRow`, `SessionItem`.
 - Produces:
   - Prisma `PracticeSessionPlay.kind: string`, `label: string | null`, `stays: boolean`, `rotateEveryMinutes: number | null`, `playId: string | null`, `play: Play | null`; `PracticeSession.transitionMinutes: number`;
   - `practiceSessionPlayInputSchema` output `PracticeSessionRowInput = { kind: SessionRowKind; playId?: string; clientKey; sequence; duration; instructions?: string; runsWithPrevious: boolean; label?: string | null; stays?: boolean; rotateEveryMinutes?: number | null }`; `transitionMinutes?: number` on both session schemas;
-  - `getPracticeSessionDetail(...).session.plays: SessionRow[]` and `.transitionMinutes: number`; `getPracticeSessionForEdit(...).initialData.plays: SessionItem[]` and `.transitionMinutes: number`.
+  - `getPracticeSessionDetail(...).session.plays: SessionRow[]` and `.transitionMinutes: number`; `getPracticeSessionForEdit(...).initialData.plays: SessionItem[]` and `.transitionMinutes: number`;
+  - `getUpcomingSchedule(...)`'s `UpcomingPracticeItem.playCount` counts drill rows only (the type is unchanged).
 
 - [ ] **Step 1: Write the failing migration test**
 
@@ -2792,10 +2982,27 @@ describe("practice timing rows (spec R2, R3, R5)", () => {
 });
 ```
 
-In the same file, and in `__tests__/lib/actions/practice-sessions-stations.test.ts`, every existing exact-shape expectation of a written session-play row (find them with `rg -n "runsWithPrevious: (true|false), duration" __tests__/lib/actions`) gains the four new keys, for example:
+In the same file, the one existing exact-shape expectation of a written session-play row (line 99, in "createPracticeSession owns its drills"; `rg -n "runsWithPrevious: (true|false), duration" __tests__/lib/actions` finds no other) gains the four new keys:
 
 ```ts
             { sessionId: SESSION, playId: "cclone0xxxxxxxxxxxxxxxxxx", kind: "drill", label: null, sequence: 0, runsWithPrevious: false, stays: false, rotateEveryMinutes: null, duration: 10, instructions: null },
+```
+
+(`__tests__/lib/actions/practice-sessions-stations.test.ts` reads single fields off the written rows, so it needs no change.)
+
+The existing ownership test "reads previous references before deleting session plays" (line 146) would now pass vacuously: its save omits `stays` / `rotateEveryMinutes`, so the first `practiceSessionPlay.findMany` is the new stored-timing read, not `materializeSessionDrills`'s. Pin it to the reference read, whose `select` is exactly `{ playId: true }`:
+
+```ts
+    it("reads previous references before deleting session plays", async () => {
+        await updatePracticeSession({ id: SESSION, ...input([{ playId: OWNED, clientKey: "k1" }]) });
+        // The stored-timing read comes first now; pin materializeSessionDrills's own read.
+        const references = models.practiceSessionPlay.findMany.mock.calls.findIndex(
+            ([args]) => Object.keys(args.select).join(",") === "playId",
+        );
+        expect(references).toBeGreaterThanOrEqual(0);
+        expect(models.practiceSessionPlay.findMany.mock.invocationCallOrder[references])
+            .toBeLessThan(models.practiceSessionPlay.deleteMany.mock.invocationCallOrder[0]);
+    });
 ```
 
 Append to `__tests__/lib/actions/practice-session-drills.test.ts`, inside `describe("duplicatePracticeSession", …)`:
@@ -2843,7 +3050,11 @@ describe("getPracticeSessionById: block rows", () => {
 
 In `__tests__/lib/actions/practice-session-queries.test.ts`:
 - add `findMany: vi.fn()` to the hoisted `mockPrisma.practiceSession`;
-- add `getPracticePlannerListData` to the import from `@/lib/actions/practice-session-queries` and `import { isDrillRow } from "@/lib/utils/session-rows";`;
+- add `getPracticePlannerListData` to the import from `@/lib/actions/practice-session-queries` and `import { drillRows, isDrillRow } from "@/lib/utils/session-rows";`;
+- the query return types become `SessionItem[]` / `SessionRow[]`, so narrow the existing drill-only reads:
+  - line 96: `const [unreadable, ok] = drillRows(result!.initialData.plays);` (lines 97–99 then read drill fields as before);
+  - line 214: `expect(drillRows(result!.initialData.plays).map((p) => [p.focus, p.goalies])).toEqual([["goalies", "required"], ["team", "optional"]]);`
+  - line 222: `expect(drillRows(result!.session.plays).map((p) => [p.play.focus, p.play.goalies])).toEqual([["goalies", "required"], ["team", "optional"]]);`
 - append:
 
 ```ts
@@ -2993,8 +3204,73 @@ describe("hosted wrappers: block rows and the gap", () => {
 });
 ```
 
-Run: `bun run test __tests__/lib/utils/validation-practice-session.test.ts __tests__/lib/actions __tests__/lib/email __tests__/app/practice-planner-hosted-wrappers.test.tsx`
-Expected: FAIL. The schema has no row kinds or gap; the actions, queries, duplicate and emails don't know block rows.
+Detach-on-write (spec R5, Testing "detach carries the new fields"; ruling R12). `detachLibraryPlay` repoints rows with `updateMany({ data: { playId } })`, so a drill row keeps its `kind`, `label`, `stays` and `rotateEveryMinutes`, and a block row (no play) never matches the lookup. In `__tests__/lib/services/practice-session-drills.test.ts`, widen `fakeTx`'s second parameter so rows can carry the new columns and a block row's null play:
+
+```ts
+function fakeTx(plays: Row[], referencing: Array<{ sessionId: string; playId: string | null } & Record<string, unknown>> = []) {
+```
+
+(`refs()` still fits it), and append inside `describe("detachLibraryPlay", …)`:
+
+```ts
+    it("repoints only the play id, so a row keeps its kind, stays and rotation, and never touches a block row", async () => {
+        const { mocks, tx } = fakeTx([LIB], [
+            { sessionId: "sA", playId: null, kind: "warmup", label: "Laps", stays: false, rotateEveryMinutes: null },
+            { sessionId: "sA", playId: "lib", kind: "drill", label: null, stays: true, rotateEveryMinutes: 5 },
+        ]);
+        await expect(detachLibraryPlay(tx, { playId: "lib", teamId: TEAM, userId: USER })).resolves.toBe(1);
+        expect(mocks.practiceSessionPlay.findMany.mock.calls[0][0].where).toEqual({ playId: "lib", session: { teamId: TEAM } });
+        // The update writes the play id and nothing else: every other column stays as stored.
+        expect(mocks.practiceSessionPlay.updateMany.mock.calls).toEqual([
+            [{ where: { sessionId: "sA", playId: "lib" }, data: { playId: "clone-0" } }],
+        ]);
+    });
+```
+
+(This documents behaviour that is already right, so it passes before Step 6; it guards the copy path R5 names.)
+
+The dashboard's upcoming schedule shows "N plays" per practice from `_count.plays` (`lib/data/dashboard.ts:176`, read by `UpcomingScheduleWidget`), which would count block rows (ruling R8). Create `__tests__/lib/data/dashboard-schedule.test.ts`:
+
+```ts
+/** Dashboard upcoming schedule (practice timing, spec R11): a practice's play count is its drill rows. */
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const { mockPrisma } = vi.hoisted(() => ({
+    mockPrisma: {
+        teamMember: { findMany: vi.fn() },
+        leagueUser: { findMany: vi.fn() },
+        event: { findMany: vi.fn() },
+        practiceSession: { findMany: vi.fn() },
+    },
+}));
+
+vi.mock("@/lib/db/prisma", () => ({ prisma: mockPrisma }));
+
+import { getUpcomingSchedule } from "@/lib/data/dashboard";
+
+describe("getUpcomingSchedule: practice play counts", () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockPrisma.teamMember.findMany.mockResolvedValue([{ role: "ADMIN", team: { id: "t1", name: "Lions" } }]);
+        mockPrisma.leagueUser.findMany.mockResolvedValue([]);
+        mockPrisma.event.findMany.mockResolvedValue([]);
+        mockPrisma.practiceSession.findMany.mockResolvedValue([
+            { id: "s1", title: "Skills", date: new Date("2026-10-06T23:00:00.000Z"), duration: 60, teamId: "t1", team: { name: "Lions" }, _count: { plays: 2 } },
+        ]);
+    });
+
+    it("counts drill rows only, so a warm-up or a break is not a play", async () => {
+        const items = await getUpcomingSchedule("u1");
+        expect(mockPrisma.practiceSession.findMany.mock.calls[0][0].select._count).toEqual({ select: { plays: { where: { kind: "drill" } } } });
+        expect(items).toEqual([expect.objectContaining({ kind: "practice", id: "s1", playCount: 2 })]);
+    });
+});
+```
+
+(`getViewerMemberships` is wrapped in React's `cache`; the client build Vitest loads calls straight through, so no mock of `react` is needed.)
+
+Run: `bun run test __tests__/lib/utils/validation-practice-session.test.ts __tests__/lib/actions __tests__/lib/email __tests__/app/practice-planner-hosted-wrappers.test.tsx __tests__/lib/services/practice-session-drills.test.ts __tests__/lib/data/dashboard-schedule.test.ts`
+Expected: FAIL. The schema has no row kinds or gap; the actions, queries, duplicate, emails and the dashboard count don't know block rows. (The new detach test passes already.)
 
 - [ ] **Step 5: Extend the session schemas**
 
@@ -3006,6 +3282,7 @@ In `lib/utils/validation.ts`:
 import {
   BLOCK_HAS_NO_DRILL_MESSAGE,
   BLOCK_LABEL_MESSAGE,
+  CONTROL_CHARS,
   DRILL_NEEDS_PLAY_MESSAGE,
   ROTATE_MINUTES_MESSAGE,
   TRANSITION_MINUTES_MESSAGE,
@@ -3013,7 +3290,7 @@ import {
 import { BLOCK_ROW_FIELDS_ERROR, BLOCK_STATION_ERROR } from "@/lib/utils/session-timeline";
 ```
 
-- replace `practiceSessionPlayInputSchema` (keep its comment, extended):
+- replace `practiceSessionPlayInputSchema` (keep its comment, extended; the label strips the shared `CONTROL_CHARS`, not a new inline copy of the pattern):
 
 ```ts
 // One row in a practice-session save. clientKey is the editor's stable
@@ -3027,7 +3304,7 @@ import { BLOCK_ROW_FIELDS_ERROR, BLOCK_STATION_ERROR } from "@/lib/utils/session
 // null clears a rotation.
 const blockLabelSchema = z
   .string()
-  .transform((value) => value.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "").trim())
+  .transform((value) => value.replace(CONTROL_CHARS, "").trim())
   .pipe(z.string().max(MAX_BLOCK_LABEL_LENGTH, BLOCK_LABEL_MESSAGE));
 
 const rotateEveryMinutesSchema = z
@@ -3322,7 +3599,7 @@ In `lib/actions/practice-session-queries.ts`:
 
 (`?? false` / `?? null` here read a legacy or partial row with defaults; they never write.)
 
-- [ ] **Step 9: List block rows in the practice-plan emails**
+- [ ] **Step 9: List block rows in the practice-plan emails, and count drills on the dashboard**
 
 In `lib/email/templates.ts`:
 - add `import { blockTitle, isBlockKind, toRowKind } from "@/lib/utils/session-rows";`;
@@ -3364,6 +3641,13 @@ and add to `sessionData`:
     }),
 ```
 
+In `lib/data/dashboard.ts`, `getUpcomingSchedule`'s practice query counts drills only (its "N plays" line must not count a warm-up or a break):
+
+```ts
+        // Drills only: block rows (warm-up, break…) are not plays (practice timing).
+        _count: { select: { plays: { where: { kind: "drill" } } } },
+```
+
 - [ ] **Step 10: Send block rows from the hosted editors (remove seam S1)**
 
 In `EditSessionWrapper.tsx` and `PracticeSessionEditorWrapper.tsx`, import `toSessionRowInputs` (drop `drillRows`/`toDrillRowInput`) and replace the seam with:
@@ -3378,21 +3662,22 @@ In `EditSessionWrapper.tsx` and `PracticeSessionEditorWrapper.tsx`, import `toSe
 
 Run the Step 4 command again, plus `bun run test __tests__/prisma __tests__/lib/services __tests__/integration`.
 Expected: PASS.
-Run: `bun run type-check && bun run lint && bun run check:raw-sql`
-Expected: PASS.
+Run: `bun run test && bun run type-check && bun run lint && bun run check:raw-sql`
+Expected: PASS (the narrowed `practice-session-queries.test.ts` included).
 
 - [ ] **Step 12: Commit**
 
 ```bash
 /usr/bin/git add prisma/schema.prisma prisma/migrations/20261004120000_practice_session_timing/migration.sql \
   lib/utils/validation.ts lib/services/practice-session-drills.ts lib/actions/practice-sessions.ts \
-  lib/actions/practice-session-drills.ts lib/actions/practice-session-queries.ts lib/email/templates.ts \
+  lib/actions/practice-session-drills.ts lib/actions/practice-session-queries.ts lib/email/templates.ts lib/data/dashboard.ts \
   "app/(dashboard)/practice-planner/[sessionId]/edit/EditSessionWrapper.tsx" "app/(dashboard)/practice-planner/new/PracticeSessionEditorWrapper.tsx" \
   __tests__/prisma/practice-timing-migration.test.ts __tests__/lib/email/practice-plan-blocks.test.ts \
   __tests__/lib/utils/validation-practice-session.test.ts __tests__/lib/actions/practice-sessions-ownership.test.ts \
-  __tests__/lib/actions/practice-sessions-stations.test.ts __tests__/lib/actions/practice-sessions.test.ts \
+  __tests__/lib/actions/practice-sessions.test.ts \
   __tests__/lib/actions/practice-session-drills.test.ts __tests__/lib/actions/practice-session-queries.test.ts \
-  __tests__/lib/email/templates-preferences-scope.test.ts __tests__/app/practice-planner-hosted-wrappers.test.tsx
+  __tests__/lib/email/templates-preferences-scope.test.ts __tests__/app/practice-planner-hosted-wrappers.test.tsx \
+  __tests__/lib/services/practice-session-drills.test.ts __tests__/lib/data/dashboard-schedule.test.ts
 /usr/bin/git commit -m "feat(practice-planner): store block rows, rotation and the gap between blocks" -m "Claude-Session: https://claude.ai/code/session_01TqKuhs6SuVkWyirkz3ZdQX"
 ```
 
@@ -3405,12 +3690,12 @@ The static planner stores what hosted stores (spec R7). IndexedDB records gain o
 **Files:**
 - Modify: `apps/planner/src/store/records.ts` (`StoredSessionRow`, `StoredSession`)
 - Modify: `apps/planner/src/store/types.ts` (`LocalSessionDrill`, `LocalSessionSave`)
-- Modify: `apps/planner/src/store/sessions.ts` (imports, `checkDrills` → `checkRows`, new `checkTimeline`/`checkedTransition`/`storedTiming`, `assertExportable` seam S4, `materialize`, `listSessions`, `getSessionView`, `getSessionForEdit`, `createSession`, `updateSession`, `duplicatePracticeSession`)
+- Modify: `apps/planner/src/store/sessions.ts` (imports, the private `CONTROL_CHARS` → the shared import, `checkDrills` → `checkRows`, new `checkTimeline`/`checkedTransition`/`storedTiming`, `assertExportable` seam S4, `materialize`, `listSessions`, `getSessionView`, `getSessionForEdit`, `createSession`, `updateSession`, `duplicatePracticeSession`)
 - Modify: `apps/planner/src/screens/SessionEditorScreen.tsx` (remove seam S2)
-- Test (append or modify): `__tests__/apps/planner/local-store.sessions.test.ts`, `__tests__/apps/planner/editor-screens.test.tsx`
+- Test (append or modify): `__tests__/apps/planner/local-store.sessions.test.ts`, `__tests__/apps/planner/editor-screens.test.tsx`, `__tests__/apps/planner/import-screen.test.tsx` (the update sends every row once the store takes block rows)
 
 **Interfaces:**
-- Consumes (Task 1): `SessionRowInput`, `DrillRowInput`, `withStoredTiming`, `toBlockLabel`, `toRowKind`, `isBlockKind`, `isBlockRow`, `toRotateEveryMinutes`, `toTransitionMinutes`, the message constants, `sessionRowsError`, `sessionWallMinutes`. (Task 2): `SessionRow`, `SessionItem`.
+- Consumes (Task 1): `SessionRowInput`, `DrillRowInput`, `withStoredTiming`, `toBlockLabel`, `toRowKind`, `isBlockKind`, `isBlockRow`, `toRotateEveryMinutes`, `toTransitionMinutes`, the message constants (incl. `BLOCK_HAS_NO_DRILL_MESSAGE` and `DRILL_NEEDS_PLAY_MESSAGE`, so the static store rejects the row shapes hosted's schema rejects, ruling R7), `CONTROL_CHARS`, `sessionRowsError`, `sessionWallMinutes`, `toSessionRowInputs`. (Task 2): `SessionRow`, `SessionItem`.
 - Produces:
   - `StoredSessionRow.playId: string | null` plus optional `kind`, `label`, `stays`, `rotateEveryMinutes`; `StoredSession.transitionMinutes?: number`;
   - `LocalSessionDrill = SessionRowInput`; `LocalSessionSave.transitionMinutes?: number` (absent = unchanged on update, 0 on create).
@@ -3418,7 +3703,7 @@ The static planner stores what hosted stores (spec R7). IndexedDB records gain o
 - [ ] **Step 1: Write the failing store tests**
 
 In `__tests__/apps/planner/local-store.sessions.test.ts`:
-- imports: add `import { BLOCK_LABEL_MESSAGE, isDrillRow, TRANSITION_MINUTES_MESSAGE, type DrillRowInput } from "@/lib/utils/session-rows";` and `import { BLOCK_STATION_ERROR, ROTATION_TOO_FEW_ERROR } from "@/lib/utils/session-timeline";`;
+- imports: merge `BLOCK_HAS_NO_DRILL_MESSAGE, BLOCK_LABEL_MESSAGE, DRILL_NEEDS_PLAY_MESSAGE, isDrillRow, TRANSITION_MINUTES_MESSAGE, type DrillRowInput` into the `@/lib/utils/session-rows` import Task 2 added (one import per module), and add `import { BLOCK_STATION_ERROR, ROTATION_TOO_FEW_ERROR } from "@/lib/utils/session-timeline";`;
 - the `drill` helper builds drill rows only, so its overrides are drill fields:
 
 ```ts
@@ -3493,6 +3778,11 @@ function drill(playId: string, clientKey: string, sequence: number, overrides: P
         expect(await store.createSession(save([], { transitionMinutes: 6 }))).toEqual({ success: false, error: TRANSITION_MINUTES_MESSAGE });
         expect(await store.createSession(save([{ kind: "break", clientKey: "kb", sequence: 0, duration: 2, instructions: "", label: "x".repeat(61) }])))
             .toEqual({ success: false, error: BLOCK_LABEL_MESSAGE });
+        // The row shapes hosted's schema rejects (ruling R7), with the same words: a drill with no
+        // play, and a block that names one (built outside a literal, as an older or hand-made payload).
+        expect(await store.createSession(save([drill("", "k1", 0)]))).toEqual({ success: false, error: DRILL_NEEDS_PLAY_MESSAGE });
+        const blockWithDrill = { kind: "break" as const, clientKey: "kb", sequence: 0, duration: 2, instructions: "", label: null, playId: a };
+        expect(await store.createSession(save([blockWithDrill]))).toEqual({ success: false, error: BLOCK_HAS_NO_DRILL_MESSAGE });
         expect(data(await store.listSessions())).toEqual([]);
     });
 
@@ -3602,7 +3892,10 @@ import type { PracticeSessionView, SessionItem, SessionRow } from "@/types/pract
 import { MAX_BLOCK_LABEL_LENGTH } from "@/types/practice-planner";
 import { normalizeGroups, sessionRowsError, sessionWallMinutes } from "@/lib/utils/session-timeline";
 import {
+    BLOCK_HAS_NO_DRILL_MESSAGE,
     BLOCK_LABEL_MESSAGE,
+    CONTROL_CHARS,
+    DRILL_NEEDS_PLAY_MESSAGE,
     ROTATE_MINUTES_MESSAGE,
     TRANSITION_MINUTES_MESSAGE,
     isBlockKind,
@@ -3617,7 +3910,7 @@ import {
 } from "@/lib/utils/session-rows";
 ```
 
-(`stationGroupError` and `PlayInSession` are no longer imported.)
+(`stationGroupError` and `PlayInSession` are no longer imported.) Delete the module's private `const CONTROL_CHARS = …` (line 34): `sessionMeta` now strips the title with the shared import, which is the same pattern.
 
 Replace `checkDrills` with the shape check, and add the timeline check and the readers:
 
@@ -3632,11 +3925,17 @@ function checkRows(plays: LocalSessionDrill[]): void {
     if (sequences.some((sequence, index) => sequence !== index)) {
         throw new StoreRefusal("Drill sequences must run 0, 1, 2… with no gaps or repeats");
     }
+    // Hosted's row schema, rule for rule and in its words (practiceSessionPlayInputSchema).
     for (const row of plays) {
         if (isBlockRow(row)) {
-            if ((row.label ?? "").trim().length > MAX_BLOCK_LABEL_LENGTH) throw new StoreRefusal(BLOCK_LABEL_MESSAGE);
-        } else if (row.rotateEveryMinutes != null && toRotateEveryMinutes(row.rotateEveryMinutes) === null) {
-            throw new StoreRefusal(ROTATE_MINUTES_MESSAGE);
+            // A payload built outside the editor may still name a play on a block row.
+            if ("playId" in row && row.playId != null) throw new StoreRefusal(BLOCK_HAS_NO_DRILL_MESSAGE);
+            if ((row.label ?? "").replace(CONTROL_CHARS, "").trim().length > MAX_BLOCK_LABEL_LENGTH) throw new StoreRefusal(BLOCK_LABEL_MESSAGE);
+        } else {
+            if (!row.playId) throw new StoreRefusal(DRILL_NEEDS_PLAY_MESSAGE);
+            if (row.rotateEveryMinutes != null && toRotateEveryMinutes(row.rotateEveryMinutes) === null) {
+                throw new StoreRefusal(ROTATE_MINUTES_MESSAGE);
+            }
         }
     }
 }
@@ -3849,10 +4148,16 @@ In `apps/planner/src/screens/SessionEditorScreen.tsx`, import `toSessionRowInput
         ...(session.transitionMinutes !== undefined && { transitionMinutes: session.transitionMinutes }),
 ```
 
+In `__tests__/apps/planner/import-screen.test.tsx`, the update Task 2 narrowed now sends every row, so a template's block rows (Task 10 adds a cool-down) round-trip as blocks: change the import to `import { drillRows, toSessionRowInputs } from "@/lib/utils/session-rows";` and the payload to
+
+```ts
+            plays: toSessionRowInputs(initialData.plays).map((row) => ({ ...row, instructions: "Changed" })),
+```
+
 - [ ] **Step 5: Run the tests to verify they pass**
 
 Run the Step 1 command again. Expected: PASS.
-Run: `bun run test __tests__/apps/planner && bun run type-check && bun run lint`
+Run: `bun run test && bun run type-check && bun run lint`
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
@@ -3860,7 +4165,8 @@ Expected: PASS.
 ```bash
 /usr/bin/git add apps/planner/src/store/records.ts apps/planner/src/store/types.ts apps/planner/src/store/sessions.ts \
   apps/planner/src/screens/SessionEditorScreen.tsx \
-  __tests__/apps/planner/local-store.sessions.test.ts __tests__/apps/planner/editor-screens.test.tsx
+  __tests__/apps/planner/local-store.sessions.test.ts __tests__/apps/planner/editor-screens.test.tsx \
+  __tests__/apps/planner/import-screen.test.tsx
 /usr/bin/git commit -m "feat(planner): store block rows, rotation and the gap in the static planner" -m "Claude-Session: https://claude.ai/code/session_01TqKuhs6SuVkWyirkz3ZdQX"
 ```
 
@@ -3877,10 +4183,10 @@ The plan document carries block rows, rotation, stays and the gap (spec R6) with
 - Modify: `components/features/practice-planner/ExportPlanMenu.tsx` (new `toPlanRows`, `buildPlanDocument`)
 - Modify: `components/features/practice-planner/PlanPreview.tsx`
 - Modify: `docs/adr/0020-exchange-practice-plans-as-a-portable-versioned-document-and-ship-a-static-local.md`
-- Test (append or modify): `__tests__/lib/plan-document/document.test.ts`, `__tests__/lib/actions/practice-plan-import.test.ts`, `__tests__/apps/planner/local-store.sessions.test.ts`, `__tests__/components/features/practice-planner/ExportPlanMenu.test.tsx`, `__tests__/components/features/practice-planner/PlanImportView.test.tsx`, `__tests__/lib/data/starter-templates.test.ts` (narrowing only)
+- Test (append or modify): `__tests__/lib/plan-document/document.test.ts` (new tests, plus narrowing lines 118, 125, 138, 157, 179–180, 185, 199, 290, 338, 356, 369), `__tests__/lib/actions/practice-plan-import.test.ts` (new tests, plus the exact `create` and row shapes at lines 128–139 and 162–164), `__tests__/apps/planner/local-store.sessions.test.ts` (new test, plus line 312), `__tests__/components/features/practice-planner/ExportPlanMenu.test.tsx` (new test, plus lines 80, 319, 320), `__tests__/components/features/practice-planner/PlanImportView.test.tsx` (new test, plus `within` in its import), `__tests__/lib/data/starter-templates.test.ts` (narrowing only), `__tests__/components/features/practice-planner/StarterTemplatePicker.test.tsx` (narrowing lines 49–53)
 
 **Interfaces:**
-- Consumes (Task 1): `isBlockKind`, `isBlockRow`, `toBlockLabel`, `toRotateEveryMinutes`, `toTransitionMinutes`, `blockTitle`, `drillRows`, `normalizeGroups`, `settleRotations`, `sessionRowsError`, `sessionWallMinutes(rows, transitionMinutes)`, `groupStations(rows, transitionMinutes)`. (Task 2): `ExportSessionRow`, `BLOCK_ICONS`.
+- Consumes (Task 1): `isBlockKind`, `isBlockRow`, `toBlockLabel`, `toRotateEveryMinutes`, `toTransitionMinutes`, `CONTROL_CHARS`, `blockTitle`, `drillRows`, `normalizeGroups`, `settleRotations`, `sessionRowsError`, `sessionWallMinutes(rows, transitionMinutes)`, `groupStations(rows, transitionMinutes)`. (Task 2): `ExportSessionRow`, `BLOCK_ICONS`.
 - Produces:
   - `ROW_KIND_MESSAGE`; `PlanEntry = PlanDrill | PlanBlock` (`PlanDrill` is now the drill entry: `kind: "drill"`, `stays: boolean`, `rotateEveryMinutes: number | null`, `drill`; `PlanBlock`: `kind: BlockKind`, `sequence`, `durationMinutes`, `instructions`, `label: string | null`); `PlanDocument["session"].transitionMinutes: number`;
   - `PlanDrillInput` (with optional `kind?: "drill"`, `stays?`, `rotateEveryMinutes?`), `PlanBlockInput { kind: BlockKind; sequence; duration; runsWithPrevious: false; instructions: string | null; label: string | null }`, `PlanSessionInput.transitionMinutes?: number` and `drills: Array<PlanDrillInput | PlanBlockInput>`;
@@ -4009,7 +4315,20 @@ In the same file, update the existing test `carries no ids, thumbnails or other 
         expect(Object.keys(doc.session.drills[0]).sort()).toEqual(["drill", "durationMinutes", "instructions", "kind", "rotateEveryMinutes", "runsWithPrevious", "sequence", "stays"]);
 ```
 
-Any other test in that file that reads `doc.session.drills[i].drill` on a drill-only plan narrows with `if (entry.kind !== "drill") throw …` or reads through `planToEditorSession`; a test that indexes `planToEditorSession(...).plays[i].key` changes `plan-drill-` to `plan-row-`.
+`PlanEntry` and the editor rows become unions, so the existing typed reads of drill fields narrow with `drillRows` (it accepts any rows with a `kind`; add `import { drillRows } from "@/lib/utils/session-rows";`). The `RawDoc` mutations (`raw.session.drills[0].drill.focus = …`) are untyped and need nothing. Exactly:
+- line 118: `expect(drillRows(doc.session.drills).map((d) => [d.sequence, d.drill.name, d.runsWithPrevious])).toEqual([`
+- line 125: `const regroup = drillRows(serializePlan(input(), "openleague-hosted", NOW).session.drills)[2];`
+- line 138: `expect(Object.keys(drillRows(doc.session.drills)[0].drill).sort()).toEqual(["description", "focus", "goalies", "name", "playData"]);`
+- line 157: `const board = drillRows(result.plan.session.drills)[0].drill.playData;`
+- lines 179–180: `expect(drillRows(result.plan.session.drills)[0].drill).not.toHaveProperty("thumbnail");` and the same for `"id"`;
+- line 185: `expect(result.ok && drillRows(result.plan.session.drills).map((d) => d.drill.name)).toEqual(["Warmup Laps", "Breakout", "Regroup"]);`
+- line 199: `expect([result.plan.session.drills[0].instructions, drillRows(result.plan.session.drills)[0].drill.description]).toEqual(["", ""]);`
+- line 290: `expect(groups.map((g) => drillRows(g.stations).map((p) => p.name))).toEqual([["Warmup Laps"], ["Breakout", "Regroup"]]);`
+- line 338: `expect(drillRows(doc.session.drills).map((d) => [d.drill.focus, d.drill.goalies])).toEqual([["goalies", "required"], ["team", "optional"]]);`
+- line 356: `expect(result.ok && drillRows(result.plan.session.drills).map((d) => [d.drill.focus, d.drill.goalies])).toEqual([`
+- line 369: `expect(result.ok && [result.plan.session.goaliesAttending, drillRows(result.plan.session.drills)[0].drill.focus, drillRows(result.plan.session.drills)[0].drill.goalies])`
+
+No existing test indexes a `plan-drill-` key (the rows' keys become `plan-row-N`).
 
 Append to `__tests__/lib/actions/practice-plan-import.test.ts`:
 
@@ -4054,7 +4373,9 @@ describe("importPracticePlan: block rows, rotation and the gap", () => {
 });
 ```
 
-In the same file, any existing exact-shape expectation of the written session-play rows gains `kind: "drill", label: null, stays: false, rotateEveryMinutes: null`.
+In the same file, the existing "creates the session, its owned drills and the ordered rows in one transaction" test pins two exact shapes the importer now extends:
+- the `practiceSession.create` data (lines 128–139) gains `transitionMinutes: 0,` after `goaliesAttending: null,` (a plan without a gap reads as 0, and the importer writes it);
+- each of the three written rows (lines 162–164) gains `kind: "drill", label: null, stays: false, rotateEveryMinutes: null`, for example `{ sessionId: SESSION, playId: "cowned0xxxxxxxxxxxxxxxxxx", kind: "drill", label: null, sequence: 0, duration: 10, instructions: "Two laps", runsWithPrevious: false, stays: false, rotateEveryMinutes: null },`.
 
 Append to `__tests__/apps/planner/local-store.sessions.test.ts`, inside `describe.each(REPOS)`:
 
@@ -4135,7 +4456,12 @@ describe("PlanImportView: block rows in the preview", () => {
 });
 ```
 
-(`render`, `upload`, `LIONS` and the imports of `serializePlan`, `createEmptyPlayData` and `within` follow the file's existing tests.)
+(`render`, `upload`, `LIONS`, `serializePlan` and `createEmptyPlayData` are the file's own. It does not import `within` yet: add it to its `@testing-library/react` import, which becomes `import { fireEvent, screen, waitFor, within } from "@testing-library/react";`.)
+
+The existing readers of a plan's drill entries narrow with `drillRows` (each file adds `import { drillRows } from "@/lib/utils/session-rows";`, or merges it into the session-rows import it already has):
+- `__tests__/components/features/practice-planner/ExportPlanMenu.test.tsx`: line 80 `expect(drillRows(doc.session.drills)[0].drill.playData).toEqual(createEmptyPlayData());`, line 319 `expect(drillRows(doc.session.drills)[0].drill).toMatchObject({ focus: "goalies", goalies: "optional" });`, line 320 `expect(drillRows(doc.session.drills)[0].drill.playData.players.map((p) => p.role)).toEqual(["G"]);`;
+- `__tests__/apps/planner/local-store.sessions.test.ts` line 312: `expect(drillRows(exported.session.drills)[0].drill).toMatchObject({ focus: "goalies", goalies: "required" });`;
+- `__tests__/components/features/practice-planner/StarterTemplatePicker.test.tsx` ("never shares a diagram…", line 49): `for (const drill of drillRows(result.plan.session.drills)) {` (it would also throw at runtime once Task 10's templates carry a cool-down, which has no `drill`).
 
 `PlanSessionInput["drills"]` becomes a union of drill and block rows, so `__tests__/lib/data/starter-templates.test.ts` must narrow before reading drill fields (its behaviour is unchanged; Task 10 rewrites its timing checks). Add `import { drillRows } from "@/lib/utils/session-rows";` and:
 - in "has station blocks of 2–4 drills…": `expect(drillRows(block.stations).some((station) => station.goalies === "required")).toBe(true);`
@@ -4153,9 +4479,11 @@ Imports:
 import { BLOCK_KINDS, PLAY_FOCUS, PLAY_GOALIES, type BlockKind, type PlayData, type PlayFocus, type PlayGoalies } from "@/types/practice-planner";
 import { drillTags, toGoaliesAttending, toPlayFocus, toPlayGoalies } from "@/lib/utils/drill-tags";
 import { createEmptyPlayData, parseStoredPlayData } from "@/lib/utils/play-data";
-import { isBlockRow, toBlockLabel, toRotateEveryMinutes, toTransitionMinutes } from "@/lib/utils/session-rows";
+import { CONTROL_CHARS, isBlockRow, toBlockLabel, toRotateEveryMinutes, toTransitionMinutes } from "@/lib/utils/session-rows";
 import { normalizeGroups, sessionRowsError, sessionWallMinutes, settleRotations } from "@/lib/utils/session-timeline";
 ```
+
+and delete the module's private `const CONTROL_CHARS = …` (line 45); `clean` keeps using the name, now the shared import (the same pattern).
 
 After `NEWER_VERSION_MESSAGE` / `INVALID_PLAN_MESSAGE`:
 
@@ -4725,8 +5053,8 @@ Expected: PASS.
 
 - [ ] **Step 6: Run the tests to verify they pass**
 
-Run the Step 1 command again, then `bun run test __tests__/lib/plan-document __tests__/lib/actions __tests__/apps/planner __tests__/components/features/practice-planner __tests__/lib/data`.
-Expected: PASS.
+Run the Step 1 command again, then `bun run test`.
+Expected: PASS, the narrowed tests and the importer's extended exact shapes included.
 Run: `bun run type-check && bun run lint`
 Expected: PASS.
 
@@ -4739,7 +5067,8 @@ Expected: PASS.
   docs/adr/0020-exchange-practice-plans-as-a-portable-versioned-document-and-ship-a-static-local.md \
   __tests__/lib/plan-document/document.test.ts __tests__/lib/actions/practice-plan-import.test.ts \
   __tests__/apps/planner/local-store.sessions.test.ts __tests__/components/features/practice-planner/ExportPlanMenu.test.tsx \
-  __tests__/components/features/practice-planner/PlanImportView.test.tsx
+  __tests__/components/features/practice-planner/PlanImportView.test.tsx __tests__/lib/data/starter-templates.test.ts \
+  __tests__/components/features/practice-planner/StarterTemplatePicker.test.tsx
 /usr/bin/git commit -m "feat(practice-planner): plan files carry block rows, rotation and the gap" -m "Claude-Session: https://claude.ai/code/session_01TqKuhs6SuVkWyirkz3ZdQX"
 ```
 
@@ -4753,7 +5082,8 @@ The coach can add a block row and set the gap (spec R8). The editor is at 885 of
 **Files:**
 - Create: `components/features/practice-planner/SessionDetailsFields.tsx`, `BetweenBlocksField.tsx`, `AddBlockMenu.tsx`, `useSessionRowEdits.ts`, `useBetweenBlocks.ts`
 - Modify: `components/features/practice-planner/PracticeSessionEditor.tsx`, `SessionDrillList.tsx`
-- Test (create): `__tests__/components/features/practice-planner/PracticeSessionEditor.timing.test.tsx`
+- Test (create): `__tests__/helpers/session-editor.tsx` (the shared editor harness), `__tests__/components/features/practice-planner/PracticeSessionEditor.timing.test.tsx`
+- Test (modify): `__tests__/components/features/practice-planner/SessionDrillList.busy.test.tsx` (the new required `onAddBlock` prop, ruling R2)
 - Screenshot script (scratchpad, not committed): `pwcheck/timing-task6.mjs`
 
 **Interfaces:**
@@ -4768,11 +5098,12 @@ The coach can add a block row and set the gap (spec R8). The editor is at 885 of
 
 - [ ] **Step 1: Write the failing editor tests**
 
-Create `__tests__/components/features/practice-planner/PracticeSessionEditor.timing.test.tsx`:
+The practice-timing editor tests (this task and Task 7) share one harness instead of copying it (ruling R14). Create `__tests__/helpers/session-editor.tsx` (not a `*.test.*` file, so Vitest doesn't collect it):
 
 ```tsx
-import { beforeAll, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, screen, within } from "@testing-library/react";
+/** Shared harness for the PracticeSessionEditor practice-timing tests (Add block, Between blocks, rotation). */
+import { vi } from "vitest";
+import { act, fireEvent, screen } from "@testing-library/react";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
@@ -4781,34 +5112,27 @@ import { PracticeSessionEditor } from "@/components/features/practice-planner/Pr
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import type { PlayInSession, PracticeSessionData, SessionItem } from "@/types/practice-planner";
 
-beforeAll(() => {
+export const TEAM = "cteamxxxxxxxxxxxxxxxxxxxx";
+export const SESSION = "csessionxxxxxxxxxxxxxxxxx";
+
+/** jsdom has no ResizeObserver, which the editor's board uses: call from beforeAll. */
+export function stubResizeObserver(): void {
     global.ResizeObserver = class {
         observe() {}
         unobserve() {}
         disconnect() {}
     } as unknown as typeof ResizeObserver;
-});
+}
 
-const TEAM = "cteamxxxxxxxxxxxxxxxxxxxx";
-const SESSION = "csessionxxxxxxxxxxxxxxxxx";
-
-function drill(id: string, sequence: number, extra: Partial<PlayInSession> = {}): PlayInSession {
+export function drill(id: string, sequence: number, extra: Partial<PlayInSession> = {}): PlayInSession {
     return {
         id, playId: `cplay${id}xxxxxxxxxxxxxxxxxxx`, name: `Drill ${id}`, sequence, runsWithPrevious: false,
         duration: 10, instructions: "", playData: createEmptyPlayData(), thumbnail: "", ...extra,
     };
 }
 
-/** As getPracticeSessionForEdit returns it: normalized, every timing field loaded. */
-const STORED: SessionItem[] = [
-    { id: "kw", kind: "warmup", label: "Laps", sequence: 0, duration: 8, instructions: "Easy", runsWithPrevious: false },
-    drill("ka", 1, { stays: true, rotateEveryMinutes: 5, duration: 10 }),
-    drill("kb", 2, { runsWithPrevious: true, stays: false, rotateEveryMinutes: null, duration: 5 }),
-    drill("kc", 3, { runsWithPrevious: true, stays: false, rotateEveryMinutes: null, duration: 5 }),
-    { id: "kd", kind: "cooldown", label: "", sequence: 4, duration: 5, instructions: "", runsWithPrevious: false },
-];
-
-function renderEditor(plays: SessionItem[], extra: Partial<PracticeSessionData> = {}, onSave = vi.fn().mockResolvedValue({ success: true })) {
+/** A saved session's editor; returns its onSave mock. */
+export function renderEditor(plays: SessionItem[], extra: Partial<PracticeSessionData> = {}, onSave = vi.fn().mockResolvedValue({ success: true })) {
     renderWithPlanner(
         <ThemeProvider theme={createTheme()}>
             <LocalizationProvider dateAdapter={AdapterDateFns}>
@@ -4824,11 +5148,36 @@ function renderEditor(plays: SessionItem[], extra: Partial<PracticeSessionData> 
     return onSave;
 }
 
-async function save() {
+export async function save(): Promise<void> {
     await act(async () => {
         fireEvent.click(screen.getByRole("button", { name: /^save session/i }));
     });
 }
+```
+
+Create `__tests__/components/features/practice-planner/PracticeSessionEditor.timing.test.tsx`:
+
+```tsx
+import { beforeAll, describe, expect, it } from "vitest";
+import { fireEvent, screen, within } from "@testing-library/react";
+import { ThemeProvider, createTheme } from "@mui/material/styles";
+import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
+import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
+import { renderWithPlanner } from "@/__tests__/helpers/planner";
+import { TEAM, drill, renderEditor, save, stubResizeObserver } from "@/__tests__/helpers/session-editor";
+import { PracticeSessionEditor } from "@/components/features/practice-planner/PracticeSessionEditor";
+import type { SessionItem } from "@/types/practice-planner";
+
+beforeAll(stubResizeObserver);
+
+/** As getPracticeSessionForEdit returns it: normalized, every timing field loaded. */
+const STORED: SessionItem[] = [
+    { id: "kw", kind: "warmup", label: "Laps", sequence: 0, duration: 8, instructions: "Easy", runsWithPrevious: false },
+    drill("ka", 1, { stays: true, rotateEveryMinutes: 5, duration: 10 }),
+    drill("kb", 2, { runsWithPrevious: true, stays: false, rotateEveryMinutes: null, duration: 5 }),
+    drill("kc", 3, { runsWithPrevious: true, stays: false, rotateEveryMinutes: null, duration: 5 }),
+    { id: "kd", kind: "cooldown", label: "", sequence: 4, duration: 5, instructions: "", runsWithPrevious: false },
+];
 
 describe("PracticeSessionEditor: Add block", () => {
     it("adds each block kind at the end with its default label and minutes", async () => {
@@ -5237,15 +5586,17 @@ In `components/features/practice-planner/SessionDrillList.tsx`:
 - `const totalPlayTime = sessionWallMinutes(plays, transitionMinutes);`
 - the header's button `Stack` becomes `<Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" justifyContent="flex-end">`, with `<AddBlockMenu onAdd={onAddBlock} disabled={disabled || locked} />` between "New drill" and "Add from library"; the outer header `Stack` gets `flexWrap="wrap" useFlexGap spacing={1}` so the three buttons wrap under the heading on a phone.
 
+`onAddBlock` is a required prop, so `__tests__/components/features/practice-planner/SessionDrillList.busy.test.tsx` passes it: in `renderList`, after `onNewDrill={vi.fn()}`, add `onAddBlock={vi.fn()}`.
+
 Run: `bun run test __tests__/components/features/practice-planner/PracticeSessionEditor.line-budget.test.ts && wc -l components/features/practice-planner/PracticeSessionEditor.tsx`
-Expected: PASS, about 830 lines.
+Expected: PASS, about 790 lines (the Session Details form and the four list-edit handlers leave the editor).
 
 - [ ] **Step 5: Run the tests to verify they pass**
 
-Run: `bun run test __tests__/components/features/practice-planner/PracticeSessionEditor.timing.test.tsx __tests__/components/features/practice-planner`
+Run: `bun run test __tests__/components/features/practice-planner/PracticeSessionEditor.timing.test.tsx && bun run test`
 Expected: PASS (every existing editor test included: the extraction is behaviour-preserving).
 Run: `bun run type-check && bun run lint`
-Expected: PASS.
+Expected: PASS (the busy test passes `onAddBlock`).
 
 - [ ] **Step 6: Screenshots (light and dark, desktop and mobile)**
 
@@ -5304,7 +5655,8 @@ Read every `timing-task6-*.png`. Check: the Between blocks field sits under Goal
 /usr/bin/git add components/features/practice-planner/SessionDetailsFields.tsx components/features/practice-planner/BetweenBlocksField.tsx \
   components/features/practice-planner/AddBlockMenu.tsx components/features/practice-planner/useSessionRowEdits.ts \
   components/features/practice-planner/useBetweenBlocks.ts components/features/practice-planner/PracticeSessionEditor.tsx \
-  components/features/practice-planner/SessionDrillList.tsx __tests__/components/features/practice-planner/PracticeSessionEditor.timing.test.tsx
+  components/features/practice-planner/SessionDrillList.tsx __tests__/components/features/practice-planner/PracticeSessionEditor.timing.test.tsx \
+  __tests__/helpers/session-editor.tsx __tests__/components/features/practice-planner/SessionDrillList.busy.test.tsx
 /usr/bin/git commit -m "feat(practice-planner): add warm-up, break, transition and cool-down blocks and a gap between blocks" -m "Claude-Session: https://claude.ai/code/session_01TqKuhs6SuVkWyirkz3ZdQX"
 ```
 
@@ -5320,7 +5672,8 @@ A station block of 2 or more drills gets a **Rotate** switch, an "every M min" s
 - Modify: `components/features/practice-planner/SessionDrillCard.tsx` (the `stays` prop)
 - Modify: `components/features/practice-planner/useSessionRowEdits.ts` (`setRotation`, `setStays`)
 - Modify: `components/features/practice-planner/PracticeSessionEditor.tsx` (two props, `settleRotations` in the payload)
-- Test (create): `__tests__/components/features/practice-planner/PracticeSessionEditor.rotation.test.tsx`, `__tests__/components/features/practice-planner/RotationGridTable.test.tsx`
+- Test (create): `__tests__/components/features/practice-planner/PracticeSessionEditor.rotation.test.tsx` (on the Task 6 harness), `__tests__/components/features/practice-planner/RotationGridTable.test.tsx`
+- Test (modify): `__tests__/components/features/practice-planner/SessionDrillList.busy.test.tsx` (the new required `onSetRotation` / `onSetStays` props, ruling R2)
 - Screenshot script (scratchpad): `pwcheck/timing-task7.mjs`
 
 **Interfaces:**
@@ -5372,13 +5725,22 @@ describe("RotationGridTable", () => {
 });
 ```
 
-Create `__tests__/components/features/practice-planner/PracticeSessionEditor.rotation.test.tsx` with the same imports, `beforeAll`, `TEAM`, `SESSION`, `drill`, `renderEditor` and `save` as `PracticeSessionEditor.timing.test.tsx` (Task 6), with `waitFor` added to the `@testing-library/react` import, plus `import { CANT_ROTATE_MESSAGE } from "@/components/features/practice-planner/StationBlockHeader";`, and:
+Create `__tests__/components/features/practice-planner/PracticeSessionEditor.rotation.test.tsx` on the shared harness (Task 6), not a copy of it:
 
 ```tsx
+import { beforeAll, describe, expect, it, vi } from "vitest";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { drill, renderEditor, save, stubResizeObserver } from "@/__tests__/helpers/session-editor";
+import { CANT_ROTATE_MESSAGE } from "@/components/features/practice-planner/StationBlockHeader";
+import type { PlayInSession, SessionItem } from "@/types/practice-planner";
+
+beforeAll(stubResizeObserver);
+
+/** As getPracticeSessionForEdit loads a block that doesn't rotate: every timing field present. */
 const STATIONS: SessionItem[] = [
-    drill("ka", 0, { duration: 15 }),
-    drill("kb", 1, { runsWithPrevious: true, duration: 15 }),
-    drill("kc", 2, { runsWithPrevious: true, duration: 15 }),
+    drill("ka", 0, { duration: 15, stays: false, rotateEveryMinutes: null }),
+    drill("kb", 1, { runsWithPrevious: true, duration: 15, stays: false, rotateEveryMinutes: null }),
+    drill("kc", 2, { runsWithPrevious: true, duration: 15, stays: false, rotateEveryMinutes: null }),
 ];
 const ROTATING: SessionItem[] = [
     drill("ka", 0, { stays: false, rotateEveryMinutes: 5, duration: 5 }),
@@ -5396,6 +5758,8 @@ const sent = (onSave: ReturnType<typeof vi.fn>) => onSave.mock.calls[0][0].plays
 describe("PracticeSessionEditor: station rotation (spec R8)", () => {
     it("turns rotation on with an interval that keeps the block about as long, and summarizes it", async () => {
         const onSave = renderEditor(STATIONS);
+        // Every block's switch is "Rotate": its description names the block it belongs to.
+        expect(screen.getByLabelText("Rotate")).toHaveAccessibleDescription("Stations · 3 · 15 min");
         fireEvent.click(screen.getByLabelText("Rotate"));
         expect(screen.getByRole("combobox", { name: /^Every/ })).toHaveTextContent("5 min");
         expect(screen.getByText("3 stations × 5 min = 15 min · groups A–C")).toBeInTheDocument();
@@ -5440,8 +5804,12 @@ describe("PracticeSessionEditor: station rotation (spec R8)", () => {
     it("shows and hides the rotation grid", async () => {
         renderEditor(WITH_STAYS);
         expect(screen.queryByRole("table", { name: /^Rotation grid/ })).toBeNull();
+        // aria-controls only while the grid it names is in the document (the collapse unmounts it).
+        expect(screen.getByRole("button", { name: "Show rotation grid" })).not.toHaveAttribute("aria-controls");
         fireEvent.click(screen.getByRole("button", { name: "Show rotation grid" }));
         const table = screen.getByRole("table", { name: /^Rotation grid/ });
+        const controls = screen.getByRole("button", { name: "Hide rotation grid" }).getAttribute("aria-controls");
+        expect(controls && document.getElementById(controls)?.contains(table)).toBe(true);
         expect(within(table).getAllByRole("row").map((row) => row.textContent)).toEqual([
             "StartDrill kaDrill kbDrill kc",
             "0–5 minallAB",
@@ -5480,6 +5848,8 @@ Expected: FAIL. Neither component exists and the station header has no Rotate sw
  * plus one column per station, each cell a group (A, B, C…) or "all" for a
  * stays station. The screen variant is a compact MUI table; the print variant
  * is a plain table for the bench sheet (app/(print)/print.css, .bench-rotation).
+ * Rows are keyed by round, never by their start text, which can repeat (the
+ * clock shows "—" for every round until it mounts).
  */
 import { Table, TableBody, TableCell, TableHead, TableRow } from "@mui/material";
 import { ROTATION_ALL, type RotationTable } from "@/lib/utils/session-timeline";
@@ -5498,8 +5868,8 @@ export function RotationGridTable({ table, caption, variant = "screen" }: { tabl
                         </tr>
                     </thead>
                     <tbody>
-                        {table.rows.map((row) => (
-                            <tr key={row.start}>
+                        {table.rows.map((row, round) => (
+                            <tr key={round}>
                                 <td>{row.start}</td>
                                 {row.cells.map((cell, index) => (
                                     <td key={index}>{cell}</td>
@@ -5524,8 +5894,8 @@ export function RotationGridTable({ table, caption, variant = "screen" }: { tabl
                 </TableRow>
             </TableHead>
             <TableBody>
-                {table.rows.map((row) => (
-                    <TableRow key={row.start}>
+                {table.rows.map((row, round) => (
+                    <TableRow key={round}>
                         <TableCell sx={{ whiteSpace: "nowrap", fontFamily: "var(--font-mono), monospace" }}>{row.start}</TableCell>
                         {row.cells.map((cell, index) => (
                             <TableCell key={index} sx={cell === ROTATION_ALL ? { color: "text.secondary" } : { fontWeight: 800, color: "secondary.main" }}>
@@ -5594,7 +5964,14 @@ export function StationBlockHeader({ id, label, warnings, rotation }: { id: stri
             </Typography>
             <Stack direction="row" spacing={2} alignItems="center" useFlexGap flexWrap="wrap" sx={{ mt: 0.5 }}>
                 <FormControlLabel
-                    control={<Switch checked={minutes !== null} onChange={(event) => rotation.onRotateChange(event.target.checked)} />}
+                    control={
+                        <Switch
+                            checked={minutes !== null}
+                            onChange={(event) => rotation.onRotateChange(event.target.checked)}
+                            // Every block's switch is labelled "Rotate": the header names which block.
+                            slotProps={{ input: { "aria-describedby": id } }}
+                        />
+                    }
                     label="Rotate"
                     disabled={rotation.disabled}
                     sx={{ minHeight: 44, ml: 0 }}
@@ -5634,7 +6011,8 @@ export function StationBlockHeader({ id, label, warnings, rotation }: { id: stri
                         startIcon={<GridIcon />}
                         onClick={() => setShowGrid((shown) => !shown)}
                         aria-expanded={showGrid}
-                        aria-controls={gridId}
+                        // The collapsed grid is unmounted: point at it only while it exists.
+                        aria-controls={showGrid ? gridId : undefined}
                         sx={{ minHeight: 44 }}
                     >
                         {showGrid ? "Hide rotation grid" : "Show rotation grid"}
@@ -5769,12 +6147,14 @@ In `PracticeSessionEditor.tsx`:
 - pass `onSetRotation={rowEdits.setRotation}` and `onSetStays={rowEdits.setStays}` to `SessionDrillList`;
 - import `settleRotations` from `@/lib/utils/session-timeline`, and in `sessionData` send `plays: settleRotations(plays),` (a block that can't rotate saves without its rotation; the screen keeps the coach's ticks and the note).
 
+`onSetRotation` and `onSetStays` are required props, so `__tests__/components/features/practice-planner/SessionDrillList.busy.test.tsx` passes them: in `renderList`, after `onAddBlock={vi.fn()}` (Task 6), add `onSetRotation={vi.fn()} onSetStays={vi.fn()}`.
+
 Run: `bun run test __tests__/components/features/practice-planner/PracticeSessionEditor.line-budget.test.ts`
 Expected: PASS.
 
 - [ ] **Step 5: Run the tests to verify they pass**
 
-Run the Step 1 command again, then `bun run test __tests__/components/features/practice-planner && bun run type-check && bun run lint`.
+Run the Step 1 command again, then `bun run test && bun run type-check && bun run lint`.
 Expected: PASS.
 
 - [ ] **Step 6: Screenshots (light and dark, desktop and mobile)**
@@ -5833,7 +6213,8 @@ Read every `timing-task7-*.png`. Check: the Rotate switch, "Every 5 min", the su
 /usr/bin/git add components/features/practice-planner/RotationGridTable.tsx components/features/practice-planner/StationBlockHeader.tsx \
   components/features/practice-planner/SessionDrillList.tsx components/features/practice-planner/SessionDrillCard.tsx \
   components/features/practice-planner/useSessionRowEdits.ts components/features/practice-planner/PracticeSessionEditor.tsx \
-  __tests__/components/features/practice-planner/RotationGridTable.test.tsx __tests__/components/features/practice-planner/PracticeSessionEditor.rotation.test.tsx
+  __tests__/components/features/practice-planner/RotationGridTable.test.tsx __tests__/components/features/practice-planner/PracticeSessionEditor.rotation.test.tsx \
+  __tests__/components/features/practice-planner/SessionDrillList.busy.test.tsx
 /usr/bin/git commit -m "feat(practice-planner): rotate station blocks, with stays stations and a rotation grid" -m "Claude-Session: https://claude.ai/code/session_01TqKuhs6SuVkWyirkz3ZdQX"
 ```
 
@@ -5852,7 +6233,7 @@ The shared `SessionTimeline` shows a rotating block with a "Rotates every M min"
 - Screenshot script (scratchpad): `pwcheck/timing-task8.mjs`
 
 **Interfaces:**
-- Consumes (Task 1): `rotationTable`, `rotationBlockLabel`, `rotatesEveryLabel`, `betweenBlocksLabel`, `RotationGrid`. (Task 2): `SessionTimelinePlay`. (Task 7): `RotationGridTable`.
+- Consumes (Task 1): `rotationTable`, `rotationBlockLabel`, `rotatesEveryLabel`, `betweenBlocksLabel`, `staysSuffix`, `RotationGrid`. (Task 2): `SessionTimelinePlay`. (Task 7): `RotationGridTable`.
 - Produces: nothing new for later tasks; the screen and print timelines render rotation.
 
 - [ ] **Step 1: Write the failing tests**
@@ -5871,6 +6252,8 @@ describe("SessionTimeline: a rotating station block (spec R9)", () => {
         render(ui({ plays: ROTATING }));
         const [block, gridRow] = bodyRows();
         expect(within(block).getByText("Rotates every 5 min")).toBeInTheDocument();
+        // The chip is a div: its caption line must not be a <p> (invalid nesting, a React 19 hydration error).
+        expect(block.querySelector("p .MuiChip-root")).toBeNull();
         expect(within(block).getByText(/stays/)).toBeInTheDocument();
         expect(within(block).getByText("10")).toBeInTheDocument();
         const grid = within(gridRow).getByRole("table", { name: /^Rotation grid/ });
@@ -5974,9 +6357,10 @@ function gridTable(grid: RotationGrid<SessionTimelinePlay>, roundStarts: Date[],
 ```
 
   - screen: the same inside `<TableRow><TableCell colSpan={3} sx={{ pt: 0 }}>…</TableCell></TableRow>` with the screen variant;
-- a rotating block's station list (both variants): the label is `rotationBlockLabel(grid.minutes, group.wallMinutes)` in print, and on screen `stationsLabel(drills.length)` followed by `<Chip size="small" variant="outlined" color="secondary" label={rotatesEveryLabel(grid.minutes)} sx={{ ml: 1 }} />` in the caption's line; each station shows `" · stays"` when it stays, and nothing else (its minutes are the rotation's):
-  - print `li`: `` {`${sp.play.name}${grid ? (sp.stays ? " · stays" : "") : ` · ${sp.duration} min`}`} ``
-  - screen caption span: `{grid ? (sp.stays ? " · stays" : "") : ` · ${sp.duration} min`}`
+- a rotating block's station list (both variants): the label is `rotationBlockLabel(grid.minutes, group.wallMinutes)` in print, and on screen `stationsLabel(drills.length)` followed by `<Chip size="small" variant="outlined" color="secondary" label={rotatesEveryLabel(grid.minutes)} />` in the caption's line. A `Chip` renders a `div`, which can't sit inside a `p` (ruling R10), so the screen caption `Typography` that Task 2 wrote as `component="p"` becomes `component="div"`, with `sx` gaining `display: "flex", alignItems: "center", flexWrap: "wrap", gap: 1` (the chip needs no margin of its own);
+- each station shows `staysSuffix(sp.stays)` (Task 1; ` · stays` or nothing) in a rotating block, and nothing else (its minutes are the rotation's); import `staysSuffix` with the other timeline names:
+  - print `li`: `` {`${sp.play.name}${grid ? staysSuffix(sp.stays) : ` · ${sp.duration} min`}`} ``
+  - screen caption span: `{grid ? staysSuffix(sp.stays) : ` · ${sp.duration} min`}`
 
 In `app/(print)/print.css`, after the `.bench-timeline ul` rule:
 
@@ -6014,7 +6398,7 @@ Run: `bun run test __tests__/app/SessionDetailView.line-budget.test.ts`. Expecte
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run the Step 1 command again, then `bun run test __tests__/components/features/practice-planner __tests__/app && bun run type-check && bun run lint`.
+Run the Step 1 command again, then `bun run test && bun run type-check && bun run lint`.
 Expected: PASS.
 
 - [ ] **Step 5: Screenshots: session page and bench sheet print view**
@@ -6049,22 +6433,25 @@ for (const scheme of ["light", "dark"]) {
     await page.getByRole("table", { name: "Session timeline" }).waitFor({ timeout: 20000 });
     await page.getByRole("table", { name: "Session timeline" }).scrollIntoViewIfNeeded();
     await page.screenshot({ path: `timing-task8-session-${tag}-${scheme}.png`, fullPage: true });
-    if (tag === "desktop") {
-      await page.goto(session + "/print");
-      await page.getByRole("button", { name: "Print" }).waitFor({ timeout: 20000 });
-      await page.waitForTimeout(1500);
-      await page.screenshot({ path: `timing-task8-bench-${tag}-${scheme}.png`, fullPage: true });
-      if (scheme === "light") await page.pdf({ path: "timing-task8-bench.pdf", format: "Letter", preferCSSPageSize: true });
-    }
+    // The bench sheet print view on desktop and mobile (spec "Visual"): on screen, then as printed.
+    await page.goto(session + "/print");
+    await page.getByRole("button", { name: "Print" }).waitFor({ timeout: 20000 });
+    await page.waitForTimeout(1500);
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    console.log(scheme, tag, "bench sheet horizontal overflow px:", overflow);
+    await page.screenshot({ path: `timing-task8-bench-${tag}-${scheme}.png`, fullPage: true });
+    await page.emulateMedia({ media: "print" });
+    await page.screenshot({ path: `timing-task8-bench-print-${tag}-${scheme}.png`, fullPage: true });
+    if (tag === "desktop" && scheme === "light") await page.pdf({ path: "timing-task8-bench.pdf", format: "Letter", preferCSSPageSize: true });
     await ctx.close();
   }
 }
 await browser.close();
 ```
 
-Run it from the pwcheck directory. Expected: no `pageerror`.
+Run it from the pwcheck directory. Expected: no `pageerror`; "bench sheet horizontal overflow px: 0" (or less) for every scheme and size.
 
-Read every `timing-task8-*.png` and `timing-task8-bench.pdf`. Check: the timeline's start times include the 1-minute gaps; the rotating block shows its chip, "stays" on the goalie station, and the grid's clock times under it; the cool-down row has no link; the session page's sequence names "Stations · rotate every 5 min · 10 min"; the bench sheet header says "1 min between blocks", and the printed grid has borders and fits the page width; nothing overflows at 390 px; dark mode reads cleanly. Stop the preview server.
+Read every `timing-task8-*.png` and `timing-task8-bench.pdf`. Check: the timeline's start times include the 1-minute gaps; the rotating block shows its chip, "stays" on the goalie station, and the grid's clock times under it; the cool-down row has no link; the session page's sequence names "Stations · rotate every 5 min · 10 min"; the bench sheet header says "1 min between blocks", and the printed grid has borders and fits the page width; at 390 px the bench sheet (`timing-task8-bench-mobile-*` and `timing-task8-bench-print-mobile-*`) shows the header, the timeline and the grid without clipping or sideways scroll; the print-media shots are black on white in both schemes; dark mode reads cleanly on screen. Stop the preview server.
 
 - [ ] **Step 6: Commit**
 
@@ -6090,7 +6477,7 @@ Read every `timing-task8-*.png` and `timing-task8-bench.pdf`. Check: the timelin
 - Screenshot script (scratchpad): `pwcheck/timing-task9.mjs`
 
 **Interfaces:**
-- Consumes (Task 1): `rotationTable`, `rotationBlockLabel`, `betweenBlocksLabel`, `RotationTable`, `ROTATION_ALL`; `buildSchedule(...).roundStarts`.
+- Consumes (Task 1): `rotationTable`, `rotationBlockLabel`, `betweenBlocksLabel`, `staysSuffix`, `RotationTable`, `ROTATION_ALL` (the Word grid compares cells with it, never with a literal "all"); `buildSchedule(...).roundStarts`.
 - Produces: `BenchSheetTimelineRow` gains `{ kind: "rotation"; start: string; minutes: number; label: string; stations: string[]; grid: RotationTable }`; `BenchSheetModel.gap: string | null`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -6212,7 +6599,7 @@ Expected: FAIL. The model has no rotation row or gap, and neither export renders
 - [ ] **Step 2: Emit rotation rows and the gap in the model**
 
 In `components/features/practice-planner/export/bench-sheet-model.ts`:
-- imports: add `betweenBlocksLabel, rotationBlockLabel, rotationTable, type RotationGrid, type RotationTable` from the timeline module;
+- imports: add `betweenBlocksLabel, rotationBlockLabel, rotationTable, staysSuffix, type RotationGrid, type RotationTable` from the timeline module;
 - add the third member to `BenchSheetTimelineRow`:
 
 ```ts
@@ -6252,7 +6639,7 @@ In `components/features/practice-planner/export/bench-sheet-model.ts`:
                     start: time(startsAt),
                     minutes: group.wallMinutes,
                     label: rotationBlockLabel(grid.minutes, group.wallMinutes),
-                    stations: stations.map((sp) => `${sp.play.name}${sp.stays ? " · stays" : ""}`),
+                    stations: stations.map((sp) => `${sp.play.name}${staysSuffix(sp.stays)}`),
                     grid: rotationTable(grid, (row) => (isBlockRow(row) ? blockTitle(row.kind, row.label) : row.play.name), (_, round) => time(roundStarts[round])),
                 };
             }
@@ -6286,9 +6673,14 @@ In `components/features/practice-planner/export/bench-sheet-html.ts`:
 ${model.gap ? html`<p class="gap">${model.gap}</p>` : null}
 ```
 
-- add, above `timeline()`:
+- add, above `timeline()`, the station list both station rows share (a plain station block and a rotation block print the same header and list; only the rotation adds its grid) and the grid:
 
 ```ts
+/** A station block's header and its stations: a plain block's and a rotation block's alike. */
+function stationList(label: string, stations: readonly string[]): Trusted {
+    return html`<strong>${label}</strong><ul>${stations.map((station) => html`<li>${station}</li>`)}</ul>`;
+}
+
 /** A rotation block's grid: a Start column plus one column per station, a group or "all" in each cell. */
 function rotationGrid(grid: RotationTable): Trusted {
     return html`<table class="rotation" border="1" cellpadding="3" cellspacing="0">
@@ -6298,15 +6690,13 @@ function rotationGrid(grid: RotationTable): Trusted {
 }
 ```
 
-- `timeline()`'s third cell handles the rotation row first:
+- `timeline()`'s third cell prints any station list once, and a rotation's grid after it:
 
 ```ts
             html`<tr><td class="time">${row.start}</td><td>${row.minutes}</td><td>${
-                row.kind === "rotation"
-                    ? html`<strong>${row.label}</strong><ul>${row.stations.map((station) => html`<li>${station}</li>`)}</ul>${rotationGrid(row.grid)}`
-                    : row.stations
-                      ? html`<strong>${row.label}</strong><ul>${row.stations.map((station) => html`<li>${station}</li>`)}</ul>`
-                      : html`${row.label}${row.kind === "block" && row.note ? html` · ${row.note}` : null}`
+                row.stations
+                    ? html`${stationList(row.label, row.stations)}${row.kind === "rotation" ? rotationGrid(row.grid) : null}`
+                    : html`${row.label}${row.kind === "block" && row.note ? html` · ${row.note}` : null}`
             }</td></tr>
 `,
 ```
@@ -6314,12 +6704,20 @@ function rotationGrid(grid: RotationTable): Trusted {
 - [ ] **Step 4: Write the grid as a Word table**
 
 In `components/features/practice-planner/export/bench-sheet-docx.ts`:
-- import `type RotationTable` from `@/lib/utils/session-timeline`;
+- import `ROTATION_ALL, type RotationTable` from `@/lib/utils/session-timeline`;
 - `header()` adds `...(model.gap ? [new Paragraph({ children: textRuns(model.gap) })] : []),` after the place paragraph;
 - `cell()` takes `children: Array<Paragraph | Table>`;
-- add, above `timeline()`:
+- add, above `timeline()`, the station paragraphs both station rows share, and the grid:
 
 ```ts
+/** A station block's header and its stations: a plain block's and a rotation block's alike. */
+function stationParagraphs(label: string, stations: readonly string[]): Paragraph[] {
+    return [
+        new Paragraph({ children: textRuns(label, { bold: true }) }),
+        ...stations.map((station) => new Paragraph({ children: textRuns(`• ${station}`) })),
+    ];
+}
+
 /** A rotation block's grid as a real table (spec R10): Start plus one column per station. */
 function gridTable(grid: RotationTable): Table {
     const head = new TableRow({
@@ -6332,7 +6730,7 @@ function gridTable(grid: RotationTable): Table {
                 cantSplit: true,
                 children: [
                     cell([new Paragraph({ children: textRuns(row.start, { font: MONO }) })]),
-                    ...row.cells.map((value) => cell([new Paragraph({ children: textRuns(value, value === "all" ? {} : { bold: true }) })])),
+                    ...row.cells.map((value) => cell([new Paragraph({ children: textRuns(value, value === ROTATION_ALL ? {} : { bold: true }) })])),
                 ],
             }),
     );
@@ -6340,29 +6738,22 @@ function gridTable(grid: RotationTable): Table {
 }
 ```
 
-- the timeline's third cell handles the rotation row first; Word wants a paragraph after a table in a cell:
+- the timeline's third cell writes any station list once, and a rotation's grid after it; Word wants a paragraph after a table in a cell:
 
 ```ts
                     cell(
-                        row.kind === "rotation"
+                        row.stations
                             ? [
-                                  new Paragraph({ children: textRuns(row.label, { bold: true }) }),
-                                  ...row.stations.map((station) => new Paragraph({ children: textRuns(`• ${station}`) })),
-                                  gridTable(row.grid),
-                                  new Paragraph({ children: [] }),
+                                  ...stationParagraphs(row.label, row.stations),
+                                  ...(row.kind === "rotation" ? [gridTable(row.grid), new Paragraph({ children: [] })] : []),
                               ]
-                            : row.stations
-                              ? [
-                                    new Paragraph({ children: textRuns(row.label, { bold: true }) }),
-                                    ...row.stations.map((station) => new Paragraph({ children: textRuns(`• ${station}`) })),
-                                ]
-                              : [new Paragraph({ children: textRuns(row.kind === "block" && row.note ? `${row.label} · ${row.note}` : row.label) })],
+                            : [new Paragraph({ children: textRuns(row.kind === "block" && row.note ? `${row.label} · ${row.note}` : row.label) })],
                     ),
 ```
 
 - [ ] **Step 5: Run the tests to verify they pass**
 
-Run the Step 1 command again, then `bun run test __tests__/components/features/practice-planner && bun run type-check && bun run lint`.
+Run the Step 1 command again, then `bun run test && bun run type-check && bun run lint`.
 Expected: PASS.
 
 - [ ] **Step 6: Open both exports**
@@ -6434,6 +6825,8 @@ Template arithmetic (each rotating block: M × rotating stations; a stays statio
 
 Every station's time sits in its drill's stated range: Angles & Depth 10–15, Rebound control 10–15, Stickhandling 5–6, Wrist-Shot Lanes 5–8, Puck protection 5–6, Transitions 5–8, Goalie Warm-Up 5–8, Edges 6–8, Passing 8, Small-area 10–12, Stops & starts 4–5, Breakaways 8–10.
 
+Accepted deviation from R12's "the rest of each practice stays as it is" (ruling R9; recorded under Self-Review, spec gaps): the station blocks get shorter, Skills Stations 15 → 12 and Team Practice 15 → 10 and 15 → 12, because a stays goalie station lasts the block and only the two skater stations rotate (2 × M). The totals are verified above: 60 of 60, 45 of 45, 60 of 60.
+
 **Files:**
 - Modify: `components/features/practice-planner/PlanPreview.tsx`
 - Modify (replace the builder and the data): `lib/data/starter-templates.ts`
@@ -6444,7 +6837,7 @@ Every station's time sits in its drill's stated range: Angles & Depth 10–15, R
 - Screenshot script (scratchpad): `pwcheck/timing-task10.mjs`
 
 **Interfaces:**
-- Consumes (Task 1): `rotationBlockLabel`, `rotatesEveryLabel`, `betweenBlocksLabel`, `rotatingStations`, `MIN_ROTATING_STATIONS`, `sessionRowsError`, `drillRows`, `isDrillRow`. (Task 5): `PlanDrillInput`, `PlanBlockInput`, `PlanSessionInput.transitionMinutes`.
+- Consumes (Task 1): `rotationBlockLabel`, `rotatesEveryLabel`, `betweenBlocksLabel`, `STAYS_MARK`, `rotatingStations`, `MIN_ROTATING_STATIONS`, `sessionRowsError`, `drillRows`, `isDrillRow`. (Task 5): `PlanDrillInput`, `PlanBlockInput`, `PlanSessionInput.transitionMinutes`.
 - Produces: the three templates' new data; nothing new for other tasks.
 
 - [ ] **Step 1: Write the failing tests**
@@ -6486,14 +6879,21 @@ Append to `__tests__/components/features/practice-planner/StarterTemplatePicker.
 
 ```tsx
 describe("StarterTemplatePicker: counts", () => {
-    it("counts drills, not the cool-down", () => {
+    it("counts each template's drills, never its cool-down row", () => {
         render(<StarterTemplatePicker onUse={vi.fn()} />);
-        const skills = STARTER_TEMPLATES[0];
-        const drills = skills.session.drills.filter((row) => row.kind === undefined || row.kind === "drill").length;
-        expect(screen.getAllByText(`${drills} drills`).length).toBeGreaterThan(0);
+        const chips = STARTER_TEMPLATES.map((template) => {
+            const card = screen.getByRole("heading", { name: template.name }).closest(".MuiCard-root");
+            if (!(card instanceof HTMLElement)) throw new Error(`No card for ${template.name}`);
+            return within(card).getByText(/^\d+ drills$/).textContent;
+        });
+        // Skills Stations 2 + 3 + 1 + 1 + 1 drills, Goalie & Skater 3 + 3 + 1 + 1, Team Practice 1 + 3 + 3 + 1 + 1;
+        // each also has one cool-down row, which would make 9, 9 and 10 if rows were counted.
+        expect(chips).toEqual(["8 drills", "8 drills", "9 drills"]);
     });
 });
 ```
+
+(Add `within` to the file's `@testing-library/react` import.)
 
 Replace `__tests__/lib/data/starter-templates.test.ts` with:
 
@@ -6823,7 +7223,7 @@ In `components/features/practice-planner/StarterTemplatePicker.tsx`, import `dri
 - [ ] **Step 3: Show rotation and the gap in `PlanPreview`**
 
 In `components/features/practice-planner/PlanPreview.tsx`:
-- import `betweenBlocksLabel, rotatesEveryLabel, rotationBlockLabel` from the timeline module;
+- import `STAYS_MARK, betweenBlocksLabel, rotatesEveryLabel, rotationBlockLabel` from the timeline module;
 - the subtitle says the gap when there is one:
 
 ```tsx
@@ -6849,15 +7249,15 @@ In `components/features/practice-planner/PlanPreview.tsx`:
 - and a station's minutes line reads its rotation (`const rotation = group.rotation;` before the `stations.map`):
 
 ```tsx
-                                        const timing = rotation ? (play.stays ? "stays" : rotatesEveryLabel(rotation.minutes)) : `${play.duration} min`;
+                                        const timing = rotation ? (play.stays ? STAYS_MARK : rotatesEveryLabel(rotation.minutes)) : `${play.duration} min`;
 ```
 
   with the secondary text `{play.instructions ? `${timing} · ${play.instructions}` : timing}`.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run the Step 1 command again, then `bun run test __tests__/lib/data __tests__/components/features/practice-planner __tests__/apps/planner __tests__/app && bun run type-check && bun run lint`.
-Expected: PASS. (The "Use template" import tests in `PlanImportView.test.tsx` and `import-screen.test.tsx` now import templates with a cool-down block and rotation; they must stay green.)
+Run the Step 1 command again, then `bun run test && bun run type-check && bun run lint`.
+Expected: PASS. The template-reading tests already handle the cool-down and rotation: `import-screen.test.tsx` walks `drillRows` and sends `toSessionRowInputs` with each row's own minutes (Tasks 2 and 4), `StarterTemplatePicker.test.tsx` walks `drillRows` (Task 5), and `PlanImportView.test.tsx`'s `.some(…goalies === "required")` meets the required goalie warm-up before the cool-down.
 
 - [ ] **Step 5: Screenshots: the import preview**
 
@@ -6970,7 +7370,7 @@ wc -l components/features/practice-planner/PracticeSessionEditor.tsx "app/(dashb
 ```
 
 Expected:
-- both files are ≤ 900 lines (the editor about 830 after Task 6, the session page about 750);
+- both files are ≤ 900 lines (the editor about 790 after Task 6, the session page about 750);
 - `git status` shows nothing. If `CLAUDE.md` appears modified by `next dev`, leave it out of every commit.
 
 - [ ] **Step 7: Final screenshots for the PR**
@@ -6998,24 +7398,25 @@ Only if Steps 1–7 required changes. Stage the exact files by path:
 | R2 columns, CHECKs incl. `(kind = 'drill') = ("playId" IS NOT NULL)`, deferred FK kept, migration test against the schema | 3 |
 | R3 row rules: block flags, rotation placement, < 2 rotating stations, stays, minutes, absent = unchanged | 1 (`normalizeGroups`, `settleRotations`, `sessionRowsError`, `withStoredTiming`), 3 (Zod, server), 4 (static), 5 (import), 7 (editor save) |
 | R4 `blockMinutes`, `rotationGrid`, `buildSchedule` with gaps and rounds, `sessionWallMinutes`, goalie demand | 1 |
-| R5 copy paths: duplicate, detach, materialize, export/import both apps, static copies; guard from the select | 3 (duplicate, materialize; detach unchanged: it repoints by `playId`, block rows never match), 4 (static), 5 (plan files) |
+| R5 copy paths: duplicate, detach, materialize, export/import both apps, static copies; guard from the select | 3 (duplicate, materialize; detach repoints by `playId` only, so a row keeps its new columns and block rows never match, with a test), 4 (static), 5 (plan files) |
 | R6 plan document fields, lenient reads, block entry shape, `MAX_PLAN_DRILLS`, compatibility, ADR-0020 amendment | 5 |
 | R7 static records, legacy defaults, absent = unchanged, no IndexedDB bump, both repos | 4 |
 | R8 editor: Add block, block card, Rotate / M / summary / grid, Stays, can't-rotate note, Between blocks, 44 px, palette, extraction first | 2 (block card), 6 (Add block, Between blocks, extraction), 7 (rotation) |
 | R9 session page: block rows, gaps folded, rotation chip, stays, grid, sequence and diagram skip blocks, Planned X of Y | 2 (blocks, gaps, skips), 8 (rotation) |
 | R10 bench sheet: three row kinds, rotation header, grid as a table, gap in the header, HTML escaping, Word table | 2 (block rows), 8 (live print), 9 (model, HTML, Word) |
-| R11 emails list blocks; every `sp.play` reader narrows | 2 (readers), 3 (emails, list query) |
+| R11 emails list blocks; every `sp.play` reader narrows | 2 (readers), 3 (emails, list query, dashboard count) |
 | R12 templates: rotation fields, warm-up/cool-down, Skills Stations 60/60, invariant tests | 10 |
 | Success criteria 1–6 | 6 (1), 7 (2), 6/8 (3), 1/2/8 (4), 3/4/5 (5: legacy rows and files read as before), 10 (6) |
 | Testing: pure, Zod/plan, migration, actions, static, components, exports, emails, visual | 1, 3/5, 3, 3, 4, 2/6/7/8/10, 9, 3, 6/7/8/9/10/11 |
 
 **Spec gaps and conflicts, and how this plan resolves them:**
-- "Minutes per row: 1–120, as today": today's code allows 1–300 everywhere (Zod, `VALIDATION_CONSTRAINTS`, plan document). The plan keeps 300 and changes no limit.
-- "Practice-plan shared and updated emails list session drills by name": they show only a count (`_count.plays`). The plan counts drill rows only and adds one "Also planned: Warm-up · 8 min, …" line (Task 3).
+- Row minutes (1–300, as today) and the practice-plan emails (a drill count plus one "Also planned: Warm-up · 8 min, …" line, R11) match the amended spec; nothing to resolve. The emails, the hosted list and the dashboard schedule count drill rows only (Task 3).
 - A drill flagged `runsWithPrevious` directly after a block row is not covered by R3. Ruling: normalization clears it, and `sessionRowsError` rejects it with `BLOCK_STATION_ERROR` (a block row neither joins nor is joined by a station block).
-- R3 says a block with fewer than 2 rotating stations is "cleared on save" by the editor; the plan also has the server, the static store and the importer reject it (`ROTATION_TOO_FEW_ERROR`), so all three stores agree. `stays` outside a rotating block is ignored, as R3 says, never rejected.
+- R3 says a block with fewer than 2 rotating stations is "cleared on save" by the editor; the plan also has the server, the static store and the importer reject it (`ROTATION_TOO_FEW_ERROR`), so all three stores agree. `stays` outside a rotating block is ignored, as R3 says, never rejected; the server and the static store store it as sent and don't rewrite minutes (they reject rather than normalize), and only the editor's `normalizeGroups` clears it and writes M.
 - The spec's success criterion "3 stations × 5 min" uses three rotating stations; a stays goalie station is not one of them. The templates (Task 10) mark the goalie station stays, so their blocks are 2 × M; the table in Task 10 shows the arithmetic.
-- Absent = unchanged for per-row fields in a whole-list save: the server and the static store resolve a drill row's missing `stays` / `rotateEveryMinutes` from the stored row with the same play (`withStoredTiming`) before validating, so an older client never wipes them.
+- **R12 deviation, accepted (ruling R9):** R12 says "the rest of each practice stays as it is", but with a stays goalie station each template's station block becomes 2 × M, so the blocks get shorter: Skills Stations 15 → 12 min, Team Practice 15 → 10 and 15 → 12 min. The practices still fill 60 of 60, 45 of 45 and 60 of 60 minutes (the Task 10 table, checked by its tests).
+- Absent = unchanged for per-row fields in a whole-list save: the server and the static store resolve a drill row's missing `stays` / `rotateEveryMinutes` from the stored row with the same play (`withStoredTiming`) before validating, so an older client never wipes them. Keying by `playId` relies on the accepted invariant in Global Constraints (one stored row per play copy, ruling R5).
+- A list edit that gives a rotating block a new first drill (a reorder, a delete, a join) is not covered by R3. Ruling R4: the block's new first drill takes the rotation, so its stays ticks stay (Task 1); a split leaves the rotation with the original first drill.
 
 **Placeholder scan:** none. Every code step carries the code; steps that edit large existing files name the block and show the new lines. The only `<…>` text is the gate-fix commit template in Task 11, which by design names what a gate caught.
 
