@@ -1,7 +1,7 @@
 /** Import a practice plan (ADR-0020): file or #plan= link → preview → team → new session. */
 import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 // The view reads the plan generator from the planner platform (the real hosted one here).
 import { renderWithPlanner as render } from "@/__tests__/helpers/planner";
 
@@ -319,5 +319,27 @@ describe("PlanImportView: starter templates", () => {
         await new Promise((resolve) => setTimeout(resolve, 50));
         expect(screen.getByRole("heading", { name: "Skills Stations" })).toBeInTheDocument();
         expect(screen.queryByRole("heading", { name: "Tuesday Skills Practice" })).toBeNull();
+    });
+});
+
+describe("PlanImportView: block rows in the preview", () => {
+    it("lists block rows by label and minutes, with no diagram, and counts the gap in the planned minutes", async () => {
+        const timed = serializePlan(
+            {
+                title: "Timed", durationMinutes: 60, date: "2026-10-06", startTime: "19:00", transitionMinutes: 2,
+                drills: [
+                    { kind: "warmup", sequence: 0, duration: 8, instructions: "Laps", label: null, runsWithPrevious: false },
+                    { sequence: 1, duration: 10, runsWithPrevious: false, instructions: "", name: "Breakout", description: "", playData: createEmptyPlayData() },
+                ],
+            },
+            "openleague-static",
+        );
+        render(<PlanImportView teams={[LIONS]} />);
+        upload(JSON.stringify(timed));
+        const list = await screen.findByRole("list", { name: "Drills in this plan" });
+        expect(within(list).getByText("Warm-up")).toBeInTheDocument();
+        expect(within(list).getByText("8 min · Laps")).toBeInTheDocument();
+        expect(within(list).queryByRole("img", { name: /Warm-up/ })).toBeNull();
+        expect(screen.getByText(/Planned 20 of 60 min/)).toBeInTheDocument();
     });
 });

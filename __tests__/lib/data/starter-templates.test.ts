@@ -3,6 +3,7 @@ import { STARTER_TEMPLATES, starterTemplatePlan } from "@/lib/data/starter-templ
 import { STARTER_PLAYS } from "@/lib/data/starter-plays";
 import { parsePlan } from "@/lib/plan-document";
 import { goalieMarkerCount } from "@/lib/utils/drill-tags";
+import { drillRows, isDrillRow } from "@/lib/utils/session-rows";
 import {
     MAX_STATIONS_PER_GROUP,
     goalieWarnings,
@@ -48,12 +49,12 @@ describe("starter templates", () => {
             expect(blocks.length).toBeGreaterThan(0);
             for (const block of blocks) {
                 expect(block.stations.length).toBeLessThanOrEqual(MAX_STATIONS_PER_GROUP);
-                expect(block.stations.some((station) => station.goalies === "required")).toBe(true);
+                expect(drillRows(block.stations).some((station) => station.goalies === "required")).toBe(true);
             }
         });
 
         it("puts stations on ice that doesn't overlap", () => {
-            const withAreas = drills.map((d) => ({ ...d, area: d.playData?.area }));
+            const withAreas = drills.map((d) => ({ ...d, area: isDrillRow(d) ? d.playData?.area : null }));
             expect(stationWarnings(groupStations(withAreas), null).overlaps).toEqual([]);
         });
 
@@ -63,7 +64,7 @@ describe("starter templates", () => {
         });
 
         it("never sends skaters to an empty net that the diagram shows a goalie in, without the second-goalie option", () => {
-            for (const drill of drills) {
+            for (const drill of drillRows(drills)) {
                 if (!drill.playData || goalieMarkerCount(drill.playData) === 0) continue;
                 const instructions = drill.instructions ?? "";
                 if (instructions.includes("empty net")) expect(instructions, drill.name).toMatch(/second goalie/);
@@ -73,7 +74,7 @@ describe("starter templates", () => {
         it("gives each drill the time its own description states", () => {
             // Time one group spends on the drill: a station that goalies stay at runs the whole block;
             // otherwise a rotation or switch interval ("every 5 minutes", "at 6 minutes") if one is given.
-            for (const drill of drills) {
+            for (const drill of drillRows(drills)) {
                 const stated = (drill.description ?? "").match(/(\d+)(?:–(\d+))? min\b/);
                 if (!stated) continue;
                 const [lo, hi] = [Number(stated[1]), Number(stated[2] ?? stated[1])];
@@ -88,7 +89,7 @@ describe("starter templates", () => {
         });
 
         it("uses starter drills verbatim", () => {
-            for (const drill of drills) {
+            for (const drill of drillRows(drills)) {
                 const starter = STARTER_PLAYS.find((p) => p.name === drill.name);
                 expect(starter, drill.name).toBeDefined();
                 expect(drill).toMatchObject({

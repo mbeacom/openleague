@@ -131,6 +131,7 @@ describe("importPracticePlan", () => {
                 date: new Date(DATE),
                 duration: 60,
                 goaliesAttending: null,
+                transitionMinutes: 0,
                 isShared: false,
                 teamId: TEAM,
                 createdById: USER,
@@ -159,9 +160,9 @@ describe("importPracticePlan", () => {
 
         const rows = models.practiceSessionPlay.createMany.mock.calls[0][0].data;
         expect(rows).toEqual([
-            { sessionId: SESSION, playId: "cowned0xxxxxxxxxxxxxxxxxx", sequence: 0, duration: 10, instructions: "Two laps", runsWithPrevious: false },
-            { sessionId: SESSION, playId: "cowned1xxxxxxxxxxxxxxxxxx", sequence: 1, duration: 15, instructions: null, runsWithPrevious: false },
-            { sessionId: SESSION, playId: "cowned2xxxxxxxxxxxxxxxxxx", sequence: 2, duration: 10, instructions: null, runsWithPrevious: true },
+            { sessionId: SESSION, playId: "cowned0xxxxxxxxxxxxxxxxxx", kind: "drill", label: null, sequence: 0, duration: 10, instructions: "Two laps", runsWithPrevious: false, stays: false, rotateEveryMinutes: null },
+            { sessionId: SESSION, playId: "cowned1xxxxxxxxxxxxxxxxxx", kind: "drill", label: null, sequence: 1, duration: 15, instructions: null, runsWithPrevious: false, stays: false, rotateEveryMinutes: null },
+            { sessionId: SESSION, playId: "cowned2xxxxxxxxxxxxxxxxxx", kind: "drill", label: null, sequence: 2, duration: 10, instructions: null, runsWithPrevious: true, stays: false, rotateEveryMinutes: null },
         ]);
         expect(mockCache.revalidatePath).toHaveBeenCalledWith("/practice-planner");
         expect(mockCache.revalidatePath).toHaveBeenCalledWith("/calendar");
@@ -225,5 +226,44 @@ describe("importPracticePlan: goaltender fields", () => {
         for (const call of models.play.createMany.mock.calls) {
             expect(call[0].data[0]).toMatchObject({ focus: "goalies", goalies: "required" });
         }
+    });
+});
+
+describe("importPracticePlan: block rows, rotation and the gap", () => {
+    const TIMED = () => doc({
+        transitionMinutes: 2,
+        drills: [
+            { kind: "warmup", sequence: 0, duration: 8, instructions: "Laps", label: null, runsWithPrevious: false },
+            { sequence: 1, duration: 5, runsWithPrevious: false, instructions: "", name: "Breakout", description: "", playData: BOARD, rotateEveryMinutes: 5 },
+            { sequence: 2, duration: 5, runsWithPrevious: true, instructions: "", name: "Regroup", description: "", playData: BOARD },
+            { kind: "break", sequence: 3, duration: 2, instructions: null, label: "Water", runsWithPrevious: false },
+            { sequence: 4, duration: 10, runsWithPrevious: false, instructions: "", name: "Shooting", description: "", playData: BOARD },
+        ],
+    });
+
+    it("writes block rows with no play, each drill row on its own copy, and the gap", async () => {
+        const result = await call({ document: TIMED() });
+        expect(result).toEqual({ success: true, data: { sessionId: SESSION } });
+        expect(models.practiceSession.create.mock.calls[0][0].data.transitionMinutes).toBe(2);
+        expect(models.play.createMany.mock.calls[0][0].data.map((d: { name: string }) => d.name)).toEqual(["Breakout", "Regroup", "Shooting"]);
+        const rows = models.practiceSessionPlay.createMany.mock.calls[0][0].data;
+        expect(rows.map((row: { kind: string; playId: string | null }) => [row.kind, row.playId])).toEqual([
+            ["warmup", null],
+            ["drill", "cowned0xxxxxxxxxxxxxxxxxx"],
+            ["drill", "cowned1xxxxxxxxxxxxxxxxxx"],
+            ["break", null],
+            ["drill", "cowned2xxxxxxxxxxxxxxxxxx"],
+        ]);
+        expect(rows[1]).toMatchObject({ rotateEveryMinutes: 5, stays: false });
+        expect(rows[3]).toMatchObject({ label: "Water", runsWithPrevious: false });
+    });
+
+    it("copies only drills into the library", async () => {
+        await call({ document: TIMED(), addToLibrary: true });
+        expect(models.play.createMany.mock.calls[1][0].data.map((d: { name: string; isTemplate: boolean }) => [d.name, d.isTemplate])).toEqual([
+            ["Breakout", true],
+            ["Regroup", true],
+            ["Shooting", true],
+        ]);
     });
 });

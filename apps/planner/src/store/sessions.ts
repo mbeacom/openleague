@@ -3,9 +3,9 @@
  * practice-session-drills.ts and practice-plan-import.ts (ADR-0020, 3a).
  * Every stored session is a valid plan document, so it always exports.
  */
-import type { PracticeSessionView, SessionItem, SessionRow } from "@/types/practice-planner";
+import type { PlayData, PracticeSessionView, SessionItem, SessionRow } from "@/types/practice-planner";
 import { MAX_BLOCK_LABEL_LENGTH } from "@/types/practice-planner";
-import { parsePlan, serializePlan } from "@/lib/plan-document";
+import { parsePlan, serializePlan, type PlanBlockInput, type PlanDrillInput } from "@/lib/plan-document";
 import { createEmptyPlayData, parseStoredPlayData } from "@/lib/utils/play-data";
 import { drillTags, toPlayFocus, toPlayGoalies } from "@/lib/utils/drill-tags";
 import { normalizeGroups, sessionRowsError, sessionWallMinutes, settleInheritedTiming } from "@/lib/utils/session-timeline";
@@ -122,8 +122,12 @@ function assertExportable(
             date: null,
             startTime: null,
             goaliesAttending: meta.goaliesAttending ?? null,
-            // The plan document has no block entries yet, so the export check covers the drill rows.
-            drills: rows.filter((row) => !isBlockKind(row.kind)).map((row) => {
+            transitionMinutes: meta.transitionMinutes ?? 0,
+            drills: rows.map((row): PlanDrillInput | PlanBlockInput => {
+                const kind = toRowKind(row.kind);
+                if (isBlockKind(kind)) {
+                    return { kind, sequence: row.sequence, duration: row.duration, runsWithPrevious: false, instructions: row.instructions, label: row.label ?? null };
+                }
                 const play = row.playId ? plays.get(row.playId) : undefined;
                 const parsed = parseStoredPlayData(play?.playData);
                 return {
@@ -134,6 +138,8 @@ function assertExportable(
                     name: play?.name ?? "",
                     description: play?.description ?? null,
                     ...drillTags(play),
+                    stays: row.stays ?? false,
+                    rotateEveryMinutes: row.rotateEveryMinutes ?? null,
                     playData: parsed.ok ? parsed.data : null,
                 };
             }),
@@ -507,22 +513,34 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                 const parsed = parsePlan(plan);
                 if (!parsed.ok) throw new StoreRefusal(parsed.error.message, parsed.error.issues);
                 const date = validDate(options.date);
-                const drills = parsed.plan.session.drills.map((d) => {
-                    const playData = writablePlayData(d.drill.playData);
-                    return { d, playData, thumbnail: ctx.makeThumbnail(playData) };
-                });
+                // Diagrams are cleaned and drawn before the transaction (IndexedDB can't wait on other work), keyed by row.
+                const prepared = new Map<number, { playData: PlayData; thumbnail: string | null }>();
+                for (const entry of parsed.plan.session.drills) {
+                    if (entry.kind !== "drill") continue;
+                    const playData = writablePlayData(entry.drill.playData);
+                    prepared.set(entry.sequence, { playData, thumbnail: ctx.makeThumbnail(playData) });
+                }
                 const sessionId = await write(ctx, async (tx) => {
                     const at = ctx.now();
                     const id = ctx.newId();
                     const rows: StoredSessionRow[] = [];
-                    for (const { d, playData, thumbnail } of drills) {
+                    for (const entry of parsed.plan.session.drills) {
+                        if (entry.kind !== "drill") {
+                            rows.push({
+                                id: ctx.newId(), playId: null, kind: entry.kind, label: entry.label, sequence: entry.sequence,
+                                duration: entry.durationMinutes, instructions: entry.instructions, runsWithPrevious: false, stays: false, rotateEveryMinutes: null,
+                            });
+                            continue;
+                        }
+                        const ready = prepared.get(entry.sequence);
+                        if (!ready) throw new Error(`No prepared diagram for row ${entry.sequence}`);
                         const base = {
-                            name: d.drill.name,
-                            description: d.drill.description || null,
-                            thumbnail,
-                            playData,
-                            focus: d.drill.focus,
-                            goalies: d.drill.goalies,
+                            name: entry.drill.name,
+                            description: entry.drill.description || null,
+                            thumbnail: ready.thumbnail,
+                            playData: ready.playData,
+                            focus: entry.drill.focus,
+                            goalies: entry.drill.goalies,
                             sourcePlayId: null,
                             createdAt: at,
                             updatedAt: at,
@@ -530,16 +548,8 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                         const owned: StoredPlay = { id: ctx.newId(), ...base, isTemplate: false, sessionId: id };
                         await tx.putPlay(owned);
                         rows.push({
-                            id: ctx.newId(),
-                            playId: owned.id,
-                            kind: "drill",
-                            label: null,
-                            sequence: d.sequence,
-                            duration: d.durationMinutes,
-                            instructions: d.instructions,
-                            runsWithPrevious: d.runsWithPrevious,
-                            stays: false,
-                            rotateEveryMinutes: null,
+                            id: ctx.newId(), playId: owned.id, kind: "drill", label: null, sequence: entry.sequence, duration: entry.durationMinutes,
+                            instructions: entry.instructions, runsWithPrevious: entry.runsWithPrevious, stays: entry.stays, rotateEveryMinutes: entry.rotateEveryMinutes,
                         });
                         if (options.addToLibrary) {
                             await tx.putPlay({ id: ctx.newId(), ...base, isTemplate: true, sessionId: null });
@@ -551,6 +561,7 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                         date,
                         duration: parsed.plan.session.durationMinutes,
                         goaliesAttending: parsed.plan.session.goaliesAttending,
+                        transitionMinutes: parsed.plan.session.transitionMinutes,
                         rows,
                         createdAt: at,
                         updatedAt: at,

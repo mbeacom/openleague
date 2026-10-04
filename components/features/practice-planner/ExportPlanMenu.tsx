@@ -29,12 +29,34 @@ import {
     serializePlan,
     type PlanDocument,
     type PlanGenerator,
+    type PlanSessionInput,
 } from "@/lib/plan-document";
 import { usePlannerPlatform, type PlannerPlanLink } from "@/lib/planner-store";
-import { drillRows } from "@/lib/utils/session-rows";
+import { drillRows, isBlockRow } from "@/lib/utils/session-rows";
 import { downloadBlob } from "./export/download";
-import type { ExportSession } from "./export/bench-sheet-model";
+import type { ExportSession, ExportSessionRow } from "./export/bench-sheet-model";
 import { ExportModuleLoadError, exportBenchSheet, type BenchSheetFormat } from "./export/export-bench-sheet";
+
+/** The session's rows as plan rows: drills with their tags and timing, blocks with their label and note. */
+export function toPlanRows(rows: readonly ExportSessionRow[]): PlanSessionInput["drills"] {
+    return rows.map((row) =>
+        isBlockRow(row)
+            ? { kind: row.kind, sequence: row.sequence, duration: row.duration, runsWithPrevious: false, instructions: row.instructions, label: row.label }
+            : {
+                  sequence: row.sequence,
+                  duration: row.duration,
+                  runsWithPrevious: row.runsWithPrevious,
+                  instructions: row.instructions,
+                  name: row.play.name,
+                  description: row.play.description,
+                  focus: row.play.focus,
+                  goalies: row.play.goalies,
+                  stays: row.stays,
+                  rotateEveryMinutes: row.rotateEveryMinutes,
+                  playData: row.play.playData,
+              },
+    );
+}
 
 /** What the session page passes (a PracticeSessionView fits). Team and venue names feed the bench sheet exports. */
 export type ExportableSession = ExportSession;
@@ -54,18 +76,8 @@ export function buildPlanDocument(
             date: date ?? null,
             startTime: startTime ?? null,
             goaliesAttending: session.goaliesAttending ?? null,
-            // The plan document has no block entries yet, so a plan carries the drill rows.
-            drills: drillRows(session.plays).map((sp) => ({
-                sequence: sp.sequence,
-                duration: sp.duration,
-                runsWithPrevious: sp.runsWithPrevious,
-                instructions: sp.instructions,
-                name: sp.play.name,
-                description: sp.play.description,
-                focus: sp.play.focus,
-                goalies: sp.play.goalies,
-                playData: sp.play.playData,
-            })),
+            transitionMinutes: session.transitionMinutes ?? 0,
+            drills: toPlanRows(session.plays),
         },
         generator,
         now,

@@ -319,7 +319,7 @@ describe.each(REPOS)("sessions (%s)", (_name, open) => {
         expect(view.goaliesAttending).toBe(0);
         const exported = buildPlanDocument(view, new Date(), "openleague-static");
         expect(exported.session.goaliesAttending).toBe(0);
-        expect(exported.session.drills[0].drill).toMatchObject({ focus: "goalies", goalies: "required" });
+        expect(drillRows(exported.session.drills)[0].drill).toMatchObject({ focus: "goalies", goalies: "required" });
         const library = data(await store.getPlaysByTeam({ teamId: T, isTemplate: true, page: 1, limit: 20, dateFilter: "all", focus: "goalies" }));
         expect(library.total).toBe(1);
     });
@@ -464,6 +464,29 @@ describe.each(REPOS)("sessions (%s)", (_name, open) => {
         expect(view.transitionMinutes).toBe(0);
         expect(view.plays[0]).toMatchObject({ stays: false, rotateEveryMinutes: null, play: { id: plays[0].playId } });
         expect(data(await store.getSessionForEdit(id)).initialData.plays[0]).toMatchObject({ stays: false, rotateEveryMinutes: null });
+    });
+
+    it("imports a plan's block rows, rotation and gap, and exports them back", async () => {
+        const { store } = await setup();
+        const document = serializePlan(
+            {
+                title: "Timed", durationMinutes: 60, date: null, startTime: null, transitionMinutes: 1,
+                drills: [
+                    { kind: "warmup", sequence: 0, duration: 8, instructions: "Laps", label: null, runsWithPrevious: false },
+                    { sequence: 1, duration: 5, runsWithPrevious: false, instructions: "", name: "A", description: "", playData: createEmptyPlayData(), rotateEveryMinutes: 5 },
+                    { sequence: 2, duration: 5, runsWithPrevious: true, instructions: "", name: "B", description: "", playData: createEmptyPlayData() },
+                ],
+            },
+            "openleague-static",
+        );
+        const { sessionId } = data(await store.importPlan(document, { date: new Date("2026-10-06T19:00:00"), addToLibrary: false }));
+        const view = data(await store.getSessionView(sessionId));
+        expect(view.transitionMinutes).toBe(1);
+        expect(view.plays.map((row) => row.kind ?? "drill")).toEqual(["warmup", "drill", "drill"]);
+        const exported = buildPlanDocument(view, new Date(), "openleague-static");
+        expect(exported.session.transitionMinutes).toBe(1);
+        expect(exported.session.drills.map((entry) => entry.kind)).toEqual(["warmup", "drill", "drill"]);
+        expect(exported.session.drills[1]).toMatchObject({ rotateEveryMinutes: 5 });
     });
 });
 

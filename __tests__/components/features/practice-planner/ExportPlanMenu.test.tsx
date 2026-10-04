@@ -10,6 +10,7 @@ import {
 } from "@/components/features/practice-planner/ExportPlanMenu";
 import { LINK_TOO_LARGE_MESSAGE, MAX_PLAN_DRILLS, MAX_PLAN_FILE_BYTES, decodePlanLink, parsePlan } from "@/lib/plan-document";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
+import { drillRows } from "@/lib/utils/session-rows";
 import { formatDateTimeLocalInput, resolveTimeZone } from "@/lib/utils/date";
 import { createHashPlatform, renderWithPlanner } from "@/__tests__/helpers/planner";
 import type { PlannerPlatform } from "@/lib/planner-store";
@@ -77,7 +78,7 @@ describe("buildPlanDocument", () => {
 
     it("exports an unreadable diagram as an empty board and still parses", () => {
         const doc = buildPlanDocument({ ...SESSION, plays: [sessionPlay("Broken", 0, false, false)] }, NOW);
-        expect(doc.session.drills[0].drill.playData).toEqual(createEmptyPlayData());
+        expect(drillRows(doc.session.drills)[0].drill.playData).toEqual(createEmptyPlayData());
         expect(parsePlan(JSON.parse(JSON.stringify(doc))).ok).toBe(true);
     });
 });
@@ -316,7 +317,26 @@ describe("buildPlanDocument: goaltender fields", () => {
         };
         const doc = buildPlanDocument(session, NOW);
         expect(doc.session.goaliesAttending).toBe(0);
-        expect(doc.session.drills[0].drill).toMatchObject({ focus: "goalies", goalies: "optional" });
-        expect(doc.session.drills[0].drill.playData.players.map((p) => p.role)).toEqual(["G"]);
+        expect(drillRows(doc.session.drills)[0].drill).toMatchObject({ focus: "goalies", goalies: "optional" });
+        expect(drillRows(doc.session.drills)[0].drill.playData.players.map((p) => p.role)).toEqual(["G"]);
+    });
+});
+
+describe("buildPlanDocument: block rows, rotation and the gap", () => {
+    it("writes every row in order, each drill's timing, and the gap", () => {
+        const session: ExportableSession = {
+            ...SESSION,
+            transitionMinutes: 2,
+            plays: [
+                { kind: "warmup", sequence: 0, duration: 8, instructions: "Laps", runsWithPrevious: false, label: null },
+                { ...sessionPlay("A", 1), rotateEveryMinutes: 5, stays: false },
+                { ...sessionPlay("B", 2), runsWithPrevious: true, stays: false, rotateEveryMinutes: null },
+            ],
+        };
+        const doc = buildPlanDocument(session, NOW);
+        expect(doc.session.transitionMinutes).toBe(2);
+        expect(doc.session.drills.map((entry) => entry.kind)).toEqual(["warmup", "drill", "drill"]);
+        expect(doc.session.drills[0]).toEqual({ kind: "warmup", sequence: 0, durationMinutes: 8, instructions: "Laps", label: null });
+        expect(doc.session.drills[1]).toMatchObject({ rotateEveryMinutes: 5, stays: false });
     });
 });

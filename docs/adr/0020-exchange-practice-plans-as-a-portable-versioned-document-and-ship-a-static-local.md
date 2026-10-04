@@ -179,3 +179,19 @@ The document gains three optional fields without a version bump:
 - A bump would make every older build reject new files as "made by a newer version", a worse outcome than losing advisory tags.
 
 Starter practice templates ship as plan-document inputs (`lib/data/starter-templates.ts`) and are imported through the existing import flows. Spec: `docs/superpowers/specs/2026-10-03-goalie-drills-design.md`.
+
+### 2026-10-04: Practice timing (additive fields, version stays 1)
+
+The document gains, without a version bump:
+- per row: `kind` (`drill` | `warmup` | `break` | `transition` | `cooldown`); on a drill row `stays` (boolean) and `rotateEveryMinutes` (an integer 1–30, or `null`); on a block row `label` (at most 60 characters, or `null` for the kind's default);
+- per session: `transitionMinutes` (an integer 0–5, the gap between blocks).
+
+**Rules:**
+- A row without a `kind` is a drill, so every earlier file reads as before, with a 0-minute gap.
+- A block row carries `sequence`, `durationMinutes`, `kind`, `label` and `instructions` (its note) and nothing else: no drill, diagram or tags. It counts toward `MAX_PLAN_DRILLS`.
+- `stays`, `rotateEveryMinutes`, `label` and `transitionMinutes` read leniently (an unrecognized value takes its default). An unknown `kind` is an error, never read as a drill. The row rules (a block never runs as a station; a rotation only on the first drill of a block with at least 2 rotating stations) are enforced as the hosted save enforces them.
+- Writers always emit every field.
+
+**Compatibility:** a reader built before this amendment strips the drill rows' new keys and reads such a file as before, but rejects a file that contains a block row (it has no `drill`) with its normal "can't open this plan" message. That one-way break is accepted: a bump would make older readers reject every new file, including those without blocks.
+
+Spec: `docs/superpowers/specs/2026-10-04-practice-timing-design.md`.
