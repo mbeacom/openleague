@@ -23,9 +23,10 @@ export function GoaliesAttendingField({
             value={value === null ? NOT_SET : String(value)}
             onChange={(event) => onChange(event.target.value === NOT_SET ? null : Number(event.target.value))}
             disabled={disabled}
-            helperText="Optional. Used for goalie warnings; at 0, goalies are hidden on drills that don't need one."
+            helperText="Optional. Used for goalie warnings; at 0, goalies are hidden on the session view and bench sheet for drills that don't need one."
             slotProps={{ select: { displayEmpty: true }, inputLabel: { shrink: true } }}
-            sx={{ "& .MuiInputBase-root": { minHeight: 44 } }}
+            // The theme's 48px select min-height plus outlined padding is 81px; the default matches the 56px fields beside it.
+            sx={{ "& .MuiSelect-select.MuiInputBase-input": { minHeight: "1.4375em" } }}
         >
             <MenuItem value={NOT_SET}>Not set</MenuItem>
             {Array.from({ length: MAX_GOALIES_ATTENDING + 1 }, (_, count) => (

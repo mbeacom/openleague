@@ -6,7 +6,13 @@ import { renderWithPlanner } from "@/__tests__/helpers/planner";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import type { PlayData, PlayGoalies } from "@/types/practice-planner";
 
-const seen = vi.hoisted(() => ({ legends: [] as PlayData[], diagrams: [] as PlayData[] }));
+const seen = vi.hoisted(() => ({ legends: [] as PlayData[], diagrams: [] as PlayData[], stations: [] as Array<Array<{ playData: PlayData | null }>> }));
+vi.mock("@/components/features/practice-planner/StationMap", () => ({
+    StationMap: ({ stations }: { stations: Array<{ playData: PlayData | null }> }) => {
+        seen.stations.push(stations);
+        return null;
+    },
+}));
 vi.mock("@/components/features/practice-planner/PlayLegend", () => ({
     PlayLegend: ({ playData }: { playData: PlayData | null }) => {
         if (playData) seen.legends.push(playData);
@@ -48,6 +54,7 @@ function session(goaliesAttending: number | null, goalies: PlayGoalies) {
 function renderView(s: ReturnType<typeof session>) {
     seen.legends.length = 0;
     seen.diagrams.length = 0;
+    seen.stations.length = 0;
     renderWithPlanner(
         <ThemeProvider theme={createTheme()}>
             <SessionDetailView session={s} isAdmin={false} />
@@ -74,6 +81,15 @@ describe("SessionDetailView goalies", () => {
         expect(seen.legends.at(-1)?.players.map((p) => p.role)).toEqual(["G", "F"]);
         expect(screen.getByText("1 drill or station block needs a goalie, but none are attending")).toBeInTheDocument();
         expect(screen.getByText("Goalies: 0")).toBeInTheDocument();
+    });
+
+    it("passes the drawn diagrams (goalie hidden) to the station map", () => {
+        const base = session(0, "optional");
+        const second = { ...base.plays[0], id: "row-b", sequence: 1, runsWithPrevious: true, play: { ...base.plays[0].play, id: "play-b", name: "Low Cycle" } };
+        renderView({ ...base, plays: [base.plays[0], second] });
+        const stations = seen.stations.at(-1) ?? [];
+        expect(stations.map((st) => st.playData?.players.map((p) => p.role))).toEqual([["F"], ["F"]]);
+        expect(G_BOARD.players).toHaveLength(2);
     });
 
     it("says nothing about goalies when the count is not set", () => {

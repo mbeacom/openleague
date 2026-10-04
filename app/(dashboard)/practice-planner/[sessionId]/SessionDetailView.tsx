@@ -47,7 +47,7 @@ import { PlayLegend } from "@/components/features/practice-planner/PlayLegend";
 import { StationMap } from "@/components/features/practice-planner/StationMap";
 import { SessionTimeline } from "@/components/features/practice-planner/SessionTimeline";
 import { ExportPlanMenu } from "@/components/features/practice-planner/ExportPlanMenu";
-import { PrintDiagram } from "@/components/features/practice-planner/print/PrintDiagram";
+import { PRINT_DIAGRAM_SIZE, PrintDiagram } from "@/components/features/practice-planner/print/PrintDiagram";
 import { useSessionGoalies } from "@/components/features/practice-planner/useSessionGoalies";
 import type { PracticeSessionView, PracticeSessionViewPlay } from "@/types/practice-planner";
 import {
@@ -283,7 +283,14 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
                 <Chip size="small" variant="outlined" label={`Goalies: ${session.goaliesAttending}`} />
               )}
               {goalieMessages.map((message) => (
-                <Chip key={message} size="small" color="warning" variant="outlined" label={message} />
+                <Chip
+                  key={message}
+                  size="small"
+                  color="warning"
+                  variant="outlined"
+                  label={message}
+                  sx={{ height: "auto", maxWidth: "100%", "& .MuiChip-label": { whiteSpace: "normal", py: 0.25 } }}
+                />
               ))}
             </Stack>
           </Box>
@@ -545,7 +552,10 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
                 >
                   {/* A stored PNG can't drop a hidden goalie marker, so draw it live. */}
                   {goaliesHidden ? (
-                    <PrintDiagram playData={activeDrawn} name={activePlay.play.name} pixelRatio={2} />
+                    // Fit inside the fixed-height preview like the thumbnail's fit="contain".
+                    <Box sx={{ height: "100%", aspectRatio: `${PRINT_DIAGRAM_SIZE.width} / ${PRINT_DIAGRAM_SIZE.height}`, maxWidth: "100%", display: "flex", alignItems: "center" }}>
+                      <PrintDiagram playData={activeDrawn} name={activePlay.play.name} pixelRatio={2} />
+                    </Box>
                   ) : activePlay.play.thumbnail ? (
                     <Image src={activePlay.play.thumbnail} alt={activePlay.play.name} fit="contain" />
                   ) : (

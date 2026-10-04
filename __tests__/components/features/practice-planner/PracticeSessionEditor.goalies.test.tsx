@@ -60,6 +60,14 @@ describe("PracticeSessionEditor: goalies attending", () => {
         expect(onSave.mock.calls[0][0].goaliesAttending).toBe(2);
     });
 
+    it("saves the loaded count unchanged when the coach doesn't touch it", async () => {
+        const { onSave } = renderEditor([], 1);
+        await act(async () => {
+            fireEvent.click(screen.getByRole("button", { name: /^save session/i }));
+        });
+        expect(onSave.mock.calls[0][0].goaliesAttending).toBe(1);
+    });
+
     it("saves null after choosing Not set", async () => {
         const { onSave } = renderEditor([], 1);
         await chooseGoalies("Not set");
