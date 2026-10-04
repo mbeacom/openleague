@@ -50,7 +50,7 @@
   - S4 `apps/planner/src/store/sessions.ts` `assertExportable`: serializes drill rows only (introduced by Task 4, the first task in which the static store holds block rows) → Task 5.
   No other interim code. Comments at the seams say what they hold back, never "Task N".
 - No new runtime dependencies. No raw SQL outside the migration file (ADR-0003, `bun run check:raw-sql`). MUI is the only component library (ADR-0004).
-- Screenshots (UI tasks): build and serve the static planner, drive it with headless Playwright from the scratchpad harness, and write PNGs to `/private/tmp/claude-501/-Users-markbeacom-github-mbeacom-openleague/3436f415-4c2f-4d80-8aa7-d860be0c7ad8/scratchpad/pwcheck/` (it has `node_modules/playwright`; the Chromium executable is `/Users/markbeacom/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell`). Name files `timing-taskN-<view>-<desktop|mobile>-<light|dark>.png`. Read every PNG before committing.
+- Screenshots (UI tasks): build and serve the static planner, drive it with headless Playwright from the scratchpad harness, and write PNGs to `<scratchpad>/pwcheck/` (it has `node_modules/playwright`; the Chromium executable is the local Chromium headless shell (set `CHROMIUM_PATH`)). Name files `timing-taskN-<view>-<desktop|mobile>-<light|dark>.png`. Read every PNG before committing.
 - Commit trailer, on its own paragraph: `Claude-Session: https://claude.ai/code/session_01TqKuhs6SuVkWyirkz3ZdQX`
 
 ## Review Focus
@@ -5602,11 +5602,11 @@ Expected: PASS (the busy test passes `onAddBlock`).
 
 Run `bun run planner:build`, then start the preview in the background (Bash `run_in_background: true`): `bun run planner:preview --port 4199 --strictPort`.
 
-Write `/private/tmp/claude-501/-Users-markbeacom-github-mbeacom-openleague/3436f415-4c2f-4d80-8aa7-d860be0c7ad8/scratchpad/pwcheck/timing-task6.mjs`:
+Write `<scratchpad>/pwcheck/timing-task6.mjs`:
 
 ```js
 import { chromium } from "playwright";
-const exe = "/Users/markbeacom/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell";
+const exe = process.env.CHROMIUM_PATH;
 const browser = await chromium.launch({ executablePath: exe });
 const BASE = "http://localhost:4199/";
 for (const scheme of ["light", "dark"]) {
@@ -5644,7 +5644,7 @@ for (const scheme of ["light", "dark"]) {
 await browser.close();
 ```
 
-Run: `cd /private/tmp/claude-501/-Users-markbeacom-github-mbeacom-openleague/3436f415-4c2f-4d80-8aa7-d860be0c7ad8/scratchpad/pwcheck && node timing-task6.mjs`
+Run: `cd <scratchpad>/pwcheck && node timing-task6.mjs`
 Expected output: no `pageerror`; both selects about 56 px tall (never 81); "block-card buttons under 44px: []".
 
 Read every `timing-task6-*.png`. Check: the Between blocks field sits under Goalies attending with its helper text; the header's three buttons wrap cleanly at 390 px; the block card shows its icon, label, `2 min` stepper, note, and move/delete; in dark mode no surface is white and every text is readable. Fix and re-run until they do. Stop the preview server.
@@ -6165,7 +6165,7 @@ Write `pwcheck/timing-task7.mjs` (same scratchpad directory):
 
 ```js
 import { chromium } from "playwright";
-const exe = "/Users/markbeacom/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell";
+const exe = process.env.CHROMIUM_PATH;
 const browser = await chromium.launch({ executablePath: exe });
 const BASE = "http://localhost:4199/";
 for (const scheme of ["light", "dark"]) {
@@ -6407,7 +6407,7 @@ Rebuild and serve as in Task 6 Step 6. Write `pwcheck/timing-task8.mjs`:
 
 ```js
 import { chromium } from "playwright";
-const exe = "/Users/markbeacom/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell";
+const exe = process.env.CHROMIUM_PATH;
 const browser = await chromium.launch({ executablePath: exe });
 const BASE = "http://localhost:4199/";
 for (const scheme of ["light", "dark"]) {
@@ -6762,7 +6762,7 @@ Rebuild and serve as in Task 6 Step 6. Write `pwcheck/timing-task9.mjs`, which r
 
 ```js
 import { chromium } from "playwright";
-const exe = "/Users/markbeacom/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell";
+const exe = process.env.CHROMIUM_PATH;
 const browser = await chromium.launch({ executablePath: exe });
 const BASE = "http://localhost:4199/";
 const ctx = await browser.newContext({ acceptDownloads: true, viewport: { width: 1280, height: 1000 } });
@@ -7265,7 +7265,7 @@ Rebuild and serve as in Task 6 Step 6. Write `pwcheck/timing-task10.mjs`:
 
 ```js
 import { chromium } from "playwright";
-const exe = "/Users/markbeacom/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell";
+const exe = process.env.CHROMIUM_PATH;
 const browser = await chromium.launch({ executablePath: exe });
 const BASE = "http://localhost:4199/";
 for (const scheme of ["light", "dark"]) {
