@@ -2,7 +2,8 @@
 import type { LibraryDateFilter } from "@/lib/planner-store";
 import { STARTER_PLAYS } from "@/lib/data/starter-plays";
 import { PLAY_DATA_UNREADABLE_CODE, PLAY_DATA_UNREADABLE_MESSAGE, parseStoredPlayData } from "@/lib/utils/play-data";
-import { META_STARTERS_SEEDED, type StoredPlay } from "./records";
+import { drillTags, toPlayFocus, toPlayGoalies } from "@/lib/utils/drill-tags";
+import { LEGACY_SEEDED_STARTER_IDS, META_SEEDED_STARTER_IDS, META_STARTERS_SEEDED, type RepoTx, type StoredPlay } from "./records";
 import {
     OWNED_DRILL_DELETE_MESSAGE,
     PLAY_NOT_FOUND_MESSAGE,
@@ -41,6 +42,18 @@ export function dateFilterStart(filter: LibraryDateFilter, now: Date): Date | nu
     }
 }
 
+/** Starter ids this device has received: the stored list, or before it existed, the nine the legacy flag stood for. */
+export function seededStarterIds(stored: unknown, legacyFlag: unknown): Set<string> {
+    if (Array.isArray(stored)) return new Set(stored.filter((id): id is string => typeof id === "string"));
+    return new Set(legacyFlag ? LEGACY_SEEDED_STARTER_IDS : []);
+}
+
+async function readSeeded(tx: RepoTx): Promise<Set<string>> {
+    return seededStarterIds(await tx.getMeta(META_SEEDED_STARTER_IDS), await tx.getMeta(META_STARTERS_SEEDED));
+}
+
+const unseeded = (seeded: Set<string>) => STARTER_PLAYS.filter((starter) => !seeded.has(starter.id));
+
 export function createLibraryOps(ctx: StoreContext): LibraryOps {
     return {
         getPlaysByTeam: (input) =>
@@ -52,6 +65,8 @@ export function createLibraryOps(ctx: StoreContext): LibraryOps {
                     // Session-owned copies never appear in any listing.
                     .filter((p) => p.sessionId === null)
                     .filter((p) => input.isTemplate === undefined || p.isTemplate === input.isTemplate)
+                    .filter((p) => !input.focus || drillTags(p).focus === input.focus)
+                    .filter((p) => !input.goalies || drillTags(p).goalies === input.goalies)
                     .filter((p) => !since || p.createdAt >= since)
                     .filter((p) => !term || p.name.toLowerCase().includes(term) || (p.description ?? "").toLowerCase().includes(term))
                     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || a.name.localeCompare(b.name));
@@ -87,6 +102,7 @@ export function createLibraryOps(ctx: StoreContext): LibraryOps {
                     ...text,
                     thumbnail: thumbnailOrNull(input.thumbnail),
                     playData,
+                    ...drillTags(input),
                     isTemplate: input.isTemplate,
                     sessionId: null,
                     sourcePlayId: null,
@@ -102,12 +118,17 @@ export function createLibraryOps(ctx: StoreContext): LibraryOps {
                 const text = drillText(input.name, input.description);
                 const playData = writablePlayData(input.playData);
                 const thumbnail = thumbnailOrNull(input.thumbnail);
+                // Absent = unchanged: only tags the caller sends replace the stored ones.
+                const tags = {
+                    ...(input.focus !== undefined && { focus: toPlayFocus(input.focus) }),
+                    ...(input.goalies !== undefined && { goalies: toPlayGoalies(input.goalies) }),
+                };
                 const at = ctx.now();
                 await write(ctx, async (tx) => {
                     const play = await tx.getPlay(input.id);
                     // Sessions hold their own copies, so a library edit never reaches one.
                     if (!play || play.sessionId !== null) throw new StoreRefusal(PLAY_NOT_FOUND_MESSAGE);
-                    await tx.putPlay({ ...play, ...text, thumbnail, playData, updatedAt: at });
+                    await tx.putPlay({ ...play, ...text, thumbnail, playData, ...tags, updatedAt: at });
                 });
                 return ok({ id: input.id });
             }),
@@ -125,32 +146,40 @@ export function createLibraryOps(ctx: StoreContext): LibraryOps {
             }),
 
         seedStarterDrills: async () => {
-            if (await ctx.repo.read((tx) => tx.getMeta(META_STARTERS_SEEDED))) return;
+            const pending = unseeded(await ctx.repo.read(readSeeded));
+            if (pending.length === 0) return;
             // Thumbnails first: nothing but repo calls may be awaited inside a transaction.
-            const prepared = STARTER_PLAYS.map((starter) => ({ starter, thumbnail: ctx.makeThumbnail(starter.playData) }));
+            const thumbnails = new Map(pending.map((starter) => [starter.id, ctx.makeThumbnail(starter.playData)]));
             // Not a user write (ctx.repo.write, not write): no persistence prompt at first load.
             await ctx.repo.write(async (tx) => {
-                if (await tx.getMeta(META_STARTERS_SEEDED)) return;
+                const seeded = await readSeeded(tx);
+                const todo = unseeded(seeded);
+                if (todo.length === 0) return;
                 const existing = new Set(
                     (await tx.allPlays()).filter((p) => p.sessionId === null).map((p) => p.name.trim().toLowerCase()),
                 );
                 const at = ctx.now();
-                for (const { starter, thumbnail } of prepared) {
+                for (const starter of todo) {
+                    // Seeded either way: a starter blocked by a coach's own drill, or deleted later, never returns.
+                    seeded.add(starter.id);
                     if (existing.has(starter.name.trim().toLowerCase())) continue;
-                    await tx.putPlay({
+                    const play: StoredPlay = {
                         id: ctx.newId(),
                         name: starter.name,
                         description: starter.description || null,
-                        thumbnail,
+                        thumbnail: thumbnails.get(starter.id) ?? null,
                         playData: structuredClone(starter.playData),
+                        focus: starter.focus,
+                        goalies: starter.goalies,
                         isTemplate: true,
                         sessionId: null,
                         sourcePlayId: null,
                         createdAt: at,
                         updatedAt: at,
-                    });
+                    };
+                    await tx.putPlay(play);
                 }
-                await tx.putMeta(META_STARTERS_SEEDED, true);
+                await tx.putMeta(META_SEEDED_STARTER_IDS, [...seeded]);
             });
         },
     };

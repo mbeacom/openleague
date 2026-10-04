@@ -21,6 +21,8 @@ export function toLocalSessionSave(session: PracticeSessionSubmitData): LocalSes
         title: session.title,
         date: session.date,
         duration: session.duration,
+        // Absent = unchanged (as EditSessionWrapper): an editor without the field never clears a stored count.
+        ...(session.goaliesAttending !== undefined && { goaliesAttending: session.goaliesAttending }),
         plays: session.plays.map((play) => ({
             playId: play.playId,
             clientKey: play.id,

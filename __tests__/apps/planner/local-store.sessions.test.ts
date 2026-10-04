@@ -9,6 +9,8 @@ import { buildPlanDocument } from "@/components/features/practice-planner/Export
 import { parsePlan, serializePlan } from "@/lib/plan-document";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import { SESSION_DRILL_REJECTED_MESSAGE } from "@/lib/utils/session-drill-ids";
+import type { ActionResult } from "@/lib/planner-store";
+import { GOALIES_ATTENDING_MESSAGE } from "@/lib/utils/drill-tags";
 
 const T = LOCAL_TEAM_ID;
 
@@ -18,6 +20,11 @@ function drill(playId: string, clientKey: string, sequence: number, overrides: P
 
 function save(plays: LocalSessionDrill[], overrides: Partial<LocalSessionSave> = {}): LocalSessionSave {
     return { title: "Tuesday Skills", date: new Date("2026-10-06T19:00:00"), duration: 60, plays, ...overrides };
+}
+
+function data<T>(result: ActionResult<T>): T {
+    if (!result.success) throw new Error(result.error);
+    return result.data;
 }
 
 describe.each(REPOS)("sessions (%s)", (_name, open) => {
@@ -247,6 +254,71 @@ describe.each(REPOS)("sessions (%s)", (_name, open) => {
         const { store } = await setup();
         const result = await store.importPlan({ format: "nope" } as never, { date: new Date(), addToLibrary: false });
         expect(result).toMatchObject({ success: false, error: "This file isn't an OpenLeague practice plan." });
+    });
+
+    it("carries drill tags and the goalie count through saves, forks, add-to-library and duplicate", async () => {
+        const { store } = await setup();
+        const lib = data(await store.createPlay({ name: "Warm-up", playData: createEmptyPlayData(), isTemplate: true, teamId: T, focus: "goalies", goalies: "required" }));
+        const session = data(await store.createSession(save([drill(lib.id, "k1", 0)], { goaliesAttending: 1 })));
+
+        const view = data(await store.getSessionView(session.id));
+        expect(view.goaliesAttending).toBe(1);
+        expect(view.plays[0].play).toMatchObject({ focus: "goalies", goalies: "required" });
+        const edit = data(await store.getSessionForEdit(session.id));
+        expect(edit.initialData.goaliesAttending).toBe(1);
+        expect(edit.initialData.plays[0]).toMatchObject({ focus: "goalies", goalies: "required" });
+
+        // A fork with no tags sent inherits the library drill's.
+        const fork = data(await store.saveSessionDrill({ sessionId: session.id, teamId: T, playId: lib.id, name: "Warm-up", playData: createEmptyPlayData() }));
+        const copied = data(await store.copySessionDrillToLibrary({ playId: fork.playId, teamId: T }));
+        expect(data(await store.getPlayById({ id: copied.playId, teamId: T }))).toMatchObject({ focus: "goalies", goalies: "required" });
+
+        // Saving an owned drill in place with new tags changes them.
+        const owned = view.plays[0].play.id;
+        data(await store.saveSessionDrill({ sessionId: session.id, teamId: T, playId: owned, name: "Warm-up", playData: createEmptyPlayData(), goalies: "optional" }));
+        expect(data(await store.getSessionView(session.id)).plays[0].play).toMatchObject({ focus: "goalies", goalies: "optional" });
+
+        const duplicate = data(await store.duplicatePracticeSession({ id: session.id, teamId: T, date: new Date("2026-10-13T19:00:00") }));
+        const copy = data(await store.getSessionView(duplicate.id));
+        expect(copy.goaliesAttending).toBe(1);
+        expect(copy.plays[0].play).toMatchObject({ focus: "goalies", goalies: "optional" });
+    });
+
+    it("keeps the goalie count when an update omits it, clears it on null, and refuses an out-of-range count", async () => {
+        const { store } = await setup();
+        const { id } = data(await store.createSession(save([], { goaliesAttending: 2 })));
+        data(await store.updateSession(id, save([])));
+        expect(data(await store.getSessionView(id)).goaliesAttending).toBe(2);
+        data(await store.updateSession(id, save([], { goaliesAttending: null })));
+        expect(data(await store.getSessionView(id)).goaliesAttending).toBeNull();
+        expect(await store.updateSession(id, save([], { goaliesAttending: 11 }))).toEqual({ success: false, error: GOALIES_ATTENDING_MESSAGE });
+        expect(await store.createSession(save([], { goaliesAttending: -1 }))).toEqual({ success: false, error: GOALIES_ATTENDING_MESSAGE });
+    });
+
+    it("imports a plan's tags and goalie count, and exports them back", async () => {
+        const { store } = await setup();
+        const document = serializePlan(
+            {
+                title: "Goalie night", durationMinutes: 30, date: null, startTime: null, goaliesAttending: 0,
+                drills: [{ sequence: 0, duration: 10, runsWithPrevious: false, instructions: "", name: "Warm-up", description: "", focus: "goalies", goalies: "required", playData: createEmptyPlayData() }],
+            },
+            "openleague-static",
+        );
+        const { sessionId } = data(await store.importPlan(document, { date: new Date("2026-10-06T19:00:00"), addToLibrary: true }));
+        const view = data(await store.getSessionView(sessionId));
+        expect(view.goaliesAttending).toBe(0);
+        const exported = buildPlanDocument(view, new Date(), "openleague-static");
+        expect(exported.session.goaliesAttending).toBe(0);
+        expect(exported.session.drills[0].drill).toMatchObject({ focus: "goalies", goalies: "required" });
+        const library = data(await store.getPlaysByTeam({ teamId: T, isTemplate: true, page: 1, limit: 20, dateFilter: "all", focus: "goalies" }));
+        expect(library.total).toBe(1);
+    });
+
+    it("reads a session stored before goalie counts as not set", async () => {
+        const { repo, store, clock } = await setup();
+        await repo.write((tx) => tx.putSession({ id: "old", title: "Old", date: clock.now, duration: 60, rows: [], createdAt: clock.now, updatedAt: clock.now }));
+        expect(data(await store.getSessionView("old")).goaliesAttending).toBeNull();
+        expect(data(await store.getSessionForEdit("old")).initialData.goaliesAttending).toBeNull();
     });
 });
 
