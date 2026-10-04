@@ -55,6 +55,15 @@ describe("hosted wrappers: goaltender fields", () => {
         expect(actions.updatePracticeSession.mock.calls[0][0]).toMatchObject({ goaliesAttending: 0 });
     });
 
+    it("EditSessionWrapper leaves the count alone when the editor omits it (an explicit null still clears)", async () => {
+        render(<EditSessionWrapper sessionId={SESSION} teamId={TEAM} initialData={{}} bookingOptions={BOOKING as never} />);
+        const { goaliesAttending: _omitted, ...withoutCount } = submitted;
+        await captured.props!.onSave(withoutCount);
+        expect(actions.updatePracticeSession.mock.calls[0][0]).not.toHaveProperty("goaliesAttending");
+        await captured.props!.onSave({ ...submitted, goaliesAttending: null });
+        expect(actions.updatePracticeSession.mock.calls[1][0]).toMatchObject({ goaliesAttending: null });
+    });
+
     it("PracticeSessionEditorWrapper sends goaliesAttending", async () => {
         render(<PracticeSessionEditorWrapper teamId={TEAM} bookingOptions={BOOKING as never} />);
         await captured.props!.onSave({ ...submitted, goaliesAttending: 2 });

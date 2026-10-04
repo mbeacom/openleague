@@ -384,9 +384,14 @@ describe("clones carry the drill tags (materialize, detach and duplicate share c
     });
 
     it("writes every Play column except the timestamps (new-column guard)", async () => {
-        const data = await cloneOne({ id: "lib", name: "W", description: null, thumbnail: null, playData: {}, sourcePlayId: null, focus: "team", goalies: "none" });
+        // The source carries only what CLONE_SOURCE_SELECT reads, so a column
+        // missing from the select comes through undefined and fails here.
+        const source: Record<string, unknown> = {};
+        for (const key of Object.keys(CLONE_SOURCE_SELECT)) source[key] = `${key}-value`;
+        const data = await cloneOne(source);
         for (const field of Object.values(Prisma.PlayScalarFieldEnum)) {
-            expect(field in data || PLAY_FIELDS_NOT_CLONED.has(field), `Play.${field} is neither cloned nor in PLAY_FIELDS_NOT_CLONED`).toBe(true);
+            if (PLAY_FIELDS_NOT_CLONED.has(field)) continue;
+            expect(data[field], `Play.${field} is neither cloned (selected and written) nor in PLAY_FIELDS_NOT_CLONED`).not.toBeUndefined();
         }
     });
 });

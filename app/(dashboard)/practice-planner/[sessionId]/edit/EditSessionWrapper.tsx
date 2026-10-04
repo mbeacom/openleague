@@ -39,7 +39,8 @@ export function EditSessionWrapper({
         title: session.title,
         date: session.date,
         duration: session.duration,
-        goaliesAttending: session.goaliesAttending ?? null,
+        // Absent = unchanged: the editor may not set it; only an explicit null clears.
+        ...(session.goaliesAttending !== undefined && { goaliesAttending: session.goaliesAttending }),
         teamId,
         plays: session.plays.map((play) => ({
           playId: play.playId,
