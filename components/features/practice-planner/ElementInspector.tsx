@@ -81,7 +81,10 @@ function ColorRow({ value, onChange }: { value: string; onChange: (c: string) =>
                     onClick={() => onChange(c)}
                     sx={{
                         width: 44, height: 44, borderRadius: "50%", bgcolor: c,
-                        outline: value.toUpperCase() === c ? "3px solid #FFD700" : "1px solid rgba(0,0,0,0.2)",
+                        // Tokens, so the selection ring reads on either scheme's
+                        // paper (the old gold ring was ~1.4:1 on white).
+                        outline: value.toUpperCase() === c ? "3px solid" : "1px solid",
+                        outlineColor: value.toUpperCase() === c ? "text.primary" : "text.secondary",
                         outlineOffset: 2,
                     }}
                 />
