@@ -57,6 +57,12 @@ describe("renderBenchSheetHtml", () => {
         for (const page of pages) expect(page.getAttribute("style")).toContain("page-break-before:always");
     });
 
+    it("sizes the diagram to fit Word's Letter text column if the stylesheet is dropped, keeping the 720:306 aspect", () => {
+        const img = parse(renderBenchSheetHtml(MODEL)).querySelector("img.diagram");
+        expect(img?.getAttribute("width")).toBe("624");
+        expect(img?.getAttribute("height")).toBe("265");
+    });
+
     it("marks an over-time plan", () => {
         const doc = parse(renderBenchSheetHtml({ ...MODEL, overTime: true }));
         expect(doc.querySelector(".planned")?.classList.contains("over")).toBe(true);

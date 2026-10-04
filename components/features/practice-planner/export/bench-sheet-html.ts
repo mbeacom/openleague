@@ -129,7 +129,7 @@ function legend(model: BenchSheetModel): Trusted | null {
 
 function drill(item: BenchSheetDrillItem): Trusted {
     const diagram = isPngDataUri(item.diagram)
-        ? html`<img class="diagram" src="${item.diagram}" width="720" height="306" alt="${`Diagram: ${item.name}`}">`
+        ? html`<img class="diagram" src="${item.diagram}" width="624" height="265" alt="${`Diagram: ${item.name}`}">`
         : html`<p class="unavailable">${DIAGRAM_UNAVAILABLE_TEXT}</p>`;
     return html`<article class="drill">
 <h2>${item.number}. ${item.name}</h2>
