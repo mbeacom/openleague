@@ -135,6 +135,13 @@ describe.each(REPOS)("library (%s)", (_name, open) => {
         expect(after.success && after.data.total).toBe(STARTER_PLAYS.length - 1);
     });
 
+    it("sets the legacy seeded flag on a fresh device, so an older cached build never re-seeds deleted originals", async () => {
+        const { repo, library } = await setup();
+        expect(await repo.read((tx) => tx.getMeta(META_STARTERS_SEEDED))).toBeFalsy();
+        await library.seedStarterDrills();
+        expect(await repo.read((tx) => tx.getMeta(META_STARTERS_SEEDED))).toBe(true);
+    });
+
     it("stores each starter's tags", async () => {
         const { library } = await setup();
         await library.seedStarterDrills();

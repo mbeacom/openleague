@@ -180,6 +180,11 @@ export function createLibraryOps(ctx: StoreContext): LibraryOps {
                     await tx.putPlay(play);
                 }
                 await tx.putMeta(META_SEEDED_STARTER_IDS, [...seeded]);
+                // An older cached build reads only the legacy flag and seeds the original nine by name;
+                // set it once any of them is recorded, so that build can't bring back a deleted original.
+                if (LEGACY_SEEDED_STARTER_IDS.some((id) => seeded.has(id))) {
+                    await tx.putMeta(META_STARTERS_SEEDED, true);
+                }
             });
         },
     };
