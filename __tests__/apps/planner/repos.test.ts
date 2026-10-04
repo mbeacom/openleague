@@ -143,17 +143,17 @@ describe("IndexedDB repo", () => {
     });
 });
 
-describe("IndexedDB schema version 2 (practice timing rows)", () => {
+describe("IndexedDB schema versions (practice timing rows, practice staff)", () => {
     // A session as a planner built before practice timing stored it: drill rows only, no kind.
     const v1Session: StoredSession = {
         ...session("s1"),
         rows: [{ id: "r1", playId: "p1", sequence: 0, duration: 10, instructions: "Skate", runsWithPrevious: false }],
     };
 
-    /** Opens the database at version 1 exactly as a pre-timing build did, and leaves the connection open. */
-    function openV1(factory: IDBFactory, name: string): Promise<IDBDatabase> {
+    /** Opens the database at `version` exactly as a build of that version did, and leaves the connection open. */
+    function openAt(factory: IDBFactory, name: string, version: number): Promise<IDBDatabase> {
         return new Promise((resolve, reject) => {
-            const request = factory.open(name, 1);
+            const request = factory.open(name, version);
             request.onupgradeneeded = (event) => upgradeDatabase(request.result, event.oldVersion);
             request.onsuccess = () => resolve(request.result);
             request.onerror = () => reject(request.error);
@@ -184,13 +184,11 @@ describe("IndexedDB schema version 2 (practice timing rows)", () => {
         });
     }
 
-    it("is version 2", () => {
-        expect(DB_VERSION).toBe(2);
-    });
+    it("is version 3", () => expect(DB_VERSION).toBe(3));
 
-    it("opens a version 1 database at version 2 with every store, index and record intact", async () => {
+    it("opens a version 1 database at the current version with every store, index and record intact", async () => {
         const factory = new IDBFactory();
-        const v1 = await openV1(factory, "v1-upgrade");
+        const v1 = await openAt(factory, "v1-upgrade", 1);
         await seed(v1);
         v1.close();
 
@@ -207,12 +205,12 @@ describe("IndexedDB schema version 2 (practice timing rows)", () => {
         expect(contents.owned.map((p) => p.id)).toEqual(["p1"]);
         expect(contents.sessions).toEqual([v1Session]);
         expect(contents.meta).toBe(true);
-        expect(await versionOf(factory, "v1-upgrade")).toBe(2);
+        expect(await versionOf(factory, "v1-upgrade")).toBe(DB_VERSION);
     });
 
     it("makes a tab still open at version 1 close its connection before the upgrade, keeping its data", async () => {
         const factory = new IDBFactory();
-        const v1 = await openV1(factory, "v1-open-tab");
+        const v1 = await openAt(factory, "v1-open-tab", 1);
         await seed(v1);
         // What a pre-timing build's openIdbRepo installs: close, then tell the app to reload.
         const reload = vi.fn();
@@ -229,9 +227,26 @@ describe("IndexedDB schema version 2 (practice timing rows)", () => {
 
     it("reports storage blocked when a version 1 connection won't close, so this tab asks for a reload", async () => {
         const factory = new IDBFactory();
-        const v1 = await openV1(factory, "v1-holds-on");
+        const v1 = await openAt(factory, "v1-holds-on", 1);
         await expect(openIdbRepo({ factory, name: "v1-holds-on" })).rejects.toBeInstanceOf(StorageBlockedError);
         v1.close();
+    });
+
+    it("makes a tab still open at version 2 (before practice staff) reload before this build writes, keeping its data", async () => {
+        const factory = new IDBFactory();
+        const v2 = await openAt(factory, "v2-open-tab", 2);
+        await seed(v2);
+        // A pre-staff build would rewrite a session without its staff: its tab must reload first.
+        const reload = vi.fn();
+        v2.onversionchange = () => {
+            v2.close();
+            reload();
+        };
+        const repo = await openIdbRepo({ factory, name: "v2-open-tab" });
+        expect(reload).toHaveBeenCalledTimes(1);
+        expect(await repo.read((tx) => tx.getSession("s1"))).toEqual(v1Session);
+        expect(await versionOf(factory, "v2-open-tab")).toBe(3);
+        repo.close();
     });
 });
 

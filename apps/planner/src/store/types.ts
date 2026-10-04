@@ -8,6 +8,7 @@ import type { ActionResult, PlannerStore } from "@/lib/planner-store";
 import type { PlanDocument } from "@/lib/plan-document";
 import type { SavedDrillId } from "@/lib/utils/session-drill-ids";
 import type { SessionRowInput } from "@/lib/utils/session-rows";
+import type { SessionStaffInput } from "@/lib/utils/session-staff";
 import type { PlayData, PlayFocus, PlayGoalies, PracticeSessionData, PracticeSessionView } from "@/types/practice-planner";
 
 export interface LocalSessionSummary {
@@ -30,6 +31,8 @@ export interface LocalSessionSave {
     goaliesAttending?: number | null;
     /** Minutes between blocks. Absent = unchanged on update (0 on create). */
     transitionMinutes?: number;
+    /** The practice's staff. Absent = unchanged on update (none on create); a row's `staff` is read only with it. */
+    staff?: SessionStaffInput[];
     plays: LocalSessionDrill[];
 }
 

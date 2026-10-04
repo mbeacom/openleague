@@ -8,14 +8,15 @@
  * add a case to upgradeDatabase and never drop data.
  *
  * Versions: 1 = the first release; 2 = practice timing rows (a row's playId
- * may be null, block rows carry kind and label). Bumping the version is what
+ * may be null, block rows carry kind and label); 3 = practice staff (sessions
+ * and rows gained optional staff fields). Bumping the version is what
  * makes a tab still running an older build close its connection and reload
  * (onversionchange below) before this build writes rows it can't read.
  */
 import type { PlannerRepo, RepoTx, StoredPlay, StoredSession } from "./records";
 
 export const DB_NAME = "openleague-planner";
-export const DB_VERSION = 2;
+export const DB_VERSION = 3;
 const STORES = ["plays", "sessions", "meta"];
 
 export class StorageBlockedError extends Error {
@@ -42,6 +43,12 @@ export function upgradeDatabase(db: IDBDatabase, oldVersion: number): void {
     if (oldVersion < 2) {
         // Practice timing: same stores and index; rows only gained optional fields
         // (older rows read as drills), so there is nothing to migrate.
+    }
+    if (oldVersion < 3) {
+        // Practice staff: sessions and rows only gained optional fields (older records read
+        // with no staff), so there is nothing to migrate. The bump is what makes a tab still
+        // running an older build reload (onversionchange) before it can rewrite a session
+        // without its staff.
     }
 }
 
