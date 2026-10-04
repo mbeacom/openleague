@@ -122,7 +122,7 @@ function renderManage(store: ReturnType<typeof createMockPlannerStore>) {
 /** A library held in memory: the page query and the names scan both page through it. */
 function libraryStore(initial: unknown[]) {
     const store = createMockPlannerStore();
-    const state = { plays: [...initial] as { name: string }[], failNamesPage: 0 };
+    const state = { plays: [...initial] as { id: string; name: string }[], failNamesPage: 0 };
     store.getPlaysByTeam.mockImplementation(async (query: Query) => {
         if (query.limit === 100 && query.page === state.failNamesPage) return { success: false, error: "Offline" };
         const start = (query.page - 1) * query.limit;
@@ -132,14 +132,14 @@ function libraryStore(initial: unknown[]) {
 }
 
 const namesQueries = (store: ReturnType<typeof createMockPlannerStore>) =>
-    store.getPlaysByTeam.mock.calls.filter(([query]: [Query]) => query.limit === 100);
+    store.getPlaysByTeam.mock.calls.map((call) => call[0] as Query).filter((query) => query.limit === 100);
 
 describe("PlayLibrary whole-library names scan", () => {
     it("pages through a library over 100 drills and hides a starter copied on page 2", async () => {
         const { store } = libraryStore([...filler(120), summary("cplay3xxxxxxxxxxxxxxxxxxx", "Goalie Warm-Up")]);
         renderManage(store);
         await screen.findByText("Breakout (5-Man)");
-        await waitFor(() => expect(namesQueries(store).map(([q]: [Query]) => q.page)).toEqual([1, 2]));
+        await waitFor(() => expect(namesQueries(store).map((q) => q.page)).toEqual([1, 2]));
         await waitFor(() => expect(screen.queryByText("Goalie Warm-Up")).toBeNull());
     });
 
@@ -188,7 +188,7 @@ describe("PlayLibrary whole-library names scan", () => {
             return { success: true, data: { id: "cnewxxxxxxxxxxxxxxxxxxxxx", name: input.name, isTemplate: true } };
         });
         store.deletePlay.mockImplementation(async ({ id }: { id: string }) => {
-            state.plays = state.plays.filter((p) => (p as { id: string }).id !== id);
+            state.plays = state.plays.filter((p) => p.id !== id);
             return { success: true, data: { id, detachedSessions: 0 } };
         });
         renderManage(store);
