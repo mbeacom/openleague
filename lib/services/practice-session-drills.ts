@@ -30,6 +30,9 @@ export type CloneSource = {
     thumbnail: string | null;
     playData: Prisma.JsonValue;
     sourcePlayId: string | null;
+    /** Drill tags (goaltender-aware drills); absent on old fixtures = the column default. */
+    focus?: string;
+    goalies?: string;
 };
 
 export const CLONE_SOURCE_SELECT = {
@@ -41,7 +44,17 @@ export const CLONE_SOURCE_SELECT = {
     sourcePlayId: true,
     isTemplate: true,
     sessionId: true,
+    focus: true,
+    goalies: true,
 } as const;
+
+/**
+ * Play columns a clone does not write: a clone is a new row, so it gets its
+ * own timestamps. Every other Play column must appear in the clone's data
+ * (the new-column guard test), so a column added later can't be silently
+ * dropped from session copies.
+ */
+export const PLAY_FIELDS_NOT_CLONED: ReadonlySet<string> = new Set(["createdAt", "updatedAt"]);
 
 /** A copy's provenance is the library play it ultimately came from. */
 function provenanceOf(source: CloneSource): string {
@@ -69,6 +82,8 @@ export async function cloneDrillsIntoSessions(
             description: source.description,
             thumbnail: source.thumbnail,
             playData: source.playData as Prisma.InputJsonValue,
+            focus: source.focus,
+            goalies: source.goalies,
             isTemplate: false,
             teamId: input.teamId,
             createdById: input.userId,

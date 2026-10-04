@@ -68,6 +68,8 @@ export default async function EditPlayPage({ params }: PageProps) {
     thumbnail: result.data.thumbnail ?? "",
     playData: result.data.playData,
     isTemplate: result.data.isTemplate,
+    focus: result.data.focus,
+    goalies: result.data.goalies,
     createdAt: result.data.createdAt,
     updatedAt: result.data.updatedAt,
   };

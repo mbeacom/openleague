@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import {
+    CLONE_SOURCE_SELECT,
+    PLAY_FIELDS_NOT_CLONED,
     SESSION_DRILL_REJECTED_MESSAGE,
     SessionDrillError,
+    cloneDrillsIntoSessions,
     deleteOrphanedSessionDrills,
     detachLibraryPlay,
     materializeSessionDrills,
@@ -359,5 +362,31 @@ describe("duplicateSessionTitle", () => {
     it("prefixes and keeps the 100-character limit", () => {
         expect(duplicateSessionTitle("Tuesday")).toBe("Copy of Tuesday");
         expect(duplicateSessionTitle("x".repeat(100))).toHaveLength(100);
+    });
+});
+
+describe("clones carry the drill tags (materialize, detach and duplicate share cloneDrillsIntoSessions)", () => {
+    async function cloneOne(source: Record<string, unknown>) {
+        const createManyAndReturn = vi.fn(async ({ data }: { data: Array<{ id: string }> }) => data.map((d) => ({ id: d.id })));
+        const client = { play: { createManyAndReturn } } as unknown as Prisma.TransactionClient;
+        await cloneDrillsIntoSessions(client, {
+            teamId: TEAM,
+            userId: USER,
+            copies: [{ sessionId: SESSION, source: source as never }],
+        });
+        return createManyAndReturn.mock.calls[0][0].data[0] as Record<string, unknown>;
+    }
+
+    it("selects and copies focus and goalies", async () => {
+        expect(CLONE_SOURCE_SELECT).toMatchObject({ focus: true, goalies: true });
+        const data = await cloneOne({ id: "lib", name: "Warm-up", description: null, thumbnail: null, playData: {}, sourcePlayId: null, focus: "goalies", goalies: "required" });
+        expect(data).toMatchObject({ focus: "goalies", goalies: "required", sessionId: SESSION, sourcePlayId: "lib" });
+    });
+
+    it("writes every Play column except the timestamps (new-column guard)", async () => {
+        const data = await cloneOne({ id: "lib", name: "W", description: null, thumbnail: null, playData: {}, sourcePlayId: null, focus: "team", goalies: "none" });
+        for (const field of Object.values(Prisma.PlayScalarFieldEnum)) {
+            expect(field in data || PLAY_FIELDS_NOT_CLONED.has(field), `Play.${field} is neither cloned nor in PLAY_FIELDS_NOT_CLONED`).toBe(true);
+        }
     });
 });

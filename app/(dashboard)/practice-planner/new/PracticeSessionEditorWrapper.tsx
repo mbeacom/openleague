@@ -29,6 +29,7 @@ export function PracticeSessionEditorWrapper({
         title: session.title,
         date: session.date,
         duration: session.duration,
+        goaliesAttending: session.goaliesAttending ?? null,
         teamId,
         plays: session.plays.map((play) => ({
           playId: play.playId,

@@ -1591,6 +1591,10 @@ model PracticeSession {
   date      DateTime
   duration  Int // Total duration in minutes
   isShared  Boolean  @default(false)
+  // Goalies expected (0-10; null = not set). Advisory only: drives goalie
+  // warnings and hides optional-drill goalie markers at 0. CHECK in migration
+  // 20261003140000_play_drill_tags_and_session_goalies.
+  goaliesAttending Int?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1673,6 +1677,13 @@ model Play {
   thumbnail   String? // Base64 encoded PNG thumbnail (generated server-side from canvas export)
   playData    Json // Serialized PlayData structure
   isTemplate  Boolean  @default(false) // true = library; false = session-owned (sessionId set)
+  // Drill tags (goaltender-aware drills). Strings, not enums: the lowercase
+  // vocabulary is PLAY_FOCUS / PLAY_GOALIES in types/practice-planner.ts,
+  // shared with the plan document and the static planner. CHECK constraints
+  // in migration 20261003140000_play_drill_tags_and_session_goalies keep the
+  // values honest; Prisma can't model them, so keep them by hand.
+  focus       String   @default("team")
+  goalies     String   @default("optional")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

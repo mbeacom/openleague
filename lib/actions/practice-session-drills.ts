@@ -66,11 +66,17 @@ export async function saveSessionDrill(
         if (!sanitized.ok) {
             return { success: false, error: "Invalid play data", details: sanitized.issues };
         }
+        // Tags: absent = keep (owned drill) / inherit (fork) / default (new drill) (spec R3).
+        const tags = {
+            ...(validated.focus !== undefined && { focus: validated.focus }),
+            ...(validated.goalies !== undefined && { goalies: validated.goalies }),
+        };
         const fields = {
             name: validated.name,
             description: validated.description || null,
             thumbnail: validated.thumbnail || null,
             playData: sanitized.data as unknown as Prisma.InputJsonValue,
+            ...tags,
         };
 
         const playId = await prisma.$transaction(async (tx) => {
@@ -99,7 +105,7 @@ export async function saveSessionDrill(
 
             const play = await tx.play.findFirst({
                 where: { id: validated.playId, teamId: validated.teamId },
-                select: { id: true, sessionId: true, isTemplate: true, sourcePlayId: true },
+                select: { id: true, sessionId: true, isTemplate: true, sourcePlayId: true, focus: true, goalies: true },
             });
             if (!play) throw new SessionDrillError();
 
@@ -117,7 +123,7 @@ export async function saveSessionDrill(
             }
 
             const forked = await tx.play.create({
-                data: { ...fields, ...ownedCopy, sourcePlayId: play.sourcePlayId ?? play.id },
+                data: { focus: play.focus, goalies: play.goalies, ...fields, ...ownedCopy, sourcePlayId: play.sourcePlayId ?? play.id },
                 select: { id: true },
             });
             return forked.id;
@@ -140,7 +146,7 @@ export async function copySessionDrillToLibrary(
 
         const play = await prisma.play.findFirst({
             where: { id: validated.playId, teamId: validated.teamId, session: { teamId: validated.teamId } },
-            select: { name: true, description: true, thumbnail: true, playData: true, sessionId: true },
+            select: { name: true, description: true, thumbnail: true, playData: true, sessionId: true, focus: true, goalies: true },
         });
         if (!play || play.sessionId === null) {
             return { success: false, error: "Drill not found in this session" };
@@ -152,6 +158,8 @@ export async function copySessionDrillToLibrary(
                 description: play.description,
                 thumbnail: play.thumbnail,
                 playData: play.playData as Prisma.InputJsonValue,
+                focus: play.focus,
+                goalies: play.goalies,
                 isTemplate: true,
                 teamId: validated.teamId,
                 createdById: userId,
@@ -185,6 +193,7 @@ export async function duplicatePracticeSession(
                 teamId: true,
                 title: true,
                 duration: true,
+                goaliesAttending: true,
                 plays: {
                     orderBy: { sequence: "asc" },
                     include: { play: { select: CLONE_SOURCE_SELECT } },
@@ -201,6 +210,7 @@ export async function duplicatePracticeSession(
                     title: duplicateSessionTitle(source.title),
                     date: validated.date,
                     duration: source.duration,
+                    goaliesAttending: source.goaliesAttending ?? null,
                     isShared: false,
                     teamId: validated.teamId,
                     createdById: userId,

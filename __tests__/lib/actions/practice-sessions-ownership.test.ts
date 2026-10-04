@@ -172,3 +172,28 @@ describe("updatePracticeSession owns its drills", () => {
         expect(result).toMatchObject({ success: false, error: "Invalid input" });
     });
 });
+
+describe("goalie count (goaltender-aware drills)", () => {
+    it("createPracticeSession stores the count, or null when none is sent", async () => {
+        await createPracticeSession({ ...input([]), goaliesAttending: 2 });
+        expect(models.practiceSession.create.mock.calls[0][0].data.goaliesAttending).toBe(2);
+        await createPracticeSession(input([]));
+        expect(models.practiceSession.create.mock.calls[1][0].data.goaliesAttending).toBeNull();
+    });
+
+    it("updatePracticeSession writes a sent count, clears on null, and leaves it alone when omitted (older tabs' autosave)", async () => {
+        const update = (extra: Record<string, unknown> = {}) => updatePracticeSession({ id: SESSION, ...input([]), ...extra });
+        await update({ goaliesAttending: 1 });
+        expect(models.practiceSession.update.mock.calls[0][0].data.goaliesAttending).toBe(1);
+        await update({ goaliesAttending: null });
+        expect(models.practiceSession.update.mock.calls[1][0].data.goaliesAttending).toBeNull();
+        await update();
+        expect(models.practiceSession.update.mock.calls[2][0].data).not.toHaveProperty("goaliesAttending");
+    });
+
+    it("rejects a count outside 0–10 without writing", async () => {
+        const result = await createPracticeSession({ ...input([]), goaliesAttending: 11 });
+        expect(result.success).toBe(false);
+        expect(models.practiceSession.create).not.toHaveBeenCalled();
+    });
+});

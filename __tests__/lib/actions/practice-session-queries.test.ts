@@ -193,3 +193,32 @@ describe("getPracticeSessionDetail: venue timezone and unchanged access (3b)", (
     if (visible) expect(result?.isAdmin).toBe(isAdmin);
   });
 });
+
+describe("goaltender fields in the session queries", () => {
+    const base = {
+        id: "s1", teamId: "t1", title: "T", date: new Date("2026-01-01T00:00:00Z"), duration: 60, isShared: true,
+        venueId: null, surfaceId: null, segmentId: null, startAt: null, goaliesAttending: 1,
+        createdBy: { name: "Coach" }, team: { id: "t1", name: "Team" }, venue: null, surface: null, segment: null,
+        plays: [{ ...row("a", 0), play: { ...row("a", 0).play, focus: "goalies", goalies: "required" } }, row("b", 1)],
+    };
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockPrisma.teamMember.findFirst.mockResolvedValue({ id: "m", role: "ADMIN", teamId: "t1" });
+        mockPrisma.practiceSession.findUnique.mockResolvedValue(base);
+    });
+
+    it("getPracticeSessionForEdit returns the count and each drill's tags (defaults when untagged)", async () => {
+        const result = await getPracticeSessionForEdit("s1");
+        expect(result?.initialData.goaliesAttending).toBe(1);
+        expect(result?.initialData.plays.map((p) => [p.focus, p.goalies])).toEqual([["goalies", "required"], ["team", "optional"]]);
+        const select = mockPrisma.practiceSession.findUnique.mock.calls[0][0].include.plays.include.play.select;
+        expect(select).toMatchObject({ focus: true, goalies: true });
+    });
+
+    it("getPracticeSessionDetail returns the count and each drill's tags", async () => {
+        const result = await getPracticeSessionDetail("s1");
+        expect(result?.session.goaliesAttending).toBe(1);
+        expect(result?.session.plays.map((p) => [p.play.focus, p.play.goalies])).toEqual([["goalies", "required"], ["team", "optional"]]);
+    });
+});
