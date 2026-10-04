@@ -24,7 +24,15 @@ export function AddBlockMenu({ onAdd, disabled = false }: { onAdd: (kind: BlockK
             >
                 Add block
             </Button>
-            <Menu id={menuId} anchorEl={anchor} open={anchor !== null} onClose={() => setAnchor(null)}>
+            {/* Opens below its button, left edges aligned, so the button stays in view. */}
+            <Menu
+                id={menuId}
+                anchorEl={anchor}
+                open={anchor !== null}
+                onClose={() => setAnchor(null)}
+                anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+                transformOrigin={{ vertical: "top", horizontal: "left" }}
+            >
                 {BLOCK_KINDS.map((kind) => {
                     const Icon = BLOCK_ICONS[kind];
                     return (

@@ -200,7 +200,7 @@ export function SessionDrillCard({
                 sx={{
                     width: { xs: "100%", sm: 200 },
                     height: { xs: 150, sm: 120 },
-                    bgcolor: "grey.100",
+                    bgcolor: "action.hover",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",

@@ -4,7 +4,8 @@
  * The session editor's list edits (2b, practice timing): delete, move, the
  * station toggle, Add block, and a station block's rotation and Stays ticks,
  * through the shared timeline rules. A refused edit (the helpers return the
- * list itself) changes nothing and never marks the editor dirty. Kept out of PracticeSessionEditor for its line budget.
+ * list itself) changes nothing and never marks the editor dirty. Kept out of
+ * PracticeSessionEditor for its line budget.
  */
 import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
 import type { BlockKind, SessionItem } from "@/types/practice-planner";
@@ -51,10 +52,11 @@ export function useSessionRowEdits({
     );
 
     // Turning Rotate on writes M over each station's minutes (spec R3). Each
-    // station's own minutes are remembered for this sitting only, by row id, so
-    // turning Rotate off again gives them back; a block that loaded rotating
-    // has nothing remembered and keeps M.
-    const minutesBeforeRotation = useRef(new Map<string, number>());
+    // station's own minutes are remembered for this sitting only, by row id and
+    // with the id of the drill that headed the block, so turning that block's
+    // Rotate off again gives them back. A station that left and now sits in a
+    // block with another head keeps M, as does a block that loaded rotating.
+    const minutesBeforeRotation = useRef(new Map<string, { head: string; minutes: number }>());
 
     // The rotation lives on the block's first drill; normalizeGroups writes the stations' minutes (spec R3).
     // `plays` is the editor's list, in sequence order, as normalizeGroups groups by position.
@@ -68,8 +70,9 @@ export function useSessionRowEdits({
             const turningOff = head.rotateEveryMinutes != null && minutes === null;
             const next = plays.map((row, i) => {
                 if (i < start || i >= end) return row;
-                if (turningOn) remembered.set(row.id, row.duration);
-                const restored = turningOff ? remembered.get(row.id) : undefined;
+                if (turningOn) remembered.set(row.id, { head: head.id, minutes: row.duration });
+                const entry = turningOff ? remembered.get(row.id) : undefined;
+                const restored = entry?.head === head.id ? entry.minutes : undefined;
                 if (turningOff) remembered.delete(row.id);
                 if (i === headIndex) return { ...row, rotateEveryMinutes: minutes, ...(restored !== undefined && { duration: restored }) };
                 return restored !== undefined ? { ...row, duration: restored } : row;

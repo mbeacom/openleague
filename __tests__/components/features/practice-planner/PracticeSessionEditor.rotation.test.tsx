@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { drill, renderEditor, save, stubResizeObserver } from "@/__tests__/helpers/session-editor";
 import { CANT_ROTATE_MESSAGE } from "@/components/features/practice-planner/StationBlockHeader";
+import { STATION_SWITCH_LABEL } from "@/components/features/practice-planner/SessionDrillCard";
 import type { PlayInSession, SessionItem } from "@/types/practice-planner";
 
 beforeAll(stubResizeObserver);
@@ -119,6 +120,35 @@ describe("PracticeSessionEditor: station rotation (spec R8)", () => {
         fireEvent.click(screen.getByLabelText("Rotate"));
         await save();
         expect(sent(onSave).map((p) => [p.rotateEveryMinutes, p.duration])).toEqual([[null, 5], [null, 5], [null, 5]]);
+    });
+
+    it("restores a station's minutes only in the block that remembered them, after it leaves and joins another", async () => {
+        const onSave = renderEditor([
+            drill("ka", 0, { duration: 12, stays: false, rotateEveryMinutes: null }),
+            drill("kb", 1, { runsWithPrevious: true, duration: 9, stays: false, rotateEveryMinutes: null }),
+            drill("kc", 2, { runsWithPrevious: true, duration: 15, stays: false, rotateEveryMinutes: null }),
+            drill("kd", 3, { duration: 6, stays: false, rotateEveryMinutes: 6 }),
+            drill("ke", 4, { runsWithPrevious: true, duration: 6, stays: false, rotateEveryMinutes: null }),
+        ]);
+        // The first block rotates (remembering 12, 9 and 15), then kc leaves it...
+        fireEvent.click(screen.getAllByLabelText("Rotate")[0]);
+        fireEvent.click(within(station(/Drill kc/)).getByLabelText(STATION_SWITCH_LABEL));
+        // ...and the rotating block kd–ke joins kc, which now heads it.
+        fireEvent.click(within(screen.getByRole("group", { name: /Drill kd/ })).getByLabelText(STATION_SWITCH_LABEL));
+        fireEvent.click(screen.getAllByLabelText("Rotate")[1]);
+        await save();
+        // kc's 15 belonged to the first block's rotation: turning off this one keeps M.
+        expect(sent(onSave).map((p) => [p.id, p.rotateEveryMinutes, p.duration])).toEqual([
+            ["ka", 5, 5], ["kb", null, 5], ["kc", null, 6], ["kd", null, 6], ["ke", null, 6],
+        ]);
+    });
+
+    it("explains that a block can't rotate once a rotating station is deleted, and saves without the rotation", async () => {
+        const onSave = renderEditor(WITH_STAYS.map((row) => ({ ...row })));
+        fireEvent.click(screen.getByRole("button", { name: "Delete play 3" }));
+        expect(screen.getByText(CANT_ROTATE_MESSAGE)).toBeInTheDocument();
+        await save();
+        expect(sent(onSave).map((p) => [p.id, p.rotateEveryMinutes, p.stays])).toEqual([["ka", null, false], ["kb", null, false]]);
     });
 
     it("offers no rotation on a drill that runs on its own", () => {

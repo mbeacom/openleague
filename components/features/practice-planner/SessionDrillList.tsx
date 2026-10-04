@@ -126,8 +126,9 @@ export function SessionDrillList({
 
     // The editor keeps array order equal to sequence order, so a drill's
     // position in `plays` is its move/toggle index; its card number counts
-    // drills only, so a warm-up or break never shifts "Play N".
-    const drills = drillRows(plays);
+    // drills only, so a warm-up or break never shifts "Play N". Looked up by
+    // row id, not object identity, so a copied row still finds its number.
+    const drillNumbers = new Map(drillRows(plays).map((drill, index) => [drill.id, index + 1]));
     const renderCard = (
         play: PlayInSession,
         stationSlot?: { position: number; count: number },
@@ -142,7 +143,7 @@ export function SessionDrillList({
                 key={play.id}
                 play={play}
                 index={index}
-                number={drills.indexOf(play) + 1}
+                number={drillNumbers.get(play.id) ?? drillNumbers.size + 1}
                 stationSlot={stationSlot}
                 canMoveUp={canMove(plays, index, -1)}
                 canMoveDown={canMove(plays, index, 1)}
