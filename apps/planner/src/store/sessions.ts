@@ -15,6 +15,7 @@ import {
     sessionRowsError,
     sessionWallMinutes,
     settleInheritedTiming,
+    withRotationMinutes,
 } from "@/lib/utils/session-timeline";
 import {
     BLOCK_HAS_NO_DRILL_MESSAGE,
@@ -91,7 +92,7 @@ function checkRows(plays: LocalSessionDrill[]): void {
             if ((row.label ?? "").replace(CONTROL_CHARS, "").trim().length > MAX_BLOCK_LABEL_LENGTH) throw new StoreRefusal(BLOCK_LABEL_MESSAGE);
             if (sent.rotateEveryMinutes != null && toRotateEveryMinutes(sent.rotateEveryMinutes) === null) throw new StoreRefusal(ROTATE_MINUTES_MESSAGE);
             // A payload built outside the editor may still carry drill fields on a block row.
-            if (sent.playId != null && sent.playId !== "") throw new StoreRefusal(BLOCK_HAS_NO_DRILL_MESSAGE);
+            if (sent.playId != null) throw new StoreRefusal(BLOCK_HAS_NO_DRILL_MESSAGE);
             if (sent.runsWithPrevious === true) throw new StoreRefusal(BLOCK_STATION_ERROR);
             if (sent.stays === true || sent.rotateEveryMinutes != null) throw new StoreRefusal(BLOCK_ROW_FIELDS_ERROR);
         } else {
@@ -112,12 +113,16 @@ function resolveRows(plays: LocalSessionDrill[], stored: StoredTiming[]): Resolv
     return settleInheritedTiming(resolved, plays);
 }
 
-/** Hosted's rules on the resolved rows (updatePracticeSession): station, block and rotation rules, then the wall time with the gap. */
-function checkTimeline(rows: ResolvedRow[], duration: number, transitionMinutes: number): void {
+/**
+ * Hosted's rules on the resolved rows (updatePracticeSession): station, block and rotation rules, then the wall time
+ * with the gap. Returns the rows to store, as hosted writes them: a rotating station lasts M (spec R3).
+ */
+function checkTimeline(rows: ResolvedRow[], duration: number, transitionMinutes: number): ResolvedRow[] {
     const ruleError = sessionRowsError(rows);
     if (ruleError) throw new StoreRefusal(ruleError);
     const wall = sessionWallMinutes(rows, transitionMinutes);
     if (wall > duration) throw new StoreRefusal(`Practice timeline (${wall} min) exceeds session duration (${duration} min)`);
+    return withRotationMinutes(rows);
 }
 
 /** Hosted's rule: 0–5 whole minutes; undefined passes through, meaning unchanged. */
@@ -383,8 +388,7 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                 const goaliesAttending = checkedGoalieCount(input.goaliesAttending) ?? null;
                 const transitionMinutes = checkedTransition(input.transitionMinutes) ?? 0;
                 // A create has nothing stored: absent timing takes the defaults.
-                const resolved = resolveRows(input.plays, []);
-                checkTimeline(resolved, meta.duration, transitionMinutes);
+                const resolved = checkTimeline(resolveRows(input.plays, []), meta.duration, transitionMinutes);
                 const saved = await write(ctx, async (tx) => {
                     const at = ctx.now();
                     const id = ctx.newId();
@@ -408,8 +412,7 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                     // Absent = unchanged: an editor opened before a field existed autosaves without it.
                     const goaliesAttending = count === undefined ? (existing.goaliesAttending ?? null) : count;
                     const transitionMinutes = sentGap ?? existing.transitionMinutes ?? 0;
-                    const resolved = resolveRows(input.plays, storedTiming(existing));
-                    checkTimeline(resolved, meta.duration, transitionMinutes);
+                    const resolved = checkTimeline(resolveRows(input.plays, storedTiming(existing)), meta.duration, transitionMinutes);
                     const at = ctx.now();
                     const { rows, plays, mapping } = await materialize(tx, ctx, id, resolved, at);
                     assertExportable({ ...meta, goaliesAttending, transitionMinutes }, rows, plays, at);

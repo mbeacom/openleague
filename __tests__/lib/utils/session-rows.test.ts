@@ -71,6 +71,10 @@ describe("block text and lenient readers", () => {
         expect(toBlockLabel("")).toBeNull();
         expect(toBlockLabel(7)).toBeNull();
         expect(toBlockLabel("x".repeat(70))).toHaveLength(60);
+        // Never cut through an emoji: a pair that doesn't fit the 60 is dropped whole,
+        // so the label still passes every 60-character check (they count UTF-16 units).
+        expect(toBlockLabel(`${"x".repeat(59)}🏒🏒`)).toBe("x".repeat(59));
+        expect(toBlockLabel(`${"x".repeat(58)}🏒`)).toBe(`${"x".repeat(58)}🏒`);
         expect([1, 30, 5].map(toRotateEveryMinutes)).toEqual([1, 30, 5]);
         expect([0, 31, 2.5, "5", null, undefined].map(toRotateEveryMinutes)).toEqual([null, null, null, null, null, null]);
         expect([0, 5, 3].map(toTransitionMinutes)).toEqual([0, 5, 3]);

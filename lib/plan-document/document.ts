@@ -12,7 +12,7 @@ import { BLOCK_KINDS, PLAY_FOCUS, PLAY_GOALIES, type BlockKind, type PlayData, t
 import { drillTags, toGoaliesAttending, toPlayFocus, toPlayGoalies } from "@/lib/utils/drill-tags";
 import { createEmptyPlayData, parseStoredPlayData } from "@/lib/utils/play-data";
 import { CONTROL_CHARS, isBlockRow, toBlockLabel, toRotateEveryMinutes, toTransitionMinutes } from "@/lib/utils/session-rows";
-import { normalizeGroups, sessionRowsError, sessionWallMinutes, settleRotations } from "@/lib/utils/session-timeline";
+import { normalizeGroups, sessionRowsError, sessionWallMinutes, settleRotations, withRotationMinutes } from "@/lib/utils/session-timeline";
 
 export const PLAN_FORMAT = "openleague.practice-plan" as const;
 export const PLAN_VERSION = 1 as const;
@@ -36,7 +36,8 @@ const MAX_GENERATOR_LENGTH = 100;
 export const NOT_A_PLAN_MESSAGE = "This file isn't an OpenLeague practice plan.";
 export const NEWER_VERSION_MESSAGE = "This plan was made by a newer version of OpenLeague. Update to open it.";
 export const INVALID_PLAN_MESSAGE = "This practice plan has problems and can't be opened.";
-export const ROW_KIND_MESSAGE = "Row kind must be drill, warmup, break, transition or cooldown";
+/** A plan row's kind is unknown (session-rows has its own ROW_KIND_MESSAGE for the save schema). */
+export const PLAN_ROW_KIND_MESSAGE = "Row kind must be drill, warmup, break, transition or cooldown";
 
 export type PlanGenerator = "openleague-hosted" | "openleague-static";
 
@@ -156,8 +157,20 @@ function withDefaultKind(raw: unknown): unknown {
 
 const planEntrySchema = z.preprocess(
     withDefaultKind,
-    z.discriminatedUnion("kind", [planDrillSchema, planBlockSchema], { message: ROW_KIND_MESSAGE }),
+    z.discriminatedUnion("kind", [planDrillSchema, planBlockSchema], { message: PLAN_ROW_KIND_MESSAGE }),
 );
+
+/** A plan row as a timeline row: what the row rules and the rotation's minutes read. */
+function timelineRow(entry: z.output<typeof planEntrySchema>) {
+    return {
+        sequence: entry.sequence,
+        duration: entry.durationMinutes,
+        kind: entry.kind,
+        runsWithPrevious: entry.kind === "drill" ? entry.runsWithPrevious : false,
+        stays: entry.kind === "drill" ? entry.stays : false,
+        rotateEveryMinutes: entry.kind === "drill" ? entry.rotateEveryMinutes : null,
+    };
+}
 
 const planSessionSchema = z
     .object({
@@ -171,14 +184,7 @@ const planSessionSchema = z
     })
     .superRefine((session, ctx) => {
         // The same rules the hosted save enforces (createPracticeSession).
-        const timeline = session.drills.map((entry) => ({
-            sequence: entry.sequence,
-            duration: entry.durationMinutes,
-            kind: entry.kind,
-            runsWithPrevious: entry.kind === "drill" ? entry.runsWithPrevious : false,
-            stays: entry.kind === "drill" ? entry.stays : false,
-            rotateEveryMinutes: entry.kind === "drill" ? entry.rotateEveryMinutes : null,
-        }));
+        const timeline = session.drills.map(timelineRow);
         const sequences = timeline.map((t) => t.sequence).sort((a, b) => a - b);
         if (sequences.some((sequence, index) => sequence !== index)) {
             ctx.addIssue({ code: "custom", path: ["drills"], message: "Drill sequences must run 0, 1, 2… with no gaps or repeats" });
@@ -195,7 +201,18 @@ const planSessionSchema = z
             });
         }
     })
-    .transform((session) => ({ ...session, drills: [...session.drills].sort((a, b) => a.sequence - b.sequence) }));
+    .transform((session) => {
+        // Sorted, and each rotating station at the minutes the editor shows (M, or the whole
+        // block when it stays), so both importers store what every view shows (spec R3).
+        const drills = [...session.drills].sort((a, b) => a.sequence - b.sequence);
+        const timed = withRotationMinutes(drills.map(timelineRow));
+        return {
+            ...session,
+            drills: drills.map((entry, index) =>
+                timed[index].duration === entry.durationMinutes ? entry : { ...entry, durationMinutes: timed[index].duration },
+            ),
+        };
+    });
 
 export const planDocumentSchema = z.object({
     format: z.literal(PLAN_FORMAT),

@@ -25,7 +25,7 @@ import {
     type PracticeSessionRowInput,
     STALE_EDITOR_MESSAGE,
 } from "@/lib/utils/validation";
-import type { PlayData, SessionRowKind } from "@/types/practice-planner";
+import type { SessionRow } from "@/types/practice-planner";
 import { playDataOrEmpty } from "@/lib/utils/play-data";
 import {
     assignVenueReservation,
@@ -45,6 +45,7 @@ import {
     sessionRowsError,
     sessionWallMinutes,
     settleInheritedTiming,
+    withRotationMinutes,
     type TimelinePlay,
 } from "@/lib/utils/session-timeline";
 import { isBlockKind, needsStoredTiming, toBlockLabel, toRowKind, withStoredTiming } from "@/lib/utils/session-rows";
@@ -510,11 +511,13 @@ export async function createPracticeSession(
         );
 
         // A create has nothing stored: absent timing takes the defaults.
-        const rows = withStoredTiming(validated.plays, []);
-        const rowError = rowsError(rows, validated.duration, validated.transitionMinutes ?? 0);
+        const resolved = withStoredTiming(validated.plays, []);
+        const rowError = rowsError(resolved, validated.duration, validated.transitionMinutes ?? 0);
         if (rowError) {
             return { success: false, error: rowError };
         }
+        // Stored as the editor shows them: a rotating station lasts M (spec R3).
+        const rows = withRotationMinutes(resolved);
 
         const requestedAttachment = normalizePracticeAttachment(validated);
         if (
@@ -776,8 +779,9 @@ export async function updatePracticeSession(
         }
 
         // Rows sent without a kind come from an editor that predates block rows.
-        const sentRows: readonly object[] = Array.isArray(input.plays) ? input.plays : [];
-        const legacyRows = sentRows.length > 0 && sentRows.every((row) => !Object.hasOwn(row, "kind"));
+        // A kind sent as undefined is a missing kind (Zod reads both as the "drill" default).
+        const sentRows: ReadonlyArray<{ kind?: unknown }> = Array.isArray(input.plays) ? input.plays : [];
+        const legacyRows = sentRows.length > 0 && sentRows.every((row) => row.kind === undefined);
 
         if (
             !selectedReservationId
@@ -846,12 +850,14 @@ export async function updatePracticeSession(
             if (legacyRows && stored.some((row) => isBlockKind(toRowKind(row.kind)))) {
                 throw new SessionRowsRejected(STALE_EDITOR_MESSAGE);
             }
-            const rows = settleInheritedTiming(withStoredTiming(validated.plays, stored), validated.plays);
+            const resolved = settleInheritedTiming(withStoredTiming(validated.plays, stored), validated.plays);
             const transitionMinutes = validated.transitionMinutes ?? current.transitionMinutes ?? 0;
-            const rowError = rowsError(rows, validated.duration, transitionMinutes);
+            const rowError = rowsError(resolved, validated.duration, transitionMinutes);
             if (rowError) {
                 throw new SessionRowsRejected(rowError);
             }
+            // Stored as the editor shows them: a rotating station lasts M (spec R3).
+            const rows = withRotationMinutes(resolved);
 
             const oldEvent = current.venueReservationId
                 ? await tx.event.findUnique({
@@ -1226,25 +1232,8 @@ export async function getPracticeSessionById(input: GetPracticeSessionByIdInput)
     segmentName: string | null;
     segmentKind: SegmentKind | null;
     startAt: Date | null;
-    plays: Array<{
-        id: string;
-        sequence: number;
-        duration: number;
-        instructions: string | null;
-        runsWithPrevious: boolean;
-        kind: SessionRowKind;
-        label: string | null;
-        stays: boolean;
-        rotateEveryMinutes: number | null;
-        /** null for a block row (warm-up, break…): it has no drill. */
-        play: {
-            id: string;
-            name: string;
-            description: string | null;
-            thumbnail: string | null;
-            playData: PlayData;
-        } | null;
-    }>;
+    /** The SessionRow shape the detail loaders return: a block row has no drill fields. */
+    plays: SessionRow[];
 }>> {
     try {
         // Validate input
@@ -1331,26 +1320,30 @@ export async function getPracticeSessionById(input: GetPracticeSessionByIdInput)
                 segmentName: session.segment?.name ?? null,
                 segmentKind: session.segment?.kind ?? null,
                 startAt: session.startAt,
-                plays: session.plays.map(p => ({
-                    id: p.id,
-                    sequence: p.sequence,
-                    duration: p.duration,
-                    instructions: p.instructions,
-                    runsWithPrevious: p.runsWithPrevious,
-                    kind: toRowKind(p.kind),
-                    label: p.label,
-                    stays: p.stays,
-                    rotateEveryMinutes: p.rotateEveryMinutes,
-                    play: p.play
-                        ? {
+                plays: session.plays.flatMap((p): SessionRow[] => {
+                    const kind = toRowKind(p.kind);
+                    if (isBlockKind(kind)) {
+                        return [{ id: p.id, kind, label: p.label, sequence: p.sequence, duration: p.duration, instructions: p.instructions, runsWithPrevious: false }];
+                    }
+                    // Every drill row has its play (CHECK practice_session_plays_kind_play_check).
+                    if (!p.play) return [];
+                    return [{
+                        id: p.id,
+                        sequence: p.sequence,
+                        duration: p.duration,
+                        instructions: p.instructions,
+                        runsWithPrevious: p.runsWithPrevious,
+                        stays: p.stays,
+                        rotateEveryMinutes: p.rotateEveryMinutes,
+                        play: {
                             id: p.play.id,
                             name: p.play.name,
                             description: p.play.description,
                             thumbnail: p.play.thumbnail,
                             playData: playDataOrEmpty(p.play.playData, `play ${p.play.id}`),
-                        }
-                        : null,
-                })),
+                        },
+                    }];
+                }),
             },
         };
     } catch (error) {
@@ -1446,9 +1439,10 @@ export async function getPracticeSessionsByTeam(input: GetPracticeSessionsByTeam
                     isShared: true,
                     createdAt: true,
                     updatedAt: true,
+                    // Drill rows only: a warm-up or break is not a drill (as the list query counts).
                     _count: {
                         select: {
-                            plays: true,
+                            plays: { where: { kind: "drill" } },
                         },
                     },
                 },

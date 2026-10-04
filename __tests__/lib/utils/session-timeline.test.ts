@@ -43,6 +43,7 @@ import {
     stationWarnings,
     staysSuffix,
     toggleRunsWithPrevious,
+    withRotationMinutes,
     type GoalieNeeds,
     type StationArea,
     type TimelinePlay,
@@ -186,7 +187,7 @@ describe("groupRange", () => {
     it("throws a RangeError for an index outside the list, instead of a bogus range", () => {
         const plays = cards("a b+ c");
         expect(() => groupRange(plays, -1)).toThrow(RangeError);
-        expect(() => groupRange(plays, 3)).toThrow(/out of range/);
+        expect(() => groupRange(plays, 3)).toThrow(/out of range for 3 row\(s\)/);
         expect(() => groupRange(plays, 1.5)).toThrow(RangeError);
         expect(() => groupRange([], 0)).toThrow(RangeError);
     });
@@ -646,6 +647,24 @@ describe("normalizeGroups: row rules (spec R3)", () => {
     });
 });
 
+describe("withRotationMinutes (spec R3, on write)", () => {
+    it("gives each rotating station M and a stays station the whole block, leaving other rows as they are", () => {
+        const rows = [solo("w", 0, 8), ...stations(1, [{ id: "a", duration: 12 }, { id: "b", duration: 7 }, { id: "g", duration: 3, stays: true }], 5), solo("c", 4, 9)];
+        const written = withRotationMinutes(rows);
+        expect(written.map((row) => [row.id, row.duration])).toEqual([["w", 8], ["a", 5], ["b", 5], ["g", 10], ["c", 9]]);
+        expect(written[0]).toBe(rows[0]);
+        expect(written[4]).toBe(rows[4]);
+        expect(sessionWallMinutes(written, 1)).toBe(sessionWallMinutes(rows, 1));
+    });
+
+    it("groups by sequence, keeps the rows' order, and leaves a block that doesn't rotate alone", () => {
+        const [a, b] = stations(0, [{ id: "a", duration: 12 }, { id: "b", duration: 7 }], 4);
+        expect(withRotationMinutes([b, a]).map((row) => [row.id, row.duration])).toEqual([["b", 4], ["a", 4]]);
+        const still = stations(0, [{ id: "a", duration: 12 }, { id: "b", duration: 7 }]);
+        expect(withRotationMinutes(still)).toEqual(still);
+    });
+});
+
 describe("settleRotations", () => {
     it("clears a rotation that can't run (fewer than 2 rotating stations) and its stays flags", () => {
         const rows = stations(0, [{ id: "g", stays: true }, { id: "a" }], 5);
@@ -770,6 +789,8 @@ describe("rotation labels", () => {
         expect(rotationBlockLabel(5, 15)).toBe("Stations · rotate every 5 min · 15 min");
         expect(rotationSummary(3, 5)).toBe("3 stations × 5 min = 15 min · groups A–C");
         expect(rotationSummary(2, 6)).toBe("2 stations × 6 min = 12 min · groups A–B");
+        // Fewer than 2 rotating stations is no rotation: callers check first.
+        expect(() => rotationSummary(1, 5)).toThrow(RangeError);
         expect(rotatesEveryLabel(5)).toBe("Rotates every 5 min");
         expect(betweenBlocksLabel(1)).toBe("1 min between blocks");
         expect(rotationRoundLabel(5, 5)).toBe("5–10 min");

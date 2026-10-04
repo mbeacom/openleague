@@ -109,6 +109,9 @@ describe("practice timing fields (spec R2, R3)", () => {
     it("rejects a drill without a play, and a block with one or with station fields", () => {
         expect(issues({ ...drillRow, playId: undefined })).toEqual([DRILL_NEEDS_PLAY_MESSAGE]);
         expect(issues({ ...blockRow, playId: CUID })).toEqual([BLOCK_HAS_NO_DRILL_MESSAGE]);
+        // An empty play id on a block row is still a drill field it can't carry, not a malformed id.
+        expect(issues({ ...blockRow, playId: "" })).toEqual([BLOCK_HAS_NO_DRILL_MESSAGE]);
+        expect(issues({ ...drillRow, playId: "" })).toEqual([DRILL_NEEDS_PLAY_MESSAGE]);
         expect(issues({ ...blockRow, runsWithPrevious: true })).toEqual([BLOCK_STATION_ERROR]);
         expect(issues({ ...blockRow, stays: true })).toEqual([BLOCK_ROW_FIELDS_ERROR]);
         expect(issues({ ...blockRow, kind: "stretch" })).toHaveLength(1);

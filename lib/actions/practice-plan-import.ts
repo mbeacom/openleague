@@ -113,12 +113,17 @@ export async function importPracticePlan(
                     data: drillFields.map((fields, index) => ({ id: ownedIds[index], ...fields, isTemplate: false, sessionId: session.id })),
                 });
             }
+            const ownedCopy = (sequence: number): string => {
+                const id = ownedBySequence.get(sequence);
+                if (id === undefined) throw new Error(`No drill copy for row ${sequence}`);
+                return id;
+            };
             await tx.practiceSessionPlay.createMany({
                 data: planSession.drills.map((entry) =>
                     entry.kind === "drill"
                         ? {
                               sessionId: session.id,
-                              playId: ownedBySequence.get(entry.sequence),
+                              playId: ownedCopy(entry.sequence),
                               kind: "drill",
                               label: null,
                               sequence: entry.sequence,

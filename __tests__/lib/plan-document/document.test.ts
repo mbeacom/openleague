@@ -6,7 +6,7 @@ import {
     MAX_PLAN_DRILLS,
     NEWER_VERSION_MESSAGE,
     NOT_A_PLAN_MESSAGE,
-    ROW_KIND_MESSAGE,
+    PLAN_ROW_KIND_MESSAGE,
     PLAN_FORMAT,
     PLAN_VERSION,
     parsePlan,
@@ -414,6 +414,15 @@ describe("practice timing fields (additive, version 1)", () => {
         expect(parsePlan(JSON.parse(JSON.stringify(doc)))).toEqual({ ok: true, plan: doc });
     });
 
+    it("reads a hand-edited file's rotating stations at the rotation's minutes, so both importers store what the editor shows", () => {
+        const file = raw();
+        file.session.drills[1].durationMinutes = 3;
+        file.session.drills[2].durationMinutes = 9;
+        file.session.drills[3].durationMinutes = 7;
+        const result = parsePlan(file);
+        expect(result.ok && result.plan.session.drills.map((entry) => entry.durationMinutes)).toEqual([8, 10, 5, 5, 5]);
+    });
+
     it("reads a file written before practice timing as drills with no gap", () => {
         const old = JSON.parse(JSON.stringify(serializePlan(
             { title: "Old", durationMinutes: 30, date: null, startTime: null, drills: [{ sequence: 0, duration: 10, runsWithPrevious: false, instructions: null, name: "A", description: null, playData: null }] },
@@ -436,7 +445,7 @@ describe("practice timing fields (additive, version 1)", () => {
         file.session.drills[0].kind = "stretch";
         const result = parsePlan(file);
         expect(result.ok).toBe(false);
-        expect(!result.ok && result.error.issues?.[0]).toBe(`Drill 1: ${ROW_KIND_MESSAGE}`);
+        expect(!result.ok && result.error.issues?.[0]).toBe(`Drill 1: ${PLAN_ROW_KIND_MESSAGE}`);
     });
 
     it("rejects the row rules the hosted save rejects", () => {

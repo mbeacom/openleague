@@ -1,18 +1,24 @@
 /**
- * Practice-session timeline (practice planner 2b): station groups, wall time,
- * the server's group check, and the editor's reorder / toggle / remove rules.
- * Pure, so the session editor, the session actions, the detail view and 3b's
- * timeline all share it.
+ * Practice-session timeline (practice planner 2b, practice timing): the rows
+ * grouped into blocks, wall time with the gap between blocks, station
+ * rotation, the save rules, and the editor's reorder / toggle / remove rules.
+ * Pure, so the session editor, the session actions, the static store, the
+ * plan document, the detail view, the bench sheet and the exports all share it.
  *
+ * A row is a drill or a block row (warm-up, break, transition, cool-down).
  * A drill with `runsWithPrevious` runs at the same time as the drill before it
- * (by sequence). Consecutive flagged drills form one group with the nearest
- * preceding unflagged drill. A group lasts as long as its longest drill.
+ * (by sequence): consecutive flagged drills form one station block with the
+ * nearest preceding unflagged drill. A block row is always its own block. A
+ * block lasts as long as its longest row, or, when its first drill sets
+ * `rotateEveryMinutes` (M) and at least 2 stations rotate, M × rotating
+ * stations; a station marked `stays` keeps its group for the whole block.
+ * `transitionMinutes` is added between consecutive blocks, never after the last.
  *
- * `groupStations`, `sessionWallMinutes` and `stationGroupError` order by
- * `sequence`, because a payload's array order is not trusted. The list helpers
- * (`normalizeGroups`, `toggleRunsWithPrevious`, `moveItem`, `removeItem`) work
- * on array order, which the editor keeps equal to sequence order: every edit
- * ends in `normalizeGroups`.
+ * `groupStations`, `sessionWallMinutes`, `buildSchedule` and the save checks
+ * order by `sequence`, because a payload's array order is not trusted. The
+ * list helpers (`normalizeGroups`, `toggleRunsWithPrevious`, `moveItem`,
+ * `removeItem`, `settleRotations`) work on array order, which the editor keeps
+ * equal to sequence order: every edit ends in `normalizeGroups`.
  */
 
 import type { SegmentKind } from "@/types/segments";
@@ -182,12 +188,37 @@ export function normalizeGroups<T extends TimelinePlay>(plays: readonly T[]): T[
             const changes: Partial<TimelinePlay> = {};
             if ((k > 0 || !setToRotate) && row.rotateEveryMinutes != null) changes.rotateEveryMinutes = null;
             if (!setToRotate && row.stays) changes.stays = false;
-            if (minutes !== null) changes.duration = row.stays ? minutes * rotating : minutes;
+            if (minutes !== null) changes.duration = stationMinutes(row, minutes, rotating);
             next[start + k] = withChanges(row, changes);
         });
         start = end;
     }
     return next;
+}
+
+/** A station's minutes in a rotating block (spec R3): M, or the whole block when its group stays. */
+function stationMinutes(row: TimelinePlay, minutes: number, rotating: number): number {
+    return row.stays ? minutes * rotating : minutes;
+}
+
+/**
+ * On write (spec R3): each station of a rotating block gets the minutes the
+ * editor shows (normalizeGroups's rule): M, or M × rotating stations when its
+ * group stays. For rows that already pass sessionRowsError; groups by sequence.
+ * Rows keep their order, and an unchanged row keeps its object. The wall time
+ * doesn't change: a rotating block's length never reads its stations' minutes.
+ */
+export function withRotationMinutes<T extends TimelinePlay>(rows: readonly T[]): T[] {
+    const minutes = new Map<T, number>();
+    for (const { stations, rotation } of groupStations(rows)) {
+        if (!rotation) continue;
+        const rotating = rotatingStations(stations).length;
+        for (const station of stations) minutes.set(station, stationMinutes(station, rotation.minutes, rotating));
+    }
+    return rows.map((row) => {
+        const duration = minutes.get(row);
+        return duration === undefined ? row : withChanges(row, { duration });
+    });
 }
 
 /**
@@ -197,7 +228,7 @@ export function normalizeGroups<T extends TimelinePlay>(plays: readonly T[]): T[
  */
 export function groupRange(plays: readonly TimelinePlay[], index: number): { start: number; end: number } {
     if (!Number.isInteger(index) || index < 0 || index >= plays.length) {
-        throw new RangeError(`groupRange: index ${index} is out of range for ${plays.length} drill(s)`);
+        throw new RangeError(`groupRange: index ${index} is out of range for ${plays.length} row(s)`);
     }
     let start = index;
     while (start > 0 && plays[start].runsWithPrevious) start--;
@@ -653,8 +684,15 @@ export function rotationBlockLabel(rotateEvery: number, minutes: number): string
     return `Stations · rotate every ${rotateEvery} min · ${minutes} min`;
 }
 
-/** The editor's summary: "3 stations × 5 min = 15 min · groups A–C". */
+/**
+ * The editor's summary: "3 stations × 5 min = 15 min · groups A–C". Only for a
+ * block that rotates: fewer than 2 rotating stations is a RangeError (callers
+ * show CANT_ROTATE_MESSAGE instead).
+ */
 export function rotationSummary(rotating: number, rotateEvery: number): string {
+    if (!Number.isInteger(rotating) || rotating < MIN_ROTATING_STATIONS) {
+        throw new RangeError(`rotationSummary: a rotation needs at least ${MIN_ROTATING_STATIONS} rotating stations, got ${rotating}`);
+    }
     return `${rotating} stations × ${rotateEvery} min = ${rotating * rotateEvery} min · groups A–${groupLetter(rotating - 1)}`;
 }
 

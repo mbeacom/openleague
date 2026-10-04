@@ -34,6 +34,8 @@ const { mockAuth, mockTx, mockPrisma, serviceAssignVenueReservation, serviceCrea
       create: vi.fn(),
       delete: vi.fn(),
       findUnique: vi.fn(),
+      findMany: vi.fn(),
+      count: vi.fn(),
       update: vi.fn(),
     },
     practiceSessionPlay: { deleteMany: vi.fn(), findMany: vi.fn(), createMany: vi.fn() },
@@ -89,6 +91,7 @@ import {
   createPracticeSession,
   deletePracticeSession,
   getPracticeSessionById,
+  getPracticeSessionsByTeam,
   updatePracticeSession,
 } from "@/lib/actions/practice-sessions";
 
@@ -523,6 +526,19 @@ describe("getPracticeSessionById: block rows", () => {
             plays: [{ id: "w", sequence: 0, duration: 8, instructions: null, runsWithPrevious: false, kind: "warmup", label: null, stays: false, rotateEveryMinutes: null, play: null }],
         });
         const result = await getPracticeSessionById({ id: SESSION_CUID, teamId: TEAM_CUID });
-        expect(result.success && result.data.plays[0]).toMatchObject({ kind: "warmup", label: null, play: null });
+        // The SessionRow shape the other loaders return: a block row has no drill fields.
+        expect(result.success && result.data.plays[0]).toEqual({ id: "w", kind: "warmup", label: null, sequence: 0, duration: 8, instructions: null, runsWithPrevious: false });
+    });
+});
+
+describe("getPracticeSessionsByTeam: drill count", () => {
+    it("counts drill rows only, as the list, the dashboard and the email do", async () => {
+        const TEAM_CUID = "cjld2cjxh0000qzrmn831i7rn";
+        mockAuth.requireTeamMember.mockResolvedValue(undefined);
+        mockPrisma.practiceSession.findMany.mockResolvedValue([]);
+        mockPrisma.practiceSession.count.mockResolvedValue(0);
+        const result = await getPracticeSessionsByTeam({ teamId: TEAM_CUID, page: 1, limit: 20, dateFilter: "all" });
+        expect(result.success).toBe(true);
+        expect(mockPrisma.practiceSession.findMany.mock.calls[0][0].select._count).toEqual({ select: { plays: { where: { kind: "drill" } } } });
     });
 });

@@ -72,10 +72,16 @@ export function blockTitle(kind: BlockKind, label: string | null | undefined): s
  */
 export const CONTROL_CHARS = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g;
 
-/** Cleaned and cut to 60 characters; empty or not text reads as null (the default label). */
+/**
+ * Cleaned and cut to 60 characters; empty or not text reads as null (the default
+ * label). The cut counts UTF-16 units, as every label check does (Zod, the static
+ * store, the input's maxLength), and never leaves half an emoji: a surrogate pair
+ * that doesn't fit is dropped whole.
+ */
 export function toBlockLabel(value: unknown): string | null {
     if (typeof value !== "string") return null;
-    return value.replace(CONTROL_CHARS, "").trim().slice(0, MAX_BLOCK_LABEL_LENGTH).trim() || null;
+    const cut = value.replace(CONTROL_CHARS, "").trim().slice(0, MAX_BLOCK_LABEL_LENGTH).replace(/[\uD800-\uDBFF]$/, "");
+    return cut.trim() || null;
 }
 
 /** A whole number of minutes from 1 to 30, else null (no rotation). */

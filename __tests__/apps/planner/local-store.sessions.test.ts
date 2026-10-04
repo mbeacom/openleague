@@ -361,6 +361,25 @@ describe.each(REPOS)("sessions (%s)", (_name, open) => {
         expect(data(await store.listSessions())[0].drillCount).toBe(2);
     });
 
+    it("stores each rotating station's minutes as the editor shows them: M, or the whole block for a stays station", async () => {
+        const { store } = await setup();
+        const [a, b, g] = [await addLibraryPlay(store, "A"), await addLibraryPlay(store, "B"), await addLibraryPlay(store, "G")];
+        const minutes = async (id: string) => data(await store.getSessionView(id)).plays.map((row) => row.duration);
+        const created = data(await store.createSession(save([
+            drill(a, "ka", 0, { stays: false, rotateEveryMinutes: 5, duration: 12 }),
+            drill(b, "kb", 1, { runsWithPrevious: true, stays: false, duration: 7 }),
+            drill(g, "kg", 2, { runsWithPrevious: true, stays: true, duration: 3 }),
+        ])));
+        expect(await minutes(created.id)).toEqual([5, 5, 10]);
+        const [ownedA, ownedB, ownedG] = created.plays.map((p) => p.playId);
+        data(await store.updateSession(created.id, save([
+            drill(ownedA, "ka", 0, { rotateEveryMinutes: 6, duration: 9 }),
+            drill(ownedB, "kb", 1, { runsWithPrevious: true, duration: 9 }),
+            drill(ownedG, "kg", 2, { runsWithPrevious: true, duration: 9 }),
+        ])));
+        expect(await minutes(created.id)).toEqual([6, 6, 12]);
+    });
+
     it("keeps the gap and each drill's rotation and stays when an update leaves them out, and clears them when told", async () => {
         const { store } = await setup();
         const a = await addLibraryPlay(store, "A");
@@ -445,6 +464,7 @@ describe.each(REPOS)("sessions (%s)", (_name, open) => {
             ["a block row that stays", (p) => [drill(p, "k1", 0), { ...breakRow, stays: true }], BLOCK_ROW_FIELDS_ERROR],
             ["a block row that rotates", (p) => [drill(p, "k1", 0), { ...breakRow, rotateEveryMinutes: 5 }], BLOCK_ROW_FIELDS_ERROR],
             ["an unknown row kind", (p) => [drill(p, "k1", 0), { ...breakRow, kind: "scrimmage" } as unknown as LocalSessionDrill], ROW_KIND_MESSAGE],
+            ["a block row with an empty play id", (p) => [drill(p, "k1", 0), { ...breakRow, playId: "" } as unknown as LocalSessionDrill], BLOCK_HAS_NO_DRILL_MESSAGE],
         ];
         it.each(cases)("%s", async (_rule, rows, error) => {
             const { store } = await setup();

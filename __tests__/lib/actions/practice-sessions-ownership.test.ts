@@ -291,6 +291,20 @@ describe("practice timing rows (spec R2, R3, R5)", () => {
         expect(models.practiceSession.create).not.toHaveBeenCalled();
     });
 
+    it("writes each rotating station's minutes as the editor shows them, on create and update", async () => {
+        const rotating = (durations: number[]): SaveRow[] => [
+            { playId: LIB, clientKey: "k1", sequence: 0, duration: durations[0], instructions: "", stays: false, rotateEveryMinutes: 5 },
+            { playId: LIB, clientKey: "k2", sequence: 1, duration: durations[1], instructions: "", runsWithPrevious: true, stays: false, rotateEveryMinutes: null },
+            { playId: LIB, clientKey: "k3", sequence: 2, duration: durations[2], instructions: "", runsWithPrevious: true, stays: true, rotateEveryMinutes: null },
+        ];
+        expect((await createPracticeSession(save(rotating([12, 7, 3])))).success).toBe(true);
+        const created: Array<{ duration: number }> = models.practiceSessionPlay.createMany.mock.calls[0][0].data;
+        expect(created.map((row) => row.duration)).toEqual([5, 5, 10]);
+        expect((await updatePracticeSession({ id: SESSION, ...save(rotating([9, 9, 9])) })).success).toBe(true);
+        const updated: Array<{ duration: number }> = models.practiceSession.update.mock.calls[0][0].data.plays.create;
+        expect(updated.map((row) => row.duration)).toEqual([5, 5, 10]);
+    });
+
     it("never treats a stored block row as an orphaned drill", async () => {
         models.practiceSessionPlay.findMany.mockResolvedValue([{ playId: null }, { playId: OWNED }]);
         await updatePracticeSession({ id: SESSION, ...save([]) });
@@ -317,6 +331,13 @@ describe("a stale editor can't drop warm-ups and breaks", () => {
             .toBeLessThan(models.practiceSessionPlay.findMany.mock.invocationCallOrder[0]);
         expect(models.practiceSessionPlay.deleteMany).not.toHaveBeenCalled();
         expect(models.practiceSession.update).not.toHaveBeenCalled();
+    });
+
+    it("reads a row whose kind is present but undefined as an older client's", async () => {
+        stored([{ playId: null, kind: "warmup" }, { playId: OWNED, kind: "drill" }]);
+        const result = await update([legacy(OWNED, "k1", 0, { kind: undefined })]);
+        expect(result).toEqual({ success: false, error: STALE_EDITOR_MESSAGE });
+        expect(models.practiceSessionPlay.deleteMany).not.toHaveBeenCalled();
     });
 
     it("saves a payload without row kinds as today when the practice has no block rows", async () => {

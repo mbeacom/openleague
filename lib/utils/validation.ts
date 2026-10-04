@@ -1407,7 +1407,8 @@ const rotateEveryMinutesSchema = z
 export const practiceSessionPlayInputSchema = z
   .object({
     kind: z.enum(SESSION_ROW_KINDS, { message: ROW_KIND_MESSAGE }).default("drill"),
-    playId: z.string().cuid("Invalid play ID format").optional(),
+    // "" passes here so a block row that carries one is refused for what it is (below).
+    playId: z.string().cuid("Invalid play ID format").or(z.literal("")).optional(),
     clientKey: z.string().min(1, "Drill key is required").max(64, "Drill key is too long"),
     sequence: z.number().int().min(0),
     duration: z.number().int(PLAY_DURATION_INT_MESSAGE).min(1, PLAY_DURATION_MIN_MESSAGE).max(300, PLAY_DURATION_MAX_MESSAGE),
@@ -1422,7 +1423,7 @@ export const practiceSessionPlayInputSchema = z
       if (!row.playId) ctx.addIssue({ code: "custom", path: ["playId"], message: DRILL_NEEDS_PLAY_MESSAGE });
       return;
     }
-    if (row.playId) ctx.addIssue({ code: "custom", path: ["playId"], message: BLOCK_HAS_NO_DRILL_MESSAGE });
+    if (row.playId !== undefined) ctx.addIssue({ code: "custom", path: ["playId"], message: BLOCK_HAS_NO_DRILL_MESSAGE });
     if (row.runsWithPrevious) ctx.addIssue({ code: "custom", path: ["runsWithPrevious"], message: BLOCK_STATION_ERROR });
     if (row.stays || row.rotateEveryMinutes != null) ctx.addIssue({ code: "custom", path: ["kind"], message: BLOCK_ROW_FIELDS_ERROR });
   });
