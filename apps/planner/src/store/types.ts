@@ -7,6 +7,7 @@
 import type { ActionResult, PlannerStore } from "@/lib/planner-store";
 import type { PlanDocument } from "@/lib/plan-document";
 import type { SavedDrillId } from "@/lib/utils/session-drill-ids";
+import type { SessionRowInput } from "@/lib/utils/session-rows";
 import type { PlayData, PlayFocus, PlayGoalies, PracticeSessionData, PracticeSessionView } from "@/types/practice-planner";
 
 export interface LocalSessionSummary {
@@ -18,15 +19,8 @@ export interface LocalSessionSummary {
     updatedAt: Date;
 }
 
-/** One drill in a session save: the editor's card, as EditSessionWrapper maps it for hosted. */
-export interface LocalSessionDrill {
-    playId: string;
-    clientKey: string;
-    sequence: number;
-    runsWithPrevious: boolean;
-    duration: number;
-    instructions: string;
-}
+/** One row in a session save: the editor's card, as toSessionRowInputs maps it (hosted sends the same). */
+export type LocalSessionDrill = SessionRowInput;
 
 export interface LocalSessionSave {
     title: string;
@@ -34,6 +28,8 @@ export interface LocalSessionSave {
     duration: number;
     /** Absent = unchanged on update (null on create); null clears. */
     goaliesAttending?: number | null;
+    /** Minutes between blocks. Absent = unchanged on update (0 on create). */
+    transitionMinutes?: number;
     plays: LocalSessionDrill[];
 }
 

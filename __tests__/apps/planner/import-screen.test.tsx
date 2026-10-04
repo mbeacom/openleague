@@ -6,7 +6,7 @@ import { PRIVACY_NOTE } from "@/apps/planner/src/config";
 import { FILE_TOO_LARGE_MESSAGE, MAX_PLAN_FILE_BYTES, NOT_A_PLAN_MESSAGE, encodePlanLink, serializePlan, type PlanSessionInput } from "@/lib/plan-document";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import { STARTER_PLAYS } from "@/lib/data/starter-plays";
-import { drillRows, toDrillRowInput } from "@/lib/utils/session-rows";
+import { drillRows, toSessionRowInputs } from "@/lib/utils/session-rows";
 
 // jsdom has no canvas; the preview's diagrams (a template's are not empty) draw as a stub.
 vi.mock("@/lib/utils/canvas/thumbnail-generator", () => ({
@@ -203,7 +203,7 @@ describe("ImportScreen", () => {
             date: initialData.date,
             duration: initialData.duration,
             // The static store doesn't take block rows yet, so the update carries the drill rows.
-            plays: drillRows(initialData.plays).map((play) => ({ ...toDrillRowInput(play), instructions: "Changed" })),
+            plays: toSessionRowInputs(initialData.plays).map((row) => ({ ...row, instructions: "Changed" })),
         });
         expect(updated.success).toBe(true);
 

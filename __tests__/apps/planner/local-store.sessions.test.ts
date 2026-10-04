@@ -11,11 +11,20 @@ import { createEmptyPlayData } from "@/lib/utils/play-data";
 import { SESSION_DRILL_REJECTED_MESSAGE } from "@/lib/utils/session-drill-ids";
 import type { ActionResult } from "@/lib/planner-store";
 import { GOALIES_ATTENDING_MESSAGE } from "@/lib/utils/drill-tags";
-import { drillRows } from "@/lib/utils/session-rows";
+import {
+    BLOCK_HAS_NO_DRILL_MESSAGE,
+    BLOCK_LABEL_MESSAGE,
+    DRILL_NEEDS_PLAY_MESSAGE,
+    TRANSITION_MINUTES_MESSAGE,
+    drillRows,
+    isDrillRow,
+    type DrillRowInput,
+} from "@/lib/utils/session-rows";
+import { BLOCK_STATION_ERROR, ROTATION_TOO_FEW_ERROR } from "@/lib/utils/session-timeline";
 
 const T = LOCAL_TEAM_ID;
 
-function drill(playId: string, clientKey: string, sequence: number, overrides: Partial<LocalSessionDrill> = {}): LocalSessionDrill {
+function drill(playId: string, clientKey: string, sequence: number, overrides: Partial<DrillRowInput> = {}): DrillRowInput {
     return { playId, clientKey, sequence, runsWithPrevious: false, duration: 10, instructions: "", ...overrides };
 }
 
@@ -320,6 +329,115 @@ describe.each(REPOS)("sessions (%s)", (_name, open) => {
         await repo.write((tx) => tx.putSession({ id: "old", title: "Old", date: clock.now, duration: 60, rows: [], createdAt: clock.now, updatedAt: clock.now }));
         expect(data(await store.getSessionView("old")).goaliesAttending).toBeNull();
         expect(data(await store.getSessionForEdit("old")).initialData.goaliesAttending).toBeNull();
+    });
+
+    it("saves block rows, rotation, stays and the gap, and reads them back in the view, the editor and the list", async () => {
+        const { store } = await setup();
+        const a = await addLibraryPlay(store, "A");
+        const b = await addLibraryPlay(store, "B");
+        const { id } = data(await store.createSession(save([
+            { kind: "warmup", clientKey: "kw", sequence: 0, duration: 8, instructions: "Laps", label: null },
+            drill(a, "ka", 1, { stays: false, rotateEveryMinutes: 5, duration: 5 }),
+            drill(b, "kb", 2, { runsWithPrevious: true, stays: false, rotateEveryMinutes: null, duration: 5 }),
+            { kind: "cooldown", clientKey: "kc", sequence: 3, duration: 5, instructions: "", label: "Stretch" },
+        ], { transitionMinutes: 2 })));
+
+        const view = data(await store.getSessionView(id));
+        expect(view.transitionMinutes).toBe(2);
+        expect(view.plays.map((row) => (isDrillRow(row) ? row.play.name : row.kind))).toEqual(["warmup", "A", "B", "cooldown"]);
+        expect(view.plays[3]).toEqual({ id: "kc", kind: "cooldown", label: "Stretch", sequence: 3, duration: 5, instructions: null, runsWithPrevious: false });
+        expect(view.plays.slice(1, 3).map((row) => isDrillRow(row) && [row.rotateEveryMinutes, row.stays])).toEqual([[5, false], [null, false]]);
+
+        const edit = data(await store.getSessionForEdit(id));
+        expect(edit.initialData.transitionMinutes).toBe(2);
+        expect(edit.initialData.plays[0]).toEqual({ id: "kw", kind: "warmup", label: "", sequence: 0, duration: 8, instructions: "Laps", runsWithPrevious: false });
+        expect(edit.initialData.plays[1]).toMatchObject({ stays: false, rotateEveryMinutes: 5 });
+
+        expect(data(await store.listSessions())[0].drillCount).toBe(2);
+    });
+
+    it("keeps the gap and each drill's rotation and stays when an update leaves them out, and clears them when told", async () => {
+        const { store } = await setup();
+        const a = await addLibraryPlay(store, "A");
+        const b = await addLibraryPlay(store, "B");
+        const created = data(await store.createSession(save([
+            drill(a, "ka", 0, { stays: false, rotateEveryMinutes: 5 }),
+            drill(b, "kb", 1, { runsWithPrevious: true, stays: false, rotateEveryMinutes: null }),
+        ], { transitionMinutes: 3 })));
+        const [ownedA, ownedB] = created.plays.map((p) => p.playId);
+
+        data(await store.updateSession(created.id, save([drill(ownedA, "ka", 0), drill(ownedB, "kb", 1, { runsWithPrevious: true })])));
+        const kept = data(await store.getSessionView(created.id));
+        expect(kept.transitionMinutes).toBe(3);
+        expect(kept.plays.map((row) => isDrillRow(row) && row.rotateEveryMinutes)).toEqual([5, null]);
+
+        data(await store.updateSession(created.id, save([drill(ownedA, "ka", 0, { rotateEveryMinutes: null })], { transitionMinutes: 0 })));
+        const cleared = data(await store.getSessionView(created.id));
+        expect(cleared.transitionMinutes).toBe(0);
+        expect(cleared.plays.map((row) => isDrillRow(row) && row.rotateEveryMinutes)).toEqual([null]);
+    });
+
+    it("refuses what hosted refuses, writing nothing", async () => {
+        const { store } = await setup();
+        const a = await addLibraryPlay(store, "A");
+        expect(await store.createSession(save([
+            drill(a, "k1", 0, { stays: false, rotateEveryMinutes: 5 }),
+            drill(a, "k2", 1, { runsWithPrevious: true, stays: true }),
+        ]))).toEqual({ success: false, error: ROTATION_TOO_FEW_ERROR });
+        expect(await store.createSession(save([
+            { kind: "break", clientKey: "kb", sequence: 0, duration: 2, instructions: "", label: null },
+            drill(a, "k1", 1, { runsWithPrevious: true }),
+        ]))).toEqual({ success: false, error: BLOCK_STATION_ERROR });
+        // 30 + 1 + 30 = 61
+        expect(await store.createSession(save([drill(a, "k1", 0, { duration: 30 }), drill(a, "k2", 1, { duration: 30 })], { transitionMinutes: 1 })))
+            .toEqual({ success: false, error: "Practice timeline (61 min) exceeds session duration (60 min)" });
+        expect(await store.createSession(save([], { transitionMinutes: 6 }))).toEqual({ success: false, error: TRANSITION_MINUTES_MESSAGE });
+        expect(await store.createSession(save([{ kind: "break", clientKey: "kb", sequence: 0, duration: 2, instructions: "", label: "x".repeat(61) }])))
+            .toEqual({ success: false, error: BLOCK_LABEL_MESSAGE });
+        // The row shapes hosted's schema rejects (ruling R7), with the same words: a drill with no
+        // play, and a block that names one (built outside a literal, as an older or hand-made payload).
+        expect(await store.createSession(save([drill("", "k1", 0)]))).toEqual({ success: false, error: DRILL_NEEDS_PLAY_MESSAGE });
+        const blockWithDrill = { kind: "break" as const, clientKey: "kb", sequence: 0, duration: 2, instructions: "", label: null, playId: a };
+        expect(await store.createSession(save([blockWithDrill]))).toEqual({ success: false, error: BLOCK_HAS_NO_DRILL_MESSAGE });
+        expect(data(await store.listSessions())).toEqual([]);
+    });
+
+    it("duplicates block rows as they are, each drill to its own clone, and the gap", async () => {
+        const { store } = await setup();
+        const a = await addLibraryPlay(store, "A");
+        const b = await addLibraryPlay(store, "B");
+        const source = data(await store.createSession(save([
+            { kind: "warmup", clientKey: "kw", sequence: 0, duration: 8, instructions: "", label: "Laps" },
+            drill(a, "k1", 1),
+            { kind: "break", clientKey: "kb", sequence: 2, duration: 2, instructions: "", label: null },
+            drill(b, "k2", 3),
+        ], { transitionMinutes: 1 })));
+        const copy = data(await store.duplicatePracticeSession({ id: source.id, teamId: T, date: new Date("2026-10-13T19:00:00") }));
+        const view = data(await store.getSessionView(copy.id));
+        expect(view.transitionMinutes).toBe(1);
+        expect(view.plays.map((row) => (isDrillRow(row) ? row.play.name : row.kind))).toEqual(["warmup", "A", "break", "B"]);
+        expect(view.plays[0]).toMatchObject({ kind: "warmup", label: "Laps" });
+        const copiedIds = view.plays.flatMap((row) => (isDrillRow(row) ? [row.play.id] : []));
+        expect(copiedIds).toHaveLength(2);
+        for (const id of copiedIds) expect(source.plays.map((p) => p.playId)).not.toContain(id);
+    });
+
+    it("reads a session stored before practice timing as drills with no gap", async () => {
+        const { repo, store } = await setup();
+        const a = await addLibraryPlay(store, "A");
+        const { id, plays } = data(await store.createSession(save([drill(a, "k1", 0)])));
+        await repo.write(async (tx) => {
+            const stored = await tx.getSession(id);
+            if (!stored) throw new Error("session missing");
+            await tx.putSession({
+                id: stored.id, title: stored.title, date: stored.date, duration: stored.duration, createdAt: stored.createdAt, updatedAt: stored.updatedAt,
+                rows: stored.rows.map((row) => ({ id: row.id, playId: row.playId, sequence: row.sequence, duration: row.duration, instructions: row.instructions, runsWithPrevious: row.runsWithPrevious })),
+            });
+        });
+        const view = data(await store.getSessionView(id));
+        expect(view.transitionMinutes).toBe(0);
+        expect(view.plays[0]).toMatchObject({ stays: false, rotateEveryMinutes: null, play: { id: plays[0].playId } });
+        expect(data(await store.getSessionForEdit(id)).initialData.plays[0]).toMatchObject({ stays: false, rotateEveryMinutes: null });
     });
 });
 
