@@ -590,4 +590,216 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
             area: { kind: "custom", rect: { x: 0, y: 12.5, w: 50, h: 60 } },
         },
     },
+    {
+        id: "starter-skate-edges-crossovers",
+        name: "Edges & Crossovers: Circle Figure-Eights",
+        description:
+            "Forward crossovers around both right-end circles in a figure eight, switching direction through the middle so both edges work. Teach: knees bent, a full push from the outside leg, the crossover leg pushing under the body on its outside edge, shoulders level, head and stick up. Second time through, backward crossovers. Add a puck once the pattern is clean. 6–8 min.",
+        focus: "skaters",
+        goalies: "none",
+        playData: {
+            version: PLAY_DATA_VERSION,
+            players: [
+                player("ec-s1", "S1", 142, 26),
+                player("ec-s2", "S2", 133, 14),
+                player("ec-s3", "S3", 140, 64),
+            ],
+            drawings: [
+                skate("ec-entry", [147, 28], [154, 31]),
+                lateral(
+                    "ec-figure-eight",
+                    [157, 32.5], [152, 20.5], [157, 8.5], [169, 3.5], [181, 8.5], [186, 20.5], [181, 32.5],
+                    [169, 42.5],
+                    [157, 52.5], [152, 64.5], [157, 76.5], [169, 81.5], [181, 76.5], [186, 64.5], [181, 52.5], [172, 44],
+                ),
+                skate("ec-exit", [166, 46], [148, 48]),
+            ],
+            equipment: [pylon("ec-pylon-top", 169, 20.5), pylon("ec-pylon-bottom", 169, 64.5)],
+            annotations: [note("ec-note", "Switch edges", 128, 40, "#000000", 5)],
+            area: { kind: "zone-right" },
+        },
+    },
+    {
+        id: "starter-skate-transitions",
+        name: "Pivots & Transitions: Cone Box",
+        description:
+            "Skate forward up one side of the box, open the hips and pivot to backward at the cone, skate backward across the top, pivot to forward down the far side, and so on around the box. Teach: pivot at the cone, not after it; turn the hips and shoulders together; keep the stick on the ice and the eyes up the ice; quick feet out of every pivot. Run both directions so the pivots go both ways. 6 min.",
+        focus: "skaters",
+        goalies: "none",
+        playData: {
+            version: PLAY_DATA_VERSION,
+            players: [
+                player("tr-s1", "S1", 84, 77),
+                player("tr-s2", "S2", 97, 77),
+                player("tr-s3", "S3", 110, 77),
+            ],
+            drawings: [
+                skate("tr-fwd-left", [85, 70], [85, 23]),
+                backskate("tr-back-top", [88, 20], [112, 20]),
+                skate("tr-fwd-right", [115, 23], [115, 62]),
+                backskate("tr-back-bottom", [112, 65], [88, 65]),
+            ],
+            equipment: [cone("tr-cone1", 85, 20), cone("tr-cone2", 115, 20), cone("tr-cone3", 115, 65), cone("tr-cone4", 85, 65)],
+            annotations: [note("tr-note", "Pivot at cones", 79, 10, "#000000", 5)],
+            area: { kind: "zone-neutral" },
+        },
+    },
+    {
+        id: "starter-skate-passing-lanes",
+        name: "Partner Passing Lanes",
+        description:
+            "Partners skate the length of the ice about 40 feet apart, passing back and forth at full speed without breaking stride. Pass ahead of your partner's stick so they skate into it; receive on the forehand and backhand alternately and cushion the puck (soft hands, blade angled over the puck). The last pass comes at the far blue line; the receiver drives wide and shoots. Count completed passes per trip. 8 min.",
+        focus: "skaters",
+        goalies: "optional",
+        playData: {
+            version: PLAY_DATA_VERSION,
+            players: [
+                player("pl-a1", "A1", 28, 20),
+                player("pl-a2", "A2", 28, 65),
+                player("pl-b1", "B1", 15, 20),
+                player("pl-b2", "B2", 15, 65),
+            ],
+            drawings: [
+                skate("pl-a1-route", [34, 20], [160, 20]),
+                skate("pl-a2-route", [34, 65], [160, 65]),
+                pass("pl-pass1", [40, 23], [62, 62]),
+                pass("pl-pass2", [78, 62], [100, 23]),
+                pass("pl-pass3", [116, 23], [138, 62]),
+                carry("pl-a2-drive", [160, 65], [176, 56]),
+                shot("pl-shot", [176, 55], [187, 45]),
+            ],
+            equipment: [rightNet("pl-net"), pucks("pl-pucks", 20, 42.5)],
+            annotations: [],
+        },
+    },
+    {
+        id: "starter-skate-wrist-shots",
+        name: "Wrist-Shot Lanes",
+        description:
+            "Three lines at the tops of the circles and the high slot. On the whistle, each shooter takes a short pull-in carry and shoots a wrist shot in stride, lines alternating. Teach: the puck starts at the heel of the blade beside the back foot; weight moves from the back foot to the front; roll the wrists and follow through at the target, low for low shots and high for the top corners. Pick a spot before the release. 8 min; rotate lines every five shots.",
+        focus: "skaters",
+        goalies: "optional",
+        playData: {
+            version: PLAY_DATA_VERSION,
+            players: [
+                goalie("ws-g", 183, 42.5),
+                player("ws-s1", "S1", 150, 18),
+                player("ws-s2", "S2", 140, 42.5),
+                player("ws-s3", "S3", 150, 67),
+            ],
+            drawings: [
+                carry("ws-s1-carry", [154, 22], [162, 28]),
+                shot("ws-shot1", [163, 29], [178, 38]),
+                carry("ws-s2-carry", [146, 42.5], [158, 42.5]),
+                shot("ws-shot2", [159, 42.5], [176, 42.5]),
+                carry("ws-s3-carry", [154, 63], [162, 57]),
+                shot("ws-shot3", [163, 56], [178, 47]),
+            ],
+            equipment: [rightNet("ws-net"), pucks("ws-pucks1", 139, 23), pucks("ws-pucks2", 130, 42.5), pucks("ws-pucks3", 139, 62)],
+            annotations: [note("ws-note", "Pick a spot", 128, 83, "#000000", 6)],
+            area: { kind: "zone-right" },
+        },
+    },
+    {
+        id: "starter-skate-puck-protection",
+        name: "Puck Protection: Wall Battle",
+        description:
+            "The coach spots a puck into the corner. F1 wins it and protects it along the wall for 10 seconds against a live defender, staying inside the cones. Teach: wide base and bent knees, the puck on the far side of the body from the defender's stick, the inside arm and hip holding the defender off (legal body position, no hooking), and a cut back when the defender overcommits. Defender: stick on the puck, body between the puck and the net. Swap roles every rep. 6 min.",
+        focus: "skaters",
+        goalies: "none",
+        playData: {
+            version: PLAY_DATA_VERSION,
+            players: [
+                player("pr-f1", "F1", 174, 77),
+                player("pr-o1", "O1", 166, 66, "them"),
+                coach("pr-c", 163.5, 51),
+            ],
+            drawings: [
+                pass("pr-pass", [168, 56], [184, 68]),
+                carry("pr-carry", [180, 80], [189, 76], [194, 66]),
+                carry("pr-cutback", [192, 61], [182, 59]),
+                opponentRoute("pr-o1-route", [170, 70], [181, 74]),
+            ],
+            equipment: [cone("pr-cone1", 157, 60), cone("pr-cone2", 157, 82), pucks("pr-pucks", 157, 51)],
+            annotations: [note("pr-note", "10 seconds", 170, 51.5, "#000000", 4.5)],
+            area: { kind: "custom", rect: { x: 155, y: 45, w: 45, h: 40 } },
+        },
+    },
+    {
+        id: "starter-skate-small-area-2v2",
+        name: "Small-Area 2-on-2 Battle",
+        description:
+            "The coach spots pucks into the zone: two attackers against two defenders, 30–40 second shifts, everything below the tops of the circles. Attackers get to the net fast; one takes the puck to the net, the other finds open ice for a pass or a rebound. Defenders: stick on the puck, take away the middle, win it and move it to the coach to switch. Keep score, because battles need consequences. 10–12 min.",
+        focus: "skaters",
+        goalies: "optional",
+        playData: {
+            version: PLAY_DATA_VERSION,
+            players: [
+                goalie("sa-g", 183, 42.5),
+                player("sa-f1", "F1", 155, 26),
+                player("sa-f2", "F2", 150, 56),
+                player("sa-o1", "O1", 169, 31, "them"),
+                player("sa-o2", "O2", 156, 70, "them"),
+                coach("sa-c", 138, 78),
+            ],
+            drawings: [
+                pass("sa-pass1", [141, 73], [146, 63]),
+                carry("sa-f2-carry", [155, 60], [166, 66], [176, 62]),
+                skate("sa-f1-route", [157, 31], [158, 40]),
+                pass("sa-pass2", [176, 60], [160, 46]),
+                shot("sa-shot", [161, 46], [176, 44]),
+            ],
+            equipment: [rightNet("sa-net"), pucks("sa-pucks", 128, 80)],
+            annotations: [],
+            area: { kind: "zone-right" },
+        },
+    },
+    {
+        id: "starter-skate-stops-starts",
+        name: "Stops & Starts",
+        description:
+            "Skate from the goal line to the near blue line, two-foot hockey stop, and sprint back; then to the red line and back, then the far blue line and back. Stop facing the same wall on the way out and the other wall on the way back so both sides get worked. Teach: drop the hips, turn the hips and shoulders together, skates about shoulder-width apart, and dig in the inside edge of the front skate and the outside edge of the back skate. Explode out with short, quick first strides. 4–5 min.",
+        focus: "skaters",
+        goalies: "none",
+        playData: {
+            version: PLAY_DATA_VERSION,
+            players: [
+                player("ss-s1", "S1", 14, 20),
+                player("ss-s2", "S2", 14, 42.5),
+                player("ss-s3", "S3", 14, 65),
+            ],
+            drawings: [
+                skateStop("ss-s1-out", [20, 20], [73, 20]),
+                skateStop("ss-s1-back", [73, 25], [20, 25]),
+                skateStop("ss-s2-out", [20, 42.5], [98, 42.5]),
+                skateStop("ss-s3-out", [20, 65], [123, 65]),
+            ],
+            equipment: [],
+            annotations: [note("ss-note", "Stop facing the same wall", 24, 36, "#000000", 5)],
+        },
+    },
+    {
+        id: "starter-skate-stickhandling",
+        name: "Stickhandling: Cone Weave",
+        description:
+            "Carry the puck through the cones with quick side-to-side handles, finish around the last cone with a toe drag, and pass to the next skater. Teach: the puck in the middle of the blade, a loose bottom hand, the top hand doing the work, the puck moving wider than the body, and the eyes up between cones (glance down, don't stare). Progress: forehand only, backhand only, then one hand on the stick. 6 min.",
+        focus: "skaters",
+        goalies: "none",
+        playData: {
+            version: PLAY_DATA_VERSION,
+            players: [
+                player("st-s1", "S1", 85, 15),
+                player("st-s2", "S2", 98, 15),
+                player("st-s3", "S3", 111, 15),
+            ],
+            drawings: [
+                carry("st-weave", [84, 21], [82, 30], [86, 36], [96, 49], [106, 36], [116, 49], [122, 42.5], [119, 33]),
+                pass("st-pass", [117, 29], [104, 20]),
+                skate("st-s2-next", [94, 20], [88, 27]),
+            ],
+            equipment: [cone("st-cone1", 86, 42.5), cone("st-cone2", 96, 42.5), cone("st-cone3", 106, 42.5), cone("st-cone4", 116, 42.5), pucks("st-pucks", 78, 6)],
+            annotations: [note("st-note", "Eyes up", 88, 70, "#000000", 6)],
+            area: { kind: "zone-neutral" },
+        },
+    },
 ];

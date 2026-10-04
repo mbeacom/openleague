@@ -154,6 +154,14 @@ describe("Starter play ice areas", () => {
         "starter-goalie-breakaways": "half-left",
         "starter-goalie-warmup": "zone-left",
         "starter-goalie-crease-pattern": "custom",
+        "starter-skate-edges-crossovers": "zone-right",
+        "starter-skate-transitions": "zone-neutral",
+        "starter-skate-passing-lanes": undefined,
+        "starter-skate-wrist-shots": "zone-right",
+        "starter-skate-puck-protection": "custom",
+        "starter-skate-small-area-2v2": "zone-right",
+        "starter-skate-stops-starts": undefined,
+        "starter-skate-stickhandling": "zone-neutral",
     };
 
     it("gives the obvious set plays an explicit area and leaves full-ice drills unset", () => {
@@ -229,5 +237,10 @@ describe("Starter drill tags", () => {
             "starter-goalie-warmup",
         ]);
         expect(goalieDrills.every((p) => p.goalies === "required")).toBe(true);
+    });
+
+    it("ships eight skater fundamentals and 26 starters in all", () => {
+        expect(STARTER_PLAYS.filter((p) => p.id.startsWith("starter-skate-")).map((p) => p.focus)).toEqual(Array(8).fill("skaters"));
+        expect(STARTER_PLAYS).toHaveLength(26);
     });
 });
