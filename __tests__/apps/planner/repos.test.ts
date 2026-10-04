@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { IDBFactory } from "fake-indexeddb";
 import { createMemoryRepo } from "@/apps/planner/src/store/memory-repo";
-import { OPEN_TIMEOUT_MS, openIdbRepo } from "@/apps/planner/src/store/idb-repo";
+import { DB_VERSION, OPEN_TIMEOUT_MS, StorageBlockedError, openIdbRepo, upgradeDatabase } from "@/apps/planner/src/store/idb-repo";
 import type { PlannerRepo, StoredPlay, StoredSession } from "@/apps/planner/src/store/records";
 
 let dbSeq = 0;
@@ -121,7 +121,7 @@ describe("IndexedDB repo", () => {
         let notified = false;
         await openIdbRepo({ factory, name: "upgrade", onVersionChange: () => (notified = true) });
         await new Promise<void>((resolve, reject) => {
-            const request = factory.open("upgrade", 2);
+            const request = factory.open("upgrade", DB_VERSION + 1);
             request.onsuccess = () => {
                 request.result.close();
                 resolve();
@@ -140,6 +140,98 @@ describe("IndexedDB repo", () => {
         await opening;
         db.onclose?.(new Event("close"));
         expect(notified).toBe(true);
+    });
+});
+
+describe("IndexedDB schema version 2 (practice timing rows)", () => {
+    // A session as a planner built before practice timing stored it: drill rows only, no kind.
+    const v1Session: StoredSession = {
+        ...session("s1"),
+        rows: [{ id: "r1", playId: "p1", sequence: 0, duration: 10, instructions: "Skate", runsWithPrevious: false }],
+    };
+
+    /** Opens the database at version 1 exactly as a pre-timing build did, and leaves the connection open. */
+    function openV1(factory: IDBFactory, name: string): Promise<IDBDatabase> {
+        return new Promise((resolve, reject) => {
+            const request = factory.open(name, 1);
+            request.onupgradeneeded = (event) => upgradeDatabase(request.result, event.oldVersion);
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    function seed(db: IDBDatabase): Promise<void> {
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(["plays", "sessions", "meta"], "readwrite");
+            tx.objectStore("plays").put(play("p1", "s1"));
+            tx.objectStore("plays").put(play("lib"));
+            tx.objectStore("sessions").put(v1Session);
+            tx.objectStore("meta").put({ key: "starter-drills", value: true });
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+        });
+    }
+
+    function versionOf(factory: IDBFactory, name: string): Promise<number> {
+        return new Promise((resolve, reject) => {
+            const request = factory.open(name);
+            request.onsuccess = () => {
+                const { version } = request.result;
+                request.result.close();
+                resolve(version);
+            };
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    it("is version 2", () => {
+        expect(DB_VERSION).toBe(2);
+    });
+
+    it("opens a version 1 database at version 2 with every store, index and record intact", async () => {
+        const factory = new IDBFactory();
+        const v1 = await openV1(factory, "v1-upgrade");
+        await seed(v1);
+        v1.close();
+
+        const repo = await openIdbRepo({ factory, name: "v1-upgrade" });
+        const contents = await repo.read(async (tx) => ({
+            plays: await tx.allPlays(),
+            owned: await tx.sessionPlays("s1"),
+            sessions: await tx.allSessions(),
+            meta: await tx.getMeta("starter-drills"),
+        }));
+        repo.close();
+
+        expect(contents.plays.map((p) => p.id).sort()).toEqual(["lib", "p1"]);
+        expect(contents.owned.map((p) => p.id)).toEqual(["p1"]);
+        expect(contents.sessions).toEqual([v1Session]);
+        expect(contents.meta).toBe(true);
+        expect(await versionOf(factory, "v1-upgrade")).toBe(2);
+    });
+
+    it("makes a tab still open at version 1 close its connection before the upgrade, keeping its data", async () => {
+        const factory = new IDBFactory();
+        const v1 = await openV1(factory, "v1-open-tab");
+        await seed(v1);
+        // What a pre-timing build's openIdbRepo installs: close, then tell the app to reload.
+        const reload = vi.fn();
+        v1.onversionchange = () => {
+            v1.close();
+            reload();
+        };
+
+        const repo = await openIdbRepo({ factory, name: "v1-open-tab" });
+        expect(reload).toHaveBeenCalledTimes(1);
+        expect(await repo.read((tx) => tx.getSession("s1"))).toEqual(v1Session);
+        repo.close();
+    });
+
+    it("reports storage blocked when a version 1 connection won't close, so this tab asks for a reload", async () => {
+        const factory = new IDBFactory();
+        const v1 = await openV1(factory, "v1-holds-on");
+        await expect(openIdbRepo({ factory, name: "v1-holds-on" })).rejects.toBeInstanceOf(StorageBlockedError);
+        v1.close();
     });
 });
 

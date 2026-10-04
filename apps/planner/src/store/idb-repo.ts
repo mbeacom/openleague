@@ -6,11 +6,16 @@
  * - meta (keyPath key).
  * Every operation is one transaction over all three stores. Schema changes
  * add a case to upgradeDatabase and never drop data.
+ *
+ * Versions: 1 = the first release; 2 = practice timing rows (a row's playId
+ * may be null, block rows carry kind and label). Bumping the version is what
+ * makes a tab still running an older build close its connection and reload
+ * (onversionchange below) before this build writes rows it can't read.
  */
 import type { PlannerRepo, RepoTx, StoredPlay, StoredSession } from "./records";
 
 export const DB_NAME = "openleague-planner";
-export const DB_VERSION = 1;
+export const DB_VERSION = 2;
 const STORES = ["plays", "sessions", "meta"];
 
 export class StorageBlockedError extends Error {
@@ -33,6 +38,10 @@ export function upgradeDatabase(db: IDBDatabase, oldVersion: number): void {
         plays.createIndex("bySession", "sessionId", { unique: false });
         db.createObjectStore("sessions", { keyPath: "id" });
         db.createObjectStore("meta", { keyPath: "key" });
+    }
+    if (oldVersion < 2) {
+        // Practice timing: same stores and index; rows only gained optional fields
+        // (older rows read as drills), so there is nothing to migrate.
     }
 }
 
