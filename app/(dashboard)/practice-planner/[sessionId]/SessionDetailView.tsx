@@ -49,7 +49,8 @@ import { SessionTimeline } from "@/components/features/practice-planner/SessionT
 import { ExportPlanMenu } from "@/components/features/practice-planner/ExportPlanMenu";
 import { PRINT_DIAGRAM_SIZE, PrintDiagram } from "@/components/features/practice-planner/print/PrintDiagram";
 import { useSessionGoalies } from "@/components/features/practice-planner/useSessionGoalies";
-import type { PracticeSessionView, PracticeSessionViewPlay } from "@/types/practice-planner";
+import { SidebarPlayCard } from "@/components/features/practice-planner/SidebarPlayCard";
+import type { PracticeSessionView } from "@/types/practice-planner";
 import {
   SEGMENT_KIND_FIT_LABELS,
   groupStations,
@@ -450,6 +451,7 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
                     <SidebarPlayCard
                       key={sp.id}
                       sp={sp}
+                      drawn={drawnAt(index)}
                       index={index}
                       active={index === activePlayIndex}
                       onSelect={() => setActivePlayIndex(index)}
@@ -721,105 +723,5 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
         </DialogActions>
       </Dialog>
     </Box>
-  );
-}
-
-interface SidebarPlayCardProps {
-  sp: PracticeSessionViewPlay;
-  index: number;
-  active: boolean;
-  onSelect: () => void;
-}
-
-/** One drill in the sidebar's play sequence; standalone or inside a station block (2b). */
-function SidebarPlayCard({ sp, index, active, onSelect }: SidebarPlayCardProps) {
-  const { Image } = usePlannerPlatform();
-  return (
-    <Card
-      sx={{
-        border: "2px solid",
-        borderColor: active ? "primary.main" : "transparent",
-        bgcolor: active ? "action.hover" : "background.paper",
-        boxShadow: active ? 2 : 0,
-        transition: "all 0.15s ease",
-        "&:hover": {
-          borderColor: active ? "primary.main" : "primary.light",
-          bgcolor: "action.hover",
-        },
-      }}
-    >
-      <CardActionArea
-        onClick={onSelect}
-        aria-current={active ? "true" : undefined}
-        sx={{ "&.Mui-focusVisible": { outline: "2px solid", outlineColor: "primary.main", outlineOffset: -2 } }}
-      >
-      <CardContent sx={{ p: 1.5, "&:last-child": { pb: 1.5 } }}>
-        <Stack direction="row" alignItems="center" spacing={1.5}>
-          {/* Play number */}
-          <Box
-            sx={{
-              width: 28,
-              height: 28,
-              borderRadius: "50%",
-              bgcolor: active ? "primary.main" : "action.selected",
-              color: active ? "primary.contrastText" : "text.secondary",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              flexShrink: 0,
-              fontSize: "0.75rem",
-              fontWeight: 700,
-            }}
-          >
-            {index + 1}
-          </Box>
-
-          {/* Thumbnail */}
-          <Box
-            sx={{
-              width: 48,
-              height: 32,
-              borderRadius: 1,
-              bgcolor: "action.hover",
-              overflow: "hidden",
-              position: "relative",
-              flexShrink: 0,
-            }}
-          >
-            {sp.play.thumbnail ? (
-              <Image src={sp.play.thumbnail} alt="" fit="cover" />
-            ) : (
-              <Box
-                sx={{
-                  width: "100%",
-                  height: "100%",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <HockeyIcon sx={{ fontSize: 14, color: "text.disabled" }} />
-              </Box>
-            )}
-          </Box>
-
-          {/* Name & duration */}
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography
-              variant="body2"
-              fontWeight={600}
-              noWrap
-              sx={{ fontSize: "0.8rem" }}
-            >
-              {sp.play.name}
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              {sp.duration} min
-            </Typography>
-          </Box>
-        </Stack>
-      </CardContent>
-      </CardActionArea>
-    </Card>
   );
 }

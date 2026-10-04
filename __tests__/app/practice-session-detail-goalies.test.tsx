@@ -1,12 +1,18 @@
 /** Session detail (spec R6, R7): goalie messages, and goalie markers hidden at render time only. */
 import { describe, expect, it, vi } from "vitest";
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { renderWithPlanner } from "@/__tests__/helpers/planner";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import type { PlayData, PlayGoalies } from "@/types/practice-planner";
 
-const seen = vi.hoisted(() => ({ legends: [] as PlayData[], diagrams: [] as PlayData[], stations: [] as Array<Array<{ playData: PlayData | null }>> }));
+const seen = vi.hoisted(() => ({ legends: [] as PlayData[], diagrams: [] as PlayData[], thumbs: [] as PlayData[], stations: [] as Array<Array<{ playData: PlayData | null }>> }));
+vi.mock("@/lib/utils/canvas/thumbnail-generator", () => ({
+    generateThumbnail: (playData: PlayData) => {
+        seen.thumbs.push(playData);
+        return "data:image/png;base64,LIVE";
+    },
+}));
 vi.mock("@/components/features/practice-planner/StationMap", () => ({
     StationMap: ({ stations }: { stations: Array<{ playData: PlayData | null }> }) => {
         seen.stations.push(stations);
@@ -55,11 +61,21 @@ function renderView(s: ReturnType<typeof session>) {
     seen.legends.length = 0;
     seen.diagrams.length = 0;
     seen.stations.length = 0;
+    seen.thumbs.length = 0;
     renderWithPlanner(
         <ThemeProvider theme={createTheme()}>
             <SessionDetailView session={s} isAdmin={false} />
         </ThemeProvider>,
     );
+}
+
+/** The drill thumbnail in the sidebar's play sequence (not the main preview). */
+function sidebarThumb() {
+    const sequence = screen.getByText("Play Sequence").parentElement as HTMLElement;
+    // alt="" (decorative), so it has no img role to query by.
+    const img = within(sequence).getByRole("button", { name: /D-Zone/ }).querySelector("img");
+    expect(img).not.toBeNull();
+    return img as HTMLImageElement;
 }
 
 describe("SessionDetailView goalies", () => {
@@ -90,6 +106,21 @@ describe("SessionDetailView goalies", () => {
         const stations = seen.stations.at(-1) ?? [];
         expect(stations.map((st) => st.playData?.players.map((p) => p.role))).toEqual([["F"], ["F"]]);
         expect(G_BOARD.players).toHaveLength(2);
+    });
+
+    it("draws the sidebar thumbnail live, without the goalie, when it is hidden", () => {
+        renderView(session(0, "optional"));
+        const thumb = sidebarThumb();
+        expect(thumb).not.toHaveAttribute("src", "data:image/png;base64,AA==");
+        expect(thumb).toHaveAttribute("src", "data:image/png;base64,LIVE");
+        expect(seen.thumbs.at(-1)?.players.map((p) => p.role)).toEqual(["F"]);
+    });
+
+    it("keeps the stored sidebar thumbnail when goalies attend", () => {
+        renderView(session(1, "optional"));
+        const thumb = sidebarThumb();
+        expect(thumb).toHaveAttribute("src", "data:image/png;base64,AA==");
+        expect(seen.thumbs).toHaveLength(0);
     });
 
     it("says nothing about goalies when the count is not set", () => {
