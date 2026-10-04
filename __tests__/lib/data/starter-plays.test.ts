@@ -239,6 +239,24 @@ describe("Starter drill tags", () => {
         expect(goalieDrills.every((p) => p.goalies === "required")).toBe(true);
     });
 
+    it("never passes or shoots a goalie-drill puck through its own net mouth", () => {
+        // Goal lines x=11/189; the posts sit 3 ft either side of y=42.5.
+        const crossesMouth = (a: { x: number; y: number }, b: { x: number; y: number }, line: number) => {
+            if ((a.x - line) * (b.x - line) >= 0) return false;
+            const y = a.y + ((line - a.x) / (b.x - a.x)) * (b.y - a.y);
+            return y >= 39.5 && y <= 45.5;
+        };
+        for (const play of STARTER_PLAYS.filter((p) => p.focus === "goalies")) {
+            for (const d of play.playData.drawings.filter((d) => d.action === "pass" || d.action === "shot")) {
+                for (let i = 1; i < d.points.length; i++) {
+                    for (const line of [11, 189]) {
+                        expect(crossesMouth(d.points[i - 1], d.points[i], line), `${play.id} ${d.id}`).toBe(false);
+                    }
+                }
+            }
+        }
+    });
+
     it("ships eight skater fundamentals and 26 starters in all", () => {
         expect(STARTER_PLAYS.filter((p) => p.id.startsWith("starter-skate-")).map((p) => p.focus)).toEqual(Array(8).fill("skaters"));
         expect(STARTER_PLAYS).toHaveLength(26);

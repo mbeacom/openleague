@@ -270,7 +270,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
         id: "starter-point-shot-screen",
         name: "Point Shot with Screen",
         description:
-            "Simple offensive-zone set to generate traffic goals. The corner forward wins the puck and moves it to the point; the net-front forward establishes a screen at the top of the crease while the high slot forward crashes for tips and rebounds off the point shot.",
+            "Simple offensive-zone set to generate traffic goals. The corner forward wins the puck and moves it to the point; the net-front forward establishes a screen in front of the goalie while the high slot forward crashes for tips and rebounds off the point shot.",
         focus: "team",
         goalies: "required",
         playData: {
@@ -290,7 +290,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
             ],
             equipment: [
                 { id: "ps-pucks", kind: "puckPile", position: { x: 128, y: 45 }, rotation: 0 },
-                { id: "ps-net", kind: "net", position: { x: 189, y: 42.5 }, rotation: 0 },
+                rightNet("ps-net"),
             ],
             annotations: [note("ps-note", "Screen", 160, 60, "#000000", 6)],
             area: { kind: "zone-right" },
@@ -426,7 +426,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
             drawings: [
                 carry("pt-wrap", [11, 21], [5, 30], [5, 55], [12, 64]),
                 lateral("pt-g-push", [17, 44.5], [17, 50]),
-                shot("pt-wrap-shot", [13, 63], [13, 49]),
+                shot("pt-wrap-shot", [12, 56], [12.5, 48]),
                 pass("pt-pass-out", [7, 57], [32, 51.5]),
                 shot("pt-shot2", [32.5, 48], [23, 41.5]),
             ],
@@ -481,7 +481,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
                 pass("sc-pass", [68, 52], [68, 34]),
                 shot("sc-shot", [64, 30], [24, 40.5]),
                 skate("sc-screen-move", [36, 49], [36, 40.5]),
-                lateral("sc-g-look", [20, 49.5], [20, 55]),
+                lateral("sc-g-look", [20, 35.5], [20, 30]),
             ],
             equipment: [leftNet("sc-net"), pucks("sc-pucks", 72, 43)],
             annotations: [note("sc-note", "Look around", 20, 83, "#000000", 6)],
@@ -506,8 +506,8 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
             drawings: [
                 pass("ph-rim-pass", [75, 76.5], [40, 82], [12, 78], [4, 62], [4, 50]),
                 skate("ph-g-route", [12, 47], [5, 53]),
-                pass("ph-set-pass", [6, 50], [23.5, 19]),
-                pass("ph-wall-pass", [8, 40], [49, 11]),
+                pass("ph-set-pass", [6, 50], [7, 33]),
+                pass("ph-wall-pass", [6, 36], [10, 17], [18, 5], [48, 5]),
             ],
             equipment: [leftNet("ph-net"), pucks("ph-pucks", 86, 76)],
             annotations: [note("ph-note", "Set · Reverse · Wall", 24, 52, "#000000", 6)],
@@ -526,8 +526,8 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
             players: [
                 goalie("bk-g", 22, 42.5),
                 player("bk-f1", "F1", 92, 42.5),
-                player("bk-f2", "F2", 96, 28),
-                player("bk-f3", "F3", 96, 57),
+                player("bk-f2", "F2", 93, 28),
+                player("bk-f3", "F3", 93, 57),
             ],
             drawings: [
                 carry("bk-carry", [86, 42.5], [55, 40], [39, 38]),
