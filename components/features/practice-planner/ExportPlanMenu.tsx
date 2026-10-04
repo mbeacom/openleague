@@ -11,12 +11,13 @@
 import { useState } from "react";
 import { Alert, Button, ListItemIcon, ListItemText, Menu, MenuItem, Snackbar, type ButtonProps } from "@mui/material";
 import {
+    ArticleOutlined as WordIcon,
     FileDownloadOutlined as DownloadIcon,
     IosShareOutlined as ExportIcon,
     LinkOutlined as LinkIcon,
     OpenInNew as OpenIcon,
+    WebOutlined as HtmlIcon,
 } from "@mui/icons-material";
-import type { PlayData } from "@/types/practice-planner";
 import { formatDateTimeLocalInput, resolveTimeZone, sessionStart } from "@/lib/utils/date";
 import {
     LINK_TOO_LARGE_MESSAGE,
@@ -31,21 +32,11 @@ import {
 } from "@/lib/plan-document";
 import { usePlannerPlatform, type PlannerPlanLink } from "@/lib/planner-store";
 import { downloadBlob } from "./export/download";
+import type { ExportSession } from "./export/bench-sheet-model";
+import { ExportModuleLoadError, exportBenchSheet, type BenchSheetFormat } from "./export/export-bench-sheet";
 
-export interface ExportableSession {
-    title: string;
-    date: string;
-    duration: number;
-    startAt?: string | null;
-    venueTimezone?: string | null;
-    plays: Array<{
-        sequence: number;
-        duration: number;
-        instructions: string | null;
-        runsWithPrevious: boolean;
-        play: { name: string; description: string | null; playData: PlayData | null };
-    }>;
-}
+/** What the session page passes (a PracticeSessionView fits). Team and venue names feed the bench sheet exports. */
+export type ExportableSession = ExportSession;
 
 /** Local date and start come from sessionStart in the venue's zone when booked, else the viewer's. */
 export function buildPlanDocument(
@@ -107,11 +98,17 @@ interface ExportPlanMenuProps {
 
 export const LINK_COPIED_NOTICE = "Link copied. Paste it to open this plan in the planner.";
 export const OPENED_IN_HOSTED_NOTICE = "Opened OpenLeague in a new tab. Sign in there to save this plan to a team.";
+export const PREPARING_HTML_NOTICE = "Preparing the bench sheet…";
+export const PREPARING_DOCX_NOTICE = "Preparing the Word document…";
+export const DOCX_LOAD_FAILED_NOTICE =
+    "Couldn't load the Word export. Check your connection and try again, or download the bench sheet (HTML).";
+export const EXPORT_FAILED_NOTICE = "Couldn't create the file. Try again, or use Print bench sheet.";
 
 export function ExportPlanMenu({ session, size = "medium" }: ExportPlanMenuProps) {
     const { planGenerator, planLink, navigate } = usePlannerPlatform();
     const [anchor, setAnchor] = useState<HTMLElement | null>(null);
     const [notice, setNotice] = useState<Notice | null>(null);
+    const [exporting, setExporting] = useState<BenchSheetFormat | null>(null);
     const unreadable = unreadableDiagramNotice(session.plays.filter((sp) => sp.play.playData === null).length);
 
     const download = () => {
@@ -121,6 +118,23 @@ export function ExportPlanMenu({ session, size = "medium" }: ExportPlanMenuProps
         downloadBlob(new Blob([text], { type: "application/json" }), planFileName(session.title));
         const warnings = [unreadable, importProblemNotice(doc, text)].filter((text): text is string => text !== null);
         setNotice(warnings.length > 0 ? { severity: "warning", text: warnings.join(" ") } : null);
+    };
+
+    const exportSheet = async (format: BenchSheetFormat) => {
+        setAnchor(null);
+        if (exporting) return;
+        setExporting(format);
+        setNotice({ severity: "info", text: format === "html" ? PREPARING_HTML_NOTICE : PREPARING_DOCX_NOTICE });
+        try {
+            // The static planner's team is the placeholder "This device", not a name.
+            await exportBenchSheet(session, format, { omitTeam: planGenerator === "openleague-static" });
+            setNotice(null);
+        } catch (error) {
+            console.error("Bench sheet export failed:", error);
+            setNotice({ severity: "error", text: error instanceof ExportModuleLoadError ? DOCX_LOAD_FAILED_NOTICE : EXPORT_FAILED_NOTICE });
+        } finally {
+            setExporting(null);
+        }
     };
 
     const handOff = async (link: PlannerPlanLink) => {
@@ -183,6 +197,18 @@ export function ExportPlanMenu({ session, size = "medium" }: ExportPlanMenuProps
                         <DownloadIcon fontSize="small" />
                     </ListItemIcon>
                     <ListItemText>Download plan file</ListItemText>
+                </MenuItem>
+                <MenuItem onClick={() => void exportSheet("html")} disabled={exporting !== null}>
+                    <ListItemIcon>
+                        <HtmlIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText>Download bench sheet (HTML)</ListItemText>
+                </MenuItem>
+                <MenuItem onClick={() => void exportSheet("docx")} disabled={exporting !== null}>
+                    <ListItemIcon>
+                        <WordIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText>Download Word document (.docx)</ListItemText>
                 </MenuItem>
                 {planLink && (
                     <MenuItem onClick={() => void handOff(planLink)}>
