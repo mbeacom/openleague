@@ -22,7 +22,7 @@ Verified facts about the code:
 - 35 non-test files under `lib`, `components`, `app` and `apps/planner/src` read `sp.play.*` or `playId`.
 - `copySessionPlayScalars` (`lib/services/practice-session-drills.ts:330`) is the single copy point for session-play columns.
 - `PracticeSessionEditor.tsx` is 885 lines and `SessionDetailView.tsx` is 727, against a 900-line budget test.
-- Practice-plan shared and updated emails (`lib/email/templates.ts`) list session drills by name.
+- Practice-plan shared and updated emails (`lib/email/templates.ts`) show a drill count, not names.
 
 ## Goal
 
@@ -87,7 +87,7 @@ Existing rows become `drill`, `stays = false`, `rotateEveryMinutes = null` and `
   - A block with fewer than 2 rotating stations (rows with `stays = false`) can't rotate. The editor explains why, and save clears `rotateEveryMinutes`.
 - `stays` is meaningful only inside a rotating block. Elsewhere it is ignored and normalized to false.
 - In a rotating block every rotating station's `duration` is `M`, and normalization writes it. A **stays** station's `duration` is the block length.
-- Minutes per row: 1–120, as today.
+- Minutes per row: 1–300, as today.
 - Updates follow the existing rule: a missing field is unchanged, and an explicit `null` clears.
 
 ### R4. Timeline maths (pure, in `lib/utils/session-timeline.ts`)
@@ -183,7 +183,7 @@ If the gap is non-zero, the header adds "N min between blocks". HTML escapes eve
 
 ### R11. Emails and other readers
 
-Practice-plan shared and updated emails list block rows by label, with minutes. Every reader of `sp.play` narrows on `kind` first. Nothing may crash on a row without a drill.
+Practice-plan shared and updated emails count drill rows only and add one line listing the block rows by label and minutes (e.g. "Also planned: Warm-up · 8 min, Water break · 2 min"). Every reader of `sp.play` narrows on `kind` first. Nothing may crash on a row without a drill.
 
 ### R12. Templates
 
