@@ -224,15 +224,20 @@ export function ExportPlanMenu({ session, size = "medium" }: ExportPlanMenuProps
             {notice && (
                 <Snackbar
                     open
-                    // While an export runs its "Preparing…" notice stays up: no timer, no click-away.
+                    // While an export runs its "Preparing…" notice stays up: no timer, and no
+                    // close path (click-away, Escape, or the close button) until it finishes.
                     autoHideDuration={exporting ? null : 6000}
-                    onClose={(_event, reason) => {
-                        if (exporting && reason === "clickaway") return;
+                    onClose={() => {
+                        if (exporting) return;
                         setNotice(null);
                     }}
                     anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
                 >
-                    <Alert severity={notice.severity} variant="filled" onClose={() => setNotice(null)}>
+                    <Alert
+                        severity={notice.severity}
+                        variant="filled"
+                        onClose={exporting ? undefined : () => setNotice(null)}
+                    >
                         {notice.text}
                     </Alert>
                 </Snackbar>

@@ -143,6 +143,20 @@ describe("ExportPlanMenu bench sheet exports", () => {
         }
     });
 
+    it("offers no way to dismiss the preparing notice while the export runs", async () => {
+        let finish!: (blob: Blob) => void;
+        mockDocx.mockReturnValue(new Promise<Blob>((resolve) => (finish = resolve)));
+        renderWithPlanner(<ExportPlanMenu session={SESSION} />);
+        choose("Download Word document (.docx)");
+        expect(await screen.findByText(PREPARING_DOCX_NOTICE)).toBeInTheDocument();
+        await waitFor(() => expect(mockDocx).toHaveBeenCalled());
+        expect(screen.queryByRole("button", { name: /close/i })).not.toBeInTheDocument();
+        fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+        expect(screen.getByText(PREPARING_DOCX_NOTICE)).toBeInTheDocument();
+        finish(new Blob(["PK"]));
+        await waitFor(() => expect(downloads).toHaveLength(1));
+    });
+
     it("leaves a notice that replaced the preparing one when the export succeeds", async () => {
         vi.stubEnv("NEXT_PUBLIC_STATIC_PLANNER_URL", "https://planner.example/app/");
         Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: vi.fn().mockResolvedValue(undefined) } });
