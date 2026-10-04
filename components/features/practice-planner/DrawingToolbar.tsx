@@ -56,9 +56,12 @@ import {
     EQUIPMENT_LABELS,
     DEFAULT_END_FOR_ACTION,
 } from "@/lib/utils/canvas/notation";
-import { OptionGroup, OPTION_SX, TOUCH_TARGET_SX } from "./OptionGroup";
+import { OptionGroup, OPTION_SX, TOUCH_TARGET_SX, FOCUS_RING_SX } from "./OptionGroup";
 
 export { OPTION_SX, TOUCH_TARGET_SX };
+
+/** Tool and action buttons: 44px touch target plus the shared focus ring. */
+const TOOL_BUTTON_SX = { ...TOUCH_TARGET_SX, ...FOCUS_RING_SX } as const;
 
 /**
  * Props for the DrawingToolbar component
@@ -240,7 +243,11 @@ export function DrawingToolbar({
                     flexDirection: isMobile ? "column" : "row",
                     gap: 2,
                     padding: 2,
-                    backgroundColor: theme.palette.background.paper,
+                    // A token, not theme.palette.background.paper: under
+                    // cssVariables the JS palette always holds the LIGHT
+                    // literal (#FFFFFF), which painted a white box behind the
+                    // dark scheme's white icons.
+                    bgcolor: "background.paper",
                     borderRadius: 1,
                     boxShadow: 1,
                     flexWrap: "wrap",
@@ -260,32 +267,32 @@ export function DrawingToolbar({
                     }}
                 >
                     <Tooltip title="Select">
-                        <ToggleButton value="select" aria-label="select tool" sx={TOUCH_TARGET_SX}>
+                        <ToggleButton value="select" aria-label="select tool" sx={TOOL_BUTTON_SX}>
                             <SelectIcon />
                         </ToggleButton>
                     </Tooltip>
                     <Tooltip title="Add Player">
-                        <ToggleButton value="player" aria-label="player tool" sx={TOUCH_TARGET_SX}>
+                        <ToggleButton value="player" aria-label="player tool" sx={TOOL_BUTTON_SX}>
                             <PlayerIcon />
                         </ToggleButton>
                     </Tooltip>
                     <Tooltip title="Movement">
-                        <ToggleButton value="stroke" aria-label="movement tool" sx={TOUCH_TARGET_SX}>
+                        <ToggleButton value="stroke" aria-label="movement tool" sx={TOOL_BUTTON_SX}>
                             <MovementIcon />
                         </ToggleButton>
                     </Tooltip>
                     <Tooltip title="Equipment">
-                        <ToggleButton value="equipment" aria-label="equipment tool" sx={TOUCH_TARGET_SX}>
+                        <ToggleButton value="equipment" aria-label="equipment tool" sx={TOOL_BUTTON_SX}>
                             <EquipmentIcon />
                         </ToggleButton>
                     </Tooltip>
                     <Tooltip title="Add Text">
-                        <ToggleButton value="text" aria-label="text tool" sx={TOUCH_TARGET_SX}>
+                        <ToggleButton value="text" aria-label="text tool" sx={TOOL_BUTTON_SX}>
                             <TextIcon />
                         </ToggleButton>
                     </Tooltip>
                     <Tooltip title="Eraser">
-                        <ToggleButton value="eraser" aria-label="eraser tool" sx={TOUCH_TARGET_SX}>
+                        <ToggleButton value="eraser" aria-label="eraser tool" sx={TOOL_BUTTON_SX}>
                             <EraserIcon />
                         </ToggleButton>
                     </Tooltip>
@@ -298,8 +305,12 @@ export function DrawingToolbar({
                         onClick={handleColorPickerClick}
                         aria-label="color picker"
                         sx={{
-                            ...TOUCH_TARGET_SX,
-                            border: `2px solid ${selectedColor}`,
+                            ...TOOL_BUTTON_SX,
+                            // The swatch fill alone can vanish into the paper
+                            // (#212121 on dark, #FFFFFF on light); the ring
+                            // keeps the control's edge at >=3:1 in both.
+                            border: "2px solid",
+                            borderColor: "text.secondary",
                             backgroundColor: selectedColor,
                             "&:hover": {
                                 backgroundColor: selectedColor,
@@ -325,7 +336,7 @@ export function DrawingToolbar({
                                 disabled={!canUndo}
                                 aria-label="undo"
                                 size={isMobile ? "small" : "medium"}
-                                sx={TOUCH_TARGET_SX}
+                                sx={TOOL_BUTTON_SX}
                             >
                                 <UndoIcon />
                             </IconButton>
@@ -338,7 +349,7 @@ export function DrawingToolbar({
                                 disabled={!canRedo}
                                 aria-label="redo"
                                 size={isMobile ? "small" : "medium"}
-                                sx={TOUCH_TARGET_SX}
+                                sx={TOOL_BUTTON_SX}
                             >
                                 <RedoIcon />
                             </IconButton>
@@ -354,7 +365,7 @@ export function DrawingToolbar({
                         aria-label="clear canvas"
                         color="error"
                         size={isMobile ? "small" : "medium"}
-                        sx={TOUCH_TARGET_SX}
+                        sx={TOOL_BUTTON_SX}
                     >
                         <ClearIcon />
                     </IconButton>
@@ -422,10 +433,8 @@ export function DrawingToolbar({
                                     width: 40,
                                     height: 40,
                                     backgroundColor: color,
-                                    border:
-                                        color === selectedColor
-                                            ? "3px solid #000"
-                                            : "1px solid #ccc",
+                                    border: color === selectedColor ? "3px solid" : "1px solid",
+                                    borderColor: color === selectedColor ? "text.primary" : "text.secondary",
                                     "&:hover": {
                                         backgroundColor: color,
                                         opacity: 0.8,

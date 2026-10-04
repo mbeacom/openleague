@@ -9,7 +9,19 @@ import { ToggleButtonGroup, ToggleButton, Tooltip } from "@mui/material";
  * value/onChange to its buttons through context, not by cloning children.
  */
 export const TOUCH_TARGET_SX = { minWidth: 44, minHeight: 44 } as const;
-export const OPTION_SX = { ...TOUCH_TARGET_SX, px: 1.25, fontWeight: 800 } as const;
+
+/**
+ * Keyboard focus ring for the editor chrome. MUI's ToggleButton/IconButton only
+ * pulse a ripple on focus-visible, which is faint on the dark paper. The ring is
+ * drawn inset so neighbours in a ToggleButtonGroup don't clip it, and uses a
+ * palette token so it resolves per color scheme (#0D47A1 on light paper,
+ * #64B5F6 on dark).
+ */
+export const FOCUS_RING_SX = {
+    "&.Mui-focusVisible": { outline: "2px solid", outlineColor: "primary.main", outlineOffset: -2 },
+} as const;
+
+export const OPTION_SX = { ...TOUCH_TARGET_SX, ...FOCUS_RING_SX, px: 1.25, fontWeight: 800 } as const;
 
 export function OptionGroup<T extends string>({ label, value, options, labels, onChange }: {
     label: string;
