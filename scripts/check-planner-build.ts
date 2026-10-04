@@ -39,7 +39,7 @@ const PROCESS_ENV = /(\.\s*)?\bprocess\s*(\?\.\s*env\b|\.\s*env\b|(\?\.)?\s*\[\s
 const TYPEOF_PROCESS = /\btypeof\s+process\b/;
 
 /** An if condition that proves `process` exists: `!== "undefined"`, `!= "undefined"`, minified `<"u"`, or `=== "object"`. */
-const PROCESS_EXISTS = /\btypeof\s+process\s*(?:!==?\s*["']undefined["']|<\s*["']u["']|===?\s*["']object["'])/;
+const PROCESS_EXISTS = /^typeof\s+process\s*(?:!==?\s*["']undefined["']|<\s*["']u["']|===?\s*["']object["'])$/;
 
 /** The `{` of the innermost block or object literal still open at `index`, or -1. Strings aren't parsed. */
 function enclosingBrace(text: string, index: number): number {
@@ -56,7 +56,7 @@ function enclosingBrace(text: string, index: number): number {
 
 /**
  * True when the `{` at `brace` opens the block of `if (cond)` and `cond` proves
- * `process` exists with no `||` to escape it. Bundlers keep guards like
+ * `process` exists in its first `&&` operand, with no way around it. Bundlers keep guards like
  * `if(typeof process<"u"){…process.env…}`. Deliberately strict: only that
  * block's own statements count, never an `else` block, a nested block, function
  * or object literal, or anything after the closing `}`.
@@ -79,8 +79,11 @@ function opensProcessGuardedIf(text: string, brace: number): boolean {
     let keyword = open - 1;
     while (keyword >= 0 && /\s/.test(text[keyword])) keyword--;
     if (text.slice(keyword - 1, keyword + 1) !== "if" || /[\w$]/.test(text[keyword - 2] ?? "")) return false;
-    const condition = text.slice(open + 1, close);
-    return PROCESS_EXISTS.test(condition) && !condition.includes("||");
+    let condition = text.slice(open + 1, close).trim();
+    if (condition.startsWith("(") && condition.endsWith(")")) condition = condition.slice(1, -1).trim();
+    // A pure `&&` chain whose first operand is the check: no `|`, `?:`, comma or negation to escape it.
+    if (/[|?,]/.test(condition) || condition.startsWith("!")) return false;
+    return PROCESS_EXISTS.test(condition.split("&&")[0].trim());
 }
 
 /**

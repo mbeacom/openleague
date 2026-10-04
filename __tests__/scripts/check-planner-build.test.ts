@@ -110,6 +110,8 @@ describe("unguardedProcessEnvCount", () => {
         expect(unguardedProcessEnvCount('if (typeof process !== "undefined") { setup(); const a = process.env.A; }')).toBe(0);
         expect(unguardedProcessEnvCount("if(typeof process!='undefined'){x=1,y=process.env.A}")).toBe(0);
         expect(unguardedProcessEnvCount('if(typeof process==="object"){process.env.A}')).toBe(0);
+        expect(unguardedProcessEnvCount('if(typeof process<"u"&&x){process.env.A}')).toBe(0);
+        expect(unguardedProcessEnvCount('if(x){}else if (typeof process!=="undefined"){process.env.A}')).toBe(0);
     });
 
     it("stays strict about everything else an if touches", () => {
@@ -120,6 +122,11 @@ describe("unguardedProcessEnvCount", () => {
         expect(unguardedProcessEnvCount('if(typeof process<"u"||y){process.env.A}')).toBe(1);
         expect(unguardedProcessEnvCount('if(typeof process==="undefined"){process.env.A}')).toBe(1);
         expect(unguardedProcessEnvCount('if(typeof process<"u"){a()}process.env.B')).toBe(1);
+        expect(unguardedProcessEnvCount('if(!(typeof process!=="undefined")){process.env.A}')).toBe(1);
+        expect(unguardedProcessEnvCount('if(y?0:typeof process<"u"){process.env.A}')).toBe(1);
+        expect(unguardedProcessEnvCount('if(f(typeof process<"u")){process.env.A}')).toBe(1);
+        expect(unguardedProcessEnvCount('if(a,typeof process<"u"){process.env.A}')).toBe(1);
+        expect(unguardedProcessEnvCount('if(typeof process<"u"|y){process.env.A}')).toBe(1);
         expect(unguardedProcessEnvCount('elif(typeof process<"u"){process.env.A}')).toBe(1);
     });
 });
