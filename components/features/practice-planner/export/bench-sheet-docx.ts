@@ -77,7 +77,7 @@ function timeline(model: BenchSheetModel): Array<Paragraph | Table> {
                                   new Paragraph({ children: textRuns(row.label, { bold: true }) }),
                                   ...row.stations.map((station) => new Paragraph({ children: textRuns(`• ${station}`) })),
                               ]
-                            : [new Paragraph({ children: textRuns(row.label) })],
+                            : [new Paragraph({ children: textRuns(row.kind === "block" && row.note ? `${row.label} · ${row.note}` : row.label) })],
                     ),
                 ],
             }),
@@ -134,7 +134,7 @@ function drills(model: BenchSheetModel): Paragraph[] {
 
 function benchSheetDocument(model: BenchSheetModel): Document {
     const body =
-        model.drills.length === 0
+        model.timeline.length === 0
             ? [...header(model), new Paragraph({ children: textRuns(NO_DRILLS_TEXT, { bold: true }) })]
             : [...header(model), ...timeline(model), ...legend(model), ...drills(model)];
     return new Document({

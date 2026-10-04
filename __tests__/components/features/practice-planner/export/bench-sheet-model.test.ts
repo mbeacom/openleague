@@ -4,6 +4,7 @@ import {
     buildBenchSheetModel,
     type BenchSheetRenderers,
     type ExportSession,
+    type ExportSessionPlay,
 } from "@/components/features/practice-planner/export/bench-sheet-model";
 import { DIAGRAM_UNAVAILABLE_TEXT, NO_DRILLS_TEXT } from "@/components/features/practice-planner/export/labels";
 import { NO_DRILLS_MESSAGE } from "@/components/features/practice-planner/print/BenchSheet";
@@ -11,7 +12,7 @@ import { DIAGRAM_UNAVAILABLE } from "@/components/features/practice-planner/prin
 import { buildLegend } from "@/lib/utils/canvas/legend";
 import { formatClockTime, formatLongDate } from "@/lib/utils/date";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
-import type { PlayData } from "@/types/practice-planner";
+import type { BlockKind, PlayData } from "@/types/practice-planner";
 
 const pass = (id: string) => ({
     id,
@@ -30,7 +31,7 @@ function play(
     duration: number,
     runsWithPrevious = false,
     extra: { instructions?: string | null; description?: string | null; playData?: PlayData | null } = {},
-): ExportSession["plays"][number] {
+): ExportSessionPlay {
     return {
         sequence,
         duration,
@@ -199,5 +200,40 @@ describe("goalie markers (spec R7)", () => {
     it("never touches the stored diagram", () => {
         drawn(0);
         expect(goalieBoard.players).toHaveLength(2);
+    });
+});
+
+describe("buildBenchSheetModel: block rows and the gap", () => {
+    const blockRow = (kind: BlockKind, sequence: number, duration: number, label: string | null = null, instructions: string | null = null) =>
+        ({ kind, sequence, duration, label, instructions, runsWithPrevious: false });
+    const WITH_BLOCKS: ExportSession = {
+        ...UNBOOKED,
+        transitionMinutes: 2,
+        plays: [
+            blockRow("warmup", 0, 8, null, "Easy laps"),
+            play("Breakout", 1, 10, false, { playData: withPass("a") }),
+            blockRow("break", 2, 2, "Water"),
+            play("Shooting", 3, 15, false, { playData: withPass("b") }),
+        ],
+    };
+
+    it("lists blocks on the timeline by label and note, with the gap in the start times", () => {
+        const model = buildBenchSheetModel(WITH_BLOCKS, renderers());
+        const start = new Date(WITH_BLOCKS.date);
+        const at = (minutes: number) => formatClockTime(new Date(start.getTime() + minutes * 60_000), undefined, false);
+        expect(model.timeline).toEqual([
+            { kind: "block", start: at(0), minutes: 8, label: "Warm-up", note: "Easy laps", stations: null },
+            { start: at(10), minutes: 10, label: "Breakout", stations: null },
+            { kind: "block", start: at(22), minutes: 2, label: "Water", note: null, stations: null },
+            { start: at(26), minutes: 15, label: "Shooting", stations: null },
+        ]);
+        expect(model.planned).toBe("Planned 41 of 60 min");
+    });
+
+    it("numbers and draws drills only", () => {
+        const model = buildBenchSheetModel(WITH_BLOCKS, renderers());
+        expect(model.drills.map((d) => [d.number, d.name])).toEqual([[1, "Breakout"], [2, "Shooting"]]);
+        // Both drills draw one pass: one legend entry, from the drills alone.
+        expect(model.legend).toEqual(buildLegend(withPass("x")).map((entry) => ({ label: entry.label, image: "data:image/png;base64,SWAT" })));
     });
 });

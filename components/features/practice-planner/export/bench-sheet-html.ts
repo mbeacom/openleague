@@ -102,7 +102,9 @@ function timeline(model: BenchSheetModel): Trusted {
     const rows = model.timeline.map(
         (row) =>
             html`<tr><td class="time">${row.start}</td><td>${row.minutes}</td><td>${
-                row.stations ? html`<strong>${row.label}</strong><ul>${row.stations.map((station) => html`<li>${station}</li>`)}</ul>` : row.label
+                row.stations
+                    ? html`<strong>${row.label}</strong><ul>${row.stations.map((station) => html`<li>${station}</li>`)}</ul>`
+                    : html`${row.label}${row.kind === "block" && row.note ? html` · ${row.note}` : null}`
             }</td></tr>
 `,
     );
@@ -152,7 +154,7 @@ ${pages}</section>`;
 
 export function renderBenchSheetHtml(model: BenchSheetModel): string {
     const body =
-        model.drills.length === 0
+        model.timeline.length === 0
             ? html`<p class="empty">${NO_DRILLS_TEXT}</p>`
             : html`${timeline(model)}
 ${legend(model)}

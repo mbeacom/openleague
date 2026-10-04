@@ -239,7 +239,7 @@ export interface PracticeSessionData {
     title: string;
     date: Date;
     duration: number; // minutes
-    plays: PlayInSession[];
+    plays: SessionItem[];
     isShared: boolean;
     /** Goalies expected at this practice; null or absent = not set (spec R6, R7). */
     goaliesAttending?: number | null;
@@ -314,7 +314,7 @@ export interface PracticeSessionView {
     goaliesAttending?: number | null;
     /** Minutes between blocks (0–5); absent reads as 0. */
     transitionMinutes?: number;
-    plays: PracticeSessionViewPlay[];
+    plays: SessionRow[];
 }
 
 /**

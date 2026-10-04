@@ -9,6 +9,7 @@ import {
   type PracticeSessionSaveResult,
 } from "@/components/features/practice-planner/PracticeSessionEditor";
 import { createPracticeSession } from "@/lib/actions/practice-sessions";
+import { drillRows, toDrillRowInput } from "@/lib/utils/session-rows";
 import type { VenueBookingOptions } from "../venue-booking-options";
 
 interface PracticeSessionEditorWrapperProps {
@@ -31,14 +32,8 @@ export function PracticeSessionEditorWrapper({
         duration: session.duration,
         goaliesAttending: session.goaliesAttending ?? null,
         teamId,
-        plays: session.plays.map((play) => ({
-          playId: play.playId,
-          clientKey: play.id,
-          sequence: play.sequence,
-          runsWithPrevious: play.runsWithPrevious,
-          duration: play.duration,
-          instructions: play.instructions || "",
-        })),
+        // The session actions don't take block rows yet, so a save carries the drill rows.
+        plays: drillRows(session.plays).map(toDrillRowInput),
         reservationId: session.reservationId ?? undefined,
         // Optional venue booking (006, FR-019); omitted fields mean unbooked.
         venueId: session.venueId || undefined,

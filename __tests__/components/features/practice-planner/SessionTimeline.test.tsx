@@ -98,3 +98,36 @@ describe("SessionTimeline (print)", () => {
         expect(screen.getByText("Planned 25 of 60 min")).toBeInTheDocument();
     });
 });
+
+describe("SessionTimeline: block rows and the gap between blocks", () => {
+    const ROWS = [
+        { id: "row-w", sequence: 0, duration: 8, runsWithPrevious: false, kind: "warmup" as const, label: null, instructions: "Easy laps" },
+        play("Breakout", 1, 15),
+        { id: "row-c", sequence: 2, duration: 5, runsWithPrevious: false, kind: "cooldown" as const, label: "Stretch", instructions: null },
+    ];
+
+    it("shows a block by its label and note, never as a link, and folds the gap into start times", () => {
+        render(
+            <ThemeProvider theme={createTheme()}>
+                <SessionTimeline plays={ROWS} sessionStart={START} timeZone="America/New_York" showZone durationMinutes={60} transitionMinutes={2} onSelectPlay={vi.fn()} />
+            </ThemeProvider>,
+        );
+        const [warmup, breakout, cooldown] = bodyRows();
+        expect(within(warmup).getByText("Warm-up")).toBeInTheDocument();
+        expect(within(warmup).getByText(/Easy laps/)).toBeInTheDocument();
+        expect(within(warmup).queryByRole("button")).toBeNull();
+        expect(within(breakout).getByText("6:10 PM EDT")).toBeInTheDocument();
+        expect(within(breakout).getByRole("button", { name: "Breakout" })).toBeInTheDocument();
+        expect(within(cooldown).getByText("6:27 PM EDT")).toBeInTheDocument();
+        expect(within(cooldown).getByText("Stretch")).toBeInTheDocument();
+        expect(screen.getByText("Planned 32 of 60 min")).toBeInTheDocument();
+    });
+
+    it("prints a block as plain text", () => {
+        const html = renderToStaticMarkup(
+            <SessionTimeline variant="print" plays={ROWS} sessionStart={START} timeZone="America/New_York" showZone durationMinutes={60} transitionMinutes={2} />,
+        );
+        expect(html).toContain("Warm-up · Easy laps");
+        expect(html).toContain("Planned 32 of 60 min");
+    });
+});

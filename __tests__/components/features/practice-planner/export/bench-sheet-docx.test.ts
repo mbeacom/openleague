@@ -127,3 +127,13 @@ describe("renderBenchSheetDocx", () => {
         for (const statement of modelImports) expect(statement).toMatch(/^import type\b/);
     });
 });
+
+describe("renderBenchSheetDocx: block rows", () => {
+    it("writes a block as its label and note in the timeline", async () => {
+        const xml = await documentXml({
+            ...MODEL,
+            timeline: [{ kind: "block", start: "5:50 PM", minutes: 8, label: "Warm-up", note: "Easy laps", stations: null }, ...MODEL.timeline],
+        });
+        expect(xml).toContain("Warm-up · Easy laps");
+    });
+});

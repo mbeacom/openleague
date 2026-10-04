@@ -16,6 +16,7 @@ import {
 } from "@/lib/utils/drill-tags";
 import { PLAY_FOCUS, PLAY_GOALIES, type PlayData } from "@/types/practice-planner";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
+import { isDrillRow } from "@/lib/utils/session-rows";
 
 const BOARD: PlayData = {
     ...createEmptyPlayData(),
@@ -115,5 +116,17 @@ describe("goalieDemand", () => {
         expect(goalieMarkerCount(two)).toBe(2);
         expect(goalieDemand({ goalies: "required", playData: two })).toBe(2);
         expect(goalieDemand({ goalies: "required", playData: null })).toBe(1);
+    });
+});
+
+describe("sessionForDisplay with block rows", () => {
+    it("passes block rows through untouched and still hides markers on drills", () => {
+        const breakRow = { id: "b", kind: "break" as const, label: null, sequence: 1, duration: 2, instructions: null, runsWithPrevious: false };
+        const session = { goaliesAttending: 0, plays: [{ kind: "drill" as const, play: { goalies: "optional" as const, playData: BOARD } }, breakRow] };
+        const shown = sessionForDisplay(session);
+        expect(shown.plays[1]).toBe(breakRow);
+        const [drill] = shown.plays;
+        if (!isDrillRow(drill)) throw new Error("expected a drill row");
+        expect(drill.play.playData?.players).toHaveLength(1);
     });
 });

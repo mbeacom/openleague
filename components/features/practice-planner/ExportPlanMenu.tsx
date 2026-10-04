@@ -31,6 +31,7 @@ import {
     type PlanGenerator,
 } from "@/lib/plan-document";
 import { usePlannerPlatform, type PlannerPlanLink } from "@/lib/planner-store";
+import { drillRows } from "@/lib/utils/session-rows";
 import { downloadBlob } from "./export/download";
 import type { ExportSession } from "./export/bench-sheet-model";
 import { ExportModuleLoadError, exportBenchSheet, type BenchSheetFormat } from "./export/export-bench-sheet";
@@ -53,7 +54,8 @@ export function buildPlanDocument(
             date: date ?? null,
             startTime: startTime ?? null,
             goaliesAttending: session.goaliesAttending ?? null,
-            drills: session.plays.map((sp) => ({
+            // The plan document has no block entries yet, so a plan carries the drill rows.
+            drills: drillRows(session.plays).map((sp) => ({
                 sequence: sp.sequence,
                 duration: sp.duration,
                 runsWithPrevious: sp.runsWithPrevious,
@@ -112,7 +114,7 @@ export function ExportPlanMenu({ session, size = "medium" }: ExportPlanMenuProps
     const [anchor, setAnchor] = useState<HTMLElement | null>(null);
     const [notice, setNotice] = useState<Notice | null>(null);
     const [exporting, setExporting] = useState<BenchSheetFormat | null>(null);
-    const unreadable = unreadableDiagramNotice(session.plays.filter((sp) => sp.play.playData === null).length);
+    const unreadable = unreadableDiagramNotice(drillRows(session.plays).filter((sp) => sp.play.playData === null).length);
 
     const download = () => {
         setAnchor(null);

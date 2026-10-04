@@ -177,3 +177,21 @@ describe("renderBenchSheetHtml against hostile plans", () => {
         expect(html).not.toMatch(/<script/i);
     });
 });
+
+describe("renderBenchSheetHtml: block rows", () => {
+    it("prints a block as its label and note on one line, escaped", () => {
+        const doc = parse(renderBenchSheetHtml({
+            ...MODEL,
+            timeline: [{ kind: "block", start: "5:50 PM", minutes: 8, label: "Warm-up <fast>", note: "Laps & stretch", stations: null }, ...MODEL.timeline],
+        }));
+        const first = doc.querySelectorAll("tbody tr")[0];
+        expect(first.textContent).toContain("Warm-up <fast> · Laps & stretch");
+        expect(first.querySelector("ul")).toBeNull();
+    });
+
+    it("prints the timeline for a practice with only blocks", () => {
+        const doc = parse(renderBenchSheetHtml({ ...MODEL, legend: [], drills: [], timeline: [{ kind: "block", start: "6:00 PM", minutes: 5, label: "Cool-down", note: null, stations: null }] }));
+        expect(doc.querySelector(".empty")).toBeNull();
+        expect(doc.querySelector("table")?.textContent).toContain("Cool-down");
+    });
+});

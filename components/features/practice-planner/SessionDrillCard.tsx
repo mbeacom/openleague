@@ -35,6 +35,7 @@ import { usePlannerPlatform } from "@/lib/planner-store";
 import { VALIDATION_CONSTRAINTS, type PlayInSession } from "@/types/practice-planner";
 import { MAX_STATIONS_PER_GROUP } from "@/lib/utils/session-timeline";
 import { needsGoalie } from "@/lib/utils/drill-tags";
+import type { RowEdit } from "@/lib/utils/session-rows";
 import { GoalieBadge } from "./GoalieBadge";
 
 /** Hidden from sight but read by screen readers (the standard clip pattern). */
@@ -82,7 +83,7 @@ export interface SessionDrillCardProps {
     isEditing: boolean;
     onDelete: (playId: string) => void;
     onEdit: (playId: string) => void;
-    onUpdate: (playId: string, updates: Partial<PlayInSession>) => void;
+    onUpdate: (playId: string, edit: RowEdit) => void;
     onCancelEdit: () => void;
     onMoveUp: (index: number) => void;
     onMoveDown: (index: number) => void;

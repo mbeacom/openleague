@@ -14,6 +14,7 @@ import {
   sharePracticeSession,
 } from "@/lib/actions/practice-sessions";
 import type { PracticeSessionData } from "@/types/practice-planner";
+import { drillRows, toDrillRowInput } from "@/lib/utils/session-rows";
 import type { VenueBookingOptions } from "../../venue-booking-options";
 
 interface EditSessionWrapperProps {
@@ -42,14 +43,8 @@ export function EditSessionWrapper({
         // Absent = unchanged: the editor may not set it; only an explicit null clears.
         ...(session.goaliesAttending !== undefined && { goaliesAttending: session.goaliesAttending }),
         teamId,
-        plays: session.plays.map((play) => ({
-          playId: play.playId,
-          clientKey: play.id,
-          sequence: play.sequence,
-          runsWithPrevious: play.runsWithPrevious,
-          duration: play.duration,
-          instructions: play.instructions || "",
-        })),
+        // The session actions don't take block rows yet, so a save carries the drill rows.
+        plays: drillRows(session.plays).map(toDrillRowInput),
         reservationId: session.reservationId ?? undefined,
         // Optional venue booking (006, FR-019); the attachment is replaced
         // wholesale — omitting venueId detaches the practice.

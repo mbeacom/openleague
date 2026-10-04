@@ -13,6 +13,7 @@ import { usePlannerPlatform } from "@/lib/planner-store";
 import { LOCAL_TEAM_ID } from "../config";
 import { staticRoutes } from "../routes";
 import type { LocalPlannerStore, LocalSessionSave } from "../store/types";
+import { drillRows, toDrillRowInput } from "@/lib/utils/session-rows";
 import { LoadingScreen, MissingScreen } from "./StatusScreens";
 import { useStoreResult } from "./useStoreResult";
 
@@ -23,14 +24,8 @@ export function toLocalSessionSave(session: PracticeSessionSubmitData): LocalSes
         duration: session.duration,
         // Absent = unchanged (as EditSessionWrapper): an editor without the field never clears a stored count.
         ...(session.goaliesAttending !== undefined && { goaliesAttending: session.goaliesAttending }),
-        plays: session.plays.map((play) => ({
-            playId: play.playId,
-            clientKey: play.id,
-            sequence: play.sequence,
-            runsWithPrevious: play.runsWithPrevious,
-            duration: play.duration,
-            instructions: play.instructions || "",
-        })),
+        // The local store doesn't take block rows yet, so a save carries the drill rows.
+        plays: drillRows(session.plays).map(toDrillRowInput),
     };
 }
 

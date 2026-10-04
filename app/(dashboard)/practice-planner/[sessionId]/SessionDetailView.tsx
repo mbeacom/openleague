@@ -59,6 +59,7 @@ import {
   stationWarnings,
 } from "@/lib/utils/session-timeline";
 import { sessionStart, sessionTimeZone } from "@/lib/utils/date";
+import { drillRows } from "@/lib/utils/session-rows";
 import { useClockText } from "@/lib/hooks/useClockText";
 import { usePlannerPlatform, usePlannerStore } from "@/lib/planner-store";
 
@@ -81,6 +82,9 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
   const [isSharing, setIsSharing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isShared, setIsShared] = useState(session.isShared);
+  // The play sequence, the viewer and the counts are drills; blocks show on the timeline only (spec R9).
+  const drills = useMemo(() => drillRows(session.plays), [session.plays]);
+  const gap = session.transitionMinutes ?? 0;
 
   const handleDelete = useCallback(async () => {
     setIsDeleting(true);
@@ -126,11 +130,11 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
   }, []);
 
   const handleNextPlay = useCallback(() => {
-    setActivePlayIndex((prev) => Math.min(session.plays.length - 1, prev + 1));
-  }, [session.plays.length]);
+    setActivePlayIndex((prev) => Math.min(drills.length - 1, prev + 1));
+  }, [drills.length]);
 
   // Station blocks run at the same time, so time allocation is wall time (2b).
-  const totalPlayTime = sessionWallMinutes(session.plays);
+  const totalPlayTime = sessionWallMinutes(session.plays, gap);
   // A zero-minute session (bad stored data) reads as full, not NaN%.
   const durationPercent =
     session.duration > 0 ? Math.min((totalPlayTime / session.duration) * 100, 100) : 100;
@@ -138,13 +142,15 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
   const start = sessionStart(session);
   const { timeZone, showZone } = sessionTimeZone(session);
   const clock = useClockText(timeZone, showZone);
-  const activePlay = session.plays[activePlayIndex] ?? null;
+  const activePlay = drills[activePlayIndex] ?? null;
   const { shown, messages: goalieMessages } = useSessionGoalies(session);
   // The diagram as drawn for this session (spec R7); the stored play is never changed.
-  const drawnAt = (index: number) => shown.plays[index]?.play.playData ?? session.plays[index]?.play.playData ?? null;
+  // The display copy keeps the row order, so its drills line up with `drills`.
+  const shownDrills = useMemo(() => drillRows(shown.plays), [shown]);
+  const drawnAt = (index: number) => shownDrills[index]?.play.playData ?? drills[index]?.play.playData ?? null;
   const activeDrawn = activePlay ? drawnAt(activePlayIndex) : null;
   const goaliesHidden = Boolean(activePlay && activeDrawn !== activePlay.play.playData);
-  const groups = useMemo(() => groupStations(session.plays), [session.plays]);
+  const groups = useMemo(() => groupStations(drills), [drills]);
   const activeGroup = activePlay
     ? groups.find((group) => group.stations.includes(activePlay)) ?? null
     : null;
@@ -153,10 +159,10 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
       activeGroup && activeGroup.stations.length > 1
         ? activeGroup.stations.map((sp) => ({
             name: sp.play.name,
-            playData: shown.plays[session.plays.indexOf(sp)]?.play.playData ?? sp.play.playData,
+            playData: shownDrills[drills.indexOf(sp)]?.play.playData ?? sp.play.playData,
           }))
         : null,
-    [activeGroup, shown, session.plays]
+    [activeGroup, shownDrills, drills]
   );
   // Advisory fit check against the booked segment's kind (2b); unreadable drills are skipped.
   const fitLabel = session.segmentKind ? SEGMENT_KIND_FIT_LABELS[session.segmentKind] : null;
@@ -164,11 +170,11 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
     () =>
       stationWarnings(
         groupStations(
-          session.plays.map((sp) => ({ ...sp, area: sp.play.playData ? sp.play.playData.area : null }))
+          drills.map((sp) => ({ ...sp, area: sp.play.playData ? sp.play.playData.area : null }))
         ),
         session.segmentKind ?? null
       ).tooBig.length,
-    [session.plays, session.segmentKind]
+    [drills, session.segmentKind]
   );
 
   return (
@@ -254,7 +260,7 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
               <Stack direction="row" alignItems="center" spacing={0.5}>
                 <HockeyIcon sx={{ fontSize: 16 }} />
                 <Typography variant="body2">
-                  {session.plays.length} play{session.plays.length !== 1 ? "s" : ""}
+                  {drills.length} play{drills.length !== 1 ? "s" : ""}
                 </Typography>
               </Stack>
               <Stack direction="row" alignItems="center" spacing={0.5}>
@@ -393,16 +399,15 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
             timeZone={timeZone}
             showZone={showZone}
             durationMinutes={session.duration}
+            transitionMinutes={gap}
             activePlayId={activePlay?.id}
-            onSelectPlay={(id) =>
-              setActivePlayIndex(Math.max(0, session.plays.findIndex((sp) => sp.id === id)))
-            }
+            onSelectPlay={(id) => setActivePlayIndex(Math.max(0, drills.findIndex((sp) => sp.id === id)))}
           />
         </Paper>
       )}
 
       {/* Content area */}
-      {session.plays.length === 0 ? (
+      {drills.length === 0 ? (
         <Paper>
           <EmptyState
             icon={<HockeyIcon />}
@@ -446,7 +451,7 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
             <Stack spacing={1}>
               {groups.map((group) => {
                 const cards = group.stations.map((sp) => {
-                  const index = session.plays.indexOf(sp);
+                  const index = drills.indexOf(sp);
                   return (
                     <SidebarPlayCard
                       key={sp.id}
@@ -507,7 +512,7 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
                   <Stack direction="row" alignItems="center" spacing={1}>
                     <PlayIcon sx={{ fontSize: 18, color: "primary.main" }} />
                     <Typography variant="subtitle2">
-                      Play {activePlayIndex + 1} of {session.plays.length}
+                      Play {activePlayIndex + 1} of {drills.length}
                     </Typography>
                   </Stack>
                   <Stack direction="row" spacing={0.5}>
@@ -521,7 +526,7 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
                     </IconButton>
                     <IconButton
                       onClick={handleNextPlay}
-                      disabled={activePlayIndex === session.plays.length - 1}
+                      disabled={activePlayIndex === drills.length - 1}
                       size="small"
                       aria-label="Next play"
                     >

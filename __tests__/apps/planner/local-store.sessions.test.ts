@@ -11,6 +11,7 @@ import { createEmptyPlayData } from "@/lib/utils/play-data";
 import { SESSION_DRILL_REJECTED_MESSAGE } from "@/lib/utils/session-drill-ids";
 import type { ActionResult } from "@/lib/planner-store";
 import { GOALIES_ATTENDING_MESSAGE } from "@/lib/utils/drill-tags";
+import { drillRows } from "@/lib/utils/session-rows";
 
 const T = LOCAL_TEAM_ID;
 
@@ -35,7 +36,7 @@ describe.each(REPOS)("sessions (%s)", (_name, open) => {
 
     async function ownedIds(store: Awaited<ReturnType<typeof setup>>["store"], id: string): Promise<string[]> {
         const view = await store.getSessionView(id);
-        return view.success ? view.data.plays.map((p) => p.play.id) : [];
+        return view.success ? drillRows(view.data.plays).map((p) => p.play.id) : [];
     }
 
     it("creates a session whose library picks become owned clones, mapped per client key", async () => {
@@ -175,7 +176,7 @@ describe.each(REPOS)("sessions (%s)", (_name, open) => {
         expect(view.success && view.data).toMatchObject({ title: "Copy of Tuesday Skills", date: date.toISOString() });
         expect(view.success && view.data.plays[0]).toMatchObject({ instructions: "Hard", duration: 15 });
         const [original] = await ownedIds(store, s.data.id);
-        expect(view.success && view.data.plays[0].play.id).not.toBe(original);
+        expect(view.success && drillRows(view.data.plays)[0].play.id).not.toBe(original);
     });
 
     it("lists sessions newest date first", async () => {
@@ -199,7 +200,7 @@ describe.each(REPOS)("sessions (%s)", (_name, open) => {
         const error = vi.spyOn(console, "error").mockImplementation(() => {});
         const view = await store.getSessionView(s.data.id);
         expect(view.success && view.data).toMatchObject({ teamId: T, teamName: LOCAL_TEAM_NAME, createdByName: LOCAL_AUTHOR_NAME, isShared: false, venueId: null });
-        expect(view.success && view.data.plays[0].play.playData).toBeNull();
+        expect(view.success && drillRows(view.data.plays)[0].play.playData).toBeNull();
         const edit = await store.getSessionForEdit(s.data.id);
         expect(edit.success && edit.data.initialData.plays[0]).toMatchObject({ playDataUnreadable: true, sequence: 0, runsWithPrevious: false });
         error.mockRestore();
@@ -238,7 +239,7 @@ describe.each(REPOS)("sessions (%s)", (_name, open) => {
         if (!plain.success) throw new Error(plain.error);
         const view = await store.getSessionView(plain.data.sessionId);
         expect(view.success && view.data).toMatchObject({ title: "Imported", duration: 45, date: date.toISOString() });
-        expect(view.success && view.data.plays.map((p) => [p.play.name, p.runsWithPrevious, p.instructions])).toEqual([
+        expect(view.success && drillRows(view.data.plays).map((p) => [p.play.name, p.runsWithPrevious, p.instructions])).toEqual([
             ["One", false, "Go"],
             ["Two", true, null],
         ]);
@@ -263,7 +264,7 @@ describe.each(REPOS)("sessions (%s)", (_name, open) => {
 
         const view = data(await store.getSessionView(session.id));
         expect(view.goaliesAttending).toBe(1);
-        expect(view.plays[0].play).toMatchObject({ focus: "goalies", goalies: "required" });
+        expect(drillRows(view.plays)[0].play).toMatchObject({ focus: "goalies", goalies: "required" });
         const edit = data(await store.getSessionForEdit(session.id));
         expect(edit.initialData.goaliesAttending).toBe(1);
         expect(edit.initialData.plays[0]).toMatchObject({ focus: "goalies", goalies: "required" });
@@ -274,14 +275,14 @@ describe.each(REPOS)("sessions (%s)", (_name, open) => {
         expect(data(await store.getPlayById({ id: copied.playId, teamId: T }))).toMatchObject({ focus: "goalies", goalies: "required" });
 
         // Saving an owned drill in place with new tags changes them.
-        const owned = view.plays[0].play.id;
+        const owned = drillRows(view.plays)[0].play.id;
         data(await store.saveSessionDrill({ sessionId: session.id, teamId: T, playId: owned, name: "Warm-up", playData: createEmptyPlayData(), goalies: "optional" }));
-        expect(data(await store.getSessionView(session.id)).plays[0].play).toMatchObject({ focus: "goalies", goalies: "optional" });
+        expect(drillRows(data(await store.getSessionView(session.id)).plays)[0].play).toMatchObject({ focus: "goalies", goalies: "optional" });
 
         const duplicate = data(await store.duplicatePracticeSession({ id: session.id, teamId: T, date: new Date("2026-10-13T19:00:00") }));
         const copy = data(await store.getSessionView(duplicate.id));
         expect(copy.goaliesAttending).toBe(1);
-        expect(copy.plays[0].play).toMatchObject({ focus: "goalies", goalies: "optional" });
+        expect(drillRows(copy.plays)[0].play).toMatchObject({ focus: "goalies", goalies: "optional" });
     });
 
     it("keeps the goalie count when an update omits it, clears it on null, and refuses an out-of-range count", async () => {

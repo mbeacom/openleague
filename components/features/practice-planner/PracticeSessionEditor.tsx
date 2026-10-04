@@ -31,12 +31,14 @@ import {
     PracticeSessionData,
     PlayInSession,
     SavedPlay,
+    SessionItem,
     validateSessionDuration,
     VALIDATION_CONSTRAINTS,
 } from "@/types/practice-planner";
 import type { BookingConflict } from "@/types/segments";
 import { applySavedPlayIds, describeSaveError, type SavedDrillId } from "@/lib/utils/session-drill-ids";
 import { moveItem, removeItem, toggleRunsWithPrevious } from "@/lib/utils/session-timeline";
+import { applyRowEdit, drillRows, type RowEdit } from "@/lib/utils/session-rows";
 import { PlayLibrary } from "./PlayLibrary";
 import { useSingleFlightSave, type SaveOutcome } from "./useSingleFlightSave";
 import { SessionDrillList } from "./SessionDrillList";
@@ -135,7 +137,7 @@ export function PracticeSessionEditor({
     const [title, setTitle] = useState(initialData?.title || "");
     const [date, setDate] = useState<Date | null>(initialData?.date || new Date());
     const [duration, setDuration] = useState(initialData?.duration || 60);
-    const [plays, setPlays] = useState<PlayInSession[]>(initialData?.plays || []);
+    const [plays, setPlays] = useState<SessionItem[]>(initialData?.plays || []);
     const [isShared, setIsShared] = useState(initialData?.isShared || false);
 
     // UI state
@@ -325,7 +327,7 @@ export function PracticeSessionEditor({
         }
 
         const startedVersion = saveFlight.start({ carriesRequests: isFollowUp });
-        const sentPlayIds = new Map(plays.map((play) => [play.id, play.playId]));
+        const sentPlayIds = new Map(drillRows(plays).map((play) => [play.id, play.playId]));
         setIsSaving(true);
         setSaveError(null);
         setSaveSuccess(false);
@@ -494,7 +496,7 @@ export function PracticeSessionEditor({
      * edit changes nothing and must not mark the editor dirty. Computed from
      * the rendered list; React renders between discrete clicks.
      */
-    const applyListEdit = useCallback((next: PlayInSession[]) => {
+    const applyListEdit = useCallback((next: SessionItem[]) => {
         if (next === plays) return;
         setPlays(next);
         markDirty();
@@ -523,13 +525,9 @@ export function PracticeSessionEditor({
      * Requirements: 2.4, 4.4 - Ensure edits don't affect library play
      */
     const handleUpdatePlayInSession = useCallback(
-        (playId: string, updates: Partial<PlayInSession>) => {
+        (playId: string, edit: RowEdit) => {
             if (creating) return;
-            setPlays((prevPlays) =>
-                prevPlays.map((play) =>
-                    play.id === playId ? { ...play, ...updates } : play
-                )
-            );
+            setPlays((prevPlays) => prevPlays.map((play) => (play.id === playId ? applyRowEdit(play, edit) : play)));
             markDirty();
             setEditingPlayId(null);
         },

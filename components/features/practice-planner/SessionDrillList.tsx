@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import type { SegmentKind } from "@/types/segments";
 import { Alert, Box, Button, Paper, Stack, Tooltip, Typography } from "@mui/material";
 import { Add as AddIcon, Draw as DrawIcon } from "@mui/icons-material";
-import type { PlayInSession } from "@/types/practice-planner";
+import type { BlockInSession, PlayInSession, SessionItem } from "@/types/practice-planner";
 import {
     SEGMENT_KIND_FIT_LABELS,
     canMove,
@@ -18,10 +18,12 @@ import {
     stationWarnings,
     type StationGroup,
 } from "@/lib/utils/session-timeline";
+import { drillRows, isDrillRow, type RowEdit } from "@/lib/utils/session-rows";
+import { BlockRowCard } from "./BlockRowCard";
 import { SessionDrillCard } from "./SessionDrillCard";
 
 export interface SessionDrillListProps {
-    plays: PlayInSession[];
+    plays: SessionItem[];
     duration: number;
     /** The booked segment's kind, for the fit warning (2b); null = unbooked or the whole surface. */
     segmentKind?: SegmentKind | null;
@@ -34,7 +36,7 @@ export interface SessionDrillListProps {
     onOpenLibrary: () => void;
     onDelete: (playId: string) => void;
     onEdit: (playId: string) => void;
-    onUpdate: (playId: string, updates: Partial<PlayInSession>) => void;
+    onUpdate: (playId: string, edit: RowEdit) => void;
     onCancelEdit: () => void;
     onMoveUp: (index: number) => void;
     onMoveDown: (index: number) => void;
@@ -77,7 +79,7 @@ function StationBlockHeader({ id, label, warnings }: { id: string; label: string
 
 /** "Stations 1 and 2 overlap on the ice", numbering stations by their place in the block. */
 function overlapMessages(
-    group: StationGroup<PlayInSession>,
+    group: StationGroup<SessionItem>,
     overlaps: Array<[number, number, number]>,
 ): string[] {
     const position = (sequence: number) => group.stations.findIndex((station) => station.sequence === sequence) + 1;
@@ -114,18 +116,18 @@ export function SessionDrillList({
 }: SessionDrillListProps) {
     const totalPlayTime = sessionWallMinutes(plays);
     const groups = groupStations(plays);
-    // An unreadable drill (area null) is skipped by the warnings, not read as full ice.
+    // An unreadable drill (area null) is skipped by the warnings, not read as full ice; a block has no area.
     const warnings = stationWarnings(
-        groupStations(plays.map((play) => ({ ...play, area: play.playDataUnreadable ? null : play.playData.area }))),
+        groupStations(plays.map((play) => (isDrillRow(play) ? { ...play, area: play.playDataUnreadable ? null : play.playData.area } : { ...play, area: null }))),
         segmentKind,
     );
     // Raw diagrams (never the display copy): hidden markers must not hide a shortfall.
     // An unreadable drill (playData null) needs one goalie if it is tagged so, never zero by accident.
     const goalieAlerts = goalieWarnings(
-        groupStations(plays.map((play) => ({ ...play, playData: play.playDataUnreadable ? null : play.playData }))),
+        groupStations(plays.map((play) => (isDrillRow(play) ? { ...play, playData: play.playDataUnreadable ? null : play.playData } : play))),
         goaliesAttending,
     );
-    const goalieMessage = (group: StationGroup<PlayInSession>): string | null => {
+    const goalieMessage = (group: StationGroup<SessionItem>): string | null => {
         const shortfall = goalieAlerts.short.find((short) => short.groupIndex === group.index);
         return shortfall && goaliesAttending !== null
             ? goalieShortMessage(shortfall.needed, goaliesAttending, group.stations.length > 1)
@@ -167,6 +169,24 @@ export function SessionDrillList({
                 disabled={disabled}
                 locked={locked}
                 onEditDiagram={onEditDiagram}
+            />
+        );
+    };
+
+    const renderBlock = (item: BlockInSession) => {
+        const index = plays.indexOf(item);
+        return (
+            <BlockRowCard
+                key={item.id}
+                item={item}
+                index={index}
+                canMoveUp={canMove(plays, index, -1)}
+                canMoveDown={canMove(plays, index, 1)}
+                locked={locked}
+                onUpdate={onUpdate}
+                onDelete={onDelete}
+                onMoveUp={onMoveUp}
+                onMoveDown={onMoveDown}
             />
         );
     };
@@ -254,21 +274,25 @@ export function SessionDrillList({
                 {plays.length > 0 && (
                     <Stack spacing={2}>
                         {groups.flatMap((group): ReactNode[] => {
-                            if (group.stations.length === 1) return [renderCard(group.stations[0], undefined, goalieMessage(group))];
+                            const only = group.stations[0];
+                            if (group.stations.length === 1) {
+                                return [isDrillRow(only) ? renderCard(only, undefined, goalieMessage(group)) : renderBlock(only)];
+                            }
+                            // A station block's stations are drills: a block row never joins one.
+                            const stations = drillRows(group.stations);
                             const blockGoalieMessage = goalieMessage(group);
-                            const headerId = `station-block-${group.stations[0].id}`;
+                            const headerId = `station-block-${only.id}`;
                             return [
                                 <StationBlockHeader
-                                    key={`header-${group.stations[0].id}`}
+                                    key={`header-${only.id}`}
                                     id={headerId}
-                                    label={stationBlockLabel(group.stations.length, group.wallMinutes)}
+                                    label={stationBlockLabel(stations.length, group.wallMinutes)}
                                     warnings={[
                                         ...overlapMessages(group, warnings.overlaps),
                                         ...(blockGoalieMessage ? [blockGoalieMessage] : []),
                                     ]}
                                 />,
-                                ...group.stations.map((play, slot) =>
-                                    renderCard(play, { position: slot + 1, count: group.stations.length })),
+                                ...stations.map((play, slot) => renderCard(play, { position: slot + 1, count: stations.length })),
                             ];
                         })}
                     </Stack>

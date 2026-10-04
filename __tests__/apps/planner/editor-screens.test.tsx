@@ -32,7 +32,7 @@ describe("toLocalSessionSave", () => {
             date,
             duration: 60,
             goaliesAttending: 2,
-            plays: [{ playId: "p1", clientKey: "k1", sequence: 0, runsWithPrevious: false, duration: 10, instructions: "" }],
+            plays: [{ kind: "drill", playId: "p1", clientKey: "k1", sequence: 0, runsWithPrevious: false, duration: 10, instructions: "" }],
         });
     });
 

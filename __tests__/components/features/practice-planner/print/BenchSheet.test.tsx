@@ -4,7 +4,7 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { renderWithPlanner } from "@/__tests__/helpers/planner";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
-import type { PlayData } from "@/types/practice-planner";
+import type { DrillRow, PlayData } from "@/types/practice-planner";
 
 const { mockGenerate } = vi.hoisted(() => ({ mockGenerate: vi.fn(() => "data:image/png;base64,AA==") }));
 vi.mock("@/lib/utils/canvas/thumbnail-generator", () => ({ generateThumbnail: mockGenerate }));
@@ -31,7 +31,7 @@ function sessionPlay(
     runsWithPrevious: boolean,
     duration: number,
     extra: { instructions?: string | null; description?: string | null; playData?: PlayData | null } = {},
-): BenchSheetSession["plays"][number] {
+): DrillRow {
     return {
         id: `row-${name}`,
         sequence,
@@ -262,5 +262,33 @@ describe("BenchSheet goalie markers", () => {
         await waitFor(() => expect(mockGenerate).toHaveBeenCalled());
         const drawnPlayers = (mockGenerate.mock.calls[0] as unknown as [PlayData])[0].players;
         expect(drawnPlayers.map((p) => p.role)).toEqual(["F"]);
+    });
+});
+
+describe("BenchSheet: block rows", () => {
+    const WITH_BLOCKS: BenchSheetSession = {
+        ...SESSION,
+        transitionMinutes: 1,
+        plays: [
+            { id: "row-w", kind: "warmup", label: null, sequence: 0, duration: 8, instructions: "Easy laps", runsWithPrevious: false },
+            sessionPlay("Breakout", 1, false, 15, { playData: withPass("d1") }),
+            { id: "row-c", kind: "cooldown", label: null, sequence: 2, duration: 5, instructions: null, runsWithPrevious: false },
+        ],
+    };
+
+    it("puts blocks on the timeline but gives only drills a page, numbered from 1", async () => {
+        renderSheet(WITH_BLOCKS);
+        const timeline = screen.getByRole("table", { name: "Session timeline" });
+        expect(within(timeline).getByText(/Warm-up · Easy laps/)).toBeInTheDocument();
+        expect(within(timeline).getByText("Cool-down")).toBeInTheDocument();
+        expect(drills().map((article) => article.getAttribute("aria-label"))).toEqual(["Drill 1: Breakout"]);
+    });
+
+    it("prints the timeline for a practice with only blocks", () => {
+        renderSheet({ ...WITH_BLOCKS, plays: [WITH_BLOCKS.plays[0]] });
+        expect(screen.queryByText("No drills planned")).toBeNull();
+        expect(screen.getByRole("table", { name: "Session timeline" })).toBeInTheDocument();
+        expect(drills()).toHaveLength(0);
+        expect(screen.getByRole("button", { name: "Print" })).toBeEnabled();
     });
 });
