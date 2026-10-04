@@ -221,6 +221,21 @@ describe("duplicatePracticeSession", () => {
         expect(result.success).toBe(false);
         expect(tx.practiceSession.create).not.toHaveBeenCalled();
     });
+
+    it("copies block rows without cloning them, keeps each drill on its own copy, and copies the gap", async () => {
+        const blockRow = { ...sourceRow(1), kind: "break", label: "Water", playId: null, play: null };
+        mockPrisma.practiceSession.findUnique.mockResolvedValue({
+            teamId: TEAM, title: "Tuesday", duration: 75, transitionMinutes: 2, plays: [sourceRow(0), blockRow, sourceRow(2)],
+        });
+        await duplicatePracticeSession({ id: SOURCE, teamId: TEAM, date: DATE });
+
+        expect(mockPrisma.practiceSession.findUnique.mock.calls[0][0].select).toMatchObject({ transitionMinutes: true });
+        expect(tx.practiceSession.create.mock.calls[0][0].data.transitionMinutes).toBe(2);
+        expect(tx.play.createManyAndReturn.mock.calls[0][0].data.map((d: { name: string }) => d.name)).toEqual(["Drill 0", "Drill 2"]);
+        const copied: Array<Record<string, unknown>> = tx.practiceSessionPlay.createMany.mock.calls[0][0].data;
+        expect(copied.map((row) => row.playId)).toEqual(["cclone0xxxxxxxxxxxxxxxxxx", null, "cclone1xxxxxxxxxxxxxxxxxx"]);
+        expect(copied[1]).toMatchObject({ kind: "break", label: "Water", sessionId: COPY });
+    });
 });
 
 describe("saveSessionDrill: drill tags", () => {

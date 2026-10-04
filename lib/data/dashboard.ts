@@ -173,7 +173,8 @@ export async function getUpcomingSchedule(userId: string): Promise<ScheduleItem[
         duration: true,
         teamId: true,
         team: { select: { name: true } },
-        _count: { select: { plays: true } },
+        // Drills only: block rows (warm-up, break…) are not plays (practice timing).
+        _count: { select: { plays: { where: { kind: "drill" } } } },
       },
     }),
   ]);

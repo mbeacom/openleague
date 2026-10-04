@@ -79,3 +79,36 @@ describe("hosted wrappers: goaltender fields", () => {
         expect(actions.createPlay.mock.calls[0][0]).toMatchObject({ focus: "goalies", goalies: "required" });
     });
 });
+
+describe("hosted wrappers: block rows and the gap", () => {
+    const ROWS = [
+        { id: "kw", kind: "warmup", label: " Laps ", sequence: 0, duration: 8, instructions: "", runsWithPrevious: false },
+        { id: "k1", playId: "cplayxxxxxxxxxxxxxxxxxxxx", name: "A", sequence: 1, runsWithPrevious: false, duration: 10, instructions: "", playData: createEmptyPlayData(), stays: false, rotateEveryMinutes: null },
+    ];
+    const SENT = [
+        { kind: "warmup", clientKey: "kw", sequence: 0, duration: 8, instructions: "", label: "Laps" },
+        { kind: "drill", playId: "cplayxxxxxxxxxxxxxxxxxxxx", clientKey: "k1", sequence: 1, runsWithPrevious: false, duration: 10, instructions: "", stays: false, rotateEveryMinutes: null },
+    ];
+
+    it("EditSessionWrapper sends every row and the gap", async () => {
+        render(<EditSessionWrapper sessionId={SESSION} teamId={TEAM} initialData={{}} bookingOptions={BOOKING as never} />);
+        await captured.props!.onSave({ ...submitted, plays: ROWS, transitionMinutes: 2 });
+        const sent = actions.updatePracticeSession.mock.calls[0][0];
+        expect(sent.plays).toEqual(SENT);
+        expect(sent.transitionMinutes).toBe(2);
+    });
+
+    it("EditSessionWrapper leaves the gap out when the editor holds none, so the stored gap stays", async () => {
+        render(<EditSessionWrapper sessionId={SESSION} teamId={TEAM} initialData={{}} bookingOptions={BOOKING as never} />);
+        await captured.props!.onSave({ ...submitted });
+        expect(actions.updatePracticeSession.mock.calls[0][0]).not.toHaveProperty("transitionMinutes");
+    });
+
+    it("PracticeSessionEditorWrapper sends every row on create", async () => {
+        render(<PracticeSessionEditorWrapper teamId={TEAM} bookingOptions={BOOKING as never} />);
+        await captured.props!.onSave({ ...submitted, plays: ROWS, transitionMinutes: 1 });
+        const sent = actions.createPracticeSession.mock.calls[0][0];
+        expect(sent.plays).toEqual(SENT);
+        expect(sent.transitionMinutes).toBe(1);
+    });
+});

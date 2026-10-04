@@ -88,6 +88,7 @@ vi.mock("@/lib/services/venue-reservations", () => ({
 import {
   createPracticeSession,
   deletePracticeSession,
+  getPracticeSessionById,
   updatePracticeSession,
 } from "@/lib/actions/practice-sessions";
 
@@ -508,4 +509,20 @@ describe("updatePracticeSession update notifications", () => {
     await updatePracticeSession({ id: SESSION_ID, ...baseInput({ notify: true }) });
     expect(mockSendNotifications).not.toHaveBeenCalled();
   });
+});
+
+describe("getPracticeSessionById: block rows", () => {
+    it("returns a block row with its kind and no play", async () => {
+        const TEAM_CUID = "cjld2cjxh0000qzrmn831i7rn";
+        const SESSION_CUID = "cjld2cyuq0000t3rmniod1foy";
+        mockAuth.requireTeamMember.mockResolvedValue(undefined);
+        mockPrisma.practiceSession.findUnique.mockResolvedValue({
+            id: SESSION_CUID, title: "T", date: new Date("2026-10-06T23:00:00Z"), duration: 60, isShared: false, teamId: TEAM_CUID,
+            createdAt: new Date(), updatedAt: new Date(), venueId: null, venue: null, surfaceId: null, surface: null,
+            segmentId: null, segment: null, startAt: null,
+            plays: [{ id: "w", sequence: 0, duration: 8, instructions: null, runsWithPrevious: false, kind: "warmup", label: null, stays: false, rotateEveryMinutes: null, play: null }],
+        });
+        const result = await getPracticeSessionById({ id: SESSION_CUID, teamId: TEAM_CUID });
+        expect(result.success && result.data.plays[0]).toMatchObject({ kind: "warmup", label: null, play: null });
+    });
 });

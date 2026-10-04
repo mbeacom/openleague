@@ -40,6 +40,7 @@ vi.mock("@/lib/services/venue-reservations", () => ({
 }));
 
 import { createPracticeSession, updatePracticeSession } from "@/lib/actions/practice-sessions";
+import { ROTATION_TOO_FEW_ERROR } from "@/lib/utils/session-timeline";
 
 const TEAM = "cteamxxxxxxxxxxxxxxxxxxxx";
 const USER = "cuserxxxxxxxxxxxxxxxxxxxx";
@@ -96,7 +97,7 @@ describe("createPracticeSession owns its drills", () => {
 
         expect(result).toMatchObject({ success: true, data: { plays: [{ clientKey: "k1", playId: "cclone0xxxxxxxxxxxxxxxxxx" }] } });
         expect(models.practiceSessionPlay.createMany.mock.calls[0][0].data).toEqual([
-            { sessionId: SESSION, playId: "cclone0xxxxxxxxxxxxxxxxxx", sequence: 0, runsWithPrevious: false, duration: 10, instructions: null },
+            { sessionId: SESSION, playId: "cclone0xxxxxxxxxxxxxxxxxx", kind: "drill", label: null, sequence: 0, runsWithPrevious: false, stays: false, rotateEveryMinutes: null, duration: 10, instructions: null },
         ]);
     });
 });
@@ -145,7 +146,12 @@ describe("updatePracticeSession owns its drills", () => {
 
     it("reads previous references before deleting session plays", async () => {
         await updatePracticeSession({ id: SESSION, ...input([{ playId: OWNED, clientKey: "k1" }]) });
-        expect(models.practiceSessionPlay.findMany.mock.invocationCallOrder[0])
+        // The stored-timing read comes first now; pin materializeSessionDrills's own read.
+        const references = models.practiceSessionPlay.findMany.mock.calls.findIndex(
+            ([args]) => Object.keys(args.select).join(",") === "playId",
+        );
+        expect(references).toBeGreaterThanOrEqual(0);
+        expect(models.practiceSessionPlay.findMany.mock.invocationCallOrder[references])
             .toBeLessThan(models.practiceSessionPlay.deleteMany.mock.invocationCallOrder[0]);
     });
 
@@ -195,5 +201,95 @@ describe("goalie count (goaltender-aware drills)", () => {
         const result = await createPracticeSession({ ...input([]), goaliesAttending: 11 });
         expect(result.success).toBe(false);
         expect(models.practiceSession.create).not.toHaveBeenCalled();
+    });
+});
+
+describe("practice timing rows (spec R2, R3, R5)", () => {
+    // Raw wire payloads (older clients, block rows): the action's Zod schema is what checks them.
+    const save = (plays: unknown[], extra: Record<string, unknown> = {}) =>
+        ({ ...input([]), plays, ...extra }) as Parameters<typeof createPracticeSession>[0];
+    const ROWS = [
+        { kind: "warmup", clientKey: "kw", sequence: 0, duration: 8, instructions: "Laps", label: "" },
+        { playId: LIB, clientKey: "k1", sequence: 1, duration: 10, instructions: "", stays: false, rotateEveryMinutes: null },
+        { kind: "break", clientKey: "kb", sequence: 2, duration: 2, instructions: "", label: "Water" },
+        { playId: LIB, clientKey: "k2", sequence: 3, duration: 10, instructions: "", stays: false, rotateEveryMinutes: null },
+    ];
+    type Written = { kind: string; playId: string | null; label: string | null };
+
+    it("create writes block rows with no play, and maps each drill row to its own copy by key", async () => {
+        const result = await createPracticeSession(save(ROWS, { transitionMinutes: 1 }));
+        expect(result).toMatchObject({ success: true, data: { plays: [{ clientKey: "k1" }, { clientKey: "k2" }] } });
+        expect(models.practiceSession.create.mock.calls[0][0].data.transitionMinutes).toBe(1);
+        const written: Written[] = models.practiceSessionPlay.createMany.mock.calls[0][0].data;
+        expect(written.map((row) => [row.kind, row.playId])).toEqual([
+            ["warmup", null],
+            ["drill", "cclone0xxxxxxxxxxxxxxxxxx"],
+            ["break", null],
+            ["drill", "cclone1xxxxxxxxxxxxxxxxxx"],
+        ]);
+        expect(written[0]).toMatchObject({ label: null, instructions: "Laps", stays: false, rotateEveryMinutes: null, runsWithPrevious: false });
+        expect(written[2]).toMatchObject({ label: "Water" });
+    });
+
+    it("create writes a session with only blocks, and defaults the gap to 0", async () => {
+        await createPracticeSession(save([ROWS[0]]));
+        expect(models.practiceSession.create.mock.calls[0][0].data.transitionMinutes).toBe(0);
+        expect(models.practiceSessionPlay.createMany.mock.calls[0][0].data).toHaveLength(1);
+    });
+
+    it("update writes the gap only when it is sent", async () => {
+        await updatePracticeSession({ id: SESSION, ...save([], { transitionMinutes: 3 }) });
+        expect(models.practiceSession.update.mock.calls[0][0].data.transitionMinutes).toBe(3);
+        await updatePracticeSession({ id: SESSION, ...save([]) });
+        expect(models.practiceSession.update.mock.calls[1][0].data).not.toHaveProperty("transitionMinutes");
+    });
+
+    it("update keeps a drill's stored rotation and stays when an older client leaves them out", async () => {
+        models.practiceSessionPlay.findMany.mockResolvedValue([{ playId: OWNED, stays: false, rotateEveryMinutes: 5 }]);
+        const result = await updatePracticeSession({
+            id: SESSION,
+            ...save([
+                { playId: OWNED, clientKey: "k1", sequence: 0, duration: 5, instructions: "" },
+                { playId: LIB, clientKey: "k2", sequence: 1, duration: 5, instructions: "", runsWithPrevious: true },
+            ]),
+        });
+        expect(result.success).toBe(true);
+        expect(models.practiceSessionPlay.findMany.mock.calls[0][0]).toMatchObject({
+            where: { sessionId: SESSION },
+            select: { playId: true, stays: true, rotateEveryMinutes: true },
+        });
+        const created: Array<{ rotateEveryMinutes: number | null; stays: boolean }> = models.practiceSession.update.mock.calls[0][0].data.plays.create;
+        expect(created.map((row) => [row.rotateEveryMinutes, row.stays])).toEqual([[5, false], [null, false]]);
+    });
+
+    it("update checks the plan against the stored gap when the save leaves the gap out", async () => {
+        models.practiceSession.findUnique.mockResolvedValue({ id: SESSION, teamId: TEAM, isShared: false, venueReservationId: null, transitionMinutes: 5 });
+        const tight = [0, 1, 2].map((sequence) => ({ playId: LIB, clientKey: `k${sequence}`, sequence, duration: 18, instructions: "", stays: false, rotateEveryMinutes: null }));
+        // 3 × 18 = 54, plus two 5-minute gaps = 64
+        expect(await updatePracticeSession({ id: SESSION, ...save(tight) })).toEqual({
+            success: false,
+            error: "Practice timeline (64 min) exceeds session duration (60 min)",
+        });
+        expect(models.practiceSession.update).not.toHaveBeenCalled();
+    });
+
+    it("rejects a rotation that can't run and a block inside a station block, writing nothing", async () => {
+        const rotation = await createPracticeSession(save([
+            { playId: LIB, clientKey: "k1", sequence: 0, duration: 10, instructions: "", stays: false, rotateEveryMinutes: 5 },
+            { playId: LIB, clientKey: "k2", sequence: 1, duration: 10, instructions: "", runsWithPrevious: true, stays: true, rotateEveryMinutes: null },
+        ]));
+        expect(rotation).toEqual({ success: false, error: ROTATION_TOO_FEW_ERROR });
+        const block = await createPracticeSession(save([
+            { playId: LIB, clientKey: "k1", sequence: 0, duration: 10, instructions: "" },
+            { kind: "break", clientKey: "kb", sequence: 1, duration: 2, instructions: "", runsWithPrevious: true },
+        ]));
+        expect(block.success).toBe(false);
+        expect(models.practiceSession.create).not.toHaveBeenCalled();
+    });
+
+    it("never treats a stored block row as an orphaned drill", async () => {
+        models.practiceSessionPlay.findMany.mockResolvedValue([{ playId: null }, { playId: OWNED }]);
+        await updatePracticeSession({ id: SESSION, ...save([]) });
+        expect(models.play.deleteMany.mock.calls[0][0].where.id).toEqual({ in: [OWNED] });
     });
 });

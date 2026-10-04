@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { mockPrisma } = vi.hoisted(() => ({
   mockPrisma: {
-    practiceSession: { findUnique: vi.fn() },
+    practiceSession: { findUnique: vi.fn(), findMany: vi.fn() },
     teamMember: { findFirst: vi.fn() },
   },
 }));
@@ -12,7 +12,8 @@ vi.mock("@/lib/auth/session", () => ({
   requireUserId: vi.fn().mockResolvedValue("cuserxxxxxxxxxxxxxxxxxxxx"),
 }));
 
-import { getPracticeSessionDetail, getPracticeSessionForEdit } from "@/lib/actions/practice-session-queries";
+import { getPracticePlannerListData, getPracticeSessionDetail, getPracticeSessionForEdit } from "@/lib/actions/practice-session-queries";
+import { drillRows, isDrillRow } from "@/lib/utils/session-rows";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 
 function row(id: string, sequence: number, runsWithPrevious = false) {
@@ -93,7 +94,7 @@ describe("getPracticeSessionForEdit", () => {
 
     const result = await getPracticeSessionForEdit("s1");
 
-    const [unreadable, ok] = result!.initialData.plays;
+    const [unreadable, ok] = drillRows(result!.initialData.plays);
     expect(unreadable.playDataUnreadable).toBe(true);
     expect(unreadable.playData).toEqual(createEmptyPlayData()); // still an empty board for the editor
     expect(ok.playDataUnreadable).toBeFalsy();
@@ -211,7 +212,7 @@ describe("goaltender fields in the session queries", () => {
     it("getPracticeSessionForEdit returns the count and each drill's tags (defaults when untagged)", async () => {
         const result = await getPracticeSessionForEdit("s1");
         expect(result?.initialData.goaliesAttending).toBe(1);
-        expect(result?.initialData.plays.map((p) => [p.focus, p.goalies])).toEqual([["goalies", "required"], ["team", "optional"]]);
+        expect(drillRows(result!.initialData.plays).map((p) => [p.focus, p.goalies])).toEqual([["goalies", "required"], ["team", "optional"]]);
         const select = mockPrisma.practiceSession.findUnique.mock.calls[0][0].include.plays.include.play.select;
         expect(select).toMatchObject({ focus: true, goalies: true });
     });
@@ -219,6 +220,55 @@ describe("goaltender fields in the session queries", () => {
     it("getPracticeSessionDetail returns the count and each drill's tags", async () => {
         const result = await getPracticeSessionDetail("s1");
         expect(result?.session.goaliesAttending).toBe(1);
-        expect(result?.session.plays.map((p) => [p.play.focus, p.play.goalies])).toEqual([["goalies", "required"], ["team", "optional"]]);
+        expect(drillRows(result!.session.plays).map((p) => [p.play.focus, p.play.goalies])).toEqual([["goalies", "required"], ["team", "optional"]]);
+    });
+});
+
+describe("practice timing in the session queries", () => {
+    const blockRow = {
+        id: "w", sequence: 0, duration: 8, instructions: "Easy laps", runsWithPrevious: false,
+        kind: "warmup", label: null, stays: false, rotateEveryMinutes: null, play: null,
+    };
+    const base = {
+        id: "s1", teamId: "t1", title: "T", date: new Date("2026-01-01T00:00:00Z"), duration: 60, isShared: true,
+        venueId: null, surfaceId: null, segmentId: null, startAt: null, goaliesAttending: null, transitionMinutes: 2,
+        createdBy: { name: "Coach" }, team: { id: "t1", name: "Team" }, venue: null, surface: null, segment: null,
+        plays: [
+            blockRow,
+            { ...row("a", 1), kind: "drill", label: null, stays: false, rotateEveryMinutes: 5 },
+            { ...row("b", 2, true), kind: "drill", label: null, stays: false, rotateEveryMinutes: null },
+        ],
+    };
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockPrisma.teamMember.findFirst.mockResolvedValue({ id: "m", role: "ADMIN", teamId: "t1", team: { id: "t1", name: "Team" } });
+        mockPrisma.practiceSession.findUnique.mockResolvedValue(base);
+    });
+
+    it("getPracticeSessionDetail returns block rows, each drill's timing and the gap", async () => {
+        const result = await getPracticeSessionDetail("s1");
+        expect(result?.session.transitionMinutes).toBe(2);
+        expect(result?.session.plays[0]).toEqual({
+            id: "w", kind: "warmup", label: null, sequence: 0, duration: 8, instructions: "Easy laps", runsWithPrevious: false,
+        });
+        expect(result?.session.plays.slice(1).map((p) => isDrillRow(p) && [p.stays, p.rotateEveryMinutes])).toEqual([[false, 5], [false, null]]);
+    });
+
+    it("getPracticeSessionForEdit returns block items and each drill's stored timing, so an untouched editor saves them back", async () => {
+        const result = await getPracticeSessionForEdit("s1");
+        expect(result?.initialData.transitionMinutes).toBe(2);
+        expect(result?.initialData.plays[0]).toEqual({
+            id: "w", kind: "warmup", label: "", sequence: 0, duration: 8, instructions: "Easy laps", runsWithPrevious: false,
+        });
+        expect(result?.initialData.plays[1]).toMatchObject({ playId: "play-a", stays: false, rotateEveryMinutes: 5 });
+    });
+
+    it("getPracticePlannerListData pictures and counts drills only", async () => {
+        mockPrisma.practiceSession.findMany.mockResolvedValue([]);
+        await getPracticePlannerListData();
+        const include = mockPrisma.practiceSession.findMany.mock.calls[0][0].include;
+        expect(include.plays).toMatchObject({ where: { kind: "drill" }, take: 1 });
+        expect(include._count).toEqual({ select: { plays: { where: { kind: "drill" } } } });
     });
 });

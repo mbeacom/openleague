@@ -180,7 +180,7 @@ export async function materializeSessionDrills(
         where: { sessionId: input.sessionId },
         select: { playId: true },
     });
-    const previousPlayIds = [...new Set(previous.map((row) => row.playId))];
+    const previousPlayIds = [...new Set(previous.flatMap((row) => (row.playId ? [row.playId] : [])))];
     if (input.items.length === 0) return { mapping: [], previousPlayIds };
 
     const plays = await tx.play.findMany({

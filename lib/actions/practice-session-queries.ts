@@ -2,7 +2,8 @@
 
 import { prisma } from "@/lib/db/prisma";
 import { requireUserId } from "@/lib/auth/session";
-import type { PlayData, PlayFocus, PlayGoalies } from "@/types/practice-planner";
+import type { PlayData, SessionItem, SessionRow } from "@/types/practice-planner";
+import { isBlockKind, toRowKind } from "@/lib/utils/session-rows";
 import { drillTags } from "@/lib/utils/drill-tags";
 import { createEmptyPlayData, parseStoredPlayData } from "@/lib/utils/play-data";
 import type { SegmentKind } from "@prisma/client";
@@ -49,11 +50,12 @@ export async function getPracticePlannerListData(): Promise<{
     include: {
       createdBy: { select: { name: true } },
       plays: {
+        where: { kind: "drill" },
         select: { play: { select: { thumbnail: true } } },
         orderBy: { sequence: "asc" },
         take: 1,
       },
-      _count: { select: { plays: true } },
+      _count: { select: { plays: { where: { kind: "drill" } } } },
     },
   });
 
@@ -100,23 +102,9 @@ export async function getPracticeSessionDetail(sessionId: string): Promise<{
     segmentKind: SegmentKind | null;
     startAt: string | null;
     goaliesAttending: number | null;
-    plays: Array<{
-      id: string;
-      sequence: number;
-      duration: number;
-      instructions: string | null;
-      runsWithPrevious: boolean;
-      play: {
-        id: string;
-        name: string;
-        description: string | null;
-        thumbnail: string | null;
-        focus: PlayFocus;
-        goalies: PlayGoalies;
-        /** null = stored data unreadable; hide the legend. */
-        playData: PlayData | null;
-      };
-    }>;
+    /** Minutes between blocks (practice timing). */
+    transitionMinutes: number;
+    plays: SessionRow[];
   };
   isAdmin: boolean;
 } | null> {
@@ -187,25 +175,37 @@ export async function getPracticeSessionDetail(sessionId: string): Promise<{
       segmentKind: session.segment?.kind ?? null,
       startAt: session.startAt ? session.startAt.toISOString() : null,
       goaliesAttending: session.goaliesAttending ?? null,
-      plays: session.plays.map((sp) => ({
-        id: sp.id,
-        sequence: sp.sequence,
-        duration: sp.duration ?? 0,
-        instructions: sp.instructions,
-        runsWithPrevious: sp.runsWithPrevious,
-        play: {
-          id: sp.play.id,
-          name: sp.play.name,
-          description: sp.play.description,
-          thumbnail: sp.play.thumbnail,
-          ...drillTags(sp.play),
-          playData: (() => {
-            const parsed = parseStoredPlayData(sp.play.playData);
-            if (!parsed.ok) console.error(`Unreadable playData (play ${sp.play.id}):`, parsed.error);
-            return parsed.ok ? parsed.data : null;
-          })(),
-        },
-      })),
+      transitionMinutes: session.transitionMinutes ?? 0,
+      plays: session.plays.flatMap((sp): SessionRow[] => {
+        const kind = toRowKind(sp.kind);
+        if (isBlockKind(kind)) {
+          return [{ id: sp.id, kind, label: sp.label ?? null, sequence: sp.sequence, duration: sp.duration ?? 0, instructions: sp.instructions, runsWithPrevious: false }];
+        }
+        // Every drill row has its play (CHECK practice_session_plays_kind_play_check).
+        if (!sp.play) return [];
+        const play = sp.play;
+        return [{
+          id: sp.id,
+          sequence: sp.sequence,
+          duration: sp.duration ?? 0,
+          instructions: sp.instructions,
+          runsWithPrevious: sp.runsWithPrevious,
+          stays: sp.stays ?? false,
+          rotateEveryMinutes: sp.rotateEveryMinutes ?? null,
+          play: {
+            id: play.id,
+            name: play.name,
+            description: play.description,
+            thumbnail: play.thumbnail,
+            ...drillTags(play),
+            playData: (() => {
+              const parsed = parseStoredPlayData(play.playData);
+              if (!parsed.ok) console.error(`Unreadable playData (play ${play.id}):`, parsed.error);
+              return parsed.ok ? parsed.data : null;
+            })(),
+          },
+        }];
+      }),
     },
     isAdmin,
   };
@@ -244,22 +244,9 @@ export async function getPracticeSessionForEdit(sessionId: string): Promise<{
     segmentId: string | null;
     startAt: Date | null;
     goaliesAttending: number | null;
-    plays: Array<{
-      id: string;
-      playId: string;
-      name: string;
-      description: string;
-      sequence: number;
-      runsWithPrevious: boolean;
-      duration: number;
-      instructions: string;
-      focus: PlayFocus;
-      goalies: PlayGoalies;
-      playData: PlayData;
-      /** The stored diagram couldn't be read; playData is an empty stand-in (2b warnings skip it). */
-      playDataUnreadable?: true;
-      thumbnail: string;
-    }>;
+    /** Minutes between blocks (practice timing). */
+    transitionMinutes: number;
+    plays: SessionItem[];
   };
 } | null> {
   const userId = await requireUserId();
@@ -307,24 +294,35 @@ export async function getPracticeSessionForEdit(sessionId: string): Promise<{
       segmentId: session.segmentId,
       startAt: session.startAt,
       goaliesAttending: session.goaliesAttending ?? null,
+      transitionMinutes: session.transitionMinutes ?? 0,
       // Plays are ordered by sequence asc. Before 3a, deleting a library play
       // cascaded its PracticeSessionPlay row away and could leave gaps (e.g.
       // 0,2), which the save validator rejects, or a block's stations without
       // their first drill. normalizeGroups renumbers to consecutive 0-based
       // indices and clears the first drill's station flag (2b).
-      plays: normalizeGroups(session.plays.map((sp) => ({
-        id: sp.id,
-        playId: sp.play.id,
-        name: sp.play.name,
-        description: sp.play.description ?? "",
-        sequence: sp.sequence,
-        runsWithPrevious: sp.runsWithPrevious,
-        duration: sp.duration ?? 0,
-        instructions: sp.instructions || "",
-        ...drillTags(sp.play),
-        ...editorPlayData(sp.play.playData, sp.play.id),
-        thumbnail: sp.play.thumbnail || "",
-      }))),
+      plays: normalizeGroups(session.plays.flatMap((sp): SessionItem[] => {
+        const kind = toRowKind(sp.kind);
+        if (isBlockKind(kind)) {
+          return [{ id: sp.id, kind, label: sp.label ?? "", sequence: sp.sequence, duration: sp.duration ?? 0, instructions: sp.instructions || "", runsWithPrevious: false }];
+        }
+        if (!sp.play) return [];
+        return [{
+          id: sp.id,
+          playId: sp.play.id,
+          name: sp.play.name,
+          description: sp.play.description ?? "",
+          sequence: sp.sequence,
+          runsWithPrevious: sp.runsWithPrevious,
+          duration: sp.duration ?? 0,
+          instructions: sp.instructions || "",
+          // Loaded so an untouched editor saves them back unchanged.
+          stays: sp.stays ?? false,
+          rotateEveryMinutes: sp.rotateEveryMinutes ?? null,
+          ...drillTags(sp.play),
+          ...editorPlayData(sp.play.playData, sp.play.id),
+          thumbnail: sp.play.thumbnail || "",
+        }];
+      })),
     },
   };
 }

@@ -22,8 +22,9 @@ import {
     type GetPracticeSessionByIdInput,
     type GetPracticeSessionsByTeamInput,
     type SharePracticeSessionInput,
+    type PracticeSessionRowInput,
 } from "@/lib/utils/validation";
-import type { PlayData } from "@/types/practice-planner";
+import type { PlayData, SessionRowKind } from "@/types/practice-planner";
 import { playDataOrEmpty } from "@/lib/utils/play-data";
 import {
     assignVenueReservation,
@@ -40,10 +41,11 @@ import {
 } from "@/lib/services/practice-session-drills";
 import { FALLBACK_TIME_ZONE } from "@/lib/utils/date";
 import {
+    sessionRowsError,
     sessionWallMinutes,
-    stationGroupError,
     type TimelinePlay,
 } from "@/lib/utils/session-timeline";
+import { needsStoredTiming, toBlockLabel, toRowKind, withStoredTiming } from "@/lib/utils/session-rows";
 
 export type ActionResult<T> =
     | { success: true; data: T }
@@ -384,15 +386,16 @@ function validatePlaySequence(plays: Array<{ sequence: number }>): { valid: bool
 }
 
 /**
- * Validate the practice timeline against the session duration (2b). Station
- * groups run at the same time, so each group counts once, for its longest
- * drill. For a session with no stations this is the sum of drill durations.
+ * Validate the practice timeline against the session duration (2b, practice
+ * timing). Each block counts once (station blocks for their longest drill or
+ * M × rotating stations), plus the gap between blocks.
  */
 function validateWallTime(
     sessionDuration: number,
-    plays: TimelinePlay[]
+    plays: TimelinePlay[],
+    transitionMinutes: number,
 ): { valid: boolean; error?: string } {
-    const wallMinutes = sessionWallMinutes(plays);
+    const wallMinutes = sessionWallMinutes(plays, transitionMinutes);
     if (wallMinutes > sessionDuration) {
         return {
             valid: false,
@@ -440,12 +443,49 @@ function normalizePracticeAttachment(validated: {
 /** Drill key and owned play id, returned so the editor can swap ids. */
 type SavedDrill = { clientKey: string; playId: string };
 
-function drillItems(plays: Array<{ playId: string; clientKey: string; sequence: number }>) {
-    return plays.map(({ playId, clientKey, sequence }) => ({ playId, clientKey, sequence }));
-}
-
 function toSavedDrills(mapping: SessionDrillMapping[]): SavedDrill[] {
     return mapping.map(({ clientKey, playId }) => ({ clientKey, playId }));
+}
+
+/** A save row with its timing resolved: sent, else stored (update), else the default. */
+type ResolvedRow = PracticeSessionRowInput & { stays: boolean; rotateEveryMinutes: number | null };
+
+/** The drill rows' play ids and keys, for materializeSessionDrills. Block rows have no play. */
+function drillItems(rows: ResolvedRow[]) {
+    return rows.flatMap((row) => (row.kind === "drill" && row.playId ? [{ playId: row.playId, clientKey: row.clientKey, sequence: row.sequence }] : []));
+}
+
+/** The rows' first problem: sequences, the station / block / rotation rules, then the wall time with the gap. */
+function rowsError(rows: ResolvedRow[], duration: number, transitionMinutes: number): string | null {
+    if (rows.length === 0) return null;
+    const sequence = validatePlaySequence(rows);
+    if (!sequence.valid) return sequence.error || "Invalid play sequence";
+    const ruleError = sessionRowsError(rows);
+    if (ruleError) return ruleError;
+    const wall = validateWallTime(duration, rows, transitionMinutes);
+    return wall.valid ? null : wall.error || "Practice timeline exceeds session duration";
+}
+
+/**
+ * One session-play row to write. A block row has no play; a drill row points
+ * at its owned copy, found by clientKey (never by position: block rows sit
+ * between drills).
+ */
+function sessionPlayData(row: ResolvedRow, ownedByKey: ReadonlyMap<string, string>) {
+    const block = row.kind !== "drill";
+    const playId = block ? null : ownedByKey.get(row.clientKey);
+    if (playId === undefined) throw new Error(`No drill copy for row ${row.clientKey}`);
+    return {
+        playId,
+        kind: row.kind,
+        label: block ? toBlockLabel(row.label) : null,
+        sequence: row.sequence,
+        runsWithPrevious: block ? false : row.runsWithPrevious,
+        stays: row.stays,
+        rotateEveryMinutes: row.rotateEveryMinutes,
+        duration: row.duration,
+        instructions: row.instructions ? sanitizeText(row.instructions, 2000) : null,
+    };
 }
 
 /**
@@ -464,27 +504,11 @@ export async function createPracticeSession(
             reservationInput.reservationId,
         );
 
-        if (validated.plays && validated.plays.length > 0) {
-            const sequenceValidation = validatePlaySequence(validated.plays);
-            if (!sequenceValidation.valid) {
-                return {
-                    success: false,
-                    error: sequenceValidation.error || "Invalid play sequence",
-                };
-            }
-
-            const groupError = stationGroupError(validated.plays);
-            if (groupError) {
-                return { success: false, error: groupError };
-            }
-
-            const durationValidation = validateWallTime(validated.duration, validated.plays);
-            if (!durationValidation.valid) {
-                return {
-                    success: false,
-                    error: durationValidation.error || "Practice timeline exceeds session duration",
-                };
-            }
+        // A create has nothing stored: absent timing takes the defaults.
+        const rows = withStoredTiming(validated.plays, []);
+        const rowError = rowsError(rows, validated.duration, validated.transitionMinutes ?? 0);
+        if (rowError) {
+            return { success: false, error: rowError };
         }
 
         const requestedAttachment = normalizePracticeAttachment(validated);
@@ -572,6 +596,7 @@ export async function createPracticeSession(
                         : validated.duration,
                     isShared: false,
                     goaliesAttending: validated.goaliesAttending ?? null,
+                    transitionMinutes: validated.transitionMinutes ?? 0,
                     teamId: validated.teamId,
                     createdById: userId,
                     venueId: canonical.venueId,
@@ -587,20 +612,12 @@ export async function createPracticeSession(
                 sessionId: createdSession.id,
                 teamId: validated.teamId,
                 userId,
-                items: drillItems(validated.plays),
+                items: drillItems(rows),
             });
-            if (mapping.length > 0) {
+            const ownedByKey = new Map(mapping.map((entry) => [entry.clientKey, entry.playId]));
+            if (rows.length > 0) {
                 await tx.practiceSessionPlay.createMany({
-                    data: validated.plays.map((play, index) => ({
-                        sessionId: createdSession.id,
-                        playId: mapping[index].playId,
-                        sequence: play.sequence,
-                        runsWithPrevious: play.runsWithPrevious,
-                        duration: play.duration,
-                        instructions: play.instructions
-                            ? sanitizeText(play.instructions, 2000)
-                            : null,
-                    })),
+                    data: rows.map((row) => ({ sessionId: createdSession.id, ...sessionPlayData(row, ownedByKey) })),
                 });
             }
 
@@ -700,6 +717,7 @@ export async function updatePracticeSession(
                 teamId: true,
                 isShared: true,
                 venueReservationId: true,
+                transitionMinutes: true,
             },
         });
 
@@ -753,27 +771,20 @@ export async function updatePracticeSession(
                 ?? await requireTeamAdmin(existingSession.teamId);
         }
 
-        if (validated.plays && validated.plays.length > 0) {
-            const sequenceValidation = validatePlaySequence(validated.plays);
-            if (!sequenceValidation.valid) {
-                return {
-                    success: false,
-                    error: sequenceValidation.error || "Invalid play sequence",
-                };
-            }
-
-            const groupError = stationGroupError(validated.plays);
-            if (groupError) {
-                return { success: false, error: groupError };
-            }
-
-            const durationValidation = validateWallTime(validated.duration, validated.plays);
-            if (!durationValidation.valid) {
-                return {
-                    success: false,
-                    error: durationValidation.error || "Practice timeline exceeds session duration",
-                };
-            }
+        // Absent = unchanged (spec R3): a drill row without stays or
+        // rotateEveryMinutes (an older client) keeps the stored row's values,
+        // read before validating; the gap likewise keeps the stored gap.
+        const stored = needsStoredTiming(validated.plays)
+            ? await prisma.practiceSessionPlay.findMany({
+                where: { sessionId: validated.id },
+                select: { playId: true, stays: true, rotateEveryMinutes: true },
+            })
+            : [];
+        const rows = withStoredTiming(validated.plays, stored);
+        const transitionMinutes = validated.transitionMinutes ?? existingSession.transitionMinutes ?? 0;
+        const rowError = rowsError(rows, validated.duration, transitionMinutes);
+        if (rowError) {
+            return { success: false, error: rowError };
         }
 
         if (
@@ -918,8 +929,9 @@ export async function updatePracticeSession(
                 sessionId: validated.id,
                 teamId: validated.teamId,
                 userId,
-                items: drillItems(validated.plays),
+                items: drillItems(rows),
             });
+            const ownedByKey = new Map(mapping.map((entry) => [entry.clientKey, entry.playId]));
 
             await tx.practiceSessionPlay.deleteMany({
                 where: { sessionId: validated.id },
@@ -943,6 +955,8 @@ export async function updatePracticeSession(
                         : validated.duration,
                     // Absent = unchanged: an editor tab opened before this field existed autosaves without it.
                     ...(validated.goaliesAttending !== undefined && { goaliesAttending: validated.goaliesAttending }),
+                    // Absent = unchanged: an editor that never loaded or set the gap sends none.
+                    ...(validated.transitionMinutes !== undefined && { transitionMinutes: validated.transitionMinutes }),
                     venueId: canonical.venueId,
                     surfaceId: canonical.surfaceId,
                     segmentId: canonical.segmentId,
@@ -953,15 +967,7 @@ export async function updatePracticeSession(
                     conflictOverriddenAt: parsedReservation.overrideReason
                         ? new Date()
                         : null,
-                    plays: validated.plays.length > 0 ? {
-                        create: validated.plays.map((play, index) => ({
-                            playId: mapping[index].playId,
-                            sequence: play.sequence,
-                            runsWithPrevious: play.runsWithPrevious,
-                            duration: play.duration,
-                            instructions: play.instructions ? sanitizeText(play.instructions, 2000) : null,
-                        })),
-                    } : undefined,
+                    plays: rows.length > 0 ? { create: rows.map((row) => sessionPlayData(row, ownedByKey)) } : undefined,
                 },
                 select: {
                     id: true,
@@ -1213,13 +1219,18 @@ export async function getPracticeSessionById(input: GetPracticeSessionByIdInput)
         duration: number;
         instructions: string | null;
         runsWithPrevious: boolean;
+        kind: SessionRowKind;
+        label: string | null;
+        stays: boolean;
+        rotateEveryMinutes: number | null;
+        /** null for a block row (warm-up, break…): it has no drill. */
         play: {
             id: string;
             name: string;
             description: string | null;
             thumbnail: string | null;
             playData: PlayData;
-        };
+        } | null;
     }>;
 }>> {
     try {
@@ -1256,6 +1267,10 @@ export async function getPracticeSessionById(input: GetPracticeSessionByIdInput)
                         duration: true,
                         instructions: true,
                         runsWithPrevious: true,
+                        kind: true,
+                        label: true,
+                        stays: true,
+                        rotateEveryMinutes: true,
                         play: {
                             select: {
                                 id: true,
@@ -1309,13 +1324,19 @@ export async function getPracticeSessionById(input: GetPracticeSessionByIdInput)
                     duration: p.duration,
                     instructions: p.instructions,
                     runsWithPrevious: p.runsWithPrevious,
-                    play: {
-                        id: p.play.id,
-                        name: p.play.name,
-                        description: p.play.description,
-                        thumbnail: p.play.thumbnail,
-                        playData: playDataOrEmpty(p.play.playData, `play ${p.play.id}`),
-                    },
+                    kind: toRowKind(p.kind),
+                    label: p.label,
+                    stays: p.stays,
+                    rotateEveryMinutes: p.rotateEveryMinutes,
+                    play: p.play
+                        ? {
+                            id: p.play.id,
+                            name: p.play.name,
+                            description: p.play.description,
+                            thumbnail: p.play.thumbnail,
+                            playData: playDataOrEmpty(p.play.playData, `play ${p.play.id}`),
+                        }
+                        : null,
                 })),
             },
         };

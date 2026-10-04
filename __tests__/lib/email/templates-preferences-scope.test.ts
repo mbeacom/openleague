@@ -56,6 +56,7 @@ describe("sendPracticePlanNotifications league scoping", () => {
         members: [{ user: { id: "u1", email: "u1@example.com", notificationPreferences: prefs } }],
       },
       _count: { plays: 3 },
+      plays: [],
     };
   }
 
