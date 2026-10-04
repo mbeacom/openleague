@@ -150,7 +150,7 @@ A guard test checks every `Prisma.PlayScalarFieldEnum` value against the keys a 
 
 **Results:**
 - `short`: each group whose demand is more than the goalies attending, as `{ groupIndex, sequences, needed }`.
-- `unused`: true when at least one goalie is attending, the session has drills, and every drill is `goalies === "none"`.
+- `unused`: true when at least one goalie is attending, the session has drills, and no drill uses a goalie. A drill uses a goalie when its `goalies` is not `"none"` or its demand is above 0, so a goalie-focus drill tagged `none` still counts.
 - `goaliesAttending === null` returns no warnings.
 
 **Messages** come from pure helpers, so the editor and the detail page say the same thing:
@@ -171,8 +171,8 @@ The warnings never block a save, in either app.
 The helpers live in `lib/utils/drill-tags.ts`:
 
 - `withoutGoalies(playData)` returns a new `PlayData` with role-G players removed. Strokes, nets and annotations stay.
-- `hidesGoalieMarkers(goaliesAttending, goalies)` is `goaliesAttending === 0 && goalies === "optional"`.
-- `displayPlayData(playData, goalies, goaliesAttending)` returns the **same object** unless markers are hidden and there are any to hide.
+- `hidesGoalieMarkers(goaliesAttending, goalies, focus)` is `goaliesAttending === 0 && goalies === "optional" && focus !== "goalies"`. A goalie-focus drill always keeps its goalie.
+- `displayPlayData(playData, goalies, goaliesAttending, focus)` returns the **same object** unless markers are hidden and there are any to hide.
 - `sessionForDisplay(session)` maps each play's `playData` through `displayPlayData`. It returns the same session object when nothing changes, so React memos stay stable.
 
 **Applied at render, never stored, in:**
@@ -184,7 +184,9 @@ The helpers live in `lib/utils/drill-tags.ts`:
 - the plan JSON (`ExportPlanMenu` serializes the raw session);
 - editor thumbnails and library thumbnails (stored images).
 
-`required` drills keep their `G` markers. The warnings say a goalie is missing.
+`required` drills and goalie-focus drills keep their `G` markers. The warnings say a goalie is missing.
+
+The "Needs a goalie" badge on library, starter and session drill cards uses the warnings' rule (`needsGoalie`: `goalies === "required"` or `focus === "goalies"`).
 
 ### R8. Library filters
 
@@ -202,7 +204,7 @@ The helpers live in `lib/utils/drill-tags.ts`:
 - `META_STARTERS_SEEDED` (boolean) gives way to `META_SEEDED_STARTER_IDS` (a `string[]`).
 - If the legacy flag is true and the new key is absent, the device counts `ORIGINAL_STARTER_IDS` as seeded. That is a hard-coded list of today's 9 ids. It is not derived from `STARTER_PLAYS`, which will grow.
 - Seeding adds starters whose id isn't in the set, and records every pending id as seeded. That includes one skipped because a library play already has its name, so a deleted starter never returns.
-- The legacy key is left in place, and nothing reads it after migration.
+- The legacy key is left in place. Seeding sets it to true once any of the original 9 ids is recorded, so an older cached build, which reads only that flag, never seeds the originals again by name.
 
 **Hosted:** confirmed. `PlayLibrary.visibleStarters` already lists starters not yet copied, by name, and that stays.
 - *Amended during implementation:* the page-only limitation was rejected. Matching uses the whole library: the team's drill names are paged in unfiltered, 100 per query, on first load and after a drill is added or deleted, never on a filter change. When the first page already holds every drill, no extra query runs.
@@ -212,6 +214,7 @@ The helpers live in `lib/utils/drill-tags.ts`:
 `lib/data/starter-templates.ts` exports `STARTER_TEMPLATES: readonly StarterTemplate[]`, where each is `{ id, name, description, session: PlanSessionInput }`.
 - Each drill is built from a starter by id. The name, description, `playData` and tags come from `STARTER_PLAYS`, so there's one source.
 - `starterTemplatePlan(template, generator, now)` calls `serializePlan`.
+- Every template sets `goaliesAttending: 1`. Each is built for one goalie and has a goalie station, so the goalie warnings work right after import. The coach can change the count in Edit.
 
 *Why:* `PlanGenerator` must be the running app's value, and `exportedAt` must not freeze at build time.
 
@@ -221,9 +224,10 @@ The new `StarterTemplatePicker.tsx` (shared) lists the templates as cards, each 
 
 **Hosted:**
 - `PlanImportView` renders the picker in its `pick` state. Choosing a template sets `{ kind: "ready", plan: starterTemplatePlan(t, "openleague-hosted") }`.
-- The existing flow then runs as for a file: preview, team, date, start time, add to library, `importPracticePlan`. The server re-parses the document.
+- The existing flow then runs as for a file: preview, team, date, start time, `importPracticePlan`. The server re-parses the document.
+- For a template, "Also add these drills to the team library" is hidden (its drills are already offered as starters), and "Choose another file" becomes **Start over**, which returns to the import page with the templates.
 
-**Static:** `ImportScreen` does the same with `"openleague-static"` and `store.importPlan`.
+**Static:** `ImportScreen` does the same with `"openleague-static"` and `store.importPlan`, with the same template changes. An undated plan, which includes every template, is saved at the current date and time; the preview says so and that the date can be changed in Edit.
 
 **Entry points:** both practice lists get a **Use a template** button that links to the import route (`/practice-planner/import`, `#/import`). The hosted button shows only where Import shows (`canImport`).
 
@@ -242,11 +246,11 @@ The budget test stays at 900.
 
 **Drill fields** `focus` and `goalies`:
 - Missing or null reads as the default.
-- An unrecognized value also reads as the default (`z.unknown().transform(toPlayFocus)`). The tags are advisory and must never block opening a plan.
+- An unrecognized value also reads as the default (`z.preprocess(toPlayFocus, z.enum(PLAY_FOCUS))`, and the same for `goalies`). The tags are advisory and must never block opening a plan. `z.unknown().transform(...)` was not used because it rejects a missing key.
 
 **Session field** `goaliesAttending`:
 - Missing or null reads as `null`.
-- A value that is not an integer from 0 to 10 also reads as `null`.
+- A value that is not an integer from 0 to 10 also reads as `null` (`z.preprocess(toGoaliesAttending, ...)`).
 
 **Serialization:**
 - `serializePlan` always writes all three, with `null` for an unset count.
@@ -342,7 +346,7 @@ Stations sit on non-overlapping areas. Shared edges are allowed, within the 1 ft
 - no `stationWarnings` overlaps;
 - `sessionWallMinutes` is at most the duration;
 - every station block holds a drill with `goalies === "required"`;
-- with `goaliesAttending: 1`, `goalieWarnings(...).short` is empty.
+- `goaliesAttending` is 1, and with it `goalieWarnings(...).short` is empty.
 
 ## Testing
 
@@ -357,6 +361,10 @@ TDD per task (see the plan):
 - `bun run db:generate`, `type-check`, `lint`, `test`, `build`;
 - `planner:build && planner:check`;
 - `adr:lint`, `check:raw-sql`.
+
+## Known limitations
+
+- Library copies of the original 9 starters made before this change keep the default tags (`team` / `optional`). There is no data rewrite; coaches can retag them in the drill editor.
 
 ## Out of scope
 
