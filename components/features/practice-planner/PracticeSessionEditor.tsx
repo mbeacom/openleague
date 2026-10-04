@@ -35,6 +35,7 @@ import {
 import type { BookingConflict } from "@/types/segments";
 import { applySavedPlayIds, describeSaveError, type SavedDrillId } from "@/lib/utils/session-drill-ids";
 import { applyRowEdit, drillRows, type RowEdit } from "@/lib/utils/session-rows";
+import { settleRotations } from "@/lib/utils/session-timeline";
 import { PlayLibrary } from "./PlayLibrary";
 import { useSingleFlightSave, type SaveOutcome } from "./useSingleFlightSave";
 import { SessionDrillList } from "./SessionDrillList";
@@ -341,7 +342,9 @@ export function PracticeSessionEditor({
                 title: title.trim(),
                 date,
                 duration,
-                plays,
+                // A block that can't rotate saves without its rotation (the screen keeps the ticks and the note).
+                // The list loads in sequence order and every edit keeps it so, as settleRotations groups by position.
+                plays: settleRotations(plays),
                 isShared,
                 goaliesAttending: goalies.goaliesAttending,
                 transitionMinutes: betweenBlocks.transitionMinutes,
@@ -639,6 +642,8 @@ export function PracticeSessionEditor({
                 onEditDiagram={drillDialog.editDiagram}
                 onNewDrill={drillDialog.newDrill}
                 onAddBlock={rowEdits.addBlock}
+                onSetRotation={rowEdits.setRotation}
+                onSetStays={rowEdits.setStays}
             />
 
             {/* Save Status and Actions */}

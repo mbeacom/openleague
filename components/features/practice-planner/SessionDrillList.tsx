@@ -9,10 +9,14 @@ import {
     SEGMENT_KIND_FIT_LABELS,
     canMove,
     canToggleRunsWithPrevious,
+    defaultRotationMinutes,
     goalieShortMessage,
     goalieWarnings,
     goaliesUnusedMessage,
     groupStations,
+    rotatingStations,
+    rotationRoundLabel,
+    rotationTable,
     sessionWallMinutes,
     stationBlockLabel,
     stationWarnings,
@@ -22,6 +26,7 @@ import { drillRows, isBlockRow, isDrillRow, type RowEdit } from "@/lib/utils/ses
 import { AddBlockMenu } from "./AddBlockMenu";
 import { BlockRowCard } from "./BlockRowCard";
 import { SessionDrillCard } from "./SessionDrillCard";
+import { StationBlockHeader, type StationRotationControls } from "./StationBlockHeader";
 
 export interface SessionDrillListProps {
     plays: SessionItem[];
@@ -51,35 +56,10 @@ export interface SessionDrillListProps {
     transitionMinutes?: number;
     /** Appends a warm-up, water break, transition or cool-down. */
     onAddBlock: (kind: BlockKind) => void;
-}
-
-/**
- * The header of a station block, "Stations · N · M min", with its overlap
- * warnings (2b). It is a sibling of the block's cards, not their parent: the
- * list renders flat so a drill joining, leaving or heading a block never
- * remounts its card (which would drop keyboard focus and inline-edit drafts).
- * It is an h3 like a standalone card's title; each grouped card is a
- * role="group" named "Station k of N: <title>" (its own h4), so the header
- * is announced once rather than repeated on every card.
- */
-function StationBlockHeader({ id, label, warnings }: { id: string; label: string; warnings: string[] }) {
-    return (
-        <Box sx={{ borderLeft: 4, borderColor: "primary.main", pl: 1.5 }}>
-            <Typography
-                id={id}
-                variant="subtitle2"
-                component="h3"
-                sx={{ fontWeight: 800, color: "primary.main", textTransform: "uppercase", letterSpacing: 1 }}
-            >
-                {label}
-            </Typography>
-            {warnings.map((warning) => (
-                <Alert key={warning} severity="warning" sx={{ mt: 1 }}>
-                    {warning}
-                </Alert>
-            ))}
-        </Box>
-    );
+    /** Sets or clears (null) the rotation on the block whose first drill is at this position. */
+    onSetRotation: (headIndex: number, minutes: number | null) => void;
+    /** Marks the drill at this position as staying put in its rotating block. */
+    onSetStays: (index: number, stays: boolean) => void;
 }
 
 /** "Stations 1 and 2 overlap on the ice", numbering stations by their place in the block. */
@@ -120,6 +100,8 @@ export function SessionDrillList({
     onNewDrill,
     transitionMinutes = 0,
     onAddBlock,
+    onSetRotation,
+    onSetStays,
 }: SessionDrillListProps) {
     const totalPlayTime = sessionWallMinutes(plays, transitionMinutes);
     const groups = groupStations(plays);
@@ -150,6 +132,7 @@ export function SessionDrillList({
         play: PlayInSession,
         stationSlot?: { position: number; count: number },
         goalieWarning: string | null = null,
+        stays: { checked: boolean; onToggle: () => void } | null = null,
     ) => {
         const index = plays.indexOf(play);
         // A drill right after a block row (or first) can't join a station block.
@@ -170,6 +153,7 @@ export function SessionDrillList({
                 onToggleStation={onToggleStation}
                 fitWarning={fitLabel && warnings.tooBig.includes(play.sequence) ? `Larger than the booked ${fitLabel}` : null}
                 goalieWarning={goalieWarning}
+                stays={stays}
                 isEditing={editingPlayId === play.id}
                 onDelete={onDelete}
                 onEdit={onEdit}
@@ -295,6 +279,21 @@ export function SessionDrillList({
                             const stations = drillRows(group.stations);
                             const blockGoalieMessage = goalieMessage(group);
                             const headerId = `station-block-${only.id}`;
+                            const head = stations[0];
+                            const headIndex = plays.indexOf(head);
+                            const grid = group.rotation;
+                            // Set to rotate, even when it can't yet: Stays stays visible with the note (spec R3).
+                            const rotateOn = head.rotateEveryMinutes != null;
+                            const rotation: StationRotationControls = {
+                                rotateEveryMinutes: head.rotateEveryMinutes ?? null,
+                                rotatingCount: rotatingStations(stations).length,
+                                table: grid
+                                    ? rotationTable(grid, (row) => (isDrillRow(row) ? row.name || "Drill" : ""), (start) => rotationRoundLabel(start, grid.minutes))
+                                    : null,
+                                onRotateChange: (on) => onSetRotation(headIndex, on ? defaultRotationMinutes(stations) : null),
+                                onMinutesChange: (minutes) => onSetRotation(headIndex, minutes),
+                                disabled: locked,
+                            };
                             return [
                                 <StationBlockHeader
                                     key={`header-${only.id}`}
@@ -304,8 +303,15 @@ export function SessionDrillList({
                                         ...overlapMessages(group, warnings.overlaps),
                                         ...(blockGoalieMessage ? [blockGoalieMessage] : []),
                                     ]}
+                                    rotation={rotation}
                                 />,
-                                ...stations.map((play, slot) => renderCard(play, { position: slot + 1, count: stations.length })),
+                                ...stations.map((play, slot) =>
+                                    renderCard(
+                                        play,
+                                        { position: slot + 1, count: stations.length },
+                                        null,
+                                        rotateOn ? { checked: Boolean(play.stays), onToggle: () => onSetStays(plays.indexOf(play), !play.stays) } : null,
+                                    )),
                             ];
                         })}
                     </Stack>

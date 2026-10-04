@@ -14,6 +14,7 @@ import {
     CardActions,
     CardContent,
     CardMedia,
+    Checkbox,
     Chip,
     FormControlLabel,
     FormHelperText,
@@ -54,6 +55,8 @@ const VISUALLY_HIDDEN = {
 
 export const STATION_SWITCH_LABEL = "Run as a station with the previous drill";
 export const STATION_CAP_TOOLTIP = `A station block holds at most ${MAX_STATIONS_PER_GROUP} drills`;
+export const STAYS_LABEL = "Stays";
+export const STAYS_HELP = "Doesn't rotate, e.g. goalie station";
 
 /**
  * Props for the SessionDrillCard component
@@ -82,6 +85,11 @@ export interface SessionDrillCardProps {
     fitWarning?: string | null;
     /** Advisory goalie shortfall for a standalone drill. Never blocks a save. */
     goalieWarning?: string | null;
+    /**
+     * Set while this drill's station block rotates (spec R8): the Stays
+     * checkbox replaces the minutes, which the rotation sets.
+     */
+    stays?: { checked: boolean; onToggle: () => void } | null;
     isEditing: boolean;
     onDelete: (playId: string) => void;
     onEdit: (playId: string) => void;
@@ -115,6 +123,7 @@ export function SessionDrillCard({
     stationSlot,
     fitWarning = null,
     goalieWarning = null,
+    stays = null,
     isEditing,
     onDelete,
     onEdit,
@@ -137,6 +146,7 @@ export function SessionDrillCard({
     const grouped = stationSlot !== undefined;
     const capReasonId = useId();
     const capped = station !== null && !station.canToggle;
+    const staysHelpId = useId();
 
     // Get thumbnail from play instance (copied from library play when added)
     const thumbnail = play.thumbnail || "";
@@ -146,10 +156,8 @@ export function SessionDrillCard({
      * Requirements: 2.4 - Save inline edits
      */
     const handleSaveEdits = () => {
-        onUpdate(play.id, {
-            duration: editDuration,
-            instructions: editInstructions,
-        });
+        // While the block rotates, the rotation owns the minutes.
+        onUpdate(play.id, { ...(stays ? {} : { duration: editDuration }), instructions: editInstructions });
     };
 
     /**
@@ -240,9 +248,27 @@ export function SessionDrillCard({
                         <Chip label={goalieWarning} color="warning" size="small" variant="outlined" sx={{ alignSelf: "flex-start" }} />
                     )}
 
-                    {/* Duration - Editable */}
+                    {/* Duration - Editable; while the block rotates, Stays in its place (spec R8) */}
                     {/* Requirements: 2.4 - Duration input for each play */}
-                    {isEditing ? (
+                    {stays ? (
+                        <Box>
+                            <FormControlLabel
+                                control={
+                                    <Checkbox
+                                        checked={stays.checked}
+                                        onChange={stays.onToggle}
+                                        slotProps={{ input: { "aria-describedby": `${titleId} ${staysHelpId}` } }}
+                                    />
+                                }
+                                label={STAYS_LABEL}
+                                disabled={locked}
+                                sx={{ minHeight: 44, ml: 0 }}
+                            />
+                            <FormHelperText id={staysHelpId} sx={{ mt: 0 }}>
+                                {STAYS_HELP}
+                            </FormHelperText>
+                        </Box>
+                    ) : isEditing ? (
                         <TextField
                             label="Duration (minutes)"
                             type="number"
