@@ -3,7 +3,23 @@ import { STARTER_PLAYS } from "@/lib/data/starter-plays";
 import { playDataSchema } from "@/lib/utils/play-data";
 import { RINK_DIMENSIONS } from "@/lib/utils/canvas/rink-renderer";
 import { areaRect, countElementsOutside } from "@/lib/utils/ice-area";
+import { PLAYER_RADIUS_FT } from "@/lib/utils/canvas/glyph-metrics";
 import { PLAY_FOCUS, PLAY_GOALIES, type IceArea } from "@/types/practice-planner";
+
+/**
+ * An annotation's text box in rink feet. drawTextAnnotation renders Arial at
+ * `fontSize` feet, left-aligned, with the box spanning [y - fontSize, y]. There
+ * is no headless text-measure helper, so the width is estimated at 0.6 em per
+ * character, a little wider than Arial's average (~0.5 em), to stay conservative.
+ */
+const CHAR_WIDTH_EM = 0.6;
+const annotationBox = (a: { text: string; fontSize: number; position: { x: number; y: number } }) => ({
+    x0: a.position.x,
+    x1: a.position.x + a.text.length * a.fontSize * CHAR_WIDTH_EM,
+    y0: a.position.y - a.fontSize,
+    y1: a.position.y,
+});
+const NOTE_MARGIN_FT = 2;
 
 const withinRink = ({ x, y }: { x: number; y: number }) =>
     x >= 0 && x <= RINK_DIMENSIONS.width && y >= 0 && y <= RINK_DIMENSIONS.height;
@@ -90,6 +106,23 @@ describe("Starter plays pack", () => {
                 }
             });
 
+            it("stands each goalie off the goal line, so the net and crease stay visible", () => {
+                for (const g of play.playData.players.filter((p) => p.role === "G")) {
+                    const goalLine = g.position.x < 100 ? 11 : 189;
+                    expect(Math.abs(g.position.x - goalLine), g.id).toBeGreaterThanOrEqual(PLAYER_RADIUS_FT);
+                }
+            });
+
+            it("ends every arrow clear of the player markers, so its head shows", () => {
+                for (const d of play.playData.drawings.filter((d) => d.end !== "none")) {
+                    const tip = d.points[d.points.length - 1];
+                    for (const p of play.playData.players) {
+                        const gap = Math.hypot(tip.x - p.position.x, tip.y - p.position.y);
+                        expect(gap, `${d.id} – ${p.id}`).toBeGreaterThanOrEqual(PLAYER_RADIUS_FT);
+                    }
+                }
+            });
+
             it("has known tags, and draws a goalie exactly when the tags say one is in net", () => {
                 expect(PLAY_FOCUS).toContain(play.focus);
                 expect(PLAY_GOALIES).toContain(play.goalies);
@@ -130,6 +163,32 @@ describe("Starter play ice areas", () => {
 
     it.each(STARTER_PLAYS.map((p) => [p.name, p] as const))("%s has no element outside its area", (_name, play) => {
         expect(countElementsOutside(play.playData, areaRect(play.playData.area))).toBe(0);
+    });
+
+    it.each(STARTER_PLAYS.map((p) => [p.name, p] as const))(
+        "%s keeps every note's text box inside its area, clear of the edges",
+        (_name, play) => {
+            const rect = areaRect(play.playData.area);
+            for (const a of play.playData.annotations) {
+                const box = annotationBox(a);
+                expect(box.x0, a.id).toBeGreaterThanOrEqual(rect.x + NOTE_MARGIN_FT);
+                expect(box.x1, a.id).toBeLessThanOrEqual(rect.x + rect.w - NOTE_MARGIN_FT);
+                expect(box.y0, a.id).toBeGreaterThanOrEqual(rect.y + NOTE_MARGIN_FT);
+                expect(box.y1, a.id).toBeLessThanOrEqual(rect.y + rect.h - NOTE_MARGIN_FT);
+            }
+        }
+    );
+
+    it.each(STARTER_PLAYS.map((p) => [p.name, p] as const))("%s keeps notes off the player markers", (_name, play) => {
+        for (const a of play.playData.annotations) {
+            const box = annotationBox(a);
+            for (const p of play.playData.players) {
+                const nx = Math.min(Math.max(p.position.x, box.x0), box.x1);
+                const ny = Math.min(Math.max(p.position.y, box.y0), box.y1);
+                const gap = Math.hypot(p.position.x - nx, p.position.y - ny);
+                expect(gap, `${a.id} – ${p.id}`).toBeGreaterThanOrEqual(PLAYER_RADIUS_FT);
+            }
+        }
     });
 });
 
