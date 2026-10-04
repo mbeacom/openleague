@@ -7,12 +7,25 @@ import {
   MAX_BLOCK_LABEL_LENGTH,
   MAX_GOALIES_ATTENDING,
   MAX_ROTATE_MINUTES,
+  MAX_ROW_STAFF,
+  MAX_SESSION_STAFF,
   MAX_TRANSITION_MINUTES,
   MIN_ROTATE_MINUTES,
   PLAY_FOCUS,
   PLAY_GOALIES,
   SESSION_ROW_KINDS,
+  STAFF_NAME_MAX,
 } from "@/types/practice-planner";
+import {
+  ROW_STAFF_LIMIT_MESSAGE,
+  STAFF_KEY_MAX,
+  STAFF_KEY_MESSAGE,
+  STAFF_LIMIT_MESSAGE,
+  STAFF_NAME_LENGTH_MESSAGE,
+  STAFF_NAME_REQUIRED_MESSAGE,
+  STAFF_ONE_LINK_MESSAGE,
+  cleanStaffName,
+} from "@/lib/utils/session-staff";
 import {
   BLOCK_HAS_NO_DRILL_MESSAGE,
   BLOCK_LABEL_MESSAGE,
@@ -1404,6 +1417,11 @@ const rotateEveryMinutesSchema = z
   .min(MIN_ROTATE_MINUTES, ROTATE_MINUTES_MESSAGE)
   .max(MAX_ROTATE_MINUTES, ROTATE_MINUTES_MESSAGE);
 
+// Practice staff (spec R2, R3). A key is a stored staff id or the editor's key
+// for someone new; the action maps keys to ids. A row's `staff` is read only
+// when the save sends the session's `staff` (absent = unchanged).
+const staffKeySchema = z.string().min(1, STAFF_KEY_MESSAGE).max(STAFF_KEY_MAX, STAFF_KEY_MESSAGE);
+
 export const practiceSessionPlayInputSchema = z
   .object({
     kind: z.enum(SESSION_ROW_KINDS, { message: ROW_KIND_MESSAGE }).default("drill"),
@@ -1417,6 +1435,7 @@ export const practiceSessionPlayInputSchema = z
     label: blockLabelSchema.nullable().optional(),
     stays: z.boolean().optional(),
     rotateEveryMinutes: rotateEveryMinutesSchema.nullable().optional(),
+    staff: z.array(staffKeySchema).max(MAX_ROW_STAFF, ROW_STAFF_LIMIT_MESSAGE).optional(),
   })
   .superRefine((row, ctx) => {
     if (row.kind === "drill") {
@@ -1453,6 +1472,26 @@ const practiceSessionPlayItemsSchema = z
   .optional()
   .default([]);
 
+// One person on the practice's staff. Names are cleaned, then checked (never
+// cut). The list's uniqueness, the rows' keys and the links are checked by the
+// action after authorization (sessionStaffError, staffLinkError).
+export const sessionStaffInputSchema = z
+  .object({
+    key: staffKeySchema,
+    name: z
+      .string()
+      .transform(cleanStaffName)
+      .pipe(z.string().min(1, STAFF_NAME_REQUIRED_MESSAGE).max(STAFF_NAME_MAX, STAFF_NAME_LENGTH_MESSAGE)),
+    teamOfficialId: z.string().cuid("Invalid official ID format").nullable().optional(),
+    userId: z.string().cuid("Invalid user ID format").nullable().optional(),
+  })
+  .refine((member) => !(member.teamOfficialId && member.userId), { message: STAFF_ONE_LINK_MESSAGE, path: ["userId"] });
+
+export type SessionStaffSaveInput = z.output<typeof sessionStaffInputSchema>;
+
+// Absent = unchanged on update, none on create; [] clears (spec R3).
+const sessionStaffSchema = z.array(sessionStaffInputSchema).max(MAX_SESSION_STAFF, STAFF_LIMIT_MESSAGE).optional();
+
 // Practice session validation schemas
 export const createPracticeSessionSchema = z.object({
   title: sanitizedStringWithMin(1, 100),
@@ -1465,6 +1504,7 @@ export const createPracticeSessionSchema = z.object({
   // Absent = unchanged on update, null on create; null clears (spec R3).
   goaliesAttending: goaliesAttendingSchema.nullable().optional(),
   transitionMinutes: transitionMinutesSchema.optional(),
+  staff: sessionStaffSchema,
   ...practiceVenueAttachmentFields,
 }).refine(practiceHasStartAtWhenVenueSet, practiceStartAtRequiredIssue);
 
@@ -1480,6 +1520,7 @@ export const updatePracticeSessionSchema = z.object({
   // Absent = unchanged on update, null on create; null clears (spec R3).
   goaliesAttending: goaliesAttendingSchema.nullable().optional(),
   transitionMinutes: transitionMinutesSchema.optional(),
+  staff: sessionStaffSchema,
   // Explicit Save only; autosave omits it so shared sessions do not email the
   // team on every debounce.
   notify: z.boolean().optional().default(false),

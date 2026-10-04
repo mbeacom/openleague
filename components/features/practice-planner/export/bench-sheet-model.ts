@@ -5,7 +5,7 @@
  * else the viewer's), printPixelRatio for diagrams, one combined legend.
  * Images come from injected renderers, so this module never touches a canvas.
  */
-import type { BlockKind, PlayData, PlayFocus, PlayGoalies } from "@/types/practice-planner";
+import type { BlockKind, PlayData, PlayFocus, PlayGoalies, SessionStaffMember } from "@/types/practice-planner";
 import { buildLegend, type LegendEntry } from "@/lib/utils/canvas/legend";
 import { combinedLegendData } from "@/lib/utils/canvas/station-map";
 import {
@@ -33,6 +33,8 @@ export interface ExportSessionPlay {
     runsWithPrevious: boolean;
     stays?: boolean;
     rotateEveryMinutes?: number | null;
+    /** Staff ids running this row; names come from ExportSession.staff. */
+    staff?: string[];
     play: { name: string; description: string | null; playData: PlayData | null; focus?: PlayFocus; goalies?: PlayGoalies };
 }
 
@@ -45,6 +47,8 @@ export interface ExportSessionBlock {
     instructions: string | null;
     runsWithPrevious: boolean;
     label: string | null;
+    /** Staff ids running this row; names come from ExportSession.staff. */
+    staff?: string[];
 }
 
 export type ExportSessionRow = ExportSessionPlay | ExportSessionBlock;
@@ -63,6 +67,8 @@ export interface ExportSession {
     goaliesAttending?: number | null;
     /** Minutes between blocks; absent reads as 0 */
     transitionMinutes?: number;
+    /** The practice's staff, in list order; absent reads as none. */
+    staff?: SessionStaffMember[];
     plays: ExportSessionRow[];
 }
 

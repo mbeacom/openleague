@@ -336,7 +336,30 @@ describe("buildPlanDocument: block rows, rotation and the gap", () => {
         const doc = buildPlanDocument(session, NOW);
         expect(doc.session.transitionMinutes).toBe(2);
         expect(doc.session.drills.map((entry) => entry.kind)).toEqual(["warmup", "drill", "drill"]);
-        expect(doc.session.drills[0]).toEqual({ kind: "warmup", sequence: 0, durationMinutes: 8, instructions: "Laps", label: null });
+        expect(doc.session.drills[0]).toEqual({ kind: "warmup", sequence: 0, durationMinutes: 8, instructions: "Laps", label: null, staff: [] });
         expect(doc.session.drills[1]).toMatchObject({ rotateEveryMinutes: 5, stays: false });
+    });
+});
+
+describe("buildPlanDocument: practice staff (spec R5, R6)", () => {
+    it("writes the staff list and each row's staff as names: no ids, no links", () => {
+        const session: ExportableSession = {
+            ...SESSION,
+            staff: [{ id: "s1", name: "Coach Lee", teamOfficialId: "cofficialxxxxxxxxxxxxxxxx" }, { id: "s2", name: "Sam" }],
+            plays: [
+                { kind: "warmup", sequence: 0, duration: 8, instructions: null, runsWithPrevious: false, label: null, staff: ["s2"] },
+                { ...sessionPlay("A", 1), staff: ["s1", "s2", "gone"] },
+            ],
+        };
+        const doc = buildPlanDocument(session, NOW);
+        expect(doc.session.staff).toEqual(["Coach Lee", "Sam"]);
+        expect(doc.session.drills.map((entry) => entry.staff)).toEqual([["Sam"], ["Coach Lee", "Sam"]]);
+        expect(JSON.stringify(doc)).not.toMatch(/cofficial|"s1"|"s2"/);
+    });
+
+    it("writes empty lists for a session without staff", () => {
+        const doc = buildPlanDocument(SESSION, NOW);
+        expect(doc.session.staff).toEqual([]);
+        expect(doc.session.drills.every((entry) => entry.staff.length === 0)).toBe(true);
     });
 });

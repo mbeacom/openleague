@@ -197,3 +197,19 @@ The document gains, without a version bump:
 **Compatibility:** a reader built before this amendment strips the drill rows' new keys and reads such a file as before, but rejects a file that contains a block row (it has no `drill`) with its normal "can't open this plan" message. That one-way break is accepted: a bump would make older readers reject every new file, including those without blocks.
 
 Spec: `docs/superpowers/specs/2026-10-04-practice-timing-design.md`.
+
+### 2026-10-05: Practice staff (additive fields, version stays 1)
+
+The document gains, without a version bump:
+- per session: `staff`, a list of at most 12 names (each 1–60 characters once control characters are removed and it is trimmed, unique ignoring case);
+- per row, drill or block: `staff`, at most 4 names, each on the session's list (matched ignoring case).
+
+**Rules:**
+- Names only. A plan never carries a staff id, a link to a team official or an account, or an email. An import creates typed names; a hosted importer never links them.
+- A missing or `null` list reads as no staff, so every earlier file reads as before.
+- Unlike the advisory fields, these are strict: a row naming someone not on the list, a repeated name, an empty or over-long name, or too many names is an error with a readable "Drill N" issue, never silently dropped.
+- Writers always emit both lists (`[]` when there is no staff), and only names that pass the rules.
+
+**Compatibility:** a reader built before this amendment strips the new keys and opens the file without staff. Nothing older readers rely on changes, so no bump.
+
+Spec: `docs/superpowers/specs/2026-10-04-practice-staff-design.md`.
