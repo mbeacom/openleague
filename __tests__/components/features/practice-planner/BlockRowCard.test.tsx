@@ -64,3 +64,14 @@ describe("BlockRowCard", () => {
         expect(screen.getByRole("button", { name: "Delete Water break" })).toBeDisabled();
     });
 });
+
+describe("BlockRowCard touch targets", () => {
+    it("gives the Note field the same 44px minimum height as the Label", () => {
+        renderCard();
+        for (const name of ["Label", "Note"]) {
+            const root = screen.getByRole("textbox", { name }).closest(".MuiInputBase-root");
+            expect(root, name).not.toBeNull();
+            expect(getComputedStyle(root as Element).minHeight, name).toBe("44px");
+        }
+    });
+});

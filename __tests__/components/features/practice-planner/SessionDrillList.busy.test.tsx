@@ -16,7 +16,7 @@ function renderList(disabled: boolean) {
             plays={[play]} duration={60} editingPlayId={null} disabled={disabled}
             onOpenLibrary={vi.fn()} onDelete={vi.fn()} onEdit={vi.fn()} onUpdate={vi.fn()}
             onCancelEdit={vi.fn()} onMoveUp={vi.fn()} onMoveDown={vi.fn()} onToggleStation={vi.fn()}
-            canEditDiagram onEditDiagram={vi.fn()} onNewDrill={vi.fn()}
+            canEditDiagram onEditDiagram={vi.fn()} onNewDrill={vi.fn()} onAddBlock={vi.fn()}
         />,
     );
 }

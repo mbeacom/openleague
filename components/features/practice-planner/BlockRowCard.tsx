@@ -142,6 +142,7 @@ export function BlockRowCard({ item, index, canMoveUp, canMoveDown, locked = fal
                     onChange={(event) => onUpdate(item.id, { instructions: event.target.value })}
                     disabled={locked}
                     slotProps={{ htmlInput: { maxLength: 2000 } }}
+                    sx={{ "& .MuiInputBase-root": { minHeight: 44 } }}
                 />
             </Box>
         </Card>

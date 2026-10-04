@@ -60,8 +60,10 @@ export const STATION_CAP_TOOLTIP = `A station block holds at most ${MAX_STATIONS
  */
 export interface SessionDrillCardProps {
     play: PlayInSession;
-    /** Position in the whole session (not within a station block). */
+    /** Position in the whole session (not within a station block): the move / toggle index. */
     index: number;
+    /** 1-based number among the session's drills (block rows aren't counted); defaults to index + 1. */
+    number?: number;
     /** Whether Move up / Move down would change the order (station-aware, 2b). */
     canMoveUp: boolean;
     canMoveDown: boolean;
@@ -105,6 +107,7 @@ export interface SessionDrillCardProps {
 export function SessionDrillCard({
     play,
     index,
+    number = index + 1,
     canMoveUp,
     canMoveDown,
     station,
@@ -198,14 +201,14 @@ export function SessionDrillCard({
                 }}
             >
                 {thumbnail ? (
-                    <Image src={thumbnail} alt={play.name || `Drill ${index + 1}`} fit="contain" />
+                    <Image src={thumbnail} alt={play.name || `Drill ${number}`} fit="contain" />
                 ) : (
                     <Typography variant="body2" color="text.secondary">
-                        Play {index + 1}
+                        Play {number}
                     </Typography>
                 )}
                 <Chip
-                    label={`#${index + 1}`}
+                    label={`#${number}`}
                     color="primary"
                     size="small"
                     sx={{
@@ -221,7 +224,7 @@ export function SessionDrillCard({
             <CardContent sx={{ flexGrow: 1, py: 1 }}>
                 <Stack spacing={1}>
                     <Typography id={titleId} variant="h6" component={grouped ? "h4" : "h3"}>
-                        {play.name || `Drill ${index + 1}`}
+                        {play.name || `Drill ${number}`}
                     </Typography>
 
                     {fitWarning && (
@@ -308,7 +311,7 @@ export function SessionDrillCard({
                                     startIcon={<DrawIcon />}
                                     onClick={() => onEditDiagram(play.id)}
                                     disabled={disabled || !canEditDiagram}
-                                    aria-label={`Edit diagram for ${play.name || `drill ${index + 1}`}`}
+                                    aria-label={`Edit diagram for ${play.name || `drill ${number}`}`}
                                     sx={{ minHeight: 44 }}
                                 >
                                     Edit diagram
@@ -387,7 +390,7 @@ export function SessionDrillCard({
                         size="small"
                         onClick={() => onMoveUp(index)}
                         disabled={locked || !canMoveUp}
-                        aria-label={`Move play ${index + 1} up`}
+                        aria-label={`Move play ${number} up`}
                     >
                         <ArrowUpwardIcon />
                     </IconButton>
@@ -395,7 +398,7 @@ export function SessionDrillCard({
                         size="small"
                         onClick={() => onMoveDown(index)}
                         disabled={locked || !canMoveDown}
-                        aria-label={`Move play ${index + 1} down`}
+                        aria-label={`Move play ${number} down`}
                     >
                         <ArrowDownwardIcon />
                     </IconButton>
@@ -404,7 +407,7 @@ export function SessionDrillCard({
                         color="primary"
                         onClick={() => onEdit(play.id)}
                         disabled={locked}
-                        aria-label={`Edit play ${index + 1}`}
+                        aria-label={`Edit play ${number}`}
                     >
                         <EditIcon />
                     </IconButton>
@@ -413,7 +416,7 @@ export function SessionDrillCard({
                         color="error"
                         onClick={() => onDelete(play.id)}
                         disabled={locked}
-                        aria-label={`Delete play ${index + 1}`}
+                        aria-label={`Delete play ${number}`}
                     >
                         <DeleteIcon />
                     </IconButton>

@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import type { SegmentKind } from "@/types/segments";
 import { Alert, Box, Button, Paper, Stack, Tooltip, Typography } from "@mui/material";
 import { Add as AddIcon, Draw as DrawIcon } from "@mui/icons-material";
-import type { BlockInSession, PlayInSession, SessionItem } from "@/types/practice-planner";
+import type { BlockInSession, BlockKind, PlayInSession, SessionItem } from "@/types/practice-planner";
 import {
     SEGMENT_KIND_FIT_LABELS,
     canMove,
@@ -18,7 +18,8 @@ import {
     stationWarnings,
     type StationGroup,
 } from "@/lib/utils/session-timeline";
-import { drillRows, isDrillRow, type RowEdit } from "@/lib/utils/session-rows";
+import { drillRows, isBlockRow, isDrillRow, type RowEdit } from "@/lib/utils/session-rows";
+import { AddBlockMenu } from "./AddBlockMenu";
 import { BlockRowCard } from "./BlockRowCard";
 import { SessionDrillCard } from "./SessionDrillCard";
 
@@ -46,6 +47,10 @@ export interface SessionDrillListProps {
     canEditDiagram: boolean;
     onEditDiagram: (clientKey: string) => void;
     onNewDrill: () => void;
+    /** Minutes between blocks, counted in the total (spec R4). */
+    transitionMinutes?: number;
+    /** Appends a warm-up, water break, transition or cool-down. */
+    onAddBlock: (kind: BlockKind) => void;
 }
 
 /**
@@ -113,8 +118,10 @@ export function SessionDrillList({
     canEditDiagram,
     onEditDiagram,
     onNewDrill,
+    transitionMinutes = 0,
+    onAddBlock,
 }: SessionDrillListProps) {
-    const totalPlayTime = sessionWallMinutes(plays);
+    const totalPlayTime = sessionWallMinutes(plays, transitionMinutes);
     const groups = groupStations(plays);
     // An unreadable drill (area null) is skipped by the warnings, not read as full ice; a block has no area.
     const warnings = stationWarnings(
@@ -136,22 +143,27 @@ export function SessionDrillList({
     const fitLabel = segmentKind ? SEGMENT_KIND_FIT_LABELS[segmentKind] : null;
 
     // The editor keeps array order equal to sequence order, so a drill's
-    // position in `plays` is its card number and its move/toggle index.
+    // position in `plays` is its move/toggle index; its card number counts
+    // drills only, so a warm-up or break never shifts "Play N".
+    const drills = drillRows(plays);
     const renderCard = (
         play: PlayInSession,
         stationSlot?: { position: number; count: number },
         goalieWarning: string | null = null,
     ) => {
         const index = plays.indexOf(play);
+        // A drill right after a block row (or first) can't join a station block.
+        const previous = plays[index - 1];
         return (
             <SessionDrillCard
                 key={play.id}
                 play={play}
                 index={index}
+                number={drills.indexOf(play) + 1}
                 stationSlot={stationSlot}
                 canMoveUp={canMove(plays, index, -1)}
                 canMoveDown={canMove(plays, index, 1)}
-                station={index === 0 ? null : {
+                station={previous === undefined || isBlockRow(previous) ? null : {
                     checked: play.runsWithPrevious,
                     canToggle: canToggleRunsWithPrevious(plays, index),
                 }}
@@ -194,11 +206,11 @@ export function SessionDrillList({
     return (
         <Paper elevation={2} sx={{ p: 2 }}>
             <Stack spacing={2}>
-                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" useFlexGap spacing={1}>
                     <Typography variant="h6" component="h2">
                         Plays in Session
                     </Typography>
-                    <Stack direction="row" spacing={1}>
+                    <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" justifyContent="flex-end">
                         <Tooltip title={canEditDiagram ? "" : "Save the session first"}>
                             <span>
                                 <Button
@@ -212,6 +224,7 @@ export function SessionDrillList({
                                 </Button>
                             </span>
                         </Tooltip>
+                        <AddBlockMenu onAdd={onAddBlock} disabled={disabled || locked} />
                         <Button
                             variant="outlined"
                             startIcon={<AddIcon />}
