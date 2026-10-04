@@ -136,6 +136,8 @@ export interface DrillRowInput {
     stays?: boolean;
     /** Absent = unchanged; null clears. */
     rotateEveryMinutes?: number | null;
+    /** Staff keys running this row (spec R3). Read only when the save sends the session's staff. */
+    staff?: string[];
 }
 
 /** One block row in a session save: no drill fields. */
@@ -147,6 +149,8 @@ export interface BlockRowInput {
     instructions: string;
     /** null = the kind's default label */
     label: string | null;
+    /** Staff keys running this row (spec R3). Read only when the save sends the session's staff. */
+    staff?: string[];
 }
 
 export type SessionRowInput = DrillRowInput | BlockRowInput;
@@ -163,6 +167,7 @@ export function toDrillRowInput(item: PlayInSession): DrillRowInput {
         instructions: item.instructions || "",
         ...(item.stays !== undefined && { stays: item.stays }),
         ...(item.rotateEveryMinutes !== undefined && { rotateEveryMinutes: item.rotateEveryMinutes }),
+        ...(item.staff !== undefined && { staff: [...item.staff] }),
     };
 }
 
@@ -177,6 +182,7 @@ export function toSessionRowInputs(items: readonly SessionItem[]): SessionRowInp
                   duration: item.duration,
                   instructions: item.instructions || "",
                   label: toBlockLabel(item.label),
+                  ...(item.staff !== undefined && { staff: [...item.staff] }),
               }
             : toDrillRowInput(item),
     );

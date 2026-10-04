@@ -152,3 +152,21 @@ describe("withStoredTiming", () => {
         expect([first.stays, first.rotateEveryMinutes, second.stays, second.rotateEveryMinutes]).toEqual([true, 5, true, 5]);
     });
 });
+
+describe("row inputs carry staff keys (practice staff, spec R3)", () => {
+    it("sends a row's staff only when the editor row holds it", () => {
+        expect(toDrillRowInput(DRILL)).not.toHaveProperty("staff");
+        expect(toDrillRowInput({ ...DRILL, staff: ["s1", "s2"] }).staff).toEqual(["s1", "s2"]);
+        expect(toDrillRowInput({ ...DRILL, staff: [] }).staff).toEqual([]);
+        const [, block] = toSessionRowInputs([DRILL, { ...BLOCK, staff: ["s3"] }]);
+        expect(block).toMatchObject({ kind: "break", staff: ["s3"] });
+        expect(toSessionRowInputs([BLOCK])[0]).not.toHaveProperty("staff");
+    });
+
+    it("copies the keys, so a later editor edit never changes a payload in flight", () => {
+        const staff = ["s1"];
+        const sent = toDrillRowInput({ ...DRILL, staff });
+        staff.push("s2");
+        expect(sent.staff).toEqual(["s1"]);
+    });
+});
