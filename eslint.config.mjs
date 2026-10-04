@@ -195,7 +195,7 @@ const eslintConfig = [
               group: ["next/*", "@/lib/actions/*", "@/lib/db/*", "@/lib/auth/*"],
               message: PLANNER_PORTABILITY_MESSAGE,
             },
-            { group: ["**/bench-sheet-docx"], message: LAZY_DOCX_MESSAGE },
+            { group: ["**/bench-sheet-docx", "docx/*"], message: LAZY_DOCX_MESSAGE },
           ],
         },
       ],
