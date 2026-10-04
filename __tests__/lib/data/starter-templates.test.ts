@@ -16,6 +16,7 @@ import {
 } from "@/lib/utils/session-timeline";
 
 const NOW = new Date("2026-10-03T18:00:00.000Z");
+const GOALIE_WARMUP = STARTER_PLAYS.find((play) => play.id === "starter-goalie-warmup")?.name;
 
 describe("starter templates", () => {
     it("ships three templates with stable unique ids and names", () => {
@@ -56,10 +57,31 @@ describe("starter templates", () => {
             expect(sessionRowsError(rows)).toBeNull();
         });
 
-        it("opens with a warm-up and closes with a cool-down", () => {
-            const first = rows[0];
-            expect(isDrillRow(first) ? `${first.name} ${first.instructions ?? ""}` : first.kind).toMatch(/warm/i);
+        it("warms the goalie up in its first block and closes with a cool-down", () => {
+            // The first block is a warm-up block, or holds the Goalie Warm-Up drill, or its
+            // lone drill's instructions warm the goalie up before anyone shoots for real.
+            const first = groups[0].stations;
+            const head = first[0];
+            const warmsGoalie =
+                head.kind === "warmup" ||
+                drillRows(first).some((drill) => drill.name === GOALIE_WARMUP) ||
+                (first.length === 1 && isDrillRow(head) && /warm the goalie up/i.test(head.instructions ?? ""));
+            expect(warmsGoalie).toBe(true);
             expect(rows[rows.length - 1].kind).toBe("cooldown");
+        });
+
+        it("says who shoots at every goalie station that stays", () => {
+            for (const drill of drillRows(rows).filter((row) => row.stays)) {
+                expect((drill.instructions ?? "").trim(), drill.name).not.toBe("");
+            }
+        });
+
+        it("describes the same rotation and gap the data runs", () => {
+            for (const group of groups.filter((g) => g.rotation)) {
+                expect(template.description).toContain(`every ${group.rotation?.minutes} minutes`);
+            }
+            if (gap > 0) expect(template.description).toMatch(/between blocks/);
+            else expect(template.description).not.toMatch(/between blocks/);
         });
 
         it("has station blocks of 2–4 drills, each with a goalie station", () => {

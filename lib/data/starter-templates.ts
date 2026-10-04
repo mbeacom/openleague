@@ -88,6 +88,8 @@ function practice(title: string, durationMinutes: number, transitionMinutes: num
 
 const EMPTY_NET = "If a second goalie is free, put them in net; otherwise shoot at the empty net or targets.";
 const SMALL_AREA = "Goalie in net; 30–40 second shifts.";
+/** Who shoots at a goalie station that stays: no skater group visits it. */
+const COACH_FIVE_SPOTS = "A coach shoots from the five spots.";
 
 export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
     {
@@ -105,7 +107,7 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
             {
                 rotateEveryMinutes: 6,
                 stations: [
-                    { drill: "starter-goalie-angles-depth", minutes: 12, stays: true },
+                    { drill: "starter-goalie-angles-depth", minutes: 12, stays: true, instructions: COACH_FIVE_SPOTS },
                     { drill: "starter-skate-stickhandling", minutes: 6 },
                     { drill: "starter-skate-wrist-shots", minutes: 6, instructions: EMPTY_NET },
                 ],
@@ -132,7 +134,7 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
             {
                 rotateEveryMinutes: 6,
                 stations: [
-                    { drill: "starter-goalie-angles-depth", minutes: 12, stays: true, instructions: "A coach shoots from the five spots." },
+                    { drill: "starter-goalie-angles-depth", minutes: 12, stays: true, instructions: COACH_FIVE_SPOTS },
                     { drill: "starter-skate-stickhandling", minutes: 6 },
                     { drill: "starter-skate-puck-protection", minutes: 6 },
                 ],
@@ -146,13 +148,13 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
         id: "template-team-stations",
         name: "Team Practice with Stations",
         description:
-            "A 60-minute team practice: the 3-man weave to warm up skaters and goalie, two rotating station blocks with the goalie staying on angles and then on rebounds, the full team on point shots with a screen and breakouts, and a cool-down, with a minute between blocks.",
+            "A 60-minute team practice: the 3-man weave to warm up skaters and goalie, two station blocks with the goalie staying on angles and then on rebounds while two skater groups rotate every 5 minutes and then every 6 minutes, the full team on point shots with a screen and breakouts, and a cool-down, with a minute between blocks.",
         session: practice("Team Practice with Stations", 60, 1, [
-            { stations: [{ drill: "starter-3man-weave", minutes: 8, instructions: "Finish on the goalie to warm everyone up." }] },
+            { stations: [{ drill: "starter-3man-weave", minutes: 8, instructions: "Finish on the goalie. The first reps are easy shots to the body to warm the goalie up." }] },
             {
                 rotateEveryMinutes: 5,
                 stations: [
-                    { drill: "starter-goalie-angles-depth", minutes: 10, stays: true },
+                    { drill: "starter-goalie-angles-depth", minutes: 10, stays: true, instructions: COACH_FIVE_SPOTS },
                     { drill: "starter-skate-transitions", minutes: 5 },
                     { drill: "starter-skate-puck-protection", minutes: 5 },
                 ],
@@ -160,7 +162,12 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
             {
                 rotateEveryMinutes: 6,
                 stations: [
-                    { drill: "starter-goalie-rebound-control", minutes: 12, stays: true },
+                    {
+                        drill: "starter-goalie-rebound-control",
+                        minutes: 12,
+                        stays: true,
+                        instructions: "A coach shoots from the high slot; two extra skaters or coaches crash the posts.",
+                    },
                     { drill: "starter-skate-stickhandling", minutes: 6 },
                     { drill: "starter-skate-wrist-shots", minutes: 6, instructions: EMPTY_NET },
                 ],
