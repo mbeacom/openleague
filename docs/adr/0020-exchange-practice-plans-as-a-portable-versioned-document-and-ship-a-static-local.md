@@ -84,7 +84,7 @@ Nothing lets a plan leave the hosted database. There is no export and no import,
 
 **Document exports (sub-project 4).**
 - Both deployables export a session as a self-contained HTML bench sheet (inline CSS, PNG data-URI diagrams, no script, no external request, a restrictive CSP meta) and as a Word document.
-- The Word document is built by `docx` (MIT), the planner's only runtime dependency. Exactly one module imports it, and only through `import()` on click, so neither main bundle carries it. ESLint forbids static imports of it in portable code, and the static build check fails if the entry chunk contains it.
+- The Word document is built by `docx` (MIT), the only runtime dependency this sub-project adds. Exactly one module imports it, and only through `import()` on click, so neither main bundle carries it. ESLint forbids static imports of it in portable code, and the static build check fails if the entry chunk contains it.
 
 ## Options considered
 
