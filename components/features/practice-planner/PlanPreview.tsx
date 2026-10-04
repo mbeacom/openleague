@@ -4,7 +4,15 @@
 
 import { useMemo } from "react";
 import { Box, Paper, Stack, Typography } from "@mui/material";
-import { groupStations, sessionWallMinutes, stationBlockLabel } from "@/lib/utils/session-timeline";
+import {
+    STAYS_MARK,
+    betweenBlocksLabel,
+    groupStations,
+    rotatesEveryLabel,
+    rotationBlockLabel,
+    sessionWallMinutes,
+    stationBlockLabel,
+} from "@/lib/utils/session-timeline";
 import { generateThumbnail } from "@/lib/utils/canvas/thumbnail-generator";
 import { useMounted } from "@/lib/hooks/useClockText";
 import { plannedLabel } from "@/components/features/practice-planner/SessionTimeline";
@@ -39,7 +47,11 @@ export function PlanPreview({ plan }: { plan: PlanDocument }) {
                 {session.title}
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                {`${session.duration} min · ${plannedLabel(sessionWallMinutes(session.plays, session.transitionMinutes), session.duration)}`}
+                {[
+                    `${session.duration} min`,
+                    ...(session.transitionMinutes > 0 ? [betweenBlocksLabel(session.transitionMinutes)] : []),
+                    plannedLabel(sessionWallMinutes(session.plays, session.transitionMinutes), session.duration),
+                ].join(" · ")}
             </Typography>
             {session.plays.length === 0 ? (
                 <Typography color="text.secondary">No drills in this plan</Typography>
@@ -64,16 +76,20 @@ export function PlanPreview({ plan }: { plan: PlanDocument }) {
                             );
                         }
                         const stations = drillRows(group.stations);
+                        const rotation = group.rotation;
                         return (
                             <Box component="li" key={group.index}>
                                 {stations.length > 1 && (
                                     <Typography variant="overline" color="secondary.main">
-                                        {stationBlockLabel(stations.length, group.wallMinutes)}
+                                        {rotation
+                                            ? rotationBlockLabel(rotation.minutes, group.wallMinutes)
+                                            : stationBlockLabel(stations.length, group.wallMinutes)}
                                     </Typography>
                                 )}
                                 <Stack spacing={1}>
                                     {stations.map((play) => {
                                         const src = thumbnails.get(play.key);
+                                        const timing = rotation ? (play.stays ? STAYS_MARK : rotatesEveryLabel(rotation.minutes)) : `${play.duration} min`;
                                         return (
                                             <Stack key={play.key} direction="row" spacing={1.5} alignItems="center">
                                                 {src ? (
@@ -89,7 +105,7 @@ export function PlanPreview({ plan }: { plan: PlanDocument }) {
                                                 <Box sx={{ minWidth: 0 }}>
                                                     <Typography fontWeight={600}>{play.name}</Typography>
                                                     <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: "pre-line" }}>
-                                                        {play.instructions ? `${play.duration} min · ${play.instructions}` : `${play.duration} min`}
+                                                        {play.instructions ? `${timing} · ${play.instructions}` : timing}
                                                     </Typography>
                                                 </Box>
                                             </Stack>
