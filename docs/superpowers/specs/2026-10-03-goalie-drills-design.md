@@ -205,9 +205,7 @@ The helpers live in `lib/utils/drill-tags.ts`:
 - The legacy key is left in place, and nothing reads it after migration.
 
 **Hosted:** confirmed. `PlayLibrary.visibleStarters` already lists starters not yet copied, by name, and that stays.
-- *Known limitation, kept:* matching is against the current page only. Once a library passes one page (20), a copied starter can show again on another page.
-- Adding it twice makes a second copy. Nothing is lost.
-- Fixing this needs a "copied starter ids" query and is out of scope.
+- *Amended during implementation:* the page-only limitation was rejected. Matching uses the whole library: the team's drill names are paged in unfiltered, 100 per query, on first load and after a drill is added or deleted, never on a filter change. When the first page already holds every drill, no extra query runs.
 
 ### R10. Starter templates are plan inputs, serialized at use time
 
@@ -365,6 +363,5 @@ TDD per task (see the plan):
 - Per-goalie names or rosters, and assigning goalies to stations.
 - Goalie-specific bench-sheet sections.
 - A goalie count in the bench-sheet header.
-- Fixing hosted page-scoped starter matching (R9).
 - Re-rendering stored thumbnails without goalie markers.
 - Sports other than hockey.
