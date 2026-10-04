@@ -101,12 +101,17 @@ export function sessionForDisplay<S extends { goaliesAttending?: number | null; 
     return changed ? ({ ...session, plays } as S) : session;
 }
 
+/** A drill needs a goalie in net when it is tagged required or is goalie focused (the badge and the warnings). */
+export function needsGoalie(drill: { focus?: unknown; goalies?: unknown }): boolean {
+    const { focus, goalies } = drillTags(drill);
+    return goalies === "required" || focus === "goalies";
+}
+
 /**
- * Goalies a drill needs in net: 0 unless it is tagged required or is goalie
- * focused; then one per G marker (at least one), and one when unreadable.
+ * Goalies a drill needs in net: 0 unless it needs a goalie (needsGoalie);
+ * then one per G marker (at least one), and one when unreadable.
  */
 export function goalieDemand(drill: { focus?: PlayFocus; goalies?: PlayGoalies; playData: PlayData | null }): number {
-    const { focus, goalies } = drillTags(drill);
-    if (goalies !== "required" && focus !== "goalies") return 0;
+    if (!needsGoalie(drill)) return 0;
     return drill.playData ? Math.max(1, goalieMarkerCount(drill.playData)) : 1;
 }

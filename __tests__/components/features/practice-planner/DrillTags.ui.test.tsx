@@ -68,10 +68,10 @@ describe("PlayEditor drill tags", () => {
 });
 
 describe("SessionDrillCard goalie badge", () => {
-    function card(goalies?: "none" | "optional" | "required") {
+    function card(goalies?: "none" | "optional" | "required", focus?: "team" | "skaters" | "goalies") {
         renderWithPlanner(
             <SessionDrillCard
-                play={{ id: "k1", playId: "cplayxxxxxxxxxxxxxxxxxxxx", name: "Warm-up", sequence: 0, duration: 10, runsWithPrevious: false, instructions: "", playData: createEmptyPlayData(), goalies }}
+                play={{ id: "k1", playId: "cplayxxxxxxxxxxxxxxxxxxxx", name: "Warm-up", sequence: 0, duration: 10, runsWithPrevious: false, instructions: "", playData: createEmptyPlayData(), goalies, focus }}
                 index={0} canMoveUp={false} canMoveDown={false} station={null} onToggleStation={vi.fn()} isEditing={false}
                 onDelete={vi.fn()} onEdit={vi.fn()} onUpdate={vi.fn()} onCancelEdit={vi.fn()} onMoveUp={vi.fn()} onMoveDown={vi.fn()}
                 canEditDiagram onEditDiagram={vi.fn()}
@@ -80,6 +80,10 @@ describe("SessionDrillCard goalie badge", () => {
     }
     it("shows the badge only for a drill that needs a goalie", () => {
         card("required");
+        expect(screen.getByRole("img", { name: "Needs a goalie" })).toBeInTheDocument();
+    });
+    it("shows it for a goalie-focused drill tagged optional, by the same rule as the warnings", () => {
+        card("optional", "goalies");
         expect(screen.getByRole("img", { name: "Needs a goalie" })).toBeInTheDocument();
     });
     it("hides it otherwise, including untagged drills", () => {

@@ -56,6 +56,7 @@ import { formatDistanceToNow } from "date-fns";
 import { useDebouncedCallback } from "use-debounce";
 import { DrillFilterChips, type DrillFilters } from "./DrillFilterChips";
 import { GoalieBadge } from "./GoalieBadge";
+import { needsGoalie } from "@/lib/utils/drill-tags";
 
 /** The most rows one library query may ask for (getPlaysByTeamSchema). */
 const NAMES_PAGE_SIZE = 100;
@@ -161,7 +162,7 @@ function PlayCard({
                         No preview
                     </Typography>
                 )}
-                {play.goalies === "required" && <GoalieBadge sx={{ position: "absolute", top: 8, left: 8 }} />}
+                {needsGoalie(play) && <GoalieBadge sx={{ position: "absolute", top: 8, left: 8 }} />}
                 {isSelected && (
                     <Chip
                         label={isLoading ? "Loading..." : "Selected"}
@@ -292,7 +293,7 @@ function StarterPlayCard({
                         No preview
                     </Typography>
                 )}
-                {starter.goalies === "required" && <GoalieBadge sx={{ position: "absolute", top: 8, left: 8 }} />}
+                {needsGoalie(starter) && <GoalieBadge sx={{ position: "absolute", top: 8, left: 8 }} />}
                 <Chip
                     label="Starter"
                     color="secondary"
@@ -381,6 +382,11 @@ export function PlayLibrary({
     // Every drill name in the library; null until loaded (or if that fails).
     const [libraryNames, setLibraryNames] = useState<Set<string> | null>(null);
     const libraryNamesLoaded = useRef(false);
+    // The latest names scan; an older or unmounted scan's answer is dropped.
+    const namesScan = useRef(0);
+    useEffect(() => () => {
+        namesScan.current++;
+    }, []);
 
     // Pagination state
     // Requirements: 4.2 - Pagination for large libraries (20 per page)
@@ -391,22 +397,26 @@ export function PlayLibrary({
     /**
      * The whole library's drill names, for the starter list (manage mode only).
      * An unfiltered first page that holds the whole library already has them;
-     * otherwise this pages through the library. A failure falls back to the
-     * loaded page's names.
+     * otherwise this pages through the library in the background, so the grid
+     * never waits on it. A failed scan keeps the names already known.
      */
-    const refreshLibraryNames = useCallback(async (page: { plays: { name: string }[]; total: number } | null) => {
+    const refreshLibraryNames = useCallback((page: { plays: { name: string }[]; total: number } | null) => {
         if (mode !== "manage") return;
         libraryNamesLoaded.current = true;
+        const scan = ++namesScan.current;
         if (page && page.total <= page.plays.length) {
             setLibraryNames(new Set(page.plays.map((play) => nameKey(play.name))));
             return;
         }
-        try {
-            setLibraryNames(await loadLibraryNames(store, teamId));
-        } catch (err) {
-            console.error("Error loading library names:", err);
-            setLibraryNames(null);
-        }
+        loadLibraryNames(store, teamId)
+            .catch((err: unknown) => {
+                console.error("Error loading library names:", err);
+                return null;
+            })
+            .then((next) => {
+                if (scan !== namesScan.current) return;
+                setLibraryNames((prev) => next ?? prev);
+            });
     }, [mode, store, teamId]);
 
     /**
@@ -441,7 +451,7 @@ export function PlayLibrary({
                 setTotalPages(Math.ceil(result.data.total / playsPerPage));
                 if (refreshNames) {
                     const unfiltered = !search.trim() && dateFilterValue === "all" && !drillFilters.focus && !drillFilters.goalies;
-                    await refreshLibraryNames(unfiltered && currentPage === 1 ? result.data : null);
+                    refreshLibraryNames(unfiltered && currentPage === 1 ? result.data : null);
                 }
             } else {
                 setError(result.error);
@@ -497,7 +507,7 @@ export function PlayLibrary({
         const query = searchQuery.trim().toLowerCase();
 
         return STARTER_PLAYS.filter((starter) => {
-            const name = starter.name.toLowerCase();
+            const name = nameKey(starter.name);
             if (existingNames.has(name) || copiedStarterNames.has(name)) return false;
             if (
                 query &&
@@ -535,7 +545,7 @@ export function PlayLibrary({
                 if (result.success) {
                     setCopiedStarterNames((prev) => {
                         const next = new Set(prev);
-                        next.add(starter.name.toLowerCase());
+                        next.add(nameKey(starter.name));
                         return next;
                     });
                     await loadPlays(searchQuery, dateFilter, filters, true);
@@ -664,7 +674,15 @@ export function PlayLibrary({
             });
 
             if (result.success) {
-                // Reload plays after deletion; a deleted starter copy can be added again
+                // A deleted starter copy can be added again: forget it was copied, then reload
+                const deletedName = plays.find((play) => play.id === playToDelete)?.name;
+                if (deletedName) {
+                    setCopiedStarterNames((prev) => {
+                        const next = new Set(prev);
+                        next.delete(nameKey(deletedName));
+                        return next;
+                    });
+                }
                 await loadPlays(searchQuery, dateFilter, filters, true);
                 setDeleteDialogOpen(false);
                 setPlayToDelete(null);
@@ -677,7 +695,7 @@ export function PlayLibrary({
         } finally {
             setIsDeleting(false);
         }
-    }, [store, playToDelete, teamId, loadPlays, searchQuery, dateFilter, filters]);
+    }, [store, playToDelete, plays, teamId, loadPlays, searchQuery, dateFilter, filters]);
 
     /**
      * Handle delete dialog close

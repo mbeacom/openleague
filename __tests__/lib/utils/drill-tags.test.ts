@@ -5,6 +5,7 @@ import {
     displayPlayData,
     drillTags,
     goalieDemand,
+    needsGoalie,
     goalieMarkerCount,
     hidesGoalieMarkers,
     sessionForDisplay,
@@ -91,6 +92,16 @@ describe("goalie markers", () => {
         expect(shown).not.toBe(zero);
         expect(shown.plays[0].play.playData?.players).toHaveLength(1);
         expect(zero.plays[0].play.playData.players).toHaveLength(2);
+    });
+});
+
+describe("needsGoalie", () => {
+    it("is true for a drill tagged required or goalie focused, false otherwise (untagged included)", () => {
+        expect(needsGoalie({ goalies: "required" })).toBe(true);
+        expect(needsGoalie({ focus: "goalies", goalies: "optional" })).toBe(true);
+        expect(needsGoalie({ focus: "goalies", goalies: "none" })).toBe(true);
+        expect(needsGoalie({ focus: "team", goalies: "optional" })).toBe(false);
+        expect(needsGoalie({})).toBe(false);
     });
 });
 

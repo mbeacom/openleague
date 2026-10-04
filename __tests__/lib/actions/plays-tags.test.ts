@@ -64,6 +64,8 @@ describe("plays: drill tags", () => {
         const query = mockPrisma.play.findMany.mock.calls[0][0];
         expect(query.where).toMatchObject({ teamId: TEAM, sessionId: null, isTemplate: true, focus: "goalies", goalies: "required" });
         expect(query).toMatchObject({ skip: 20, take: 20 });
+        // A stable order (id breaks createdAt ties), so offset pages never skip or repeat a drill.
+        expect(query.orderBy).toEqual([{ createdAt: "desc" }, { id: "desc" }]);
         expect(query.select).toMatchObject({ focus: true, goalies: true });
         expect(mockPrisma.play.count.mock.calls[0][0].where).toEqual(query.where);
         expect(result.success && result.data.total).toBe(21);

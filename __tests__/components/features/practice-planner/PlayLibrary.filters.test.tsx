@@ -32,6 +32,12 @@ const focusChip = (name: string) => within(screen.getByRole("group", { name: "Fo
 const goaliesChip = (name: string) => within(screen.getByRole("group", { name: "Goalies" })).getByRole("button", { name });
 
 describe("PlayLibrary drill tags", () => {
+    it("badges a goalie-focused drill tagged optional, by the same rule as the warnings", async () => {
+        renderLibrary([summary("cplay4xxxxxxxxxxxxxxxxxxx", "My Crease Work", { focus: "goalies", goalies: "optional" })]);
+        await screen.findByText("My Crease Work");
+        expect(within(cardOf("My Crease Work")).getByRole("img", { name: "Needs a goalie" })).toBeInTheDocument();
+    });
+
     it("badges library drills that need a goalie", async () => {
         renderLibrary();
         await screen.findByText("My Warm-up");
@@ -98,5 +104,100 @@ describe("PlayLibrary drill tags", () => {
         await waitFor(() => expect(screen.queryByText("Goalie Warm-Up")).toBeNull());
         // The names scan ignores search, date and tag filters, so it sees the whole library.
         expect(store.getPlaysByTeam).toHaveBeenCalledWith({ teamId: TEAM, isTemplate: true, page: 1, limit: 100, dateFilter: "all" });
+    });
+});
+
+type Query = { limit: number; page: number; focus?: string };
+const filler = (n: number) => Array.from({ length: n }, (_, i) => summary(`cfill${String(i).padStart(20, "x")}`, `Drill ${i}`));
+
+function renderManage(store: ReturnType<typeof createMockPlannerStore>) {
+    renderWithPlanner(
+        <ThemeProvider theme={createTheme()}>
+            <PlayLibrary teamId={TEAM} mode="manage" />
+        </ThemeProvider>,
+        { store, platform: createHashPlatform() },
+    );
+}
+
+/** A library held in memory: the page query and the names scan both page through it. */
+function libraryStore(initial: unknown[]) {
+    const store = createMockPlannerStore();
+    const state = { plays: [...initial] as { name: string }[], failNamesPage: 0 };
+    store.getPlaysByTeam.mockImplementation(async (query: Query) => {
+        if (query.limit === 100 && query.page === state.failNamesPage) return { success: false, error: "Offline" };
+        const start = (query.page - 1) * query.limit;
+        return { success: true, data: { plays: state.plays.slice(start, start + query.limit), total: state.plays.length, page: query.page, limit: query.limit } };
+    });
+    return { store, state };
+}
+
+const namesQueries = (store: ReturnType<typeof createMockPlannerStore>) =>
+    store.getPlaysByTeam.mock.calls.filter(([query]: [Query]) => query.limit === 100);
+
+describe("PlayLibrary whole-library names scan", () => {
+    it("pages through a library over 100 drills and hides a starter copied on page 2", async () => {
+        const { store } = libraryStore([...filler(120), summary("cplay3xxxxxxxxxxxxxxxxxxx", "Goalie Warm-Up")]);
+        renderManage(store);
+        await screen.findByText("Breakout (5-Man)");
+        await waitFor(() => expect(namesQueries(store).map(([q]: [Query]) => q.page)).toEqual([1, 2]));
+        await waitFor(() => expect(screen.queryByText("Goalie Warm-Up")).toBeNull());
+    });
+
+    it("shows the drills while the scan is still running", async () => {
+        const { store } = libraryStore([...filler(30)]);
+        const page = store.getPlaysByTeam.getMockImplementation()!;
+        store.getPlaysByTeam.mockImplementation((query: Query) => (query.limit === 100 ? new Promise(() => {}) : page(query)));
+        renderManage(store);
+        expect(await screen.findByText("Drill 0")).toBeInTheDocument();
+        expect(screen.queryByRole("progressbar")).toBeNull();
+    });
+
+    it("keeps the names it has when a later scan fails part-way", async () => {
+        const { store, state } = libraryStore([...filler(120), summary("cplay3xxxxxxxxxxxxxxxxxxx", "Goalie Warm-Up")]);
+        store.createPlay.mockImplementation(async (input: { name: string }) => {
+            state.plays.push(summary("cnewxxxxxxxxxxxxxxxxxxxxx", input.name));
+            state.failNamesPage = 2;
+            return { success: true, data: { id: "cnewxxxxxxxxxxxxxxxxxxxxx", name: input.name, isTemplate: true } };
+        });
+        renderManage(store);
+        await waitFor(() => expect(screen.queryByText("Goalie Warm-Up")).toBeNull());
+        await screen.findByText("Breakout (5-Man)");
+        fireEvent.click(within(cardOf("Breakout (5-Man)")).getByRole("button", { name: /Add to my library/ }));
+        await waitFor(() => expect(namesQueries(store).length).toBeGreaterThanOrEqual(4));
+        expect(screen.queryByText("Breakout (5-Man)")).toBeNull();
+        expect(screen.queryByText("Goalie Warm-Up")).toBeNull();
+        expect(screen.getByText("Drill 0")).toBeInTheDocument();
+    });
+
+    it("issues no names query on a filter or page change", async () => {
+        const { store } = libraryStore([...filler(45)]);
+        renderManage(store);
+        await screen.findByText("Drill 0");
+        await waitFor(() => expect(namesQueries(store)).toHaveLength(1));
+        fireEvent.click(screen.getByRole("button", { name: "Go to page 2" }));
+        await waitFor(() => expect(store.getPlaysByTeam).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2, limit: 20 })));
+        fireEvent.click(focusChip("Goalies"));
+        await waitFor(() => expect(store.getPlaysByTeam).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1, focus: "goalies" })));
+        expect(namesQueries(store)).toHaveLength(1);
+    });
+
+    it("offers a starter again after its copy is deleted", async () => {
+        const { store, state } = libraryStore([]);
+        store.createPlay.mockImplementation(async (input: { name: string }) => {
+            state.plays.push(summary("cnewxxxxxxxxxxxxxxxxxxxxx", input.name));
+            return { success: true, data: { id: "cnewxxxxxxxxxxxxxxxxxxxxx", name: input.name, isTemplate: true } };
+        });
+        store.deletePlay.mockImplementation(async ({ id }: { id: string }) => {
+            state.plays = state.plays.filter((p) => (p as { id: string }).id !== id);
+            return { success: true, data: { id, detachedSessions: 0 } };
+        });
+        renderManage(store);
+        await screen.findByText("Goalie Warm-Up");
+        fireEvent.click(within(cardOf("Goalie Warm-Up")).getByRole("button", { name: /Add to my library/ }));
+        await waitFor(() => expect(screen.getByRole("button", { name: "Delete Goalie Warm-Up" })).toBeInTheDocument());
+        fireEvent.click(screen.getByRole("button", { name: "Delete Goalie Warm-Up" }));
+        fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
+        await waitFor(() => expect(screen.queryByRole("button", { name: "Delete Goalie Warm-Up" })).toBeNull());
+        await waitFor(() => expect(within(cardOf("Goalie Warm-Up")).getByText("Starter")).toBeInTheDocument());
     });
 });

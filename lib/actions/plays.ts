@@ -554,9 +554,8 @@ export async function getPlaysByTeam(input: GetPlaysByTeamInput): Promise<Action
                     createdAt: true,
                     updatedAt: true,
                 },
-                orderBy: {
-                    createdAt: "desc",
-                },
+                // id breaks createdAt ties, so offset pages never skip or repeat a drill
+                orderBy: [{ createdAt: "desc" }, { id: "desc" }],
                 skip,
                 take: validated.limit,
             }),
