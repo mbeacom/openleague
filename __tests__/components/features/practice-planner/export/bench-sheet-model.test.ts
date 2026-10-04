@@ -156,3 +156,48 @@ describe("export copy", () => {
         expect(DIAGRAM_UNAVAILABLE_TEXT).toBe(DIAGRAM_UNAVAILABLE);
     });
 });
+
+describe("goalie markers (spec R7)", () => {
+    const goalieBoard: PlayData = {
+        ...createEmptyPlayData(),
+        players: [
+            { id: "g", role: "G", label: "G", position: { x: 14, y: 42.5 }, color: "#212121" },
+            { id: "f", role: "F", label: "F1", position: { x: 40, y: 42.5 }, color: "#1976D2" },
+        ],
+    };
+    const session = (goaliesAttending: number | null): ExportSession => ({
+        ...UNBOOKED,
+        goaliesAttending,
+        plays: [
+            { ...play("D-Zone", 0, 10, false, { playData: goalieBoard }), play: { name: "D-Zone", description: null, playData: goalieBoard, goalies: "optional" } },
+            { ...play("Warm-up", 1, 10, false, { playData: goalieBoard }), play: { name: "Warm-up", description: null, playData: goalieBoard, goalies: "required" } },
+        ],
+    });
+
+    function drawn(goaliesAttending: number | null): string[][] {
+        const diagrams: PlayData[] = [];
+        const renderers: BenchSheetRenderers = {
+            diagram: (playData) => {
+                diagrams.push(playData);
+                return "data:image/png;base64,AA==";
+            },
+            swatch: () => null,
+        };
+        buildBenchSheetModel(session(goaliesAttending), renderers);
+        return diagrams.map((d) => d.players.map((p) => p.role));
+    }
+
+    it("hides the goalie on optional-goalie drills when 0 goalies attend; keeps it on required drills", () => {
+        expect(drawn(0)).toEqual([["F"], ["G", "F"]]);
+    });
+
+    it("changes nothing when goalies attend or the count is not set", () => {
+        expect(drawn(1)).toEqual([["G", "F"], ["G", "F"]]);
+        expect(drawn(null)).toEqual([["G", "F"], ["G", "F"]]);
+    });
+
+    it("never touches the stored diagram", () => {
+        drawn(0);
+        expect(goalieBoard.players).toHaveLength(2);
+    });
+});

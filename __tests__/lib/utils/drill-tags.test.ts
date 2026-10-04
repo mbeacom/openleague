@@ -66,6 +66,14 @@ describe("goalie markers", () => {
         expect(hidesGoalieMarkers(undefined, "optional")).toBe(false);
     });
 
+    it("never hides the goalie on a goalie-focus drill", () => {
+        expect(hidesGoalieMarkers(0, "optional", "goalies")).toBe(false);
+        expect(hidesGoalieMarkers(0, "optional", "team")).toBe(true);
+        expect(displayPlayData(BOARD, "optional", 0, "goalies")).toBe(BOARD);
+        const session = { goaliesAttending: 0, plays: [{ play: { focus: "goalies" as const, goalies: "optional" as const, playData: BOARD } }] };
+        expect(sessionForDisplay(session)).toBe(session);
+    });
+
     it("displayPlayData returns the same object unless markers are hidden", () => {
         expect(displayPlayData(BOARD, "optional", 1)).toBe(BOARD);
         expect(displayPlayData(BOARD, "required", 0)).toBe(BOARD);

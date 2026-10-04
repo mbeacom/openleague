@@ -1,6 +1,6 @@
 /** BenchSheet (3b): header, timeline, one legend, then drills paired into pages. */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, screen, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { renderWithPlanner } from "@/__tests__/helpers/planner";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
@@ -242,4 +242,25 @@ describe("BenchSheet chrome and place line", () => {
         expect(screen.queryByText(/Test Rink|Main|Half A/)).toBeNull();
     });
 
+});
+
+describe("BenchSheet goalie markers", () => {
+    it("prints optional-goalie drills without the goalie when 0 goalies attend", async () => {
+        const goalieBoard: PlayData = {
+            ...createEmptyPlayData(),
+            players: [
+                { id: "g", role: "G", label: "G", position: { x: 14, y: 42.5 }, color: "#212121" },
+                { id: "f", role: "F", label: "F1", position: { x: 40, y: 42.5 }, color: "#1976D2" },
+            ],
+        };
+        mockGenerate.mockClear();
+        renderSheet({
+            ...SESSION,
+            goaliesAttending: 0,
+            plays: [{ ...sessionPlay("D-Zone", 0, false, 10, { playData: goalieBoard }), play: { id: "play-dz", name: "D-Zone", description: null, thumbnail: null, playData: goalieBoard, goalies: "optional" } }],
+        });
+        await waitFor(() => expect(mockGenerate).toHaveBeenCalled());
+        const drawnPlayers = (mockGenerate.mock.calls[0] as unknown as [PlayData])[0].players;
+        expect(drawnPlayers.map((p) => p.role)).toEqual(["F"]);
+    });
 });

@@ -302,7 +302,7 @@ export interface GoalieShortfall {
 
 export interface GoalieWarnings {
     short: GoalieShortfall[];
-    /** Goalies attend, but every drill is tagged "none". */
+    /** Goalies attend, but no drill uses one (every drill is tagged "none" and needs none). */
     unused: boolean;
 }
 
@@ -324,8 +324,9 @@ export function goalieWarnings(
         const sequences: number[] = [];
         for (const station of group.stations) {
             drills++;
-            if (toPlayGoalies(station.goalies) !== "none") anyUsesGoalie = true;
             const demand = goalieDemand(station);
+            // A goalie-focus drill uses a goalie even when tagged "none".
+            if (toPlayGoalies(station.goalies) !== "none" || demand > 0) anyUsesGoalie = true;
             if (demand > 0) {
                 needed += demand;
                 sequences.push(station.sequence);

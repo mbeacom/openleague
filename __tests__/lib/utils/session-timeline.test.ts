@@ -472,6 +472,10 @@ describe("goalieWarnings", () => {
         expect(warn([], 2).unused).toBe(false);
     });
 
+    it("counts a goalie-focus drill as using a goalie even when tagged none", () => {
+        expect(warn([drill(0, "none", false, G, "goalies")], 1)).toEqual({ short: [], unused: false });
+    });
+
     it("words the drill, block, session and summary messages", () => {
         expect(goalieShortMessage(1, 0, false)).toBe("Needs a goalie — none attending");
         expect(goalieShortMessage(2, 1, false)).toBe("Needs 2 goalies — 1 attending");

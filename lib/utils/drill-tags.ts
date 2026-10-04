@@ -58,9 +58,16 @@ export function withoutGoalies(playData: PlayData): PlayData {
     return { ...playData, players: playData.players.filter((player) => player.role !== "G") };
 }
 
-/** Goalie markers are hidden only when the coach said no goalies are coming and the drill doesn't need one. */
-export function hidesGoalieMarkers(goaliesAttending: number | null | undefined, goalies: PlayGoalies | undefined): boolean {
-    return goaliesAttending === 0 && toPlayGoalies(goalies) === "optional";
+/**
+ * Goalie markers are hidden only when the coach said no goalies are coming and
+ * the drill doesn't need one. A goalie-focus drill always keeps its goalie.
+ */
+export function hidesGoalieMarkers(
+    goaliesAttending: number | null | undefined,
+    goalies: PlayGoalies | undefined,
+    focus?: PlayFocus,
+): boolean {
+    return goaliesAttending === 0 && toPlayGoalies(goalies) === "optional" && toPlayFocus(focus) !== "goalies";
 }
 
 /** The diagram as the session views draw it. The same object unless markers are actually hidden. */
@@ -68,13 +75,14 @@ export function displayPlayData<T extends PlayData | null>(
     playData: T,
     goalies: PlayGoalies | undefined,
     goaliesAttending: number | null | undefined,
+    focus?: PlayFocus,
 ): T {
-    if (!playData || !hidesGoalieMarkers(goaliesAttending, goalies) || goalieMarkerCount(playData) === 0) return playData;
+    if (!playData || !hidesGoalieMarkers(goaliesAttending, goalies, focus) || goalieMarkerCount(playData) === 0) return playData;
     return withoutGoalies(playData) as T;
 }
 
 interface DisplayablePlay {
-    play: { goalies?: PlayGoalies; playData: PlayData | null };
+    play: { focus?: PlayFocus; goalies?: PlayGoalies; playData: PlayData | null };
 }
 
 /**
@@ -85,7 +93,7 @@ interface DisplayablePlay {
 export function sessionForDisplay<S extends { goaliesAttending?: number | null; plays: readonly DisplayablePlay[] }>(session: S): S {
     let changed = false;
     const plays = session.plays.map((sp) => {
-        const shown = displayPlayData(sp.play.playData, sp.play.goalies, session.goaliesAttending);
+        const shown = displayPlayData(sp.play.playData, sp.play.goalies, session.goaliesAttending, sp.play.focus);
         if (shown === sp.play.playData) return sp;
         changed = true;
         return { ...sp, play: { ...sp.play, playData: shown } };

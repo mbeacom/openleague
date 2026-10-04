@@ -77,6 +77,8 @@ export interface SessionDrillCardProps {
     stationSlot?: { position: number; count: number };
     /** Advisory: the drill is larger than the booked ice segment (2b). Never blocks a save. */
     fitWarning?: string | null;
+    /** Advisory goalie shortfall for a standalone drill. Never blocks a save. */
+    goalieWarning?: string | null;
     isEditing: boolean;
     onDelete: (playId: string) => void;
     onEdit: (playId: string) => void;
@@ -108,6 +110,7 @@ export function SessionDrillCard({
     onToggleStation,
     stationSlot,
     fitWarning = null,
+    goalieWarning = null,
     isEditing,
     onDelete,
     onEdit,
@@ -228,6 +231,9 @@ export function SessionDrillCard({
                             variant="outlined"
                             sx={{ alignSelf: "flex-start" }}
                         />
+                    )}
+                    {goalieWarning && (
+                        <Chip label={goalieWarning} color="warning" size="small" variant="outlined" sx={{ alignSelf: "flex-start" }} />
                     )}
 
                     {/* Duration - Editable */}

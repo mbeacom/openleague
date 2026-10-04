@@ -42,6 +42,8 @@ import { useSingleFlightSave, type SaveOutcome } from "./useSingleFlightSave";
 import { SessionDrillList } from "./SessionDrillList";
 import { SessionDrillDialog } from "./SessionDrillDialog";
 import { useSessionDrillDialog } from "./useSessionDrillDialog";
+import { GoaliesAttendingField } from "./GoaliesAttendingField";
+import { useGoaliesAttending } from "./useGoaliesAttending";
 import { ShareSessionDialog } from "./ShareSessionDialog";
 import { BookingConflictAlert, VenueBookingFields } from "./VenueBookingFields";
 import {
@@ -178,6 +180,7 @@ export function PracticeSessionEditor({
     // Edit a drill's diagram, or build a new drill, in the session (3a).
     const saveNow = useCallback(() => saveFlight.request({ overrideConflicts: false, notify: false }), [saveFlight]);
     const drillDialog = useSessionDrillDialog(plays, setPlays, markDirty, saveNow);
+    const goalies = useGoaliesAttending(initialData?.goaliesAttending, markDirty);
 
     // Optional ice booking (feature 006, FR-019).
     const booking = useVenueBooking({
@@ -338,6 +341,7 @@ export function PracticeSessionEditor({
                 duration,
                 plays,
                 isShared,
+                goaliesAttending: goalies.goaliesAttending,
                 ...booking.attachment(resolvedStart.startAt),
                 overrideConflicts,
                 overrideReason: overrideConflicts ? booking.overrideReason.trim() : "",
@@ -386,7 +390,7 @@ export function PracticeSessionEditor({
             setIsSaving(false);
             saveFlight.finish(outcome);
         }
-    }, [title, date, duration, plays, isShared, sessionId, booking, onSave, validateForm, saveFlight]);
+    }, [title, date, duration, plays, isShared, goalies.goaliesAttending, sessionId, booking, onSave, validateForm, saveFlight]);
 
     // Keep handleSaveRef updated with latest handleSave function
     useEffect(() => {
@@ -685,6 +689,7 @@ export function PracticeSessionEditor({
                         }
                         error={!!validationErrors.duration}
                     />
+                    <GoaliesAttendingField value={goalies.goaliesAttending} onChange={goalies.setGoaliesAttending} disabled={creating} />
 
                     {/* Shared Status Indicator */}
                     {/* Requirements: 3.1 - Show shared status indicator */}
@@ -710,6 +715,7 @@ export function PracticeSessionEditor({
                 plays={plays}
                 duration={duration}
                 segmentKind={booking.segmentKind}
+                goaliesAttending={goalies.goaliesAttending}
                 editingPlayId={editingPlayId}
                 disabled={busy}
                 locked={creating}

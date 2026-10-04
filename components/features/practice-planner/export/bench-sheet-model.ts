@@ -9,6 +9,7 @@ import type { PlayData, PlayFocus, PlayGoalies } from "@/types/practice-planner"
 import { buildLegend, type LegendEntry } from "@/lib/utils/canvas/legend";
 import { combinedLegendData } from "@/lib/utils/canvas/station-map";
 import { buildSchedule, sessionWallMinutes } from "@/lib/utils/session-timeline";
+import { sessionForDisplay } from "@/lib/utils/drill-tags";
 import { formatClockTime, formatLongDate, sessionStart, sessionTimeZone } from "@/lib/utils/date";
 import { plannedLabel, stationsLabel } from "../SessionTimeline";
 import { drillText, stationTag } from "../print/BenchSheetDrill";
@@ -86,10 +87,12 @@ export interface BenchSheetRenderers {
 const MS_PER_MINUTE = 60_000;
 
 export function buildBenchSheetModel(
-    session: ExportSession,
+    stored: ExportSession,
     renderers: BenchSheetRenderers,
     options: { omitTeam?: boolean } = {},
 ): BenchSheetModel {
+    // Goalie markers hidden at render time only (spec R7). The plan JSON export never calls this.
+    const session = sessionForDisplay(stored);
     const start = sessionStart(session);
     const end = new Date(start.getTime() + session.duration * MS_PER_MINUTE);
     const { timeZone, showZone } = sessionTimeZone(session);

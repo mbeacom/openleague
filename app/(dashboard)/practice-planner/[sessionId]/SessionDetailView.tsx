@@ -47,6 +47,8 @@ import { PlayLegend } from "@/components/features/practice-planner/PlayLegend";
 import { StationMap } from "@/components/features/practice-planner/StationMap";
 import { SessionTimeline } from "@/components/features/practice-planner/SessionTimeline";
 import { ExportPlanMenu } from "@/components/features/practice-planner/ExportPlanMenu";
+import { PrintDiagram } from "@/components/features/practice-planner/print/PrintDiagram";
+import { useSessionGoalies } from "@/components/features/practice-planner/useSessionGoalies";
 import type { PracticeSessionView, PracticeSessionViewPlay } from "@/types/practice-planner";
 import {
   SEGMENT_KIND_FIT_LABELS,
@@ -136,6 +138,11 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
   const { timeZone, showZone } = sessionTimeZone(session);
   const clock = useClockText(timeZone, showZone);
   const activePlay = session.plays[activePlayIndex] ?? null;
+  const { shown, messages: goalieMessages } = useSessionGoalies(session);
+  // The diagram as drawn for this session (spec R7); the stored play is never changed.
+  const drawnAt = (index: number) => shown.plays[index]?.play.playData ?? session.plays[index]?.play.playData ?? null;
+  const activeDrawn = activePlay ? drawnAt(activePlayIndex) : null;
+  const goaliesHidden = Boolean(activePlay && activeDrawn !== activePlay.play.playData);
   const groups = useMemo(() => groupStations(session.plays), [session.plays]);
   const activeGroup = activePlay
     ? groups.find((group) => group.stations.includes(activePlay)) ?? null
@@ -143,9 +150,12 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
   const stationMapStations = useMemo(
     () =>
       activeGroup && activeGroup.stations.length > 1
-        ? activeGroup.stations.map((sp) => ({ name: sp.play.name, playData: sp.play.playData }))
+        ? activeGroup.stations.map((sp) => ({
+            name: sp.play.name,
+            playData: shown.plays[session.plays.indexOf(sp)]?.play.playData ?? sp.play.playData,
+          }))
         : null,
-    [activeGroup]
+    [activeGroup, shown, session.plays]
   );
   // Advisory fit check against the booked segment's kind (2b); unreadable drills are skipped.
   const fitLabel = session.segmentKind ? SEGMENT_KIND_FIT_LABELS[session.segmentKind] : null;
@@ -269,6 +279,12 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
                   )}
                 </Stack>
               )}
+              {session.goaliesAttending != null && (
+                <Chip size="small" variant="outlined" label={`Goalies: ${session.goaliesAttending}`} />
+              )}
+              {goalieMessages.map((message) => (
+                <Chip key={message} size="small" color="warning" variant="outlined" label={message} />
+              ))}
             </Stack>
           </Box>
 
@@ -527,7 +543,10 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
                     position: "relative",
                   }}
                 >
-                  {activePlay.play.thumbnail ? (
+                  {/* A stored PNG can't drop a hidden goalie marker, so draw it live. */}
+                  {goaliesHidden ? (
+                    <PrintDiagram playData={activeDrawn} name={activePlay.play.name} pixelRatio={2} />
+                  ) : activePlay.play.thumbnail ? (
                     <Image src={activePlay.play.thumbnail} alt={activePlay.play.name} fit="contain" />
                   ) : (
                     <Stack alignItems="center" spacing={1}>
@@ -540,7 +559,7 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
                 </Box>
 
                 <Box sx={{ px: 3, pt: 2 }}>
-                  <PlayLegend playData={activePlay.play.playData} />
+                  <PlayLegend playData={activeDrawn} />
                 </Box>
 
                 {/* Play details */}
