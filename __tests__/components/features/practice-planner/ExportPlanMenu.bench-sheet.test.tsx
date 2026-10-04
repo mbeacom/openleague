@@ -1,6 +1,6 @@
 /** Export plan → bench sheet (HTML) and Word document (.docx), sub-project 4. */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
 const { mockDocx } = vi.hoisted(() => ({ mockDocx: vi.fn() }));
@@ -11,6 +11,7 @@ vi.mock("@/components/features/practice-planner/export/bench-sheet-docx", () => 
 
 import {
     ExportPlanMenu,
+    LINK_COPIED_NOTICE,
     PREPARING_DOCX_NOTICE,
     type ExportableSession,
 } from "@/components/features/practice-planner/ExportPlanMenu";
@@ -117,6 +118,50 @@ describe("ExportPlanMenu bench sheet exports", () => {
         await waitFor(() =>
             expect(screen.getByRole("menuitem", { name: "Download Word document (.docx)" })).not.toHaveAttribute("aria-disabled"),
         );
+    });
+
+    it("keeps the preparing notice up past the usual 6 s and through a click away while the export runs", async () => {
+        let finish!: (blob: Blob) => void;
+        mockDocx.mockReturnValue(new Promise<Blob>((resolve) => (finish = resolve)));
+        vi.useFakeTimers();
+        try {
+            renderWithPlanner(<ExportPlanMenu session={SESSION} />);
+            choose("Download Word document (.docx)");
+            await act(() => vi.advanceTimersByTimeAsync(0));
+            expect(mockDocx).toHaveBeenCalled();
+            await act(() => vi.advanceTimersByTimeAsync(7000));
+            expect(screen.getByText(PREPARING_DOCX_NOTICE)).toBeInTheDocument();
+            fireEvent.click(document.body);
+            await act(() => vi.advanceTimersByTimeAsync(0));
+            expect(screen.getByText(PREPARING_DOCX_NOTICE)).toBeInTheDocument();
+            finish(new Blob(["PK"]));
+            await act(() => vi.advanceTimersByTimeAsync(0));
+            expect(downloads).toHaveLength(1);
+            expect(screen.queryByText(PREPARING_DOCX_NOTICE)).not.toBeInTheDocument();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it("leaves a notice that replaced the preparing one when the export succeeds", async () => {
+        vi.stubEnv("NEXT_PUBLIC_STATIC_PLANNER_URL", "https://planner.example/app/");
+        Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: vi.fn().mockResolvedValue(undefined) } });
+        let finish!: (blob: Blob) => void;
+        mockDocx.mockReturnValue(new Promise<Blob>((resolve) => (finish = resolve)));
+        try {
+            renderWithPlanner(<ExportPlanMenu session={SESSION} />);
+            choose("Download Word document (.docx)");
+            await waitFor(() => expect(mockDocx).toHaveBeenCalled());
+            fireEvent.click(screen.getByRole("button", { name: "Export plan" }));
+            fireEvent.click(screen.getByRole("menuitem", { name: /open in planner/i }));
+            expect(await screen.findByText(LINK_COPIED_NOTICE)).toBeInTheDocument();
+            finish(new Blob(["PK"]));
+            await waitFor(() => expect(downloads).toHaveLength(1));
+            await act(async () => {});
+            expect(screen.getByText(LINK_COPIED_NOTICE)).toBeInTheDocument();
+        } finally {
+            vi.unstubAllEnvs();
+        }
     });
 
     it("explains a failed export", async () => {

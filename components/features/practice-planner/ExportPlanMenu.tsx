@@ -124,11 +124,13 @@ export function ExportPlanMenu({ session, size = "medium" }: ExportPlanMenuProps
         setAnchor(null);
         if (exporting) return;
         setExporting(format);
-        setNotice({ severity: "info", text: format === "html" ? PREPARING_HTML_NOTICE : PREPARING_DOCX_NOTICE });
+        const preparing: Notice = { severity: "info", text: format === "html" ? PREPARING_HTML_NOTICE : PREPARING_DOCX_NOTICE };
+        setNotice(preparing);
         try {
             // The static planner's team is the placeholder "This device", not a name.
             await exportBenchSheet(session, format, { omitTeam: planGenerator === "openleague-static" });
-            setNotice(null);
+            // Clear only our own notice: another action may have replaced it meanwhile.
+            setNotice((current) => (current === preparing ? null : current));
         } catch (error) {
             console.error("Bench sheet export failed:", error);
             setNotice({ severity: "error", text: error instanceof ExportModuleLoadError ? DOCX_LOAD_FAILED_NOTICE : EXPORT_FAILED_NOTICE });
@@ -222,8 +224,12 @@ export function ExportPlanMenu({ session, size = "medium" }: ExportPlanMenuProps
             {notice && (
                 <Snackbar
                     open
-                    autoHideDuration={6000}
-                    onClose={() => setNotice(null)}
+                    // While an export runs its "Preparing…" notice stays up: no timer, no click-away.
+                    autoHideDuration={exporting ? null : 6000}
+                    onClose={(_event, reason) => {
+                        if (exporting && reason === "clickaway") return;
+                        setNotice(null);
+                    }}
                     anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
                 >
                     <Alert severity={notice.severity} variant="filled" onClose={() => setNotice(null)}>
