@@ -45,6 +45,10 @@ function draw(stations: StationMapStation[], activeIndex = 0): Call[] {
     return calls;
 }
 
+/** Station clips are rectangles; the rink's own clip to its rounded outline is not one of them. */
+const stationClipIndexes = (calls: Call[]) =>
+    calls.flatMap((c, i) => (c.name === "clip" && calls[i - 1]?.name === "rect" ? [i] : []));
+
 const texts = (calls: Call[]) => calls.filter((c) => c.name === "fillText").map((c) => c.args[0]);
 
 describe("stationLabel", () => {
@@ -60,7 +64,7 @@ describe("drawStationMap", () => {
         const calls = draw([{ name: "Breakout", playData: breakout }, { name: "Regroup", playData: regroup }]);
 
         // Two clips per station: its drawing, then its label.
-        expect(calls.filter((c) => c.name === "clip")).toHaveLength(4);
+        expect(stationClipIndexes(calls)).toHaveLength(4);
         const clipRects = calls
             .filter((c, i) => c.name === "rect" && calls[i + 1]?.name === "clip")
             .filter((_, i) => i % 2 === 0);
@@ -72,11 +76,20 @@ describe("drawStationMap", () => {
 
     it("draws a station's elements between its clip and the restore", () => {
         const calls = draw([{ name: "Breakout", playData: breakout }, { name: "Empty", playData: createEmptyPlayData() }]);
-        const clips = calls.flatMap((c, i) => (c.name === "clip" ? [i] : [])).filter((_, i) => i % 2 === 0);
+        const clips = stationClipIndexes(calls).filter((_, i) => i % 2 === 0);
         const nextRestore = (from: number) => calls.findIndex((c, i) => i > from && c.name === "restore");
 
         expect(nextRestore(clips[0]) - clips[0]).toBeGreaterThan(1);
         expect(nextRestore(clips[1]) - clips[1]).toBe(1);
+    });
+
+    it("draws the rink once, its markings clipped to the rounded outline", () => {
+        const calls = draw([{ name: "Breakout", playData: breakout }, { name: "Regroup", playData: regroup }]);
+        const rinkClips = calls.flatMap((c, i) => (c.name === "clip" && calls[i - 1]?.name === "roundRect" ? [i] : []));
+        expect(rinkClips).toHaveLength(1);
+        // The rink's clip is released before the first station's own clip.
+        const restore = calls.findIndex((c, i) => i > rinkClips[0] && c.name === "restore");
+        expect(restore).toBeLessThan(stationClipIndexes(calls)[0]);
     });
 
     it("labels every station '<n> · <name>' and highlights the active one", () => {
@@ -91,7 +104,7 @@ describe("drawStationMap", () => {
     it("still outlines and labels an unreadable station, with the unreadable message", () => {
         const calls = draw([{ name: "Breakout", playData: breakout }, { name: "Lost", playData: null }]);
 
-        expect(calls.filter((c) => c.name === "clip")).toHaveLength(4);
+        expect(stationClipIndexes(calls)).toHaveLength(4);
         expect(calls.filter((c) => c.name === "strokeRect")).toHaveLength(2);
         expect(texts(calls)).toEqual(expect.arrayContaining(["2 · Lost", PLAY_DATA_UNREADABLE_MESSAGE]));
     });
