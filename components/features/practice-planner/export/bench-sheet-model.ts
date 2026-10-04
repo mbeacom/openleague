@@ -5,7 +5,7 @@
  * else the viewer's), printPixelRatio for diagrams, one combined legend.
  * Images come from injected renderers, so this module never touches a canvas.
  */
-import type { PlayData } from "@/types/practice-planner";
+import type { PlayData, PlayFocus, PlayGoalies } from "@/types/practice-planner";
 import { buildLegend, type LegendEntry } from "@/lib/utils/canvas/legend";
 import { combinedLegendData } from "@/lib/utils/canvas/station-map";
 import { buildSchedule, sessionWallMinutes } from "@/lib/utils/session-timeline";
@@ -19,7 +19,7 @@ export interface ExportSessionPlay {
     duration: number;
     instructions: string | null;
     runsWithPrevious: boolean;
-    play: { name: string; description: string | null; playData: PlayData | null };
+    play: { name: string; description: string | null; playData: PlayData | null; focus?: PlayFocus; goalies?: PlayGoalies };
 }
 
 /** What the session page hands the Export menu (a PracticeSessionView fits). */
@@ -33,6 +33,7 @@ export interface ExportSession {
     venueName?: string | null;
     surfaceName?: string | null;
     segmentName?: string | null;
+    goaliesAttending?: number | null;
     plays: ExportSessionPlay[];
 }
 

@@ -3,6 +3,8 @@ import { playDataSchema } from "@/lib/utils/play-data";
 import { isValidTimeZone } from "@/lib/utils/date";
 import { MAX_THUMBNAIL_SIZE, THUMBNAIL_DATA_URL } from "@/lib/utils/thumbnail-rules";
 import { MIN_SEGMENT_DIMENSION } from "@/lib/utils/segment-geometry";
+import { MAX_GOALIES_ATTENDING, PLAY_FOCUS, PLAY_GOALIES } from "@/types/practice-planner";
+import { GOALIES_ATTENDING_MESSAGE } from "@/lib/utils/drill-tags";
 
 /**
  * Optional IANA timezone string (e.g. "America/New_York"). Validated against the
@@ -1280,12 +1282,23 @@ const base64ImageSchema = z
   .max(MAX_THUMBNAIL_SIZE, "Thumbnail must be less than 1MB")
   .optional();
 
+// Drill tags and the session goalie count (goaltender-aware drills, spec R3).
+const playFocusSchema = z.enum(PLAY_FOCUS);
+const playGoaliesSchema = z.enum(PLAY_GOALIES);
+const goaliesAttendingSchema = z
+  .number({ message: GOALIES_ATTENDING_MESSAGE })
+  .int(GOALIES_ATTENDING_MESSAGE)
+  .min(0, GOALIES_ATTENDING_MESSAGE)
+  .max(MAX_GOALIES_ATTENDING, GOALIES_ATTENDING_MESSAGE);
+
 export const createPlaySchema = z.object({
   name: sanitizedStringWithMin(1, 100),
   description: optionalSanitizedString(1000),
   thumbnail: base64ImageSchema,
   playData: playDataSchema,
   isTemplate: z.boolean().default(false),
+  focus: playFocusSchema.default("team"),
+  goalies: playGoaliesSchema.default("optional"),
   teamId: z.string().cuid("Invalid team ID format"),
 });
 
@@ -1296,6 +1309,9 @@ export const updatePlaySchema = z.object({
   thumbnail: base64ImageSchema,
   playData: playDataSchema,
   isTemplate: z.boolean().optional(),
+  // Absent = unchanged.
+  focus: playFocusSchema.optional(),
+  goalies: playGoaliesSchema.optional(),
   teamId: z.string().cuid("Invalid team ID format"),
 });
 
@@ -1316,6 +1332,8 @@ export const getPlaysByTeamSchema = z.object({
   limit: z.number().int().min(1).max(100).default(20),
   search: z.string().max(100).optional(),
   dateFilter: z.enum(["all", "today", "week", "month"]).optional().default("all"),
+  focus: playFocusSchema.optional(),
+  goalies: playGoaliesSchema.optional(),
 });
 
 // Optional venue booking for a practice session (FR-019, feature 006). All
@@ -1373,6 +1391,8 @@ export const createPracticeSessionSchema = z.object({
   duration: z.number().int().min(1, "Duration must be at least 1 minute").max(300, "Duration must be less than 300 minutes"),
   teamId: z.string().cuid("Invalid team ID format"),
   plays: practiceSessionPlayItemsSchema,
+  // Absent = unchanged on update, null on create; null clears (spec R3).
+  goaliesAttending: goaliesAttendingSchema.nullable().optional(),
   ...practiceVenueAttachmentFields,
 }).refine(practiceHasStartAtWhenVenueSet, practiceStartAtRequiredIssue);
 
@@ -1385,6 +1405,8 @@ export const updatePracticeSessionSchema = z.object({
   duration: z.number().int().min(1, "Duration must be at least 1 minute").max(300, "Duration must be less than 300 minutes"),
   teamId: z.string().cuid("Invalid team ID format"),
   plays: practiceSessionPlayItemsSchema,
+  // Absent = unchanged on update, null on create; null clears (spec R3).
+  goaliesAttending: goaliesAttendingSchema.nullable().optional(),
   // Explicit Save only; autosave omits it so shared sessions do not email the
   // team on every debounce.
   notify: z.boolean().optional().default(false),
@@ -1426,6 +1448,9 @@ export const saveSessionDrillSchema = z.object({
   description: optionalSanitizedString(1000),
   thumbnail: base64ImageSchema,
   playData: playDataSchema,
+  // Absent: a new drill takes the defaults, an owned drill keeps its tags, a fork inherits its source's.
+  focus: playFocusSchema.optional(),
+  goalies: playGoaliesSchema.optional(),
 });
 
 export const copySessionDrillToLibrarySchema = z.object({
@@ -1440,7 +1465,7 @@ export const duplicatePracticeSessionSchema = z.object({
 });
 
 // Type exports for practice planner
-export type CreatePlayInput = z.infer<typeof createPlaySchema>;
+export type CreatePlayInput = z.input<typeof createPlaySchema>;
 export type UpdatePlayInput = z.infer<typeof updatePlaySchema>;
 export type DeletePlayInput = z.infer<typeof deletePlaySchema>;
 export type GetPlayByIdInput = z.infer<typeof getPlayByIdSchema>;

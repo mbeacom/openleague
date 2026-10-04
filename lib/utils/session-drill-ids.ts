@@ -2,7 +2,7 @@
  * Pure helpers for the session editor's drill cards (practice planner 3a).
  * A card's `id` is its clientKey; `playId` is the Play row it shows.
  */
-import type { PlayData, PlayInSession } from "@/types/practice-planner";
+import type { PlayData, PlayFocus, PlayGoalies, PlayInSession } from "@/types/practice-planner";
 
 export type SavedDrillId = { clientKey: string; playId: string };
 
@@ -31,6 +31,8 @@ export type SessionDrillPatch = {
     description: string;
     thumbnail: string;
     playData: PlayData;
+    focus?: PlayFocus;
+    goalies?: PlayGoalies;
 };
 
 /**

@@ -52,6 +52,7 @@ export function buildPlanDocument(
             durationMinutes: session.duration,
             date: date ?? null,
             startTime: startTime ?? null,
+            goaliesAttending: session.goaliesAttending ?? null,
             drills: session.plays.map((sp) => ({
                 sequence: sp.sequence,
                 duration: sp.duration,
@@ -59,6 +60,8 @@ export function buildPlanDocument(
                 instructions: sp.instructions,
                 name: sp.play.name,
                 description: sp.play.description,
+                focus: sp.play.focus,
+                goalies: sp.play.goalies,
                 playData: sp.play.playData,
             })),
         },

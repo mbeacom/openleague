@@ -9,7 +9,7 @@
  * Method names, inputs and results mirror the server actions one to one.
  */
 import type { AnchorHTMLAttributes, ComponentType, Ref } from "react";
-import type { PlayData } from "@/types/practice-planner";
+import type { PlayData, PlayFocus, PlayGoalies } from "@/types/practice-planner";
 import type { PlanGenerator } from "@/lib/plan-document";
 
 /** Same shape as the ActionResult each lib/actions file declares. */
@@ -24,6 +24,8 @@ export interface LibraryPlaySummary {
     name: string;
     description: string | null;
     thumbnail: string | null;
+    focus?: PlayFocus;
+    goalies?: PlayGoalies;
     isTemplate: boolean;
     createdAt: Date;
     updatedAt: Date;
@@ -47,6 +49,10 @@ export interface LibraryQuery {
     limit: number;
     search?: string;
     dateFilter: LibraryDateFilter;
+    /** Only drills with this focus (spec R8). */
+    focus?: PlayFocus;
+    /** Only drills with this goalies tag. */
+    goalies?: PlayGoalies;
 }
 
 export interface PlayRef {
@@ -59,6 +65,8 @@ export interface NewLibraryPlay {
     description?: string;
     thumbnail?: string;
     playData: PlayData;
+    focus?: PlayFocus;
+    goalies?: PlayGoalies;
     isTemplate: boolean;
     teamId: string;
 }
@@ -72,6 +80,8 @@ export interface SessionDrillSave {
     description?: string;
     thumbnail?: string;
     playData: PlayData;
+    focus?: PlayFocus;
+    goalies?: PlayGoalies;
 }
 
 export interface SessionDrillRef {

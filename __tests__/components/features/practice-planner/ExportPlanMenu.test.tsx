@@ -302,3 +302,21 @@ describe("ExportPlanMenu in the static planner", () => {
         expect(open).not.toHaveBeenCalled();
     });
 });
+
+describe("buildPlanDocument: goaltender fields", () => {
+    it("writes the count and drill tags, and keeps goalie markers even when none attend", () => {
+        const goalieBoard = {
+            ...createEmptyPlayData(),
+            players: [{ id: "g", role: "G" as const, label: "G", position: { x: 14, y: 42.5 }, color: "#212121" }],
+        };
+        const session: ExportableSession = {
+            ...SESSION,
+            goaliesAttending: 0,
+            plays: [{ ...sessionPlay("Warm-up", 0), play: { name: "Warm-up", description: null, playData: goalieBoard, focus: "goalies", goalies: "optional" } }],
+        };
+        const doc = buildPlanDocument(session, NOW);
+        expect(doc.session.goaliesAttending).toBe(0);
+        expect(doc.session.drills[0].drill).toMatchObject({ focus: "goalies", goalies: "optional" });
+        expect(doc.session.drills[0].drill.playData.players.map((p) => p.role)).toEqual(["G"]);
+    });
+});

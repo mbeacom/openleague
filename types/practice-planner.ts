@@ -42,6 +42,25 @@ export type StrokeEnd = (typeof STROKE_ENDS)[number];
 export const EQUIPMENT_KINDS = ["puck", "puckPile", "cone", "net", "tire", "pylon"] as const;
 export type EquipmentKind = (typeof EQUIPMENT_KINDS)[number];
 
+// ============================================================================
+// Drill tags and goalie count (goaltender-aware drills)
+// ============================================================================
+
+export const PLAY_FOCUS = ["team", "skaters", "goalies"] as const;
+/** What a drill trains: team play, skater skills, or goaltending. */
+export type PlayFocus = (typeof PLAY_FOCUS)[number];
+
+export const PLAY_GOALIES = ["none", "optional", "required"] as const;
+/** Whether a drill needs a goalie in net. */
+export type PlayGoalies = (typeof PLAY_GOALIES)[number];
+
+/** What an untagged drill (every drill saved before tags existed) reads as. */
+export const DEFAULT_PLAY_FOCUS: PlayFocus = "team";
+export const DEFAULT_PLAY_GOALIES: PlayGoalies = "optional";
+
+/** A session's goalie count is a whole number from 0 to this, or null (not set). */
+export const MAX_GOALIES_ATTENDING = 10;
+
 export interface PlayerIcon {
     id: string;
     position: Position;
@@ -146,6 +165,8 @@ export interface PlayInSession {
     duration: number; // minutes
     instructions: string;
     playData: PlayData;
+    focus?: PlayFocus;
+    goalies?: PlayGoalies;
     /**
      * The stored diagram couldn't be read, so `playData` is an empty board
      * stand-in. Station warnings skip such a drill rather than treating its
@@ -167,6 +188,8 @@ export interface PracticeSessionData {
     duration: number; // minutes
     plays: PlayInSession[];
     isShared: boolean;
+    /** Goalies expected at this practice; null or absent = not set (spec R6, R7). */
+    goaliesAttending?: number | null;
 }
 
 /**
@@ -185,6 +208,8 @@ export interface PracticeSessionViewPlay {
         description: string | null;
         thumbnail: string | null;
         playData: PlayData | null;
+        focus?: PlayFocus;
+        goalies?: PlayGoalies;
     };
 }
 
@@ -210,6 +235,7 @@ export interface PracticeSessionView {
     segmentName?: string | null;
     segmentKind?: SegmentKind | null;
     startAt?: string | null;
+    goaliesAttending?: number | null;
     plays: PracticeSessionViewPlay[];
 }
 
@@ -224,6 +250,8 @@ export interface SavedPlay {
     thumbnail: string; // base64 PNG
     playData: PlayData;
     isTemplate: boolean; // Whether this play is saved to the library
+    focus?: PlayFocus;
+    goalies?: PlayGoalies;
     createdAt: Date;
     updatedAt: Date;
 }

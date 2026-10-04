@@ -40,6 +40,9 @@ affects:
   - type: path
     pattern: "components/providers/hosted-planner-platform.tsx"
     note: The hosted PlannerPlatform (next/link, next/image, router, plan hand-off).
+  - type: path
+    pattern: "lib/data/starter-*.ts"
+    note: Starter drills and starter practice templates both deployables ship; templates are plan-document inputs.
 provenance:
   authoredBy: agent-drafted
   ratifiedBy: "@mbeacom"
@@ -157,3 +160,22 @@ Plans stay locked in the hosted database, and coaches without an account can't u
 3. [x] Sub-project 3: static app and Pages deploy.
 4. [x] Sub-project 4: HTML and `.docx` exports.
 5. [ ] Sub-project 5: Drive and OneDrive saving, once the OAuth apps are registered.
+
+## Amendments
+
+### 2026-10-03: Goaltender-aware drills (additive fields, version stays 1)
+
+The document gains three optional fields without a version bump:
+- each drill's `focus` (`team` | `skaters` | `goalies`) and `goalies` (`none` | `optional` | `required`);
+- the session's `goaliesAttending` (an integer from 0 to 10, or `null`).
+
+**Rules:**
+- Missing, null or unrecognized values read as `team` / `optional` / `null`, so these advisory fields never make a plan unreadable.
+- Writers always emit all three.
+- Readers built before this amendment strip unknown keys, so files stay mutually readable. A round trip through an older build drops the tags.
+
+**Why no bump:**
+- The change is purely additive and lossy only toward older readers.
+- A bump would make every older build reject new files as "made by a newer version", a worse outcome than losing advisory tags.
+
+Starter practice templates ship as plan-document inputs (`lib/data/starter-templates.ts`) and are imported through the existing import flows. Spec: `docs/superpowers/specs/2026-10-03-goalie-drills-design.md`.

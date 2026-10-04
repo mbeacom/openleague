@@ -133,9 +133,9 @@ describe("serializePlan", () => {
         const withIds = Object.assign({}, base.drills[0], { id: "row-1", playId: "cplayxxxxxxxxxxxxxxxxxxxx", thumbnail: "data:image/png;base64,AA==" });
         const doc = serializePlan(Object.assign({}, base, { drills: [withIds], teamId: "cteamxxxxxxxxxxxxxxxxxxxx" }), "openleague-hosted", NOW);
         expect(Object.keys(doc).sort()).toEqual(["exportedAt", "format", "generator", "session", "version"]);
-        expect(Object.keys(doc.session).sort()).toEqual(["date", "drills", "durationMinutes", "startTime", "title"]);
+        expect(Object.keys(doc.session).sort()).toEqual(["date", "drills", "durationMinutes", "goaliesAttending", "startTime", "title"]);
         expect(Object.keys(doc.session.drills[0]).sort()).toEqual(["drill", "durationMinutes", "instructions", "runsWithPrevious", "sequence"]);
-        expect(Object.keys(doc.session.drills[0].drill).sort()).toEqual(["description", "name", "playData"]);
+        expect(Object.keys(doc.session.drills[0].drill).sort()).toEqual(["description", "focus", "goalies", "name", "playData"]);
     });
 });
 
@@ -314,5 +314,65 @@ describe("planExportFileName", () => {
         const title = "  Équipe Été!!  ";
         expect(planSlug(title)).toBe("equipe-ete");
         expect(planFileName(title)).toBe(`${planSlug(title)}.olplan.json`);
+    });
+});
+
+describe("goaltender fields (additive, version 1)", () => {
+    function goalieInput(extra: Partial<PlanSessionInput> = {}): PlanSessionInput {
+        return {
+            title: "Goalie night",
+            durationMinutes: 30,
+            date: null,
+            startTime: null,
+            drills: [
+                { sequence: 0, duration: 10, runsWithPrevious: false, instructions: null, name: "Warm-up", description: null, playData: null, focus: "goalies", goalies: "required" },
+                { sequence: 1, duration: 10, runsWithPrevious: false, instructions: null, name: "Weave", description: null, playData: null },
+            ],
+            ...extra,
+        };
+    }
+
+    it("serializes the tags (defaults when absent) and the count (null when unset)", () => {
+        const doc = serializePlan(goalieInput({ goaliesAttending: 2 }), "openleague-static", NOW);
+        expect(doc.session.goaliesAttending).toBe(2);
+        expect(doc.session.drills.map((d) => [d.drill.focus, d.drill.goalies])).toEqual([["goalies", "required"], ["team", "optional"]]);
+        expect(serializePlan(goalieInput(), "openleague-static", NOW).session.goaliesAttending).toBeNull();
+    });
+
+    it("round-trips through parsePlan", () => {
+        const doc = serializePlan(goalieInput({ goaliesAttending: 0 }), "openleague-hosted", NOW);
+        expect(parsePlan(JSON.parse(JSON.stringify(doc)))).toEqual({ ok: true, plan: doc });
+    });
+
+    it("reads an older v1 file without the fields using the defaults", () => {
+        const raw = JSON.parse(JSON.stringify(serializePlan(goalieInput({ goaliesAttending: 3 }), "openleague-static", NOW)));
+        delete raw.session.goaliesAttending;
+        for (const d of raw.session.drills) {
+            delete d.drill.focus;
+            delete d.drill.goalies;
+        }
+        const result = parsePlan(raw);
+        expect(result.ok && result.plan.session.goaliesAttending).toBeNull();
+        expect(result.ok && result.plan.session.drills.map((d) => [d.drill.focus, d.drill.goalies])).toEqual([
+            ["team", "optional"],
+            ["team", "optional"],
+        ]);
+    });
+
+    it("never rejects a plan for an unrecognized tag or count", () => {
+        const raw = JSON.parse(JSON.stringify(serializePlan(goalieInput(), "openleague-static", NOW)));
+        raw.session.goaliesAttending = 11;
+        raw.session.drills[0].drill.focus = "both";
+        raw.session.drills[0].drill.goalies = 3;
+        const result = parsePlan(raw);
+        expect(result.ok).toBe(true);
+        expect(result.ok && [result.plan.session.goaliesAttending, result.plan.session.drills[0].drill.focus, result.plan.session.drills[0].drill.goalies])
+            .toEqual([null, "team", "optional"]);
+    });
+
+    it("carries the fields into the editor mapping", () => {
+        const editor = planToEditorSession(serializePlan(goalieInput({ goaliesAttending: 1 }), "openleague-static", NOW));
+        expect(editor.goaliesAttending).toBe(1);
+        expect(editor.plays[0]).toMatchObject({ focus: "goalies", goalies: "required" });
     });
 });

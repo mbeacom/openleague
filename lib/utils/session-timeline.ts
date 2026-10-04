@@ -16,7 +16,8 @@
  */
 
 import type { SegmentKind } from "@/types/segments";
-import type { IceArea } from "@/types/practice-planner";
+import type { IceArea, PlayData, PlayFocus, PlayGoalies } from "@/types/practice-planner";
+import { goalieDemand, toPlayGoalies } from "@/lib/utils/drill-tags";
 import { areaRect, isFullIce } from "@/lib/utils/ice-area";
 import { BLUE_LINES, RINK_DIMENSIONS } from "@/lib/utils/canvas/rink-renderer";
 
@@ -278,4 +279,77 @@ export function stationWarnings(
         });
     }
     return { overlaps, tooBig };
+}
+
+// ---------------------------------------------------------------------------
+// Goalie warnings (advisory, never block a save)
+// ---------------------------------------------------------------------------
+
+/** What the goalie warnings read from a drill. playData null = unreadable (needs one goalie if required). */
+export interface GoalieNeeds {
+    focus?: PlayFocus;
+    goalies?: PlayGoalies;
+    playData: PlayData | null;
+}
+
+export interface GoalieShortfall {
+    /** The block (StationGroup.index) that needs more goalies than attend. */
+    groupIndex: number;
+    /** Sequences of the drills in that block that need a goalie. */
+    sequences: number[];
+    needed: number;
+}
+
+export interface GoalieWarnings {
+    short: GoalieShortfall[];
+    /** Goalies attend, but every drill is tagged "none". */
+    unused: boolean;
+}
+
+/**
+ * Blocks needing more goalies than attend. Stations in a block run at once,
+ * so their demand adds up (goalieDemand per drill). A null count (not set)
+ * warns about nothing.
+ */
+export function goalieWarnings(
+    groups: StationGroup<TimelinePlay & GoalieNeeds>[],
+    goaliesAttending: number | null | undefined,
+): GoalieWarnings {
+    if (goaliesAttending === null || goaliesAttending === undefined) return { short: [], unused: false };
+    const short: GoalieShortfall[] = [];
+    let drills = 0;
+    let anyUsesGoalie = false;
+    for (const group of groups) {
+        let needed = 0;
+        const sequences: number[] = [];
+        for (const station of group.stations) {
+            drills++;
+            if (toPlayGoalies(station.goalies) !== "none") anyUsesGoalie = true;
+            const demand = goalieDemand(station);
+            if (demand > 0) {
+                needed += demand;
+                sequences.push(station.sequence);
+            }
+        }
+        if (needed > goaliesAttending) short.push({ groupIndex: group.index, sequences, needed });
+    }
+    return { short, unused: goaliesAttending > 0 && drills > 0 && !anyUsesGoalie };
+}
+
+/** "Needs a goalie — none attending" (a drill) or "These stations need 3 goalies — 2 attending" (a block). */
+export function goalieShortMessage(needed: number, attending: number, stations: boolean): string {
+    const have = attending === 0 ? "none attending" : `${attending} attending`;
+    if (stations) return `These stations need ${needed} ${needed === 1 ? "goalie" : "goalies"} — ${have}`;
+    return `Needs ${needed === 1 ? "a goalie" : `${needed} goalies`} — ${have}`;
+}
+
+/** "2 goalies attending, but no drill uses a goalie". */
+export function goaliesUnusedMessage(attending: number): string {
+    return `${attending} ${attending === 1 ? "goalie" : "goalies"} attending, but no drill uses a goalie`;
+}
+
+/** The detail page's one-line summary of the shortfalls. */
+export function goalieShortSummary(count: number, attending: number): string {
+    const subject = count === 1 ? "1 drill or station block needs" : `${count} drills or station blocks need`;
+    return attending === 0 ? `${subject} a goalie, but none are attending` : `${subject} more goalies than the ${attending} attending`;
 }
