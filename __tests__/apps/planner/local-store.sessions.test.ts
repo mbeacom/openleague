@@ -617,6 +617,26 @@ describe.each(REPOS)("sessions (%s)", (_name, open) => {
             expect(view.plays.map((row) => [row.id, row.staff])).toEqual([["kb", []], ["kw", ["st-sam"]], ["ka", ["st-lee", "st-sam"]]]);
         });
 
+        it("gives a row inserted by an update without staff nobody, and keeps the others' staff", async () => {
+            const { store, id } = await staffed();
+            const plays = toSessionRowInputs(data(await store.getSessionForEdit(id)).initialData.plays);
+            const inserted: LocalSessionDrill = { kind: "break", clientKey: "kx", sequence: 1, duration: 2, instructions: "", label: null };
+            const [w, x, y] = plays;
+            data(await store.updateSession(id, save([w, inserted, { ...x, sequence: 2 }, { ...y, sequence: 3 }])));
+            const view = data(await store.getSessionView(id));
+            expect(view.plays.map((row) => [row.id, row.staff])).toEqual([["kw", ["st-sam"]], ["kx", []], ["ka", ["st-lee", "st-sam"]], ["kb", []]]);
+        });
+
+        it("drops a staffed row deleted by an update without staff, and keeps the list and the others' staff", async () => {
+            const { store, id } = await staffed();
+            const plays = toSessionRowInputs(data(await store.getSessionForEdit(id)).initialData.plays);
+            const [w, , y] = plays;
+            data(await store.updateSession(id, save([w, { ...y, sequence: 1 }])));
+            const view = data(await store.getSessionView(id));
+            expect(view.staff?.map((member) => member.name)).toEqual(["Coach Lee", "Sam"]);
+            expect(view.plays.map((row) => [row.id, row.staff])).toEqual([["kw", ["st-sam"]], ["kb", []]]);
+        });
+
         it("gives a row without staff nobody when a list is sent", async () => {
             const { store, id } = await staffed();
             const plays = toSessionRowInputs(data(await store.getSessionForEdit(id)).initialData.plays);
@@ -659,9 +679,12 @@ describe.each(REPOS)("sessions (%s)", (_name, open) => {
             expect(await refusal([{ ...LEE, teamOfficialId: "cofficialxxxxxxxxxxxxxxxx" }])).toBe(STAFF_OFFICIAL_MESSAGE);
             expect(await refusal([{ ...LEE, userId: "cuserxxxxxxxxxxxxxxxxxxxx" }])).toBe(STAFF_ADMIN_MESSAGE);
             expect(await refusal([{ ...LEE, teamOfficialId: "cofficialxxxxxxxxxxxxxxxx", userId: "cuserxxxxxxxxxxxxxxxxxxxx" }])).toBe(STAFF_ONE_LINK_MESSAGE);
-            // An empty link is still a link (hosted's cuid check refuses ""), never stored as a typed name.
-            expect(await refusal([{ ...LEE, teamOfficialId: "" }])).toBe(STAFF_OFFICIAL_MESSAGE);
-            expect(await refusal([{ ...LEE, userId: "" }])).toBe(STAFF_ADMIN_MESSAGE);
+            // A malformed link (an empty one included) gets hosted's format message, never stored as a typed name.
+            expect(await refusal([{ ...LEE, teamOfficialId: "" }])).toBe("Invalid official ID format");
+            expect(await refusal([{ ...LEE, userId: "" }])).toBe("Invalid user ID format");
+            expect(await refusal([{ ...LEE, teamOfficialId: "not an id" }])).toBe("Invalid official ID format");
+            expect(await refusal([{ ...LEE, userId: "x" }])).toBe("Invalid user ID format");
+            expect(await refusal([{ ...LEE, teamOfficialId: "bad", userId: "bad" }])).toBe("Invalid official ID format");
             expect(await refusal([{ key: "", name: "Sam" }])).toBe(STAFF_KEY_MESSAGE);
             expect(await refusal([LEE, { key: "st-lee", name: "Sam" }])).toBe(STAFF_KEY_DUPLICATE_MESSAGE);
             // A row's keys are shaped even when the save sends no list, as hosted's row schema does.

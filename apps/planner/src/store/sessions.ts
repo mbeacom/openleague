@@ -3,6 +3,7 @@
  * practice-session-drills.ts and practice-plan-import.ts (ADR-0020, 3a).
  * Every stored session is a valid plan document, so it always exports.
  */
+import { z } from "zod";
 import type { PlayData, PracticeSessionView, SessionItem, SessionRow } from "@/types/practice-planner";
 import { MAX_BLOCK_LABEL_LENGTH, MAX_ROW_STAFF, VALIDATION_CONSTRAINTS } from "@/types/practice-planner";
 import { parsePlan, serializePlan, type PlanBlockInput, type PlanDrillInput } from "@/lib/plan-document";
@@ -46,8 +47,10 @@ import {
     STAFF_ADMIN_MESSAGE,
     STAFF_KEY_MAX,
     STAFF_KEY_MESSAGE,
+    STAFF_OFFICIAL_ID_FORMAT_MESSAGE,
     STAFF_OFFICIAL_MESSAGE,
     STAFF_ONE_LINK_MESSAGE,
+    STAFF_USER_ID_FORMAT_MESSAGE,
     cleanStaffName,
     sessionStaffError,
     staffNameKey,
@@ -145,6 +148,10 @@ function checkedTransition(value: number | undefined): number | undefined {
     return value;
 }
 
+/** Hosted's id format for a link (its Zod cuid check). */
+const linkIdSchema = z.string().cuid();
+const isLinkId = (value: unknown): boolean => linkIdSchema.safeParse(value).success;
+
 /**
  * Hosted's staff rules in its words (the row and staff schemas, then
  * sessionStaffError, then the link check), on the payload as sent. This
@@ -158,9 +165,14 @@ function checkStaff(input: LocalSessionSave): StoredStaffMember[] | undefined {
         if (row.staff?.some((key) => key.length < 1 || key.length > STAFF_KEY_MAX)) throw new StoreRefusal(STAFF_KEY_MESSAGE);
     }
     if (input.staff === undefined) return undefined;
-    // Any link that isn't null or absent counts, "" included: hosted's cuid check refuses an empty id.
+    // Any link that isn't null or absent counts, "" included. A malformed id gets hosted's
+    // format message (its cuid check); a well-formed one can't be verified here (no team).
     const official = (member: SessionStaffInput) => member.teamOfficialId != null;
     const admin = (member: SessionStaffInput) => member.userId != null;
+    for (const member of input.staff) {
+        if (official(member) && !isLinkId(member.teamOfficialId)) throw new StoreRefusal(STAFF_OFFICIAL_ID_FORMAT_MESSAGE);
+        if (admin(member) && !isLinkId(member.userId)) throw new StoreRefusal(STAFF_USER_ID_FORMAT_MESSAGE);
+    }
     if (input.staff.some((member) => official(member) && admin(member))) throw new StoreRefusal(STAFF_ONE_LINK_MESSAGE);
     const error = sessionStaffError(input.staff, input.plays);
     if (error) throw new StoreRefusal(error);
@@ -639,7 +651,11 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                     // Staff (spec R5, R6): typed names; parsePlan checked every row's names are on the list.
                     const staff = parsed.plan.session.staff.map((name) => ({ id: ctx.newId(), name }));
                     const staffByName = new Map(staff.map((member) => [staffNameKey(member.name), member.id]));
-                    const rowStaff = (names: string[]) => names.map((name) => staffByName.get(staffNameKey(name)) as string);
+                    const rowStaff = (names: string[]) =>
+                        names.flatMap((name) => {
+                            const key = staffByName.get(staffNameKey(name));
+                            return key === undefined ? [] : [key];
+                        });
                     const rows: StoredSessionRow[] = [];
                     for (const entry of parsed.plan.session.drills) {
                         if (entry.kind !== "drill") {

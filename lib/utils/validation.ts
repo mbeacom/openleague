@@ -23,7 +23,9 @@ import {
   STAFF_LIMIT_MESSAGE,
   STAFF_NAME_LENGTH_MESSAGE,
   STAFF_NAME_REQUIRED_MESSAGE,
+  STAFF_OFFICIAL_ID_FORMAT_MESSAGE,
   STAFF_ONE_LINK_MESSAGE,
+  STAFF_USER_ID_FORMAT_MESSAGE,
   cleanStaffName,
 } from "@/lib/utils/session-staff";
 import {
@@ -1482,8 +1484,8 @@ export const sessionStaffInputSchema = z
       .string()
       .transform(cleanStaffName)
       .pipe(z.string().min(1, STAFF_NAME_REQUIRED_MESSAGE).max(STAFF_NAME_MAX, STAFF_NAME_LENGTH_MESSAGE)),
-    teamOfficialId: z.string().cuid("Invalid official ID format").nullable().optional(),
-    userId: z.string().cuid("Invalid user ID format").nullable().optional(),
+    teamOfficialId: z.string().cuid(STAFF_OFFICIAL_ID_FORMAT_MESSAGE).nullable().optional(),
+    userId: z.string().cuid(STAFF_USER_ID_FORMAT_MESSAGE).nullable().optional(),
   })
   .refine((member) => !(member.teamOfficialId && member.userId), { message: STAFF_ONE_LINK_MESSAGE, path: ["userId"] });
 
