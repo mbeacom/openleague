@@ -7,10 +7,12 @@ import "@/app/(print)/print.css";
 import type { LocalPlannerStore } from "../store/types";
 import { LoadingScreen, MissingScreen } from "./StatusScreens";
 import { useStoreResult } from "./useStoreResult";
+import { useTeamProfileVersion } from "./useTeamProfile";
 
 export function BenchSheetScreen({ store, id }: { store: LocalPlannerStore; id: string }) {
     const load = useCallback(() => store.getSessionView(id), [store, id]);
-    const state = useStoreResult(load);
+    // A "Your team" change shows on an open practice without a reload (practice logo spec R4).
+    const state = useStoreResult(load, useTeamProfileVersion(store));
     return (
         <LightThemeScope component="main" className="bench-print-root" sx={{ minHeight: "100vh", bgcolor: "#fff", color: "#000" }}>
             {state.kind === "ready" ? (

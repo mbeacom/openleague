@@ -49,7 +49,15 @@ function picture(dataUri: string, size: { width: number; height: number }, rawAl
 
 function header(model: BenchSheetModel): Paragraph[] {
     return [
-        new Paragraph({ heading: HeadingLevel.HEADING_1, children: textRuns(model.title, { bold: true, color: LEAGUE_BLUE }) }),
+        // The mark opens the header block (practice logo spec R5), in its own paragraph so the
+        // heading, and the Navigation pane or a table of contents built from it, stays text.
+        ...(model.mark && isPngDataUri(model.mark.image)
+            ? [new Paragraph({ keepNext: true, children: [picture(model.mark.image, { width: model.mark.width, height: model.mark.height }, model.mark.alt)] })]
+            : []),
+        new Paragraph({
+            heading: HeadingLevel.HEADING_1,
+            children: textRuns(model.title, { bold: true, color: LEAGUE_BLUE }),
+        }),
         ...(model.teamName ? [new Paragraph({ children: textRuns(model.teamName, { bold: true }) })] : []),
         new Paragraph({ children: textRuns(model.when) }),
         ...(model.place ? [new Paragraph({ children: textRuns(model.place) })] : []),

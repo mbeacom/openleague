@@ -6,8 +6,12 @@ export type LoadState<T> =
     | { kind: "error"; message: string; details?: unknown }
     | { kind: "ready"; data: T };
 
-/** Runs a store read when `load` changes (memoize it with useCallback). Screens are keyed by id, so state resets per record. */
-export function useStoreResult<T>(load: () => Promise<ActionResult<T>>): LoadState<T> {
+/**
+ * Runs a store read when `load` changes (memoize it with useCallback), and
+ * again when `refreshKey` changes (the last result stays up meanwhile).
+ * Screens are keyed by id, so state resets per record.
+ */
+export function useStoreResult<T>(load: () => Promise<ActionResult<T>>, refreshKey: unknown = null): LoadState<T> {
     const [state, setState] = useState<LoadState<T>>({ kind: "loading" });
     useEffect(() => {
         let cancelled = false;
@@ -27,6 +31,6 @@ export function useStoreResult<T>(load: () => Promise<ActionResult<T>>): LoadSta
         return () => {
             cancelled = true;
         };
-    }, [load]);
+    }, [load, refreshKey]);
     return state;
 }

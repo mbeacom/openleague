@@ -7,6 +7,7 @@ import { createLibraryOps } from "./library";
 import { META_PERSIST_REQUESTED, type PlannerRepo } from "./records";
 import { createSessionOps } from "./sessions";
 import { createStoreContext } from "./shared";
+import { createTeamProfileOps } from "./team-profile";
 import type { LocalPlannerStore, LocalStoreOptions } from "./types";
 
 /**
@@ -37,5 +38,5 @@ export function createLocalPlannerStore(repo: PlannerRepo, options: LocalStoreOp
         asked = true;
         void requestPersistence(repo);
     });
-    return { ...createLibraryOps(ctx), ...createSessionOps(ctx) };
+    return { ...createLibraryOps(ctx), ...createSessionOps(ctx), ...createTeamProfileOps(ctx) };
 }

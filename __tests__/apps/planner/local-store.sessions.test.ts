@@ -4,7 +4,7 @@ import { createLocalPlannerStore, requestPersistence } from "@/apps/planner/src/
 import { SESSION_NOT_ON_DEVICE_MESSAGE } from "@/apps/planner/src/store/sessions";
 import { createMemoryRepo } from "@/apps/planner/src/store/memory-repo";
 import type { LocalSessionDrill, LocalSessionSave } from "@/apps/planner/src/store/types";
-import { LOCAL_AUTHOR_NAME, LOCAL_TEAM_ID, LOCAL_TEAM_NAME } from "@/apps/planner/src/config";
+import { LOCAL_AUTHOR_NAME, LOCAL_TEAM_ID } from "@/apps/planner/src/config";
 import { buildPlanDocument } from "@/components/features/practice-planner/ExportPlanMenu";
 import { parsePlan, serializePlan } from "@/lib/plan-document";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
@@ -228,7 +228,7 @@ describe.each(REPOS)("sessions (%s)", (_name, open) => {
         });
         const error = vi.spyOn(console, "error").mockImplementation(() => {});
         const view = await store.getSessionView(s.data.id);
-        expect(view.success && view.data).toMatchObject({ teamId: T, teamName: LOCAL_TEAM_NAME, createdByName: LOCAL_AUTHOR_NAME, isShared: false, venueId: null });
+        expect(view.success && view.data).toMatchObject({ teamId: T, teamName: "", createdByName: LOCAL_AUTHOR_NAME, isShared: false, venueId: null });
         expect(view.success && drillRows(view.data.plays)[0].play.playData).toBeNull();
         const edit = await store.getSessionForEdit(s.data.id);
         expect(edit.success && edit.data.initialData.plays[0]).toMatchObject({ playDataUnreadable: true, sequence: 0, runsWithPrevious: false });

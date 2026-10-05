@@ -6,7 +6,7 @@
  * the pending link lives in state, so the URL change can't cancel decoding.
  * Leaving #plan= clears the pending link, so pasting the same link again reads it again.
  */
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Box, Button, Checkbox, FormControlLabel, Paper, Stack, Typography } from "@mui/material";
 import { FileUploadOutlined as UploadIcon } from "@mui/icons-material";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -15,9 +15,13 @@ import { StarterTemplatePicker, starterTemplateImport } from "@/components/featu
 import { usePlannerPlatform } from "@/lib/planner-store";
 import { readPlanFile, readPlanLink, type ParsePlanResult, type PlanDocument, type PlanError } from "@/lib/plan-document";
 import { parseDateTimeLocalToUtc, resolveTimeZone } from "@/lib/utils/date";
+import { toTeamMark } from "@/lib/utils/team-mark";
+import { LOCAL_TEAM_ID } from "../config";
 import { replaceHash } from "../platform";
 import { staticRoutes } from "../routes";
 import type { LocalPlannerStore } from "../store/types";
+import { useStoreResult } from "./useStoreResult";
+import { useTeamProfileVersion } from "./useTeamProfile";
 
 /** The plan's local date and start in this browser's zone; midnight without a start; now without a date. */
 export function planStartDate(plan: PlanDocument, now: Date = new Date()): Date {
@@ -56,6 +60,10 @@ export function ImportScreen({ store, linkValue }: { store: LocalPlannerStore; l
     const [addToLibrary, setAddToLibrary] = useState(false);
     const [saving, setSaving] = useState(false);
     const [saveError, setSaveError] = useState<string | null>(null);
+    // The device's "Your team": a plan file has no team, so the preview shows this device's (spec R5).
+    const loadProfile = useCallback(() => store.getTeamProfile(), [store]);
+    const profile = useStoreResult(loadProfile, useTeamProfileVersion(store));
+    const teamMark = profile.kind === "ready" && profile.data ? toTeamMark(profile.data, LOCAL_TEAM_ID) : null;
 
     useEffect(() => {
         if (!pending) return;
@@ -159,7 +167,7 @@ export function ImportScreen({ store, linkValue }: { store: LocalPlannerStore; l
 
                 {state.kind === "ready" && (
                     <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>
-                        <PlanPreview plan={state.plan} />
+                        <PlanPreview plan={state.plan} teamMark={teamMark} />
                         {!state.plan.session.date && (
                             <Alert severity="info" sx={{ mt: 2 }}>
                                 {UNDATED_PLAN_NOTE}

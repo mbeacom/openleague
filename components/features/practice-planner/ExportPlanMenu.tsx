@@ -31,13 +31,14 @@ import {
     type PlanGenerator,
     type PlanSessionInput,
 } from "@/lib/plan-document";
-import { usePlannerPlatform, type PlannerPlanLink } from "@/lib/planner-store";
+import { usePlannerPlatform, usePlannerStore, type PlannerPlanLink } from "@/lib/planner-store";
 import { drillRows, isBlockRow } from "@/lib/utils/session-rows";
 import { staffNames } from "@/lib/utils/session-staff";
 import type { SessionStaffMember } from "@/types/practice-planner";
 import { downloadBlob } from "./export/download";
 import type { ExportSession, ExportSessionRow } from "./export/bench-sheet-model";
 import { ExportModuleLoadError, exportBenchSheet, type BenchSheetFormat } from "./export/export-bench-sheet";
+import { resolveExportLogo } from "./export/export-logo";
 
 /** A session's rows as plan rows: each row's staff ids become names from the session's list (spec R6). */
 export function toPlanRows(rows: readonly ExportSessionRow[], staff?: readonly SessionStaffMember[]): PlanSessionInput["drills"] {
@@ -135,6 +136,7 @@ export const EXPORT_FAILED_NOTICE = "Couldn't create the file. Try again, or use
 
 export function ExportPlanMenu({ session, size = "medium" }: ExportPlanMenuProps) {
     const { planGenerator, planLink, navigate } = usePlannerPlatform();
+    const store = usePlannerStore();
     const [anchor, setAnchor] = useState<HTMLElement | null>(null);
     const [notice, setNotice] = useState<Notice | null>(null);
     const [exporting, setExporting] = useState<BenchSheetFormat | null>(null);
@@ -156,8 +158,9 @@ export function ExportPlanMenu({ session, size = "medium" }: ExportPlanMenuProps
         const preparing: Notice = { severity: "info", text: format === "html" ? PREPARING_HTML_NOTICE : PREPARING_DOCX_NOTICE };
         setNotice(preparing);
         try {
-            // The static planner's team is the placeholder "This device", not a name.
-            await exportBenchSheet(session, format, { omitTeam: planGenerator === "openleague-static" });
+            // The team's logo, else its Crest (practice logo spec R5); never fails the export.
+            const logo = await resolveExportLogo(session, store.getPracticeLogoImage);
+            await exportBenchSheet(session, format, { logo });
             // Clear only our own notice: another action may have replaced it meanwhile.
             setNotice((current) => (current === preparing ? null : current));
         } catch (error) {

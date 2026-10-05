@@ -5,7 +5,7 @@
  * combined legend. Then the drills, paired into .bench-page containers that
  * app/(print)/print.css starts on fresh pages. Nothing auto-prints: the
  * toolbar's Print button calls window.print(), and stays disabled until every
- * drill's diagram is ready. The toolbar itself is hidden in print.
+ * drill's diagram and the team mark are ready. The toolbar itself is hidden in print.
  */
 import { useCallback, useMemo, useState } from "react";
 import { Box, Button, Stack, Typography } from "@mui/material";
@@ -23,11 +23,12 @@ import { SessionTimeline } from "../SessionTimeline";
 import { BenchSheetDrill, drillText } from "./BenchSheetDrill";
 import { printPixelRatio } from "./PrintDiagram";
 import { LegendList } from "./LegendList";
+import { TeamMarkImage } from "./TeamMarkImage";
 
 export type BenchSheetSession = PracticeSessionView;
 
 export const NO_DRILLS_MESSAGE = "No drills planned";
-export const PREPARING_DIAGRAMS = "Preparing diagrams…";
+export const PREPARING_PRINT = "Preparing print…";
 
 const MS_PER_MINUTE = 60_000;
 const DRILLS_PER_PAGE = 2;
@@ -39,9 +40,10 @@ function chunk<T>(items: T[], size: number): T[][] {
 export function BenchSheet({ session: stored }: { session: BenchSheetSession }) {
     // Goalie markers hidden at render time only (spec R7); the stored session is untouched.
     const session = useMemo(() => sessionForDisplay(stored), [stored]);
-    const { Link, routes, planGenerator } = usePlannerPlatform();
-    // The static planner's team is the placeholder "This device", not a name (as the exports omit it).
-    const teamName = planGenerator === "openleague-static" ? null : session.teamName;
+    const { Link, routes } = usePlannerPlatform();
+    // A static device without "Your team" has no name: nothing prints (practice logo spec R4).
+    const teamName = session.teamName?.trim() || null;
+    const mark = teamName ? session.teamMark ?? null : null;
     const start = sessionStart(session);
     const end = new Date(start.getTime() + session.duration * MS_PER_MINUTE);
     const { timeZone, showZone } = sessionTimeZone(session);
@@ -69,7 +71,10 @@ export function BenchSheet({ session: stored }: { session: BenchSheetSession }) 
         (id: string) => setReadyIds((prev) => (prev.has(id) ? prev : new Set(prev).add(id))),
         []
     );
-    const allReady = drills.every(({ sp }) => readyIds.has(sp.id));
+    // The team mark counts too: a hosted logo is a network image (practice logo spec R5).
+    const [markShown, setMarkShown] = useState(false);
+    const onMarkReady = useCallback(() => setMarkShown(true), []);
+    const allReady = drills.every(({ sp }) => readyIds.has(sp.id)) && (!mark || markShown);
 
     return (
         <Box className="bench-sheet" sx={{ maxWidth: 820, mx: "auto", p: { xs: 2, sm: 4 }, bgcolor: "#fff", color: "#000" }}>
@@ -88,15 +93,18 @@ export function BenchSheet({ session: stored }: { session: BenchSheetSession }) 
                 </Button>
                 {!allReady && (
                     <Typography variant="body2" role="status" sx={{ color: "text.secondary" }}>
-                        {PREPARING_DIAGRAMS}
+                        {PREPARING_PRINT}
                     </Typography>
                 )}
             </Stack>
 
             <Box component="header" sx={{ mb: 3 }}>
-                <Typography variant="h4" component="h1" sx={{ fontWeight: 800 }}>
-                    {session.title}
-                </Typography>
+                <Stack direction="row" spacing={1.5} alignItems="center">
+                    {mark && <TeamMarkImage mark={mark} onReady={onMarkReady} />}
+                    <Typography variant="h4" component="h1" sx={{ fontWeight: 800, minWidth: 0 }}>
+                        {session.title}
+                    </Typography>
+                </Stack>
                 {teamName && (
                     <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
                         {teamName}

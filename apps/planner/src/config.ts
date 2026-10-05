@@ -11,7 +11,6 @@ export const HOSTED_IMPORT_URL = `${HOSTED_URL}${PLAN_IMPORT_PATH}`;
 
 /** The static app has one implicit "team": this browser. The store ignores teamId. */
 export const LOCAL_TEAM_ID = "local";
-export const LOCAL_TEAM_NAME = "This device";
 export const LOCAL_AUTHOR_NAME = "You";
 
 export const PRIVACY_NOTE =

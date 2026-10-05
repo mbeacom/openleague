@@ -23,6 +23,7 @@ const MODEL: BenchSheetModel = {
     place: "Ice House · Rink A",
     gap: null,
     staff: null,
+    mark: null,
     timeline: [{ start: "6:00 PM MDT", minutes: 10, label: "Stations · 2", stations: ["Breakout · 10 min", "Regroup · 8 min"] }],
     planned: "Planned 10 of 60 min",
     overTime: false,
@@ -188,5 +189,26 @@ describe("renderBenchSheetDocx: practice staff (spec R9)", () => {
         expect(xml).not.toContain("\u0007");
         expect(xml).toContain("Shooting · run by &lt;Sam&gt;");
         expect(xml).toContain("Water · Fill up · run by Coach Lee");
+    });
+});
+
+describe("renderBenchSheetDocx: the team mark (practice logo spec R5)", () => {
+    it("puts the mark in its own paragraph just before the title, sized, with XML-safe alt text", async () => {
+        const xml = await documentXml({ ...MODEL, mark: { image: PNG, width: 96, height: 48, alt: "Hawks <U12>\u0001 logo" } });
+        const paragraphs = xml.match(/<w:p(?: [^>]*)?>[\s\S]*?<\/w:p>/g) ?? [];
+        const heading = paragraphs.findIndex((p) => p.includes("Tuesday &lt;Skills&gt; &amp; Co"));
+        expect(paragraphs[heading]).toContain('w:val="Heading1"');
+        expect(paragraphs[heading]).not.toContain("<w:drawing>");
+        expect(paragraphs[heading - 1]).toContain("<w:drawing>");
+        expect(paragraphs[heading - 1]).toContain("<w:keepNext/>");
+        expect(xml).toContain('descr="Hawks &lt;U12&gt; logo"');
+        expect(xml).not.toContain("\u0001");
+        // 96 × 48 px in EMUs (9525 per pixel).
+        expect(xml).toContain('cx="914400" cy="457200"');
+    });
+
+    it("has no title drawing without a mark", async () => {
+        const xml = await documentXml(MODEL);
+        expect(xml.slice(0, xml.indexOf("Tuesday &lt;Skills&gt; &amp; Co"))).not.toContain("<w:drawing>");
     });
 });

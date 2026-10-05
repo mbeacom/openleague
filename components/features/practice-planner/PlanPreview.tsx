@@ -19,10 +19,12 @@ import { planToEditorSession, type PlanDocument } from "@/lib/plan-document";
 import { blockTitle, drillRows, isBlockRow } from "@/lib/utils/session-rows";
 import { BLOCK_ICONS } from "@/components/features/practice-planner/BlockRowCard";
 import { runBySuffix, staffHeaderLabel, staffNameKey } from "@/lib/utils/session-staff";
+import { Crest } from "@/components/ui/Crest";
+import type { TeamMark } from "@/types/practice-planner";
 
 const THUMB = { width: 120, height: 51 } as const;
 
-export function PlanPreview({ plan }: { plan: PlanDocument }) {
+export function PlanPreview({ plan, teamMark = null }: { plan: PlanDocument; teamMark?: TeamMark | null }) {
     const session = useMemo(() => planToEditorSession(plan), [plan]);
     const groups = useMemo(() => groupStations(session.plays, session.transitionMinutes), [session]);
     const mounted = useMounted();
@@ -47,9 +49,12 @@ export function PlanPreview({ plan }: { plan: PlanDocument }) {
 
     return (
         <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>
-            <Typography variant="h5" component="h2" fontWeight={800}>
-                {session.title}
-            </Typography>
+            <Stack direction="row" spacing={1.5} alignItems="center">
+                {teamMark && <Crest name={teamMark.name} id={teamMark.id} logoUrl={teamMark.logoUrl} brandColor={teamMark.color} size="md" />}
+                <Typography variant="h5" component="h2" fontWeight={800} sx={{ minWidth: 0, overflowWrap: "anywhere" }}>
+                    {session.title}
+                </Typography>
+            </Stack>
             <Typography variant="body2" color="text.secondary" sx={{ mb: staffLine ? 0.5 : 2 }}>
                 {[
                     `${session.duration} min`,

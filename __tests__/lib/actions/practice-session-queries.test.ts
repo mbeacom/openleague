@@ -408,3 +408,35 @@ describe("getPracticeStaffOptions (spec R4)", () => {
         expect(mockPrisma.teamOfficial.findMany).not.toHaveBeenCalled();
     });
 });
+
+describe("getPracticeSessionDetail: the team mark (practice logo spec R5)", () => {
+  const DETAIL = {
+    id: "s1", teamId: "t1", title: "T", date: new Date("2026-04-07T22:00:00Z"), duration: 60, isShared: false,
+    createdBy: { name: "Coach" }, venue: null, surface: null, segment: null, staff: [], plays: [],
+    team: { id: "t1", name: "Ice Hawks", logoUrl: "https://abc.public.blob.vercel-storage.com/branding/team/t1/l.png", brandPrimaryColor: "#9B1B30" },
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPrisma.teamMember.findFirst.mockResolvedValue({ id: "m", role: "ADMIN" });
+    mockPrisma.practiceSession.findUnique.mockResolvedValue(DETAIL);
+  });
+
+  it("reads the team's logo and brand color into the mark", async () => {
+    const result = await getPracticeSessionDetail(SESSION_ID);
+    expect(result?.session.teamMark).toEqual({
+      id: "t1", name: "Ice Hawks", logoUrl: "https://abc.public.blob.vercel-storage.com/branding/team/t1/l.png", color: "#9B1B30",
+    });
+    expect(mockPrisma.practiceSession.findUnique.mock.calls[0][0].include.team).toEqual({
+      select: { id: true, name: true, logoUrl: true, brandPrimaryColor: true },
+    });
+  });
+
+  it("reads a team without branding as a mark with no logo and no color", async () => {
+    mockPrisma.practiceSession.findUnique.mockResolvedValueOnce({
+      ...DETAIL,
+      team: { id: "t1", name: "Ice Hawks", logoUrl: null, brandPrimaryColor: null },
+    });
+    expect((await getPracticeSessionDetail(SESSION_ID))?.session.teamMark).toEqual({ id: "t1", name: "Ice Hawks", logoUrl: null, color: null });
+  });
+});

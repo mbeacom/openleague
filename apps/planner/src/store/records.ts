@@ -97,6 +97,8 @@ export const META_STARTERS_SEEDED = "startersSeeded";
 /** The starter ids this device has received (string[]), so upgrades add only new starters. */
 export const META_SEEDED_STARTER_IDS = "seededStarterIds";
 export const META_PERSIST_REQUESTED = "persistRequested";
+/** The device's "Your team" profile (practice logo spec R4): a TeamProfile, or null once cleared. Never in plan files. */
+export const META_TEAM_PROFILE = "teamProfile";
 
 /**
  * The starters every device seeded under META_STARTERS_SEEDED. Hard-coded on

@@ -36,6 +36,7 @@ export function createMockPlannerStore(): MockPlannerStore {
         duplicatePracticeSession: vi.fn(),
         deletePracticeSession: vi.fn(),
         sharePracticeSession: vi.fn(),
+        getPracticeLogoImage: vi.fn().mockResolvedValue(null),
     };
 }
 

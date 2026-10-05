@@ -65,6 +65,7 @@ body { margin: 0; color: #111; background: #fff; font: 11pt/1.4 "Cabinet Grotesk
 h1, h2 { color: #0D47A1; line-height: 1.15; margin: 0 0 4px; }
 h1 { font-size: 24pt; font-weight: 900; letter-spacing: -0.01em; }
 h2 { font-size: 13pt; font-weight: 800; }
+.mark { vertical-align: middle; margin-right: 10px; }
 header { border-bottom: 3px solid #1976D2; padding-bottom: 8px; margin-bottom: 12px; }
 header p { margin: 2px 0; }
 .team { font-weight: 700; }
@@ -97,7 +98,7 @@ td ul { margin: 2px 0 0; padding-left: 1.1em; }
 
 function header(model: BenchSheetModel): Trusted {
     return html`<header>
-<h1>${model.title}</h1>
+<h1>${model.mark && isPngDataUri(model.mark.image) ? html`<img class="mark" src="${model.mark.image}" width="${model.mark.width}" height="${model.mark.height}" alt="${model.mark.alt}">` : null}${model.title}</h1>
 ${model.teamName ? html`<p class="team">${model.teamName}</p>` : null}
 <p class="when">${model.when}</p>
 ${model.place ? html`<p class="place">${model.place}</p>` : null}

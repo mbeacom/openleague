@@ -3,9 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+const CREST = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggh==";
 const { mockDocx } = vi.hoisted(() => ({ mockDocx: vi.fn() }));
 vi.mock("@/components/features/practice-planner/export/export-images", () => ({
-    canvasRenderers: { diagram: () => PNG, swatch: () => PNG },
+    canvasRenderers: { diagram: () => PNG, swatch: () => PNG, crest: () => CREST },
 }));
 vi.mock("@/components/features/practice-planner/export/bench-sheet-docx", () => ({ renderBenchSheetDocx: mockDocx }));
 
@@ -16,7 +17,8 @@ import {
     type ExportableSession,
 } from "@/components/features/practice-planner/ExportPlanMenu";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
-import { createHashPlatform, renderWithPlanner } from "@/__tests__/helpers/planner";
+import { createHashPlatform, createMockPlannerStore, renderWithPlanner } from "@/__tests__/helpers/planner";
+import { logoPng } from "@/__tests__/helpers/logo-png";
 
 const SESSION: ExportableSession = {
     title: "Tuesday Skills",
@@ -86,11 +88,108 @@ describe("ExportPlanMenu bench sheet exports", () => {
         expect(mockDocx).not.toHaveBeenCalled();
     });
 
-    it("leaves the placeholder team out of a static planner export", async () => {
-        renderWithPlanner(<ExportPlanMenu session={{ ...SESSION, teamName: "This device" }} />, { platform: createHashPlatform() });
+    it("prints no team for a static device without Your team", async () => {
+        renderWithPlanner(<ExportPlanMenu session={{ ...SESSION, teamName: "", teamMark: null }} />, { platform: createHashPlatform() });
         choose("Download bench sheet (HTML)");
         await waitFor(() => expect(downloads).toHaveLength(1));
-        expect(await readText(downloads[0].blob)).not.toContain("This device");
+        const html = await readText(downloads[0].blob);
+        expect(html).not.toContain('class="team"');
+        expect(html).not.toContain('class="mark"');
+    });
+
+    const MARK = { id: "cteamxxxxxxxxxxxxxxxxxxxx", name: "Hawks U12", logoUrl: "https://abc.public.blob.vercel-storage.com/branding/team/t/l.png", color: null };
+    const HOSTED = { ...SESSION, id: "csessionxxxxxxxxxxxxxxxxx", teamMark: MARK };
+
+    it("embeds the hosted team's logo, fetched through the store", async () => {
+        const store = createMockPlannerStore();
+        store.getPracticeLogoImage!.mockResolvedValue({ dataUrl: logoPng(512, 512), width: 512, height: 512 });
+        renderWithPlanner(<ExportPlanMenu session={HOSTED} />, { store });
+        choose("Download bench sheet (HTML)");
+        await waitFor(() => expect(downloads).toHaveLength(1));
+        expect(store.getPracticeLogoImage).toHaveBeenCalledWith("csessionxxxxxxxxxxxxxxxxx");
+        expect(await readText(downloads[0].blob)).toContain(`<img class="mark" src="${logoPng(512, 512)}" width="48" height="48" alt="Hawks U12 logo">`);
+    });
+
+    it.each([
+        ["returns no logo", (s: ReturnType<typeof createMockPlannerStore>) => s.getPracticeLogoImage!.mockResolvedValue(null)],
+        ["fails", (s: ReturnType<typeof createMockPlannerStore>) => s.getPracticeLogoImage!.mockRejectedValue(new Error("offline"))],
+    ])("still exports, with the Crest, when the logo read %s", async (_label, arrange) => {
+        const store = createMockPlannerStore();
+        arrange(store);
+        renderWithPlanner(<ExportPlanMenu session={HOSTED} />, { store });
+        choose("Download bench sheet (HTML)");
+        await waitFor(() => expect(downloads).toHaveLength(1));
+        expect(await readText(downloads[0].blob)).toContain(`<img class="mark" src="${CREST}"`);
+    });
+
+    it("logs a failed logo read by its error type only, never the URL or an id", async () => {
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        try {
+            const store = createMockPlannerStore();
+            store.getPracticeLogoImage!.mockRejectedValue(new TypeError(`fetch ${MARK.logoUrl} for ${HOSTED.id}`));
+            renderWithPlanner(<ExportPlanMenu session={HOSTED} />, { store });
+            choose("Download bench sheet (HTML)");
+            await waitFor(() => expect(downloads).toHaveLength(1));
+            expect(warn).toHaveBeenCalledWith("Bench sheet export: the team logo is unavailable:", "TypeError");
+            const logged = JSON.stringify(warn.mock.calls);
+            for (const secret of [MARK.logoUrl, HOSTED.id, MARK.id]) expect(logged).not.toContain(secret);
+        } finally {
+            warn.mockRestore();
+        }
+    });
+
+    it("uses the static profile's stored logo without asking the store", async () => {
+        const store = createMockPlannerStore();
+        const logo = { dataUrl: logoPng(512, 256), width: 512, height: 256 };
+        renderWithPlanner(<ExportPlanMenu session={{ ...SESSION, teamName: "Ice Hawks", teamMark: { id: "local", name: "Ice Hawks", logoUrl: logo.dataUrl, color: null, logoImage: logo } }} />, { store, platform: createHashPlatform() });
+        choose("Download bench sheet (HTML)");
+        await waitFor(() => expect(downloads).toHaveLength(1));
+        expect(store.getPracticeLogoImage).not.toHaveBeenCalled();
+        const html = await readText(downloads[0].blob);
+        expect(html).toContain('<p class="team">Ice Hawks</p>');
+        expect(html).toContain('width="96" height="48" alt="Ice Hawks logo"');
+    });
+
+    describe("the Crest's font", () => {
+        const original = Object.getOwnPropertyDescriptor(document, "fonts");
+        let release: () => void = () => {};
+        const load = vi.fn(() => new Promise<void>((resolve) => (release = resolve)));
+
+        beforeEach(() => {
+            load.mockClear();
+            Object.defineProperty(document, "fonts", { configurable: true, value: { load } });
+        });
+
+        afterEach(() => {
+            if (original) Object.defineProperty(document, "fonts", original);
+            else delete (document as { fonts?: unknown }).fonts;
+        });
+
+        it("loads before the Crest is drawn into the export", async () => {
+            renderWithPlanner(<ExportPlanMenu session={HOSTED} />);
+            choose("Download bench sheet (HTML)");
+            await waitFor(() => expect(load).toHaveBeenCalledWith(expect.stringMatching(/^800 68px /)));
+            expect(downloads).toHaveLength(0);
+            await act(async () => release());
+            await waitFor(() => expect(downloads).toHaveLength(1));
+            expect(await readText(downloads[0].blob)).toContain(`<img class="mark" src="${CREST}"`);
+        });
+
+        it("isn't waited for when there is no team name to draw a mark for", async () => {
+            renderWithPlanner(<ExportPlanMenu session={{ ...HOSTED, teamName: "  " }} />);
+            choose("Download bench sheet (HTML)");
+            await waitFor(() => expect(downloads).toHaveLength(1));
+            expect(load).not.toHaveBeenCalled();
+        });
+
+        it("isn't waited for when the logo is embedded", async () => {
+            const store = createMockPlannerStore();
+            store.getPracticeLogoImage!.mockResolvedValue({ dataUrl: logoPng(512, 512), width: 512, height: 512 });
+            renderWithPlanner(<ExportPlanMenu session={HOSTED} />, { store });
+            choose("Download bench sheet (HTML)");
+            await waitFor(() => expect(downloads).toHaveLength(1));
+            expect(load).not.toHaveBeenCalled();
+        });
     });
 
     it("loads the Word renderer only on click and downloads <slug>.docx", async () => {

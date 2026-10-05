@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
 import { requireUserId } from "@/lib/auth/session";
-import type { PlayData, SessionItem, SessionRow, SessionStaffMember, StaffOption } from "@/types/practice-planner";
+import type { PlayData, SessionItem, SessionRow, SessionStaffMember, StaffOption, TeamMark } from "@/types/practice-planner";
 import { isBlockKind, toRowKind } from "@/lib/utils/session-rows";
 import { drillTags } from "@/lib/utils/drill-tags";
 import { createEmptyPlayData, parseStoredPlayData } from "@/lib/utils/play-data";
@@ -12,6 +12,7 @@ import { normalizeGroups } from "@/lib/utils/session-timeline";
 import { TEAM_OFFICIAL_ROLE_LABELS } from "@/lib/utils/validation";
 import { toStaffName } from "@/lib/utils/session-staff";
 import { parseId } from "@/lib/utils/ids";
+import { canViewPracticeSession } from "@/lib/utils/practice-access";
 
 /**
  * Get the practice planner list page data for the user's primary team.
@@ -94,6 +95,7 @@ export async function getPracticeSessionDetail(sessionId: string): Promise<{
     createdByName: string;
     teamId: string;
     teamName: string;
+    teamMark: TeamMark;
     // Optional venue attachment (FR-019, feature 006)
     venueId: string | null;
     venueName: string | null;
@@ -147,7 +149,7 @@ export async function getPracticeSessionDetail(sessionId: string): Promise<{
           staff: { orderBy: { position: "asc" }, select: { staffId: true } },
         },
       },
-      team: { select: { id: true, name: true } },
+      team: { select: { id: true, name: true, logoUrl: true, brandPrimaryColor: true } },
       venue: { select: { name: true, timezone: true } },
       surface: { select: { name: true } },
       segment: { select: { name: true, kind: true } },
@@ -161,10 +163,8 @@ export async function getPracticeSessionDetail(sessionId: string): Promise<{
     where: { userId, teamId: session.teamId },
   });
 
-  if (!membership) return null;
-
+  if (!membership || !canViewPracticeSession(membership.role, session.isShared)) return null;
   const isAdmin = membership.role === "ADMIN";
-  if (!isAdmin && !session.isShared) return null;
 
   return {
     session: {
@@ -176,6 +176,12 @@ export async function getPracticeSessionDetail(sessionId: string): Promise<{
       createdByName: session.createdBy.name || "Unknown",
       teamId: session.team.id,
       teamName: session.team.name,
+      teamMark: {
+        id: session.team.id,
+        name: session.team.name,
+        logoUrl: session.team.logoUrl ?? null,
+        color: session.team.brandPrimaryColor ?? null,
+      },
       venueId: session.venueId,
       venueName: session.venue?.name ?? null,
       venueTimezone: session.venue?.timezone ?? null,

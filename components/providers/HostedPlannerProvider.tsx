@@ -17,6 +17,7 @@ import {
     duplicatePracticeSession,
     saveSessionDrill,
 } from "@/lib/actions/practice-session-drills";
+import { getPracticeLogoImage } from "@/lib/actions/practice-logo";
 import { deletePracticeSession, sharePracticeSession } from "@/lib/actions/practice-sessions";
 import { useHostedPlannerPlatform } from "./hosted-planner-platform";
 
@@ -30,6 +31,7 @@ export const hostedPlannerStore: PlannerStore = {
     duplicatePracticeSession,
     deletePracticeSession,
     sharePracticeSession,
+    getPracticeLogoImage,
 };
 
 export function HostedPlannerProvider({ children }: { children: ReactNode }) {
