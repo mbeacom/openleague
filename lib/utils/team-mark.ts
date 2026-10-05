@@ -45,12 +45,16 @@ function isSide(value: unknown): boolean {
     return Number.isInteger(value) && (value as number) >= 1 && (value as number) <= LOGO_IMAGE_MAX_PX;
 }
 
+/** Every PNG data URL starts so: the 8-byte signature and IHDR's length, base64-encoded. */
+const PNG_DATA_URI_START = "data:image/png;base64,iVBORw0KGgo";
+
 /** A normalized logo (spec R2): a PNG data URL, sides 1–512, at most 200 KB decoded. */
 export function isLogoImage(value: unknown): value is LogoImage {
     if (typeof value !== "object" || value === null) return false;
     const { dataUrl, width, height } = value as Record<string, unknown>;
     return (
         typeof dataUrl === "string" &&
+        dataUrl.startsWith(PNG_DATA_URI_START) &&
         isPngDataUri(dataUrl) &&
         pngDataUriByteLength(dataUrl) <= MAX_LOGO_PNG_BYTES &&
         isSide(width) &&
@@ -107,13 +111,15 @@ export function toTeamMark(profile: TeamProfile, id: string): TeamMark {
     return { id, name: profile.name, logoUrl: profile.logo?.dataUrl ?? null, color: profile.primaryColor, logoImage: profile.logo };
 }
 
-/** The mark image's alt text (spec R5). Callers escape it for their format. */
+/** The mark image's alt text (spec R5), from the cleaned name. Callers escape it for their format. */
 export function teamLogoAlt(name: string): string {
-    return `${name.trim()} logo`;
+    return `${cleanTeamName(name)} logo`;
 }
 
-/** The size an export draws a logo at: 48 px high, at most 144 px wide, ratio kept. */
+/** The size an export draws a logo at: 48 px high, at most 144 px wide, ratio kept. Sides must be positive. */
 export function exportMarkSize(image: { width: number; height: number }): { width: number; height: number } {
+    const positive = (side: number) => Number.isFinite(side) && side > 0;
+    if (!positive(image.width) || !positive(image.height)) throw new RangeError("A logo's sides must be positive numbers");
     const width = Math.round((EXPORT_MARK_HEIGHT * image.width) / image.height);
     if (width <= EXPORT_MARK_MAX_WIDTH) return { width: Math.max(1, width), height: EXPORT_MARK_HEIGHT };
     return { width: EXPORT_MARK_MAX_WIDTH, height: Math.max(1, Math.round((EXPORT_MARK_MAX_WIDTH * image.height) / image.width)) };

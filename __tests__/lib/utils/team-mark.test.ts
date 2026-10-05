@@ -23,7 +23,7 @@ import { pngDataUriByteLength } from "@/lib/utils/png-data-uri";
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
 const LOGO = { dataUrl: PNG, width: 1, height: 1 };
 /** 204,801 decoded bytes: one over the cap. */
-const BIG_PNG = `data:image/png;base64,${"A".repeat(273_068)}`;
+const BIG_PNG = `data:image/png;base64,iVBORw0KGgo${"A".repeat(273_057)}`;
 
 const input = (overrides: Partial<TeamProfileInput> = {}): TeamProfileInput => ({
     name: "Ice Hawks",
@@ -49,12 +49,14 @@ describe("isLogoImage", () => {
         expect(isLogoImage({ dataUrl: BIG_PNG, width: 1, height: 1 })).toBe(false);
         expect(isLogoImage(null)).toBe(false);
         expect(isLogoImage(PNG)).toBe(false);
+        // Well-formed base64, but not a PNG's bytes.
+        expect(isLogoImage({ ...LOGO, dataUrl: "data:image/png;base64,AAAA" })).toBe(false);
     });
 });
 
 describe("teamProfileErrors", () => {
     it("cleans the name like a staff name and accepts 1 to 60 characters", () => {
-        expect(cleanTeamName("  Ice\u0007   Hawks​ ")).toBe("Ice Hawks");
+        expect(cleanTeamName("  Ice\u0007   Hawks\u200B ")).toBe("Ice Hawks");
         expect(teamProfileError(input({ name: "x".repeat(60) }))).toBeNull();
         expect(teamProfileError(input({ logo: LOGO, primaryColor: "#0d47a1", secondaryColor: "#FFFFFF" }))).toBeNull();
     });
@@ -108,6 +110,19 @@ describe("toTeamMark, teamLogoAlt and exportMarkSize", () => {
 
     it("labels the image with the team name", () => {
         expect(teamLogoAlt(`Hawks <U12> & "Co"`)).toBe(`Hawks <U12> & "Co" logo`);
+    });
+
+    it("cleans control and invisible characters out of the alt text", () => {
+        expect(teamLogoAlt(" Hawks\u0001\u200B  U12 ")).toBe("Hawks U12 logo");
+    });
+
+    it.each([
+        ["a zero height", { width: 10, height: 0 }],
+        ["a negative width", { width: -1, height: 10 }],
+        ["a NaN side", { width: Number.NaN, height: 10 }],
+        ["an infinite side", { width: 10, height: Number.POSITIVE_INFINITY }],
+    ])("refuses %s", (_label, image) => {
+        expect(() => exportMarkSize(image)).toThrow(RangeError);
     });
 
     it("draws an export mark 48 px high, at most 144 px wide, keeping the ratio", () => {
