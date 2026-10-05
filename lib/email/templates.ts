@@ -1,9 +1,10 @@
 import { sendEmail, type EmailMessage } from "./client";
 import { prisma } from "@/lib/db/prisma";
-import { FALLBACK_TIME_ZONE, formatDateTime } from "@/lib/utils/date";
+import { FALLBACK_TIME_ZONE, formatDateTime, isValidTimeZone, sessionStart } from "@/lib/utils/date";
 import { getBaseUrl } from "@/lib/env";
 import { notificationService } from "@/lib/services/notification";
 import { blockTitle, isBlockKind, toRowKind } from "@/lib/utils/session-rows";
+import { YOUR_STATIONS_LABEL, yourStations, yourStationsText } from "@/lib/utils/session-staff";
 
 const BASE_URL = getBaseUrl();
 
@@ -1508,6 +1509,8 @@ interface PracticePlanSharedEmailData {
   playCount: number;
   /** Block rows (warm-up, break…), listed by label with minutes (spec R11). */
   blocks: Array<{ title: string; minutes: number }>;
+  /** This recipient's rows, "Breakout (6:10 PM), …" (spec R10); absent for everyone else. */
+  yourStations?: string | null;
   sessionId: string;
   teamId: string;
 }
@@ -1538,6 +1541,7 @@ export async function sendPracticePlanSharedEmail(data: PracticePlanSharedEmailD
           <p style="margin: 10px 0;"><strong>Duration:</strong> ${data.duration} minutes</p>
           <p style="margin: 10px 0;"><strong>Number of Drills:</strong> ${data.playCount}</p>
           ${data.blocks.length > 0 ? `<p style="margin: 10px 0;"><strong>Also planned:</strong> ${escapeHtml(plannedBlocks(data.blocks))}</p>` : ""}
+          ${data.yourStations ? `<p style="margin: 10px 0;"><strong>${YOUR_STATIONS_LABEL}:</strong> ${escapeHtml(data.yourStations)}</p>` : ""}
         </div>
 
         <p>Review the practice plan to see the drills and prepare for the upcoming practice.</p>
@@ -1562,7 +1566,7 @@ A new practice plan has been shared with ${data.teamName}.
 ${data.sessionTitle}
 Date: ${data.sessionDate}
 Duration: ${data.duration} minutes
-Number of Drills: ${data.playCount}${data.blocks.length > 0 ? `\nAlso planned: ${plannedBlocks(data.blocks)}` : ""}
+Number of Drills: ${data.playCount}${data.blocks.length > 0 ? `\nAlso planned: ${plannedBlocks(data.blocks)}` : ""}${data.yourStations ? `\n${YOUR_STATIONS_LABEL}: ${data.yourStations}` : ""}
 
 Review the practice plan to see the drills and prepare for the upcoming practice.
 
@@ -1588,6 +1592,8 @@ interface PracticePlanUpdatedEmailData {
   playCount: number;
   /** Block rows (warm-up, break…), listed by label with minutes (spec R11). */
   blocks: Array<{ title: string; minutes: number }>;
+  /** This recipient's rows, "Breakout (6:10 PM), …" (spec R10); absent for everyone else. */
+  yourStations?: string | null;
   sessionId: string;
   teamId: string;
 }
@@ -1613,6 +1619,7 @@ export async function sendPracticePlanUpdatedEmail(data: PracticePlanUpdatedEmai
           <p style="margin: 10px 0;"><strong>Duration:</strong> ${data.duration} minutes</p>
           <p style="margin: 10px 0;"><strong>Number of Drills:</strong> ${data.playCount}</p>
           ${data.blocks.length > 0 ? `<p style="margin: 10px 0;"><strong>Also planned:</strong> ${escapeHtml(plannedBlocks(data.blocks))}</p>` : ""}
+          ${data.yourStations ? `<p style="margin: 10px 0;"><strong>${YOUR_STATIONS_LABEL}:</strong> ${escapeHtml(data.yourStations)}</p>` : ""}
         </div>
 
         <p>The practice plan has been modified. Please review the updated drills and instructions.</p>
@@ -1637,7 +1644,7 @@ A practice plan for ${data.teamName} has been updated.
 ${data.sessionTitle}
 Date: ${data.sessionDate}
 Duration: ${data.duration} minutes
-Number of Drills: ${data.playCount}${data.blocks.length > 0 ? `\nAlso planned: ${plannedBlocks(data.blocks)}` : ""}
+Number of Drills: ${data.playCount}${data.blocks.length > 0 ? `\nAlso planned: ${plannedBlocks(data.blocks)}` : ""}${data.yourStations ? `\n${YOUR_STATIONS_LABEL}: ${data.yourStations}` : ""}
 
 The practice plan has been modified. Please review the updated drills and instructions.
 
@@ -1652,6 +1659,68 @@ ${sessionLink}`,
     console.error("Error sending practice plan updated email:", error);
     throw new Error("Failed to send practice plan update notification email");
   }
+}
+
+/**
+ * Each recipient's "Your stations" text (spec R10), by user id: only for a
+ * recipient whose account is linked to an assigned staff member, as a team
+ * admin (userId) or through a team official (teamOfficial.userId), and only
+ * while that link is live: the official ACTIVE or INVITED on the team, the
+ * admin still an ADMIN member of it (the rule the save and edit loader use).
+ * Rows use the bench sheet's titles and buildSchedule starts; times are in
+ * the venue's zone when booked, else FALLBACK_TIME_ZONE (Team has no zone of
+ * its own).
+ */
+async function practiceStationLines(
+  session: { id: string; teamId: string; date: Date; startAt: Date | null; transitionMinutes: number; venue: { timezone: string } | null },
+  userIds: string[],
+): Promise<Map<string, string>> {
+  const lines = new Map<string, string>();
+  const linked = await prisma.practiceSessionStaff.findMany({
+    where: {
+      sessionId: session.id,
+      OR: [
+        { userId: { in: userIds }, user: { teamMembers: { some: { teamId: session.teamId, role: "ADMIN" } } } },
+        { teamOfficial: { userId: { in: userIds }, teamId: session.teamId, status: { in: ["ACTIVE", "INVITED"] } } },
+      ],
+    },
+    select: { id: true, userId: true, teamOfficial: { select: { userId: true } } },
+  });
+  if (linked.length === 0) return lines;
+
+  const staffByUser = new Map<string, Set<string>>();
+  for (const member of linked) {
+    const userId = member.userId ?? member.teamOfficial?.userId;
+    if (!userId) continue;
+    staffByUser.set(userId, (staffByUser.get(userId) ?? new Set<string>()).add(member.id));
+  }
+  // yourStations reads rows in array order, so they are fetched in schedule order.
+  const rows = await prisma.practiceSessionPlay.findMany({
+    where: { sessionId: session.id },
+    orderBy: { sequence: "asc" },
+    select: {
+      sequence: true, duration: true, runsWithPrevious: true, kind: true, label: true, stays: true, rotateEveryMinutes: true,
+      play: { select: { name: true } },
+      staff: { select: { staffId: true } },
+    },
+  });
+  const timeline = rows.map((row) => ({ ...row, kind: toRowKind(row.kind), staff: row.staff.map((assignment) => assignment.staffId) }));
+  const venueZone = session.venue?.timezone;
+  const timeZone = isValidTimeZone(venueZone) ? venueZone : FALLBACK_TIME_ZONE;
+  const start = sessionStart(session);
+  for (const [userId, staffIds] of staffByUser) {
+    const text = yourStationsText(
+      yourStations(timeline, {
+        start,
+        transitionMinutes: session.transitionMinutes,
+        staffIds,
+        title: (row) => (isBlockKind(row.kind) ? blockTitle(row.kind, row.label) : row.play?.name ?? "Drill"),
+      }),
+      timeZone,
+    );
+    if (text) lines.set(userId, text);
+  }
+  return lines;
 }
 
 /**
@@ -1688,6 +1757,7 @@ export async function sendPracticePlanNotifications(
           },
         },
       },
+      venue: { select: { timezone: true } },
       // Drills only: block rows are listed by label instead (spec R11).
       _count: { select: { plays: { where: { kind: "drill" } } } },
       plays: {
@@ -1705,21 +1775,20 @@ export async function sendPracticePlanNotifications(
   // Filter members by the preference for this team's league context (league
   // override else global); an unrelated league opt-out must not suppress here.
   const teamLeagueId = session.team.leagueId;
-  const emails = session.team.members
+  const recipients = session.team.members
     .filter((member: { user: { notificationPreferences: Array<{ leagueId: string | null; practicePlanNotifications: boolean; emailEnabled: boolean }> } }) => {
       const pref = pickPreference(member.user.notificationPreferences, teamLeagueId);
       if (!pref) return true;
       return pref.practicePlanNotifications && pref.emailEnabled;
     })
-    .map((member: { user: { email: string } }) => member.user.email);
+    .map((member: { user: { id: string; email: string } }) => ({ userId: member.user.id, email: member.user.email }));
 
   // No eligible recipients — skip sending to avoid Mailchimp 400 error
-  if (emails.length === 0) {
+  if (recipients.length === 0) {
     return;
   }
 
   const sessionData = {
-    emails,
     teamName: session.team.name,
     sessionTitle: session.title,
     sessionDate: formatDateTime(session.date),
@@ -1733,11 +1802,32 @@ export async function sendPracticePlanNotifications(
     teamId: session.teamId,
   };
 
-  if (type === "shared") {
-    await sendPracticePlanSharedEmail(sessionData);
-  } else if (type === "updated") {
-    await sendPracticePlanUpdatedEmail(sessionData);
+  const send = type === "shared" ? sendPracticePlanSharedEmail : sendPracticePlanUpdatedEmail;
+  // Practice staff (spec R10): the same message for everyone, plus a "Your stations" line for a
+  // recipient linked to an assigned staff member, in their own send. Preferences already applied.
+  // The team always gets the plan: a failed staff read means nobody gets a personal line.
+  let stations = new Map<string, string>();
+  try {
+    stations = await practiceStationLines(session, recipients.map((recipient) => recipient.userId));
+  } catch (error) {
+    console.error("Error reading practice staff for practice plan emails:", error);
   }
+  // A recipient whose personal send fails falls back to the shared send, so nobody gets neither.
+  const shared: string[] = [];
+  for (const recipient of recipients) {
+    const line = stations.get(recipient.userId);
+    if (!line) {
+      shared.push(recipient.email);
+      continue;
+    }
+    try {
+      await send({ ...sessionData, emails: [recipient.email], yourStations: line });
+    } catch (error) {
+      console.error("Error sending a practice plan email with stations:", error);
+      shared.push(recipient.email);
+    }
+  }
+  if (shared.length > 0) await send({ ...sessionData, emails: shared });
 }
 
 // --- Signup events (feature 004) ---

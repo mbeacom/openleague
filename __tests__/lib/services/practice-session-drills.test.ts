@@ -306,6 +306,23 @@ describe("detachLibraryPlay", () => {
             [{ where: { sessionId: "sA", playId: "lib" }, data: { playId: "clone-0" } }],
         ]);
     });
+
+    it("keeps every row, so each row's staff stays with it (practice staff, spec R5)", async () => {
+        const { mocks } = fakeTx([LIB], [{ sessionId: "sA", playId: "lib" }]);
+        const used: string[] = [];
+        const watched = new Proxy(mocks, {
+            get: (models, model: string) =>
+                new Proxy(models[model as keyof typeof models] as object, {
+                    get: (methods, method: string) => {
+                        used.push(`${model}.${method}`);
+                        return (methods as Record<string, unknown>)[method];
+                    },
+                }),
+        }) as unknown as Prisma.TransactionClient;
+        await detachLibraryPlay(watched, { playId: "lib", teamId: TEAM, userId: USER });
+        // Assignments hang on the row ids: a detach repoints rows in place and never deletes or recreates one.
+        expect(used.filter((name) => name.startsWith("practiceSessionPlay"))).toEqual(["practiceSessionPlay.findMany", "practiceSessionPlay.updateMany"]);
+    });
 });
 
 describe("team scoping (a session never references another team's play)", () => {

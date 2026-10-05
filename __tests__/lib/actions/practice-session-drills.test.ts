@@ -8,7 +8,11 @@ import { Prisma } from "@prisma/client";
 const { mockAuth, tx, mockPrisma } = vi.hoisted(() => {
     const tx = {
         practiceSession: { findUnique: vi.fn(), create: vi.fn() },
-        practiceSessionPlay: { findFirst: vi.fn(), createMany: vi.fn() },
+        practiceSessionPlay: { findFirst: vi.fn(), findMany: vi.fn(), createMany: vi.fn() },
+        practiceSessionStaff: { createMany: vi.fn() },
+        practiceSessionPlayStaff: { createMany: vi.fn() },
+        teamOfficial: { findMany: vi.fn() },
+        teamMember: { findMany: vi.fn() },
         play: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn(), createManyAndReturn: vi.fn() },
     };
     return {
@@ -27,6 +31,12 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 import { copySessionDrillToLibrary, duplicatePracticeSession, saveSessionDrill } from "@/lib/actions/practice-session-drills";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
+import {
+    PRACTICE_STAFF_COPY_SELECT,
+    ROW_STAFF_COPY_SELECT,
+    ROW_STAFF_FIELDS_NOT_COPIED,
+    STAFF_FIELDS_NOT_COPIED,
+} from "@/lib/services/practice-session-staff";
 
 const TEAM = "cteamxxxxxxxxxxxxxxxxxxxx";
 const USER = "cuserxxxxxxxxxxxxxxxxxxxx";
@@ -141,12 +151,13 @@ describe("duplicatePracticeSession", () => {
             duration: 10 + index,
             instructions: `Do ${index}`,
             play: { id: `cplay${index}xxxxxxxxxxxxxxxxxxx`, name: `Drill ${index}`, description: null, thumbnail: null, playData: {}, sourcePlayId: null },
+            staff: [] as Array<{ staffId: string; position: number }>,
         };
     }
 
     beforeEach(() => {
         mockPrisma.practiceSession.findUnique.mockResolvedValue({
-            teamId: TEAM, title: "Tuesday", duration: 75, plays: [sourceRow(0), sourceRow(1)],
+            teamId: TEAM, title: "Tuesday", duration: 75, staff: [], plays: [sourceRow(0), sourceRow(1)],
         });
         tx.practiceSession.create.mockResolvedValue({ id: COPY });
         playIds.next = 0;
@@ -157,7 +168,7 @@ describe("duplicatePracticeSession", () => {
 
     it("copies the session's goalie count", async () => {
         mockPrisma.practiceSession.findUnique.mockResolvedValue({
-            teamId: TEAM, title: "Tuesday", duration: 75, goaliesAttending: 2, plays: [sourceRow(0)],
+            teamId: TEAM, title: "Tuesday", duration: 75, goaliesAttending: 2, staff: [], plays: [sourceRow(0)],
         });
         await duplicatePracticeSession({ id: SOURCE, teamId: TEAM, date: DATE });
         expect(tx.practiceSession.create.mock.calls[0][0].data.goaliesAttending).toBe(2);
@@ -198,7 +209,7 @@ describe("duplicatePracticeSession", () => {
 
     it("copies each drill's station flag (runsWithPrevious)", async () => {
         mockPrisma.practiceSession.findUnique.mockResolvedValue({
-            teamId: TEAM, title: "Tuesday", duration: 75,
+            teamId: TEAM, title: "Tuesday", duration: 75, staff: [],
             plays: [{ ...sourceRow(0), runsWithPrevious: false }, { ...sourceRow(1), runsWithPrevious: true }],
         });
 
@@ -209,7 +220,7 @@ describe("duplicatePracticeSession", () => {
     });
 
     it("refuses a session of another team", async () => {
-        mockPrisma.practiceSession.findUnique.mockResolvedValue({ teamId: "cotherteamxxxxxxxxxxxxxxx", title: "x", duration: 60, plays: [] });
+        mockPrisma.practiceSession.findUnique.mockResolvedValue({ teamId: "cotherteamxxxxxxxxxxxxxxx", title: "x", duration: 60, staff: [], plays: [] });
         const result = await duplicatePracticeSession({ id: SOURCE, teamId: TEAM, date: DATE });
         expect(result).toEqual({ success: false, error: "Practice session not found" });
         expect(tx.practiceSession.create).not.toHaveBeenCalled();
@@ -225,7 +236,7 @@ describe("duplicatePracticeSession", () => {
     it("copies block rows without cloning them, keeps each drill on its own copy, and copies the gap", async () => {
         const blockRow = { ...sourceRow(1), kind: "break", label: "Water", playId: null, play: null };
         mockPrisma.practiceSession.findUnique.mockResolvedValue({
-            teamId: TEAM, title: "Tuesday", duration: 75, transitionMinutes: 2, plays: [sourceRow(0), blockRow, sourceRow(2)],
+            teamId: TEAM, title: "Tuesday", duration: 75, transitionMinutes: 2, staff: [], plays: [sourceRow(0), blockRow, sourceRow(2)],
         });
         await duplicatePracticeSession({ id: SOURCE, teamId: TEAM, date: DATE });
 
@@ -235,6 +246,97 @@ describe("duplicatePracticeSession", () => {
         const copied: Array<Record<string, unknown>> = tx.practiceSessionPlay.createMany.mock.calls[0][0].data;
         expect(copied.map((row) => row.playId)).toEqual(["cclone0xxxxxxxxxxxxxxxxxx", null, "cclone1xxxxxxxxxxxxxxxxxx"]);
         expect(copied[1]).toMatchObject({ kind: "break", label: "Water", sessionId: COPY });
+    });
+
+    describe("practice staff (spec R5)", () => {
+        const OFFICIAL = "cofficialxxxxxxxxxxxxxxxx";
+        const sourceStaff = [
+            { id: "cstaffa", name: "Coach Lee", position: 0, teamOfficialId: OFFICIAL, userId: null },
+            { id: "cstaffb", name: "Sam", position: 1, teamOfficialId: null, userId: null },
+        ];
+
+        beforeEach(() => {
+            mockPrisma.practiceSession.findUnique.mockResolvedValue({
+                teamId: TEAM, title: "Tuesday", duration: 75, staff: sourceStaff,
+                plays: [
+                    { ...sourceRow(0), staff: [{ staffId: "cstaffb", position: 0 }] },
+                    { ...sourceRow(1), staff: [{ staffId: "cstaffa", position: 0 }, { staffId: "cstaffb", position: 1 }] },
+                ],
+            });
+            tx.practiceSessionPlay.findMany.mockResolvedValue([{ id: "ccopyrow0", sequence: 0 }, { id: "ccopyrow1", sequence: 1 }]);
+            tx.practiceSessionStaff.createMany.mockResolvedValue({ count: 2 });
+            tx.practiceSessionPlayStaff.createMany.mockResolvedValue({ count: 3 });
+            tx.teamOfficial.findMany.mockResolvedValue([{ id: OFFICIAL }]);
+            tx.teamMember.findMany.mockResolvedValue([]);
+        });
+
+        it("copies the list with new ids, links kept, and each row's staff onto the copied rows", async () => {
+            await duplicatePracticeSession({ id: SOURCE, teamId: TEAM, date: DATE });
+            // Two drill clones take cclone0 and cclone1; the staff copies come next.
+            expect(tx.practiceSessionStaff.createMany.mock.calls[0][0].data).toEqual([
+                { id: "cclone2xxxxxxxxxxxxxxxxxx", sessionId: COPY, name: "Coach Lee", position: 0, teamOfficialId: OFFICIAL, userId: null },
+                { id: "cclone3xxxxxxxxxxxxxxxxxx", sessionId: COPY, name: "Sam", position: 1, teamOfficialId: null, userId: null },
+            ]);
+            expect(tx.practiceSessionPlayStaff.createMany.mock.calls[0][0].data).toEqual([
+                { playRowId: "ccopyrow0", staffId: "cclone3xxxxxxxxxxxxxxxxxx", position: 0 },
+                { playRowId: "ccopyrow1", staffId: "cclone2xxxxxxxxxxxxxxxxxx", position: 0 },
+                { playRowId: "ccopyrow1", staffId: "cclone3xxxxxxxxxxxxxxxxxx", position: 1 },
+            ]);
+        });
+
+        it("reads and copies every staff and assignment column but ids and owners (guard built from the copy selects)", async () => {
+            await duplicatePracticeSession({ id: SOURCE, teamId: TEAM, date: DATE });
+            const select = mockPrisma.practiceSession.findUnique.mock.calls[0][0].select;
+            expect(select.staff).toEqual({ orderBy: { position: "asc" }, select: PRACTICE_STAFF_COPY_SELECT });
+            expect(select.plays.include.staff).toEqual({ orderBy: { position: "asc" }, select: ROW_STAFF_COPY_SELECT });
+            const written: Array<Record<string, unknown>> = tx.practiceSessionStaff.createMany.mock.calls[0][0].data;
+            for (const field of Object.values(Prisma.PracticeSessionStaffScalarFieldEnum)) {
+                if (STAFF_FIELDS_NOT_COPIED.has(field)) continue;
+                expect(PRACTICE_STAFF_COPY_SELECT).toHaveProperty(field, true);
+                expect(written[0][field]).toEqual((sourceStaff[0] as Record<string, unknown>)[field]);
+            }
+            for (const field of Object.values(Prisma.PracticeSessionPlayStaffScalarFieldEnum)) {
+                if (!ROW_STAFF_FIELDS_NOT_COPIED.has(field)) expect(ROW_STAFF_COPY_SELECT).toHaveProperty(field, true);
+            }
+        });
+
+        it("drops a link the team no longer allows, keeping the name (the save would refuse it)", async () => {
+            mockPrisma.practiceSession.findUnique.mockResolvedValue({
+                teamId: TEAM, title: "Tuesday", duration: 75,
+                staff: [
+                    { id: "cstaffa", name: "Coach Lee", position: 0, teamOfficialId: OFFICIAL, userId: null },
+                    { id: "cstaffb", name: "Alex", position: 1, teamOfficialId: null, userId: "cadminxxxxxxxxxxxxxxxxxxx" },
+                    { id: "cstaffc", name: "Jo", position: 2, teamOfficialId: null, userId: "cdemotedxxxxxxxxxxxxxxxxx" },
+                ],
+                plays: [sourceRow(0)],
+            });
+            tx.teamOfficial.findMany.mockResolvedValue([]);
+            tx.teamMember.findMany.mockResolvedValue([{ userId: "cadminxxxxxxxxxxxxxxxxxxx" }]);
+            await duplicatePracticeSession({ id: SOURCE, teamId: TEAM, date: DATE });
+            expect(tx.teamOfficial.findMany).toHaveBeenCalledWith({
+                where: { id: { in: [OFFICIAL] }, teamId: TEAM, status: { in: ["ACTIVE", "INVITED"] } },
+                select: { id: true },
+            });
+            expect(tx.teamMember.findMany).toHaveBeenCalledWith({
+                where: { userId: { in: ["cadminxxxxxxxxxxxxxxxxxxx", "cdemotedxxxxxxxxxxxxxxxxx"] }, teamId: TEAM, role: "ADMIN" },
+                select: { userId: true },
+            });
+            const written: Array<{ name: string; teamOfficialId: string | null; userId: string | null }> = tx.practiceSessionStaff.createMany.mock.calls[0][0].data;
+            expect(written.map((member) => [member.name, member.teamOfficialId, member.userId])).toEqual([
+                ["Coach Lee", null, null],
+                ["Alex", null, "cadminxxxxxxxxxxxxxxxxxxx"],
+                ["Jo", null, null],
+            ]);
+        });
+
+        it("writes no staff for a practice without any", async () => {
+            mockPrisma.practiceSession.findUnique.mockResolvedValue({ teamId: TEAM, title: "Tuesday", duration: 75, staff: [], plays: [sourceRow(0)] });
+            await duplicatePracticeSession({ id: SOURCE, teamId: TEAM, date: DATE });
+            expect(tx.practiceSessionStaff.createMany).not.toHaveBeenCalled();
+            expect(tx.practiceSessionPlayStaff.createMany).not.toHaveBeenCalled();
+            expect(tx.teamOfficial.findMany).not.toHaveBeenCalled();
+            expect(tx.teamMember.findMany).not.toHaveBeenCalled();
+        });
     });
 });
 

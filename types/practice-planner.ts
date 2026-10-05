@@ -88,6 +88,39 @@ export const MAX_ROTATE_MINUTES = 30;
 /** The gap between blocks: 0–5 minutes. */
 export const MAX_TRANSITION_MINUTES = 5;
 
+// ============================================================================
+// Practice staff: who runs each row
+// ============================================================================
+
+/** A practice lists at most this many staff (spec R2). */
+export const MAX_SESSION_STAFF = 12;
+/** A row is run by at most this many of them. */
+export const MAX_ROW_STAFF = 4;
+/** A staff name is 1–60 characters once cleaned. */
+export const STAFF_NAME_MAX = 60;
+
+/**
+ * One person on a practice's staff. `id` is the stored id, or the editor's key
+ * for someone not saved yet. Hosted only: linked to a team official or a team
+ * admin, never both; a typed name has neither. Never carries an email (spec R4).
+ */
+export interface SessionStaffMember {
+    id: string;
+    name: string;
+    teamOfficialId?: string | null;
+    userId?: string | null;
+}
+
+/** A team official or team admin the hosted picker offers (spec R4). No email, ever. */
+export interface StaffOption {
+    kind: "official" | "admin";
+    /** The TeamOfficial id, or the admin's User id */
+    id: string;
+    name: string;
+    /** "Head Coach", "Assistant Coach"…, or "Team admin" */
+    roleLabel: string;
+}
+
 export interface PlayerIcon {
     id: string;
     position: Position;
@@ -195,6 +228,8 @@ export interface PlayInSession {
     stays?: boolean;
     /** On the first drill of a station block: groups rotate every this many minutes. */
     rotateEveryMinutes?: number | null;
+    /** Staff keys running this row, in order (spec R3). Sent only with the session's staff list. */
+    staff?: string[];
     duration: number; // minutes
     instructions: string;
     playData: PlayData;
@@ -225,6 +260,8 @@ export interface BlockInSession {
     instructions: string;
     /** Always false: a block never runs as a station (spec R3). */
     runsWithPrevious: boolean;
+    /** Staff keys running this row, in order (spec R3). Sent only with the session's staff list. */
+    staff?: string[];
 }
 
 /** One row in the session editor. Narrow with isDrillRow before reading drill fields. */
@@ -245,6 +282,8 @@ export interface PracticeSessionData {
     goaliesAttending?: number | null;
     /** Minutes between blocks (0–5). Absent = unchanged on save; reads as 0. */
     transitionMinutes?: number;
+    /** The practice's staff. Absent = unchanged on save (spec R3); reads as none. */
+    staff?: SessionStaffMember[];
 }
 
 /**
@@ -260,6 +299,8 @@ export interface PracticeSessionViewPlay {
     kind?: "drill";
     stays?: boolean;
     rotateEveryMinutes?: number | null;
+    /** Staff ids running this row, in order; names come from the session's list (spec R11). */
+    staff?: string[];
     play: {
         id: string;
         name: string;
@@ -282,6 +323,8 @@ export interface PracticeSessionViewBlock {
     /** The block's note */
     instructions: string | null;
     runsWithPrevious: boolean;
+    /** Staff ids running this row, in order; names come from the session's list (spec R11). */
+    staff?: string[];
 }
 
 export type DrillRow = PracticeSessionViewPlay;
@@ -314,6 +357,8 @@ export interface PracticeSessionView {
     goaliesAttending?: number | null;
     /** Minutes between blocks (0–5); absent reads as 0. */
     transitionMinutes?: number;
+    /** The practice's staff, in list order; absent reads as none. */
+    staff?: SessionStaffMember[];
     plays: SessionRow[];
 }
 

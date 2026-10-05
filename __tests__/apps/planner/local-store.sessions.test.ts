@@ -23,9 +23,24 @@ import {
     TRANSITION_MINUTES_MESSAGE,
     drillRows,
     isDrillRow,
+    toSessionRowInputs,
     type DrillRowInput,
 } from "@/lib/utils/session-rows";
 import { BLOCK_ROW_FIELDS_ERROR, BLOCK_STATION_ERROR, ROTATION_PLACEMENT_ERROR, ROTATION_TOO_FEW_ERROR } from "@/lib/utils/session-timeline";
+import {
+    ROW_STAFF_DUPLICATE_MESSAGE,
+    ROW_STAFF_LIMIT_MESSAGE,
+    ROW_STAFF_UNKNOWN_MESSAGE,
+    STAFF_ADMIN_MESSAGE,
+    STAFF_KEY_DUPLICATE_MESSAGE,
+    STAFF_KEY_MESSAGE,
+    STAFF_LIMIT_MESSAGE,
+    STAFF_NAME_LENGTH_MESSAGE,
+    STAFF_NAME_REQUIRED_MESSAGE,
+    STAFF_NAME_TAKEN_MESSAGE,
+    STAFF_OFFICIAL_MESSAGE,
+    STAFF_ONE_LINK_MESSAGE,
+} from "@/lib/utils/session-staff";
 
 const T = LOCAL_TEAM_ID;
 
@@ -350,12 +365,12 @@ describe.each(REPOS)("sessions (%s)", (_name, open) => {
         const view = data(await store.getSessionView(id));
         expect(view.transitionMinutes).toBe(2);
         expect(view.plays.map((row) => (isDrillRow(row) ? row.play.name : row.kind))).toEqual(["warmup", "A", "B", "cooldown"]);
-        expect(view.plays[3]).toEqual({ id: "kc", kind: "cooldown", label: "Stretch", sequence: 3, duration: 5, instructions: null, runsWithPrevious: false });
+        expect(view.plays[3]).toEqual({ id: "kc", kind: "cooldown", label: "Stretch", sequence: 3, duration: 5, instructions: null, runsWithPrevious: false, staff: [] });
         expect(view.plays.slice(1, 3).map((row) => isDrillRow(row) && [row.rotateEveryMinutes, row.stays])).toEqual([[5, false], [null, false]]);
 
         const edit = data(await store.getSessionForEdit(id));
         expect(edit.initialData.transitionMinutes).toBe(2);
-        expect(edit.initialData.plays[0]).toEqual({ id: "kw", kind: "warmup", label: "", sequence: 0, duration: 8, instructions: "Laps", runsWithPrevious: false });
+        expect(edit.initialData.plays[0]).toEqual({ id: "kw", kind: "warmup", label: "", sequence: 0, duration: 8, instructions: "Laps", runsWithPrevious: false, staff: [] });
         expect(edit.initialData.plays[1]).toMatchObject({ stays: false, rotateEveryMinutes: 5 });
 
         expect(data(await store.listSessions())[0].drillCount).toBe(2);
@@ -561,6 +576,166 @@ describe.each(REPOS)("sessions (%s)", (_name, open) => {
         expect(exported.session.transitionMinutes).toBe(1);
         expect(exported.session.drills.map((entry) => entry.kind)).toEqual(["warmup", "drill", "drill"]);
         expect(exported.session.drills[1]).toMatchObject({ rotateEveryMinutes: 5 });
+    });
+
+    describe("practice staff (spec R3, R5, R7)", () => {
+        const LEE = { key: "st-lee", name: "Coach Lee" };
+        const SAM = { key: "st-sam", name: " Sam " };
+        const rows = (a: string, b: string, staff: [string[]?, string[]?] = []): LocalSessionDrill[] => [
+            { kind: "warmup", clientKey: "kw", sequence: 0, duration: 8, instructions: "", label: null, ...(staff[0] && { staff: staff[0] }) },
+            drill(a, "ka", 1, staff[1] ? { staff: staff[1] } : {}),
+            drill(b, "kb", 2),
+        ];
+
+        async function staffed() {
+            const h = await setup();
+            const a = await addLibraryPlay(h.store, "A");
+            const b = await addLibraryPlay(h.store, "B");
+            const { id } = data(await h.store.createSession(save(rows(a, b, [["st-sam"], ["st-lee", "st-sam"]]), { staff: [LEE, SAM] })));
+            return { ...h, id };
+        }
+
+        it("stores the list (names cleaned) and each row's staff, and reads them in the view and the editor", async () => {
+            const { store, id } = await staffed();
+            const view = data(await store.getSessionView(id));
+            expect(view.staff).toEqual([{ id: "st-lee", name: "Coach Lee" }, { id: "st-sam", name: "Sam" }]);
+            expect(view.plays.map((row) => row.staff)).toEqual([["st-sam"], ["st-lee", "st-sam"], []]);
+            const edit = data(await store.getSessionForEdit(id));
+            expect(edit.initialData.staff).toEqual(view.staff);
+            expect(edit.initialData.plays.map((row) => row.staff)).toEqual([["st-sam"], ["st-lee", "st-sam"], []]);
+        });
+
+        it("keeps the list and each row's staff when an update omits staff, following rows by id (absent = unchanged)", async () => {
+            const { store, id } = await staffed();
+            const edit = data(await store.getSessionForEdit(id));
+            // An older save: no staff on the session; the rows reordered, and a stray key ignored.
+            const plays = toSessionRowInputs(edit.initialData.plays).map((row) => ({ ...row, staff: ["stray"] }));
+            const [w, x, y] = plays;
+            data(await store.updateSession(id, save([{ ...y, sequence: 0 }, { ...w, sequence: 1 }, { ...x, sequence: 2 }])));
+            const view = data(await store.getSessionView(id));
+            expect(view.staff?.map((member) => member.name)).toEqual(["Coach Lee", "Sam"]);
+            expect(view.plays.map((row) => [row.id, row.staff])).toEqual([["kb", []], ["kw", ["st-sam"]], ["ka", ["st-lee", "st-sam"]]]);
+        });
+
+        it("keeps the list and every row's staff when neither the session nor any row sends staff (an editor pausing staff on a name clash)", async () => {
+            const { store, id } = await staffed();
+            const plays = toSessionRowInputs(data(await store.getSessionForEdit(id)).initialData.plays).map(({ staff: _omitted, ...row }) => row);
+            expect(plays.some((row) => "staff" in row)).toBe(false);
+            data(await store.updateSession(id, save(plays, { title: "Renamed" })));
+            const view = data(await store.getSessionView(id));
+            expect(view.title).toBe("Renamed");
+            expect(view.staff?.map((member) => member.name)).toEqual(["Coach Lee", "Sam"]);
+            expect(view.plays.map((row) => row.staff)).toEqual([["st-sam"], ["st-lee", "st-sam"], []]);
+        });
+
+        it("gives a row inserted by an update without staff nobody, and keeps the others' staff", async () => {
+            const { store, id } = await staffed();
+            const plays = toSessionRowInputs(data(await store.getSessionForEdit(id)).initialData.plays);
+            const inserted: LocalSessionDrill = { kind: "break", clientKey: "kx", sequence: 1, duration: 2, instructions: "", label: null };
+            const [w, x, y] = plays;
+            data(await store.updateSession(id, save([w, inserted, { ...x, sequence: 2 }, { ...y, sequence: 3 }])));
+            const view = data(await store.getSessionView(id));
+            expect(view.plays.map((row) => [row.id, row.staff])).toEqual([["kw", ["st-sam"]], ["kx", []], ["ka", ["st-lee", "st-sam"]], ["kb", []]]);
+        });
+
+        it("drops a staffed row deleted by an update without staff, and keeps the list and the others' staff", async () => {
+            const { store, id } = await staffed();
+            const plays = toSessionRowInputs(data(await store.getSessionForEdit(id)).initialData.plays);
+            const [w, , y] = plays;
+            data(await store.updateSession(id, save([w, { ...y, sequence: 1 }])));
+            const view = data(await store.getSessionView(id));
+            expect(view.staff?.map((member) => member.name)).toEqual(["Coach Lee", "Sam"]);
+            expect(view.plays.map((row) => [row.id, row.staff])).toEqual([["kw", ["st-sam"]], ["kb", []]]);
+        });
+
+        it("gives a row without staff nobody when a list is sent", async () => {
+            const { store, id } = await staffed();
+            const plays = toSessionRowInputs(data(await store.getSessionForEdit(id)).initialData.plays);
+            const unstaffed = plays.map((row) => ({ ...row, staff: undefined }));
+            data(await store.updateSession(id, save(unstaffed, { staff: [LEE] })));
+            const view = data(await store.getSessionView(id));
+            expect(view.staff).toEqual([{ id: "st-lee", name: "Coach Lee" }]);
+            expect(view.plays.every((row) => row.staff?.length === 0)).toBe(true);
+        });
+
+        it("clears the list and every row's staff with [], from rows that had staff", async () => {
+            const { store, id } = await staffed();
+            const before = data(await store.getSessionView(id));
+            // Not vacuous: two rows are staffed before the clear.
+            expect(before.plays.filter((row) => (row.staff ?? []).length > 0)).toHaveLength(2);
+            const plays = toSessionRowInputs(data(await store.getSessionForEdit(id)).initialData.plays);
+            data(await store.updateSession(id, save(plays.map((row) => ({ ...row, staff: undefined })), { staff: [] })));
+            const view = data(await store.getSessionView(id));
+            expect(view.staff).toEqual([]);
+            expect(view.plays.map((row) => row.staff)).toEqual([[], [], []]);
+        });
+
+        it("refuses what hosted refuses, in hosted's words, before writing anything", async () => {
+            const { store } = await setup();
+            const a = await addLibraryPlay(store, "A");
+            const b = await addLibraryPlay(store, "B");
+            const refusal = async (staff: unknown, keys: [string[]?, string[]?] = []) => {
+                const result = await store.createSession(save(rows(a, b, keys), { staff } as Partial<LocalSessionSave>));
+                return result.success ? null : result.error;
+            };
+            expect(await refusal([LEE, { key: "x", name: "coach lee" }])).toBe(STAFF_NAME_TAKEN_MESSAGE);
+            // Names PostgreSQL's lower() folds together, though JavaScript's toLowerCase doesn't.
+            expect(await refusal([{ key: "a", name: "İlker" }, { key: "b", name: "ilker" }])).toBe(STAFF_NAME_TAKEN_MESSAGE);
+            expect(await refusal([{ key: "a", name: "ΟΔΟΣ" }, { key: "b", name: "οδοσ" }])).toBe(STAFF_NAME_TAKEN_MESSAGE);
+            expect(await refusal([LEE], [["nobody"]])).toBe(ROW_STAFF_UNKNOWN_MESSAGE);
+            expect(await refusal([LEE], [["st-lee", "st-lee"]])).toBe(ROW_STAFF_DUPLICATE_MESSAGE);
+            expect(await refusal(Array.from({ length: 13 }, (_, i) => ({ key: `k${i}`, name: `Coach ${i}` })))).toBe(STAFF_LIMIT_MESSAGE);
+            expect(await refusal([{ key: "k", name: "x".repeat(61) }])).toBe(STAFF_NAME_LENGTH_MESSAGE);
+            expect(await refusal([{ key: "k", name: " " }])).toBe(STAFF_NAME_REQUIRED_MESSAGE);
+            expect(await refusal([{ ...LEE, teamOfficialId: "cofficialxxxxxxxxxxxxxxxx" }])).toBe(STAFF_OFFICIAL_MESSAGE);
+            expect(await refusal([{ ...LEE, userId: "cuserxxxxxxxxxxxxxxxxxxxx" }])).toBe(STAFF_ADMIN_MESSAGE);
+            expect(await refusal([{ ...LEE, teamOfficialId: "cofficialxxxxxxxxxxxxxxxx", userId: "cuserxxxxxxxxxxxxxxxxxxxx" }])).toBe(STAFF_ONE_LINK_MESSAGE);
+            // A malformed link (an empty one included) gets hosted's format message, never stored as a typed name.
+            expect(await refusal([{ ...LEE, teamOfficialId: "" }])).toBe("Invalid official ID format");
+            expect(await refusal([{ ...LEE, userId: "" }])).toBe("Invalid user ID format");
+            expect(await refusal([{ ...LEE, teamOfficialId: "not an id" }])).toBe("Invalid official ID format");
+            expect(await refusal([{ ...LEE, userId: "x" }])).toBe("Invalid user ID format");
+            expect(await refusal([{ ...LEE, teamOfficialId: "bad", userId: "bad" }])).toBe("Invalid official ID format");
+            expect(await refusal([{ key: "", name: "Sam" }])).toBe(STAFF_KEY_MESSAGE);
+            expect(await refusal([LEE, { key: "st-lee", name: "Sam" }])).toBe(STAFF_KEY_DUPLICATE_MESSAGE);
+            // A row's keys are shaped even when the save sends no list, as hosted's row schema does.
+            expect(await refusal(undefined, [["a", "b", "c", "d", "e"]])).toBe(ROW_STAFF_LIMIT_MESSAGE);
+            expect(await refusal(undefined, [[""]])).toBe(STAFF_KEY_MESSAGE);
+            expect(data(await store.listSessions())).toEqual([]);
+        });
+
+        it("reads a session stored before practice staff with no staff", async () => {
+            const { repo, store, clock } = await setup();
+            await repo.write((tx) => tx.putSession({ id: "old", title: "Old", date: clock.now, duration: 60, rows: [], createdAt: clock.now, updatedAt: clock.now }));
+            expect(data(await store.getSessionView("old")).staff).toEqual([]);
+            expect(data(await store.getSessionForEdit("old")).initialData.staff).toEqual([]);
+        });
+
+        it("duplicates the list with new ids and moves each row's staff onto them", async () => {
+            const { store, id } = await staffed();
+            const copy = data(await store.duplicatePracticeSession({ id, teamId: T, date: new Date("2026-10-13T19:00:00") }));
+            const view = data(await store.getSessionView(copy.id));
+            expect(view.staff?.map((member) => member.name)).toEqual(["Coach Lee", "Sam"]);
+            expect(view.staff?.some((member) => member.id === "st-lee" || member.id === "st-sam")).toBe(false);
+            const [lee, sam] = (view.staff ?? []).map((member) => member.id);
+            expect(view.plays.map((row) => row.staff)).toEqual([[sam], [lee, sam], []]);
+        });
+
+        it("exports names and imports them back as typed staff, matched ignoring case", async () => {
+            const { store, id } = await staffed();
+            const doc = buildPlanDocument(data(await store.getSessionView(id)), new Date(), "openleague-static");
+            expect(doc.session.staff).toEqual(["Coach Lee", "Sam"]);
+            expect(doc.session.drills.map((entry) => entry.staff)).toEqual([["Sam"], ["Coach Lee", "Sam"], []]);
+            const raw = JSON.parse(JSON.stringify(doc));
+            raw.session.drills[1].staff = ["COACH LEE", "sam"];
+            const parsed = parsePlan(raw);
+            if (!parsed.ok) throw new Error(parsed.error.message);
+            const { sessionId } = data(await store.importPlan(parsed.plan, { date: new Date("2026-10-20T19:00:00"), addToLibrary: false }));
+            const view = data(await store.getSessionView(sessionId));
+            expect(view.staff?.map((member) => member.name)).toEqual(["Coach Lee", "Sam"]);
+            const names = (keys: string[] | undefined) => (keys ?? []).map((key) => view.staff?.find((member) => member.id === key)?.name);
+            expect(view.plays.map((row) => names(row.staff))).toEqual([["Sam"], ["Coach Lee", "Sam"], []]);
+        });
     });
 });
 

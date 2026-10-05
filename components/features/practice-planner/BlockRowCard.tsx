@@ -22,6 +22,7 @@ import {
 } from "@mui/icons-material";
 import { BLOCK_DEFAULTS, MAX_BLOCK_LABEL_LENGTH, VALIDATION_CONSTRAINTS, type BlockInSession, type BlockKind } from "@/types/practice-planner";
 import { blockTitle, type RowEdit } from "@/lib/utils/session-rows";
+import { RunByField, type RowRunBy } from "./RunByField";
 
 /** One outline icon per block kind (the Add block menu uses them too). */
 export const BLOCK_ICONS: Record<BlockKind, SvgIconComponent> = {
@@ -41,13 +42,15 @@ export interface BlockRowCardProps {
     canMoveDown: boolean;
     /** The session is being created: nothing on the card may change. */
     locked?: boolean;
+    /** Who runs this block (practice staff, spec R8); null hides the field. */
+    runBy?: RowRunBy | null;
     onUpdate: (id: string, edit: RowEdit) => void;
     onDelete: (id: string) => void;
     onMoveUp: (index: number) => void;
     onMoveDown: (index: number) => void;
 }
 
-export function BlockRowCard({ item, index, canMoveUp, canMoveDown, locked = false, onUpdate, onDelete, onMoveUp, onMoveDown }: BlockRowCardProps) {
+export function BlockRowCard({ item, index, canMoveUp, canMoveDown, locked = false, runBy = null, onUpdate, onDelete, onMoveUp, onMoveDown }: BlockRowCardProps) {
     const titleId = useId();
     const Icon = BLOCK_ICONS[item.kind];
     const title = blockTitle(item.kind, item.label);
@@ -130,7 +133,7 @@ export function BlockRowCard({ item, index, canMoveUp, canMoveDown, locked = fal
                     </IconButton>
                 </Stack>
             </Stack>
-            <Box sx={{ px: 2, pb: 2 }}>
+            <Stack spacing={1.5} sx={{ px: 2, pb: 2 }}>
                 <TextField
                     label="Note"
                     size="small"
@@ -144,7 +147,8 @@ export function BlockRowCard({ item, index, canMoveUp, canMoveDown, locked = fal
                     slotProps={{ htmlInput: { maxLength: 2000 } }}
                     sx={{ "& .MuiInputBase-root": { minHeight: 44 } }}
                 />
-            </Box>
+                {runBy && <RunByField {...runBy} title={title} disabled={locked} />}
+            </Stack>
         </Card>
     );
 }

@@ -326,3 +326,23 @@ describe("BenchSheet: rotation and the gap", () => {
         expect(screen.queryByText(/between blocks/)).toBeNull();
     });
 });
+
+describe("BenchSheet: practice staff (spec R9)", () => {
+    it("prints the staff line in the header and who runs each timeline row", () => {
+        const [breakout, regroup, shooting, lost, cooldown] = SESSION.plays;
+        renderSheet({
+            ...SESSION,
+            staff: [{ id: "s1", name: "Coach Lee" }, { id: "s2", name: "Sam" }],
+            plays: [{ ...breakout, staff: ["s1", "s2"] }, regroup, shooting, { ...lost, staff: ["s2"] }, cooldown],
+        });
+        expect(screen.getByText("Staff: Coach Lee, Sam")).toBeInTheDocument();
+        const timeline = screen.getByRole("table", { name: "Session timeline" });
+        expect(timeline).toHaveTextContent("Breakout · 15 min · run by Coach Lee, Sam");
+        expect(timeline).toHaveTextContent("Lost · run by Sam");
+    });
+
+    it("prints no staff line for a practice without staff", () => {
+        renderSheet();
+        expect(screen.queryByText(/^Staff:/)).toBeNull();
+    });
+});

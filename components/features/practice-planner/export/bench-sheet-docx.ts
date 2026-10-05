@@ -53,6 +53,7 @@ function header(model: BenchSheetModel): Paragraph[] {
         ...(model.teamName ? [new Paragraph({ children: textRuns(model.teamName, { bold: true }) })] : []),
         new Paragraph({ children: textRuns(model.when) }),
         ...(model.place ? [new Paragraph({ children: textRuns(model.place) })] : []),
+        ...(model.staff ? [new Paragraph({ children: textRuns(model.staff) })] : []),
         ...(model.gap ? [new Paragraph({ children: textRuns(model.gap) })] : []),
     ];
 }
@@ -117,7 +118,7 @@ function timeline(model: BenchSheetModel): Array<Paragraph | Table> {
                                   // Word wants a paragraph after a table in a cell.
                                   ...(row.kind === "rotation" ? [gridTable(row.grid), new Paragraph({ children: [] })] : []),
                               ]
-                            : [new Paragraph({ children: textRuns(row.kind === "block" && row.note ? `${row.label} · ${row.note}` : row.label) })],
+                            : [new Paragraph({ children: textRuns([row.label, row.kind === "block" ? row.note : null, row.runBy].filter(Boolean).join(" · ")) })],
                     ),
                 ],
             }),

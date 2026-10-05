@@ -23,6 +23,7 @@ import {
     type GetPracticeSessionsByTeamInput,
     type SharePracticeSessionInput,
     type PracticeSessionRowInput,
+    type SessionStaffSaveInput,
     STALE_EDITOR_MESSAGE,
 } from "@/lib/utils/validation";
 import type { SessionRow } from "@/types/practice-planner";
@@ -49,6 +50,14 @@ import {
     type TimelinePlay,
 } from "@/lib/utils/session-timeline";
 import { isBlockKind, needsStoredTiming, toBlockLabel, toRowKind, withStoredTiming } from "@/lib/utils/session-rows";
+import { carryRowStaff, sessionStaffError, type SavedStaffId } from "@/lib/utils/session-staff";
+import {
+    StaffNameConflictError,
+    readCarriedRowStaff,
+    replaceSessionStaff,
+    staffLinkError,
+    writeRowStaff,
+} from "@/lib/services/practice-session-staff";
 
 export type ActionResult<T> =
     | { success: true; data: T }
@@ -495,13 +504,49 @@ function sessionPlayData(row: ResolvedRow, ownedByKey: ReadonlyMap<string, strin
 class SessionRowsRejected extends Error {}
 
 /**
+ * A sent staff list's problem (spec R3, R4): the pure rules (limits, names,
+ * the rows' keys), then the links. Runs inside the save's transaction, after
+ * authentication and authorization.
+ */
+async function staffSaveError(
+    tx: Prisma.TransactionClient,
+    teamId: string,
+    staff: SessionStaffSaveInput[],
+    rows: ResolvedRow[],
+): Promise<string | null> {
+    return sessionStaffError(staff, rows) ?? (await staffLinkError(tx, teamId, staff));
+}
+
+/**
+ * Writes a sent list and each row's staff (spec R3): keys become ids; a row
+ * without `staff` has nobody. Returns every sent key with its stored id, in list
+ * order, so the editor can swap its keys (parity with toSavedDrills).
+ */
+async function writeSentStaff(tx: Prisma.TransactionClient, sessionId: string, staff: SessionStaffSaveInput[], rows: ResolvedRow[]): Promise<SavedStaffId[]> {
+    const ids = await replaceSessionStaff(tx, sessionId, staff);
+    await writeRowStaff(
+        tx,
+        sessionId,
+        rows.map((row) => ({
+            sequence: row.sequence,
+            staffIds: (row.staff ?? []).map((key) => {
+                const staffId = ids.get(key);
+                if (staffId === undefined) throw new Error(`No staff member for key ${key}`);
+                return staffId;
+            }),
+        })),
+    );
+    return [...ids].map(([key, id]) => ({ key, id }));
+}
+
+/**
  * Create a new practice session
  * Only ADMIN role can create sessions
  * Requirements: 2.1, 2.2, 2.5
  */
 export async function createPracticeSession(
     input: CreatePracticeSessionActionInput
-): Promise<ActionResult<{ id: string; title: string; date: Date; conflictsOverridden: boolean; plays: SavedDrill[] }>> {
+): Promise<ActionResult<{ id: string; title: string; date: Date; conflictsOverridden: boolean; plays: SavedDrill[]; staff: SavedStaffId[] }>> {
     try {
         const validated = createPracticeSessionSchema.parse(input);
         const reservationInput = reservationFields(input);
@@ -533,6 +578,11 @@ export async function createPracticeSession(
         }
 
         const session = await runVenueReservationTransaction(async (tx) => {
+            // A sent staff list is checked here, after authorization and before anything is written.
+            if (validated.staff) {
+                const staffError = await staffSaveError(tx, validated.teamId, validated.staff, rows);
+                if (staffError) throw new SessionRowsRejected(staffError);
+            }
             let reservation: ConfirmedPracticeReservation | null = null;
 
             if (reservationInput.reservationId) {
@@ -628,6 +678,8 @@ export async function createPracticeSession(
                     data: rows.map((row) => ({ sessionId: createdSession.id, ...sessionPlayData(row, ownedByKey) })),
                 });
             }
+            // Every sent key with its new id, for the editor's swap; none when no staff was sent.
+            const savedStaff = validated.staff ? await writeSentStaff(tx, createdSession.id, validated.staff, rows) : [];
 
             if (reservation) {
                 await assignVenueReservation(tx, {
@@ -647,7 +699,7 @@ export async function createPracticeSession(
                     overrideReason: reservationInput.overrideReason,
                 });
             }
-            return { ...createdSession, plays: toSavedDrills(mapping) };
+            return { ...createdSession, plays: toSavedDrills(mapping), staff: savedStaff };
         });
 
         revalidatePath("/practice-planner");
@@ -684,7 +736,7 @@ export async function createPracticeSession(
             };
         }
 
-        if (error instanceof SessionDrillError) {
+        if (error instanceof SessionDrillError || error instanceof SessionRowsRejected || error instanceof StaffNameConflictError) {
             return {
                 success: false,
                 error: error.message,
@@ -713,7 +765,7 @@ export async function createPracticeSession(
  */
 export async function updatePracticeSession(
     input: UpdatePracticeSessionActionInput
-): Promise<ActionResult<{ id: string; title: string; date: Date; conflictsOverridden: boolean; plays: SavedDrill[] }>> {
+): Promise<ActionResult<{ id: string; title: string; date: Date; conflictsOverridden: boolean; plays: SavedDrill[]; staff: SavedStaffId[] }>> {
     try {
         const validated = updatePracticeSessionSchema.parse(input);
         const parsedReservation = reservationFields(input);
@@ -862,6 +914,14 @@ export async function updatePracticeSession(
             }
             // Stored as the editor shows them: a rotating station lasts M (spec R3).
             const rows = withRotationMinutes(resolved);
+            // Practice staff (spec R3). Sent: checked here, after authorization, before anything is
+            // rewritten. Absent: unchanged. The rows are deleted and recreated below and the delete
+            // cascades their assignments, so they are read now and carried to the new rows.
+            if (validated.staff) {
+                const staffError = await staffSaveError(tx, validated.teamId, validated.staff, rows);
+                if (staffError) throw new SessionRowsRejected(staffError);
+            }
+            const carried = validated.staff ? null : await readCarriedRowStaff(tx, validated.id);
 
             const oldEvent = current.venueReservationId
                 ? await tx.event.findUnique({
@@ -1002,7 +1062,28 @@ export async function updatePracticeSession(
                 sessionId: validated.id,
                 previousPlayIds,
             });
-            const saved = { ...updated, plays: toSavedDrills(mapping) };
+            let savedStaff: SavedStaffId[] = [];
+            if (validated.staff) {
+                savedStaff = await writeSentStaff(tx, validated.id, validated.staff, rows);
+            } else if (carried) {
+                // Row identity (Global Constraints): a drill by its owned play id; a block by its place,
+                // only when the block kinds are unchanged in order and count.
+                await writeRowStaff(
+                    tx,
+                    validated.id,
+                    carryRowStaff(
+                        carried.stored,
+                        carried.storedBlocks,
+                        rows.map((row) => ({
+                            kind: row.kind,
+                            playId: row.kind === "drill" ? ownedByKey.get(row.clientKey) ?? null : null,
+                            sequence: row.sequence,
+                        })),
+                    ),
+                );
+            }
+            // Both `return saved` paths (with and without a booking) hand the editor its staff ids.
+            const saved = { ...updated, plays: toSavedDrills(mapping), staff: savedStaff };
 
             if (!reservation) {
                 if (oldEvent) {
@@ -1080,7 +1161,7 @@ export async function updatePracticeSession(
             };
         }
 
-        if (error instanceof SessionDrillError || error instanceof SessionRowsRejected) {
+        if (error instanceof SessionDrillError || error instanceof SessionRowsRejected || error instanceof StaffNameConflictError) {
             return {
                 success: false,
                 error: error.message,

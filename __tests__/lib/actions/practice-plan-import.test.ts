@@ -8,7 +8,9 @@ const { mockAuth, models, mockPrisma, mockCache } = vi.hoisted(() => {
     const models = {
         practiceSession: { create: vi.fn() },
         play: { createMany: vi.fn() },
-        practiceSessionPlay: { createMany: vi.fn() },
+        practiceSessionPlay: { createMany: vi.fn(), findMany: vi.fn() },
+        practiceSessionStaff: { createMany: vi.fn() },
+        practiceSessionPlayStaff: { createMany: vi.fn() },
     };
     return {
         models,
@@ -22,7 +24,9 @@ vi.mock("@/lib/auth/session", () => mockAuth);
 vi.mock("@/lib/db/prisma", () => ({ prisma: mockPrisma }));
 vi.mock("next/cache", () => mockCache);
 
+import { Prisma } from "@prisma/client";
 import { importPracticePlan } from "@/lib/actions/practice-plan-import";
+import { STAFF_NAME_TAKEN_MESSAGE } from "@/lib/utils/session-staff";
 import { INVALID_PLAN_MESSAGE, NOT_A_PLAN_MESSAGE, serializePlan, type PlanSessionInput } from "@/lib/plan-document";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import type { PlayData } from "@/types/practice-planner";
@@ -207,6 +211,49 @@ describe("importPracticePlan", () => {
         models.practiceSession.create.mockRejectedValue(new Error("connection reset"));
         expect(await call()).toEqual({ success: false, error: "Failed to import the practice plan. Please try again." });
         consoleError.mockRestore();
+    });
+
+    it("creates the plan's staff as typed names and each row's staff, matched by name ignoring case (spec R5, R6)", async () => {
+        models.practiceSessionPlay.findMany.mockResolvedValue([{ id: "crow0", sequence: 0 }, { id: "crow2", sequence: 2 }]);
+        models.practiceSessionStaff.createMany.mockResolvedValue({ count: 2 });
+        models.practiceSessionPlayStaff.createMany.mockResolvedValue({ count: 3 });
+        const document = doc({
+            staff: ["Coach Lee", "Sam"],
+            drills: [
+                { sequence: 0, duration: 10, runsWithPrevious: false, instructions: "Two laps", name: "Warmup Laps", description: "", playData: BOARD, staff: ["Sam"] },
+                { sequence: 1, duration: 15, runsWithPrevious: false, instructions: "", name: "Breakout", description: "D to D", playData: BOARD },
+                { sequence: 2, duration: 10, runsWithPrevious: true, instructions: "", name: "Regroup", description: "", playData: createEmptyPlayData(), staff: ["coach lee", "Sam"] },
+            ],
+        });
+        expect(await call({ document })).toEqual({ success: true, data: { sessionId: SESSION } });
+        // Staff is created right after the session, so it takes the first two ids.
+        expect(models.practiceSessionStaff.createMany.mock.calls[0][0].data).toEqual([
+            { id: "cowned0xxxxxxxxxxxxxxxxxx", sessionId: SESSION, name: "Coach Lee", position: 0, teamOfficialId: null, userId: null },
+            { id: "cowned1xxxxxxxxxxxxxxxxxx", sessionId: SESSION, name: "Sam", position: 1, teamOfficialId: null, userId: null },
+        ]);
+        expect(models.practiceSessionPlayStaff.createMany.mock.calls[0][0].data).toEqual([
+            { playRowId: "crow0", staffId: "cowned1xxxxxxxxxxxxxxxxxx", position: 0 },
+            { playRowId: "crow2", staffId: "cowned0xxxxxxxxxxxxxxxxxx", position: 0 },
+            { playRowId: "crow2", staffId: "cowned1xxxxxxxxxxxxxxxxxx", position: 1 },
+        ]);
+    });
+
+    it("shows a name clash the lower(name) index catches as the name message, not the generic import error", async () => {
+        // A Neon-shaped P2002: the key's columns, cut at the expression's first ")".
+        const clash = new Prisma.PrismaClientKnownRequestError("Unique constraint failed", {
+            code: "P2002",
+            clientVersion: "7.10.0",
+            meta: { table: "practice_session_staff", driverAdapterError: { cause: { kind: "UniqueConstraintViolation", constraint: { fields: ['"sessionId"', "lower(name"] } } } },
+        });
+        models.practiceSessionStaff.createMany.mockRejectedValue(clash);
+        expect(await call({ document: doc({ staff: ["Coach Lee", "Sam"] }) })).toEqual({ success: false, error: STAFF_NAME_TAKEN_MESSAGE });
+        expect(models.practiceSessionPlay.createMany).not.toHaveBeenCalled();
+    });
+
+    it("writes no staff for a plan without any", async () => {
+        await call();
+        expect(models.practiceSessionStaff.createMany).not.toHaveBeenCalled();
+        expect(models.practiceSessionPlayStaff.createMany).not.toHaveBeenCalled();
     });
 });
 

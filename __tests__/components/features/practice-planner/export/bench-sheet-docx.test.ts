@@ -22,6 +22,7 @@ const MODEL: BenchSheetModel = {
     when: "Tuesday, April 7, 2026 · 6:00 PM – 7:00 PM MDT",
     place: "Ice House · Rink A",
     gap: null,
+    staff: null,
     timeline: [{ start: "6:00 PM MDT", minutes: 10, label: "Stations · 2", stations: ["Breakout · 10 min", "Regroup · 8 min"] }],
     planned: "Planned 10 of 60 min",
     overTime: false,
@@ -165,5 +166,27 @@ describe("renderBenchSheetDocx: rotation and the gap (spec R10)", () => {
         expect(widths).toHaveLength(4);
         expect(widths[0]).toBeLessThan(widths[1]);
         expect(new Set(widths.slice(1)).size).toBe(1);
+    });
+});
+
+describe("renderBenchSheetDocx: practice staff (spec R9)", () => {
+    it("writes the staff line and each row's names as safe text", async () => {
+        const xml = await documentXml({
+            ...MODEL,
+            staff: "Staff: <Coach> & Sam\u0007",
+            timeline: [
+                ...MODEL.timeline,
+                { start: "6:10 PM MDT", minutes: 15, label: "Shooting", stations: null, runBy: "run by <Sam>" },
+                { kind: "block", start: "6:25 PM MDT", minutes: 2, label: "Water", note: "Fill up", stations: null, runBy: "run by Coach Lee" },
+            ],
+        });
+        expect(xml).toContain("Staff: &lt;Coach&gt; &amp; Sam");
+        // Plain, like the place and gap lines and the live bench sheet.
+        const staffRun = xml.match(/<w:r>(?:(?!<w:r>)[\s\S])*?Staff: &lt;Coach&gt;/)?.[0] ?? "";
+        expect(staffRun).not.toBe("");
+        expect(staffRun).not.toContain("<w:b/>");
+        expect(xml).not.toContain("\u0007");
+        expect(xml).toContain("Shooting · run by &lt;Sam&gt;");
+        expect(xml).toContain("Water · Fill up · run by Coach Lee");
     });
 });

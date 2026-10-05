@@ -12,6 +12,7 @@ const { mockSendEmail, mockPrisma } = vi.hoisted(() => ({
   mockSendEmail: vi.fn(),
   mockPrisma: {
     practiceSession: { findUnique: vi.fn() },
+    practiceSessionStaff: { findMany: vi.fn() },
     signupEvent: { findMany: vi.fn() },
     gameProposal: { findUnique: vi.fn() },
     teamMember: { findMany: vi.fn() },
@@ -21,8 +22,8 @@ const { mockSendEmail, mockPrisma } = vi.hoisted(() => ({
 
 vi.mock("@/lib/email/client", () => ({ sendEmail: mockSendEmail }));
 vi.mock("@/lib/db/prisma", () => ({ prisma: mockPrisma }));
-vi.mock("@/lib/utils/date", () => ({
-  FALLBACK_TIME_ZONE: "America/New_York",
+vi.mock("@/lib/utils/date", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/utils/date")>()),
   formatDateTime: vi.fn(() => "Jan 1, 2026, 10:00 AM"),
 }));
 vi.mock("@/lib/env", () => ({ getBaseUrl: () => "http://localhost:3000" }));
@@ -37,6 +38,7 @@ import {
 beforeEach(() => {
   vi.clearAllMocks();
   mockSendEmail.mockResolvedValue(undefined);
+  mockPrisma.practiceSessionStaff.findMany.mockResolvedValue([]);
 });
 
 describe("sendPracticePlanNotifications league scoping", () => {

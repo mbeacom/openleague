@@ -10,17 +10,22 @@ import {
 } from "@/components/features/practice-planner/PracticeSessionEditor";
 import { createPracticeSession } from "@/lib/actions/practice-sessions";
 import { toSessionRowInputs } from "@/lib/utils/session-rows";
+import { toSessionStaffInputs } from "@/lib/utils/session-staff";
+import type { StaffOption } from "@/types/practice-planner";
 import type { VenueBookingOptions } from "../venue-booking-options";
 
 interface PracticeSessionEditorWrapperProps {
   teamId: string;
   /** Venue/surface/segment options for the optional ice booking (006, FR-019). */
   bookingOptions: VenueBookingOptions;
+  /** The team's officials and admins for the Staff picker (spec R4). */
+  staffOptions?: StaffOption[];
 }
 
 export function PracticeSessionEditorWrapper({
   teamId,
   bookingOptions,
+  staffOptions = [],
 }: PracticeSessionEditorWrapperProps) {
   const router = useRouter();
 
@@ -35,6 +40,8 @@ export function PracticeSessionEditorWrapper({
         plays: toSessionRowInputs(session.plays),
         // Absent = unchanged: an editor that never loaded or set the gap sends none.
         ...(session.transitionMinutes !== undefined && { transitionMinutes: session.transitionMinutes }),
+        // Absent = unchanged: an editor that holds no list sends none.
+        ...(session.staff !== undefined && { staff: toSessionStaffInputs(session.staff) }),
         reservationId: session.reservationId ?? undefined,
         // Optional venue booking (006, FR-019); omitted fields mean unbooked.
         venueId: session.venueId || undefined,
@@ -72,6 +79,7 @@ export function PracticeSessionEditorWrapper({
       surfacesByVenue={bookingOptions.surfacesByVenue}
       segmentsBySurface={bookingOptions.segmentsBySurface}
       wholeLabelBySurface={bookingOptions.wholeLabelBySurface}
+      staffOptions={staffOptions}
       onSave={handleSave}
       onCancel={handleCancel}
     />

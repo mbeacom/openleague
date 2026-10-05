@@ -3,12 +3,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { mockSendEmail, mockPrisma } = vi.hoisted(() => ({
     mockSendEmail: vi.fn(),
-    mockPrisma: { practiceSession: { findUnique: vi.fn() } },
+    mockPrisma: { practiceSession: { findUnique: vi.fn() }, practiceSessionStaff: { findMany: vi.fn() } },
 }));
 
 vi.mock("@/lib/email/client", () => ({ sendEmail: mockSendEmail }));
 vi.mock("@/lib/db/prisma", () => ({ prisma: mockPrisma }));
-vi.mock("@/lib/utils/date", () => ({ FALLBACK_TIME_ZONE: "America/New_York", formatDateTime: vi.fn(() => "Jan 1, 2026, 10:00 AM") }));
+vi.mock("@/lib/utils/date", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("@/lib/utils/date")>()),
+    formatDateTime: vi.fn(() => "Jan 1, 2026, 10:00 AM"),
+}));
 vi.mock("@/lib/env", () => ({ getBaseUrl: () => "http://localhost:3000" }));
 vi.mock("@/lib/services/notification", () => ({ notificationService: {} }));
 
@@ -26,6 +29,7 @@ function session(plays: Array<{ kind: string; label: string | null; duration: nu
 beforeEach(() => {
     vi.clearAllMocks();
     mockSendEmail.mockResolvedValue(undefined);
+    mockPrisma.practiceSessionStaff.findMany.mockResolvedValue([]);
 });
 
 describe("practice-plan emails with block rows", () => {

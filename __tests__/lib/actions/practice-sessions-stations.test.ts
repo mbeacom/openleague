@@ -9,6 +9,7 @@ const { mockAuth, models, mockPrisma } = vi.hoisted(() => {
         play: { findMany: vi.fn(), createManyAndReturn: vi.fn(), deleteMany: vi.fn() },
         practiceSession: { create: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
         practiceSessionPlay: { findMany: vi.fn(), deleteMany: vi.fn(), createMany: vi.fn() },
+        practiceSessionPlayStaff: { findMany: vi.fn(), createMany: vi.fn() },
         teamMember: { findFirst: vi.fn() },
         event: { findUnique: vi.fn(), delete: vi.fn() },
     };
@@ -81,6 +82,7 @@ beforeEach(() => {
     models.practiceSession.findUnique.mockResolvedValue({ id: SESSION, teamId: TEAM, isShared: false, venueReservationId: null });
     models.practiceSession.update.mockResolvedValue({ id: SESSION, title: "Tuesday", date: new Date() });
     models.practiceSessionPlay.findMany.mockResolvedValue([]);
+    models.practiceSessionPlayStaff.findMany.mockResolvedValue([]);
     models.practiceSessionPlay.deleteMany.mockResolvedValue({ count: 0 });
     models.practiceSessionPlay.createMany.mockResolvedValue({ count: 0 });
     models.play.deleteMany.mockResolvedValue({ count: 0 });

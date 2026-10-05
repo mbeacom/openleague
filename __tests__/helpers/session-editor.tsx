@@ -5,7 +5,7 @@ import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
 import { renderWithPlanner } from "@/__tests__/helpers/planner";
-import { PracticeSessionEditor } from "@/components/features/practice-planner/PracticeSessionEditor";
+import { PracticeSessionEditor, type PracticeSessionEditorProps } from "@/components/features/practice-planner/PracticeSessionEditor";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import type { PlayInSession, PracticeSessionData, SessionItem } from "@/types/practice-planner";
 
@@ -29,7 +29,12 @@ export function drill(id: string, sequence: number, extra: Partial<PlayInSession
 }
 
 /** A saved session's editor; returns its onSave mock. */
-export function renderEditor(plays: SessionItem[], extra: Partial<PracticeSessionData> = {}, onSave = vi.fn().mockResolvedValue({ success: true })) {
+export function renderEditor(
+    plays: SessionItem[],
+    extra: Partial<PracticeSessionData> = {},
+    onSave = vi.fn().mockResolvedValue({ success: true }),
+    props: Partial<PracticeSessionEditorProps> = {},
+) {
     renderWithPlanner(
         <ThemeProvider theme={createTheme()}>
             <LocalizationProvider dateAdapter={AdapterDateFns}>
@@ -38,6 +43,7 @@ export function renderEditor(plays: SessionItem[], extra: Partial<PracticeSessio
                     teamId={TEAM}
                     initialData={{ title: "Practice", duration: 60, date: new Date("2026-04-07T22:00:00.000Z"), plays, ...extra }}
                     onSave={onSave}
+                    {...props}
                 />
             </LocalizationProvider>
         </ThemeProvider>,

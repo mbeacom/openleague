@@ -33,15 +33,25 @@ import {
 } from "@/lib/plan-document";
 import { usePlannerPlatform, type PlannerPlanLink } from "@/lib/planner-store";
 import { drillRows, isBlockRow } from "@/lib/utils/session-rows";
+import { staffNames } from "@/lib/utils/session-staff";
+import type { SessionStaffMember } from "@/types/practice-planner";
 import { downloadBlob } from "./export/download";
 import type { ExportSession, ExportSessionRow } from "./export/bench-sheet-model";
 import { ExportModuleLoadError, exportBenchSheet, type BenchSheetFormat } from "./export/export-bench-sheet";
 
-/** The session's rows as plan rows: drills with their tags and timing, blocks with their label and note. */
-export function toPlanRows(rows: readonly ExportSessionRow[]): PlanSessionInput["drills"] {
+/** A session's rows as plan rows: each row's staff ids become names from the session's list (spec R6). */
+export function toPlanRows(rows: readonly ExportSessionRow[], staff?: readonly SessionStaffMember[]): PlanSessionInput["drills"] {
     return rows.map((row) =>
         isBlockRow(row)
-            ? { kind: row.kind, sequence: row.sequence, duration: row.duration, runsWithPrevious: false, instructions: row.instructions, label: row.label }
+            ? {
+                  kind: row.kind,
+                  sequence: row.sequence,
+                  duration: row.duration,
+                  runsWithPrevious: false,
+                  instructions: row.instructions,
+                  label: row.label,
+                  staff: staffNames(row.staff, staff),
+              }
             : {
                   sequence: row.sequence,
                   duration: row.duration,
@@ -54,6 +64,7 @@ export function toPlanRows(rows: readonly ExportSessionRow[]): PlanSessionInput[
                   stays: row.stays,
                   rotateEveryMinutes: row.rotateEveryMinutes,
                   playData: row.play.playData,
+                  staff: staffNames(row.staff, staff),
               },
     );
 }
@@ -77,7 +88,8 @@ export function buildPlanDocument(
             startTime: startTime ?? null,
             goaliesAttending: session.goaliesAttending ?? null,
             transitionMinutes: session.transitionMinutes ?? 0,
-            drills: toPlanRows(session.plays),
+            staff: session.staff?.map((member) => member.name),
+            drills: toPlanRows(session.plays, session.staff),
         },
         generator,
         now,

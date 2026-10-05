@@ -15,6 +15,7 @@ const MODEL: BenchSheetModel = {
     when: "Tuesday, April 7, 2026 · 6:00 PM – 7:00 PM MDT",
     place: "Ice House · Rink A",
     gap: null,
+    staff: null,
     timeline: [
         { start: "6:00 PM MDT", minutes: 10, label: "Stations · 2", stations: ["Breakout · 10 min", "Regroup · 8 min"] },
         { start: "6:10 PM MDT", minutes: 15, label: "Shooting", stations: null },
@@ -233,5 +234,33 @@ describe("renderBenchSheetHtml: rotation and the gap (spec R10)", () => {
         expect(doc.querySelector("g")).toBeNull();
         // A round's start time never wraps.
         expect(doc.querySelector("style")?.textContent).toMatch(/\.rotation \.time\s*\{\s*white-space:\s*nowrap;/);
+    });
+});
+
+describe("renderBenchSheetHtml: practice staff (spec R9)", () => {
+    it("prints the staff line and each row's names, escaped", () => {
+        const out = renderBenchSheetHtml({
+            ...MODEL,
+            staff: "Staff: <Coach> & Sam",
+            timeline: [
+                { start: "6:00 PM MDT", minutes: 10, label: "Stations · 2", stations: ["Breakout · 10 min · run by <Sam>", "Regroup · 8 min"] },
+                { start: "6:10 PM MDT", minutes: 15, label: "Shooting", stations: null, runBy: "run by <Sam>" },
+                { kind: "block", start: "6:25 PM MDT", minutes: 2, label: "Water", note: "Fill up", stations: null, runBy: "run by Coach Lee" },
+            ],
+        });
+        const doc = parse(out);
+        expect(doc.querySelector(".staff")?.textContent).toBe("Staff: <Coach> & Sam");
+        // Plain, like the place and gap lines and the live bench sheet.
+        expect(doc.querySelector("style")?.textContent).not.toMatch(/\.staff\s*\{/);
+        expect(out).toContain("Staff: &lt;Coach&gt; &amp; Sam");
+        const rows = Array.from(doc.querySelectorAll(".timeline tbody tr"));
+        expect(rows[0].querySelector("li")?.textContent).toBe("Breakout · 10 min · run by <Sam>");
+        expect(rows[1].querySelectorAll("td")[2].textContent).toBe("Shooting · run by <Sam>");
+        expect(rows[2].querySelectorAll("td")[2].textContent).toBe("Water · Fill up · run by Coach Lee");
+        expect(out).not.toContain("<Sam>");
+    });
+
+    it("prints no staff line when there is none", () => {
+        expect(parse(renderBenchSheetHtml(MODEL)).querySelector(".staff")).toBeNull();
     });
 });

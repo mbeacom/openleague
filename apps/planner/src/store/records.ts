@@ -24,6 +24,12 @@ export interface StoredPlay {
     updatedAt: Date;
 }
 
+/** One person on a practice's staff. The static planner keeps typed names only; `id` is the editor's key. */
+export interface StoredStaffMember {
+    id: string;
+    name: string;
+}
+
 /** One row in a session. `id` is the editor's clientKey, so card keys survive reloads. */
 export interface StoredSessionRow {
     id: string;
@@ -39,6 +45,8 @@ export interface StoredSessionRow {
     label?: string | null;
     stays?: boolean;
     rotateEveryMinutes?: number | null;
+    /** Staff ids running this row, in order. Absent on rows stored before practice staff: nobody. */
+    staff?: string[];
 }
 
 export interface StoredSession {
@@ -50,6 +58,8 @@ export interface StoredSession {
     goaliesAttending?: number | null;
     /** Minutes between blocks (0–5). Absent on sessions stored before practice timing: 0. */
     transitionMinutes?: number;
+    /** The practice's staff, in order. Absent on sessions stored before practice staff: none. */
+    staff?: StoredStaffMember[];
     rows: StoredSessionRow[];
     createdAt: Date;
     updatedAt: Date;

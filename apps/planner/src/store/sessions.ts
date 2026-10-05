@@ -3,8 +3,9 @@
  * practice-session-drills.ts and practice-plan-import.ts (ADR-0020, 3a).
  * Every stored session is a valid plan document, so it always exports.
  */
+import { z } from "zod";
 import type { PlayData, PracticeSessionView, SessionItem, SessionRow } from "@/types/practice-planner";
-import { MAX_BLOCK_LABEL_LENGTH, VALIDATION_CONSTRAINTS } from "@/types/practice-planner";
+import { MAX_BLOCK_LABEL_LENGTH, MAX_ROW_STAFF, VALIDATION_CONSTRAINTS } from "@/types/practice-planner";
 import { parsePlan, serializePlan, type PlanBlockInput, type PlanDrillInput } from "@/lib/plan-document";
 import { createEmptyPlayData, parseStoredPlayData } from "@/lib/utils/play-data";
 import { drillTags, toPlayFocus, toPlayGoalies } from "@/lib/utils/drill-tags";
@@ -41,8 +42,23 @@ import {
     type StoredTiming,
 } from "@/lib/utils/session-rows";
 import { SESSION_DRILL_REJECTED_MESSAGE, duplicateSessionTitle, type SavedDrillId } from "@/lib/utils/session-drill-ids";
+import {
+    ROW_STAFF_LIMIT_MESSAGE,
+    STAFF_ADMIN_MESSAGE,
+    STAFF_KEY_MAX,
+    STAFF_KEY_MESSAGE,
+    STAFF_OFFICIAL_ID_FORMAT_MESSAGE,
+    STAFF_OFFICIAL_MESSAGE,
+    STAFF_ONE_LINK_MESSAGE,
+    STAFF_USER_ID_FORMAT_MESSAGE,
+    cleanStaffName,
+    sessionStaffError,
+    staffNameKey,
+    staffNames,
+    type SessionStaffInput,
+} from "@/lib/utils/session-staff";
 import { LOCAL_AUTHOR_NAME, LOCAL_TEAM_ID, LOCAL_TEAM_NAME } from "../config";
-import type { RepoTx, StoredPlay, StoredSession, StoredSessionRow } from "./records";
+import type { RepoTx, StoredPlay, StoredSession, StoredSessionRow, StoredStaffMember } from "./records";
 import { StoreRefusal, attempt, checkedGoalieCount, drillText, ok, thumbnailOrNull, writablePlayData, write, type StoreContext } from "./shared";
 import type { LocalPlannerStore, LocalSessionDrill, LocalSessionSave } from "./types";
 
@@ -132,6 +148,56 @@ function checkedTransition(value: number | undefined): number | undefined {
     return value;
 }
 
+/** Hosted's id format for a link (its Zod cuid check). */
+const linkIdSchema = z.string().cuid();
+const isLinkId = (value: unknown): boolean => linkIdSchema.safeParse(value).success;
+
+/**
+ * Hosted's staff rules in its words (the row and staff schemas, then
+ * sessionStaffError, then the link check), on the payload as sent. This
+ * planner keeps typed names only, so a link is refused as hosted refuses one it
+ * can't verify. Returns the list to store, or undefined when the save sends
+ * none (absent = unchanged).
+ */
+function checkStaff(input: LocalSessionSave): StoredStaffMember[] | undefined {
+    for (const row of input.plays) {
+        if (row.staff && row.staff.length > MAX_ROW_STAFF) throw new StoreRefusal(ROW_STAFF_LIMIT_MESSAGE);
+        if (row.staff?.some((key) => key.length < 1 || key.length > STAFF_KEY_MAX)) throw new StoreRefusal(STAFF_KEY_MESSAGE);
+    }
+    if (input.staff === undefined) return undefined;
+    // Any link that isn't null or absent counts, "" included. A malformed id gets hosted's
+    // format message (its cuid check); a well-formed one can't be verified here (no team).
+    const official = (member: SessionStaffInput) => member.teamOfficialId != null;
+    const admin = (member: SessionStaffInput) => member.userId != null;
+    for (const member of input.staff) {
+        if (official(member) && !isLinkId(member.teamOfficialId)) throw new StoreRefusal(STAFF_OFFICIAL_ID_FORMAT_MESSAGE);
+        if (admin(member) && !isLinkId(member.userId)) throw new StoreRefusal(STAFF_USER_ID_FORMAT_MESSAGE);
+    }
+    if (input.staff.some((member) => official(member) && admin(member))) throw new StoreRefusal(STAFF_ONE_LINK_MESSAGE);
+    const error = sessionStaffError(input.staff, input.plays);
+    if (error) throw new StoreRefusal(error);
+    if (input.staff.some(official)) throw new StoreRefusal(STAFF_OFFICIAL_MESSAGE);
+    if (input.staff.some(admin)) throw new StoreRefusal(STAFF_ADMIN_MESSAGE);
+    return input.staff.map((member) => ({ id: member.key, name: cleanStaffName(member.name) }));
+}
+
+/**
+ * Each row's staff to store (spec R3, R7). A sent list: the row's keys as sent,
+ * nobody when it sends none. Absent: the stored row with the same id keeps its
+ * staff. A row's id is the editor's clientKey and survives every save, so this
+ * follows a row however it moved.
+ */
+function withRowStaff(rows: StoredSessionRow[], plays: LocalSessionDrill[], sent: StoredStaffMember[] | undefined, existing?: StoredSession): StoredSessionRow[] {
+    if (sent) {
+        const byKey = new Map(plays.map((row) => [row.clientKey, row.staff]));
+        return rows.map((row) => ({ ...row, staff: [...(byKey.get(row.id) ?? [])] }));
+    }
+    // Legacy records read with defaults: a session or row stored before practice staff has none.
+    const listed = new Set((existing?.staff ?? []).map((member) => member.id));
+    const stored = new Map((existing?.rows ?? []).map((row) => [row.id, row.staff ?? []]));
+    return rows.map((row) => ({ ...row, staff: (stored.get(row.id) ?? []).filter((key) => listed.has(key)) }));
+}
+
 /** A stored session's drill timing, for withStoredTiming (absent = unchanged). */
 function storedTiming(session: StoredSession): StoredTiming[] {
     return session.rows.map((row) => ({ playId: row.playId, stays: row.stays ?? false, rotateEveryMinutes: row.rotateEveryMinutes ?? null }));
@@ -139,7 +205,7 @@ function storedTiming(session: StoredSession): StoredTiming[] {
 
 /** Synchronous, so it can run inside a transaction: the session must be a valid plan document. */
 function assertExportable(
-    meta: { title: string; duration: number; goaliesAttending?: number | null; transitionMinutes?: number },
+    meta: { title: string; duration: number; goaliesAttending?: number | null; transitionMinutes?: number; staff?: StoredStaffMember[] },
     rows: StoredSessionRow[],
     plays: Map<string, StoredPlay>,
     at: Date,
@@ -152,10 +218,19 @@ function assertExportable(
             startTime: null,
             goaliesAttending: meta.goaliesAttending ?? null,
             transitionMinutes: meta.transitionMinutes ?? 0,
+            staff: meta.staff?.map((member) => member.name),
             drills: rows.map((row): PlanDrillInput | PlanBlockInput => {
                 const kind = toRowKind(row.kind);
                 if (isBlockKind(kind)) {
-                    return { kind, sequence: row.sequence, duration: row.duration, runsWithPrevious: false, instructions: row.instructions, label: row.label ?? null };
+                    return {
+                        kind,
+                        sequence: row.sequence,
+                        duration: row.duration,
+                        runsWithPrevious: false,
+                        instructions: row.instructions,
+                        label: row.label ?? null,
+                        staff: staffNames(row.staff, meta.staff),
+                    };
                 }
                 const play = row.playId ? plays.get(row.playId) : undefined;
                 const parsed = parseStoredPlayData(play?.playData);
@@ -169,6 +244,7 @@ function assertExportable(
                     ...drillTags(play),
                     stays: row.stays ?? false,
                     rotateEveryMinutes: row.rotateEveryMinutes ?? null,
+                    staff: staffNames(row.staff, meta.staff),
                     playData: parsed.ok ? parsed.data : null,
                 };
             }),
@@ -299,10 +375,12 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                     startAt: null,
                     goaliesAttending: session.goaliesAttending ?? null,
                     transitionMinutes: session.transitionMinutes ?? 0,
+                    // Legacy sessions read as no staff (spec R7).
+                    staff: (session.staff ?? []).map((member) => ({ id: member.id, name: member.name })),
                     plays: sortedRows(session).flatMap((row): SessionRow[] => {
                         const kind = toRowKind(row.kind);
                         if (isBlockKind(kind)) {
-                            return [{ id: row.id, kind, label: row.label ?? null, sequence: row.sequence, duration: row.duration, instructions: row.instructions || null, runsWithPrevious: false }];
+                            return [{ id: row.id, kind, label: row.label ?? null, sequence: row.sequence, duration: row.duration, instructions: row.instructions || null, runsWithPrevious: false, staff: row.staff ?? [] }];
                         }
                         const play = row.playId ? plays.get(row.playId) : undefined;
                         if (!play) return [];
@@ -318,6 +396,7 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                                 // Legacy rows read as not rotating (spec R7).
                                 stays: row.stays ?? false,
                                 rotateEveryMinutes: row.rotateEveryMinutes ?? null,
+                                staff: row.staff ?? [],
                                 play: {
                                     id: play.id,
                                     name: play.name,
@@ -341,7 +420,7 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                 const editorPlays: SessionItem[] = sortedRows(session).flatMap((row): SessionItem[] => {
                     const kind = toRowKind(row.kind);
                     if (isBlockKind(kind)) {
-                        return [{ id: row.id, kind, label: row.label ?? "", sequence: row.sequence, duration: row.duration, instructions: row.instructions, runsWithPrevious: false }];
+                        return [{ id: row.id, kind, label: row.label ?? "", sequence: row.sequence, duration: row.duration, instructions: row.instructions, runsWithPrevious: false, staff: row.staff ?? [] }];
                     }
                     const play = row.playId ? plays.get(row.playId) : undefined;
                     if (!play) return [];
@@ -360,6 +439,7 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                             // Legacy rows read as not rotating (spec R7).
                             stays: row.stays ?? false,
                             rotateEveryMinutes: row.rotateEveryMinutes ?? null,
+                            staff: row.staff ?? [],
                             ...drillTags(play),
                             ...(parsed.ok ? { playData: parsed.data } : { playData: createEmptyPlayData(), playDataUnreadable: true }),
                             thumbnail: play.thumbnail ?? "",
@@ -376,6 +456,7 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                         isShared: false,
                         goaliesAttending: session.goaliesAttending ?? null,
                         transitionMinutes: session.transitionMinutes ?? 0,
+                        staff: (session.staff ?? []).map((member) => ({ id: member.id, name: member.name })),
                         plays: normalizeGroups(editorPlays),
                     },
                 });
@@ -385,6 +466,7 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
             attempt("Failed to create practice session. Please try again.", async () => {
                 const meta = sessionMeta(input);
                 checkRows(input.plays);
+                const staff = checkStaff(input);
                 const goaliesAttending = checkedGoalieCount(input.goaliesAttending) ?? null;
                 const transitionMinutes = checkedTransition(input.transitionMinutes) ?? 0;
                 // A create has nothing stored: absent timing takes the defaults.
@@ -392,9 +474,12 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                 const saved = await write(ctx, async (tx) => {
                     const at = ctx.now();
                     const id = ctx.newId();
-                    const { rows, plays, mapping } = await materialize(tx, ctx, id, resolved, at);
-                    assertExportable({ ...meta, goaliesAttending, transitionMinutes }, rows, plays, at);
-                    await tx.putSession({ id, ...meta, goaliesAttending, transitionMinutes, rows, createdAt: at, updatedAt: at });
+                    const { rows: materialized, plays, mapping } = await materialize(tx, ctx, id, resolved, at);
+                    const rows = withRowStaff(materialized, input.plays, staff);
+                    // A create without staff stores none.
+                    const sessionStaff = staff ?? [];
+                    assertExportable({ ...meta, goaliesAttending, transitionMinutes, staff: sessionStaff }, rows, plays, at);
+                    await tx.putSession({ id, ...meta, goaliesAttending, transitionMinutes, staff: sessionStaff, rows, createdAt: at, updatedAt: at });
                     return { id, plays: mapping };
                 });
                 return ok(saved);
@@ -404,6 +489,7 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
             attempt("Failed to update practice session. Please try again.", async () => {
                 const meta = sessionMeta(input);
                 checkRows(input.plays);
+                const staff = checkStaff(input);
                 const count = checkedGoalieCount(input.goaliesAttending);
                 const sentGap = checkedTransition(input.transitionMinutes);
                 const saved = await write(ctx, async (tx) => {
@@ -414,9 +500,12 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                     const transitionMinutes = sentGap ?? existing.transitionMinutes ?? 0;
                     const resolved = checkTimeline(resolveRows(input.plays, storedTiming(existing)), meta.duration, transitionMinutes);
                     const at = ctx.now();
-                    const { rows, plays, mapping } = await materialize(tx, ctx, id, resolved, at);
-                    assertExportable({ ...meta, goaliesAttending, transitionMinutes }, rows, plays, at);
-                    await tx.putSession({ ...existing, ...meta, goaliesAttending, transitionMinutes, rows, updatedAt: at });
+                    const { rows: materialized, plays, mapping } = await materialize(tx, ctx, id, resolved, at);
+                    const rows = withRowStaff(materialized, input.plays, staff, existing);
+                    // Absent = unchanged: the stored list stays (a legacy session has none).
+                    const sessionStaff = staff ?? existing.staff ?? [];
+                    assertExportable({ ...meta, goaliesAttending, transitionMinutes, staff: sessionStaff }, rows, plays, at);
+                    await tx.putSession({ ...existing, ...meta, goaliesAttending, transitionMinutes, staff: sessionStaff, rows, updatedAt: at });
                     // Drop-only cleanup: copies this session referenced before and no longer does.
                     // A copy the drill dialog made but the editor hasn't sent is never touched here.
                     const referenced = new Set(rows.flatMap((row) => (row.playId ? [row.playId] : [])));
@@ -496,10 +585,18 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                     const newId = ctx.newId();
                     const plays = new Map<string, StoredPlay>();
                     const rows: StoredSessionRow[] = [];
+                    // Staff (spec R5): new ids, each row's staff moved onto them.
+                    const staffIds = new Map((source.staff ?? []).map((member) => [member.id, ctx.newId()]));
+                    const staff = (source.staff ?? []).map((member) => ({ id: staffIds.get(member.id) as string, name: member.name }));
+                    const copiedStaff = (row: StoredSessionRow) =>
+                        (row.staff ?? []).flatMap((key) => {
+                            const copied = staffIds.get(key);
+                            return copied ? [copied] : [];
+                        });
                     for (const row of sortedRows(source)) {
                         if (!row.playId) {
                             // A block row has no drill to clone.
-                            rows.push({ ...row, id: ctx.newId() });
+                            rows.push({ ...row, id: ctx.newId(), staff: copiedStaff(row) });
                             continue;
                         }
                         const play = await tx.getPlay(row.playId);
@@ -507,7 +604,7 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                         const copy = cloneInto(play, newId, ctx.newId(), at);
                         await tx.putPlay(copy);
                         plays.set(copy.id, copy);
-                        rows.push({ ...row, id: ctx.newId(), playId: copy.id });
+                        rows.push({ ...row, id: ctx.newId(), playId: copy.id, staff: copiedStaff(row) });
                     }
                     const meta = {
                         title: duplicateSessionTitle(source.title),
@@ -515,6 +612,7 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                         duration: source.duration,
                         goaliesAttending: source.goaliesAttending ?? null,
                         transitionMinutes: source.transitionMinutes ?? 0,
+                        staff,
                     };
                     assertExportable(meta, rows, plays, at);
                     await tx.putSession({ id: newId, ...meta, rows, createdAt: at, updatedAt: at });
@@ -550,12 +648,21 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                 const sessionId = await write(ctx, async (tx) => {
                     const at = ctx.now();
                     const id = ctx.newId();
+                    // Staff (spec R5, R6): typed names; parsePlan checked every row's names are on the list.
+                    const staff = parsed.plan.session.staff.map((name) => ({ id: ctx.newId(), name }));
+                    const staffByName = new Map(staff.map((member) => [staffNameKey(member.name), member.id]));
+                    const rowStaff = (names: string[]) =>
+                        names.flatMap((name) => {
+                            const key = staffByName.get(staffNameKey(name));
+                            return key === undefined ? [] : [key];
+                        });
                     const rows: StoredSessionRow[] = [];
                     for (const entry of parsed.plan.session.drills) {
                         if (entry.kind !== "drill") {
                             rows.push({
                                 id: ctx.newId(), playId: null, kind: entry.kind, label: entry.label, sequence: entry.sequence,
                                 duration: entry.durationMinutes, instructions: entry.instructions, runsWithPrevious: false, stays: false, rotateEveryMinutes: null,
+                                staff: rowStaff(entry.staff),
                             });
                             continue;
                         }
@@ -577,6 +684,7 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                         rows.push({
                             id: ctx.newId(), playId: owned.id, kind: "drill", label: null, sequence: entry.sequence, duration: entry.durationMinutes,
                             instructions: entry.instructions, runsWithPrevious: entry.runsWithPrevious, stays: entry.stays, rotateEveryMinutes: entry.rotateEveryMinutes,
+                            staff: rowStaff(entry.staff),
                         });
                         if (options.addToLibrary) {
                             await tx.putPlay({ id: ctx.newId(), ...base, isTemplate: true, sessionId: null });
@@ -589,6 +697,7 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                         duration: parsed.plan.session.durationMinutes,
                         goaliesAttending: parsed.plan.session.goaliesAttending,
                         transitionMinutes: parsed.plan.session.transitionMinutes,
+                        staff,
                         rows,
                         createdAt: at,
                         updatedAt: at,

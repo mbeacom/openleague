@@ -271,8 +271,55 @@ describe("buildBenchSheetModel: rotation and the gap (spec R10)", () => {
         expect(model.drills.map((d) => d.station)).toEqual(["Station 1 of 3", "Station 2 of 3", "Station 3 of 3"]);
     });
 
+    it("names who runs each rotating station in its line, after stays, and puts no runBy on the rotation row", () => {
+        const model = buildBenchSheetModel(
+            {
+                ...ROTATING,
+                staff: [{ id: "s1", name: "Coach Lee" }, { id: "s2", name: "Sam" }],
+                plays: ROTATING.plays.map((row, index) => ({ ...row, staff: [["s1"], [], ["s2", "s1"]][index] })),
+            },
+            renderers(),
+        );
+        expect(model.timeline[0]).toMatchObject({
+            kind: "rotation",
+            stations: ["Goalie · stays · run by Coach Lee", "Skate A", "Skate B · run by Sam, Coach Lee"],
+            grid: { columns: ["Goalie", "Skate A", "Skate B"] },
+        });
+        expect(model.timeline[0]).not.toHaveProperty("runBy");
+    });
+
     it("says the gap for the header only when there is one", () => {
         expect(buildBenchSheetModel(ROTATING, renderers()).gap).toBe("2 min between blocks");
         expect(buildBenchSheetModel(UNBOOKED, renderers()).gap).toBeNull();
+    });
+});
+
+describe("buildBenchSheetModel: practice staff (spec R9)", () => {
+    const STAFFED: ExportSession = {
+        ...BOOKED,
+        staff: [{ id: "s1", name: "Coach Lee" }, { id: "s2", name: "Sam" }],
+        plays: [
+            { ...play("Breakout", 0, 10, false, { playData: withPass("a") }), staff: ["s1"] },
+            { ...play("Regroup", 1, 8, true, { playData: withPass("b") }), staff: ["s2", "s1"] },
+            { ...play("Shooting", 2, 15, false, { playData: null }), staff: ["s2"] },
+            { kind: "break", sequence: 3, duration: 2, instructions: null, runsWithPrevious: false, label: null, staff: ["s1", "gone"] },
+        ],
+    };
+
+    it("names the staff in the header and who runs each row: in a station's line, or as the row's runBy", () => {
+        const model = buildBenchSheetModel(STAFFED, renderers());
+        expect(model.staff).toBe("Staff: Coach Lee, Sam");
+        expect(model.timeline).toMatchObject([
+            { label: "Stations · 2", stations: ["Breakout · 10 min · run by Coach Lee", "Regroup · 8 min · run by Sam, Coach Lee"] },
+            { label: "Shooting", stations: null, runBy: "run by Sam" },
+            { kind: "block", label: "Water break", runBy: "run by Coach Lee" },
+        ]);
+        expect(model.timeline[0]).not.toHaveProperty("runBy");
+    });
+
+    it("has no staff line and no runBy without a staff list", () => {
+        const model = buildBenchSheetModel(BOOKED, renderers());
+        expect(model.staff).toBeNull();
+        expect(model.timeline.some((row) => "runBy" in row)).toBe(false);
     });
 });

@@ -6,6 +6,7 @@ vi.mock("@/lib/utils/canvas/thumbnail-generator", () => ({ generateThumbnail: ()
 
 import { PlanPreview } from "@/components/features/practice-planner/PlanPreview";
 import { STARTER_TEMPLATES, starterTemplatePlan } from "@/lib/data/starter-templates";
+import { parsePlan, serializePlan } from "@/lib/plan-document";
 
 const NOW = new Date("2026-10-04T18:00:00.000Z");
 
@@ -49,5 +50,70 @@ describe("PlanPreview: rotation and the gap", () => {
         );
         expect(screen.getByText("45 min · Planned 45 of 45 min")).toBeInTheDocument();
         expect(screen.queryByText(/between blocks/)).toBeNull();
+    });
+});
+
+describe("PlanPreview: practice staff (spec R9)", () => {
+    it("lists the plan's staff under the subtitle and who runs each row", () => {
+        const plan = serializePlan(
+            {
+                title: "Staffed",
+                durationMinutes: 60,
+                date: null,
+                startTime: null,
+                staff: ["Coach Lee", "Sam"],
+                drills: [
+                    { kind: "warmup", sequence: 0, duration: 8, instructions: null, label: null, runsWithPrevious: false, staff: ["Sam"] },
+                    { sequence: 1, duration: 10, runsWithPrevious: false, instructions: "Hard", name: "Breakout", description: null, playData: null, staff: ["Coach Lee", "Sam"] },
+                    { sequence: 2, duration: 10, runsWithPrevious: false, instructions: null, name: "Shooting", description: null, playData: null },
+                ],
+            },
+            "openleague-static",
+            NOW,
+        );
+        render(
+            <ThemeProvider theme={createTheme({ palette: { mode: "dark" } })}>
+                <PlanPreview plan={plan} />
+            </ThemeProvider>,
+        );
+        expect(screen.getByText("Staff: Coach Lee, Sam")).toBeInTheDocument();
+        expect(screen.getByText("8 min · run by Sam")).toBeInTheDocument();
+        expect(screen.getByText("10 min · Hard · run by Coach Lee, Sam")).toBeInTheDocument();
+        expect(screen.getByText("10 min")).toBeInTheDocument();
+    });
+
+    it("shows each row's names in the list's spelling when the file spells them differently", () => {
+        const raw = JSON.parse(JSON.stringify(serializePlan(
+            {
+                title: "Spelled",
+                durationMinutes: 60,
+                date: null,
+                startTime: null,
+                staff: ["Coach Lee", "Sam"],
+                drills: [{ sequence: 0, duration: 10, runsWithPrevious: false, instructions: null, name: "Breakout", description: null, playData: null }],
+            },
+            "openleague-static",
+            NOW,
+        )));
+        raw.session.drills[0].staff = ["coach lee", "SAM"];
+        const parsed = parsePlan(raw);
+        if (!parsed.ok) throw new Error(parsed.error.message);
+        render(
+            <ThemeProvider theme={createTheme()}>
+                <PlanPreview plan={parsed.plan} />
+            </ThemeProvider>,
+        );
+        expect(screen.getByText("10 min · run by Coach Lee, Sam")).toBeInTheDocument();
+    });
+
+    it("shows no staff line for a plan without staff", () => {
+        const rotation = STARTER_TEMPLATES.find((template) => template.id === "template-goalie-skater-rotation");
+        if (!rotation) throw new Error("Goalie & Skater Rotation is missing");
+        render(
+            <ThemeProvider theme={createTheme()}>
+                <PlanPreview plan={starterTemplatePlan(rotation, "openleague-static", NOW)} />
+            </ThemeProvider>,
+        );
+        expect(screen.queryByText(/^Staff:/)).toBeNull();
     });
 });

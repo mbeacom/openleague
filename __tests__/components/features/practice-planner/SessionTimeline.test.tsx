@@ -167,3 +167,46 @@ describe("SessionTimeline: a rotating station block (spec R9)", () => {
         expect(html).toMatch(/<tr class="bench-keep-with-grid"><td>[^<]*<\/td><td>10<\/td>/);
     });
 });
+
+describe("SessionTimeline: who runs each row (practice staff, spec R9)", () => {
+    const STAFF = [{ id: "s1", name: "Coach Lee" }, { id: "s2", name: "Sam" }];
+    const ROWS = [
+        { ...play("Breakout", 0, 15), staff: ["s1", "s2"] },
+        { ...play("Regroup", 1, 10, true), staff: ["s2"] },
+        { id: "row-w", kind: "break" as const, label: null, instructions: null, sequence: 2, duration: 2, runsWithPrevious: false, staff: ["s1", "gone"] },
+        play("Shooting", 3, 10),
+    ];
+
+    function renderRows(variant: "screen" | "print") {
+        render(
+            <ThemeProvider theme={createTheme({ palette: { mode: "dark" } })}>
+                <SessionTimeline plays={ROWS} sessionStart={START} timeZone="America/New_York" showZone durationMinutes={60} staff={STAFF} variant={variant} />
+            </ThemeProvider>,
+        );
+    }
+
+    it("screen: adds the names after each station, block and lone drill, from the list by key, and nothing for nobody", () => {
+        renderRows("screen");
+        const [stations, block, shooting] = bodyRows();
+        expect(within(stations).getByText("· 15 min · run by Coach Lee, Sam")).toBeInTheDocument();
+        expect(within(stations).getByText("· 10 min · run by Sam")).toBeInTheDocument();
+        // A long unbroken name wraps inside the cell instead of widening the table.
+        expect(within(stations).getByText("· 15 min · run by Coach Lee, Sam")).toHaveStyle({ overflowWrap: "anywhere" });
+        expect(within(block).getByText("· run by Coach Lee")).toBeInTheDocument();
+        expect(within(shooting).queryByText(/run by/)).toBeNull();
+    });
+
+    it("print: the same names in the bench sheet's plain table", () => {
+        renderRows("print");
+        const table = screen.getByRole("table", { name: "Session timeline" });
+        expect(table).toHaveTextContent("Breakout · 15 min · run by Coach Lee, Sam");
+        expect(table).toHaveTextContent("Regroup · 10 min · run by Sam");
+        expect(table).toHaveTextContent("Water break · run by Coach Lee");
+        expect(table.textContent).not.toMatch(/Shooting · run by/);
+    });
+
+    it("shows no names without a staff list", () => {
+        render(ui());
+        expect(screen.queryByText(/run by/)).toBeNull();
+    });
+});

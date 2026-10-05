@@ -32,8 +32,8 @@ vi.mock("@/lib/db/prisma", () => ({
   prisma: mockPrisma,
 }));
 
-vi.mock("@/lib/utils/date", () => ({
-  FALLBACK_TIME_ZONE: "America/New_York",
+vi.mock("@/lib/utils/date", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/utils/date")>()),
   formatDateTime: vi.fn(() => "Jan 1, 2026, 10:00 AM"),
 }));
 

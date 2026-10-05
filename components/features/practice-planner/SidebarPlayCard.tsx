@@ -38,10 +38,12 @@ interface SidebarPlayCardProps {
   index: number;
   active: boolean;
   onSelect: () => void;
+  /** "Run by Coach Lee, Sam" (practice staff, spec R9), or null when nobody runs this drill */
+  runBy?: string | null;
 }
 
 /** One drill in the sidebar's play sequence; standalone or inside a station block (2b). */
-export function SidebarPlayCard({ sp, drawn, timing, index, active, onSelect }: SidebarPlayCardProps) {
+export function SidebarPlayCard({ sp, drawn, timing, index, active, onSelect, runBy = null }: SidebarPlayCardProps) {
   const { Image } = usePlannerPlatform();
   const thumbnail = useDrawnThumbnail(sp.play.thumbnail, sp.play.playData, drawn);
   return (
@@ -126,6 +128,12 @@ export function SidebarPlayCard({ sp, drawn, timing, index, active, onSelect }: 
             <Typography variant="caption" color="text.secondary">
               {timing}
             </Typography>
+            {runBy && (
+              // Wraps rather than truncates: every name stays readable on a phone.
+              <Typography variant="caption" color="text.secondary" component="div" sx={{ overflowWrap: "anywhere" }}>
+                {runBy}
+              </Typography>
+            )}
           </Box>
         </Stack>
       </CardContent>

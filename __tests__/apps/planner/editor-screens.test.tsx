@@ -50,6 +50,15 @@ describe("toLocalSessionSave", () => {
         expect(toLocalSessionSave(submitted)).toMatchObject({ transitionMinutes: 2, plays: [{ kind: "warmup", clientKey: "kw", label: null }] });
         expect(toLocalSessionSave({ ...submitted, transitionMinutes: undefined })).not.toHaveProperty("transitionMinutes");
     });
+
+    it("sends the staff list as keys and names, and leaves it out when the editor holds none", () => {
+        const base = {
+            title: "Tuesday", date: new Date("2026-10-06T19:00:00"), duration: 60, isShared: false, plays: [],
+            overrideConflicts: false, overrideReason: "", notify: true,
+        } as unknown as PracticeSessionSubmitData;
+        expect(toLocalSessionSave({ ...base, staff: [{ id: "st1", name: "Sam" }] }).staff).toEqual([{ key: "st1", name: "Sam" }]);
+        expect(toLocalSessionSave(base)).not.toHaveProperty("staff");
+    });
 });
 
 describe("SessionEditorScreen", () => {

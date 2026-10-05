@@ -17,6 +17,14 @@ import {
     TRANSITION_MINUTES_MESSAGE,
 } from "@/lib/utils/session-rows";
 import { BLOCK_ROW_FIELDS_ERROR, BLOCK_STATION_ERROR } from "@/lib/utils/session-timeline";
+import {
+    ROW_STAFF_LIMIT_MESSAGE,
+    STAFF_KEY_MESSAGE,
+    STAFF_LIMIT_MESSAGE,
+    STAFF_NAME_LENGTH_MESSAGE,
+    STAFF_NAME_REQUIRED_MESSAGE,
+    STAFF_ONE_LINK_MESSAGE,
+} from "@/lib/utils/session-staff";
 
 const TEAM = "cteamxxxxxxxxxxxxxxxxxxxx";
 const SESSION = "csessionxxxxxxxxxxxxxxxxx";
@@ -130,5 +138,39 @@ describe("practice timing fields (spec R2, R3)", () => {
             const result = updatePracticeSessionSchema.safeParse({ ...base, id: CUID, transitionMinutes: bad });
             expect(result.success ? [] : result.error.issues.map((issue) => issue.message)).toEqual([TRANSITION_MINUTES_MESSAGE]);
         }
+    });
+});
+
+describe("practice staff fields (spec R2, R3)", () => {
+    const CUID = "cjld2cjxh0000qzrmn831i7rn";
+    const base = { title: "Practice", date: "2026-10-06T23:00:00.000Z", duration: 60, teamId: CUID };
+    const row = { playId: CUID, clientKey: "k1", sequence: 0, duration: 10, instructions: "" };
+    const messages = (result: { success: boolean; error?: { issues: Array<{ message: string }> } }) =>
+        result.success ? [] : (result.error?.issues ?? []).map((issue) => issue.message);
+
+    it("leaves staff undefined when a save omits it (absent = unchanged)", () => {
+        expect(updatePracticeSessionSchema.parse({ ...base, id: CUID }).staff).toBeUndefined();
+        expect(practiceSessionPlayInputSchema.parse(row).staff).toBeUndefined();
+        expect(updatePracticeSessionSchema.parse({ ...base, id: CUID, staff: [] }).staff).toEqual([]);
+    });
+
+    it("cleans names, keeps a link, and takes a row's keys", () => {
+        const parsed = createPracticeSessionSchema.parse({
+            ...base,
+            staff: [{ key: "k-new", name: "  Sam\u0007 " }, { key: CUID, name: "Coach Lee", teamOfficialId: CUID }],
+            plays: [{ ...row, staff: ["k-new", CUID] }],
+        });
+        expect(parsed.staff).toEqual([{ key: "k-new", name: "Sam" }, { key: CUID, name: "Coach Lee", teamOfficialId: CUID }]);
+        expect(parsed.plays[0].staff).toEqual(["k-new", CUID]);
+    });
+
+    it("refuses an empty or long name, a bad key, two links, 13 staff and a row run by 5", () => {
+        const staffed = (staff: unknown[], plays: unknown[] = []) => messages(createPracticeSessionSchema.safeParse({ ...base, staff, plays }));
+        expect(staffed([{ key: "k", name: " \u0007 " }])).toEqual([STAFF_NAME_REQUIRED_MESSAGE]);
+        expect(staffed([{ key: "k", name: "x".repeat(61) }])).toEqual([STAFF_NAME_LENGTH_MESSAGE]);
+        expect(staffed([{ key: "", name: "Sam" }])).toEqual([STAFF_KEY_MESSAGE]);
+        expect(staffed([{ key: "k", name: "Sam", teamOfficialId: CUID, userId: CUID }])).toEqual([STAFF_ONE_LINK_MESSAGE]);
+        expect(staffed(Array.from({ length: 13 }, (_, i) => ({ key: `k${i}`, name: `Coach ${i}` })))).toEqual([STAFF_LIMIT_MESSAGE]);
+        expect(staffed([], [{ ...row, staff: ["a", "b", "c", "d", "e"] }])).toEqual([ROW_STAFF_LIMIT_MESSAGE]);
     });
 });

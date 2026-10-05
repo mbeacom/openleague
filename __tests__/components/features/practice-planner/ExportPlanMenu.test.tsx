@@ -336,7 +336,56 @@ describe("buildPlanDocument: block rows, rotation and the gap", () => {
         const doc = buildPlanDocument(session, NOW);
         expect(doc.session.transitionMinutes).toBe(2);
         expect(doc.session.drills.map((entry) => entry.kind)).toEqual(["warmup", "drill", "drill"]);
-        expect(doc.session.drills[0]).toEqual({ kind: "warmup", sequence: 0, durationMinutes: 8, instructions: "Laps", label: null });
+        expect(doc.session.drills[0]).toEqual({ kind: "warmup", sequence: 0, durationMinutes: 8, instructions: "Laps", label: null, staff: [] });
         expect(doc.session.drills[1]).toMatchObject({ rotateEveryMinutes: 5, stays: false });
+    });
+});
+
+describe("buildPlanDocument: practice staff (spec R5, R6)", () => {
+    it("writes the staff list and each row's staff as names: no ids, no links", () => {
+        const session: ExportableSession = {
+            ...SESSION,
+            staff: [{ id: "s1", name: "Coach Lee", teamOfficialId: "cofficialxxxxxxxxxxxxxxxx" }, { id: "s2", name: "Sam" }],
+            plays: [
+                { kind: "warmup", sequence: 0, duration: 8, instructions: null, runsWithPrevious: false, label: null, staff: ["s2"] },
+                { ...sessionPlay("A", 1), staff: ["s1", "s2", "gone"] },
+            ],
+        };
+        const doc = buildPlanDocument(session, NOW);
+        expect(doc.session.staff).toEqual(["Coach Lee", "Sam"]);
+        expect(doc.session.drills.map((entry) => entry.staff)).toEqual([["Sam"], ["Coach Lee", "Sam"]]);
+        expect(JSON.stringify(doc)).not.toMatch(/cofficial|"s1"|"s2"/);
+    });
+
+    it("keeps the first 4 names of a row that lists more, so the file still opens", () => {
+        const staff = Array.from({ length: 6 }, (_, i) => ({ id: `s${i}`, name: `Coach ${i}` }));
+        const session: ExportableSession = { ...SESSION, staff, plays: [{ ...sessionPlay("A", 0), staff: staff.map((member) => member.id) }] };
+        const doc = buildPlanDocument(session, NOW);
+        expect(doc.session.drills[0].staff).toEqual(["Coach 0", "Coach 1", "Coach 2", "Coach 3"]);
+        expect(parsePlan(JSON.parse(JSON.stringify(doc))).ok).toBe(true);
+    });
+
+    it("leaves off a row's person the list filtered out (a 13th person, an over-long name)", () => {
+        const staff = [
+            ...Array.from({ length: 12 }, (_, i) => ({ id: `s${i}`, name: `Coach ${i}` })),
+            { id: "s12", name: "Thirteenth" },
+            { id: "long", name: "x".repeat(61) },
+        ];
+        const session: ExportableSession = {
+            ...SESSION,
+            staff,
+            plays: [{ ...sessionPlay("A", 0), staff: ["s12", "s0"] }, { ...sessionPlay("B", 1), staff: ["long"] }],
+        };
+        const doc = buildPlanDocument(session, NOW);
+        expect(doc.session.staff).toHaveLength(12);
+        expect(doc.session.staff).not.toContain("Thirteenth");
+        expect(doc.session.drills.map((entry) => entry.staff)).toEqual([["Coach 0"], []]);
+        expect(parsePlan(JSON.parse(JSON.stringify(doc))).ok).toBe(true);
+    });
+
+    it("writes empty lists for a session without staff", () => {
+        const doc = buildPlanDocument(SESSION, NOW);
+        expect(doc.session.staff).toEqual([]);
+        expect(doc.session.drills.every((entry) => entry.staff.length === 0)).toBe(true);
     });
 });

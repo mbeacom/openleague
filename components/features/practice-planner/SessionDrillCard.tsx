@@ -38,6 +38,7 @@ import { MAX_STATIONS_PER_GROUP } from "@/lib/utils/session-timeline";
 import { needsGoalie } from "@/lib/utils/drill-tags";
 import type { RowEdit } from "@/lib/utils/session-rows";
 import { GoalieBadge } from "./GoalieBadge";
+import { RunByField, type RowRunBy } from "./RunByField";
 
 /** Hidden from sight but read by screen readers (the standard clip pattern). */
 const VISUALLY_HIDDEN = {
@@ -90,6 +91,8 @@ export interface SessionDrillCardProps {
      * checkbox replaces the minutes, which the rotation sets.
      */
     stays?: { checked: boolean; onToggle: () => void } | null;
+    /** Who runs this drill (practice staff, spec R8); null hides the field (nobody on the list is named). */
+    runBy?: RowRunBy | null;
     isEditing: boolean;
     onDelete: (playId: string) => void;
     onEdit: (playId: string) => void;
@@ -124,6 +127,7 @@ export function SessionDrillCard({
     fitWarning = null,
     goalieWarning = null,
     stays = null,
+    runBy = null,
     isEditing,
     onDelete,
     onEdit,
@@ -328,6 +332,8 @@ export function SessionDrillCard({
                             </Box>
                         )
                     )}
+
+                    {runBy && <RunByField {...runBy} title={play.name || `Drill ${number}`} disabled={disabled || locked} />}
 
                     {!isEditing && (
                         <Tooltip title={canEditDiagram ? "" : "Save the session first"}>

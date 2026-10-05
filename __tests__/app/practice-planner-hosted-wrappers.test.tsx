@@ -36,8 +36,8 @@ import { createEmptyPlayData } from "@/lib/utils/play-data";
 const TEAM = "cteamxxxxxxxxxxxxxxxxxxxx";
 const SESSION = "csessionxxxxxxxxxxxxxxxxx";
 const BOOKING = { venues: [], reservations: [], currentReservationId: null, surfacesByVenue: {}, segmentsBySurface: {}, wholeLabelBySurface: {} };
-/** The edit page always loads the stored gap (getPracticeSessionForEdit), 0 when none was set. */
-const LOADED = { transitionMinutes: 0 };
+/** The edit page always loads the stored gap and staff (getPracticeSessionForEdit): 0 and [] when none were set. */
+const LOADED = { transitionMinutes: 0, staff: [] };
 const submitted = {
     title: "Tuesday", date: new Date("2026-04-07T22:00:00.000Z"), duration: 60, plays: [], isShared: false,
     goaliesAttending: 0, overrideConflicts: false, overrideReason: "", notify: false,
@@ -125,5 +125,51 @@ describe("hosted wrappers: block rows and the gap", () => {
         const sent = actions.createPracticeSession.mock.calls[0][0];
         expect(sent.plays).toEqual(SENT);
         expect(sent.transitionMinutes).toBe(1);
+    });
+});
+
+describe("hosted wrappers: practice staff (spec R3, R4)", () => {
+    const STAFF = [{ id: "cstaffxxxxxxxxxxxxxxxxxxx", name: "Coach Lee", teamOfficialId: "cofficialxxxxxxxxxxxxxxxx", userId: null }, { id: "k-new", name: "Sam" }];
+    const ROWS = [{ id: "k1", playId: "cplayxxxxxxxxxxxxxxxxxxxx", name: "A", sequence: 0, runsWithPrevious: false, duration: 10, instructions: "", playData: createEmptyPlayData(), staff: ["k-new"] }];
+    const OPTIONS = [{ kind: "official", id: "cofficialxxxxxxxxxxxxxxxx", name: "Coach Lee", roleLabel: "Head Coach" }];
+
+    it("EditSessionWrapper sends the list as keys and names (links only when set) and each row's keys", async () => {
+        render(<EditSessionWrapper sessionId={SESSION} teamId={TEAM} initialData={LOADED} bookingOptions={BOOKING as never} />);
+        await captured.props!.onSave({ ...submitted, plays: ROWS, staff: STAFF });
+        const sentSave = actions.updatePracticeSession.mock.calls[0][0];
+        expect(sentSave.staff).toEqual([
+            { key: "cstaffxxxxxxxxxxxxxxxxxxx", name: "Coach Lee", teamOfficialId: "cofficialxxxxxxxxxxxxxxxx" },
+            { key: "k-new", name: "Sam" },
+        ]);
+        expect(sentSave.plays[0].staff).toEqual(["k-new"]);
+    });
+
+    it("EditSessionWrapper hands the editor the save's staff ids, for the key → id swap", async () => {
+        const saved = [{ key: "cstaffxxxxxxxxxxxxxxxxxxx", id: "cstaffxxxxxxxxxxxxxxxxxxx" }, { key: "k-new", id: "cstaffnewxxxxxxxxxxxxxxxx" }];
+        actions.updatePracticeSession.mockResolvedValue({ success: true, data: { id: SESSION, plays: [], staff: saved } });
+        render(<EditSessionWrapper sessionId={SESSION} teamId={TEAM} initialData={LOADED} bookingOptions={BOOKING as never} />);
+        await expect(captured.props!.onSave({ ...submitted, plays: ROWS, staff: STAFF })).resolves.toEqual({ success: true, plays: [], staff: saved });
+    });
+
+    it("EditSessionWrapper and PracticeSessionEditorWrapper leave staff out when the editor holds none", async () => {
+        render(<EditSessionWrapper sessionId={SESSION} teamId={TEAM} initialData={LOADED} bookingOptions={BOOKING as never} />);
+        await captured.props!.onSave({ ...submitted });
+        expect(actions.updatePracticeSession.mock.calls[0][0]).not.toHaveProperty("staff");
+        render(<PracticeSessionEditorWrapper teamId={TEAM} bookingOptions={BOOKING as never} />);
+        await captured.props!.onSave({ ...submitted });
+        expect(actions.createPracticeSession.mock.calls[0][0]).not.toHaveProperty("staff");
+    });
+
+    it("both wrappers hand the editor the picker's options", () => {
+        render(<EditSessionWrapper sessionId={SESSION} teamId={TEAM} initialData={LOADED} bookingOptions={BOOKING as never} staffOptions={OPTIONS as never} />);
+        expect((captured.props as unknown as { staffOptions: unknown }).staffOptions).toEqual(OPTIONS);
+        render(<PracticeSessionEditorWrapper teamId={TEAM} bookingOptions={BOOKING as never} staffOptions={OPTIONS as never} />);
+        expect((captured.props as unknown as { staffOptions: unknown }).staffOptions).toEqual(OPTIONS);
+    });
+
+    it("EditSessionWrapper can't be given a session without its staff (type check)", () => {
+        // @ts-expect-error -- the edit page must load staff, so a current editor always sends its list.
+        render(<EditSessionWrapper sessionId={SESSION} teamId={TEAM} initialData={{ transitionMinutes: 0 }} bookingOptions={BOOKING as never} />);
+        expect(captured.props).not.toBeNull();
     });
 });

@@ -77,6 +77,7 @@ td ul { margin: 2px 0 0; padding-left: 1.1em; }
 .rotation th, .rotation td { text-align: center; }
 .rotation .time { white-space: nowrap; }
 .gap { color: #37474F; }
+.run-by { color: #37474F; }
 .planned { margin: 6px 0 0; }
 .planned.over { font-weight: 700; color: #C62828; }
 .legend { margin-top: 14px; }
@@ -100,6 +101,7 @@ function header(model: BenchSheetModel): Trusted {
 ${model.teamName ? html`<p class="team">${model.teamName}</p>` : null}
 <p class="when">${model.when}</p>
 ${model.place ? html`<p class="place">${model.place}</p>` : null}
+${model.staff ? html`<p class="staff">${model.staff}</p>` : null}
 ${model.gap ? html`<p class="gap">${model.gap}</p>` : null}
 </header>`;
 }
@@ -123,7 +125,7 @@ function timeline(model: BenchSheetModel): Trusted {
             html`<tr><td class="time">${row.start}</td><td>${row.minutes}</td><td>${
                 row.stations
                     ? html`${stationList(row.label, row.stations)}${row.kind === "rotation" ? rotationGrid(row.grid) : null}`
-                    : html`${row.label}${row.kind === "block" && row.note ? html` · ${row.note}` : null}`
+                    : html`${row.label}${row.kind === "block" && row.note ? html` · ${row.note}` : null}${row.runBy ? html`<span class="run-by"> · ${row.runBy}</span>` : null}`
             }</td></tr>
 `,
     );

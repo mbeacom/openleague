@@ -8,7 +8,17 @@
  */
 
 import { z } from "zod";
-import { BLOCK_KINDS, PLAY_FOCUS, PLAY_GOALIES, type BlockKind, type PlayData, type PlayFocus, type PlayGoalies } from "@/types/practice-planner";
+import { BLOCK_KINDS, MAX_ROW_STAFF, MAX_SESSION_STAFF, PLAY_FOCUS, PLAY_GOALIES, STAFF_NAME_MAX, type BlockKind, type PlayData, type PlayFocus, type PlayGoalies } from "@/types/practice-planner";
+import {
+    ROW_STAFF_LIMIT_MESSAGE,
+    STAFF_LIMIT_MESSAGE,
+    STAFF_NAME_LENGTH_MESSAGE,
+    STAFF_NAME_REQUIRED_MESSAGE,
+    STAFF_NAME_TAKEN_MESSAGE,
+    cleanStaffName,
+    rowStaffError,
+    staffNameKey,
+} from "@/lib/utils/session-staff";
 import { drillTags, toGoaliesAttending, toPlayFocus, toPlayGoalies } from "@/lib/utils/drill-tags";
 import { createEmptyPlayData, parseStoredPlayData } from "@/lib/utils/play-data";
 import { CONTROL_CHARS, isBlockRow, toBlockLabel, toRotateEveryMinutes, toTransitionMinutes } from "@/lib/utils/session-rows";
@@ -120,6 +130,22 @@ const rotateEveryMinutesSchema = z.preprocess(toRotateEveryMinutes, z.number().i
 const blockLabelSchema = z.preprocess(toBlockLabel, z.string().nullable());
 const transitionMinutesSchema = z.preprocess(toTransitionMinutes, z.number().int());
 
+// Practice staff (spec R6): names only, never ids or links. Strict, unlike the
+// advisory fields: a row naming someone off the list is a broken file.
+const planStaffNameSchema = z
+    .string({ message: "A staff name must be text" })
+    .transform(cleanStaffName)
+    .pipe(z.string().min(1, STAFF_NAME_REQUIRED_MESSAGE).max(STAFF_NAME_MAX, STAFF_NAME_LENGTH_MESSAGE));
+
+/** A list of staff names. Missing or null is none: every file written before practice staff. */
+function planStaffSchema(max: number, message: string) {
+    return z
+        .array(planStaffNameSchema, { message: "Staff must be a list of names" })
+        .max(max, message)
+        .nullish()
+        .transform((names) => names ?? []);
+}
+
 const sequenceSchema = z.number({ message: "Sequence must be a number" }).int("Sequence must be a whole number").min(0, "Sequence can't be negative");
 
 const planDrillSchema = z.object({
@@ -130,6 +156,7 @@ const planDrillSchema = z.object({
     instructions: optionalText(MAX_INSTRUCTIONS_LENGTH, "Instructions"),
     stays: staysSchema,
     rotateEveryMinutes: rotateEveryMinutesSchema,
+    staff: planStaffSchema(MAX_ROW_STAFF, ROW_STAFF_LIMIT_MESSAGE),
     drill: z.object({
         name: requiredText(MAX_DRILL_NAME_LENGTH, "Drill name"),
         description: optionalText(MAX_DRILL_DESCRIPTION_LENGTH, "Description"),
@@ -146,6 +173,7 @@ const planBlockSchema = z.object({
     durationMinutes: minutes("Block length"),
     instructions: optionalText(MAX_INSTRUCTIONS_LENGTH, "Note"),
     label: blockLabelSchema,
+    staff: planStaffSchema(MAX_ROW_STAFF, ROW_STAFF_LIMIT_MESSAGE),
 });
 
 /** A row without a kind is a drill: every file written before practice timing. */
@@ -180,9 +208,28 @@ const planSessionSchema = z
         startTime: localTimeSchema,
         goaliesAttending: goaliesAttendingSchema,
         transitionMinutes: transitionMinutesSchema,
+        staff: planStaffSchema(MAX_SESSION_STAFF, STAFF_LIMIT_MESSAGE),
         drills: z.array(planEntrySchema).max(MAX_PLAN_DRILLS, `A plan can hold at most ${MAX_PLAN_DRILLS} rows (drills and blocks)`),
     })
     .superRefine((session, ctx) => {
+        // Practice staff (spec R6): names unique ignoring case; each row's names on the list.
+        const listed = new Set<string>();
+        for (const name of session.staff) {
+            const key = staffNameKey(name);
+            if (listed.has(key)) {
+                ctx.addIssue({ code: "custom", path: ["staff"], message: STAFF_NAME_TAKEN_MESSAGE });
+                break;
+            }
+            listed.add(key);
+        }
+        session.drills.forEach((entry, index) => {
+            // A row over the limit already has its issue from the entry's .max(MAX_ROW_STAFF):
+            // that issue is continuable, so this refine still runs, and checking it again
+            // would report ROW_STAFF_LIMIT_MESSAGE twice on the same path.
+            if (entry.staff.length > MAX_ROW_STAFF) return;
+            const error = rowStaffError(entry.staff.map(staffNameKey), listed);
+            if (error) ctx.addIssue({ code: "custom", path: ["drills", index, "staff"], message: error });
+        });
         // The same rules the hosted save enforces (createPracticeSession).
         const timeline = session.drills.map(timelineRow);
         const sequences = timeline.map((t) => t.sequence).sort((a, b) => a - b);
@@ -247,6 +294,8 @@ export interface PlanDrillInput {
     /** Absent = false / null */
     stays?: boolean;
     rotateEveryMinutes?: number | null;
+    /** Staff names running this row; absent = none. Names not on the session's list are dropped. */
+    staff?: string[];
     /** null = unreadable; exported as an empty board */
     playData: PlayData | null;
 }
@@ -261,6 +310,8 @@ export interface PlanBlockInput {
     /** The block's note */
     instructions: string | null;
     label: string | null;
+    /** Staff names running this row; absent = none. Names not on the session's list are dropped. */
+    staff?: string[];
 }
 
 /** The minimal session view an exporter supplies (hosted detail page, static store). */
@@ -275,20 +326,49 @@ export interface PlanSessionInput {
     goaliesAttending?: number | null;
     /** Minutes between blocks; absent = 0 */
     transitionMinutes?: number;
+    /** The practice's staff names; absent = none. */
+    staff?: string[];
     drills: Array<PlanDrillInput | PlanBlockInput>;
+}
+
+/** The staff an export writes: cleaned names, the first spelling wins ignoring case, up to 12 names of 1–60 characters. */
+function exportStaff(names: readonly string[] | undefined): string[] {
+    const listed = new Set<string>();
+    const staff: string[] = [];
+    for (const raw of names ?? []) {
+        const name = cleanStaffName(raw);
+        const key = staffNameKey(name);
+        if (!name || name.length > STAFF_NAME_MAX || listed.has(key) || staff.length >= MAX_SESSION_STAFF) continue;
+        listed.add(key);
+        staff.push(name);
+    }
+    return staff;
+}
+
+/** A row's staff on export: names on the list (in the list's spelling), each once, at most 4. */
+function exportRowStaff(names: readonly string[] | undefined, listed: ReadonlyMap<string, string>): string[] {
+    const row: string[] = [];
+    for (const raw of names ?? []) {
+        const name = listed.get(staffNameKey(raw));
+        if (name && !row.includes(name) && row.length < MAX_ROW_STAFF) row.push(name);
+    }
+    return row;
 }
 
 /**
  * Builds a document from a session. Picks fields explicitly, so ids and
  * thumbnails on the input never leak. Sorts and renumbers, and applies the
  * editor's row rules (the first row and a row after a block never run with a
- * previous one; a rotation that can't run is dropped), so every export imports.
+ * previous one; a rotation that can't run is dropped), and keeps only staff
+ * names that fit the plan's rules, so every export imports.
  */
 export function serializePlan(input: PlanSessionInput, generator: PlanGenerator, now: Date = new Date()): PlanDocument {
     const rows = settleRotations(normalizeGroups([...input.drills].sort((a, b) => a.sequence - b.sequence)));
+    const staff = exportStaff(input.staff);
+    const listed = new Map(staff.map((name) => [staffNameKey(name), name]));
     const drills = rows.map((row, index): PlanEntry => {
         if (isBlockRow(row)) {
-            return { kind: row.kind, sequence: index, durationMinutes: row.duration, instructions: row.instructions ?? "", label: toBlockLabel(row.label) };
+            return { kind: row.kind, sequence: index, durationMinutes: row.duration, instructions: row.instructions ?? "", label: toBlockLabel(row.label), staff: exportRowStaff(row.staff, listed) };
         }
         return {
             kind: "drill",
@@ -298,6 +378,7 @@ export function serializePlan(input: PlanSessionInput, generator: PlanGenerator,
             instructions: row.instructions ?? "",
             stays: row.stays ?? false,
             rotateEveryMinutes: row.rotateEveryMinutes ?? null,
+            staff: exportRowStaff(row.staff, listed),
             drill: {
                 name: row.name,
                 description: row.description ?? "",
@@ -318,6 +399,7 @@ export function serializePlan(input: PlanSessionInput, generator: PlanGenerator,
             startTime: input.startTime,
             goaliesAttending: toGoaliesAttending(input.goaliesAttending),
             transitionMinutes: toTransitionMinutes(input.transitionMinutes),
+            staff,
             drills,
         },
     };
@@ -428,6 +510,7 @@ export interface PlanEditorDrill {
     stays: boolean;
     rotateEveryMinutes: number | null;
     playData: PlayData;
+    staff: string[];
 }
 
 export interface PlanEditorBlock {
@@ -438,6 +521,7 @@ export interface PlanEditorBlock {
     runsWithPrevious: false;
     instructions: string;
     label: string | null;
+    staff: string[];
 }
 
 export interface PlanEditorSession {
@@ -447,6 +531,7 @@ export interface PlanEditorSession {
     startTime: string | null;
     goaliesAttending: number | null;
     transitionMinutes: number;
+    staff: string[];
     plays: Array<PlanEditorDrill | PlanEditorBlock>;
 }
 
@@ -459,6 +544,7 @@ export function planToEditorSession(plan: PlanDocument): PlanEditorSession {
         startTime: plan.session.startTime,
         goaliesAttending: plan.session.goaliesAttending,
         transitionMinutes: plan.session.transitionMinutes,
+        staff: plan.session.staff,
         plays: plan.session.drills.map((entry): PlanEditorDrill | PlanEditorBlock =>
             entry.kind === "drill"
                 ? {
@@ -475,6 +561,7 @@ export function planToEditorSession(plan: PlanDocument): PlanEditorSession {
                       stays: entry.stays,
                       rotateEveryMinutes: entry.rotateEveryMinutes,
                       playData: entry.drill.playData,
+                      staff: entry.staff,
                   }
                 : {
                       key: `plan-row-${entry.sequence}`,
@@ -484,6 +571,7 @@ export function planToEditorSession(plan: PlanDocument): PlanEditorSession {
                       runsWithPrevious: false,
                       instructions: entry.instructions,
                       label: entry.label,
+                      staff: entry.staff,
                   },
         ),
     };
