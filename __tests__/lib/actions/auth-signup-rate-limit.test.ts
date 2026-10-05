@@ -128,3 +128,24 @@ describe("signup rate limiting", () => {
     );
   });
 });
+
+describe("signup invitation token", () => {
+  it.each([
+    ["a filter object", { not: "x" }],
+    ["an array", ["a"]],
+    ["a string that is not a token", "not-a-token"],
+  ])("creates the account without looking up %s", async (_label, token) => {
+    const result = await signup({ ...validInput, invitationToken: token as unknown as string });
+    expect(result).toHaveProperty("success", true);
+    expect(mocks.invitation.findUnique).not.toHaveBeenCalled();
+    expect(mocks.user.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ emailVerified: null }) }),
+    );
+  });
+
+  it("looks up a well-formed invitation token", async () => {
+    const token = "a".repeat(64);
+    await signup({ ...validInput, invitationToken: token });
+    expect(mocks.invitation.findUnique).toHaveBeenCalledWith({ where: { token } });
+  });
+});

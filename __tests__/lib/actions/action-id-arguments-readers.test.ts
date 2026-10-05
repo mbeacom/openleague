@@ -68,7 +68,7 @@ import {
 import { resendInvitation } from "@/lib/actions/invitations";
 import { getPublicRinkProfile } from "@/lib/actions/venue-organizations";
 import { listEventInvitations } from "@/lib/actions/event-invitations";
-import { deleteVenue, getVenue, getVenuePageData } from "@/lib/actions/venues";
+import { deleteVenue, getAvailableVenues, getVenue, getVenuePageData } from "@/lib/actions/venues";
 import { getTeamOverviewData, getTeamRosterDataById } from "@/lib/actions/team-context";
 import { deletePlayer } from "@/lib/actions/roster";
 import {
@@ -248,6 +248,18 @@ const cases: Case[] = [
     outcome: { returns: { success: false, error: "Venue not found" } },
   },
   { name: "getVenue", call: (b) => getVenue(s(b)), outcome: { returns: null } },
+  {
+    name: "getAvailableVenues (filters)",
+    call: (b) => getAvailableVenues(b as Parameters<typeof getAvailableVenues>[0]),
+    outcome: { returns: [] },
+    values: [
+      ["a surface type filter object", { surfaceType: { not: "x" } }],
+      ["an unknown surface type", { surfaceType: "NOT_A_TYPE" }],
+      ["a city array", { city: ["a"] }],
+      ["a search filter object", { search: { contains: "a" } }],
+      ["a non-object", "ICE"],
+    ],
+  },
   { name: "getVenuePageData", call: (b) => getVenuePageData(s(b)), outcome: { returns: null } },
   { name: "getTeamOverviewData", call: (b) => getTeamOverviewData(s(b)), outcome: { returns: null } },
   { name: "getTeamRosterDataById", call: (b) => getTeamRosterDataById(s(b)), outcome: { returns: null } },
@@ -479,6 +491,24 @@ describe.each(cases)("$name", ({ call, outcome, values = MALFORMED }) => {
 });
 
 describe("well-formed values still reach their reads", () => {
+  it.each([
+    ["getPublicSignupEvent", () => getPublicSignupEvent({ eventId: IDS.team, linkToken: null as unknown as string })],
+    ["listEventMedia", () => listEventMedia({ eventId: IDS.team, linkToken: null as unknown as string })],
+    ["getPublicEventGames", () => getPublicEventGames(IDS.team, null as unknown as string)],
+    ["getEventStandings", () => getEventStandings(IDS.team, null as unknown as string)],
+  ])("%s treats a null link token as not supplied", async (_name, call) => {
+    await call();
+    expect(recorder.calls.find((c) => c.model === "signupEvent")?.args[0]).toMatchObject({
+      where: { id: IDS.team },
+    });
+  });
+
+  it("getAvailableVenues still lists venues for well-formed filters", async () => {
+    recorder.mock("venue", "findMany").mockResolvedValue([{ id: "clvenuex1" }]);
+    await expect(getAvailableVenues({ surfaceType: "ICE", city: "Duluth" })).resolves.toEqual([{ id: "clvenuex1" }]);
+    expect(mockAuth).toHaveBeenCalled();
+  });
+
   it("getPublicSignupEvent looks the event up by a well-formed link token", async () => {
     await expect(getPublicSignupEvent({ linkToken: HEX })).resolves.toBeNull();
     expect(recorder.calls.find((c) => c.model === "signupEvent")?.args[0]).toMatchObject({
