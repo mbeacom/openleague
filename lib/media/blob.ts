@@ -1,6 +1,9 @@
 import { del } from "@vercel/blob";
 import { isBlobConfigured } from "@/lib/env";
 
+/** Crest logo limits live in the portable logo-rules module; re-exported for the upload route. */
+export { LOGO_CONTENT_TYPES, LOGO_MAX_BYTES } from "./logo-rules";
+
 /**
  * Vercel Blob integration for event media galleries — the platform's first
  * object-storage use. Media uploads are feature-flagged on
@@ -40,20 +43,6 @@ export function maxBytesForContentType(contentType: string): number {
 export function eventMediaPrefix(eventId: string): string {
   return `signup-events/${eventId}/`;
 }
-
-/**
- * Crest logos. Kept well under the gallery's image cap: these render at 104px
- * at the very largest, so a multi-megabyte upload is pure waste on every page
- * that shows the crest.
- */
-export const LOGO_MAX_BYTES = 2 * 1024 * 1024;
-
-/** SVG is deliberately absent — it is a script-execution vector. */
-export const LOGO_CONTENT_TYPES = [
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-] as const;
 
 /** The entity kinds that own a crest. */
 export const BRANDABLE_ENTITIES = ["team", "league", "venue"] as const;

@@ -121,6 +121,39 @@ export interface StaffOption {
     roleLabel: string;
 }
 
+/**
+ * A logo ready for a bench sheet or an export (practice logo spec R2): a PNG
+ * data URL that fits 512×512 and is at most 200 KB (isLogoImage).
+ */
+export interface LogoImage {
+    dataUrl: string;
+    width: number;
+    height: number;
+}
+
+/**
+ * The team identity a practice shows (spec R5). Hosted: the team. Static: the
+ * device's "Your team" profile. `id` seeds the Crest's fallback color.
+ */
+export interface TeamMark {
+    id: string;
+    name: string;
+    /** What the on-screen Crest draws: a hosted blob URL, or the static profile's PNG data URL. */
+    logoUrl: string | null;
+    /** The owner's brand color; null = the Crest's derived color. */
+    color: string | null;
+    /** Export-ready logo when the platform already holds one (static). Absent: hosted fetches it (getPracticeLogoImage). */
+    logoImage?: LogoImage | null;
+}
+
+/** The static planner's device-wide "Your team" (spec R4). Plan files never carry it. */
+export interface TeamProfile {
+    name: string;
+    logo: LogoImage | null;
+    primaryColor: string | null;
+    secondaryColor: string | null;
+}
+
 export interface PlayerIcon {
     id: string;
     position: Position;
@@ -345,6 +378,8 @@ export interface PracticeSessionView {
     createdByName: string;
     teamId: string;
     teamName: string;
+    /** The team's mark (spec R5); absent or null shows none. */
+    teamMark?: TeamMark | null;
     venueId?: string | null;
     venueName?: string | null;
     venueTimezone?: string | null;
