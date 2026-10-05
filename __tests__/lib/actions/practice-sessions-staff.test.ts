@@ -318,6 +318,18 @@ describe("updatePracticeSession without staff: unchanged across the row rewrite 
         ]);
     });
 
+    it("keeps every assignment when neither the session nor any row sends staff (an editor pausing staff on a name clash)", async () => {
+        models.practiceSessionPlayStaff.findMany.mockResolvedValue(stored);
+        const result = await updatePracticeSession({ id: SESSION, ...save({ title: "Renamed" }) });
+        expect(result.success).toBe(true);
+        expect(models.practiceSessionStaff.deleteMany).not.toHaveBeenCalled();
+        expect(assignmentsWritten()).toEqual([
+            { playRowId: "crow0", staffId: "cstaffsam", position: 0 },
+            { playRowId: "crow1", staffId: "cstafflee", position: 0 },
+            { playRowId: "crow1", staffId: "cstaffsam", position: 1 },
+        ]);
+    });
+
     it("reads the assignments before the rows are deleted (the delete cascades them)", async () => {
         models.practiceSessionPlayStaff.findMany.mockResolvedValue(stored);
         await updatePracticeSession({ id: SESSION, ...save() });

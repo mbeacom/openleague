@@ -617,6 +617,17 @@ describe.each(REPOS)("sessions (%s)", (_name, open) => {
             expect(view.plays.map((row) => [row.id, row.staff])).toEqual([["kb", []], ["kw", ["st-sam"]], ["ka", ["st-lee", "st-sam"]]]);
         });
 
+        it("keeps the list and every row's staff when neither the session nor any row sends staff (an editor pausing staff on a name clash)", async () => {
+            const { store, id } = await staffed();
+            const plays = toSessionRowInputs(data(await store.getSessionForEdit(id)).initialData.plays).map(({ staff: _omitted, ...row }) => row);
+            expect(plays.some((row) => "staff" in row)).toBe(false);
+            data(await store.updateSession(id, save(plays, { title: "Renamed" })));
+            const view = data(await store.getSessionView(id));
+            expect(view.title).toBe("Renamed");
+            expect(view.staff?.map((member) => member.name)).toEqual(["Coach Lee", "Sam"]);
+            expect(view.plays.map((row) => row.staff)).toEqual([["st-sam"], ["st-lee", "st-sam"], []]);
+        });
+
         it("gives a row inserted by an update without staff nobody, and keeps the others' staff", async () => {
             const { store, id } = await staffed();
             const plays = toSessionRowInputs(data(await store.getSessionForEdit(id)).initialData.plays);

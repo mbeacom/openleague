@@ -343,7 +343,7 @@ export function PracticeSessionEditor({
         let outcome: SaveOutcome = { ok: false, error: "Failed to save session" };
 
         try {
-            // Named staff only, and no row run by someone unnamed; absent when the editor holds no list (spec R3).
+            // Named staff only; absent when the editor holds no list or two names clash (spec R3).
             const settled = settleRotations(plays);
             const staffed = staffList === undefined ? null : namedStaffPayload(staffList, settled);
             const sessionData: PracticeSessionSubmitData = {
@@ -354,7 +354,7 @@ export function PracticeSessionEditor({
                 // A block that can't rotate saves without its rotation (the screen keeps the ticks and the note).
                 // The list loads in sequence order and every edit keeps it so, as settleRotations groups by position.
                 plays: staffed ? staffed.rows : settled,
-                staff: staffed?.staff,
+                ...(staffed?.staff && { staff: staffed.staff }),
                 isShared,
                 goaliesAttending: goalies.goaliesAttending,
                 transitionMinutes: betweenBlocks.transitionMinutes,

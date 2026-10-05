@@ -154,19 +154,27 @@ describe("PracticeSessionEditor: the Staff section", () => {
         expect(screen.getByRole("button", { name: "Add staff" })).toHaveFocus();
     });
 
-    it("keeps a clashing person out of the save, with the message shown, so other edits still save", async () => {
-        const onSave = renderEditor([drill("k1", 0, { staff: ["st2", "k-dup"] })], { staff: [SAM, { id: "k-dup", name: " sam " }] });
+    it("pauses staff changes while two names clash: other edits save, the stored staff and assignments stay, and the fix sends them again", async () => {
+        // Sam (stored) runs two rows; Alex is renamed to "sam".
+        const ALEX: SessionStaffMember = { id: "st5", name: "Alex" };
+        const onSave = renderEditor(STAFFED, { staff: [LEE, SAM, ALEX] });
+        const alex = screen.getAllByRole("textbox", { name: "Name" })[1];
+        fireEvent.change(alex, { target: { value: "sam" } });
         expect(screen.getAllByText(STAFF_NAME_TAKEN_MESSAGE)).toHaveLength(2);
         fireEvent.change(screen.getByLabelText(/^Session Title/), { target: { value: "Renamed" } });
         await save();
-        expect(sent(onSave).staff).toEqual([SAM]);
-        expect(sent(onSave).plays[0].staff).toEqual(["st2"]);
-        // The editor still holds them: fixing the name sends them again.
-        fireEvent.change(screen.getAllByRole("textbox", { name: "Name" })[1], { target: { value: "Sam B" } });
+        const first = sent(onSave) as unknown as Record<string, unknown> & { plays: SessionItem[] };
+        expect(first.title).toBe("Renamed");
+        expect(first).not.toHaveProperty("staff");
+        expect(first.plays.some((row) => "staff" in row)).toBe(false);
+        // Still shown until fixed.
+        expect(screen.getAllByText(STAFF_NAME_TAKEN_MESSAGE)).toHaveLength(2);
+
+        fireEvent.change(alex, { target: { value: "Alex B" } });
         await save();
         const second = onSave.mock.calls[1][0] as { staff?: SessionStaffMember[]; plays: SessionItem[] };
-        expect(second.staff).toEqual([SAM, { id: "k-dup", name: "Sam B" }]);
-        expect(second.plays[0].staff).toEqual(["st2", "k-dup"]);
+        expect(second.staff).toEqual([LEE, SAM, { id: "st5", name: "Alex B" }]);
+        expect(second.plays.map((row) => row.staff)).toEqual([["st2"], ["st2", "st1"], []]);
     });
 
     it("doesn't offer an official or admin whose name someone listed has, and shows a clash under a linked person", async () => {
