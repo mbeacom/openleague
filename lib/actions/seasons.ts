@@ -309,8 +309,12 @@ export async function getSeasons(params: {
   teamId?: string;
   includeArchived?: boolean;
 }) {
-  const parsedLeagueId = parseOptionalId(params?.leagueId);
-  const parsedTeamId = parseOptionalId(params?.teamId);
+  // A missing or non-object argument means "no explicit context".
+  const context: { leagueId?: unknown; teamId?: unknown; includeArchived?: unknown } =
+    params !== null && typeof params === "object" && !Array.isArray(params) ? params : {};
+  const includeArchived = Boolean(context.includeArchived);
+  const parsedLeagueId = parseOptionalId(context.leagueId);
+  const parsedTeamId = parseOptionalId(context.teamId);
   if (parsedLeagueId === null) {
     throw new Error("Unauthorized: You are not a member of this league");
   }
@@ -338,7 +342,7 @@ export async function getSeasons(params: {
     ];
     return prisma.season.findMany({
       where: {
-        ...(params.includeArchived ? {} : { archivedAt: null }),
+        ...(includeArchived ? {} : { archivedAt: null }),
         OR: [{ teamId: { in: teamIds } }, { leagueId: { in: leagueIds } }],
       },
       include: {
@@ -353,7 +357,7 @@ export async function getSeasons(params: {
   return prisma.season.findMany({
     where: {
       ...(leagueId ? { leagueId } : { teamId }),
-      ...(params.includeArchived ? {} : { archivedAt: null }),
+      ...(includeArchived ? {} : { archivedAt: null }),
     },
     include: {
       league: { select: { name: true, sport: true } },

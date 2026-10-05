@@ -318,6 +318,24 @@ describe("well-formed ids still load data", () => {
     expect(nonStringIdArguments(recorder.calls)).toEqual([]);
   });
 
+  it.each([
+    ["undefined", undefined],
+    ["null", null],
+    ["a string", "clleague000000000000000001"],
+    ["a number", 7],
+    ["an array", [IDS.league]],
+  ])("getSeasons treats %s as no explicit context", async (_label, params) => {
+    recorder.mock("teamMember", "findMany").mockResolvedValue([]);
+    recorder.mock("season", "findMany").mockResolvedValue([]);
+
+    await expect(getSeasons(params as unknown as Parameters<typeof getSeasons>[0])).resolves.toEqual([]);
+    expect(recorder.calls.some((c) => c.model === "leagueUser")).toBe(false);
+    expect(recorder.calls.find((c) => c.model === "season")?.args[0]).toMatchObject({
+      where: { archivedAt: null, OR: [{ teamId: { in: [] } }, { leagueId: { in: [] } }] },
+    });
+    expect(nonStringIdArguments(recorder.calls)).toEqual([]);
+  });
+
   it("getGearNeedsContext returns an empty context to a league admin with no teams", async () => {
     recorder.mock("leagueUser", "findUnique").mockResolvedValue({ role: "LEAGUE_ADMIN", league: { isActive: true } });
 
