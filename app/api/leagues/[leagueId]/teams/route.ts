@@ -1,14 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireUserId } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
+import { parseId } from "@/lib/utils/ids";
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ leagueId: string }> }
 ) {
   try {
+    const leagueId = parseId((await params).leagueId);
+    if (!leagueId) {
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 403 }
+      );
+    }
     const userId = await requireUserId();
-    const { leagueId } = await params;
 
     // Verify user has access to this league
     const leagueUser = await prisma.leagueUser.findFirst({

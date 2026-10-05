@@ -6,6 +6,7 @@ import { requireSignupEventHostAdmin, requireEventManager } from "@/lib/auth/ses
 import type { ActionResult } from "@/lib/actions/venue-organizations";
 import { addEventManagerSchema, eventManagerCommandSchema, type AddEventManagerInput, type EventManagerCommandInput } from "@/lib/utils/validation";
 import { logSignupEventActivity } from "@/lib/utils/event-activity";
+import { parseId } from "@/lib/utils/ids";
 
 /**
  * Per-event management delegation (FR-028): host-entity admins grant a
@@ -125,6 +126,11 @@ export async function removeEventManager(
 
 /** The event's delegated managers (visible to any event manager). */
 export async function listEventManagers(eventId: string) {
+  const parsedEventId = parseId(eventId);
+  if (!parsedEventId) {
+    throw new Error("Unauthorized: You do not have permission to manage this event");
+  }
+  eventId = parsedEventId;
   await requireEventManager(eventId);
   return prisma.eventManager.findMany({
     where: { eventId },

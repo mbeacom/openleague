@@ -2,11 +2,12 @@ import { prisma } from "@/lib/db/prisma";
 import { getCurrentUserId, isTeamAdmin } from "@/lib/auth/session";
 import { toCsvContent } from "@/lib/utils/csv";
 import { TEAM_OFFICIAL_ROLE_LABELS } from "@/lib/utils/validation";
+import { parseId } from "@/lib/utils/ids";
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const teamId = searchParams.get("teamId");
+    const teamId = parseId(searchParams.get("teamId"));
 
     if (!teamId) {
       return new Response("Bad Request", { status: 400 });

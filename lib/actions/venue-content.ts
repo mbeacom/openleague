@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
-import { parseId } from "@/lib/utils/ids";
+import { parseId, parseOptionalIdList } from "@/lib/utils/ids";
 import { requireVenueContentManager } from "@/lib/auth/session";
 import { expandRecurrenceWindow } from "@/lib/utils/venue-schedule";
 import {
@@ -522,6 +522,13 @@ export async function archiveVenueContentPost(
 }
 
 export async function getPublicVenueContent(venueId: string, filters: PublicContentFilters = {}) {
+  const parsedVenueId = parseId(venueId);
+  const skillLevelIds = parseOptionalIdList(filters?.skillLevelIds);
+  if (!parsedVenueId || skillLevelIds === null) {
+    return { posts: [], lessons: [], events: [] };
+  }
+  venueId = parsedVenueId;
+  filters = { ...filters, skillLevelIds };
   const skillLevelWhere = filters.skillLevelIds?.length
     ? { skillLevels: { some: { id: { in: filters.skillLevelIds } } } }
     : {};

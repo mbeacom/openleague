@@ -15,6 +15,7 @@ import {
 } from "@/components/features/venue-admin";
 import { formatCurrencyFromCents } from "@/lib/utils/currency";
 import { formatDateTime, formatDateTimeInZone } from "@/lib/utils/date";
+import { parseId } from "@/lib/utils/ids";
 
 export const dynamic = "force-dynamic";
 
@@ -40,8 +41,9 @@ function spotsRemaining(capacity: number | null, registrations: { quantity: numb
 export default async function PublicRinkSchedulePage({ params, searchParams }: PublicRinkSchedulePageProps) {
   const { slug } = await params;
   const { level, registration } = await searchParams;
+  const levelId = parseId(level);
   const [venue, skillLevels, session] = await Promise.all([
-    getPublicVenueSchedule(slug, level ? { skillLevelIds: [level] } : {}),
+    getPublicVenueSchedule(slug, levelId ? { skillLevelIds: [levelId] } : {}),
     getSkillLevelReferences(),
     auth(),
   ]);

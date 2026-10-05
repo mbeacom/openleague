@@ -1,12 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
+import { parseHexToken } from "@/lib/utils/ids";
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ token: string }> }
 ) {
   try {
-    const { token } = await params;
+    const token = parseHexToken((await params).token);
+    if (!token) {
+      return NextResponse.redirect(
+        new URL("/login?error=invalid_invitation", request.url)
+      );
+    }
 
     // Find the invitation by token. Unified invitations target exactly one
     // of team / league / venue organization.

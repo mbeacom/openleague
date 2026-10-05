@@ -20,6 +20,7 @@ import {
 } from "@/lib/email/templates";
 import { sendInvitationSchema, sendLeagueInvitationSchema, type SendInvitationInput, type SendLeagueInvitationInput } from "@/lib/utils/validation";
 import { checkRateLimit, rateLimitMessage, RATE_LIMITS } from "@/lib/utils/durable-rate-limit";
+import { parseId } from "@/lib/utils/ids";
 
 export type ActionResult<T> =
   | { success: true; data: T }
@@ -649,6 +650,15 @@ export async function resendInvitation(
   invitationId: string
 ): Promise<ActionResult<{ invited: boolean }>> {
   try {
+    const parsedInvitationId = parseId(invitationId);
+    if (!parsedInvitationId) {
+      return {
+        success: false,
+        error: "Invitation not found",
+      };
+    }
+    invitationId = parsedInvitationId;
+
     // Get the invitation first to resolve its target
     const invitation = await prisma.invitation.findUnique({
       where: { id: invitationId },

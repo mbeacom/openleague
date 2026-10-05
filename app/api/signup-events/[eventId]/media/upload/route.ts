@@ -9,6 +9,7 @@ import {
   isBlobEnabled,
   VIDEO_MAX_BYTES,
 } from "@/lib/media/blob";
+import { parseId } from "@/lib/utils/ids";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,10 +26,13 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ eventId: string }> }
 ): Promise<Response> {
-  const { eventId } = await params;
+  const eventId = parseId((await params).eventId);
 
   if (!isBlobEnabled()) {
     return NextResponse.json({ error: "Media uploads are not configured" }, { status: 503 });
+  }
+  if (!eventId) {
+    return NextResponse.json({ error: "Event not found" }, { status: 404 });
   }
 
   const userId = await getCurrentUserId();

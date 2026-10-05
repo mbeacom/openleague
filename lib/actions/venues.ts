@@ -11,6 +11,7 @@ import { revalidatePath } from "next/cache";
 import { canUserAccessVenue } from "@/lib/auth/venue-access";
 import type { SurfaceType } from "@prisma/client";
 import {
+  SURFACE_TYPES,
   createVenueSchema,
   updateVenueSchema,
   venueAvailabilitySchema,
@@ -18,6 +19,7 @@ import {
   type UpdateVenueInput,
   type VenueAvailabilityInput,
 } from "@/lib/utils/validation";
+import { parseId } from "@/lib/utils/ids";
 
 export type ActionResult<T> =
   | { success: true; data: T }
@@ -190,6 +192,11 @@ export async function deleteVenue(
   venueId: string
 ): Promise<ActionResult<{ id: string }>> {
   try {
+    const parsedVenueId = parseId(venueId);
+    if (!parsedVenueId) {
+      return { success: false, error: "Venue not found" };
+    }
+    venueId = parsedVenueId;
     const userId = await requireUserId();
 
     const venue = await prisma.venue.findUnique({
@@ -229,6 +236,9 @@ export async function deleteVenue(
  * Get a single venue with upcoming events count
  */
 export async function getVenue(venueId: string) {
+  const parsedVenueId = parseId(venueId);
+  if (!parsedVenueId) return null;
+  venueId = parsedVenueId;
   const userId = await requireUserId();
 
   const venue = await prisma.venue.findUnique({
@@ -263,6 +273,24 @@ export async function getAvailableVenues(filters?: {
   search?: string;
   includeInactive?: boolean;
 }) {
+  const isOptionalText = (value: unknown) => value === undefined || value === null || typeof value === "string";
+  if (
+    (filters !== undefined && (typeof filters !== "object" || filters === null)) ||
+    !isOptionalText(filters?.city) ||
+    !isOptionalText(filters?.search) ||
+    !(
+      filters?.surfaceType === undefined ||
+      filters.surfaceType === null ||
+      filters.surfaceType === "" ||
+      (SURFACE_TYPES as readonly unknown[]).includes(filters.surfaceType)
+    )
+  ) {
+    return [];
+  }
+  if (filters) {
+    filters = { ...filters, includeInactive: filters.includeInactive === true };
+  }
+
   const userId = await requireUserId();
 
   // Get user's team and league memberships for visibility filtering
@@ -481,6 +509,9 @@ export async function getVenuePageData(venueId: string): Promise<{
     team: { name: string };
   }>;
 } | null> {
+  const parsedVenueId = parseId(venueId);
+  if (!parsedVenueId) return null;
+  venueId = parsedVenueId;
   const userId = await requireUserId();
   const venue = await getVenue(venueId);
   if (!venue) return null;

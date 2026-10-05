@@ -41,6 +41,7 @@ import {
   VenueReservationLifecycleError,
 } from "@/lib/services/venue-reservations";
 import { runVenueReservationTransaction } from "@/lib/services/venue-reservation-transaction";
+import { parseHexToken, parseId } from "@/lib/utils/ids";
 
 function overlaps(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date): boolean {
   return aStart < bEnd && bStart < aEnd;
@@ -919,6 +920,11 @@ export type EventTeamsBoard = Awaited<ReturnType<typeof getEventTeamsBoard>>;
 
 /** Manager view: teams with rosters and counts, unassigned pool, games, surfaces. */
 export async function getEventTeamsBoard(eventId: string) {
+  const parsedEventId = parseId(eventId);
+  if (!parsedEventId) {
+    throw new Error("Unauthorized: You do not have permission to manage this event");
+  }
+  eventId = parsedEventId;
   await requireEventManager(eventId);
 
   const [event, teams, unassigned, games] = await Promise.all([
@@ -1041,6 +1047,9 @@ export type MyEventAssignments = Awaited<ReturnType<typeof getMyEventAssignments
  * assignments and game times, visible once teams are posted.
  */
 export async function getMyEventAssignments(eventId: string) {
+  const parsedEventId = parseId(eventId);
+  if (!parsedEventId) return null;
+  eventId = parsedEventId;
   const userId = await getCurrentUserId();
   if (!userId) return null;
 
@@ -1158,6 +1167,12 @@ export type PublicEventGames = Awaited<ReturnType<typeof getPublicEventGames>>;
  * participant PII, only team names and times.
  */
 export async function getPublicEventGames(eventId: string, linkToken?: string) {
+  const parsedEventId = parseId(eventId);
+  const parsedLinkToken =
+    linkToken === undefined || linkToken === "" ? undefined : parseHexToken(linkToken);
+  if (!parsedEventId || parsedLinkToken === null) return null;
+  eventId = parsedEventId;
+  linkToken = parsedLinkToken;
   const gate = await prisma.signupEvent.findUnique({
     where: { id: eventId },
     select: {
@@ -1213,6 +1228,9 @@ export async function getPublicEventGames(eventId: string, linkToken?: string) {
  * rink's public schedule page alongside the event listing (FR-032).
  */
 export async function listPublicVenueEventGames(venueId: string) {
+  const parsedVenueId = parseId(venueId);
+  if (!parsedVenueId) return [];
+  venueId = parsedVenueId;
   return prisma.eventGame.findMany({
     where: {
       event: {
@@ -1327,6 +1345,12 @@ export type EventStandings = Awaited<ReturnType<typeof getEventStandings>>;
  * teams, and the viewer passes the visibility gate.
  */
 export async function getEventStandings(eventId: string, linkToken?: string) {
+  const parsedEventId = parseId(eventId);
+  const parsedLinkToken =
+    linkToken === undefined || linkToken === "" ? undefined : parseHexToken(linkToken);
+  if (!parsedEventId || parsedLinkToken === null) return null;
+  eventId = parsedEventId;
+  linkToken = parsedLinkToken;
   const gate = await prisma.signupEvent.findUnique({
     where: { id: eventId },
     select: {

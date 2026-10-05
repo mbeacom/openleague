@@ -9,6 +9,7 @@ import {
   LOGO_CONTENT_TYPES,
   LOGO_MAX_BYTES,
 } from "@/lib/media/blob";
+import { parseId } from "@/lib/utils/ids";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,12 +27,13 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ entity: string; entityId: string }> },
 ): Promise<Response> {
-  const { entity, entityId } = await params;
+  const { entity } = await params;
+  const entityId = parseId((await params).entityId);
 
   if (!isBlobEnabled()) {
     return NextResponse.json({ error: "Logo uploads are not configured" }, { status: 503 });
   }
-  if (!isBrandableEntity(entity)) {
+  if (!isBrandableEntity(entity) || !entityId) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 

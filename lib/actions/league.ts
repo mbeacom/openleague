@@ -1556,6 +1556,14 @@ export async function exportLeagueRosterCSV(
   leagueId: string
 ): Promise<ActionResult<{ csv: string; filename: string }>> {
   try {
+    const parsedLeagueId = parseId(leagueId);
+    if (!parsedLeagueId) {
+      return {
+        success: false,
+        error: "Unauthorized - you are not a member of this league",
+      };
+    }
+    leagueId = parsedLeagueId;
     const userId = await requireUserId();
 
     // Verify user has access to the league
@@ -1597,6 +1605,14 @@ export async function exportLeagueRosterPDF(
   leagueId: string
 ): Promise<ActionResult<{ pdfBase64: string; filename: string }>> {
   try {
+    const parsedLeagueId = parseId(leagueId);
+    if (!parsedLeagueId) {
+      return {
+        success: false,
+        error: "Unauthorized - you are not a member of this league",
+      };
+    }
+    leagueId = parsedLeagueId;
     const userId = await requireUserId();
 
     const hasAccess = await hasLeagueAccess(userId, leagueId);
@@ -1640,6 +1656,14 @@ export async function exportLeagueScheduleCSV(
   leagueId: string
 ): Promise<ActionResult<{ csv: string; filename: string }>> {
   try {
+    const parsedLeagueId = parseId(leagueId);
+    if (!parsedLeagueId) {
+      return {
+        success: false,
+        error: "Unauthorized - you are not a member of this league",
+      };
+    }
+    leagueId = parsedLeagueId;
     const userId = await requireUserId();
 
     // Verify user has access to the league
@@ -1680,6 +1704,14 @@ export async function exportLeagueSchedulePDF(
   leagueId: string
 ): Promise<ActionResult<{ pdfBase64: string; filename: string }>> {
   try {
+    const parsedLeagueId = parseId(leagueId);
+    if (!parsedLeagueId) {
+      return {
+        success: false,
+        error: "Unauthorized - you are not a member of this league",
+      };
+    }
+    leagueId = parsedLeagueId;
     const userId = await requireUserId();
 
     const hasAccess = await hasLeagueAccess(userId, leagueId);
@@ -1717,6 +1749,14 @@ export async function exportAttendanceReportCSV(
   leagueId: string
 ): Promise<ActionResult<{ csv: string; filename: string }>> {
   try {
+    const parsedLeagueId = parseId(leagueId);
+    if (!parsedLeagueId) {
+      return {
+        success: false,
+        error: "Unauthorized - you are not a member of this league",
+      };
+    }
+    leagueId = parsedLeagueId;
     const userId = await requireUserId();
 
     // Verify user has access to the league
@@ -1757,6 +1797,14 @@ export async function exportAttendanceReportPDF(
   leagueId: string
 ): Promise<ActionResult<{ pdfBase64: string; filename: string }>> {
   try {
+    const parsedLeagueId = parseId(leagueId);
+    if (!parsedLeagueId) {
+      return {
+        success: false,
+        error: "Unauthorized - you are not a member of this league",
+      };
+    }
+    leagueId = parsedLeagueId;
     const userId = await requireUserId();
 
     const hasAccess = await hasLeagueAccess(userId, leagueId);
@@ -1794,6 +1842,14 @@ export async function exportFinancialReportCSV(
   leagueId: string
 ): Promise<ActionResult<{ csv: string; filename: string }>> {
   try {
+    const parsedLeagueId = parseId(leagueId);
+    if (!parsedLeagueId) {
+      return {
+        success: false,
+        error: "Unauthorized - you must be a league admin",
+      };
+    }
+    leagueId = parsedLeagueId;
     const userId = await requireUserId();
 
     // Verify user has league admin access
@@ -1834,6 +1890,14 @@ export async function exportFinancialReportPDF(
   leagueId: string
 ): Promise<ActionResult<{ pdfBase64: string; filename: string }>> {
   try {
+    const parsedLeagueId = parseId(leagueId);
+    if (!parsedLeagueId) {
+      return {
+        success: false,
+        error: "Unauthorized - you must be a league admin",
+      };
+    }
+    leagueId = parsedLeagueId;
     const userId = await requireUserId();
 
     const isAdmin = await verifyLeagueAdmin(leagueId, userId);

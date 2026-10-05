@@ -24,6 +24,7 @@ import {
   type CreateVenueOrganizationInput,
   type UpdateVenueProfileInput,
 } from "@/lib/utils/validation";
+import { parseSlug } from "@/lib/utils/ids";
 
 export type ActionResult<T> =
   | { success: true; data: T }
@@ -616,6 +617,9 @@ export async function getPublicRinkSummaries() {
 }
 
 export async function getPublicRinkProfile(slug: string) {
+  const parsedSlug = parseSlug(slug);
+  if (!parsedSlug) return null;
+  slug = parsedSlug;
   try {
     const now = new Date();
     return await prisma.venue.findFirst({

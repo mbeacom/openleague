@@ -270,6 +270,21 @@ export async function updatePlayer(input: UpdatePlayerInput) {
  */
 export async function deletePlayer(playerId: string, teamId: string) {
   try {
+    const parsedTeamId = parseId(teamId);
+    if (!parsedTeamId) {
+      return {
+        error: "Failed to delete player. Please try again.",
+      };
+    }
+    const parsedPlayerId = parseId(playerId);
+    if (!parsedPlayerId) {
+      return {
+        error: "Player not found",
+      };
+    }
+    teamId = parsedTeamId;
+    playerId = parsedPlayerId;
+
     // Check authentication and authorization - only ADMIN can delete players
     await requireTeamAdmin(teamId);
 

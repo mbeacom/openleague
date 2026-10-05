@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db/prisma";
 import { getBaseUrl } from "@/lib/env";
+import { parseHexToken } from "@/lib/utils/ids";
 
 /**
  * Event invitation accept link. Signed-in invitees land on the event ready to
@@ -12,8 +13,12 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ token: string }> }
 ) {
-  const { token } = await params;
+  const token = parseHexToken((await params).token);
   const baseUrl = getBaseUrl();
+
+  if (!token) {
+    return NextResponse.redirect(`${baseUrl}/signups?invitation=invalid`);
+  }
 
   const invitation = await prisma.eventInvitation.findUnique({
     where: { token },

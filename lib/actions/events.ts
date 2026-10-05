@@ -523,6 +523,15 @@ export async function deleteEvent(
   eventId: string
 ): Promise<ActionResult<{ id: string }>> {
   try {
+    const parsedEventId = parseId(eventId);
+    if (!parsedEventId) {
+      return {
+        success: false,
+        error: "Event not found",
+      };
+    }
+    eventId = parsedEventId;
+
     // Get the event to verify it exists and get team ID
     const existingEvent = await prisma.event.findUnique({
       where: { id: eventId },
@@ -630,6 +639,11 @@ export async function getTeamEvents(teamId: string) {
  */
 export async function getEvent(eventId: string) {
   try {
+    const parsedEventId = parseId(eventId);
+    if (!parsedEventId) {
+      return null;
+    }
+    eventId = parsedEventId;
     const event = await prisma.event.findUnique({
       where: { id: eventId },
       include: {

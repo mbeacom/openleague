@@ -45,7 +45,18 @@ import {
 import { BLOCK_ROW_FIELDS_ERROR, BLOCK_STATION_ERROR } from "@/lib/utils/session-timeline";
 import { GOALIES_ATTENDING_MESSAGE } from "@/lib/utils/drill-tags";
 
-export { idSchema, slugSchema, parseId, parseOptionalId, parseSlug } from "@/lib/utils/ids";
+export {
+  idSchema,
+  slugSchema,
+  hexTokenSchema,
+  shareTokenSchema,
+  parseId,
+  parseOptionalId,
+  parseSlug,
+  parseHexToken,
+  parseShareToken,
+  parseOptionalIdList,
+} from "@/lib/utils/ids";
 
 /**
  * Optional IANA timezone string (e.g. "America/New_York"). Validated against the

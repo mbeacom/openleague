@@ -14,6 +14,7 @@ import {
   publicPublishedTeamWhere,
   publicTeamSummarySelect,
 } from "@/lib/utils/public-associations";
+import { parseId, parseSlug } from "@/lib/utils/ids";
 
 /**
  * Public association and team profiles (feature 007 / User Story 4).
@@ -375,7 +376,9 @@ async function resolveAssociationSlug(
 export async function resolvePublicAssociation(
   slug: string,
 ): Promise<ResolvedAssociation | null> {
-  return resolveAssociationSlug(slug, true);
+  const parsedSlug = parseSlug(slug);
+  if (!parsedSlug) return null;
+  return resolveAssociationSlug(parsedSlug, true);
 }
 
 /**
@@ -387,11 +390,15 @@ export async function resolvePublicAssociation(
 export async function resolveActiveAssociation(
   slug: string,
 ): Promise<ResolvedAssociation | null> {
-  return resolveAssociationSlug(slug, false);
+  const parsedSlug = parseSlug(slug);
+  if (!parsedSlug) return null;
+  return resolveAssociationSlug(parsedSlug, false);
 }
 
 export async function getPublicAssociationProfile(slug: string) {
-  const resolved = await resolvePublicAssociation(slug);
+  const parsedSlug = parseSlug(slug);
+  if (!parsedSlug) return null;
+  const resolved = await resolvePublicAssociation(parsedSlug);
   if (!resolved) return null;
 
   const now = new Date();
@@ -403,6 +410,9 @@ export async function getPublicAssociationProfile(slug: string) {
 }
 
 export async function getPublicAssociationTeams(leagueId: string) {
+  const parsedLeagueId = parseId(leagueId);
+  if (!parsedLeagueId) return [];
+  leagueId = parsedLeagueId;
   return prisma.team.findMany({
     where: { ...publicPublishedTeamWhere, leagueId },
     select: publicTeamSummarySelect,
@@ -414,6 +424,11 @@ export async function resolvePublicTeam(
   leagueId: string,
   teamSlug: string,
 ): Promise<{ id: string; canonicalSlug: string; redirected: boolean } | null> {
+  const parsedLeagueId = parseId(leagueId);
+  const parsedTeamSlug = parseSlug(teamSlug);
+  if (!parsedLeagueId || !parsedTeamSlug) return null;
+  leagueId = parsedLeagueId;
+  teamSlug = parsedTeamSlug;
   const team = await prisma.team.findFirst({
     where: { ...publicPublishedTeamWhere, leagueId, slug: teamSlug },
     select: { id: true, slug: true },
@@ -438,7 +453,10 @@ export async function resolvePublicTeam(
 }
 
 export async function getPublicTeamProfile(leagueId: string, teamSlug: string) {
-  const resolved = await resolvePublicTeam(leagueId, teamSlug);
+  const parsedLeagueId = parseId(leagueId);
+  const parsedTeamSlug = parseSlug(teamSlug);
+  if (!parsedLeagueId || !parsedTeamSlug) return null;
+  const resolved = await resolvePublicTeam(parsedLeagueId, parsedTeamSlug);
   if (!resolved) return null;
 
   const now = new Date();

@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
-import { parseOptionalId } from "@/lib/utils/ids";
+import { parseId, parseOptionalId } from "@/lib/utils/ids";
 import {
   getUserLeagueRole,
   isTeamAdmin,
@@ -329,6 +329,11 @@ export async function getSeasons(params: {
 
 /** Full season detail: phases, games (with teams/venues), owner sport. */
 export async function getSeasonDetail(seasonId: string) {
+  const parsedSeasonId = parseId(seasonId);
+  if (!parsedSeasonId) {
+    throw new Error("Season not found");
+  }
+  seasonId = parsedSeasonId;
   const { season, userId } = await requireSeasonViewer(seasonId);
   const canViewPrivatePlacementNotes = season.leagueId
     ? (await getUserLeagueRole(userId, season.leagueId)) === "LEAGUE_ADMIN"

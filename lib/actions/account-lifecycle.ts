@@ -21,6 +21,7 @@ import {
   type ForgotPasswordInput,
   type ResetPasswordInput,
 } from "@/lib/utils/validation";
+import { parseShareToken } from "@/lib/utils/ids";
 
 export type ActionResult<T = undefined> =
   | { success: true; data: T }
@@ -175,7 +176,10 @@ export async function confirmEmailVerification(
   token: string
 ): Promise<ActionResult<{ message: string }>> {
   try {
-    const consumed = await consumeVerificationToken(token, "EMAIL_VERIFICATION");
+    const parsedToken = parseShareToken(token);
+    const consumed = parsedToken
+      ? await consumeVerificationToken(parsedToken, "EMAIL_VERIFICATION")
+      : null;
     if (!consumed) {
       return {
         success: false,
@@ -204,7 +208,8 @@ export async function confirmEmailChange(
   token: string
 ): Promise<ActionResult<{ message: string }>> {
   try {
-    const consumed = await consumeVerificationToken(token, "EMAIL_CHANGE");
+    const parsedToken = parseShareToken(token);
+    const consumed = parsedToken ? await consumeVerificationToken(parsedToken, "EMAIL_CHANGE") : null;
     if (!consumed || !consumed.newEmail) {
       return {
         success: false,

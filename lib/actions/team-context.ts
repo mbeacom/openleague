@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/db/prisma";
 import { requireUserId } from "@/lib/auth/session";
 import type { Player } from "@/types/roster";
+import { parseId } from "@/lib/utils/ids";
 
 export type TeamContext = {
   teamId: string;
@@ -359,6 +360,9 @@ type AccessibleTeamData = {
 };
 
 async function getAccessibleTeamData(teamId: string): Promise<AccessibleTeamData | null> {
+  const parsedTeamId = parseId(teamId);
+  if (!parsedTeamId) return null;
+  teamId = parsedTeamId;
   const userId = await requireUserId();
 
   const team = await prisma.team.findFirst({
