@@ -86,6 +86,7 @@ import {
 } from "@/lib/actions/public-content";
 import { getSeasonDetail } from "@/lib/actions/seasons";
 import { getPracticeSessionDetail, getPracticeSessionForEdit } from "@/lib/actions/practice-session-queries";
+import { getPracticeLogoImage } from "@/lib/actions/practice-logo";
 import { confirmEmailVerification, confirmEmailChange } from "@/lib/actions/account-lifecycle";
 import { checkPermissionAction } from "@/lib/actions/permissions";
 import { getPublicVenueRelationships, getTeamVenueRelationships } from "@/lib/actions/venue-relationships";
@@ -325,6 +326,7 @@ const cases: Case[] = [
   { name: "getSeasonDetail", call: (b) => getSeasonDetail(s(b)), outcome: { rejects: /Season not found/ } },
   { name: "getPracticeSessionDetail", call: (b) => getPracticeSessionDetail(s(b)), outcome: { returns: null } },
   { name: "getPracticeSessionForEdit", call: (b) => getPracticeSessionForEdit(s(b)), outcome: { returns: null } },
+  { name: "getPracticeLogoImage", call: (b) => getPracticeLogoImage(s(b)), outcome: { returns: null } },
   {
     name: "confirmEmailVerification",
     call: (b) => confirmEmailVerification(s(b)),

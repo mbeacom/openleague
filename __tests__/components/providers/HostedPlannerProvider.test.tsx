@@ -12,6 +12,8 @@ const sessions = vi.hoisted(() => ({ deletePracticeSession: vi.fn(), sharePracti
 vi.mock("@/lib/actions/plays", () => plays);
 vi.mock("@/lib/actions/practice-session-drills", () => drills);
 vi.mock("@/lib/actions/practice-sessions", () => sessions);
+const logo = vi.hoisted(() => ({ getPracticeLogoImage: vi.fn() }));
+vi.mock("@/lib/actions/practice-logo", () => logo);
 
 import { HostedPlannerProvider, hostedPlannerStore } from "@/components/providers/HostedPlannerProvider";
 import { usePlannerPlatform, usePlannerStore } from "@/lib/planner-store";
@@ -35,6 +37,7 @@ describe("HostedPlannerProvider", () => {
         ["duplicatePracticeSession", drills.duplicatePracticeSession],
         ["deletePracticeSession", sessions.deletePracticeSession],
         ["sharePracticeSession", sessions.sharePracticeSession],
+        ["getPracticeLogoImage", logo.getPracticeLogoImage],
     ] as const)("store.%s is the server action itself", (name, action) => {
         expect(hostedPlannerStore[name]).toBe(action);
     });

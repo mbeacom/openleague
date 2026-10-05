@@ -237,6 +237,7 @@ export const ACTION_ID_ARGUMENTS: Record<string, TableEntry> = {
   "plays#getPlayById": [{ id: ID, teamId: ID }],
   "plays#getPlaysByTeam": [{ teamId: ID }],
   "plays#updatePlay": [{ id: ID, teamId: ID, name: "Sample", playData: { version: 2, players: [], drawings: [], equipment: [], annotations: [] } }],
+  "practice-logo#getPracticeLogoImage": [ID],
   "practice-plan-import#importPracticePlan": [{ teamId: ID, date: "2026-11-01T18:00:00.000Z", document: SAMPLE_PLAN }],
   "practice-session-drills#copySessionDrillToLibrary": [{ playId: ID, teamId: ID }],
   "practice-session-drills#duplicatePracticeSession": [{ id: ID, teamId: ID, date: "2026-11-01T18:00:00.000Z" }],

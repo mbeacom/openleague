@@ -187,6 +187,10 @@ const eslintConfig = [
             "@/components/ui/NextLinkComposites",
             "@/components/providers/HostedPlannerProvider",
             "@/components/providers/hosted-planner-platform",
+            // Server-only image handling (practice logo): sharp is native, blob.ts imports @vercel/blob.
+            "sharp",
+            "@/lib/media/logo-image",
+            "@/lib/media/blob",
           ]
             .map((name) => ({ name, message: PLANNER_PORTABILITY_MESSAGE }))
             .concat([{ name: "docx", message: LAZY_DOCX_MESSAGE }]),

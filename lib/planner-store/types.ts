@@ -9,7 +9,7 @@
  * Method names, inputs and results mirror the server actions one to one.
  */
 import type { AnchorHTMLAttributes, ComponentType, Ref } from "react";
-import type { PlayData, PlayFocus, PlayGoalies } from "@/types/practice-planner";
+import type { LogoImage, PlayData, PlayFocus, PlayGoalies } from "@/types/practice-planner";
 import type { PlanGenerator } from "@/lib/plan-document";
 
 /** Same shape as the ActionResult each lib/actions file declares. */
@@ -113,6 +113,12 @@ export interface PlannerStore {
     deletePracticeSession: (input: SessionRef) => Promise<ActionResult<{ id: string }>>;
     /** Team sharing is hosted-only. A store without it hides the Share control. */
     sharePracticeSession?: (input: SessionShare) => Promise<ActionResult<{ id: string; isShared: boolean }>>;
+    /**
+     * The team logo as an export-ready PNG, or null (practice logo spec R1).
+     * Hosted only: the static planner's exports use the device profile's
+     * stored logo (TeamMark.logoImage).
+     */
+    getPracticeLogoImage?: (sessionId: string) => Promise<LogoImage | null>;
 }
 
 export type PlannerLinkProps = Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "href"> & {
