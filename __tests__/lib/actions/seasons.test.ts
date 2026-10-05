@@ -25,8 +25,8 @@ import {
 } from "@/lib/actions/seasons";
 
 const season = {
-  id: "season-1",
-  leagueId: "league-1",
+  id: "clseason000000000000000001",
+  leagueId: "clleague000000000000000001",
   teamId: null,
 };
 

@@ -6,7 +6,8 @@ import { parseId } from "@/lib/utils/ids";
 import { getViewableTeamIds, requireTeamAdmin, requireTeamMember, requireUserId } from "@/lib/auth/session";
 import { revalidatePath } from "next/cache";
 import { sendEventNotifications } from "@/lib/email/templates";
-import { canUserAccessVenue as checkVenueAccess } from "@/lib/actions/venues";
+import { canUserAccessVenue as checkVenueAccess } from "@/lib/auth/venue-access";
+import { verifyLeagueAdmin, verifyTeamAdminInLeague } from "@/lib/auth/league-access";
 import type { BookingConflict } from "@/types/segments";
 import { FALLBACK_TIME_ZONE } from "@/lib/utils/date";
 import {
@@ -755,9 +756,6 @@ export async function createInterTeamGame(
 
     // Check authentication and authorization - user must be league admin or admin of one of the teams
     const userId = await requireUserId();
-
-    // Import league actions for authorization helpers
-    const { verifyLeagueAdmin, verifyTeamAdminInLeague } = await import("@/lib/actions/league");
 
     const isLeagueAdmin = await verifyLeagueAdmin(validated.leagueId, userId);
     const isHomeTeamAdmin = await verifyTeamAdminInLeague(validated.homeTeamId, validated.leagueId, userId);

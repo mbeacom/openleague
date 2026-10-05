@@ -8,7 +8,7 @@ import {
   requireUserId,
   VENUE_STAFF_ADMIN_ROLES,
 } from "@/lib/auth/session";
-import { ensureLeagueUser } from "@/lib/actions/league";
+import { ensureLeagueUser } from "@/lib/auth/league-access";
 import { revalidatePath } from "next/cache";
 import { randomBytes } from "crypto";
 import {

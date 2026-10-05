@@ -61,7 +61,7 @@ describeWithTestDatabase("venue reservation concurrency (T018)", () => {
       await Promise.all([
         import("@prisma/client"),
         import("@/lib/db/prisma"),
-        import("@/lib/actions/venue-requests"),
+        import("@/lib/services/ice-time-request-decision"),
         import("@/lib/services/venue-reservation-transaction"),
       ]);
 

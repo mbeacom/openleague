@@ -19,7 +19,7 @@ const {
   },
 }));
 
-vi.mock("@/lib/actions/seasons", () => ({
+vi.mock("@/lib/auth/season-access", () => ({
   requireSeasonManager: (...args: unknown[]) => mockRequireSeasonManager(...args),
 }));
 

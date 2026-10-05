@@ -64,7 +64,7 @@ vi.mock("@/lib/db/prisma", () => ({
 vi.mock("@/lib/email/templates", () => ({
   sendEventNotifications: (...args: unknown[]) => mockSendEventNotifications(...args),
 }));
-vi.mock("@/lib/actions/venues", () => ({
+vi.mock("@/lib/auth/venue-access", () => ({
   canUserAccessVenue: (...args: unknown[]) => mockCanUserAccessVenue(...args),
 }));
 vi.mock("@/lib/utils/availability", () => ({

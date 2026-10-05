@@ -83,11 +83,11 @@ vi.mock("@/lib/auth/session", () => ({
   getCurrentUserId: vi.fn(),
   isEventManager: vi.fn(),
 }));
-vi.mock("@/lib/actions/seasons", () => ({
+vi.mock("@/lib/auth/season-access", () => ({
   requireSeasonManager: (...args: unknown[]) =>
     mockAuth.requireSeasonManager(...args),
 }));
-vi.mock("@/lib/actions/venues", () => ({
+vi.mock("@/lib/auth/venue-access", () => ({
   canUserAccessVenue: vi.fn().mockResolvedValue(true),
 }));
 vi.mock("@/lib/db/prisma", () => ({ prisma: mockPrisma }));

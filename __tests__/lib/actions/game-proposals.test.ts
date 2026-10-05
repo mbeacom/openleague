@@ -73,7 +73,7 @@ vi.mock("@/lib/email/templates", () => ({
   sendEventNotifications: vi.fn(() => Promise.resolve()),
   sendGameProposalNotifications: vi.fn(() => Promise.resolve()),
 }));
-vi.mock("@/lib/actions/season-games", () => ({
+vi.mock("@/lib/services/season-game-events", () => ({
   createGameEventWithRsvps: vi.fn(),
 }));
 

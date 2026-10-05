@@ -32,7 +32,7 @@ vi.mock("@/lib/email/templates", () => ({
   sendVerificationEmail: mocks.sendVerificationEmail,
 }));
 
-vi.mock("@/lib/actions/league", () => ({
+vi.mock("@/lib/auth/league-access", () => ({
   ensureLeagueUser: mocks.ensureLeagueUser,
 }));
 

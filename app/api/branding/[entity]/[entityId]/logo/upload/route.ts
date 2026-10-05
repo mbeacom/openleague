@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { getCurrentUserId } from "@/lib/auth/session";
-import { canBrandEntity } from "@/lib/actions/branding";
+import { canBrandEntity } from "@/lib/auth/branding-access";
 import {
   entityLogoPrefix,
   isBlobEnabled,

@@ -4,8 +4,8 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 
 import { prisma } from "@/lib/db/prisma";
-import { requireUserId, isTeamAdmin, hasVenueStaffRole } from "@/lib/auth/session";
-import { Capability, hasCapability } from "@/lib/auth/capabilities";
+import { requireUserId } from "@/lib/auth/session";
+import { canBrandEntity } from "@/lib/auth/branding-access";
 import { rethrowIfNextRedirectError } from "@/lib/utils/next-errors";
 import {
   BRANDABLE_ENTITIES,
@@ -27,8 +27,6 @@ import {
 export type ActionResult<T> =
   | { success: true; data: T }
   | { success: false; error: string; details?: unknown };
-
-const VENUE_BRANDING_ROLES = ["OWNER", "MANAGER"] as const;
 
 const entitySchema = z.enum(BRANDABLE_ENTITIES);
 const hexColor = z
@@ -55,58 +53,6 @@ const brandColorsSchema = z.object({
   brandPrimaryColor: hexColor.nullable().optional(),
   brandSecondaryColor: hexColor.nullable().optional(),
 });
-
-/**
- * Whether the user may change how this entity presents itself.
- *
- * Exported so the upload token route asks exactly the same question the write
- * actions do — a token issued on a weaker check would be a way to write a URL
- * the action itself would refuse.
- */
-export async function canBrandEntity(
-  userId: string,
-  entity: BrandableEntity,
-  entityId: string,
-): Promise<boolean> {
-  switch (entity) {
-    case "team": {
-      if (await isTeamAdmin(userId, entityId)) return true;
-      const team = await prisma.team.findUnique({
-        where: { id: entityId },
-        select: { leagueId: true },
-      });
-      // A standalone team has no association to delegate from, so team
-      // admin is the whole answer for it.
-      if (!team?.leagueId) return false;
-      return hasCapability({
-        userId,
-        leagueId: team.leagueId,
-        teamId: entityId,
-        capability: Capability.MANAGE_TEAM,
-      });
-    }
-    case "league":
-      return hasCapability({
-        userId,
-        leagueId: entityId,
-        capability: Capability.ADMINISTER_ASSOCIATION,
-      });
-    case "venue": {
-      const venue = await prisma.venue.findUnique({
-        where: { id: entityId },
-        select: { organizationId: true },
-      });
-      // A venue with no owning organization has no staff to authorize against.
-      if (!venue?.organizationId) return false;
-      return hasVenueStaffRole(
-        userId,
-        venue.organizationId,
-        VENUE_BRANDING_ROLES,
-        entityId,
-      );
-    }
-  }
-}
 
 /** Reads the crest fields currently stored for an entity. */
 async function readLogoUrl(

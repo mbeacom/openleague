@@ -12,6 +12,7 @@ import {
   requireUserId,
 } from "@/lib/auth/session";
 import { revalidatePath } from "next/cache";
+import { requireSeasonManager, requireSeasonViewer } from "@/lib/auth/season-access";
 import {
   createSeasonSchema,
   updateSeasonSchema,
@@ -28,48 +29,6 @@ import {
 export type ActionResult<T> =
   | { success: true; data: T }
   | { success: false; error: string; details?: unknown };
-
-/**
- * Authorize management of a season by its owner: league seasons require
- * LEAGUE_ADMIN, standalone team seasons require team ADMIN (FR-038).
- */
-export async function requireSeasonManager(seasonId: string) {
-  const season = await prisma.season.findUnique({
-    where: { id: seasonId },
-    select: {
-      id: true,
-      name: true,
-      startDate: true,
-      endDate: true,
-      leagueId: true,
-      teamId: true,
-      league: { select: { sport: true } },
-      team: { select: { sport: true } },
-    },
-  });
-  if (!season) {
-    throw new Error("Season not found");
-  }
-  const userId = season.leagueId
-    ? await requireLeagueRole(season.leagueId, "LEAGUE_ADMIN")
-    : await requireTeamAdmin(season.teamId as string);
-  return { season, userId };
-}
-
-/** Read access: any member of the owning league or team. */
-export async function requireSeasonViewer(seasonId: string) {
-  const season = await prisma.season.findUnique({
-    where: { id: seasonId },
-    select: { id: true, leagueId: true, teamId: true },
-  });
-  if (!season) {
-    throw new Error("Season not found");
-  }
-  const userId = season.leagueId
-    ? await requireLeagueRole(season.leagueId, "MEMBER")
-    : await requireTeamMember(season.teamId as string);
-  return { season, userId };
-}
 
 export async function createSeason(
   input: CreateSeasonInput

@@ -1,5 +1,5 @@
 import { notFound, redirect } from "next/navigation";
-import { canAccessActiveTeamInLeague } from "@/lib/actions/team-context";
+import { canAccessActiveTeamInLeague } from "@/lib/auth/team-access";
 
 interface LeagueTeamRedirectPageProps {
   params: Promise<{ leagueId: string; teamId: string }>;

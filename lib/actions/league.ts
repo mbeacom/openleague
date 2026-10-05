@@ -1,10 +1,15 @@
 "use server";
 
 import { z } from "zod";
-import type { LeagueRole, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { requireUserId } from "@/lib/auth/session";
-import { isUserIdString, parseId } from "@/lib/utils/ids";
+import { parseId } from "@/lib/utils/ids";
+import {
+  ensureLeagueUser,
+  hasLeagueAccess,
+  verifyLeagueAdmin,
+  verifyTeamAdminInLeague,
+} from "@/lib/auth/league-access";
 import { revalidatePath } from "next/cache";
 import { format } from "date-fns";
 import {
@@ -42,50 +47,6 @@ import { rethrowIfNextRedirectError } from "@/lib/utils/next-errors";
 export type ActionResult<T> =
   | { success: true; data: T }
   | { success: false; error: string; details?: unknown };
-
-const LEAGUE_ROLE_RANK: Record<LeagueRole, number> = {
-  MEMBER: 1,
-  TEAM_ADMIN: 2,
-  LEAGUE_ADMIN: 3,
-};
-
-/**
- * League-identity sync (Tier 3 canonical rule): every TeamMember of a
- * league-linked team must have an explicit LeagueUser row. Call this wherever
- * a TeamMember row is created for a league team (invitation acceptance,
- * migrateTeamToLeague, team-joins-league transitions).
- *
- * Idempotent: creates the row when missing, upgrades the role when the
- * requested role outranks the existing one, and never downgrades.
- *
- * Not a client-callable action — it must run inside a caller-owned Prisma
- * transaction (any client invocation fails because `tx` is not serializable).
- */
-export async function ensureLeagueUser(
-  tx: Prisma.TransactionClient,
-  userId: string,
-  leagueId: string,
-  role: LeagueRole = "MEMBER"
-): Promise<void> {
-  const existing = await tx.leagueUser.findUnique({
-    where: { userId_leagueId: { userId, leagueId } },
-    select: { id: true, role: true },
-  });
-
-  if (!existing) {
-    await tx.leagueUser.create({
-      data: { userId, leagueId, role },
-    });
-    return;
-  }
-
-  if (LEAGUE_ROLE_RANK[role] > LEAGUE_ROLE_RANK[existing.role]) {
-    await tx.leagueUser.update({
-      where: { id: existing.id },
-      data: { role },
-    });
-  }
-}
 
 /**
  * Create a new league and assign the creator as LEAGUE_ADMIN
@@ -552,69 +513,6 @@ export async function updateLeagueSettings(
       success: false,
       error: "Failed to update league settings. Please try again.",
     };
-  }
-}
-
-/**
- * Helper function to verify league admin permissions
- */
-export async function verifyLeagueAdmin(leagueId: string, userId?: string): Promise<boolean> {
-  if (!parseId(leagueId) || (userId !== undefined && !isUserIdString(userId))) {
-    return false;
-  }
-
-  try {
-    const currentUserId = userId || await requireUserId();
-
-    const leagueUser = await prisma.leagueUser.findFirst({
-      where: {
-        leagueId,
-        userId: currentUserId,
-        role: "LEAGUE_ADMIN",
-      },
-    });
-
-    return !!leagueUser;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Helper function to verify team admin permissions within a league context
- */
-export async function verifyTeamAdminInLeague(
-  teamId: string,
-  leagueId: string,
-  userId?: string
-): Promise<boolean> {
-  if (!parseId(teamId) || !parseId(leagueId) || (userId !== undefined && !isUserIdString(userId))) {
-    return false;
-  }
-
-  try {
-    const currentUserId = userId || await requireUserId();
-
-    // Check if user is league admin (has access to all teams)
-    const isLeagueAdmin = await verifyLeagueAdmin(leagueId, currentUserId);
-    if (isLeagueAdmin) return true;
-
-    // Check if user is admin of the specific team
-    const teamMember = await prisma.teamMember.findFirst({
-      where: {
-        teamId,
-        userId: currentUserId,
-        role: "ADMIN",
-        team: {
-          leagueId,
-        },
-      },
-      select: { id: true },
-    });
-
-    return !!teamMember;
-  } catch {
-    return false;
   }
 }
 
@@ -1147,31 +1045,6 @@ export async function getLeagueTeamsPaginated(
       success: false,
       error: "Failed to fetch league teams. Please try again.",
     };
-  }
-}
-
-/**
- * Check if a user has access to a specific league
- */
-export async function hasLeagueAccess(userId: string, leagueId: string): Promise<boolean> {
-  if (!isUserIdString(userId) || !parseId(leagueId)) {
-    return false;
-  }
-
-  try {
-    const leagueUser = await prisma.leagueUser.findFirst({
-      where: {
-        leagueId,
-        userId,
-        league: {
-          isActive: true,
-        },
-      },
-    });
-
-    return !!leagueUser;
-  } catch {
-    return false;
   }
 }
 

@@ -133,11 +133,11 @@ import {
   createDivision,
   createLeague,
   deleteDivision,
-  ensureLeagueUser,
   getLeagueStatisticsData,
   getLeagueTeamsPaginated,
   migrateTeamToLeague,
 } from "@/lib/actions/league";
+import { ensureLeagueUser } from "@/lib/auth/league-access";
 import type { Prisma } from "@prisma/client";
 
 const USER_ID = "user-1";

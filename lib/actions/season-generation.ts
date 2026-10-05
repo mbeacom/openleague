@@ -12,7 +12,8 @@ import {
   generateRoundRobinSchema,
   type GenerateRoundRobinInput,
 } from "@/lib/utils/validation";
-import { requireSeasonManager, type ActionResult } from "@/lib/actions/seasons";
+import type { ActionResult } from "@/lib/actions/seasons";
+import { requireSeasonManager } from "@/lib/auth/season-access";
 import type { GameConflictView } from "@/types/seasons";
 
 export type GenerationPreviewGame = ProposedGame & {

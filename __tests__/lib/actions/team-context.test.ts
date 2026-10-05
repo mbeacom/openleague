@@ -33,12 +33,8 @@ vi.mock("@/lib/db/prisma", () => ({
   prisma: mockPrisma,
 }));
 
-import {
-  canAccessActiveTeamInLeague,
-  getTeamOverviewData,
-  getTeamRosterDataById,
-  isActiveTeamInLeague,
-} from "@/lib/actions/team-context";
+import { getTeamOverviewData, getTeamRosterDataById } from "@/lib/actions/team-context";
+import { canAccessActiveTeamInLeague, isActiveTeamInLeague } from "@/lib/auth/team-access";
 
 const USER_ID = "user-123";
 const TEAM_ID = "clteam000000000000000000";

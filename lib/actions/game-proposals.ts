@@ -8,7 +8,7 @@ import { requireLeagueRole, requireTeamAdmin, requireUserId } from "@/lib/auth/s
 import { revalidatePath } from "next/cache";
 import { sendEventNotifications, sendGameProposalNotifications } from "@/lib/email/templates";
 import { FALLBACK_TIME_ZONE } from "@/lib/utils/date";
-import { createGameEventWithRsvps } from "@/lib/actions/season-games";
+import { createGameEventWithRsvps } from "@/lib/services/season-game-events";
 import {
   createVenueReservation,
   VenueReservationConflictError,

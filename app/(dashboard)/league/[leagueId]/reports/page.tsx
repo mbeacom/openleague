@@ -1,6 +1,6 @@
 import { requireUserId } from "@/lib/auth/session";
 import { notFound } from "next/navigation";
-import { hasLeagueAccess, verifyLeagueAdmin } from "@/lib/actions/league";
+import { hasLeagueAccess, verifyLeagueAdmin } from "@/lib/auth/league-access";
 import LeagueReportsView from "@/components/features/dashboard/LeagueReportsView";
 
 interface LeagueReportsPageProps {

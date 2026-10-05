@@ -8,6 +8,7 @@ import {
   VENUE_PROFILE_ROLES,
 } from "@/lib/auth/session";
 import { revalidatePath } from "next/cache";
+import { canUserAccessVenue } from "@/lib/auth/venue-access";
 import type { SurfaceType } from "@prisma/client";
 import {
   createVenueSchema,
@@ -603,25 +604,3 @@ async function canUserEditVenue(
   return false;
 }
 
-export async function canUserAccessVenue(
-  userId: string,
-  venue: { visibility: string; teamId: string | null; leagueId: string | null }
-): Promise<boolean> {
-  if (venue.visibility === "PUBLIC") return true;
-
-  if (venue.visibility === "TEAM" && venue.teamId) {
-    const membership = await prisma.teamMember.findUnique({
-      where: { userId_teamId: { userId, teamId: venue.teamId } },
-    });
-    return !!membership;
-  }
-
-  if (venue.visibility === "LEAGUE" && venue.leagueId) {
-    const leagueUser = await prisma.leagueUser.findUnique({
-      where: { userId_leagueId: { userId, leagueId: venue.leagueId } },
-    });
-    return !!leagueUser;
-  }
-
-  return false;
-}

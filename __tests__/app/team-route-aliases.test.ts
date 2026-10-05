@@ -19,7 +19,7 @@ vi.mock("next/navigation", () => ({
   redirect: (url: string) => mockRedirect(url),
 }));
 
-vi.mock("@/lib/actions/team-context", () => ({
+vi.mock("@/lib/auth/team-access", () => ({
   canAccessActiveTeamInLeague: (...args: unknown[]) => mockCanAccessActiveTeamInLeague(...args),
 }));
 

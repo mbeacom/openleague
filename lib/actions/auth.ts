@@ -4,7 +4,7 @@ import { hash } from "bcryptjs";
 import type { Invitation, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { applyInvitationResponsibility } from "@/lib/services/association-roles";
-import { ensureLeagueUser } from "@/lib/actions/league";
+import { ensureLeagueUser } from "@/lib/auth/league-access";
 import { issueVerificationToken } from "@/lib/auth/tokens";
 import { sendVerificationEmail } from "@/lib/email/templates";
 import {
