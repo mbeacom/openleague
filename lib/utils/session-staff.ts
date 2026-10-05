@@ -20,6 +20,8 @@ export const STAFF_NAME_LENGTH_MESSAGE = `Staff name must be at most ${STAFF_NAM
 export const STAFF_LIMIT_MESSAGE = `A practice can list at most ${MAX_SESSION_STAFF} staff`;
 export const STAFF_KEY_DUPLICATE_MESSAGE = "Each staff member needs a unique key";
 export const STAFF_NAME_TAKEN_MESSAGE = "Two staff members can't share a name";
+/** A new practice can't pause staff the way an autosave does, so its create waits for the clash to be fixed. */
+export const STAFF_CLASH_CREATE_MESSAGE = "Two staff members share a name. Rename one before creating the practice.";
 export const STAFF_ONE_LINK_MESSAGE = "A staff member can be a team official or a team admin, not both";
 export const STAFF_OFFICIAL_MESSAGE = "That team official isn't active on this team";
 export const STAFF_ADMIN_MESSAGE = "That person isn't an admin of this team";

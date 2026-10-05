@@ -2,7 +2,7 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { drill, renderEditor, save, stubResizeObserver } from "@/__tests__/helpers/session-editor";
-import { STAFF_NAME_TAKEN_MESSAGE } from "@/lib/utils/session-staff";
+import { STAFF_CLASH_CREATE_MESSAGE, STAFF_NAME_TAKEN_MESSAGE } from "@/lib/utils/session-staff";
 import { MAX_SESSION_STAFF, type SessionItem, type SessionStaffMember, type StaffOption } from "@/types/practice-planner";
 
 beforeAll(stubResizeObserver);
@@ -199,6 +199,27 @@ describe("PracticeSessionEditor: the Staff section", () => {
     it("stops adding at 12 people", () => {
         renderEditor([drill("k1", 0)], { staff: Array.from({ length: MAX_SESSION_STAFF }, (_, i) => ({ id: `s${i}`, name: `Coach ${i}` })) });
         expect(screen.getByRole("button", { name: "Add staff" })).toBeDisabled();
+    });
+
+    it("won't create a new practice while two names clash (a create can't pause staff), and creates with the full list once fixed", async () => {
+        const onSave = renderEditor([drill("k1", 0)], {}, undefined, { sessionId: undefined });
+        fireEvent.click(within(await openAddStaff()).getByRole("menuitem", { name: "Type a name" }));
+        fireEvent.change(screen.getByRole("textbox", { name: "Name" }), { target: { value: "Sam" } });
+        fireEvent.click(within(await openAddStaff()).getByRole("menuitem", { name: "Type a name" }));
+        const second = screen.getAllByRole("textbox", { name: "Name" })[1];
+        fireEvent.change(second, { target: { value: "SAM" } });
+        await save();
+        expect(onSave).not.toHaveBeenCalled();
+        expect(screen.getByRole("alert")).toHaveTextContent(STAFF_CLASH_CREATE_MESSAGE);
+        expect(screen.getAllByText(STAFF_NAME_TAKEN_MESSAGE)).toHaveLength(2);
+
+        fireEvent.change(second, { target: { value: "Pat" } });
+        await save();
+        expect(onSave).toHaveBeenCalledTimes(1);
+        expect(sent(onSave).staff).toEqual([
+            { id: expect.any(String), name: "Sam" },
+            { id: expect.any(String), name: "Pat" },
+        ]);
     });
 });
 

@@ -34,7 +34,7 @@ import type { BookingConflict } from "@/types/segments";
 import { applySavedPlayIds, describeSaveError, type SavedDrillId } from "@/lib/utils/session-drill-ids";
 import { applyRowEdit, drillRows, type RowEdit } from "@/lib/utils/session-rows";
 import { settleRotations } from "@/lib/utils/session-timeline";
-import { namedStaffPayload, type SavedStaffId } from "@/lib/utils/session-staff";
+import { STAFF_CLASH_CREATE_MESSAGE, hasStaffNameClash, namedStaffPayload, type SavedStaffId } from "@/lib/utils/session-staff";
 import { PlayLibraryDialog } from "./PlayLibraryDialog";
 import { useSingleFlightSave, type SaveOutcome } from "./useSingleFlightSave";
 import { SessionDrillList } from "./SessionDrillList";
@@ -320,6 +320,14 @@ export function PracticeSessionEditor({
 
         // TypeScript narrowing: after validateForm() passes, date is guaranteed to be non-null
         if (!date) return;
+
+        // A clash pauses staff on an autosave (namedStaffPayload), but a create then leaves the
+        // page, so the unsaved staff would be lost: a new practice waits for the clash to be fixed.
+        if (!sessionId && staffList && hasStaffNameClash(staffList)) {
+            setSaveError(STAFF_CLASH_CREATE_MESSAGE);
+            if (isFollowUp) saveFlight.abandon(STAFF_CLASH_CREATE_MESSAGE);
+            return;
+        }
 
         // The booking instant: the practice date + wall-clock start time in the venue's zone (FR-019).
         const resolvedStart = booking.resolveStartAt(date);
