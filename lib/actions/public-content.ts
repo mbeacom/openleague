@@ -4,6 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 
 import { prisma } from "@/lib/db/prisma";
+import { parseId } from "@/lib/utils/ids";
 import { requireUserId } from "@/lib/auth/session";
 import {
   Capability,
@@ -316,6 +317,12 @@ async function getContentManagementScope(userId: string, leagueId: string) {
 
 /** Management view: every item covered by the caller's active grant scope. */
 export async function listAssociationContent(leagueId: string) {
+  const parsedLeagueId = parseId(leagueId);
+  if (!parsedLeagueId) {
+    return { success: false as const, error: "You do not have permission to view content." };
+  }
+  leagueId = parsedLeagueId;
+
   const userId = await requireUserId();
   const scope = await getContentManagementScope(userId, leagueId);
   if (!scope.canPublishAssociationWide && scope.teams.length === 0) {

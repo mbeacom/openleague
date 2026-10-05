@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
+import { parseId } from "@/lib/utils/ids";
 import { getViewableTeamIds, requireTeamAdmin, requireTeamMember, requireUserId } from "@/lib/auth/session";
 import { revalidatePath } from "next/cache";
 import { sendEventNotifications } from "@/lib/email/templates";
@@ -584,6 +585,12 @@ export async function deleteEvent(
  */
 export async function getTeamEvents(teamId: string) {
   try {
+    const parsedTeamId = parseId(teamId);
+    if (!parsedTeamId) {
+      throw new Error("Unauthorized: You are not a member of this team");
+    }
+    teamId = parsedTeamId;
+
     // Check authentication and authorization - user must be a team member
     await requireTeamMember(teamId);
 

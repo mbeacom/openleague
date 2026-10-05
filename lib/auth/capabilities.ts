@@ -5,6 +5,7 @@ import type {
 
 import { prisma } from "@/lib/db/prisma";
 import { LeagueAccessLevel, getUserLeagueAccessLevel } from "@/lib/utils/security";
+import { isUserIdString, parseId, parseOptionalId } from "@/lib/utils/ids";
 import {
   Capability,
   ROLE_CAPABILITY_MATRIX,
@@ -75,6 +76,10 @@ export async function loadActiveGrants(
   userId: string,
   leagueId: string,
 ): Promise<GrantRow[]> {
+  if (!isUserIdString(userId) || !parseId(leagueId)) {
+    return [];
+  }
+
   return prisma.associationRoleGrant.findMany({
     where: { userId, leagueId, state: "ACTIVE" },
     select: {
@@ -205,6 +210,16 @@ export async function hasCapability(
 ): Promise<boolean> {
   const { userId, leagueId, capability, ...target } = options;
 
+  if (
+    !isUserIdString(userId) ||
+    !parseId(leagueId) ||
+    [target.teamId, target.divisionId, target.seasonId, target.eventId, target.signupEventId].some(
+      (id) => parseOptionalId(id) === null
+    )
+  ) {
+    return false;
+  }
+
   const accessLevel = await getUserLeagueAccessLevel(userId, leagueId);
 
   if (accessLevel === LeagueAccessLevel.LEAGUE_ADMIN) {
@@ -265,6 +280,10 @@ export async function grantsAllowGearAction(options: {
   teamId?: string | null;
 }): Promise<boolean> {
   const { userId, leagueId, action, teamId } = options;
+
+  if (!isUserIdString(userId) || !parseId(leagueId) || parseOptionalId(teamId) === null) {
+    return false;
+  }
 
   // Team-scoped gear work is never league-wide by omission. Mirrors the same
   // rule in hasPermission so a grant cannot loosen it.

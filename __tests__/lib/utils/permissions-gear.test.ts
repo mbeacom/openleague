@@ -41,7 +41,7 @@ describe("team-scoped gear permissions", () => {
 
   it("fails closed when a team-scoped gear permission omits teamId", async () => {
     await expect(
-      hasPermission("user-1", "league-1", Permission.CREATE_TEAM_GEAR_NEED),
+      hasPermission("user-1", "cleague0001", Permission.CREATE_TEAM_GEAR_NEED),
     ).resolves.toBe(false);
     expect(findFirst).not.toHaveBeenCalled();
   });
@@ -50,11 +50,11 @@ describe("team-scoped gear permissions", () => {
     findFirst.mockResolvedValue(null);
 
     await expect(
-      hasPermission("user-1", "league-1", Permission.REQUEST_TEAM_GEAR, "team-2"),
+      hasPermission("user-1", "cleague0001", Permission.REQUEST_TEAM_GEAR, "cteam0002"),
     ).resolves.toBe(false);
     expect(findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({ teamId: "team-2" }),
+        where: expect.objectContaining({ teamId: "cteam0002" }),
       }),
     );
   });
@@ -63,10 +63,10 @@ describe("team-scoped gear permissions", () => {
     getUserLeagueAccessLevel.mockResolvedValue("LEAGUE_ADMIN");
 
     await expect(
-      hasPermission("user-1", "league-1", Permission.REQUEST_TEAM_GEAR),
+      hasPermission("user-1", "cleague0001", Permission.REQUEST_TEAM_GEAR),
     ).resolves.toBe(false);
     await expect(
-      hasPermission("user-1", "league-1", Permission.REQUEST_TEAM_GEAR, "team-2"),
+      hasPermission("user-1", "cleague0001", Permission.REQUEST_TEAM_GEAR, "cteam0002"),
     ).resolves.toBe(true);
   });
 });
@@ -87,7 +87,7 @@ describe("equipment-manager gear delegation", () => {
   const equipmentGrant = (scopeType: string, extra: Record<string, unknown> = {}) => ({
     role: "EQUIPMENT_MANAGER",
     scopeType,
-    leagueId: "league-1",
+    leagueId: "cleague0001",
     divisionId: null,
     teamId: null,
     seasonId: null,
@@ -112,19 +112,19 @@ describe("equipment-manager gear delegation", () => {
 
     it("allows inventory and wishlist administration", async () => {
       await expect(
-        hasPermission("user-1", "league-1", Permission.MANAGE_GEAR_INVENTORY),
+        hasPermission("user-1", "cleague0001", Permission.MANAGE_GEAR_INVENTORY),
       ).resolves.toBe(true);
       await expect(
-        hasPermission("user-1", "league-1", Permission.MANAGE_GEAR_WISHLIST),
+        hasPermission("user-1", "cleague0001", Permission.MANAGE_GEAR_WISHLIST),
       ).resolves.toBe(true);
     });
 
     it("allows team need/request work for any team in the association", async () => {
       await expect(
-        hasPermission("user-1", "league-1", Permission.CREATE_TEAM_GEAR_NEED, "team-7"),
+        hasPermission("user-1", "cleague0001", Permission.CREATE_TEAM_GEAR_NEED, "cteam0007"),
       ).resolves.toBe(true);
       await expect(
-        hasPermission("user-1", "league-1", Permission.REQUEST_TEAM_GEAR, "team-7"),
+        hasPermission("user-1", "cleague0001", Permission.REQUEST_TEAM_GEAR, "cteam0007"),
       ).resolves.toBe(true);
     });
 
@@ -132,10 +132,10 @@ describe("equipment-manager gear delegation", () => {
       // Mandatory teamId: an association-wide gear grant does not make a
       // team-scoped permission league-wide by omission.
       await expect(
-        hasPermission("user-1", "league-1", Permission.CREATE_TEAM_GEAR_NEED),
+        hasPermission("user-1", "cleague0001", Permission.CREATE_TEAM_GEAR_NEED),
       ).resolves.toBe(false);
       await expect(
-        hasPermission("user-1", "league-1", Permission.REQUEST_TEAM_GEAR),
+        hasPermission("user-1", "cleague0001", Permission.REQUEST_TEAM_GEAR),
       ).resolves.toBe(false);
     });
 
@@ -147,7 +147,7 @@ describe("equipment-manager gear delegation", () => {
         Permission.ASSIGN_LEAGUE_ROLE,
       ]) {
         await expect(
-          hasPermission("user-1", "league-1", permission, "team-7"),
+          hasPermission("user-1", "cleague0001", permission, "cteam0007"),
         ).resolves.toBe(false);
       }
     });
@@ -156,15 +156,15 @@ describe("equipment-manager gear delegation", () => {
   describe("division scope", () => {
     beforeEach(() => {
       grantFindMany.mockResolvedValue([
-        equipmentGrant("DIVISION", { divisionId: "division-1" }),
+        equipmentGrant("DIVISION", { divisionId: "cdivision0001" }),
       ]);
     });
 
     it("allows team need/request work for a team in the division", async () => {
-      teamFindFirst.mockResolvedValue({ id: "team-1" });
+      teamFindFirst.mockResolvedValue({ id: "cteam0001" });
 
       await expect(
-        hasPermission("user-1", "league-1", Permission.CREATE_TEAM_GEAR_NEED, "team-1"),
+        hasPermission("user-1", "cleague0001", Permission.CREATE_TEAM_GEAR_NEED, "cteam0001"),
       ).resolves.toBe(true);
     });
 
@@ -172,49 +172,49 @@ describe("equipment-manager gear delegation", () => {
       teamFindFirst.mockResolvedValue(null);
 
       await expect(
-        hasPermission("user-1", "league-1", Permission.CREATE_TEAM_GEAR_NEED, "team-9"),
+        hasPermission("user-1", "cleague0001", Permission.CREATE_TEAM_GEAR_NEED, "cteam0009"),
       ).resolves.toBe(false);
     });
 
     it("does not confer inventory or wishlist administration", async () => {
       await expect(
-        hasPermission("user-1", "league-1", Permission.MANAGE_GEAR_INVENTORY),
+        hasPermission("user-1", "cleague0001", Permission.MANAGE_GEAR_INVENTORY),
       ).resolves.toBe(false);
       await expect(
-        hasPermission("user-1", "league-1", Permission.MANAGE_GEAR_WISHLIST),
+        hasPermission("user-1", "cleague0001", Permission.MANAGE_GEAR_WISHLIST),
       ).resolves.toBe(false);
     });
   });
 
   describe("team scope", () => {
     beforeEach(() => {
-      grantFindMany.mockResolvedValue([equipmentGrant("TEAM", { teamId: "team-1" })]);
+      grantFindMany.mockResolvedValue([equipmentGrant("TEAM", { teamId: "cteam0001" })]);
     });
 
     it("allows need/request work for the exact team", async () => {
       await expect(
-        hasPermission("user-1", "league-1", Permission.REQUEST_TEAM_GEAR, "team-1"),
+        hasPermission("user-1", "cleague0001", Permission.REQUEST_TEAM_GEAR, "cteam0001"),
       ).resolves.toBe(true);
     });
 
     it("refuses any other team", async () => {
       await expect(
-        hasPermission("user-1", "league-1", Permission.REQUEST_TEAM_GEAR, "team-2"),
+        hasPermission("user-1", "cleague0001", Permission.REQUEST_TEAM_GEAR, "cteam0002"),
       ).resolves.toBe(false);
     });
 
     it("does not confer inventory or wishlist administration", async () => {
       await expect(
-        hasPermission("user-1", "league-1", Permission.MANAGE_GEAR_INVENTORY),
+        hasPermission("user-1", "cleague0001", Permission.MANAGE_GEAR_INVENTORY),
       ).resolves.toBe(false);
     });
   });
 
   describe("unsupported scopes fail closed", () => {
     it.each([
-      ["SEASON", { seasonId: "season-1" }],
-      ["EVENT", { eventId: "event-1" }],
-      ["SIGNUP_EVENT", { signupEventId: "signup-1" }],
+      ["SEASON", { seasonId: "cseason0001" }],
+      ["EVENT", { eventId: "cevent0001" }],
+      ["SIGNUP_EVENT", { signupEventId: "csignup0001" }],
     ])("refuses every gear permission at %s scope", async (scopeType, extra) => {
       grantFindMany.mockResolvedValue([equipmentGrant(scopeType, extra)]);
 
@@ -225,7 +225,7 @@ describe("equipment-manager gear delegation", () => {
         Permission.REQUEST_TEAM_GEAR,
       ]) {
         await expect(
-          hasPermission("user-1", "league-1", permission, "team-1"),
+          hasPermission("user-1", "cleague0001", permission, "cteam0001"),
         ).resolves.toBe(false);
       }
     });
@@ -234,20 +234,20 @@ describe("equipment-manager gear delegation", () => {
   describe("team-manager gear delegation", () => {
     it("allows only need/request work on the exact team", async () => {
       grantFindMany.mockResolvedValue([
-        { ...equipmentGrant("TEAM", { teamId: "team-1" }), role: "TEAM_MANAGER" },
+        { ...equipmentGrant("TEAM", { teamId: "cteam0001" }), role: "TEAM_MANAGER" },
       ]);
 
       await expect(
-        hasPermission("user-1", "league-1", Permission.CREATE_TEAM_GEAR_NEED, "team-1"),
+        hasPermission("user-1", "cleague0001", Permission.CREATE_TEAM_GEAR_NEED, "cteam0001"),
       ).resolves.toBe(true);
       await expect(
-        hasPermission("user-1", "league-1", Permission.REQUEST_TEAM_GEAR, "team-1"),
+        hasPermission("user-1", "cleague0001", Permission.REQUEST_TEAM_GEAR, "cteam0001"),
       ).resolves.toBe(true);
       await expect(
-        hasPermission("user-1", "league-1", Permission.CREATE_TEAM_GEAR_NEED, "team-2"),
+        hasPermission("user-1", "cleague0001", Permission.CREATE_TEAM_GEAR_NEED, "cteam0002"),
       ).resolves.toBe(false);
       await expect(
-        hasPermission("user-1", "league-1", Permission.MANAGE_GEAR_INVENTORY),
+        hasPermission("user-1", "cleague0001", Permission.MANAGE_GEAR_INVENTORY),
       ).resolves.toBe(false);
     });
   });
@@ -265,7 +265,7 @@ describe("equipment-manager gear delegation", () => {
           Permission.REQUEST_TEAM_GEAR,
         ]) {
           await expect(
-            hasPermission("user-1", "league-1", permission, "team-1"),
+            hasPermission("user-1", "cleague0001", permission, "cteam0001"),
           ).resolves.toBe(false);
         }
       },

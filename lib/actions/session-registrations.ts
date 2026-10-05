@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
+import { parseId } from "@/lib/utils/ids";
 import { requireUserId, requireVenueRequestManager, requireVenueStaffRole, VENUE_STAFF_ADMIN_ROLES } from "@/lib/auth/session";
 import type { ActionResult } from "@/lib/actions/venue-organizations";
 import { logVenueActivity } from "@/lib/services/venue-activity";
@@ -491,12 +492,18 @@ export async function getMyRegistrations() {
 
 /** Admin: list registrations for a venue plus a revenue summary. */
 export async function getVenueRegistrations(input: { organizationId: string; venueId: string }) {
-  await requireVenueRequestManager(input.organizationId, input.venueId);
+  const organizationId = parseId(input?.organizationId);
+  const venueId = parseId(input?.venueId);
+  if (!organizationId || !venueId) {
+    throw new Error("Unauthorized: You do not have permission to manage this venue");
+  }
+
+  await requireVenueRequestManager(organizationId, venueId);
 
   // Bind venue to organization: org-wide staff roles authorize any venueId, so we
   // must confirm the venue actually belongs to this org before returning data.
   const venue = await prisma.venue.findFirst({
-    where: { id: input.venueId, organizationId: input.organizationId },
+    where: { id: venueId, organizationId },
     select: { id: true },
   });
   if (!venue) {
@@ -505,7 +512,7 @@ export async function getVenueRegistrations(input: { organizationId: string; ven
 
   const [registrations, summary] = await Promise.all([
     prisma.sessionRegistration.findMany({
-      where: { venueId: input.venueId, venue: { organizationId: input.organizationId } },
+      where: { venueId, venue: { organizationId } },
       orderBy: { createdAt: "desc" },
       take: 500,
       select: {
@@ -523,7 +530,7 @@ export async function getVenueRegistrations(input: { organizationId: string; ven
         payment: { select: { status: true, amount: true, refundedAmount: true, applicationFeeAmount: true } },
       },
     }),
-    computeRevenueSummary({ venueId: input.venueId, organizationId: input.organizationId }),
+    computeRevenueSummary({ venueId, organizationId }),
   ]);
 
   return { registrations, summary };

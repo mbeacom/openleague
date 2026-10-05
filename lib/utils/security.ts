@@ -7,6 +7,7 @@ import { requireUserId } from "@/lib/auth/session";
 import { sanitizeErrorForLogging } from "./error-handling";
 import type { Prisma } from "@prisma/client";
 import { LeagueAccessLevel } from "./access-levels";
+import { isUserIdString, parseId } from "./ids";
 
 /**
  * League access levels for permission checking
@@ -90,26 +91,30 @@ export async function getUserLeagueAccessLevel(
     userId: string,
     leagueId: string
 ): Promise<LeagueAccessLevel> {
+    const parsedLeagueId = parseId(leagueId);
+    if (!isUserIdString(userId) || !parsedLeagueId) {
+        return LeagueAccessLevel.NONE;
+    }
+    leagueId = parsedLeagueId;
+
     try {
         // Check if user is league admin
-        const leagueUser = await prisma.leagueUser.findFirst({
-            where: {
-                userId,
-                leagueId,
-                league: { isActive: true },
-            },
-            select: { role: true },
+        const leagueUser = await prisma.leagueUser.findUnique({
+            where: { userId_leagueId: { userId, leagueId } },
+            select: { role: true, league: { select: { isActive: true } } },
         });
 
-        if (leagueUser?.role === "LEAGUE_ADMIN") {
+        const leagueRole = leagueUser?.league?.isActive ? leagueUser.role : null;
+
+        if (leagueRole === "LEAGUE_ADMIN") {
             return LeagueAccessLevel.LEAGUE_ADMIN;
         }
 
-        if (leagueUser?.role === "TEAM_ADMIN") {
+        if (leagueRole === "TEAM_ADMIN") {
             return LeagueAccessLevel.TEAM_ADMIN;
         }
 
-        if (leagueUser?.role === "MEMBER") {
+        if (leagueRole === "MEMBER") {
             return LeagueAccessLevel.MEMBER;
         }
 
@@ -159,6 +164,10 @@ export async function verifyLeagueAccess(
     requiredLevel: LeagueAccessLevel,
     userId?: string
 ): Promise<{ hasAccess: boolean; userId: string; accessLevel: LeagueAccessLevel }> {
+    if (!parseId(leagueId)) {
+        return { hasAccess: false, userId: userId || "", accessLevel: LeagueAccessLevel.NONE };
+    }
+
     try {
         const currentUserId = userId || await requireUserId();
         const accessLevel = await getUserLeagueAccessLevel(currentUserId, leagueId);
@@ -203,6 +212,10 @@ export async function verifyTeamAccess(
     requiredLevel: LeagueAccessLevel,
     userId?: string
 ): Promise<{ hasAccess: boolean; userId: string; accessLevel: LeagueAccessLevel }> {
+    if (!parseId(teamId) || !parseId(leagueId)) {
+        return { hasAccess: false, userId: userId || "", accessLevel: LeagueAccessLevel.NONE };
+    }
+
     try {
         const currentUserId = userId || await requireUserId();
 

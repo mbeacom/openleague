@@ -2,6 +2,7 @@
 
 import { requireUserId } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
+import { parseId } from "@/lib/utils/ids";
 import {
   activeAllocationQuantity,
   canTransitionAllocation,
@@ -95,6 +96,10 @@ export async function getGearInventoryContext(
   leagueId: string,
   options?: { activityPage?: number; activitySearch?: string },
 ): Promise<GearInventoryContext | null> {
+  const parsedLeagueId = parseId(leagueId);
+  if (!parsedLeagueId) return null;
+  leagueId = parsedLeagueId;
+
   const userId = await requireUserId();
   const membership = await prisma.leagueUser.findFirst({
     where: { leagueId, userId, league: { isActive: true } },
@@ -103,8 +108,11 @@ export async function getGearInventoryContext(
   if (!membership) return null;
 
   const canManageInventory = membership.role === "LEAGUE_ADMIN";
-  const activityPage = Math.max(1, Math.floor(options?.activityPage ?? 1));
-  const activitySearch = options?.activitySearch?.trim().slice(0, 100) ?? "";
+  const requestedPage = options?.activityPage;
+  const activityPage =
+    typeof requestedPage === "number" && Number.isFinite(requestedPage) ? Math.max(1, Math.floor(requestedPage)) : 1;
+  const activitySearch =
+    typeof options?.activitySearch === "string" ? options.activitySearch.trim().slice(0, 100) : "";
   const [locations, catalogItems, stocks, units, movements] = await Promise.all([
     prisma.gearStorageLocation.findMany({
       where: { leagueId },
@@ -327,6 +335,10 @@ export type GearReservationContext = {
  * association-wide operational queue and decision notes.
  */
 export async function getGearReservationContext(leagueId: string): Promise<GearReservationContext | null> {
+  const parsedLeagueId = parseId(leagueId);
+  if (!parsedLeagueId) return null;
+  leagueId = parsedLeagueId;
+
   const userId = await requireUserId();
   const membership = await prisma.leagueUser.findFirst({
     where: { leagueId, userId, league: { isActive: true } },

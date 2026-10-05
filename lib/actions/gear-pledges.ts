@@ -7,6 +7,7 @@ import { z } from "zod";
 import { Permission } from "@/lib/utils/permission-types";
 import { requirePermissionForLeague } from "@/lib/utils/permissions";
 import { prisma } from "@/lib/db/prisma";
+import { parseId } from "@/lib/utils/ids";
 import { recordGearActivity, recordGearInventoryMovement } from "@/lib/services/gear-ledger";
 import { queueGearOutboxForEmail, queueGearOutboxForLeagueAdmins } from "@/lib/services/gear-outbox";
 import { redactTerminalGearPledgePii } from "@/lib/services/gear-pledge-retention";
@@ -841,6 +842,12 @@ export type GearPledgeAdminContext = Array<{
 }>;
 
 export async function getGearPledgeAdminContext(leagueId: string): Promise<GearPledgeAdminContext> {
+  const parsedLeagueId = parseId(leagueId);
+  if (!parsedLeagueId) {
+    throw new Error("Unauthorized: insufficient permissions for this action");
+  }
+  leagueId = parsedLeagueId;
+
   await requirePermissionForLeague(leagueId, Permission.MANAGE_GEAR_WISHLIST);
   const pledges = await prisma.gearPledge.findMany({
     where: { leagueId },

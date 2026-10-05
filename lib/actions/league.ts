@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { LeagueRole, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { requireUserId } from "@/lib/auth/session";
+import { isUserIdString, parseId } from "@/lib/utils/ids";
 import { revalidatePath } from "next/cache";
 import { format } from "date-fns";
 import {
@@ -558,6 +559,10 @@ export async function updateLeagueSettings(
  * Helper function to verify league admin permissions
  */
 export async function verifyLeagueAdmin(leagueId: string, userId?: string): Promise<boolean> {
+  if (!parseId(leagueId) || (userId !== undefined && !isUserIdString(userId))) {
+    return false;
+  }
+
   try {
     const currentUserId = userId || await requireUserId();
 
@@ -583,6 +588,10 @@ export async function verifyTeamAdminInLeague(
   leagueId: string,
   userId?: string
 ): Promise<boolean> {
+  if (!parseId(teamId) || !parseId(leagueId) || (userId !== undefined && !isUserIdString(userId))) {
+    return false;
+  }
+
   try {
     const currentUserId = userId || await requireUserId();
 
@@ -1145,6 +1154,10 @@ export async function getLeagueTeamsPaginated(
  * Check if a user has access to a specific league
  */
 export async function hasLeagueAccess(userId: string, leagueId: string): Promise<boolean> {
+  if (!isUserIdString(userId) || !parseId(leagueId)) {
+    return false;
+  }
+
   try {
     const leagueUser = await prisma.leagueUser.findFirst({
       where: {
@@ -1210,6 +1223,9 @@ export async function getLeagueWithStats(leagueId: string): Promise<{
   }>;
 } | null> {
   try {
+    const parsedLeagueId = parseId(leagueId);
+    if (!parsedLeagueId) return null;
+    leagueId = parsedLeagueId;
     // Authorization: league contact info + activity feed (incl. child names)
     // must not be readable by unauthenticated callers of this server action.
     const userId = await requireUserId();
@@ -1471,6 +1487,9 @@ export async function getLeagueTeamsWithDivisions(leagueId: string): Promise<{
   };
 } | null> {
   try {
+    const parsedLeagueId = parseId(leagueId);
+    if (!parsedLeagueId) return null;
+    leagueId = parsedLeagueId;
     // Authorization: only league members may enumerate teams/divisions.
     const userId = await requireUserId();
     const hasAccess = await hasLeagueAccess(userId, leagueId);
@@ -1586,6 +1605,9 @@ export async function getLeagueDivisions(leagueId: string): Promise<Array<{
   skillLevel: string | null;
 }>> {
   try {
+    const parsedLeagueId = parseId(leagueId);
+    if (!parsedLeagueId) return [];
+    leagueId = parsedLeagueId;
     // Authorization: only league members may enumerate divisions.
     const userId = await requireUserId();
     const hasAccess = await hasLeagueAccess(userId, leagueId);
@@ -1619,6 +1641,14 @@ export async function getLeagueStatisticsData(
   leagueId: string
 ): Promise<ActionResult<LeagueStatistics>> {
   try {
+    const parsedLeagueId = parseId(leagueId);
+    if (!parsedLeagueId) {
+      return {
+        success: false,
+        error: "Unauthorized - you are not a member of this league",
+      };
+    }
+    leagueId = parsedLeagueId;
     const userId = await requireUserId();
 
     // Verify user has access to the league

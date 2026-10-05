@@ -3,6 +3,7 @@
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
+import { parseId } from "@/lib/utils/ids";
 import { requireLeagueRole, requireTeamAdmin, requireUserId } from "@/lib/auth/session";
 import { revalidatePath } from "next/cache";
 import { sendEventNotifications, sendGameProposalNotifications } from "@/lib/email/templates";
@@ -1306,6 +1307,12 @@ async function finalizeProposalViews(
 
 /** Proposals sent or received by a team, for its admins. */
 export async function getProposalsForTeam(teamId: string): Promise<GameProposalView[]> {
+  const parsedTeamId = parseId(teamId);
+  if (!parsedTeamId) {
+    throw new Error("Unauthorized: Only team admins can perform this action");
+  }
+  teamId = parsedTeamId;
+
   await requireTeamAdmin(teamId);
 
   const proposals = await prisma.gameProposal.findMany({
@@ -1319,6 +1326,12 @@ export async function getProposalsForTeam(teamId: string): Promise<GameProposalV
 
 /** All proposals within a league, for league administrators (FR-024). */
 export async function getProposalsForLeague(leagueId: string): Promise<GameProposalView[]> {
+  const parsedLeagueId = parseId(leagueId);
+  if (!parsedLeagueId) {
+    throw new Error("Unauthorized: You are not a member of this league");
+  }
+  leagueId = parsedLeagueId;
+
   await requireLeagueRole(leagueId, "LEAGUE_ADMIN");
 
   const proposals = await prisma.gameProposal.findMany({

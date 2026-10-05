@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/db/prisma";
+import { parseId } from "@/lib/utils/ids";
 import { requireUserId, canUserCreateLeagueGames } from "@/lib/auth/session";
 import { getLeagueScheduleItems } from "@/lib/data/schedule-items";
 import type { LeagueEvent } from "@/types/events";
@@ -23,6 +24,10 @@ export async function getLeagueMessagesData(leagueId: string): Promise<{
   };
   canSendMessages: boolean;
 } | null> {
+  const parsedLeagueId = parseId(leagueId);
+  if (!parsedLeagueId) return null;
+  leagueId = parsedLeagueId;
+
   const userId = await requireUserId();
 
   const leagueUser = await prisma.leagueUser.findFirst({
@@ -93,6 +98,10 @@ export async function getLeagueScheduleData(leagueId: string): Promise<{
     ReturnType<typeof prisma.division.findMany<{ where: { leagueId: string; isActive: true } }>>
   >;
 } | null> {
+  const parsedLeagueId = parseId(leagueId);
+  if (!parsedLeagueId) return null;
+  leagueId = parsedLeagueId;
+
   const userId = await requireUserId();
 
   const leagueUser = await prisma.leagueUser.findFirst({
@@ -160,6 +169,10 @@ export async function getNewLeagueGameContext(leagueId: string): Promise<{
     division: { id: string; name: string } | null;
   }>;
 } | null> {
+  const parsedLeagueId = parseId(leagueId);
+  if (!parsedLeagueId) return null;
+  leagueId = parsedLeagueId;
+
   const userId = await requireUserId();
 
   const leagueUser = await prisma.leagueUser.findFirst({
@@ -211,6 +224,10 @@ export async function getLeagueInvitationsData(leagueId: string): Promise<{
     team: { name: string; division: { name: string } | null };
   }>;
 } | null> {
+  const parsedLeagueId = parseId(leagueId);
+  if (!parsedLeagueId) return null;
+  leagueId = parsedLeagueId;
+
   const userId = await requireUserId();
 
   const leagueUser = await prisma.leagueUser.findFirst({
@@ -312,6 +329,10 @@ export async function getLeagueRosterData(leagueId: string): Promise<{
     team: { name: string; division: { name: string } | null };
   }>;
 } | null> {
+  const parsedLeagueId = parseId(leagueId);
+  if (!parsedLeagueId) return null;
+  leagueId = parsedLeagueId;
+
   const userId = await requireUserId();
 
   const leagueUser = await prisma.leagueUser.findFirst({

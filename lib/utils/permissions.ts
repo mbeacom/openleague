@@ -5,6 +5,7 @@
 import { prisma } from "@/lib/db/prisma";
 import { LeagueAccessLevel, logAuditEvent, AuditAction } from "./security";
 import { sanitizeErrorForLogging } from "./error-handling";
+import { isUserIdString, parseId, parseOptionalId } from "./ids";
 import type { GearAction } from "@/lib/auth/capabilities";
 import { Permission, TEAM_SCOPED_PERMISSIONS, type TeamScopedPermission } from "./permission-types";
 
@@ -159,6 +160,14 @@ async function hasGearPermissionViaGrant(
 }
 
 /**
+ * True when the user id is a non-empty string, the league id is well formed,
+ * and the team id is either absent or well formed.
+ */
+function hasWellFormedIds(userId: unknown, leagueId: unknown, teamId?: unknown): boolean {
+    return isUserIdString(userId) && parseId(leagueId) !== null && parseOptionalId(teamId) !== null;
+}
+
+/**
  * Check if a user has a specific permission for a league
  */
 export async function hasPermission(
@@ -167,6 +176,10 @@ export async function hasPermission(
     permission: Permission,
     teamId?: string
 ): Promise<boolean> {
+    if (!hasWellFormedIds(userId, leagueId, teamId)) {
+        return false;
+    }
+
     try {
         // Get user's access level for the league
         const { getUserLeagueAccessLevel } = await import("./security");
@@ -269,6 +282,10 @@ export async function requirePermission(
     permission: Permission,
     teamId?: string
 ): Promise<void> {
+    if (!hasWellFormedIds(userId, leagueId, teamId)) {
+        throw new Error(`Permission denied: ${permission}`);
+    }
+
     const hasAccess = await hasPermission(userId, leagueId, permission, teamId);
 
     if (!hasAccess) {

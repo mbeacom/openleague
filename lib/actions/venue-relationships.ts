@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
+import { parseId } from "@/lib/utils/ids";
 import {
   requireAuth,
   requireLeagueRole,
@@ -56,7 +57,16 @@ export async function getVenueRelationshipAdminData(
   venueId: string
 ): Promise<ActionResult<{ venueId: string; relationships: VenueRelationshipAdminSummary[] }>> {
   try {
+    const parsedOrganizationId = parseId(organizationId);
+    const parsedVenueId = parseId(venueId);
+    if (!parsedOrganizationId || !parsedVenueId) {
+      return { success: false, error: "Failed to load venue relationships." };
+    }
+    organizationId = parsedOrganizationId;
+    venueId = parsedVenueId;
+
     await requireVenueProfileManager(organizationId, venueId);
+    await ensureVenue(organizationId, venueId);
     const relationships = await prisma.venueRelationship.findMany({
       where: { venueId },
       orderBy: { createdAt: "desc" },

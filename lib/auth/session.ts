@@ -2,6 +2,7 @@ import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db/prisma";
 import type { VenueStaffRole } from "@prisma/client";
+import { isUserIdString, parseId, parseOptionalId } from "@/lib/utils/ids";
 
 export const VENUE_PROFILE_ROLES = ["OWNER", "MANAGER"] as const satisfies VenueStaffRole[];
 export const VENUE_STAFF_ADMIN_ROLES = ["OWNER", "MANAGER"] as const satisfies VenueStaffRole[];
@@ -105,15 +106,7 @@ export async function requireUserId(): Promise<string> {
  * Returns true if user has ADMIN role for the team
  */
 export async function isTeamAdmin(userId: string, teamId: string): Promise<boolean> {
-  const count = await prisma.teamMember.count({
-    where: {
-      userId,
-      teamId,
-      role: "ADMIN",
-    },
-  });
-
-  return count > 0;
+  return (await getTeamMembershipRole(userId, teamId)) === "ADMIN";
 }
 
 /**
@@ -121,14 +114,25 @@ export async function isTeamAdmin(userId: string, teamId: string): Promise<boole
  * Returns true if user belongs to the team
  */
 export async function isTeamMember(userId: string, teamId: string): Promise<boolean> {
-  const count = await prisma.teamMember.count({
-    where: {
-      userId,
-      teamId,
-    },
+  return (await getTeamMembershipRole(userId, teamId)) !== null;
+}
+
+/**
+ * The user's role on one team, read by the membership's compound key.
+ * Malformed ids resolve to `null` without querying.
+ */
+async function getTeamMembershipRole(userId: unknown, teamId: unknown): Promise<"ADMIN" | "MEMBER" | null> {
+  const parsedTeamId = parseId(teamId);
+  if (!isUserIdString(userId) || !parsedTeamId) {
+    return null;
+  }
+
+  const member = await prisma.teamMember.findUnique({
+    where: { userId_teamId: { userId, teamId: parsedTeamId } },
+    select: { role: true },
   });
 
-  return count > 0;
+  return member?.role ?? null;
 }
 
 /**
@@ -196,19 +200,7 @@ export async function getViewableTeamIds(userId: string): Promise<string[]> {
  * Returns null if user is not a member of the team
  */
 export async function getUserTeamRole(userId: string, teamId: string): Promise<"ADMIN" | "MEMBER" | null> {
-  const member = await prisma.teamMember.findUnique({
-    where: {
-      userId_teamId: {
-        userId,
-        teamId,
-      },
-    },
-    select: {
-      role: true,
-    },
-  });
-
-  return member?.role ?? null;
+  return getTeamMembershipRole(userId, teamId);
 }
 
 /**
@@ -220,6 +212,11 @@ export async function canUserCreateLeagueGames(
   leagueId: string,
   leagueRole?: "LEAGUE_ADMIN" | "TEAM_ADMIN" | "MEMBER"
 ): Promise<boolean> {
+  const parsedLeagueId = parseId(leagueId);
+  if (!isUserIdString(userId) || !parsedLeagueId) {
+    return false;
+  }
+
   // If league role is provided and is LEAGUE_ADMIN or TEAM_ADMIN, they can create games
   if (leagueRole === "LEAGUE_ADMIN" || leagueRole === "TEAM_ADMIN") {
     return true;
@@ -231,7 +228,7 @@ export async function canUserCreateLeagueGames(
       userId,
       role: "ADMIN",
       team: {
-        leagueId,
+        leagueId: parsedLeagueId,
         isActive: true,
       },
     },
@@ -247,17 +244,22 @@ export async function getUserLeagueRole(
   userId: string,
   leagueId: string
 ): Promise<"LEAGUE_ADMIN" | "TEAM_ADMIN" | "MEMBER" | null> {
+  const parsedLeagueId = parseId(leagueId);
+  if (!isUserIdString(userId) || !parsedLeagueId) {
+    return null;
+  }
+
   try {
-    const leagueUser = await prisma.leagueUser.findFirst({
-      where: {
-        userId,
-        leagueId,
-        league: { isActive: true },
-      },
-      select: { role: true },
+    const leagueUser = await prisma.leagueUser.findUnique({
+      where: { userId_leagueId: { userId, leagueId: parsedLeagueId } },
+      select: { role: true, league: { select: { isActive: true } } },
     });
 
-    return leagueUser?.role || null;
+    if (!leagueUser?.league?.isActive) {
+      return null;
+    }
+
+    return leagueUser.role || null;
   } catch (error) {
     console.error("Error getting user league role:", error);
     return null;
@@ -375,21 +377,38 @@ export async function requireSystemAdmin() {
 /**
  * Return the highest active venue staff role a user has for an organization or specific venue.
  * Organization-wide staff rows have a null venueId and apply to every venue in the organization.
+ * When a venue is given it must belong to the organization; otherwise no role applies.
  */
 export async function getUserVenueStaffRole(
   userId: string,
   organizationId: string,
   venueId?: string
 ): Promise<VenueStaffRole | null> {
+  const parsedOrganizationId = parseId(organizationId);
+  const parsedVenueId = parseOptionalId(venueId);
+  if (!isUserIdString(userId) || !parsedOrganizationId || parsedVenueId === null) {
+    return null;
+  }
+
+  if (parsedVenueId) {
+    const venue = await prisma.venue.findUnique({
+      where: { id: parsedVenueId },
+      select: { organizationId: true },
+    });
+    if (!venue || venue.organizationId !== parsedOrganizationId) {
+      return null;
+    }
+  }
+
   const memberships = await prisma.venueStaff.findMany({
     where: {
       userId,
-      organizationId,
+      organizationId: parsedOrganizationId,
       status: "ACTIVE",
       organization: {
         status: { in: ["DRAFT", "ACTIVE"] },
       },
-      OR: venueId ? [{ venueId: null }, { venueId }] : undefined,
+      OR: parsedVenueId ? [{ venueId: null }, { venueId: parsedVenueId }] : undefined,
     },
     select: {
       role: true,
@@ -511,6 +530,10 @@ export async function requireSignupEventHostAdmin(host: SignupEventHost): Promis
  * or holder of a per-event EventManager grant.
  */
 export async function isEventManager(userId: string, eventId: string): Promise<boolean> {
+  if (!isUserIdString(userId) || !parseId(eventId)) {
+    return false;
+  }
+
   const event = await prisma.signupEvent.findUnique({
     where: { id: eventId },
     select: { hostOrganizationId: true, hostLeagueId: true, hostTeamId: true },
