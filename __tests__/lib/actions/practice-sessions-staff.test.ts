@@ -36,14 +36,10 @@ vi.mock("@/lib/services/venue-reservations", () => ({
     VenueReservationLifecycleError: class VenueReservationLifecycleError extends Error {},
 }));
 
+import { Prisma } from "@prisma/client";
 import { createPracticeSession, updatePracticeSession } from "@/lib/actions/practice-sessions";
-import {
-    ROW_STAFF_DUPLICATE_MESSAGE,
-    ROW_STAFF_UNKNOWN_MESSAGE,
-    STAFF_ADMIN_MESSAGE,
-    STAFF_NAME_TAKEN_MESSAGE,
-    STAFF_OFFICIAL_MESSAGE,
-} from "@/lib/utils/session-staff";
+import { STAFF_NAME_INDEX } from "@/lib/services/practice-session-staff";
+import { ROW_STAFF_DUPLICATE_MESSAGE, ROW_STAFF_UNKNOWN_MESSAGE, STAFF_NAME_TAKEN_MESSAGE } from "@/lib/utils/session-staff";
 
 const TEAM = "cteamxxxxxxxxxxxxxxxxxxxx";
 const USER = "cuserxxxxxxxxxxxxxxxxxxxx";
@@ -68,6 +64,20 @@ type SaveInput = Parameters<typeof createPracticeSession>[0];
 function save(extra: Record<string, unknown> = {}): SaveInput {
     return { title: "Tuesday", date: new Date("2026-10-06T22:00:00.000Z"), duration: 60, teamId: TEAM, transitionMinutes: 0, plays: rows(), ...extra } as SaveInput;
 }
+
+/** A P2002 as Prisma 7 reports it under a driver adapter: the cause in meta.driverAdapterError, no meta.target. */
+function uniqueViolation(constraint: { index?: string; fields?: string[] } | undefined, table = "practice_session_staff") {
+    return new Prisma.PrismaClientKnownRequestError("Unique constraint failed", {
+        code: "P2002",
+        clientVersion: "7.10.0",
+        meta: { modelName: "PracticeSessionStaff", table, driverAdapterError: { cause: { kind: "UniqueConstraintViolation", constraint, table } } },
+    });
+}
+
+const CREATE_FAILED = "Failed to create practice session. Please try again.";
+const UPDATE_FAILED = "Failed to update practice session. Please try again.";
+const STALE_OFFICIAL = "Coach Lee is no longer on the team. Remove them from Staff, or reload.";
+const STALE_ADMIN = "Pat is no longer a team admin. Remove them from Staff, or reload.";
 
 /** The rows as written, read back by sequence (writeRowStaff). */
 const WRITTEN = [{ id: "crow0", sequence: 0 }, { id: "crow1", sequence: 1 }];
@@ -124,6 +134,15 @@ describe("createPracticeSession with staff (spec R3)", () => {
         ]);
     });
 
+    it("refuses a link the team doesn't allow on create too, naming the person, before writing staff", async () => {
+        expect(await createPracticeSession(save({ staff: [{ key: "k", name: "Coach Lee", teamOfficialId: OFFICIAL }] }))).toEqual({
+            success: false,
+            error: STALE_OFFICIAL,
+        });
+        expect(await createPracticeSession(save({ staff: [{ key: "k", name: "Pat", userId: ADMIN }] }))).toEqual({ success: false, error: STALE_ADMIN });
+        expect(models.practiceSessionStaff.createMany).not.toHaveBeenCalled();
+    });
+
     it("stores no staff when the create sends none", async () => {
         const result = await createPracticeSession(save());
         expect(result.success && result.data.staff).toEqual([]);
@@ -142,7 +161,7 @@ describe("updatePracticeSession: checks after authentication and authorization (
 
     it("refuses an official who isn't an active or invited official of this team, before rewriting anything", async () => {
         const result = await updatePracticeSession({ id: SESSION, ...save({ staff: [{ key: OFFICIAL, name: "Coach Lee", teamOfficialId: OFFICIAL }] }) });
-        expect(result).toEqual({ success: false, error: STAFF_OFFICIAL_MESSAGE });
+        expect(result).toEqual({ success: false, error: STALE_OFFICIAL });
         expect(models.teamOfficial.findMany).toHaveBeenCalledWith({
             where: { id: { in: [OFFICIAL] }, teamId: TEAM, status: { in: ["ACTIVE", "INVITED"] } },
             select: { id: true },
@@ -152,7 +171,7 @@ describe("updatePracticeSession: checks after authentication and authorization (
 
     it("refuses a user who isn't an admin of this team", async () => {
         const result = await updatePracticeSession({ id: SESSION, ...save({ staff: [{ key: "k", name: "Pat", userId: ADMIN }] }) });
-        expect(result).toEqual({ success: false, error: STAFF_ADMIN_MESSAGE });
+        expect(result).toEqual({ success: false, error: STALE_ADMIN });
         expect(models.teamMember.findMany).toHaveBeenCalledWith({
             where: { userId: { in: [ADMIN] }, teamId: TEAM, role: "ADMIN" },
             select: { userId: true },
@@ -182,10 +201,45 @@ describe("updatePracticeSession: checks after authentication and authorization (
         expect(models.practiceSessionPlay.deleteMany).not.toHaveBeenCalled();
     });
 
-    it("shows a name clash the database catches (the lower(name) index) as the name message", async () => {
-        models.practiceSessionStaff.createMany.mockRejectedValue(Object.assign(new Error("Unique constraint failed"), { code: "P2002" }));
-        const result = await updatePracticeSession({ id: SESSION, ...save({ staff: [{ key: "a", name: "Straße" }] }) });
-        expect(result).toEqual({ success: false, error: STAFF_NAME_TAKEN_MESSAGE });
+    it("names the person whose link the team no longer allows, of several, and says what to do", async () => {
+        models.teamOfficial.findMany.mockResolvedValue([{ id: OFFICIAL }]);
+        const other = "cotherofficialxxxxxxxxxxx";
+        const result = await updatePracticeSession({ id: SESSION, ...save({
+            staff: [{ key: "k-1", name: "Alex", teamOfficialId: OFFICIAL }, { key: "k-2", name: "Coach Lee", teamOfficialId: other }],
+        }) });
+        expect(result).toEqual({ success: false, error: STALE_OFFICIAL });
+    });
+
+    it("shows a name clash the database catches on the lower(name) index as the name message (pg and Neon shapes)", async () => {
+        for (const constraint of [{ index: STAFF_NAME_INDEX }, { fields: ['"sessionId"', "lower(name"] }]) {
+            models.practiceSessionStaff.createMany.mockRejectedValueOnce(uniqueViolation(constraint));
+            const result = await updatePracticeSession({ id: SESSION, ...save({ staff: [{ key: "a", name: "Straße" }] }) });
+            expect(result).toEqual({ success: false, error: STAFF_NAME_TAKEN_MESSAGE });
+        }
+    });
+
+    it("keeps any other unique violation a generic failure: another staff index, no cause, or the rows' insert", async () => {
+        const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+        const others = [
+            uniqueViolation({ index: "practice_session_staff_sessionId_position_key" }),
+            uniqueViolation({ fields: ['"sessionId"', '"position"'] }),
+            uniqueViolation(undefined),
+            Object.assign(new Error("Unique constraint failed"), { code: "P2002" }),
+        ];
+        for (const error of others) {
+            models.practiceSessionStaff.createMany.mockRejectedValueOnce(error);
+            const result = await updatePracticeSession({ id: SESSION, ...save({ staff: [{ key: "a", name: "Sam" }] }) });
+            expect(result).toEqual({ success: false, error: UPDATE_FAILED });
+        }
+        // The rows' own unique index: create writes them with practiceSessionPlay.createMany, update nested in its update.
+        const rowsClash = () => uniqueViolation({ index: "practice_session_plays_sessionId_sequence_key" }, "practice_session_plays");
+        models.practiceSessionPlay.createMany.mockRejectedValueOnce(rowsClash());
+        const created = await createPracticeSession(save({ staff: [{ key: "a", name: "Sam" }] }));
+        expect(created).toEqual({ success: false, error: CREATE_FAILED });
+        models.practiceSession.update.mockRejectedValueOnce(rowsClash());
+        const updated = await updatePracticeSession({ id: SESSION, ...save({ staff: [{ key: "a", name: "Sam" }] }) });
+        expect(updated).toEqual({ success: false, error: UPDATE_FAILED });
+        consoleError.mockRestore();
     });
 
     it("refuses before writing a pair JavaScript lowercases apart but PostgreSQL's lower() treats as one", async () => {

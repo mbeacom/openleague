@@ -24,7 +24,9 @@ vi.mock("@/lib/auth/session", () => mockAuth);
 vi.mock("@/lib/db/prisma", () => ({ prisma: mockPrisma }));
 vi.mock("next/cache", () => mockCache);
 
+import { Prisma } from "@prisma/client";
 import { importPracticePlan } from "@/lib/actions/practice-plan-import";
+import { STAFF_NAME_TAKEN_MESSAGE } from "@/lib/utils/session-staff";
 import { INVALID_PLAN_MESSAGE, NOT_A_PLAN_MESSAGE, serializePlan, type PlanSessionInput } from "@/lib/plan-document";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import type { PlayData } from "@/types/practice-planner";
@@ -234,6 +236,18 @@ describe("importPracticePlan", () => {
             { playRowId: "crow2", staffId: "cowned0xxxxxxxxxxxxxxxxxx", position: 0 },
             { playRowId: "crow2", staffId: "cowned1xxxxxxxxxxxxxxxxxx", position: 1 },
         ]);
+    });
+
+    it("shows a name clash the lower(name) index catches as the name message, not the generic import error", async () => {
+        // A Neon-shaped P2002: the key's columns, cut at the expression's first ")".
+        const clash = new Prisma.PrismaClientKnownRequestError("Unique constraint failed", {
+            code: "P2002",
+            clientVersion: "7.10.0",
+            meta: { table: "practice_session_staff", driverAdapterError: { cause: { kind: "UniqueConstraintViolation", constraint: { fields: ['"sessionId"', "lower(name"] } } } },
+        });
+        models.practiceSessionStaff.createMany.mockRejectedValue(clash);
+        expect(await call({ document: doc({ staff: ["Coach Lee", "Sam"] }) })).toEqual({ success: false, error: STAFF_NAME_TAKEN_MESSAGE });
+        expect(models.practiceSessionPlay.createMany).not.toHaveBeenCalled();
     });
 
     it("writes no staff for a plan without any", async () => {

@@ -23,6 +23,10 @@ export const STAFF_NAME_TAKEN_MESSAGE = "Two staff members can't share a name";
 export const STAFF_ONE_LINK_MESSAGE = "A staff member can be a team official or a team admin, not both";
 export const STAFF_OFFICIAL_MESSAGE = "That team official isn't active on this team";
 export const STAFF_ADMIN_MESSAGE = "That person isn't an admin of this team";
+/** Hosted: a linked official the team no longer has (removed while the editor was open). */
+export const staffOfficialGoneMessage = (name: string) => `${name} is no longer on the team. Remove them from Staff, or reload.`;
+/** Hosted: a linked admin the team no longer has as an admin (demoted while the editor was open). */
+export const staffAdminGoneMessage = (name: string) => `${name} is no longer a team admin. Remove them from Staff, or reload.`;
 export const ROW_STAFF_LIMIT_MESSAGE = `A row can be run by at most ${MAX_ROW_STAFF} staff`;
 export const ROW_STAFF_DUPLICATE_MESSAGE = "A row lists the same staff member twice";
 export const ROW_STAFF_UNKNOWN_MESSAGE = "A row is run by someone who isn't on the practice's staff";

@@ -6,7 +6,7 @@
 import { Prisma } from "@prisma/client";
 import { newPlayId } from "@/lib/services/play-ids";
 import { isBlockKind, toRowKind } from "@/lib/utils/session-rows";
-import { STAFF_ADMIN_MESSAGE, STAFF_NAME_TAKEN_MESSAGE, STAFF_OFFICIAL_MESSAGE, type StoredBlock, type StoredRowStaff } from "@/lib/utils/session-staff";
+import { STAFF_NAME_TAKEN_MESSAGE, staffAdminGoneMessage, staffOfficialGoneMessage, type StoredBlock, type StoredRowStaff } from "@/lib/utils/session-staff";
 
 /** The database refused a name (the unique index on lower("name")): shown as the name message. */
 export class StaffNameConflictError extends Error {
@@ -16,8 +16,30 @@ export class StaffNameConflictError extends Error {
     }
 }
 
-function isUniqueViolation(error: unknown): boolean {
-    return typeof error === "object" && error !== null && (error as { code?: unknown }).code === "P2002";
+/** The unique index on ("sessionId", lower("name")), added by hand in the migration (Prisma can't model it). */
+export const STAFF_NAME_INDEX = "practice_session_staff_sessionId_lower_name_key";
+
+type UniqueViolationMeta = {
+    target?: unknown;
+    driverAdapterError?: { cause?: { constraint?: { index?: string; fields?: string[] } } };
+};
+
+/**
+ * A unique violation on the staff name index, and on nothing else (the
+ * (sessionId, position) index or a primary key stays a generic failure).
+ * Under a driver adapter a P2002 carries no meta.target: the cause is in
+ * meta.driverAdapterError.cause.constraint, where the pg adapter names the
+ * index and the Neon adapter lists the key's columns as PostgreSQL's message
+ * prints them, cut at the expression's first ")" (`lower(name`). Without any
+ * of these the violation is not counted as a name clash.
+ */
+export function isStaffNameConflict(error: unknown): boolean {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") return false;
+    const meta = (error.meta ?? {}) as UniqueViolationMeta;
+    const constraint = meta.driverAdapterError?.cause?.constraint;
+    if (constraint?.index !== undefined) return constraint.index === STAFF_NAME_INDEX;
+    const fields = constraint?.fields ?? (Array.isArray(meta.target) ? meta.target : typeof meta.target === "string" ? [meta.target] : []);
+    return fields.some((field) => typeof field === "string" && (field === STAFF_NAME_INDEX || /^lower\(/i.test(field.trim())));
 }
 
 type StaffLink = { teamOfficialId?: string | null; userId?: string | null };
@@ -25,9 +47,16 @@ type StaffLink = { teamOfficialId?: string | null; userId?: string | null };
 /**
  * A link the practice's team doesn't allow (spec R3, R4): an official must be
  * ACTIVE or INVITED on the team, a user an ADMIN member of it. Checked after
- * authorization, inside the save's transaction.
+ * authorization, inside the save's transaction. The message names the first
+ * person refused and says what to do: an editor left open while an official
+ * was removed or an admin demoted keeps sending the link until the coach
+ * removes them or reloads (the edit loader unlinks them).
  */
-export async function staffLinkError(tx: Prisma.TransactionClient, teamId: string, staff: readonly StaffLink[]): Promise<string | null> {
+export async function staffLinkError(
+    tx: Prisma.TransactionClient,
+    teamId: string,
+    staff: ReadonlyArray<{ name: string } & StaffLink>,
+): Promise<string | null> {
     const officialIds = [...new Set(staff.flatMap((member) => (member.teamOfficialId ? [member.teamOfficialId] : [])))];
     const userIds = [...new Set(staff.flatMap((member) => (member.userId ? [member.userId] : [])))];
     if (officialIds.length > 0) {
@@ -35,14 +64,18 @@ export async function staffLinkError(tx: Prisma.TransactionClient, teamId: strin
             where: { id: { in: officialIds }, teamId, status: { in: ["ACTIVE", "INVITED"] } },
             select: { id: true },
         });
-        if (officials.length !== officialIds.length) return STAFF_OFFICIAL_MESSAGE;
+        const live = new Set(officials.map((official) => official.id));
+        const gone = staff.find((member) => member.teamOfficialId && !live.has(member.teamOfficialId));
+        if (gone) return staffOfficialGoneMessage(gone.name);
     }
     if (userIds.length > 0) {
         const admins = await tx.teamMember.findMany({
             where: { userId: { in: userIds }, teamId, role: "ADMIN" },
             select: { userId: true },
         });
-        if (new Set(admins.map((admin) => admin.userId)).size !== userIds.length) return STAFF_ADMIN_MESSAGE;
+        const live = new Set(admins.map((admin) => admin.userId));
+        const gone = staff.find((member) => member.userId && !live.has(member.userId));
+        if (gone) return staffAdminGoneMessage(gone.name);
     }
     return null;
 }
@@ -76,7 +109,9 @@ export async function replaceSessionStaff(
             })),
         });
     } catch (error) {
-        if (isUniqueViolation(error)) throw new StaffNameConflictError();
+        // The list was just deleted, ids are stored or new and positions run 0..n-1, so the name
+        // index is the one a sound save can hit; isStaffNameConflict still checks which index fired.
+        if (isStaffNameConflict(error)) throw new StaffNameConflictError();
         throw error;
     }
     return ids;

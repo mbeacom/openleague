@@ -1,7 +1,8 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { STAFF_NAME_MAX } from "@/types/practice-planner";
+import { STAFF_NAME_INDEX } from "@/lib/services/practice-session-staff";
 
 const sql = readFileSync(join(process.cwd(), "prisma/migrations/20261005120000_practice_session_staff/migration.sql"), "utf8");
 const schema = readFileSync(join(process.cwd(), "prisma/schema.prisma"), "utf8");
@@ -18,6 +19,16 @@ describe("practice staff migration", () => {
     it("keeps positions and names unique per practice, names ignoring case through a hand-written expression index", () => {
         expect(sql).toContain(`CREATE UNIQUE INDEX "practice_session_staff_sessionId_position_key" ON "practice_session_staff"("sessionId", "position");`);
         expect(sql).toContain(`CREATE UNIQUE INDEX "practice_session_staff_sessionId_lower_name_key" ON "practice_session_staff"("sessionId", lower("name"));`);
+    });
+
+    it("keeps the hand-written name index: the schema warns, the code names it, and no later migration drops it", () => {
+        expect(STAFF_NAME_INDEX).toBe("practice_session_staff_sessionId_lower_name_key");
+        expect(schema).toContain(`a generated migration that drops\n// "${STAFF_NAME_INDEX}" must be edited to keep it.`);
+        const dir = join(process.cwd(), "prisma/migrations");
+        const later = readdirSync(dir, { withFileTypes: true })
+            .filter((entry) => entry.isDirectory() && entry.name > "20261005120000_practice_session_staff")
+            .map((entry) => readFileSync(join(dir, entry.name, "migration.sql"), "utf8"));
+        for (const migration of later) expect(migration).not.toContain(`DROP INDEX "${STAFF_NAME_INDEX}"`);
     });
 
     it("creates the row assignments, one per row and person, ordered", () => {

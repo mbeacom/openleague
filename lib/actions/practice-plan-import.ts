@@ -14,8 +14,8 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
 import { isTeamAdmin, requireUserId } from "@/lib/auth/session";
 import { newPlayId } from "@/lib/services/play-ids";
-import { writeRowStaff } from "@/lib/services/practice-session-staff";
-import { staffNameKey } from "@/lib/utils/session-staff";
+import { StaffNameConflictError, isStaffNameConflict, writeRowStaff } from "@/lib/services/practice-session-staff";
+import { STAFF_NAME_TAKEN_MESSAGE, staffNameKey } from "@/lib/utils/session-staff";
 import { sanitizePlayDataForWrite } from "@/lib/utils/play-data";
 import { parsePlan, type PlanDrill } from "@/lib/plan-document";
 import type { PlayData } from "@/types/practice-planner";
@@ -96,16 +96,22 @@ export async function importPracticePlan(
             // Staff (spec R5, R6): typed names from the file, never linked; ids made here so rows can name them.
             const staffIds = planSession.staff.map(() => newPlayId());
             if (planSession.staff.length > 0) {
-                await tx.practiceSessionStaff.createMany({
-                    data: planSession.staff.map((name, position) => ({
-                        id: staffIds[position],
-                        sessionId: session.id,
-                        name,
-                        position,
-                        teamOfficialId: null,
-                        userId: null,
-                    })),
-                });
+                try {
+                    await tx.practiceSessionStaff.createMany({
+                        data: planSession.staff.map((name, position) => ({
+                            id: staffIds[position],
+                            sessionId: session.id,
+                            name,
+                            position,
+                            teamOfficialId: null,
+                            userId: null,
+                        })),
+                    });
+                } catch (error) {
+                    // Two names the file keeps apart but the lower("name") index treats as one.
+                    if (isStaffNameConflict(error)) throw new StaffNameConflictError();
+                    throw error;
+                }
             }
             const staffByName = new Map(planSession.staff.map((name, index) => [staffNameKey(name), staffIds[index]]));
             if (planSession.drills.length === 0) return session.id;
@@ -191,6 +197,7 @@ export async function importPracticePlan(
 
         return { success: true, data: { sessionId } };
     } catch (error) {
+        if (error instanceof StaffNameConflictError) return { success: false, error: STAFF_NAME_TAKEN_MESSAGE };
         console.error("Error importing practice plan:", error);
         return { success: false, error: IMPORT_FAILED_MESSAGE };
     }

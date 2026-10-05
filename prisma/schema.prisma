@@ -1700,7 +1700,9 @@ model PracticeSessionPlay {
 // 20261005120000_practice_session_staff also adds what Prisma can't model:
 // CHECK (char_length("name") BETWEEN 1 AND 60), CHECK ("position" >= 0),
 // CHECK (num_nonnulls("teamOfficialId", "userId") <= 1), and the unique index
-// on ("sessionId", lower("name")). Keep them by hand if regenerated.
+// on ("sessionId", lower("name")). Keep them by hand if regenerated: Prisma
+// doesn't see the index, so a generated migration that drops
+// "practice_session_staff_sessionId_lower_name_key" must be edited to keep it.
 model PracticeSessionStaff {
   id       String @id @default(cuid())
   /// 1-60 characters, cleaned; unique per practice ignoring case.
