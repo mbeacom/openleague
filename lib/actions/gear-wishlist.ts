@@ -18,7 +18,7 @@ import {
 import { normalizeGearKey } from "@/lib/utils/gear";
 import { saveGearWishlistSchema } from "@/lib/utils/validation";
 import type { ActionResult } from "@/lib/actions/gear-inventory";
-import { parseId } from "@/lib/utils/ids";
+import { parseId, parseShareToken } from "@/lib/utils/ids";
 
 const gearId = z.string().cuid("Invalid gear identifier");
 const wishlistCommandSchema = z.object({
@@ -476,7 +476,8 @@ export async function getGearWishlistForAdmin(leagueId: string) {
 
 /** The share-token projection intentionally omits league identity and all donor records. */
 export async function getPublicGearWishlist(wishlistToken: string) {
-  const token = z.string().trim().min(16).max(255).parse(wishlistToken);
+  const token = parseShareToken(typeof wishlistToken === "string" ? wishlistToken.trim() : wishlistToken);
+  if (!token) return null;
   const wishlist = await prisma.gearWishlist.findFirst({
     where: { shareToken: token, status: "PUBLISHED", league: { isActive: true } },
     select: {

@@ -8,7 +8,7 @@ import {
   notificationService,
   type ResolvedNotificationPreferences,
 } from "@/lib/services/notification";
-import { parseId } from "@/lib/utils/ids";
+import { parseHexToken, parseId } from "@/lib/utils/ids";
 
 export type ActionResult<T> =
   | { success: true; data: T }
@@ -190,8 +190,15 @@ export async function handleUnsubscribe(
 ): Promise<ActionResult<{ unsubscribed: boolean; leagueName?: string }>> {
   try {
     const validated = unsubscribeSchema.parse(input);
+    const token = parseHexToken(validated.token);
+    if (!token) {
+      return {
+        success: false,
+        error: "Invalid or expired unsubscribe token",
+      };
+    }
 
-    const result = await notificationService.handleUnsubscribe(validated.token);
+    const result = await notificationService.handleUnsubscribe(token);
 
     if (!result.success) {
       return {

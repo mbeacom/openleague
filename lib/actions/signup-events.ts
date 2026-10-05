@@ -1300,9 +1300,9 @@ export async function listPublicSignupEvents(filters?: {
     where: {
       visibility: "PUBLIC",
       status: { in: ["PUBLISHED", "CANCELED"] },
-      venueId,
-      hostLeagueId,
-      hostOrganizationId,
+      ...(venueId ? { venueId } : {}),
+      ...(hostLeagueId ? { hostLeagueId } : {}),
+      ...(hostOrganizationId ? { hostOrganizationId } : {}),
       startAt: {
         gte: from ?? new Date(Date.now() - 24 * 60 * 60 * 1000),
         lte: to,
