@@ -9,7 +9,8 @@ import type { PlanDocument } from "@/lib/plan-document";
 import type { SavedDrillId } from "@/lib/utils/session-drill-ids";
 import type { SessionRowInput } from "@/lib/utils/session-rows";
 import type { SessionStaffInput } from "@/lib/utils/session-staff";
-import type { PlayData, PlayFocus, PlayGoalies, PracticeSessionData, PracticeSessionView } from "@/types/practice-planner";
+import type { TeamProfileInput } from "@/lib/utils/team-mark";
+import type { PlayData, PlayFocus, PlayGoalies, PracticeSessionData, PracticeSessionView, TeamProfile } from "@/types/practice-planner";
 
 export interface LocalSessionSummary {
     id: string;
@@ -78,4 +79,12 @@ export interface LocalPlannerStore extends PlannerStore {
     updatePlay: (input: LocalPlayUpdate) => Promise<ActionResult<{ id: string }>>;
     importPlan: (plan: PlanDocument, options: PlanImportOptions) => Promise<ActionResult<{ sessionId: string }>>;
     seedStarterDrills: () => Promise<void>;
+    /** "Your team" (practice logo spec R4). */
+    getTeamProfile: () => Promise<ActionResult<TeamProfile | null>>;
+    saveTeamProfile: (input: TeamProfileInput) => Promise<ActionResult<TeamProfile>>;
+    clearTeamProfile: () => Promise<ActionResult<null>>;
+    /** Called after each save or clear in this tab; returns the unsubscribe. */
+    subscribeTeamProfile: (listener: () => void) => () => void;
+    /** Starts at 0 and goes up by one per save or clear: a useSyncExternalStore snapshot. */
+    teamProfileVersion: () => number;
 }

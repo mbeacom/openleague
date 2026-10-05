@@ -9,6 +9,7 @@ import { MAX_BLOCK_LABEL_LENGTH, MAX_ROW_STAFF, VALIDATION_CONSTRAINTS } from "@
 import { parsePlan, serializePlan, type PlanBlockInput, type PlanDrillInput } from "@/lib/plan-document";
 import { createEmptyPlayData, parseStoredPlayData } from "@/lib/utils/play-data";
 import { drillTags, toPlayFocus, toPlayGoalies } from "@/lib/utils/drill-tags";
+import { readTeamProfile, toTeamMark } from "@/lib/utils/team-mark";
 import {
     BLOCK_ROW_FIELDS_ERROR,
     BLOCK_STATION_ERROR,
@@ -57,7 +58,8 @@ import {
     staffNames,
     type SessionStaffInput,
 } from "@/lib/utils/session-staff";
-import { LOCAL_AUTHOR_NAME, LOCAL_TEAM_ID, LOCAL_TEAM_NAME } from "../config";
+import { LOCAL_AUTHOR_NAME, LOCAL_TEAM_ID } from "../config";
+import { META_TEAM_PROFILE } from "./records";
 import type { RepoTx, StoredPlay, StoredSession, StoredSessionRow, StoredStaffMember } from "./records";
 import { StoreRefusal, attempt, checkedGoalieCount, drillText, ok, thumbnailOrNull, writablePlayData, write, type StoreContext } from "./shared";
 import type { LocalPlannerStore, LocalSessionDrill, LocalSessionSave } from "./types";
@@ -355,6 +357,8 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                 const found = await readSession(ctx, id);
                 if (!found) return { success: false, error: SESSION_NOT_ON_DEVICE_MESSAGE };
                 const { session, plays } = found;
+                // The device's "Your team" (spec R4); none: no team name and no mark, as before.
+                const profile = readTeamProfile(await ctx.repo.read((tx) => tx.getMeta(META_TEAM_PROFILE)));
                 const view: PracticeSessionView = {
                     id: session.id,
                     title: session.title,
@@ -363,7 +367,8 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                     isShared: false,
                     createdByName: LOCAL_AUTHOR_NAME,
                     teamId: LOCAL_TEAM_ID,
-                    teamName: LOCAL_TEAM_NAME,
+                    teamName: profile?.name ?? "",
+                    teamMark: profile ? toTeamMark(profile, LOCAL_TEAM_ID) : null,
                     venueId: null,
                     venueName: null,
                     venueTimezone: null,
