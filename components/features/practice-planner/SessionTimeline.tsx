@@ -11,7 +11,7 @@
  */
 import { Fragment } from "react";
 import { Box, Chip, Link, Stack, Table, TableBody, TableCell, TableHead, TableRow, Typography } from "@mui/material";
-import type { BlockKind } from "@/types/practice-planner";
+import type { BlockKind, SessionStaffMember } from "@/types/practice-planner";
 import {
     buildSchedule,
     rotationBlockLabel,
@@ -23,6 +23,7 @@ import {
     type TimelinePlay,
 } from "@/lib/utils/session-timeline";
 import { blockTitle, drillRows, isBlockRow, rotationColumnName } from "@/lib/utils/session-rows";
+import { runBySuffix, staffNames } from "@/lib/utils/session-staff";
 import { useClockText } from "@/lib/hooks/useClockText";
 import { RotationGridTable } from "./RotationGridTable";
 
@@ -32,6 +33,8 @@ export interface SessionTimelineDrill extends TimelinePlay {
     id: string;
     kind?: "drill";
     play: { name: string };
+    /** Staff ids running this row (practice staff); names come from the `staff` prop. */
+    staff?: readonly string[];
 }
 
 /** A block row: its label and note, never a link. */
@@ -40,6 +43,8 @@ export interface SessionTimelineBlock extends TimelinePlay {
     kind: BlockKind;
     label: string | null;
     instructions: string | null;
+    /** Staff ids running this row (practice staff); names come from the `staff` prop. */
+    staff?: readonly string[];
 }
 
 export type SessionTimelinePlay = SessionTimelineDrill | SessionTimelineBlock;
@@ -56,6 +61,8 @@ export interface SessionTimelineProps<T extends SessionTimelinePlay> {
     durationMinutes: number;
     /** Minutes between blocks (0–5), folded into each later block's start */
     transitionMinutes?: number;
+    /** The practice's staff: each row shows " · run by …" from it, by key (spec R9, R11). */
+    staff?: readonly SessionStaffMember[];
     /** Session-play id of the drill on screen; its block is highlighted */
     activePlayId?: string;
     /** Screen only: called with a session-play id when a drill name is clicked */
@@ -123,6 +130,7 @@ export function SessionTimeline<T extends SessionTimelinePlay>({
     showZone,
     durationMinutes,
     transitionMinutes = 0,
+    staff,
     activePlayId,
     onSelectPlay,
     variant = "screen",
@@ -132,6 +140,16 @@ export function SessionTimeline<T extends SessionTimelinePlay>({
     const planned = sessionWallMinutes(plays, transitionMinutes);
     const overTime = planned > durationMinutes;
     const footer = plannedLabel(planned, durationMinutes);
+    // " · run by Coach Lee, Sam" after a row or a station (spec R9).
+    const runBy = (row: SessionTimelinePlay) => runBySuffix(staffNames(row.staff, staff));
+    const runByCaption = (row: SessionTimelinePlay) => {
+        const text = runBy(row);
+        return text ? (
+            <Typography component="span" variant="caption" color="text.secondary" sx={{ overflowWrap: "anywhere" }}>
+                {text}
+            </Typography>
+        ) : null;
+    };
 
     if (variant === "print") {
         return (
@@ -159,18 +177,18 @@ export function SessionTimeline<T extends SessionTimelinePlay>({
                                         <td>{group.wallMinutes}</td>
                                         <td>
                                             {isBlockRow(head) ? (
-                                                blockLine(head)
+                                                `${blockLine(head)}${runBy(head)}`
                                             ) : drills.length > 1 ? (
                                                 <>
                                                     <strong>{grid ? rotationBlockLabel(grid.minutes, group.wallMinutes) : stationsLabel(drills.length)}</strong>
                                                     <ul>
                                                         {drills.map((sp) => (
-                                                            <li key={sp.id}>{`${sp.play.name}${grid ? staysSuffix(sp.stays) : ` · ${sp.duration} min`}`}</li>
+                                                            <li key={sp.id}>{`${sp.play.name}${grid ? staysSuffix(sp.stays) : ` · ${sp.duration} min`}${runBy(sp)}`}</li>
                                                         ))}
                                                     </ul>
                                                 </>
                                             ) : (
-                                                drills[0].play.name
+                                                `${drills[0].play.name}${runBy(drills[0])}`
                                             )}
                                         </td>
                                     </tr>
@@ -222,7 +240,10 @@ export function SessionTimeline<T extends SessionTimelinePlay>({
                                     <TableCell align="right">{group.wallMinutes}</TableCell>
                                     <TableCell>
                                         {isBlockRow(head) ? (
-                                            <BlockText row={head} />
+                                            <>
+                                                <BlockText row={head} />
+                                                {runByCaption(head)}
+                                            </>
                                         ) : drills.length > 1 ? (
                                             <>
                                                 {/* A div, not a p: the chip is a div (invalid inside a p). */}
@@ -257,14 +278,17 @@ export function SessionTimeline<T extends SessionTimelinePlay>({
                                                         <li key={sp.id}>
                                                             <DrillName id={sp.id} name={sp.play.name} onSelect={onSelectPlay} />
                                                             <Typography component="span" variant="caption" color="text.secondary">
-                                                                {grid ? staysSuffix(sp.stays) : ` · ${sp.duration} min`}
+                                                                {`${grid ? staysSuffix(sp.stays) : ` · ${sp.duration} min`}${runBy(sp)}`}
                                                             </Typography>
                                                         </li>
                                                     ))}
                                                 </Box>
                                             </>
                                         ) : (
-                                            <DrillName id={head.id} name={drills[0].play.name} onSelect={onSelectPlay} />
+                                            <>
+                                                <DrillName id={head.id} name={drills[0].play.name} onSelect={onSelectPlay} />
+                                                {runByCaption(drills[0])}
+                                            </>
                                         )}
                                     </TableCell>
                                 </TableRow>

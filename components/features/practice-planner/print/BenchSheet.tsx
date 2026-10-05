@@ -15,6 +15,7 @@ import type { PracticeSessionView } from "@/types/practice-planner";
 import { betweenBlocksLabel, buildSchedule } from "@/lib/utils/session-timeline";
 import { sessionForDisplay } from "@/lib/utils/drill-tags";
 import { drillRows } from "@/lib/utils/session-rows";
+import { staffHeaderLabel } from "@/lib/utils/session-staff";
 import { combinedLegendData } from "@/lib/utils/canvas/station-map";
 import { sessionStart, sessionTimeZone } from "@/lib/utils/date";
 import { useClockText } from "@/lib/hooks/useClockText";
@@ -47,6 +48,7 @@ export function BenchSheet({ session: stored }: { session: BenchSheetSession }) 
     const clock = useClockText(timeZone, showZone);
     const place = [session.venueName, session.surfaceName, session.segmentName].filter(Boolean).join(" · ");
     const gap = session.transitionMinutes ?? 0;
+    const staffLine = staffHeaderLabel(session.staff);
     const legend = combinedLegendData(drillRows(session.plays).map((sp) => ({ name: sp.play.name, playData: sp.play.playData })));
     // One page per drill; a block (warm-up, break…) is a timeline row only. Start times come
     // from the stored rows, as the timeline's do; each page draws the display copy of its drill.
@@ -104,6 +106,7 @@ export function BenchSheet({ session: stored }: { session: BenchSheetSession }) 
                     {`${clock.longDate(start)} · ${clock.time(start, false)} – ${clock.time(end)}`}
                 </Typography>
                 {place && <Typography variant="body1">{place}</Typography>}
+                {staffLine && <Typography variant="body1">{staffLine}</Typography>}
                 {gap > 0 && <Typography variant="body1">{betweenBlocksLabel(gap)}</Typography>}
             </Box>
 
@@ -122,6 +125,7 @@ export function BenchSheet({ session: stored }: { session: BenchSheetSession }) 
                         showZone={showZone}
                         durationMinutes={session.duration}
                         transitionMinutes={gap}
+                        staff={session.staff}
                     />
                     <LegendList playData={legend} />
                     {drills.length > 0 && (

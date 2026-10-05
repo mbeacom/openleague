@@ -62,6 +62,7 @@ import {
 } from "@/lib/utils/session-timeline";
 import { sessionStart, sessionTimeZone } from "@/lib/utils/date";
 import { drillRows } from "@/lib/utils/session-rows";
+import { runByLabel, staffNames } from "@/lib/utils/session-staff";
 import { useClockText } from "@/lib/hooks/useClockText";
 import { usePlannerPlatform, usePlannerStore } from "@/lib/planner-store";
 
@@ -402,6 +403,7 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
             showZone={showZone}
             durationMinutes={session.duration}
             transitionMinutes={gap}
+            staff={session.staff}
             activePlayId={activePlay?.id}
             onSelectPlay={(id) => setActivePlayIndex(Math.max(0, drills.findIndex((sp) => sp.id === id)))}
           />
@@ -463,6 +465,7 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
                       index={index}
                       active={index === activePlayIndex}
                       onSelect={() => setActivePlayIndex(index)}
+                      runBy={runByLabel(staffNames(sp.staff, session.staff))}
                     />
                   );
                 });

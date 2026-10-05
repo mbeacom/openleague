@@ -105,6 +105,13 @@ describe("names and labels (spec R9, R11)", () => {
         expect([staffHeaderLabel([]), staffHeaderLabel(undefined)]).toEqual([null, null]);
     });
 
+    it("skips unnamed people in a row's names and in the header", () => {
+        const withBlank: SessionStaffMember[] = [...staff, { id: "s3", name: "" }, { id: "s4", name: " \t " }];
+        expect(staffNames(["s3", "s1", "s4"], withBlank)).toEqual(["Coach Lee"]);
+        expect(staffHeaderLabel(withBlank)).toBe("Staff: Coach Lee, Sam");
+        expect(staffHeaderLabel([{ name: "" }, { name: "  " }])).toBeNull();
+    });
+
     it("asks before removing someone who runs rows, with the right count", () => {
         expect(removeStaffPrompt("Sam", 2)).toBe("Remove Sam? They run 2 rows.");
         expect(removeStaffPrompt("Sam", 1)).toBe("Remove Sam? They run 1 row.");

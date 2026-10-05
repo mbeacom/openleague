@@ -96,13 +96,13 @@ export function sessionStaffError(
     return null;
 }
 
-/** A row's names from the session's list by key, in the row's order (spec R11). An unknown key is skipped. */
+/** A row's names from the session's list by key, in the row's order (spec R11). An unknown key or an unnamed person is skipped. */
 export function staffNames(
     keys: readonly string[] | undefined,
     staff: ReadonlyArray<{ id: string; name: string }> | undefined,
 ): string[] {
     if (!keys || keys.length === 0 || !staff || staff.length === 0) return [];
-    const byId = new Map(staff.map((member) => [member.id, member.name]));
+    const byId = new Map(staff.filter(isNamedStaff).map((member) => [member.id, member.name]));
     return keys.flatMap((key) => {
         const name = byId.get(key);
         return name ? [name] : [];
@@ -125,9 +125,10 @@ export function runByLabel(names: readonly string[]): string | null {
     return names.length > 0 ? `Run by ${names.join(", ")}` : null;
 }
 
-/** "Staff: Coach Lee, Sam, Alex" in the bench sheet's header and the import preview, or null. */
+/** "Staff: Coach Lee, Sam, Alex" in the bench sheet's header and the import preview, or null. Unnamed people are skipped. */
 export function staffHeaderLabel(staff: ReadonlyArray<{ name: string }> | undefined): string | null {
-    return staff && staff.length > 0 ? `Staff: ${staff.map((member) => member.name).join(", ")}` : null;
+    const named = (staff ?? []).filter(isNamedStaff);
+    return named.length > 0 ? `Staff: ${named.map((member) => member.name).join(", ")}` : null;
 }
 
 /** The editor's confirm: "Remove Sam? They run 2 rows." */
