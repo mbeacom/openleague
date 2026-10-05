@@ -12,7 +12,7 @@
 - Shared components reach the hosted action only through the planner seam: `PlannerStore.getPracticeLogoImage?` is optional and hosted-only, like `sharePracticeSession`. They never import `lib/actions`.
 - The static "This device" leave-out rule is removed. A static session's `teamName` is the profile's name, or `""` with no profile, and an empty name already prints nothing.
 
-**Tech Stack:** TypeScript (strict), Next.js 16 App Router, React 19, MUI v7, Prisma 7 (Neon/PostgreSQL), Zod v4, `sharp` 0.35 (server only), Vite (static planner), Vitest + Testing Library, fake-indexeddb, `docx`, Playwright (screenshots only, from the scratchpad), Bun.
+**Tech Stack:** TypeScript (strict), Next.js 16 App Router, React 19, MUI v7, Prisma 7 (Neon/PostgreSQL), Zod v4, `sharp` 0.35 (server only), Vite (static planner), Vitest + Testing Library, fake-indexeddb, `docx`, Playwright (screenshots only, from a local harness outside the repository), Bun.
 
 **Spec:** `docs/superpowers/specs/2026-10-05-practice-logo-design.md`. Its rulings R1–R6 are referenced below.
 
@@ -89,7 +89,7 @@
 
   A stored record is read leniently (`readTeamProfile`): a bad name means no profile; a bad logo or colour reads as `null`.
 - **Screenshots (UI tasks 4–6):**
-  - Build and serve the static planner, drive it with headless Playwright from the scratchpad harness, and write PNGs to `<scratchpad>/pwcheck/`. That folder has `node_modules/playwright`. Launch with `executablePath: process.env.CHROMIUM_PATH`.
+  - Build and serve the static planner, drive it with a local headless Playwright harness kept outside the repository, and write the PNGs there. Launch with `executablePath: process.env.CHROMIUM_PATH`.
   - Name files `logo-taskN-<view>-<desktop|mobile>-<light|dark>.png`.
   - Read every PNG before committing.
   - The hosted header and the hosted export logo can't be reached from the static build; they are covered by component tests.
@@ -2360,7 +2360,7 @@ Expected: exit 0, no new warnings in the touched files.
 
 Run `bun run planner:build`, then start the preview in the background (Bash `run_in_background: true`): `bun run planner:preview --port 4199 --strictPort`.
 
-Write `<scratchpad>/pwcheck/logo-task4.mjs`:
+Write `<harness>/logo-task4.mjs`:
 
 ```js
 import { chromium } from "playwright";
@@ -2408,7 +2408,7 @@ for (const scheme of ["light", "dark"]) {
 await browser.close();
 ```
 
-Run: `cd <scratchpad>/pwcheck && node logo-task4.mjs` (with `CHROMIUM_PATH` set to the local Chromium headless shell).
+Run: `cd <harness> && node logo-task4.mjs` (with `CHROMIUM_PATH` set to the local Chromium headless shell).
 Expected output: no `pageerror`; "dialog controls under 44px: []"; "button crest img: 1"; overflow 0.
 
 Read every `logo-task4-*.png`. Check all of these, then fix and re-run until they hold:
@@ -2719,7 +2719,7 @@ Expected: exit 0; about 750 lines (≤ 900).
 
 - [ ] **Step 6: Screenshots: session page and bench sheet**
 
-With the static planner built and served as in Task 4 Step 9, write `<scratchpad>/pwcheck/logo-task5.mjs`:
+With the static planner built and served as in Task 4 Step 9, write `<harness>/logo-task5.mjs`:
 
 ```js
 import { chromium } from "playwright";
@@ -2783,7 +2783,7 @@ for (const scheme of ["light", "dark"]) {
 await browser.close();
 ```
 
-Run: `cd <scratchpad>/pwcheck && node logo-task5.mjs` (with `CHROMIUM_PATH` set).
+Run: `cd <harness> && node logo-task5.mjs` (with `CHROMIUM_PATH` set).
 Expected output: no `pageerror`; "header images: 0" for the crest pass (the CSS Crest has no image) and 1 for the logo pass; overflow 0; "bench mark: data:image/png;base64," in both passes.
 
 Read every `logo-task5-*.png` and both PDFs' first pages. Check all of these, then fix and re-run until they hold:
@@ -3257,7 +3257,7 @@ Expected: exit 0.
 
 - [ ] **Step 9: Screenshots and both exports**
 
-With the static planner built and served as in Task 4 Step 9, write `<scratchpad>/pwcheck/logo-task6.mjs`:
+With the static planner built and served as in Task 4 Step 9, write `<harness>/logo-task6.mjs`:
 
 ```js
 import { chromium } from "playwright";
@@ -3328,7 +3328,7 @@ for (const scheme of ["light", "dark"]) {
 await browser.close();
 ```
 
-Run: `cd <scratchpad>/pwcheck && node logo-task6.mjs && for k in crest logo; do unzip -l logo-bench-$k.docx | grep -c media/; unzip -p logo-bench-$k.docx word/document.xml | grep -o 'descr="[^"]*logo"' | head -1; grep -c 'data:image/png' logo-plan-$k.olplan.json; done` (with `CHROMIUM_PATH` set).
+Run: `cd <harness> && node logo-task6.mjs && for k in crest logo; do unzip -l logo-bench-$k.docx | grep -c media/; unzip -p logo-bench-$k.docx word/document.xml | grep -o 'descr="[^"]*logo"' | head -1; grep -c 'data:image/png' logo-plan-$k.olplan.json; done` (with `CHROMIUM_PATH` set).
 Expected output:
 - no `pageerror`; overflow 0;
 - "html mark: Hawks <U12> & "Co" logo" for both files;
@@ -3508,7 +3508,7 @@ Only if Steps 1–7 required changes. Stage the exact files by path:
 - **Secondary color:** R4 stores it, but no surface in this spec draws one: it is kept in the profile for later use and shown only in the dialog.
 - **Color format:** static accepts `#RRGGBB` only (spec R4), while hosted branding also accepts `#RGB`. The message text is hosted's, so both read the same.
 
-**Placeholder scan:** none. Every code step carries the code, and steps that edit large existing files name the block and show the new lines. The only `<…>` text is the gate-fix commit template in Task 7 and the screenshot commands' `<scratchpad>`, which stands for this machine's scratch folder and is kept out of the repository on purpose. `CHROMIUM_PATH` is read from the environment.
+**Placeholder scan:** none. Every code step carries the code, and steps that edit large existing files name the block and show the new lines. The only `<…>` text is the gate-fix commit template in Task 7 and the screenshot commands' `<harness>`, a local folder kept out of the repository on purpose. `CHROMIUM_PATH` is read from the environment.
 
 **Type consistency:**
 - `LogoImage`, `TeamMark`, `TeamProfile` (Task 1) are the shapes used by the action (Task 2), the store (Task 3), the dialog (Task 4), `TeamMarkImage` (Task 5) and the model (Task 6).
