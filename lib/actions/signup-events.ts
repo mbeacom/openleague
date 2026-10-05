@@ -1474,14 +1474,14 @@ export async function listHostGroupOptions(input: {
   /** The event being edited, when the form is in edit mode. */
   eventId?: string;
 }): Promise<HostGroupOptions> {
-  const userId = await requireUserId();
   const empty: HostGroupOptions = { divisions: [], teams: [] };
-
   const parsed = hostGroupOptionsInputSchema.safeParse(input);
   if (!parsed.success) {
     return empty;
   }
   const host = parsed.data;
+
+  const userId = await requireUserId();
   const hostRef = {
     organizationId: host.kind === "organization" ? host.id : null,
     leagueId: host.kind === "league" ? host.id : null,
