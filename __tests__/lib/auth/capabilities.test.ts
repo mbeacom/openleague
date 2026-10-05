@@ -43,7 +43,7 @@ type GrantRow = {
 /** Shape a grant the way the resolver reads it out of Prisma. */
 function grant(row: GrantRow) {
   return {
-    leagueId: "league-1",
+    leagueId: "cleague0001",
     divisionId: null,
     teamId: null,
     seasonId: null,
@@ -53,7 +53,7 @@ function grant(row: GrantRow) {
   };
 }
 
-const base = { userId: "user-1", leagueId: "league-1" } as const;
+const base = { userId: "user-1", leagueId: "cleague0001" } as const;
 
 describe("association capability matrix", () => {
   beforeEach(() => {
@@ -141,33 +141,33 @@ describe("association capability matrix", () => {
 
     it("confines a coach to practice work on the granted team", async () => {
       findMany.mockResolvedValue([
-        grant({ role: "COACH", scopeType: "TEAM", teamId: "team-1" }),
+        grant({ role: "COACH", scopeType: "TEAM", teamId: "cteam0001" }),
       ]);
 
       await expect(
-        hasCapability({ ...base, capability: Capability.MANAGE_PRACTICE, teamId: "team-1" }),
+        hasCapability({ ...base, capability: Capability.MANAGE_PRACTICE, teamId: "cteam0001" }),
       ).resolves.toBe(true);
       await expect(
-        hasCapability({ ...base, capability: Capability.MANAGE_PRACTICE, teamId: "team-2" }),
+        hasCapability({ ...base, capability: Capability.MANAGE_PRACTICE, teamId: "cteam0002" }),
       ).resolves.toBe(false);
       await expect(
-        hasCapability({ ...base, capability: Capability.MANAGE_TEAM, teamId: "team-1" }),
+        hasCapability({ ...base, capability: Capability.MANAGE_TEAM, teamId: "cteam0001" }),
       ).resolves.toBe(false);
     });
 
     it("confines a team manager to the exact granted team", async () => {
       findMany.mockResolvedValue([
-        grant({ role: "TEAM_MANAGER", scopeType: "TEAM", teamId: "team-1" }),
+        grant({ role: "TEAM_MANAGER", scopeType: "TEAM", teamId: "cteam0001" }),
       ]);
 
       await expect(
-        hasCapability({ ...base, capability: Capability.MANAGE_TEAM, teamId: "team-1" }),
+        hasCapability({ ...base, capability: Capability.MANAGE_TEAM, teamId: "cteam0001" }),
       ).resolves.toBe(true);
       await expect(
-        hasCapability({ ...base, capability: Capability.MANAGE_ROSTER, teamId: "team-1" }),
+        hasCapability({ ...base, capability: Capability.MANAGE_ROSTER, teamId: "cteam0001" }),
       ).resolves.toBe(true);
       await expect(
-        hasCapability({ ...base, capability: Capability.MANAGE_TEAM, teamId: "team-2" }),
+        hasCapability({ ...base, capability: Capability.MANAGE_TEAM, teamId: "cteam0002" }),
       ).resolves.toBe(false);
       // No association-wide reach, even for a capability the role does hold.
       await expect(
@@ -177,30 +177,30 @@ describe("association capability matrix", () => {
 
     it("lets a volunteer coordinator work at event scope without event administration", async () => {
       findMany.mockResolvedValue([
-        grant({ role: "VOLUNTEER_COORDINATOR", scopeType: "EVENT", eventId: "event-1" }),
+        grant({ role: "VOLUNTEER_COORDINATOR", scopeType: "EVENT", eventId: "cevent0001" }),
       ]);
 
       await expect(
-        hasCapability({ ...base, capability: Capability.MANAGE_VOLUNTEERS, eventId: "event-1" }),
+        hasCapability({ ...base, capability: Capability.MANAGE_VOLUNTEERS, eventId: "cevent0001" }),
       ).resolves.toBe(true);
       await expect(
-        hasCapability({ ...base, capability: Capability.MANAGE_EVENT, eventId: "event-1" }),
+        hasCapability({ ...base, capability: Capability.MANAGE_EVENT, eventId: "cevent0001" }),
       ).resolves.toBe(false);
       await expect(
-        hasCapability({ ...base, capability: Capability.MANAGE_VOLUNTEERS, eventId: "event-2" }),
+        hasCapability({ ...base, capability: Capability.MANAGE_VOLUNTEERS, eventId: "cevent0002" }),
       ).resolves.toBe(false);
     });
 
     it("confines an event manager to the exact event", async () => {
       findMany.mockResolvedValue([
-        grant({ role: "EVENT_MANAGER", scopeType: "EVENT", eventId: "event-1" }),
+        grant({ role: "EVENT_MANAGER", scopeType: "EVENT", eventId: "cevent0001" }),
       ]);
 
       await expect(
-        hasCapability({ ...base, capability: Capability.MANAGE_EVENT, eventId: "event-1" }),
+        hasCapability({ ...base, capability: Capability.MANAGE_EVENT, eventId: "cevent0001" }),
       ).resolves.toBe(true);
       await expect(
-        hasCapability({ ...base, capability: Capability.MANAGE_EVENT, eventId: "event-2" }),
+        hasCapability({ ...base, capability: Capability.MANAGE_EVENT, eventId: "cevent0002" }),
       ).resolves.toBe(false);
       // Managing one event confers nothing over the association hosting it.
       await expect(
@@ -214,34 +214,34 @@ describe("association capability matrix", () => {
       findMany.mockResolvedValue([grant({ role: "REGISTRAR", scopeType: "ASSOCIATION" })]);
 
       await expect(
-        hasCapability({ ...base, capability: Capability.MANAGE_ROSTER, teamId: "team-1" }),
+        hasCapability({ ...base, capability: Capability.MANAGE_ROSTER, teamId: "cteam0001" }),
       ).resolves.toBe(true);
     });
 
     it("lets a division-scoped grant reach a team currently in that division", async () => {
       findMany.mockResolvedValue([
-        grant({ role: "REGISTRAR", scopeType: "DIVISION", divisionId: "division-1" }),
+        grant({ role: "REGISTRAR", scopeType: "DIVISION", divisionId: "cdivision0001" }),
       ]);
-      teamFindFirst.mockResolvedValue({ id: "team-1" });
+      teamFindFirst.mockResolvedValue({ id: "cteam0001" });
 
       await expect(
-        hasCapability({ ...base, capability: Capability.MANAGE_ROSTER, teamId: "team-1" }),
+        hasCapability({ ...base, capability: Capability.MANAGE_ROSTER, teamId: "cteam0001" }),
       ).resolves.toBe(true);
       expect(teamFindFirst).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({ id: "team-1", divisionId: "division-1" }),
+          where: expect.objectContaining({ id: "cteam0001", divisionId: "cdivision0001" }),
         }),
       );
     });
 
     it("rejects a division-scoped grant for a team outside the division", async () => {
       findMany.mockResolvedValue([
-        grant({ role: "REGISTRAR", scopeType: "DIVISION", divisionId: "division-1" }),
+        grant({ role: "REGISTRAR", scopeType: "DIVISION", divisionId: "cdivision0001" }),
       ]);
       teamFindFirst.mockResolvedValue(null);
 
       await expect(
-        hasCapability({ ...base, capability: Capability.MANAGE_ROSTER, teamId: "team-9" }),
+        hasCapability({ ...base, capability: Capability.MANAGE_ROSTER, teamId: "cteam0009" }),
       ).resolves.toBe(false);
     });
 
@@ -249,7 +249,7 @@ describe("association capability matrix", () => {
       // A team-scoped grant asked about association-wide work has no target to
       // check against and must fail rather than defaulting to "any team".
       findMany.mockResolvedValue([
-        grant({ role: "REGISTRAR", scopeType: "TEAM", teamId: "team-1" }),
+        grant({ role: "REGISTRAR", scopeType: "TEAM", teamId: "cteam0001" }),
       ]);
 
       await expect(
@@ -266,7 +266,7 @@ describe("association capability matrix", () => {
         expect.objectContaining({
           where: expect.objectContaining({
             userId: "user-1",
-            leagueId: "league-1",
+            leagueId: "cleague0001",
             state: "ACTIVE",
           }),
         }),
@@ -286,11 +286,11 @@ describe("association capability matrix", () => {
       // TREASURER supports ASSOCIATION only. A row that somehow carries a team
       // scope must not authorize anything.
       findMany.mockResolvedValue([
-        grant({ role: "TREASURER", scopeType: "TEAM", teamId: "team-1" }),
+        grant({ role: "TREASURER", scopeType: "TEAM", teamId: "cteam0001" }),
       ]);
 
       await expect(
-        hasCapability({ ...base, capability: Capability.MANAGE_PAYMENTS, teamId: "team-1" }),
+        hasCapability({ ...base, capability: Capability.MANAGE_PAYMENTS, teamId: "cteam0001" }),
       ).resolves.toBe(false);
     });
 
@@ -300,7 +300,7 @@ describe("association capability matrix", () => {
       ]);
 
       await expect(
-        hasCapability({ ...base, capability: Capability.MANAGE_EVENT, eventId: "event-1" }),
+        hasCapability({ ...base, capability: Capability.MANAGE_EVENT, eventId: "cevent0001" }),
       ).resolves.toBe(false);
     });
 
@@ -327,16 +327,16 @@ describe("association capability matrix", () => {
         hasCapability({ ...base, capability: Capability.MANAGE_PAYMENTS }),
       ).resolves.toBe(true);
       await expect(
-        hasCapability({ ...base, capability: Capability.MANAGE_TEAM, teamId: "team-1" }),
+        hasCapability({ ...base, capability: Capability.MANAGE_TEAM, teamId: "cteam0001" }),
       ).resolves.toBe(true);
     });
 
     it("keeps existing team admins managing their own team", async () => {
       getUserLeagueAccessLevel.mockResolvedValue("TEAM_ADMIN");
-      teamFindFirst.mockResolvedValue({ id: "team-1" });
+      teamFindFirst.mockResolvedValue({ id: "cteam0001" });
 
       await expect(
-        hasCapability({ ...base, capability: Capability.MANAGE_TEAM, teamId: "team-1" }),
+        hasCapability({ ...base, capability: Capability.MANAGE_TEAM, teamId: "cteam0001" }),
       ).resolves.toBe(true);
     });
 
@@ -353,7 +353,7 @@ describe("association capability matrix", () => {
 
       for (const capability of Object.values(Capability)) {
         await expect(
-          hasCapability({ ...base, capability, teamId: "team-1" }),
+          hasCapability({ ...base, capability, teamId: "cteam0001" }),
         ).resolves.toBe(false);
       }
     });
@@ -365,7 +365,7 @@ describe("association capability matrix", () => {
       findMany.mockResolvedValue([]);
 
       await expect(
-        hasCapability({ ...base, capability: Capability.MANAGE_TEAM, teamId: "team-1" }),
+        hasCapability({ ...base, capability: Capability.MANAGE_TEAM, teamId: "cteam0001" }),
       ).resolves.toBe(false);
     });
   });
