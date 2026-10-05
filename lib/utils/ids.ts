@@ -14,11 +14,16 @@ import { z } from "zod";
  */
 export const idSchema = z.string().cuid("Invalid ID format");
 
-/** URL slugs: lowercase alphanumerics separated by single hyphens. */
+/**
+ * URL slugs for lookups: lowercase alphanumerics and hyphens, starting with an
+ * alphanumeric. Deliberately looser than the write-time slug schemas so every
+ * slug already stored still resolves: association slugs minted from a league
+ * name could end in a hyphen, or hold a double hyphen before a numeric suffix.
+ */
 export const slugSchema = z
   .string()
   .max(160)
-  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Invalid slug format");
+  .regex(/^[a-z0-9][a-z0-9-]*$/, "Invalid slug format");
 
 /** A 64-character lowercase hex token (`randomBytes(32).toString("hex")`). */
 export const hexTokenSchema = z

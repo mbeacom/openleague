@@ -5,6 +5,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import type { PhaseAudience, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
+import { slugifyName } from "@/lib/utils/slugify";
 import { idSchema, parseHexToken, parseId, parseOptionalId } from "@/lib/utils/ids";
 import { FALLBACK_TIME_ZONE } from "@/lib/utils/date";
 import {
@@ -53,14 +54,6 @@ class SignupEventLifecycleError extends Error {
 
 function generateEventToken(): string {
   return randomBytes(32).toString("hex");
-}
-
-function slugifyName(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 60) || "association";
 }
 
 function hostDisplayName(event: {
@@ -1206,10 +1199,10 @@ export async function getPublicSignupEvent(params: {
   linkToken?: string;
 }): Promise<PublicSignupEventView | null> {
   const eventId = parseOptionalId(params?.eventId);
-  const linkToken = params?.linkToken == null || params.linkToken === ""
-    ? undefined
-    : parseHexToken(params.linkToken);
-  if (eventId === null || linkToken === null) return null;
+  // A malformed link token is ignored; with no event id there is nothing to
+  // look up.
+  const linkToken = parseHexToken(params?.linkToken) ?? undefined;
+  if (eventId === null) return null;
   if (!eventId && !linkToken) return null;
 
   const gate = await prisma.signupEvent.findFirst({
