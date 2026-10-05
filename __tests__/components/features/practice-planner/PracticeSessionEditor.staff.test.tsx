@@ -221,6 +221,22 @@ describe("PracticeSessionEditor: the Staff section", () => {
             { id: expect.any(String), name: "Pat" },
         ]);
     });
+
+    it("returns focus to Add staff when the menu closes on Escape or a pick, and to the new Name field on Type a name", async () => {
+        renderEditor([drill("k1", 0)], {}, undefined, { staffOptions: OPTIONS });
+        const add = screen.getByRole("button", { name: "Add staff" });
+        fireEvent.keyDown(await openAddStaff(), { key: "Escape" });
+        await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+        expect(add).toHaveFocus();
+
+        fireEvent.click(within(await openAddStaff()).getByRole("menuitem", { name: /Pat Park/ }));
+        await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+        expect(add).toHaveFocus();
+
+        fireEvent.click(within(await openAddStaff()).getByRole("menuitem", { name: "Type a name" }));
+        await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+        expect(screen.getByRole("textbox", { name: "Name" })).toHaveFocus();
+    });
 });
 
 describe("PracticeSessionEditor: Run by on the row cards", () => {

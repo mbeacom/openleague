@@ -69,12 +69,19 @@ export function SessionStaffSection({ staff, renderKeys = NO_RENDER_KEYS, option
     const [focusKey, setFocusKey] = useState<string | null>(null);
     const [pending, setPending] = useState<{ key: string; name: string; rows: number } | null>(null);
     const addRef = useRef<HTMLButtonElement>(null);
-    // After a remove, focus goes to Add staff (the removed row's button is gone). An effect, so
-    // it runs once the list has re-rendered: Add staff may only now be enabled (below 12 people).
+    // After a remove or a menu close, focus goes to Add staff (a removed row's button is gone; the
+    // menu keeps disableRestoreFocus so Type a name can focus its new field). An effect, so it runs
+    // once the list has re-rendered: Add staff may only now be enabled (below 12 people).
     const [refocus, setRefocus] = useState(0);
     useEffect(() => {
         if (refocus > 0) addRef.current?.focus();
     }, [refocus]);
+    // Type a name focuses the new field from an effect, not autoFocus: autoFocus runs while the
+    // closing menu's focus trap still listens, and the trap pulls focus back into the menu.
+    const typedRef = useRef<HTMLInputElement>(null);
+    useEffect(() => {
+        if (focusKey) typedRef.current?.focus();
+    }, [focusKey]);
 
     // An official or admin already on the list isn't offered again, nor one whose name someone listed has.
     const listedNames = new Set(staff.map((member) => staffNameKey(member.name)));
@@ -86,6 +93,10 @@ export function SessionStaffSection({ staff, renderKeys = NO_RENDER_KEYS, option
     const clashes = (member: SessionStaffMember) => {
         const key = staffNameKey(member.name);
         return key !== "" && staff.some((other) => other.id !== member.id && staffNameKey(other.name) === key);
+    };
+    const closeMenu = () => {
+        setAnchor(null);
+        setRefocus((count) => count + 1);
     };
     const removeNow = (key: string) => {
         onRemove(key);
@@ -174,7 +185,7 @@ export function SessionStaffSection({ staff, renderKeys = NO_RENDER_KEYS, option
                                             size="small"
                                             value={member.name}
                                             onChange={(event) => onRename(member.id, event.target.value)}
-                                            autoFocus={rowKey === focusKey}
+                                            inputRef={rowKey === focusKey ? typedRef : undefined}
                                             disabled={disabled}
                                             error={clash}
                                             helperText={clash ? STAFF_NAME_TAKEN_MESSAGE : name === "" ? UNSAVED_NAME_HELP : undefined}
@@ -201,8 +212,9 @@ export function SessionStaffSection({ staff, renderKeys = NO_RENDER_KEYS, option
                 id={menuId}
                 anchorEl={anchor}
                 open={anchor !== null}
-                onClose={() => setAnchor(null)}
-                // The typed name's field takes focus (autoFocus); the menu must not pull it back to the button.
+                onClose={closeMenu}
+                // Read when the menu opens, so it can't vary by how it closes: Escape, a click away and a
+                // pick refocus Add staff (closeMenu); Type a name focuses its new field (typedRef).
                 disableRestoreFocus
                 anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
                 transformOrigin={{ vertical: "top", horizontal: "right" }}
@@ -211,7 +223,7 @@ export function SessionStaffSection({ staff, renderKeys = NO_RENDER_KEYS, option
                     <MenuItem
                         key={`${option.kind}-${option.id}`}
                         onClick={() => {
-                            setAnchor(null);
+                            closeMenu();
                             onAddOption(option);
                         }}
                         sx={{ minHeight: 44 }}
