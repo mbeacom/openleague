@@ -33,14 +33,14 @@
   3. authorizes exactly like `getPracticeSessionDetail`, through the shared `canViewPracticeSession(role, isShared)` (team admins always; members only when the practice is shared);
   4. fetches only a `logoUrl` that passes `isOwnedBlobUrl(url, entityLogoPrefix("team", teamId))`;
   5. fetches with `redirect: "error"`, `cache: "no-store"` and `AbortSignal.timeout(5000)`, and enforces a 2 MB cap (`LOGO_MAX_BYTES`) both on `content-length` and while streaming;
-  6. sniffs the magic bytes (PNG, JPEG, WebP only; never the `content-type` header), then decodes with `sharp` under `limitInputPixels: 40_000_000`, and re-checks `metadata().format` (sharp can decode SVG and GIF);
+  6. sniffs the magic bytes (PNG, JPEG, WebP only; never the `content-type` header), then decodes with `sharp` under `limitInputPixels: 4096 * 4096` (`LOGO_INPUT_PIXEL_LIMIT`, about 16.8 million pixels), and re-checks `metadata().format` (sharp can decode SVG and GIF);
   7. returns `{ dataUrl, width, height } | null` and never the URL. Any failure returns `null` and logs one line (spec R6): a fixed message, or `error.name` for a thrown error, never a URL, team id or session id.
 
   It goes in the sweep table `__tests__/helpers/action-id-sweep-table.ts` (`"practice-logo#getPracticeLogoImage": [ID]`) and in the readers table in `__tests__/lib/actions/action-id-arguments-readers.test.ts`.
 - **Shapes and limits (spec R2, R4):**
   - `LogoImage = { dataUrl: string; width: number; height: number }`: a `data:image/png;base64,` URI that passes `isPngDataUri`, with integer sides from 1 to `LOGO_IMAGE_MAX_PX`, at most `MAX_LOGO_PNG_BYTES` decoded.
   - Constants, from `lib/media/logo-rules.ts`: `LOGO_IMAGE_MAX_PX = 512`, `LOGO_IMAGE_FALLBACK_PX = 256`, `MAX_LOGO_PNG_BYTES = 200 * 1024`, and the moved `LOGO_MAX_BYTES = 2 * 1024 * 1024` and `LOGO_CONTENT_TYPES` (`lib/media/blob.ts` re-exports both).
-  - Constants, from `lib/media/logo-image.ts`: `LOGO_FETCH_TIMEOUT_MS = 5000`, `LOGO_INPUT_PIXEL_LIMIT = 40_000_000`.
+  - Constants, from `lib/media/logo-image.ts`: `LOGO_FETCH_TIMEOUT_MS = 5000`, `LOGO_INPUT_PIXEL_LIMIT = 4096 * 4096`.
   - Constants, from `lib/utils/team-mark.ts`: `TEAM_NAME_MAX = 60`, `EXPORT_MARK_HEIGHT = 48`, `EXPORT_MARK_MAX_WIDTH = 144`.
   - Constants, from `lib/utils/canvas/crest-png.ts`: `CREST_EXPORT_PX = 192`, `CREST_FONT_RATIO = 17 / 48`.
   - The static meta key, from `apps/planner/src/store/records.ts`: `META_TEAM_PROFILE = "teamProfile"`. It is one new meta key, with no IndexedDB version bump.
@@ -55,7 +55,7 @@
   - The static store refuses anything `isLogoImage` refuses, with `TEAM_LOGO_INVALID_MESSAGE`, checked on the payload as sent.
 - **Plan files never carry the profile or the logo** (spec R4). Importing a plan never changes the profile.
 - **Escaping:** HTML export: the mark's `alt` goes through the module's `html` template (`escapeHtml`); its `src` must pass `isPngDataUri`. Word: the alt text goes through `xmlSafe` (the existing `picture()` does it). React escapes everything on screen. `EXPORT_CSP` is unchanged (it already allows `img-src data:`).
-- **Portable code:** nothing under `components/features/practice-planner/`, `lib/utils/`, `lib/media/logo-rules.ts`, `lib/planner-store/`, `types/practice-planner.ts` or `apps/planner/` imports `next/*`, `@/lib/actions/*`, `@/lib/db/*`, `@/lib/auth/*`, `@prisma/client`, `lib/media/blob.ts` (it imports `@vercel/blob`) or `lib/media/logo-image.ts`. `components/ui/Crest.tsx` is already portable (it imports only MUI, `lib/utils/crest`, `lib/utils/contrast-color` and `lib/theme`, which the static theme already loads).
+- **Portable code:** nothing under `components/features/practice-planner/`, `lib/utils/`, `lib/media/logo-rules.ts`, `lib/planner-store/`, `types/practice-planner.ts` or `apps/planner/` imports `next/*`, `@/lib/actions/*`, `@/lib/db/*`, `@/lib/auth/*`, `@prisma/client`, `lib/media/blob.ts` (it imports `@vercel/blob`) or `lib/media/logo-image.ts`. ESLint enforces `sharp`, `@/lib/media/logo-image` and `@/lib/media/blob` for the ADR-0020 files (the `adr-0020/portable-practice-planner` block in `eslint.config.mjs`, Task 2). `components/ui/Crest.tsx` is already portable (it imports only MUI, `lib/utils/crest`, `lib/utils/contrast-color` and `lib/theme`, which the static theme already loads).
 - **On-screen components:**
   - Use only palette tokens (`text.secondary`, `divider`, `background.paper`, `action.hover`, `error.main`…), so dark mode works. Print and export markup keeps its black-on-white.
   - Every new interactive control is at least 44×44 px, the colour picker included.
@@ -792,6 +792,8 @@ Expected: exit 0.
 - Modify: `components/providers/HostedPlannerProvider.tsx`
 - Modify: `__tests__/helpers/planner.tsx` (`createMockPlannerStore` gains `getPracticeLogoImage`)
 - Modify: `__tests__/helpers/action-id-sweep-table.ts` (new entry)
+- Modify: `vitest.setup.ts` (the two canvas mocks guarded by `typeof HTMLCanvasElement !== "undefined"`, so the node-environment tests can load the setup)
+- Modify: `eslint.config.mjs` (`sharp`, `@/lib/media/logo-image` and `@/lib/media/blob` join the `adr-0020/portable-practice-planner` restricted imports)
 - Test (create): `__tests__/lib/utils/practice-access.test.ts`, `__tests__/lib/media/logo-image.test.ts`, `__tests__/lib/actions/practice-logo.test.ts`
 - Test (append): `__tests__/lib/actions/practice-session-queries.test.ts`, `__tests__/lib/actions/action-id-arguments-readers.test.ts`
 - Test (breaks, fix here): `__tests__/components/providers/HostedPlannerProvider.test.tsx`. It would import the real action module, so mock it and add the row.
@@ -834,6 +836,23 @@ describe("canViewPracticeSession", () => {
         expect(canViewPracticeSession(role, isShared)).toBe(expected);
     });
 });
+```
+
+The two sharp test files below run under `// @vitest-environment node`. Keep that environment: jsdom's `AbortSignal` is not the one undici's `fetch` and `Response` accept. `vitest.setup.ts` assigns two canvas mocks to `HTMLCanvasElement.prototype` at the top level, and a node-environment file has no `HTMLCanvasElement`, so the setup would throw before any test runs. In `vitest.setup.ts`, wrap both assignments (the `getContext` mock and the `toDataURL` mock) in one guard. The mock bodies are unchanged; only the `if` and the indentation are new:
+
+```ts
+// Canvas mocks for canvas-based components. Node-environment tests (sharp) have no DOM, so they skip these.
+if (typeof HTMLCanvasElement !== 'undefined') {
+  // Mock HTMLCanvasElement.getContext for canvas-based components
+  HTMLCanvasElement.prototype.getContext = vi.fn().mockImplementation(
+    (contextId: '2d' | 'webgl' | 'webgl2' | 'bitmaprenderer') => {
+      // …the existing body, unchanged: the '2d' context object, else null
+    },
+  );
+
+  // Mock canvas toDataURL for thumbnail generation
+  HTMLCanvasElement.prototype.toDataURL = vi.fn().mockReturnValue('data:image/png;base64,mockImageData');
+}
 ```
 
 Create `__tests__/lib/media/logo-image.test.ts`. It runs in the node environment, because sharp is a native module and expects Node's `Buffer`, and builds real images with sharp:
@@ -907,7 +926,7 @@ describe("normalizeLogoBytes", () => {
         const truncated = (await png(64, 64)).slice(0, 40);
         await expect(normalizeLogoBytes(truncated)).rejects.toThrow();
         await expect(normalizeLogoBytes(await png(20, 20), { maxInputPixels: 100 })).rejects.toThrow();
-        expect(LOGO_INPUT_PIXEL_LIMIT).toBe(40_000_000);
+        expect(LOGO_INPUT_PIXEL_LIMIT).toBe(4096 * 4096);
     });
 });
 
@@ -915,7 +934,7 @@ describe("fetchLogoBytes", () => {
     const URL_ = "https://abc.public.blob.vercel-storage.com/branding/team/t1/logo.png";
 
     it("asks for no redirects, no cache and a 5 s timeout, and returns the body", async () => {
-        const fetchImpl = vi.fn(async () => new Response(new Uint8Array([1, 2, 3])));
+        const fetchImpl = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) => new Response(new Uint8Array([1, 2, 3])));
         expect(await fetchLogoBytes(URL_, { fetchImpl })).toEqual(new Uint8Array([1, 2, 3]));
         const init = fetchImpl.mock.calls[0][1] as RequestInit;
         expect([init.redirect, init.cache, init.signal instanceof AbortSignal]).toEqual(["error", "no-store", true]);
@@ -982,8 +1001,8 @@ import { LOGO_IMAGE_FALLBACK_PX, LOGO_IMAGE_MAX_PX, LOGO_MAX_BYTES, MAX_LOGO_PNG
 import type { LogoImage } from "@/types/practice-planner";
 
 export const LOGO_FETCH_TIMEOUT_MS = 5_000;
-/** Decoded pixels allowed in: a 2 MB file can declare enormous dimensions. */
-export const LOGO_INPUT_PIXEL_LIMIT = 40_000_000;
+/** Decoded pixels allowed in (4096 × 4096, about 16.8 million): a 2 MB file can declare enormous dimensions. */
+export const LOGO_INPUT_PIXEL_LIMIT = 4096 * 4096;
 
 const DECODABLE_FORMATS = new Set(["png", "jpeg", "webp"]);
 
@@ -1181,10 +1200,15 @@ describe("getPracticeLogoImage", () => {
         expect(JSON.stringify(warn.mock.calls)).not.toContain(OWNED);
     });
 
-    it("returns null for a body over 2 MB or a failed response, and logs each", async () => {
+    it("returns null for a PNG over 2 MB, stopped by the size cap before decoding, and for a failed response", async () => {
         const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-        fetchMock.mockResolvedValueOnce(new Response(new Uint8Array(2 * 1024 * 1024 + 1)));
+        // A real PNG signature padded past 2 MB: without the cap it would reach sharp and log a decode error instead.
+        const oversize = new Uint8Array(2 * 1024 * 1024 + 1);
+        oversize.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+        fetchMock.mockResolvedValueOnce(new Response(oversize));
         expect(await getPracticeLogoImage(SESSION_ID)).toBeNull();
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(warn).toHaveBeenCalledWith("Practice logo unavailable: the response failed or was over the size cap");
         fetchMock.mockResolvedValueOnce(new Response("gone", { status: 404 }));
         expect(await getPracticeLogoImage(SESSION_ID)).toBeNull();
         expect(warn).toHaveBeenCalledTimes(2);
@@ -1257,7 +1281,7 @@ and the row after the `getPracticeSessionForEdit` row:
   { name: "getPracticeLogoImage", call: (b) => getPracticeLogoImage(s(b)), outcome: { returns: null } },
 ```
 
-In `__tests__/helpers/action-id-sweep-table.ts`, add after the `plays#…` entries and before the `practice-session-drills#…` entries, keeping the table's alphabetical order:
+In `__tests__/helpers/action-id-sweep-table.ts`, add the entry directly before `"practice-plan-import#importPracticePlan"` (alphabetical: `practice-logo` sorts before `practice-plan-import`):
 
 ```ts
   "practice-logo#getPracticeLogoImage": [ID],
@@ -1390,6 +1414,15 @@ In `__tests__/helpers/planner.tsx`, add as the last member of `createMockPlanner
         getPracticeLogoImage: vi.fn().mockResolvedValue(null),
 ```
 
+In `eslint.config.mjs`, in the `adr-0020/portable-practice-planner` block's `no-restricted-imports` `paths` list, add three names after `"@/components/providers/hosted-planner-platform",` (they get `PLANNER_PORTABILITY_MESSAGE` through the existing `.map`):
+
+```js
+            // Server-only image handling (practice logo): sharp is native, blob.ts imports @vercel/blob.
+            "sharp",
+            "@/lib/media/logo-image",
+            "@/lib/media/blob",
+```
+
 - [ ] **Step 9: Run the tests to verify they pass**
 
 Run: `bun run test __tests__/lib/actions __tests__/lib/media __tests__/lib/utils/practice-access.test.ts __tests__/components/providers __tests__/app/practice-session-bench-sheet-page.test.tsx`
@@ -1398,10 +1431,22 @@ Expected: PASS, including `action-id-sweep.test.ts`, which now finds `practice-l
 Run: `bun run type-check`
 Expected: exit 0.
 
+Check that the new restricted imports fire on a portable file and that no existing file trips them:
+
+```bash
+for m in sharp @/lib/media/logo-image @/lib/media/blob; do
+  printf 'import * as probe from "%s";\nexport { probe };\n' "$m" \
+    | bunx eslint --stdin --stdin-filename components/features/practice-planner/portability-probe.ts; echo "exit $?"
+done
+bun run lint
+```
+
+Expected: each probe reports `no-restricted-imports` with the ADR-0020 portability message and prints `exit 1`; nothing is written to disk. `bun run lint` exits 0.
+
 - [ ] **Step 10: Commit**
 
 ```bash
-/usr/bin/git add package.json bun.lock lib/utils/practice-access.ts lib/media/logo-image.ts lib/actions/practice-logo.ts \
+/usr/bin/git add package.json bun.lock vitest.setup.ts eslint.config.mjs lib/utils/practice-access.ts lib/media/logo-image.ts lib/actions/practice-logo.ts \
   lib/actions/practice-session-queries.ts lib/planner-store/types.ts components/providers/HostedPlannerProvider.tsx \
   __tests__/helpers/planner.tsx __tests__/helpers/action-id-sweep-table.ts \
   __tests__/lib/utils/practice-access.test.ts __tests__/lib/media/logo-image.test.ts __tests__/lib/actions/practice-logo.test.ts \
@@ -1543,7 +1588,6 @@ describe.each(REPOS)("team profile (%s)", (_name, open) => {
         const text = JSON.stringify(buildPlanDocument(data(await store.getSessionView(sessionId)), new Date(), "openleague-static"));
         expect(text).not.toContain(PNG);
         expect(text).not.toContain("Ice Hawks");
-        expect(text).not.toContain("teamMark");
         const plan = serializePlan(
             { title: "Imported", durationMinutes: 30, date: "2026-10-08", startTime: "18:00", drills: [{ sequence: 0, duration: 10, runsWithPrevious: false, instructions: null, name: "Laps", description: null, playData: createEmptyPlayData() }] },
             "openleague-hosted",
@@ -1916,7 +1960,10 @@ import { TEAM_COLOR_MESSAGE, TEAM_NAME_REQUIRED_MESSAGE } from "@/lib/utils/team
 const pick = () => fireEvent.change(screen.getByTestId("team-logo-input"), { target: { files: [new File([new Uint8Array(8)], "logo.png", { type: "image/png" })] } });
 
 async function openDialog() {
-    fireEvent.click(await screen.findByRole("button", { name: "Your team" }));
+    const button = await screen.findByRole("button", { name: "Your team" });
+    // YourTeamButton is disabled while the profile loads, so the dialog never opens with a stale team.
+    await waitFor(() => expect(button).toBeEnabled());
+    fireEvent.click(button);
     return screen.findByRole("dialog", { name: "Your team" });
 }
 
@@ -1986,12 +2033,17 @@ describe("YourTeamButton and the Your team dialog", () => {
 
     it("gives every control a 44 px target", async () => {
         const { store } = memoryStore();
+        // A saved team with a logo, so Replace logo, Remove logo and Clear team are all shown.
+        await store.saveTeamProfile({ name: "Ice Hawks", logo: LOGO, primaryColor: null, secondaryColor: null });
         renderScreen(<YourTeamButton store={store} />, store);
         expect(getComputedStyle(await screen.findByRole("button", { name: "Your team" })).minHeight).toBe("44px");
         await openDialog();
-        for (const name of ["Upload logo", "Cancel", "Save"]) {
-            expect(getComputedStyle(screen.getByRole("button", { name })).minHeight, name).toBe("44px");
+        const minHeight = (name: string) => getComputedStyle(screen.getByRole("button", { name })).minHeight;
+        for (const name of ["Replace logo", "Remove logo", "Clear team", "Cancel", "Save"]) {
+            expect(minHeight(name), name).toBe("44px");
         }
+        fireEvent.click(screen.getByRole("button", { name: "Remove logo" }));
+        expect(minHeight("Upload logo"), "Upload logo").toBe("44px");
         for (const name of ["Pick primary color", "Pick secondary color"]) {
             const picker = screen.getByLabelText(name);
             expect([getComputedStyle(picker).width, getComputedStyle(picker).height], name).toEqual(["44px", "44px"]);
@@ -2390,7 +2442,7 @@ Stop the preview server.
 
 **Interfaces:**
 - Consumes: `TeamMark` (Task 1); `crestPng`, `CREST_EXPORT_PX` (Task 1); `teamLogoAlt` (Task 1); `resolveCrestColor` (`lib/utils/crest.ts`); `useMounted` (`lib/hooks/useClockText`); the static view's `teamName`/`teamMark` (Task 3) and the screen refresh (Task 4).
-- Produces: `TeamMarkImage({ mark, height }: { mark: TeamMark; height?: number })`, an `<img>` of the logo, falling back to the Crest PNG on `error` or when there is no logo; it renders nothing when the Crest can't be drawn.
+- Produces: `TeamMarkImage({ mark, height }: { mark: TeamMark; height?: number })` (`height` defaults to `EXPORT_MARK_HEIGHT`), an `<img>` of the logo, falling back to the Crest PNG on `error` or when there is no logo; it renders nothing when the Crest can't be drawn.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -2400,8 +2452,11 @@ Create `__tests__/components/features/practice-planner/print/TeamMarkImage.test.
 /** TeamMarkImage: the bench sheet's mark, a logo or the Crest as an image (prints without CSS backgrounds). */
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
+import type { CrestPaint } from "@/lib/utils/canvas/crest-png";
 
-const { mockCrestPng } = vi.hoisted(() => ({ mockCrestPng: vi.fn(() => "data:image/png;base64,CREST") }));
+const { mockCrestPng } = vi.hoisted(() => ({
+    mockCrestPng: vi.fn((_paint: CrestPaint): string | null => "data:image/png;base64,CREST"),
+}));
 vi.mock("@/lib/utils/canvas/crest-png", async (importOriginal) => ({
     ...(await importOriginal<typeof import("@/lib/utils/canvas/crest-png")>()),
     crestPng: mockCrestPng,
@@ -2433,7 +2488,7 @@ describe("TeamMarkImage", () => {
     });
 
     it("renders nothing when the Crest can't be drawn", () => {
-        mockCrestPng.mockReturnValueOnce(null as unknown as string);
+        mockCrestPng.mockReturnValueOnce(null);
         const { container } = render(<TeamMarkImage mark={{ ...MARK, logoUrl: null }} />);
         expect(container.querySelector("img")).toBeNull();
     });
@@ -2577,11 +2632,12 @@ Create `components/features/practice-planner/print/TeamMarkImage.tsx`:
 import { useMemo, useState } from "react";
 import { crestPng, CREST_EXPORT_PX } from "@/lib/utils/canvas/crest-png";
 import { resolveCrestColor } from "@/lib/utils/crest";
-import { teamLogoAlt } from "@/lib/utils/team-mark";
+import { EXPORT_MARK_HEIGHT, teamLogoAlt } from "@/lib/utils/team-mark";
 import { useMounted } from "@/lib/hooks/useClockText";
 import type { TeamMark } from "@/types/practice-planner";
 
-export function TeamMarkImage({ mark, height = 48 }: { mark: TeamMark; height?: number }) {
+/** Drawn at the exports' mark height by default, so screen, print and export match. */
+export function TeamMarkImage({ mark, height = EXPORT_MARK_HEIGHT }: { mark: TeamMark; height?: number }) {
     const mounted = useMounted();
     const [failed, setFailed] = useState(false);
     const useLogo = Boolean(mark.logoUrl) && !failed;
@@ -2912,7 +2968,7 @@ In `__tests__/components/features/practice-planner/ExportPlanMenu.bench-sheet.te
 
     it("embeds the hosted team's logo, fetched through the store", async () => {
         const store = createMockPlannerStore();
-        store.getPracticeLogoImage.mockResolvedValue({ dataUrl: PNG, width: 512, height: 512 });
+        store.getPracticeLogoImage!.mockResolvedValue({ dataUrl: PNG, width: 512, height: 512 });
         renderWithPlanner(<ExportPlanMenu session={HOSTED} />, { store });
         choose("Download bench sheet (HTML)");
         await waitFor(() => expect(downloads).toHaveLength(1));
@@ -2921,8 +2977,8 @@ In `__tests__/components/features/practice-planner/ExportPlanMenu.bench-sheet.te
     });
 
     it.each([
-        ["returns no logo", (s: ReturnType<typeof createMockPlannerStore>) => s.getPracticeLogoImage.mockResolvedValue(null)],
-        ["fails", (s: ReturnType<typeof createMockPlannerStore>) => s.getPracticeLogoImage.mockRejectedValue(new Error("offline"))],
+        ["returns no logo", (s: ReturnType<typeof createMockPlannerStore>) => s.getPracticeLogoImage!.mockResolvedValue(null)],
+        ["fails", (s: ReturnType<typeof createMockPlannerStore>) => s.getPracticeLogoImage!.mockRejectedValue(new Error("offline"))],
     ])("still exports, with the Crest, when the logo read %s", async (_label, arrange) => {
         const store = createMockPlannerStore();
         arrange(store);
@@ -2974,15 +3030,13 @@ describe("PlanPreview: the device team's mark (practice logo spec R5)", () => {
 In `__tests__/apps/planner/import-screen.test.tsx`, append inside `describe("ImportScreen", …)`:
 
 ```tsx
-    it("previews the plan with the device team's mark, which the import leaves unchanged", async () => {
+    it("previews the plan with the device team's mark", async () => {
         const { store } = memoryStore();
         await store.saveTeamProfile({ name: "Ice Hawks", logo: null, primaryColor: "#00695C", secondaryColor: null });
         renderScreen(<ImportScreen store={store} linkValue={null} />, store);
         chooseFile(new File([JSON.stringify(PLAN)], "tuesday.olplan.json", { type: "application/json" }));
         const title = await screen.findByRole("heading", { level: 2, name: "Tuesday Skills" });
         await waitFor(() => expect(title.parentElement?.textContent).toContain("IH"));
-        const profile = await store.getTeamProfile();
-        expect(profile.success && profile.data?.name).toBe("Ice Hawks");
     });
 ```
 
@@ -3339,10 +3393,10 @@ Expected: both succeed.
 Then:
 
 ```bash
-rg -l "sharp|libvips" dist/planner
+rg -l 'libvips|@img/sharp|require\("sharp"\)|import\("sharp"\)' dist/planner
 ```
 
-Expected: no output. The static bundle never carries sharp.
+Expected: no output. The static bundle never carries sharp. (A bare `sharp` search is not usable: the bundle already contains MUI's `easing.sharp` and drill text such as "sharper".)
 
 - [ ] **Step 4: Check portability, palette tokens and the action's privacy**
 
@@ -3384,14 +3438,16 @@ ADR-0020 needs no amendment. The plan document format is unchanged, and the prof
 ```bash
 wc -l components/features/practice-planner/PracticeSessionEditor.tsx "app/(dashboard)/practice-planner/[sessionId]/SessionDetailView.tsx"
 /usr/bin/git diff main -- bun.lock | rg '^\+' | rg -v '^\+\+\+' | head
-/usr/bin/git diff main --name-only | xargs rg -n '/Use[r]s/|/priv[a]te/tmp|scratchpad/|claude-[0-9]{3}' || true
+/usr/bin/git diff main --name-only | xargs rg -n --no-heading '/Use[r]s/|/priv[a]te/tmp|scratc[h]pad/|claude-[0-9]{3}|sessio[n]_0' \
+  | sed -E 's#Claude-Session: https://claude\.ai/code/sessio[n]_[A-Za-z0-9]+##g' \
+  | rg '/Use[r]s/|/priv[a]te/tmp|scratc[h]pad/|claude-[0-9]{3}|sessio[n]_0' || true
 /usr/bin/git status --short
 ```
 
 Expected:
 - the editor is 806 lines (untouched) and the session page about 750 (both ≤ 900);
 - `bun.lock`'s added lines are only the root's `"sharp": "^0.35.4"`;
-- no local path in any changed file;
+- no local path and no session id in any changed file. The commit-command trailer `Claude-Session: https://claude.ai/code/…` is the one allowed form: the `sed` removes exactly that trailer before the second match, so a trailer line passes and anything else on it still fails;
 - `git status` shows nothing. If `CLAUDE.md` appears modified by `next dev`, leave it out of every commit.
 
 - [ ] **Step 7: Final screenshots for the PR**

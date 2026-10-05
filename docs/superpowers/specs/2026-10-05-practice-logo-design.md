@@ -39,7 +39,7 @@ In the static planner, the coach sets a device-wide **Your team** profile (name,
 
 ### R1. Hosted export logo comes from a server action
 
-`getPracticeLogoImage(sessionId)` is a server action. Its id is validated with `idSchema`, it goes in the action sweep table, and it is authorized like the session detail read: team members, plus shared viewers if the detail read allows them.
+`getPracticeLogoImage(sessionId)` is a server action. Its id is validated with `idSchema`, it goes in the action sweep table, and it is authorized exactly like the session detail read, through the same shared rule: the team's admins always, and the team's members only once the practice is shared. Anyone else (a member of an unshared practice, someone outside the team, a signed-out caller) gets `null`.
 
 - It looks up the team's `logoUrl` and refuses anything that isn't `isOwnedBlobUrl(url, entityLogoPrefix("team", teamId))`.
 - It fetches the logo server-side with a 5 s timeout and a 2 MB cap.
@@ -99,7 +99,7 @@ Every logo used in a bench sheet or export is a PNG data URL that fits 512×512:
 ## Testing
 
 - **Server action:**
-  - authentication and authorization (not a member: `null`);
+  - authentication and authorization (no access under the detail read's rule, such as a member of an unshared practice or someone outside the team: `null`);
   - id validation, plus a sweep-table entry;
   - a non-owned URL is refused;
   - a non-image (sniffed) is refused;
