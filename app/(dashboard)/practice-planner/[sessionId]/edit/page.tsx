@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { EditSessionWrapper } from "./EditSessionWrapper";
-import { getPracticeSessionForEdit } from "@/lib/actions/practice-session-queries";
+import { getPracticeSessionForEdit, getPracticeStaffOptions } from "@/lib/actions/practice-session-queries";
 import { getVenueBookingOptions } from "../../venue-booking-options";
 
 export const metadata: Metadata = {
@@ -27,6 +27,7 @@ export default async function EditPracticeSessionPage({ params }: PageProps) {
 
   // Venue/surface/segment options for the optional ice booking (006, FR-019).
   const bookingOptions = await getVenueBookingOptions(data.teamId, sessionId);
+  const staffOptions = await getPracticeStaffOptions(data.teamId);
 
   return (
     <PageContainer>
@@ -35,6 +36,7 @@ export default async function EditPracticeSessionPage({ params }: PageProps) {
         teamId={data.teamId}
         initialData={data.initialData}
         bookingOptions={bookingOptions}
+        staffOptions={staffOptions}
       />
     </PageContainer>
   );

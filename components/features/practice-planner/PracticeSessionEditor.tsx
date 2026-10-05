@@ -18,9 +18,6 @@ import {
     CircularProgress,
     Alert,
     Stack,
-    Dialog,
-    DialogTitle,
-    DialogContent,
 } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
@@ -30,13 +27,15 @@ import {
     PlayInSession,
     SavedPlay,
     SessionItem,
+    StaffOption,
     validateSessionDuration,
 } from "@/types/practice-planner";
 import type { BookingConflict } from "@/types/segments";
 import { applySavedPlayIds, describeSaveError, type SavedDrillId } from "@/lib/utils/session-drill-ids";
 import { applyRowEdit, drillRows, type RowEdit } from "@/lib/utils/session-rows";
 import { settleRotations } from "@/lib/utils/session-timeline";
-import { PlayLibrary } from "./PlayLibrary";
+import { namedStaffPayload, type SavedStaffId } from "@/lib/utils/session-staff";
+import { PlayLibraryDialog } from "./PlayLibraryDialog";
 import { useSingleFlightSave, type SaveOutcome } from "./useSingleFlightSave";
 import { SessionDrillList } from "./SessionDrillList";
 import { SessionDrillDialog } from "./SessionDrillDialog";
@@ -46,6 +45,8 @@ import { SessionDetailsFields } from "./SessionDetailsFields";
 import { useBetweenBlocks } from "./useBetweenBlocks";
 import { useSessionRowEdits } from "./useSessionRowEdits";
 import { ShareSessionDialog } from "./ShareSessionDialog";
+import { SessionStaffSection } from "./SessionStaffSection";
+import { useSessionStaff } from "./useSessionStaff";
 import { BookingConflictAlert, VenueBookingFields } from "./VenueBookingFields";
 import {
     useVenueBooking,
@@ -85,7 +86,7 @@ export interface PracticeSessionSubmitData
  * conflicts (warn + "Book anyway", FR-019/US5) from ordinary errors.
  */
 export type PracticeSessionSaveResult =
-    | { success: true; plays?: SavedDrillId[] }
+    | { success: true; plays?: SavedDrillId[]; staff?: SavedStaffId[] }
     | { success: false; error: string; conflicts?: BookingConflict[] };
 
 /**
@@ -105,6 +106,8 @@ export interface PracticeSessionEditorProps {
     segmentsBySurface?: Record<string, SegmentBookingOption[]>;
     /** Display name of the implicit whole-surface option per surface ("Full ice"). */
     wholeLabelBySurface?: Record<string, string>;
+    /** Hosted: the team's officials and admins for the Staff picker (spec R4). The static planner passes none. */
+    staffOptions?: StaffOption[];
     onSave?: (session: PracticeSessionSubmitData) => Promise<PracticeSessionSaveResult>;
     onShare?: (sessionId: string) => Promise<void>;
     onCancel?: () => void;
@@ -124,6 +127,7 @@ export function PracticeSessionEditor({
     surfacesByVenue = {},
     segmentsBySurface = {},
     wholeLabelBySurface = {},
+    staffOptions = [],
     onSave,
     onShare,
     onCancel,
@@ -184,6 +188,8 @@ export function PracticeSessionEditor({
     const goalies = useGoaliesAttending(initialData?.goaliesAttending, markDirty);
     const betweenBlocks = useBetweenBlocks(initialData?.transitionMinutes, markDirty);
     const rowEdits = useSessionRowEdits({ plays, setPlays, markDirty, locked: creating });
+    const staff = useSessionStaff({ initial: initialData?.staff, plays, setPlays, markDirty, locked: creating });
+    const { staff: staffList, applySaved: applySavedStaff } = staff;
 
     // Optional ice booking (feature 006, FR-019).
     const booking = useVenueBooking({
@@ -337,6 +343,9 @@ export function PracticeSessionEditor({
         let outcome: SaveOutcome = { ok: false, error: "Failed to save session" };
 
         try {
+            // Named staff only, and no row run by someone unnamed; absent when the editor holds no list (spec R3).
+            const settled = settleRotations(plays);
+            const staffed = staffList === undefined ? null : namedStaffPayload(staffList, settled);
             const sessionData: PracticeSessionSubmitData = {
                 id: sessionId,
                 title: title.trim(),
@@ -344,7 +353,8 @@ export function PracticeSessionEditor({
                 duration,
                 // A block that can't rotate saves without its rotation (the screen keeps the ticks and the note).
                 // The list loads in sequence order and every edit keeps it so, as settleRotations groups by position.
-                plays: settleRotations(plays),
+                plays: staffed ? staffed.rows : settled,
+                staff: staffed?.staff,
                 isShared,
                 goaliesAttending: goalies.goaliesAttending,
                 transitionMinutes: betweenBlocks.transitionMinutes,
@@ -372,6 +382,7 @@ export function PracticeSessionEditor({
             outcome = { ok: true };
             if (!sessionId) setCreated(true);
             setPlays((current) => applySavedPlayIds(current, sentPlayIds, result.plays));
+            applySavedStaff(result.staff);
             if (!saveFlight.editedSince(startedVersion)) {
                 setHasUnsavedChanges(false);
             } else if (sessionId) {
@@ -396,7 +407,7 @@ export function PracticeSessionEditor({
             setIsSaving(false);
             saveFlight.finish(outcome);
         }
-    }, [title, date, duration, plays, isShared, goalies.goaliesAttending, betweenBlocks.transitionMinutes, sessionId, booking, onSave, validateForm, saveFlight]);
+    }, [title, date, duration, plays, isShared, goalies.goaliesAttending, betweenBlocks.transitionMinutes, staffList, applySavedStaff, sessionId, booking, onSave, validateForm, saveFlight]);
 
     // Keep handleSaveRef updated with latest handleSave function
     useEffect(() => {
@@ -611,6 +622,18 @@ export function PracticeSessionEditor({
                 validationErrors={validationErrors}
             />
 
+            <SessionStaffSection
+                staff={staff.staff ?? []}
+                renderKeys={staff.renderKeys}
+                options={staffOptions}
+                assignments={staff.assignments}
+                disabled={busy}
+                onAddOption={staff.addOption}
+                onAddTyped={staff.addTyped}
+                onRename={staff.rename}
+                onRemove={staff.remove}
+            />
+
             <VenueBookingFields
                 booking={booking}
                 venues={venues}
@@ -751,39 +774,13 @@ export function PracticeSessionEditor({
                 />
             )}
 
-            {/* Play Library Dialog */}
-            {/* Requirements: 4.3 - Integrate PlayLibrary component in selection mode */}
-            {/* Using MUI Dialog for accessibility: focus trapping, scroll locking, Escape key handling */}
-            <Dialog
+            <PlayLibraryDialog
                 open={showLibrary}
-                onClose={handleCloseLibrary}
+                teamId={teamId}
                 fullScreen={isMobile}
-                maxWidth="lg"
-                fullWidth
-                aria-labelledby="play-library-dialog-title"
-            >
-                <DialogTitle id="play-library-dialog-title">
-                    <Stack
-                        direction="row"
-                        justifyContent="space-between"
-                        alignItems="center"
-                    >
-                        <Typography variant="h5" component="span">
-                            Select Play from Library
-                        </Typography>
-                        <Button variant="outlined" onClick={handleCloseLibrary}>
-                            Close
-                        </Button>
-                    </Stack>
-                </DialogTitle>
-                <DialogContent dividers>
-                    <PlayLibrary
-                        teamId={teamId}
-                        onSelectPlay={handleAddPlayFromLibrary}
-                        mode="select"
-                    />
-                </DialogContent>
-            </Dialog>
+                onClose={handleCloseLibrary}
+                onSelectPlay={handleAddPlayFromLibrary}
+            />
 
             {/* Share Confirmation Dialog */}
             {/* Requirements: 3.1 - Share button with confirmation */}

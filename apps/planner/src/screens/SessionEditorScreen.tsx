@@ -14,6 +14,7 @@ import { LOCAL_TEAM_ID } from "../config";
 import { staticRoutes } from "../routes";
 import type { LocalPlannerStore, LocalSessionSave } from "../store/types";
 import { toSessionRowInputs } from "@/lib/utils/session-rows";
+import { toSessionStaffInputs } from "@/lib/utils/session-staff";
 import { LoadingScreen, MissingScreen } from "./StatusScreens";
 import { useStoreResult } from "./useStoreResult";
 
@@ -27,6 +28,8 @@ export function toLocalSessionSave(session: PracticeSessionSubmitData): LocalSes
         plays: toSessionRowInputs(session.plays),
         // Absent = unchanged (as EditSessionWrapper): an editor that never loaded or set the gap sends none.
         ...(session.transitionMinutes !== undefined && { transitionMinutes: session.transitionMinutes }),
+        // Absent = unchanged (as EditSessionWrapper): an editor that holds no list sends none.
+        ...(session.staff !== undefined && { staff: toSessionStaffInputs(session.staff) }),
     };
 }
 
