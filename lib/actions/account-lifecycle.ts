@@ -84,8 +84,9 @@ export async function resetPassword(
 ): Promise<ActionResult<{ message: string }>> {
   try {
     const validated = resetPasswordSchema.parse(input);
+    const token = parseShareToken(validated.token);
 
-    const consumed = await consumeVerificationToken(validated.token, "PASSWORD_RESET");
+    const consumed = token ? await consumeVerificationToken(token, "PASSWORD_RESET") : null;
     if (!consumed) {
       return {
         success: false,

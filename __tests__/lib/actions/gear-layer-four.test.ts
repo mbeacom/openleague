@@ -379,7 +379,7 @@ describe("Layer 4 gear actions", () => {
 
   it("handles honeypot, idempotency, and rate limits without creating a pledge", async () => {
     const common = {
-      wishlistToken: "t".repeat(32), wishlistItemId: WISHLIST_ITEM_ID, donorName: "Donor",
+      wishlistToken: "t".repeat(43), wishlistItemId: WISHLIST_ITEM_ID, donorName: "Donor",
       donorEmail: "donor@example.com", quantity: 1, idempotencyKey: "i".repeat(16),
     };
     await expect(createPublicGearPledge({ ...common, website: "spam" })).resolves.toEqual({
@@ -424,7 +424,7 @@ describe("Layer 4 gear actions", () => {
     });
 
     const result = await createPublicGearPledge({
-      wishlistToken: "t".repeat(32),
+      wishlistToken: "t".repeat(43),
       wishlistItemId: WISHLIST_ITEM_ID,
       donorName: "Donor",
       donorPhone: "555-0100",
@@ -445,7 +445,7 @@ describe("Layer 4 gear actions", () => {
     mockGetClientIp.mockResolvedValue(null);
 
     await expect(createPublicGearPledge({
-      wishlistToken: "t".repeat(32),
+      wishlistToken: "t".repeat(43),
       wishlistItemId: WISHLIST_ITEM_ID,
       donorName: "Donor",
       donorPhone: "555-0100",

@@ -102,7 +102,7 @@ describe("gear validation schemas", () => {
   it("requires an idempotency key for public pledges", () => {
     expect(
       createGearPledgeSchema.safeParse({
-        wishlistToken: "a".repeat(16),
+        wishlistToken: "a".repeat(43),
         wishlistItemId: ITEM_ID,
         donorName: "A donor",
         donorEmail: "donor@example.com",
@@ -112,7 +112,7 @@ describe("gear validation schemas", () => {
     ).toBe(true);
     expect(
       createGearPledgeSchema.safeParse({
-        wishlistToken: "a".repeat(16),
+        wishlistToken: "a".repeat(43),
         wishlistItemId: ITEM_ID,
         donorName: "A donor",
         donorEmail: "donor@example.com",
@@ -122,7 +122,7 @@ describe("gear validation schemas", () => {
     ).toBe(false);
     expect(
       createGearPledgeSchema.safeParse({
-        wishlistToken: "a".repeat(16),
+        wishlistToken: "a".repeat(43),
         wishlistItemId: ITEM_ID,
         donorName: "A donor",
         quantity: 1,

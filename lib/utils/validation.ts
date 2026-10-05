@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { hexTokenSchema, shareTokenSchema } from "@/lib/utils/ids";
 import { playDataSchema } from "@/lib/utils/play-data";
 import { isValidTimeZone } from "@/lib/utils/date";
 import { MAX_THUMBNAIL_SIZE, THUMBNAIL_DATA_URL } from "@/lib/utils/thumbnail-rules";
@@ -1771,7 +1772,7 @@ export const eventRegistrationSchema = z.object({
   eventId: z.string().cuid("Invalid event ID format"),
   slotId: z.string().cuid("Invalid slot ID format"),
   // LINK-visibility events pass the link token for access verification.
-  linkToken: optionalSanitizedString(128),
+  linkToken: hexTokenSchema.optional().or(z.literal("")),
   // For priced slots on events accepting both methods. ONLINE checkout is
   // limited to one participant per request (one checkout = one payment).
   paymentMethod: z.enum(["ONLINE", "MANUAL"]).optional(),
@@ -2500,7 +2501,7 @@ export const saveGearWishlistSchema = z.object({
 });
 
 export const createGearPledgeSchema = z.object({
-  wishlistToken: z.string().trim().min(16).max(255),
+  wishlistToken: z.string().trim().pipe(shareTokenSchema),
   wishlistItemId: gearCuidSchema,
   // Kept empty by real clients; spam bots that populate it receive a generic
   // success response without creating a pledge.
