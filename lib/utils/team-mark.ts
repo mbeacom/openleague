@@ -4,6 +4,7 @@
  * Crest. Pure and portable.
  */
 import { LOGO_IMAGE_MAX_PX, MAX_LOGO_PNG_BYTES } from "@/lib/media/logo-rules";
+import { readImageDimensions } from "@/lib/utils/image-dimensions";
 import { isPngDataUri, pngDataUriByteLength } from "@/lib/utils/png-data-uri";
 import { cleanStaffName } from "@/lib/utils/session-staff";
 import type { LogoImage, TeamMark, TeamProfile } from "@/types/practice-planner";
@@ -45,21 +46,25 @@ function isSide(value: unknown): boolean {
     return Number.isInteger(value) && (value as number) >= 1 && (value as number) <= LOGO_IMAGE_MAX_PX;
 }
 
-/** Every PNG data URL starts so: the 8-byte signature and IHDR's length, base64-encoded. */
-const PNG_DATA_URI_START = "data:image/png;base64,iVBORw0KGgo";
+/** The smallest valid PNG: signature, IHDR, one IDAT and IEND. Anything shorter is a stub. */
+const MIN_LOGO_PNG_BYTES = 57;
+/** Signature (8) + IHDR length and type (8) + width and height (8), as base64 characters (24 bytes = 32 characters). */
+const PNG_HEADER_BASE64_CHARS = 32;
 
-/** A normalized logo (spec R2): a PNG data URL, sides 1–512, at most 200 KB decoded. */
+/** A normalized logo (spec R2): a real PNG data URL whose IHDR matches the stored sides, 1–512, at most 200 KB decoded. */
 export function isLogoImage(value: unknown): value is LogoImage {
     if (typeof value !== "object" || value === null) return false;
     const { dataUrl, width, height } = value as Record<string, unknown>;
-    return (
-        typeof dataUrl === "string" &&
-        dataUrl.startsWith(PNG_DATA_URI_START) &&
-        isPngDataUri(dataUrl) &&
-        pngDataUriByteLength(dataUrl) <= MAX_LOGO_PNG_BYTES &&
-        isSide(width) &&
-        isSide(height)
-    );
+    if (typeof dataUrl !== "string" || !isPngDataUri(dataUrl) || !isSide(width) || !isSide(height)) return false;
+    const byteLength = pngDataUriByteLength(dataUrl);
+    if (byteLength < MIN_LOGO_PNG_BYTES || byteLength > MAX_LOGO_PNG_BYTES) return false;
+    // Decode only the header: the declared size must be the stored size.
+    const payload = dataUrl.slice(dataUrl.indexOf(",") + 1, dataUrl.indexOf(",") + 1 + PNG_HEADER_BASE64_CHARS);
+    const binary = atob(payload);
+    const header = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) header[i] = binary.charCodeAt(i);
+    const declared = readImageDimensions(header);
+    return declared !== null && declared.width === width && declared.height === height && header[0] === 0x89;
 }
 
 export function teamProfileErrors(input: TeamProfileInput): Partial<Record<TeamProfileField, string>> {

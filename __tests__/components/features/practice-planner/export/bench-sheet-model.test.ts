@@ -13,6 +13,7 @@ import { buildLegend } from "@/lib/utils/canvas/legend";
 import { formatClockTime, formatLongDate } from "@/lib/utils/date";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import type { BlockKind, PlayData } from "@/types/practice-planner";
+import { logoPng } from "@/__tests__/helpers/logo-png";
 
 const pass = (id: string) => ({
     id,
@@ -331,12 +332,12 @@ describe("buildBenchSheetModel: the team mark (practice logo spec R2, R3, R5)", 
     const MARK = { id: "cteamxxxxxxxxxxxxxxxxxxxx", name: "Hawks <U12>", logoUrl: "https://x.blob.vercel-storage.com/a.png", color: "#9B1B30" };
 
     it("embeds the logo 48 px high, its ratio kept, with the team's alt text", () => {
-        const model = buildBenchSheetModel({ ...BOOKED, teamMark: MARK }, renderers(), { logo: { dataUrl: PNG, width: 512, height: 256 } });
-        expect(model.mark).toEqual({ image: PNG, width: 96, height: 48, alt: "Hawks <U12> logo" });
+        const model = buildBenchSheetModel({ ...BOOKED, teamMark: MARK }, renderers(), { logo: { dataUrl: logoPng(512, 256), width: 512, height: 256 } });
+        expect(model.mark).toEqual({ image: logoPng(512, 256), width: 96, height: 48, alt: "Hawks <U12> logo" });
     });
 
     it("fits a wide wordmark within 144 px", () => {
-        expect(buildBenchSheetModel({ ...BOOKED, teamMark: MARK }, renderers(), { logo: { dataUrl: PNG, width: 512, height: 85 } }).mark).toMatchObject({ width: 144, height: 24 });
+        expect(buildBenchSheetModel({ ...BOOKED, teamMark: MARK }, renderers(), { logo: { dataUrl: logoPng(512, 85), width: 512, height: 85 } }).mark).toMatchObject({ width: 144, height: 24 });
     });
 
     it("draws the Crest in the team's color when there is no logo, or the logo isn't a valid PNG", () => {

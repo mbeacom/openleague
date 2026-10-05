@@ -18,6 +18,7 @@ import {
 } from "@/components/features/practice-planner/ExportPlanMenu";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import { createHashPlatform, createMockPlannerStore, renderWithPlanner } from "@/__tests__/helpers/planner";
+import { logoPng } from "@/__tests__/helpers/logo-png";
 
 const SESSION: ExportableSession = {
     title: "Tuesday Skills",
@@ -101,12 +102,12 @@ describe("ExportPlanMenu bench sheet exports", () => {
 
     it("embeds the hosted team's logo, fetched through the store", async () => {
         const store = createMockPlannerStore();
-        store.getPracticeLogoImage!.mockResolvedValue({ dataUrl: PNG, width: 512, height: 512 });
+        store.getPracticeLogoImage!.mockResolvedValue({ dataUrl: logoPng(512, 512), width: 512, height: 512 });
         renderWithPlanner(<ExportPlanMenu session={HOSTED} />, { store });
         choose("Download bench sheet (HTML)");
         await waitFor(() => expect(downloads).toHaveLength(1));
         expect(store.getPracticeLogoImage).toHaveBeenCalledWith("csessionxxxxxxxxxxxxxxxxx");
-        expect(await readText(downloads[0].blob)).toContain(`<img class="mark" src="${PNG}" width="48" height="48" alt="Hawks U12 logo">`);
+        expect(await readText(downloads[0].blob)).toContain(`<img class="mark" src="${logoPng(512, 512)}" width="48" height="48" alt="Hawks U12 logo">`);
     });
 
     it.each([
@@ -139,8 +140,8 @@ describe("ExportPlanMenu bench sheet exports", () => {
 
     it("uses the static profile's stored logo without asking the store", async () => {
         const store = createMockPlannerStore();
-        const logo = { dataUrl: PNG, width: 512, height: 256 };
-        renderWithPlanner(<ExportPlanMenu session={{ ...SESSION, teamName: "Ice Hawks", teamMark: { id: "local", name: "Ice Hawks", logoUrl: PNG, color: null, logoImage: logo } }} />, { store, platform: createHashPlatform() });
+        const logo = { dataUrl: logoPng(512, 256), width: 512, height: 256 };
+        renderWithPlanner(<ExportPlanMenu session={{ ...SESSION, teamName: "Ice Hawks", teamMark: { id: "local", name: "Ice Hawks", logoUrl: logo.dataUrl, color: null, logoImage: logo } }} />, { store, platform: createHashPlatform() });
         choose("Download bench sheet (HTML)");
         await waitFor(() => expect(downloads).toHaveLength(1));
         expect(store.getPracticeLogoImage).not.toHaveBeenCalled();
@@ -183,7 +184,7 @@ describe("ExportPlanMenu bench sheet exports", () => {
 
         it("isn't waited for when the logo is embedded", async () => {
             const store = createMockPlannerStore();
-            store.getPracticeLogoImage!.mockResolvedValue({ dataUrl: PNG, width: 512, height: 512 });
+            store.getPracticeLogoImage!.mockResolvedValue({ dataUrl: logoPng(512, 512), width: 512, height: 512 });
             renderWithPlanner(<ExportPlanMenu session={HOSTED} />, { store });
             choose("Download bench sheet (HTML)");
             await waitFor(() => expect(downloads).toHaveLength(1));

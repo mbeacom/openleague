@@ -18,6 +18,7 @@ import {
     toTeamProfile,
     type TeamProfileInput,
 } from "@/lib/utils/team-mark";
+import { logoPng } from "@/__tests__/helpers/logo-png";
 import { pngDataUriByteLength } from "@/lib/utils/png-data-uri";
 
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
@@ -36,7 +37,19 @@ const input = (overrides: Partial<TeamProfileInput> = {}): TeamProfileInput => (
 describe("isLogoImage", () => {
     it("accepts a PNG data URL with sides 1 to 512 and at most 200 KB", () => {
         expect(isLogoImage(LOGO)).toBe(true);
-        expect(isLogoImage({ ...LOGO, width: 512, height: 512 })).toBe(true);
+        expect(isLogoImage({ ...LOGO, dataUrl: logoPng(512, 512), width: 512, height: 512 })).toBe(true);
+    });
+
+    it("refuses a truncated PNG that only carries the signature", () => {
+        expect(isLogoImage({ dataUrl: "data:image/png;base64,iVBORw0KGgo=", width: 1, height: 1 })).toBe(false);
+        expect(isLogoImage({ ...LOGO, dataUrl: PNG.slice(0, 60) })).toBe(false);
+    });
+
+    it("refuses a PNG whose IHDR size differs from the stored size", () => {
+        expect(isLogoImage({ ...LOGO, width: 2 })).toBe(false);
+        expect(isLogoImage({ ...LOGO, height: 2 })).toBe(false);
+        expect(isLogoImage({ dataUrl: logoPng(300, 100), width: 100, height: 300 })).toBe(false);
+        expect(isLogoImage({ dataUrl: logoPng(300, 100), width: 300, height: 100 })).toBe(true);
     });
 
     it("refuses another type, a bad side, an oversize PNG and a non-object", () => {
