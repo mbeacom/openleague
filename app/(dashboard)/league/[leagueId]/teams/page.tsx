@@ -1,6 +1,7 @@
 import { requireUserId } from "@/lib/auth/session";
 import { notFound } from "next/navigation";
-import { hasLeagueAccess, getLeagueTeamsWithDivisions } from "@/lib/actions/league";
+import { getLeagueTeamsWithDivisions } from "@/lib/actions/league";
+import { hasLeagueAccess } from "@/lib/auth/league-access";
 import LeagueTeamsView from "@/components/features/team/LeagueTeamsView";
 
 interface LeagueTeamsPageProps {

@@ -165,10 +165,10 @@ describe("resetPassword", () => {
   it("updates the password hash and marks the email verified", async () => {
     mocks.consumeVerificationToken.mockResolvedValue({ userId: "user-1", newEmail: null });
 
-    const result = await resetPassword({ token: "good-token", password: "new-password-1" });
+    const result = await resetPassword({ token: GOOD_TOKEN, password: "new-password-1" });
     expect(result.success).toBe(true);
 
-    expect(mocks.consumeVerificationToken).toHaveBeenCalledWith("good-token", "PASSWORD_RESET");
+    expect(mocks.consumeVerificationToken).toHaveBeenCalledWith(GOOD_TOKEN, "PASSWORD_RESET");
     expect(mocks.hash).toHaveBeenCalledWith("new-password-1", 12);
     // Also bumps sessionVersion to evict outstanding sessions on recovery.
     expect(mocks.user.update).toHaveBeenCalledWith({
@@ -182,7 +182,7 @@ describe("resetPassword", () => {
   });
 
   it("enforces the password policy", async () => {
-    const result = await resetPassword({ token: "good-token", password: "short" });
+    const result = await resetPassword({ token: GOOD_TOKEN, password: "short" });
     expect(result.success).toBe(false);
     expect(mocks.consumeVerificationToken).not.toHaveBeenCalled();
   });
@@ -241,6 +241,9 @@ describe("resendVerificationEmail", () => {
   });
 });
 
+// Shaped like a real emailed token: 32 random bytes, base64url.
+const GOOD_TOKEN = "Zm9vYmFyYmF6cXV4Zm9vYmFyYmF6cXV4Zm9vYmFyYmF";
+
 describe("confirmEmailVerification", () => {
   it("rejects an invalid or expired token without mutating", async () => {
     mocks.consumeVerificationToken.mockResolvedValue(null);
@@ -251,9 +254,9 @@ describe("confirmEmailVerification", () => {
 
   it("marks the account verified on a valid token", async () => {
     mocks.consumeVerificationToken.mockResolvedValue({ userId: "user-1", newEmail: null });
-    const result = await confirmEmailVerification("good-token");
+    const result = await confirmEmailVerification(GOOD_TOKEN);
     expect(result.success).toBe(true);
-    expect(mocks.consumeVerificationToken).toHaveBeenCalledWith("good-token", "EMAIL_VERIFICATION");
+    expect(mocks.consumeVerificationToken).toHaveBeenCalledWith(GOOD_TOKEN, "EMAIL_VERIFICATION");
     expect(mocks.user.updateMany).toHaveBeenCalledWith({
       where: { id: "user-1", emailVerified: null },
       data: { emailVerified: expect.any(Date) },
@@ -275,7 +278,7 @@ describe("confirmEmailChange", () => {
       newEmail: "new@example.com",
     });
     mocks.user.findUnique.mockResolvedValueOnce({ id: "someone-else" }); // taken check
-    const result = await confirmEmailChange("good-token");
+    const result = await confirmEmailChange(GOOD_TOKEN);
     expect(result.success).toBe(false);
     expect(mocks.user.update).not.toHaveBeenCalled();
   });
@@ -289,7 +292,7 @@ describe("confirmEmailChange", () => {
       .mockResolvedValueOnce(null) // taken check: available
       .mockResolvedValueOnce({ email: "old@example.com", name: "Someone" }); // current user
 
-    const result = await confirmEmailChange("good-token");
+    const result = await confirmEmailChange(GOOD_TOKEN);
     expect(result.success).toBe(true);
 
     expect(mocks.user.update).toHaveBeenCalledWith({

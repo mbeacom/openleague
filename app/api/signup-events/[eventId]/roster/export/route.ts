@@ -2,13 +2,17 @@ import { prisma } from "@/lib/db/prisma";
 import { getCurrentUserId, isEventManager } from "@/lib/auth/session";
 import { toCsvContent } from "@/lib/utils/csv";
 import { formatDateTime } from "@/lib/utils/date";
+import { parseId } from "@/lib/utils/ids";
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ eventId: string }> }
 ) {
   try {
-    const { eventId } = await params;
+    const eventId = parseId((await params).eventId);
+    if (!eventId) {
+      return new Response("Forbidden", { status: 403 });
+    }
 
     const userId = await getCurrentUserId();
     if (!userId) {

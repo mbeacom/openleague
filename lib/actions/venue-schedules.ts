@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
-import { parseId } from "@/lib/utils/ids";
+import { parseId, parseOptionalIdList, parseSlug } from "@/lib/utils/ids";
 import {
   requireVenueScheduleManager,
   VENUE_SCHEDULE_ROLES,
@@ -954,6 +954,11 @@ function expandRequestableOfferingOccurrences(
 }
 
 export async function getPublicVenueSchedule(slug: string, filters: PublicVenueScheduleFilters = {}) {
+  const parsedSlug = parseSlug(slug);
+  const skillLevelIds = parseOptionalIdList(filters?.skillLevelIds);
+  if (!parsedSlug || skillLevelIds === null) return null;
+  slug = parsedSlug;
+  filters = { ...filters, skillLevelIds };
   const now = new Date();
   const availabilityEnd = new Date(
     now.getTime() + OFFERING_AVAILABILITY_HORIZON_MS,

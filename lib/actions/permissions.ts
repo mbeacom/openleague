@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
-import { parseId } from "@/lib/utils/ids";
+import { parseId, parseOptionalId } from "@/lib/utils/ids";
 import { requireUserId } from "@/lib/auth/session";
 import { revalidatePath } from "next/cache";
 import {
@@ -551,6 +551,16 @@ export async function checkPermissionAction(
     teamId?: string
 ): Promise<ActionResult<{ hasPermission: boolean }>> {
     try {
+        const parsedLeagueId = parseId(leagueId);
+        const parsedTeamId = parseOptionalId(teamId);
+        if (!parsedLeagueId || parsedTeamId === null) {
+            return {
+                success: true,
+                data: { hasPermission: false },
+            };
+        }
+        leagueId = parsedLeagueId;
+        teamId = parsedTeamId;
         const userId = await requireUserId();
 
         const hasAccess = await hasPermission(userId, leagueId, permission, teamId);

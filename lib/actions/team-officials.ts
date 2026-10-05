@@ -5,7 +5,7 @@ import { randomBytes } from "crypto";
 import { Prisma, type TeamOfficial } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { requireTeamAdmin, requireTeamMember } from "@/lib/auth/session";
-import { ensureLeagueUser } from "@/lib/actions/league";
+import { ensureLeagueUser } from "@/lib/auth/league-access";
 import { revalidatePath } from "next/cache";
 import {
   sendExistingUserNotification,

@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUserId } from "@/lib/auth/session";
 import { getLeagueScheduleItems, buildScheduleIcs } from "@/lib/data/schedule-items";
 import { prisma } from "@/lib/db/prisma";
+import { parseId } from "@/lib/utils/ids";
 
 /**
  * GET /api/leagues/[leagueId]/schedule.ics
@@ -15,12 +16,15 @@ export async function GET(
   { params }: { params: Promise<{ leagueId: string }> },
 ) {
   try {
+    const leagueId = parseId((await params).leagueId);
+    if (!leagueId) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
     const userId = await getCurrentUserId();
     if (!userId) {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
-
-    const { leagueId } = await params;
     const leagueUser = await prisma.leagueUser.findFirst({
       where: { userId, leagueId, league: { isActive: true } },
       select: { role: true, league: { select: { id: true, name: true } } },

@@ -17,6 +17,7 @@ import {
   retrieveAccount,
 } from "@/lib/payments/stripe";
 import { computeRevenueSummary } from "@/lib/payments/revenue";
+import { parseId } from "@/lib/utils/ids";
 
 export type ConnectStatus = {
   configured: boolean;
@@ -230,6 +231,11 @@ export async function getOrganizationPaymentsOverview(
   organizationId: string
 ): Promise<ActionResult<OrganizationPaymentsOverview>> {
   try {
+    const parsedOrganizationId = parseId(organizationId);
+    if (!parsedOrganizationId) {
+      return { success: false, error: "Organization not found" };
+    }
+    organizationId = parsedOrganizationId;
     await requireVenueStaffRole(organizationId, VENUE_STAFF_ADMIN_ROLES);
 
     const organization = await prisma.venueOrganization.findUnique({

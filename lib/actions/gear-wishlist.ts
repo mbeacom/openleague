@@ -4,7 +4,6 @@ import { randomBytes } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireUserId } from "@/lib/auth/session";
 import { Permission } from "@/lib/utils/permission-types";
 import { requirePermissionForLeague } from "@/lib/utils/permissions";
 import { prisma } from "@/lib/db/prisma";
@@ -19,6 +18,7 @@ import {
 import { normalizeGearKey } from "@/lib/utils/gear";
 import { saveGearWishlistSchema } from "@/lib/utils/validation";
 import type { ActionResult } from "@/lib/actions/gear-inventory";
+import { parseId, parseShareToken } from "@/lib/utils/ids";
 
 const gearId = z.string().cuid("Invalid gear identifier");
 const wishlistCommandSchema = z.object({
@@ -442,6 +442,11 @@ export type GearWishlistAdminContext = {
 };
 
 export async function getGearWishlistAdminContext(leagueId: string): Promise<GearWishlistAdminContext | null> {
+  const parsedLeagueId = parseId(leagueId);
+  if (!parsedLeagueId) {
+    throw new Error("Unauthorized: insufficient permissions for this action");
+  }
+  leagueId = parsedLeagueId;
   await requirePermissionForLeague(leagueId, Permission.MANAGE_GEAR_WISHLIST);
   const wishlist = await prisma.gearWishlist.findUnique({
     where: { leagueId },
@@ -471,7 +476,8 @@ export async function getGearWishlistForAdmin(leagueId: string) {
 
 /** The share-token projection intentionally omits league identity and all donor records. */
 export async function getPublicGearWishlist(wishlistToken: string) {
-  const token = z.string().trim().min(16).max(255).parse(wishlistToken);
+  const token = parseShareToken(typeof wishlistToken === "string" ? wishlistToken.trim() : wishlistToken);
+  if (!token) return null;
   const wishlist = await prisma.gearWishlist.findFirst({
     where: { shareToken: token, status: "PUBLISHED", league: { isActive: true } },
     select: {
@@ -500,10 +506,3 @@ export async function getPublicGearWishlist(wishlistToken: string) {
   };
 }
 
-export async function canViewGearWishlist(leagueId: string): Promise<boolean> {
-  const userId = await requireUserId();
-  return Boolean(await prisma.leagueUser.findFirst({
-    where: { leagueId, userId, league: { isActive: true } },
-    select: { id: true },
-  }));
-}

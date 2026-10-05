@@ -1,6 +1,7 @@
 import { requireUserId } from "@/lib/auth/session";
 import { notFound } from "next/navigation";
-import { hasLeagueAccess, getLeagueStatisticsData } from "@/lib/actions/league";
+import { getLeagueStatisticsData } from "@/lib/actions/league";
+import { hasLeagueAccess } from "@/lib/auth/league-access";
 import LeagueStatisticsDashboard from "@/components/features/dashboard/LeagueStatisticsDashboard";
 import { Alert } from "@mui/material";
 import { PageContainer } from "@/components/ui/PageContainer";

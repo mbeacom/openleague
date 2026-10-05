@@ -13,6 +13,7 @@ import {
 } from "@/lib/utils/validation";
 import { sendEventInvitationEmail } from "@/lib/email/templates";
 import { formatDateTime } from "@/lib/utils/date";
+import { parseId } from "@/lib/utils/ids";
 
 function generateInvitationToken(): string {
   return randomBytes(32).toString("hex");
@@ -237,6 +238,11 @@ export async function resendEventInvitation(
 
 /** Organizer view of an event's invitation list. */
 export async function listEventInvitations(eventId: string) {
+  const parsedEventId = parseId(eventId);
+  if (!parsedEventId) {
+    throw new Error("Unauthorized: You do not have permission to manage this event");
+  }
+  eventId = parsedEventId;
   await requireEventManager(eventId);
   return prisma.eventInvitation.findMany({
     where: { eventId },

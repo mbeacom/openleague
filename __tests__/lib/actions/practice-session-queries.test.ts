@@ -18,6 +18,8 @@ import { drillRows, isDrillRow } from "@/lib/utils/session-rows";
 import { requireUserId } from "@/lib/auth/session";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 
+const SESSION_ID = "clsession00000000000000001";
+
 function row(id: string, sequence: number, runsWithPrevious = false) {
   return {
     id,
@@ -54,7 +56,7 @@ describe("getPracticeSessionForEdit", () => {
       plays: [row("a", 0), row("b", 2)],
     });
 
-    const result = await getPracticeSessionForEdit("s1");
+    const result = await getPracticeSessionForEdit(SESSION_ID);
 
     expect(result?.initialData.plays.map((p) => p.sequence)).toEqual([0, 1]);
     expect(result?.initialData.plays.map((p) => p.id)).toEqual(["a", "b"]);
@@ -66,7 +68,7 @@ describe("getPracticeSessionForEdit", () => {
       venueId: null, surfaceId: null, segmentId: null, startAt: null, staff: [],
       plays: [row("a", 0)],
     });
-    const result = await getPracticeSessionForEdit("s1");
+    const result = await getPracticeSessionForEdit(SESSION_ID);
     expect(result?.initialData.plays[0]).toMatchObject({ name: "a", description: "" });
   });
 
@@ -78,7 +80,7 @@ describe("getPracticeSessionForEdit", () => {
       plays: [row("a", 1, true), row("b", 2, true), row("c", 3, false)],
     });
 
-    const result = await getPracticeSessionForEdit("s1");
+    const result = await getPracticeSessionForEdit(SESSION_ID);
 
     expect(result?.initialData.plays.map((p) => [p.id, p.sequence, p.runsWithPrevious])).toEqual([
       ["a", 0, false],
@@ -96,7 +98,7 @@ describe("getPracticeSessionForEdit", () => {
     });
     vi.spyOn(console, "error").mockImplementation(() => {});
 
-    const result = await getPracticeSessionForEdit("s1");
+    const result = await getPracticeSessionForEdit(SESSION_ID);
 
     const [unreadable, ok] = drillRows(result!.initialData.plays);
     expect(unreadable.playDataUnreadable).toBe(true);
@@ -120,7 +122,7 @@ describe("getPracticeSessionDetail", () => {
       plays: [row("a", 0, false), row("b", 1, true)],
     });
 
-    const result = await getPracticeSessionDetail("s1");
+    const result = await getPracticeSessionDetail(SESSION_ID);
 
     expect(result?.session.segmentKind).toBe("HALF");
     expect(result?.session.plays.map((p) => p.runsWithPrevious)).toEqual([false, true]);
@@ -135,7 +137,7 @@ describe("getPracticeSessionDetail", () => {
       plays: [],
     });
 
-    expect((await getPracticeSessionDetail("s1"))?.session.segmentKind).toBeNull();
+    expect((await getPracticeSessionDetail(SESSION_ID))?.session.segmentKind).toBeNull();
   });
 });
 
@@ -169,7 +171,7 @@ describe("getPracticeSessionDetail: venue timezone and unchanged access (3b)", (
     memberships({ role: "ADMIN" });
     mockPrisma.practiceSession.findUnique.mockResolvedValue(detailRow());
 
-    const result = await getPracticeSessionDetail("s1");
+    const result = await getPracticeSessionDetail(SESSION_ID);
 
     expect(result?.session.venueTimezone).toBe("America/Denver");
     expect(mockPrisma.practiceSession.findUnique.mock.calls[0][0].include.venue).toEqual({
@@ -181,7 +183,7 @@ describe("getPracticeSessionDetail: venue timezone and unchanged access (3b)", (
     memberships({ role: "ADMIN" });
     mockPrisma.practiceSession.findUnique.mockResolvedValue(detailRow({ venueId: null, venue: null, startAt: null }));
 
-    expect((await getPracticeSessionDetail("s1"))?.session.venueTimezone).toBeNull();
+    expect((await getPracticeSessionDetail(SESSION_ID))?.session.venueTimezone).toBeNull();
   });
 
   it.each([
@@ -193,7 +195,7 @@ describe("getPracticeSessionDetail: venue timezone and unchanged access (3b)", (
     memberships(sessionTeam);
     mockPrisma.practiceSession.findUnique.mockResolvedValue(detailRow({ isShared }));
 
-    const result = await getPracticeSessionDetail("s1");
+    const result = await getPracticeSessionDetail(SESSION_ID);
 
     expect(result !== null).toBe(visible);
     if (visible) expect(result?.isAdmin).toBe(isAdmin);
@@ -215,7 +217,7 @@ describe("goaltender fields in the session queries", () => {
     });
 
     it("getPracticeSessionForEdit returns the count and each drill's tags (defaults when untagged)", async () => {
-        const result = await getPracticeSessionForEdit("s1");
+        const result = await getPracticeSessionForEdit(SESSION_ID);
         expect(result?.initialData.goaliesAttending).toBe(1);
         expect(drillRows(result!.initialData.plays).map((p) => [p.focus, p.goalies])).toEqual([["goalies", "required"], ["team", "optional"]]);
         const select = mockPrisma.practiceSession.findUnique.mock.calls[0][0].include.plays.include.play.select;
@@ -223,7 +225,7 @@ describe("goaltender fields in the session queries", () => {
     });
 
     it("getPracticeSessionDetail returns the count and each drill's tags", async () => {
-        const result = await getPracticeSessionDetail("s1");
+        const result = await getPracticeSessionDetail(SESSION_ID);
         expect(result?.session.goaliesAttending).toBe(1);
         expect(drillRows(result!.session.plays).map((p) => [p.play.focus, p.play.goalies])).toEqual([["goalies", "required"], ["team", "optional"]]);
     });
@@ -252,7 +254,7 @@ describe("practice timing in the session queries", () => {
     });
 
     it("getPracticeSessionDetail returns block rows, each drill's timing and the gap", async () => {
-        const result = await getPracticeSessionDetail("s1");
+        const result = await getPracticeSessionDetail(SESSION_ID);
         expect(result?.session.transitionMinutes).toBe(2);
         expect(result?.session.plays[0]).toEqual({
             id: "w", kind: "warmup", label: null, sequence: 0, duration: 8, instructions: "Easy laps", runsWithPrevious: false, staff: [],
@@ -261,7 +263,7 @@ describe("practice timing in the session queries", () => {
     });
 
     it("getPracticeSessionForEdit returns block items and each drill's stored timing, so an untouched editor saves them back", async () => {
-        const result = await getPracticeSessionForEdit("s1");
+        const result = await getPracticeSessionForEdit(SESSION_ID);
         expect(result?.initialData.transitionMinutes).toBe(2);
         expect(result?.initialData.plays[0]).toEqual({
             id: "w", kind: "warmup", label: "", sequence: 0, duration: 8, instructions: "Easy laps", runsWithPrevious: false, staff: [],
@@ -304,7 +306,7 @@ describe("practice staff in the session queries (spec R4, R9)", () => {
     });
 
     it("getPracticeSessionDetail returns the list (names only) and each row's staff ids in order", async () => {
-        const result = await getPracticeSessionDetail("s1");
+        const result = await getPracticeSessionDetail(SESSION_ID);
         expect(result?.session.staff).toEqual([
             { id: "st1", name: "Coach Lee" }, { id: "st2", name: "Pat" }, { id: "st3", name: "Alex" }, { id: "st4", name: "Jo" }, { id: "st5", name: "Sam" },
         ]);
@@ -315,7 +317,7 @@ describe("practice staff in the session queries (spec R4, R9)", () => {
     });
 
     it("getPracticeSessionForEdit keeps valid links and loads a stale one unlinked (Review Focus 2)", async () => {
-        const result = await getPracticeSessionForEdit("s1");
+        const result = await getPracticeSessionForEdit(SESSION_ID);
         expect(result?.initialData.staff).toEqual([
             { id: "st1", name: "Coach Lee", teamOfficialId: "off-active", userId: null },
             { id: "st2", name: "Pat", teamOfficialId: null, userId: null },
@@ -332,7 +334,7 @@ describe("practice staff in the session queries (spec R4, R9)", () => {
 
     it("getPracticeSessionForEdit asks for no admins when nobody is linked to an account", async () => {
         mockPrisma.practiceSession.findUnique.mockResolvedValue({ ...session, staff: [session.staff[4]] });
-        await getPracticeSessionForEdit("s1");
+        await getPracticeSessionForEdit(SESSION_ID);
         expect(mockPrisma.teamMember.findMany).not.toHaveBeenCalled();
     });
 });

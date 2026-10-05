@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { IDS, MALFORMED_IDS, nonStringIdArguments } from "@/__tests__/helpers/prisma-recorder";
+import { auth } from "@/auth";
 
 /**
  * Server actions that read by league, team, organization or venue id must
@@ -259,16 +260,18 @@ const cases: Case[] = [
 
 beforeEach(() => {
   recorder.reset();
+  vi.mocked(auth).mockClear();
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
 describe.each(cases)("$name", ({ call, outcome }) => {
-  it.each(MALFORMED_IDS)("returns the no-access result for %s without querying", async (_label, bad) => {
+  it.each(MALFORMED_IDS)("returns the no-access result for %s without a session lookup or query", async (_label, bad) => {
     if ("rejects" in outcome) {
       await expect(call(bad)).rejects.toThrow(outcome.rejects);
     } else {
       await expect(call(bad)).resolves.toEqual(outcome.returns);
     }
+    expect(auth).not.toHaveBeenCalled();
     expect(nonStringIdArguments(recorder.calls)).toEqual([]);
     expect(recorder.calls).toEqual([]);
   });

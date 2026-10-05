@@ -19,6 +19,7 @@ import {
   mediaKindForContentType,
 } from "@/lib/media/blob";
 import { logSignupEventActivity } from "@/lib/utils/event-activity";
+import { parseHexToken, parseId } from "@/lib/utils/ids";
 
 /**
  * Record an uploaded blob as a gallery item. Called by the client after the
@@ -143,8 +144,14 @@ export async function listEventMedia(input: {
 }): Promise<{ items: EventGalleryItem[]; canModerate: boolean; canUpload: boolean } | null> {
   if (!isBlobEnabled()) return null;
 
+  const eventId = parseId(input?.eventId);
+  // A missing or malformed link token is ignored: managers and registrants
+  // are still recognised without it.
+  const linkToken = parseHexToken(input?.linkToken) ?? undefined;
+  if (!eventId) return null;
+
   const gate = await prisma.signupEvent.findUnique({
-    where: { id: input.eventId },
+    where: { id: eventId },
     select: {
       id: true,
       status: true,
@@ -159,7 +166,7 @@ export async function listEventMedia(input: {
   const userId = await getCurrentUserId();
   const canModerate = userId ? await isEventManager(userId, gate.id) : false;
   const allowed =
-    canModerate || (await canViewEventGallery(gate, { userId, linkToken: input.linkToken }));
+    canModerate || (await canViewEventGallery(gate, { userId, linkToken }));
   if (!allowed) return null;
 
   const canUpload =

@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/db/prisma";
 import { requireUserId } from "@/lib/auth/session";
 import type { Player } from "@/types/roster";
+import { parseId } from "@/lib/utils/ids";
 
 export type TeamContext = {
   teamId: string;
@@ -359,6 +360,9 @@ type AccessibleTeamData = {
 };
 
 async function getAccessibleTeamData(teamId: string): Promise<AccessibleTeamData | null> {
+  const parsedTeamId = parseId(teamId);
+  if (!parsedTeamId) return null;
+  teamId = parsedTeamId;
   const userId = await requireUserId();
 
   const team = await prisma.team.findFirst({
@@ -523,56 +527,3 @@ export async function getTeamRosterDataById(teamId: string): Promise<{
   });
 }
 
-/**
- * Verify that an active team belongs to an active league.
- * Used by route aliases before redirecting to canonical team pages.
- */
-export async function isActiveTeamInLeague(teamId: string, leagueId: string): Promise<boolean> {
-  const team = await prisma.team.findFirst({
-    where: {
-      id: teamId,
-      leagueId,
-      isActive: true,
-      league: { isActive: true },
-    },
-    select: { id: true },
-  });
-
-  return !!team;
-}
-
-/**
- * Verify that the current user can safely follow a league-scoped team alias.
- * Prevents redirect-vs-404 probing of team/league relationships by requiring
- * either direct team membership or active league membership before redirecting.
- */
-export async function canAccessActiveTeamInLeague(teamId: string, leagueId: string): Promise<boolean> {
-  const userId = await requireUserId();
-
-  const team = await prisma.team.findFirst({
-    where: {
-      id: teamId,
-      leagueId,
-      isActive: true,
-      league: { isActive: true },
-    },
-    select: {
-      members: {
-        where: { userId },
-        select: { id: true },
-        take: 1,
-      },
-      league: {
-        select: {
-          users: {
-            where: { userId },
-            select: { id: true },
-            take: 1,
-          },
-        },
-      },
-    },
-  });
-
-  return !!team && (team.members.length > 0 || (team.league?.users.length ?? 0) > 0);
-}

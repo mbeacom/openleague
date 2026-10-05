@@ -4,7 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 
 import { prisma } from "@/lib/db/prisma";
-import { parseId } from "@/lib/utils/ids";
+import { parseId, parseSlug } from "@/lib/utils/ids";
 import { requireUserId } from "@/lib/auth/session";
 import {
   Capability,
@@ -363,11 +363,21 @@ export async function listAssociationContent(leagueId: string) {
 /* Public readers. No session — these serve anonymous visitors.               */
 /* ------------------------------------------------------------------------- */
 
+/** A finite number, or the fallback for anything else (NaN, strings, objects). */
+function finiteOr(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
 export async function listPublicAssociationContent(
   leagueId: string,
   limit = 20,
   offset = 0,
 ) {
+  const parsedLeagueId = parseId(leagueId);
+  if (!parsedLeagueId) return [];
+  leagueId = parsedLeagueId;
+  limit = finiteOr(limit, 20);
+  offset = finiteOr(offset, 0);
   return prisma.publicContentItem.findMany({
     where: { leagueId, ...publicContentWhere(new Date()) },
     select: publicContentSelect,
@@ -382,8 +392,13 @@ export async function listPublicAssociationContentPage(
   page: number,
   pageSize = 20,
 ) {
-  const normalizedPage = Math.max(1, Math.trunc(page));
-  const normalizedPageSize = Math.min(100, Math.max(1, Math.trunc(pageSize)));
+  const normalizedPage = Math.max(1, Math.trunc(finiteOr(page, 1)));
+  const normalizedPageSize = Math.min(100, Math.max(1, Math.trunc(finiteOr(pageSize, 20))));
+  const parsedLeagueId = parseId(leagueId);
+  if (!parsedLeagueId) {
+    return { items: [], page: normalizedPage, totalItems: 0, totalPages: 1 };
+  }
+  leagueId = parsedLeagueId;
   const where = { leagueId, ...publicContentWhere(new Date()) };
   const totalItems = await prisma.publicContentItem.count({ where });
   const totalPages = Math.max(1, Math.ceil(totalItems / normalizedPageSize));
@@ -411,6 +426,11 @@ export async function listPublicAssociationContentPage(
  * trust a league id from the URL.
  */
 export async function getPublicContentItem(associationSlug: string, contentSlug: string) {
+  const parsedAssociationSlug = parseSlug(associationSlug);
+  const parsedContentSlug = parseSlug(contentSlug);
+  if (!parsedAssociationSlug || !parsedContentSlug) return null;
+  associationSlug = parsedAssociationSlug;
+  contentSlug = parsedContentSlug;
   const now = new Date();
   const resolved = await resolvePublicAssociation(associationSlug);
   if (!resolved) return null;

@@ -44,6 +44,7 @@ import {
   sendEventRegistrationRemovedEmail,
   sendWaitlistOfferEmail,
 } from "@/lib/email/templates";
+import { parseId } from "@/lib/utils/ids";
 
 export type RegisterForEventResult = {
   registrationIds: string[];
@@ -672,10 +673,14 @@ export type EventRoster = Awaited<ReturnType<typeof getEventRoster>>;
 
 /** Organizer roster: per-slot registrations with payment and check-in state. */
 export async function getEventRoster(input: { eventId: string }) {
-  await requireEventManager(input.eventId);
+  const eventId = parseId(input?.eventId);
+  if (!eventId) {
+    throw new Error("Unauthorized: You do not have permission to manage this event");
+  }
+  await requireEventManager(eventId);
 
   const slots = await prisma.signupSlot.findMany({
-    where: { eventId: input.eventId },
+    where: { eventId },
     orderBy: { sortOrder: "asc" },
     select: {
       id: true,

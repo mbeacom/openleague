@@ -15,13 +15,15 @@ vi.mock("@/lib/data/schedule-items", () => mockSchedule);
 
 import { GET } from "@/app/api/leagues/[leagueId]/schedule.ics/route";
 
+const LEAGUE_ID = "clleague000000000000000001";
+
 describe("private league schedule ICS", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockAuth.getCurrentUserId.mockResolvedValue("member-1");
     mockPrisma.leagueUser.findFirst.mockResolvedValue({
       role: "MEMBER",
-      league: { id: "league-1", name: "Test League" },
+      league: { id: LEAGUE_ID, name: "Test League" },
     });
     mockSchedule.getLeagueScheduleItems.mockResolvedValue([]);
     mockSchedule.buildScheduleIcs.mockReturnValue("BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n");
@@ -30,11 +32,11 @@ describe("private league schedule ICS", () => {
   it("forwards the authenticated viewer and exact league role", async () => {
     const response = await GET(
       new Request("https://example.test/api/leagues/league-1/schedule.ics") as never,
-      { params: Promise.resolve({ leagueId: "league-1" }) },
+      { params: Promise.resolve({ leagueId: LEAGUE_ID }) },
     );
 
     expect(response.status).toBe(200);
-    expect(mockSchedule.getLeagueScheduleItems).toHaveBeenCalledWith("league-1", {
+    expect(mockSchedule.getLeagueScheduleItems).toHaveBeenCalledWith(LEAGUE_ID, {
       userId: "member-1",
       leagueRole: "MEMBER",
     });
@@ -45,7 +47,7 @@ describe("private league schedule ICS", () => {
 
     const response = await GET(
       new Request("https://example.test/api/leagues/league-1/schedule.ics") as never,
-      { params: Promise.resolve({ leagueId: "league-1" }) },
+      { params: Promise.resolve({ leagueId: LEAGUE_ID }) },
     );
 
     expect(response.status).toBe(404);

@@ -8,6 +8,7 @@ import {
   notificationService,
   type ResolvedNotificationPreferences,
 } from "@/lib/services/notification";
+import { parseHexToken, parseId } from "@/lib/utils/ids";
 
 export type ActionResult<T> =
   | { success: true; data: T }
@@ -41,6 +42,14 @@ export async function getNotificationPreferences(
   leagueId?: string
 ): Promise<ActionResult<ResolvedNotificationPreferences>> {
   try {
+    const parsedLeagueId = leagueId === undefined || leagueId === null ? undefined : parseId(leagueId);
+    if (parsedLeagueId === null) {
+      return {
+        success: false,
+        error: "Failed to get notification preferences",
+      };
+    }
+    leagueId = parsedLeagueId;
     const userId = await requireUserId();
 
     const preferences = await notificationService.resolveNotificationPreferences(userId, leagueId);
@@ -181,8 +190,15 @@ export async function handleUnsubscribe(
 ): Promise<ActionResult<{ unsubscribed: boolean; leagueName?: string }>> {
   try {
     const validated = unsubscribeSchema.parse(input);
+    const token = parseHexToken(validated.token);
+    if (!token) {
+      return {
+        success: false,
+        error: "Invalid or expired unsubscribe token",
+      };
+    }
 
-    const result = await notificationService.handleUnsubscribe(validated.token);
+    const result = await notificationService.handleUnsubscribe(token);
 
     if (!result.success) {
       return {
@@ -222,6 +238,14 @@ export async function generateUnsubscribeToken(
   leagueId?: string
 ): Promise<ActionResult<{ token: string }>> {
   try {
+    const parsedLeagueId = leagueId === undefined || leagueId === null ? undefined : parseId(leagueId);
+    if (parsedLeagueId === null) {
+      return {
+        success: false,
+        error: "You don't have access to this league",
+      };
+    }
+    leagueId = parsedLeagueId;
     const userId = await requireUserId();
 
     // If leagueId is provided, verify user has access to the league

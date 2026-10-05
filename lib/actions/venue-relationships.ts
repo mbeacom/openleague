@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
-import { parseId } from "@/lib/utils/ids";
+import { parseId, parseOptionalIdList } from "@/lib/utils/ids";
 import {
   requireAuth,
   requireLeagueRole,
@@ -204,6 +204,9 @@ export async function removeVenueRelationship(
 }
 
 export async function getPublicVenueRelationships(venueId: string) {
+  const parsedVenueId = parseId(venueId);
+  if (!parsedVenueId) return [];
+  venueId = parsedVenueId;
   return prisma.venueRelationship.findMany({
     where: { venueId, status: "ACTIVE" },
     select: {
@@ -219,9 +222,11 @@ export async function getPublicVenueRelationships(venueId: string) {
 }
 
 export async function getTeamVenueRelationships(teamIds: string[]) {
-  if (teamIds.length === 0) {
+  const parsedTeamIds = parseOptionalIdList(teamIds, 500);
+  if (!parsedTeamIds || parsedTeamIds.length === 0) {
     return [];
   }
+  teamIds = parsedTeamIds;
 
   return prisma.venueRelationship.findMany({
     where: { teamId: { in: teamIds }, status: "ACTIVE" },

@@ -4,7 +4,7 @@ import { hash } from "bcryptjs";
 import type { Invitation, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { applyInvitationResponsibility } from "@/lib/services/association-roles";
-import { ensureLeagueUser } from "@/lib/actions/league";
+import { ensureLeagueUser } from "@/lib/auth/league-access";
 import { issueVerificationToken } from "@/lib/auth/tokens";
 import { sendVerificationEmail } from "@/lib/email/templates";
 import {
@@ -15,6 +15,7 @@ import {
 } from "@/lib/utils/durable-rate-limit";
 import { signupSchema, type SignupInput } from "@/lib/utils/validation";
 import { ZodError } from "zod";
+import { parseHexToken } from "@/lib/utils/ids";
 
 export interface SignupWithInvitationInput extends SignupInput {
   invitationToken?: string;
@@ -22,6 +23,13 @@ export interface SignupWithInvitationInput extends SignupInput {
 
 export async function signup(data: SignupWithInvitationInput) {
   try {
+    // A malformed invitation token is treated like an unknown one: the
+    // account is created without the invitation.
+    const invitationToken =
+      data?.invitationToken === undefined || data?.invitationToken === ""
+        ? undefined
+        : (parseHexToken(data.invitationToken) ?? undefined);
+
     // Validate input
     const validated = signupSchema.parse(data);
 
@@ -58,8 +66,8 @@ export async function signup(data: SignupWithInvitationInput) {
     // A valid invitation sent to this exact address already proves inbox
     // ownership (the signup link arrived in that inbox), so those accounts
     // start verified. Everyone else must click an emailed verification link.
-    const invitation = data.invitationToken
-      ? await prisma.invitation.findUnique({ where: { token: data.invitationToken } })
+    const invitation = invitationToken
+      ? await prisma.invitation.findUnique({ where: { token: invitationToken } })
       : null;
     const invitationValid =
       invitation !== null && invitation.status === "PENDING" && invitation.expiresAt > new Date();

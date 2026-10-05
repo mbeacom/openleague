@@ -7,6 +7,7 @@ import {
 import { resolvePublicAssociation } from "@/lib/actions/association-profile";
 import { prisma } from "@/lib/db/prisma";
 import { publicPublishedAssociationWhere } from "@/lib/utils/public-associations";
+import { parseSlug } from "@/lib/utils/ids";
 
 /**
  * GET /api/associations/[slug]/schedule.ics
@@ -20,7 +21,7 @@ export async function GET(
   { params }: { params: Promise<{ slug: string }> },
 ) {
   try {
-    const { slug } = await params;
+    const slug = parseSlug((await params).slug);
     if (!slug) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     const resolved = await resolvePublicAssociation(slug);

@@ -47,7 +47,7 @@ vi.mock("@/lib/auth/session", () => ({
   requireUserId: (...args: unknown[]) => mockRequireUserId(...args),
 }));
 
-vi.mock("@/lib/actions/seasons", () => ({
+vi.mock("@/lib/auth/season-access", () => ({
   requireSeasonManager: (...args: unknown[]) => mockRequireSeasonManager(...args),
 }));
 

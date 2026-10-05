@@ -74,7 +74,7 @@ vi.mock("@/lib/auth/session", () => mockAuth);
 vi.mock("@/lib/db/prisma", () => ({ prisma: mockPrisma }));
 vi.mock("@/lib/email/templates", () => ({ sendPracticePlanNotifications: mockSendNotifications }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
-vi.mock("@/lib/actions/venues", () => ({ canUserAccessVenue: vi.fn().mockResolvedValue(true) }));
+vi.mock("@/lib/auth/venue-access", () => ({ canUserAccessVenue: vi.fn().mockResolvedValue(true) }));
 vi.mock("@/lib/services/venue-reservations", () => ({
   assignVenueReservation: serviceAssignVenueReservation,
   createVenueReservation: serviceCreateVenueReservation,

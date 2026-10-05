@@ -5,7 +5,8 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import type { PhaseAudience, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
-import { idSchema } from "@/lib/utils/ids";
+import { slugifyName } from "@/lib/utils/slugify";
+import { idSchema, parseHexToken, parseId, parseOptionalId } from "@/lib/utils/ids";
 import { FALLBACK_TIME_ZONE } from "@/lib/utils/date";
 import {
   assignVenueReservation,
@@ -53,14 +54,6 @@ class SignupEventLifecycleError extends Error {
 
 function generateEventToken(): string {
   return randomBytes(32).toString("hex");
-}
-
-function slugifyName(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 60) || "association";
 }
 
 function hostDisplayName(event: {
@@ -1205,7 +1198,11 @@ export async function getPublicSignupEvent(params: {
   eventId?: string;
   linkToken?: string;
 }): Promise<PublicSignupEventView | null> {
-  const { eventId, linkToken } = params;
+  const eventId = parseOptionalId(params?.eventId);
+  // A malformed link token is ignored; with no event id there is nothing to
+  // look up.
+  const linkToken = parseHexToken(params?.linkToken) ?? undefined;
+  if (eventId === null) return null;
   if (!eventId && !linkToken) return null;
 
   const gate = await prisma.signupEvent.findFirst({
@@ -1263,6 +1260,12 @@ export async function getPublicSignupEvent(params: {
   return { event, availability, viewerCanManage, viewerPhase, onlinePaymentReady };
 }
 
+/** `undefined` when absent, the date when valid, otherwise `null`. */
+function optionalDate(value: unknown): Date | undefined | null {
+  if (value === undefined || value === null) return undefined;
+  return value instanceof Date && !Number.isNaN(value.getTime()) ? value : null;
+}
+
 /** PUBLIC + PUBLISHED (and recently CANCELED) events for discovery pages and rollups. */
 export async function listPublicSignupEvents(filters?: {
   venueId?: string;
@@ -1271,16 +1274,31 @@ export async function listPublicSignupEvents(filters?: {
   from?: Date;
   to?: Date;
 }): Promise<PublicSignupEvent[]> {
+  const venueId = parseOptionalId(filters?.venueId);
+  const hostLeagueId = parseOptionalId(filters?.hostLeagueId);
+  const hostOrganizationId = parseOptionalId(filters?.hostOrganizationId);
+  const from = optionalDate(filters?.from);
+  const to = optionalDate(filters?.to);
+  if (
+    venueId === null ||
+    hostLeagueId === null ||
+    hostOrganizationId === null ||
+    from === null ||
+    to === null
+  ) {
+    return [];
+  }
+
   return prisma.signupEvent.findMany({
     where: {
       visibility: "PUBLIC",
       status: { in: ["PUBLISHED", "CANCELED"] },
-      venueId: filters?.venueId,
-      hostLeagueId: filters?.hostLeagueId,
-      hostOrganizationId: filters?.hostOrganizationId,
+      ...(venueId ? { venueId } : {}),
+      ...(hostLeagueId ? { hostLeagueId } : {}),
+      ...(hostOrganizationId ? { hostOrganizationId } : {}),
       startAt: {
-        gte: filters?.from ?? new Date(Date.now() - 24 * 60 * 60 * 1000),
-        lte: filters?.to,
+        gte: from ?? new Date(Date.now() - 24 * 60 * 60 * 1000),
+        lte: to,
       },
     },
     orderBy: { startAt: "asc" },
@@ -1364,6 +1382,11 @@ export type ManagedSignupEvent = NonNullable<Awaited<ReturnType<typeof getManage
 
 /** Full event detail for the management UI (manager-gated). */
 export async function getManagedSignupEvent(eventId: string) {
+  const parsedEventId = parseId(eventId);
+  if (!parsedEventId) {
+    throw new Error("Unauthorized: You do not have permission to manage this event");
+  }
+  eventId = parsedEventId;
   await requireEventManager(eventId);
 
   const event = await prisma.signupEvent.findUnique({

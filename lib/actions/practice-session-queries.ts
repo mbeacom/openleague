@@ -11,6 +11,7 @@ import type { SegmentKind } from "@prisma/client";
 import { normalizeGroups } from "@/lib/utils/session-timeline";
 import { TEAM_OFFICIAL_ROLE_LABELS } from "@/lib/utils/validation";
 import { toStaffName } from "@/lib/utils/session-staff";
+import { parseId } from "@/lib/utils/ids";
 
 /**
  * Get the practice planner list page data for the user's primary team.
@@ -113,6 +114,9 @@ export async function getPracticeSessionDetail(sessionId: string): Promise<{
   };
   isAdmin: boolean;
 } | null> {
+  const parsedSessionId = parseId(sessionId);
+  if (!parsedSessionId) return null;
+  sessionId = parsedSessionId;
   const userId = await requireUserId();
 
   const teamMember = await prisma.teamMember.findFirst({
@@ -260,6 +264,9 @@ export async function getPracticeSessionForEdit(sessionId: string): Promise<{
     plays: SessionItem[];
   };
 } | null> {
+  const parsedSessionId = parseId(sessionId);
+  if (!parsedSessionId) return null;
+  sessionId = parsedSessionId;
   const userId = await requireUserId();
 
   const session = await prisma.practiceSession.findUnique({

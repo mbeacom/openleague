@@ -3,7 +3,7 @@ import { Alert, Box, Card, CardContent } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { prisma } from "@/lib/db/prisma";
 import { requireUserId } from "@/lib/auth/session";
-import { canBrandEntity } from "@/lib/actions/branding";
+import { canBrandEntity } from "@/lib/auth/branding-access";
 import { isBlobEnabled } from "@/lib/media/blob";
 import { LinkButton } from "@/components/ui/NextLinkComposites";
 import { PageContainer } from "@/components/ui/PageContainer";

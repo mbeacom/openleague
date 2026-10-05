@@ -15,6 +15,7 @@ import {
 } from "@/lib/payments/stripe";
 import { computeRevenueSummary } from "@/lib/payments/revenue";
 import { leaguePaymentCommandSchema, type LeaguePaymentCommandInput } from "@/lib/utils/validation";
+import { parseId } from "@/lib/utils/ids";
 
 /**
  * Stripe Connect onboarding for leagues/associations hosting paid signup
@@ -192,6 +193,11 @@ export async function getLeaguePaymentsOverview(
   leagueId: string
 ): Promise<ActionResult<OrganizationPaymentsOverview>> {
   try {
+    const parsedLeagueId = parseId(leagueId);
+    if (!parsedLeagueId) {
+      return { success: false, error: "League not found" };
+    }
+    leagueId = parsedLeagueId;
     await requireLeagueRole(leagueId, "LEAGUE_ADMIN");
 
     const league = await prisma.league.findUnique({
