@@ -145,9 +145,10 @@ export async function listEventMedia(input: {
   if (!isBlobEnabled()) return null;
 
   const eventId = parseId(input?.eventId);
-  const linkToken =
-    input?.linkToken == null || input.linkToken === "" ? undefined : parseHexToken(input.linkToken);
-  if (!eventId || linkToken === null) return null;
+  // A missing or malformed link token is ignored: managers and registrants
+  // are still recognised without it.
+  const linkToken = parseHexToken(input?.linkToken) ?? undefined;
+  if (!eventId) return null;
 
   const gate = await prisma.signupEvent.findUnique({
     where: { id: eventId },

@@ -5,9 +5,8 @@ import { isUserIdString, parseId } from "@/lib/utils/ids";
 
 /**
  * League membership helpers for server code (Server Components, route
- * handlers and server actions). This module deliberately has no "use server"
- * directive: its exports take a user id or a transaction client from the
- * caller, so they must not be callable from the browser.
+ * handlers and server actions). Their exports take a user id or a transaction
+ * client from the caller, so they live in a plain server module.
  */
 
 const LEAGUE_ROLE_RANK: Record<LeagueRole, number> = {

@@ -30,8 +30,8 @@ export async function isActiveTeamInLeague(teamId: string, leagueId: string): Pr
 
 /**
  * Verify that the current user can safely follow a league-scoped team alias.
- * Prevents redirect-vs-404 probing of team/league relationships by requiring
- * either direct team membership or active league membership before redirecting.
+ * Requires either direct team membership or active league membership before
+ * the alias redirects.
  */
 export async function canAccessActiveTeamInLeague(teamId: string, leagueId: string): Promise<boolean> {
   const parsedTeamId = parseId(teamId);
