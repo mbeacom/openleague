@@ -181,13 +181,13 @@ describe("BenchSheet", () => {
         renderSheet();
         const button = screen.getByRole("button", { name: "Print" });
         expect(button).toBeDisabled();
-        expect(screen.getByText("Preparing diagrams…")).toBeInTheDocument();
+        expect(screen.getByText("Preparing print…")).toBeInTheDocument();
         const images = screen.getAllByRole("img", { name: /^Diagram: / });
         images.slice(0, -1).forEach((img) => fireEvent.load(img));
         expect(button).toBeDisabled();
         fireEvent.load(images[images.length - 1]);
         expect(button).toBeEnabled();
-        expect(screen.queryByText("Preparing diagrams…")).not.toBeInTheDocument();
+        expect(screen.queryByText("Preparing print…")).not.toBeInTheDocument();
         fireEvent.click(button);
         expect(print).toHaveBeenCalledTimes(1);
     });

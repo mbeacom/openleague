@@ -28,7 +28,7 @@ import { TeamMarkImage } from "./TeamMarkImage";
 export type BenchSheetSession = PracticeSessionView;
 
 export const NO_DRILLS_MESSAGE = "No drills planned";
-export const PREPARING_DIAGRAMS = "Preparing diagrams…";
+export const PREPARING_PRINT = "Preparing print…";
 
 const MS_PER_MINUTE = 60_000;
 const DRILLS_PER_PAGE = 2;
@@ -93,7 +93,7 @@ export function BenchSheet({ session: stored }: { session: BenchSheetSession }) 
                 </Button>
                 {!allReady && (
                     <Typography variant="body2" role="status" sx={{ color: "text.secondary" }}>
-                        {PREPARING_DIAGRAMS}
+                        {PREPARING_PRINT}
                     </Typography>
                 )}
             </Stack>
