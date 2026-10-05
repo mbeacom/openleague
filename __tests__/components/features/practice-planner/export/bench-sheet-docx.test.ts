@@ -195,7 +195,7 @@ describe("renderBenchSheetDocx: practice staff (spec R9)", () => {
 describe("renderBenchSheetDocx: the team mark (practice logo spec R5)", () => {
     it("puts the mark in its own paragraph just before the title, sized, with XML-safe alt text", async () => {
         const xml = await documentXml({ ...MODEL, mark: { image: PNG, width: 96, height: 48, alt: "Hawks <U12>\u0001 logo" } });
-        const paragraphs = xml.match(/<w:p>.*?<\/w:p>|<w:p [^>]*>.*?<\/w:p>/gs) ?? [];
+        const paragraphs = xml.match(/<w:p(?: [^>]*)?>[\s\S]*?<\/w:p>/g) ?? [];
         const heading = paragraphs.findIndex((p) => p.includes("Tuesday &lt;Skills&gt; &amp; Co"));
         expect(paragraphs[heading]).toContain('w:val="Heading1"');
         expect(paragraphs[heading]).not.toContain("<w:drawing>");
