@@ -64,6 +64,7 @@ function renderers(overrides: Partial<BenchSheetRenderers> = {}): BenchSheetRend
     return {
         diagram: vi.fn((_data: PlayData, ratio: number) => `data:image/png;base64,DIA${ratio}`),
         swatch: vi.fn(() => "data:image/png;base64,SWAT"),
+        crest: vi.fn(() => "data:image/png;base64,CREST"),
         ...overrides,
     };
 }
@@ -86,9 +87,9 @@ describe("buildBenchSheetModel", () => {
         expect(model.timeline[0].start).toBe(formatClockTime(start));
     });
 
-    it("omits the team when asked (static planner) or when it is blank", () => {
-        expect(buildBenchSheetModel(BOOKED, renderers(), { omitTeam: true }).teamName).toBeNull();
+    it("omits the team when it is blank (a static device without Your team)", () => {
         expect(buildBenchSheetModel({ ...BOOKED, teamName: "   " }, renderers()).teamName).toBeNull();
+        expect(buildBenchSheetModel({ ...BOOKED, teamName: "" }, renderers()).teamName).toBeNull();
     });
 
     it("lists one timeline row per block, with station blocks expanded", () => {
@@ -183,6 +184,7 @@ describe("goalie markers (spec R7)", () => {
                 return "data:image/png;base64,AA==";
             },
             swatch: () => null,
+            crest: () => null,
         };
         buildBenchSheetModel(session(goaliesAttending), renderers);
         return diagrams.map((d) => d.players.map((p) => p.role));
@@ -321,5 +323,33 @@ describe("buildBenchSheetModel: practice staff (spec R9)", () => {
         const model = buildBenchSheetModel(BOOKED, renderers());
         expect(model.staff).toBeNull();
         expect(model.timeline.some((row) => "runBy" in row)).toBe(false);
+    });
+});
+
+describe("buildBenchSheetModel: the team mark (practice logo spec R2, R3, R5)", () => {
+    const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+    const MARK = { id: "cteamxxxxxxxxxxxxxxxxxxxx", name: "Hawks <U12>", logoUrl: "https://x.blob.vercel-storage.com/a.png", color: "#9B1B30" };
+
+    it("embeds the logo 48 px high, its ratio kept, with the team's alt text", () => {
+        const model = buildBenchSheetModel({ ...BOOKED, teamMark: MARK }, renderers(), { logo: { dataUrl: PNG, width: 512, height: 256 } });
+        expect(model.mark).toEqual({ image: PNG, width: 96, height: 48, alt: "Hawks <U12> logo" });
+    });
+
+    it("fits a wide wordmark within 144 px", () => {
+        expect(buildBenchSheetModel({ ...BOOKED, teamMark: MARK }, renderers(), { logo: { dataUrl: PNG, width: 512, height: 85 } }).mark).toMatchObject({ width: 144, height: 24 });
+    });
+
+    it("draws the Crest in the team's color when there is no logo, or the logo isn't a valid PNG", () => {
+        const crest = vi.fn(() => "data:image/png;base64,CREST");
+        expect(buildBenchSheetModel({ ...BOOKED, teamMark: MARK }, renderers({ crest })).mark).toEqual({ image: "data:image/png;base64,CREST", width: 48, height: 48, alt: "Hawks <U12> logo" });
+        expect(crest).toHaveBeenCalledWith("Hawks <U12>", "#9B1B30");
+        const bad = buildBenchSheetModel({ ...BOOKED, teamMark: MARK }, renderers({ crest }), { logo: { dataUrl: "https://x/a.png", width: 10, height: 10 } });
+        expect(bad.mark?.image).toBe("data:image/png;base64,CREST");
+    });
+
+    it("shows no mark without a team mark, without a team name, or when the Crest can't be drawn", () => {
+        expect(buildBenchSheetModel(BOOKED, renderers()).mark).toBeNull();
+        expect(buildBenchSheetModel({ ...BOOKED, teamName: "", teamMark: MARK }, renderers()).mark).toBeNull();
+        expect(buildBenchSheetModel({ ...BOOKED, teamMark: MARK }, renderers({ crest: () => null })).mark).toBeNull();
     });
 });

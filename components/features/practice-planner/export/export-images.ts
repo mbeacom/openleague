@@ -1,11 +1,12 @@
 /**
  * The canvas half of the bench sheet exports: diagrams exactly as the printed
- * bench sheet draws them, and legend swatches with the legend's own painter.
+ * bench sheet draws them, legend swatches with the legend's own painter, and the team's Crest.
  * A drawing failure is logged and returns null, which the files show as
  * "Diagram unavailable" (or a label without its swatch); it never fails the export.
  */
 import { generateThumbnail } from "@/lib/utils/canvas/thumbnail-generator";
 import { LEGEND_SWATCH_SIZE, paintLegendSwatch } from "@/lib/utils/canvas/legend-swatch";
+import { CREST_EXPORT_PX, crestPng } from "@/lib/utils/canvas/crest-png";
 import { PRINT_DIAGRAM_SIZE } from "../print/PrintDiagram";
 import type { BenchSheetRenderers } from "./bench-sheet-model";
 
@@ -32,6 +33,14 @@ export const canvasRenderers: BenchSheetRenderers = {
             return canvas.toDataURL("image/png");
         } catch (error) {
             console.warn(`Bench sheet export: the "${entry.label}" legend swatch couldn't be drawn:`, error);
+            return null;
+        }
+    },
+    crest(name, color) {
+        try {
+            return crestPng({ name, color, size: CREST_EXPORT_PX });
+        } catch (error) {
+            console.warn("Bench sheet export: the team crest couldn't be drawn:", error);
             return null;
         }
     },

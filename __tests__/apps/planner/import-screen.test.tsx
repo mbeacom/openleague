@@ -209,5 +209,14 @@ describe("ImportScreen", () => {
 
         expect(STARTER_PLAYS).toEqual(before);
     });
+
+    it("previews the plan with the device team's mark", async () => {
+        const { store } = memoryStore();
+        await store.saveTeamProfile({ name: "Ice Hawks", logo: null, primaryColor: "#00695C", secondaryColor: null });
+        renderScreen(<ImportScreen store={store} linkValue={null} />, store);
+        chooseFile(new File([JSON.stringify(PLAN)], "tuesday.olplan.json", { type: "application/json" }));
+        const title = await screen.findByRole("heading", { level: 2, name: "Tuesday Skills" });
+        await waitFor(() => expect(title.parentElement?.textContent).toContain("IH"));
+    });
 });
 

@@ -55,3 +55,35 @@ export function crestPng(paint: CrestPaint): string | null {
     paintCrest(ctx, paint);
     return canvas.toDataURL("image/png");
 }
+
+/** How long a Crest drawing waits for the theme font before using a fallback face. */
+export const CREST_FONT_WAIT_MS = 1500;
+
+/** The face an exported Crest paints with: weight, size and family. */
+export const CREST_EXPORT_FONT = `800 ${Math.round(CREST_EXPORT_PX * CREST_FONT_RATIO)}px ${FONT_FAMILY}`;
+
+/** True when the browser has the Font Loading API: without it there is nothing to wait for. */
+export function canWaitForCrestFont(): boolean {
+    return typeof document !== "undefined" && typeof document.fonts?.load === "function";
+}
+
+/**
+ * Resolves once the exported Crest's font has loaded, failed, or taken longer
+ * than `timeoutMs`; never rejects. A canvas draws with whatever face is ready,
+ * so drawing first would bake a fallback font into the image.
+ */
+export function waitForCrestFont(timeoutMs: number = CREST_FONT_WAIT_MS): Promise<void> {
+    if (!canWaitForCrestFont()) return Promise.resolve();
+    return new Promise((resolve) => {
+        const done = () => {
+            clearTimeout(timer);
+            resolve();
+        };
+        const timer = setTimeout(done, timeoutMs);
+        try {
+            document.fonts.load(CREST_EXPORT_FONT).then(done, done);
+        } catch {
+            done();
+        }
+    });
+}

@@ -1,8 +1,12 @@
 /** canvasRenderers: the browser side of the exports. A drawing failure becomes null, never a failed export. */
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const { mockGenerate } = vi.hoisted(() => ({ mockGenerate: vi.fn(() => "data:image/png;base64,AAAA") }));
+const { mockGenerate, mockCrest } = vi.hoisted(() => ({
+    mockGenerate: vi.fn(() => "data:image/png;base64,AAAA"),
+    mockCrest: vi.fn((): string | null => "data:image/png;base64,CREST"),
+}));
 vi.mock("@/lib/utils/canvas/thumbnail-generator", () => ({ generateThumbnail: mockGenerate }));
+vi.mock("@/lib/utils/canvas/crest-png", () => ({ CREST_EXPORT_PX: 192, crestPng: mockCrest }));
 
 import { canvasRenderers } from "@/components/features/practice-planner/export/export-images";
 import type { LegendEntry } from "@/lib/utils/canvas/legend";
@@ -60,5 +64,21 @@ describe("canvasRenderers.swatch", () => {
     it("returns null without a 2d context", () => {
         vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
         expect(canvasRenderers.swatch(FORWARD)).toBeNull();
+    });
+});
+
+describe("canvasRenderers.crest", () => {
+    it("draws the Crest at 192 px for a 48 px export mark", () => {
+        expect(canvasRenderers.crest("Ice Hawks", "#9B1B30")).toBe("data:image/png;base64,CREST");
+        expect(mockCrest).toHaveBeenCalledWith({ name: "Ice Hawks", color: "#9B1B30", size: 192 });
+    });
+
+    it("returns null and warns when drawing throws", () => {
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        mockCrest.mockImplementationOnce(() => {
+            throw new Error("no 2d context");
+        });
+        expect(canvasRenderers.crest("Ice Hawks", "#9B1B30")).toBeNull();
+        expect(warn).toHaveBeenCalled();
     });
 });

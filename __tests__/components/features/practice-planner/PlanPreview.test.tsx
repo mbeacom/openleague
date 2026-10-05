@@ -117,3 +117,25 @@ describe("PlanPreview: practice staff (spec R9)", () => {
         expect(screen.queryByText(/^Staff:/)).toBeNull();
     });
 });
+
+describe("PlanPreview: the device team's mark (practice logo spec R5)", () => {
+    const plan = () => starterTemplatePlan(STARTER_TEMPLATES[0], "openleague-static", NOW);
+
+    it("shows the mark before the title when given one", () => {
+        render(
+            <ThemeProvider theme={createTheme()}>
+                <PlanPreview plan={plan()} teamMark={{ id: "local", name: "Ice Hawks", logoUrl: null, color: "#00695C" }} />
+            </ThemeProvider>,
+        );
+        expect(screen.getByRole("heading", { level: 2 }).parentElement?.textContent).toContain("IH");
+    });
+
+    it("shows no mark without one", () => {
+        render(
+            <ThemeProvider theme={createTheme()}>
+                <PlanPreview plan={plan()} />
+            </ThemeProvider>,
+        );
+        expect(screen.queryByText("IH")).toBeNull();
+    });
+});

@@ -5,7 +5,9 @@
  * else the viewer's), printPixelRatio for diagrams, one combined legend.
  * Images come from injected renderers, so this module never touches a canvas.
  */
-import type { BlockKind, PlayData, PlayFocus, PlayGoalies, SessionStaffMember } from "@/types/practice-planner";
+import type { BlockKind, LogoImage, PlayData, PlayFocus, PlayGoalies, SessionStaffMember, TeamMark } from "@/types/practice-planner";
+import { resolveCrestColor } from "@/lib/utils/crest";
+import { EXPORT_MARK_HEIGHT, exportMarkSize, isLogoImage, teamLogoAlt } from "@/lib/utils/team-mark";
 import { buildLegend, type LegendEntry } from "@/lib/utils/canvas/legend";
 import { combinedLegendData } from "@/lib/utils/canvas/station-map";
 import {
@@ -57,11 +59,15 @@ export type ExportSessionRow = ExportSessionPlay | ExportSessionBlock;
 /** What the session page hands the Export menu (a PracticeSessionView fits). */
 export interface ExportSession {
     title: string;
+    /** The practice's id: the hosted logo read takes it. */
+    id?: string;
     date: string;
     duration: number;
     startAt?: string | null;
     venueTimezone?: string | null;
     teamName?: string | null;
+    /** The team's mark (practice logo spec R5); absent or null: none. */
+    teamMark?: TeamMark | null;
     venueName?: string | null;
     surfaceName?: string | null;
     segmentName?: string | null;
@@ -123,10 +129,21 @@ export interface BenchSheetDrillItem {
     text: string | null;
 }
 
+/** The team's mark in an export header: a PNG data URI at its drawn size. */
+export interface BenchSheetMark {
+    image: string;
+    width: number;
+    height: number;
+    /** "<team> logo", unescaped */
+    alt: string;
+}
+
 export interface BenchSheetModel {
     title: string;
     /** null: omitted */
     teamName: string | null;
+    /** The logo, else the Crest, beside the title; null: none */
+    mark: BenchSheetMark | null;
     /** "Tuesday, April 7, 2026 · 6:00 PM – 7:00 PM MDT" */
     when: string;
     /** "Venue · Surface · Segment", or null when unbooked */
@@ -147,6 +164,8 @@ export interface BenchSheetRenderers {
     diagram(playData: PlayData, pixelRatio: number): string | null;
     /** One legend symbol as a PNG data URI, or null */
     swatch(entry: LegendEntry): string | null;
+    /** The team's Crest (initials on `color`) as a PNG data URI for a 48 px mark, or null */
+    crest(name: string, color: string): string | null;
 }
 
 const MS_PER_MINUTE = 60_000;
@@ -154,7 +173,7 @@ const MS_PER_MINUTE = 60_000;
 export function buildBenchSheetModel(
     stored: ExportSession,
     renderers: BenchSheetRenderers,
-    options: { omitTeam?: boolean } = {},
+    options: { logo?: LogoImage | null } = {},
 ): BenchSheetModel {
     // Goalie markers hidden at render time only (spec R7). The plan JSON export never calls this.
     const session = sessionForDisplay(stored);
@@ -186,7 +205,8 @@ export function buildBenchSheetModel(
 
     return {
         title: session.title,
-        teamName: options.omitTeam || !team ? null : team,
+        teamName: team || null,
+        mark: benchSheetMark(session, team, options.logo ?? null, renderers),
         when: `${formatLongDate(start, timeZone)} · ${time(start, false)} – ${time(end)}`,
         place: [session.venueName, session.surfaceName, session.segmentName].filter(Boolean).join(" · ") || null,
         gap: gap > 0 ? betweenBlocksLabel(gap) : null,
@@ -230,4 +250,14 @@ export function buildBenchSheetModel(
             text: drillText(sp.instructions, sp.play.description),
         })),
     };
+}
+
+/** The logo when it is a valid normalized PNG, else the Crest; none without a team (spec R3, R5). */
+function benchSheetMark(session: ExportSession, team: string | undefined, logo: LogoImage | null, renderers: BenchSheetRenderers): BenchSheetMark | null {
+    const mark = session.teamMark;
+    if (!mark || !team) return null;
+    const alt = teamLogoAlt(mark.name || team);
+    if (logo && isLogoImage(logo)) return { image: logo.dataUrl, ...exportMarkSize(logo), alt };
+    const crest = renderers.crest(mark.name || team, resolveCrestColor(mark.id, mark.color));
+    return crest ? { image: crest, width: EXPORT_MARK_HEIGHT, height: EXPORT_MARK_HEIGHT, alt } : null;
 }

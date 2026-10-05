@@ -16,6 +16,7 @@ const MODEL: BenchSheetModel = {
     place: "Ice House · Rink A",
     gap: null,
     staff: null,
+    mark: null,
     timeline: [
         { start: "6:00 PM MDT", minutes: 10, label: "Stations · 2", stations: ["Breakout · 10 min", "Regroup · 8 min"] },
         { start: "6:10 PM MDT", minutes: 15, label: "Shooting", stations: null },
@@ -262,5 +263,25 @@ describe("renderBenchSheetHtml: practice staff (spec R9)", () => {
 
     it("prints no staff line when there is none", () => {
         expect(parse(renderBenchSheetHtml(MODEL)).querySelector(".staff")).toBeNull();
+    });
+});
+
+describe("renderBenchSheetHtml: the team mark (practice logo spec R5)", () => {
+    const withMark = (mark: BenchSheetModel["mark"]) => renderBenchSheetHtml({ ...MODEL, mark });
+
+    it("puts the mark in the title with its size and escaped alt text, inside the unchanged CSP", () => {
+        const html = withMark({ image: PNG, width: 96, height: 48, alt: `Hawks <U12> & "Co" logo` });
+        const img = parse(html).querySelector("h1 img.mark");
+        expect(img?.getAttribute("src")).toBe(PNG);
+        expect([img?.getAttribute("width"), img?.getAttribute("height")]).toEqual(["96", "48"]);
+        expect(img?.getAttribute("alt")).toBe(`Hawks <U12> & "Co" logo`);
+        expect(html).toContain('alt="Hawks &lt;U12&gt; &amp; &quot;Co&quot; logo"');
+        expect(html).toContain(`content="${EXPORT_CSP}"`);
+        expect(EXPORT_CSP).toBe("default-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'");
+    });
+
+    it("leaves out a mark whose image isn't a PNG data URI, and shows none without a mark", () => {
+        expect(parse(withMark({ image: "https://example.com/a.png", width: 48, height: 48, alt: "x logo" })).querySelector("img.mark")).toBeNull();
+        expect(parse(withMark(null)).querySelector("img.mark")).toBeNull();
     });
 });

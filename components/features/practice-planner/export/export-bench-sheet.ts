@@ -4,6 +4,9 @@
  * so `docx` never reaches either main bundle (ADR-0020).
  */
 import { planExportFileName } from "@/lib/plan-document";
+import { waitForCrestFont } from "@/lib/utils/canvas/crest-png";
+import { isLogoImage } from "@/lib/utils/team-mark";
+import type { LogoImage } from "@/types/practice-planner";
 import { buildBenchSheetModel, type BenchSheetModel, type ExportSession } from "./bench-sheet-model";
 import { renderBenchSheetHtml } from "./bench-sheet-html";
 import { canvasRenderers } from "./export-images";
@@ -27,10 +30,12 @@ function yieldToBrowser(): Promise<void> {
 export async function exportBenchSheet(
     session: ExportSession,
     format: BenchSheetFormat,
-    options: { omitTeam: boolean },
+    options: { logo: LogoImage | null },
 ): Promise<void> {
     await yieldToBrowser();
-    const model = buildBenchSheetModel(session, canvasRenderers, { omitTeam: options.omitTeam });
+    // The Crest stands in for a missing logo: let its font load first, as the printed sheet does.
+    if (session.teamMark && !isLogoImage(options.logo)) await waitForCrestFont();
+    const model = buildBenchSheetModel(session, canvasRenderers, { logo: options.logo });
     if (format === "html") {
         const blob = new Blob([renderBenchSheetHtml(model)], { type: "text/html;charset=utf-8" });
         downloadBlob(blob, planExportFileName(session.title, "html"));

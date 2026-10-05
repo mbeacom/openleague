@@ -7,22 +7,13 @@
  * falls back to the Crest (spec R6).
  */
 import { useEffect, useMemo, useState } from "react";
-import theme from "@/lib/theme";
-import { crestPng, CREST_EXPORT_PX, CREST_FONT_RATIO } from "@/lib/utils/canvas/crest-png";
+import { canWaitForCrestFont, crestPng, CREST_EXPORT_PX, waitForCrestFont } from "@/lib/utils/canvas/crest-png";
 import { resolveCrestColor } from "@/lib/utils/crest";
 import { cleanTeamName, EXPORT_MARK_HEIGHT, teamLogoAlt } from "@/lib/utils/team-mark";
 import { useMounted } from "@/lib/hooks/useClockText";
 import type { TeamMark } from "@/types/practice-planner";
 
-/** How long the Crest waits for the theme font before drawing in a fallback face. */
-export const CREST_FONT_WAIT_MS = 1500;
-
-/** The face crestPng paints with: weight, size and family. */
-const CREST_FONT = `800 ${Math.round(CREST_EXPORT_PX * CREST_FONT_RATIO)}px ${String(theme.typography.fontFamily)}`;
-
-function hasFontLoading(): boolean {
-    return typeof document !== "undefined" && typeof document.fonts?.load === "function";
-}
+export { CREST_FONT_WAIT_MS } from "@/lib/utils/canvas/crest-png";
 
 /**
  * True once the Crest's font has loaded, failed, or taken too long. A canvas
@@ -32,25 +23,18 @@ function hasFontLoading(): boolean {
 function useCrestFontReady(active: boolean): boolean {
     const mounted = useMounted();
     const [loaded, setLoaded] = useState(false);
-    const waiting = mounted && active && !loaded && hasFontLoading();
+    const waiting = mounted && active && !loaded && canWaitForCrestFont();
     useEffect(() => {
         if (!waiting) return;
         let live = true;
-        const done = () => {
+        void waitForCrestFont().then(() => {
             if (live) setLoaded(true);
-        };
-        const timer = setTimeout(done, CREST_FONT_WAIT_MS);
-        try {
-            document.fonts.load(CREST_FONT).then(done, done);
-        } catch {
-            done();
-        }
+        });
         return () => {
             live = false;
-            clearTimeout(timer);
         };
     }, [waiting]);
-    return mounted && (loaded || !hasFontLoading());
+    return mounted && (loaded || !canWaitForCrestFont());
 }
 
 /** Drawn at the exports' mark height by default, so screen, print and export match. */

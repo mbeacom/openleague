@@ -49,7 +49,16 @@ function picture(dataUri: string, size: { width: number; height: number }, rawAl
 
 function header(model: BenchSheetModel): Paragraph[] {
     return [
-        new Paragraph({ heading: HeadingLevel.HEADING_1, children: textRuns(model.title, { bold: true, color: LEAGUE_BLUE }) }),
+        new Paragraph({
+            heading: HeadingLevel.HEADING_1,
+            children: [
+                // The mark inline at the start of the header block (practice logo spec R5).
+                ...(model.mark && isPngDataUri(model.mark.image)
+                    ? [picture(model.mark.image, { width: model.mark.width, height: model.mark.height }, model.mark.alt), new TextRun({ text: "  " })]
+                    : []),
+                ...textRuns(model.title, { bold: true, color: LEAGUE_BLUE }),
+            ],
+        }),
         ...(model.teamName ? [new Paragraph({ children: textRuns(model.teamName, { bold: true }) })] : []),
         new Paragraph({ children: textRuns(model.when) }),
         ...(model.place ? [new Paragraph({ children: textRuns(model.place) })] : []),
