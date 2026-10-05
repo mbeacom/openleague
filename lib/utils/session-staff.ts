@@ -175,14 +175,24 @@ export function withoutStaffMember<T extends Staffed>(rows: readonly T[], key: s
 
 /**
  * What the editor sends: the named staff, and each row's keys limited to them.
- * A typed person whose name is still empty isn't saved yet, so no row is sent
- * as run by them (an autosave never fails on a name being typed).
+ * A typed person whose name is still empty, or whose name someone earlier on
+ * the list already has (the section shows the clash), isn't saved yet, so no
+ * row is sent as run by them: an autosave never fails on a name being typed,
+ * and other edits keep saving while a clash is shown. The editor keeps them,
+ * and the first save after the name is fixed sends them again.
  */
 export function namedStaffPayload<T extends Staffed>(
     staff: readonly SessionStaffMember[],
     rows: readonly T[],
 ): { staff: SessionStaffMember[]; rows: T[] } {
-    const named = staff.filter(isNamedStaff);
+    const taken = new Set<string>();
+    const named = staff.filter((member) => {
+        if (!isNamedStaff(member)) return false;
+        const key = staffNameKey(member.name);
+        if (taken.has(key)) return false;
+        taken.add(key);
+        return true;
+    });
     if (named.length === staff.length) return { staff: [...staff], rows: [...rows] };
     const kept = new Set(named.map((member) => member.id));
     return {

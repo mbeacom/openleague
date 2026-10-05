@@ -8,7 +8,7 @@
  * planners). Removing someone who runs rows asks first. Portable: no store,
  * action or Next import; everything comes in as props.
  */
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import {
     Box,
     Button,
@@ -30,7 +30,7 @@ import {
 } from "@mui/material";
 import { LinkOutlined, PersonAddAlt1Outlined, PersonRemoveOutlined } from "@mui/icons-material";
 import { MAX_SESSION_STAFF, STAFF_NAME_MAX, type SessionStaffMember, type StaffOption } from "@/types/practice-planner";
-import { STAFF_NAME_TAKEN_MESSAGE, cleanStaffName, removeStaffPrompt, staffNameKey } from "@/lib/utils/session-staff";
+import { STAFF_NAME_TAKEN_MESSAGE, cleanStaffName, removeStaffPrompt, staffNameKey, toStaffName } from "@/lib/utils/session-staff";
 
 export const STAFF_HEADING = "Staff";
 export const NO_STAFF_TEXT = "No staff yet. Add a coach or a volunteer to show who runs each part.";
@@ -68,18 +68,32 @@ export function SessionStaffSection({ staff, renderKeys = NO_RENDER_KEYS, option
     const [anchor, setAnchor] = useState<HTMLElement | null>(null);
     const [focusKey, setFocusKey] = useState<string | null>(null);
     const [pending, setPending] = useState<{ key: string; name: string; rows: number } | null>(null);
+    const addRef = useRef<HTMLButtonElement>(null);
+    // After a remove, focus goes to Add staff (the removed row's button is gone). An effect, so
+    // it runs once the list has re-rendered: Add staff may only now be enabled (below 12 people).
+    const [refocus, setRefocus] = useState(0);
+    useEffect(() => {
+        if (refocus > 0) addRef.current?.focus();
+    }, [refocus]);
 
-    // An official or admin already on the list isn't offered again.
+    // An official or admin already on the list isn't offered again, nor one whose name someone listed has.
+    const listedNames = new Set(staff.map((member) => staffNameKey(member.name)));
     const available = options.filter(
-        (option) => !staff.some((member) => (option.kind === "official" ? member.teamOfficialId === option.id : member.userId === option.id)),
+        (option) =>
+            !staff.some((member) => (option.kind === "official" ? member.teamOfficialId === option.id : member.userId === option.id)) &&
+            !listedNames.has(staffNameKey(toStaffName(option.name))),
     );
     const clashes = (member: SessionStaffMember) => {
         const key = staffNameKey(member.name);
         return key !== "" && staff.some((other) => other.id !== member.id && staffNameKey(other.name) === key);
     };
+    const removeNow = (key: string) => {
+        onRemove(key);
+        setRefocus((count) => count + 1);
+    };
     const remove = (member: SessionStaffMember) => {
         const rows = assignments(member.id);
-        if (rows === 0) onRemove(member.id);
+        if (rows === 0) removeNow(member.id);
         else setPending({ key: member.id, name: cleanStaffName(member.name), rows });
     };
 
@@ -91,6 +105,7 @@ export function SessionStaffSection({ staff, renderKeys = NO_RENDER_KEYS, option
                         {STAFF_HEADING}
                     </Typography>
                     <Button
+                        ref={addRef}
                         variant="outlined"
                         startIcon={<PersonAddAlt1Outlined />}
                         aria-haspopup="menu"
@@ -108,7 +123,7 @@ export function SessionStaffSection({ staff, renderKeys = NO_RENDER_KEYS, option
                         {NO_STAFF_TEXT}
                     </Typography>
                 ) : (
-                    <Stack component="ul" aria-labelledby={headingId} spacing={1} sx={{ listStyle: "none", m: 0, p: 0 }}>
+                    <Stack component="ul" role="list" aria-labelledby={headingId} spacing={1} sx={{ listStyle: "none", m: 0, p: 0 }}>
                         {staff.map((member) => {
                             const name = cleanStaffName(member.name);
                             const linked = Boolean(member.teamOfficialId || member.userId);
@@ -134,18 +149,25 @@ export function SessionStaffSection({ staff, renderKeys = NO_RENDER_KEYS, option
                                         {name.charAt(0).toUpperCase() || "?"}
                                     </Box>
                                     {linked ? (
-                                        <Stack direction="row" spacing={1} alignItems="center" useFlexGap flexWrap="wrap" sx={{ flex: 1, minWidth: 0 }}>
-                                            <Typography sx={{ fontWeight: 700 }} noWrap>
-                                                {name}
-                                            </Typography>
-                                            <Chip
-                                                size="small"
-                                                variant="outlined"
-                                                color="secondary"
-                                                icon={<LinkOutlined />}
-                                                label={member.teamOfficialId ? TEAM_OFFICIAL_BADGE : TEAM_ADMIN_BADGE}
-                                            />
-                                        </Stack>
+                                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                                            <Stack direction="row" spacing={1} alignItems="center" useFlexGap flexWrap="wrap">
+                                                <Typography sx={{ fontWeight: 700 }} noWrap>
+                                                    {name}
+                                                </Typography>
+                                                <Chip
+                                                    size="small"
+                                                    variant="outlined"
+                                                    color="secondary"
+                                                    icon={<LinkOutlined />}
+                                                    label={member.teamOfficialId ? TEAM_OFFICIAL_BADGE : TEAM_ADMIN_BADGE}
+                                                />
+                                            </Stack>
+                                            {clash && (
+                                                <Typography variant="caption" component="p" sx={{ color: "error.main" }}>
+                                                    {STAFF_NAME_TAKEN_MESSAGE}
+                                                </Typography>
+                                            )}
+                                        </Box>
                                     ) : (
                                         <TextField
                                             label="Name"
@@ -222,7 +244,7 @@ export function SessionStaffSection({ staff, renderKeys = NO_RENDER_KEYS, option
                         color="error"
                         variant="contained"
                         onClick={() => {
-                            if (pending) onRemove(pending.key);
+                            if (pending) removeNow(pending.key);
                             setPending(null);
                         }}
                         sx={{ minHeight: 44 }}

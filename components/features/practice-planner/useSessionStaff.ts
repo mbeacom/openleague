@@ -73,6 +73,13 @@ export function useSessionStaff({
             if (locked) return;
             setStaff((current) => current?.filter((member) => member.id !== key));
             setPlays((rows) => withoutStaffMember(rows, key));
+            // The person's render key goes with them (it is keyed by their current id).
+            setRenderKeys((current) => {
+                if (!current.has(key)) return current;
+                const next = new Map(current);
+                next.delete(key);
+                return next;
+            });
             markDirty();
         },
         [locked, markDirty, setPlays],

@@ -57,6 +57,8 @@ describe("PracticeSessionEditor: the Staff section", () => {
         expect(document.body.textContent).not.toContain("@");
         fireEvent.click(within(menu).getByRole("menuitem", { name: /Pat Park/ }));
         const list = screen.getByRole("list", { name: "Staff" });
+        // Explicit: list-style none drops the list role in some browsers.
+        expect(list).toHaveAttribute("role", "list");
         expect(within(list).getByText("Pat Park")).toBeInTheDocument();
         expect(within(list).getByText("Team official")).toBeInTheDocument();
         expect(within(list).queryByRole("textbox")).toBeNull();
@@ -100,7 +102,8 @@ describe("PracticeSessionEditor: the Staff section", () => {
         const field = screen.getAllByRole("textbox", { name: "Name" })[1];
         field.focus();
         await save();
-        // The same element, still focused: the row kept its React key when its id changed.
+        // Element identity is the proof: a remount would put a new input in the document (and focus
+        // would fall to the body), so the same element, still focused, means the row kept its React key.
         expect(screen.getAllByRole("textbox", { name: "Name" })[1]).toBe(field);
         expect(field).toHaveFocus();
         fireEvent.change(field, { target: { value: "Pat Park" } });
@@ -131,6 +134,51 @@ describe("PracticeSessionEditor: the Staff section", () => {
         await save();
         expect(sent(onSave).staff?.map((member) => member.name)).toEqual(["Coach Lee"]);
         expect(sent(onSave).plays.map((row) => row.staff)).toEqual([[], ["st1"], []]);
+    });
+
+    it("moves focus to Add staff after a remove, at once or after the confirm; Cancel returns it to the remove button", async () => {
+        renderEditor(STAFFED, { staff: [LEE, SAM, { id: "st3", name: "Idle" }] });
+        fireEvent.click(screen.getByRole("button", { name: "Remove Idle" }));
+        await waitFor(() => expect(screen.getByRole("button", { name: "Add staff" })).toHaveFocus());
+
+        const removeSam = screen.getByRole("button", { name: "Remove Sam" });
+        removeSam.focus();
+        fireEvent.click(removeSam);
+        fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Cancel" }));
+        await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+        expect(removeSam).toHaveFocus();
+
+        fireEvent.click(removeSam);
+        fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Remove" }));
+        await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+        expect(screen.getByRole("button", { name: "Add staff" })).toHaveFocus();
+    });
+
+    it("keeps a clashing person out of the save, with the message shown, so other edits still save", async () => {
+        const onSave = renderEditor([drill("k1", 0, { staff: ["st2", "k-dup"] })], { staff: [SAM, { id: "k-dup", name: " sam " }] });
+        expect(screen.getAllByText(STAFF_NAME_TAKEN_MESSAGE)).toHaveLength(2);
+        fireEvent.change(screen.getByLabelText(/^Session Title/), { target: { value: "Renamed" } });
+        await save();
+        expect(sent(onSave).staff).toEqual([SAM]);
+        expect(sent(onSave).plays[0].staff).toEqual(["st2"]);
+        // The editor still holds them: fixing the name sends them again.
+        fireEvent.change(screen.getAllByRole("textbox", { name: "Name" })[1], { target: { value: "Sam B" } });
+        await save();
+        const second = onSave.mock.calls[1][0] as { staff?: SessionStaffMember[]; plays: SessionItem[] };
+        expect(second.staff).toEqual([SAM, { id: "k-dup", name: "Sam B" }]);
+        expect(second.plays[0].staff).toEqual(["st2", "k-dup"]);
+    });
+
+    it("doesn't offer an official or admin whose name someone listed has, and shows a clash under a linked person", async () => {
+        renderEditor([drill("k1", 0)], { staff: [{ id: "st4", name: "pat park" }] }, undefined, { staffOptions: OPTIONS });
+        expect(itemTexts(await openAddStaff())).toEqual(["Coach LeeHead Coach", "Alex AdminTeam admin", "Type a name"]);
+        fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+        await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+        fireEvent.click(within(await openAddStaff()).getByRole("menuitem", { name: /Coach Lee/ }));
+        expect(screen.queryByText(STAFF_NAME_TAKEN_MESSAGE)).toBeNull();
+        fireEvent.change(screen.getByRole("textbox", { name: "Name" }), { target: { value: "COACH LEE" } });
+        const linked = within(screen.getByRole("list", { name: "Staff" })).getAllByRole("listitem")[1];
+        expect(within(linked).getByText(STAFF_NAME_TAKEN_MESSAGE)).toBeInTheDocument();
     });
 
     it("says when a typed name clashes with another person's, ignoring case", async () => {

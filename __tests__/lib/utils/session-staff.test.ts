@@ -173,6 +173,13 @@ describe("editor list edits (Review Focus 4, 5)", () => {
         expect(all.rows).toEqual(rows);
     });
 
+    it("sends a clashing name only for the first person who has it, and no row keeps a later one's key", () => {
+        const staff: SessionStaffMember[] = [{ id: "s1", name: "Sam" }, { id: "s2", name: "İlker" }, { id: "s3", name: " sam " }, { id: "s4", name: "ilker" }];
+        const payload = namedStaffPayload(staff, [{ id: "r1", staff: ["s3", "s1", "s4"] }]);
+        expect(payload.staff.map((entry) => entry.id)).toEqual(["s1", "s2"]);
+        expect(payload.rows[0].staff).toEqual(["s1"]);
+    });
+
     it("turns the list into save inputs, links only when set", () => {
         expect(toSessionStaffInputs([
             { id: "s1", name: "Coach Lee", teamOfficialId: "coff", userId: null },
