@@ -5,7 +5,7 @@
  * combined legend. Then the drills, paired into .bench-page containers that
  * app/(print)/print.css starts on fresh pages. Nothing auto-prints: the
  * toolbar's Print button calls window.print(), and stays disabled until every
- * drill's diagram is ready. The toolbar itself is hidden in print.
+ * drill's diagram and the team mark are ready. The toolbar itself is hidden in print.
  */
 import { useCallback, useMemo, useState } from "react";
 import { Box, Button, Stack, Typography } from "@mui/material";
@@ -71,7 +71,10 @@ export function BenchSheet({ session: stored }: { session: BenchSheetSession }) 
         (id: string) => setReadyIds((prev) => (prev.has(id) ? prev : new Set(prev).add(id))),
         []
     );
-    const allReady = drills.every(({ sp }) => readyIds.has(sp.id));
+    // The team mark counts too: a hosted logo is a network image (practice logo spec R5).
+    const [markShown, setMarkShown] = useState(false);
+    const onMarkReady = useCallback(() => setMarkShown(true), []);
+    const allReady = drills.every(({ sp }) => readyIds.has(sp.id)) && (!mark || markShown);
 
     return (
         <Box className="bench-sheet" sx={{ maxWidth: 820, mx: "auto", p: { xs: 2, sm: 4 }, bgcolor: "#fff", color: "#000" }}>
@@ -97,7 +100,7 @@ export function BenchSheet({ session: stored }: { session: BenchSheetSession }) 
 
             <Box component="header" sx={{ mb: 3 }}>
                 <Stack direction="row" spacing={1.5} alignItems="center">
-                    {mark && <TeamMarkImage mark={mark} />}
+                    {mark && <TeamMarkImage mark={mark} onReady={onMarkReady} />}
                     <Typography variant="h4" component="h1" sx={{ fontWeight: 800, minWidth: 0 }}>
                         {session.title}
                     </Typography>

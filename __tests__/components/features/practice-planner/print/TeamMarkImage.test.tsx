@@ -48,11 +48,67 @@ describe("TeamMarkImage", () => {
     });
 });
 
+describe("TeamMarkImage: readiness for print", () => {
+    it("is ready once the logo loads", () => {
+        const onReady = vi.fn();
+        render(<TeamMarkImage mark={MARK} onReady={onReady} />);
+        expect(onReady).not.toHaveBeenCalled();
+        fireEvent.load(screen.getByRole("img", { name: "Ice Hawks logo" }));
+        expect(onReady).toHaveBeenCalled();
+    });
+
+    it("is ready once the Crest loads in place of a logo that failed", () => {
+        const onReady = vi.fn();
+        render(<TeamMarkImage mark={MARK} onReady={onReady} />);
+        fireEvent.error(screen.getByRole("img", { name: "Ice Hawks logo" }));
+        expect(onReady).not.toHaveBeenCalled();
+        const crest = screen.getByRole("img", { name: "Ice Hawks logo" });
+        expect(crest).toHaveAttribute("src", "data:image/png;base64,CREST");
+        fireEvent.load(crest);
+        expect(onReady).toHaveBeenCalled();
+    });
+
+    it("is ready when neither the logo nor the Crest can be drawn", () => {
+        mockCrestPng.mockReturnValue(null);
+        try {
+            const onReady = vi.fn();
+            const { container } = render(<TeamMarkImage mark={MARK} onReady={onReady} />);
+            fireEvent.error(screen.getByRole("img", { name: "Ice Hawks logo" }));
+            expect(container.querySelector("img")).toBeNull();
+            expect(onReady).toHaveBeenCalled();
+        } finally {
+            mockCrestPng.mockReturnValue("data:image/png;base64,CREST");
+        }
+    });
+
+    it("is ready when the Crest image itself fails", () => {
+        const onReady = vi.fn();
+        render(<TeamMarkImage mark={{ ...MARK, logoUrl: null }} onReady={onReady} />);
+        fireEvent.error(screen.getByRole("img", { name: "Ice Hawks logo" }));
+        expect(onReady).toHaveBeenCalled();
+    });
+
+    it("tries a replaced logo again after the previous one failed", () => {
+        const { rerender } = render(<TeamMarkImage mark={MARK} />);
+        fireEvent.error(screen.getByRole("img", { name: "Ice Hawks logo" }));
+        expect(screen.getByRole("img")).toHaveAttribute("src", "data:image/png;base64,CREST");
+        const next = "https://abc.public.blob.vercel-storage.com/branding/team/t/l2.png";
+        rerender(<TeamMarkImage mark={{ ...MARK, logoUrl: next }} />);
+        expect(screen.getByRole("img")).toHaveAttribute("src", next);
+    });
+
+    it("prefers the export-ready logo image over the logo URL", () => {
+        const dataUrl = "data:image/png;base64,iVBORw0KGgoAAAA=";
+        render(<TeamMarkImage mark={{ ...MARK, logoImage: { dataUrl, width: 10, height: 10 } }} />);
+        expect(screen.getByRole("img")).toHaveAttribute("src", dataUrl);
+    });
+});
+
 describe("TeamMarkImage: the Crest's font", () => {
     const original = Object.getOwnPropertyDescriptor(document, "fonts");
-    function stubFonts(load: (font: string) => Promise<unknown>) {
+    function stubFonts(load: (font: string) => Promise<unknown>, check?: (font: string) => boolean) {
         const spy = vi.fn(load);
-        Object.defineProperty(document, "fonts", { configurable: true, value: { load: spy } });
+        Object.defineProperty(document, "fonts", { configurable: true, value: check ? { load: spy, check } : { load: spy } });
         return spy;
     }
     afterEach(() => {
@@ -86,6 +142,31 @@ describe("TeamMarkImage: the Crest's font", () => {
         expect(container.querySelector("img")).toBeNull();
         await act(async () => { await vi.advanceTimersByTimeAsync(CREST_FONT_WAIT_MS); });
         expect(screen.getByRole("img", { name: "Ice Hawks logo" })).toHaveAttribute("src", "data:image/png;base64,CREST");
+    });
+
+    it("draws again when the font arrives after the wait gave up", async () => {
+        vi.useFakeTimers();
+        let arrive!: () => void;
+        const arrived = new Promise<void>((resolve) => { arrive = resolve; });
+        let available = false;
+        stubFonts(() => arrived, () => available);
+        mockCrestPng.mockClear();
+        render(<TeamMarkImage mark={{ ...MARK, logoUrl: null }} />);
+        await act(async () => { await vi.advanceTimersByTimeAsync(CREST_FONT_WAIT_MS); });
+        expect(mockCrestPng).toHaveBeenCalledTimes(1);
+        available = true;
+        await act(async () => { arrive(); await arrived; });
+        expect(mockCrestPng).toHaveBeenCalledTimes(2);
+        expect(screen.getByRole("img", { name: "Ice Hawks logo" })).toHaveAttribute("src", "data:image/png;base64,CREST");
+    });
+
+    it("doesn't draw again when the font was in time", async () => {
+        let loaded!: () => void;
+        stubFonts(() => new Promise<void>((resolve) => { loaded = resolve; }), () => true);
+        mockCrestPng.mockClear();
+        render(<TeamMarkImage mark={{ ...MARK, logoUrl: null }} />);
+        await act(async () => loaded());
+        expect(mockCrestPng).toHaveBeenCalledTimes(1);
     });
 
     it("draws anyway when the font fails to load", async () => {

@@ -297,6 +297,41 @@ describe("BenchSheet: the team and its mark (practice logo spec R5)", () => {
     });
 });
 
+describe("BenchSheet: print waits for the team mark", () => {
+    const renderSheet = (session: BenchSheetSession) =>
+        renderWithPlanner(
+            <ThemeProvider theme={createTheme()}>
+                <BenchSheet session={session} />
+            </ThemeProvider>,
+            { platform: createHashPlatform() },
+        );
+    const NO_DRILLS = { ...SESSION, plays: [] };
+
+    it("enables Print only once a hosted logo has loaded", () => {
+        const logoUrl = "https://abc.public.blob.vercel-storage.com/branding/team/t/l.png";
+        renderSheet({ ...NO_DRILLS, teamMark: { id: SESSION.teamId, name: SESSION.teamName, logoUrl, color: null } });
+        const print = screen.getByRole("button", { name: "Print" });
+        expect(print).toBeDisabled();
+        fireEvent.load(screen.getByRole("img", { name: `${SESSION.teamName} logo` }));
+        expect(print).toBeEnabled();
+    });
+
+    it("enables Print once the Crest stands in for a logo that failed", () => {
+        const logoUrl = "https://abc.public.blob.vercel-storage.com/branding/team/t/l.png";
+        renderSheet({ ...NO_DRILLS, teamMark: { id: SESSION.teamId, name: SESSION.teamName, logoUrl, color: null } });
+        fireEvent.error(screen.getByRole("img", { name: `${SESSION.teamName} logo` }));
+        const print = screen.getByRole("button", { name: "Print" });
+        expect(print).toBeDisabled();
+        fireEvent.load(screen.getByRole("img", { name: `${SESSION.teamName} logo` }));
+        expect(print).toBeEnabled();
+    });
+
+    it("doesn't wait for a mark when there is no team", () => {
+        renderSheet({ ...NO_DRILLS, teamName: "", teamMark: null });
+        expect(screen.getByRole("button", { name: "Print" })).toBeEnabled();
+    });
+});
+
 describe("BenchSheet: block rows", () => {
     const WITH_BLOCKS: BenchSheetSession = {
         ...SESSION,
