@@ -92,6 +92,7 @@ describe('isOwnedBlobUrl', () => {
     ['a host with our store as a prefix', `https://${HOST}.evil.com/${PREFIX}x.png`],
     ['a subdomain of our store', `https://a.${HOST}/${PREFIX}x.png`],
     ['an explicit port', `https://${HOST}:8443/${PREFIX}x.png`],
+    ['credentials on our host', `https://user:pw@${HOST}/${PREFIX}x.png`],
     ['the store id on another access level', `https://abc123.private.blob.vercel-storage.com/${PREFIX}x.png`],
   ])('rejects %s', (_label, url) => {
     expect(isOwnedBlobUrl(url, PREFIX)).toBe(false);

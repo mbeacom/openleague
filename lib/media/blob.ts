@@ -95,6 +95,7 @@ export function isOwnedBlobUrl(url: string, prefix: string): boolean {
   }
   if (parsed.protocol !== "https:") return false;
   if (parsed.host !== host) return false;
+  if (parsed.username || parsed.password) return false;
   return parsed.pathname.replace(/^\//, "").startsWith(prefix);
 }
 
