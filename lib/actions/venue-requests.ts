@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
+import { parseId } from "@/lib/utils/ids";
 import {
   getUserLeagueRole,
   requireTeamMember,
@@ -799,6 +800,14 @@ export async function getVenueRequestQueue(
   }>
 > {
   try {
+    const parsedOrganizationId = parseId(organizationId);
+    const parsedVenueId = parseId(venueId);
+    if (!parsedOrganizationId || !parsedVenueId) {
+      return { success: false, error: "Failed to load request queue." };
+    }
+    organizationId = parsedOrganizationId;
+    venueId = parsedVenueId;
+
     await requireVenueRequestManager(organizationId, venueId);
     const venue = await prisma.venue.findFirst({
       where: {

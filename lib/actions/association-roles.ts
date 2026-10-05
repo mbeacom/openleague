@@ -11,6 +11,7 @@ import type {
 } from "@prisma/client";
 
 import { prisma } from "@/lib/db/prisma";
+import { parseId } from "@/lib/utils/ids";
 import { requireUserId } from "@/lib/auth/session";
 import {
   Capability,
@@ -254,6 +255,12 @@ export async function listAssociationResponsibilityGrants(
   leagueId: string,
 ): Promise<ActionResult<ResponsibilityGrantRow[]>> {
   try {
+    const parsedLeagueId = parseId(leagueId);
+    if (!parsedLeagueId) {
+      return { success: false, error: "You do not have permission to view responsibilities." };
+    }
+    leagueId = parsedLeagueId;
+
     const actingUserId = await requireUserId();
 
     if (!(await requireGrantAdministration(actingUserId, leagueId))) {

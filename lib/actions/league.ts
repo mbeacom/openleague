@@ -1223,6 +1223,9 @@ export async function getLeagueWithStats(leagueId: string): Promise<{
   }>;
 } | null> {
   try {
+    const parsedLeagueId = parseId(leagueId);
+    if (!parsedLeagueId) return null;
+    leagueId = parsedLeagueId;
     // Authorization: league contact info + activity feed (incl. child names)
     // must not be readable by unauthenticated callers of this server action.
     const userId = await requireUserId();
@@ -1484,6 +1487,9 @@ export async function getLeagueTeamsWithDivisions(leagueId: string): Promise<{
   };
 } | null> {
   try {
+    const parsedLeagueId = parseId(leagueId);
+    if (!parsedLeagueId) return null;
+    leagueId = parsedLeagueId;
     // Authorization: only league members may enumerate teams/divisions.
     const userId = await requireUserId();
     const hasAccess = await hasLeagueAccess(userId, leagueId);
@@ -1599,6 +1605,9 @@ export async function getLeagueDivisions(leagueId: string): Promise<Array<{
   skillLevel: string | null;
 }>> {
   try {
+    const parsedLeagueId = parseId(leagueId);
+    if (!parsedLeagueId) return [];
+    leagueId = parsedLeagueId;
     // Authorization: only league members may enumerate divisions.
     const userId = await requireUserId();
     const hasAccess = await hasLeagueAccess(userId, leagueId);
@@ -1632,6 +1641,14 @@ export async function getLeagueStatisticsData(
   leagueId: string
 ): Promise<ActionResult<LeagueStatistics>> {
   try {
+    const parsedLeagueId = parseId(leagueId);
+    if (!parsedLeagueId) {
+      return {
+        success: false,
+        error: "Unauthorized - you are not a member of this league",
+      };
+    }
+    leagueId = parsedLeagueId;
     const userId = await requireUserId();
 
     // Verify user has access to the league

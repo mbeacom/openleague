@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
+import { parseId } from "@/lib/utils/ids";
 import { requireUserId } from "@/lib/auth/session";
 import { revalidatePath } from "next/cache";
 import {
@@ -581,6 +582,17 @@ export async function getTeamMembersWithRoles(
     joinedAt: Date;
 }>>> {
     try {
+        const parsedLeagueId = parseId(leagueId);
+        const parsedTeamId = parseId(teamId);
+        if (!parsedLeagueId || !parsedTeamId) {
+            return {
+                success: false,
+                error: "Unauthorized - you are not a member of this league",
+            };
+        }
+        leagueId = parsedLeagueId;
+        teamId = parsedTeamId;
+
         const userId = await requireUserId();
 
         // Verify user has access to view team members

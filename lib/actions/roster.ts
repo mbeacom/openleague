@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
+import { parseId } from "@/lib/utils/ids";
 import { requireTeamAdmin, requireUserId } from "@/lib/auth/session";
 import { revalidatePath } from "next/cache";
 import {
@@ -498,6 +499,14 @@ export async function updateTeamMemberUsahId(input: UpdateTeamMemberUsahIdInput)
  */
 export async function exportLeagueRoster(leagueId: string) {
   try {
+    const parsedLeagueId = parseId(leagueId);
+    if (!parsedLeagueId) {
+      return {
+        error: "Unauthorized: Only league admins can export roster data",
+      };
+    }
+    leagueId = parsedLeagueId;
+
     const userId = await requireUserId();
 
     // Verify user is league admin

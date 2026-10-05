@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
+import { parseOptionalId } from "@/lib/utils/ids";
 import {
   getUserLeagueRole,
   isTeamAdmin,
@@ -308,9 +309,18 @@ export async function getSeasons(params: {
   teamId?: string;
   includeArchived?: boolean;
 }) {
+  const parsedLeagueId = parseOptionalId(params?.leagueId);
+  const parsedTeamId = parseOptionalId(params?.teamId);
+  if (parsedLeagueId === null) {
+    throw new Error("Unauthorized: You are not a member of this league");
+  }
+  if (parsedTeamId === null) {
+    throw new Error("Unauthorized: You are not a member of this team");
+  }
+
   const userId = await requireUserId();
-  const leagueId = params.leagueId || null;
-  const teamId = params.teamId || null;
+  const leagueId = parsedLeagueId ?? null;
+  const teamId = parsedTeamId ?? null;
 
   if (leagueId) {
     await requireLeagueRole(leagueId, "MEMBER");

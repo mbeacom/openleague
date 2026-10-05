@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
+import { parseId } from "@/lib/utils/ids";
 import {
   requireVenueScheduleManager,
   VENUE_SCHEDULE_ROLES,
@@ -149,6 +150,13 @@ export async function getVenueScheduleAdminData(
   }>
 > {
   try {
+    const parsedOrganizationId = parseId(organizationId);
+    const parsedVenueId = parseId(venueId);
+    if (!parsedOrganizationId || !parsedVenueId) {
+      return { success: false, error: "Failed to load venue schedule data." };
+    }
+    organizationId = parsedOrganizationId;
+    venueId = parsedVenueId;
     await requireVenueScheduleManager(organizationId, venueId);
     const venue = await ensureVenueContext(organizationId, venueId);
 

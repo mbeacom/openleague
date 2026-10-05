@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getUserLeagueRole, isTeamAdmin, requireLeagueRole, requireUserId } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
+import { parseId } from "@/lib/utils/ids";
 import { recordGearActivity } from "@/lib/services/gear-ledger";
 import { reportGearActionFailure } from "@/lib/services/gear-observability";
 import {
@@ -423,6 +424,10 @@ export async function getGearNeedsContext(leagueId: string): Promise<{
   teams: Array<{ id: string; name: string }>;
   needs: GearNeedDto[];
 } | null> {
+  const parsedLeagueId = parseId(leagueId);
+  if (!parsedLeagueId) return null;
+  leagueId = parsedLeagueId;
+
   const userId = await requireUserId();
   const leagueRole = await getUserLeagueRole(userId, leagueId);
   if (!leagueRole) return null;
@@ -473,6 +478,12 @@ export async function getGearNeedsContext(leagueId: string): Promise<{
 }
 
 export async function getGearNeedDetail(leagueId: string, needId: string): Promise<GearNeedDto | null> {
+  const parsedLeagueId = parseId(leagueId);
+  const parsedNeedId = parseId(needId);
+  if (!parsedLeagueId || !parsedNeedId) return null;
+  leagueId = parsedLeagueId;
+  needId = parsedNeedId;
+
   const userId = await requireUserId();
   const need = await prisma.teamGearNeed.findFirst({
     where: { id: needId, leagueId, league: { isActive: true }, team: { leagueId, isActive: true } },
@@ -501,6 +512,12 @@ export async function getGearNeedDetail(leagueId: string, needId: string): Promi
 }
 
 export async function getTeamGearNeeds(leagueId: string, teamId: string): Promise<GearNeedDto[]> {
+  const parsedLeagueId = parseId(leagueId);
+  const parsedTeamId = parseId(teamId);
+  if (!parsedLeagueId || !parsedTeamId) return [];
+  leagueId = parsedLeagueId;
+  teamId = parsedTeamId;
+
   const context = await getGearNeedsContext(leagueId);
   if (!context || !context.teamIds.includes(teamId)) return [];
   return context.needs.filter((need) => need.teamId === teamId);

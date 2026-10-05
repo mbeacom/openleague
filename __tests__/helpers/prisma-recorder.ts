@@ -87,29 +87,48 @@ export function createPrismaRecorder() {
 
 export type PrismaRecorder = ReturnType<typeof createPrismaRecorder>;
 
-/** Field names treated as identifiers when scanning recorded where-clauses. */
-const ID_KEY = /(^id$|Id$)/;
+/**
+ * Field names treated as identifiers when scanning recorded where-clauses.
+ * Compound unique keys (`userId_teamId`) are objects and are descended into.
+ */
+const ID_KEY = /^(id|[A-Za-z]+Id)$/;
+
+function isStringInList(value: unknown): boolean {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    Object.keys(value).length === 1 &&
+    Array.isArray((value as { in?: unknown }).in) &&
+    (value as { in: unknown[] }).in.every((entry) => typeof entry === "string")
+  );
+}
 
 /**
- * Walk every recorded call's arguments and return id-like fields whose value
- * is neither a string nor null (e.g. a filter object or undefined).
+ * Walk the `where` clauses of every recorded call and return id-like fields
+ * whose value is neither a string, null, nor an `{ in: string[] }` list (for
+ * example a filter object or undefined).
  */
 export function nonStringIdArguments(calls: RecordedCall[]): string[] {
   const problems: string[] = [];
-  const visit = (value: unknown, path: string) => {
+  const scanWhere = (value: unknown, path: string) => {
     if (value === null || typeof value !== "object") return;
     for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
       const childPath = `${path}.${key}`;
-      if (ID_KEY.test(key) && child !== null && typeof child !== "string") {
-        if (!(typeof child === "object" && child && "in" in child && Array.isArray((child as { in: unknown }).in) &&
-          (child as { in: unknown[] }).in.every((v) => typeof v === "string"))) {
-          problems.push(childPath);
-        }
+      if (ID_KEY.test(key) && child !== null && typeof child !== "string" && !isStringInList(child)) {
+        problems.push(childPath);
+        continue;
       }
-      visit(child, childPath);
+      scanWhere(child, childPath);
     }
   };
-  for (const call of calls) visit(call.args, `${call.model}.${call.method}`);
+  const findWhere = (value: unknown, path: string) => {
+    if (value === null || typeof value !== "object") return;
+    for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+      if (key === "where") scanWhere(child, `${path}.where`);
+      else findWhere(child, `${path}.${key}`);
+    }
+  };
+  for (const call of calls) findWhere(call.args, `${call.model}.${call.method}`);
   return problems;
 }
 

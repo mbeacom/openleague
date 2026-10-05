@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
+import { parseId } from "@/lib/utils/ids";
 import { requireUserId } from "@/lib/auth/session";
 import { verifyLeagueAccess, LeagueAccessLevel } from "@/lib/utils/security";
 import { sanitizeErrorForLogging } from "@/lib/utils/error-handling";
@@ -167,6 +168,10 @@ export async function getAuditActionsForLeague(
   leagueId: string
 ): Promise<string[]> {
   try {
+    const parsedLeagueId = parseId(leagueId);
+    if (!parsedLeagueId) return [];
+    leagueId = parsedLeagueId;
+
     const userId = await requireUserId();
 
     // Verify user has league admin access
