@@ -88,6 +88,42 @@ describe("TeamMarkImage: readiness for print", () => {
         expect(onReady).toHaveBeenCalled();
     });
 
+    describe("an image that settled before hydration", () => {
+        function stubSettled(naturalWidth: number) {
+            const proto = HTMLImageElement.prototype;
+            const complete = Object.getOwnPropertyDescriptor(proto, "complete");
+            const width = Object.getOwnPropertyDescriptor(proto, "naturalWidth");
+            Object.defineProperty(proto, "complete", { configurable: true, get: () => true });
+            Object.defineProperty(proto, "naturalWidth", { configurable: true, get: () => naturalWidth });
+            return () => {
+                if (complete) Object.defineProperty(proto, "complete", complete);
+                if (width) Object.defineProperty(proto, "naturalWidth", width);
+            };
+        }
+
+        it("is ready on mount when the logo had already loaded", () => {
+            const restore = stubSettled(64);
+            try {
+                const onReady = vi.fn();
+                render(<TeamMarkImage mark={MARK} onReady={onReady} />);
+                expect(onReady).toHaveBeenCalled();
+                expect(screen.getByRole("img")).toHaveAttribute("src", MARK.logoUrl);
+            } finally {
+                restore();
+            }
+        });
+
+        it("falls back to the Crest when the logo had already failed", () => {
+            const restore = stubSettled(0);
+            try {
+                render(<TeamMarkImage mark={MARK} />);
+                expect(screen.getByRole("img")).toHaveAttribute("src", "data:image/png;base64,CREST");
+            } finally {
+                restore();
+            }
+        });
+    });
+
     it("tries a replaced logo again after the previous one failed", () => {
         const { rerender } = render(<TeamMarkImage mark={MARK} />);
         fireEvent.error(screen.getByRole("img", { name: "Ice Hawks logo" }));
