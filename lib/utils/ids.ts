@@ -8,7 +8,10 @@ import { z } from "zod";
  * `lib/utils/validation.ts` re-exports everything here.
  */
 
-/** Every model id is a Prisma `@default(cuid())` value. */
+/**
+ * A Prisma-generated entity id (`@id @default(cuid())`). Not for app-assigned
+ * ids (such as fixed sentinel ids) or composite keys.
+ */
 export const idSchema = z.string().cuid("Invalid ID format");
 
 /** URL slugs: lowercase alphanumerics separated by single hyphens. */
