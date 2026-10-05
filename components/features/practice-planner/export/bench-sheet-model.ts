@@ -106,8 +106,6 @@ export type BenchSheetTimelineRow =
           stations: string[];
           /** A Start column (each round's clock time) plus one column per station */
           grid: RotationTable;
-          /** "run by Coach Lee, Sam" for a lone drill or a block; absent when nobody runs it (a station's names are in its line) */
-          runBy?: string;
       };
 
 export interface BenchSheetDrillItem {

@@ -77,7 +77,6 @@ td ul { margin: 2px 0 0; padding-left: 1.1em; }
 .rotation th, .rotation td { text-align: center; }
 .rotation .time { white-space: nowrap; }
 .gap { color: #37474F; }
-.staff { font-weight: 700; }
 .run-by { color: #37474F; }
 .planned { margin: 6px 0 0; }
 .planned.over { font-weight: 700; color: #C62828; }

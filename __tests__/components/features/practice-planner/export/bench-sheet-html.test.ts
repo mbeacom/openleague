@@ -250,6 +250,8 @@ describe("renderBenchSheetHtml: practice staff (spec R9)", () => {
         });
         const doc = parse(out);
         expect(doc.querySelector(".staff")?.textContent).toBe("Staff: <Coach> & Sam");
+        // Plain, like the place and gap lines and the live bench sheet.
+        expect(doc.querySelector("style")?.textContent).not.toMatch(/\.staff\s*\{/);
         expect(out).toContain("Staff: &lt;Coach&gt; &amp; Sam");
         const rows = Array.from(doc.querySelectorAll(".timeline tbody tr"));
         expect(rows[0].querySelector("li")?.textContent).toBe("Breakout · 10 min · run by <Sam>");

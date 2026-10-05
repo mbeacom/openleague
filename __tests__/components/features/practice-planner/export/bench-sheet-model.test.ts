@@ -271,6 +271,23 @@ describe("buildBenchSheetModel: rotation and the gap (spec R10)", () => {
         expect(model.drills.map((d) => d.station)).toEqual(["Station 1 of 3", "Station 2 of 3", "Station 3 of 3"]);
     });
 
+    it("names who runs each rotating station in its line, after stays, and puts no runBy on the rotation row", () => {
+        const model = buildBenchSheetModel(
+            {
+                ...ROTATING,
+                staff: [{ id: "s1", name: "Coach Lee" }, { id: "s2", name: "Sam" }],
+                plays: ROTATING.plays.map((row, index) => ({ ...row, staff: [["s1"], [], ["s2", "s1"]][index] })),
+            },
+            renderers(),
+        );
+        expect(model.timeline[0]).toMatchObject({
+            kind: "rotation",
+            stations: ["Goalie · stays · run by Coach Lee", "Skate A", "Skate B · run by Sam, Coach Lee"],
+            grid: { columns: ["Goalie", "Skate A", "Skate B"] },
+        });
+        expect(model.timeline[0]).not.toHaveProperty("runBy");
+    });
+
     it("says the gap for the header only when there is one", () => {
         expect(buildBenchSheetModel(ROTATING, renderers()).gap).toBe("2 min between blocks");
         expect(buildBenchSheetModel(UNBOOKED, renderers()).gap).toBeNull();

@@ -53,7 +53,7 @@ function header(model: BenchSheetModel): Paragraph[] {
         ...(model.teamName ? [new Paragraph({ children: textRuns(model.teamName, { bold: true }) })] : []),
         new Paragraph({ children: textRuns(model.when) }),
         ...(model.place ? [new Paragraph({ children: textRuns(model.place) })] : []),
-        ...(model.staff ? [new Paragraph({ children: textRuns(model.staff, { bold: true }) })] : []),
+        ...(model.staff ? [new Paragraph({ children: textRuns(model.staff) })] : []),
         ...(model.gap ? [new Paragraph({ children: textRuns(model.gap) })] : []),
     ];
 }

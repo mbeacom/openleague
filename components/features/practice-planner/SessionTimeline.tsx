@@ -277,7 +277,7 @@ export function SessionTimeline<T extends SessionTimelinePlay>({
                                                     {drills.map((sp) => (
                                                         <li key={sp.id}>
                                                             <DrillName id={sp.id} name={sp.play.name} onSelect={onSelectPlay} />
-                                                            <Typography component="span" variant="caption" color="text.secondary">
+                                                            <Typography component="span" variant="caption" color="text.secondary" sx={{ overflowWrap: "anywhere" }}>
                                                                 {`${grid ? staysSuffix(sp.stays) : ` · ${sp.duration} min`}${runBy(sp)}`}
                                                             </Typography>
                                                         </li>

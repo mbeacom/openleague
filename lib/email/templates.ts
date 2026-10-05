@@ -1667,9 +1667,9 @@ ${sessionLink}`,
  * admin (userId) or through a team official (teamOfficial.userId), and only
  * while that link is live: the official ACTIVE or INVITED on the team, the
  * admin still an ADMIN member of it (the rule the save and edit loader use).
- * Rows use
- * the bench sheet's titles and buildSchedule starts; times are in the venue's
- * zone when booked, else FALLBACK_TIME_ZONE (Team has no zone of its own).
+ * Rows use the bench sheet's titles and buildSchedule starts; times are in
+ * the venue's zone when booked, else FALLBACK_TIME_ZONE (Team has no zone of
+ * its own).
  */
 async function practiceStationLines(
   session: { id: string; teamId: string; date: Date; startAt: Date | null; transitionMinutes: number; venue: { timezone: string } | null },

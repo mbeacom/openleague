@@ -18,7 +18,7 @@ import { plannedLabel } from "@/components/features/practice-planner/SessionTime
 import { planToEditorSession, type PlanDocument } from "@/lib/plan-document";
 import { blockTitle, drillRows, isBlockRow } from "@/lib/utils/session-rows";
 import { BLOCK_ICONS } from "@/components/features/practice-planner/BlockRowCard";
-import { runBySuffix, staffHeaderLabel } from "@/lib/utils/session-staff";
+import { runBySuffix, staffHeaderLabel, staffNameKey } from "@/lib/utils/session-staff";
 
 const THUMB = { width: 120, height: 51 } as const;
 
@@ -27,6 +27,9 @@ export function PlanPreview({ plan }: { plan: PlanDocument }) {
     const groups = useMemo(() => groupStations(session.plays, session.transitionMinutes), [session]);
     const mounted = useMounted();
     const staffLine = staffHeaderLabel(session.staff.map((name) => ({ name })));
+    // A row's names in the list's spelling (a file may spell them differently; they match ignoring case).
+    const listed = useMemo(() => new Map(session.staff.map((name) => [staffNameKey(name), name])), [session]);
+    const runBy = (names: readonly string[] | undefined) => runBySuffix((names ?? []).map((name) => listed.get(staffNameKey(name)) ?? name));
 
     // Canvas needs the DOM: thumbnails are drawn in the first render after mount.
     const thumbnails = useMemo(() => {
@@ -75,7 +78,7 @@ export function PlanPreview({ plan }: { plan: PlanDocument }) {
                                     <Box sx={{ minWidth: 0 }}>
                                         <Typography fontWeight={600}>{blockTitle(head.kind, head.label)}</Typography>
                                         <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: "pre-line" }}>
-                                            {`${head.instructions ? `${head.duration} min · ${head.instructions}` : `${head.duration} min`}${runBySuffix(head.staff)}`}
+                                            {`${head.instructions ? `${head.duration} min · ${head.instructions}` : `${head.duration} min`}${runBy(head.staff)}`}
                                         </Typography>
                                     </Box>
                                 </Stack>
@@ -111,7 +114,7 @@ export function PlanPreview({ plan }: { plan: PlanDocument }) {
                                                 <Box sx={{ minWidth: 0 }}>
                                                     <Typography fontWeight={600}>{play.name}</Typography>
                                                     <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: "pre-line" }}>
-                                                        {`${play.instructions ? `${timing} · ${play.instructions}` : timing}${runBySuffix(play.staff)}`}
+                                                        {`${play.instructions ? `${timing} · ${play.instructions}` : timing}${runBy(play.staff)}`}
                                                     </Typography>
                                                 </Box>
                                             </Stack>

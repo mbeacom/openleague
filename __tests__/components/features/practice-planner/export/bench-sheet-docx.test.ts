@@ -181,6 +181,10 @@ describe("renderBenchSheetDocx: practice staff (spec R9)", () => {
             ],
         });
         expect(xml).toContain("Staff: &lt;Coach&gt; &amp; Sam");
+        // Plain, like the place and gap lines and the live bench sheet.
+        const staffRun = xml.match(/<w:r>(?:(?!<w:r>)[\s\S])*?Staff: &lt;Coach&gt;/)?.[0] ?? "";
+        expect(staffRun).not.toBe("");
+        expect(staffRun).not.toContain("<w:b/>");
         expect(xml).not.toContain("\u0007");
         expect(xml).toContain("Shooting · run by &lt;Sam&gt;");
         expect(xml).toContain("Water · Fill up · run by Coach Lee");

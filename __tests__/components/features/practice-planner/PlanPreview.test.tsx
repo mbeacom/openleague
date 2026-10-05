@@ -6,7 +6,7 @@ vi.mock("@/lib/utils/canvas/thumbnail-generator", () => ({ generateThumbnail: ()
 
 import { PlanPreview } from "@/components/features/practice-planner/PlanPreview";
 import { STARTER_TEMPLATES, starterTemplatePlan } from "@/lib/data/starter-templates";
-import { serializePlan } from "@/lib/plan-document";
+import { parsePlan, serializePlan } from "@/lib/plan-document";
 
 const NOW = new Date("2026-10-04T18:00:00.000Z");
 
@@ -80,6 +80,30 @@ describe("PlanPreview: practice staff (spec R9)", () => {
         expect(screen.getByText("8 min · run by Sam")).toBeInTheDocument();
         expect(screen.getByText("10 min · Hard · run by Coach Lee, Sam")).toBeInTheDocument();
         expect(screen.getByText("10 min")).toBeInTheDocument();
+    });
+
+    it("shows each row's names in the list's spelling when the file spells them differently", () => {
+        const raw = JSON.parse(JSON.stringify(serializePlan(
+            {
+                title: "Spelled",
+                durationMinutes: 60,
+                date: null,
+                startTime: null,
+                staff: ["Coach Lee", "Sam"],
+                drills: [{ sequence: 0, duration: 10, runsWithPrevious: false, instructions: null, name: "Breakout", description: null, playData: null }],
+            },
+            "openleague-static",
+            NOW,
+        )));
+        raw.session.drills[0].staff = ["coach lee", "SAM"];
+        const parsed = parsePlan(raw);
+        if (!parsed.ok) throw new Error(parsed.error.message);
+        render(
+            <ThemeProvider theme={createTheme()}>
+                <PlanPreview plan={parsed.plan} />
+            </ThemeProvider>,
+        );
+        expect(screen.getByText("10 min · run by Coach Lee, Sam")).toBeInTheDocument();
     });
 
     it("shows no staff line for a plan without staff", () => {

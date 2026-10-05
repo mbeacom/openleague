@@ -190,6 +190,8 @@ describe("SessionTimeline: who runs each row (practice staff, spec R9)", () => {
         const [stations, block, shooting] = bodyRows();
         expect(within(stations).getByText("· 15 min · run by Coach Lee, Sam")).toBeInTheDocument();
         expect(within(stations).getByText("· 10 min · run by Sam")).toBeInTheDocument();
+        // A long unbroken name wraps inside the cell instead of widening the table.
+        expect(within(stations).getByText("· 15 min · run by Coach Lee, Sam")).toHaveStyle({ overflowWrap: "anywhere" });
         expect(within(block).getByText("· run by Coach Lee")).toBeInTheDocument();
         expect(within(shooting).queryByText(/run by/)).toBeNull();
     });
