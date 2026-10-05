@@ -160,6 +160,14 @@ describe("PracticeSessionEditor: Run by on the row cards", () => {
         expect(sent(onSave).plays.map((row) => row.staff)).toEqual([["st2"], ["st2", "st1"], ["st2", "st1"]]);
     });
 
+    it("marks the editor unsaved when a row's Run by changes (the autosave path)", () => {
+        renderEditor(STAFFED, { staff: [LEE, SAM] });
+        expect(screen.queryByText("Unsaved changes")).toBeNull();
+        fireEvent.keyDown(screen.getByRole("combobox", { name: "Run by for Drill k2" }), { key: "ArrowDown" });
+        fireEvent.click(screen.getByRole("option", { name: "Sam" }));
+        expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+    });
+
     it("keeps an open drill edit when Run by changes on another row", () => {
         renderEditor(STAFFED, { staff: [LEE, SAM] });
         fireEvent.click(screen.getByRole("button", { name: "Edit play 1" }));

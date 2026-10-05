@@ -333,7 +333,7 @@ export function SessionDrillCard({
                         )
                     )}
 
-                    {runBy && <RunByField {...runBy} title={play.name || `Drill ${number}`} disabled={locked} />}
+                    {runBy && <RunByField {...runBy} title={play.name || `Drill ${number}`} disabled={disabled || locked} />}
 
                     {!isEditing && (
                         <Tooltip title={canEditDiagram ? "" : "Save the session first"}>
