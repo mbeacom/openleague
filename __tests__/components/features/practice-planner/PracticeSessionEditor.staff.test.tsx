@@ -145,3 +145,40 @@ describe("PracticeSessionEditor: the Staff section", () => {
         expect(screen.getByRole("button", { name: "Add staff" })).toBeDisabled();
     });
 });
+
+describe("PracticeSessionEditor: Run by on the row cards", () => {
+    it("shows Run by on every drill and block card once someone is named, and saves the picks in order", async () => {
+        const onSave = renderEditor(STAFFED, { staff: [LEE, SAM] });
+        expect(screen.getAllByRole("combobox", { name: /^Run by for / }).map((field) => field.getAttribute("aria-label"))).toEqual([
+            "Run by for Drill k1", "Run by for Warm-up", "Run by for Drill k2",
+        ]);
+        const k2 = screen.getByRole("combobox", { name: "Run by for Drill k2" });
+        fireEvent.keyDown(k2, { key: "ArrowDown" });
+        fireEvent.click(screen.getByRole("option", { name: "Sam" }));
+        fireEvent.click(screen.getByRole("option", { name: "Coach Lee" }));
+        await save();
+        expect(sent(onSave).plays.map((row) => row.staff)).toEqual([["st2"], ["st2", "st1"], ["st2", "st1"]]);
+    });
+
+    it("keeps an open drill edit when Run by changes on another row", () => {
+        renderEditor(STAFFED, { staff: [LEE, SAM] });
+        fireEvent.click(screen.getByRole("button", { name: "Edit play 1" }));
+        fireEvent.change(screen.getByRole("textbox", { name: "Instructions" }), { target: { value: "Half speed" } });
+        fireEvent.keyDown(screen.getByRole("combobox", { name: "Run by for Drill k2" }), { key: "ArrowDown" });
+        fireEvent.click(screen.getByRole("option", { name: "Sam" }));
+        expect(screen.getByRole("textbox", { name: "Instructions" })).toHaveValue("Half speed");
+    });
+
+    it("hides Run by while nobody on the list has a name", () => {
+        renderEditor([drill("k1", 0)], { staff: [{ id: "st9", name: "" }] });
+        expect(screen.queryByRole("combobox", { name: /^Run by for / })).toBeNull();
+    });
+
+    it("drops a removed person's chips from the cards at once", async () => {
+        renderEditor(STAFFED, { staff: [LEE, SAM] });
+        expect(screen.getAllByText("Sam").length).toBeGreaterThan(1);
+        fireEvent.click(screen.getByRole("button", { name: "Remove Sam" }));
+        fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Remove" }));
+        expect(screen.queryByText("Sam")).toBeNull();
+    });
+});

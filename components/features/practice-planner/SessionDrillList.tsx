@@ -4,7 +4,8 @@ import type { ReactNode } from "react";
 import type { SegmentKind } from "@/types/segments";
 import { Alert, Box, Button, Paper, Stack, Tooltip, Typography } from "@mui/material";
 import { Add as AddIcon, Draw as DrawIcon } from "@mui/icons-material";
-import type { BlockInSession, BlockKind, PlayInSession, SessionItem } from "@/types/practice-planner";
+import type { BlockInSession, BlockKind, PlayInSession, SessionItem, SessionStaffMember } from "@/types/practice-planner";
+import { isNamedStaff } from "@/lib/utils/session-staff";
 import {
     SEGMENT_KIND_FIT_LABELS,
     canMove,
@@ -27,6 +28,7 @@ import { AddBlockMenu } from "./AddBlockMenu";
 import { BlockRowCard } from "./BlockRowCard";
 import { SessionDrillCard } from "./SessionDrillCard";
 import { StationBlockHeader, type StationRotationControls } from "./StationBlockHeader";
+import type { RowRunBy } from "./RunByField";
 
 export interface SessionDrillListProps {
     plays: SessionItem[];
@@ -60,6 +62,10 @@ export interface SessionDrillListProps {
     onSetRotation: (headIndex: number, minutes: number | null) => void;
     /** Marks the drill at this position as staying put in its rotating block. */
     onSetStays: (index: number, stays: boolean) => void;
+    /** The practice's staff (practice staff, spec R8); absent or unnamed hides Run by. */
+    staff?: SessionStaffMember[];
+    /** Sets who runs the row with this id. */
+    onSetRowStaff?: (rowId: string, keys: string[]) => void;
 }
 
 /** "Stations 1 and 2 overlap on the ice", numbering stations by their place in the block. */
@@ -102,6 +108,8 @@ export function SessionDrillList({
     onAddBlock,
     onSetRotation,
     onSetStays,
+    staff,
+    onSetRowStaff,
 }: SessionDrillListProps) {
     const totalPlayTime = sessionWallMinutes(plays, transitionMinutes);
     const groups = groupStations(plays);
@@ -129,6 +137,10 @@ export function SessionDrillList({
     // drills only, so a warm-up or break never shifts "Play N". Looked up by
     // row id, not object identity, so a copied row still finds its number.
     const drillNumbers = new Map(drillRows(plays).map((drill, index) => [drill.id, index + 1]));
+    // Run by appears on every card once the practice has a named person (spec R8).
+    const staffed = Boolean(staff?.some(isNamedStaff));
+    const runByFor = (row: SessionItem): RowRunBy | null =>
+        staffed && staff && onSetRowStaff ? { staff, value: row.staff ?? [], onChange: (keys) => onSetRowStaff(row.id, keys) } : null;
     const renderCard = (
         play: PlayInSession,
         stationSlot?: { position: number; count: number },
@@ -155,6 +167,7 @@ export function SessionDrillList({
                 fitWarning={fitLabel && warnings.tooBig.includes(play.sequence) ? `Larger than the booked ${fitLabel}` : null}
                 goalieWarning={goalieWarning}
                 stays={stays}
+                runBy={runByFor(play)}
                 isEditing={editingPlayId === play.id}
                 onDelete={onDelete}
                 onEdit={onEdit}
@@ -180,6 +193,7 @@ export function SessionDrillList({
                 canMoveUp={canMove(plays, index, -1)}
                 canMoveDown={canMove(plays, index, 1)}
                 locked={locked}
+                runBy={runByFor(item)}
                 onUpdate={onUpdate}
                 onDelete={onDelete}
                 onMoveUp={onMoveUp}

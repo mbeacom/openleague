@@ -667,6 +667,8 @@ export function PracticeSessionEditor({
                 onAddBlock={rowEdits.addBlock}
                 onSetRotation={rowEdits.setRotation}
                 onSetStays={rowEdits.setStays}
+                staff={staff.staff}
+                onSetRowStaff={staff.setRowStaff}
             />
 
             {/* Save Status and Actions */}
