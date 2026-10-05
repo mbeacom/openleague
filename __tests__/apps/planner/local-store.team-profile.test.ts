@@ -6,6 +6,7 @@ import { META_TEAM_PROFILE } from "@/apps/planner/src/store/records";
 import { LOCAL_TEAM_ID } from "@/apps/planner/src/config";
 import { buildPlanDocument } from "@/components/features/practice-planner/ExportPlanMenu";
 import { serializePlan } from "@/lib/plan-document";
+import { decodePlanLink, encodePlanLink } from "@/lib/plan-document/link";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import {
     TEAM_COLOR_MESSAGE,
@@ -52,14 +53,14 @@ describe.each(REPOS)("team profile (%s)", (_name, open) => {
     });
 
     it.each([
-        [{ name: "  " }, TEAM_NAME_REQUIRED_MESSAGE],
-        [{ name: "x".repeat(61) }, TEAM_NAME_LENGTH_MESSAGE],
-        [{ primaryColor: "#123" }, TEAM_COLOR_MESSAGE],
-        [{ secondaryColor: "red" }, TEAM_COLOR_MESSAGE],
-        [{ logo: { dataUrl: "data:image/jpeg;base64,AAAA", width: 1, height: 1 } }, TEAM_LOGO_INVALID_MESSAGE],
-        [{ logo: { ...LOGO, width: 513 } }, TEAM_LOGO_INVALID_MESSAGE],
-        [{ logo: { dataUrl: `data:image/png;base64,${"A".repeat(273_068)}`, width: 1, height: 1 } }, TEAM_LOGO_INVALID_MESSAGE],
-    ] as Array<[Partial<TeamProfileInput>, string]>)("refuses %o with its message and stores nothing", async (overrides, message) => {
+        ["a blank name", { name: "  " }, TEAM_NAME_REQUIRED_MESSAGE],
+        ["a 61-character name", { name: "x".repeat(61) }, TEAM_NAME_LENGTH_MESSAGE],
+        ["a short hex primary colour", { primaryColor: "#123" }, TEAM_COLOR_MESSAGE],
+        ["a named secondary colour", { secondaryColor: "red" }, TEAM_COLOR_MESSAGE],
+        ["a JPEG logo", { logo: { dataUrl: "data:image/jpeg;base64,AAAA", width: 1, height: 1 } }, TEAM_LOGO_INVALID_MESSAGE],
+        ["a logo wider than 512", { logo: { ...LOGO, width: 513 } }, TEAM_LOGO_INVALID_MESSAGE],
+        ["a logo over 200 KB", { logo: { dataUrl: `data:image/png;base64,iVBORw0KGgo${"A".repeat(273_057)}`, width: 1, height: 1 } }, TEAM_LOGO_INVALID_MESSAGE],
+    ] as Array<[string, Partial<TeamProfileInput>, string]>)("refuses %s with its message and stores nothing", async (_label, overrides, message) => {
         const { store } = await setup();
         expect(await store.saveTeamProfile({ ...HAWKS, ...overrides })).toEqual({ success: false, error: message });
         expect(data(await store.getTeamProfile())).toBeNull();
@@ -94,6 +95,43 @@ describe.each(REPOS)("team profile (%s)", (_name, open) => {
         unsubscribe();
         data(await store.saveTeamProfile(HAWKS));
         expect(listener).toHaveBeenCalledTimes(2);
+    });
+
+    it("never writes any part of the profile into a plan file or a plan link", async () => {
+        const { store } = await setup();
+        data(await store.saveTeamProfile({ ...HAWKS, primaryColor: "#123ABC", secondaryColor: "#456DEF" }));
+        const source = serializePlan(
+            { title: "Thursday Skills", durationMinutes: 30, date: "2026-10-08", startTime: "18:00", drills: [{ sequence: 0, duration: 10, runsWithPrevious: false, instructions: "Go", name: "Laps", description: null, playData: createEmptyPlayData() }] },
+            "openleague-static",
+        );
+        const withDrill = data(await store.importPlan(source, { date: new Date("2026-10-08T18:00:00"), addToLibrary: false }));
+        const view = data(await store.getSessionView(withDrill.sessionId));
+        expect(view.plays).toHaveLength(1);
+        expect(view.teamMark?.logoImage?.dataUrl).toBe(PNG);
+        const plan = buildPlanDocument(view, new Date(), "openleague-static");
+        const texts = [JSON.stringify(plan), JSON.stringify(await decodePlanLink(await encodePlanLink(plan)))];
+        for (const text of texts) {
+            expect(text).toContain("Thursday Skills");
+            for (const leak of [PNG, "data:image/png", "Ice Hawks", "Hawks", "#123ABC", "#456DEF", "teamMark", "teamName", "logo"]) {
+                expect(text.toLowerCase()).not.toContain(leak.toLowerCase());
+            }
+        }
+    });
+
+    it("reports a committed save as saved even when a listener throws, and still tells the others", async () => {
+        const { store } = await setup();
+        const error = vi.spyOn(console, "error").mockImplementation(() => {});
+        const after = vi.fn();
+        store.subscribeTeamProfile(() => {
+            throw new Error("boom");
+        });
+        store.subscribeTeamProfile(after);
+        expect((await store.saveTeamProfile(HAWKS)).success).toBe(true);
+        expect((await store.clearTeamProfile()).success).toBe(true);
+        expect(after).toHaveBeenCalledTimes(2);
+        expect(store.teamProfileVersion()).toBe(2);
+        expect(error).toHaveBeenCalledWith("A team profile listener failed:", "Error");
+        error.mockRestore();
     });
 
     it("keeps the profile out of plan files, and an import never changes it", async () => {

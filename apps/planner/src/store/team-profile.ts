@@ -24,30 +24,42 @@ export interface TeamProfileOps {
 export function createTeamProfileOps(ctx: StoreContext): TeamProfileOps {
     const listeners = new Set<() => void>();
     let version = 0;
-    const changed = () => {
+    // Runs after the write has committed and outside `attempt`: a listener that
+    // throws can't turn a saved profile into a reported failure, or stop the others.
+    const notify = <T>(result: ActionResult<T>): ActionResult<T> => {
+        if (!result.success) return result;
         version += 1;
-        for (const listener of listeners) listener();
+        for (const listener of [...listeners]) {
+            try {
+                listener();
+            } catch (error) {
+                console.error("A team profile listener failed:", error instanceof Error ? error.name : "unknown error");
+            }
+        }
+        return result;
     };
     return {
         getTeamProfile: () =>
             attempt(TEAM_PROFILE_LOAD_FAILED, async () => ok(readTeamProfile(await ctx.repo.read((tx) => tx.getMeta(META_TEAM_PROFILE))))),
 
-        saveTeamProfile: (input) =>
-            attempt(TEAM_PROFILE_SAVE_FAILED, async () => {
-                const error = teamProfileError(input);
-                if (error) return { success: false, error };
-                const profile = toTeamProfile(input);
-                await write(ctx, (tx) => tx.putMeta(META_TEAM_PROFILE, profile));
-                changed();
-                return ok(profile);
-            }),
+        saveTeamProfile: async (input) =>
+            notify(
+                await attempt(TEAM_PROFILE_SAVE_FAILED, async () => {
+                    const error = teamProfileError(input);
+                    if (error) return { success: false, error };
+                    const profile = toTeamProfile(input);
+                    await write(ctx, (tx) => tx.putMeta(META_TEAM_PROFILE, profile));
+                    return ok(profile);
+                }),
+            ),
 
-        clearTeamProfile: () =>
-            attempt(TEAM_PROFILE_SAVE_FAILED, async () => {
-                await write(ctx, (tx) => tx.putMeta(META_TEAM_PROFILE, null));
-                changed();
-                return ok(null);
-            }),
+        clearTeamProfile: async () =>
+            notify(
+                await attempt(TEAM_PROFILE_SAVE_FAILED, async () => {
+                    await write(ctx, (tx) => tx.putMeta(META_TEAM_PROFILE, null));
+                    return ok(null);
+                }),
+            ),
 
         subscribeTeamProfile: (listener) => {
             listeners.add(listener);
