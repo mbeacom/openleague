@@ -207,7 +207,7 @@ The document gains, without a version bump:
 **Rules:**
 - Names only. A plan never carries a staff id, a link to a team official or an account, or an email. An import creates typed names; a hosted importer never links them.
 - A missing or `null` list reads as no staff, so every earlier file reads as before.
-- Unlike the advisory fields, these are strict: a row naming someone not on the list, a repeated name, an empty or over-long name, or too many names is an error with a readable "Drill N" issue, never silently dropped.
+- Unlike the advisory fields, these are strict: a broken list or row is an error, never silently dropped. A row's problems (a name not on the list, the same name twice, more than 4 names) are reported as readable "Drill N" issues. The list's problems (a repeated name, an empty or over-long name, more than 12 names) are reported on the staff list.
 - Writers always emit both lists (`[]` when there is no staff), and only names that pass the rules.
 
 **Compatibility:** a reader built before this amendment strips the new keys and opens the file without staff. Nothing older readers rely on changes, so no bump.
