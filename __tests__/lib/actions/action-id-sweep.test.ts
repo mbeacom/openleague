@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
@@ -15,6 +15,27 @@ import { ACTION_ID_ARGUMENTS, NO_ID_ARGUMENTS } from "@/__tests__/helpers/action
  * Calls every identifier-taking export of every "use server" module with
  * malformed values in each identifier position, and checks that the value
  * never reaches a Prisma query or an authorization helper.
+ *
+ * Scope and limits:
+ * - Server actions are expected only as whole "use server" modules under
+ *   lib/actions. A repository scan (app, lib, components) fails if a
+ *   directive appears anywhere else, including inside a function body.
+ * - The mocked Prisma client returns empty results and the session user has
+ *   no memberships, so an action usually stops at its first lookup or
+ *   refusal. The sweep therefore checks the arguments that reach Prisma or
+ *   an authorization helper first; ids consulted only after a successful
+ *   lookup are not exercised here.
+ * - Templates list only identifier fields. For object inputs a schema often
+ *   rejects the call for a missing field first, which still satisfies the
+ *   checks below but does not show that a particular field is format-checked;
+ *   the per-action tests pin those results.
+ * - A malformed value is recognised by identity (objects and arrays) or by
+ *   its sentinel string, plus a scan of id columns in `where` clauses that
+ *   accepts only well-formed ids, null, or single-value filters of them. List
+ *   filters (`in` / `notIn`) on an id column are reported, so an action that
+ *   legitimately reaches one with these mocks needs an explicit exemption.
+ * - For `undefined`, only the Prisma side is checked: authorization helpers
+ *   have optional parameters where undefined is legitimate.
  */
 
 const { recorder, authCalls, spyOnModule } = await vi.hoisted(async () => {
@@ -99,13 +120,37 @@ vi.mock("@/lib/auth/season-access", async (importOriginal) =>
   spyOnModule("season-access", await importOriginal()),
 );
 
-const ACTIONS_DIR = path.resolve(__dirname, "../../../lib/actions");
+const REPO_ROOT = path.resolve(__dirname, "../../..");
+const ACTIONS_DIR = path.join(REPO_ROOT, "lib/actions");
+
+/** A directive statement on a line of its own, at file or function level. */
+const DIRECTIVE_LINE = /^\s*["']use server["'];?\s*$/m;
+
+/** Whether the directive is the module's first statement (after comments). */
+function hasFileLevelDirective(source: string): boolean {
+  const body = source.replace(/^(?:\s+|\/\/[^\n]*\n|\/\*[\s\S]*?\*\/)*/, "");
+  return /^["']use server["']/.test(body);
+}
+
+function sourceFiles(dir: string): string[] {
+  return readdirSync(dir).flatMap((entry) => {
+    const full = path.join(dir, entry);
+    if (statSync(full).isDirectory()) return entry === "node_modules" ? [] : sourceFiles(full);
+    return /\.(ts|tsx)$/.test(entry) ? [full] : [];
+  });
+}
+
+/** Every file in app, lib and components containing a "use server" directive. */
+const directiveFiles = ["app", "lib", "components"]
+  .flatMap((dir) => sourceFiles(path.join(REPO_ROOT, dir)))
+  .filter((file) => DIRECTIVE_LINE.test(readFileSync(file, "utf8")))
+  .map((file) => path.relative(REPO_ROOT, file).split(path.sep).join("/"))
+  .sort();
 
 /** The "use server" modules under lib/actions, by file name without extension. */
-const serverActionModules = readdirSync(ACTIONS_DIR)
-  .filter((file) => file.endsWith(".ts"))
-  .filter((file) => /^\s*["']use server["']/.test(readFileSync(path.join(ACTIONS_DIR, file), "utf8")))
-  .map((file) => file.replace(/\.ts$/, ""))
+const serverActionModules = sourceFiles(ACTIONS_DIR)
+  .filter((file) => hasFileLevelDirective(readFileSync(file, "utf8")))
+  .map((file) => path.relative(ACTIONS_DIR, file).split(path.sep).join("/").replace(/\.tsx?$/, ""))
   .sort();
 
 const modules = Object.fromEntries(
@@ -136,6 +181,14 @@ beforeEach(() => {
 describe("server action id sweep: coverage", () => {
   it("finds the server action modules", () => {
     expect(serverActionModules.length).toBeGreaterThan(50);
+  });
+
+  it("finds the 'use server' directive only as the first statement of modules under lib/actions", () => {
+    expect(directiveFiles.filter((file) => !file.startsWith("lib/actions/"))).toEqual([]);
+    expect(
+      directiveFiles.filter((file) => !hasFileLevelDirective(readFileSync(path.join(REPO_ROOT, file), "utf8"))),
+    ).toEqual([]);
+    expect(directiveFiles).toEqual(serverActionModules.map((name) => `lib/actions/${name}.ts`).sort());
   });
 
   it("lists every exported server action in the id table or the no-id allowlist", () => {

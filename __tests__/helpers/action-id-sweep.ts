@@ -140,8 +140,9 @@ function isWellFormedIdValue(value: unknown): boolean {
   if (value === null) return true;
   if (typeof value === "string") return CUID.test(value);
   if (typeof value === "object" && !Array.isArray(value)) {
-    // A Prisma filter built by the action itself, such as `{ in: ids }` or
-    // `{ not: null }`: every operand must itself be well formed.
+    // A filter on an id column, such as `{ not: null }`: every operand must
+    // itself be well formed. List filters (`in` / `notIn`) are not accepted.
+    if ("in" in value || "notIn" in value) return false;
     const operands = Object.values(value as Record<string, unknown>);
     return operands.every((operand) =>
       Array.isArray(operand) ? operand.every(isWellFormedIdValue) : isWellFormedIdValue(operand),

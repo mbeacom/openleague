@@ -136,7 +136,6 @@ const MALFORMED_TOKENS: Array<[string, unknown]> = [
   ...MALFORMED.filter(([label]) => label !== "a non-cuid string"),
   ["a string that is not a token", "not-a-token"],
 ];
-const MALFORMED_PRESENT_TOKENS = MALFORMED_TOKENS.filter(([label]) => label !== "undefined");
 
 const s = (value: unknown) => value as string;
 const unauthorized = /Unauthorized/;
@@ -178,29 +177,16 @@ const cases: Case[] = [
     call: (b) => listEventMedia({ eventId: s(b) }),
     outcome: { returns: null },
   },
-  {
-    name: "listEventMedia (link token)",
-    call: (b) => listEventMedia({ eventId: IDS.team, linkToken: s(b) }),
-    outcome: { returns: null },
-    values: MALFORMED_PRESENT_TOKENS,
-  },
+
   { name: "getEventRoster", call: (b) => getEventRoster({ eventId: s(b) }), outcome: { rejects: unauthorized } },
   { name: "getEventTeamsBoard", call: (b) => getEventTeamsBoard(s(b)), outcome: { rejects: unauthorized } },
   { name: "getMyEventAssignments", call: (b) => getMyEventAssignments(s(b)), outcome: { returns: null } },
+  // A malformed link token is ignored rather than refused; see
+  // link-token-and-slug-lookups.test.ts.
   { name: "getPublicEventGames (event id)", call: (b) => getPublicEventGames(s(b)), outcome: { returns: null } },
-  {
-    name: "getPublicEventGames (link token)",
-    call: (b) => getPublicEventGames(IDS.team, s(b)),
-    outcome: { returns: null },
-    values: MALFORMED_PRESENT_TOKENS,
-  },
+
   { name: "getEventStandings (event id)", call: (b) => getEventStandings(s(b)), outcome: { returns: null } },
-  {
-    name: "getEventStandings (link token)",
-    call: (b) => getEventStandings(IDS.team, s(b)),
-    outcome: { returns: null },
-    values: MALFORMED_PRESENT_TOKENS,
-  },
+
   { name: "listPublicVenueEventGames", call: (b) => listPublicVenueEventGames(s(b)), outcome: { returns: [] } },
   {
     name: "getOrganizationPaymentsOverview",
