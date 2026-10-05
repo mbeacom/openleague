@@ -337,7 +337,7 @@ function exportStaff(names: readonly string[] | undefined): string[] {
     const staff: string[] = [];
     for (const raw of names ?? []) {
         const name = cleanStaffName(raw);
-        const key = name.toLowerCase();
+        const key = staffNameKey(name);
         if (!name || name.length > STAFF_NAME_MAX || listed.has(key) || staff.length >= MAX_SESSION_STAFF) continue;
         listed.add(key);
         staff.push(name);
@@ -365,7 +365,7 @@ function exportRowStaff(names: readonly string[] | undefined, listed: ReadonlyMa
 export function serializePlan(input: PlanSessionInput, generator: PlanGenerator, now: Date = new Date()): PlanDocument {
     const rows = settleRotations(normalizeGroups([...input.drills].sort((a, b) => a.sequence - b.sequence)));
     const staff = exportStaff(input.staff);
-    const listed = new Map(staff.map((name) => [name.toLowerCase(), name]));
+    const listed = new Map(staff.map((name) => [staffNameKey(name), name]));
     const drills = rows.map((row, index): PlanEntry => {
         if (isBlockRow(row)) {
             return { kind: row.kind, sequence: index, durationMinutes: row.duration, instructions: row.instructions ?? "", label: toBlockLabel(row.label), staff: exportRowStaff(row.staff, listed) };

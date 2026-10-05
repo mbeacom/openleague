@@ -188,19 +188,17 @@ describe("updatePracticeSession: checks after authentication and authorization (
         expect(result).toEqual({ success: false, error: STAFF_NAME_TAKEN_MESSAGE });
     });
 
-    it("refuses with the name message a pair JavaScript lowercases apart but PostgreSQL's lower() treats as one", async () => {
-        // "İlker".toLowerCase() is "i̇lker" (i + combining dot), so the pure check lets the pair through;
-        // the database's lower("name") index then catches the clash as P2002.
-        const pair = [{ key: "a", name: "İlker" }, { key: "b", name: "ilker" }];
-        expect(pair[0].name.toLowerCase()).not.toBe(pair[1].name.toLowerCase());
-        models.practiceSessionStaff.createMany.mockRejectedValue(
-            Object.assign(new Error("Unique constraint failed on the fields: (`sessionId`, lower(\"name\"))"), { code: "P2002" }),
-        );
-        const updated = await updatePracticeSession({ id: SESSION, ...save({ staff: pair }) });
-        expect(updated).toEqual({ success: false, error: STAFF_NAME_TAKEN_MESSAGE });
-        expect(models.practiceSessionStaff.createMany).toHaveBeenCalled();
-        const created = await createPracticeSession(save({ staff: pair }));
-        expect(created).toEqual({ success: false, error: STAFF_NAME_TAKEN_MESSAGE });
+    it("refuses before writing a pair JavaScript lowercases apart but PostgreSQL's lower() treats as one", async () => {
+        // "İlker".toLowerCase() is "i̇lker" (i + combining dot); staffNameKey folds it, as the lower("name") index does.
+        for (const pair of [
+            [{ key: "a", name: "İlker" }, { key: "b", name: "ilker" }],
+            [{ key: "a", name: "ΟΔΟΣ" }, { key: "b", name: "οδοσ" }],
+        ]) {
+            expect(pair[0].name.toLowerCase()).not.toBe(pair[1].name.toLowerCase());
+            expect(await updatePracticeSession({ id: SESSION, ...save({ staff: pair }) })).toEqual({ success: false, error: STAFF_NAME_TAKEN_MESSAGE });
+            expect(await createPracticeSession(save({ staff: pair }))).toEqual({ success: false, error: STAFF_NAME_TAKEN_MESSAGE });
+        }
+        expect(models.practiceSessionStaff.createMany).not.toHaveBeenCalled();
     });
 });
 

@@ -648,6 +648,9 @@ describe.each(REPOS)("sessions (%s)", (_name, open) => {
                 return result.success ? null : result.error;
             };
             expect(await refusal([LEE, { key: "x", name: "coach lee" }])).toBe(STAFF_NAME_TAKEN_MESSAGE);
+            // Names PostgreSQL's lower() folds together, though JavaScript's toLowerCase doesn't.
+            expect(await refusal([{ key: "a", name: "İlker" }, { key: "b", name: "ilker" }])).toBe(STAFF_NAME_TAKEN_MESSAGE);
+            expect(await refusal([{ key: "a", name: "ΟΔΟΣ" }, { key: "b", name: "οδοσ" }])).toBe(STAFF_NAME_TAKEN_MESSAGE);
             expect(await refusal([LEE], [["nobody"]])).toBe(ROW_STAFF_UNKNOWN_MESSAGE);
             expect(await refusal([LEE], [["st-lee", "st-lee"]])).toBe(ROW_STAFF_DUPLICATE_MESSAGE);
             expect(await refusal(Array.from({ length: 13 }, (_, i) => ({ key: `k${i}`, name: `Coach ${i}` })))).toBe(STAFF_LIMIT_MESSAGE);

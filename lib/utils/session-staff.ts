@@ -27,14 +27,29 @@ export const ROW_STAFF_LIMIT_MESSAGE = `A row can be run by at most ${MAX_ROW_ST
 export const ROW_STAFF_DUPLICATE_MESSAGE = "A row lists the same staff member twice";
 export const ROW_STAFF_UNKNOWN_MESSAGE = "A row is run by someone who isn't on the practice's staff";
 
-/** A name as every write path stores it: control characters removed, trimmed. Never cut: a long name is refused. */
+/** C1 controls and zero-width characters (ZWSP, ZWNJ, ZWJ, word joiner, BOM): never part of a staff name. */
+const STAFF_INVISIBLE_CHARS = /[\u0080-\u009F\u200B-\u200D\u2060\uFEFF]/g;
+
+/**
+ * A name as every write path stores it, on one line: control, C1 and
+ * zero-width characters removed, then any run of whitespace (tabs and line
+ * breaks included) made one space, then trimmed. Removed first, so a zero-width
+ * character inside a word never becomes a space. Never cut: a long name is refused.
+ */
 export function cleanStaffName(name: string): string {
-    return name.replace(CONTROL_CHARS, "").trim();
+    return name.replace(CONTROL_CHARS, "").replace(STAFF_INVISIBLE_CHARS, "").replace(/\s+/g, " ").trim();
 }
 
-/** Names are unique per practice ignoring case, as the database's lower("name") index compares them. */
+/**
+ * Names are unique per practice ignoring case, as the database's lower("name")
+ * index compares them. Every case-insensitive comparison of staff names goes
+ * through this key. JavaScript's toLowerCase differs from PostgreSQL's lower()
+ * on two known inputs, folded here so both refuse the same pairs: a final sigma
+ * (JavaScript gives "ς", PostgreSQL "σ") and a dotted capital I (JavaScript
+ * gives "i" plus a combining dot above, PostgreSQL "i").
+ */
 export function staffNameKey(name: string): string {
-    return cleanStaffName(name).toLowerCase();
+    return cleanStaffName(name).toLowerCase().replace(/ς/g, "σ").replace(/i\u0307/g, "i");
 }
 
 /** Has a name once cleaned: only named people are saved, offered on a row, or make Run by appear. */
@@ -63,7 +78,7 @@ export function staffListError(staff: ReadonlyArray<{ key: string; name: string 
         if (name.length > STAFF_NAME_MAX) return STAFF_NAME_LENGTH_MESSAGE;
         if (keys.has(member.key)) return STAFF_KEY_DUPLICATE_MESSAGE;
         keys.add(member.key);
-        const key = name.toLowerCase();
+        const key = staffNameKey(name);
         if (names.has(key)) return STAFF_NAME_TAKEN_MESSAGE;
         names.add(key);
     }
@@ -290,7 +305,8 @@ export interface StationStart {
 /**
  * The rows these staff ids run (spec R10), in schedule order. Starts come from
  * buildSchedule, as on the bench sheet: a station of a station block starts with
- * its block, and the gap between blocks is counted.
+ * its block, and the gap between blocks is counted. Rows may come in any order:
+ * buildSchedule orders them by sequence, so each row needs its stored sequence.
  */
 export function yourStations<T extends TimelinePlay & { staff?: readonly string[] }>(
     rows: readonly T[],

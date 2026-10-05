@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { MAX_ROW_STAFF, MAX_SESSION_STAFF, STAFF_NAME_MAX, type BlockKind, type SessionStaffMember } from "@/types/practice-planner";
 import {
@@ -46,6 +48,37 @@ describe("staff names", () => {
 
     it("counts a person as named once their cleaned name has a character", () => {
         expect([isNamedStaff({ name: "Sam" }), isNamedStaff({ name: " \u0007 " }), isNamedStaff({ name: "" })]).toEqual([true, false, false]);
+        expect(isNamedStaff({ name: "\u200B\u200C\u200D\u2060\uFEFF" })).toBe(false);
+    });
+
+    it("keeps a name on one line: whitespace runs become one space, C1 and zero-width characters go", () => {
+        expect(cleanStaffName("Coach\tLee")).toBe("Coach Lee");
+        expect(cleanStaffName(" Coach \r\n\n  Lee ")).toBe("Coach Lee");
+        expect(cleanStaffName("Sa\u0085m\u009F")).toBe("Sam");
+        // Removed before whitespace is collapsed: a zero-width character inside a word never becomes a space.
+        expect(cleanStaffName("Sa\u200Bm Le\uFEFFe\u2060")).toBe("Sam Lee");
+        expect(cleanStaffName("\u200C\u200D")).toBe("");
+    });
+
+    it("folds the names JavaScript and PostgreSQL lower differently, so both refuse the same pairs", () => {
+        expect(staffNameKey("İlker")).toBe(staffNameKey("ilker"));
+        expect(staffNameKey("İLKER")).toBe("ilker");
+        expect(staffNameKey("ΟΔΟΣ")).toBe(staffNameKey("οδοσ"));
+        expect(staffNameKey("Οδός")).toBe("οδόσ");
+        expect(staffListError([member("k1", "İlker"), member("k2", "ilker")])).toBe(STAFF_NAME_TAKEN_MESSAGE);
+        expect(staffListError([member("k1", "ΟΔΟΣ"), member("k2", "οδοσ")])).toBe(STAFF_NAME_TAKEN_MESSAGE);
+        expect(staffListError([member("k1", "Coach\tLee"), member("k2", "coach  lee")])).toBe(STAFF_NAME_TAKEN_MESSAGE);
+    });
+
+    it("compares staff names only through staffNameKey (no other toLowerCase in the name modules)", () => {
+        const sources = {
+            "lib/utils/session-staff.ts": readFileSync(join(process.cwd(), "lib/utils/session-staff.ts"), "utf8"),
+            "lib/plan-document/document.ts": readFileSync(join(process.cwd(), "lib/plan-document/document.ts"), "utf8"),
+        };
+        // staffNameKey itself, and planSlug (a file name, not a staff name).
+        expect(sources["lib/utils/session-staff.ts"].match(/toLowerCase\(/g)).toHaveLength(1);
+        expect(sources["lib/plan-document/document.ts"].match(/toLowerCase\(/g)).toHaveLength(1);
+        expect(sources["lib/plan-document/document.ts"]).toMatch(/\.toLowerCase\(\)\s*\.replace\(\/\[\^a-z0-9\]\+\/g, "-"\)/);
     });
 
     it("offers a long official's name cut to 60, never half an emoji", () => {
@@ -177,6 +210,15 @@ describe("applySavedStaffIds: a hosted save's keys become stored ids (spec R3, p
         expect(next.rows).toBe(heldRows);
     });
 
+    it("maps each key once, never through a chain, and the last entry for a key wins", () => {
+        const chained: SessionStaffMember[] = [{ id: "ka", name: "A" }, { id: "kb", name: "B" }];
+        const next = applySavedStaffIds(chained, [{ id: "r1", staff: ["ka", "kb"] }], [{ key: "ka", id: "kb" }, { key: "kb", id: "kc" }]);
+        expect(next.staff.map((entry) => entry.id)).toEqual(["kb", "kc"]);
+        expect(next.rows[0].staff).toEqual(["kb", "kc"]);
+        const twice = applySavedStaffIds([{ id: "ka", name: "A" }], [], [{ key: "ka", id: "c1" }, { key: "ka", id: "c2" }]);
+        expect(twice.staff[0].id).toBe("c2");
+    });
+
     it("returns the same arrays when nothing changes: no mapping, or only stored ids", () => {
         for (const saved of [undefined, [], [{ key: "cstored1", id: "cstored1" }]]) {
             const next = applySavedStaffIds(staff, rows, saved);
@@ -249,6 +291,46 @@ describe("carryRowStaff: absent staff across a row rewrite (spec R3, Global Cons
         expect(carryRowStaff(breaks, storedBreaks, [{ kind: "break", playId: null, sequence: 0 }])).toEqual([]);
     });
 
+    it("follows a drill removed or moved between unchanged blocks, and keeps the blocks' staff", () => {
+        const drills = [
+            { playId: null, kind: "warmup" as const, sequence: 0, staffIds: ["s1"] },
+            { playId: "cplaya", kind: "drill" as const, sequence: 1, staffIds: ["s2"] },
+            { playId: "cplayb", kind: "drill" as const, sequence: 2, staffIds: ["s3"] },
+            { playId: null, kind: "break" as const, sequence: 3, staffIds: ["s4"] },
+        ];
+        const layout = [{ sequence: 0, kind: "warmup" as const }, { sequence: 3, kind: "break" as const }];
+        // Drill A removed; drill B moved after the break.
+        expect(carryRowStaff(drills, layout, [
+            { kind: "warmup", playId: null, sequence: 0 },
+            { kind: "break", playId: null, sequence: 1 },
+            { kind: "drill", playId: "cplayb", sequence: 2 },
+        ])).toEqual([
+            { sequence: 0, staffIds: ["s1"] },
+            { sequence: 1, staffIds: ["s4"] },
+            { sequence: 2, staffIds: ["s3"] },
+        ]);
+    });
+
+    it("gives every new row of a repeated play id the first stored row's staff (first match wins)", () => {
+        const repeated = [
+            { playId: "cplaya", kind: "drill" as const, sequence: 0, staffIds: ["s1"] },
+            { playId: "cplaya", kind: "drill" as const, sequence: 1, staffIds: ["s2"] },
+        ];
+        expect(carryRowStaff(repeated, [], [
+            { kind: "drill", playId: "cplaya", sequence: 0 },
+            { kind: "drill", playId: "cplaya", sequence: 1 },
+        ])).toEqual([
+            { sequence: 0, staffIds: ["s1"] },
+            { sequence: 1, staffIds: ["s1"] },
+        ]);
+    });
+
+    it("carries nothing for a stored drill row without a play id, nor onto a new drill without one", () => {
+        const orphan = [{ playId: null, kind: "drill" as const, sequence: 0, staffIds: ["s1"] }];
+        expect(carryRowStaff(orphan, [], [{ kind: "drill", playId: null, sequence: 0 }])).toEqual([]);
+        expect(carryRowStaff(orphan, [], [{ kind: "drill", playId: "cplaya", sequence: 0 }])).toEqual([]);
+    });
+
     it("carries nothing when nothing was assigned", () => {
         expect(carryRowStaff([], [], [{ kind: "drill", playId: "cplaya", sequence: 0 }])).toEqual([]);
     });
@@ -277,6 +359,12 @@ describe("yourStations (spec R10)", () => {
             ["Warm-up", 0], ["Pass & Shoot", 10], ["Scrimmage", 26],
         ]);
         expect(yourStationsText(stations, "America/New_York")).toBe("Warm-up (6:00 PM), Pass & Shoot (6:10 PM), Scrimmage (6:26 PM)");
+    });
+
+    it("orders rows by sequence itself: rows in any order give the same stations", () => {
+        const shuffled = [rows[3], rows[0], rows[4], rows[2], rows[1]];
+        const options = { start: START, transitionMinutes: 2, staffIds: new Set(["s1"]), title };
+        expect(yourStations(shuffled, options)).toEqual(yourStations(rows, options));
     });
 
     it("joins several staff ids for one person, and has no text for someone who runs nothing", () => {

@@ -527,6 +527,22 @@ describe("practice staff in plan files (spec R6)", () => {
         expect(serializePlan(input(), "openleague-hosted", NOW).session.drills.every((entry) => entry.staff.length === 0)).toBe(true);
     });
 
+    it("folds names PostgreSQL's lower() treats as one, on the list and on each row, so the file opens", () => {
+        const base = staffed();
+        const doc = serializePlan(
+            {
+                ...base,
+                staff: ["İlker", "ilker", "ΟΔΟΣ", "οδοσ"],
+                drills: [{ ...base.drills[0], staff: ["ilker", "οδοσ"] }, { ...base.drills[1], staff: ["İLKER"] }],
+            },
+            "openleague-hosted",
+            NOW,
+        );
+        expect(doc.session.staff).toEqual(["İlker", "ΟΔΟΣ"]);
+        expect(doc.session.drills.map((entry) => entry.staff)).toEqual([["İlker", "ΟΔΟΣ"], ["İlker"]]);
+        expect(parsePlan(JSON.parse(JSON.stringify(doc))).ok).toBe(true);
+    });
+
     it("round-trips through parsePlan", () => {
         const doc = serializePlan(staffed(), "openleague-static", NOW);
         expect(parsePlan(JSON.parse(JSON.stringify(doc)))).toEqual({ ok: true, plan: doc });
