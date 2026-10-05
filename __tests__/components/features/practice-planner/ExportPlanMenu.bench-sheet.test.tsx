@@ -121,6 +121,22 @@ describe("ExportPlanMenu bench sheet exports", () => {
         expect(await readText(downloads[0].blob)).toContain(`<img class="mark" src="${CREST}"`);
     });
 
+    it("logs a failed logo read by its error type only, never the URL or an id", async () => {
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        try {
+            const store = createMockPlannerStore();
+            store.getPracticeLogoImage!.mockRejectedValue(new TypeError(`fetch ${MARK.logoUrl} for ${HOSTED.id}`));
+            renderWithPlanner(<ExportPlanMenu session={HOSTED} />, { store });
+            choose("Download bench sheet (HTML)");
+            await waitFor(() => expect(downloads).toHaveLength(1));
+            expect(warn).toHaveBeenCalledWith("Bench sheet export: the team logo is unavailable:", "TypeError");
+            const logged = JSON.stringify(warn.mock.calls);
+            for (const secret of [MARK.logoUrl, HOSTED.id, MARK.id]) expect(logged).not.toContain(secret);
+        } finally {
+            warn.mockRestore();
+        }
+    });
+
     it("uses the static profile's stored logo without asking the store", async () => {
         const store = createMockPlannerStore();
         const logo = { dataUrl: PNG, width: 512, height: 256 };
@@ -156,6 +172,13 @@ describe("ExportPlanMenu bench sheet exports", () => {
             await act(async () => release());
             await waitFor(() => expect(downloads).toHaveLength(1));
             expect(await readText(downloads[0].blob)).toContain(`<img class="mark" src="${CREST}"`);
+        });
+
+        it("isn't waited for when there is no team name to draw a mark for", async () => {
+            renderWithPlanner(<ExportPlanMenu session={{ ...HOSTED, teamName: "  " }} />);
+            choose("Download bench sheet (HTML)");
+            await waitFor(() => expect(downloads).toHaveLength(1));
+            expect(load).not.toHaveBeenCalled();
         });
 
         it("isn't waited for when the logo is embedded", async () => {
