@@ -79,6 +79,12 @@ describe.each(MALFORMED_IDS)("auth helpers with %s as the id", (_label, bad) => 
     expectNoQueries();
   });
 
+  it("canUserCreateLeagueGames returns false even when an admin role is supplied", async () => {
+    expect(await canUserCreateLeagueGames(IDS.user, bad as string, "LEAGUE_ADMIN")).toBe(false);
+    expect(await canUserCreateLeagueGames(IDS.user, bad as string, "TEAM_ADMIN")).toBe(false);
+    expectNoQueries();
+  });
+
   it("getUserVenueStaffRole returns null for a malformed organization id", async () => {
     expect(await getUserVenueStaffRole(IDS.user, bad as string, IDS.venue)).toBeNull();
     expectNoQueries();
@@ -139,6 +145,19 @@ describe.each(MALFORMED_IDS)("auth helpers with %s as the id", (_label, bad) => 
     expect(
       await grantsAllowGearAction({ userId: IDS.user, leagueId: bad as string, action: "MANAGE_INVENTORY" })
     ).toBe(false);
+    expectNoQueries();
+  });
+});
+
+describe("canUserCreateLeagueGames", () => {
+  it("returns false for an empty user id even when an admin role is supplied", async () => {
+    expect(await canUserCreateLeagueGames("", IDS.league, "LEAGUE_ADMIN")).toBe(false);
+    expect(await canUserCreateLeagueGames("", "bad", "LEAGUE_ADMIN")).toBe(false);
+    expectNoQueries();
+  });
+
+  it("allows a supplied admin role for well-formed ids without querying", async () => {
+    expect(await canUserCreateLeagueGames(IDS.user, IDS.league, "LEAGUE_ADMIN")).toBe(true);
     expectNoQueries();
   });
 });

@@ -212,14 +212,14 @@ export async function canUserCreateLeagueGames(
   leagueId: string,
   leagueRole?: "LEAGUE_ADMIN" | "TEAM_ADMIN" | "MEMBER"
 ): Promise<boolean> {
-  // If league role is provided and is LEAGUE_ADMIN or TEAM_ADMIN, they can create games
-  if (leagueRole === "LEAGUE_ADMIN" || leagueRole === "TEAM_ADMIN") {
-    return true;
-  }
-
   const parsedLeagueId = parseId(leagueId);
   if (!isUserIdString(userId) || !parsedLeagueId) {
     return false;
+  }
+
+  // If league role is provided and is LEAGUE_ADMIN or TEAM_ADMIN, they can create games
+  if (leagueRole === "LEAGUE_ADMIN" || leagueRole === "TEAM_ADMIN") {
+    return true;
   }
 
   // Check if user is admin of any team in the league
