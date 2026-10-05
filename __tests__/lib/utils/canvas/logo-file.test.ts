@@ -73,6 +73,15 @@ describe("normalizeLogoFile", () => {
         expect(await normalizeLogoFile(file(webp, 64, "image/webp"))).toMatchObject({ ok: true });
     });
 
+    it("accepts a JPEG whose metadata segments push the frame header past 64 KiB", async () => {
+        bitmap = { width: 100, height: 40, close: vi.fn() };
+        // Two APP1 segments of ~60 KB each (a segment holds at most 65,533 bytes), then SOF0 declaring 40 × 100.
+        const app1 = (n: number) => [0xff, 0xe1, (n + 2) >> 8, (n + 2) & 255, ...new Array(n).fill(0)];
+        const jpeg = [0xff, 0xd8, ...app1(60_000), ...app1(60_000), 0xff, 0xc0, 0, 11, 8, 0, 40, 0, 100, 1, 1, 0x11, 0];
+        expect(jpeg.length).toBeGreaterThan(64 * 1024);
+        expect(await normalizeLogoFile(file(jpeg, jpeg.length, "image/jpeg"))).toMatchObject({ ok: true, logo: { width: 100, height: 40 } });
+    });
+
     it("refuses an SVG renamed .png and a GIF by their bytes, before decoding", async () => {
         const svg = [...new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"/>')];
         expect(await normalizeLogoFile(file(svg, 64))).toEqual({ ok: false, error: LOGO_TYPE_MESSAGE });
@@ -98,7 +107,7 @@ describe("normalizeLogoFile", () => {
         vi.spyOn(console, "warn").mockImplementation(() => {});
         const unreadable = {
             size: 64,
-            slice: () => ({ arrayBuffer: () => Promise.reject(new DOMException("gone", "NotReadableError")) }),
+            arrayBuffer: () => Promise.reject(new DOMException("gone", "NotReadableError")),
         } as unknown as Blob;
         expect(await normalizeLogoFile(unreadable)).toEqual({ ok: false, error: LOGO_UNREADABLE_MESSAGE });
         expect(console.warn).toHaveBeenCalledWith(expect.any(String), "NotReadableError");

@@ -14,7 +14,7 @@ import {
     fitWithin,
     sniffLogoType,
 } from "@/lib/media/logo-rules";
-import { IMAGE_HEADER_BYTES, exceedsPixelLimit, readImageDimensions } from "@/lib/utils/image-dimensions";
+import { exceedsPixelLimit, readImageDimensions } from "@/lib/utils/image-dimensions";
 import { MAX_PNG_DATA_URI_LENGTH, isPngDataUri, pngDataUriByteLength } from "@/lib/utils/png-data-uri";
 import type { LogoImage } from "@/types/practice-planner";
 
@@ -32,9 +32,11 @@ const errorName = (error: unknown) =>
 
 export async function normalizeLogoFile(file: Blob): Promise<LogoFileResult> {
     if (file.size > LOGO_MAX_BYTES) return refuse(LOGO_FILE_SIZE_MESSAGE);
+    // The whole file (already capped at LOGO_MAX_BYTES above): a JPEG's frame header can sit behind
+    // metadata segments (EXIF, ICC) that run past any fixed prefix.
     let head: Uint8Array;
     try {
-        head = new Uint8Array(await file.slice(0, IMAGE_HEADER_BYTES).arrayBuffer());
+        head = new Uint8Array(await file.arrayBuffer());
     } catch (error) {
         console.warn("Logo upload: the file couldn't be read:", errorName(error));
         return refuse(LOGO_UNREADABLE_MESSAGE);

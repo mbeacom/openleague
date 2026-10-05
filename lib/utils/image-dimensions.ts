@@ -11,9 +11,6 @@ export interface ImageDimensions {
     height: number;
 }
 
-/** How much of a file to read so a JPEG's frame header is found behind its metadata segments. */
-export const IMAGE_HEADER_BYTES = 64 * 1024;
-
 const sized = (width: number, height: number): ImageDimensions | null => (width > 0 && height > 0 ? { width, height } : null);
 const u16be = (b: Uint8Array, i: number) => (b[i] << 8) | b[i + 1];
 const u16le = (b: Uint8Array, i: number) => b[i] | (b[i + 1] << 8);
