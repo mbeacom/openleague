@@ -20,6 +20,7 @@ import { SessionDetailScreen } from "./screens/SessionDetailScreen";
 import { SessionEditorScreen } from "./screens/SessionEditorScreen";
 import { SessionListScreen } from "./screens/SessionListScreen";
 import { NotFoundScreen } from "./screens/StatusScreens";
+import { YourTeamButton } from "./screens/YourTeam";
 
 export const CRASH_MESSAGE = "Something went wrong. Your saved practices are safe in this browser.";
 
@@ -93,7 +94,7 @@ export function PlannerApp({ store, durable, stale }: PlannerAppProps) {
                     {route.name === "sessionPrint" ? (
                         <BenchSheetScreen key={route.id} store={store} id={route.id} />
                     ) : (
-                        <AppShell durable={durable} stale={stale} section={navSection(route)}>
+                        <AppShell durable={durable} stale={stale} section={navSection(route)} teamControl={<YourTeamButton store={store} />}>
                             <RouteView route={route} store={store} />
                         </AppShell>
                     )}

@@ -22,12 +22,15 @@ export function AppShell({
     durable,
     stale,
     section = null,
+    teamControl,
     children,
 }: {
     durable: boolean;
     stale: StaleSignal;
     /** The current route's section, marked aria-current in the nav. */
     section?: NavSection | null;
+    /** The "Your team" button, beside the title. */
+    teamControl?: ReactNode;
     children: ReactNode;
 }) {
     const isStale = useSyncExternalStore(stale.subscribe, stale.isStale, () => false);
@@ -40,22 +43,24 @@ export function AppShell({
             >
                 {/* Phones: the title, then the nav as one compact row of equal buttons; wider screens: one row. */}
                 <Toolbar sx={{ flexWrap: { xs: "wrap", sm: "nowrap" }, columnGap: 1, px: { xs: 1.5, sm: 2 }, py: { xs: 0.5, sm: 0 } }}>
-                    <Typography
-                        component="a"
-                        href={staticRoutes.list()}
-                        variant="h6"
-                        sx={{
-                            fontWeight: 800,
-                            letterSpacing: "-0.02em",
-                            color: "inherit",
-                            flexGrow: 1,
-                            flexBasis: { xs: "100%", sm: "auto" },
-                            fontSize: { xs: "1.0625rem", sm: "1.25rem" },
-                            lineHeight: { xs: "36px", sm: "inherit" },
-                        }}
-                    >
-                        OpenLeague Planner
-                    </Typography>
+                    <Box sx={{ display: "flex", alignItems: "center", columnGap: 1, flexGrow: 1, flexBasis: { xs: "100%", sm: "auto" }, minWidth: 0 }}>
+                        <Typography
+                            component="a"
+                            href={staticRoutes.list()}
+                            variant="h6"
+                            sx={{
+                                fontWeight: 800,
+                                letterSpacing: "-0.02em",
+                                color: "inherit",
+                                flexGrow: 1,
+                                fontSize: { xs: "1.0625rem", sm: "1.25rem" },
+                                lineHeight: { xs: "36px", sm: "inherit" },
+                            }}
+                        >
+                            OpenLeague Planner
+                        </Typography>
+                        {teamControl}
+                    </Box>
                     <Box component="nav" aria-label="Planner" sx={{ display: "flex", gap: 0.5, width: { xs: "100%", sm: "auto" } }}>
                         {NAV_ITEMS.map((item) => {
                             const active = item.section === section;
