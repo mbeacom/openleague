@@ -42,6 +42,7 @@ import {
   PrintOutlined as PrintIcon,
 } from "@mui/icons-material";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Crest } from "@/components/ui/Crest";
 import { DuplicateSessionDialog } from "@/components/features/practice-planner/DuplicateSessionDialog";
 import { PlayLegend } from "@/components/features/practice-planner/PlayLegend";
 import { StationMap } from "@/components/features/practice-planner/StationMap";
@@ -226,7 +227,17 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
         >
           <Box>
             <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 1 }}>
-              <Typography variant="h4" component="h1" sx={{ fontWeight: 800 }}>
+              {session.teamMark && (
+                <Crest
+                  name={session.teamMark.name}
+                  id={session.teamMark.id}
+                  logoUrl={session.teamMark.logoUrl}
+                  brandColor={session.teamMark.color}
+                  size="md"
+                  sx={{ alignSelf: "flex-start" }}
+                />
+              )}
+              <Typography variant="h4" component="h1" sx={{ fontWeight: 800, minWidth: 0, overflowWrap: "anywhere" }}>
                 {session.title}
               </Typography>
               {isShared && (

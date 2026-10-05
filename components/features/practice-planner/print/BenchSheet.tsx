@@ -23,6 +23,7 @@ import { SessionTimeline } from "../SessionTimeline";
 import { BenchSheetDrill, drillText } from "./BenchSheetDrill";
 import { printPixelRatio } from "./PrintDiagram";
 import { LegendList } from "./LegendList";
+import { TeamMarkImage } from "./TeamMarkImage";
 
 export type BenchSheetSession = PracticeSessionView;
 
@@ -39,9 +40,10 @@ function chunk<T>(items: T[], size: number): T[][] {
 export function BenchSheet({ session: stored }: { session: BenchSheetSession }) {
     // Goalie markers hidden at render time only (spec R7); the stored session is untouched.
     const session = useMemo(() => sessionForDisplay(stored), [stored]);
-    const { Link, routes, planGenerator } = usePlannerPlatform();
-    // The static planner's team is the placeholder "This device", not a name (as the exports omit it).
-    const teamName = planGenerator === "openleague-static" ? null : session.teamName;
+    const { Link, routes } = usePlannerPlatform();
+    // A static device without "Your team" has no name: nothing prints (practice logo spec R4).
+    const teamName = session.teamName?.trim() || null;
+    const mark = teamName ? session.teamMark ?? null : null;
     const start = sessionStart(session);
     const end = new Date(start.getTime() + session.duration * MS_PER_MINUTE);
     const { timeZone, showZone } = sessionTimeZone(session);
@@ -94,9 +96,12 @@ export function BenchSheet({ session: stored }: { session: BenchSheetSession }) 
             </Stack>
 
             <Box component="header" sx={{ mb: 3 }}>
-                <Typography variant="h4" component="h1" sx={{ fontWeight: 800 }}>
-                    {session.title}
-                </Typography>
+                <Stack direction="row" spacing={1.5} alignItems="center">
+                    {mark && <TeamMarkImage mark={mark} />}
+                    <Typography variant="h4" component="h1" sx={{ fontWeight: 800, minWidth: 0 }}>
+                        {session.title}
+                    </Typography>
+                </Stack>
                 {teamName && (
                     <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
                         {teamName}
