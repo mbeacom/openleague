@@ -16,6 +16,8 @@ import { isLogoImage } from "@/lib/utils/team-mark";
 const SESSION_ID = "clsession00000000000000001";
 const TEAM_ID = "clteam000000000000000000001";
 const USER_ID = "cluser000000000000000000001";
+// The fake store the stubbed token names: ownership is pinned to it.
+const BLOB_TOKEN = "vercel_blob_rw_Abc_notARealSecret";
 const OWNED = `https://abc.public.blob.vercel-storage.com/branding/team/${TEAM_ID}/logo-a1.png`;
 
 let fetchMock: ReturnType<typeof vi.fn>;
@@ -30,6 +32,7 @@ function session(overrides: { logoUrl?: string | null; isShared?: boolean } = {}
 
 beforeEach(async () => {
     vi.clearAllMocks();
+    vi.stubEnv("BLOB_READ_WRITE_TOKEN", BLOB_TOKEN);
     mockUserId.mockResolvedValue(USER_ID);
     mockPrisma.practiceSession.findUnique.mockResolvedValue(session());
     mockPrisma.teamMember.findFirst.mockResolvedValue({ role: "ADMIN" });
@@ -39,6 +42,7 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+    vi.unstubAllEnvs();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
 });
@@ -70,6 +74,8 @@ describe("getPracticeLogoImage", () => {
         ["a team without a logo", () => mockPrisma.practiceSession.findUnique.mockResolvedValue(session({ logoUrl: null }))],
         ["another team's blob", () => mockPrisma.practiceSession.findUnique.mockResolvedValue(session({ logoUrl: "https://abc.public.blob.vercel-storage.com/branding/team/clother0000000000000000001/x.png" }))],
         ["a URL off our blob host", () => mockPrisma.practiceSession.findUnique.mockResolvedValue(session({ logoUrl: `https://example.com/branding/team/${TEAM_ID}/x.png` }))],
+        ["another blob store", () => mockPrisma.practiceSession.findUnique.mockResolvedValue(session({ logoUrl: `https://other.public.blob.vercel-storage.com/branding/team/${TEAM_ID}/x.png` }))],
+        ["no blob store configured", () => vi.stubEnv("BLOB_READ_WRITE_TOKEN", undefined)],
     ])("returns null without fetching for %s", async (_label, arrange) => {
         arrange();
         expect(await getPracticeLogoImage(SESSION_ID)).toBeNull();

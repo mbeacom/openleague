@@ -57,15 +57,36 @@ export function entityLogoPrefix(entity: BrandableEntity, entityId: string): str
   return `branding/${entity}/${entityId}/`;
 }
 
+/** The read-write token's form: `vercel_blob_rw_<storeId>_<secret>` (as @vercel/blob parses it). */
+const READ_WRITE_TOKEN_PREFIX = "vercel_blob_rw_";
+const STORE_ID = /^[A-Za-z0-9]+$/;
+
+/**
+ * The public host of this project's own blob store, from the read-write token
+ * every upload is signed with, or null when no valid token is configured.
+ * Read at call time rather than through lib/env's import-time snapshot. The
+ * store id is lowercased because a parsed URL's hostname always is.
+ */
+export function ownedBlobHost(token: string | undefined = process.env.BLOB_READ_WRITE_TOKEN): string | null {
+  const value = token?.trim();
+  if (!value?.startsWith(READ_WRITE_TOKEN_PREFIX)) return null;
+  const storeId = value.slice(READ_WRITE_TOKEN_PREFIX.length).split("_")[0];
+  if (!STORE_ID.test(storeId)) return null;
+  return `${storeId.toLowerCase()}.public.blob.vercel-storage.com`;
+}
+
 /**
  * Whether a URL is one of our own blob objects under the given prefix.
  *
- * Both halves matter. The host check stops an arbitrary third-party URL being
- * stored and then served as if it were ours; the prefix check stops one
- * entity's admin from pointing their crest at another entity's object and
- * having a later delete take out a file they never owned.
+ * Both halves matter. The host must be exactly this project's store, so a URL
+ * from anywhere else is never stored, served or fetched as if it were ours;
+ * the prefix check stops one entity's admin from pointing their crest at
+ * another entity's object and having a later delete take out a file they
+ * never owned. Without a configured store nothing is owned.
  */
 export function isOwnedBlobUrl(url: string, prefix: string): boolean {
+  const host = ownedBlobHost();
+  if (!host) return false;
   let parsed: URL;
   try {
     parsed = new URL(url);
@@ -73,7 +94,7 @@ export function isOwnedBlobUrl(url: string, prefix: string): boolean {
     return false;
   }
   if (parsed.protocol !== "https:") return false;
-  if (!parsed.hostname.endsWith(".blob.vercel-storage.com")) return false;
+  if (parsed.host !== host) return false;
   return parsed.pathname.replace(/^\//, "").startsWith(prefix);
 }
 
