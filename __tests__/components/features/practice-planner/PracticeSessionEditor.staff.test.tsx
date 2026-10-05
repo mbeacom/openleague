@@ -1,6 +1,6 @@
 /** The editor's Staff section (practice staff, spec R3, R4, R8). */
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { drill, renderEditor, save, stubResizeObserver } from "@/__tests__/helpers/session-editor";
 import { STAFF_CLASH_CREATE_MESSAGE, STAFF_NAME_TAKEN_MESSAGE } from "@/lib/utils/session-staff";
 import { MAX_SESSION_STAFF, type SessionItem, type SessionStaffMember, type StaffOption } from "@/types/practice-planner";
@@ -236,6 +236,28 @@ describe("PracticeSessionEditor: the Staff section", () => {
         fireEvent.click(within(await openAddStaff()).getByRole("menuitem", { name: "Type a name" }));
         await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
         expect(screen.getByRole("textbox", { name: "Name" })).toHaveFocus();
+    });
+
+    it("removes a new person once confirmed even if a save swaps their key for a stored id while the dialog is open", async () => {
+        const onSave = vi.fn().mockImplementation(async (session: { staff?: SessionStaffMember[] }) => ({
+            success: true,
+            staff: (session.staff ?? []).map((member) => ({ key: member.id, id: member.id.startsWith("k-") ? `cstored-${member.id}` : member.id })),
+        }));
+        renderEditor([drill("k1", 0, { staff: ["k-new", "st2"] })], { staff: [SAM, { id: "k-new", name: "Pat" }] }, onSave);
+        fireEvent.click(screen.getByRole("button", { name: "Remove Pat" }));
+        const dialog = await screen.findByRole("dialog", { name: "Remove staff member" });
+        // The autosave lands while the dialog is open (the page behind it is aria-hidden).
+        await act(async () => {
+            fireEvent.click(screen.getByRole("button", { name: /^save session/i, hidden: true }));
+        });
+        expect(onSave).toHaveBeenCalledTimes(1);
+        fireEvent.click(within(dialog).getByRole("button", { name: "Remove" }));
+        await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+        expect(screen.queryByDisplayValue("Pat")).toBeNull();
+        await save();
+        const second = onSave.mock.calls[1][0] as { staff?: SessionStaffMember[]; plays: SessionItem[] };
+        expect(second.staff).toEqual([SAM]);
+        expect(second.plays[0].staff).toEqual(["st2"]);
     });
 });
 

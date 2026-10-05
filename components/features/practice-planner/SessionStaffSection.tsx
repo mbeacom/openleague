@@ -67,7 +67,9 @@ export function SessionStaffSection({ staff, renderKeys = NO_RENDER_KEYS, option
     const dialogTitleId = useId();
     const [anchor, setAnchor] = useState<HTMLElement | null>(null);
     const [focusKey, setFocusKey] = useState<string | null>(null);
-    const [pending, setPending] = useState<{ key: string; name: string; rows: number } | null>(null);
+    // Held by the row's render key, not member.id: a save may swap a new person's key for a
+    // stored id while this dialog is open, and the stale key would remove nobody.
+    const [pending, setPending] = useState<{ rowKey: string; name: string; rows: number } | null>(null);
     const addRef = useRef<HTMLButtonElement>(null);
     // After a remove or a menu close, focus goes to Add staff (a removed row's button is gone; the
     // menu keeps disableRestoreFocus so Type a name can focus its new field). An effect, so it runs
@@ -94,6 +96,7 @@ export function SessionStaffSection({ staff, renderKeys = NO_RENDER_KEYS, option
         const key = staffNameKey(member.name);
         return key !== "" && staff.some((other) => other.id !== member.id && staffNameKey(other.name) === key);
     };
+    const rowKeyOf = (member: SessionStaffMember) => renderKeys.get(member.id) ?? member.id;
     const closeMenu = () => {
         setAnchor(null);
         setRefocus((count) => count + 1);
@@ -105,7 +108,7 @@ export function SessionStaffSection({ staff, renderKeys = NO_RENDER_KEYS, option
     const remove = (member: SessionStaffMember) => {
         const rows = assignments(member.id);
         if (rows === 0) removeNow(member.id);
-        else setPending({ key: member.id, name: cleanStaffName(member.name), rows });
+        else setPending({ rowKey: rowKeyOf(member), name: cleanStaffName(member.name), rows });
     };
 
     return (
@@ -140,7 +143,7 @@ export function SessionStaffSection({ staff, renderKeys = NO_RENDER_KEYS, option
                             const linked = Boolean(member.teamOfficialId || member.userId);
                             const clash = clashes(member);
                             // Not member.id: a save swaps a new person's key to their stored id.
-                            const rowKey = renderKeys.get(member.id) ?? member.id;
+                            const rowKey = rowKeyOf(member);
                             return (
                                 <Stack component="li" key={rowKey} direction="row" spacing={1.5} alignItems="center" sx={{ minHeight: 44 }}>
                                     <Box
@@ -256,7 +259,9 @@ export function SessionStaffSection({ staff, renderKeys = NO_RENDER_KEYS, option
                         color="error"
                         variant="contained"
                         onClick={() => {
-                            if (pending) removeNow(pending.key);
+                            // The person's current id (their stored one, if a save landed meanwhile).
+                            const member = pending && staff.find((candidate) => rowKeyOf(candidate) === pending.rowKey);
+                            if (member) removeNow(member.id);
                             setPending(null);
                         }}
                         sx={{ minHeight: 44 }}
