@@ -10,7 +10,10 @@ import {
 
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
 const OVER_CAP = `data:image/png;base64,${"A".repeat(273_068)}`; // 204,801 bytes
-const PNG_HEAD = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+const u32be = (n: number) => [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255];
+/** A PNG signature and IHDR declaring width × height. */
+const pngHead = (width: number, height: number) => [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, ...u32be(13), 0x49, 0x48, 0x44, 0x52, ...u32be(width), ...u32be(height), 8, 6, 0, 0, 0];
+const PNG_HEAD = pngHead(1024, 256);
 
 const file = (head: number[], size = 64, type = "image/png") => {
     const bytes = new Uint8Array(size);
@@ -62,8 +65,11 @@ describe("normalizeLogoFile", () => {
 
     it("accepts JPEG and WebP by their bytes, and never upscales", async () => {
         bitmap = { width: 100, height: 40, close: vi.fn() };
-        expect(await normalizeLogoFile(file([0xff, 0xd8, 0xff, 0xe0], 64, "image/jpeg"))).toMatchObject({ ok: true, logo: { width: 100, height: 40 } });
-        const webp = [0x52, 0x49, 0x46, 0x46, 1, 2, 3, 4, 0x57, 0x45, 0x42, 0x50];
+        // SOI, then an SOF0 frame declaring 40 × 100.
+        const jpeg = [0xff, 0xd8, 0xff, 0xc0, 0, 11, 8, 0, 40, 0, 100, 1, 1, 0x11, 0];
+        expect(await normalizeLogoFile(file(jpeg, 64, "image/jpeg"))).toMatchObject({ ok: true, logo: { width: 100, height: 40 } });
+        // RIFF....WEBP with a VP8X chunk declaring 100 × 40 (stored minus one).
+        const webp = [0x52, 0x49, 0x46, 0x46, 1, 2, 3, 4, 0x57, 0x45, 0x42, 0x50, 0x56, 0x50, 0x38, 0x58, 10, 0, 0, 0, 0, 0, 0, 0, 99, 0, 0, 39, 0, 0];
         expect(await normalizeLogoFile(file(webp, 64, "image/webp"))).toMatchObject({ ok: true });
     });
 
@@ -71,6 +77,31 @@ describe("normalizeLogoFile", () => {
         const svg = [...new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"/>')];
         expect(await normalizeLogoFile(file(svg, 64))).toEqual({ ok: false, error: LOGO_TYPE_MESSAGE });
         expect(await normalizeLogoFile(file([...new TextEncoder().encode("GIF89a")]))).toEqual({ ok: false, error: LOGO_TYPE_MESSAGE });
+        expect(createImageBitmap).not.toHaveBeenCalled();
+    });
+
+    it("refuses an image whose header declares more than 4096 × 4096 pixels, before decoding", async () => {
+        expect(await normalizeLogoFile(file(pngHead(4097, 4096)))).toEqual({ ok: false, error: LOGO_TOO_DETAILED_MESSAGE });
+        expect(await normalizeLogoFile(file(pngHead(65_535, 300)))).toEqual({ ok: false, error: LOGO_TOO_DETAILED_MESSAGE });
+        expect(createImageBitmap).not.toHaveBeenCalled();
+        expect(await normalizeLogoFile(file(pngHead(4096, 4096)))).toMatchObject({ ok: true });
+    });
+
+    it("refuses an image whose size can't be read from its header, before decoding", async () => {
+        // A PNG signature with no IHDR, and a JPEG with no frame header.
+        expect(await normalizeLogoFile(file([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))).toEqual({ ok: false, error: LOGO_UNREADABLE_MESSAGE });
+        expect(await normalizeLogoFile(file([0xff, 0xd8, 0xff, 0xe0], 64, "image/jpeg"))).toEqual({ ok: false, error: LOGO_UNREADABLE_MESSAGE });
+        expect(createImageBitmap).not.toHaveBeenCalled();
+    });
+
+    it("refuses a file that can't be read", async () => {
+        vi.spyOn(console, "warn").mockImplementation(() => {});
+        const unreadable = {
+            size: 64,
+            slice: () => ({ arrayBuffer: () => Promise.reject(new DOMException("gone", "NotReadableError")) }),
+        } as unknown as Blob;
+        expect(await normalizeLogoFile(unreadable)).toEqual({ ok: false, error: LOGO_UNREADABLE_MESSAGE });
+        expect(console.warn).toHaveBeenCalledWith(expect.any(String), "NotReadableError");
         expect(createImageBitmap).not.toHaveBeenCalled();
     });
 

@@ -25,6 +25,8 @@ export const LOGO_IMAGE_MAX_PX = 512;
 export const LOGO_IMAGE_FALLBACK_PX = 256;
 /** The largest normalized logo PNG, decoded bytes (spec R4). */
 export const MAX_LOGO_PNG_BYTES = 200 * 1024;
+/** The most pixels a logo may have before it is decoded, on the server and in the browser (about 16.8 million). */
+export const LOGO_INPUT_PIXEL_LIMIT = 4096 * 4096;
 
 function startsWith(bytes: Uint8Array, offset: number, expected: readonly number[]): boolean {
     if (bytes.length < offset + expected.length) return false;

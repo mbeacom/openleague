@@ -3,12 +3,12 @@
  * R2). Server only: sharp is a native module (a Next.js server external
  * package), loaded on first use so nothing else pays for it.
  */
-import { LOGO_IMAGE_FALLBACK_PX, LOGO_IMAGE_MAX_PX, LOGO_MAX_BYTES, MAX_LOGO_PNG_BYTES, sniffLogoType } from "./logo-rules";
+import { LOGO_IMAGE_FALLBACK_PX, LOGO_IMAGE_MAX_PX, LOGO_INPUT_PIXEL_LIMIT, LOGO_MAX_BYTES, MAX_LOGO_PNG_BYTES, sniffLogoType } from "./logo-rules";
 import type { LogoImage } from "@/types/practice-planner";
 
 export const LOGO_FETCH_TIMEOUT_MS = 5_000;
-/** Decoded pixels allowed in (4096 × 4096, about 16.8 million): a 2 MB file can declare enormous dimensions. */
-export const LOGO_INPUT_PIXEL_LIMIT = 4096 * 4096;
+/** Decoded pixels allowed in (4096 × 4096, about 16.8 million): a 2 MB file can declare enormous dimensions. Defined in logo-rules so the static upload applies the same limit. */
+export { LOGO_INPUT_PIXEL_LIMIT };
 
 const DECODABLE_FORMATS = new Set(["png", "jpeg", "webp"]);
 

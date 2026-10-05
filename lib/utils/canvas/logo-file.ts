@@ -1,7 +1,8 @@
 /**
  * The static planner's logo upload (practice logo spec R4): the browser half
  * of the rule lib/media/logo-image.ts applies on the server. The type comes
- * from the file's bytes; the image is decoded with createImageBitmap, drawn
+ * from the file's bytes, and the header's declared size must be within
+ * LOGO_INPUT_PIXEL_LIMIT before anything decodes it; the image is decoded with createImageBitmap, drawn
  * within 512×512 and stored as PNG; over 200 KB it is drawn again within 256;
  * still over, it is refused.
  */
@@ -13,6 +14,7 @@ import {
     fitWithin,
     sniffLogoType,
 } from "@/lib/media/logo-rules";
+import { IMAGE_HEADER_BYTES, exceedsPixelLimit, readImageDimensions } from "@/lib/utils/image-dimensions";
 import { MAX_PNG_DATA_URI_LENGTH, isPngDataUri, pngDataUriByteLength } from "@/lib/utils/png-data-uri";
 import type { LogoImage } from "@/types/practice-planner";
 
@@ -24,17 +26,30 @@ export const LOGO_TOO_DETAILED_MESSAGE = "This logo is too detailed to store. Tr
 export type LogoFileResult = { ok: true; logo: LogoImage } | { ok: false; error: string };
 
 const refuse = (error: string): LogoFileResult => ({ ok: false, error });
+/** A thrown value's name for the one log line (a DOMException isn't an Error everywhere); never its message. */
+const errorName = (error: unknown) =>
+    typeof error === "object" && error !== null && typeof (error as { name?: unknown }).name === "string" ? (error as { name: string }).name : "unknown error";
 
 export async function normalizeLogoFile(file: Blob): Promise<LogoFileResult> {
     if (file.size > LOGO_MAX_BYTES) return refuse(LOGO_FILE_SIZE_MESSAGE);
-    const head = new Uint8Array(await file.slice(0, 16).arrayBuffer());
+    let head: Uint8Array;
+    try {
+        head = new Uint8Array(await file.slice(0, IMAGE_HEADER_BYTES).arrayBuffer());
+    } catch (error) {
+        console.warn("Logo upload: the file couldn't be read:", errorName(error));
+        return refuse(LOGO_UNREADABLE_MESSAGE);
+    }
     if (!sniffLogoType(head)) return refuse(LOGO_TYPE_MESSAGE);
+    // The declared size, checked before decoding: a small file can declare an enormous image.
+    const declared = readImageDimensions(head);
+    if (!declared) return refuse(LOGO_UNREADABLE_MESSAGE);
+    if (exceedsPixelLimit(declared)) return refuse(LOGO_TOO_DETAILED_MESSAGE);
 
     let bitmap: ImageBitmap;
     try {
         bitmap = await createImageBitmap(file);
     } catch (error) {
-        console.warn("Logo upload: the image couldn't be decoded:", error instanceof Error ? error.name : "unknown error");
+        console.warn("Logo upload: the image couldn't be decoded:", errorName(error));
         return refuse(LOGO_UNREADABLE_MESSAGE);
     }
     try {

@@ -13,9 +13,10 @@ vi.mock("@/lib/utils/canvas/logo-file", async (importOriginal) => ({
     normalizeLogoFile: mockNormalize,
 }));
 
-import { YourTeamButton } from "@/apps/planner/src/screens/YourTeam";
+import { CLEAR_TEAM_PROMPT, YourTeamButton } from "@/apps/planner/src/screens/YourTeam";
+import { TEAM_PROFILE_LOAD_FAILED } from "@/apps/planner/src/store/team-profile";
 import { useStoreResult } from "@/apps/planner/src/screens/useStoreResult";
-import { LOGO_TYPE_MESSAGE } from "@/lib/utils/canvas/logo-file";
+import { LOGO_TYPE_MESSAGE, LOGO_UNREADABLE_MESSAGE } from "@/lib/utils/canvas/logo-file";
 import { TEAM_COLOR_MESSAGE, TEAM_NAME_REQUIRED_MESSAGE } from "@/lib/utils/team-mark";
 
 const pick = () => fireEvent.change(screen.getByTestId("team-logo-input"), { target: { files: [new File([new Uint8Array(8)], "logo.png", { type: "image/png" })] } });
@@ -87,6 +88,14 @@ describe("YourTeamButton and the Your team dialog", () => {
         await screen.findByText("IH");
         await openDialog();
         fireEvent.click(screen.getByRole("button", { name: "Clear team" }));
+        // A confirm step first: Keep goes back, and nothing is cleared yet.
+        expect(screen.getByText(CLEAR_TEAM_PROMPT)).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "Keep" }));
+        expect(screen.queryByText(CLEAR_TEAM_PROMPT)).toBeNull();
+        const kept = await store.getTeamProfile();
+        expect(kept.success && kept.data?.name).toBe("Ice Hawks");
+        fireEvent.click(screen.getByRole("button", { name: "Clear team" }));
+        fireEvent.click(screen.getByRole("button", { name: "Clear" }));
         await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
         const saved = await store.getTeamProfile();
         expect(saved.success && saved.data).toBeNull();
@@ -103,12 +112,85 @@ describe("YourTeamButton and the Your team dialog", () => {
         for (const name of ["Replace logo", "Remove logo", "Clear team", "Cancel", "Save"]) {
             expect(minHeight(name), name).toBe("44px");
         }
+        fireEvent.click(screen.getByRole("button", { name: "Clear team" }));
+        for (const name of ["Keep", "Clear"]) {
+            expect(minHeight(name), name).toBe("44px");
+        }
+        fireEvent.click(screen.getByRole("button", { name: "Keep" }));
         fireEvent.click(screen.getByRole("button", { name: "Remove logo" }));
         expect(minHeight("Upload logo"), "Upload logo").toBe("44px");
         for (const name of ["Pick primary color", "Pick secondary color"]) {
             const picker = screen.getByLabelText(name);
             expect([getComputedStyle(picker).width, getComputedStyle(picker).height], name).toEqual(["44px", "44px"]);
         }
+    });
+});
+
+describe("the Your team dialog's edge cases", () => {
+    it("says a file couldn't be read when reading it fails, and lets the coach try again", async () => {
+        mockNormalize.mockRejectedValue(new Error("read failed"));
+        const { store } = memoryStore();
+        renderScreen(<YourTeamButton store={store} />, store);
+        await openDialog();
+        pick();
+        expect(await screen.findByText(LOGO_UNREADABLE_MESSAGE)).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Upload logo" })).toBeEnabled();
+        expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+    });
+
+    it("shows an empty swatch for an empty color, and picking any color fills it, #0D47A1 included", async () => {
+        const { store } = memoryStore();
+        renderScreen(<YourTeamButton store={store} />, store);
+        await openDialog();
+        expect(screen.getByTestId("primary-color-swatch")).toHaveAttribute("data-empty", "true");
+        fireEvent.change(screen.getByLabelText("Pick primary color"), { target: { value: "#0d47a1" } });
+        expect(screen.getByRole("textbox", { name: "Primary color" })).toHaveValue("#0D47A1");
+        expect(screen.getByTestId("primary-color-swatch")).toHaveAttribute("data-empty", "false");
+    });
+
+    it("shows a neutral placeholder, not initials, until there is a name or a logo", async () => {
+        const { store } = memoryStore();
+        renderScreen(<YourTeamButton store={store} />, store);
+        await openDialog();
+        expect(screen.getByTestId("team-crest-placeholder")).toBeInTheDocument();
+        expect(screen.queryByText("TE")).toBeNull();
+        fireEvent.change(screen.getByRole("textbox", { name: "Team name" }), { target: { value: "Ice Hawks" } });
+        expect(screen.queryByTestId("team-crest-placeholder")).toBeNull();
+        expect(screen.getByText("IH")).toBeInTheDocument();
+    });
+
+    it("says the team couldn't be loaded instead of opening as a blank team", async () => {
+        const { store } = memoryStore();
+        vi.spyOn(store, "getTeamProfile").mockResolvedValue({ success: false, error: TEAM_PROFILE_LOAD_FAILED });
+        renderScreen(<YourTeamButton store={store} />, store);
+        await openDialog();
+        expect(screen.getByText(TEAM_PROFILE_LOAD_FAILED)).toBeInTheDocument();
+    });
+
+    it("disables Clear team while a logo is being read", async () => {
+        mockNormalize.mockReturnValue(new Promise(() => {}));
+        const { store } = memoryStore();
+        await store.saveTeamProfile({ name: "Ice Hawks", logo: null, primaryColor: null, secondaryColor: null });
+        renderScreen(<YourTeamButton store={store} />, store);
+        await openDialog();
+        pick();
+        await waitFor(() => expect(screen.getByRole("button", { name: "Clear team" })).toBeDisabled());
+    });
+
+    it("discards edits on Cancel: reopening shows the saved team", async () => {
+        const { store } = memoryStore();
+        await store.saveTeamProfile({ name: "Ice Hawks", logo: null, primaryColor: "#9B1B30", secondaryColor: null });
+        renderScreen(<YourTeamButton store={store} />, store);
+        await openDialog();
+        fireEvent.change(screen.getByRole("textbox", { name: "Team name" }), { target: { value: "Snow Owls" } });
+        fireEvent.change(screen.getByRole("textbox", { name: "Primary color" }), { target: { value: "#000000" } });
+        fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+        await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+        await openDialog();
+        expect(screen.getByRole("textbox", { name: "Team name" })).toHaveValue("Ice Hawks");
+        expect(screen.getByRole("textbox", { name: "Primary color" })).toHaveValue("#9B1B30");
+        const saved = await store.getTeamProfile();
+        expect(saved.success && saved.data?.name).toBe("Ice Hawks");
     });
 });
 

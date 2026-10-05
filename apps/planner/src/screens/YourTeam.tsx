@@ -20,16 +20,72 @@ import { useTheme } from "@mui/material/styles";
 import { DeleteOutline as RemoveIcon, FileUploadOutlined as UploadIcon, GroupsOutlined as TeamIcon } from "@mui/icons-material";
 import { Crest } from "@/components/ui/Crest";
 import { LOGO_ACCEPT } from "@/lib/media/logo-rules";
-import { normalizeLogoFile } from "@/lib/utils/canvas/logo-file";
+import { LOGO_UNREADABLE_MESSAGE, normalizeLogoFile } from "@/lib/utils/canvas/logo-file";
 import { TEAM_NAME_MAX, isTeamColor, teamProfileErrors, type TeamProfileField, type TeamProfileInput } from "@/lib/utils/team-mark";
 import type { LogoImage, TeamProfile } from "@/types/practice-planner";
 import { LOCAL_TEAM_ID } from "../config";
+import { TEAM_PROFILE_LOAD_FAILED } from "../store/team-profile";
 import type { LocalPlannerStore } from "../store/types";
 import { useStoreResult } from "./useStoreResult";
 import { useTeamProfileVersion } from "./useTeamProfile";
 
 export const YOUR_TEAM_INTRO = "Shown on your practices, bench sheets and exports on this device. Plan files never include it.";
+export const CLEAR_TEAM_PROMPT = "Clear team? This removes the name, logo and colors from this device.";
+export const CLEAR_TEAM_CONFIRM = "Clear";
+export const CLEAR_TEAM_KEEP = "Keep";
 const TARGET = { minHeight: 44 } as const;
+
+/**
+ * The native picker's value while the field holds no color: one nobody picks,
+ * so choosing any real color (#0D47A1 included) is a change and fires.
+ */
+const EMPTY_PICKER_VALUE = "#010203";
+
+/** A 44 px color picker: the native input, invisible, over a swatch that shows the color or a slashed empty box. */
+function ColorPicker({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+    const color = isTeamColor(value) ? value.toUpperCase() : null;
+    return (
+        <Box
+            sx={{
+                position: "relative",
+                width: 44,
+                height: 44,
+                flexShrink: 0,
+                borderRadius: 1,
+                "&:focus-within": { outline: "2px solid", outlineColor: "primary.main", outlineOffset: 1 },
+            }}
+        >
+            <Box
+                aria-hidden
+                data-testid={`${label.split(" ")[0].toLowerCase()}-color-swatch`}
+                data-empty={color ? "false" : "true"}
+                sx={(theme) => {
+                    const ink = (theme.vars ?? theme).palette.text.secondary;
+                    return {
+                        position: "absolute",
+                        inset: 4,
+                        borderRadius: 0.5,
+                        border: 1,
+                        borderColor: color ? "divider" : "text.secondary",
+                        bgcolor: color ?? "transparent",
+                        // Empty: a diagonal slash, the usual "no color" mark.
+                        backgroundImage: color
+                            ? "none"
+                            : `linear-gradient(to top right, transparent calc(50% - 1px), ${ink} calc(50% - 1px), ${ink} calc(50% + 1px), transparent calc(50% + 1px))`,
+                    };
+                }}
+            />
+            <Box
+                component="input"
+                type="color"
+                aria-label={`Pick ${label.toLowerCase()}`}
+                value={color ? color.toLowerCase() : EMPTY_PICKER_VALUE}
+                onChange={(event: ChangeEvent<HTMLInputElement>) => onChange(event.target.value.toUpperCase())}
+                sx={{ position: "absolute", inset: 0, width: 44, height: 44, m: 0, p: 0, border: 0, opacity: 0, cursor: "pointer" }}
+            />
+        </Box>
+    );
+}
 
 function ColorField({ label, value, onChange, error }: { label: string; value: string; onChange: (value: string) => void; error?: string }) {
     return (
@@ -44,23 +100,25 @@ function ColorField({ label, value, onChange, error }: { label: string; value: s
             slotProps={{
                 htmlInput: { maxLength: 7, spellCheck: false, autoCapitalize: "off" },
                 input: {
-                    endAdornment: (
-                        <Box
-                            component="input"
-                            type="color"
-                            aria-label={`Pick ${label.toLowerCase()}`}
-                            value={isTeamColor(value) ? value.toLowerCase() : "#0d47a1"}
-                            onChange={(event: ChangeEvent<HTMLInputElement>) => onChange(event.target.value.toUpperCase())}
-                            sx={{ width: 44, height: 44, minWidth: 44, p: 0, border: 0, bgcolor: "transparent", cursor: "pointer", flexShrink: 0 }}
-                        />
-                    ),
+                    endAdornment: <ColorPicker label={label} value={value} onChange={onChange} />,
                 },
             }}
         />
     );
 }
 
-export function TeamProfileDialog({ store, initial, onClose }: { store: LocalPlannerStore; initial: TeamProfile | null; onClose: () => void }) {
+export function TeamProfileDialog({
+    store,
+    initial,
+    loadFailed = false,
+    onClose,
+}: {
+    store: LocalPlannerStore;
+    initial: TeamProfile | null;
+    /** The saved team couldn't be read: say so rather than open as a blank team. */
+    loadFailed?: boolean;
+    onClose: () => void;
+}) {
     const theme = useTheme();
     const fullScreen = useMediaQuery(theme.breakpoints.down("sm"));
     const fileInput = useRef<HTMLInputElement>(null);
@@ -73,6 +131,7 @@ export function TeamProfileDialog({ store, initial, onClose }: { store: LocalPla
     const [busy, setBusy] = useState(false);
     const [logoError, setLogoError] = useState<string | null>(null);
     const [saveError, setSaveError] = useState<string | null>(null);
+    const [confirmingClear, setConfirmingClear] = useState(false);
 
     const input: TeamProfileInput = { name, logo, primaryColor: primary.trim() || null, secondaryColor: secondary.trim() || null };
     const errors: Partial<Record<TeamProfileField, string>> = submitted ? teamProfileErrors(input) : {};
@@ -82,13 +141,18 @@ export function TeamProfileDialog({ store, initial, onClose }: { store: LocalPla
         event.target.value = "";
         if (!file) return;
         setReading(true);
-        const result = await normalizeLogoFile(file);
-        setReading(false);
-        if (result.ok) {
-            setLogo(result.logo);
-            setLogoError(null);
-        } else {
-            setLogoError(result.error);
+        try {
+            const result = await normalizeLogoFile(file);
+            if (result.ok) {
+                setLogo(result.logo);
+                setLogoError(null);
+            } else {
+                setLogoError(result.error);
+            }
+        } catch {
+            setLogoError(LOGO_UNREADABLE_MESSAGE);
+        } finally {
+            setReading(false);
         }
     };
 
@@ -120,6 +184,7 @@ export function TeamProfileDialog({ store, initial, onClose }: { store: LocalPla
                     <Typography variant="body2" color="text.secondary">
                         {YOUR_TEAM_INTRO}
                     </Typography>
+                    {loadFailed && <Alert severity="error">{TEAM_PROFILE_LOAD_FAILED}</Alert>}
                     <TextField
                         label="Team name"
                         value={name}
@@ -131,13 +196,36 @@ export function TeamProfileDialog({ store, initial, onClose }: { store: LocalPla
                         autoFocus
                     />
                     <Stack direction="row" spacing={2} alignItems="center">
-                        <Crest
-                            name={name.trim() || "Team"}
-                            id={LOCAL_TEAM_ID}
-                            logoUrl={logo?.dataUrl ?? null}
-                            brandColor={isTeamColor(primary) ? primary : null}
-                            size="lg"
-                        />
+                        {name.trim() || logo ? (
+                            <Crest
+                                name={name.trim() || "Team"}
+                                id={LOCAL_TEAM_ID}
+                                logoUrl={logo?.dataUrl ?? null}
+                                brandColor={isTeamColor(primary) ? primary : null}
+                                size="lg"
+                            />
+                        ) : (
+                            // No name and no logo yet: a neutral mark, like the app bar's, not initials of a placeholder.
+                            <Box
+                                aria-hidden
+                                data-testid="team-crest-placeholder"
+                                sx={{
+                                    width: 72,
+                                    height: 72,
+                                    flexShrink: 0,
+                                    borderRadius: "50%",
+                                    bgcolor: "action.hover",
+                                    color: "text.secondary",
+                                    border: 1,
+                                    borderColor: "divider",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                }}
+                            >
+                                <TeamIcon sx={{ fontSize: 36 }} />
+                            </Box>
+                        )}
                         <Stack spacing={1} sx={{ minWidth: 0 }}>
                             <Button variant="outlined" startIcon={<UploadIcon />} onClick={() => fileInput.current?.click()} disabled={reading || busy} sx={TARGET}>
                                 {logo ? "Replace logo" : "Upload logo"}
@@ -160,17 +248,33 @@ export function TeamProfileDialog({ store, initial, onClose }: { store: LocalPla
                 </Stack>
             </DialogContent>
             <DialogActions sx={{ px: 3, pb: 2, flexWrap: "wrap", gap: 1 }}>
-                {initial && (
-                    <Button color="error" onClick={() => void clear()} disabled={busy} sx={{ ...TARGET, mr: "auto" }}>
-                        Clear team
-                    </Button>
+                {confirmingClear ? (
+                    <>
+                        <Typography variant="body2" sx={{ flexBasis: "100%", fontWeight: 600 }}>
+                            {CLEAR_TEAM_PROMPT}
+                        </Typography>
+                        <Button onClick={() => setConfirmingClear(false)} disabled={busy} autoFocus sx={{ ...TARGET, ml: "auto" }}>
+                            {CLEAR_TEAM_KEEP}
+                        </Button>
+                        <Button color="error" variant="contained" onClick={() => void clear()} disabled={busy} sx={TARGET}>
+                            {CLEAR_TEAM_CONFIRM}
+                        </Button>
+                    </>
+                ) : (
+                    <>
+                        {initial && (
+                            <Button color="error" onClick={() => setConfirmingClear(true)} disabled={busy || reading} sx={{ ...TARGET, mr: "auto" }}>
+                                Clear team
+                            </Button>
+                        )}
+                        <Button onClick={onClose} disabled={busy} sx={TARGET}>
+                            Cancel
+                        </Button>
+                        <Button variant="contained" onClick={() => void save()} disabled={busy || reading} sx={TARGET}>
+                            Save
+                        </Button>
+                    </>
                 )}
-                <Button onClick={onClose} disabled={busy} sx={TARGET}>
-                    Cancel
-                </Button>
-                <Button variant="contained" onClick={() => void save()} disabled={busy || reading} sx={TARGET}>
-                    Save
-                </Button>
             </DialogActions>
         </Dialog>
     );
@@ -200,7 +304,7 @@ export function YourTeamButton({ store }: { store: LocalPlannerStore }) {
             >
                 Your team
             </Button>
-            {open && <TeamProfileDialog store={store} initial={profile} onClose={() => setOpen(false)} />}
+            {open && <TeamProfileDialog store={store} initial={profile} loadFailed={state.kind === "error"} onClose={() => setOpen(false)} />}
         </>
     );
 }
