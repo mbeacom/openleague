@@ -129,6 +129,19 @@ describe("getPracticeLogoImage", () => {
         for (const secret of [OWNED, SESSION_ID, TEAM_ID, USER_ID]) expect(logged).not.toContain(secret);
     });
 
+    it.each([
+        ["the session read fails", () => mockUserId.mockRejectedValue(new Error(`session ${USER_ID}`))],
+        ["the practice read fails", () => mockPrisma.practiceSession.findUnique.mockRejectedValue(new Error(`query ${SESSION_ID}`))],
+        ["the membership read fails", () => mockPrisma.teamMember.findFirst.mockRejectedValue(new Error(`query ${TEAM_ID}`))],
+    ])("returns null when %s, logging the error type only", async (_label, arrange) => {
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        arrange();
+        expect(await getPracticeLogoImage(SESSION_ID)).toBeNull();
+        expect(fetchMock).not.toHaveBeenCalled();
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(warn).toHaveBeenCalledWith("Practice logo unavailable:", "Error");
+    });
+
     it("returns null for a corrupt image", async () => {
         vi.spyOn(console, "warn").mockImplementation(() => {});
         fetchMock.mockResolvedValue(new Response((await pngBytes()).slice(0, 40)));

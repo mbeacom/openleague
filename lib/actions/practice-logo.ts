@@ -18,23 +18,23 @@ import type { LogoImage } from "@/types/practice-planner";
 export async function getPracticeLogoImage(sessionId: string): Promise<LogoImage | null> {
     const id = parseId(sessionId);
     if (!id) return null;
-    const userId = await getCurrentUserId();
-    if (!userId) return null;
-
-    const session = await prisma.practiceSession.findUnique({
-        where: { id },
-        select: { teamId: true, isShared: true, team: { select: { logoUrl: true } } },
-    });
-    if (!session) return null;
-    const membership = await prisma.teamMember.findFirst({
-        where: { userId, teamId: session.teamId },
-        select: { role: true },
-    });
-    if (!canViewPracticeSession(membership?.role, session.isShared)) return null;
-
-    const url = session.team.logoUrl;
-    if (!url || !isOwnedBlobUrl(url, entityLogoPrefix("team", session.teamId))) return null;
     try {
+        const userId = await getCurrentUserId();
+        if (!userId) return null;
+
+        const session = await prisma.practiceSession.findUnique({
+            where: { id },
+            select: { teamId: true, isShared: true, team: { select: { logoUrl: true } } },
+        });
+        if (!session) return null;
+        const membership = await prisma.teamMember.findFirst({
+            where: { userId, teamId: session.teamId },
+            select: { role: true },
+        });
+        if (!canViewPracticeSession(membership?.role, session.isShared)) return null;
+
+        const url = session.team.logoUrl;
+        if (!url || !isOwnedBlobUrl(url, entityLogoPrefix("team", session.teamId))) return null;
         const bytes = await fetchLogoBytes(url);
         if (!bytes) {
             console.warn("Practice logo unavailable: the response failed or was over the size cap");
