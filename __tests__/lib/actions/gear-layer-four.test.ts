@@ -282,7 +282,7 @@ describe("Layer 4 gear actions", () => {
         description: null, targetQty: 5, pledgedQty: 6, receivedQty: 1,
       }],
     });
-    const projection = await getPublicGearWishlist("t".repeat(32));
+    const projection = await getPublicGearWishlist("t".repeat(43));
     expect(projection).toEqual({
       associationName: "Open League",
       title: "Community gear drive",
@@ -293,7 +293,7 @@ describe("Layer 4 gear actions", () => {
     expect(projection).not.toHaveProperty("shareToken");
 
     mockPrisma.gearWishlist.findFirst.mockResolvedValue(null);
-    await expect(getPublicGearWishlist("t".repeat(32))).resolves.toBeNull();
+    await expect(getPublicGearWishlist("t".repeat(43))).resolves.toBeNull();
     expect(mockPrisma.gearWishlist.findFirst).toHaveBeenLastCalledWith(expect.objectContaining({
       where: expect.objectContaining({ status: "PUBLISHED" }),
     }));
