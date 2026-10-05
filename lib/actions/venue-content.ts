@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
+import { parseId } from "@/lib/utils/ids";
 import { requireVenueContentManager } from "@/lib/auth/session";
 import { expandRecurrenceWindow } from "@/lib/utils/venue-schedule";
 import {
@@ -233,7 +234,16 @@ export async function getVenueContentAdminData(
   venueId: string
 ): Promise<ActionResult<{ venueId: string; lessons: LessonOfferingAdminSummary[]; posts: VenueContentPostAdminSummary[] }>> {
   try {
+    const parsedOrganizationId = parseId(organizationId);
+    const parsedVenueId = parseId(venueId);
+    if (!parsedOrganizationId || !parsedVenueId) {
+      return { success: false, error: "Failed to load venue content." };
+    }
+    organizationId = parsedOrganizationId;
+    venueId = parsedVenueId;
+
     await requireVenueContentManager(organizationId, venueId);
+    await ensureVenue(organizationId, venueId);
     const [lessons, posts] = await Promise.all([
       prisma.lessonOffering.findMany({ where: { venueId }, select: lessonOfferingAdminSelect, orderBy: { createdAt: "desc" } }),
       prisma.venueContentPost.findMany({ where: { venueId }, select: venueContentPostAdminSelect, orderBy: { createdAt: "desc" } }),

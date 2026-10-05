@@ -1,9 +1,11 @@
 "use server";
 
 import { randomBytes } from "crypto";
+import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import type { PhaseAudience, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
+import { idSchema } from "@/lib/utils/ids";
 import { FALLBACK_TIME_ZONE } from "@/lib/utils/date";
 import {
   assignVenueReservation,
@@ -15,6 +17,7 @@ import { runVenueReservationTransaction } from "@/lib/services/venue-reservation
 import {
   getCurrentUserId,
   isEventManager,
+  isSignupEventHostAdmin,
   requireEventManager,
   requireSignupEventHostAdmin,
   requireUserId,
@@ -1451,15 +1454,43 @@ export type HostGroupOptions = {
   teams: Array<{ id: string; name: string }>;
 };
 
+const hostGroupOptionsInputSchema = z.object({
+  kind: z.enum(["organization", "league", "team"]),
+  id: idSchema,
+  eventId: idSchema.optional(),
+});
+
 /**
  * Divisions/teams selectable for a phase's SELECTED_GROUPS audience,
  * resolved from the hosting entity.
+ *
+ * Available to admins of the host (who may create events for it) and to
+ * managers of the given event when that event belongs to the host (who may
+ * edit it).
  */
-export async function listHostGroupOptions(host: {
+export async function listHostGroupOptions(input: {
   kind: "organization" | "league" | "team";
   id: string;
+  /** The event being edited, when the form is in edit mode. */
+  eventId?: string;
 }): Promise<HostGroupOptions> {
-  await requireUserId();
+  const userId = await requireUserId();
+  const empty: HostGroupOptions = { divisions: [], teams: [] };
+
+  const parsed = hostGroupOptionsInputSchema.safeParse(input);
+  if (!parsed.success) {
+    return empty;
+  }
+  const host = parsed.data;
+  const hostRef = {
+    organizationId: host.kind === "organization" ? host.id : null,
+    leagueId: host.kind === "league" ? host.id : null,
+    teamId: host.kind === "team" ? host.id : null,
+  };
+
+  if (!(await canReadHostGroupOptions(userId, hostRef, host.eventId))) {
+    return empty;
+  }
 
   if (host.kind === "league") {
     const [divisions, teams] = await Promise.all([
@@ -1497,4 +1528,32 @@ export async function listHostGroupOptions(host: {
     select: { id: true, name: true },
   });
   return { divisions: [], teams };
+}
+
+async function canReadHostGroupOptions(
+  userId: string,
+  host: { organizationId: string | null; leagueId: string | null; teamId: string | null },
+  eventId: string | undefined
+): Promise<boolean> {
+  if (await isSignupEventHostAdmin(userId, host)) {
+    return true;
+  }
+  if (!eventId) {
+    return false;
+  }
+
+  const event = await prisma.signupEvent.findUnique({
+    where: { id: eventId },
+    select: { hostOrganizationId: true, hostLeagueId: true, hostTeamId: true },
+  });
+  if (
+    !event ||
+    event.hostOrganizationId !== host.organizationId ||
+    event.hostLeagueId !== host.leagueId ||
+    event.hostTeamId !== host.teamId
+  ) {
+    return false;
+  }
+
+  return isEventManager(userId, eventId);
 }

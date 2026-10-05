@@ -173,13 +173,14 @@ export function EventForm({ hostOptions, venueOptions, initialValues, host }: Ev
   // Load division/team pickers for the selected host (fixed host in edit mode).
   const activeHost = host ?? (hostKey ? { kind: hostKey.split(":")[0] as HostOption["kind"], id: hostKey.split(":")[1] } : null);
   const activeHostKey = activeHost ? `${activeHost.kind}:${activeHost.id}` : "";
+  const editingEventId = initialValues?.eventId;
   useEffect(() => {
     if (!activeHostKey) {
       return;
     }
     const [kind, id] = activeHostKey.split(":");
     let stale = false;
-    listHostGroupOptions({ kind: kind as HostOption["kind"], id })
+    listHostGroupOptions({ kind: kind as HostOption["kind"], id, eventId: editingEventId })
       .then((options) => {
         if (!stale) setGroupOptions(options);
       })
@@ -189,7 +190,7 @@ export function EventForm({ hostOptions, venueOptions, initialValues, host }: Ev
     return () => {
       stale = true;
     };
-  }, [activeHostKey]);
+  }, [activeHostKey, editingEventId]);
   const [slots, setSlots] = useState<SlotRow[]>(
     initialValues
       ? initialValues.slots.map((slot) => ({
