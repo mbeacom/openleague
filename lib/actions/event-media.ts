@@ -146,7 +146,7 @@ export async function listEventMedia(input: {
 
   const eventId = parseId(input?.eventId);
   const linkToken =
-    input?.linkToken === undefined || input?.linkToken === "" ? undefined : parseHexToken(input.linkToken);
+    input?.linkToken == null || input.linkToken === "" ? undefined : parseHexToken(input.linkToken);
   if (!eventId || linkToken === null) return null;
 
   const gate = await prisma.signupEvent.findUnique({

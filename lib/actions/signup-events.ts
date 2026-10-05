@@ -1206,7 +1206,7 @@ export async function getPublicSignupEvent(params: {
   linkToken?: string;
 }): Promise<PublicSignupEventView | null> {
   const eventId = parseOptionalId(params?.eventId);
-  const linkToken = params?.linkToken === undefined || params?.linkToken === ""
+  const linkToken = params?.linkToken == null || params.linkToken === ""
     ? undefined
     : parseHexToken(params.linkToken);
   if (eventId === null || linkToken === null) return null;

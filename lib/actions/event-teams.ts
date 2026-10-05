@@ -1169,7 +1169,7 @@ export type PublicEventGames = Awaited<ReturnType<typeof getPublicEventGames>>;
 export async function getPublicEventGames(eventId: string, linkToken?: string) {
   const parsedEventId = parseId(eventId);
   const parsedLinkToken =
-    linkToken === undefined || linkToken === "" ? undefined : parseHexToken(linkToken);
+    linkToken == null || linkToken === "" ? undefined : parseHexToken(linkToken);
   if (!parsedEventId || parsedLinkToken === null) return null;
   eventId = parsedEventId;
   linkToken = parsedLinkToken;
@@ -1347,7 +1347,7 @@ export type EventStandings = Awaited<ReturnType<typeof getEventStandings>>;
 export async function getEventStandings(eventId: string, linkToken?: string) {
   const parsedEventId = parseId(eventId);
   const parsedLinkToken =
-    linkToken === undefined || linkToken === "" ? undefined : parseHexToken(linkToken);
+    linkToken == null || linkToken === "" ? undefined : parseHexToken(linkToken);
   if (!parsedEventId || parsedLinkToken === null) return null;
   eventId = parsedEventId;
   linkToken = parsedLinkToken;
