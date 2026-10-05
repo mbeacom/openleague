@@ -4,12 +4,20 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   MALFORMED_STRINGS,
   buildArgs,
+  buildValidArgs,
   containsValue,
+  sweepValuesIn,
+  templatesOf,
   malformedIdFields,
   malformedValues,
   markerPositions,
 } from "@/__tests__/helpers/action-id-sweep";
-import { ACTION_ID_ARGUMENTS, NO_ID_ARGUMENTS } from "@/__tests__/helpers/action-id-sweep-table";
+import { hashToken } from "@/lib/auth/tokens";
+import {
+  ACTION_ID_ARGUMENTS,
+  NO_ID_ARGUMENTS,
+  VALID_TEMPLATE_EXEMPTIONS,
+} from "@/__tests__/helpers/action-id-sweep-table";
 
 /**
  * Calls every identifier-taking export of every "use server" module with
@@ -91,6 +99,16 @@ vi.mock("next/headers", () => ({
   cookies: vi.fn(async () => ({ get: () => undefined, set: () => undefined, delete: () => undefined })),
 }));
 vi.mock("@/lib/email/client", () => ({ sendEmail: vi.fn(async () => undefined) }));
+// Uploads and online payments report themselves configured, so the actions
+// behind them get as far as their lookups.
+vi.mock("@/lib/media/blob", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/media/blob")>()),
+  isBlobEnabled: () => true,
+}));
+vi.mock("@/lib/payments/stripe", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/payments/stripe")>()),
+  isStripeEnabled: () => true,
+}));
 
 vi.mock("@/lib/auth/session", async (importOriginal) =>
   spyOnModule("session", await importOriginal()),
@@ -203,16 +221,26 @@ describe("server action id sweep: coverage", () => {
     expect(Object.keys(ACTION_ID_ARGUMENTS).filter((key) => key in NO_ID_ARGUMENTS)).toEqual([]);
   });
 
-  it("gives every table entry at least one identifier position", () => {
+  it("gives every table template at least one identifier position", () => {
     expect(
       Object.entries(ACTION_ID_ARGUMENTS)
-        .filter(([, template]) => markerPositions(template).length === 0)
+        .filter(([, entry]) => templatesOf(entry).some((template) => markerPositions(template).length === 0))
         .map(([key]) => key),
     ).toEqual([]);
   });
 });
 
-const sweepCases = Object.entries(ACTION_ID_ARGUMENTS).flatMap(([key, template]) =>
+/** Every table template, labelled with its variant when an entry has several. */
+const templates = Object.entries(ACTION_ID_ARGUMENTS).flatMap(([key, entry]) => {
+  const list = templatesOf(entry);
+  return list.map((template, index) => ({
+    key,
+    template,
+    label: list.length > 1 ? `${key} (variant ${index + 1})` : key,
+  }));
+});
+
+const sweepCases = templates.flatMap(({ key, template, label: templateLabel }) =>
   markerPositions(template).flatMap(({ path: position, kind }) =>
     malformedValues(kind).map(([label, bad]) => ({
       key,
@@ -221,10 +249,40 @@ const sweepCases = Object.entries(ACTION_ID_ARGUMENTS).flatMap(([key, template])
       kind,
       label,
       bad,
-      name: `${key} [${position.join(".")}] with ${label}`,
+      name: `${templateLabel} [${position.join(".")}] with ${label}`,
     })),
   ),
 );
+
+describe("server action id sweep: templates are complete", () => {
+  // With every marker well formed, the call must get past input validation
+  // and use one of those values in a query or an authorization check; a
+  // template missing a required field would otherwise fail validation first
+  // and make every malformed-value case below pass without reaching the
+  // identifier handling.
+  for (const { key, template, label } of templates) {
+    if (key in VALID_TEMPLATE_EXEMPTIONS) continue;
+    it(`${label} gets past validation with well-formed values`, async () => {
+      const [moduleName, exportName] = key.split("#");
+      const action = modules[moduleName][exportName] as (...args: unknown[]) => Promise<unknown>;
+      const args = buildValidArgs(template);
+      // Tokens are looked up by their hash, so count the hash as a use too.
+      const values = sweepValuesIn(args).flatMap((value) => [value, hashToken(value)]);
+      try {
+        await action(...args);
+      } catch {
+        // Only whether the values were used matters here.
+      }
+      const usedIn = (callArgs: unknown) => values.some((value) => containsValue(callArgs, value));
+      const used = recorder.calls.some((call) => usedIn(call.args)) || authCalls.some((call) => usedIn(call.args));
+      expect(used).toBe(true);
+    });
+  }
+
+  it("lists exemptions only for table entries", () => {
+    expect(Object.keys(VALID_TEMPLATE_EXEMPTIONS).filter((key) => !(key in ACTION_ID_ARGUMENTS))).toEqual([]);
+  });
+});
 
 describe("server action id sweep", () => {
   for (const { key, template, position, kind, bad, name } of sweepCases) it(name, async () => {

@@ -23,6 +23,20 @@ export const SHARE_TOKEN = marker("shareToken");
 
 export type ArgTemplate = unknown[];
 
+const VARIANTS = Symbol("template variants");
+/** Several argument shapes for one action, such as mutually exclusive ids. */
+export type TemplateVariants = { readonly [VARIANTS]: ArgTemplate[] };
+export type TableEntry = ArgTemplate | TemplateVariants;
+
+export function variants(...templates: ArgTemplate[]): TemplateVariants {
+  return { [VARIANTS]: templates };
+}
+
+/** The argument templates of a table entry. */
+export function templatesOf(entry: TableEntry): ArgTemplate[] {
+  return Array.isArray(entry) ? [entry] : entry[VARIANTS];
+}
+
 function isMarker(value: unknown): value is Marker {
   return typeof value === "object" && value !== null && MARKER in value;
 }
@@ -112,6 +126,23 @@ export function buildArgs(template: ArgTemplate, target: Path, bad: unknown): un
     return value;
   };
   return build(template, []) as unknown[];
+}
+
+/** Materialise a template with a well-formed value at every marker. */
+export function buildValidArgs(template: ArgTemplate): unknown[] {
+  return buildArgs(template, ["\u0000no-target"], undefined);
+}
+
+/** The identifier values `buildValidArgs` placed into the arguments. */
+export function sweepValuesIn(args: unknown[]): string[] {
+  const out: string[] = [];
+  const walk = (value: unknown) => {
+    if (typeof value === "string" && /^(clsweep|sample-slug-|a{60}\d{4}$|A{39}\d{4}$)/.test(value)) out.push(value);
+    else if (Array.isArray(value)) value.forEach(walk);
+    else if (value && typeof value === "object" && !(value instanceof Date)) Object.values(value).forEach(walk);
+  };
+  walk(args);
+  return out;
 }
 
 /** Whether `needle` (by identity, or by equality for strings) occurs anywhere inside `haystack`. */
