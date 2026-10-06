@@ -5,13 +5,13 @@
 **Goal:** A coach can fix a line on the rink board without redrawing it: move it, drag its ends, bend it into a smooth curve with "+" handles, remove a bend, straighten it, and have new and dragged line ends snap to players, equipment and other lines' ends.
 
 **Architecture:**
-- **No schema change (spec R1).** A `straight` line with more than 2 points is a bent line; an edit can give it at most 6 bends (8 points).
-- **One renderer (spec R2).** `buildStrokeGeometry` gets its centerline from a new `strokeCenterline`: a centripetal Catmull-Rom curve (alpha 0.5) for a straight line with 3 or more points, unchanged for 2-point and freehand lines. The board, thumbnails, the bench sheet, the exports and the legend all go through it. The selection highlight and line hit-testing use the same centerline.
-- **Pure editing helpers (spec R5)** in `lib/utils/canvas/line-editing.ts` (no DOM, no React, portable to `apps/planner`): handle positions, handle hit-testing, point and whole-line moves, bend insert and remove, straighten, freehand anchors, snapping and the double-tap test.
+- **A new stroke path, `curve` (spec R1).** `STROKE_PATHS` gains `"curve"`; the play schema accepts it through its existing `z.enum`, and `PlayData.version` (2) and `PLAN_VERSION` (1) don't change. A line becomes a `curve` only by editing: a "+" on a 2-point straight line. The drawing toolbar keeps offering Straight and Freehand only (a separate `DRAWN_STROKE_PATHS` list). An ADR-0020 amendment records that plan files can now carry `curve`, and what older readers do with it.
+- **One renderer (spec R2).** `buildStrokeGeometry` gets its centerline from a new `strokeCenterline`: a centripetal Catmull-Rom curve (alpha 0.5) for a `curve` with 3 or more points. `straight` lines of any length and `freehand` lines are unchanged, byte for byte. The board, thumbnails, the bench sheet, the exports and the legend all go through it. The selection highlight and hit-testing follow the curve for `curve` lines only.
+- **Pure editing helpers (spec R5)** in `lib/utils/canvas/line-editing.ts` (no DOM, no React, portable to `apps/planner`): handle positions (ends, curve bends, polyline corners, freehand anchors, "+"), handle hit-testing, point and whole-line moves, bend insert and remove (which own the `straight` ↔ `curve` changes), straighten, freehand anchors, snapping and the double-tap test.
 - **Gesture state in hooks, so `RinkBoard.tsx` does not grow (spec R5).** Task 3 first moves the existing touch and pinch handling into `useBoardTouch.ts`. Line-editing gestures, the live preview, the snap ring and the one-history-entry commit then live in `useStrokeEditing.ts`. RinkBoard only routes events and draws. A line-budget test pins `RinkBoard.tsx` at 1057 lines or fewer.
 - **Drawing** of handles and the snap ring goes in `drawing-utils.ts`, with colours passed in (`LINE_EDIT_COLORS`, the theme's light-scheme blues, because the board's ice is drawn light in both colour schemes).
 
-**Tech Stack:** TypeScript (strict), React 19, MUI v7, Vite (static planner), Vitest + jsdom + Testing Library, Playwright (screenshots only, from a local harness outside the repository), Bun.
+**Tech Stack:** TypeScript (strict), React 19, MUI v7, Zod v4, Vite (static planner), Vitest + jsdom + Testing Library, Playwright (screenshots only, from a local harness outside the repository), Bun.
 
 **Spec:** `docs/superpowers/specs/2026-10-05-practice-line-editing-design.md`. Its success criteria (1–7) and rulings R1–R6 are referenced below.
 
@@ -20,19 +20,27 @@
 - Use `bun` for every script (`bun run …`), never npm or yarn.
 - Use `/usr/bin/git`. Never `git stash`. Never switch branches (work on `feat/line-editing`). Stage files by path, never `git add -A` or `git add .`, because `next dev` can rewrite `CLAUDE.md`.
 - **Commit trailer:** every commit message ends, as its own paragraph, with the `Claude-Session:` line the executing session's instructions give. Set it once per shell as `SESSION_TRAILER` (for example `export SESSION_TRAILER='Claude-Session: https://claude.ai/code/…'` with the real URL) and pass it as the last `-m`, as every commit step below does.
-- **No schema or format change (R1).** `PLAY_DATA_VERSION` (2), `PLAN_VERSION` (1), `playDataSchema` and the plan-file format are unchanged. No migration, no Prisma change. Never run `prisma migrate dev`, `db:migrate`, `db:push` or `db:migrate:reset`.
+- **One additive schema value (R1).** `STROKE_PATHS` becomes `["straight", "freehand", "curve"]`. Nothing else in `playDataSchema` or the plan-document schema changes; `PLAY_DATA_VERSION` stays 2 and `PLAN_VERSION` stays 1. No database migration, no Prisma change. Never run `prisma migrate dev`, `db:migrate`, `db:push` or `db:migrate:reset`.
+- **Drawing choices (R1, R5):** `DRAWN_STROKE_PATHS = ["straight", "freehand"]` is what the toolbar offers. `curve` is never a drawing choice; `finishStroke` and the in-progress preview only ever see `straight` or `freehand`.
+- **Path semantics (R1–R3):**
+  - `straight`: a polyline through its points, sharp corners, any number of points (older data has up to 16). Interior points are **corner** handles; "+" adds a corner and the line stays `straight`, except that "+" on a **2-point** straight line makes it a `curve`.
+  - `curve`: a smooth curve through its points. Interior points are **bend** handles. Removing a bend that leaves 2 points sets `path: "straight"`.
+  - `freehand`: unchanged; up to 6 anchor handles, no "+".
+  - Straighten (curve, or straight with more than 2 points) and Make straight (freehand) give `path: "straight"` with the first and last points.
 - **Constants, exactly:**
-  - from `lib/utils/canvas/line-editing.ts`: `MAX_LINE_BENDS = 6`, `MAX_EDIT_POINTS = 8` (`MAX_LINE_BENDS + 2`), `SNAP_RADIUS_FT = 3`, `DOUBLE_TAP_MS = 300`;
+  - from `lib/utils/canvas/line-editing.ts`: `MAX_LINE_BENDS = 6` (bends or corners an edit may reach), `MAX_EDIT_POINTS = 8`, `SNAP_RADIUS_FT = 3`, `DOUBLE_TAP_MS = 300`;
   - from `lib/utils/canvas/stroke-geometry.ts`: `CURVE_SAMPLES_PER_SEGMENT = 16`;
   - from `lib/utils/canvas/drawing-utils.ts`: `LINE_HANDLE_RADIUS_PX = 7`, `SNAP_RING_RADIUS_PX = 14`;
   - from `lib/utils/canvas/rink-renderer.ts`: `ICE_COLOR = "#E8F4F8"` (the value `drawIceSurface` already uses);
   - from `lib/utils/canvas/notation.ts`: `LINE_EDIT_COLORS = { handleFill: "#FFFFFF", handleStroke: BOARD_COLORS.actionBlue, snapRing: BOARD_COLORS.leagueBlue }`;
+  - from `types/practice-planner.ts`: `DRAWN_STROKE_PATHS = ["straight", "freehand"]`;
   - existing and unchanged: `MIN_HIT_RADIUS_PX = 22` (RinkBoard), `DRAG_THRESHOLD_PX = 4` (`interaction-utils.ts`).
-- **Geometry (R2):** centripetal Catmull-Rom (alpha 0.5, Barry–Goldman form) for a straight line with ≥ 3 points; the ends use mirrored phantom points; every stored point is a sample exactly. A 2-point straight line and every freehand line produce **byte-identical** geometry to today, pinned by a snapshot recorded before the change (Task 1). Never run the suite with `-u` / `--update` on this branch.
-- **Snapping (R4):** radius `snapRadiusFt(minHitRadiusFt) = max(3, minHitRadiusFt)`; targets in order: player centres, equipment centres, the first and last points of other lines; nearest wins, ties go to the earlier target; text is never a target; a line never snaps to itself; targets outside the drill's ice area are skipped; Alt/Option on the gesture's events turns it off. Snapping sets coordinates only.
+- **Geometry (R2):** centripetal Catmull-Rom (alpha 0.5, Barry–Goldman form) for a `curve` with ≥ 3 points; the ends use mirrored phantom points; every stored point is a sample exactly. `straight` lines (2-point and multi-point) and `freehand` lines produce **byte-identical** geometry, highlight and hit-testing to today, pinned by a snapshot recorded before the change (Task 1). Never run the suite with `-u` / `--update` on this branch.
+- **No starter-data edits.** `lib/data/starter-plays.ts` and `lib/data/starter-templates.ts` are untouched.
+- **Snapping (R4):** radius `snapRadiusFt(minHitRadiusFt) = max(3, minHitRadiusFt)`; targets in order: player centres, equipment centres, the first and last points of other lines; nearest wins, ties go to the earlier target; text is never a target; a line never snaps to itself; targets outside the drill's ice area are skipped; Alt/Option on the gesture's events turns it off. Only ends snap. Snapping sets coordinates only.
 - **Portability (ADR-0020):** `lib/utils/canvas/line-editing.ts` imports only types and pure `lib/utils` modules (no DOM, no React, no MUI). `useBoardTouch.ts` and `useStrokeEditing.ts` sit in `components/features/practice-planner/` (the `adr-0020/portable-practice-planner` ESLint block) and import only `react`, `@/types/practice-planner` and `@/lib/utils/...`. Nothing new imports `next/*`, `@/lib/actions/*`, `@/lib/db/*`, `@/lib/auth/*` or `@prisma/client`.
-- **Colour and touch (R6):** handles draw at 7 px radius on screen at any zoom; their hit area is the board's 22 px minimum hit radius. Handle and ring colours come from `LINE_EDIT_COLORS`, which equal the theme's light-scheme `secondary.main` and `primary.main` and reach 3:1 against `ICE_COLOR` (Action Blue about 4.1:1, League Blue about 7.7:1). The ice is drawn light in both schemes, so these hold in dark mode too. On-screen MUI controls use palette tokens only and are at least 44 × 44 px.
-- **Copy, exactly:** inspector buttons `Straighten` (a straight line with bends) and `Make straight` (a freehand line). No other new user-facing text.
+- **Colour and touch (R6):** handles draw at 7 px radius on screen at any zoom (corner handles as 14 px squares); their hit area is the board's 22 px minimum hit radius. Handle and ring colours come from `LINE_EDIT_COLORS`, which equal the theme's light-scheme `secondary.main` and `primary.main` and reach 3:1 against `ICE_COLOR` (Action Blue about 4.1:1, League Blue about 7.7:1). The ice is drawn light in both schemes, so these hold in dark mode too. On-screen MUI controls use palette tokens only and are at least 44 × 44 px.
+- **Copy, exactly:** inspector buttons `Straighten` (a curve, or a straight line with more than 2 points) and `Make straight` (a freehand line). No other new user-facing text.
 - **Line budget:** `components/features/practice-planner/RinkBoard.tsx` stays at or under **1057** lines, pinned by `__tests__/components/features/practice-planner/RinkBoard.line-budget.test.ts` (Task 3). Expected: about 940 after Task 3 and about 1000 after Task 6.
 - **Breaking tests:** a task that changes a shared function's behaviour lists the existing tests it touches. Every task ends with `bun run type-check` and its suites green (`tsconfig.json` includes `__tests__`).
 - **Screenshots (Task 7):** build and serve the static planner, drive it with a local headless Playwright script kept outside the repository, launch Chromium with `executablePath: process.env.CHROMIUM_PATH`, and write the PNGs to `.cache/line-editing/` in the repository (git-ignored by the `.cache` rule). Read every PNG before calling the task done.
@@ -40,20 +48,22 @@
 
 ## Review Focus
 
-1. **Lines with more points than an edit makes.** 16 starter strokes are `straight` with 3–16 points (for example `st-weave`, `wv-f1-route`, `pt-wrap`, and the 16-point `ec-figure-eight`), and a play upgraded from v1 can carry a `straight` line with any number of points. They now draw as curves; they must stay on the ice, show a bend handle on every interior point, show no "+" handle once 6 bends exist, refuse a new bend, and still straighten. Tests: Task 1 (every starter curve inside the rink; zone outlines are 2-point segments), Task 2 (`lineHandles`, `insertBend` and `straighten` on a 10-point line; every starter straight line, including the 16-point `ec-figure-eight`).
-2. **Coincident or collinear points** (a bend dragged onto its neighbour, a line whose points all lie on one line). The curve stays finite, the arrow keeps a direction, anchors collapse to the two ends. Tests: Task 1 (`catmullRomPath` and the end angle with duplicate points), Task 2 (`anchorPoints` on collinear points).
-3. **A line partly outside the drill's ice area, or larger than it** (the area was set after drawing). A tap selects it without moving it; a drag moves it in as a whole without distorting it; an axis on which it is longer than the area does not move. Tests: Task 2 (`moveLine`), Task 4 (a touch tap on a line outside the area records nothing; a whole-line move is clamped with its shape kept).
-4. **Short lines whose handles overlap** (a line under two hit radii long: both ends and the "+" within 22 px). The nearest handle wins and an end beats a "+" on a tie, so pressing an end drags the end. Tests: Task 2 (`hitTestLineHandle` ties), Task 4 (dragging an end of a 6 ft line).
+1. **Older polylines.** 16 starter strokes and v1-upgraded lines are `straight` with 3–16 points (`ec-figure-eight` has 16, the `dz-house` zone outline 5). They must look exactly as before, keep sharp corners when a corner is dragged or added, show a corner handle on every interior point, show no "+" once 6 corners exist, refuse a new corner, and still straighten. Tests: Task 1 (legacy snapshot of a 16-point polyline; highlight and hit test along its chords), Task 2 (`lineHandles`, `insertBend` and `straighten` on 10- and 16-point straight lines), Task 4 (dragging and adding a corner keeps `straight`).
+2. **Path changes at the edges.** "+" on a 2-point straight line makes a `curve`; removing a curve's last bend makes it `straight`; removing a corner never changes the path; Straighten always gives `straight`. Tests: Task 2 (`insertBend`, `removeBend`, `straighten`), Task 4 and Task 5 (board).
+3. **Coincident or collinear points** (a bend dragged onto its neighbour, a line whose points all lie on one line). The curve stays finite, the arrow keeps a direction, anchors collapse to the two ends. Tests: Task 1 (`catmullRomPath` and the end angle with duplicate points), Task 2 (`anchorPoints` on collinear points).
+4. **A line partly outside the drill's ice area, or larger than it**, or a line whose handles overlap (shorter than two hit radii). A tap selects it without moving it; a drag moves it in as a whole without distorting it; an axis on which it is longer than the area does not move; the nearest handle wins and an end beats a "+" on a tie. Tests: Task 2 (`moveLine`, `hitTestLineHandle`), Task 4 (touch tap outside the area, clamped move, a 6 ft line's end).
 5. **An interrupted gesture.** Release outside the canvas commits once; a second finger, a touchcancel or a tool change cancels without committing or leaving a preview. Tests: Task 4 (window release, second finger, touchcancel, tool change).
 
 ## File Structure
 
 | File | Responsibility | Task |
 |---|---|---|
+| `types/practice-planner.ts` | `STROKE_PATHS` gains `curve`; `DRAWN_STROKE_PATHS`, `DrawnStrokePath` | 1 |
+| `components/features/practice-planner/DrawingToolbar.tsx` | the stroke-path choice lists `DRAWN_STROKE_PATHS` only | 1 |
+| `docs/adr/0020-exchange-practice-plans-as-a-portable-versioned-document-and-ship-a-static-local.md` | amendment: `curve` in plan files, older readers' behaviour | 1 |
 | `lib/utils/canvas/stroke-geometry.ts` | `CURVE_SAMPLES_PER_SEGMENT`, `curvePoint`, `catmullRomPath`, `strokeCenterline`; `buildStrokeGeometry` uses the centerline | 1 |
-| `lib/utils/canvas/drawing-utils.ts` | selection highlight along the centerline (1); `drawLineHandles`, `LINE_HANDLE_RADIUS_PX`, `LineEditColors` (4); `drawSnapRing`, `SNAP_RING_RADIUS_PX` (6) | 1, 4, 6 |
-| `lib/utils/canvas/interaction-utils.ts` | `hitTestDrawing` along a bent line's curve (1); export `distanceToLineSegment`, add `drawingHitRadius` (2) | 1, 2 |
-| `lib/data/starter-plays.ts` | `dz-house` zone outline split into four 2-point segments | 1 |
+| `lib/utils/canvas/drawing-utils.ts` | a curve's highlight along its curve (1); `drawLineHandles`, `LINE_HANDLE_RADIUS_PX`, `LineEditColors` (4); `drawSnapRing`, `SNAP_RING_RADIUS_PX` (6) | 1, 4, 6 |
+| `lib/utils/canvas/interaction-utils.ts` | `hitTestDrawing` along a curve's curve (1); export `distanceToLineSegment`, add `drawingHitRadius` (2) | 1, 2 |
 | `lib/utils/canvas/line-editing.ts` (new) | the pure helpers of R3–R5 | 2 |
 | `lib/utils/canvas/element-ops.ts` | `replaceDrawing`; `ElementPatch` admits a line's `path` and `points` | 2 |
 | `components/features/practice-planner/useBoardTouch.ts` (new) | touch: one-finger pointer, tap tools, pinch, cancel (moved out of RinkBoard) | 3 |
@@ -65,25 +75,30 @@
 
 ---
 
-### Task 1: Bent lines draw as curves everywhere
+### Task 1: A `curve` path that draws as a smooth curve
 
-A `straight` line with 3 or more points becomes a centripetal Catmull-Rom curve in the one place lines become geometry, so the board, thumbnails, print, exports and the legend all change together (spec R2, success criterion 4). The selection highlight and hit-testing follow the drawn curve. A snapshot recorded **before** the change pins today's 2-point and freehand geometry byte for byte (criterion 7). The starter `dz-house` zone outline, the one multi-point straight line that is meant to have corners, becomes four 2-point segments.
+The play model gains its one new value, and the one place lines become geometry learns to draw it (spec R1, R2, success criteria 4 and 7). A `curve` with 3 or more points becomes a centripetal Catmull-Rom curve, so the board, thumbnails, print, exports and the legend all draw it the same way. `straight` lines of any length and `freehand` lines keep today's geometry, highlight and hit test, pinned by a snapshot recorded **before** any change. The drawing toolbar keeps offering Straight and Freehand only. The ADR-0020 amendment records that plan files may now contain `curve`.
+
+Nothing creates a `curve` yet (Task 4 does, through a "+" handle); this task makes every reader and renderer ready for one.
 
 **Files:**
+- Modify: `types/practice-planner.ts:35-37` (`STROKE_PATHS`; add `DRAWN_STROKE_PATHS`)
+- Modify: `components/features/practice-planner/DrawingToolbar.tsx` (import, lines 41–51; the `stroke path` `OptionGroup`, lines 391–397)
 - Modify: `lib/utils/canvas/stroke-geometry.ts` (add the curve functions after `smoothPath`, lines 28–42; `buildStrokeGeometry` line 99)
 - Modify: `lib/utils/canvas/drawing-utils.ts` (`drawElement`'s highlight, lines 239–258; import line 22)
 - Modify: `lib/utils/canvas/interaction-utils.ts` (`hitTestDrawing`, lines 247–264; imports)
-- Modify: `lib/data/starter-plays.ts:317` (`dz-house`)
+- Modify: `docs/adr/0020-exchange-practice-plans-as-a-portable-versioned-document-and-ship-a-static-local.md` (append an amendment after the last one)
 - Test (create): `__tests__/lib/utils/canvas/stroke-geometry.legacy.test.ts` and its snapshot `__tests__/lib/utils/canvas/__snapshots__/stroke-geometry.legacy.test.ts.snap`
-- Test (modify): `__tests__/lib/utils/canvas/stroke-geometry.test.ts`, `__tests__/lib/utils/canvas/drawing-utils.test.ts`, `__tests__/lib/utils/canvas/interaction-utils.test.ts`, `__tests__/lib/data/starter-plays.test.ts`
-- Existing tests that must stay green unchanged: `__tests__/lib/utils/canvas/legend-swatch.test.ts`, `thumbnail-*.test.ts`, the export and print suites under `__tests__/components/features/practice-planner/`.
+- Test (modify): `__tests__/lib/utils/canvas/stroke-geometry.test.ts`, `__tests__/lib/utils/canvas/drawing-utils.test.ts`, `__tests__/lib/utils/canvas/interaction-utils.test.ts`, `__tests__/lib/utils/play-data.test.ts`, `__tests__/lib/plan-document/document.test.ts`, `__tests__/components/features/practice-planner/DrawingToolbar.test.tsx`
+- Existing tests that must stay green unchanged: `__tests__/lib/data/starter-plays.test.ts`, `__tests__/lib/utils/canvas/legend-swatch.test.ts`, `thumbnail-*.test.ts`, the export and print suites under `__tests__/components/features/practice-planner/`.
 
 **Interfaces:**
+- Produces, from `types/practice-planner.ts`: `STROKE_PATHS = ["straight", "freehand", "curve"]` (so `StrokePath` gains `"curve"`), `DRAWN_STROKE_PATHS = ["straight", "freehand"]`, `type DrawnStrokePath`.
 - Produces, from `lib/utils/canvas/stroke-geometry.ts`:
   - `CURVE_SAMPLES_PER_SEGMENT: 16`;
   - `curvePoint(points: Position[], segment: number, u: number): Position` (the point at `u` in [0, 1] along segment `segment` of the curve through `points`; needs `points.length >= 2`);
   - `catmullRomPath(points: Position[], samplesPerSegment?: number): Position[]` (`1 + (n − 1) × samplesPerSegment` samples, input point `i` at sample `i × samplesPerSegment`; fewer than 3 points come back as copies);
-  - `strokeCenterline(stroke: { path: StrokePath; points: Position[] }): Position[]`.
+  - `strokeCenterline(stroke: { path: StrokePath; points: Position[] }): Position[]` (freehand smoothed; `curve` with ≥ 3 points curved; everything else copied).
 - `hitTestDrawing(point, drawing, threshold)` keeps its signature.
 
 - [ ] **Step 1: Record today's geometry (before any code change)**
@@ -92,15 +107,16 @@ Create `__tests__/lib/utils/canvas/stroke-geometry.legacy.test.ts`:
 
 ```ts
 /**
- * Pins the geometry of every line the editor could draw before line editing
- * (line editing spec R2, success criterion 7): 2-point straight lines and
- * freehand lines. The snapshot was recorded from the code before bent lines
+ * Pins the geometry of every line that exists before line editing (line
+ * editing spec R2, success criterion 7): 2-point straight lines, multi-point
+ * straight lines (older polylines, such as the starter figure-eight) and
+ * freehand lines. The snapshot was recorded from the code before curves
  * existed. Never update it with `-u`: a diff here means existing plays would
  * look different.
  */
 import { describe, expect, it } from "vitest";
 import { buildStrokeGeometry } from "@/lib/utils/canvas/stroke-geometry";
-import { STROKE_ACTIONS, type Position, type StrokeAction, type StrokeEnd, type StrokePath } from "@/types/practice-planner";
+import { STROKE_ACTIONS, type Position, type StrokeAction, type StrokeEnd } from "@/types/practice-planner";
 
 // Canvas px, as drawStroke passes them; 3.8 px/ft is an 800 × 400 board's scale.
 const PX_PER_FT = 3.8;
@@ -112,11 +128,16 @@ const FREEHAND: Position[] = [
     { x: 270.8, y: 187.2 },
     { x: 324, y: 210 },
 ];
+/** The starter "ec-figure-eight" route's 16 points, copied here so the pin never moves with starter data. */
+const POLYLINE: Position[] = [
+    [157, 32.5], [152, 20.5], [157, 8.5], [169, 3.5], [181, 8.5], [186, 20.5], [181, 32.5], [169, 42.5],
+    [157, 52.5], [152, 64.5], [157, 76.5], [169, 81.5], [181, 76.5], [186, 64.5], [181, 52.5], [172, 44],
+].map(([x, y]) => ({ x: x * PX_PER_FT, y: y * PX_PER_FT }));
 
-const geometry = (path: StrokePath, action: StrokeAction, end: StrokeEnd, points: Position[]) =>
+const geometry = (path: "straight" | "freehand", action: StrokeAction, end: StrokeEnd, points: Position[]) =>
     JSON.stringify(buildStrokeGeometry({ action, path, end, points, strokeWidth: 2 }, PX_PER_FT));
 
-describe("geometry of lines drawn before line editing", () => {
+describe("geometry of lines that exist before line editing", () => {
     for (const action of STROKE_ACTIONS) {
         it(`straight ${action} with an arrow`, () => {
             expect(geometry("straight", action, "arrow", STRAIGHT)).toMatchSnapshot();
@@ -130,15 +151,20 @@ describe("geometry of lines drawn before line editing", () => {
             expect(geometry("straight", "skate", end, STRAIGHT)).toMatchSnapshot();
         });
     }
+    for (const action of ["lateral", "skate", "pass"] as const) {
+        it(`16-point straight polyline, ${action} with an arrow`, () => {
+            expect(geometry("straight", action, "arrow", POLYLINE)).toMatchSnapshot();
+        });
+    }
 });
 ```
 
 - [ ] **Step 2: Write the snapshot from the current code**
 
 Run: `env -u CI bun run test __tests__/lib/utils/canvas/stroke-geometry.legacy.test.ts`
-Expected: PASS, 16 tests, and Vitest reports `16 written`. (`env -u CI` matters: with `CI` set, Vitest refuses to write new snapshots.) Confirm the file `__tests__/lib/utils/canvas/__snapshots__/stroke-geometry.legacy.test.ts.snap` exists. Do not edit `stroke-geometry.ts` before this step has passed.
+Expected: PASS, 19 tests, and Vitest reports `19 written`. (`env -u CI` matters: with `CI` set, Vitest refuses to write new snapshots.) Confirm the file `__tests__/lib/utils/canvas/__snapshots__/stroke-geometry.legacy.test.ts.snap` exists. Do not edit any source file before this step has passed.
 
-- [ ] **Step 3: Write the failing curve tests**
+- [ ] **Step 3: Write the failing tests**
 
 In `__tests__/lib/utils/canvas/stroke-geometry.test.ts`, replace the import on line 2 with:
 
@@ -158,11 +184,13 @@ import {
 Append to the file:
 
 ```ts
-describe("bent straight lines (line editing R2)", () => {
+describe("curve lines (line editing R2)", () => {
     const bent = [{ x: 0, y: 0 }, { x: 50, y: 50 }, { x: 100, y: 0 }];
+    const curve = (points: { x: number; y: number }[], action: StrokeAction = "skate") =>
+        buildStrokeGeometry({ action, path: "curve", end: "arrow", points, strokeWidth: 2 }, 4);
 
-    it("draws a 3-point straight line as a curve through its middle point", () => {
-        const line = geom("skate", "arrow", bent).polylines[0];
+    it("draws a 3-point curve through its middle point", () => {
+        const line = curve(bent).polylines[0];
         expect(line).toHaveLength(1 + 2 * CURVE_SAMPLES_PER_SEGMENT);
         expect(line[0]).toEqual({ x: 0, y: 0 });
         expect(line[CURVE_SAMPLES_PER_SEGMENT]).toEqual({ x: 50, y: 50 });
@@ -174,7 +202,7 @@ describe("bent straight lines (line editing R2)", () => {
     });
 
     it("points the arrow along the curve's end tangent, not along the chord from start to end", () => {
-        const g = geom("skate", "arrow", bent);
+        const g = curve(bent);
         const nearEnd = curvePoint(bent, 1, 1 - 1e-6);
         const tangent = Math.atan2(0 - nearEnd.y, 100 - nearEnd.x);
         expect(Math.abs(g.end!.angle - tangent)).toBeLessThan(0.05);
@@ -191,14 +219,16 @@ describe("bent straight lines (line editing R2)", () => {
     it("stays finite when points coincide, and the arrow keeps a direction", () => {
         const pts = [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 0 }, { x: 20, y: 5 }];
         expect(catmullRomPath(pts).every((p) => Number.isFinite(p.x) && Number.isFinite(p.y))).toBe(true);
-        expect(Number.isFinite(geom("pass", "arrow", pts).end!.angle)).toBe(true);
+        expect(Number.isFinite(curve(pts, "pass").end!.angle)).toBe(true);
     });
 
-    it("leaves 2-point straight lines and freehand lines on today's centerline", () => {
+    it("curves only a curve: straight lines of any length and freehand lines keep today's centerline", () => {
         expect(strokeCenterline({ path: "straight", points: straight })).toEqual(straight);
+        expect(strokeCenterline({ path: "straight", points: bent })).toEqual(bent);
         const free = [{ x: 0, y: 0 }, { x: 10, y: 10 }, { x: 20, y: 0 }];
         expect(strokeCenterline({ path: "freehand", points: free })).toEqual(smoothPath(free));
-        expect(strokeCenterline({ path: "straight", points: bent })).toEqual(catmullRomPath(bent));
+        expect(strokeCenterline({ path: "curve", points: bent })).toEqual(catmullRomPath(bent));
+        expect(strokeCenterline({ path: "curve", points: straight })).toEqual(straight);
     });
 
     it("puts a 2-point line's curve midpoint at the segment midpoint", () => {
@@ -217,23 +247,26 @@ add `import { CURVE_SAMPLES_PER_SEGMENT } from "@/lib/utils/canvas/stroke-geomet
 
 ```ts
 describe("drawElement selection highlight", () => {
-    const element = (pts: { x: number; y: number }[]) => ({
-        id: "d", action: "skate" as const, path: "straight" as const, end: "none" as const, points: pts, color: "#212121", strokeWidth: 2,
+    const element = (path: "straight" | "freehand" | "curve", pts: { x: number; y: number }[]) => ({
+        id: "d", action: "skate" as const, path, end: "none" as const, points: pts, color: "#212121", strokeWidth: 2,
     });
     /** lineTo calls in the highlight: everything before the first stroke(). */
-    const highlightLineTos = (pts: { x: number; y: number }[]) => {
+    const highlightLineTos = (path: "straight" | "freehand" | "curve", pts: { x: number; y: number }[]) => {
         const calls: Call[] = [];
-        drawElement(recordingCtx(calls), element(pts), transform, true);
+        drawElement(recordingCtx(calls), element(path, pts), transform, true);
         const firstStroke = calls.findIndex((c) => c.name === "stroke");
         return calls.slice(0, firstStroke).filter((c) => c.name === "lineTo").length;
     };
+    const three = [{ x: 20, y: 40 }, { x: 60, y: 20 }, { x: 120, y: 40 }];
 
-    it("follows a bent line's curve", () => {
-        expect(highlightLineTos([{ x: 20, y: 40 }, { x: 60, y: 20 }, { x: 120, y: 40 }])).toBe(2 * CURVE_SAMPLES_PER_SEGMENT);
+    it("follows a curve", () => {
+        expect(highlightLineTos("curve", three)).toBe(2 * CURVE_SAMPLES_PER_SEGMENT);
     });
 
-    it("is still one segment for a 2-point line", () => {
-        expect(highlightLineTos(points)).toBe(1);
+    it("stays on the stored points for straight and freehand lines, as before", () => {
+        expect(highlightLineTos("straight", three)).toBe(2);
+        expect(highlightLineTos("straight", points)).toBe(1);
+        expect(highlightLineTos("freehand", three)).toBe(2);
     });
 });
 ```
@@ -241,47 +274,138 @@ describe("drawElement selection highlight", () => {
 In `__tests__/lib/utils/canvas/interaction-utils.test.ts`, append:
 
 ```ts
-describe("hitTestDrawing on a bent line (line editing R2)", () => {
-    const bent: DrawingElement = {
-        id: "b", action: "skate", path: "straight", end: "arrow",
-        points: [{ x: 0, y: 0 }, { x: 50, y: 50 }, { x: 100, y: 0 }], color: "#212121", strokeWidth: 2,
-    };
+describe("hitTestDrawing on a curve (line editing R2)", () => {
+    const pts = [{ x: 0, y: 0 }, { x: 50, y: 50 }, { x: 100, y: 0 }];
+    const make = (path: "straight" | "curve"): DrawingElement => ({
+        id: "b", action: "skate", path, end: "arrow", points: pts, color: "#212121", strokeWidth: 2,
+    });
 
-    it("hits the drawn curve, not the chords between its points", () => {
-        // The curve passes (25, 31.25); the chord y = x passes (25, 25), about 4 ft from the curve
-        expect(hitTestDrawing({ x: 25, y: 31.25 }, bent, 1)).toBe(true);
-        expect(hitTestDrawing({ x: 25, y: 25 }, bent, 1)).toBe(false);
+    it("hits a curve where it is drawn, not on the chords between its points", () => {
+        // The curve passes (25, 31.25); the chord y = x passes (25, 25), about 3.9 ft from the curve
+        expect(hitTestDrawing({ x: 25, y: 31.25 }, make("curve"), 1)).toBe(true);
+        expect(hitTestDrawing({ x: 25, y: 25 }, make("curve"), 1)).toBe(false);
+    });
+
+    it("keeps hitting a straight polyline on its chords, as before", () => {
+        expect(hitTestDrawing({ x: 25, y: 25 }, make("straight"), 1)).toBe(true);
+        expect(hitTestDrawing({ x: 25, y: 31.25 }, make("straight"), 1)).toBe(false);
     });
 });
 ```
 
-In `__tests__/lib/data/starter-plays.test.ts`, add `import { strokeCenterline } from "@/lib/utils/canvas/stroke-geometry";` to the imports and append:
+In `__tests__/lib/utils/play-data.test.ts`, append:
 
 ```ts
-describe("Starter play lines (line editing R2)", () => {
-    const strokes = STARTER_PLAYS.flatMap((play) => play.playData.drawings);
-
-    it("draws zone outlines as separate segments, since a straight line with bends now draws as a curve", () => {
-        const bentOutlines = strokes
-            .filter((d) => d.action === "line" && d.path === "straight" && d.points.length > 2)
-            .map((d) => d.id);
-        expect(bentOutlines).toEqual([]);
+describe("the curve path (line editing R1)", () => {
+    const withPath = (path: string) => ({
+        ...createEmptyPlayData(),
+        drawings: [{ id: "d", action: "skate", path, end: "arrow", points: [{ x: 10, y: 10 }, { x: 30, y: 30 }, { x: 50, y: 10 }], color: "#212121", strokeWidth: 2 }],
     });
 
-    it("keeps every drawn route, curved or not, on the ice", () => {
-        for (const d of strokes) {
-            for (const p of strokeCenterline(d)) expect(withinRink(p)).toBe(true);
-        }
+    it("accepts a curve line at version 2 and still rejects an unknown path", () => {
+        expect(playDataSchema.safeParse(withPath("curve")).success).toBe(true);
+        expect(parseStoredPlayData(withPath("curve")).ok).toBe(true);
+        expect(playDataSchema.safeParse(withPath("spline")).success).toBe(false);
+    });
+});
+```
+
+In `__tests__/lib/plan-document/document.test.ts`, add `import { drillRows } from "@/lib/utils/session-rows";` only if it is not already imported (it is, on line 23), and append:
+
+```ts
+describe("curve lines in plan files (line editing R1)", () => {
+    it("carry a curve line through a plan file at version 1", () => {
+        const curved: PlayData = {
+            ...BOARD,
+            drawings: [{ id: "c", action: "skate", path: "curve", end: "arrow", points: [{ x: 10, y: 10 }, { x: 30, y: 30 }, { x: 50, y: 10 }], color: "#212121", strokeWidth: 2 }],
+        };
+        const doc = JSON.parse(JSON.stringify(serializePlan(input({
+            drills: [{ sequence: 0, duration: 10, runsWithPrevious: false, instructions: null, name: "Curl", description: "", playData: curved }],
+        }), "openleague-hosted", NOW)));
+        expect(doc.version).toBe(PLAN_VERSION);
+        const parsed = parsePlan(doc);
+        if (!parsed.ok) throw new Error(parsed.error.message);
+        expect(drillRows(parsed.plan.session.drills)[0].drill.playData.drawings[0].path).toBe("curve");
+    });
+});
+```
+
+In `__tests__/components/features/practice-planner/DrawingToolbar.test.tsx`, change the Testing Library import to `import { render, screen, waitFor, within } from "@testing-library/react";` and append:
+
+```tsx
+describe("stroke path choices (line editing R1)", () => {
+    it("offers Straight and Freehand only: a curve comes from editing, never from drawing", () => {
+        renderWithTheme(createDefaultProps({ selectedTool: "stroke" }));
+        const group = screen.getByRole("group", { name: "stroke path" });
+        expect(within(group).getAllByRole("button").map((b) => b.textContent)).toEqual(["Straight", "Freehand"]);
     });
 });
 ```
 
 - [ ] **Step 4: Run the tests to see them fail**
 
-Run: `bun run test __tests__/lib/utils/canvas/stroke-geometry.test.ts __tests__/lib/utils/canvas/drawing-utils.test.ts __tests__/lib/utils/canvas/interaction-utils.test.ts __tests__/lib/data/starter-plays.test.ts`
-Expected: FAIL. The new stroke-geometry tests fail on missing exports (`catmullRomPath is not a function` / undefined `CURVE_SAMPLES_PER_SEGMENT`); the highlight test reports 2 lineTo calls instead of 32; the bent-line hit test returns `false` for the curve point; the starter test lists `["dz-house"]`.
+Run: `bun run test __tests__/lib/utils/canvas/stroke-geometry.test.ts __tests__/lib/utils/canvas/drawing-utils.test.ts __tests__/lib/utils/canvas/interaction-utils.test.ts __tests__/lib/utils/play-data.test.ts __tests__/lib/plan-document/document.test.ts __tests__/components/features/practice-planner/DrawingToolbar.test.tsx`
+Expected: FAIL.
+- The curve tests fail on missing exports (`catmullRomPath is not a function` / undefined `CURVE_SAMPLES_PER_SEGMENT`); TypeScript-level `"curve"` literals are not checked by Vitest, so they fail at runtime, not at import.
+- The highlight test for `curve` reports 2 lineTo calls instead of 32 (the straight and freehand highlight assertions already pass).
+- The curve hit test returns `false` for the curve point (the straight polyline assertions already pass).
+- The schema test rejects `curve`, and the plan-file test fails with the diagram issue.
+- The toolbar test passes already (it pins today's two choices); it guards Step 5.
 
-- [ ] **Step 5: Add the curve to `stroke-geometry.ts`**
+- [ ] **Step 5: Add `curve` to the model, keeping the toolbar's two choices**
+
+In `types/practice-planner.ts`, replace lines 35–37
+
+```ts
+/** straight = polyline through stored points, unsmoothed; freehand = smoothed */
+export const STROKE_PATHS = ["straight", "freehand"] as const;
+export type StrokePath = (typeof STROKE_PATHS)[number];
+```
+
+with
+
+```ts
+/**
+ * straight = polyline through stored points, unsmoothed; freehand = smoothed;
+ * curve = a smooth curve through stored points (a line bent by editing; line
+ * editing R1). Every value a stored line may have.
+ */
+export const STROKE_PATHS = ["straight", "freehand", "curve"] as const;
+export type StrokePath = (typeof STROKE_PATHS)[number];
+
+/** The paths the drawing toolbar offers: a curve comes only from editing a line. */
+export const DRAWN_STROKE_PATHS = ["straight", "freehand"] as const satisfies readonly StrokePath[];
+export type DrawnStrokePath = (typeof DRAWN_STROKE_PATHS)[number];
+```
+
+In `components/features/practice-planner/DrawingToolbar.tsx`, replace `STROKE_PATHS,` in the `@/types/practice-planner` import with `DRAWN_STROKE_PATHS,`, and replace the `stroke path` group
+
+```tsx
+                    <OptionGroup
+                        label="stroke path"
+                        value={strokeOptions.path}
+                        options={STROKE_PATHS}
+                        labels={{ straight: "Straight", freehand: "Freehand" }}
+                        onChange={(path) => onStrokeOptionsChange({ ...strokeOptions, path })}
+                    />
+```
+
+with
+
+```tsx
+                    <OptionGroup
+                        label="stroke path"
+                        // Drawing offers straight and freehand; curve comes only from editing (line editing R1)
+                        value={strokeOptions.path === "freehand" ? "freehand" : "straight"}
+                        options={DRAWN_STROKE_PATHS}
+                        labels={{ straight: "Straight", freehand: "Freehand" }}
+                        onChange={(path) => onStrokeOptionsChange({ ...strokeOptions, path })}
+                    />
+```
+
+`finishStroke` (`options.path === "straight"` → 2 points, otherwise simplified) and RinkBoard's in-progress preview are left as they are: the drawing path they receive is always `straight` or `freehand`.
+
+- [ ] **Step 6: Add the curve to `stroke-geometry.ts`**
 
 In `lib/utils/canvas/stroke-geometry.ts`, change the import on line 6 to
 
@@ -292,7 +416,7 @@ import type { Position, StrokeAction, StrokeEnd, StrokeOptions, StrokePath } fro
 and insert after `smoothPath` (after line 42):
 
 ```ts
-/** Samples per segment of a bent straight line's curve (line editing R2). */
+/** Samples per segment of a curve line (line editing R2). */
 export const CURVE_SAMPLES_PER_SEGMENT = 16;
 
 /** Centripetal (alpha 0.5) knot spacing; the floor keeps coincident points finite. */
@@ -343,14 +467,15 @@ export function catmullRomPath(points: Position[], samplesPerSegment: number = C
 }
 
 /**
- * The line a stroke is drawn along, before its action pattern: a freehand
- * line is smoothed, a 2-point straight line is its segment, and a straight
- * line with bends (3 or more points) is a curve through them (line editing R2).
+ * The line a stroke is drawn along, before its action pattern (line editing
+ * R2): a freehand line is smoothed, a curve with 3 or more points is a curve
+ * through them, and everything else (a straight polyline of any length, a
+ * 2-point curve) is its stored points.
  */
 export function strokeCenterline(stroke: { path: StrokePath; points: Position[] }): Position[] {
     if (stroke.path === "freehand") return smoothPath(stroke.points);
-    if (stroke.points.length < 3) return stroke.points.map((p) => ({ ...p }));
-    return catmullRomPath(stroke.points);
+    if (stroke.path === "curve" && stroke.points.length >= 3) return catmullRomPath(stroke.points);
+    return stroke.points.map((p) => ({ ...p }));
 }
 ```
 
@@ -366,9 +491,9 @@ with
     const base = strokeCenterline(stroke);
 ```
 
-(For 2 points and for freehand this is exactly the old expression, so the snapshot holds. The arrow and stop angle keep using the last two distinct samples, which on a curve lie along its end tangent.)
+(For `straight` and `freehand` this is exactly the old expression, so the snapshot holds. On a curve, the arrow and stop angle use the last two distinct samples, which lie along its end tangent.)
 
-- [ ] **Step 6: Highlight and hit-test along the drawn line**
+- [ ] **Step 7: A curve's highlight and hit test follow the curve**
 
 In `lib/utils/canvas/drawing-utils.ts`, change line 22 to
 
@@ -394,8 +519,9 @@ and in `drawElement` replace
 with
 
 ```ts
-        // Along the drawn centerline, so a bent or freehand line's highlight follows its curve
-        const path = strokeCenterline({ path: element.path, points: element.points.map((p) => rinkToCanvas(p, transform)) });
+        // A curve's highlight follows its curve; straight and freehand lines keep theirs on the stored points
+        const stored = element.points.map((p) => rinkToCanvas(p, transform));
+        const path = element.path === "curve" ? strokeCenterline({ path: "curve", points: stored }) : stored;
         ctx.beginPath();
         ctx.moveTo(path[0].x, path[0].y);
         for (let i = 1; i < path.length; i++) ctx.lineTo(path[i].x, path[i].y);
@@ -418,8 +544,8 @@ export function hitTestDrawing(
     drawing: DrawingElement,
     threshold = HIT_THRESHOLD
 ): boolean {
-    // A bent straight line is drawn as a curve through its points (line editing R2): test what is drawn
-    const path = drawing.path === "straight" && drawing.points.length > 2 ? strokeCenterline(drawing) : drawing.points;
+    // A curve is tested where it is drawn (line editing R2); other lines on their stored points, as before
+    const path = drawing.path === "curve" ? strokeCenterline(drawing) : drawing.points;
     for (let i = 0; i < path.length - 1; i++) {
         if (distanceToLineSegment(point, path[i], path[i + 1]) <= threshold) return true;
     }
@@ -427,52 +553,55 @@ export function hitTestDrawing(
 }
 ```
 
-(Freehand and 2-point lines keep today's hit test on their stored points.)
+- [ ] **Step 8: Amend ADR-0020**
 
-- [ ] **Step 7: Split the starter zone outline**
+Append to `docs/adr/0020-exchange-practice-plans-as-a-portable-versioned-document-and-ship-a-static-local.md`, after the last amendment:
 
-In `lib/data/starter-plays.ts`, replace line 317
+```markdown
+### 2026-10-05: Curved lines (one additive path value, versions stay 1 and 2)
 
-```ts
-                zoneLine("dz-house", [11, 27], [33, 27], [43, 42.5], [33, 58], [11, 58]),
+A diagram line's `path` may now be `curve` as well as `straight` and `freehand`: a smooth curve through its points, made by bending a line on the board. `PLAN_VERSION` stays 1 and `PlayData.version` stays 2.
+
+**Rules:**
+- Writers emit `curve` only for a line bent by editing; drawing still produces `straight` or `freehand`.
+- `straight` keeps its meaning, a polyline with sharp corners, so every earlier file and stored play draws exactly as before.
+
+**Compatibility:** a reader built before this amendment validates `path` against `straight` and `freehand`, so a diagram with a `curve` fails as a whole:
+- a plan file (or plan link) containing one is refused with the normal "can't open this plan" message, not the newer-version one;
+- a static planner tab still on an older build reports that drill's diagram as unreadable (the library won't open it; session views show it without a diagram) until it is reloaded. The stored drill is unchanged unless that old tab saves over it.
+
+That one-way break is accepted, as for block rows: a version bump would make older readers reject every new file, including the many with no curve.
+
+Spec: `docs/superpowers/specs/2026-10-05-practice-line-editing-design.md`.
 ```
 
-with
+- [ ] **Step 9: Run the tests to see them pass**
 
-```ts
-                // Four segments: a straight line with bends now draws as a curve, and the house has corners
-                zoneLine("dz-house-1", [11, 27], [33, 27]),
-                zoneLine("dz-house-2", [33, 27], [43, 42.5]),
-                zoneLine("dz-house-3", [43, 42.5], [33, 58]),
-                zoneLine("dz-house-4", [33, 58], [11, 58]),
-```
+Run: `bun run test __tests__/lib/utils __tests__/lib/plan-document __tests__/lib/data __tests__/components/features/practice-planner __tests__/apps/planner`
+Expected: PASS. The legacy file reports `19 passed` with nothing written, updated or obsolete.
 
-The other 15 multi-point starter strokes are routes (skates, carries, passes, the goalie shuffle) and are meant to read as curves; they stay as they are.
+Run: `bun run type-check && bun run lint && bun run adr:lint`
+Expected: all exit 0. (`StrokePath` now includes `"curve"`; no `Record<StrokePath, …>` or exhaustive switch over it exists elsewhere, which type-check confirms.)
 
-- [ ] **Step 8: Run the tests to see them pass**
-
-Run: `bun run test __tests__/lib/utils/canvas __tests__/lib/data __tests__/components/features/practice-planner`
-Expected: PASS. The legacy file reports `16 passed` with nothing written, updated or obsolete.
-
-Run: `bun run type-check`
-Expected: exit 0.
-
-- [ ] **Step 9: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
-/usr/bin/git add lib/utils/canvas/stroke-geometry.ts lib/utils/canvas/drawing-utils.ts lib/utils/canvas/interaction-utils.ts \
-  lib/data/starter-plays.ts __tests__/lib/utils/canvas/stroke-geometry.legacy.test.ts \
+/usr/bin/git add types/practice-planner.ts components/features/practice-planner/DrawingToolbar.tsx \
+  lib/utils/canvas/stroke-geometry.ts lib/utils/canvas/drawing-utils.ts lib/utils/canvas/interaction-utils.ts \
+  docs/adr/0020-exchange-practice-plans-as-a-portable-versioned-document-and-ship-a-static-local.md \
+  __tests__/lib/utils/canvas/stroke-geometry.legacy.test.ts \
   __tests__/lib/utils/canvas/__snapshots__/stroke-geometry.legacy.test.ts.snap \
   __tests__/lib/utils/canvas/stroke-geometry.test.ts __tests__/lib/utils/canvas/drawing-utils.test.ts \
-  __tests__/lib/utils/canvas/interaction-utils.test.ts __tests__/lib/data/starter-plays.test.ts
-/usr/bin/git commit -m "feat(practice-planner): draw bent straight lines as smooth curves" -m "$SESSION_TRAILER"
+  __tests__/lib/utils/canvas/interaction-utils.test.ts __tests__/lib/utils/play-data.test.ts \
+  __tests__/lib/plan-document/document.test.ts __tests__/components/features/practice-planner/DrawingToolbar.test.tsx
+/usr/bin/git commit -m "feat(practice-planner): add a curve line path drawn as a smooth curve" -m "$SESSION_TRAILER"
 ```
 
 ---
 
 ### Task 2: Pure line-editing helpers
 
-Everything the board needs to edit a line, as pure functions in rink feet (spec R3, R4, R5). Each edit returns the same reference when it changes nothing. Nothing is wired to the board yet.
+Everything the board needs to edit a line, as pure functions in rink feet (spec R3, R4, R5). Each edit returns the same reference when it changes nothing. `insertBend` and `removeBend` own the `straight` ↔ `curve` changes: a "+" on a 2-point straight line makes a curve, a multi-point straight line stays a sharp polyline, and a curve left with 2 points becomes straight again. Nothing is wired to the board yet.
 
 **Files:**
 - Create: `lib/utils/canvas/line-editing.ts`
@@ -486,14 +615,14 @@ Everything the board needs to edit a line, as pure functions in rink feet (spec 
 - Produces, from `lib/utils/canvas/line-editing.ts`:
   - `MAX_LINE_BENDS = 6`, `MAX_EDIT_POINTS = 8`, `SNAP_RADIUS_FT = 3`, `DOUBLE_TAP_MS = 300`;
   - `type LineStroke = Pick<DrawingElement, "path" | "points">`;
-  - `type LineHandle = { kind: "end" | "bend" | "anchor"; index: number; position: Position } | { kind: "add"; segment: number; position: Position }`;
+  - `type LineHandle = { kind: "end" | "bend" | "corner" | "anchor"; index: number; position: Position } | { kind: "add"; segment: number; position: Position }` (`bend` on a curve, `corner` on a straight polyline, `anchor` on a freehand line);
   - `anchorPoints(points: Position[], max?: number): Position[]`;
-  - `lineHandles(stroke: LineStroke): LineHandle[]` (ends first, then bends or anchors, then "+" handles);
+  - `lineHandles(stroke: LineStroke): LineHandle[]` (ends first, then bends, corners or anchors, then "+" handles);
   - `hitTestLineHandle(handles: readonly LineHandle[], point: Position, radiusFt: number): LineHandle | null`;
   - `moveLinePoint(stroke: DrawingElement, index: number, to: Position, rect: RinkRect): DrawingElement`;
   - `moveLine(stroke: DrawingElement, delta: Position, rect: RinkRect): DrawingElement`;
-  - `insertBend(stroke: DrawingElement, segment: number, at: Position, rect: RinkRect): DrawingElement`;
-  - `removeBend(stroke: DrawingElement, index: number): DrawingElement`;
+  - `insertBend(stroke: DrawingElement, segment: number, at: Position, rect: RinkRect): DrawingElement` (a 2-point straight line becomes a `curve`; other paths keep theirs);
+  - `removeBend(stroke: DrawingElement, index: number): DrawingElement` (a `curve` left with 2 points becomes `straight`);
   - `straighten(stroke: DrawingElement): DrawingElement`;
   - `interface SnapOptions { radiusFt: number; excludeId?: string; bypass?: boolean; rect?: RinkRect }`;
   - `findSnapTarget(data: PlayData, point: Position, options: SnapOptions): Position | null`;
@@ -548,14 +677,14 @@ describe("limits", () => {
         expect([MAX_LINE_BENDS, MAX_EDIT_POINTS, SNAP_RADIUS_FT, DOUBLE_TAP_MS]).toEqual([6, 8, 3, 300]);
     });
 
-    it("give every starter straight line a bend handle per interior point, and '+' handles only under 6 bends", () => {
+    it("give every starter polyline a corner handle per interior point, and '+' handles only under 6 corners", () => {
         for (const play of STARTER_PLAYS) {
             for (const d of play.playData.drawings) {
                 if (d.path !== "straight") continue;
                 const handles = lineHandles(d);
-                const bends = d.points.length - 2;
-                expect(handles.filter((h) => h.kind === "bend")).toHaveLength(bends);
-                expect(handles.filter((h) => h.kind === "add")).toHaveLength(bends < MAX_LINE_BENDS ? d.points.length - 1 : 0);
+                const corners = d.points.length - 2;
+                expect(handles.filter((h) => h.kind === "corner")).toHaveLength(corners);
+                expect(handles.filter((h) => h.kind === "add")).toHaveLength(corners < MAX_LINE_BENDS ? d.points.length - 1 : 0);
             }
         }
         // The 16-point figure-eight is the starter line with more points than an edit can make
@@ -599,8 +728,8 @@ describe("lineHandles", () => {
         ]);
     });
 
-    it("puts a bent line's '+' handles on the drawn curve", () => {
-        const handles = lineHandles(line([{ x: 0, y: 0 }, { x: 50, y: 50 }, { x: 100, y: 0 }]));
+    it("gives a curve bend handles, with its '+' handles on the drawn curve", () => {
+        const handles = lineHandles(line([{ x: 0, y: 0 }, { x: 50, y: 50 }, { x: 100, y: 0 }], "curve"));
         expect(handles.map((h) => h.kind)).toEqual(["end", "end", "bend", "add", "add"]);
         const adds = handles.filter((h) => h.kind === "add");
         expect(adds[0].position.x).toBeCloseTo(25, 6);
@@ -609,15 +738,24 @@ describe("lineHandles", () => {
         expect(adds[1].position.y).toBeCloseTo(31.25, 6);
     });
 
-    it("shows no '+' once a line has 6 bends", () => {
-        const handles = lineHandles(line(zigzag(6)));
-        expect(handles.filter((h) => h.kind === "bend")).toHaveLength(6);
-        expect(handles.filter((h) => h.kind === "add")).toHaveLength(0);
+    it("gives a straight polyline corner handles, with its '+' handles at the segment midpoints", () => {
+        const handles = lineHandles(line([{ x: 0, y: 0 }, { x: 50, y: 50 }, { x: 100, y: 0 }]));
+        expect(handles.map((h) => h.kind)).toEqual(["end", "end", "corner", "add", "add"]);
+        expect(handles.filter((h) => h.kind === "add").map((h) => h.position)).toEqual([{ x: 25, y: 25 }, { x: 75, y: 25 }]);
     });
 
-    it("gives an older line with more than 8 points a bend on every interior point and no '+'", () => {
+    it("shows no '+' once a line has 6 bends or corners", () => {
+        const curve = lineHandles(line(zigzag(6), "curve"));
+        expect(curve.filter((h) => h.kind === "bend")).toHaveLength(6);
+        expect(curve.filter((h) => h.kind === "add")).toHaveLength(0);
+        const polyline = lineHandles(line(zigzag(6)));
+        expect(polyline.filter((h) => h.kind === "corner")).toHaveLength(6);
+        expect(polyline.filter((h) => h.kind === "add")).toHaveLength(0);
+    });
+
+    it("gives an older polyline with more than 8 points a corner on every interior point and no '+'", () => {
         const handles = lineHandles(line(zigzag(8)));
-        expect(handles.filter((h) => h.kind === "bend")).toHaveLength(8);
+        expect(handles.filter((h) => h.kind === "corner")).toHaveLength(8);
         expect(handles.filter((h) => h.kind === "add")).toHaveLength(0);
     });
 
@@ -712,14 +850,27 @@ describe("moveLine", () => {
 describe("insertBend and removeBend", () => {
     const l = line([{ x: 0, y: 0 }, { x: 100, y: 0 }]);
 
-    it("inserts a bend after the segment's first point, inside the area", () => {
-        expect(insertBend(l, 0, { x: 50, y: 20 }, RINK).points).toEqual([{ x: 0, y: 0 }, { x: 50, y: 20 }, { x: 100, y: 0 }]);
+    it("bends a 2-point straight line into a curve, inside the area", () => {
+        const bent = insertBend(l, 0, { x: 50, y: 20 }, RINK);
+        expect(bent.path).toBe("curve");
+        expect(bent.points).toEqual([{ x: 0, y: 0 }, { x: 50, y: 20 }, { x: 100, y: 0 }]);
         expect(insertBend(l, 0, { x: 50, y: -10 }, RINK).points[1]).toEqual({ x: 50, y: 0 });
     });
 
-    it("refuses a seventh bend, a freehand line and an unknown segment", () => {
-        const full = line(zigzag(6));
-        expect(insertBend(full, 0, { x: 1, y: 1 }, RINK)).toBe(full);
+    it("adds a corner to a straight polyline and keeps it straight, and another bend to a curve", () => {
+        const polyline = line([{ x: 0, y: 0 }, { x: 50, y: 20 }, { x: 100, y: 0 }]);
+        const cornered = insertBend(polyline, 1, { x: 75, y: 30 }, RINK);
+        expect(cornered.path).toBe("straight");
+        expect(cornered.points).toEqual([{ x: 0, y: 0 }, { x: 50, y: 20 }, { x: 75, y: 30 }, { x: 100, y: 0 }]);
+        const curve = line([{ x: 0, y: 0 }, { x: 50, y: 20 }, { x: 100, y: 0 }], "curve");
+        expect(insertBend(curve, 0, { x: 25, y: 20 }, RINK).path).toBe("curve");
+    });
+
+    it("refuses a seventh bend or corner, a freehand line and an unknown segment", () => {
+        const fullCurve = line(zigzag(6), "curve");
+        expect(insertBend(fullCurve, 0, { x: 1, y: 1 }, RINK)).toBe(fullCurve);
+        const fullPolyline = line(zigzag(6));
+        expect(insertBend(fullPolyline, 0, { x: 1, y: 1 }, RINK)).toBe(fullPolyline);
         const free = line([{ x: 0, y: 0 }, { x: 100, y: 0 }], "freehand");
         expect(insertBend(free, 0, { x: 50, y: 20 }, RINK)).toBe(free);
         expect(insertBend(l, 1, { x: 50, y: 20 }, RINK)).toBe(l);
@@ -728,21 +879,40 @@ describe("insertBend and removeBend", () => {
         expect(insertBend(legacy, 0, { x: 1, y: 1 }, RINK)).toBe(legacy);
     });
 
-    it("removes an interior bend but never an end", () => {
-        const bent = line([{ x: 0, y: 0 }, { x: 50, y: 20 }, { x: 100, y: 0 }]);
-        expect(removeBend(bent, 1).points).toEqual([{ x: 0, y: 0 }, { x: 100, y: 0 }]);
-        expect(removeBend(bent, 0)).toBe(bent);
-        expect(removeBend(bent, 2)).toBe(bent);
+    it("turns a curve left with 2 points back into a straight line", () => {
+        const curve = line([{ x: 0, y: 0 }, { x: 50, y: 20 }, { x: 100, y: 0 }], "curve");
+        const removed = removeBend(curve, 1);
+        expect(removed.path).toBe("straight");
+        expect(removed.points).toEqual([{ x: 0, y: 0 }, { x: 100, y: 0 }]);
+        expect(removeBend(line(zigzag(2), "curve"), 1).path).toBe("curve");
+    });
+
+    it("removes a polyline's corner and keeps it straight", () => {
+        const polyline = line(zigzag(2));
+        const removed = removeBend(polyline, 1);
+        expect(removed.path).toBe("straight");
+        expect(removed.points).toEqual([{ x: 20, y: 40 }, { x: 40, y: 40 }, { x: 50, y: 50 }]);
+    });
+
+    it("never removes an end, or a freehand anchor", () => {
+        const curve = line([{ x: 0, y: 0 }, { x: 50, y: 20 }, { x: 100, y: 0 }], "curve");
+        expect(removeBend(curve, 0)).toBe(curve);
+        expect(removeBend(curve, 2)).toBe(curve);
         const free = line(wave(10), "freehand");
         expect(removeBend(free, 3)).toBe(free);
     });
 });
 
 describe("straighten", () => {
-    it("keeps a bent line's first and last points", () => {
-        const s = straighten(line(zigzag(3)));
+    it("keeps a curve's first and last points", () => {
+        const s = straighten(line(zigzag(3), "curve"));
         expect(s.path).toBe("straight");
         expect(s.points).toEqual([{ x: 20, y: 40 }, { x: 60, y: 40 }]);
+    });
+
+    it("straightens a polyline, including an older one with more than 8 points", () => {
+        expect(straighten(line(zigzag(3))).points).toEqual([{ x: 20, y: 40 }, { x: 60, y: 40 }]);
+        expect(straighten(line(zigzag(8))).points).toHaveLength(2);
     });
 
     it("makes a freehand line straight between its ends", () => {
@@ -752,11 +922,7 @@ describe("straighten", () => {
         expect(s.points).toEqual([pts[0], pts[29]]);
     });
 
-    it("straightens an older line with more than 8 points", () => {
-        expect(straighten(line(zigzag(8))).points).toHaveLength(2);
-    });
-
-    it("returns the same line when it is already straight", () => {
+    it("returns the same line when it is already a 2-point straight line", () => {
         const l = line([{ x: 0, y: 0 }, { x: 10, y: 0 }]);
         expect(straighten(l)).toBe(l);
     });
@@ -946,9 +1112,9 @@ import { rectContains } from "@/lib/utils/ice-area";
 import { clampToRect, distanceToLineSegment } from "./interaction-utils";
 import { curvePoint } from "./stroke-geometry";
 
-/** Bends an edit may give a straight line (R1). */
+/** Bends (on a curve) or corners (on a straight polyline) an edit may add up to (R1). */
 export const MAX_LINE_BENDS = 6;
-/** Points in an edited line: its two ends plus MAX_LINE_BENDS bends (or freehand anchors). */
+/** Points in an edited line: its two ends plus MAX_LINE_BENDS bends, corners or freehand anchors. */
 export const MAX_EDIT_POINTS = MAX_LINE_BENDS + 2;
 /** Snap radius floor in feet (R4); the board uses the larger of this and its minimum hit radius. */
 export const SNAP_RADIUS_FT = 3;
@@ -962,15 +1128,17 @@ export type LineStroke = Pick<DrawingElement, "path" | "points">;
 
 /**
  * A handle on the selected line. `index` is a position in the line's
- * editable points: its stored points for a straight line, its anchorPoints
- * for a freehand line. An "add" handle sits on segment `segment` (between
- * points `segment` and `segment + 1`); dragging it inserts a bend there.
+ * editable points: its stored points for a straight line or a curve, its
+ * anchorPoints for a freehand line. Interior points are a curve's "bend"s, a
+ * straight polyline's "corner"s and a freehand line's "anchor"s. An "add"
+ * handle sits on segment `segment` (between points `segment` and
+ * `segment + 1`); dragging it inserts a point there.
  */
 export type LineHandle =
-    | { kind: "end" | "bend" | "anchor"; index: number; position: Position }
+    | { kind: "end" | "bend" | "corner" | "anchor"; index: number; position: Position }
     | { kind: "add"; segment: number; position: Position };
 
-/** The points an edit works on: a straight line's own, or a freehand line's anchors. */
+/** The points an edit works on: a straight line's or a curve's own, or a freehand line's anchors. */
 function editablePoints(stroke: LineStroke): Position[] {
     return stroke.path === "freehand" ? anchorPoints(stroke.points) : stroke.points;
 }
@@ -1007,12 +1175,15 @@ export function anchorPoints(points: Position[], max: number = MAX_EDIT_POINTS):
     return kept.map((i) => ({ ...points[i] }));
 }
 
+const INTERIOR_HANDLE = { curve: "bend", straight: "corner", freehand: "anchor" } as const;
+
 /**
  * The selected line's handles (R3), ends first so they win ties: the two
- * ends; a bend handle on each interior point of a straight line, or an
- * anchor handle on each interior anchor of a freehand line; and, on a
- * straight line with fewer than MAX_LINE_BENDS bends, a "+" handle on each
- * segment at the drawn curve's midpoint (the plain midpoint for 2 points).
+ * ends; a handle on each interior point (a curve's bends, a straight
+ * polyline's corners, a freehand line's anchors); and, on a straight line or
+ * a curve with fewer than MAX_LINE_BENDS interior points, a "+" handle on
+ * each segment, at the drawn curve's midpoint on a curve and at the
+ * segment's midpoint on a straight line.
  */
 export function lineHandles(stroke: LineStroke): LineHandle[] {
     const points = editablePoints(stroke);
@@ -1022,13 +1193,13 @@ export function lineHandles(stroke: LineStroke): LineHandle[] {
         { kind: "end", index: 0, position: points[0] },
         { kind: "end", index: last, position: points[last] },
     ];
-    const interior: "bend" | "anchor" = stroke.path === "freehand" ? "anchor" : "bend";
+    const interior = INTERIOR_HANDLE[stroke.path];
     for (let i = 1; i < last; i++) handles.push({ kind: interior, index: i, position: points[i] });
-    if (stroke.path === "straight" && last - 1 < MAX_LINE_BENDS) {
+    if (stroke.path !== "freehand" && last - 1 < MAX_LINE_BENDS) {
         for (let segment = 0; segment < last; segment++) {
-            const position = last === 1
-                ? { x: (points[0].x + points[1].x) / 2, y: (points[0].y + points[1].y) / 2 }
-                : curvePoint(points, segment, 0.5);
+            const position = stroke.path === "curve" && last > 1
+                ? curvePoint(points, segment, 0.5)
+                : { x: (points[segment].x + points[segment + 1].x) / 2, y: (points[segment].y + points[segment + 1].y) / 2 };
             handles.push({ kind: "add", segment, position });
         }
     }
@@ -1083,23 +1254,35 @@ export function moveLine(stroke: DrawingElement, delta: Position, rect: RinkRect
     return { ...stroke, points: stroke.points.map((p) => clampToRect({ x: p.x + dx, y: p.y + dy }, RINK)) };
 }
 
-/** Adds a bend on segment `segment` at `at` (kept inside `rect`); straight lines with fewer than 6 bends only. */
+/**
+ * Adds a point on segment `segment` at `at` (kept inside `rect`), for a line
+ * with fewer than 6 bends or corners (R3). A 2-point straight line becomes a
+ * curve; a multi-point straight line gets a corner and stays straight; a
+ * curve gets another bend. Freehand lines take no points.
+ */
 export function insertBend(stroke: DrawingElement, segment: number, at: Position, rect: RinkRect): DrawingElement {
     const { points } = stroke;
-    if (stroke.path !== "straight" || points.length - 2 >= MAX_LINE_BENDS) return stroke;
+    if (stroke.path === "freehand" || points.length - 2 >= MAX_LINE_BENDS) return stroke;
     if (!Number.isInteger(segment) || segment < 0 || segment > points.length - 2) return stroke;
     const next = points.map((p) => ({ ...p }));
     next.splice(segment + 1, 0, clampToRect(at, rect));
-    return { ...stroke, points: next };
+    const path = stroke.path === "straight" && points.length === 2 ? "curve" : stroke.path;
+    return { ...stroke, path, points: next };
 }
 
-/** Removes bend `index` of a straight line; ends can't be removed (R3). */
+/**
+ * Removes interior point `index` (a curve's bend or a polyline's corner);
+ * ends and freehand anchors can't be removed (R3). A curve left with 2
+ * points becomes a straight line again.
+ */
 export function removeBend(stroke: DrawingElement, index: number): DrawingElement {
-    if (stroke.path !== "straight" || index <= 0 || index >= stroke.points.length - 1) return stroke;
-    return { ...stroke, points: stroke.points.filter((_, i) => i !== index) };
+    if (stroke.path === "freehand" || index <= 0 || index >= stroke.points.length - 1) return stroke;
+    const points = stroke.points.filter((_, i) => i !== index);
+    const path = stroke.path === "curve" && points.length === 2 ? "straight" : stroke.path;
+    return { ...stroke, path, points };
 }
 
-/** Straighten / Make straight (R3): a straight line between the first and last points. */
+/** Straighten (a curve or a polyline) / Make straight (freehand) (R3): a straight line between the first and last points. */
 export function straighten(stroke: DrawingElement): DrawingElement {
     const { points } = stroke;
     if (stroke.path === "straight" && points.length === 2) return stroke;
@@ -1661,7 +1844,7 @@ Expected: both exit 0 (no unused `Position` or `useRef` imports are left: both a
 
 ### Task 4: Handles and drags on the selected line
 
-With the Select tool, a selected line shows its handles. Dragging the line moves it as a whole, dragging an end, bend or freehand anchor moves that point, and dragging a "+" adds a bend (success criteria 1, 2, 6; spec R3, R6). The preview is live, release commits one history entry, and a second finger, a touchcancel or a tool change cancels without committing. The gesture state lives in `useStrokeEditing`; RinkBoard routes events and draws.
+With the Select tool, a selected line shows its handles. Dragging the line moves it as a whole, dragging an end, bend, corner or freehand anchor moves that point, and dragging a "+" adds a point: on a 2-point straight line a bend that makes it a `curve`, on an older polyline a corner that keeps it `straight` (success criteria 1, 2, 6; spec R3, R6). The preview is live, release commits one history entry, and a second finger, a touchcancel or a tool change cancels without committing. The gesture state lives in `useStrokeEditing`; RinkBoard routes events and draws.
 
 **Files:**
 - Create: `components/features/practice-planner/useStrokeEditing.ts`
@@ -1745,6 +1928,7 @@ const line = (points: Position[], path: StrokePath = "straight", id = "l"): Draw
 const withLines = (...drawings: DrawingElement[]): PlayData => ({ ...createEmptyPlayData(), drawings });
 const CUSTOM: IceArea = { kind: "custom", rect: { x: 100, y: 30, w: 20, h: 20 } }; // viewport { 95, 25, 30, 30 }
 const STRAIGHT = [{ x: 40, y: 40 }, { x: 120, y: 40 }];
+/** Three points: a curve when the line's path is "curve", a sharp polyline when it is "straight". */
 const BENT = [{ x: 40, y: 40 }, { x: 80, y: 20 }, { x: 120, y: 40 }];
 
 function setup(props: Partial<RinkBoardProps> = {}) {
@@ -1813,27 +1997,44 @@ describe("RinkBoard line editing: handles and drags", () => {
         expectPoint(end, 130, 60);
     });
 
-    it("drags a '+' handle to add a bend", () => {
+    it("drags a '+' handle on a 2-point line to bend it into a curve", () => {
         const ctx = setup({ playData: withLines(line(STRAIGHT)) });
         ctx.click(60, 40);
         ctx.drag([80, 40], [80, 20]);
         const stroke = ctx.last().drawings[0];
-        expect(stroke.path).toBe("straight");
+        expect(stroke.path).toBe("curve");
         expect(stroke.points).toHaveLength(3);
         expectPoint(stroke.points[1], 80, 20);
     });
 
-    it("drags a bend", () => {
+    it("drags a curve's bend", () => {
+        const ctx = setup({ playData: withLines(line(BENT, "curve")) });
+        ctx.click(60, 30);
+        ctx.drag([80, 20], [90, 10]);
+        const stroke = ctx.last().drawings[0];
+        expect(stroke.path).toBe("curve");
+        expect(stroke.points).toHaveLength(3);
+        expectPoint(stroke.points[1], 90, 10);
+    });
+
+    it("keeps an older polyline sharp: a corner drag and a '+' leave it straight", () => {
         const ctx = setup({ playData: withLines(line(BENT)) });
         ctx.click(60, 30);
         ctx.drag([80, 20], [90, 10]);
-        const points = ctx.last().drawings[0].points;
-        expect(points).toHaveLength(3);
-        expectPoint(points[1], 90, 10);
+        expect(ctx.last().drawings[0].path).toBe("straight");
+        expectPoint(ctx.last().drawings[0].points[1], 90, 10);
+
+        const added = setup({ playData: withLines(line(BENT)) });
+        added.click(60, 30);
+        added.drag([100, 30], [100, 45]); // the second segment's midpoint "+"
+        const stroke = added.last().drawings[0];
+        expect(stroke.path).toBe("straight");
+        expect(stroke.points).toHaveLength(4);
+        expectPoint(stroke.points[2], 100, 45);
     });
 
     it("moves the whole line from its body, keeping its shape", () => {
-        const ctx = setup({ playData: withLines(line(BENT)) });
+        const ctx = setup({ playData: withLines(line(BENT, "curve")) });
         ctx.drag([60, 30], [70, 40]);
         expect(ctx.onPlayDataChange).toHaveBeenCalledTimes(1);
         const points = ctx.last().drawings[0].points;
@@ -2011,6 +2212,14 @@ describe("drawLineHandles", () => {
         drawLineHandles(recordingCtx(calls), handles, transform, LINE_EDIT_COLORS);
         expect(calls.filter((c) => c.name === "moveTo")).toHaveLength(2);
     });
+
+    it("draws a polyline's corner as a 14 px square", () => {
+        const calls: Call[] = [];
+        drawLineHandles(recordingCtx(calls), [{ kind: "corner", index: 1, position: { x: 70, y: 40 } }], transform, LINE_EDIT_COLORS);
+        const c = rinkToCanvas({ x: 70, y: 40 }, transform);
+        expect(calls.filter((call) => call.name === "arc")).toHaveLength(0);
+        expect(calls.find((call) => call.name === "rect")!.args).toEqual([c.x - 7, c.y - 7, 14, 14]);
+    });
 });
 ```
 
@@ -2062,8 +2271,9 @@ export interface LineEditColors {
 
 /**
  * Draws the selected line's handles (rink feet, under the board's zoom):
- * ends, bends and anchors as rings, "+" handles as filled discs with a plus.
- * `zoom` keeps the radius and outline the same size on screen.
+ * ends, bends and anchors as rings, a polyline's corners as squares (so a
+ * sharp corner reads differently from a curve's bend), and "+" handles as
+ * filled discs with a plus. `zoom` keeps the size and outline the same on screen.
  */
 export function drawLineHandles(
     ctx: CanvasRenderingContext2D,
@@ -2079,7 +2289,8 @@ export function drawLineHandles(
         const c = rinkToCanvas(handle.position, transform);
         const add = handle.kind === "add";
         ctx.beginPath();
-        ctx.arc(c.x, c.y, radius, 0, Math.PI * 2);
+        if (handle.kind === "corner") ctx.rect(c.x - radius, c.y - radius, radius * 2, radius * 2);
+        else ctx.arc(c.x, c.y, radius, 0, Math.PI * 2);
         ctx.fillStyle = add ? colors.handleStroke : colors.handleFill;
         ctx.fill();
         ctx.strokeStyle = colors.handleStroke;
@@ -2457,7 +2668,7 @@ Expected: about 975 lines (≤ 1057); type-check and lint exit 0.
 
 ### Task 5: Removing bends: double-tap and Straighten
 
-A double-click or double-tap on a bend removes it; ends can't be removed. The inspector's **Straighten** removes every bend of a straight line, and **Make straight** turns a freehand line into a straight one; both keep the first and last points and are one undoable `updateElement` (success criterion 3; spec R3).
+A double-click or double-tap on a curve's bend or a polyline's corner removes it; ends and freehand anchors can't be removed, and a curve left with 2 points becomes straight. The inspector's **Straighten** turns a curve, or a straight line with more than 2 points, into a 2-point straight line, and **Make straight** does the same for a freehand line; both keep the first and last points and are one undoable `updateElement` (success criterion 3; spec R3).
 
 **Files:**
 - Modify: `components/features/practice-planner/useStrokeEditing.ts` (`LinePress.time`; `press`; `release`)
@@ -2476,7 +2687,19 @@ Append to `__tests__/components/features/practice-planner/RinkBoard.line-editing
 
 ```tsx
 describe("RinkBoard line editing: removing bends", () => {
-    it("removes a bend with a double-click", () => {
+    it("removes a curve's bend with a double-click, and the line is straight again", () => {
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(10_000);
+        const ctx = setup({ playData: withLines(line(BENT, "curve")) });
+        ctx.click(60, 30);
+        ctx.click(80, 20);
+        vi.setSystemTime(10_200);
+        ctx.click(80, 20);
+        expect(ctx.onPlayDataChange).toHaveBeenCalledTimes(1);
+        expect(ctx.last().drawings[0]).toMatchObject({ path: "straight", points: [{ x: 40, y: 40 }, { x: 120, y: 40 }] });
+    });
+
+    it("removes a polyline's corner with a double-click", () => {
         vi.useFakeTimers({ toFake: ["Date"] });
         vi.setSystemTime(10_000);
         const ctx = setup({ playData: withLines(line(BENT)) });
@@ -2484,14 +2707,13 @@ describe("RinkBoard line editing: removing bends", () => {
         ctx.click(80, 20);
         vi.setSystemTime(10_200);
         ctx.click(80, 20);
-        expect(ctx.onPlayDataChange).toHaveBeenCalledTimes(1);
-        expect(ctx.last().drawings[0].points).toEqual([{ x: 40, y: 40 }, { x: 120, y: 40 }]);
+        expect(ctx.last().drawings[0]).toMatchObject({ path: "straight", points: [{ x: 40, y: 40 }, { x: 120, y: 40 }] });
     });
 
     it("keeps the bend for two slow clicks", () => {
         vi.useFakeTimers({ toFake: ["Date"] });
         vi.setSystemTime(10_000);
-        const ctx = setup({ playData: withLines(line(BENT)) });
+        const ctx = setup({ playData: withLines(line(BENT, "curve")) });
         ctx.click(60, 30);
         ctx.click(80, 20);
         vi.setSystemTime(10_400);
@@ -2502,7 +2724,7 @@ describe("RinkBoard line editing: removing bends", () => {
     it("removes a bend with a double-tap", () => {
         vi.useFakeTimers({ toFake: ["Date"] });
         vi.setSystemTime(10_000);
-        const ctx = setup({ playData: withLines(line(BENT)) });
+        const ctx = setup({ playData: withLines(line(BENT, "curve")) });
         const tap = (x: number, y: number) => {
             fireEvent.touchStart(ctx.canvas, { touches: [ctx.at(x, y)] });
             fireEvent.touchEnd(ctx.canvas, { touches: [] });
@@ -2517,7 +2739,7 @@ describe("RinkBoard line editing: removing bends", () => {
     it("never removes an end", () => {
         vi.useFakeTimers({ toFake: ["Date"] });
         vi.setSystemTime(10_000);
-        const ctx = setup({ playData: withLines(line(BENT)) });
+        const ctx = setup({ playData: withLines(line(BENT, "curve")) });
         ctx.click(60, 30);
         ctx.click(40, 40);
         vi.setSystemTime(10_100);
@@ -2525,10 +2747,10 @@ describe("RinkBoard line editing: removing bends", () => {
         expect(ctx.onPlayDataChange).not.toHaveBeenCalled();
     });
 
-    it("undoes a removed bend", () => {
+    it("undoes a removed bend, back to the curve", () => {
         vi.useFakeTimers({ toFake: ["Date"] });
         vi.setSystemTime(10_000);
-        const start = withLines(line(BENT));
+        const start = withLines(line(BENT, "curve"));
         const ctx = setup({ playData: start });
         ctx.click(60, 30);
         ctx.click(80, 20);
@@ -2536,17 +2758,17 @@ describe("RinkBoard line editing: removing bends", () => {
         ctx.click(80, 20);
         ctx.rerender(ctx.last());
         act(() => ctx.ref.current!.undo());
-        expect(ctx.last().drawings[0].points).toEqual(BENT);
+        expect(ctx.last().drawings[0]).toMatchObject({ path: "curve", points: BENT });
     });
 
     it("straightens through the handle as one undoable step", () => {
-        const start = withLines(line(BENT));
+        const start = withLines(line(BENT, "curve"));
         const ctx = setup({ playData: start });
         act(() => ctx.ref.current!.updateElement("l", { path: "straight", points: [BENT[0], BENT[2]] }));
-        expect(ctx.last().drawings[0].points).toEqual([BENT[0], BENT[2]]);
+        expect(ctx.last().drawings[0]).toMatchObject({ path: "straight", points: [BENT[0], BENT[2]] });
         ctx.rerender(ctx.last());
         act(() => ctx.ref.current!.undo());
-        expect(ctx.last().drawings[0].points).toEqual(BENT);
+        expect(ctx.last().drawings[0]).toMatchObject({ path: "curve", points: BENT });
     });
 });
 ```
@@ -2555,16 +2777,22 @@ Append to `__tests__/components/features/practice-planner/ElementInspector.test.
 
 ```tsx
 describe("Straighten (line editing R3)", () => {
-    const drawing = (path: "straight" | "freehand", points: { x: number; y: number }[]): SelectedElement => ({
+    const drawing = (path: "straight" | "freehand" | "curve", points: { x: number; y: number }[]): SelectedElement => ({
         kind: "drawing",
         element: { id: "d", action: "skate", path, end: "arrow", points, color: "#212121", strokeWidth: 2 },
     });
 
-    it("removes a straight line's bends and keeps its ends", async () => {
-        const onChange = wrap(drawing("straight", [{ x: 0, y: 0 }, { x: 5, y: 9 }, { x: 10, y: 0 }]));
+    it("straightens a curve, keeping its ends", async () => {
+        const onChange = wrap(drawing("curve", [{ x: 0, y: 0 }, { x: 5, y: 9 }, { x: 10, y: 0 }]));
         const button = screen.getByRole("button", { name: "Straighten" });
         expect(button).toHaveStyle({ minHeight: "44px" });
         await userEvent.click(button);
+        expect(onChange).toHaveBeenCalledWith({ path: "straight", points: [{ x: 0, y: 0 }, { x: 10, y: 0 }] });
+    });
+
+    it("straightens an older polyline", async () => {
+        const onChange = wrap(drawing("straight", [{ x: 0, y: 0 }, { x: 5, y: 9 }, { x: 10, y: 0 }]));
+        await userEvent.click(screen.getByRole("button", { name: "Straighten" }));
         expect(onChange).toHaveBeenCalledWith({ path: "straight", points: [{ x: 0, y: 0 }, { x: 10, y: 0 }] });
     });
 
@@ -2575,7 +2803,7 @@ describe("Straighten (line editing R3)", () => {
         expect(onChange).toHaveBeenCalledWith({ path: "straight", points: [{ x: 0, y: 0 }, { x: 8, y: 1 }] });
     });
 
-    it("offers neither for a straight line without bends", () => {
+    it("offers neither for a 2-point straight line", () => {
         wrap(stroke);
         expect(screen.queryByRole("button", { name: "Straighten" })).not.toBeInTheDocument();
         expect(screen.queryByRole("button", { name: "Make straight" })).not.toBeInTheDocument();
@@ -2686,7 +2914,7 @@ export function useStrokeEditing({ playDataRef, commit }: StrokeEditingOptions):
     const gestureRef = useRef<Gesture | null>(null);
     // The preview in a ref too, so a release in the same frame as the last move reads it
     const previewRef = useRef<DrawingElement | null>(null);
-    // The last press on a bend that did not become a drag (for the double-tap)
+    // The last press on a bend or corner that did not become a drag (for the double-tap)
     const lastTapRef = useRef<TapRecord | null>(null);
     const [preview, setPreviewState] = useState<DrawingElement | null>(null);
     const [active, setActive] = useState(false);
@@ -2714,10 +2942,10 @@ export function useStrokeEditing({ playDataRef, commit }: StrokeEditingOptions):
             const stroke = found.element;
             // Handles first, then the line's body (R3)
             const handle = hitTestLineHandle(lineHandles(stroke), point, hitRadiusFt);
-            if (handle?.kind === "bend") {
+            if (handle?.kind === "bend" || handle?.kind === "corner") {
                 const tap: TapRecord = { id: stroke.id, index: handle.index, position: point, time };
                 if (isDoubleTap(lastTapRef.current, tap, hitRadiusFt)) {
-                    // A double-tap removes the bend: one history entry, no drag (R3)
+                    // A double-tap removes the bend or corner: one history entry, no drag (R3)
                     lastTapRef.current = null;
                     const next = replaceDrawing(data, removeBend(stroke, handle.index));
                     if (next !== data) commit(next);
@@ -2797,12 +3025,15 @@ In `components/features/practice-planner/ElementInspector.tsx`:
 
 ```tsx
 /**
- * Straighten removes a straight line's bends; Make straight turns a freehand
- * line into a straight one. Both keep the first and last points and are one
- * undoable update (line editing R3). Nothing to offer for a 2-point line.
+ * Straighten turns a curve, or a straight polyline, into a 2-point straight
+ * line; Make straight does the same for a freehand line. Both keep the first
+ * and last points and are one undoable update (line editing R3). Nothing to
+ * offer for a 2-point straight line.
  */
 function StraightenButton({ stroke, onChange }: { stroke: DrawingElement; onChange: (patch: ElementPatch) => void }) {
-    const label = stroke.path === "freehand" ? "Make straight" : stroke.points.length > 2 ? "Straighten" : null;
+    const label = stroke.path === "freehand"
+        ? "Make straight"
+        : stroke.path === "curve" || stroke.points.length > 2 ? "Straighten" : null;
     if (!label) return null;
     return (
         <Button
@@ -3167,7 +3398,7 @@ export function useStrokeEditing({ playDataRef, commit }: StrokeEditingOptions):
     // The preview and the snap in refs too, so a release in the same frame as the last move reads them
     const previewRef = useRef<DrawingElement | null>(null);
     const snapRef = useRef<Position | null>(null);
-    // The last press on a bend that did not become a drag (for the double-tap)
+    // The last press on a bend or corner that did not become a drag (for the double-tap)
     const lastTapRef = useRef<TapRecord | null>(null);
     const [preview, setPreviewState] = useState<DrawingElement | null>(null);
     const [active, setActive] = useState(false);
@@ -3213,10 +3444,10 @@ export function useStrokeEditing({ playDataRef, commit }: StrokeEditingOptions):
             const stroke = found.element;
             // Handles first, then the line's body (R3)
             const handle = hitTestLineHandle(lineHandles(stroke), point, hitRadiusFt);
-            if (handle?.kind === "bend") {
+            if (handle?.kind === "bend" || handle?.kind === "corner") {
                 const tap: TapRecord = { id: stroke.id, index: handle.index, position: point, time };
                 if (isDoubleTap(lastTapRef.current, tap, hitRadiusFt)) {
-                    // A double-tap removes the bend: one history entry, no drag (R3)
+                    // A double-tap removes the bend or corner: one history entry, no drag (R3)
                     lastTapRef.current = null;
                     const next = replaceDrawing(data, removeBend(stroke, handle.index));
                     if (next !== data) commit(next);
@@ -3452,9 +3683,10 @@ Expected: all three succeed. `planner:check` still passes (no Next.js runtime in
 ```bash
 bun run check:raw-sql
 bun run adr:lint
-bun run adr:check lib/utils/canvas/line-editing.ts components/features/practice-planner/useStrokeEditing.ts \
+bun run adr:check-integrity
+bun run adr:check types/practice-planner.ts lib/utils/canvas/line-editing.ts components/features/practice-planner/useStrokeEditing.ts \
   components/features/practice-planner/useBoardTouch.ts components/features/practice-planner/RinkBoard.tsx \
-  components/features/practice-planner/ElementInspector.tsx lib/data/starter-plays.ts
+  components/features/practice-planner/ElementInspector.tsx components/features/practice-planner/DrawingToolbar.tsx
 rg -n 'document\.|window\.|from "react"|@mui|from "next' lib/utils/canvas/line-editing.ts lib/utils/canvas/stroke-geometry.ts
 rg -n 'from "next/|@/lib/actions|@/lib/db|@/lib/auth|@prisma/client' \
   components/features/practice-planner/useStrokeEditing.ts components/features/practice-planner/useBoardTouch.ts
@@ -3462,8 +3694,9 @@ wc -l components/features/practice-planner/RinkBoard.tsx
 ```
 
 Expected:
-- `check:raw-sql` and `adr:lint` exit 0;
-- `adr:check` lists the ADRs governing these paths (ADR-0020, the static planner, among them) with no violation. No ADR needs amending: the play schema and plan format are unchanged and the new code is portable. If `adr:check` names an ADR this change contradicts, stop and report instead of editing the ADR;
+- `check:raw-sql`, `adr:lint` and `adr:check-integrity` exit 0 (`adr:lint` covers Task 1's ADR-0020 amendment);
+- `adr:check` lists the ADRs governing these paths (ADR-0020, the static planner, among them) with no violation. ADR-0020 already carries Task 1's "Curved lines" amendment; no other ADR needs one. If `adr:check` names an ADR this change contradicts, stop and report instead of editing the ADR;
+- `git diff main --stat -- lib/data` prints nothing (no starter data changed);
 - both `rg` searches print nothing;
 - `RinkBoard.tsx` is at or under 1057 lines.
 
@@ -3549,9 +3782,20 @@ for (const scheme of ["light", "dark"]) {
     await page.screenshot({ path: shot(`bent-${tag}-${scheme}.png`) });
     console.log(scheme, tag, "horizontal overflow px:", await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth));
 
-    // A curved starter route (the stickhandling weave) on the printed bench sheet
+    // A curve and an older-style polyline on the printed bench sheet, through a plan file
+    // (this also shows the build imports a plan file that carries a curve)
+    const plan = {
+      format: "openleague.practice-plan", version: 1, exportedAt: new Date().toISOString(), generator: "line-editing-check",
+      session: { title: "Curve check", durationMinutes: 30, date: null, startTime: null, drills: [{
+        sequence: 0, durationMinutes: 10, runsWithPrevious: false, instructions: null,
+        drill: { name: "Curl and drive", description: "", playData: { version: 2, players: [], equipment: [], annotations: [], drawings: [
+          { id: "c1", action: "skate", path: "curve", end: "arrow", points: [{ x: 40, y: 60 }, { x: 90, y: 20 }, { x: 140, y: 60 }], color: "#212121", strokeWidth: 3 },
+          { id: "p1", action: "pass", path: "straight", end: "arrow", points: [{ x: 40, y: 75 }, { x: 90, y: 50 }, { x: 140, y: 75 }], color: "#1976D2", strokeWidth: 2 },
+        ] } },
+      }] },
+    };
     await page.goto(BASE + "#/import");
-    await page.getByRole("button", { name: "Use template: Skills Stations" }).click();
+    await page.locator('input[type="file"]').setInputFiles({ name: "curve-check.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(plan)) });
     await page.getByRole("button", { name: /save to my practices/i }).click();
     await page.waitForURL(/#\/sessions\/[^/]+$/, { timeout: 20000 });
     await page.goto(page.url() + "/print");
@@ -3573,7 +3817,7 @@ Read every PNG (`snap-ring-*`, `handles-*`, `bent-*`, `bench-*`, desktop and mob
 - `handles`: two white handles with an Action Blue outline at the ends and a filled Action Blue "+" at the midpoint, each about 14 px across; the gold selection highlight follows the line.
 - `bent`: the line is a smooth curve through the dragged bend (no corner), its arrow head points along the curve's end, a bend handle sits on the bend and "+" handles sit on the curve between the points.
 - Dark scheme: the ice is still light, and the handles and ring read clearly on it.
-- `bench`: the stickhandling drill's weave route is a smooth curve on the printed sheet, and the defensive-zone outline in any drill that shows it keeps its corners.
+- `bench`: the black skate line is a smooth curve through its middle point, and the blue pass line keeps its sharp corner (an older-style polyline).
 
 Stop the preview server.
 
@@ -3594,40 +3838,50 @@ Only if Steps 1–6 required changes. Stage the exact files by path:
 
 | Spec item | Task |
 |---|---|
-| Success 1: handles at ends and bends, a "+" at each segment's midpoint | 2 (`lineHandles`), 4 (drawn on the selected line) |
-| Success 2: drag the line, an end, a bend; drag a "+" to add a bend | 2 (`moveLine`, `moveLinePoint`, `insertBend`), 4 |
-| Success 3: remove a bend by double-click / double-tap; Straighten removes all bends | 2 (`removeBend`, `isDoubleTap`, `straighten`), 5 |
-| Success 4: bent lines draw as smooth curves on the board, thumbnails, bench sheet, exports and legend | 1 (`buildStrokeGeometry` is the one path for all of them), 7 (bench sheet screenshot) |
+| Success 1: handles at ends and interior points, a "+" at each segment's midpoint | 2 (`lineHandles`), 4 (drawn on the selected line) |
+| Success 2: drag the line, an end, an interior point; drag a "+" to add a bend or corner | 2 (`moveLine`, `moveLinePoint`, `insertBend`), 4 |
+| Success 3: remove a bend or corner by double-click / double-tap; Straighten removes all of them | 2 (`removeBend`, `isDoubleTap`, `straighten`), 5 |
+| Success 4: curves draw smoothly on the board, thumbnails, bench sheet, exports and legend | 1 (`buildStrokeGeometry` is the one path for all of them), 7 (bench sheet screenshot) |
 | Success 5: ends snap while drawing and while dragging an end; ring; Alt skips | 2 (`findSnapTarget`), 6 |
 | Success 6: one undo step per edit; touch-sized handles; pinch still works | 4 (history, touch, second finger), 5 (double-tap undo, Straighten undo), 3 (pinch unchanged) |
-| Success 7: existing plays look the same; no schema or plan-file change | 1 (legacy snapshot), Global Constraints (no schema change); see the ruling on multi-point straight lines below |
-| R1: bends are extra points; at most 6 by editing; versions unchanged | 2 (`MAX_LINE_BENDS`, `insertBend`), Global Constraints |
-| R2: centripetal Catmull-Rom for ≥ 3 points; 2-point unchanged; freehand unchanged; ends along the final tangent; a 2-point test | 1 |
-| R3 handle positions, freehand anchors (DP, ≤ 8, first drag simplifies, moves never do) | 2, 4 |
+| Success 7: existing plays (multi-point straight lines included) look the same; one path value added; versions unchanged | 1 (legacy snapshot with a 16-point polyline, schema and plan-file tests), Global Constraints |
+| R1: `curve` added to `STROKE_PATHS`; drawing offers straight/freehand only; 6-bend cap on both paths; versions unchanged; older builds' behaviour recorded | 1 (types, toolbar, ADR-0020 amendment), 2 (`MAX_LINE_BENDS`, `insertBend`) |
+| R2: Catmull-Rom for a curve with ≥ 3 points; straight (any length) and freehand byte-identical; ends along the final tangent; highlight and hit test follow a curve | 1 |
+| R3 handle positions: ends, bends (curve), corners (straight, drawn square), "+" on the curve or the segment midpoint, freehand anchors (DP, ≤ 8, first drag simplifies, moves never do) | 2, 4 |
+| R3 path changes: "+" on a 2-point straight line → curve; on a polyline → corner, stays straight; curve left with 2 points → straight | 2, 4, 5 |
 | R3 hit testing: handles first, then the line body, then other elements; 22 px radius; only the selected line | 4 (`press` before `hitTest`; `lineHandles` only for the selected id) |
 | R3 drags: 4 px threshold, kept inside the area, whole-line clamp keeps the shape, live preview, one entry on release | 2 (`moveLine`), 4 |
-| R3 remove a bend (300 ms, hit radius, not ends); Straighten / Make straight as one `updateElement` | 2, 5 |
+| R3 remove a bend or corner (300 ms, hit radius, not ends or anchors); Straighten / Make straight as one `updateElement` | 2, 5 |
 | R3 keyboard: Delete/Backspace still delete a selected line | unchanged code; covered by the existing keyboard tests in `RinkBoard.test.tsx` |
 | R4 when, when not, targets, radius, ties, ring, Alt, no attachment | 2, 6 |
 | R5 pure helpers in `line-editing.ts`, same reference when unchanged; hook `useStrokeEditing.ts`; RinkBoard ≤ 1057 with a test; handle and ring drawing in `drawing-utils.ts` with passed-in colours | 2, 3, 4, 6 |
 | R6 7 px handles, 22 px hit area; second finger cancels; 3:1 colours in both schemes | 4 (radius test, second-finger and touchcancel tests, contrast test), 7 (dark screenshots) |
-| Testing: pure helpers list | 2 |
-| Testing: rendering (2-point unchanged, 3-point through the middle point, arrow on the end tangent) | 1 |
-| Testing: board, mouse and touch (select, drag end, add bend, remove by double-click, move, undo/redo, snap and Alt, second finger, budget) | 3, 4, 5, 6 |
+| Testing: schema and documents (curve accepted, unknown path rejected, plan-file round trip at version 1, toolbar offers two paths) | 1 |
+| Testing: pure helpers list, including the path changes | 2 |
+| Testing: rendering (straight 2-point and multi-point and freehand unchanged, 3-point curve through the middle point, arrow on the end tangent) | 1 |
+| Testing: board, mouse and touch (select, drag end, add bend, an older polyline kept sharp, remove by double-click, move, undo/redo, snap and Alt, second finger, budget) | 3, 4, 5, 6 |
 | Testing: inspector (Straighten, Make straight) | 5 |
 | Testing: visual (light and dark, desktop and phone; handles, bent line, ring, bench sheet) | 7 |
-| Out of scope (attachment, grid, multi-select, nudging, editing in exports/print) | not touched |
+| Out of scope (attachment, grid, multi-select, nudging, editing in exports/print, auto-converting polylines, a curve drawing tool) | not touched |
 
 **Spec gaps and conflicts, and how this plan rules on them:**
-- **R2 against success criterion 7 (existing plays look the same).** The spec's Context says straight lines are stored as exactly 2 points, which holds for every line the editor draws (`finishStroke`). It does not hold for 16 starter strokes (`bo-c-route`, `wv-f1-route`, `wv-f2-route`, `wv-f3-route`, `dz-house`, `rg-c-route`, `ga-g-shuffle`, `pt-wrap`, `ph-rim-pass`, `ph-wall-pass`, `bk-carry`, `bk-deke`, `ec-figure-eight`, `pr-carry`, `sa-f2-carry`, `st-weave`), nor for v1 plays upgraded through `strokeFromV1Type` (a v1 line or arrow may carry any number of points). R2 is explicit that a straight line with ≥ 3 points is a curve, so this plan scopes criterion 7 to lines the editor could produce (2-point straight and freehand), pins those byte for byte, and accepts that multi-point starter routes and upgraded v1 lines now draw as curves. The routes are meant as curves; their sampled curves were checked to stay inside the rink (Task 1 test). Copies of starter plays already saved in hosted libraries, or already seeded into a static planner's library, keep their stored points and will also draw curved.
-- **`dz-house`** is a zone outline with real corners, so Task 1 splits it into four 2-point `zoneLine`s, and a starter test keeps any multi-point straight `line` action out of the catalog. Saved copies of the old outline will draw as a rounded shape (accepted; Straighten or redrawing fixes a copy).
-- **Lines with more than 8 points** (the starter `ec-figure-eight` has 16; v1 upgrades can have any number): a bend handle on every interior point, no "+" handles, `insertBend` refuses, Straighten works. The 6-bend cap applies to adding bends, not to stored data.
-- **Hit testing a bent line** is done against its drawn curve (`strokeCenterline`), not the chords between its points, so a press on the visible curve selects it. Freehand and 2-point lines keep today's hit test.
-- **The "+" position** ("at the midpoint of each segment, in both point space and drawn curve"): the handle sits on the drawn curve at the segment's parameter midpoint (`curvePoint(points, i, 0.5)`), which is the plain midpoint for a 2-point line.
-- **Freehand lines** get no "+" handles (R3 lists "+" handles under the straight-line positions), and their anchors can't be removed by double-tap (R3 says a *bend* handle). Anchors come from a greedy Douglas–Peucker pass capped at 8 points, which R3 names explicitly over "evenly spaced".
+- **A new path value instead of reinterpreting `straight` (owner's ruling, spec R1).** 16 starter strokes (`bo-c-route`, `wv-f1-route`, `wv-f2-route`, `wv-f3-route`, `dz-house`, `rg-c-route`, `ga-g-shuffle`, `pt-wrap`, `ph-rim-pass`, `ph-wall-pass`, `bk-carry`, `bk-deke`, `ec-figure-eight`, `pr-carry`, `sa-f2-carry`, `st-weave`) and v1-upgraded lines are multi-point `straight` polylines. They keep drawing exactly as today, so only `curve` is curved, and no starter data changes.
+- **Every place that reads `path`, checked:**
+  - `types/practice-planner.ts` (`STROKE_PATHS`, `StrokePath`): gains `curve`;
+  - `lib/utils/play-data.ts` (`z.enum(STROKE_PATHS)`): accepts it with no edit; `strokeFromV1Type` never produces it;
+  - the plan-document schema validates diagrams through `parseStoredPlayData`, so plan files accept it with no edit, and the static store's reads (`library.ts`, `sessions.ts`) and writes (`shared.ts`, `sanitizePlayDataForWrite`) go through the same functions;
+  - `finishStroke` and RinkBoard's in-progress preview only see the toolbar's `straight`/`freehand`;
+  - the legend swatch draws 2-point straight samples; the exports and print draw through `buildStrokeGeometry` (thumbnails, `drawBoardScene`);
+  - `DrawingToolbar` is the one place that listed `STROKE_PATHS` as choices, and it now lists `DRAWN_STROKE_PATHS`.
+- **The toolbar does not offer `curve`.** `OptionGroup` needs a label for every option, so offering it would be easy but would add a drawing mode the spec doesn't ask for. A curve comes only from bending a line.
+- **Older builds** reject a whole diagram that contains `curve`, rather than dropping the stroke, because `playDataSchema` validates the whole diagram. The spec's R1 records each surface's exact behaviour, and Task 1's ADR-0020 amendment records the plan-file side: an older reader refuses the file with the normal "can't open this plan" message, as for block rows.
+- **Lines with more than 8 points** (the starter `ec-figure-eight` has 16; v1 upgrades can have any number): a corner handle on every interior point, no "+" handles, `insertBend` refuses, Straighten works. The 6-bend cap limits adding points, not stored data.
+- **Corners are removable** by double-tap like bends (R3: "a bend or corner"), and removing one never changes the path. They draw as squares so a coach can tell a sharp corner from a curve's bend.
+- **Hit testing and the highlight** follow the drawn curve for `curve` lines only. `straight` and `freehand` lines keep today's behaviour, including the freehand highlight along its stored points.
+- **The "+" position:** on a curve, on the drawn curve at the segment's parameter midpoint (`curvePoint(points, i, 0.5)`); on a straight line, at the segment's midpoint.
+- **Freehand lines** get no "+" handles, and their anchors can't be removed by double-tap (spec R3). Anchors come from a greedy Douglas–Peucker pass capped at 8 points, which R3 names explicitly over "evenly spaced".
 - **Hit order** "handles, then the line body, then other elements" is read as: the selected line's handles, then the selected line's body, then the existing `hitTest` order for everything else. So a press on the selected line moves it even where a player overlaps it.
 - **Handle colours "from the theme" with 3:1 in light and dark modes:** the board's ice is drawn `#E8F4F8` in both schemes, so the dark scheme's lightened blues would fail on it (`#42A5F5` is about 2.4:1). `LINE_EDIT_COLORS` uses the light-scheme `secondary.main` and `primary.main`, asserted equal to the theme and checked for contrast in a test.
-- **Selection highlight:** it now follows the drawn centerline, which also makes a freehand line's highlight follow its smoothed curve instead of its raw points (a visual improvement, not a data change).
 - **Handle drags keep the press offset** (as element drags do), so a press up to 22 px from a handle doesn't make the point jump.
 - **Whole-line moves of a line outside or larger than the area:** once a drag starts, the move is clamped so the line ends up inside the area (a tap never moves it); along an axis on which the line is longer than the area it does not move. Snap targets outside the area are skipped, because the snapped point is clamped into the area.
 - **Double-click and double-tap** are one rule: two presses on the same bend within 300 ms (`Date.now()`) and the hit radius. The browser's `dblclick` event is not used.
@@ -3636,10 +3890,10 @@ Only if Steps 1–6 required changes. Stage the exact files by path:
 **Placeholder scan:** none. Every code step carries the code. Steps that edit `RinkBoard.tsx` quote the exact old text and show the new text. The only `<…>` text is `<N>` in Task 3's commit body (the measured line count) and the gate-fix commit template in Task 7. `SESSION_TRAILER`, `CHROMIUM_PATH` and `OUT_DIR` are read from the environment on purpose.
 
 **Type consistency:**
-- `LineHandle` (Task 2) is what `lineHandles` returns, what `hitTestLineHandle` takes and returns, what `drawLineHandles` draws (Task 4) and what the hook's `Gesture.handle` holds (Tasks 4–6).
+- `StrokePath` gains `"curve"` in Task 1; `DRAWN_STROKE_PATHS` (Task 1) is used only by the toolbar. `LineHandle` (Task 2, kinds `end`, `bend`, `corner`, `anchor`, `add`) is what `lineHandles` returns, what `hitTestLineHandle` takes and returns, what `drawLineHandles` draws (Task 4) and what the hook's `Gesture.handle` holds (Tasks 4–6).
 - `moveLinePoint(stroke, index, to, rect)`, `moveLine(stroke, delta, rect)`, `insertBend(stroke, segment, at, rect)`, `removeBend(stroke, index)`, `straighten(stroke)` (Task 2) are called with those argument orders in `useStrokeEditing.ts` (Tasks 4–6) and `ElementInspector.tsx` (Task 5).
 - `findSnapTarget(data, point, SnapOptions)` and `snapRadiusFt(minHitRadiusFt)` (Task 2) are used by `snapLineEnd` and `move` (Task 6) and by RinkBoard's stroke case (Task 6).
-- `TapRecord` and `isDoubleTap(previous, next, radiusFt)` (Task 2) are used by `press` (Task 5).
+- `TapRecord` and `isDoubleTap(previous, next, radiusFt)` (Task 2) are used by `press` (Task 5) for `bend` and `corner` handles, in both full copies of the hook (Tasks 5 and 6).
 - `LinePress` gains `time` in Task 5 and `LineMove` gains `snapRadiusFt` and `bypassSnap` in Task 6; RinkBoard's calls are updated in the same tasks.
 - `drawLineHandles(ctx, handles, transform, colors, zoom)` and `drawSnapRing(ctx, position, transform, color, zoom)` take the colours before the zoom everywhere they are called and tested.
 - `replaceDrawing(data, stroke)` (Task 2) is used by the hook's commit paths and RinkBoard's preview render (Task 4).
