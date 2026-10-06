@@ -242,7 +242,7 @@ A diagram's `area.kind` may now also be one of six quarters: `zone-left-top`, `z
 **Compatibility:** a reader built before this amendment treats an unknown area as unreadable and drops it (`upgradePlayData`), not the whole diagram:
 - a plan file (or plan link) with a quarter-ice drill opens, and that drill reads as full ice;
 - a static planner tab still on an older build reads such a drill as full ice, and would save it without its area. The IndexedDB version bump that ships with drill age groups (amendment below) makes such a tab reload before it can write;
-- a hosted tab opened before the deploy receives the quarter from the updated server and can't draw it (its rectangle table has no entry) until it is reloaded.
+- a hosted tab opened before the deploy receives the quarter from the updated server; the older build's area lookup throws on an area kind it doesn't know, so that drill's board fails to render until the tab is reloaded.
 
 From this amendment on, `areaRect` draws an area kind it doesn't know as full ice instead of throwing, so the next additive area value degrades the same way in every surface.
 
