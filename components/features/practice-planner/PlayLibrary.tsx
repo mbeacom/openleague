@@ -538,6 +538,7 @@ export function PlayLibrary({
                     playData: starter.playData,
                     focus: starter.focus,
                     goalies: starter.goalies,
+                    ageGroups: [...starter.ageGroups],
                     isTemplate: true,
                     teamId,
                 });

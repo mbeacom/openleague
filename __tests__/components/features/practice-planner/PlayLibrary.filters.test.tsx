@@ -75,6 +75,15 @@ describe("PlayLibrary drill tags", () => {
         await screen.findByText("Goalie Warm-Up");
         fireEvent.click(within(cardOf("Goalie Warm-Up")).getByRole("button", { name: /Add to my library/ }));
         await waitFor(() => expect(store.createPlay).toHaveBeenCalledWith(expect.objectContaining({ name: "Goalie Warm-Up", focus: "goalies", goalies: "required" })));
+        expect(store.createPlay.mock.calls[0][0].ageGroups).toEqual([]);
+    });
+
+    it("copies a starter's age groups", async () => {
+        const { store } = renderLibrary([]);
+        store.createPlay.mockResolvedValue({ success: true, data: { id: "cnewxxxxxxxxxxxxxxxxxxxxx", name: "Keep-Away in a Box", isTemplate: true } });
+        await screen.findByText("Keep-Away in a Box");
+        fireEvent.click(within(cardOf("Keep-Away in a Box")).getByRole("button", { name: /Add to my library/ }));
+        await waitFor(() => expect(store.createPlay).toHaveBeenCalledWith(expect.objectContaining({ name: "Keep-Away in a Box", ageGroups: ["u6", "u8", "u10"] })));
     });
 
     it("hands a selected drill over with its tags", async () => {

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { STARTER_TEMPLATES, starterTemplatePlan } from "@/lib/data/starter-templates";
 import { STARTER_PLAYS } from "@/lib/data/starter-plays";
 import { parsePlan } from "@/lib/plan-document";
+import { areaRect } from "@/lib/utils/ice-area";
+import { toAgeGroups } from "@/lib/utils/age-groups";
 import { goalieMarkerCount } from "@/lib/utils/drill-tags";
 import { drillRows, isDrillRow } from "@/lib/utils/session-rows";
 import {
@@ -19,13 +21,48 @@ const NOW = new Date("2026-10-03T18:00:00.000Z");
 const GOALIE_WARMUP = STARTER_PLAYS.find((play) => play.id === "starter-goalie-warmup")?.name;
 
 describe("starter templates", () => {
-    it("ships three templates with stable unique ids and names", () => {
+    it("ships six templates with stable unique ids and names, the age-group templates last", () => {
         expect(STARTER_TEMPLATES.map((t) => t.id)).toEqual([
             "template-skills-stations",
             "template-goalie-skater-rotation",
             "template-team-stations",
+            "template-8u-stations",
+            "template-10u-stations",
+            "template-12u-skills-games",
         ]);
-        expect(new Set(STARTER_TEMPLATES.map((t) => t.name)).size).toBe(3);
+        expect(new Set(STARTER_TEMPLATES.map((t) => t.name)).size).toBe(6);
+    });
+
+    it("tags every template with its own age groups (never derived from its drills)", () => {
+        expect(Object.fromEntries(STARTER_TEMPLATES.map((t) => [t.id, [...t.ageGroups]]))).toEqual({
+            "template-skills-stations": ["u10", "u12", "u14", "u16plus"],
+            "template-goalie-skater-rotation": ["u10", "u12", "u14", "u16plus"],
+            "template-team-stations": ["u12", "u14", "u16plus"],
+            "template-8u-stations": ["u6", "u8"],
+            "template-10u-stations": ["u10"],
+            "template-12u-skills-games": ["u12", "u14"],
+        });
+        for (const template of STARTER_TEMPLATES) expect(toAgeGroups(template.ageGroups)).toEqual([...template.ageGroups]);
+    });
+
+    it.each(["template-8u-stations", "template-10u-stations", "template-12u-skills-games"])("%s fills 60 minutes exactly", (id) => {
+        const template = STARTER_TEMPLATES.find((t) => t.id === id);
+        if (!template) throw new Error(`${id} is missing`);
+        expect(template.session.durationMinutes).toBe(60);
+        expect(sessionWallMinutes(template.session.drills, template.session.transitionMinutes)).toBe(60);
+    });
+
+    it("puts the station blocks on quarters and zones as the spec lays them out", () => {
+        const stationAreas = (id: string) => {
+            const template = STARTER_TEMPLATES.find((t) => t.id === id);
+            const block = groupStations(template?.session.drills ?? []).find((group) => group.stations.length > 1);
+            return drillRows(block?.stations ?? []).map((row) => row.playData?.area?.kind);
+        };
+        expect(stationAreas("template-8u-stations")).toEqual(["zone-left-bottom", "zone-left-top", "zone-neutral-top", "zone-right-bottom"]);
+        expect(stationAreas("template-10u-stations")).toEqual(["zone-left-bottom", "zone-left-top", "zone-right-top", "zone-neutral"]);
+        expect(stationAreas("template-12u-skills-games")).toEqual(["zone-left", "zone-neutral", "zone-right"]);
+        // Each quarter is half a zone's height.
+        expect(areaRect({ kind: "zone-left-top" }).h).toBe(42.5);
     });
 
     it("Skills Stations fills its 60 minutes exactly (spec R12)", () => {
@@ -149,6 +186,7 @@ describe("starter templates", () => {
                     description: starter!.description,
                     focus: starter!.focus,
                     goalies: starter!.goalies,
+                    ageGroups: [...starter!.ageGroups],
                     playData: starter!.playData,
                 });
             }

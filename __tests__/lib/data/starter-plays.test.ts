@@ -3,8 +3,9 @@ import { STARTER_PLAYS } from "@/lib/data/starter-plays";
 import { playDataSchema } from "@/lib/utils/play-data";
 import { RINK_DIMENSIONS } from "@/lib/utils/canvas/rink-renderer";
 import { areaRect, countElementsOutside } from "@/lib/utils/ice-area";
+import { AGE_GROUPS, toAgeGroups } from "@/lib/utils/age-groups";
 import { PLAYER_RADIUS_FT } from "@/lib/utils/canvas/glyph-metrics";
-import { PLAY_FOCUS, PLAY_GOALIES, type IceArea } from "@/types/practice-planner";
+import { ICE_AREA_PRESETS, PLAY_FOCUS, PLAY_GOALIES, type IceArea } from "@/types/practice-planner";
 
 /**
  * An annotation's text box in rink feet. drawTextAnnotation renders Arial at
@@ -100,9 +101,20 @@ describe("Starter plays pack", () => {
                 }
             });
 
-            it("opens every net toward center ice", () => {
+            it("opens goal-line nets toward center ice, and every other net toward the middle of the drill's area", () => {
+                const rect = areaRect(play.playData.area);
+                const middle = { x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 };
                 for (const item of play.playData.equipment.filter((e) => e.kind === "net")) {
-                    expect(item.rotation, item.id).toBe(item.position.x < 100 ? 180 : 0);
+                    if (item.position.x === 11 || item.position.x === 189) {
+                        expect(item.rotation, item.id).toBe(item.position.x < 100 ? 180 : 0);
+                        continue;
+                    }
+                    // A small-area net: square to the boards, its mouth facing the play. The glyph's mouth
+                    // faces (-cos θ, -sin θ) (drawEquipmentGlyph draws the back at +x, then rotates).
+                    expect([0, 90, 180, 270], item.id).toContain(item.rotation);
+                    const θ = (item.rotation * Math.PI) / 180;
+                    const facing = -Math.cos(θ) * (middle.x - item.position.x) - Math.sin(θ) * (middle.y - item.position.y);
+                    expect(facing, item.id).toBeGreaterThan(0);
                 }
             });
 
@@ -162,6 +174,15 @@ describe("Starter play ice areas", () => {
         "starter-skate-small-area-2v2": "zone-right",
         "starter-skate-stops-starts": undefined,
         "starter-skate-stickhandling": "zone-neutral",
+        "starter-goalie-quarter-station": "zone-left-bottom",
+        "starter-skate-edge-circuit": "zone-left-top",
+        "starter-skate-obstacle-lane": "zone-neutral-top",
+        "starter-skate-quarter-2v2": "zone-right-bottom",
+        "starter-skate-give-and-go": "zone-left-top",
+        "starter-skate-quick-release": "zone-right-top",
+        "starter-skate-keep-away": "zone-neutral-bottom",
+        "starter-game-3v3-cross-ice": "zone-neutral",
+        "starter-game-4v4-cross-ice": "zone-right",
     };
 
     it("gives the obvious set plays an explicit area and leaves full-ice drills unset", () => {
@@ -223,7 +244,7 @@ describe("Starter drill tags", () => {
         });
     });
 
-    it("ships nine goalie drills, every one needing a goalie", () => {
+    it("ships ten goalie drills, every one needing a goalie", () => {
         const goalieDrills = STARTER_PLAYS.filter((p) => p.focus === "goalies");
         expect(goalieDrills.map((p) => p.id).sort()).toEqual([
             "starter-goalie-angles-depth",
@@ -232,6 +253,7 @@ describe("Starter drill tags", () => {
             "starter-goalie-crease-pattern",
             "starter-goalie-post-to-post",
             "starter-goalie-puck-handling",
+            "starter-goalie-quarter-station",
             "starter-goalie-rebound-control",
             "starter-goalie-screens",
             "starter-goalie-warmup",
@@ -257,8 +279,76 @@ describe("Starter drill tags", () => {
         }
     });
 
-    it("ships eight skater fundamentals and 26 starters in all", () => {
-        expect(STARTER_PLAYS.filter((p) => p.id.startsWith("starter-skate-")).map((p) => p.focus)).toEqual(Array(8).fill("skaters"));
-        expect(STARTER_PLAYS).toHaveLength(26);
+    it("ships fourteen skater drills, two small-area games and 35 starters in all", () => {
+        expect(STARTER_PLAYS.filter((p) => p.id.startsWith("starter-skate-")).map((p) => p.focus)).toEqual(Array(14).fill("skaters"));
+        expect(STARTER_PLAYS.filter((p) => p.id.startsWith("starter-game-")).map((p) => p.focus)).toEqual(["team", "team"]);
+        expect(STARTER_PLAYS).toHaveLength(35);
+    });
+
+    it("puts every small-area drill on a quarter-ice or zone preset", () => {
+        const small = ["starter-goalie-quarter-station", "starter-skate-edge-circuit", "starter-skate-obstacle-lane", "starter-skate-quarter-2v2",
+            "starter-skate-give-and-go", "starter-skate-quick-release", "starter-skate-keep-away", "starter-game-3v3-cross-ice", "starter-game-4v4-cross-ice"];
+        for (const id of small) {
+            const kind = STARTER_PLAYS.find((p) => p.id === id)?.playData.area?.kind;
+            expect(kind && ICE_AREA_PRESETS.includes(kind as (typeof ICE_AREA_PRESETS)[number]) && /^zone-/.test(kind), id).toBe(true);
+        }
+    });
+
+});
+
+describe("Starter age groups (age-group templates R2)", () => {
+    const AGES: Record<string, string[]> = {
+        "starter-breakout-5man": ["u10", "u12", "u14", "u16plus"],
+        "starter-3man-weave": ["u10", "u12", "u14", "u16plus"],
+        "starter-pp-umbrella": ["u12", "u14", "u16plus"],
+        "starter-pk-box": ["u12", "u14", "u16plus"],
+        "starter-122-forecheck": ["u12", "u14", "u16plus"],
+        "starter-low-cycle": ["u12", "u14", "u16plus"],
+        "starter-point-shot-screen": ["u12", "u14", "u16plus"],
+        "starter-dzone-coverage": ["u12", "u14", "u16plus"],
+        "starter-nz-regroup": ["u12", "u14", "u16plus"],
+        "starter-goalie-angles-depth": ["u10", "u12", "u14", "u16plus"],
+        "starter-goalie-butterfly-recovery": ["u10", "u12", "u14", "u16plus"],
+        "starter-goalie-post-to-post": ["u12", "u14", "u16plus"],
+        "starter-goalie-rebound-control": ["u10", "u12", "u14", "u16plus"],
+        "starter-goalie-screens": ["u12", "u14", "u16plus"],
+        "starter-goalie-puck-handling": ["u12", "u14", "u16plus"],
+        "starter-goalie-breakaways": ["u10", "u12", "u14", "u16plus"],
+        "starter-goalie-warmup": [],
+        "starter-goalie-crease-pattern": ["u10", "u12", "u14", "u16plus"],
+        "starter-skate-edges-crossovers": [],
+        "starter-skate-transitions": [],
+        "starter-skate-passing-lanes": ["u10", "u12", "u14", "u16plus"],
+        "starter-skate-wrist-shots": [],
+        "starter-skate-puck-protection": [],
+        "starter-skate-small-area-2v2": [],
+        "starter-skate-stops-starts": [],
+        "starter-skate-stickhandling": [],
+        "starter-goalie-quarter-station": ["u8", "u10", "u12"],
+        "starter-skate-edge-circuit": ["u6", "u8", "u10"],
+        "starter-skate-obstacle-lane": ["u6", "u8", "u10"],
+        "starter-skate-quarter-2v2": [],
+        "starter-skate-give-and-go": ["u10", "u12", "u14"],
+        "starter-skate-quick-release": ["u10", "u12", "u14", "u16plus"],
+        "starter-skate-keep-away": ["u6", "u8", "u10"],
+        "starter-game-3v3-cross-ice": [],
+        "starter-game-4v4-cross-ice": ["u10", "u12", "u14", "u16plus"],
+    };
+
+    it("tags every starter, leaving drills that suit every age untagged", () => {
+        expect(Object.fromEntries(STARTER_PLAYS.map((p) => [p.id, [...p.ageGroups]]))).toEqual(AGES);
+    });
+
+    it("uses known groups, once each, in age order", () => {
+        for (const play of STARTER_PLAYS) {
+            expect(play.ageGroups.every((group) => (AGE_GROUPS as readonly string[]).includes(group)), play.id).toBe(true);
+            expect(toAgeGroups(play.ageGroups), play.id).toEqual([...play.ageGroups]);
+        }
+    });
+
+    it("has a drill for every age group", () => {
+        for (const group of AGE_GROUPS) {
+            expect(STARTER_PLAYS.some((p) => p.ageGroups.includes(group)), group).toBe(true);
+        }
     });
 });
