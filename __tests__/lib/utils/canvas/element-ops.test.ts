@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { findElement, updateElement, removeElement, moveElement, placePlayer, placeEquipment, finishStroke, limitMessage, rectFromDrag, isAreaClick } from "@/lib/utils/canvas/element-ops";
+import { findElement, updateElement, removeElement, moveElement, replaceDrawing, placePlayer, placeEquipment, finishStroke, limitMessage, rectFromDrag, isAreaClick } from "@/lib/utils/canvas/element-ops";
 import { ROLE_DEFAULT_COLORS } from "@/lib/utils/canvas/notation";
 import { createEmptyPlayData, iceAreaSchema } from "@/lib/utils/play-data";
 import { VALIDATION_CONSTRAINTS, type PlayData } from "@/types/practice-planner";
@@ -156,5 +156,26 @@ describe("isAreaClick", () => {
     it("treats 1 ft or more in either axis as a drag", () => {
         expect(isAreaClick({ x: 40, y: 40 }, { x: 41, y: 40 })).toBe(false);
         expect(isAreaClick({ x: 40, y: 40 }, { x: 40, y: 38.5 })).toBe(false);
+    });
+});
+
+describe("line edits through element-ops (line editing R3)", () => {
+    it("patches a line's path and points, as Straighten does", () => {
+        const bent = { ...data, drawings: [{ ...data.drawings[0], points: [{ x: 0, y: 0 }, { x: 2, y: 4 }, { x: 5, y: 5 }] }] };
+        const next = updateElement(bent, "d", { path: "straight", points: [{ x: 0, y: 0 }, { x: 5, y: 5 }] });
+        expect(next.drawings[0].points).toEqual([{ x: 0, y: 0 }, { x: 5, y: 5 }]);
+        expect(updateElement(data, "p", { points: [] } as never)).toBe(data); // not a player field
+    });
+
+    it("replaces a drawing by id", () => {
+        const edited = { ...data.drawings[0], points: [{ x: 1, y: 1 }, { x: 6, y: 6 }] };
+        const next = replaceDrawing(data, edited);
+        expect(next.drawings[0]).toBe(edited);
+        expect(next.players).toBe(data.players);
+    });
+
+    it("returns the same data for the same drawing object or an unknown id", () => {
+        expect(replaceDrawing(data, data.drawings[0])).toBe(data);
+        expect(replaceDrawing(data, { ...data.drawings[0], id: "zzz" })).toBe(data);
     });
 });

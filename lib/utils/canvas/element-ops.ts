@@ -26,13 +26,14 @@ export type SelectedElement =
     | { kind: "annotation"; element: TextAnnotation };
 
 export type ElementPatch = Partial<Pick<PlayerIcon, "role" | "label" | "color">> &
-    Partial<Pick<DrawingElement, "action" | "end" | "color">> &
+    Partial<Pick<DrawingElement, "action" | "end" | "color" | "path" | "points">> &
     Partial<Pick<EquipmentItem, "kind" | "rotation">> &
     Partial<Pick<TextAnnotation, "text" | "color">>;
 
 const ALLOWED: Record<ElementKind, readonly (keyof ElementPatch)[]> = {
     player: ["role", "label", "color"],
-    drawing: ["action", "end", "color"],
+    // path and points: the inspector's Straighten / Make straight (line editing R3)
+    drawing: ["action", "end", "color", "path", "points"],
     equipment: ["kind", "rotation"],
     annotation: ["text", "color"],
 };
@@ -96,6 +97,19 @@ export function moveElement(data: PlayData, id: string, position: Position): Pla
     const move = <T extends { id: string; position: Position }>(list: T[]) =>
         list.map((e) => (e.id === id ? { ...e, position: { ...position } } : e));
     return { ...data, players: move(data.players), equipment: move(data.equipment), annotations: move(data.annotations) };
+}
+
+/**
+ * `data` with the drawing whose id is `stroke.id` replaced by `stroke` (a line
+ * edit's result). Same reference for an unknown id or the same object, so
+ * callers can skip a no-op history entry.
+ */
+export function replaceDrawing(data: PlayData, stroke: DrawingElement): PlayData {
+    const index = data.drawings.findIndex((d) => d.id === stroke.id);
+    if (index < 0 || data.drawings[index] === stroke) return data;
+    const drawings = data.drawings.slice();
+    drawings[index] = stroke;
+    return { ...data, drawings };
 }
 
 // ============================================================================
