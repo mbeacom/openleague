@@ -19,7 +19,7 @@ import {
 } from "@/types/practice-planner";
 import type { RinkRect, StrokeOptions } from "@/types/practice-planner";
 import { FULL_RINK, TransformContext, drawRink, rinkToCanvas } from "./rink-renderer";
-import { buildStrokeGeometry, type StrokeGeometry } from "./stroke-geometry";
+import { buildStrokeGeometry, strokeCenterline, type StrokeGeometry } from "./stroke-geometry";
 import { drawPlayerGlyph, drawEquipmentGlyph } from "./glyphs";
 import { EQUIPMENT_RADIUS_FT, PLAYER_RADIUS_FT, glyphRadiusPx } from "./glyph-metrics";
 import { BOARD_COLORS } from "./notation";
@@ -244,15 +244,12 @@ export function drawElement(
         ctx.lineJoin = "round";
         ctx.globalAlpha = 0.5;
 
+        // A curve's highlight follows its curve; straight and freehand lines keep theirs on the stored points
+        const stored = element.points.map((p) => rinkToCanvas(p, transform));
+        const path = element.path === "curve" ? strokeCenterline({ path: "curve", points: stored }) : stored;
         ctx.beginPath();
-        const startCanvas = rinkToCanvas(element.points[0], transform);
-        ctx.moveTo(startCanvas.x, startCanvas.y);
-
-        for (let i = 1; i < element.points.length; i++) {
-            const pointCanvas = rinkToCanvas(element.points[i], transform);
-            ctx.lineTo(pointCanvas.x, pointCanvas.y);
-        }
-
+        ctx.moveTo(path[0].x, path[0].y);
+        for (let i = 1; i < path.length; i++) ctx.lineTo(path[i].x, path[i].y);
         ctx.stroke();
         ctx.globalAlpha = 1.0;
     }

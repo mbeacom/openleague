@@ -1,5 +1,14 @@
 import { describe, it, expect } from "vitest";
-import { buildStrokeGeometry, resampleByArcLength, smoothPath, ACTION_PATTERN } from "@/lib/utils/canvas/stroke-geometry";
+import {
+    buildStrokeGeometry,
+    catmullRomPath,
+    curvePoint,
+    resampleByArcLength,
+    smoothPath,
+    strokeCenterline,
+    ACTION_PATTERN,
+    CURVE_SAMPLES_PER_SEGMENT,
+} from "@/lib/utils/canvas/stroke-geometry";
 import { STROKE_ACTIONS, type StrokeAction } from "@/types/practice-planner";
 
 const straight = [{ x: 0, y: 0 }, { x: 100, y: 0 }];
@@ -100,5 +109,57 @@ describe("buildStrokeGeometry", () => {
         const g = geom("carry", "arrow", [{ x: 5, y: 5 }, { x: 5, y: 5 }]);
         expect(g.polylines).toEqual([]);
         expect(g.end).toBeNull();
+    });
+});
+
+describe("curve lines (line editing R2)", () => {
+    const bent = [{ x: 0, y: 0 }, { x: 50, y: 50 }, { x: 100, y: 0 }];
+    const curve = (points: { x: number; y: number }[], action: StrokeAction = "skate") =>
+        buildStrokeGeometry({ action, path: "curve", end: "arrow", points, strokeWidth: 2 }, 4);
+
+    it("draws a 3-point curve through its middle point", () => {
+        const line = curve(bent).polylines[0];
+        expect(line).toHaveLength(1 + 2 * CURVE_SAMPLES_PER_SEGMENT);
+        expect(line[0]).toEqual({ x: 0, y: 0 });
+        expect(line[CURVE_SAMPLES_PER_SEGMENT]).toEqual({ x: 50, y: 50 });
+        expect(line[line.length - 1]).toEqual({ x: 100, y: 0 });
+        // A curve, not two chords: halfway along the first segment it bulges off the chord y = x
+        const quarter = line[CURVE_SAMPLES_PER_SEGMENT / 2];
+        expect(quarter.x).toBeCloseTo(25, 6);
+        expect(quarter.y).toBeCloseTo(31.25, 6);
+    });
+
+    it("points the arrow along the curve's end tangent, not along the chord from start to end", () => {
+        const g = curve(bent);
+        const nearEnd = curvePoint(bent, 1, 1 - 1e-6);
+        const tangent = Math.atan2(0 - nearEnd.y, 100 - nearEnd.x);
+        expect(Math.abs(g.end!.angle - tangent)).toBeLessThan(0.05);
+        expect(Math.abs(g.end!.angle)).toBeGreaterThan(0.5); // the start→end chord is horizontal (angle 0)
+    });
+
+    it("passes through every point exactly, one run of samples per segment", () => {
+        const pts = [{ x: 0, y: 0 }, { x: 30, y: 20 }, { x: 60, y: 0 }, { x: 90, y: 20 }];
+        const path = catmullRomPath(pts);
+        expect(path).toHaveLength(1 + 3 * CURVE_SAMPLES_PER_SEGMENT);
+        pts.forEach((p, i) => expect(path[i * CURVE_SAMPLES_PER_SEGMENT]).toEqual(p));
+    });
+
+    it("stays finite when points coincide, and the arrow keeps a direction", () => {
+        const pts = [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 0 }, { x: 20, y: 5 }];
+        expect(catmullRomPath(pts).every((p) => Number.isFinite(p.x) && Number.isFinite(p.y))).toBe(true);
+        expect(Number.isFinite(curve(pts, "pass").end!.angle)).toBe(true);
+    });
+
+    it("curves only a curve: straight lines of any length and freehand lines keep today's centerline", () => {
+        expect(strokeCenterline({ path: "straight", points: straight })).toEqual(straight);
+        expect(strokeCenterline({ path: "straight", points: bent })).toEqual(bent);
+        const free = [{ x: 0, y: 0 }, { x: 10, y: 10 }, { x: 20, y: 0 }];
+        expect(strokeCenterline({ path: "freehand", points: free })).toEqual(smoothPath(free));
+        expect(strokeCenterline({ path: "curve", points: bent })).toEqual(catmullRomPath(bent));
+        expect(strokeCenterline({ path: "curve", points: straight })).toEqual(straight);
+    });
+
+    it("puts a 2-point line's curve midpoint at the segment midpoint", () => {
+        expect(curvePoint(straight, 0, 0.5)).toEqual({ x: 50, y: 0 });
     });
 });

@@ -213,3 +213,19 @@ The document gains, without a version bump:
 **Compatibility:** a reader built before this amendment strips the new keys and opens the file without staff. Nothing older readers rely on changes, so no bump.
 
 Spec: `docs/superpowers/specs/2026-10-04-practice-staff-design.md`.
+
+### 2026-10-05: Curved lines (one additive path value, versions stay 1 and 2)
+
+A diagram line's `path` may now be `curve` as well as `straight` and `freehand`: a smooth curve through its points, made by bending a line on the board. `PLAN_VERSION` stays 1 and `PlayData.version` stays 2.
+
+**Rules:**
+- Writers emit `curve` only for a line bent by editing; drawing still produces `straight` or `freehand`.
+- `straight` keeps its meaning, a polyline with sharp corners, so every earlier file and stored play draws exactly as before.
+
+**Compatibility:** a reader built before this amendment validates `path` against `straight` and `freehand`, so a diagram with a `curve` fails as a whole:
+- a plan file (or plan link) containing one is refused with the normal "can't open this plan" message, not the newer-version one;
+- a static planner tab still on an older build reports that drill's diagram as unreadable (the library won't open it; session views show it without a diagram) until it is reloaded. The stored drill is unchanged unless that old tab saves over it.
+
+That one-way break is accepted, as for block rows: a version bump would make older readers reject every new file, including the many with no curve.
+
+Spec: `docs/superpowers/specs/2026-10-05-practice-line-editing-design.md`.

@@ -3,7 +3,7 @@
  * `pxPerFt` scales feet-based pattern sizes. No canvas access, so every
  * pattern is unit-testable.
  */
-import type { Position, StrokeAction, StrokeEnd, StrokeOptions } from "@/types/practice-planner";
+import type { Position, StrokeAction, StrokeEnd, StrokeOptions, StrokePath } from "@/types/practice-planner";
 
 export type StrokePattern = "solid" | "ticks" | "wave" | "dashed" | "double" | "zigzag" | "thin";
 
@@ -39,6 +39,68 @@ export function smoothPath(points: Position[], iterations = 2): Position[] {
         pts = next;
     }
     return pts;
+}
+
+/** Samples per segment of a curve line (line editing R2). */
+export const CURVE_SAMPLES_PER_SEGMENT = 16;
+
+/** Centripetal (alpha 0.5) knot spacing; the floor keeps coincident points finite. */
+function nextKnot(t: number, a: Position, b: Position): number {
+    return t + Math.max(Math.sqrt(Math.hypot(b.x - a.x, b.y - a.y)), 1e-6);
+}
+
+function lerpAt(a: Position, b: Position, ta: number, tb: number, t: number): Position {
+    const w = (t - ta) / (tb - ta);
+    return { x: a.x + (b.x - a.x) * w, y: a.y + (b.y - a.y) * w };
+}
+
+/**
+ * The point at `u` (0..1) along segment `segment` (points[segment] to
+ * points[segment + 1]) of the centripetal Catmull-Rom curve through `points`
+ * (Barry–Goldman form). The ends use mirrored phantom points, so the curve
+ * leaves its first point and reaches its last along those segments.
+ */
+export function curvePoint(points: Position[], segment: number, u: number): Position {
+    const p1 = points[segment];
+    const p2 = points[segment + 1];
+    const p0 = segment > 0 ? points[segment - 1] : { x: 2 * p1.x - p2.x, y: 2 * p1.y - p2.y };
+    const p3 = segment + 2 < points.length ? points[segment + 2] : { x: 2 * p2.x - p1.x, y: 2 * p2.y - p1.y };
+    const t0 = 0;
+    const t1 = nextKnot(t0, p0, p1);
+    const t2 = nextKnot(t1, p1, p2);
+    const t3 = nextKnot(t2, p2, p3);
+    const t = t1 + (t2 - t1) * u;
+    const a1 = lerpAt(p0, p1, t0, t1, t);
+    const a2 = lerpAt(p1, p2, t1, t2, t);
+    const a3 = lerpAt(p2, p3, t2, t3, t);
+    return lerpAt(lerpAt(a1, a2, t0, t2, t), lerpAt(a2, a3, t1, t3, t), t1, t2, t);
+}
+
+/**
+ * A centripetal Catmull-Rom curve through every point, sampled into a
+ * polyline that contains each input point exactly (point i is sample
+ * i × samplesPerSegment). Fewer than 3 points come back as copies.
+ */
+export function catmullRomPath(points: Position[], samplesPerSegment: number = CURVE_SAMPLES_PER_SEGMENT): Position[] {
+    if (points.length < 3) return points.map((p) => ({ ...p }));
+    const out: Position[] = [{ ...points[0] }];
+    for (let i = 0; i < points.length - 1; i++) {
+        for (let k = 1; k < samplesPerSegment; k++) out.push(curvePoint(points, i, k / samplesPerSegment));
+        out.push({ ...points[i + 1] });
+    }
+    return out;
+}
+
+/**
+ * The line a stroke is drawn along, before its action pattern (line editing
+ * R2): a freehand line is smoothed, a curve with 3 or more points is a curve
+ * through them, and everything else (a straight polyline of any length, a
+ * 2-point curve) is its stored points.
+ */
+export function strokeCenterline(stroke: { path: StrokePath; points: Position[] }): Position[] {
+    if (stroke.path === "freehand") return smoothPath(stroke.points);
+    if (stroke.path === "curve" && stroke.points.length >= 3) return catmullRomPath(stroke.points);
+    return stroke.points.map((p) => ({ ...p }));
 }
 
 function pathLength(points: Position[]): number {
@@ -96,7 +158,7 @@ export function buildStrokeGeometry(
     stroke: StrokeOptions & { points: Position[]; strokeWidth: number },
     pxPerFt: number
 ): StrokeGeometry {
-    const base = stroke.path === "freehand" ? smoothPath(stroke.points) : stroke.points.map((p) => ({ ...p }));
+    const base = strokeCenterline(stroke);
     const total = pathLength(base);
     const pattern = ACTION_PATTERN[stroke.action];
     const lineWidth = pattern === "thin" ? stroke.strokeWidth * 0.75 : stroke.strokeWidth;

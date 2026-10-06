@@ -320,3 +320,16 @@ describe("ice area", () => {
         expect(result.ok && result.data.area).toEqual(custom);
     });
 });
+
+describe("the curve path (line editing R1)", () => {
+    const withPath = (path: string) => ({
+        ...createEmptyPlayData(),
+        drawings: [{ id: "d", action: "skate", path, end: "arrow", points: [{ x: 10, y: 10 }, { x: 30, y: 30 }, { x: 50, y: 10 }], color: "#212121", strokeWidth: 2 }],
+    });
+
+    it("accepts a curve line at version 2 and still rejects an unknown path", () => {
+        expect(playDataSchema.safeParse(withPath("curve")).success).toBe(true);
+        expect(parseStoredPlayData(withPath("curve")).ok).toBe(true);
+        expect(playDataSchema.safeParse(withPath("spline")).success).toBe(false);
+    });
+});

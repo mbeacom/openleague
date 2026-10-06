@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { DrawingToolbar, DrawingToolbarProps, OPTION_SX, TOUCH_TARGET_SX } from "@/components/features/practice-planner/DrawingToolbar";
@@ -424,5 +424,13 @@ describe("DrawingToolbar", () => {
                 expect(screen.getByLabelText(name)).toBeInTheDocument();
             }
         });
+    });
+});
+
+describe("stroke path choices (line editing R1)", () => {
+    it("offers Straight and Freehand only: a curve comes from editing, never from drawing", () => {
+        renderWithTheme(createDefaultProps({ selectedTool: "stroke" }));
+        const group = screen.getByRole("group", { name: "stroke path" });
+        expect(within(group).getAllByRole("button").map((b) => b.textContent)).toEqual(["Straight", "Freehand"]);
     });
 });

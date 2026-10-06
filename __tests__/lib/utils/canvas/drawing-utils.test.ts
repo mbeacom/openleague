@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
-import { drawStroke, drawAreaMask, drawBoardScene, drawBoardFrame } from "@/lib/utils/canvas/drawing-utils";
+import { drawStroke, drawAreaMask, drawBoardScene, drawBoardFrame, drawElement } from "@/lib/utils/canvas/drawing-utils";
+import { CURVE_SAMPLES_PER_SEGMENT } from "@/lib/utils/canvas/stroke-geometry";
 import { clearRinkCache, createTransformContext, FULL_RINK, rinkToCanvas } from "@/lib/utils/canvas/rink-renderer";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import { areaRect } from "@/lib/utils/ice-area";
@@ -203,5 +204,29 @@ describe("drawBoardFrame", () => {
         expect(built).toBe(1);
         expect(calls.some((c) => c.name === "drawImage")).toBe(true);
         expect(calls.some((c) => c.name === "roundRect")).toBe(false);
+    });
+});
+
+describe("drawElement selection highlight", () => {
+    const element = (path: "straight" | "freehand" | "curve", pts: { x: number; y: number }[]) => ({
+        id: "d", action: "skate" as const, path, end: "none" as const, points: pts, color: "#212121", strokeWidth: 2,
+    });
+    /** lineTo calls in the highlight: everything before the first stroke(). */
+    const highlightLineTos = (path: "straight" | "freehand" | "curve", pts: { x: number; y: number }[]) => {
+        const calls: Call[] = [];
+        drawElement(recordingCtx(calls), element(path, pts), transform, true);
+        const firstStroke = calls.findIndex((c) => c.name === "stroke");
+        return calls.slice(0, firstStroke).filter((c) => c.name === "lineTo").length;
+    };
+    const three = [{ x: 20, y: 40 }, { x: 60, y: 20 }, { x: 120, y: 40 }];
+
+    it("follows a curve", () => {
+        expect(highlightLineTos("curve", three)).toBe(2 * CURVE_SAMPLES_PER_SEGMENT);
+    });
+
+    it("stays on the stored points for straight and freehand lines, as before", () => {
+        expect(highlightLineTos("straight", three)).toBe(2);
+        expect(highlightLineTos("straight", points)).toBe(1);
+        expect(highlightLineTos("freehand", three)).toBe(2);
     });
 });
