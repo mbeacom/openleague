@@ -252,6 +252,35 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
             { block: "cooldown", minutes: 6, note: "Easy laps, then a stretch." },
         ]),
     },
+    {
+        id: "template-8u-tag-stops-battles",
+        name: "8U Tag, Stops and Battles",
+        description:
+            "A 50-minute practice for 8U that needs one net, one cone and a goalie: backward tag while a coach warms up the goalie, then two skater groups rotate every 8 minutes between 1-on-1 to 2-on-1 low play on the goalie and painting the cones, a water break, a 3-on-3 designated-shooter game on the same net, and a cool-down.",
+        ageGroups: ["u8"],
+        session: practice("8U Tag, Stops and Battles", 50, 0, [
+            {
+                stations: [
+                    { drill: "starter-goalie-warmup", minutes: 8, instructions: "A coach warms up the goalie while the skaters play backward tag." },
+                    { drill: "starter-skate-backward-tag", minutes: 8 },
+                ],
+            },
+            {
+                rotateEveryMinutes: 8,
+                stations: [
+                    {
+                        drill: "starter-skate-low-1v1-2v1",
+                        minutes: 8,
+                        instructions: "At least four skaters here. The first skater to the puck is on offense; the coach adds a second attacker when it helps. The defender's pass back must be deliberate.",
+                    },
+                    { drill: "starter-skate-paint-the-cones", minutes: 8, instructions: "Right foot, then left foot: alternate the lead foot every stop." },
+                ],
+            },
+            { block: "break", minutes: 2 },
+            { stations: [{ drill: "starter-game-3v3-designated-shooter", minutes: 18, instructions: "One designated shooter per team each shift; change shooters every shift." }] },
+            { block: "cooldown", minutes: 6, note: "Easy laps, then a stretch." },
+        ]),
+    },
 ];
 
 /** The template as a plan document from the running app, ready for the import flow. */
