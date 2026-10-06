@@ -130,12 +130,12 @@ All content is written by OpenLeague. "ADM-style" is used only descriptively. No
 |---|---|---|---|
 | **8U Station Practice** | 6U, 8U | 4 on quarter-ice presets | every 10 min |
 | **10U Station Practice** | 10U | 4 stations (3 on quarter-ice presets, 1 3v3 game in a zone) | every 10 min |
-| **12U Skills and Small Games** | 12U, 14U | 3 zone stations, then a 4v4 cross-ice game block | — |
+| **12U Skills and Small Games** | 12U, 14U | 3 zone stations, then a 4v4 cross-ice game block | every 7 min (goalie stays) |
 
 - The goalie station follows the existing `stays` pattern.
 - Template descriptions may say "station-based, ADM-style practice".
 
-**Drills.** About eight new starter drills, each with its own diagram on a quarter-ice or zone preset:
+**Drills.** Nine new starter drills, each with its own diagram on a quarter-ice or zone preset:
 - 2v2 quarter-ice battle;
 - 3v3 cross-ice game;
 - 4v4 cross-ice game;
@@ -143,7 +143,8 @@ All content is written by OpenLeague. "ADM-style" is used only descriptively. No
 - edges and crossovers circuit;
 - give-and-go passing triangle;
 - quick-release shooting station;
-- small-area keep-away.
+- small-area keep-away;
+- a quarter-ice goalie station (it stays while skater groups rotate).
 
 Names and descriptions are original.
 
