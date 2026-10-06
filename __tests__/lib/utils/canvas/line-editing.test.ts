@@ -20,6 +20,7 @@ import {
     type TapRecord,
 } from "@/lib/utils/canvas/line-editing";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
+import { EQUIPMENT_RADIUS_FT, PLAYER_RADIUS_FT } from "@/lib/utils/canvas/glyph-metrics";
 import { STARTER_PLAYS } from "@/lib/data/starter-plays";
 import type { DrawingElement, PlayData, Position, RinkRect, StrokePath } from "@/types/practice-planner";
 
@@ -313,6 +314,10 @@ describe("straighten", () => {
     });
 });
 
+/** Where findSnapTarget puts the line end (null = no snap). */
+const snapAt = (data: PlayData, point: Position, options: Parameters<typeof findSnapTarget>[2]) =>
+    findSnapTarget(data, point, options)?.position ?? null;
+
 describe("findSnapTarget", () => {
     const data: PlayData = {
         ...createEmptyPlayData(),
@@ -326,35 +331,47 @@ describe("findSnapTarget", () => {
     };
 
     it("snaps to the nearest target inside the radius", () => {
-        expect(findSnapTarget(data, { x: 51.2, y: 40 }, { radiusFt: 3 })).toEqual({ x: 52, y: 40 });
-        expect(findSnapTarget(data, { x: 60, y: 40 }, { radiusFt: 3 })).toBeNull();
+        expect(snapAt(data, { x: 51.2, y: 40 }, { radiusFt: 3 })).toEqual({ x: 52, y: 40 });
+        expect(snapAt(data, { x: 60, y: 40 }, { radiusFt: 3 })).toBeNull();
     });
 
     it("gives a tie to the earlier target: players, then equipment, then line ends", () => {
-        expect(findSnapTarget(data, { x: 51, y: 40 }, { radiusFt: 3 })).toEqual({ x: 50, y: 40 });
+        expect(snapAt(data, { x: 51, y: 40 }, { radiusFt: 3 })).toEqual({ x: 50, y: 40 });
     });
 
     it("snaps to another line's first and last points, not its bends", () => {
-        expect(findSnapTarget(data, { x: 101, y: 11 }, { radiusFt: 3 })).toEqual({ x: 100, y: 10 });
-        expect(findSnapTarget(data, { x: 110, y: 19 }, { radiusFt: 3 })).toBeNull();
+        expect(snapAt(data, { x: 101, y: 11 }, { radiusFt: 3 })).toEqual({ x: 100, y: 10 });
+        expect(snapAt(data, { x: 110, y: 19 }, { radiusFt: 3 })).toBeNull();
     });
 
     it("never snaps a line to itself", () => {
-        expect(findSnapTarget(data, { x: 151, y: 60 }, { radiusFt: 3 })).toEqual({ x: 150, y: 60 });
-        expect(findSnapTarget(data, { x: 151, y: 60 }, { radiusFt: 3, excludeId: "self" })).toBeNull();
+        expect(snapAt(data, { x: 151, y: 60 }, { radiusFt: 3 })).toEqual({ x: 150, y: 60 });
+        expect(snapAt(data, { x: 151, y: 60 }, { radiusFt: 3, excludeId: "self" })).toBeNull();
     });
 
     it("ignores text, and skips everything when bypassed (Alt/Option)", () => {
-        expect(findSnapTarget(data, { x: 80, y: 70 }, { radiusFt: 3 })).toBeNull();
-        expect(findSnapTarget(data, { x: 50, y: 40 }, { radiusFt: 3, bypass: true })).toBeNull();
+        expect(snapAt(data, { x: 80, y: 70 }, { radiusFt: 3 })).toBeNull();
+        expect(snapAt(data, { x: 50, y: 40 }, { radiusFt: 3, bypass: true })).toBeNull();
     });
 
     it("skips targets outside the drill's area", () => {
-        expect(findSnapTarget(data, { x: 51, y: 40 }, { radiusFt: 3, rect: { x: 51, y: 30, w: 20, h: 20 } })).toEqual({ x: 52, y: 40 });
+        expect(snapAt(data, { x: 51, y: 40 }, { radiusFt: 3, rect: { x: 51, y: 30, w: 20, h: 20 } })).toEqual({ x: 52, y: 40 });
     });
 
     it("returns a copy, never the target's own position object", () => {
-        expect(findSnapTarget(data, { x: 50, y: 40 }, { radiusFt: 3 })).not.toBe(data.players[0].position);
+        expect(snapAt(data, { x: 50, y: 40 }, { radiusFt: 3 })).not.toBe(data.players[0].position);
+    });
+
+    it("reports the target's drawn radius: a player's, an equipment item's, 0 for a line end", () => {
+        expect(findSnapTarget(data, { x: 49, y: 40 }, { radiusFt: 3 })).toEqual({ position: { x: 50, y: 40 }, radiusFt: PLAYER_RADIUS_FT });
+        expect(findSnapTarget(data, { x: 53, y: 40 }, { radiusFt: 3 })).toEqual({ position: { x: 52, y: 40 }, radiusFt: EQUIPMENT_RADIUS_FT.cone });
+        expect(findSnapTarget(data, { x: 101, y: 11 }, { radiusFt: 3 })).toEqual({ position: { x: 100, y: 10 }, radiusFt: 0 });
+    });
+
+    it("skips every target at an excluded point (the other end of the line)", () => {
+        const stacked: PlayData = { ...data, drawings: [line([{ x: 50, y: 40 }, { x: 70, y: 40 }], "straight", "on-player")] };
+        expect(snapAt(stacked, { x: 51, y: 40 }, { radiusFt: 3, excludePoint: { x: 50, y: 40 } })).toEqual({ x: 52, y: 40 });
+        expect(snapAt(stacked, { x: 49, y: 40 }, { radiusFt: 1.5, excludePoint: { x: 50, y: 40 } })).toBeNull();
     });
 
     it("uses the larger of 3 ft and the board's hit radius", () => {

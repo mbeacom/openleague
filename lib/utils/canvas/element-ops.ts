@@ -130,6 +130,11 @@ export function placeEquipment(data: PlayData, position: Position, kind: Equipme
     return { ...data, equipment: [...data.equipment, item] };
 }
 
+/** A stroke whose first and last points are under MIN_STROKE_LENGTH_FT apart is a tap, not a line. */
+export function isStrokeTap(first: Position, last: Position): boolean {
+    return Math.hypot(last.x - first.x, last.y - first.y) < MIN_STROKE_LENGTH_FT;
+}
+
 /**
  * Appends a finished stroke: `[first, last]` for straight paths, simplified
  * points for freehand. Returns `data` itself (same reference) for taps, so
@@ -145,7 +150,7 @@ export function finishStroke(
     if (rawPoints.length < 2) return data;
     const first = rawPoints[0];
     const last = rawPoints[rawPoints.length - 1];
-    if (Math.hypot(last.x - first.x, last.y - first.y) < MIN_STROKE_LENGTH_FT) return data;
+    if (isStrokeTap(first, last)) return data;
     const points = options.path === "straight" ? [{ ...first }, { ...last }] : simplifyPoints(rawPoints, 0.5);
     const stroke: DrawingElement = { id, ...options, points, color, strokeWidth: STROKE_WIDTH };
     return { ...data, drawings: [...data.drawings, stroke] };

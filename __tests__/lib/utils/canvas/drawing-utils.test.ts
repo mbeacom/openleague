@@ -11,6 +11,7 @@ import {
     SNAP_RING_RADIUS_PX,
 } from "@/lib/utils/canvas/drawing-utils";
 import { LINE_EDIT_COLORS } from "@/lib/utils/canvas/notation";
+import { EQUIPMENT_RADIUS_FT, PLAYER_RADIUS_FT, glyphRadiusPx } from "@/lib/utils/canvas/glyph-metrics";
 import type { LineHandle } from "@/lib/utils/canvas/line-editing";
 import { CURVE_SAMPLES_PER_SEGMENT } from "@/lib/utils/canvas/stroke-geometry";
 import { clearRinkCache, createTransformContext, FULL_RINK, rinkToCanvas } from "@/lib/utils/canvas/rink-renderer";
@@ -278,15 +279,48 @@ describe("drawLineHandles", () => {
 });
 
 describe("drawSnapRing", () => {
-    it("rings the target 14 px on screen in the given colour", () => {
+    const pxPerFt = Math.min(transform.scaleX, transform.scaleY);
+    const arcs = (calls: Call[]) => calls.filter((c) => c.name === "arc");
+
+    it("rings a line end 14 px on screen, a white halo under a League Blue ring", () => {
         for (const zoom of [1, 2]) {
             const calls: Call[] = [];
-            const ctx = recordingCtx(calls);
-            drawSnapRing(ctx, { x: 50, y: 40 }, transform, LINE_EDIT_COLORS.snapRing, zoom);
-            const arc = calls.find((c) => c.name === "arc")!;
+            const strokes: { strokeStyle: unknown; lineWidth: unknown }[] = [];
+            const recorder = recordingCtx(calls) as unknown as Record<string, unknown>;
+            // Each stroke records the style it was drawn with
+            const ctx = new Proxy(recorder, {
+                get: (t, prop) => (prop === "stroke" ? () => strokes.push({ strokeStyle: t.strokeStyle, lineWidth: t.lineWidth }) : t[prop as string]),
+                set: (t, prop, value) => { t[prop as string] = value; return true; },
+            }) as unknown as CanvasRenderingContext2D;
+            drawSnapRing(ctx, { position: { x: 50, y: 40 }, radiusFt: 0 }, transform, LINE_EDIT_COLORS.snapRing, zoom);
             const c = rinkToCanvas({ x: 50, y: 40 }, transform);
-            expect(arc.args.slice(0, 3)).toEqual([c.x, c.y, SNAP_RING_RADIUS_PX / zoom]);
-            expect((ctx as unknown as Record<string, unknown>).strokeStyle).toBe(LINE_EDIT_COLORS.snapRing);
+            expect(arcs(calls)).toHaveLength(1);
+            expect(arcs(calls)[0].args.slice(0, 3)).toEqual([c.x, c.y, SNAP_RING_RADIUS_PX / zoom]);
+            expect(strokes).toEqual([
+                { strokeStyle: "#FFFFFF", lineWidth: 6 / zoom },
+                { strokeStyle: LINE_EDIT_COLORS.snapRing, lineWidth: 3 / zoom },
+            ]);
         }
+    });
+
+    it("draws the ring outside the target's glyph at desktop scale", () => {
+        for (const zoom of [1, 2]) {
+            const calls: Call[] = [];
+            drawSnapRing(recordingCtx(calls), { position: { x: 50, y: 40 }, radiusFt: PLAYER_RADIUS_FT }, transform, LINE_EDIT_COLORS.snapRing, zoom);
+            const ring = arcs(calls)[0].args[2] as number;
+            const glyph = glyphRadiusPx(PLAYER_RADIUS_FT, pxPerFt, zoom);
+            expect(glyph).toBeGreaterThan(SNAP_RING_RADIUS_PX / zoom);
+            expect(ring).toBeGreaterThan(glyph);
+            expect(ring).toBeCloseTo(glyph + 5 / zoom);
+        }
+    });
+
+    it("clears a small glyph drawn at its on-screen minimum", () => {
+        const calls: Call[] = [];
+        const zoom = 1;
+        drawSnapRing(recordingCtx(calls), { position: { x: 50, y: 40 }, radiusFt: EQUIPMENT_RADIUS_FT.puck }, transform, LINE_EDIT_COLORS.snapRing, zoom);
+        const ring = arcs(calls)[0].args[2] as number;
+        expect(ring).toBe(Math.max(SNAP_RING_RADIUS_PX, glyphRadiusPx(EQUIPMENT_RADIUS_FT.puck, pxPerFt, zoom) + 5));
+        expect(ring).toBeGreaterThan(glyphRadiusPx(EQUIPMENT_RADIUS_FT.puck, pxPerFt, zoom));
     });
 });

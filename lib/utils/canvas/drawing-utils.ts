@@ -23,7 +23,7 @@ import { buildStrokeGeometry, strokeCenterline, type StrokeGeometry } from "./st
 import { drawPlayerGlyph, drawEquipmentGlyph } from "./glyphs";
 import { EQUIPMENT_RADIUS_FT, PLAYER_RADIUS_FT, glyphRadiusPx } from "./glyph-metrics";
 import { BOARD_COLORS } from "./notation";
-import type { LineHandle } from "./line-editing";
+import type { LineHandle, SnapTarget } from "./line-editing";
 
 /**
  * Visual constants for drawing
@@ -310,23 +310,38 @@ export function drawLineHandles(
     ctx.restore();
 }
 
-/** The snap ring's radius on screen, at any zoom (line editing R4). */
+/** The snap ring's smallest radius on screen, at any zoom: a line end's ring (line editing R4). */
 export const SNAP_RING_RADIUS_PX = 14;
+/** On screen, how far the ring sits outside a player's or an equipment item's glyph. */
+const SNAP_RING_GAP_PX = 5;
+/** The halo under the snap ring: white, as the handles' fill (LINE_EDIT_COLORS.handleFill) */
+const SNAP_RING_HALO = "#FFFFFF";
 
-/** Rings a snap target (rink feet) while a line end is snapping (line editing R4). */
+/**
+ * Rings a snap target while a line end is snapping (line editing R4): outside
+ * the target's drawn glyph (glyphRadiusPx, with its on-screen minimum), and at
+ * least SNAP_RING_RADIUS_PX, as a ring over a white halo so it reads on ice,
+ * lines and tokens alike.
+ */
 export function drawSnapRing(
     ctx: CanvasRenderingContext2D,
-    position: Position,
+    target: SnapTarget,
     transform: TransformContext,
     color: string,
     zoom: number = 1
 ): void {
-    const c = rinkToCanvas(position, transform);
+    const c = rinkToCanvas(target.position, transform);
+    const pxPerFt = Math.min(transform.scaleX, transform.scaleY);
+    const glyph = target.radiusFt > 0 ? glyphRadiusPx(target.radiusFt, pxPerFt, zoom) : 0;
+    const radius = Math.max(SNAP_RING_RADIUS_PX / zoom, glyph + SNAP_RING_GAP_PX / zoom);
     ctx.save();
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 2 / zoom;
     ctx.beginPath();
-    ctx.arc(c.x, c.y, SNAP_RING_RADIUS_PX / zoom, 0, Math.PI * 2);
+    ctx.arc(c.x, c.y, radius, 0, Math.PI * 2);
+    ctx.strokeStyle = SNAP_RING_HALO;
+    ctx.lineWidth = 6 / zoom;
+    ctx.stroke();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 3 / zoom;
     ctx.stroke();
     ctx.restore();
 }

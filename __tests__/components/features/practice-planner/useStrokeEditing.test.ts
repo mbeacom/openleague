@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import { useStrokeEditing } from "@/components/features/practice-planner/useStrokeEditing";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
+import { PLAYER_RADIUS_FT } from "@/lib/utils/canvas/glyph-metrics";
 import type { PlayData } from "@/types/practice-planner";
 
 const RINK = { x: 0, y: 0, w: 200, h: 85 };
@@ -24,7 +25,7 @@ describe("useStrokeEditing snap ring", () => {
         let snapped: unknown;
         act(() => { snapped = result.current.snapLineEnd({ x: 52, y: 41 }, { radiusFt: 3 }); });
         expect(snapped).toEqual({ x: 50, y: 40 });
-        expect(result.current.snapRing).toEqual({ x: 50, y: 40 });
+        expect(result.current.snapRing).toEqual({ position: { x: 50, y: 40 }, radiusFt: PLAYER_RADIUS_FT });
         expect(result.current.currentSnap()).toEqual({ x: 50, y: 40 });
         act(() => { result.current.snapLineEnd({ x: 60, y: 41 }, { radiusFt: 3 }); });
         expect(result.current.snapRing).toBeNull();
@@ -40,10 +41,22 @@ describe("useStrokeEditing snap ring", () => {
         const { result, commit } = setup();
         act(() => { result.current.press({ selectedId: "l", point: { x: 40, y: 30 }, hitRadiusFt: 3, time: 0 }); });
         act(() => { result.current.move({ x: 51, y: 39 }, { area: RINK, thresholdFt: 1, snapRadiusFt: 3, bypassSnap: false }); });
-        expect(result.current.snapRing).toEqual({ x: 50, y: 40 });
+        expect(result.current.snapRing).toEqual({ position: { x: 50, y: 40 }, radiusFt: PLAYER_RADIUS_FT });
         act(() => result.current.release());
         expect(commit).toHaveBeenCalledTimes(1);
         expect(commit.mock.calls[0][0].drawings[0].points[1]).toEqual({ x: 50, y: 40 });
         expect(result.current.snapRing).toBeNull();
+    });
+
+    it("never snaps a 2-point line's dragged end onto its other end, or onto the player under it", () => {
+        const onPlayer: PlayData = { ...data, drawings: [{ ...data.drawings[0], points: [{ x: 50, y: 40 }, { x: 80, y: 40 }] }] };
+        const commit = vi.fn();
+        const { result } = renderHook(() => useStrokeEditing({ playDataRef: { current: onPlayer }, commit }));
+        act(() => { result.current.press({ selectedId: "l", point: { x: 80, y: 40 }, hitRadiusFt: 3, time: 0 }); });
+        act(() => { result.current.move({ x: 52, y: 41 }, { area: RINK, thresholdFt: 1, snapRadiusFt: 17, bypassSnap: false }); });
+        expect(result.current.snapRing).toBeNull();
+        act(() => result.current.release());
+        expect(commit).toHaveBeenCalledTimes(1);
+        expect(commit.mock.calls[0][0].drawings[0].points).toEqual([{ x: 50, y: 40 }, { x: 52, y: 41 }]);
     });
 });

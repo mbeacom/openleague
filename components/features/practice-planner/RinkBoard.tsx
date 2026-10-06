@@ -34,6 +34,7 @@ import {
     findElement,
     finishStroke,
     isAreaClick,
+    isStrokeTap,
     limitMessage,
     moveElement,
     placeEquipment,
@@ -182,6 +183,8 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
     const dragOffsetRef = useRef(dragOffset);
     // Where the current press grabbed an element (rink feet); the drag starts past DRAG_THRESHOLD_PX from it
     const grabPointRef = useRef<Position | null>(null);
+    // Where the line being drawn starts once snapped (null = not snapped); its points stay raw
+    const strokeStartSnapRef = useRef<Position | null>(null);
     const scaleRef = useRef(scale);
     const panOffsetRef = useRef(panOffset);
 
@@ -365,11 +368,12 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
 
         // Draw current stroke in progress
         if (isDrawing && currentDrawingPoints.length > 1) {
-            // A snapped end previews where release will put it (line editing R4)
-            const tail = snapRing ?? currentDrawingPoints[currentDrawingPoints.length - 1];
+            // Snapped ends preview where release will put them (line editing R4)
+            const head = strokeStartSnapRef.current ?? currentDrawingPoints[0];
+            const tail = snapRing?.position ?? currentDrawingPoints[currentDrawingPoints.length - 1];
             const previewPoints = strokeOptions.path === "straight"
-                ? [currentDrawingPoints[0], tail]
-                : [...currentDrawingPoints.slice(0, -1), tail];
+                ? [head, tail]
+                : [head, ...currentDrawingPoints.slice(1, -1), tail];
             drawStroke(ctx, { ...strokeOptions, points: previewPoints, color: selectedColor, strokeWidth: 2 }, transform);
         }
         if (snapRing) drawSnapRing(ctx, snapRing, transform, LINE_EDIT_COLORS.snapRing, scale);
@@ -622,8 +626,10 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
                         rect: areaRect(playData.area),
                         bypass: event.nativeEvent.altKey,
                     });
+                    // The raw press point is kept: the tap filter runs on raw points (line editing R4)
+                    strokeStartSnapRef.current = start;
                     setIsDrawing(true);
-                    setCurrentDrawingPoints([start ?? clampedPos]);
+                    setCurrentDrawingPoints([clampedPos]);
                     break;
                 }
 
@@ -716,7 +722,13 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
                 const point = clampToRect(rinkPos, area);
                 setCurrentDrawingPoints((prev) => [...prev, point]);
                 // The end being drawn snaps on release; the ring shows where (line editing R4)
-                snapLineEnd(point, { radiusFt: snapRadiusFt(minHitRadiusFt()), rect: area, bypass: event.nativeEvent.altKey });
+                // and never onto the snapped start, which would leave a zero-length line
+                snapLineEnd(point, {
+                    radiusFt: snapRadiusFt(minHitRadiusFt()),
+                    rect: area,
+                    bypass: event.nativeEvent.altKey,
+                    excludePoint: strokeStartSnapRef.current ?? undefined,
+                });
             }
 
             // Drag preview: pointer clamped only to the rink, minus the grab
@@ -761,13 +773,11 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
                 return;
             }
 
-            // Finish drawing (taps shorter than 1 ft come back unchanged and are dropped)
-            if (isDrawing && selectedTool === "stroke") {
-                // The end snaps to the target the last move found (line editing R4)
-                const snapEnd = currentSnap();
-                const points = snapEnd && currentDrawingPoints.length > 1
-                    ? [...currentDrawingPoints.slice(0, -1), snapEnd]
-                    : currentDrawingPoints;
+            // Finish drawing: a tap (raw ends under 1 ft apart) is dropped, then the ends
+            // snap to the targets the press and the last move found (line editing R4)
+            const raw = currentDrawingPoints;
+            if (isDrawing && selectedTool === "stroke" && raw.length > 1 && !isStrokeTap(raw[0], raw[raw.length - 1])) {
+                const points = [strokeStartSnapRef.current ?? raw[0], ...raw.slice(1, -1), currentSnap() ?? raw[raw.length - 1]];
                 const finished = finishStroke(playData, points, strokeOptions, selectedColor, generateId());
                 if (finished !== playData) {
                     const blocked = limitMessage(playData, "drawing");
@@ -790,6 +800,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
             // Reset drawing state
             setIsDrawing(false);
             setCurrentDrawingPoints([]);
+            strokeStartSnapRef.current = null;
             clearSnap();
 
             // Reset dragging state

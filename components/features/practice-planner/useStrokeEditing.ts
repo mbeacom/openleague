@@ -25,6 +25,7 @@ import {
     removeBend,
     type LineHandle,
     type SnapOptions,
+    type SnapTarget,
     type TapRecord,
 } from "@/lib/utils/canvas/line-editing";
 
@@ -78,8 +79,8 @@ export interface StrokeEditing {
     preview: DrawingElement | null;
     /** True from press to release or cancel */
     active: boolean;
-    /** The target a line end is snapping to (null = none) */
-    snapRing: Position | null;
+    /** The target a line end is snapping to, with its drawn size for the ring (null = none) */
+    snapRing: SnapTarget | null;
 }
 
 interface Gesture {
@@ -103,40 +104,41 @@ function editedStroke(g: Gesture, pointer: Position, area: RinkRect): DrawingEle
         : moveLinePoint(g.stroke, g.handle.index, target, area);
 }
 
-const samePosition = (a: Position | null, b: Position | null) =>
-    a === b || (a !== null && b !== null && a.x === b.x && a.y === b.y);
+const sameTarget = (a: SnapTarget | null, b: SnapTarget | null) =>
+    a === b ||
+    (a !== null && b !== null && a.position.x === b.position.x && a.position.y === b.position.y && a.radiusFt === b.radiusFt);
 
 export function useStrokeEditing({ playDataRef, commit }: StrokeEditingOptions): StrokeEditing {
     const gestureRef = useRef<Gesture | null>(null);
     // The preview and the snap in refs too, so a release in the same frame as the last move reads them
     const previewRef = useRef<DrawingElement | null>(null);
-    const snapRef = useRef<Position | null>(null);
+    const snapRef = useRef<SnapTarget | null>(null);
     // The last press on a bend or corner that did not become a drag (for the double-tap)
     const lastTapRef = useRef<TapRecord | null>(null);
     const [preview, setPreviewState] = useState<DrawingElement | null>(null);
     const [active, setActive] = useState(false);
-    const [snapRing, setSnapRing] = useState<Position | null>(null);
+    const [snapRing, setSnapRing] = useState<SnapTarget | null>(null);
 
     const setPreview = useCallback((stroke: DrawingElement | null) => {
         previewRef.current = stroke;
         setPreviewState(stroke);
     }, []);
 
-    const setSnap = useCallback((target: Position | null) => {
+    const setSnap = useCallback((target: SnapTarget | null) => {
         snapRef.current = target;
-        setSnapRing((current) => (samePosition(current, target) ? current : target));
+        setSnapRing((current) => (sameTarget(current, target) ? current : target));
     }, []);
 
     const snapLineEnd = useCallback(
         (point: Position, options: SnapOptions): Position | null => {
             const target = findSnapTarget(playDataRef.current, point, options);
             setSnap(target);
-            return target;
+            return target?.position ?? null;
         },
         [playDataRef, setSnap]
     );
 
-    const currentSnap = useCallback(() => snapRef.current, []);
+    const currentSnap = useCallback(() => snapRef.current?.position ?? null, []);
     const clearSnap = useCallback(() => setSnap(null), [setSnap]);
 
     const begin = useCallback(
@@ -198,7 +200,11 @@ export function useStrokeEditing({ playDataRef, commit }: StrokeEditingOptions):
             if (handle && handle.kind === "end") {
                 // A dragged end snaps (R4); bends, anchors and whole-line moves don't
                 const target = { x: handle.position.x + pointer.x - g.grab.x, y: handle.position.y + pointer.y - g.grab.y };
-                const snap = snapLineEnd(target, { radiusFt: snapRadiusFt, excludeId: g.stroke.id, bypass: bypassSnap, rect: area });
+                // A 2-point line's end never snaps onto its other end (or whatever sits there): that would leave a
+                // zero-length line. A line with bends may close on itself.
+                const { points } = g.stroke;
+                const excludePoint = points.length === 2 ? points[handle.index === 0 ? 1 : 0] : undefined;
+                const snap = snapLineEnd(target, { radiusFt: snapRadiusFt, excludeId: g.stroke.id, excludePoint, bypass: bypassSnap, rect: area });
                 setPreview(moveLinePoint(g.stroke, handle.index, snap ?? target, area));
                 return true;
             }
@@ -223,6 +229,8 @@ export function useStrokeEditing({ playDataRef, commit }: StrokeEditingOptions):
         if (next !== current) commit(next);
     }, [playDataRef, commit, setPreview, setSnap]);
 
+    // The double-tap record is kept on purpose: the board cancels before every Select press, so clearing it here would
+    // make a second tap on a bend never count.
     const cancel = useCallback(() => {
         gestureRef.current = null;
         setPreview(null);

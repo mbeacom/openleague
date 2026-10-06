@@ -12,6 +12,7 @@ import { RINK_HEIGHT_FT, RINK_WIDTH_FT } from "@/lib/utils/play-data";
 import { rectContains } from "@/lib/utils/ice-area";
 import { clampToRect, distanceToLineSegment } from "./interaction-utils";
 import { curvePoint } from "./stroke-geometry";
+import { EQUIPMENT_RADIUS_FT, PLAYER_RADIUS_FT } from "./glyph-metrics";
 
 /** Bends (on a curve) or corners (on a straight polyline) an edit may add up to (R1). */
 export const MAX_LINE_BENDS = 6;
@@ -196,38 +197,51 @@ export interface SnapOptions {
     radiusFt: number;
     /** The line being edited: never its own target */
     excludeId?: string;
+    /** Every target at exactly this point is skipped: the line's other end, so an end never lands on it */
+    excludePoint?: Position;
     /** Alt/Option held: no snapping for this gesture */
     bypass?: boolean;
     /** Targets outside this rectangle (the drill's ice area) are skipped */
     rect?: RinkRect;
 }
 
+/** Where a line end snaps, and how large the target is drawn (so the ring can clear it). */
+export interface SnapTarget {
+    /** The target's point, a copy */
+    position: Position;
+    /** The target glyph's radius in feet: a player's or an equipment item's; 0 for a line end */
+    radiusFt: number;
+}
+
 /**
  * Where a line end at `point` snaps (R4): the nearest player centre,
  * equipment centre, or first or last point of another line within
  * `radiusFt`; ties go to the earlier target in that order. Text is never a
- * target. A copy, or null for no snap.
+ * target. Null for no snap.
  */
-export function findSnapTarget(data: PlayData, point: Position, options: SnapOptions): Position | null {
+export function findSnapTarget(data: PlayData, point: Position, options: SnapOptions): SnapTarget | null {
     if (options.bypass) return null;
-    const candidates: Position[] = [
-        ...data.players.map((p) => p.position),
-        ...data.equipment.map((e) => e.position),
+    const candidates: SnapTarget[] = [
+        ...data.players.map((p) => ({ position: p.position, radiusFt: PLAYER_RADIUS_FT })),
+        ...data.equipment.map((e) => ({ position: e.position, radiusFt: EQUIPMENT_RADIUS_FT[e.kind] })),
         ...data.drawings
             .filter((d) => d.id !== options.excludeId)
-            .flatMap((d) => [d.points[0], d.points[d.points.length - 1]]),
+            .flatMap((d) => [d.points[0], d.points[d.points.length - 1]].map((position) => ({ position, radiusFt: 0 }))),
     ];
-    let best: Position | null = null;
+    const excluded = options.excludePoint;
+    let best: SnapTarget | null = null;
     let nearest = Infinity;
     for (const c of candidates) {
-        if (options.rect && !rectContains(options.rect, c)) continue;
-        const d = Math.hypot(c.x - point.x, c.y - point.y);
+        const p = c.position;
+        if (options.rect && !rectContains(options.rect, p)) continue;
+        if (excluded && p.x === excluded.x && p.y === excluded.y) continue;
+        const d = Math.hypot(p.x - point.x, p.y - point.y);
         if (d <= options.radiusFt && d < nearest) {
             best = c;
             nearest = d;
         }
     }
-    return best ? { ...best } : null;
+    return best ? { position: { ...best.position }, radiusFt: best.radiusFt } : null;
 }
 
 /** The board's snap radius: the larger of SNAP_RADIUS_FT and its minimum hit radius in feet (R4). */

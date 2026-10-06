@@ -58,7 +58,11 @@ const STRAIGHT = [{ x: 40, y: 40 }, { x: 120, y: 40 }];
 /** Three points: a curve when the line's path is "curve", a sharp polyline when it is "straight". */
 const BENT = [{ x: 40, y: 40 }, { x: 80, y: 20 }, { x: 120, y: 40 }];
 
-function setup(props: Partial<RinkBoardProps> = {}) {
+/** A board `size` px across: 800 × 400 (desktop) unless given; a phone-sized board has a far larger hit radius in feet. */
+function setup(props: Partial<RinkBoardProps> = {}, size = { width: 800, height: 400 }) {
+    const { width, height } = size;
+    widthSpy.mockReturnValue(width);
+    heightSpy.mockReturnValue(height);
     const onPlayDataChange = vi.fn();
     const onSelectionChange = vi.fn();
     const onUndoRedoStateChange = vi.fn();
@@ -68,8 +72,8 @@ function setup(props: Partial<RinkBoardProps> = {}) {
         <RinkBoard
             ref={ref}
             mode="edit"
-            width={800}
-            height={400}
+            width={width}
+            height={height}
             selectedTool="select"
             onPlayDataChange={onPlayDataChange}
             onSelectionChange={onSelectionChange}
@@ -81,8 +85,8 @@ function setup(props: Partial<RinkBoardProps> = {}) {
     );
     const utils = render(board(playData));
     const canvas = utils.container.querySelector("canvas")!;
-    canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 400, right: 800, bottom: 400, x: 0, y: 0, toJSON: () => ({}) });
-    const transform = createTransformContext(800, 400, 20, editViewport(playData.area));
+    canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width, height, right: width, bottom: height, x: 0, y: 0, toJSON: () => ({}) });
+    const transform = createTransformContext(width, height, 20, editViewport(playData.area));
     const at = (x: number, y: number) => {
         const p = rinkToCanvas({ x, y }, transform);
         return { clientX: p.x, clientY: p.y };
@@ -443,5 +447,74 @@ describe("RinkBoard line editing: snapping", () => {
         fireEvent.mouseMove(ctx.canvas, ctx.at(110, 40));
         fireEvent.mouseUp(ctx.canvas);
         expectPoint(ctx.last().drawings[0].points[0], 100, 40);
+    });
+});
+
+describe("RinkBoard line editing: snapping on a phone-sized board", () => {
+    // 300 × 200 px over the full rink: about 1.3 px/ft, so the 22 px hit radius (and the snap radius) is about 17 ft
+    const PHONE = { width: 300, height: 200 };
+    const player = { id: "p", position: { x: 50, y: 40 }, role: "X" as const, label: "", color: "#1976D2" };
+    const draw = (path: StrokePath) => setup(
+        { playData: { ...createEmptyPlayData(), players: [player] }, selectedTool: "stroke", strokeOptions: { action: "pass", path, end: "arrow" } },
+        PHONE
+    );
+
+    it("has a snap radius well above 3 ft", () => {
+        const transform = createTransformContext(PHONE.width, PHONE.height, 20, editViewport());
+        expect(22 / Math.min(transform.scaleX, transform.scaleY)).toBeGreaterThan(15);
+    });
+
+    it("keeps a short pass started at a player, with its end where it was released", () => {
+        const ctx = draw("straight");
+        fireEvent.mouseDown(ctx.canvas, ctx.at(52, 42));
+        fireEvent.mouseMove(ctx.canvas, ctx.at(58, 40));
+        fireEvent.mouseUp(ctx.canvas);
+        const [start, end] = ctx.last().drawings[0].points;
+        expect(start).toEqual({ x: 50, y: 40 });
+        expectPoint(end, 58, 40);
+    });
+
+    it("keeps a short freehand line started at a player", () => {
+        const ctx = draw("freehand");
+        fireEvent.mouseDown(ctx.canvas, ctx.at(52, 42));
+        fireEvent.mouseMove(ctx.canvas, ctx.at(55, 46));
+        fireEvent.mouseMove(ctx.canvas, ctx.at(60, 44));
+        fireEvent.mouseUp(ctx.canvas);
+        const points = ctx.last().drawings[0].points;
+        expect(points[0]).toEqual({ x: 50, y: 40 });
+        expectPoint(points[points.length - 1], 60, 44);
+    });
+
+    it("creates nothing for a micro-drag, even between two targets it would snap to", () => {
+        const ctx = setup({
+            playData: { ...createEmptyPlayData(), players: [player], equipment: [{ id: "c", kind: "cone", position: { x: 70, y: 40 }, rotation: 0 }] },
+            selectedTool: "stroke",
+            strokeOptions: { action: "pass", path: "straight", end: "arrow" },
+        }, PHONE);
+        // Pressed nearer the player, released nearer the cone, 0.4 ft apart
+        fireEvent.mouseDown(ctx.canvas, ctx.at(59.8, 40));
+        fireEvent.mouseMove(ctx.canvas, ctx.at(60.2, 40));
+        fireEvent.mouseUp(ctx.canvas);
+        expect(ctx.onPlayDataChange).not.toHaveBeenCalled();
+    });
+
+    it("never commits a drawn line whose snapped ends coincide", () => {
+        const ctx = draw("straight");
+        fireEvent.mouseDown(ctx.canvas, ctx.at(45, 40));
+        fireEvent.mouseMove(ctx.canvas, ctx.at(55, 40));
+        fireEvent.mouseUp(ctx.canvas);
+        const drawn = ctx.onPlayDataChange.mock.calls.map((call) => (call[0] as PlayData).drawings).flat();
+        for (const d of drawn) expect(d.points[0]).not.toEqual(d.points[d.points.length - 1]);
+        expectPoint(ctx.last().drawings[0].points[1], 55, 40);
+    });
+
+    it("never drags a free end onto the player under the line's other end", () => {
+        const ctx = setup({ playData: { ...createEmptyPlayData(), players: [player], drawings: [line([{ x: 50, y: 40 }, { x: 100, y: 40 }])] } }, PHONE);
+        ctx.click(80, 40);
+        expect(ctx.onSelectionChange).toHaveBeenLastCalledWith("l");
+        ctx.drag([100, 40], [60, 40]);
+        const [start, end] = ctx.last().drawings[0].points;
+        expect(start).toEqual({ x: 50, y: 40 });
+        expectPoint(end, 60, 40);
     });
 });
