@@ -21,6 +21,7 @@ import {
 } from "@/lib/utils/canvas/line-editing";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import { EQUIPMENT_RADIUS_FT, PLAYER_RADIUS_FT } from "@/lib/utils/canvas/glyph-metrics";
+import { strokeCenterline } from "@/lib/utils/canvas/stroke-geometry";
 import { STARTER_PLAYS } from "@/lib/data/starter-plays";
 import type { DrawingElement, PlayData, Position, RinkRect, StrokePath } from "@/types/practice-planner";
 
@@ -217,6 +218,21 @@ describe("moveLine", () => {
         const area = { x: 100, y: 30, w: 20, h: 20 };
         const l = line([{ x: 90, y: 35 }, { x: 130, y: 40 }]);
         expect(moveLine(l, { x: 5, y: 3 }, area).points).toEqual([{ x: 90, y: 38 }, { x: 130, y: 43 }]);
+    });
+
+    it("keeps a curve's rendered centerline, not just its points, inside the area", () => {
+        const area = { x: 0, y: 0, w: 100, h: 60 };
+        const c = line([{ x: 40, y: 10 }, { x: 50, y: 40 }, { x: 52, y: 42 }, { x: 70, y: 10 }], "curve");
+        const storedMaxY = Math.max(...c.points.map((p) => p.y));
+        expect(Math.max(...strokeCenterline(c).map((p) => p.y))).toBeGreaterThan(storedMaxY);
+        const moved = moveLine(c, { x: 0, y: 100 }, area);
+        expect(moved).not.toBe(c);
+        for (const p of strokeCenterline(moved)) {
+            expect(p.y).toBeLessThanOrEqual(area.y + area.h + 1e-9);
+            expect(p.y).toBeGreaterThanOrEqual(area.y - 1e-9);
+        }
+        const left = moveLine(c, { x: -100, y: 0 }, area);
+        for (const p of strokeCenterline(left)) expect(p.x).toBeGreaterThanOrEqual(area.x - 1e-9);
     });
 
     it("never simplifies a freehand line", () => {

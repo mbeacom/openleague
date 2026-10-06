@@ -11,7 +11,7 @@ import type { DrawingElement, PlayData, Position, RinkRect } from "@/types/pract
 import { RINK_HEIGHT_FT, RINK_WIDTH_FT } from "@/lib/utils/play-data";
 import { rectContains } from "@/lib/utils/ice-area";
 import { clampToRect, distanceToLineSegment } from "./interaction-utils";
-import { curvePoint } from "./stroke-geometry";
+import { curvePoint, strokeCenterline } from "./stroke-geometry";
 import { EQUIPMENT_RADIUS_FT, PLAYER_RADIUS_FT } from "./glyph-metrics";
 
 /** Bends (on a curve) or corners (on a straight polyline) an edit may add up to (R1). */
@@ -145,11 +145,14 @@ function clampShift(shift: number, min: number, max: number, lo: number, hi: num
 /**
  * Moves the whole line by `delta`, clamped as a whole so every point stays
  * inside `rect` and the shape is never distorted (R3). A line longer than
- * `rect` along an axis does not move along it. Never simplifies.
+ * `rect` along an axis does not move along it. A curve is bounded by its
+ * rendered centerline, which can overshoot its points. Never simplifies.
  */
 export function moveLine(stroke: DrawingElement, delta: Position, rect: RinkRect): DrawingElement {
-    const xs = stroke.points.map((p) => p.x);
-    const ys = stroke.points.map((p) => p.y);
+    // A curve can overshoot between its points, so its drawn centerline is what must stay inside
+    const shape = stroke.path === "curve" && stroke.points.length >= 3 ? strokeCenterline(stroke) : stroke.points;
+    const xs = shape.map((p) => p.x);
+    const ys = shape.map((p) => p.y);
     const dx = clampShift(delta.x, Math.min(...xs), Math.max(...xs), rect.x, rect.x + rect.w);
     const dy = clampShift(delta.y, Math.min(...ys), Math.max(...ys), rect.y, rect.y + rect.h);
     if (dx === 0 && dy === 0) return stroke;

@@ -59,4 +59,18 @@ describe("useStrokeEditing snap ring", () => {
         expect(commit).toHaveBeenCalledTimes(1);
         expect(commit.mock.calls[0][0].drawings[0].points).toEqual([{ x: 50, y: 40 }, { x: 52, y: 41 }]);
     });
+
+    it("never snaps a curve's dragged end onto a player stacked on its other end", () => {
+        const curve: PlayData = {
+            ...data,
+            drawings: [{ ...data.drawings[0], path: "curve", points: [{ x: 50, y: 40 }, { x: 65, y: 60 }, { x: 80, y: 40 }] }],
+        };
+        const commit = vi.fn();
+        const { result } = renderHook(() => useStrokeEditing({ playDataRef: { current: curve }, commit }));
+        act(() => { result.current.press({ selectedId: "l", point: { x: 80, y: 40 }, hitRadiusFt: 3, time: 0 }); });
+        act(() => { result.current.move({ x: 52, y: 41 }, { area: RINK, thresholdFt: 1, snapRadiusFt: 17, bypassSnap: false }); });
+        expect(result.current.snapRing).toBeNull();
+        act(() => result.current.release());
+        expect(commit.mock.calls[0][0].drawings[0].points[2]).toEqual({ x: 52, y: 41 });
+    });
 });

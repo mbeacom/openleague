@@ -200,10 +200,10 @@ export function useStrokeEditing({ playDataRef, commit }: StrokeEditingOptions):
             if (handle && handle.kind === "end") {
                 // A dragged end snaps (R4); bends, anchors and whole-line moves don't
                 const target = { x: handle.position.x + pointer.x - g.grab.x, y: handle.position.y + pointer.y - g.grab.y };
-                // A 2-point line's end never snaps onto its other end (or whatever sits there): that would leave a
-                // zero-length line. A line with bends may close on itself.
+                // An end never snaps onto the line's other end (or whatever sits there), whatever its length: it would
+                // collapse a 2-point line, and close a curve or polyline onto itself by accident.
                 const { points } = g.stroke;
-                const excludePoint = points.length === 2 ? points[handle.index === 0 ? 1 : 0] : undefined;
+                const excludePoint = points[handle.index === 0 ? points.length - 1 : 0];
                 const snap = snapLineEnd(target, { radiusFt: snapRadiusFt, excludeId: g.stroke.id, excludePoint, bypass: bypassSnap, rect: area });
                 setPreview(moveLinePoint(g.stroke, handle.index, snap ?? target, area));
                 return true;
