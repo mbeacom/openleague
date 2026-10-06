@@ -6,7 +6,9 @@ import {
     drawBoardFrame,
     drawElement,
     drawLineHandles,
+    drawSnapRing,
     LINE_HANDLE_RADIUS_PX,
+    SNAP_RING_RADIUS_PX,
 } from "@/lib/utils/canvas/drawing-utils";
 import { LINE_EDIT_COLORS } from "@/lib/utils/canvas/notation";
 import type { LineHandle } from "@/lib/utils/canvas/line-editing";
@@ -272,5 +274,19 @@ describe("drawLineHandles", () => {
         const c = rinkToCanvas({ x: 70, y: 40 }, transform);
         expect(calls.filter((call) => call.name === "arc")).toHaveLength(0);
         expect(calls.find((call) => call.name === "rect")!.args).toEqual([c.x - 7, c.y - 7, 14, 14]);
+    });
+});
+
+describe("drawSnapRing", () => {
+    it("rings the target 14 px on screen in the given colour", () => {
+        for (const zoom of [1, 2]) {
+            const calls: Call[] = [];
+            const ctx = recordingCtx(calls);
+            drawSnapRing(ctx, { x: 50, y: 40 }, transform, LINE_EDIT_COLORS.snapRing, zoom);
+            const arc = calls.find((c) => c.name === "arc")!;
+            const c = rinkToCanvas({ x: 50, y: 40 }, transform);
+            expect(arc.args.slice(0, 3)).toEqual([c.x, c.y, SNAP_RING_RADIUS_PX / zoom]);
+            expect((ctx as unknown as Record<string, unknown>).strokeStyle).toBe(LINE_EDIT_COLORS.snapRing);
+        }
     });
 });

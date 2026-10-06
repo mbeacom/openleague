@@ -370,3 +370,78 @@ describe("RinkBoard line editing: removing bends", () => {
         expect(ctx.last().drawings[0]).toMatchObject({ path: "curve", points: BENT });
     });
 });
+
+describe("RinkBoard line editing: snapping", () => {
+    const targets = (): PlayData => ({
+        ...createEmptyPlayData(),
+        players: [{ id: "p", position: { x: 50, y: 40 }, role: "X", label: "", color: "#1976D2" }],
+        equipment: [{ id: "c", kind: "cone", position: { x: 100, y: 40 }, rotation: 0 }],
+    });
+    const straightTool = { selectedTool: "stroke" as const, strokeOptions: { action: "skate" as const, path: "straight" as const, end: "arrow" as const } };
+
+    it("snaps a new line's start and end to a player and a cone", () => {
+        const ctx = setup({ playData: targets(), ...straightTool });
+        fireEvent.mouseDown(ctx.canvas, ctx.at(52, 42));
+        fireEvent.mouseMove(ctx.canvas, ctx.at(80, 41));
+        fireEvent.mouseMove(ctx.canvas, ctx.at(102, 41));
+        fireEvent.mouseUp(ctx.canvas);
+        expect(ctx.last().drawings[0].points).toEqual([{ x: 50, y: 40 }, { x: 100, y: 40 }]);
+    });
+
+    it("skips snapping while Alt/Option is held", () => {
+        const ctx = setup({ playData: targets(), ...straightTool });
+        fireEvent.mouseDown(ctx.canvas, { ...ctx.at(52, 42), altKey: true });
+        fireEvent.mouseMove(ctx.canvas, { ...ctx.at(102, 41), altKey: true });
+        fireEvent.mouseUp(ctx.canvas);
+        const [start, end] = ctx.last().drawings[0].points;
+        expectPoint(start, 52, 42);
+        expectPoint(end, 102, 41);
+        expect(start).not.toEqual({ x: 50, y: 40 });
+    });
+
+    it("snaps only a freehand line's first and last points", () => {
+        const ctx = setup({ playData: targets(), selectedTool: "stroke", strokeOptions: { action: "skate", path: "freehand", end: "arrow" } });
+        fireEvent.mouseDown(ctx.canvas, ctx.at(52, 42));
+        fireEvent.mouseMove(ctx.canvas, ctx.at(65, 30));
+        fireEvent.mouseMove(ctx.canvas, ctx.at(80, 50));
+        fireEvent.mouseMove(ctx.canvas, ctx.at(101, 42));
+        fireEvent.mouseUp(ctx.canvas);
+        const points = ctx.last().drawings[0].points;
+        expect(points[0]).toEqual({ x: 50, y: 40 });
+        expect(points[points.length - 1]).toEqual({ x: 100, y: 40 });
+        expect(points.slice(1, -1).some((p) => p.x === 50 || p.x === 100)).toBe(false);
+    });
+
+    it("snaps a dragged end to another line's end, never to its own", () => {
+        const other = line([{ x: 60, y: 70 }, { x: 140, y: 60 }], "straight", "m");
+        const ctx = setup({ playData: withLines(line(STRAIGHT), other) });
+        ctx.click(60, 40);
+        ctx.drag([120, 40], [138, 58]);
+        expect(ctx.last().drawings[0].points[1]).toEqual({ x: 140, y: 60 });
+
+        const own = setup({ playData: withLines(line(STRAIGHT)) });
+        own.click(60, 40);
+        own.drag([120, 40], [42, 41]);
+        const end = own.last().drawings[0].points[1];
+        expectPoint(end, 42, 41);
+        expect(end).not.toEqual({ x: 40, y: 40 });
+    });
+
+    it("never snaps a bend or a whole-line move", () => {
+        const ctx = setup({ playData: { ...targets(), drawings: [line([{ x: 40, y: 60 }, { x: 120, y: 60 }])] } });
+        ctx.click(60, 60);
+        ctx.drag([80, 60], [99, 41]);
+        expectPoint(ctx.last().drawings[0].points[1], 99, 41);
+    });
+
+    it("ignores a target outside the drill's area", () => {
+        const ctx = setup({
+            playData: { ...createEmptyPlayData(), area: CUSTOM, players: [{ id: "p", position: { x: 98, y: 40 }, role: "X", label: "", color: "#1976D2" }] },
+            ...straightTool,
+        });
+        fireEvent.mouseDown(ctx.canvas, ctx.at(99.5, 40));
+        fireEvent.mouseMove(ctx.canvas, ctx.at(110, 40));
+        fireEvent.mouseUp(ctx.canvas);
+        expectPoint(ctx.last().drawings[0].points[0], 100, 40);
+    });
+});

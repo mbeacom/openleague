@@ -27,7 +27,7 @@ import {
     TransformContext,
     screenToRink,
 } from "@/lib/utils/canvas/rink-renderer";
-import { drawBoardFrame, drawLineHandles, drawStroke } from "@/lib/utils/canvas/drawing-utils";
+import { drawBoardFrame, drawLineHandles, drawSnapRing, drawStroke } from "@/lib/utils/canvas/drawing-utils";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import { areaMaskRect, areaRect, editViewport, withArea } from "@/lib/utils/ice-area";
 import {
@@ -58,7 +58,7 @@ import {
     type BoardView,
 } from "@/lib/utils/canvas/interaction-utils";
 import { useBoardTouch } from "./useBoardTouch";
-import { lineHandles } from "@/lib/utils/canvas/line-editing";
+import { lineHandles, snapRadiusFt } from "@/lib/utils/canvas/line-editing";
 import { LINE_EDIT_COLORS } from "@/lib/utils/canvas/notation";
 import { useStrokeEditing } from "./useStrokeEditing";
 
@@ -328,6 +328,10 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         cancel: cancelLine,
         preview: linePreview,
         active: lineGestureActive,
+        snapLineEnd,
+        currentSnap,
+        clearSnap,
+        snapRing,
     } = useStrokeEditing({ playDataRef, commit: updatePlayData });
 
     /**
@@ -361,11 +365,14 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
 
         // Draw current stroke in progress
         if (isDrawing && currentDrawingPoints.length > 1) {
+            // A snapped end previews where release will put it (line editing R4)
+            const tail = snapRing ?? currentDrawingPoints[currentDrawingPoints.length - 1];
             const previewPoints = strokeOptions.path === "straight"
-                ? [currentDrawingPoints[0], currentDrawingPoints[currentDrawingPoints.length - 1]]
-                : currentDrawingPoints;
+                ? [currentDrawingPoints[0], tail]
+                : [...currentDrawingPoints.slice(0, -1), tail];
             drawStroke(ctx, { ...strokeOptions, points: previewPoints, color: selectedColor, strokeWidth: 2 }, transform);
         }
+        if (snapRing) drawSnapRing(ctx, snapRing, transform, LINE_EDIT_COLORS.snapRing, scale);
     }, [
         transform,
         playData,
@@ -380,6 +387,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         viewPan,
         areaDrag,
         linePreview,
+        snapRing,
     ]);
 
     /**
@@ -606,10 +614,16 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
                 }
 
                 case "stroke": {
-                    // Start drawing; the limit is checked when the stroke finishes
+                    // Start drawing; the limit is checked when the stroke finishes.
+                    // The start snaps to a player, equipment or a line end (line editing R4).
                     // Requirements: 1.3, 5.1, 5.2
+                    const start = snapLineEnd(clampedPos, {
+                        radiusFt: snapRadiusFt(minHitRadiusFt()),
+                        rect: areaRect(playData.area),
+                        bypass: event.nativeEvent.altKey,
+                    });
                     setIsDrawing(true);
-                    setCurrentDrawingPoints([clampedPos]);
+                    setCurrentDrawingPoints([start ?? clampedPos]);
                     break;
                 }
 
@@ -663,6 +677,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
             pressLine,
             grabLine,
             cancelLine,
+            snapLineEnd,
         ]
     );
 
@@ -692,11 +707,16 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
             if (moveLineGesture(clampToRect(rinkPos, FULL_RINK), {
                 area,
                 thresholdFt: pxToRinkFt(DRAG_THRESHOLD_PX, transform, scaleRef.current),
+                snapRadiusFt: snapRadiusFt(minHitRadiusFt()),
+                bypassSnap: event.nativeEvent.altKey,
             })) return;
 
             // Continue drawing if in drawing mode; stroke points stay in the area
             if (isDrawing && selectedTool === "stroke") {
-                setCurrentDrawingPoints((prev) => [...prev, clampToRect(rinkPos, area)]);
+                const point = clampToRect(rinkPos, area);
+                setCurrentDrawingPoints((prev) => [...prev, point]);
+                // The end being drawn snaps on release; the ring shows where (line editing R4)
+                snapLineEnd(point, { radiusFt: snapRadiusFt(minHitRadiusFt()), rect: area, bypass: event.nativeEvent.altKey });
             }
 
             // Drag preview: pointer clamped only to the rink, minus the grab
@@ -715,7 +735,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
                 setDragPreviewPosition((prev) => (prev === null && !started ? null : dragTarget(pointer, grabOffset, area)));
             }
         },
-        [mode, transform, isDrawing, selectedTool, areaDrag, getTransformedRinkPosition, moveLineGesture]
+        [mode, transform, isDrawing, selectedTool, areaDrag, getTransformedRinkPosition, moveLineGesture, snapLineEnd, minHitRadiusFt]
     );
 
     /**
@@ -743,7 +763,12 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
 
             // Finish drawing (taps shorter than 1 ft come back unchanged and are dropped)
             if (isDrawing && selectedTool === "stroke") {
-                const finished = finishStroke(playData, currentDrawingPoints, strokeOptions, selectedColor, generateId());
+                // The end snaps to the target the last move found (line editing R4)
+                const snapEnd = currentSnap();
+                const points = snapEnd && currentDrawingPoints.length > 1
+                    ? [...currentDrawingPoints.slice(0, -1), snapEnd]
+                    : currentDrawingPoints;
+                const finished = finishStroke(playData, points, strokeOptions, selectedColor, generateId());
                 if (finished !== playData) {
                     const blocked = limitMessage(playData, "drawing");
                     if (blocked) onLimitReached?.(blocked);
@@ -765,6 +790,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
             // Reset drawing state
             setIsDrawing(false);
             setCurrentDrawingPoints([]);
+            clearSnap();
 
             // Reset dragging state
             setIsDragging(false);
@@ -790,6 +816,8 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
             updatePlayData,
             generateId,
             releaseLine,
+            currentSnap,
+            clearSnap,
         ]
     );
 

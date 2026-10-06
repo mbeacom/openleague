@@ -310,6 +310,27 @@ export function drawLineHandles(
     ctx.restore();
 }
 
+/** The snap ring's radius on screen, at any zoom (line editing R4). */
+export const SNAP_RING_RADIUS_PX = 14;
+
+/** Rings a snap target (rink feet) while a line end is snapping (line editing R4). */
+export function drawSnapRing(
+    ctx: CanvasRenderingContext2D,
+    position: Position,
+    transform: TransformContext,
+    color: string,
+    zoom: number = 1
+): void {
+    const c = rinkToCanvas(position, transform);
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2 / zoom;
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, SNAP_RING_RADIUS_PX / zoom, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+}
+
 /**
  * Draws all elements from play data: drawings, equipment, players, annotations
  *

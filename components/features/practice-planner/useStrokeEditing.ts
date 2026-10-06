@@ -1,18 +1,21 @@
 "use client";
 
 /**
- * Gesture state for editing the selected line on the rink board (line
- * editing spec R3, R5): drag the whole line, an end, a bend or a freehand
- * anchor, or a "+" handle to add a bend; double-tap a bend to remove it.
- * The geometry is pure (lib/utils/canvas/line-editing.ts); this hook holds
- * the gesture between press and release, exposes the live preview, and
- * commits one history entry per edit.
+ * Gesture state for editing lines on the rink board (line editing spec R3,
+ * R4, R5): drag the whole selected line, an end, a bend or a freehand
+ * anchor, or a "+" handle to add a bend; double-tap a bend to remove it;
+ * snap a line end (drawn or dragged) to a player, equipment or another
+ * line's end, with a ring on the target. The geometry is pure
+ * (lib/utils/canvas/line-editing.ts); this hook holds the gesture between
+ * press and release, exposes the live preview and the ring, and commits one
+ * history entry per edit.
  */
 import React, { useCallback, useRef, useState } from "react";
 import type { DrawingElement, PlayData, Position, RinkRect } from "@/types/practice-planner";
 import { findElement, replaceDrawing } from "@/lib/utils/canvas/element-ops";
 import { drawingHitRadius, hitTestDrawing, pastDragThreshold } from "@/lib/utils/canvas/interaction-utils";
 import {
+    findSnapTarget,
     hitTestLineHandle,
     insertBend,
     isDoubleTap,
@@ -21,6 +24,7 @@ import {
     moveLinePoint,
     removeBend,
     type LineHandle,
+    type SnapOptions,
     type TapRecord,
 } from "@/lib/utils/canvas/line-editing";
 
@@ -40,6 +44,10 @@ export interface LineMove {
     area: RinkRect;
     /** DRAG_THRESHOLD_PX in feet: until the pointer passes it, a press edits nothing */
     thresholdFt: number;
+    /** Snap radius in feet for a dragged end (snapRadiusFt) */
+    snapRadiusFt: number;
+    /** Alt/Option held on this move: no snapping */
+    bypassSnap: boolean;
 }
 
 export interface StrokeEditingOptions {
@@ -58,12 +66,20 @@ export interface StrokeEditing {
     move: (pointer: Position, move: LineMove) => boolean;
     /** Commits the preview as one history entry, or nothing if it changed nothing */
     release: () => void;
-    /** Drops the gesture without committing */
+    /** Drops the gesture and the ring without committing */
     cancel: () => void;
+    /** Snaps a line end being drawn: the target (shown with the ring) or null */
+    snapLineEnd: (point: Position, options: SnapOptions) => Position | null;
+    /** The last snap target (null = none), read when a drawn line is released */
+    currentSnap: () => Position | null;
+    /** Hides the ring */
+    clearSnap: () => void;
     /** The edited line while a gesture has moved it (null = none) */
     preview: DrawingElement | null;
     /** True from press to release or cancel */
     active: boolean;
+    /** The target a line end is snapping to (null = none) */
+    snapRing: Position | null;
 }
 
 interface Gesture {
@@ -87,19 +103,41 @@ function editedStroke(g: Gesture, pointer: Position, area: RinkRect): DrawingEle
         : moveLinePoint(g.stroke, g.handle.index, target, area);
 }
 
+const samePosition = (a: Position | null, b: Position | null) =>
+    a === b || (a !== null && b !== null && a.x === b.x && a.y === b.y);
+
 export function useStrokeEditing({ playDataRef, commit }: StrokeEditingOptions): StrokeEditing {
     const gestureRef = useRef<Gesture | null>(null);
-    // The preview in a ref too, so a release in the same frame as the last move reads it
+    // The preview and the snap in refs too, so a release in the same frame as the last move reads them
     const previewRef = useRef<DrawingElement | null>(null);
+    const snapRef = useRef<Position | null>(null);
     // The last press on a bend or corner that did not become a drag (for the double-tap)
     const lastTapRef = useRef<TapRecord | null>(null);
     const [preview, setPreviewState] = useState<DrawingElement | null>(null);
     const [active, setActive] = useState(false);
+    const [snapRing, setSnapRing] = useState<Position | null>(null);
 
     const setPreview = useCallback((stroke: DrawingElement | null) => {
         previewRef.current = stroke;
         setPreviewState(stroke);
     }, []);
+
+    const setSnap = useCallback((target: Position | null) => {
+        snapRef.current = target;
+        setSnapRing((current) => (samePosition(current, target) ? current : target));
+    }, []);
+
+    const snapLineEnd = useCallback(
+        (point: Position, options: SnapOptions): Position | null => {
+            const target = findSnapTarget(playDataRef.current, point, options);
+            setSnap(target);
+            return target;
+        },
+        [playDataRef, setSnap]
+    );
+
+    const currentSnap = useCallback(() => snapRef.current, []);
+    const clearSnap = useCallback(() => setSnap(null), [setSnap]);
 
     const begin = useCallback(
         (stroke: DrawingElement, handle: LineHandle | null, point: Position) => {
@@ -148,7 +186,7 @@ export function useStrokeEditing({ playDataRef, commit }: StrokeEditingOptions):
     const grab = useCallback((stroke: DrawingElement, point: Position) => begin(stroke, null, point), [begin]);
 
     const move = useCallback(
-        (pointer: Position, { area, thresholdFt }: LineMove): boolean => {
+        (pointer: Position, { area, thresholdFt, snapRadiusFt, bypassSnap }: LineMove): boolean => {
             const g = gestureRef.current;
             if (!g) return false;
             // A press that never travels the drag threshold is a tap: it edits nothing
@@ -156,10 +194,18 @@ export function useStrokeEditing({ playDataRef, commit }: StrokeEditingOptions):
                 if (!pastDragThreshold(g.grab, pointer, thresholdFt)) return true;
                 g.started = true;
             }
+            const handle = g.handle;
+            if (handle && handle.kind === "end") {
+                // A dragged end snaps (R4); bends, anchors and whole-line moves don't
+                const target = { x: handle.position.x + pointer.x - g.grab.x, y: handle.position.y + pointer.y - g.grab.y };
+                const snap = snapLineEnd(target, { radiusFt: snapRadiusFt, excludeId: g.stroke.id, bypass: bypassSnap, rect: area });
+                setPreview(moveLinePoint(g.stroke, handle.index, snap ?? target, area));
+                return true;
+            }
             setPreview(editedStroke(g, pointer, area));
             return true;
         },
-        [setPreview]
+        [setPreview, snapLineEnd]
     );
 
     const release = useCallback(() => {
@@ -168,19 +214,21 @@ export function useStrokeEditing({ playDataRef, commit }: StrokeEditingOptions):
         gestureRef.current = null;
         setPreview(null);
         setActive(false);
+        setSnap(null);
         // A drag is not a tap: the next press on the bend starts a new double-tap
         if (g?.started) lastTapRef.current = null;
         if (!g?.started || !edited || edited === g.stroke) return;
         const current = playDataRef.current;
         const next = replaceDrawing(current, edited);
         if (next !== current) commit(next);
-    }, [playDataRef, commit, setPreview]);
+    }, [playDataRef, commit, setPreview, setSnap]);
 
     const cancel = useCallback(() => {
         gestureRef.current = null;
         setPreview(null);
         setActive(false);
-    }, [setPreview]);
+        setSnap(null);
+    }, [setPreview, setSnap]);
 
-    return { press, grab, move, release, cancel, preview, active };
+    return { press, grab, move, release, cancel, snapLineEnd, currentSnap, clearSnap, preview, active, snapRing };
 }
