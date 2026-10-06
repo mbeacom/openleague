@@ -52,10 +52,11 @@ import {
     DRAG_THRESHOLD_PX,
     pastDragThreshold,
     pxToRinkFt,
-    pinchView,
     clampPan,
     viewportContentRect,
+    type BoardView,
 } from "@/lib/utils/canvas/interaction-utils";
+import { useBoardTouch } from "./useBoardTouch";
 
 /**
  * Props for the RinkBoard component
@@ -117,11 +118,6 @@ function isEditableTarget(target: EventTarget | null): boolean {
 
 const DEFAULT_COLOR = "#212121";
 const DEFAULT_STROKE_OPTIONS: StrokeOptions = { action: "skate", path: "freehand", end: "arrow" };
-/**
- * Tools whose touch tap acts once (place, erase, ask for text). On touch they
- * wait for the finger to lift, so the first finger of a pinch never acts.
- */
-const TAP_TOOLS: ReadonlySet<DrawingTool> = new Set<DrawingTool>(["player", "equipment", "eraser", "text"]);
 /** Minimum on-screen hit radius in CSS pixels, so small glyphs stay tappable */
 const MIN_HIT_RADIUS_PX = 22;
 
@@ -173,10 +169,6 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
     // Zoom/pan (pinch) state
     const [scale, setScale] = useState(1);
     const [panOffset, setPanOffset] = useState<Position>({ x: 0, y: 0 });
-    // The view and fingers when the current pinch began (null = no pinch)
-    const pinchStartRef = useRef<{ zoom: number; pan: Position; center: Position; distance: number } | null>(null);
-    // A touch tap with a TAP_TOOLS tool, waiting for touchend (client px; null = none)
-    const pendingTapRef = useRef<{ clientX: number; clientY: number } | null>(null);
 
     // Refs to avoid stale closures in event handlers
     // These refs hold the latest values without triggering callback recreation
@@ -291,15 +283,6 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
     // transform at the same zoom) can't leave the content off-screen.
     const viewPan = useMemo(() => boundPan(panOffset, scale), [boundPan, panOffset, scale]);
     useEffect(() => { panOffsetRef.current = viewPan; }, [viewPan]);
-
-    // A new viewport starts unzoomed: a pinch-zoom/pan made for the old one would
-    // misframe it. A pinch in progress ends too, or its next move would re-apply it.
-    useEffect(() => {
-        pinchStartRef.current = null;
-        pendingTapRef.current = null;
-        setScale(1);
-        setPanOffset({ x: 0, y: 0 });
-    }, [viewX, viewY, viewW, viewH]);
 
     /**
      * Initialize history with initial play data
@@ -834,46 +817,6 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         return () => window.removeEventListener("keydown", handleKeyDown);
     }, [mode, handleUndo, handleRedo]);
 
-    /**
-     * Calculate distance between two touch points
-     */
-    const getTouchDistance = useCallback((touch1: React.Touch, touch2: React.Touch): number => {
-        const dx = touch1.clientX - touch2.clientX;
-        const dy = touch1.clientY - touch2.clientY;
-        return Math.sqrt(dx * dx + dy * dy);
-    }, []);
-
-    /**
-     * Center point between two touches, relative to the canvas (the space
-     * the zoom/pan transform works in)
-     */
-    const getTouchCenter = useCallback((touch1: React.Touch, touch2: React.Touch): Position => {
-        const rect = canvasRef.current?.getBoundingClientRect();
-        return {
-            x: (touch1.clientX + touch2.clientX) / 2 - (rect?.left ?? 0),
-            y: (touch1.clientY + touch2.clientY) / 2 - (rect?.top ?? 0),
-        };
-    }, []);
-
-    /**
-     * Starts a pinch from the current view and these touches when exactly two
-     * are down, and ends it otherwise. Called whenever the finger count
-     * changes, so a pinch never continues from a different pair of fingers.
-     */
-    const capturePinch = useCallback(
-        (touches: React.TouchList) => {
-            pinchStartRef.current = touches.length === 2
-                ? {
-                    zoom: scaleRef.current,
-                    pan: panOffsetRef.current,
-                    center: getTouchCenter(touches[0], touches[1]),
-                    distance: getTouchDistance(touches[0], touches[1]),
-                }
-                : null;
-        },
-        [getTouchCenter, getTouchDistance]
-    );
-
     /** Runs handleMouseDown for a touch point (it maps the point through zoom/pan). */
     const simulateMouseDown = useCallback(
         (clientX: number, clientY: number) => {
@@ -884,6 +827,18 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
             } as React.MouseEvent<HTMLCanvasElement>);
         },
         [handleMouseDown]
+    );
+
+    /** Runs handleMouseMove for a touch point: a one-finger move acts like the mouse. */
+    const simulateMouseMove = useCallback(
+        (clientX: number, clientY: number) => {
+            handleMouseMove({
+                nativeEvent: new MouseEvent("mousemove", { clientX, clientY }),
+                preventDefault: () => { /* No-op: touch preventDefault handled at parent level */ },
+                stopPropagation: () => { /* No-op: propagation control not needed for simulated events */ },
+            } as React.MouseEvent<HTMLCanvasElement>);
+        },
+        [handleMouseMove]
     );
 
     /**
@@ -905,123 +860,43 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
     }, []);
 
     /**
-     * Handle touch start event
-     * Requirements: 3.5
+     * Applies a pinch's view. The anchored pan is bounded, so the rink can't be
+     * pinched off-screen, and the refs follow at once, so a tap right after the
+     * pinch maps through the new view. Requirements: 3.5
      */
-    const handleTouchStart = useCallback(
-        (event: React.TouchEvent<HTMLCanvasElement>) => {
-            if (!transform || !canvasRef.current) return;
-
-            // No preventDefault here: React registers touchstart/touchmove as
-            // passive listeners, so it would throw on every move. The canvas's
-            // `touch-action: none` is what stops scrolling and browser zoom.
-
-            if (event.touches.length === 1) {
-                pendingTapRef.current = null; // never replay an older, unfinished tap
-                const { clientX, clientY } = event.touches[0];
-                // Place / erase / text act on touchend, and only for a still,
-                // one-finger tap: this finger may be the first of a pinch.
-                if (!areaTool && TAP_TOOLS.has(selectedTool)) {
-                    pendingTapRef.current = { clientX, clientY };
-                    return;
-                }
-                // Select (drag), stroke and the area tool start now, like a mouse down
-                simulateMouseDown(clientX, clientY);
-            } else {
-                pendingTapRef.current = null;
-                // Two touches pinch to zoom or pan (Requirements: 3.5); a third
-                // finger ends the pinch until the count is back to two.
-                capturePinch(event.touches);
-                // The pinch takes over: nothing the coach was dragging or
-                // drawing may commit on the final touchend.
-                abandonTransientInteraction();
-            }
+    const applyPinchView = useCallback(
+        (view: BoardView) => {
+            const pan = boundPan(view.pan, view.zoom);
+            scaleRef.current = view.zoom;
+            panOffsetRef.current = pan;
+            setScale(view.zoom);
+            setPanOffset(pan);
         },
-        [transform, areaTool, selectedTool, capturePinch, simulateMouseDown, abandonTransientInteraction]
+        [boundPan]
     );
 
-    /**
-     * Handle touch move event
-     * Requirements: 3.5
-     */
-    const handleTouchMove = useCallback(
-        (event: React.TouchEvent<HTMLCanvasElement>) => {
-            if (!transform || !canvasRef.current) return;
+    // Touch: one finger acts like the mouse, two fingers pinch (useBoardTouch)
+    const { handleTouchStart, handleTouchMove, handleTouchEnd, handleTouchCancel, resetGestures } = useBoardTouch({
+        canvasRef,
+        enabled: transform !== null,
+        areaTool,
+        selectedTool,
+        scaleRef,
+        panOffsetRef,
+        applyView: applyPinchView,
+        onPointerDown: simulateMouseDown,
+        onPointerMove: simulateMouseMove,
+        onPointerUp: handleMouseUp,
+        onAbandon: abandonTransientInteraction,
+    });
 
-            // No preventDefault here: React registers touchstart/touchmove as
-            // passive listeners, so it would throw on every move. The canvas's
-            // `touch-action: none` is what stops scrolling and browser zoom.
-
-            if (event.touches.length === 1) {
-                // A pending tap that travels past the drag threshold is not a tap
-                const tap = pendingTapRef.current;
-                const touch = event.touches[0];
-                if (tap && Math.hypot(touch.clientX - tap.clientX, touch.clientY - tap.clientY) >= DRAG_THRESHOLD_PX) {
-                    pendingTapRef.current = null;
-                }
-                // Single touch - treat like mouse move
-                const mouseEvent = new MouseEvent("mousemove", {
-                    clientX: event.touches[0].clientX,
-                    clientY: event.touches[0].clientY,
-                });
-                handleMouseMove({
-                    nativeEvent: mouseEvent,
-                    preventDefault: () => { },
-                    stopPropagation: () => { },
-                } as React.MouseEvent<HTMLCanvasElement>);
-            } else if (event.touches.length === 2 && pinchStartRef.current) {
-                // Two touches: zoom about the fingers' midpoint and pan with it
-                // Requirements: 3.5
-                // The anchored pan is then bounded, so the rink can't be pinched off-screen.
-                const view = pinchView(pinchStartRef.current, {
-                    center: getTouchCenter(event.touches[0], event.touches[1]),
-                    distance: getTouchDistance(event.touches[0], event.touches[1]),
-                });
-                const pan = boundPan(view.pan, view.zoom);
-                // The refs follow at once, so a tap right after the pinch maps through the new view.
-                scaleRef.current = view.zoom;
-                panOffsetRef.current = pan;
-                setScale(view.zoom);
-                setPanOffset(pan);
-            }
-        },
-        [transform, getTouchDistance, getTouchCenter, handleMouseMove, boundPan]
-    );
-
-    /**
-     * Handle touch end event
-     * Requirements: 3.5
-     */
-    const handleTouchEnd = useCallback(
-        (event: React.TouchEvent<HTMLCanvasElement>) => {
-            // Suppresses the compatibility mouse events and click after a tap.
-            // A touchend the browser marks non-cancelable logs an error if
-            // cancelled, so only cancel when it can be.
-            if (event.cancelable) event.preventDefault();
-
-            if (event.touches.length === 0) {
-                // A still one-finger tap with a place / erase / text tool acts now
-                const tap = pendingTapRef.current;
-                pendingTapRef.current = null;
-                if (tap) simulateMouseDown(tap.clientX, tap.clientY);
-                // All touches ended - treat like mouse up
-                handleMouseUp();
-                pinchStartRef.current = null;
-            } else {
-                // Fewer fingers remain: one ends the pinch; two (after a
-                // third lifted) restart it from the pair that is left.
-                capturePinch(event.touches);
-            }
-        },
-        [handleMouseUp, simulateMouseDown, capturePinch]
-    );
-
-    /** The browser took the touches away (e.g. a system gesture): drop the pending tap, the pinch and any interaction in progress. */
-    const handleTouchCancel = useCallback(() => {
-        pendingTapRef.current = null;
-        pinchStartRef.current = null;
-        abandonTransientInteraction();
-    }, [abandonTransientInteraction]);
+    // A new viewport starts unzoomed: a pinch-zoom/pan made for the old one would
+    // misframe it. A pinch in progress ends too, or its next move would re-apply it.
+    useEffect(() => {
+        resetGestures();
+        setScale(1);
+        setPanOffset({ x: 0, y: 0 });
+    }, [viewX, viewY, viewW, viewH, resetGestures]);
 
     return (
         <div
