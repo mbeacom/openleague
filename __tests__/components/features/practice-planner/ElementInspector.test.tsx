@@ -63,3 +63,37 @@ describe("ElementInspector", () => {
         expect(onChange.mock.calls.filter(([p]) => "label" in p)).toEqual([[{ label: "G1" }]]);
     });
 });
+
+describe("Straighten (line editing R3)", () => {
+    const drawing = (path: "straight" | "freehand" | "curve", points: { x: number; y: number }[]): SelectedElement => ({
+        kind: "drawing",
+        element: { id: "d", action: "skate", path, end: "arrow", points, color: "#212121", strokeWidth: 2 },
+    });
+
+    it("straightens a curve, keeping its ends", async () => {
+        const onChange = wrap(drawing("curve", [{ x: 0, y: 0 }, { x: 5, y: 9 }, { x: 10, y: 0 }]));
+        const button = screen.getByRole("button", { name: "Straighten" });
+        expect(button).toHaveStyle({ minHeight: "44px" });
+        await userEvent.click(button);
+        expect(onChange).toHaveBeenCalledWith({ path: "straight", points: [{ x: 0, y: 0 }, { x: 10, y: 0 }] });
+    });
+
+    it("straightens an older polyline", async () => {
+        const onChange = wrap(drawing("straight", [{ x: 0, y: 0 }, { x: 5, y: 9 }, { x: 10, y: 0 }]));
+        await userEvent.click(screen.getByRole("button", { name: "Straighten" }));
+        expect(onChange).toHaveBeenCalledWith({ path: "straight", points: [{ x: 0, y: 0 }, { x: 10, y: 0 }] });
+    });
+
+    it("offers Make straight for a freehand line", async () => {
+        const onChange = wrap(drawing("freehand", [{ x: 0, y: 0 }, { x: 4, y: 3 }, { x: 8, y: 1 }]));
+        expect(screen.queryByRole("button", { name: "Straighten" })).not.toBeInTheDocument();
+        await userEvent.click(screen.getByRole("button", { name: "Make straight" }));
+        expect(onChange).toHaveBeenCalledWith({ path: "straight", points: [{ x: 0, y: 0 }, { x: 8, y: 1 }] });
+    });
+
+    it("offers neither for a 2-point straight line", () => {
+        wrap(stroke);
+        expect(screen.queryByRole("button", { name: "Straighten" })).not.toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "Make straight" })).not.toBeInTheDocument();
+    });
+});

@@ -1,5 +1,19 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
-import { drawStroke, drawAreaMask, drawBoardScene, drawBoardFrame } from "@/lib/utils/canvas/drawing-utils";
+import {
+    drawStroke,
+    drawAreaMask,
+    drawBoardScene,
+    drawBoardFrame,
+    drawElement,
+    drawLineHandles,
+    drawSnapRing,
+    LINE_HANDLE_RADIUS_PX,
+    SNAP_RING_RADIUS_PX,
+} from "@/lib/utils/canvas/drawing-utils";
+import { LINE_EDIT_COLORS } from "@/lib/utils/canvas/notation";
+import { EQUIPMENT_RADIUS_FT, PLAYER_RADIUS_FT, glyphRadiusPx } from "@/lib/utils/canvas/glyph-metrics";
+import type { LineHandle } from "@/lib/utils/canvas/line-editing";
+import { CURVE_SAMPLES_PER_SEGMENT } from "@/lib/utils/canvas/stroke-geometry";
 import { clearRinkCache, createTransformContext, FULL_RINK, rinkToCanvas } from "@/lib/utils/canvas/rink-renderer";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import { areaRect } from "@/lib/utils/ice-area";
@@ -203,5 +217,110 @@ describe("drawBoardFrame", () => {
         expect(built).toBe(1);
         expect(calls.some((c) => c.name === "drawImage")).toBe(true);
         expect(calls.some((c) => c.name === "roundRect")).toBe(false);
+    });
+});
+
+describe("drawElement selection highlight", () => {
+    const element = (path: "straight" | "freehand" | "curve", pts: { x: number; y: number }[]) => ({
+        id: "d", action: "skate" as const, path, end: "none" as const, points: pts, color: "#212121", strokeWidth: 2,
+    });
+    /** lineTo calls in the highlight: everything before the first stroke(). */
+    const highlightLineTos = (path: "straight" | "freehand" | "curve", pts: { x: number; y: number }[]) => {
+        const calls: Call[] = [];
+        drawElement(recordingCtx(calls), element(path, pts), transform, true);
+        const firstStroke = calls.findIndex((c) => c.name === "stroke");
+        return calls.slice(0, firstStroke).filter((c) => c.name === "lineTo").length;
+    };
+    const three = [{ x: 20, y: 40 }, { x: 60, y: 20 }, { x: 120, y: 40 }];
+
+    it("follows a curve", () => {
+        expect(highlightLineTos("curve", three)).toBe(2 * CURVE_SAMPLES_PER_SEGMENT);
+    });
+
+    it("stays on the stored points for straight and freehand lines, as before", () => {
+        expect(highlightLineTos("straight", three)).toBe(2);
+        expect(highlightLineTos("straight", points)).toBe(1);
+        expect(highlightLineTos("freehand", three)).toBe(2);
+    });
+});
+
+describe("drawLineHandles", () => {
+    const handles: LineHandle[] = [
+        { kind: "end", index: 0, position: { x: 20, y: 40 } },
+        { kind: "end", index: 1, position: { x: 120, y: 40 } },
+        { kind: "add", segment: 0, position: { x: 70, y: 40 } },
+    ];
+
+    it("draws every handle 7 px on screen, whatever the zoom", () => {
+        for (const zoom of [1, 2]) {
+            const calls: Call[] = [];
+            drawLineHandles(recordingCtx(calls), handles, transform, LINE_EDIT_COLORS, zoom);
+            const arcs = calls.filter((c) => c.name === "arc");
+            expect(arcs).toHaveLength(3);
+            for (const arc of arcs) expect(arc.args[2]).toBeCloseTo(LINE_HANDLE_RADIUS_PX / zoom);
+            const mid = rinkToCanvas({ x: 70, y: 40 }, transform);
+            expect(arcs[2].args.slice(0, 2)).toEqual([mid.x, mid.y]);
+        }
+    });
+
+    it("draws a plus on '+' handles only", () => {
+        const calls: Call[] = [];
+        drawLineHandles(recordingCtx(calls), handles, transform, LINE_EDIT_COLORS);
+        expect(calls.filter((c) => c.name === "moveTo")).toHaveLength(2);
+    });
+
+    it("draws a polyline's corner as a 14 px square", () => {
+        const calls: Call[] = [];
+        drawLineHandles(recordingCtx(calls), [{ kind: "corner", index: 1, position: { x: 70, y: 40 } }], transform, LINE_EDIT_COLORS);
+        const c = rinkToCanvas({ x: 70, y: 40 }, transform);
+        expect(calls.filter((call) => call.name === "arc")).toHaveLength(0);
+        expect(calls.find((call) => call.name === "rect")!.args).toEqual([c.x - 7, c.y - 7, 14, 14]);
+    });
+});
+
+describe("drawSnapRing", () => {
+    const pxPerFt = Math.min(transform.scaleX, transform.scaleY);
+    const arcs = (calls: Call[]) => calls.filter((c) => c.name === "arc");
+
+    it("rings a line end 14 px on screen, a white halo under a League Blue ring", () => {
+        for (const zoom of [1, 2]) {
+            const calls: Call[] = [];
+            const strokes: { strokeStyle: unknown; lineWidth: unknown }[] = [];
+            const recorder = recordingCtx(calls) as unknown as Record<string, unknown>;
+            // Each stroke records the style it was drawn with
+            const ctx = new Proxy(recorder, {
+                get: (t, prop) => (prop === "stroke" ? () => strokes.push({ strokeStyle: t.strokeStyle, lineWidth: t.lineWidth }) : t[prop as string]),
+                set: (t, prop, value) => { t[prop as string] = value; return true; },
+            }) as unknown as CanvasRenderingContext2D;
+            drawSnapRing(ctx, { position: { x: 50, y: 40 }, radiusFt: 0 }, transform, LINE_EDIT_COLORS.snapRing, zoom);
+            const c = rinkToCanvas({ x: 50, y: 40 }, transform);
+            expect(arcs(calls)).toHaveLength(1);
+            expect(arcs(calls)[0].args.slice(0, 3)).toEqual([c.x, c.y, SNAP_RING_RADIUS_PX / zoom]);
+            expect(strokes).toEqual([
+                { strokeStyle: "#FFFFFF", lineWidth: 6 / zoom },
+                { strokeStyle: LINE_EDIT_COLORS.snapRing, lineWidth: 3 / zoom },
+            ]);
+        }
+    });
+
+    it("draws the ring outside the target's glyph at desktop scale", () => {
+        for (const zoom of [1, 2]) {
+            const calls: Call[] = [];
+            drawSnapRing(recordingCtx(calls), { position: { x: 50, y: 40 }, radiusFt: PLAYER_RADIUS_FT }, transform, LINE_EDIT_COLORS.snapRing, zoom);
+            const ring = arcs(calls)[0].args[2] as number;
+            const glyph = glyphRadiusPx(PLAYER_RADIUS_FT, pxPerFt, zoom);
+            expect(glyph).toBeGreaterThan(SNAP_RING_RADIUS_PX / zoom);
+            // The halo's inner edge (3 px inside the ring) clears the glyph and its outline (up to 0.11 r past it)
+            expect(ring - 3 / zoom).toBeGreaterThan(glyph * 1.11);
+        }
+    });
+
+    it("clears a small glyph drawn at its on-screen minimum", () => {
+        const calls: Call[] = [];
+        const zoom = 1;
+        drawSnapRing(recordingCtx(calls), { position: { x: 50, y: 40 }, radiusFt: EQUIPMENT_RADIUS_FT.puck }, transform, LINE_EDIT_COLORS.snapRing, zoom);
+        const ring = arcs(calls)[0].args[2] as number;
+        expect(ring).toBe(SNAP_RING_RADIUS_PX);
+        expect(ring - 3).toBeGreaterThan(glyphRadiusPx(EQUIPMENT_RADIUS_FT.puck, pxPerFt, zoom) * 1.11);
     });
 });

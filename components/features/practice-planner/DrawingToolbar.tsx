@@ -42,7 +42,7 @@ import {
     DrawingTool,
     PLAYER_ROLES,
     STROKE_ACTIONS,
-    STROKE_PATHS,
+    DRAWN_STROKE_PATHS,
     STROKE_ENDS,
     EQUIPMENT_KINDS,
     PlayerRole,
@@ -390,8 +390,9 @@ export function DrawingToolbar({
                     />
                     <OptionGroup
                         label="stroke path"
-                        value={strokeOptions.path}
-                        options={STROKE_PATHS}
+                        // Drawing offers straight and freehand; curve comes only from editing (line editing R1)
+                        value={strokeOptions.path === "freehand" ? "freehand" : "straight"}
+                        options={DRAWN_STROKE_PATHS}
                         labels={{ straight: "Straight", freehand: "Freehand" }}
                         onChange={(path) => onStrokeOptionsChange({ ...strokeOptions, path })}
                     />

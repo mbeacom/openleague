@@ -339,11 +339,14 @@ function traceRinkOutline(ctx: CanvasRenderingContext2D, transform: TransformCon
     ctx.roundRect(o.x, o.y, o.width, o.height, o.radius);
 }
 
+/** The ice colour. The board draws it in both colour schemes, so line-editing colours are checked against it. */
+export const ICE_COLOR = "#E8F4F8";
+
 /**
  * Draws the ice surface
  */
 function drawIceSurface(ctx: CanvasRenderingContext2D, transform: TransformContext): void {
-    ctx.fillStyle = "#E8F4F8"; // Light ice blue
+    ctx.fillStyle = ICE_COLOR;
     traceRinkOutline(ctx, transform);
     ctx.fill();
 }

@@ -598,3 +598,19 @@ describe("practice staff in plan files (spec R6)", () => {
         expect(editor.plays.map((row) => row.staff)).toEqual([["Sam"], ["Coach Lee"]]);
     });
 });
+
+describe("curve lines in plan files (line editing R1)", () => {
+    it("carry a curve line through a plan file at version 1", () => {
+        const curved: PlayData = {
+            ...BOARD,
+            drawings: [{ id: "c", action: "skate", path: "curve", end: "arrow", points: [{ x: 10, y: 10 }, { x: 30, y: 30 }, { x: 50, y: 10 }], color: "#212121", strokeWidth: 2 }],
+        };
+        const doc = JSON.parse(JSON.stringify(serializePlan(input({
+            drills: [{ sequence: 0, duration: 10, runsWithPrevious: false, instructions: null, name: "Curl", description: "", playData: curved }],
+        }), "openleague-hosted", NOW)));
+        expect(doc.version).toBe(PLAN_VERSION);
+        const parsed = parsePlan(doc);
+        if (!parsed.ok) throw new Error(parsed.error.message);
+        expect(drillRows(parsed.plan.session.drills)[0].drill.playData.drawings[0].path).toBe("curve");
+    });
+});

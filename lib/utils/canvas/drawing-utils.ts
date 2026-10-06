@@ -19,10 +19,11 @@ import {
 } from "@/types/practice-planner";
 import type { RinkRect, StrokeOptions } from "@/types/practice-planner";
 import { FULL_RINK, TransformContext, drawRink, rinkToCanvas } from "./rink-renderer";
-import { buildStrokeGeometry, type StrokeGeometry } from "./stroke-geometry";
+import { buildStrokeGeometry, strokeCenterline, type StrokeGeometry } from "./stroke-geometry";
 import { drawPlayerGlyph, drawEquipmentGlyph } from "./glyphs";
 import { EQUIPMENT_RADIUS_FT, PLAYER_RADIUS_FT, glyphRadiusPx } from "./glyph-metrics";
 import { BOARD_COLORS } from "./notation";
+import type { LineHandle, SnapTarget } from "./line-editing";
 
 /**
  * Visual constants for drawing
@@ -244,20 +245,107 @@ export function drawElement(
         ctx.lineJoin = "round";
         ctx.globalAlpha = 0.5;
 
+        // A curve's highlight follows its curve; straight and freehand lines keep theirs on the stored points
+        const stored = element.points.map((p) => rinkToCanvas(p, transform));
+        const path = element.path === "curve" ? strokeCenterline({ path: "curve", points: stored }) : stored;
         ctx.beginPath();
-        const startCanvas = rinkToCanvas(element.points[0], transform);
-        ctx.moveTo(startCanvas.x, startCanvas.y);
-
-        for (let i = 1; i < element.points.length; i++) {
-            const pointCanvas = rinkToCanvas(element.points[i], transform);
-            ctx.lineTo(pointCanvas.x, pointCanvas.y);
-        }
-
+        ctx.moveTo(path[0].x, path[0].y);
+        for (let i = 1; i < path.length; i++) ctx.lineTo(path[i].x, path[i].y);
         ctx.stroke();
         ctx.globalAlpha = 1.0;
     }
 
     drawStroke(ctx, element, transform);
+}
+
+/** A line handle's radius on screen, at any zoom (line editing R6). */
+export const LINE_HANDLE_RADIUS_PX = 7;
+
+export interface LineEditColors {
+    /** Inside of end, bend and anchor handles; the plus on "+" handles */
+    handleFill: string;
+    /** Handle outlines and the "+" disc */
+    handleStroke: string;
+    /** The snap ring */
+    snapRing: string;
+}
+
+/**
+ * Draws the selected line's handles (rink feet, under the board's zoom):
+ * ends, bends and anchors as rings, a polyline's corners as squares (so a
+ * sharp corner reads differently from a curve's bend), and "+" handles as
+ * filled discs with a plus. `zoom` keeps the size and outline the same on screen.
+ */
+export function drawLineHandles(
+    ctx: CanvasRenderingContext2D,
+    handles: readonly LineHandle[],
+    transform: TransformContext,
+    colors: LineEditColors,
+    zoom: number = 1
+): void {
+    const radius = LINE_HANDLE_RADIUS_PX / zoom;
+    ctx.save();
+    ctx.lineWidth = 2 / zoom;
+    for (const handle of handles) {
+        const c = rinkToCanvas(handle.position, transform);
+        const add = handle.kind === "add";
+        ctx.beginPath();
+        if (handle.kind === "corner") ctx.rect(c.x - radius, c.y - radius, radius * 2, radius * 2);
+        else ctx.arc(c.x, c.y, radius, 0, Math.PI * 2);
+        ctx.fillStyle = add ? colors.handleStroke : colors.handleFill;
+        ctx.fill();
+        ctx.strokeStyle = colors.handleStroke;
+        ctx.stroke();
+        if (add) {
+            const arm = radius * 0.55;
+            ctx.beginPath();
+            ctx.moveTo(c.x - arm, c.y);
+            ctx.lineTo(c.x + arm, c.y);
+            ctx.moveTo(c.x, c.y - arm);
+            ctx.lineTo(c.x, c.y + arm);
+            ctx.strokeStyle = colors.handleFill;
+            ctx.stroke();
+        }
+    }
+    ctx.restore();
+}
+
+/** The snap ring's smallest radius on screen, at any zoom: a line end's ring (line editing R4). */
+export const SNAP_RING_RADIUS_PX = 14;
+/** On screen, how far the ring sits outside a player's or an equipment item's glyph outline. */
+const SNAP_RING_GAP_PX = 5;
+/** How far a glyph's outline reaches past its radius, as a share of it: half the widest outline (a ring player's, 0.22 r). */
+const GLYPH_OUTLINE_OUTSET = 0.11;
+/** The halo under the snap ring: white, as the handles' fill (LINE_EDIT_COLORS.handleFill) */
+const SNAP_RING_HALO = "#FFFFFF";
+
+/**
+ * Rings a snap target while a line end is snapping (line editing R4): outside
+ * the target's drawn glyph and its outline (glyphRadiusPx, with its on-screen minimum), and at
+ * least SNAP_RING_RADIUS_PX, as a ring over a white halo so it reads on ice,
+ * lines and tokens alike.
+ */
+export function drawSnapRing(
+    ctx: CanvasRenderingContext2D,
+    target: SnapTarget,
+    transform: TransformContext,
+    color: string,
+    zoom: number = 1
+): void {
+    const c = rinkToCanvas(target.position, transform);
+    const pxPerFt = Math.min(transform.scaleX, transform.scaleY);
+    const glyph = target.radiusFt > 0 ? glyphRadiusPx(target.radiusFt, pxPerFt, zoom) * (1 + GLYPH_OUTLINE_OUTSET) : 0;
+    const radius = Math.max(SNAP_RING_RADIUS_PX / zoom, glyph + SNAP_RING_GAP_PX / zoom);
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, radius, 0, Math.PI * 2);
+    ctx.strokeStyle = SNAP_RING_HALO;
+    ctx.lineWidth = 6 / zoom;
+    ctx.stroke();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 3 / zoom;
+    ctx.stroke();
+    ctx.restore();
 }
 
 /**

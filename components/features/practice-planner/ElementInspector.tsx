@@ -7,11 +7,12 @@
  * undoable.
  */
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Box, Paper, Stack, TextField, Typography, ButtonBase } from "@mui/material";
+import { Box, Button, Paper, Stack, TextField, Typography, ButtonBase } from "@mui/material";
 import { OptionGroup } from "./OptionGroup";
 import type { ElementPatch, SelectedElement } from "@/lib/utils/canvas/element-ops";
-import { EQUIPMENT_KINDS, PLAYER_ROLES, STROKE_ACTIONS, STROKE_ENDS, VALIDATION_CONSTRAINTS } from "@/types/practice-planner";
+import { EQUIPMENT_KINDS, PLAYER_ROLES, STROKE_ACTIONS, STROKE_ENDS, VALIDATION_CONSTRAINTS, type DrawingElement } from "@/types/practice-planner";
 import { ACTION_LABELS, END_LABELS, EQUIPMENT_LABELS, ROLE_LABELS } from "@/lib/utils/canvas/notation";
+import { straighten } from "@/lib/utils/canvas/line-editing";
 
 const SWATCHES = ["#212121", "#0D47A1", "#1976D2", "#D32F2F", "#2E7D32", "#F57C00", "#6A1B9A"];
 const NET_ROTATIONS = ["0", "90", "180", "270"] as const;
@@ -93,6 +94,31 @@ function ColorRow({ value, onChange }: { value: string; onChange: (c: string) =>
     );
 }
 
+/**
+ * Straighten turns a curve, or a straight polyline, into a 2-point straight
+ * line; Make straight does the same for a freehand line. Both keep the first
+ * and last points and are one undoable update (line editing R3). Nothing to
+ * offer for a 2-point straight line.
+ */
+function StraightenButton({ stroke, onChange }: { stroke: DrawingElement; onChange: (patch: ElementPatch) => void }) {
+    const label = stroke.path === "freehand"
+        ? "Make straight"
+        : stroke.path === "curve" || stroke.points.length > 2 ? "Straighten" : null;
+    if (!label) return null;
+    return (
+        <Button
+            variant="outlined"
+            sx={{ minHeight: 44, minWidth: 44 }}
+            onClick={() => {
+                const next = straighten(stroke);
+                if (next !== stroke) onChange({ path: next.path, points: next.points });
+            }}
+        >
+            {label}
+        </Button>
+    );
+}
+
 export interface ElementInspectorProps {
     selected: SelectedElement | null;
     onChange: (patch: ElementPatch) => void;
@@ -112,6 +138,7 @@ export function ElementInspector({ selected, onChange }: ElementInspectorProps) 
                         <OptionGroup label="stroke action" value={selected.element.action} options={STROKE_ACTIONS} labels={ACTION_LABELS} onChange={(action) => onChange({ action })} />
                         <OptionGroup label="stroke end" value={selected.element.end} options={STROKE_ENDS} labels={END_LABELS} onChange={(end) => onChange({ end })} />
                         <ColorRow value={selected.element.color} onChange={(color) => onChange({ color })} />
+                        <StraightenButton stroke={selected.element} onChange={onChange} />
                     </>
                 )}
                 {selected.kind === "player" && (

@@ -20,6 +20,7 @@ import {
 } from "@/types/practice-planner";
 import { TransformContext, canvasToRink } from "./rink-renderer";
 import { PLAYER_RADIUS_FT, EQUIPMENT_RADIUS_FT } from "./glyph-metrics";
+import { strokeCenterline } from "./stroke-geometry";
 
 /**
  * Hit detection constants
@@ -249,17 +250,11 @@ export function hitTestDrawing(
     drawing: DrawingElement,
     threshold = HIT_THRESHOLD
 ): boolean {
-    // Check each line segment in the drawing
-    for (let i = 0; i < drawing.points.length - 1; i++) {
-        const p1 = drawing.points[i];
-        const p2 = drawing.points[i + 1];
-
-        const distance = distanceToLineSegment(point, p1, p2);
-        if (distance <= threshold) {
-            return true;
-        }
+    // A curve is tested where it is drawn (line editing R2); other lines on their stored points, as before
+    const path = drawing.path === "curve" ? strokeCenterline(drawing) : drawing.points;
+    for (let i = 0; i < path.length - 1; i++) {
+        if (distanceToLineSegment(point, path[i], path[i + 1]) <= threshold) return true;
     }
-
     return false;
 }
 
@@ -368,7 +363,7 @@ export function hitTest(
 
     // Test drawings (bottom layer)
     for (const drawing of playData.drawings) {
-        if (hitTestDrawing(point, drawing, Math.max(HIT_THRESHOLD, minHitRadiusFt))) {
+        if (hitTestDrawing(point, drawing, drawingHitRadius(minHitRadiusFt))) {
             return {
                 hit: true,
                 elementId: drawing.id,
@@ -381,6 +376,11 @@ export function hitTest(
     return { hit: false };
 }
 
+/** Hit radius in feet for a drawing: HIT_THRESHOLD, or the board's minimum when larger. */
+export function drawingHitRadius(minHitRadiusFt = 0): number {
+    return Math.max(HIT_THRESHOLD, minHitRadiusFt);
+}
+
 /**
  * Calculates the distance from a point to a line segment
  *
@@ -389,7 +389,7 @@ export function hitTest(
  * @param lineEnd - End of line segment
  * @returns Distance from point to line segment
  */
-function distanceToLineSegment(point: Position, lineStart: Position, lineEnd: Position): number {
+export function distanceToLineSegment(point: Position, lineStart: Position, lineEnd: Position): number {
     const dx = lineEnd.x - lineStart.x;
     const dy = lineEnd.y - lineStart.y;
     const lengthSquared = dx * dx + dy * dy;

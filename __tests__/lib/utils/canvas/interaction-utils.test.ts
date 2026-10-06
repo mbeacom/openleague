@@ -17,6 +17,8 @@ import {
   isWithinRinkBounds,
   clampToRinkBounds,
   clampToRect,
+  distanceToLineSegment,
+  drawingHitRadius,
   dragTarget,
   pxToRinkFt,
   pastDragThreshold,
@@ -463,4 +465,34 @@ describe("clampPan", () => {
     const out = clampPan({ x: 123, y: 0 }, zoom, canvas, full);
     expect(out.x).toBeCloseTo(-zoom * 20, 9);
   });
+});
+
+describe("hitTestDrawing on a curve (line editing R2)", () => {
+    const pts = [{ x: 0, y: 0 }, { x: 50, y: 50 }, { x: 100, y: 0 }];
+    const make = (path: "straight" | "curve"): DrawingElement => ({
+        id: "b", action: "skate", path, end: "arrow", points: pts, color: "#212121", strokeWidth: 2,
+    });
+
+    it("hits a curve where it is drawn, not on the chords between its points", () => {
+        // The curve passes (25, 31.25); the chord y = x passes (25, 25), about 3.9 ft from the curve
+        expect(hitTestDrawing({ x: 25, y: 31.25 }, make("curve"), 1)).toBe(true);
+        expect(hitTestDrawing({ x: 25, y: 25 }, make("curve"), 1)).toBe(false);
+    });
+
+    it("keeps hitting a straight polyline on its chords, as before", () => {
+        expect(hitTestDrawing({ x: 25, y: 25 }, make("straight"), 1)).toBe(true);
+        expect(hitTestDrawing({ x: 25, y: 31.25 }, make("straight"), 1)).toBe(false);
+    });
+});
+
+describe("drawing hit radius and segment distance", () => {
+    it("uses 5 ft, or the board's minimum when larger", () => {
+        expect(drawingHitRadius()).toBe(5);
+        expect(drawingHitRadius(7)).toBe(7);
+    });
+
+    it("measures a point's distance to a segment, clamped to its ends", () => {
+        expect(distanceToLineSegment({ x: 5, y: 3 }, { x: 0, y: 0 }, { x: 10, y: 0 })).toBe(3);
+        expect(distanceToLineSegment({ x: 13, y: 4 }, { x: 0, y: 0 }, { x: 10, y: 0 })).toBe(5);
+    });
 });

@@ -32,9 +32,17 @@ export type PlayerRole = (typeof PLAYER_ROLES)[number];
 export const STROKE_ACTIONS = ["skate", "backskate", "carry", "pass", "shot", "lateral", "line"] as const;
 export type StrokeAction = (typeof STROKE_ACTIONS)[number];
 
-/** straight = polyline through stored points, unsmoothed; freehand = smoothed */
-export const STROKE_PATHS = ["straight", "freehand"] as const;
+/**
+ * straight = polyline through stored points, unsmoothed; freehand = smoothed;
+ * curve = a smooth curve through stored points (a line bent by editing; line
+ * editing R1). Every value a stored line may have.
+ */
+export const STROKE_PATHS = ["straight", "freehand", "curve"] as const;
 export type StrokePath = (typeof STROKE_PATHS)[number];
+
+/** The paths the drawing toolbar offers: a curve comes only from editing a line. */
+export const DRAWN_STROKE_PATHS = ["straight", "freehand"] as const satisfies readonly StrokePath[];
+export type DrawnStrokePath = (typeof DRAWN_STROKE_PATHS)[number];
 
 export const STROKE_ENDS = ["arrow", "stop", "none"] as const;
 export type StrokeEnd = (typeof STROKE_ENDS)[number];

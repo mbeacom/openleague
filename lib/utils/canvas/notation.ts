@@ -12,6 +12,17 @@ export const BOARD_COLORS = {
     ink: "#212121",
 } as const;
 
+/**
+ * Line-editing handle and snap-ring colours (line editing R6): the theme's
+ * light-scheme Action Blue and League Blue, since the ice (ICE_COLOR) is
+ * drawn light in both schemes. On the ice they are about 4.1:1 and 7.7:1.
+ */
+export const LINE_EDIT_COLORS = {
+    handleFill: "#FFFFFF",
+    handleStroke: BOARD_COLORS.actionBlue,
+    snapRing: BOARD_COLORS.leagueBlue,
+} as const;
+
 export const ROLE_LABELS: Record<PlayerRole, string> = {
     X: "Skater",
     O: "Opponent",

@@ -26,13 +26,14 @@ export type SelectedElement =
     | { kind: "annotation"; element: TextAnnotation };
 
 export type ElementPatch = Partial<Pick<PlayerIcon, "role" | "label" | "color">> &
-    Partial<Pick<DrawingElement, "action" | "end" | "color">> &
+    Partial<Pick<DrawingElement, "action" | "end" | "color" | "path" | "points">> &
     Partial<Pick<EquipmentItem, "kind" | "rotation">> &
     Partial<Pick<TextAnnotation, "text" | "color">>;
 
 const ALLOWED: Record<ElementKind, readonly (keyof ElementPatch)[]> = {
     player: ["role", "label", "color"],
-    drawing: ["action", "end", "color"],
+    // path and points: the inspector's Straighten / Make straight (line editing R3)
+    drawing: ["action", "end", "color", "path", "points"],
     equipment: ["kind", "rotation"],
     annotation: ["text", "color"],
 };
@@ -98,6 +99,19 @@ export function moveElement(data: PlayData, id: string, position: Position): Pla
     return { ...data, players: move(data.players), equipment: move(data.equipment), annotations: move(data.annotations) };
 }
 
+/**
+ * `data` with the drawing whose id is `stroke.id` replaced by `stroke` (a line
+ * edit's result). Same reference for an unknown id or the same object, so
+ * callers can skip a no-op history entry.
+ */
+export function replaceDrawing(data: PlayData, stroke: DrawingElement): PlayData {
+    const index = data.drawings.findIndex((d) => d.id === stroke.id);
+    if (index < 0 || data.drawings[index] === stroke) return data;
+    const drawings = data.drawings.slice();
+    drawings[index] = stroke;
+    return { ...data, drawings };
+}
+
 // ============================================================================
 // Placement (board adds) and limits
 // ============================================================================
@@ -116,6 +130,11 @@ export function placeEquipment(data: PlayData, position: Position, kind: Equipme
     return { ...data, equipment: [...data.equipment, item] };
 }
 
+/** A stroke whose first and last points are under MIN_STROKE_LENGTH_FT apart is a tap, not a line. */
+export function isStrokeTap(first: Position, last: Position): boolean {
+    return Math.hypot(last.x - first.x, last.y - first.y) < MIN_STROKE_LENGTH_FT;
+}
+
 /**
  * Appends a finished stroke: `[first, last]` for straight paths, simplified
  * points for freehand. Returns `data` itself (same reference) for taps, so
@@ -131,7 +150,7 @@ export function finishStroke(
     if (rawPoints.length < 2) return data;
     const first = rawPoints[0];
     const last = rawPoints[rawPoints.length - 1];
-    if (Math.hypot(last.x - first.x, last.y - first.y) < MIN_STROKE_LENGTH_FT) return data;
+    if (isStrokeTap(first, last)) return data;
     const points = options.path === "straight" ? [{ ...first }, { ...last }] : simplifyPoints(rawPoints, 0.5);
     const stroke: DrawingElement = { id, ...options, points, color, strokeWidth: STROKE_WIDTH };
     return { ...data, drawings: [...data.drawings, stroke] };

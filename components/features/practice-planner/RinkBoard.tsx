@@ -27,19 +27,21 @@ import {
     TransformContext,
     screenToRink,
 } from "@/lib/utils/canvas/rink-renderer";
-import { drawBoardFrame, drawStroke } from "@/lib/utils/canvas/drawing-utils";
+import { drawBoardFrame, drawLineHandles, drawSnapRing, drawStroke } from "@/lib/utils/canvas/drawing-utils";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import { areaMaskRect, areaRect, editViewport, withArea } from "@/lib/utils/ice-area";
 import {
     findElement,
     finishStroke,
     isAreaClick,
+    isStrokeTap,
     limitMessage,
     moveElement,
     placeEquipment,
     placePlayer,
     rectFromDrag,
     removeElement,
+    replaceDrawing,
     updateElement as applyElementPatch,
     type ElementPatch,
 } from "@/lib/utils/canvas/element-ops";
@@ -52,10 +54,14 @@ import {
     DRAG_THRESHOLD_PX,
     pastDragThreshold,
     pxToRinkFt,
-    pinchView,
     clampPan,
     viewportContentRect,
+    type BoardView,
 } from "@/lib/utils/canvas/interaction-utils";
+import { useBoardTouch } from "./useBoardTouch";
+import { lineHandles, snapRadiusFt } from "@/lib/utils/canvas/line-editing";
+import { LINE_EDIT_COLORS } from "@/lib/utils/canvas/notation";
+import { useStrokeEditing } from "./useStrokeEditing";
 
 /**
  * Props for the RinkBoard component
@@ -117,11 +123,6 @@ function isEditableTarget(target: EventTarget | null): boolean {
 
 const DEFAULT_COLOR = "#212121";
 const DEFAULT_STROKE_OPTIONS: StrokeOptions = { action: "skate", path: "freehand", end: "arrow" };
-/**
- * Tools whose touch tap acts once (place, erase, ask for text). On touch they
- * wait for the finger to lift, so the first finger of a pinch never acts.
- */
-const TAP_TOOLS: ReadonlySet<DrawingTool> = new Set<DrawingTool>(["player", "equipment", "eraser", "text"]);
 /** Minimum on-screen hit radius in CSS pixels, so small glyphs stay tappable */
 const MIN_HIT_RADIUS_PX = 22;
 
@@ -173,10 +174,6 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
     // Zoom/pan (pinch) state
     const [scale, setScale] = useState(1);
     const [panOffset, setPanOffset] = useState<Position>({ x: 0, y: 0 });
-    // The view and fingers when the current pinch began (null = no pinch)
-    const pinchStartRef = useRef<{ zoom: number; pan: Position; center: Position; distance: number } | null>(null);
-    // A touch tap with a TAP_TOOLS tool, waiting for touchend (client px; null = none)
-    const pendingTapRef = useRef<{ clientX: number; clientY: number } | null>(null);
 
     // Refs to avoid stale closures in event handlers
     // These refs hold the latest values without triggering callback recreation
@@ -186,6 +183,8 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
     const dragOffsetRef = useRef(dragOffset);
     // Where the current press grabbed an element (rink feet); the drag starts past DRAG_THRESHOLD_PX from it
     const grabPointRef = useRef<Position | null>(null);
+    // Where the line being drawn starts once snapped (null = not snapped); its points stay raw
+    const strokeStartSnapRef = useRef<Position | null>(null);
     const scaleRef = useRef(scale);
     const panOffsetRef = useRef(panOffset);
 
@@ -292,15 +291,6 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
     const viewPan = useMemo(() => boundPan(panOffset, scale), [boundPan, panOffset, scale]);
     useEffect(() => { panOffsetRef.current = viewPan; }, [viewPan]);
 
-    // A new viewport starts unzoomed: a pinch-zoom/pan made for the old one would
-    // misframe it. A pinch in progress ends too, or its next move would re-apply it.
-    useEffect(() => {
-        pinchStartRef.current = null;
-        pendingTapRef.current = null;
-        setScale(1);
-        setPanOffset({ x: 0, y: 0 });
-    }, [viewX, viewY, viewW, viewH]);
-
     /**
      * Initialize history with initial play data
      */
@@ -310,71 +300,6 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []); // Only on mount - intentionally empty to avoid re-initializing history
-
-    /**
-     * Rendering function
-     * Requirements: 1.1 - Render rink background
-     */
-    const render = useCallback(() => {
-        const canvas = canvasRef.current;
-        if (!canvas || !transform) return;
-
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return;
-
-        // Drag preview is visual only; the move is committed on mouseUp.
-        // drawBoardFrame clears under an identity transform, then sets the
-        // zoom/pan transform every frame (a resize resets context state).
-        const renderData = isDragging && selectedElementId && dragPreviewPosition
-            ? moveElement(playData, selectedElementId, dragPreviewPosition)
-            : playData;
-        drawBoardFrame(ctx, transform, renderData, {
-            selectedId: selectedElementId || undefined,
-            zoom: scale,
-            pan: viewPan,
-            maskRect: areaMaskRect(areaDrag, playData.area),
-        });
-
-        // Draw current stroke in progress
-        if (isDrawing && currentDrawingPoints.length > 1) {
-            const previewPoints = strokeOptions.path === "straight"
-                ? [currentDrawingPoints[0], currentDrawingPoints[currentDrawingPoints.length - 1]]
-                : currentDrawingPoints;
-            drawStroke(ctx, { ...strokeOptions, points: previewPoints, color: selectedColor, strokeWidth: 2 }, transform);
-        }
-    }, [
-        transform,
-        playData,
-        selectedElementId,
-        isDrawing,
-        isDragging,
-        dragPreviewPosition,
-        currentDrawingPoints,
-        selectedColor,
-        strokeOptions,
-        scale,
-        viewPan,
-        areaDrag,
-    ]);
-
-    /**
-     * Set up rendering loop with requestAnimationFrame
-     * Requirements: 1.1
-     */
-    useEffect(() => {
-        const animate = () => {
-            render();
-            animationFrameRef.current = requestAnimationFrame(animate);
-        };
-
-        animationFrameRef.current = requestAnimationFrame(animate);
-
-        return () => {
-            if (animationFrameRef.current) {
-                cancelAnimationFrame(animationFrameRef.current);
-            }
-        };
-    }, [render]);
 
     /**
      * Handle play data updates
@@ -396,6 +321,97 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         },
         [mode, onPlayDataChange, onUndoRedoStateChange]
     );
+
+    // Line editing: the selected line's handles, bends and whole-line moves (line editing R3, R5)
+    const {
+        press: pressLine,
+        grab: grabLine,
+        move: moveLineGesture,
+        release: releaseLine,
+        cancel: cancelLine,
+        preview: linePreview,
+        active: lineGestureActive,
+        snapLineEnd,
+        currentSnap,
+        clearSnap,
+        snapRing,
+    } = useStrokeEditing({ playDataRef, commit: updatePlayData });
+
+    /**
+     * Rendering function
+     * Requirements: 1.1 - Render rink background
+     */
+    const render = useCallback(() => {
+        const canvas = canvasRef.current;
+        if (!canvas || !transform) return;
+
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+
+        // Drag preview is visual only; the move is committed on mouseUp.
+        // drawBoardFrame clears under an identity transform, then sets the
+        // zoom/pan transform every frame (a resize resets context state).
+        const renderData = linePreview
+            ? replaceDrawing(playData, linePreview)
+            : isDragging && selectedElementId && dragPreviewPosition
+                ? moveElement(playData, selectedElementId, dragPreviewPosition)
+                : playData;
+        drawBoardFrame(ctx, transform, renderData, {
+            selectedId: selectedElementId || undefined,
+            zoom: scale,
+            pan: viewPan,
+            maskRect: areaMaskRect(areaDrag, playData.area),
+        });
+        // The selected line's handles, over the scene (line editing R3, R6)
+        const selected = selectedElementId ? findElement(renderData, selectedElementId) : null;
+        if (selected?.kind === "drawing") drawLineHandles(ctx, lineHandles(selected.element), transform, LINE_EDIT_COLORS, scale);
+
+        // Draw current stroke in progress
+        if (isDrawing && currentDrawingPoints.length > 1) {
+            // Snapped ends preview where release will put them (line editing R4)
+            const head = strokeStartSnapRef.current ?? currentDrawingPoints[0];
+            const tail = snapRing?.position ?? currentDrawingPoints[currentDrawingPoints.length - 1];
+            const previewPoints = strokeOptions.path === "straight"
+                ? [head, tail]
+                : [head, ...currentDrawingPoints.slice(1, -1), tail];
+            drawStroke(ctx, { ...strokeOptions, points: previewPoints, color: selectedColor, strokeWidth: 2 }, transform);
+        }
+        if (snapRing) drawSnapRing(ctx, snapRing, transform, LINE_EDIT_COLORS.snapRing, scale);
+    }, [
+        transform,
+        playData,
+        selectedElementId,
+        isDrawing,
+        isDragging,
+        dragPreviewPosition,
+        currentDrawingPoints,
+        selectedColor,
+        strokeOptions,
+        scale,
+        viewPan,
+        areaDrag,
+        linePreview,
+        snapRing,
+    ]);
+
+    /**
+     * Set up rendering loop with requestAnimationFrame
+     * Requirements: 1.1
+     */
+    useEffect(() => {
+        const animate = () => {
+            render();
+            animationFrameRef.current = requestAnimationFrame(animate);
+        };
+
+        animationFrameRef.current = requestAnimationFrame(animate);
+
+        return () => {
+            if (animationFrameRef.current) {
+                cancelAnimationFrame(animationFrameRef.current);
+            }
+        };
+    }, [render]);
 
     /**
      * Handle undo operation
@@ -497,7 +513,8 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         setIsDrawing(false);
         setCurrentDrawingPoints([]);
         setAreaDrag(null);
-    }, [selectedTool, areaTool]);
+        cancelLine();
+    }, [selectedTool, areaTool, cancelLine]);
 
     /** Hit radius in feet that stays MIN_HIT_RADIUS_PX on screen at any zoom */
     const minHitRadiusFt = useCallback(
@@ -556,16 +573,23 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
                     setIsDrawing(false);
                     setCurrentDrawingPoints([]);
                     grabPointRef.current = null;
+                    cancelLine();
+                    // The selected line's handles, then its body, come before
+                    // anything else under the pointer (line editing R3)
+                    if (pressLine({ selectedId: selectedElementIdRef.current, point: hitPos, hitRadiusFt: minHitRadiusFt(), time: Date.now() })) break;
                     const hitResult = hitTest(hitPos, playData, minHitRadiusFt());
                     if (hitResult.hit && hitResult.elementId) {
                         setSelectedElementId(hitResult.elementId);
+                        const found = findElement(playData, hitResult.elementId);
+                        if (found?.kind === "drawing") {
+                            // A line moves as a whole from wherever it is grabbed
+                            grabLine(found.element, hitPos);
+                            break;
+                        }
                         setIsDragging(true);
                         grabPointRef.current = hitPos;
-
-                        // Drag offset keeps the grab point under the pointer.
-                        // Strokes have no position and are not draggable.
-                        const found = findElement(playData, hitResult.elementId);
-                        if (found && found.kind !== "drawing") {
+                        // Drag offset keeps the grab point under the pointer
+                        if (found) {
                             setDragOffset({
                                 x: hitPos.x - found.element.position.x,
                                 y: hitPos.y - found.element.position.y,
@@ -594,8 +618,16 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
                 }
 
                 case "stroke": {
-                    // Start drawing; the limit is checked when the stroke finishes
+                    // Start drawing; the limit is checked when the stroke finishes.
+                    // The start snaps to a player, equipment or a line end (line editing R4).
                     // Requirements: 1.3, 5.1, 5.2
+                    const start = snapLineEnd(clampedPos, {
+                        radiusFt: snapRadiusFt(minHitRadiusFt()),
+                        rect: areaRect(playData.area),
+                        bypass: event.nativeEvent.altKey,
+                    });
+                    // The raw press point is kept: the tap filter runs on raw points (line editing R4)
+                    strokeStartSnapRef.current = start;
                     setIsDrawing(true);
                     setCurrentDrawingPoints([clampedPos]);
                     break;
@@ -648,6 +680,10 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
             generateId,
             getTransformedRinkPosition,
             minHitRadiusFt,
+            pressLine,
+            grabLine,
+            cancelLine,
+            snapLineEnd,
         ]
     );
 
@@ -673,9 +709,26 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
                 return;
             }
 
+            // A line edit in progress previews only; release commits it (line editing R3)
+            if (moveLineGesture(clampToRect(rinkPos, FULL_RINK), {
+                area,
+                thresholdFt: pxToRinkFt(DRAG_THRESHOLD_PX, transform, scaleRef.current),
+                snapRadiusFt: snapRadiusFt(minHitRadiusFt()),
+                bypassSnap: event.nativeEvent.altKey,
+            })) return;
+
             // Continue drawing if in drawing mode; stroke points stay in the area
             if (isDrawing && selectedTool === "stroke") {
-                setCurrentDrawingPoints((prev) => [...prev, clampToRect(rinkPos, area)]);
+                const point = clampToRect(rinkPos, area);
+                setCurrentDrawingPoints((prev) => [...prev, point]);
+                // The end being drawn snaps on release; the ring shows where (line editing R4)
+                // and never onto the snapped start, which would leave a zero-length line
+                snapLineEnd(point, {
+                    radiusFt: snapRadiusFt(minHitRadiusFt()),
+                    rect: area,
+                    bypass: event.nativeEvent.altKey,
+                    excludePoint: strokeStartSnapRef.current ?? undefined,
+                });
             }
 
             // Drag preview: pointer clamped only to the rink, minus the grab
@@ -694,7 +747,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
                 setDragPreviewPosition((prev) => (prev === null && !started ? null : dragTarget(pointer, grabOffset, area)));
             }
         },
-        [mode, transform, isDrawing, selectedTool, areaDrag, getTransformedRinkPosition]
+        [mode, transform, isDrawing, selectedTool, areaDrag, getTransformedRinkPosition, moveLineGesture, snapLineEnd, minHitRadiusFt]
     );
 
     /**
@@ -720,15 +773,21 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
                 return;
             }
 
-            // Finish drawing (taps shorter than 1 ft come back unchanged and are dropped)
-            if (isDrawing && selectedTool === "stroke") {
-                const finished = finishStroke(playData, currentDrawingPoints, strokeOptions, selectedColor, generateId());
+            // Finish drawing: a tap (raw ends under 1 ft apart) is dropped, then the ends
+            // snap to the targets the press and the last move found (line editing R4)
+            const raw = currentDrawingPoints;
+            if (isDrawing && selectedTool === "stroke" && raw.length > 1 && !isStrokeTap(raw[0], raw[raw.length - 1])) {
+                const points = [strokeStartSnapRef.current ?? raw[0], ...raw.slice(1, -1), currentSnap() ?? raw[raw.length - 1]];
+                const finished = finishStroke(playData, points, strokeOptions, selectedColor, generateId());
                 if (finished !== playData) {
                     const blocked = limitMessage(playData, "drawing");
                     if (blocked) onLimitReached?.(blocked);
                     else updatePlayData(finished);
                 }
             }
+
+            // A line edit commits one history entry, or nothing if it changed nothing
+            releaseLine();
 
             // Commit drag changes to playData (single history entry); a drag
             // that ends where the element already is records nothing
@@ -741,6 +800,8 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
             // Reset drawing state
             setIsDrawing(false);
             setCurrentDrawingPoints([]);
+            strokeStartSnapRef.current = null;
+            clearSnap();
 
             // Reset dragging state
             setIsDragging(false);
@@ -765,6 +826,9 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
             onAreaDrawn,
             updatePlayData,
             generateId,
+            releaseLine,
+            currentSnap,
+            clearSnap,
         ]
     );
 
@@ -774,14 +838,14 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
      * also bubble here, before React has re-rendered).
      */
     useEffect(() => {
-        if (!isDragging && !isDrawing && !areaDrag) return;
+        if (!isDragging && !isDrawing && !areaDrag && !lineGestureActive) return;
         const onWindowMouseUp = (event: MouseEvent) => {
             if (event.target instanceof Node && canvasRef.current?.contains(event.target)) return;
             handleMouseUp();
         };
         window.addEventListener("mouseup", onWindowMouseUp);
         return () => window.removeEventListener("mouseup", onWindowMouseUp);
-    }, [isDragging, isDrawing, areaDrag, handleMouseUp]);
+    }, [isDragging, isDrawing, areaDrag, lineGestureActive, handleMouseUp]);
 
     /**
      * Handle keyboard delete key for selected elements
@@ -834,46 +898,6 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         return () => window.removeEventListener("keydown", handleKeyDown);
     }, [mode, handleUndo, handleRedo]);
 
-    /**
-     * Calculate distance between two touch points
-     */
-    const getTouchDistance = useCallback((touch1: React.Touch, touch2: React.Touch): number => {
-        const dx = touch1.clientX - touch2.clientX;
-        const dy = touch1.clientY - touch2.clientY;
-        return Math.sqrt(dx * dx + dy * dy);
-    }, []);
-
-    /**
-     * Center point between two touches, relative to the canvas (the space
-     * the zoom/pan transform works in)
-     */
-    const getTouchCenter = useCallback((touch1: React.Touch, touch2: React.Touch): Position => {
-        const rect = canvasRef.current?.getBoundingClientRect();
-        return {
-            x: (touch1.clientX + touch2.clientX) / 2 - (rect?.left ?? 0),
-            y: (touch1.clientY + touch2.clientY) / 2 - (rect?.top ?? 0),
-        };
-    }, []);
-
-    /**
-     * Starts a pinch from the current view and these touches when exactly two
-     * are down, and ends it otherwise. Called whenever the finger count
-     * changes, so a pinch never continues from a different pair of fingers.
-     */
-    const capturePinch = useCallback(
-        (touches: React.TouchList) => {
-            pinchStartRef.current = touches.length === 2
-                ? {
-                    zoom: scaleRef.current,
-                    pan: panOffsetRef.current,
-                    center: getTouchCenter(touches[0], touches[1]),
-                    distance: getTouchDistance(touches[0], touches[1]),
-                }
-                : null;
-        },
-        [getTouchCenter, getTouchDistance]
-    );
-
     /** Runs handleMouseDown for a touch point (it maps the point through zoom/pan). */
     const simulateMouseDown = useCallback(
         (clientX: number, clientY: number) => {
@@ -884,6 +908,18 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
             } as React.MouseEvent<HTMLCanvasElement>);
         },
         [handleMouseDown]
+    );
+
+    /** Runs handleMouseMove for a touch point: a one-finger move acts like the mouse. */
+    const simulateMouseMove = useCallback(
+        (clientX: number, clientY: number) => {
+            handleMouseMove({
+                nativeEvent: new MouseEvent("mousemove", { clientX, clientY }),
+                preventDefault: () => { /* No-op: touch preventDefault handled at parent level */ },
+                stopPropagation: () => { /* No-op: propagation control not needed for simulated events */ },
+            } as React.MouseEvent<HTMLCanvasElement>);
+        },
+        [handleMouseMove]
     );
 
     /**
@@ -902,126 +938,47 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         grabPointRef.current = null;
         setIsDrawing(false);
         setCurrentDrawingPoints([]);
-    }, []);
+        cancelLine();
+    }, [cancelLine]);
 
     /**
-     * Handle touch start event
-     * Requirements: 3.5
+     * Applies a pinch's view. The anchored pan is bounded, so the rink can't be
+     * pinched off-screen, and the refs follow at once, so a tap right after the
+     * pinch maps through the new view. Requirements: 3.5
      */
-    const handleTouchStart = useCallback(
-        (event: React.TouchEvent<HTMLCanvasElement>) => {
-            if (!transform || !canvasRef.current) return;
-
-            // No preventDefault here: React registers touchstart/touchmove as
-            // passive listeners, so it would throw on every move. The canvas's
-            // `touch-action: none` is what stops scrolling and browser zoom.
-
-            if (event.touches.length === 1) {
-                pendingTapRef.current = null; // never replay an older, unfinished tap
-                const { clientX, clientY } = event.touches[0];
-                // Place / erase / text act on touchend, and only for a still,
-                // one-finger tap: this finger may be the first of a pinch.
-                if (!areaTool && TAP_TOOLS.has(selectedTool)) {
-                    pendingTapRef.current = { clientX, clientY };
-                    return;
-                }
-                // Select (drag), stroke and the area tool start now, like a mouse down
-                simulateMouseDown(clientX, clientY);
-            } else {
-                pendingTapRef.current = null;
-                // Two touches pinch to zoom or pan (Requirements: 3.5); a third
-                // finger ends the pinch until the count is back to two.
-                capturePinch(event.touches);
-                // The pinch takes over: nothing the coach was dragging or
-                // drawing may commit on the final touchend.
-                abandonTransientInteraction();
-            }
+    const applyPinchView = useCallback(
+        (view: BoardView) => {
+            const pan = boundPan(view.pan, view.zoom);
+            scaleRef.current = view.zoom;
+            panOffsetRef.current = pan;
+            setScale(view.zoom);
+            setPanOffset(pan);
         },
-        [transform, areaTool, selectedTool, capturePinch, simulateMouseDown, abandonTransientInteraction]
+        [boundPan]
     );
 
-    /**
-     * Handle touch move event
-     * Requirements: 3.5
-     */
-    const handleTouchMove = useCallback(
-        (event: React.TouchEvent<HTMLCanvasElement>) => {
-            if (!transform || !canvasRef.current) return;
+    // Touch: one finger acts like the mouse, two fingers pinch (useBoardTouch)
+    const { handleTouchStart, handleTouchMove, handleTouchEnd, handleTouchCancel, resetGestures } = useBoardTouch({
+        canvasRef,
+        enabled: transform !== null,
+        areaTool,
+        selectedTool,
+        scaleRef,
+        panOffsetRef,
+        applyView: applyPinchView,
+        onPointerDown: simulateMouseDown,
+        onPointerMove: simulateMouseMove,
+        onPointerUp: handleMouseUp,
+        onAbandon: abandonTransientInteraction,
+    });
 
-            // No preventDefault here: React registers touchstart/touchmove as
-            // passive listeners, so it would throw on every move. The canvas's
-            // `touch-action: none` is what stops scrolling and browser zoom.
-
-            if (event.touches.length === 1) {
-                // A pending tap that travels past the drag threshold is not a tap
-                const tap = pendingTapRef.current;
-                const touch = event.touches[0];
-                if (tap && Math.hypot(touch.clientX - tap.clientX, touch.clientY - tap.clientY) >= DRAG_THRESHOLD_PX) {
-                    pendingTapRef.current = null;
-                }
-                // Single touch - treat like mouse move
-                const mouseEvent = new MouseEvent("mousemove", {
-                    clientX: event.touches[0].clientX,
-                    clientY: event.touches[0].clientY,
-                });
-                handleMouseMove({
-                    nativeEvent: mouseEvent,
-                    preventDefault: () => { },
-                    stopPropagation: () => { },
-                } as React.MouseEvent<HTMLCanvasElement>);
-            } else if (event.touches.length === 2 && pinchStartRef.current) {
-                // Two touches: zoom about the fingers' midpoint and pan with it
-                // Requirements: 3.5
-                // The anchored pan is then bounded, so the rink can't be pinched off-screen.
-                const view = pinchView(pinchStartRef.current, {
-                    center: getTouchCenter(event.touches[0], event.touches[1]),
-                    distance: getTouchDistance(event.touches[0], event.touches[1]),
-                });
-                const pan = boundPan(view.pan, view.zoom);
-                // The refs follow at once, so a tap right after the pinch maps through the new view.
-                scaleRef.current = view.zoom;
-                panOffsetRef.current = pan;
-                setScale(view.zoom);
-                setPanOffset(pan);
-            }
-        },
-        [transform, getTouchDistance, getTouchCenter, handleMouseMove, boundPan]
-    );
-
-    /**
-     * Handle touch end event
-     * Requirements: 3.5
-     */
-    const handleTouchEnd = useCallback(
-        (event: React.TouchEvent<HTMLCanvasElement>) => {
-            // Suppresses the compatibility mouse events and click after a tap.
-            // A touchend the browser marks non-cancelable logs an error if
-            // cancelled, so only cancel when it can be.
-            if (event.cancelable) event.preventDefault();
-
-            if (event.touches.length === 0) {
-                // A still one-finger tap with a place / erase / text tool acts now
-                const tap = pendingTapRef.current;
-                pendingTapRef.current = null;
-                if (tap) simulateMouseDown(tap.clientX, tap.clientY);
-                // All touches ended - treat like mouse up
-                handleMouseUp();
-                pinchStartRef.current = null;
-            } else {
-                // Fewer fingers remain: one ends the pinch; two (after a
-                // third lifted) restart it from the pair that is left.
-                capturePinch(event.touches);
-            }
-        },
-        [handleMouseUp, simulateMouseDown, capturePinch]
-    );
-
-    /** The browser took the touches away (e.g. a system gesture): drop the pending tap, the pinch and any interaction in progress. */
-    const handleTouchCancel = useCallback(() => {
-        pendingTapRef.current = null;
-        pinchStartRef.current = null;
-        abandonTransientInteraction();
-    }, [abandonTransientInteraction]);
+    // A new viewport starts unzoomed: a pinch-zoom/pan made for the old one would
+    // misframe it. A pinch in progress ends too, or its next move would re-apply it.
+    useEffect(() => {
+        resetGestures();
+        setScale(1);
+        setPanOffset({ x: 0, y: 0 });
+    }, [viewX, viewY, viewW, viewH, resetGestures]);
 
     return (
         <div
