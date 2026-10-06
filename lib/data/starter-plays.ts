@@ -846,7 +846,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
             "A goalie station in one quarter of the ice that stays put while the skater groups rotate. Set a net on the goal line, level with the bottom faceoff dot. A helper passes to the coach, so the goalie follows the pass, squares up and sets before the coach shoots from the slot. Start with shots to the body, then low to each pad. Teach: eyes on the puck, short shuffles, stick on the ice, glove up, and back to the feet after every save. Young players can take turns in net.",
         focus: "goalies",
         goalies: "required",
-        ageGroups: ["u8", "u10", "u12"],
+        ageGroups: ["u6", "u8", "u10", "u12"],
         playData: {
             version: PLAY_DATA_VERSION,
             players: [

@@ -324,7 +324,7 @@ describe("Starter age groups (age-group templates R2)", () => {
         "starter-skate-small-area-2v2": [],
         "starter-skate-stops-starts": [],
         "starter-skate-stickhandling": [],
-        "starter-goalie-quarter-station": ["u8", "u10", "u12"],
+        "starter-goalie-quarter-station": ["u6", "u8", "u10", "u12"],
         "starter-skate-edge-circuit": ["u6", "u8", "u10"],
         "starter-skate-obstacle-lane": ["u6", "u8", "u10"],
         "starter-skate-quarter-2v2": [],
