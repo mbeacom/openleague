@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
-import { PlayLegend } from "@/components/features/practice-planner/PlayLegend";
+import { LegendSwatch, PlayLegend } from "@/components/features/practice-planner/PlayLegend";
+import { buildLegend } from "@/lib/utils/canvas/legend";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 
 const wrap = (ui: React.ReactElement) => render(<ThemeProvider theme={createTheme()}>{ui}</ThemeProvider>);
@@ -42,5 +43,20 @@ describe("PlayLegend", () => {
     it("shows no chip for full ice", () => {
         const { container } = wrap(<PlayLegend playData={{ ...createEmptyPlayData(), area: { kind: "full" } }} />);
         expect(container).toBeEmptyDOMElement();
+    });
+});
+
+describe("LegendSwatch", () => {
+    it("draws at the screen's pixel ratio, keeping its 40×20 CSS size", () => {
+        Object.defineProperty(window, "devicePixelRatio", { value: 2, configurable: true });
+        try {
+            const data = { ...createEmptyPlayData(), equipment: [{ id: "n", kind: "net" as const, position: { x: 1, y: 1 }, rotation: 0 }] };
+            const { container } = render(<LegendSwatch entry={buildLegend(data)[0]} />);
+            const canvas = container.querySelector("canvas")!;
+            expect([canvas.width, canvas.height]).toEqual([80, 40]);
+            expect([canvas.style.width, canvas.style.height]).toEqual(["40px", "20px"]);
+        } finally {
+            Object.defineProperty(window, "devicePixelRatio", { value: 1, configurable: true });
+        }
     });
 });

@@ -170,9 +170,9 @@ describe("BenchSheet", () => {
     });
 
     it("lowers the diagram pixel ratio for a large session", () => {
-        const plays = Array.from({ length: 13 }, (_, i) => sessionPlay(`Drill${i}`, i, false, 1));
+        const plays = Array.from({ length: 25 }, (_, i) => sessionPlay(`Drill${i}`, i, false, 1));
         renderSheet({ ...SESSION, duration: 60, plays });
-        expect(mockGenerate).toHaveBeenCalledTimes(13);
+        expect(mockGenerate).toHaveBeenCalledTimes(25);
         expect(mockGenerate).toHaveBeenCalledWith(expect.anything(), { width: 720, height: 306, pixelRatio: 2 });
     });
 

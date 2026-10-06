@@ -7,6 +7,7 @@ import { ExpandMore as ExpandMoreIcon } from "@mui/icons-material";
 import type { PlayData } from "@/types/practice-planner";
 import { buildLegend, type LegendEntry } from "@/lib/utils/canvas/legend";
 import { LEGEND_SWATCH_SIZE, paintLegendSwatch } from "@/lib/utils/canvas/legend-swatch";
+import { backingPixelRatio, sizeBackingStore } from "@/lib/utils/canvas/backing-store";
 import { iceAreaLabel } from "@/lib/utils/canvas/notation";
 import { isFullIce } from "@/lib/utils/ice-area";
 
@@ -14,10 +15,25 @@ import { isFullIce } from "@/lib/utils/ice-area";
 export function LegendSwatch({ entry }: { entry: LegendEntry }) {
     const ref = useRef<HTMLCanvasElement>(null);
     useEffect(() => {
-        const ctx = ref.current?.getContext("2d");
-        if (ctx) paintLegendSwatch(ctx, entry);
+        const canvas = ref.current;
+        if (!canvas) return;
+        // At the screen's ratio, so it is sharp on screen and in print (browsers print a canvas at its backing size).
+        const ratio = backingPixelRatio();
+        sizeBackingStore(canvas, LEGEND_SWATCH_SIZE.width, LEGEND_SWATCH_SIZE.height, ratio);
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+        ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+        paintLegendSwatch(ctx, entry);
     }, [entry]);
-    return <canvas ref={ref} width={LEGEND_SWATCH_SIZE.width} height={LEGEND_SWATCH_SIZE.height} aria-hidden="true" />;
+    return (
+        <canvas
+            ref={ref}
+            width={LEGEND_SWATCH_SIZE.width}
+            height={LEGEND_SWATCH_SIZE.height}
+            aria-hidden="true"
+            style={{ width: LEGEND_SWATCH_SIZE.width, height: LEGEND_SWATCH_SIZE.height }}
+        />
+    );
 }
 
 export function PlayLegend({ playData, defaultExpanded = false }: { playData: PlayData | null; defaultExpanded?: boolean }) {
