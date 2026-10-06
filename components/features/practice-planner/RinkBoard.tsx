@@ -27,7 +27,7 @@ import {
     TransformContext,
     screenToRink,
 } from "@/lib/utils/canvas/rink-renderer";
-import { drawBoardFrame, drawStroke } from "@/lib/utils/canvas/drawing-utils";
+import { drawBoardFrame, drawLineHandles, drawStroke } from "@/lib/utils/canvas/drawing-utils";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import { areaMaskRect, areaRect, editViewport, withArea } from "@/lib/utils/ice-area";
 import {
@@ -40,6 +40,7 @@ import {
     placePlayer,
     rectFromDrag,
     removeElement,
+    replaceDrawing,
     updateElement as applyElementPatch,
     type ElementPatch,
 } from "@/lib/utils/canvas/element-ops";
@@ -57,6 +58,9 @@ import {
     type BoardView,
 } from "@/lib/utils/canvas/interaction-utils";
 import { useBoardTouch } from "./useBoardTouch";
+import { lineHandles } from "@/lib/utils/canvas/line-editing";
+import { LINE_EDIT_COLORS } from "@/lib/utils/canvas/notation";
+import { useStrokeEditing } from "./useStrokeEditing";
 
 /**
  * Props for the RinkBoard component
@@ -295,6 +299,38 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
     }, []); // Only on mount - intentionally empty to avoid re-initializing history
 
     /**
+     * Handle play data updates
+     */
+    const updatePlayData = useCallback(
+        (newData: PlayData) => {
+            if (mode === "edit" && onPlayDataChange) {
+                onPlayDataChange(newData);
+                historyManagerRef.current.push(newData);
+
+                // Notify parent of undo/redo state changes
+                if (onUndoRedoStateChange) {
+                    onUndoRedoStateChange(
+                        historyManagerRef.current.canUndo(),
+                        historyManagerRef.current.canRedo()
+                    );
+                }
+            }
+        },
+        [mode, onPlayDataChange, onUndoRedoStateChange]
+    );
+
+    // Line editing: the selected line's handles, bends and whole-line moves (line editing R3, R5)
+    const {
+        press: pressLine,
+        grab: grabLine,
+        move: moveLineGesture,
+        release: releaseLine,
+        cancel: cancelLine,
+        preview: linePreview,
+        active: lineGestureActive,
+    } = useStrokeEditing({ playDataRef, commit: updatePlayData });
+
+    /**
      * Rendering function
      * Requirements: 1.1 - Render rink background
      */
@@ -308,15 +344,20 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         // Drag preview is visual only; the move is committed on mouseUp.
         // drawBoardFrame clears under an identity transform, then sets the
         // zoom/pan transform every frame (a resize resets context state).
-        const renderData = isDragging && selectedElementId && dragPreviewPosition
-            ? moveElement(playData, selectedElementId, dragPreviewPosition)
-            : playData;
+        const renderData = linePreview
+            ? replaceDrawing(playData, linePreview)
+            : isDragging && selectedElementId && dragPreviewPosition
+                ? moveElement(playData, selectedElementId, dragPreviewPosition)
+                : playData;
         drawBoardFrame(ctx, transform, renderData, {
             selectedId: selectedElementId || undefined,
             zoom: scale,
             pan: viewPan,
             maskRect: areaMaskRect(areaDrag, playData.area),
         });
+        // The selected line's handles, over the scene (line editing R3, R6)
+        const selected = selectedElementId ? findElement(renderData, selectedElementId) : null;
+        if (selected?.kind === "drawing") drawLineHandles(ctx, lineHandles(selected.element), transform, LINE_EDIT_COLORS, scale);
 
         // Draw current stroke in progress
         if (isDrawing && currentDrawingPoints.length > 1) {
@@ -338,6 +379,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         scale,
         viewPan,
         areaDrag,
+        linePreview,
     ]);
 
     /**
@@ -358,27 +400,6 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
             }
         };
     }, [render]);
-
-    /**
-     * Handle play data updates
-     */
-    const updatePlayData = useCallback(
-        (newData: PlayData) => {
-            if (mode === "edit" && onPlayDataChange) {
-                onPlayDataChange(newData);
-                historyManagerRef.current.push(newData);
-
-                // Notify parent of undo/redo state changes
-                if (onUndoRedoStateChange) {
-                    onUndoRedoStateChange(
-                        historyManagerRef.current.canUndo(),
-                        historyManagerRef.current.canRedo()
-                    );
-                }
-            }
-        },
-        [mode, onPlayDataChange, onUndoRedoStateChange]
-    );
 
     /**
      * Handle undo operation
@@ -480,7 +501,8 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         setIsDrawing(false);
         setCurrentDrawingPoints([]);
         setAreaDrag(null);
-    }, [selectedTool, areaTool]);
+        cancelLine();
+    }, [selectedTool, areaTool, cancelLine]);
 
     /** Hit radius in feet that stays MIN_HIT_RADIUS_PX on screen at any zoom */
     const minHitRadiusFt = useCallback(
@@ -539,16 +561,23 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
                     setIsDrawing(false);
                     setCurrentDrawingPoints([]);
                     grabPointRef.current = null;
+                    cancelLine();
+                    // The selected line's handles, then its body, come before
+                    // anything else under the pointer (line editing R3)
+                    if (pressLine({ selectedId: selectedElementIdRef.current, point: hitPos, hitRadiusFt: minHitRadiusFt() })) break;
                     const hitResult = hitTest(hitPos, playData, minHitRadiusFt());
                     if (hitResult.hit && hitResult.elementId) {
                         setSelectedElementId(hitResult.elementId);
+                        const found = findElement(playData, hitResult.elementId);
+                        if (found?.kind === "drawing") {
+                            // A line moves as a whole from wherever it is grabbed
+                            grabLine(found.element, hitPos);
+                            break;
+                        }
                         setIsDragging(true);
                         grabPointRef.current = hitPos;
-
-                        // Drag offset keeps the grab point under the pointer.
-                        // Strokes have no position and are not draggable.
-                        const found = findElement(playData, hitResult.elementId);
-                        if (found && found.kind !== "drawing") {
+                        // Drag offset keeps the grab point under the pointer
+                        if (found) {
                             setDragOffset({
                                 x: hitPos.x - found.element.position.x,
                                 y: hitPos.y - found.element.position.y,
@@ -631,6 +660,9 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
             generateId,
             getTransformedRinkPosition,
             minHitRadiusFt,
+            pressLine,
+            grabLine,
+            cancelLine,
         ]
     );
 
@@ -656,6 +688,12 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
                 return;
             }
 
+            // A line edit in progress previews only; release commits it (line editing R3)
+            if (moveLineGesture(clampToRect(rinkPos, FULL_RINK), {
+                area,
+                thresholdFt: pxToRinkFt(DRAG_THRESHOLD_PX, transform, scaleRef.current),
+            })) return;
+
             // Continue drawing if in drawing mode; stroke points stay in the area
             if (isDrawing && selectedTool === "stroke") {
                 setCurrentDrawingPoints((prev) => [...prev, clampToRect(rinkPos, area)]);
@@ -677,7 +715,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
                 setDragPreviewPosition((prev) => (prev === null && !started ? null : dragTarget(pointer, grabOffset, area)));
             }
         },
-        [mode, transform, isDrawing, selectedTool, areaDrag, getTransformedRinkPosition]
+        [mode, transform, isDrawing, selectedTool, areaDrag, getTransformedRinkPosition, moveLineGesture]
     );
 
     /**
@@ -712,6 +750,9 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
                     else updatePlayData(finished);
                 }
             }
+
+            // A line edit commits one history entry, or nothing if it changed nothing
+            releaseLine();
 
             // Commit drag changes to playData (single history entry); a drag
             // that ends where the element already is records nothing
@@ -748,6 +789,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
             onAreaDrawn,
             updatePlayData,
             generateId,
+            releaseLine,
         ]
     );
 
@@ -757,14 +799,14 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
      * also bubble here, before React has re-rendered).
      */
     useEffect(() => {
-        if (!isDragging && !isDrawing && !areaDrag) return;
+        if (!isDragging && !isDrawing && !areaDrag && !lineGestureActive) return;
         const onWindowMouseUp = (event: MouseEvent) => {
             if (event.target instanceof Node && canvasRef.current?.contains(event.target)) return;
             handleMouseUp();
         };
         window.addEventListener("mouseup", onWindowMouseUp);
         return () => window.removeEventListener("mouseup", onWindowMouseUp);
-    }, [isDragging, isDrawing, areaDrag, handleMouseUp]);
+    }, [isDragging, isDrawing, areaDrag, lineGestureActive, handleMouseUp]);
 
     /**
      * Handle keyboard delete key for selected elements
@@ -857,7 +899,8 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         grabPointRef.current = null;
         setIsDrawing(false);
         setCurrentDrawingPoints([]);
-    }, []);
+        cancelLine();
+    }, [cancelLine]);
 
     /**
      * Applies a pinch's view. The anchored pan is bounded, so the rink can't be

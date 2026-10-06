@@ -1,5 +1,15 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
-import { drawStroke, drawAreaMask, drawBoardScene, drawBoardFrame, drawElement } from "@/lib/utils/canvas/drawing-utils";
+import {
+    drawStroke,
+    drawAreaMask,
+    drawBoardScene,
+    drawBoardFrame,
+    drawElement,
+    drawLineHandles,
+    LINE_HANDLE_RADIUS_PX,
+} from "@/lib/utils/canvas/drawing-utils";
+import { LINE_EDIT_COLORS } from "@/lib/utils/canvas/notation";
+import type { LineHandle } from "@/lib/utils/canvas/line-editing";
 import { CURVE_SAMPLES_PER_SEGMENT } from "@/lib/utils/canvas/stroke-geometry";
 import { clearRinkCache, createTransformContext, FULL_RINK, rinkToCanvas } from "@/lib/utils/canvas/rink-renderer";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
@@ -228,5 +238,39 @@ describe("drawElement selection highlight", () => {
         expect(highlightLineTos("straight", three)).toBe(2);
         expect(highlightLineTos("straight", points)).toBe(1);
         expect(highlightLineTos("freehand", three)).toBe(2);
+    });
+});
+
+describe("drawLineHandles", () => {
+    const handles: LineHandle[] = [
+        { kind: "end", index: 0, position: { x: 20, y: 40 } },
+        { kind: "end", index: 1, position: { x: 120, y: 40 } },
+        { kind: "add", segment: 0, position: { x: 70, y: 40 } },
+    ];
+
+    it("draws every handle 7 px on screen, whatever the zoom", () => {
+        for (const zoom of [1, 2]) {
+            const calls: Call[] = [];
+            drawLineHandles(recordingCtx(calls), handles, transform, LINE_EDIT_COLORS, zoom);
+            const arcs = calls.filter((c) => c.name === "arc");
+            expect(arcs).toHaveLength(3);
+            for (const arc of arcs) expect(arc.args[2]).toBeCloseTo(LINE_HANDLE_RADIUS_PX / zoom);
+            const mid = rinkToCanvas({ x: 70, y: 40 }, transform);
+            expect(arcs[2].args.slice(0, 2)).toEqual([mid.x, mid.y]);
+        }
+    });
+
+    it("draws a plus on '+' handles only", () => {
+        const calls: Call[] = [];
+        drawLineHandles(recordingCtx(calls), handles, transform, LINE_EDIT_COLORS);
+        expect(calls.filter((c) => c.name === "moveTo")).toHaveLength(2);
+    });
+
+    it("draws a polyline's corner as a 14 px square", () => {
+        const calls: Call[] = [];
+        drawLineHandles(recordingCtx(calls), [{ kind: "corner", index: 1, position: { x: 70, y: 40 } }], transform, LINE_EDIT_COLORS);
+        const c = rinkToCanvas({ x: 70, y: 40 }, transform);
+        expect(calls.filter((call) => call.name === "arc")).toHaveLength(0);
+        expect(calls.find((call) => call.name === "rect")!.args).toEqual([c.x - 7, c.y - 7, 14, 14]);
     });
 });

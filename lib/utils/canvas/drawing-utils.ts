@@ -23,6 +23,7 @@ import { buildStrokeGeometry, strokeCenterline, type StrokeGeometry } from "./st
 import { drawPlayerGlyph, drawEquipmentGlyph } from "./glyphs";
 import { EQUIPMENT_RADIUS_FT, PLAYER_RADIUS_FT, glyphRadiusPx } from "./glyph-metrics";
 import { BOARD_COLORS } from "./notation";
+import type { LineHandle } from "./line-editing";
 
 /**
  * Visual constants for drawing
@@ -255,6 +256,58 @@ export function drawElement(
     }
 
     drawStroke(ctx, element, transform);
+}
+
+/** A line handle's radius on screen, at any zoom (line editing R6). */
+export const LINE_HANDLE_RADIUS_PX = 7;
+
+export interface LineEditColors {
+    /** Inside of end, bend and anchor handles; the plus on "+" handles */
+    handleFill: string;
+    /** Handle outlines and the "+" disc */
+    handleStroke: string;
+    /** The snap ring */
+    snapRing: string;
+}
+
+/**
+ * Draws the selected line's handles (rink feet, under the board's zoom):
+ * ends, bends and anchors as rings, a polyline's corners as squares (so a
+ * sharp corner reads differently from a curve's bend), and "+" handles as
+ * filled discs with a plus. `zoom` keeps the size and outline the same on screen.
+ */
+export function drawLineHandles(
+    ctx: CanvasRenderingContext2D,
+    handles: readonly LineHandle[],
+    transform: TransformContext,
+    colors: LineEditColors,
+    zoom: number = 1
+): void {
+    const radius = LINE_HANDLE_RADIUS_PX / zoom;
+    ctx.save();
+    ctx.lineWidth = 2 / zoom;
+    for (const handle of handles) {
+        const c = rinkToCanvas(handle.position, transform);
+        const add = handle.kind === "add";
+        ctx.beginPath();
+        if (handle.kind === "corner") ctx.rect(c.x - radius, c.y - radius, radius * 2, radius * 2);
+        else ctx.arc(c.x, c.y, radius, 0, Math.PI * 2);
+        ctx.fillStyle = add ? colors.handleStroke : colors.handleFill;
+        ctx.fill();
+        ctx.strokeStyle = colors.handleStroke;
+        ctx.stroke();
+        if (add) {
+            const arm = radius * 0.55;
+            ctx.beginPath();
+            ctx.moveTo(c.x - arm, c.y);
+            ctx.lineTo(c.x + arm, c.y);
+            ctx.moveTo(c.x, c.y - arm);
+            ctx.lineTo(c.x, c.y + arm);
+            ctx.strokeStyle = colors.handleFill;
+            ctx.stroke();
+        }
+    }
+    ctx.restore();
 }
 
 /**
