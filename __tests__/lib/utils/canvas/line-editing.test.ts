@@ -80,6 +80,28 @@ describe("anchorPoints", () => {
     });
 });
 
+describe("anchorPoints idempotence", () => {
+    const near: Position[] = [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 20, y: 0.1 }, { x: 30, y: 0 }];
+
+    it("keeps every point of a line already at or under the cap", () => {
+        expect(anchorPoints(near)).toEqual(near);
+        const anchored = anchorPoints(wave(50));
+        expect(anchorPoints(anchored)).toEqual(anchored);
+    });
+
+    it("keeps all 4 handles of a nearly collinear 4-point freehand line", () => {
+        const handles = lineHandles(line(near, "freehand"));
+        expect(handles.filter((h) => h.kind === "end")).toHaveLength(2);
+        expect(handles.filter((h) => h.kind === "anchor")).toHaveLength(2);
+    });
+
+    it("keeps the point count when an anchored line's point is dragged next to its neighbours", () => {
+        const moved = moveLinePoint(line(near, "freehand"), 2, { x: 20, y: 0 }, RINK);
+        expect(moved.points).toHaveLength(4);
+        expect(moved.points[2]).toEqual({ x: 20, y: 0 });
+    });
+});
+
 describe("lineHandles", () => {
     it("gives a 2-point line two ends and one '+' at its midpoint", () => {
         expect(lineHandles(line([{ x: 0, y: 0 }, { x: 100, y: 0 }]))).toEqual([
@@ -261,6 +283,8 @@ describe("insertBend and removeBend", () => {
         expect(removeBend(curve, 2)).toBe(curve);
         const free = line(wave(10), "freehand");
         expect(removeBend(free, 3)).toBe(free);
+        expect(removeBend(curve, 1.5)).toBe(curve);
+        expect(removeBend(curve, NaN)).toBe(curve);
     });
 });
 

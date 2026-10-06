@@ -48,10 +48,12 @@ function editablePoints(stroke: LineStroke): Position[] {
  * Up to `max` of `points`, always the first and last: a greedy
  * Douglas–Peucker pass that adds, each round, the point farthest from the
  * line through the points kept so far, until `max` are kept or none is more
- * than ANCHOR_TOLERANCE_FT away. Returns `points` itself when all are kept.
+ * than ANCHOR_TOLERANCE_FT away. A line of `max` points or fewer is returned
+ * as is (the same array), so already-anchored lines keep every handle.
  */
 export function anchorPoints(points: Position[], max: number = MAX_EDIT_POINTS): Position[] {
-    if (points.length <= 2) return points;
+    // A line already within the cap is its own anchors, so anchoring is idempotent
+    if (points.length <= max) return points;
     const kept = [0, points.length - 1];
     while (kept.length < max) {
         let best = -1;
@@ -177,7 +179,7 @@ export function insertBend(stroke: DrawingElement, segment: number, at: Position
  * points becomes a straight line again.
  */
 export function removeBend(stroke: DrawingElement, index: number): DrawingElement {
-    if (stroke.path === "freehand" || index <= 0 || index >= stroke.points.length - 1) return stroke;
+    if (stroke.path === "freehand" || !Number.isInteger(index) || index <= 0 || index >= stroke.points.length - 1) return stroke;
     const points = stroke.points.filter((_, i) => i !== index);
     const path = stroke.path === "curve" && points.length === 2 ? "straight" : stroke.path;
     return { ...stroke, path, points };
