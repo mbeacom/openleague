@@ -1,33 +1,10 @@
 "use client";
 
-import { useMemo } from "react";
 import { Box, Card, CardActionArea, CardContent, Stack, Typography } from "@mui/material";
 import { SportsHockey as HockeyIcon } from "@mui/icons-material";
 import type { PlayData, PracticeSessionViewPlay } from "@/types/practice-planner";
-import { generateThumbnail } from "@/lib/utils/canvas/thumbnail-generator";
-import { useMounted } from "@/lib/hooks/useClockText";
 import { usePlannerPlatform } from "@/lib/planner-store";
-
-/**
- * The stored thumbnail, unless the session draws this drill differently (a
- * goalie marker hidden, spec R7): a stored PNG can't drop a marker, so the
- * drawn diagram is rendered live at the stored thumbnail's size. Canvas needs
- * the DOM, so the live one is drawn in the first render after mount.
- */
-function useDrawnThumbnail(stored: string | null, playData: PlayData | null, drawn: PlayData | null): string | null {
-  const mounted = useMounted();
-  const differs = drawn !== null && drawn !== playData;
-  const live = useMemo(() => {
-    if (!differs || !mounted || !drawn) return null;
-    try {
-      return generateThumbnail(drawn);
-    } catch (error) {
-      console.warn("Session sidebar: couldn't draw a diagram", error);
-      return null;
-    }
-  }, [differs, mounted, drawn]);
-  return differs ? live : stored;
-}
+import { PlayDiagram } from "./PlayDiagram";
 
 interface SidebarPlayCardProps {
   sp: PracticeSessionViewPlay;
@@ -45,7 +22,8 @@ interface SidebarPlayCardProps {
 /** One drill in the sidebar's play sequence; standalone or inside a station block (2b). */
 export function SidebarPlayCard({ sp, drawn, timing, index, active, onSelect, runBy = null }: SidebarPlayCardProps) {
   const { Image } = usePlannerPlatform();
-  const thumbnail = useDrawnThumbnail(sp.play.thumbnail, sp.play.playData, drawn);
+  // The drawn diagram is live (sharp, and drops a hidden goalie, spec R7); the stored PNG is the fallback.
+  const thumbnail = sp.play.thumbnail;
   return (
     <Card
       sx={{
@@ -98,7 +76,9 @@ export function SidebarPlayCard({ sp, drawn, timing, index, active, onSelect, ru
               flexShrink: 0,
             }}
           >
-            {thumbnail ? (
+            {drawn ? (
+              <PlayDiagram playData={drawn} label={sp.play.name} sx={{ width: 48, height: 32 }} />
+            ) : thumbnail ? (
               <Image src={thumbnail} alt="" fit="cover" />
             ) : (
               <Box

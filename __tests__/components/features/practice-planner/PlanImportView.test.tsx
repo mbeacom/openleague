@@ -17,7 +17,8 @@ vi.mock("@/lib/plan-document", async (importOriginal) => {
         planByteLength: (plan: Parameters<typeof original.planByteLength>[0]) => planBytes.override ?? original.planByteLength(plan),
     };
 });
-vi.mock("@/lib/utils/canvas/thumbnail-generator", () => ({
+vi.mock("@/lib/utils/canvas/thumbnail-generator", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("@/lib/utils/canvas/thumbnail-generator")>()),
     generateThumbnail: vi.fn(() => "data:image/png;base64,AA=="),
 }));
 

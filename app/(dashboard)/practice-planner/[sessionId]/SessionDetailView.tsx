@@ -48,7 +48,7 @@ import { PlayLegend } from "@/components/features/practice-planner/PlayLegend";
 import { StationMap } from "@/components/features/practice-planner/StationMap";
 import { SessionTimeline } from "@/components/features/practice-planner/SessionTimeline";
 import { ExportPlanMenu } from "@/components/features/practice-planner/ExportPlanMenu";
-import { PRINT_DIAGRAM_SIZE, PrintDiagram } from "@/components/features/practice-planner/print/PrintDiagram";
+import { PlayDiagram } from "@/components/features/practice-planner/PlayDiagram";
 import { useSessionGoalies } from "@/components/features/practice-planner/useSessionGoalies";
 import { SidebarPlayCard } from "@/components/features/practice-planner/SidebarPlayCard";
 import type { PracticeSessionView } from "@/types/practice-planner";
@@ -153,7 +153,6 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
   const shownDrills = useMemo(() => drillRows(shown.plays), [shown]);
   const drawnAt = (index: number) => shownDrills[index]?.play.playData ?? drills[index]?.play.playData ?? null;
   const activeDrawn = activePlay ? drawnAt(activePlayIndex) : null;
-  const goaliesHidden = Boolean(activePlay && activeDrawn !== activePlay.play.playData);
   const groups = useMemo(() => groupStations(drills), [drills]);
   const activeGroup = activePlay
     ? groups.find((group) => group.stations.includes(activePlay)) ?? null
@@ -576,12 +575,10 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
                     position: "relative",
                   }}
                 >
-                  {/* A stored PNG can't drop a hidden goalie marker, so draw it live. */}
-                  {goaliesHidden ? (
-                    // Fit inside the fixed-height preview like the thumbnail's fit="contain".
-                    <Box sx={{ height: "100%", aspectRatio: `${PRINT_DIAGRAM_SIZE.width} / ${PRINT_DIAGRAM_SIZE.height}`, maxWidth: "100%", display: "flex", alignItems: "center" }}>
-                      <PrintDiagram playData={activeDrawn} name={activePlay.play.name} pixelRatio={2} />
-                    </Box>
+                  {/* Drawn live at the screen's pixel ratio; the drawn data already drops a hidden goalie. */}
+                  {activeDrawn ? (
+                    // Fit inside the fixed-height preview, keeping the thumbnail's shape.
+                    <PlayDiagram playData={activeDrawn} label={activePlay.play.name} sx={{ height: "100%", width: "auto" }} />
                   ) : activePlay.play.thumbnail ? (
                     <Image src={activePlay.play.thumbnail} alt={activePlay.play.name} fit="contain" />
                   ) : (

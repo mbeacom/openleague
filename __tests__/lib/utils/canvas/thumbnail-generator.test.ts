@@ -9,6 +9,7 @@
 
 import { describe, it, expect } from "vitest";
 import {
+  thumbnailPadding,
   isValidPngBase64,
   getBase64Size,
   THUMBNAIL_DIMENSIONS,
@@ -61,4 +62,16 @@ describe("getBase64Size", () => {
     const large = "data:image/png;base64,AAAAAAAAAAAAAAAAAAAAAAAAAAAA";
     expect(getBase64Size(large)).toBeGreaterThan(getBase64Size(small));
   });
+});
+
+describe("thumbnailPadding", () => {
+    it("keeps 10 px from the stored 300 px width up, so stored and printed thumbnails don't change", () => {
+        expect(thumbnailPadding(300)).toBe(10);
+        expect(thumbnailPadding(720)).toBe(10);
+    });
+
+    it("shrinks in proportion below 300 px, so a 48 px sidebar card isn't mostly padding", () => {
+        expect(thumbnailPadding(48)).toBeCloseTo(1.6);
+        expect(thumbnailPadding(120)).toBe(4);
+    });
 });

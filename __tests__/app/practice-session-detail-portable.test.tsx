@@ -78,8 +78,10 @@ describe("SessionDetailView on a portable platform", () => {
         expect(platform.navigate).toHaveBeenCalledWith("#/");
     });
 
-    it("draws the active drill with the platform's Image", () => {
+    it("draws the active drill live, not from the stored thumbnail (rink diagram quality spec §1)", () => {
         renderPortable(storeWithoutSharing());
-        expect(screen.getByRole("img", { name: "Breakout" })).toHaveAttribute("data-fit", "contain");
+        // The preview and the sidebar card both draw it.
+        expect(screen.getAllByRole("img", { name: "Breakout diagram" }).every((el) => el.tagName === "CANVAS")).toBe(true);
+        expect(screen.queryByRole("img", { name: "Breakout" })).not.toBeInTheDocument();
     });
 });

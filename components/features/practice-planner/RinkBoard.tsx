@@ -156,11 +156,9 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
     const containerRef = useRef<HTMLDivElement>(null);
     const [canvasSize, setCanvasSize] = useState({ width, height });
     // Backing-store pixels per CSS pixel; changes with browser zoom or another screen.
-    const [pixelRatio, setPixelRatio] = useState(1);
-    useEffect(() => {
-        setPixelRatio(backingPixelRatio());
-        return watchPixelRatio(() => setPixelRatio(backingPixelRatio()));
-    }, []);
+    // Never rendered into markup, so reading it on the first client render can't mismatch hydration.
+    const [pixelRatio, setPixelRatio] = useState(backingPixelRatio);
+    useEffect(() => watchPixelRatio(() => setPixelRatio(backingPixelRatio())), []);
     // Sized here, not through JSX width/height, which React would re-apply at the CSS size.
     useEffect(() => {
         const canvas = canvasRef.current;

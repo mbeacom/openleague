@@ -9,7 +9,8 @@ import { STARTER_PLAYS } from "@/lib/data/starter-plays";
 import { drillRows, toSessionRowInputs } from "@/lib/utils/session-rows";
 
 // jsdom has no canvas; the preview's diagrams (a template's are not empty) draw as a stub.
-vi.mock("@/lib/utils/canvas/thumbnail-generator", () => ({
+vi.mock("@/lib/utils/canvas/thumbnail-generator", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("@/lib/utils/canvas/thumbnail-generator")>()),
     generateThumbnail: vi.fn(() => "data:image/png;base64,AA=="),
 }));
 
