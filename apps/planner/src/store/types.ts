@@ -81,6 +81,8 @@ export interface LocalPlannerStore extends PlannerStore {
     updatePlay: (input: LocalPlayUpdate) => Promise<ActionResult<{ id: string }>>;
     importPlan: (plan: PlanDocument, options: PlanImportOptions) => Promise<ActionResult<{ sessionId: string }>>;
     seedStarterDrills: () => Promise<void>;
+    /** Replaces stored thumbnails made before 2× storage (rink diagram quality spec §1); resolves to how many it replaced. */
+    refreshStoredThumbnails: () => Promise<number>;
     /** "Your team" (practice logo spec R4). */
     getTeamProfile: () => Promise<ActionResult<TeamProfile | null>>;
     saveTeamProfile: (input: TeamProfileInput) => Promise<ActionResult<TeamProfile>>;

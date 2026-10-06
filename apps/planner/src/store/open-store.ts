@@ -59,5 +59,10 @@ export async function openPlannerStore({ open, stale, storeOptions }: OpenStoreO
     } catch (error) {
         console.error("Couldn't add the starter drills:", error);
     }
+    try {
+        await store.refreshStoredThumbnails();
+    } catch (error) {
+        console.error("Couldn't refresh drill thumbnails:", error);
+    }
     return { store, durable: repo.durable };
 }
