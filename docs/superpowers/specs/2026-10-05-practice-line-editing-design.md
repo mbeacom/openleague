@@ -110,7 +110,7 @@ The selection highlight and line hit-testing follow the drawn curve for a `curve
 
   A line never snaps to itself. Text annotations are not targets. Targets outside the drill's ice area are skipped.
 - **Radius.** The larger of **3 ft** and the board's minimum hit radius in feet. The nearest target inside the radius wins; ties go to the first in that order.
-- **Feedback.** While a snap is active, a ring is drawn around the target: 5 px outside a player's or an equipment item's drawn glyph on screen, and never smaller than a 14 px radius (a line end's ring). It is a League Blue ring over a white halo.
+- **Feedback.** While a snap is active, a ring is drawn around the target: 5 px on screen outside a player's or an equipment item's drawn glyph and its outline, and never smaller than a 14 px radius (a line end's ring). It is a League Blue ring over a white halo.
 - **Never onto its own other end.** A drawn line's end never snaps to the target its start snapped to, and a dragged end of a 2-point line never snaps onto the line's other end. A drawn line shorter than 1 ft between its raw press and release points is a tap and creates nothing, whatever it would have snapped to.
 - **Off switch.** Holding Alt/Option during the gesture disables snapping. There is no persistent toggle.
 - **No attachment.** Snapping only sets coordinates. Nothing links a line to an object.

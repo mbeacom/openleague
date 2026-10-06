@@ -312,14 +312,16 @@ export function drawLineHandles(
 
 /** The snap ring's smallest radius on screen, at any zoom: a line end's ring (line editing R4). */
 export const SNAP_RING_RADIUS_PX = 14;
-/** On screen, how far the ring sits outside a player's or an equipment item's glyph. */
+/** On screen, how far the ring sits outside a player's or an equipment item's glyph outline. */
 const SNAP_RING_GAP_PX = 5;
+/** How far a glyph's outline reaches past its radius, as a share of it: half the widest outline (a ring player's, 0.22 r). */
+const GLYPH_OUTLINE_OUTSET = 0.11;
 /** The halo under the snap ring: white, as the handles' fill (LINE_EDIT_COLORS.handleFill) */
 const SNAP_RING_HALO = "#FFFFFF";
 
 /**
  * Rings a snap target while a line end is snapping (line editing R4): outside
- * the target's drawn glyph (glyphRadiusPx, with its on-screen minimum), and at
+ * the target's drawn glyph and its outline (glyphRadiusPx, with its on-screen minimum), and at
  * least SNAP_RING_RADIUS_PX, as a ring over a white halo so it reads on ice,
  * lines and tokens alike.
  */
@@ -332,7 +334,7 @@ export function drawSnapRing(
 ): void {
     const c = rinkToCanvas(target.position, transform);
     const pxPerFt = Math.min(transform.scaleX, transform.scaleY);
-    const glyph = target.radiusFt > 0 ? glyphRadiusPx(target.radiusFt, pxPerFt, zoom) : 0;
+    const glyph = target.radiusFt > 0 ? glyphRadiusPx(target.radiusFt, pxPerFt, zoom) * (1 + GLYPH_OUTLINE_OUTSET) : 0;
     const radius = Math.max(SNAP_RING_RADIUS_PX / zoom, glyph + SNAP_RING_GAP_PX / zoom);
     ctx.save();
     ctx.beginPath();

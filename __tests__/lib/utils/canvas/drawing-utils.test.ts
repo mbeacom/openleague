@@ -310,8 +310,8 @@ describe("drawSnapRing", () => {
             const ring = arcs(calls)[0].args[2] as number;
             const glyph = glyphRadiusPx(PLAYER_RADIUS_FT, pxPerFt, zoom);
             expect(glyph).toBeGreaterThan(SNAP_RING_RADIUS_PX / zoom);
-            expect(ring).toBeGreaterThan(glyph);
-            expect(ring).toBeCloseTo(glyph + 5 / zoom);
+            // The halo's inner edge (3 px inside the ring) clears the glyph and its outline (up to 0.11 r past it)
+            expect(ring - 3 / zoom).toBeGreaterThan(glyph * 1.11);
         }
     });
 
@@ -320,7 +320,7 @@ describe("drawSnapRing", () => {
         const zoom = 1;
         drawSnapRing(recordingCtx(calls), { position: { x: 50, y: 40 }, radiusFt: EQUIPMENT_RADIUS_FT.puck }, transform, LINE_EDIT_COLORS.snapRing, zoom);
         const ring = arcs(calls)[0].args[2] as number;
-        expect(ring).toBe(Math.max(SNAP_RING_RADIUS_PX, glyphRadiusPx(EQUIPMENT_RADIUS_FT.puck, pxPerFt, zoom) + 5));
-        expect(ring).toBeGreaterThan(glyphRadiusPx(EQUIPMENT_RADIUS_FT.puck, pxPerFt, zoom));
+        expect(ring).toBe(SNAP_RING_RADIUS_PX);
+        expect(ring - 3).toBeGreaterThan(glyphRadiusPx(EQUIPMENT_RADIUS_FT.puck, pxPerFt, zoom) * 1.11);
     });
 });
