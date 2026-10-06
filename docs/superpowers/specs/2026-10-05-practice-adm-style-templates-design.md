@@ -20,7 +20,7 @@ What exists (verified):
   - Nothing smaller than a zone has a name.
 - **Drill tags.** `Play.focus` and `Play.goalies` are strings with CHECK constraints, lowercase values, mirrored in Zod, the plan file and the static store.
 - **Catalog.**
-  - There are 29 starter drills and 3 station templates.
+  - There are 26 starter drills and 3 station templates.
   - Neither drills nor templates have an age field.
   - Templates are used through "Use template" on the import screen in both apps.
 - **Age labels.** `lib/utils/age-level.ts` already labels league age classifications ("8U (Mite)", "10U (Squirt)" and so on).
@@ -33,7 +33,7 @@ A coach running a youth practice in the ADM style (several small stations at onc
 - find drills for their age group;
 - tag their own drills by age.
 
-All content is written by OpenLeague. "ADM-style" is used only descriptively. Nothing names, copies or implies endorsement by USA Hockey.
+All content is written by OpenLeague. "ADM-style" is used only descriptively. Nothing names, copies or implies endorsement by any governing body.
 
 ### Success criteria
 
@@ -68,7 +68,7 @@ All content is written by OpenLeague. "ADM-style" is used only descriptively. No
 
 **Compatibility.**
 - `PLAY_DATA_VERSION` and `PLAN_VERSION` stay the same. The values are additive.
-- An older build rejects a diagram that uses a new preset until it reloads, as with `curve`.
+- An older build reads a diagram with a new preset as full ice (it drops the unknown area) until it reloads; the ADR-0020 amendment records the exact behaviour.
 - ADR-0020 gets an amendment.
 
 **Area picker.** It groups the presets: "Full and halves", "Zones", "Quarters".
@@ -148,7 +148,7 @@ All content is written by OpenLeague. "ADM-style" is used only descriptively. No
 Names and descriptions are original.
 
 **Rules.**
-- No USA Hockey name, logo, diagram, drill name or text appears anywhere in the content, code comments, docs or commit messages.
+- No governing body's name, logo, diagram, drill name or text appears anywhere in the content, code comments, docs or commit messages.
 - Each drill passes the existing starter-catalog tests.
 - Each template passes the station-overlap and area checks.
 
@@ -195,5 +195,5 @@ Names and descriptions are original.
 
 - A second symbol set or notation preset.
 - An age group on practices or teams, or defaults taken from a team's division.
-- Importing USA Hockey or other third-party files.
+- Importing third-party practice files.
 - Sport-specific variants beyond hockey.
