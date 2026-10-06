@@ -241,7 +241,11 @@ export function drawRink(ctx: CanvasRenderingContext2D, transform: TransformCont
         ctx.save();
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.fillStyle = "#FFFFFF";
-        ctx.fillRect(0, 0, transform.canvasWidth, transform.canvasHeight);
+        // Identity transform: fill the real backing store (a high-ratio canvas is larger than the CSS size).
+        const backing = ctx.canvas as HTMLCanvasElement | undefined;
+        const fullW = typeof backing?.width === "number" ? backing.width : transform.canvasWidth;
+        const fullH = typeof backing?.height === "number" ? backing.height : transform.canvasHeight;
+        ctx.fillRect(0, 0, fullW, fullH);
         ctx.restore();
         drawRinkMarkings(ctx, transform);
         return;

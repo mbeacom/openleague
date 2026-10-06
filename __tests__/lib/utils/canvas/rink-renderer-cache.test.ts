@@ -114,3 +114,18 @@ describe("drawRink cache", () => {
     expect(calls).toContain("restore()");
   });
 });
+
+describe("drawRink without the cache", () => {
+  it("fills white over the whole backing store, not just the CSS-size rectangle", () => {
+    const ctx = fakeCtx() as CanvasRenderingContext2D & { fillRect: ReturnType<typeof vi.fn> };
+    (ctx as unknown as { canvas: unknown }).canvas = { width: 1600, height: 800 };
+    drawRink(ctx, createTransformContext(800, 400), { cache: false });
+    expect(ctx.fillRect.mock.calls[0]).toEqual([0, 0, 1600, 800]);
+  });
+
+  it("falls back to the transform's size on a context without a canvas", () => {
+    const ctx = fakeCtx() as CanvasRenderingContext2D & { fillRect: ReturnType<typeof vi.fn> };
+    drawRink(ctx, createTransformContext(800, 400), { cache: false });
+    expect(ctx.fillRect.mock.calls[0]).toEqual([0, 0, 800, 400]);
+  });
+});

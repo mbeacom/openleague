@@ -440,16 +440,19 @@ export function drawBoardScene(
 export interface BoardFrameOptions extends BoardSceneOptions {
     /** Board pan in screen pixels, applied with `zoom` (default none) */
     pan?: Position;
+    /** Backing-store pixels per CSS pixel (backing-store.ts); default 1 */
+    pixelRatio?: number;
 }
 
 /**
- * One RinkBoard animation frame. Clears the whole canvas under an identity
- * transform (a clear under the zoom/pan transform misses part of the screen,
+ * One RinkBoard animation frame. Clears the whole canvas under the pixel-ratio
+ * transform alone (a clear under the zoom/pan transform misses part of the screen,
  * and the 35% area mask then stacks on the uncleared pixels every frame),
  * applies the zoom/pan transform for drawing, then draws the scene once.
  * Zoomed or panned, the rink is drawn directly, because the cached background
  * only covers a canvas-sized rectangle at the origin; at zoom 1 with no pan
- * the cache is used as before. The transform is left applied so the caller
+ * the cache is used as before, at pixel ratio 1 only (above it the cached
+ * CSS-size bitmap would be upscaled). The transform is left applied so the caller
  * can draw an in-progress stroke on top.
  */
 export function drawBoardFrame(
@@ -460,11 +463,14 @@ export function drawBoardFrame(
 ): void {
     const zoom = options.zoom ?? 1;
     const pan = options.pan ?? { x: 0, y: 0 };
+    const ratio = options.pixelRatio ?? 1;
     ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    // Clear in CSS pixels under the ratio alone: the whole canvas, whatever the zoom or pan.
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
     ctx.clearRect(0, 0, transform.canvasWidth, transform.canvasHeight);
     ctx.restore();
-    ctx.setTransform(zoom, 0, 0, zoom, pan.x, pan.y);
+    ctx.setTransform(zoom * ratio, 0, 0, zoom * ratio, pan.x * ratio, pan.y * ratio);
     const shifted = zoom !== 1 || pan.x !== 0 || pan.y !== 0;
-    drawBoardScene(ctx, transform, playData, { ...options, zoom, cachedRink: !shifted });
+    // The cached rink is a CSS-size bitmap: use it only where it maps 1:1 onto the backing store.
+    drawBoardScene(ctx, transform, playData, { ...options, zoom, cachedRink: !shifted && ratio === 1 });
 }
