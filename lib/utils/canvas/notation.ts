@@ -102,7 +102,8 @@ export const ICE_AREA_GROUPS: ReadonlyArray<{ label: string; presets: readonly I
     },
 ];
 
-/** Display label for a drill's ice area; a missing area is full ice. */
+/** Display label for a drill's ice area; a missing or unknown area is full ice. */
 export function iceAreaLabel(area?: IceArea): string {
-    return ICE_AREA_LABELS[area?.kind ?? "full"];
+    const labels: Record<string, string | undefined> = ICE_AREA_LABELS;
+    return labels[area?.kind ?? "full"] ?? ICE_AREA_LABELS.full;
 }

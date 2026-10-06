@@ -170,6 +170,7 @@ describe("ICE_AREA_LABELS", () => {
         expect(iceAreaLabel(undefined)).toBe("Full ice");
         expect(iceAreaLabel({ kind: "zone-neutral" })).toBe("Neutral zone");
         expect(iceAreaLabel({ kind: "zone-right-bottom" })).toBe("Right end – bottom");
+        expect(iceAreaLabel({ kind: "from-the-future" } as unknown as IceArea)).toBe("Full ice");
     });
 });
 
