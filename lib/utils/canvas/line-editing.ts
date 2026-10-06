@@ -74,7 +74,6 @@ export function anchorPoints(points: Position[], max: number = MAX_EDIT_POINTS):
         if (best < 0) break;
         kept.splice(insertAt, 0, best);
     }
-    if (kept.length === points.length) return points;
     return kept.map((i) => ({ ...points[i] }));
 }
 
