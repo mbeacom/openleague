@@ -52,6 +52,7 @@ import { usePlannerPlatform, usePlannerStore, type PlannerStore } from "@/lib/pl
 import { STARTER_PLAYS, type StarterPlay } from "@/lib/data/starter-plays";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import { generateThumbnail } from "@/lib/utils/canvas/thumbnail-generator";
+import { backingPixelRatio } from "@/lib/utils/canvas/backing-store";
 import { formatDistanceToNow } from "date-fns";
 import { useDebouncedCallback } from "use-debounce";
 import { DrillFilterChips, type DrillFilters } from "./DrillFilterChips";
@@ -501,7 +502,8 @@ export function PlayLibrary({
         const thumbnails: Record<string, string> = {};
         for (const starter of STARTER_PLAYS) {
             try {
-                thumbnails[starter.id] = generateThumbnail(starter.playData);
+                // Never stored, so drawn at the screen's ratio rather than the stored 2×.
+                thumbnails[starter.id] = generateThumbnail(starter.playData, { pixelRatio: backingPixelRatio() });
             } catch (err) {
                 // Card falls back to "No preview"; play still saves without a thumbnail
                 console.error(`Error generating thumbnail for ${starter.name}:`, err);

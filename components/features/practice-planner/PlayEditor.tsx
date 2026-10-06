@@ -57,6 +57,7 @@ import { areaRect, countElementsOutside, isFullIce } from "@/lib/utils/ice-area"
 import { ICE_AREA_GROUPS, ICE_AREA_LABELS } from "@/lib/utils/canvas/notation";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import { generateThumbnail } from "@/lib/utils/canvas/thumbnail-generator";
+import { STORED_THUMBNAIL_PIXEL_RATIO } from "@/lib/utils/thumbnail-rules";
 
 /**
  * Props for the PlayEditor component
@@ -281,7 +282,7 @@ export function PlayEditor({
             // Requirements: 4.2
             let thumbnail = "";
             try {
-                thumbnail = generateThumbnail(playData);
+                thumbnail = generateThumbnail(playData, { pixelRatio: STORED_THUMBNAIL_PIXEL_RATIO });
             } catch (thumbnailError) {
                 console.error("Error generating thumbnail:", thumbnailError);
                 // Continue with save even if thumbnail generation fails

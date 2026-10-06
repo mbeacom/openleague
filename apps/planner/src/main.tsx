@@ -2,6 +2,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { generateThumbnail } from "@/lib/utils/canvas/thumbnail-generator";
+import { STORED_THUMBNAIL_PIXEL_RATIO } from "@/lib/utils/thumbnail-rules";
 import { CRASH_MESSAGE, PlannerApp } from "./App";
 import { createStaleSignal, openPlannerStore } from "./store/open-store";
 import "./static.css";
@@ -12,7 +13,7 @@ async function boot(): Promise<void> {
     const stale = createStaleSignal();
     const { store, durable } = await openPlannerStore({
         stale,
-        storeOptions: { makeThumbnail: (playData) => generateThumbnail(playData) },
+        storeOptions: { makeThumbnail: (playData) => generateThumbnail(playData, { pixelRatio: STORED_THUMBNAIL_PIXEL_RATIO }) },
     });
     createRoot(container).render(
         <StrictMode>

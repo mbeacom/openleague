@@ -1,6 +1,7 @@
 /** generateThumbnail's pixelRatio (3b): a sharper backing store for print, same geometry. */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { generateThumbnail, THUMBNAIL_DIMENSIONS } from "@/lib/utils/canvas/thumbnail-generator";
+import { STORED_THUMBNAIL_MIN_WIDTH, STORED_THUMBNAIL_PIXEL_RATIO } from "@/lib/utils/thumbnail-rules";
 import { clearRinkCache } from "@/lib/utils/canvas/rink-renderer";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 
@@ -54,6 +55,13 @@ describe("generateThumbnail pixelRatio", () => {
         expect(thumb.calls[0]).toEqual({ name: "scale", args: [3, 3] });
         // The background is filled in logical pixels, which scale(3) stretches over the whole backing store.
         expect(thumb.calls.find((c) => c.name === "fillRect")?.args).toEqual([0, 0, 720, 306]);
+    });
+
+    it("a stored thumbnail is 600×256, exactly the stored-size minimum", () => {
+        generateThumbnail(createEmptyPlayData(), { pixelRatio: STORED_THUMBNAIL_PIXEL_RATIO });
+        const [thumb] = canvases;
+        expect([thumb.width, thumb.height]).toEqual([600, 256]);
+        expect(thumb.width).toBe(STORED_THUMBNAIL_MIN_WIDTH);
     });
 
     it("draws the rink as vectors above ratio 1, so no cached rink bitmap is created or blitted", () => {
