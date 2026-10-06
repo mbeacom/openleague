@@ -225,6 +225,7 @@ A diagram line's `path` may now be `curve` as well as `straight` and `freehand`:
 **Compatibility:** a reader built before this amendment validates `path` against `straight` and `freehand`, so a diagram with a `curve` fails as a whole:
 - a plan file (or plan link) containing one is refused with the normal "can't open this plan" message, not the newer-version one;
 - a static planner tab still on an older build reports that drill's diagram as unreadable (the library won't open it; session views show it without a diagram) until it is reloaded. The stored drill is unchanged unless that old tab saves over it.
+- a hosted tab opened before the deploy reads plays through the updated server, so it never refuses them: it draws a `curve` as a sharp polyline through its bends until it is reloaded, and saving from it keeps `path: "curve"`.
 
 That one-way break is accepted, as for block rows: a version bump would make older readers reject every new file, including the many with no curve.
 

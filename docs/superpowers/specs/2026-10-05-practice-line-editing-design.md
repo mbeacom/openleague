@@ -53,7 +53,7 @@ A coach can fix a line without redrawing it: move it, drag its ends, and bend it
     - the session page and the bench sheet show the drill without its diagram, and the session editor shows it with an empty board;
     - the stored drill is not changed, unless the coach opens that drill's diagram in the old tab and saves it, which replaces it with what was saved. Reloading the tab loads the new build and reads the curve.
   - **Plan files.** An older reader refuses the whole file with "This practice plan has problems and can't be opened." (issue "The diagram can't be read"), not with the newer-version message, because `PLAN_VERSION` stays 1. This applies to the static import, a hosted import page left open from before the deploy, and a plan link.
-  - **Hosted.** The server and its client ship together, and the server validates every read and write, so an up-to-date hosted planner reads curves everywhere. A hosted tab opened before the deploy keeps its old bundle until it is reloaded; its in-browser plan reader refuses a file with a curve as above.
+  - **Hosted.** The server and its client ship together, and the server validates every read and write, so an up-to-date hosted planner reads curves everywhere. A hosted tab opened before the deploy keeps its old bundle until it is reloaded; its in-browser plan reader refuses a file with a curve as above. Plays still reach it through the new server, so it never refuses them: it draws a `curve` as a sharp polyline through its bends, and saving from it keeps `path: "curve"`.
 
 ### R2. Rendering
 
@@ -110,7 +110,8 @@ The selection highlight and line hit-testing follow the drawn curve for a `curve
 
   A line never snaps to itself. Text annotations are not targets. Targets outside the drill's ice area are skipped.
 - **Radius.** The larger of **3 ft** and the board's minimum hit radius in feet. The nearest target inside the radius wins; ties go to the first in that order.
-- **Feedback.** While a snap is active, a ring is drawn around the target point.
+- **Feedback.** While a snap is active, a ring is drawn around the target: 5 px outside a player's or an equipment item's drawn glyph on screen, and never smaller than a 14 px radius (a line end's ring). It is a League Blue ring over a white halo.
+- **Never onto its own other end.** A drawn line's end never snaps to the target its start snapped to, and a dragged end of a 2-point line never snaps onto the line's other end. A drawn line shorter than 1 ft between its raw press and release points is a tap and creates nothing, whatever it would have snapped to.
 - **Off switch.** Holding Alt/Option during the gesture disables snapping. There is no persistent toggle.
 - **No attachment.** Snapping only sets coordinates. Nothing links a line to an object.
 
