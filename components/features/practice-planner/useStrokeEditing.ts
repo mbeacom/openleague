@@ -3,10 +3,10 @@
 /**
  * Gesture state for editing the selected line on the rink board (line
  * editing spec R3, R5): drag the whole line, an end, a bend or a freehand
- * anchor, or a "+" handle to add a bend. The geometry is pure
- * (lib/utils/canvas/line-editing.ts); this hook holds the gesture between
- * press and release, exposes the live preview, and commits one history
- * entry on release.
+ * anchor, or a "+" handle to add a bend; double-tap a bend to remove it.
+ * The geometry is pure (lib/utils/canvas/line-editing.ts); this hook holds
+ * the gesture between press and release, exposes the live preview, and
+ * commits one history entry per edit.
  */
 import React, { useCallback, useRef, useState } from "react";
 import type { DrawingElement, PlayData, Position, RinkRect } from "@/types/practice-planner";
@@ -15,10 +15,13 @@ import { drawingHitRadius, hitTestDrawing, pastDragThreshold } from "@/lib/utils
 import {
     hitTestLineHandle,
     insertBend,
+    isDoubleTap,
     lineHandles,
     moveLine,
     moveLinePoint,
+    removeBend,
     type LineHandle,
+    type TapRecord,
 } from "@/lib/utils/canvas/line-editing";
 
 export interface LinePress {
@@ -28,6 +31,8 @@ export interface LinePress {
     point: Position;
     /** The board's minimum hit radius in feet (MIN_HIT_RADIUS_PX at the current zoom) */
     hitRadiusFt: number;
+    /** When the press happened, in milliseconds (for the double-tap) */
+    time: number;
 }
 
 export interface LineMove {
@@ -45,7 +50,7 @@ export interface StrokeEditingOptions {
 }
 
 export interface StrokeEditing {
-    /** A Select press on the selected line's handles or body starts a gesture; false (and nothing) otherwise */
+    /** A Select press on the selected line's handles or body starts a gesture (or removes a double-tapped bend); false (and nothing) otherwise */
     press: (press: LinePress) => boolean;
     /** Starts a whole-line move on a line a press has just selected */
     grab: (stroke: DrawingElement, point: Position) => void;
@@ -86,6 +91,8 @@ export function useStrokeEditing({ playDataRef, commit }: StrokeEditingOptions):
     const gestureRef = useRef<Gesture | null>(null);
     // The preview in a ref too, so a release in the same frame as the last move reads it
     const previewRef = useRef<DrawingElement | null>(null);
+    // The last press on a bend or corner that did not become a drag (for the double-tap)
+    const lastTapRef = useRef<TapRecord | null>(null);
     const [preview, setPreviewState] = useState<DrawingElement | null>(null);
     const [active, setActive] = useState(false);
 
@@ -104,13 +111,27 @@ export function useStrokeEditing({ playDataRef, commit }: StrokeEditingOptions):
     );
 
     const press = useCallback(
-        ({ selectedId, point, hitRadiusFt }: LinePress): boolean => {
+        ({ selectedId, point, hitRadiusFt, time }: LinePress): boolean => {
             if (!selectedId) return false;
-            const found = findElement(playDataRef.current, selectedId);
+            const data = playDataRef.current;
+            const found = findElement(data, selectedId);
             if (!found || found.kind !== "drawing") return false;
             const stroke = found.element;
             // Handles first, then the line's body (R3)
             const handle = hitTestLineHandle(lineHandles(stroke), point, hitRadiusFt);
+            if (handle?.kind === "bend" || handle?.kind === "corner") {
+                const tap: TapRecord = { id: stroke.id, index: handle.index, position: point, time };
+                if (isDoubleTap(lastTapRef.current, tap, hitRadiusFt)) {
+                    // A double-tap removes the bend or corner: one history entry, no drag (R3)
+                    lastTapRef.current = null;
+                    const next = replaceDrawing(data, removeBend(stroke, handle.index));
+                    if (next !== data) commit(next);
+                    return true;
+                }
+                lastTapRef.current = tap;
+            } else {
+                lastTapRef.current = null;
+            }
             if (handle) {
                 begin(stroke, handle, point);
                 return true;
@@ -121,7 +142,7 @@ export function useStrokeEditing({ playDataRef, commit }: StrokeEditingOptions):
             }
             return false;
         },
-        [playDataRef, begin]
+        [playDataRef, begin, commit]
     );
 
     const grab = useCallback((stroke: DrawingElement, point: Position) => begin(stroke, null, point), [begin]);
@@ -147,6 +168,8 @@ export function useStrokeEditing({ playDataRef, commit }: StrokeEditingOptions):
         gestureRef.current = null;
         setPreview(null);
         setActive(false);
+        // A drag is not a tap: the next press on the bend starts a new double-tap
+        if (g?.started) lastTapRef.current = null;
         if (!g?.started || !edited || edited === g.stroke) return;
         const current = playDataRef.current;
         const next = replaceDrawing(current, edited);

@@ -284,3 +284,89 @@ describe("RinkBoard line editing: history and interruptions", () => {
         expect(ctx.onPlayDataChange).not.toHaveBeenCalled();
     });
 });
+
+describe("RinkBoard line editing: removing bends", () => {
+    it("removes a curve's bend with a double-click, and the line is straight again", () => {
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(10_000);
+        const ctx = setup({ playData: withLines(line(BENT, "curve")) });
+        ctx.click(60, 30);
+        ctx.click(80, 20);
+        vi.setSystemTime(10_200);
+        ctx.click(80, 20);
+        expect(ctx.onPlayDataChange).toHaveBeenCalledTimes(1);
+        expect(ctx.last().drawings[0]).toMatchObject({ path: "straight", points: [{ x: 40, y: 40 }, { x: 120, y: 40 }] });
+    });
+
+    it("removes a polyline's corner with a double-click", () => {
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(10_000);
+        const ctx = setup({ playData: withLines(line(BENT)) });
+        ctx.click(60, 30);
+        ctx.click(80, 20);
+        vi.setSystemTime(10_200);
+        ctx.click(80, 20);
+        expect(ctx.last().drawings[0]).toMatchObject({ path: "straight", points: [{ x: 40, y: 40 }, { x: 120, y: 40 }] });
+    });
+
+    it("keeps the bend for two slow clicks", () => {
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(10_000);
+        const ctx = setup({ playData: withLines(line(BENT, "curve")) });
+        ctx.click(60, 30);
+        ctx.click(80, 20);
+        vi.setSystemTime(10_400);
+        ctx.click(80, 20);
+        expect(ctx.onPlayDataChange).not.toHaveBeenCalled();
+    });
+
+    it("removes a bend with a double-tap", () => {
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(10_000);
+        const ctx = setup({ playData: withLines(line(BENT, "curve")) });
+        const tap = (x: number, y: number) => {
+            fireEvent.touchStart(ctx.canvas, { touches: [ctx.at(x, y)] });
+            fireEvent.touchEnd(ctx.canvas, { touches: [] });
+        };
+        tap(60, 30);
+        tap(80, 20);
+        vi.setSystemTime(10_250);
+        tap(80, 20);
+        expect(ctx.last().drawings[0].points).toHaveLength(2);
+    });
+
+    it("never removes an end", () => {
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(10_000);
+        const ctx = setup({ playData: withLines(line(BENT, "curve")) });
+        ctx.click(60, 30);
+        ctx.click(40, 40);
+        vi.setSystemTime(10_100);
+        ctx.click(40, 40);
+        expect(ctx.onPlayDataChange).not.toHaveBeenCalled();
+    });
+
+    it("undoes a removed bend, back to the curve", () => {
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(10_000);
+        const start = withLines(line(BENT, "curve"));
+        const ctx = setup({ playData: start });
+        ctx.click(60, 30);
+        ctx.click(80, 20);
+        vi.setSystemTime(10_100);
+        ctx.click(80, 20);
+        ctx.rerender(ctx.last());
+        act(() => ctx.ref.current!.undo());
+        expect(ctx.last().drawings[0]).toMatchObject({ path: "curve", points: BENT });
+    });
+
+    it("straightens through the handle as one undoable step", () => {
+        const start = withLines(line(BENT, "curve"));
+        const ctx = setup({ playData: start });
+        act(() => ctx.ref.current!.updateElement("l", { path: "straight", points: [BENT[0], BENT[2]] }));
+        expect(ctx.last().drawings[0]).toMatchObject({ path: "straight", points: [BENT[0], BENT[2]] });
+        ctx.rerender(ctx.last());
+        act(() => ctx.ref.current!.undo());
+        expect(ctx.last().drawings[0]).toMatchObject({ path: "curve", points: BENT });
+    });
+});

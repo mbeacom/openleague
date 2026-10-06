@@ -564,7 +564,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
                     cancelLine();
                     // The selected line's handles, then its body, come before
                     // anything else under the pointer (line editing R3)
-                    if (pressLine({ selectedId: selectedElementIdRef.current, point: hitPos, hitRadiusFt: minHitRadiusFt() })) break;
+                    if (pressLine({ selectedId: selectedElementIdRef.current, point: hitPos, hitRadiusFt: minHitRadiusFt(), time: Date.now() })) break;
                     const hitResult = hitTest(hitPos, playData, minHitRadiusFt());
                     if (hitResult.hit && hitResult.elementId) {
                         setSelectedElementId(hitResult.elementId);
