@@ -262,6 +262,7 @@ describe("ice area", () => {
         ["NaN", { kind: "custom", rect: { x: Number.NaN, y: 0, w: 20, h: 20 } }],
         ["negative", { kind: "custom", rect: { x: -5, y: 0, w: 20, h: 20 } }],
         ["an unknown kind", { kind: "middle" }],
+        ["a near-miss quarter", { kind: "zone-left-middle" }],
         ["custom without a rect", { kind: "custom" }],
         ["null", null],
         ["a bare string", "zone-left"],
@@ -274,6 +275,15 @@ describe("ice area", () => {
             expect(playDataSchema.safeParse(stored).success).toBe(true);
         }
     });
+
+    it.each(["zone-left-top", "zone-left-bottom", "zone-neutral-top", "zone-neutral-bottom", "zone-right-top", "zone-right-bottom"] as const)(
+        "accepts the quarter preset %s on write and keeps it on read",
+        (kind) => {
+            const stored = { ...createEmptyPlayData(), area: { kind } };
+            expect(playDataSchema.safeParse(stored).success).toBe(true);
+            expect(upgradePlayData(stored)).toStrictEqual(stored);
+        },
+    );
 
     it("keeps a missing area missing", () => {
         const result = upgradePlayData(createEmptyPlayData());

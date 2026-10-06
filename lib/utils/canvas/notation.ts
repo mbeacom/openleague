@@ -83,8 +83,24 @@ export const ICE_AREA_LABELS: Record<IceAreaPreset | "custom", string> = {
     "zone-left": "Left end zone",
     "zone-neutral": "Neutral zone",
     "zone-right": "Right end zone",
+    "zone-left-top": "Left end – top",
+    "zone-left-bottom": "Left end – bottom",
+    "zone-neutral-top": "Neutral – top",
+    "zone-neutral-bottom": "Neutral – bottom",
+    "zone-right-top": "Right end – top",
+    "zone-right-bottom": "Right end – bottom",
     custom: "Custom area",
 };
+
+/** The area picker's groups, in ICE_AREA_PRESETS order; every preset is in exactly one. */
+export const ICE_AREA_GROUPS: ReadonlyArray<{ label: string; presets: readonly IceAreaPreset[] }> = [
+    { label: "Full and halves", presets: ["full", "half-left", "half-right"] },
+    { label: "Zones", presets: ["zone-left", "zone-neutral", "zone-right"] },
+    {
+        label: "Quarters",
+        presets: ["zone-left-top", "zone-left-bottom", "zone-neutral-top", "zone-neutral-bottom", "zone-right-top", "zone-right-bottom"],
+    },
+];
 
 /** Display label for a drill's ice area; a missing area is full ice. */
 export function iceAreaLabel(area?: IceArea): string {

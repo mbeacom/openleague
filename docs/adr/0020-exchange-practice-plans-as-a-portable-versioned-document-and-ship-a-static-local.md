@@ -230,3 +230,22 @@ A diagram line's `path` may now be `curve` as well as `straight` and `freehand`:
 That one-way break is accepted, as for block rows: a version bump would make older readers reject every new file, including the many with no curve.
 
 Spec: `docs/superpowers/specs/2026-10-05-practice-line-editing-design.md`.
+
+### 2026-10-05: Quarter-ice areas (six additive area values, versions stay 1 and 2)
+
+A diagram's `area.kind` may now also be one of six quarters: `zone-left-top`, `zone-left-bottom`, `zone-neutral-top`, `zone-neutral-bottom`, `zone-right-top` and `zone-right-bottom`. Each is a zone's x range and the top (y 0–42.5) or bottom (y 42.5–85) half of the rink. `PLAN_VERSION` stays 1 and `PlayData.version` stays 2.
+
+**Rules:**
+- The six earlier presets keep their rectangles, so every earlier file and stored play draws exactly as before.
+- Writers emit a quarter only for a drill set to one.
+
+**Compatibility:** a reader built before this amendment treats an unknown area as unreadable and drops it (`upgradePlayData`), not the whole diagram:
+- a plan file (or plan link) with a quarter-ice drill opens, and that drill reads as full ice;
+- a static planner tab still on an older build reads such a drill as full ice, and would save it without its area. The IndexedDB version bump that ships with drill age groups (amendment below) makes such a tab reload before it can write;
+- a hosted tab opened before the deploy receives the quarter from the updated server and can't draw it (its rectangle table has no entry) until it is reloaded.
+
+From this amendment on, `areaRect` draws an area kind it doesn't know as full ice instead of throwing, so the next additive area value degrades the same way in every surface.
+
+That one-way loss is accepted, as for block rows and curves: a version bump would make older readers reject every new file, including the many without quarters.
+
+Spec: `docs/superpowers/specs/2026-10-05-practice-adm-style-templates-design.md`.

@@ -22,6 +22,7 @@ import {
     FormControl,
     FormControlLabel,
     InputLabel,
+    ListSubheader,
     MenuItem,
     Select,
     Stack,
@@ -41,7 +42,6 @@ import { DrillTagFields, type DrillTagValues } from "./DrillTagFields";
 import { drillTags } from "@/lib/utils/drill-tags";
 import { findElement } from "@/lib/utils/canvas/element-ops";
 import {
-    ICE_AREA_PRESETS,
     type DrawingTool,
     type EquipmentKind,
     type IceAreaPreset,
@@ -52,7 +52,7 @@ import {
     type StrokeOptions,
 } from "@/types/practice-planner";
 import { areaRect, countElementsOutside, isFullIce } from "@/lib/utils/ice-area";
-import { ICE_AREA_LABELS } from "@/lib/utils/canvas/notation";
+import { ICE_AREA_GROUPS, ICE_AREA_LABELS } from "@/lib/utils/canvas/notation";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import { generateThumbnail } from "@/lib/utils/canvas/thumbnail-generator";
 
@@ -412,11 +412,15 @@ export function PlayEditor({
                                 value={areaTool ? "custom" : areaChoice}
                                 onChange={handleAreaChange}
                             >
-                                {ICE_AREA_PRESETS.map((preset) => (
-                                    <MenuItem key={preset} value={preset}>
-                                        {ICE_AREA_LABELS[preset]}
-                                    </MenuItem>
-                                ))}
+                                {/* Select needs its options as direct children, so the groups are flattened. */}
+                                {ICE_AREA_GROUPS.flatMap((group) => [
+                                    <ListSubheader key={`group-${group.label}`}>{group.label}</ListSubheader>,
+                                    ...group.presets.map((preset) => (
+                                        <MenuItem key={preset} value={preset}>
+                                            {ICE_AREA_LABELS[preset]}
+                                        </MenuItem>
+                                    )),
+                                ])}
                                 <MenuItem value="custom">Custom area…</MenuItem>
                             </Select>
                         </FormControl>

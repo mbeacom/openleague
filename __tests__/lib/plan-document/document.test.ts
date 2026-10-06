@@ -614,3 +614,16 @@ describe("curve lines in plan files (line editing R1)", () => {
         expect(drillRows(parsed.plan.session.drills)[0].drill.playData.drawings[0].path).toBe("curve");
     });
 });
+
+describe("quarter-ice areas (additive values, versions stay 1 and 2)", () => {
+    it("round-trips a quarter-ice diagram through a plan file at version 1", () => {
+        const quarter: PlayData = { ...BOARD, area: { kind: "zone-neutral-top" } };
+        const doc = JSON.parse(JSON.stringify(serializePlan(input({
+            drills: [{ sequence: 0, duration: 10, runsWithPrevious: false, instructions: null, name: "Lane", description: null, playData: quarter }],
+        }), "openleague-hosted", NOW)));
+        expect(doc.version).toBe(PLAN_VERSION);
+        const parsed = parsePlan(doc);
+        if (!parsed.ok) throw new Error(parsed.error.message);
+        expect(drillRows(parsed.plan.session.drills)[0].drill.playData.area).toEqual({ kind: "zone-neutral-top" });
+    });
+});
