@@ -60,6 +60,18 @@ describe("stationLabel", () => {
 describe("drawStationMap", () => {
     beforeEach(() => clearRinkCache());
 
+    it("clips and outlines a quarter-ice station to its half of the zone", () => {
+        const quarter: PlayData = { ...createEmptyPlayData(), area: { kind: "zone-right-bottom" } };
+        const calls = draw([{ name: "Battle", playData: quarter }]);
+        const clipRect = calls.find((c, i) => c.name === "rect" && calls[i + 1]?.name === "clip");
+        const topLeft = rinkToCanvas({ x: 125, y: 42.5 }, t);
+        const bottomRight = rinkToCanvas({ x: 200, y: 85 }, t);
+        expect(clipRect?.args[0]).toBeCloseTo(topLeft.x, 9);
+        expect(clipRect?.args[1]).toBeCloseTo(topLeft.y, 9);
+        expect(clipRect?.args[2]).toBeCloseTo(bottomRight.x - topLeft.x, 9);
+        expect(clipRect?.args[3]).toBeCloseTo(bottomRight.y - topLeft.y, 9);
+    });
+
     it("clips each station's drawing to its own area", () => {
         const calls = draw([{ name: "Breakout", playData: breakout }, { name: "Regroup", playData: regroup }]);
 

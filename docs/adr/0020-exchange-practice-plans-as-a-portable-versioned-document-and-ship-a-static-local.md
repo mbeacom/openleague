@@ -230,3 +230,38 @@ A diagram line's `path` may now be `curve` as well as `straight` and `freehand`:
 That one-way break is accepted, as for block rows: a version bump would make older readers reject every new file, including the many with no curve.
 
 Spec: `docs/superpowers/specs/2026-10-05-practice-line-editing-design.md`.
+
+### 2026-10-05: Quarter-ice areas (six additive area values, versions stay 1 and 2)
+
+A diagram's `area.kind` may now also be one of six quarters: `zone-left-top`, `zone-left-bottom`, `zone-neutral-top`, `zone-neutral-bottom`, `zone-right-top` and `zone-right-bottom`. Each is a zone's x range and the top (y 0–42.5) or bottom (y 42.5–85) half of the rink. `PLAN_VERSION` stays 1 and `PlayData.version` stays 2.
+
+**Rules:**
+- The six earlier presets keep their rectangles, so every earlier file and stored play draws exactly as before.
+- Writers emit a quarter only for a drill set to one.
+
+**Compatibility:** a reader built before this amendment treats an unknown area as unreadable and drops it (`upgradePlayData`), not the whole diagram:
+- a plan file (or plan link) with a quarter-ice drill opens, and that drill reads as full ice;
+- a static planner tab still on an older build reads such a drill as full ice, and would save it without its area. The IndexedDB version bump that ships with drill age groups (amendment below) makes such a tab reload before it can write;
+- a hosted tab opened before the deploy receives the quarter from the updated server; the older build's area lookup throws on an area kind it doesn't know, so that drill's board fails to render until the tab is reloaded.
+
+From this amendment on, `areaRect` draws an area kind it doesn't know as full ice instead of throwing, so the next additive area value degrades the same way in every surface.
+
+That one-way loss is accepted, as for block rows and curves: a version bump would make older readers reject every new file, including the many without quarters.
+
+Spec: `docs/superpowers/specs/2026-10-05-practice-adm-style-templates-design.md`.
+
+### 2026-10-05: Drill age groups (one additive field, version stays 1)
+
+Each drill gains `ageGroups`: a list of up to six distinct values from `u6`, `u8`, `u10`, `u12`, `u14` and `u16plus`, in that order. An empty list means the drill suits every age. `PLAN_VERSION` stays 1.
+
+**Rules:**
+- Missing or `null` reads as `[]`, so every earlier file reads as before.
+- Unlike `focus` and `goalies`, the field is strict: an unknown value, a repeated value or a value that isn't a list is an error, reported as a readable "Drill N" issue, never silently dropped.
+- Writers always emit the field (`[]` when none), in the order above.
+
+**Compatibility:**
+- A reader built before this amendment strips the key and opens the file with no age groups; a round trip through an older build drops them.
+- The static planner's IndexedDB goes from version 3 to 4 with no data change, so a tab still running an older build reloads (`onversionchange`) before it can rewrite a drill without its age groups, or a quarter-ice drill without its area.
+- A hosted tab opened before the deploy sends no age groups when it saves a drill, which the server reads as "unchanged".
+
+Spec: `docs/superpowers/specs/2026-10-05-practice-adm-style-templates-design.md`.

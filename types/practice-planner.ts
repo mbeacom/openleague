@@ -9,6 +9,7 @@
  */
 
 import type { SegmentKind } from "@/types/segments";
+import type { AgeGroup } from "@/lib/utils/age-groups";
 
 // ============================================================================
 // Core Play Data Types
@@ -207,7 +208,21 @@ export interface TextAnnotation {
 // Ice area (practice planner 2a)
 // ============================================================================
 
-export const ICE_AREA_PRESETS = ["full", "half-left", "half-right", "zone-left", "zone-neutral", "zone-right"] as const;
+/** Full ice, halves, zones, then the six quarters (a zone's top or bottom half). */
+export const ICE_AREA_PRESETS = [
+    "full",
+    "half-left",
+    "half-right",
+    "zone-left",
+    "zone-neutral",
+    "zone-right",
+    "zone-left-top",
+    "zone-left-bottom",
+    "zone-neutral-top",
+    "zone-neutral-bottom",
+    "zone-right-top",
+    "zone-right-bottom",
+] as const;
 export type IceAreaPreset = (typeof ICE_AREA_PRESETS)[number];
 
 /** Axis-aligned rectangle in rink feet. */
@@ -276,6 +291,8 @@ export interface PlayInSession {
     playData: PlayData;
     focus?: PlayFocus;
     goalies?: PlayGoalies;
+    /** Age groups (age-group templates R2); absent or [] = every age. */
+    ageGroups?: AgeGroup[];
     /**
      * The stored diagram couldn't be read, so `playData` is an empty board
      * stand-in. Station warnings skip such a drill rather than treating its
@@ -350,6 +367,7 @@ export interface PracticeSessionViewPlay {
         playData: PlayData | null;
         focus?: PlayFocus;
         goalies?: PlayGoalies;
+        ageGroups?: AgeGroup[];
     };
 }
 
@@ -418,6 +436,7 @@ export interface SavedPlay {
     isTemplate: boolean; // Whether this play is saved to the library
     focus?: PlayFocus;
     goalies?: PlayGoalies;
+    ageGroups?: AgeGroup[];
     createdAt: Date;
     updatedAt: Date;
 }

@@ -22,6 +22,7 @@ import {
     FormControl,
     FormControlLabel,
     InputLabel,
+    ListSubheader,
     MenuItem,
     Select,
     Stack,
@@ -39,9 +40,10 @@ import { ElementInspector } from "./ElementInspector";
 import { CustomAreaFields, rectFromFields } from "./CustomAreaFields";
 import { DrillTagFields, type DrillTagValues } from "./DrillTagFields";
 import { drillTags } from "@/lib/utils/drill-tags";
+import { AgeGroupsField } from "./AgeGroupsField";
+import { toAgeGroups, type AgeGroup } from "@/lib/utils/age-groups";
 import { findElement } from "@/lib/utils/canvas/element-ops";
 import {
-    ICE_AREA_PRESETS,
     type DrawingTool,
     type EquipmentKind,
     type IceAreaPreset,
@@ -52,7 +54,7 @@ import {
     type StrokeOptions,
 } from "@/types/practice-planner";
 import { areaRect, countElementsOutside, isFullIce } from "@/lib/utils/ice-area";
-import { ICE_AREA_LABELS } from "@/lib/utils/canvas/notation";
+import { ICE_AREA_GROUPS, ICE_AREA_LABELS } from "@/lib/utils/canvas/notation";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import { generateThumbnail } from "@/lib/utils/canvas/thumbnail-generator";
 
@@ -107,6 +109,7 @@ export function PlayEditor({
     const [description, setDescription] = useState(initialData?.description || "");
     const [isTemplate, setIsTemplate] = useState(initialData?.isTemplate || false);
     const [tags, setTags] = useState<DrillTagValues>(() => drillTags(initialData));
+    const [ageGroups, setAgeGroups] = useState<AgeGroup[]>(() => toAgeGroups(initialData?.ageGroups));
 
     // Play data state
     const [playData, setPlayData] = useState<PlayData>(
@@ -242,6 +245,12 @@ export function PlayEditor({
         setSaveSuccess(false);
     };
 
+    const handleAgeGroupsChange = (next: AgeGroup[]) => {
+        setAgeGroups(next);
+        setHasUnsavedChanges(true);
+        setSaveSuccess(false);
+    };
+
     /**
      * Handle save action
      * Requirements: 1.5, 4.1, 4.2
@@ -288,6 +297,7 @@ export function PlayEditor({
                 playData,
                 isTemplate,
                 ...tags,
+                ageGroups,
                 createdAt: initialData?.createdAt || new Date(),
                 updatedAt: new Date(),
             };
@@ -315,7 +325,7 @@ export function PlayEditor({
         } finally {
             setIsSaving(false);
         }
-    }, [name, description, playData, isTemplate, tags, playId, initialData, onSave]);
+    }, [name, description, playData, isTemplate, tags, ageGroups, playId, initialData, onSave]);
 
     // Keep handleSaveRef updated with latest handleSave function
     useEffect(() => {
@@ -401,6 +411,9 @@ export function PlayEditor({
                     {/* Drill tags (goaltender-aware drills) */}
                     <DrillTagFields value={tags} onChange={handleTagsChange} />
 
+                    {/* Age groups */}
+                    <AgeGroupsField value={ageGroups} onChange={handleAgeGroupsChange} />
+
                     {/* Ice area (2a) */}
                     <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems={{ sm: "center" }}>
                         <FormControl sx={{ minWidth: 220 }}>
@@ -412,11 +425,15 @@ export function PlayEditor({
                                 value={areaTool ? "custom" : areaChoice}
                                 onChange={handleAreaChange}
                             >
-                                {ICE_AREA_PRESETS.map((preset) => (
-                                    <MenuItem key={preset} value={preset}>
-                                        {ICE_AREA_LABELS[preset]}
-                                    </MenuItem>
-                                ))}
+                                {/* Select needs its options as direct children, so the groups are flattened. */}
+                                {ICE_AREA_GROUPS.flatMap((group) => [
+                                    <ListSubheader key={`group-${group.label}`}>{group.label}</ListSubheader>,
+                                    ...group.presets.map((preset) => (
+                                        <MenuItem key={preset} value={preset}>
+                                            {ICE_AREA_LABELS[preset]}
+                                        </MenuItem>
+                                    )),
+                                ])}
                                 <MenuItem value="custom">Custom area…</MenuItem>
                             </Select>
                         </FormControl>

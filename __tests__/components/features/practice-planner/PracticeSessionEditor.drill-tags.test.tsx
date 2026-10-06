@@ -19,7 +19,7 @@ beforeAll(() => {
 
 const TEAM = "cteamxxxxxxxxxxxxxxxxxxxx";
 const AT = new Date("2026-04-01T00:00:00Z");
-const LIB = { id: "cplay1xxxxxxxxxxxxxxxxxxx", name: "My Warm-up", description: null, thumbnail: null, isTemplate: true, createdAt: AT, updatedAt: AT, focus: "goalies", goalies: "required" };
+const LIB = { id: "cplay1xxxxxxxxxxxxxxxxxxx", name: "My Warm-up", description: null, thumbnail: null, isTemplate: true, createdAt: AT, updatedAt: AT, focus: "goalies", goalies: "required", ageGroups: ["u8"] };
 
 describe("PracticeSessionEditor: drill tags", () => {
     it("adds a library drill with its tags", async () => {
@@ -45,6 +45,6 @@ describe("PracticeSessionEditor: drill tags", () => {
             fireEvent.click(screen.getByRole("button", { name: /^save session/i }));
         });
         await waitFor(() => expect(onSave).toHaveBeenCalled());
-        expect(onSave.mock.calls[0][0].plays[0]).toMatchObject({ name: "My Warm-up", focus: "goalies", goalies: "required" });
+        expect(onSave.mock.calls[0][0].plays[0]).toMatchObject({ name: "My Warm-up", focus: "goalies", goalies: "required", ageGroups: ["u8"] });
     });
 });

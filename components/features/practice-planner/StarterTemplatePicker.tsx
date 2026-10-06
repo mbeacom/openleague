@@ -5,6 +5,9 @@ import { STARTER_TEMPLATES, starterTemplatePlan, type StarterTemplate } from "@/
 import { parsePlan, type ParsePlanResult, type PlanGenerator } from "@/lib/plan-document";
 import { groupStations } from "@/lib/utils/session-timeline";
 import { drillRows } from "@/lib/utils/session-rows";
+import { formatAgeGroups, matchesAgeGroup } from "@/lib/utils/age-groups";
+import { AgeFilter, AgeFilterEmpty } from "./AgeFilter";
+import { useAgeFilter } from "./useAgeFilter";
 
 /**
  * A template as the import views receive a plan file: stamped with the running
@@ -16,11 +19,21 @@ export function starterTemplateImport(template: StarterTemplate, generator: Plan
     return parsePlan(JSON.parse(JSON.stringify(starterTemplatePlan(template, generator, now))));
 }
 
+export interface StarterTemplatePickerProps {
+    onUse: (template: StarterTemplate) => void;
+    disabled?: boolean;
+    /** The templates offered; tests pass their own. */
+    templates?: readonly StarterTemplate[];
+}
+
 /**
  * Starter practice templates (spec R11). Choosing one hands it to the import
- * view, which previews it and saves it exactly like a plan file.
+ * view, which previews it and saves it exactly like a plan file. Filtered by
+ * the remembered age (R3) against each template's own ages.
  */
-export function StarterTemplatePicker({ onUse, disabled = false }: { onUse: (template: StarterTemplate) => void; disabled?: boolean }) {
+export function StarterTemplatePicker({ onUse, disabled = false, templates = STARTER_TEMPLATES }: StarterTemplatePickerProps) {
+    const [ageFilter, setAgeFilter] = useAgeFilter();
+    const shown = templates.filter((template) => matchesAgeGroup(template.ageGroups, ageFilter));
     return (
         <Stack component="section" spacing={2} aria-labelledby="starter-templates-heading">
             <Box>
@@ -31,8 +44,10 @@ export function StarterTemplatePicker({ onUse, disabled = false }: { onUse: (tem
                     Station practices with a goalie station, built from the starter drills. Everything stays editable after you save it.
                 </Typography>
             </Box>
+            <AgeFilter value={ageFilter} onChange={setAgeFilter} />
+            {ageFilter && shown.length === 0 && <AgeFilterEmpty noun="templates" ageGroup={ageFilter} onShowAll={() => setAgeFilter(null)} />}
             <Grid container spacing={2}>
-                {STARTER_TEMPLATES.map((template) => {
+                {shown.map((template) => {
                     const blocks = groupStations(template.session.drills).filter((group) => group.stations.length > 1).length;
                     return (
                         <Grid key={template.id} size={{ xs: 12, md: 4 }}>
@@ -48,6 +63,7 @@ export function StarterTemplatePicker({ onUse, disabled = false }: { onUse: (tem
                                         <Chip size="small" label={`${template.session.durationMinutes} min`} />
                                         <Chip size="small" label={`${drillRows(template.session.drills).length} drills`} />
                                         <Chip size="small" label={`${blocks} station ${blocks === 1 ? "block" : "blocks"}`} />
+                                        <Chip size="small" color="primary" variant="outlined" label={formatAgeGroups(template.ageGroups)} />
                                     </Stack>
                                     <Typography variant="body2" color="text.secondary">
                                         {template.description}

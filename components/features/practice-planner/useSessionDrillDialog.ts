@@ -35,6 +35,7 @@ export function useSessionDrillDialog(
             thumbnail: play.thumbnail ?? "",
             focus: play.focus,
             goalies: play.goalies,
+            ageGroups: play.ageGroups,
         });
     }, [plays]);
 

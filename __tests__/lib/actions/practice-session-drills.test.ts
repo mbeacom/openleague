@@ -374,3 +374,42 @@ describe("copySessionDrillToLibrary: drill tags", () => {
         expect(tx.play.create.mock.calls[0][0].data).toMatchObject({ focus: "goalies", goalies: "required", isTemplate: true });
     });
 });
+
+describe("saveSessionDrill and copySessionDrillToLibrary: age groups", () => {
+    it("a brand-new drill stores the sent groups; none sent stores the column default", async () => {
+        await saveSessionDrill({ ...drillInput(), ageGroups: ["u10", "u8"] });
+        expect(tx.play.create.mock.calls[0][0].data).toMatchObject({ ageGroups: ["u8", "u10"] });
+        await saveSessionDrill(drillInput());
+        expect(tx.play.create.mock.calls[1][0].data).not.toHaveProperty("ageGroups");
+    });
+
+    it("an owned drill keeps its groups when none are sent", async () => {
+        tx.play.findFirst.mockResolvedValue({ id: OWNED, sessionId: SESSION, isTemplate: false, sourcePlayId: LIB, focus: "team", goalies: "optional", ageGroups: ["u12"] });
+        await saveSessionDrill(drillInput(OWNED));
+        expect(tx.play.update.mock.calls[0][0].data).not.toHaveProperty("ageGroups");
+        await saveSessionDrill({ ...drillInput(OWNED), ageGroups: [] });
+        expect(tx.play.update.mock.calls[1][0].data).toMatchObject({ ageGroups: [] });
+    });
+
+    it("a fork inherits the source's groups unless new ones are sent", async () => {
+        tx.play.findFirst.mockResolvedValue({ id: LIB, sessionId: null, isTemplate: true, sourcePlayId: null, focus: "team", goalies: "optional", ageGroups: ["u8"] });
+        await saveSessionDrill(drillInput(LIB));
+        expect(tx.play.findFirst.mock.calls[0][0].select).toMatchObject({ ageGroups: true });
+        expect(tx.play.create.mock.calls[0][0].data).toMatchObject({ ageGroups: ["u8"] });
+        await saveSessionDrill({ ...drillInput(LIB), ageGroups: ["u14"] });
+        expect(tx.play.create.mock.calls[1][0].data).toMatchObject({ ageGroups: ["u14"] });
+    });
+
+    it("refuses an unknown group", async () => {
+        const result = await saveSessionDrill({ ...drillInput(), ageGroups: ["u9" as never] });
+        expect(result).toMatchObject({ success: false, error: "Invalid input" });
+        expect(tx.play.create).not.toHaveBeenCalled();
+    });
+
+    it("copySessionDrillToLibrary copies the groups", async () => {
+        tx.play.findFirst.mockResolvedValue({ name: "Battle", description: null, thumbnail: null, playData: {}, sessionId: SESSION, focus: "skaters", goalies: "none", ageGroups: ["u6", "u8"] });
+        await copySessionDrillToLibrary({ playId: OWNED, teamId: TEAM });
+        expect(tx.play.findFirst.mock.calls[0][0].select).toMatchObject({ ageGroups: true });
+        expect(tx.play.create.mock.calls[0][0].data).toMatchObject({ ageGroups: ["u6", "u8"], isTemplate: true });
+    });
+});

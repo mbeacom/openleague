@@ -11,7 +11,7 @@ import {
     withArea,
 } from "@/lib/utils/ice-area";
 import { BLUE_LINES, FULL_RINK, RINK_DIMENSIONS } from "@/lib/utils/canvas/rink-renderer";
-import { ICE_AREA_LABELS, iceAreaLabel } from "@/lib/utils/canvas/notation";
+import { ICE_AREA_GROUPS, ICE_AREA_LABELS, iceAreaLabel } from "@/lib/utils/canvas/notation";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import { ICE_AREA_PRESETS, MIN_AREA_FT, type IceArea, type PlayData } from "@/types/practice-planner";
 
@@ -34,6 +34,33 @@ describe("areaRect", () => {
         ["zone-right", 125, 200],
     ] as const)("%s spans x %d-%d over the full height", (kind, x0, x1) => {
         expect(areaRect({ kind })).toEqual({ x: x0, y: 0, w: x1 - x0, h: 85 });
+    });
+
+    it.each([
+        ["zone-left-top", 0, 75, 0],
+        ["zone-left-bottom", 0, 75, 42.5],
+        ["zone-neutral-top", 75, 125, 0],
+        ["zone-neutral-bottom", 75, 125, 42.5],
+        ["zone-right-top", 125, 200, 0],
+        ["zone-right-bottom", 125, 200, 42.5],
+    ] as const)("%s spans x %d-%d and half the height from y %d", (kind, x0, x1, y) => {
+        expect(areaRect({ kind })).toEqual({ x: x0, y, w: x1 - x0, h: 42.5 });
+    });
+
+    it("tiles the rink with the six quarters", () => {
+        const quarters = ICE_AREA_PRESETS.filter((kind) => /-(top|bottom)$/.test(kind));
+        expect(quarters).toHaveLength(6);
+        expect(quarters.reduce((sum, kind) => sum + areaRect({ kind }).w * areaRect({ kind }).h, 0)).toBe(200 * 85);
+    });
+
+    it("returns a fresh object for a preset, so callers can't change the table", () => {
+        const rect = areaRect({ kind: "zone-left-top" });
+        rect.h = 85;
+        expect(areaRect({ kind: "zone-left-top" }).h).toBe(42.5);
+    });
+
+    it("draws an area kind this build doesn't know as full ice instead of throwing", () => {
+        expect(areaRect({ kind: "zone-center" } as unknown as IceArea)).toEqual(FULL_RINK);
     });
 
     it("uses the renderer's blue lines for the zones", () => {
@@ -68,6 +95,12 @@ describe("editViewport", () => {
         expect(editViewport({ kind: "zone-neutral" })).toEqual({ x: 70, y: 0, w: 60, h: 85 });
         expect(editViewport({ kind: "half-right" })).toEqual({ x: 95, y: 0, w: 105, h: 85 });
         expect(editViewport({ kind: "custom", rect: { x: 100, y: 30, w: 20, h: 20 } })).toEqual({ x: 95, y: 25, w: 30, h: 30 });
+    });
+
+    it("fits a quarter with its margin on all four sides, clamped to the rink", () => {
+        expect(editViewport({ kind: "zone-left-top" })).toEqual({ x: 0, y: 0, w: 80, h: 47.5 });
+        expect(editViewport({ kind: "zone-right-bottom" })).toEqual({ x: 120, y: 37.5, w: 80, h: 47.5 });
+        expect(editViewport({ kind: "zone-neutral-bottom" })).toEqual({ x: 70, y: 37.5, w: 60, h: 47.5 });
     });
 });
 
@@ -131,10 +164,20 @@ describe("ICE_AREA_LABELS", () => {
     it("labels every preset and custom", () => {
         expect(ICE_AREA_PRESETS.map((p) => ICE_AREA_LABELS[p])).toEqual([
             "Full ice", "Half ice (left)", "Half ice (right)", "Left end zone", "Neutral zone", "Right end zone",
+            "Left end – top", "Left end – bottom", "Neutral – top", "Neutral – bottom", "Right end – top", "Right end – bottom",
         ]);
         expect(ICE_AREA_LABELS.custom).toBe("Custom area");
         expect(iceAreaLabel(undefined)).toBe("Full ice");
         expect(iceAreaLabel({ kind: "zone-neutral" })).toBe("Neutral zone");
+        expect(iceAreaLabel({ kind: "zone-right-bottom" })).toBe("Right end – bottom");
+        expect(iceAreaLabel({ kind: "from-the-future" } as unknown as IceArea)).toBe("Full ice");
+    });
+});
+
+describe("ICE_AREA_GROUPS", () => {
+    it("groups the picker's presets in order, each preset exactly once", () => {
+        expect(ICE_AREA_GROUPS.map((group) => group.label)).toEqual(["Full and halves", "Zones", "Quarters"]);
+        expect(ICE_AREA_GROUPS.flatMap((group) => group.presets)).toEqual([...ICE_AREA_PRESETS]);
     });
 });
 

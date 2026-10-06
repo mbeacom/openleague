@@ -203,3 +203,26 @@ describe("SessionDrillDialog: drill tags", () => {
         expect(onSaved).toHaveBeenCalledWith("k1", expect.objectContaining({ focus: "goalies", goalies: "optional" }));
     });
 });
+
+describe("SessionDrillDialog: age groups", () => {
+    it("opens the editor with the drill's groups, and saves them with the session drill and the card patch", async () => {
+        const onSaved = vi.fn().mockResolvedValue({ ok: true });
+        renderWithPlanner(
+            <SessionDrillDialog
+                open
+                sessionId={SESSION}
+                teamId={TEAM}
+                drill={{ clientKey: "k1", playId: OWNED, name: "Keep-Away", description: "", playData: createEmptyPlayData(), thumbnail: "", ageGroups: ["u6", "u8"] }}
+                onSaved={onSaved}
+                onClose={vi.fn()}
+            />,
+            { store: actions },
+        );
+        expect(captured.props?.initialData).toMatchObject({ ageGroups: ["u6", "u8"] });
+        await act(async () => {
+            await captured.props?.onSave?.({ ...saved, name: "Keep-Away", ageGroups: ["u8"] });
+        });
+        expect(actions.saveSessionDrill).toHaveBeenLastCalledWith(expect.objectContaining({ ageGroups: ["u8"] }));
+        expect(onSaved).toHaveBeenCalledWith("k1", expect.objectContaining({ ageGroups: ["u8"] }));
+    });
+});

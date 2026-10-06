@@ -13,14 +13,27 @@ export const AREA_EDIT_MARGIN_FT = 5;
 
 const RINK_W = RINK_DIMENSIONS.width;
 const RINK_H = RINK_DIMENSIONS.height;
+const HALF_H = RINK_H / 2;
+const NEUTRAL_W = BLUE_LINES.right - BLUE_LINES.left;
+const END_W = RINK_W - BLUE_LINES.right;
 
-const PRESET_X: Record<IceAreaPreset, readonly [number, number]> = {
-    full: [0, RINK_W],
-    "half-left": [0, RINK_W / 2],
-    "half-right": [RINK_W / 2, RINK_W],
-    "zone-left": [0, BLUE_LINES.left],
-    "zone-neutral": [BLUE_LINES.left, BLUE_LINES.right],
-    "zone-right": [BLUE_LINES.right, RINK_W],
+/**
+ * Every preset's rectangle in rink feet. Full ice, the halves and the zones
+ * span the rink's height; a quarter is a zone's top or bottom half.
+ */
+const PRESET_RECTS: Record<IceAreaPreset, Readonly<RinkRect>> = {
+    full: { x: 0, y: 0, w: RINK_W, h: RINK_H },
+    "half-left": { x: 0, y: 0, w: RINK_W / 2, h: RINK_H },
+    "half-right": { x: RINK_W / 2, y: 0, w: RINK_W / 2, h: RINK_H },
+    "zone-left": { x: 0, y: 0, w: BLUE_LINES.left, h: RINK_H },
+    "zone-neutral": { x: BLUE_LINES.left, y: 0, w: NEUTRAL_W, h: RINK_H },
+    "zone-right": { x: BLUE_LINES.right, y: 0, w: END_W, h: RINK_H },
+    "zone-left-top": { x: 0, y: 0, w: BLUE_LINES.left, h: HALF_H },
+    "zone-left-bottom": { x: 0, y: HALF_H, w: BLUE_LINES.left, h: HALF_H },
+    "zone-neutral-top": { x: BLUE_LINES.left, y: 0, w: NEUTRAL_W, h: HALF_H },
+    "zone-neutral-bottom": { x: BLUE_LINES.left, y: HALF_H, w: NEUTRAL_W, h: HALF_H },
+    "zone-right-top": { x: BLUE_LINES.right, y: 0, w: END_W, h: HALF_H },
+    "zone-right-bottom": { x: BLUE_LINES.right, y: HALF_H, w: END_W, h: HALF_H },
 };
 
 /** True for a missing area and for an explicit `{ kind: "full" }`. */
@@ -28,12 +41,16 @@ export function isFullIce(area?: IceArea): boolean {
     return area === undefined || area.kind === "full";
 }
 
-/** The area's rectangle in rink feet (a fresh object). Presets span the full rink height. */
+/**
+ * The area's rectangle in rink feet (a fresh object). A preset kind this build
+ * doesn't know (data written by a newer build) is drawn as full ice rather
+ * than throwing; the strict schema still refuses it on write.
+ */
 export function areaRect(area?: IceArea): RinkRect {
     if (!area) return { ...FULL_RINK };
     if (area.kind === "custom") return { ...area.rect };
-    const [x0, x1] = PRESET_X[area.kind];
-    return { x: x0, y: 0, w: x1 - x0, h: RINK_H };
+    const preset = PRESET_RECTS[area.kind] as Readonly<RinkRect> | undefined;
+    return preset ? { ...preset } : { ...FULL_RINK };
 }
 
 /** What the edit board fits: the area plus a margin, clamped to the rink; the whole rink for full ice. */

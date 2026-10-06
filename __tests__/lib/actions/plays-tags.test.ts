@@ -20,6 +20,7 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 import { createPlay, getPlayById, getPlaysByTeam, updatePlay } from "@/lib/actions/plays";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
+import { AGE_GROUP_REPEAT_MESSAGE, AGE_GROUP_UNKNOWN_MESSAGE } from "@/lib/utils/age-groups";
 
 const TEAM = "cjld2cjxh0000qzrmn831i7rn";
 const PLAY = "cjld2cyuq0000t3rmniod1foy";
@@ -89,5 +90,76 @@ describe("plays: drill tags", () => {
         const result = await getPlayById({ id: PLAY, teamId: TEAM });
         expect(mockPrisma.play.findUnique.mock.calls[0][0].select).toMatchObject({ focus: true, goalies: true });
         expect(result.success && result.data).toMatchObject({ focus: "skaters", goalies: "none" });
+    });
+});
+
+describe("plays: age groups (age-group templates R2, R3)", () => {
+    it("createPlay stores none by default, and the sent groups in table order", async () => {
+        await createPlay({ name: "Drill", teamId: TEAM, isTemplate: true, playData: createEmptyPlayData() });
+        expect(mockPrisma.play.create.mock.calls[0][0].data).toMatchObject({ ageGroups: [] });
+        await createPlay({ name: "Drill", teamId: TEAM, isTemplate: true, playData: createEmptyPlayData(), ageGroups: ["u10", "u8"] });
+        expect(mockPrisma.play.create.mock.calls[1][0].data).toMatchObject({ ageGroups: ["u8", "u10"] });
+    });
+
+    it("createPlay refuses an unknown or repeated group without writing", async () => {
+        const unknown = await createPlay({ name: "Drill", teamId: TEAM, isTemplate: true, playData: createEmptyPlayData(), ageGroups: ["u7" as never] });
+        const repeated = await createPlay({ name: "Drill", teamId: TEAM, isTemplate: true, playData: createEmptyPlayData(), ageGroups: ["u8", "u8"] });
+        expect(unknown).toMatchObject({ success: false, error: "Invalid input" });
+        expect(JSON.stringify(unknown)).toContain(AGE_GROUP_UNKNOWN_MESSAGE);
+        expect(JSON.stringify(repeated)).toContain(AGE_GROUP_REPEAT_MESSAGE);
+        expect(mockPrisma.play.create).not.toHaveBeenCalled();
+    });
+
+    it("updatePlay writes the groups only when sent; [] clears them", async () => {
+        mockPrisma.play.findUnique.mockResolvedValue({ teamId: TEAM, sessionId: null });
+        await updatePlay({ id: PLAY, name: "Drill", teamId: TEAM, playData: createEmptyPlayData() });
+        expect(tx.play.update.mock.calls[0][0].data).not.toHaveProperty("ageGroups");
+        await updatePlay({ id: PLAY, name: "Drill", teamId: TEAM, playData: createEmptyPlayData(), ageGroups: [] });
+        expect(tx.play.update.mock.calls[1][0].data).toMatchObject({ ageGroups: [] });
+    });
+
+    it("getPlaysByTeam filters by age with untagged drills included, beside the search, and narrows stored arrays", async () => {
+        mockPrisma.play.findMany.mockResolvedValue([
+            { id: PLAY, name: "Drill", description: null, thumbnail: null, isTemplate: true, focus: "team", goalies: "optional", ageGroups: ["u10", "u7", "u8", "u8"], createdAt: AT, updatedAt: AT },
+        ]);
+        mockPrisma.play.count.mockResolvedValue(1);
+        const result = await getPlaysByTeam({ teamId: TEAM, isTemplate: true, page: 1, limit: 20, dateFilter: "all", search: "breakout", ageGroup: "u10" });
+
+        const query = mockPrisma.play.findMany.mock.calls[0][0];
+        expect(query.where.AND).toEqual([{ OR: [{ ageGroups: { isEmpty: true } }, { ageGroups: { has: "u10" } }] }]);
+        // The search keeps its own OR: the age clause never replaces it.
+        expect(query.where.OR).toEqual([
+            { name: { contains: "breakout", mode: "insensitive" } },
+            { description: { contains: "breakout", mode: "insensitive" } },
+        ]);
+        expect(mockPrisma.play.count.mock.calls[0][0].where).toEqual(query.where);
+        expect(query.select).toMatchObject({ ageGroups: true });
+        expect(result.success && result.data.plays[0].ageGroups).toEqual(["u8", "u10"]);
+    });
+
+    it("getPlaysByTeam adds no age clause for All ages, and refuses an unknown age", async () => {
+        mockPrisma.play.findMany.mockResolvedValue([]);
+        mockPrisma.play.count.mockResolvedValue(0);
+        await getPlaysByTeam({ teamId: TEAM, isTemplate: true, page: 1, limit: 20, dateFilter: "all" });
+        expect(mockPrisma.play.findMany.mock.calls[0][0].where).not.toHaveProperty("AND");
+        const refused = await getPlaysByTeam({ teamId: TEAM, isTemplate: true, page: 1, limit: 20, dateFilter: "all", ageGroup: "u7" as never });
+        expect(refused).toMatchObject({ success: false, error: "Invalid input" });
+        expect(mockPrisma.play.findMany).toHaveBeenCalledTimes(1);
+    });
+
+    it("getPlayById returns the groups ([] for a play saved before them)", async () => {
+        mockPrisma.play.findUnique.mockResolvedValue({
+            id: PLAY, name: "Drill", description: null, thumbnail: null, playData: createEmptyPlayData(), isTemplate: true,
+            teamId: TEAM, sessionId: null, focus: "team", goalies: "optional", ageGroups: ["u12"], createdAt: AT, updatedAt: AT,
+        });
+        const result = await getPlayById({ id: PLAY, teamId: TEAM });
+        expect(mockPrisma.play.findUnique.mock.calls[0][0].select).toMatchObject({ ageGroups: true });
+        expect(result.success && result.data.ageGroups).toEqual(["u12"]);
+        mockPrisma.play.findUnique.mockResolvedValue({
+            id: PLAY, name: "Drill", description: null, thumbnail: null, playData: createEmptyPlayData(), isTemplate: true,
+            teamId: TEAM, sessionId: null, focus: "team", goalies: "optional", createdAt: AT, updatedAt: AT,
+        });
+        const legacy = await getPlayById({ id: PLAY, teamId: TEAM });
+        expect(legacy.success && legacy.data.ageGroups).toEqual([]);
     });
 });

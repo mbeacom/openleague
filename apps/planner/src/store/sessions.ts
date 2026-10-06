@@ -9,6 +9,7 @@ import { MAX_BLOCK_LABEL_LENGTH, MAX_ROW_STAFF, VALIDATION_CONSTRAINTS } from "@
 import { parsePlan, serializePlan, type PlanBlockInput, type PlanDrillInput } from "@/lib/plan-document";
 import { createEmptyPlayData, parseStoredPlayData } from "@/lib/utils/play-data";
 import { drillTags, toPlayFocus, toPlayGoalies } from "@/lib/utils/drill-tags";
+import { toAgeGroups } from "@/lib/utils/age-groups";
 import { readTeamProfile, toTeamMark } from "@/lib/utils/team-mark";
 import {
     BLOCK_ROW_FIELDS_ERROR,
@@ -61,7 +62,7 @@ import {
 import { LOCAL_AUTHOR_NAME, LOCAL_TEAM_ID } from "../config";
 import { META_TEAM_PROFILE } from "./records";
 import type { RepoTx, StoredPlay, StoredSession, StoredSessionRow, StoredStaffMember } from "./records";
-import { StoreRefusal, attempt, checkedGoalieCount, drillText, ok, thumbnailOrNull, writablePlayData, write, type StoreContext } from "./shared";
+import { StoreRefusal, attempt, checkedAgeGroups, checkedGoalieCount, drillText, ok, thumbnailOrNull, writablePlayData, write, type StoreContext } from "./shared";
 import type { LocalPlannerStore, LocalSessionDrill, LocalSessionSave } from "./types";
 
 export const SESSION_NOT_ON_DEVICE_MESSAGE = "This practice isn't on this device.";
@@ -244,6 +245,7 @@ function assertExportable(
                     name: play?.name ?? "",
                     description: play?.description ?? null,
                     ...drillTags(play),
+                    ageGroups: toAgeGroups(play?.ageGroups),
                     stays: row.stays ?? false,
                     rotateEveryMinutes: row.rotateEveryMinutes ?? null,
                     staff: staffNames(row.staff, meta.staff),
@@ -408,6 +410,7 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                                     description: play.description,
                                     thumbnail: play.thumbnail,
                                     ...drillTags(play),
+                                    ageGroups: toAgeGroups(play.ageGroups),
                                     playData: parsed.ok ? parsed.data : null,
                                 },
                             },
@@ -446,6 +449,7 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                             rotateEveryMinutes: row.rotateEveryMinutes ?? null,
                             staff: row.staff ?? [],
                             ...drillTags(play),
+                            ageGroups: toAgeGroups(play.ageGroups),
                             ...(parsed.ok ? { playData: parsed.data } : { playData: createEmptyPlayData(), playDataUnreadable: true }),
                             thumbnail: play.thumbnail ?? "",
                         },
@@ -529,6 +533,9 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                 const text = drillText(input.name, input.description);
                 const playData = writablePlayData(input.playData);
                 const thumbnail = thumbnailOrNull(input.thumbnail);
+                // Absent = unchanged (owned), inherited (fork) or none (new drill). Checked here: nothing
+                // but repo calls may run inside the transaction.
+                const sentAgeGroups = input.ageGroups === undefined ? undefined : checkedAgeGroups(input.ageGroups);
                 const playId = await write(ctx, async (tx) => {
                     const session = await tx.getSession(input.sessionId);
                     if (!session) throw new StoreRefusal(SESSION_NOT_FOUND);
@@ -538,9 +545,10 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                     const sent = {
                         ...(input.focus !== undefined && { focus: toPlayFocus(input.focus) }),
                         ...(input.goalies !== undefined && { goalies: toPlayGoalies(input.goalies) }),
+                        ...(sentAgeGroups !== undefined && { ageGroups: sentAgeGroups }),
                     };
                     if (!input.playId) {
-                        const created: StoredPlay = { id: ctx.newId(), ...fields, ...drillTags(sent), isTemplate: false, sessionId: session.id, sourcePlayId: null, createdAt: at };
+                        const created: StoredPlay = { id: ctx.newId(), ...fields, ...drillTags(sent), ageGroups: sentAgeGroups ?? [], isTemplate: false, sessionId: session.id, sourcePlayId: null, createdAt: at };
                         await tx.putPlay(created);
                         return created.id;
                     }
@@ -554,8 +562,9 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                     const forked: StoredPlay = {
                         id: ctx.newId(),
                         ...fields,
-                        // A fork inherits the library drill's tags unless new ones were sent.
+                        // A fork inherits the library drill's tags and ages unless new ones were sent.
                         ...drillTags({ ...drillTags(play), ...sent }),
+                        ageGroups: sentAgeGroups ?? toAgeGroups(play.ageGroups),
                         isTemplate: false,
                         sessionId: session.id,
                         sourcePlayId: play.sourcePlayId ?? play.id,
@@ -680,6 +689,7 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                             playData: ready.playData,
                             focus: entry.drill.focus,
                             goalies: entry.drill.goalies,
+                            ageGroups: entry.drill.ageGroups,
                             sourcePlayId: null,
                             createdAt: at,
                             updatedAt: at,

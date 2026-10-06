@@ -57,9 +57,15 @@ import { useDebouncedCallback } from "use-debounce";
 import { DrillFilterChips, type DrillFilters } from "./DrillFilterChips";
 import { GoalieBadge } from "./GoalieBadge";
 import { needsGoalie } from "@/lib/utils/drill-tags";
+import { matchesAgeGroup, type AgeGroup } from "@/lib/utils/age-groups";
+import { AgeFilter, AgeFilterEmpty } from "./AgeFilter";
+import { useAgeFilter } from "./useAgeFilter";
 
 /** The most rows one library query may ask for (getPlaysByTeamSchema). */
 const NAMES_PAGE_SIZE = 100;
+
+/** What a library load asks for: the tag chips plus the age filter (R3). */
+type LibraryFilters = DrillFilters & { ageGroup?: AgeGroup };
 
 const nameKey = (name: string) => name.trim().toLowerCase();
 
@@ -367,7 +373,13 @@ export function PlayLibrary({
     const [searchQuery, setSearchQuery] = useState("");
     const [dateFilter, setDateFilter] = useState<"all" | "today" | "week" | "month">("all");
     const [filters, setFilters] = useState<DrillFilters>({});
-    const filtersActive = Boolean(filters.focus || filters.goalies);
+    // Remembered on this device, and shared with the drill picker and the template picker (R3).
+    const [ageFilter, setAgeFilter] = useAgeFilter();
+    const queryFilters = useMemo<LibraryFilters>(() => (ageFilter ? { ...filters, ageGroup: ageFilter } : filters), [filters, ageFilter]);
+    const filtersActive = Boolean(filters.focus || filters.goalies || ageFilter);
+    // Only the latest load may set the grid: on the hosted page the remembered age arrives after
+    // hydration, and a quick chip change can also leave an earlier, slower answer in flight.
+    const latestLoad = useRef(0);
     const [isLoading, setIsLoading] = useState(true);
     const [isSelecting, setIsSelecting] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -423,7 +435,8 @@ export function PlayLibrary({
      * Load plays from the server with search and filter parameters
      * Requirements: 4.2, 8.4 - Server-side search and filtering
      */
-    const loadPlays = useCallback(async (search: string, dateFilterValue: "all" | "today" | "week" | "month", drillFilters: DrillFilters, refreshNames = false) => {
+    const loadPlays = useCallback(async (search: string, dateFilterValue: "all" | "today" | "week" | "month", drillFilters: LibraryFilters, refreshNames = false) => {
+        const load = ++latestLoad.current;
         setIsLoading(true);
         setError(null);
 
@@ -437,7 +450,9 @@ export function PlayLibrary({
                 dateFilter: dateFilterValue,
                 ...(drillFilters.focus && { focus: drillFilters.focus }),
                 ...(drillFilters.goalies && { goalies: drillFilters.goalies }),
+                ...(drillFilters.ageGroup && { ageGroup: drillFilters.ageGroup }),
             });
+            if (load !== latestLoad.current) return;
 
             if (result.success) {
                 const playsData = result.data.plays.map((play) => ({
@@ -450,17 +465,18 @@ export function PlayLibrary({
                 setPlays(playsData);
                 setTotalPages(Math.ceil(result.data.total / playsPerPage));
                 if (refreshNames) {
-                    const unfiltered = !search.trim() && dateFilterValue === "all" && !drillFilters.focus && !drillFilters.goalies;
+                    const unfiltered = !search.trim() && dateFilterValue === "all" && !drillFilters.focus && !drillFilters.goalies && !drillFilters.ageGroup;
                     refreshLibraryNames(unfiltered && currentPage === 1 ? result.data : null);
                 }
             } else {
                 setError(result.error);
             }
         } catch (err) {
+            if (load !== latestLoad.current) return;
             console.error("Error loading plays:", err);
             setError("Failed to load plays. Please try again.");
         } finally {
-            setIsLoading(false);
+            if (load === latestLoad.current) setIsLoading(false);
         }
     }, [store, teamId, currentPage, refreshLibraryNames]);
 
@@ -468,15 +484,15 @@ export function PlayLibrary({
     const debouncedSearch = useDebouncedCallback(
         (search: string) => {
             setCurrentPage(1); // Reset to first page on search
-            loadPlays(search, dateFilter, filters);
+            loadPlays(search, dateFilter, queryFilters);
         },
         300
     );
 
     // Load plays on mount and when page or a filter changes; the first load also reads the library's names
     useEffect(() => {
-        loadPlays(searchQuery, dateFilter, filters, !libraryNamesLoaded.current);
-    }, [currentPage, dateFilter, filters]); // eslint-disable-line react-hooks/exhaustive-deps
+        loadPlays(searchQuery, dateFilter, queryFilters, !libraryNamesLoaded.current);
+    }, [currentPage, dateFilter, queryFilters]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Render starter play thumbnails client-side once (manage mode only)
     useEffect(() => {
@@ -518,9 +534,10 @@ export function PlayLibrary({
             }
             if (filters.focus && starter.focus !== filters.focus) return false;
             if (filters.goalies && starter.goalies !== filters.goalies) return false;
+            if (!matchesAgeGroup(starter.ageGroups, ageFilter)) return false;
             return true;
         });
-    }, [mode, plays, libraryNames, copiedStarterNames, searchQuery, filters]);
+    }, [mode, plays, libraryNames, copiedStarterNames, searchQuery, filters, ageFilter]);
 
     /**
      * Copy a starter play into the team's library as an editable template
@@ -538,6 +555,7 @@ export function PlayLibrary({
                     playData: starter.playData,
                     focus: starter.focus,
                     goalies: starter.goalies,
+                    ageGroups: [...starter.ageGroups],
                     isTemplate: true,
                     teamId,
                 });
@@ -548,7 +566,7 @@ export function PlayLibrary({
                         next.add(nameKey(starter.name));
                         return next;
                     });
-                    await loadPlays(searchQuery, dateFilter, filters, true);
+                    await loadPlays(searchQuery, dateFilter, queryFilters, true);
                 } else {
                     setError(result.error);
                 }
@@ -559,7 +577,7 @@ export function PlayLibrary({
                 setAddingStarterId(null);
             }
         },
-        [store, starterThumbnails, teamId, loadPlays, searchQuery, dateFilter, filters]
+        [store, starterThumbnails, teamId, loadPlays, searchQuery, dateFilter, queryFilters]
     );
 
     /**
@@ -589,6 +607,14 @@ export function PlayLibrary({
     }, []);
 
     /**
+     * Handle an age chip change (remembered on this device)
+     */
+    const handleAgeChange = useCallback((next: AgeGroup | null) => {
+        setAgeFilter(next);
+        setCurrentPage(1); // a filtered result starts at its first page
+    }, [setAgeFilter]);
+
+    /**
      * Handle play selection - fetch complete play data before calling onSelectPlay
      * Requirements: 4.3
      */
@@ -611,6 +637,7 @@ export function PlayLibrary({
                             playData: result.data.playData,
                             focus: result.data.focus,
                             goalies: result.data.goalies,
+                            ageGroups: result.data.ageGroups,
                             isTemplate: result.data.isTemplate,
                             createdAt: result.data.createdAt,
                             updatedAt: result.data.updatedAt,
@@ -683,7 +710,7 @@ export function PlayLibrary({
                         return next;
                     });
                 }
-                await loadPlays(searchQuery, dateFilter, filters, true);
+                await loadPlays(searchQuery, dateFilter, queryFilters, true);
                 setDeleteDialogOpen(false);
                 setPlayToDelete(null);
             } else {
@@ -695,7 +722,7 @@ export function PlayLibrary({
         } finally {
             setIsDeleting(false);
         }
-    }, [store, playToDelete, plays, teamId, loadPlays, searchQuery, dateFilter, filters]);
+    }, [store, playToDelete, plays, teamId, loadPlays, searchQuery, dateFilter, queryFilters]);
 
     /**
      * Handle delete dialog close
@@ -777,10 +804,11 @@ export function PlayLibrary({
                 </FormControl>
             </Stack>
 
-            {/* Drill-tag filters (goaltender-aware drills) */}
-            <Box sx={{ mb: 3 }}>
+            {/* Drill-tag filters (goaltender-aware drills) and the age filter (R3) */}
+            <Stack spacing={1} sx={{ mb: 3 }}>
                 <DrillFilterChips value={filters} onChange={handleFiltersChange} />
-            </Box>
+                <AgeFilter value={ageFilter} onChange={handleAgeChange} />
+            </Stack>
 
             {/* Error Alert */}
             {error && (
@@ -817,16 +845,23 @@ export function PlayLibrary({
                         p: 3,
                     }}
                 >
-                    <Typography variant="h6" color="text.secondary" gutterBottom>
-                        {searchQuery || dateFilter !== "all" || filtersActive
-                            ? "No plays found"
-                            : "No plays in your library yet"}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" mb={2}>
-                        {searchQuery || dateFilter !== "all" || filtersActive
-                            ? "Try adjusting your search or filter settings"
-                            : "Create your first play to get started"}
-                    </Typography>
+                    {/* Say "no drills for this age" only when the age is the only narrowing and no starter card matches it either */}
+                    {ageFilter && !searchQuery && dateFilter === "all" && !filters.focus && !filters.goalies && visibleStarters.length === 0 ? (
+                        <AgeFilterEmpty noun="drills" ageGroup={ageFilter} onShowAll={() => handleAgeChange(null)} />
+                    ) : (
+                        <>
+                            <Typography variant="h6" color="text.secondary" gutterBottom>
+                                {searchQuery || dateFilter !== "all" || filtersActive
+                                    ? "No plays found"
+                                    : "No plays in your library yet"}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary" mb={2}>
+                                {searchQuery || dateFilter !== "all" || filtersActive
+                                    ? "Try adjusting your search or filter settings"
+                                    : "Create your first play to get started"}
+                            </Typography>
+                        </>
+                    )}
                     {mode === "manage" && !searchQuery && dateFilter === "all" && !filtersActive && (
                         <Button
                             variant="contained"

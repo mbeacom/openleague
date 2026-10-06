@@ -5,7 +5,7 @@
  */
 import React, { forwardRef, useImperativeHandle } from "react";
 import { describe, it, expect, vi } from "vitest";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import type { RinkBoardProps } from "@/components/features/practice-planner/RinkBoard";
@@ -52,6 +52,28 @@ describe("PlayEditor ice area", () => {
         expect(boardProps.current!.playData.area).toEqual({ kind: "zone-neutral" });
         await chooseArea("Full ice");
         expect("area" in boardProps.current!.playData).toBe(false);
+    });
+
+    it("groups the presets under Full and halves, Zones and Quarters, with Custom area… last", async () => {
+        renderEditor();
+        fireEvent.mouseDown(screen.getByRole("combobox", { name: /Ice area/ }));
+        const listbox = await screen.findByRole("listbox");
+        const entries = Array.from(listbox.querySelectorAll("li")).map((item) => item.textContent);
+        expect(entries).toEqual([
+            "Full and halves", "Full ice", "Half ice (left)", "Half ice (right)",
+            "Zones", "Left end zone", "Neutral zone", "Right end zone",
+            "Quarters", "Left end – top", "Left end – bottom", "Neutral – top", "Neutral – bottom", "Right end – top", "Right end – bottom",
+            "Custom area…",
+        ]);
+        // A header is not a choice: clicking it changes nothing.
+        fireEvent.click(within(listbox).getByText("Quarters"));
+        expect("area" in boardProps.current!.playData).toBe(false);
+    });
+
+    it("sets a quarter preset", async () => {
+        renderEditor();
+        await chooseArea("Right end – bottom");
+        expect(boardProps.current!.playData.area).toEqual({ kind: "zone-right-bottom" });
     });
 
     it("marks the drill dirty when an area is chosen (session drill dialog guard)", async () => {

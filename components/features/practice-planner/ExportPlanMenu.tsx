@@ -62,6 +62,7 @@ export function toPlanRows(rows: readonly ExportSessionRow[], staff?: readonly S
                   description: row.play.description,
                   focus: row.play.focus,
                   goalies: row.play.goalies,
+                  ageGroups: row.play.ageGroups,
                   stays: row.stays,
                   rotateEveryMinutes: row.rotateEveryMinutes,
                   playData: row.play.playData,

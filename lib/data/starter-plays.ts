@@ -19,6 +19,10 @@
  *   planner 2a); drills that span the ice leave it unset (full ice)
  * - Every drill is tagged (focus, goalies); a "required" drill draws its
  *   goalie(s), a "none" drill draws none (goaltender-aware drills)
+ * - Every drill carries age groups (age-group templates); [] means it suits
+ *   every age
+ * - Small-area nets sit off the goal lines, square to the boards, with their
+ *   mouth facing the middle of the drill's area
  */
 
 import {
@@ -35,6 +39,7 @@ import {
     type StrokeAction,
     type TextAnnotation,
 } from "@/types/practice-planner";
+import type { AgeGroup } from "@/lib/utils/age-groups";
 import { DEFAULT_END_FOR_ACTION, ROLE_DEFAULT_COLORS } from "@/lib/utils/canvas/notation";
 
 export interface StarterPlay {
@@ -45,6 +50,8 @@ export interface StarterPlay {
     description: string;
     focus: PlayFocus;
     goalies: PlayGoalies;
+    /** [] = every age (age-group templates R2) */
+    ageGroups: readonly AgeGroup[];
     playData: PlayData;
 }
 
@@ -93,6 +100,10 @@ function gear(kind: EquipmentKind, id: string, x: number, y: number, rotation = 
 /** The left-end net, opening toward center ice. */
 const leftNet = (id: string) => gear("net", id, 11, 42.5, 180);
 const rightNet = (id: string) => gear("net", id, 189, 42.5);
+/** A net on a goal line at height `y`, opening toward center ice. */
+const goalLineNet = (id: string, x: 11 | 189, y: number) => gear("net", id, x, y, x === 11 ? 180 : 0);
+/** A small-area net off the goal lines: rotation 90 opens toward the top boards, 270 toward the bottom, 180 toward the right end. */
+const smallNet = (id: string, x: number, y: number, rotation: 90 | 180 | 270) => gear("net", id, x, y, rotation);
 const cone = (id: string, x: number, y: number) => gear("cone", id, x, y);
 const pylon = (id: string, x: number, y: number) => gear("pylon", id, x, y);
 const pucks = (id: string, x: number, y: number) => gear("puckPile", id, x, y);
@@ -109,6 +120,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
             "Standard controlled breakout out of the defensive zone. D1 retrieves behind the net and hits the strong-side winger on the wall; the winger chips to the center swinging through the middle with speed while the weak-side winger stretches the far wall.",
         focus: "team",
         goalies: "optional",
+        ageGroups: ["u10", "u12", "u14", "u16plus"],
         playData: {
             version: PLAY_DATA_VERSION,
             players: [
@@ -138,6 +150,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
             "Full-ice passing and timing drill in three lanes. Pass and follow behind the next two skaters, filling the lane the puck came from. Emphasize crisp tape-to-tape passes, skating full speed through the crossovers, and finishing with a shot in stride.",
         focus: "skaters",
         goalies: "optional",
+        ageGroups: ["u10", "u12", "u14", "u16plus"],
         playData: {
             version: PLAY_DATA_VERSION,
             players: [
@@ -166,6 +179,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
             "1-3-1 umbrella setup on the power play. The point quarterback distributes to the flank shooters at the top of the circles for one-timers while the bumper occupies the middle of the box and the net-front player screens the goalie and hunts tips and rebounds.",
         focus: "team",
         goalies: "optional",
+        ageGroups: ["u12", "u14", "u16plus"],
         playData: {
             version: PLAY_DATA_VERSION,
             players: [
@@ -192,6 +206,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
             "Basic box penalty kill in the defensive zone. All four killers keep sticks in passing lanes and shift as a unit toward the puck side, denying seam passes through the middle. Pressure only when the puck carrier bobbles or turns their back.",
         focus: "team",
         goalies: "optional",
+        ageGroups: ["u12", "u14", "u16plus"],
         playData: {
             version: PLAY_DATA_VERSION,
             players: [
@@ -220,6 +235,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
             "Conservative forecheck that traps the breakout. F1 angles the puck carrier to one wall and takes away the D-to-D pass; F2 and F3 seal the boards on each side while both defensemen hold the middle of the neutral zone to swallow chips and stretch passes.",
         focus: "team",
         goalies: "none",
+        ageGroups: ["u12", "u14", "u16plus"],
         playData: {
             version: PLAY_DATA_VERSION,
             players: [
@@ -247,6 +263,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
             "Offensive-zone puck protection below the goal line. The puck carrier drives up the half-wall and chips the puck back along the boards to the rotating teammate; the three forwards keep rotating corner, half-wall, and slot until a lane opens to attack the net.",
         focus: "team",
         goalies: "optional",
+        ageGroups: ["u12", "u14", "u16plus"],
         playData: {
             version: PLAY_DATA_VERSION,
             players: [
@@ -273,6 +290,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
             "Simple offensive-zone set to generate traffic goals. The corner forward wins the puck and moves it to the point; the net-front forward establishes a screen in front of the goalie while the high slot forward crashes for tips and rebounds off the point shot.",
         focus: "team",
         goalies: "required",
+        ageGroups: ["u12", "u14", "u16plus"],
         playData: {
             version: PLAY_DATA_VERSION,
             players: [
@@ -303,6 +321,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
             "Base defensive-zone structure. Defensemen own the net-front and battle in the corners, wingers cover the points, and the center supports low. Protect the house: keep opponents to the outside and box out on every shot.",
         focus: "team",
         goalies: "optional",
+        ageGroups: ["u12", "u14", "u16plus"],
         playData: {
             version: PLAY_DATA_VERSION,
             players: [
@@ -333,6 +352,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
             "Regroup to attack with speed instead of forcing a play at the offensive blue line. Forwards peel back, the defensemen move the puck D-to-D, and the center curls underneath to take the second pass in stride while both wingers stretch wide.",
         focus: "team",
         goalies: "none",
+        ageGroups: ["u12", "u14", "u16plus"],
         playData: {
             version: PLAY_DATA_VERSION,
             players: [
@@ -360,6 +380,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
             "Five shooters on an arc from post to post. The coach points to a shooter; the goalie shuffles to square up, sets the feet and finds depth at the top of the crease before the release. Shooters wait until the goalie is set and shoot to the body first, then the corners. Teach: lead with the eyes, short shuffles between neighboring spots (T-pushes for bigger moves), shoulders square to the puck, and back off toward the post as the angle gets sharper. 10–15 min; rotate goalies every 10 shots.",
         focus: "goalies",
         goalies: "required",
+        ageGroups: ["u10", "u12", "u14", "u16plus"],
         playData: {
             version: PLAY_DATA_VERSION,
             players: [
@@ -389,6 +410,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
             "The coach shoots low to either pad from the slot. The goalie drops into the butterfly, smothers or controls the shot, then recovers toward the next shooter on the flank: lead leg up on the side the goalie is moving to, push off the trailing leg, and arrive square before the flank shooter releases. Teach: knees together, pads flat to seal the ice, hands out in front, stick blade covering the five-hole, and never recover by standing straight up. 6–8 min, alternate sides.",
         focus: "goalies",
         goalies: "required",
+        ageGroups: ["u10", "u12", "u14", "u16plus"],
         playData: {
             version: PLAY_DATA_VERSION,
             players: [
@@ -416,6 +438,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
             "F1 carries from the corner behind the net and tries a wrap-around at the far post. With the puck below the goal line, the goalie seals the near post in reverse-VH (RVH): post pad flat on the ice against the post, back skate loaded. As F1 wraps, the goalie rotates and pushes across to seal the far post. Option two: F1 stops and passes out to F2 in the slot; the goalie rises out of RVH and T-pushes to square up. Use RVH only while the puck is below the goal line. 6–8 min.",
         focus: "goalies",
         goalies: "required",
+        ageGroups: ["u12", "u14", "u16plus"],
         playData: {
             version: PLAY_DATA_VERSION,
             players: [
@@ -442,6 +465,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
             "A shooter in the high slot shoots low to the pads while F1 and F2 crash the posts on every shot. The goalie angles the pad or the stick blade so the rebound kicks to the corner cones, never back into the slot. Anything left in front, the forwards bury. Count the rebounds that reach the cones. Progress to shots at the body (absorb and cover) and the blocker (deflect to the corner). 10–15 min.",
         focus: "goalies",
         goalies: "required",
+        ageGroups: ["u10", "u12", "u14", "u16plus"],
         playData: {
             version: PLAY_DATA_VERSION,
             players: [
@@ -469,6 +493,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
             "D2 passes to D1, who shoots low through traffic while a screener stands at the top of the crease and moves across the goalie's eyes on the pass. The goalie finds the puck by looking around the screen, low and beside the screener's hips, not over the top; holds the crease and the angle; and stays big and patient instead of dropping early. Screener: stick on the ice, no contact with the goalie. 8 min; switch screeners every few shots.",
         focus: "goalies",
         goalies: "required",
+        ageGroups: ["u12", "u14", "u16plus"],
         playData: {
             version: PLAY_DATA_VERSION,
             players: [
@@ -495,6 +520,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
             "The coach rims a puck around the boards. The goalie leaves the net early, stops the rim behind the net with the stick on the ice and the glove behind it, and either sets the puck flat beside the net for D1 or moves it up the wall to the winger, on D1's call: \"set\", \"reverse\" or \"wall\". Then the goalie gets back to the crease the short way, stick first. Teach: read the rim early, don't chase pucks you can't reach first, and leave it flat, never on edge. 6 min.",
         focus: "goalies",
         goalies: "required",
+        ageGroups: ["u12", "u14", "u16plus"],
         playData: {
             version: PLAY_DATA_VERSION,
             players: [
@@ -521,6 +547,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
             "Shooters attack from center ice one at a time, alternating a shot and a deke. The goalie starts at the top of the crease, matches the shooter's speed with a controlled backward glide (C-cuts), keeps the gap so the shooter can't get wide, and stays patient: don't open up or drop first, and follow the puck on the deke. Shooters must finish within 8 seconds. Finish with a three-round shootout. 8–10 min.",
         focus: "goalies",
         goalies: "required",
+        ageGroups: ["u10", "u12", "u14", "u16plus"],
         playData: {
             version: PLAY_DATA_VERSION,
             players: [
@@ -547,6 +574,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
             "Every goalie's warm-up before team drills, run by a coach (5–8 min). Start with slow shots to the body so the goalie finds pucks: five to the blocker, five to the glove, five to each pad, all from the slot. Then the flank shooters shoot to the far pad so the goalie pushes and seals. Finish with five quicker shots anywhere. Shooters hit the goalie; the goal is touch and confidence, not goals.",
         focus: "goalies",
         goalies: "required",
+        ageGroups: [],
         playData: {
             version: PLAY_DATA_VERSION,
             players: [
@@ -572,6 +600,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
             "A skating pattern for crease movement, on the coach's whistle: T-push to the top post, step out to the top of the crease, C-cut back to the bottom post. Finish with a shot from F1 so every rep ends in a save. Teach: lead with the head and eyes, rotate the hips before the push, stop square with no drift, stick on the ice the whole time. With two goalies, run it at both ends. 5 min.",
         focus: "goalies",
         goalies: "required",
+        ageGroups: ["u10", "u12", "u14", "u16plus"],
         playData: {
             version: PLAY_DATA_VERSION,
             players: [
@@ -597,6 +626,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
             "Forward crossovers around both right-end circles in a figure eight, switching direction through the middle so both edges work. Teach: knees bent, a full push from the outside leg, the inside leg pushing under the body on its outside edge, shoulders level, head and stick up. Second time through, backward crossovers. Add a puck once the pattern is clean. 6–8 min.",
         focus: "skaters",
         goalies: "none",
+        ageGroups: [],
         playData: {
             version: PLAY_DATA_VERSION,
             players: [
@@ -626,6 +656,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
             "Skate forward up one side of the box, open the hips and pivot to backward at the cone, skate backward across the top, pivot to forward down the far side, and so on around the box. Teach: pivot at the cone, not after it; turn the hips and shoulders together; keep the stick on the ice and the eyes up the ice; quick feet out of every pivot. Run both directions so the pivots go both ways. 5–8 min.",
         focus: "skaters",
         goalies: "none",
+        ageGroups: [],
         playData: {
             version: PLAY_DATA_VERSION,
             players: [
@@ -651,6 +682,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
             "Partners skate the length of the ice about 40 feet apart, passing back and forth at full speed without breaking stride. Pass ahead of your partner's stick so they skate into it; receive on the forehand and backhand alternately and cushion the puck (soft hands, blade angled over the puck). The last pass comes at the far blue line; the receiver drives wide and shoots. Count completed passes per trip. 8 min.",
         focus: "skaters",
         goalies: "optional",
+        ageGroups: ["u10", "u12", "u14", "u16plus"],
         playData: {
             version: PLAY_DATA_VERSION,
             players: [
@@ -679,6 +711,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
             "Three lines at the tops of the circles and the high slot. On the whistle, each shooter takes a short pull-in carry and shoots a wrist shot in stride, lines alternating. Teach: the puck starts at the heel of the blade beside the back foot; weight moves from the back foot to the front; roll the wrists and follow through at the target, low for low shots and high for the top corners. Pick a spot before the release. 5–8 min; rotate lines every five shots.",
         focus: "skaters",
         goalies: "optional",
+        ageGroups: [],
         playData: {
             version: PLAY_DATA_VERSION,
             players: [
@@ -707,6 +740,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
             "The coach spots a puck into the corner. F1 wins it and protects it along the wall for 10 seconds against a live defender, staying inside the cones. Teach: wide base and bent knees, the puck on the far side of the body from the defender's stick, the inside arm and hip holding the defender off (legal body position, no hooking), and a cut back when the defender overcommits. Defender: stick on the puck, body between the puck and the net. Swap roles every rep. 5–6 min.",
         focus: "skaters",
         goalies: "none",
+        ageGroups: [],
         playData: {
             version: PLAY_DATA_VERSION,
             players: [
@@ -732,6 +766,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
             "The coach spots pucks into the zone: two attackers against two defenders, 30–40 second shifts, everything below the tops of the circles. Attackers get to the net fast; one takes the puck to the net, the other finds open ice for a pass or a rebound. Defenders: stick on the puck, take away the middle, win it and move it to the coach to switch. Keep score, because battles need consequences. 10–12 min.",
         focus: "skaters",
         goalies: "optional",
+        ageGroups: [],
         playData: {
             version: PLAY_DATA_VERSION,
             players: [
@@ -761,6 +796,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
             "Skate from the goal line to the near blue line, two-foot hockey stop, and sprint back; then to the red line and back, then the far blue line and back. Stop facing the same wall on the way out and the other wall on the way back so both sides get worked. Teach: drop the hips, turn the hips and shoulders together, skates about shoulder-width apart, and dig in the inside edge of the front skate and the outside edge of the back skate. Explode out with short, quick first strides. 4–5 min.",
         focus: "skaters",
         goalies: "none",
+        ageGroups: [],
         playData: {
             version: PLAY_DATA_VERSION,
             players: [
@@ -785,6 +821,7 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
             "Carry the puck through the cones with quick side-to-side handles, finish around the last cone with a toe drag, and pass to the next skater. Teach: the puck in the middle of the blade, a loose bottom hand, the top hand doing the work, the puck moving wider than the body, and the eyes up between cones (glance down, don't stare). Progress: forehand only, backhand only, then one hand on the stick. 5–6 min.",
         focus: "skaters",
         goalies: "none",
+        ageGroups: [],
         playData: {
             version: PLAY_DATA_VERSION,
             players: [
@@ -800,6 +837,259 @@ export const STARTER_PLAYS: readonly StarterPlay[] = [
             equipment: [cone("st-cone1", 86, 42.5), cone("st-cone2", 96, 42.5), cone("st-cone3", 106, 42.5), cone("st-cone4", 116, 42.5), pucks("st-pucks", 78, 6)],
             annotations: [note("st-note", "Eyes up", 88, 70, "#000000", 6)],
             area: { kind: "zone-neutral" },
+        },
+    },
+    {
+        id: "starter-goalie-quarter-station",
+        name: "Goalie Station: Track, Set, Save",
+        description:
+            "A goalie station in one quarter of the ice that stays put while the skater groups rotate. Set a net on the goal line, level with the bottom faceoff dot. A helper passes to the coach, so the goalie follows the pass, squares up and sets before the coach shoots from the slot. Start with shots to the body, then low to each pad. Teach: eyes on the puck, short shuffles, stick on the ice, glove up, and back to the feet after every save. Young players can take turns in net.",
+        focus: "goalies",
+        goalies: "required",
+        ageGroups: ["u6", "u8", "u10", "u12"],
+        playData: {
+            version: PLAY_DATA_VERSION,
+            players: [
+                goalie("gq-g", 17, 64.5),
+                coach("gq-c", 42, 64.5),
+                player("gq-h1", "H1", 34, 50),
+                player("gq-h2", "H2", 34, 79),
+            ],
+            drawings: [
+                pass("gq-pass1", [37, 54], [39, 57.5]),
+                pass("gq-pass2", [37, 75], [39.5, 71]),
+                lateral("gq-track", [21, 58], [21, 71]),
+                shot("gq-shot", [36, 64.5], [24, 64.5]),
+            ],
+            equipment: [goalLineNet("gq-net", 11, 64.5), pucks("gq-pucks", 52, 64.5)],
+            annotations: [note("gq-note", "Square up", 44, 83, "#000000", 5)],
+            area: { kind: "zone-left-bottom" },
+        },
+    },
+    {
+        id: "starter-skate-edge-circuit",
+        name: "Edge Circuit: Circle and Cones",
+        description:
+            "Edge work in one quarter of the ice. Skate forward crossovers all the way around the faceoff circle, then carve through the line of cones on deep inside and outside edges and rejoin the line. Teach: knees bent, a full push from the outside leg, the inside foot crossing over, shoulders level, eyes up. Change direction every other turn so both edges work, and add a puck once the pattern is easy. 8–10 min.",
+        focus: "skaters",
+        goalies: "none",
+        ageGroups: ["u6", "u8", "u10"],
+        playData: {
+            version: PLAY_DATA_VERSION,
+            players: [
+                player("ci-s1", "S1", 55, 33),
+                player("ci-s2", "S2", 55, 20.5),
+                player("ci-s3", "S3", 60, 8),
+            ],
+            drawings: [
+                skate("ci-entry", [50, 31], [47.5, 27]),
+                lateral("ci-circle", [47, 24], [42.3, 31.8], [31, 36.5], [19.7, 31.8], [15, 20.5], [19.7, 9.2], [31, 4.5], [42.3, 9.2], [46, 15]),
+                skate("ci-weave", [64, 6], [73, 12], [66, 24], [73, 36], [68, 40]),
+            ],
+            equipment: [cone("ci-cone1", 69.5, 12), cone("ci-cone2", 69.5, 24), cone("ci-cone3", 69.5, 36)],
+            annotations: [],
+            area: { kind: "zone-left-top" },
+        },
+    },
+    {
+        id: "starter-skate-obstacle-lane",
+        name: "Obstacle Lane: Puck Control",
+        description:
+            "A lane of cones and a tire across one quarter of the ice. Carry the puck through the lane, weaving above and below each obstacle, finish around the last cone, pass back to the next skater and join the line. Teach: soft hands, the puck in the middle of the blade, small quick steps, and eyes up between obstacles (glance down, don't stare). Progress to backhand only, then one hand on the stick. 8–10 min.",
+        focus: "skaters",
+        goalies: "none",
+        ageGroups: ["u6", "u8", "u10"],
+        playData: {
+            version: PLAY_DATA_VERSION,
+            players: [
+                player("ol-s1", "S1", 80, 36),
+                player("ol-s2", "S2", 93, 36),
+                player("ol-s3", "S3", 106, 36),
+            ],
+            drawings: [
+                carry("ol-carry", [80, 30], [86, 11], [96, 27], [106, 11], [116, 27], [121, 19]),
+                pass("ol-pass", [119, 24], [100, 31]),
+                skate("ol-next", [93, 30], [84, 26]),
+            ],
+            equipment: [
+                cone("ol-cone1", 86, 19),
+                cone("ol-cone2", 96, 19),
+                gear("tire", "ol-tire", 106, 19),
+                cone("ol-cone3", 116, 19),
+                pucks("ol-pucks", 78, 8),
+            ],
+            annotations: [],
+            area: { kind: "zone-neutral-top" },
+        },
+    },
+    {
+        id: "starter-skate-quarter-2v2",
+        name: "Quarter-Ice 2-on-2",
+        description:
+            "Two on two in one quarter of the ice, with a small net at each end. The coach spots a puck; the pair that wins it attacks the far net and the other pair defends, and every change of possession flips the direction. 30-second shifts, then the next four go. Attackers: support the puck carrier and get open. Defenders: stick on the puck, body between the puck and the net. Keep score. 8–10 min.",
+        focus: "skaters",
+        goalies: "none",
+        ageGroups: [],
+        playData: {
+            version: PLAY_DATA_VERSION,
+            players: [
+                player("q2-f1", "F1", 150, 55),
+                player("q2-f2", "F2", 158, 76),
+                player("q2-o1", "O1", 166, 60, "them"),
+                player("q2-o2", "O2", 146, 72, "them"),
+                coach("q2-c", 130, 80),
+            ],
+            drawings: [
+                pass("q2-pass", [135, 79], [150, 78]),
+                carry("q2-carry", [162, 75], [172, 74], [178, 70]),
+                shot("q2-shot", [179, 69], [185, 66.5]),
+                skate("q2-f1-route", [154, 58], [166, 50]),
+            ],
+            equipment: [goalLineNet("q2-net-right", 189, 64.5), smallNet("q2-net-left", 136, 64.5, 180), pucks("q2-pucks", 128, 82)],
+            annotations: [],
+            area: { kind: "zone-right-bottom" },
+        },
+    },
+    {
+        id: "starter-skate-give-and-go",
+        name: "Give-and-Go Triangle",
+        description:
+            "Three skaters in one quarter of the ice. S1 passes to S2, skates hard around the cone and gets the puck straight back, then carries to S3, who starts the next give-and-go. Teach: pass to the target, then move at once; the receiver shows a target with the stick on the ice; the return pass leads the skater; heads up before every pass. Switch direction after every few turns. 8–10 min.",
+        focus: "skaters",
+        goalies: "none",
+        ageGroups: ["u10", "u12", "u14"],
+        playData: {
+            version: PLAY_DATA_VERSION,
+            players: [
+                player("gg-s1", "S1", 20, 32),
+                player("gg-s2", "S2", 46, 8),
+                player("gg-s3", "S3", 62, 30),
+            ],
+            drawings: [
+                pass("gg-pass1", [25, 28], [40, 13]),
+                skate("gg-s1-route", [26, 34], [36, 30], [44, 22]),
+                pass("gg-pass2", [47, 14], [48, 24]),
+                carry("gg-carry", [49, 26], [55, 30]),
+            ],
+            equipment: [cone("gg-cone", 34, 22), pucks("gg-pucks", 12, 36)],
+            annotations: [],
+            area: { kind: "zone-left-top" },
+        },
+    },
+    {
+        id: "starter-skate-quick-release",
+        name: "Quick-Release Shooting",
+        description:
+            "A coach passes from the corner; the shooter takes it in stride at the top of the circle and shoots in one motion, without stopping the puck first. Two lines take turns. Teach: catch the pass in front of the body with soft hands, keep the puck moving toward the release, move the weight onto the front foot, and pick a corner before the pass arrives. Shoot at an empty net or targets unless a goalie is free. 8–10 min.",
+        focus: "skaters",
+        goalies: "optional",
+        ageGroups: ["u10", "u12", "u14", "u16plus"],
+        playData: {
+            version: PLAY_DATA_VERSION,
+            players: [
+                player("qr-s1", "S1", 140, 12),
+                player("qr-s2", "S2", 140, 30),
+                coach("qr-c", 176, 37),
+            ],
+            drawings: [
+                pass("qr-pass", [171, 36], [156, 30]),
+                skate("qr-s2-route", [146, 30], [154, 28]),
+                shot("qr-shot", [157, 27], [182, 21.5]),
+                skate("qr-s1-next", [146, 13], [152, 16]),
+            ],
+            equipment: [goalLineNet("qr-net", 189, 20.5), pucks("qr-pucks", 184, 38)],
+            annotations: [],
+            area: { kind: "zone-right-top" },
+        },
+    },
+    {
+        id: "starter-skate-keep-away",
+        name: "Keep-Away in a Box",
+        description:
+            "Three skaters keep the puck away from two inside a box of cones. Every completed pass is a point; when a defender touches the puck, the skater who lost it swaps in as a defender. 30-second rounds. Teach: move to open ice right after passing, show a target with the stick, and shield the puck with the body when pressured. Run one game in each quarter of the ice so everyone plays. 12–15 min.",
+        focus: "skaters",
+        goalies: "none",
+        ageGroups: ["u6", "u8", "u10"],
+        playData: {
+            version: PLAY_DATA_VERSION,
+            players: [
+                player("ka-f1", "F1", 84, 52),
+                player("ka-f2", "F2", 114, 54),
+                player("ka-f3", "F3", 100, 76),
+                player("ka-o1", "O1", 96, 60, "them"),
+                player("ka-o2", "O2", 110, 66, "them"),
+            ],
+            drawings: [
+                pass("ka-pass1", [87, 57], [96, 70]),
+                pass("ka-pass2", [104, 72], [115, 61]),
+                skate("ka-f1-route", [83, 58], [82, 66]),
+                opponentRoute("ka-o1-route", [99, 64], [102, 70]),
+            ],
+            equipment: [cone("ka-cone1", 78, 46), cone("ka-cone2", 122, 46), cone("ka-cone3", 122, 82), cone("ka-cone4", 78, 82)],
+            annotations: [],
+            area: { kind: "zone-neutral-bottom" },
+        },
+    },
+    {
+        id: "starter-game-3v3-cross-ice",
+        name: "3-on-3 Cross-Ice Game",
+        description:
+            "Three on three across the neutral zone, with a small net against each side boards. Play keeps going after a goal: the coach spots a new puck at once. Shifts of 30–40 seconds, then the next three from each team jump on. Teach: move to open ice after every pass, support the puck carrier from below, and come back to the net to defend. 7–10 min.",
+        focus: "team",
+        goalies: "none",
+        ageGroups: [],
+        playData: {
+            version: PLAY_DATA_VERSION,
+            players: [
+                player("c3-f1", "F1", 88, 30),
+                player("c3-f2", "F2", 112, 36),
+                player("c3-f3", "F3", 96, 56),
+                player("c3-o1", "O1", 106, 22, "them"),
+                player("c3-o2", "O2", 88, 46, "them"),
+                player("c3-o3", "O3", 114, 58, "them"),
+            ],
+            drawings: [
+                pass("c3-pass", [90, 35], [95, 49]),
+                carry("c3-carry", [100, 60], [106, 68]),
+                shot("c3-shot", [107, 70], [102, 76]),
+                skate("c3-f2-route", [112, 42], [116, 46]),
+                opponentRoute("c3-o2-route", [88, 52], [93, 62]),
+            ],
+            equipment: [smallNet("c3-net-top", 100, 6, 270), smallNet("c3-net-bottom", 100, 79, 90), pucks("c3-pucks", 122, 42.5)],
+            annotations: [],
+            area: { kind: "zone-neutral" },
+        },
+    },
+    {
+        id: "starter-game-4v4-cross-ice",
+        name: "4-on-4 Cross-Ice Game",
+        description:
+            "Four on four across one end zone, with a net against each side boards. Lines change on the whistle every 45 seconds, and the coach spots a new puck whenever one leaves the zone. Play fast: support the puck in threes, use the back player to switch sides, and get a body to the net on every shot. Run a second game in the other end zone if numbers allow. 15–20 min.",
+        focus: "team",
+        goalies: "optional",
+        ageGroups: ["u10", "u12", "u14", "u16plus"],
+        playData: {
+            version: PLAY_DATA_VERSION,
+            players: [
+                player("c4-f1", "F1", 142, 52),
+                player("c4-f2", "F2", 180, 56),
+                player("c4-f3", "F3", 160, 64),
+                player("c4-d1", "D1", 152, 30),
+                player("c4-o1", "O1", 165, 48, "them"),
+                player("c4-o2", "O2", 144, 68, "them"),
+                player("c4-o3", "O3", 176, 70, "them"),
+                player("c4-o4", "O4", 170, 22, "them"),
+            ],
+            drawings: [
+                pass("c4-pass", [150, 36], [144, 45]),
+                carry("c4-carry", [146, 56], [153, 68]),
+                shot("c4-shot", [156, 70], [161, 75]),
+                skate("c4-f3-route", [164, 68], [166, 74]),
+                skate("c4-d1-route", [156, 34], [160, 40]),
+            ],
+            equipment: [smallNet("c4-net-top", 162.5, 8, 270), smallNet("c4-net-bottom", 162.5, 77, 90), pucks("c4-pucks", 128, 42.5)],
+            annotations: [],
+            area: { kind: "zone-right" },
         },
     },
 ];

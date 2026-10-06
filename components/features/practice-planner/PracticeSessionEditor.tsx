@@ -561,7 +561,7 @@ export function PracticeSessionEditor({
             duration: 10, // Default duration
             instructions: savedPlay.description || "",
             playData: JSON.parse(JSON.stringify(savedPlay.playData)), // Deep copy to prevent library play mutation
-            focus: savedPlay.focus, goalies: savedPlay.goalies,
+            focus: savedPlay.focus, goalies: savedPlay.goalies, ageGroups: savedPlay.ageGroups,
             thumbnail: savedPlay.thumbnail || "", // Copy thumbnail from library play
         };
 

@@ -19,6 +19,7 @@ import {
     type GetPlaysByTeamInput,
 } from "@/lib/utils/validation";
 import { drillTags } from "@/lib/utils/drill-tags";
+import { toAgeGroups, type AgeGroup } from "@/lib/utils/age-groups";
 import type { PlayData, PlayFocus, PlayGoalies } from "@/types/practice-planner";
 import {
     PLAY_DATA_UNREADABLE_CODE,
@@ -97,6 +98,7 @@ export async function createPlay(
                 isTemplate: validated.isTemplate,
                 focus: validated.focus,
                 goalies: validated.goalies,
+                ageGroups: validated.ageGroups,
                 teamId: validated.teamId,
                 createdById: userId,
             },
@@ -208,6 +210,7 @@ export async function updatePlay(
                     ...(validated.isTemplate !== undefined && { isTemplate: validated.isTemplate }),
                     ...(validated.focus !== undefined && { focus: validated.focus }),
                     ...(validated.goalies !== undefined && { goalies: validated.goalies }),
+                    ...(validated.ageGroups !== undefined && { ageGroups: validated.ageGroups }),
                 },
                 select: {
                     id: true,
@@ -365,6 +368,7 @@ export async function getPlayById(input: GetPlayByIdInput): Promise<ActionResult
     isTemplate: boolean;
     focus: PlayFocus;
     goalies: PlayGoalies;
+    ageGroups: AgeGroup[];
     createdAt: Date;
     updatedAt: Date;
 }>> {
@@ -388,6 +392,7 @@ export async function getPlayById(input: GetPlayByIdInput): Promise<ActionResult
                 isTemplate: true,
                 focus: true,
                 goalies: true,
+                ageGroups: true,
                 teamId: true,
                 sessionId: true,
                 createdAt: true,
@@ -430,6 +435,7 @@ export async function getPlayById(input: GetPlayByIdInput): Promise<ActionResult
                 playData: parsed.data,
                 isTemplate: play.isTemplate,
                 ...drillTags(play),
+                ageGroups: toAgeGroups(play.ageGroups),
                 createdAt: play.createdAt,
                 updatedAt: play.updatedAt,
             },
@@ -472,6 +478,7 @@ export async function getPlaysByTeam(input: GetPlaysByTeamInput): Promise<Action
         isTemplate: boolean;
         focus: PlayFocus;
         goalies: PlayGoalies;
+        ageGroups: AgeGroup[];
         createdAt: Date;
         updatedAt: Date;
     }>;
@@ -501,6 +508,12 @@ export async function getPlaysByTeam(input: GetPlaysByTeamInput): Promise<Action
         // Drill-tag filters (spec R8). Applied in the database, so total and pages stay exact.
         if (validated.focus) where.focus = validated.focus;
         if (validated.goalies) where.goalies = validated.goalies;
+
+        // Age filter (age-group templates R3): an untagged drill suits every age.
+        // AND, not OR: the search below already owns where.OR.
+        if (validated.ageGroup) {
+            where.AND = [{ OR: [{ ageGroups: { isEmpty: true } }, { ageGroups: { has: validated.ageGroup } }] }];
+        }
 
         // Apply search filter (search by name or description)
         if (validated.search && validated.search.trim()) {
@@ -551,6 +564,7 @@ export async function getPlaysByTeam(input: GetPlaysByTeamInput): Promise<Action
                     isTemplate: true,
                     focus: true,
                     goalies: true,
+                    ageGroups: true,
                     createdAt: true,
                     updatedAt: true,
                 },
@@ -565,7 +579,7 @@ export async function getPlaysByTeam(input: GetPlaysByTeamInput): Promise<Action
         return {
             success: true,
             data: {
-                plays: plays.map((play) => ({ ...play, ...drillTags(play) })),
+                plays: plays.map((play) => ({ ...play, ...drillTags(play), ageGroups: toAgeGroups(play.ageGroups) })),
                 total,
                 page: validated.page,
                 limit: validated.limit,

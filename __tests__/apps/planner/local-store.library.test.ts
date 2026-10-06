@@ -16,6 +16,15 @@ describe.each(REPOS)("library (%s)", (_name, open) => {
         return { ...h, library: createLibraryOps(createStoreContext(h.repo, h.options)) };
     }
 
+    it("seeds each starter with its age groups", async () => {
+        const { library } = await setup();
+        await library.seedStarterDrills();
+        const page = await library.getPlaysByTeam({ ...QUERY, limit: 100, search: "Keep-Away in a Box" });
+        const id = page.success ? page.data.plays[0]?.id : undefined;
+        const read = id ? await library.getPlayById({ id, teamId: LOCAL_TEAM_ID }) : null;
+        expect(read?.success && read.data.ageGroups).toEqual(["u6", "u8", "u10"]);
+    });
+
     it("lists only unowned templates, newest first, with page totals", async () => {
         const { repo, clock, library } = await setup();
         clock.now = new Date("2026-10-05T09:00:00");

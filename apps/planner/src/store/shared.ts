@@ -1,6 +1,7 @@
 /** Helpers every local-store operation shares (ADR-0020). */
 import type { ActionResult, LibraryPlaySummary } from "@/lib/planner-store";
 import { GOALIES_ATTENDING_MESSAGE, drillTags, toGoaliesAttending } from "@/lib/utils/drill-tags";
+import { AGE_GROUP_UNKNOWN_MESSAGE, ageGroupsSchema, toAgeGroups, type AgeGroup } from "@/lib/utils/age-groups";
 import { MAX_THUMBNAIL_SIZE, isAcceptableThumbnail } from "@/lib/utils/thumbnail-rules";
 import { sanitizePlayDataForWrite } from "@/lib/utils/play-data";
 import type { PlayData } from "@/types/practice-planner";
@@ -87,6 +88,7 @@ export function summary(play: StoredPlay): LibraryPlaySummary {
         description: play.description,
         thumbnail: play.thumbnail,
         ...drillTags(play),
+        ageGroups: toAgeGroups(play.ageGroups),
         isTemplate: play.isTemplate,
         createdAt: play.createdAt,
         updatedAt: play.updatedAt,
@@ -129,4 +131,11 @@ export function checkedGoalieCount(value: number | null | undefined): number | n
     if (value === undefined || value === null) return value;
     if (toGoaliesAttending(value) === null) throw new StoreRefusal(GOALIES_ATTENDING_MESSAGE);
     return value;
+}
+
+/** Hosted's rule (ageGroupsSchema): known values, no repeats; returned in the table's order. */
+export function checkedAgeGroups(value: unknown): AgeGroup[] {
+    const parsed = ageGroupsSchema.safeParse(value);
+    if (!parsed.success) throw new StoreRefusal(parsed.error.issues[0]?.message ?? AGE_GROUP_UNKNOWN_MESSAGE);
+    return parsed.data;
 }

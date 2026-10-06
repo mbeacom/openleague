@@ -329,6 +329,8 @@ describe("drillFootprint", () => {
         ["zone-left", { kind: "zone-left" }, "zone"],
         ["zone-neutral", { kind: "zone-neutral" }, "zone"],
         ["zone-right", { kind: "zone-right" }, "zone"],
+        ["zone-left-top", { kind: "zone-left-top" }, "zone"],
+        ["zone-neutral-bottom", { kind: "zone-neutral-bottom" }, "zone"],
         ["custom 101 ft wide", { kind: "custom", rect: { x: 0, y: 0, w: 101, h: 20 } }, "full"],
         ["custom 100 ft wide", { kind: "custom", rect: { x: 0, y: 0, w: 100, h: 85 } }, "half"],
         ["custom 76 ft wide", { kind: "custom", rect: { x: 0, y: 0, w: 76, h: 40 } }, "half"],
@@ -356,6 +358,12 @@ describe("stationWarnings", () => {
 
     it("doesn't flag zones that only share a blue line", () => {
         expect(warn(placed([{ kind: "zone-left" }, { kind: "zone-neutral" }, { kind: "zone-right" }])).overlaps).toEqual([]);
+    });
+
+    it("doesn't flag quarters that only share a line, and flags a quarter inside a zone", () => {
+        expect(warn(placed([{ kind: "zone-left-top" }, { kind: "zone-left-bottom" }, { kind: "zone-neutral-top" }, { kind: "zone-right-bottom" }])).overlaps).toEqual([]);
+        expect(warn(placed([{ kind: "zone-neutral" }, { kind: "zone-neutral-bottom" }])).overlaps).toEqual([[0, 0, 1]]);
+        expect(warn(placed([{ kind: "zone-left-top" }, { kind: "half-left" }])).overlaps).toEqual([[0, 0, 1]]);
     });
 
     it("treats a full-ice drill as overlapping every other station", () => {

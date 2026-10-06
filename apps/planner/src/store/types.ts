@@ -11,6 +11,7 @@ import type { SessionRowInput } from "@/lib/utils/session-rows";
 import type { SessionStaffInput } from "@/lib/utils/session-staff";
 import type { TeamProfileInput } from "@/lib/utils/team-mark";
 import type { PlayData, PlayFocus, PlayGoalies, PracticeSessionData, PracticeSessionView, TeamProfile } from "@/types/practice-planner";
+import type { AgeGroup } from "@/lib/utils/age-groups";
 
 export interface LocalSessionSummary {
     id: string;
@@ -56,6 +57,7 @@ export interface LocalPlayUpdate {
     playData: PlayData;
     focus?: PlayFocus;
     goalies?: PlayGoalies;
+    ageGroups?: AgeGroup[];
 }
 
 export interface PlanImportOptions {

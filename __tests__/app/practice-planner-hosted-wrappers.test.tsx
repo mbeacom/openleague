@@ -80,6 +80,21 @@ describe("hosted wrappers: goaltender fields", () => {
         });
         expect(actions.createPlay.mock.calls[0][0]).toMatchObject({ focus: "goalies", goalies: "required" });
     });
+
+    it("PlayEditorWrapper sends the age groups on create and on update", async () => {
+        const drill = {
+            id: "", name: "Keep-Away", description: "", thumbnail: "", playData: createEmptyPlayData(), isTemplate: true,
+            ageGroups: ["u6", "u8"], createdAt: new Date(), updatedAt: new Date(),
+        };
+        render(<PlayEditorWrapper teamId={TEAM} />);
+        await captured.props!.onSave(drill);
+        expect(actions.createPlay.mock.calls[0][0]).toMatchObject({ ageGroups: ["u6", "u8"] });
+
+        actions.updatePlay.mockResolvedValue({ success: true, data: { id: "cplayxxxxxxxxxxxxxxxxxxxx", name: "Keep-Away", isTemplate: true } });
+        render(<PlayEditorWrapper teamId={TEAM} play={{ ...drill, id: "cplayxxxxxxxxxxxxxxxxxxxx" } as never} />);
+        await captured.props!.onSave({ ...drill, ageGroups: [] });
+        expect(actions.updatePlay.mock.calls[0][0]).toMatchObject({ id: "cplayxxxxxxxxxxxxxxxxxxxx", ageGroups: [] });
+    });
 });
 
 describe("hosted wrappers: block rows and the gap", () => {

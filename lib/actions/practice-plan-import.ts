@@ -123,6 +123,7 @@ export async function importPracticePlan(
                 playData: diagrams.get(entry.sequence) as unknown as Prisma.InputJsonValue,
                 focus: entry.drill.focus,
                 goalies: entry.drill.goalies,
+                ageGroups: entry.drill.ageGroups,
                 teamId,
                 createdById: userId,
                 sourcePlayId: null,
