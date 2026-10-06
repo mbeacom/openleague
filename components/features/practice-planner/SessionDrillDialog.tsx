@@ -20,6 +20,7 @@ import {
     FormControlLabel,
 } from "@mui/material";
 import type { PlayData, PlayFocus, PlayGoalies, SavedPlay } from "@/types/practice-planner";
+import type { AgeGroup } from "@/lib/utils/age-groups";
 import type { SessionDrillPatch } from "@/lib/utils/session-drill-ids";
 import { usePlannerStore } from "@/lib/planner-store";
 import { PlayEditor } from "./PlayEditor";
@@ -35,6 +36,7 @@ export interface SessionDrillDialogDrill {
     thumbnail: string;
     focus?: PlayFocus;
     goalies?: PlayGoalies;
+    ageGroups?: AgeGroup[];
 }
 
 export interface SessionDrillDialogProps {
@@ -83,6 +85,7 @@ export function SessionDrillDialog({ open, sessionId, teamId, drill, onSaved, on
             playData: saved.playData,
             focus: saved.focus,
             goalies: saved.goalies,
+            ageGroups: saved.ageGroups,
         });
         // PlayEditor catches this and shows it in its error alert; the dialog stays open.
         if (!result.success) throw new Error(result.error);
@@ -97,6 +100,7 @@ export function SessionDrillDialog({ open, sessionId, teamId, drill, onSaved, on
             playData: saved.playData,
             focus: saved.focus,
             goalies: saved.goalies,
+            ageGroups: saved.ageGroups,
         });
         // The session save that links the drill failed: report it here, not
         // behind the full-screen dialog, and keep the dialog open.
@@ -135,6 +139,7 @@ export function SessionDrillDialog({ open, sessionId, teamId, drill, onSaved, on
                     thumbnail: drill.thumbnail,
                     focus: drill.focus,
                     goalies: drill.goalies,
+                    ageGroups: drill.ageGroups,
                     isTemplate: false,
                 }}
                 lockTemplate

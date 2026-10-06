@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { memoryStore, renderScreen } from "./render-screen";
 import { SessionEditorScreen, toLocalSessionSave } from "@/apps/planner/src/screens/SessionEditorScreen";
 import { DrillEditorScreen } from "@/apps/planner/src/screens/DrillEditorScreen";
@@ -113,6 +113,27 @@ describe("DrillEditorScreen", () => {
         await waitFor(() => expect(window.location.hash).toBe("#/library"));
         const listing = await store.getPlaysByTeam({ teamId: LOCAL_TEAM_ID, isTemplate: true, page: 1, limit: 20, dateFilter: "all" });
         expect(listing.success && listing.data.plays.map((p) => p.name)).toEqual(["Breakout"]);
+    });
+
+    it("saves the chosen age groups with a new drill, and shows them when it is edited", async () => {
+        const { store } = memoryStore();
+        renderScreen(<DrillEditorScreen store={store} />, store);
+        fireEvent.change(screen.getByLabelText(/play name/i), { target: { value: "Keep-Away" } });
+        fireEvent.click(within(screen.getByRole("group", { name: "Age groups" })).getByRole("button", { name: "8U" }));
+        fireEvent.click(screen.getByRole("button", { name: /^save play/i }));
+        await waitFor(() => expect(window.location.hash).toBe("#/library"));
+        const listing = await store.getPlaysByTeam({ teamId: LOCAL_TEAM_ID, isTemplate: true, page: 1, limit: 20, dateFilter: "all" });
+        const saved = listing.success ? listing.data.plays[0] : undefined;
+        expect(saved?.ageGroups).toEqual(["u8"]);
+    });
+
+    it("loads a drill's age groups into the editor", async () => {
+        const { store } = memoryStore();
+        const created = await store.createPlay({ name: "Keep-Away", playData: createEmptyPlayData(), isTemplate: true, teamId: LOCAL_TEAM_ID, ageGroups: ["u6"] });
+        if (!created.success) throw new Error(created.error);
+        renderScreen(<DrillEditorScreen store={store} id={created.data.id} />, store);
+        const group = await screen.findByRole("group", { name: "Age groups" });
+        expect(within(group).getByRole("button", { name: "6U" })).toHaveAttribute("aria-pressed", "true");
     });
 
     it("refuses to edit an unreadable diagram", async () => {

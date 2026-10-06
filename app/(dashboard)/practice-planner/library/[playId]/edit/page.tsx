@@ -70,6 +70,7 @@ export default async function EditPlayPage({ params }: PageProps) {
     isTemplate: result.data.isTemplate,
     focus: result.data.focus,
     goalies: result.data.goalies,
+    ageGroups: result.data.ageGroups,
     createdAt: result.data.createdAt,
     updatedAt: result.data.updatedAt,
   };

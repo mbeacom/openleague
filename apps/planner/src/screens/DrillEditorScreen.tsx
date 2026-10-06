@@ -44,6 +44,7 @@ function ExistingDrill({ store, id }: { store: LocalPlannerStore; id: string }) 
         playData: state.data.playData,
         focus: state.data.focus,
         goalies: state.data.goalies,
+        ageGroups: state.data.ageGroups,
         isTemplate: state.data.isTemplate,
         createdAt: state.data.createdAt,
         updatedAt: state.data.updatedAt,
@@ -62,6 +63,7 @@ function DrillEditor({ store, play }: { store: LocalPlannerStore; play?: SavedPl
                 playData: saved.playData,
                 focus: saved.focus,
                 goalies: saved.goalies,
+                ageGroups: saved.ageGroups,
             };
             const result = play
                 ? await store.updatePlay({ id: play.id, ...fields })

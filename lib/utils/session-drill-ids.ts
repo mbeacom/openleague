@@ -3,6 +3,7 @@
  * A card's `id` is its clientKey; `playId` is the Play row it shows.
  */
 import type { PlayData, PlayFocus, PlayGoalies, SessionItem } from "@/types/practice-planner";
+import type { AgeGroup } from "@/lib/utils/age-groups";
 import { isDrillRow } from "@/lib/utils/session-rows";
 
 export type SavedDrillId = { clientKey: string; playId: string };
@@ -34,6 +35,7 @@ export type SessionDrillPatch = {
     playData: PlayData;
     focus?: PlayFocus;
     goalies?: PlayGoalies;
+    ageGroups?: AgeGroup[];
 };
 
 /**

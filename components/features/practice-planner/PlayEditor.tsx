@@ -40,6 +40,8 @@ import { ElementInspector } from "./ElementInspector";
 import { CustomAreaFields, rectFromFields } from "./CustomAreaFields";
 import { DrillTagFields, type DrillTagValues } from "./DrillTagFields";
 import { drillTags } from "@/lib/utils/drill-tags";
+import { AgeGroupsField } from "./AgeGroupsField";
+import { toAgeGroups, type AgeGroup } from "@/lib/utils/age-groups";
 import { findElement } from "@/lib/utils/canvas/element-ops";
 import {
     type DrawingTool,
@@ -107,6 +109,7 @@ export function PlayEditor({
     const [description, setDescription] = useState(initialData?.description || "");
     const [isTemplate, setIsTemplate] = useState(initialData?.isTemplate || false);
     const [tags, setTags] = useState<DrillTagValues>(() => drillTags(initialData));
+    const [ageGroups, setAgeGroups] = useState<AgeGroup[]>(() => toAgeGroups(initialData?.ageGroups));
 
     // Play data state
     const [playData, setPlayData] = useState<PlayData>(
@@ -242,6 +245,12 @@ export function PlayEditor({
         setSaveSuccess(false);
     };
 
+    const handleAgeGroupsChange = (next: AgeGroup[]) => {
+        setAgeGroups(next);
+        setHasUnsavedChanges(true);
+        setSaveSuccess(false);
+    };
+
     /**
      * Handle save action
      * Requirements: 1.5, 4.1, 4.2
@@ -288,6 +297,7 @@ export function PlayEditor({
                 playData,
                 isTemplate,
                 ...tags,
+                ageGroups,
                 createdAt: initialData?.createdAt || new Date(),
                 updatedAt: new Date(),
             };
@@ -315,7 +325,7 @@ export function PlayEditor({
         } finally {
             setIsSaving(false);
         }
-    }, [name, description, playData, isTemplate, tags, playId, initialData, onSave]);
+    }, [name, description, playData, isTemplate, tags, ageGroups, playId, initialData, onSave]);
 
     // Keep handleSaveRef updated with latest handleSave function
     useEffect(() => {
@@ -400,6 +410,9 @@ export function PlayEditor({
 
                     {/* Drill tags (goaltender-aware drills) */}
                     <DrillTagFields value={tags} onChange={handleTagsChange} />
+
+                    {/* Age groups */}
+                    <AgeGroupsField value={ageGroups} onChange={handleAgeGroupsChange} />
 
                     {/* Ice area (2a) */}
                     <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems={{ sm: "center" }}>
