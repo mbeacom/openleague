@@ -113,6 +113,7 @@ describe("PlayLibrary: age filter", () => {
         const { store, onSelectPlay } = renderLibrary([KEEP_AWAY], "select");
         store.getPlayById.mockResolvedValue({ success: true, data: { ...KEEP_AWAY, playData: createEmptyPlayData(), focus: "skaters", goalies: "none" } });
         expect(await screen.findByRole("group", { name: "Age group" })).toBeInTheDocument();
+        await screen.findByText("My Keep-Away");
         fireEvent.click(cardOf("My Keep-Away"));
         await waitFor(() => expect(onSelectPlay).toHaveBeenCalledWith(expect.objectContaining({ name: "My Keep-Away", ageGroups: ["u6", "u8"] })));
     });
