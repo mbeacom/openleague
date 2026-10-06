@@ -4,6 +4,7 @@
  * real one) and memory (the fallback when IndexedDB is unavailable).
  */
 import type { PlayFocus, PlayGoalies, SessionRowKind } from "@/types/practice-planner";
+import type { AgeGroup } from "@/lib/utils/age-groups";
 
 export interface StoredPlay {
     id: string;
@@ -16,6 +17,8 @@ export interface StoredPlay {
     /** Drill tags. Absent on records written before tags existed: read through drillTags(). */
     focus?: PlayFocus;
     goalies?: PlayGoalies;
+    /** Age groups. Absent on records written before them: read through toAgeGroups() (every age). */
+    ageGroups?: AgeGroup[];
     /** Set: a session-owned copy (practice planner 3a). Null: a library play. */
     sessionId: string | null;
     /** Provenance of a fork or clone. */

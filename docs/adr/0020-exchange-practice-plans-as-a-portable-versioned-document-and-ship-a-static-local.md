@@ -249,3 +249,19 @@ From this amendment on, `areaRect` draws an area kind it doesn't know as full ic
 That one-way loss is accepted, as for block rows and curves: a version bump would make older readers reject every new file, including the many without quarters.
 
 Spec: `docs/superpowers/specs/2026-10-05-practice-adm-style-templates-design.md`.
+
+### 2026-10-05: Drill age groups (one additive field, version stays 1)
+
+Each drill gains `ageGroups`: a list of up to six distinct values from `u6`, `u8`, `u10`, `u12`, `u14` and `u16plus`, in that order. An empty list means the drill suits every age. `PLAN_VERSION` stays 1.
+
+**Rules:**
+- Missing or `null` reads as `[]`, so every earlier file reads as before.
+- Unlike `focus` and `goalies`, the field is strict: an unknown value, a repeated value or a value that isn't a list is an error, reported as a readable "Drill N" issue, never silently dropped.
+- Writers always emit the field (`[]` when none), in the order above.
+
+**Compatibility:**
+- A reader built before this amendment strips the key and opens the file with no age groups; a round trip through an older build drops them.
+- The static planner's IndexedDB goes from version 3 to 4 with no data change, so a tab still running an older build reloads (`onversionchange`) before it can rewrite a drill without its age groups, or a quarter-ice drill without its area.
+- A hosted tab opened before the deploy sends no age groups when it saves a drill, which the server reads as "unchanged".
+
+Spec: `docs/superpowers/specs/2026-10-05-practice-adm-style-templates-design.md`.

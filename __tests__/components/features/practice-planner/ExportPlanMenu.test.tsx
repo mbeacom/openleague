@@ -305,6 +305,17 @@ describe("ExportPlanMenu in the static planner", () => {
 });
 
 describe("buildPlanDocument: goaltender fields", () => {
+    it("writes each drill's age groups, and [] for a drill without them", () => {
+        const session: ExportableSession = {
+            ...SESSION,
+            plays: [
+                { ...sessionPlay("Keep-Away", 0), play: { name: "Keep-Away", description: null, playData: createEmptyPlayData(), ageGroups: ["u8", "u6"] } },
+                sessionPlay("Weave", 1),
+            ],
+        };
+        expect(drillRows(buildPlanDocument(session, NOW).session.drills).map((d) => d.drill.ageGroups)).toEqual([["u6", "u8"], []]);
+    });
+
     it("writes the count and drill tags, and keeps goalie markers even when none attend", () => {
         const goalieBoard = {
             ...createEmptyPlayData(),

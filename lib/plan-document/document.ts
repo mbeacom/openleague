@@ -20,6 +20,7 @@ import {
     staffNameKey,
 } from "@/lib/utils/session-staff";
 import { drillTags, toGoaliesAttending, toPlayFocus, toPlayGoalies } from "@/lib/utils/drill-tags";
+import { ageGroupsSchema, toAgeGroups, type AgeGroup } from "@/lib/utils/age-groups";
 import { createEmptyPlayData, parseStoredPlayData } from "@/lib/utils/play-data";
 import { CONTROL_CHARS, isBlockRow, toBlockLabel, toRotateEveryMinutes, toTransitionMinutes } from "@/lib/utils/session-rows";
 import { normalizeGroups, sessionRowsError, sessionWallMinutes, settleRotations, withRotationMinutes } from "@/lib/utils/session-timeline";
@@ -121,6 +122,12 @@ const diagramSchema = z.unknown().transform((raw, ctx): PlayData => {
 const focusSchema = z.preprocess(toPlayFocus, z.enum(PLAY_FOCUS));
 const goaliesSchema = z.preprocess(toPlayGoalies, z.enum(PLAY_GOALIES));
 const goaliesAttendingSchema = z.preprocess(toGoaliesAttending, z.number().int().nullable());
+/**
+ * Drill age groups (age-group templates spec R2). Missing or null is every
+ * age: every file written before them. Strict, unlike focus and goalies: an
+ * unknown value or a repeat is a broken file, reported as a "Drill N" issue.
+ */
+const planAgeGroupsSchema = ageGroupsSchema.nullish().transform((groups): AgeGroup[] => groups ?? []);
 
 // Practice timing (spec R6): read leniently like the goalie fields, so a stray
 // value never makes a plan unreadable. A rotation on the wrong row is still a
@@ -162,6 +169,7 @@ const planDrillSchema = z.object({
         description: optionalText(MAX_DRILL_DESCRIPTION_LENGTH, "Description"),
         focus: focusSchema,
         goalies: goaliesSchema,
+        ageGroups: planAgeGroupsSchema,
         playData: diagramSchema,
     }),
 });
@@ -291,6 +299,8 @@ export interface PlanDrillInput {
     /** Absent = the default tag */
     focus?: PlayFocus;
     goalies?: PlayGoalies;
+    /** Absent = none (every age). Unknown values and repeats are dropped on export. */
+    ageGroups?: readonly AgeGroup[];
     /** Absent = false / null */
     stays?: boolean;
     rotateEveryMinutes?: number | null;
@@ -383,6 +393,7 @@ export function serializePlan(input: PlanSessionInput, generator: PlanGenerator,
                 name: row.name,
                 description: row.description ?? "",
                 ...drillTags(row),
+                ageGroups: toAgeGroups(row.ageGroups),
                 playData: row.playData ?? createEmptyPlayData(),
             },
         };
@@ -507,6 +518,7 @@ export interface PlanEditorDrill {
     description: string;
     focus: PlayFocus;
     goalies: PlayGoalies;
+    ageGroups: AgeGroup[];
     stays: boolean;
     rotateEveryMinutes: number | null;
     playData: PlayData;
@@ -558,6 +570,7 @@ export function planToEditorSession(plan: PlanDocument): PlanEditorSession {
                       description: entry.drill.description,
                       focus: entry.drill.focus,
                       goalies: entry.drill.goalies,
+                      ageGroups: entry.drill.ageGroups,
                       stays: entry.stays,
                       rotateEveryMinutes: entry.rotateEveryMinutes,
                       playData: entry.drill.playData,

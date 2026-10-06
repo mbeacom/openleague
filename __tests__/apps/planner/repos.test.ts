@@ -184,7 +184,7 @@ describe("IndexedDB schema versions (practice timing rows, practice staff)", () 
         });
     }
 
-    it("is version 3", () => expect(DB_VERSION).toBe(3));
+    it("is version 4", () => expect(DB_VERSION).toBe(4));
 
     it("opens a version 1 database at the current version with every store, index and record intact", async () => {
         const factory = new IDBFactory();
@@ -245,7 +245,25 @@ describe("IndexedDB schema versions (practice timing rows, practice staff)", () 
         const repo = await openIdbRepo({ factory, name: "v2-open-tab" });
         expect(reload).toHaveBeenCalledTimes(1);
         expect(await repo.read((tx) => tx.getSession("s1"))).toEqual(v1Session);
-        expect(await versionOf(factory, "v2-open-tab")).toBe(3);
+        expect(await versionOf(factory, "v2-open-tab")).toBe(DB_VERSION);
+        repo.close();
+    });
+
+    it("makes a tab still open at version 3 (before age groups) reload before this build writes, keeping its data", async () => {
+        const factory = new IDBFactory();
+        const v3 = await openAt(factory, "v3-open-tab", 3);
+        await seed(v3);
+        // A build without age groups would rewrite a drill without them: its tab must reload first.
+        const reload = vi.fn();
+        v3.onversionchange = () => {
+            v3.close();
+            reload();
+        };
+        const repo = await openIdbRepo({ factory, name: "v3-open-tab" });
+        expect(reload).toHaveBeenCalledTimes(1);
+        expect(await repo.read((tx) => tx.getSession("s1"))).toEqual(v1Session);
+        expect((await repo.read((tx) => tx.allPlays())).map((p) => p.id).sort()).toEqual(["lib", "p1"]);
+        expect(await versionOf(factory, "v3-open-tab")).toBe(4);
         repo.close();
     });
 });

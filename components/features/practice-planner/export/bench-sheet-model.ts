@@ -6,6 +6,7 @@
  * Images come from injected renderers, so this module never touches a canvas.
  */
 import type { BlockKind, LogoImage, PlayData, PlayFocus, PlayGoalies, SessionStaffMember, TeamMark } from "@/types/practice-planner";
+import type { AgeGroup } from "@/lib/utils/age-groups";
 import { resolveCrestColor } from "@/lib/utils/crest";
 import { EXPORT_MARK_HEIGHT, exportMarkSize, isLogoImage, teamLogoAlt } from "@/lib/utils/team-mark";
 import { buildLegend, type LegendEntry } from "@/lib/utils/canvas/legend";
@@ -38,7 +39,7 @@ export interface ExportSessionPlay {
     rotateEveryMinutes?: number | null;
     /** Staff ids running this row; names come from ExportSession.staff. */
     staff?: string[];
-    play: { name: string; description: string | null; playData: PlayData | null; focus?: PlayFocus; goalies?: PlayGoalies };
+    play: { name: string; description: string | null; playData: PlayData | null; focus?: PlayFocus; goalies?: PlayGoalies; ageGroups?: readonly AgeGroup[] };
 }
 
 /** A warm-up, break, transition or cool-down: a timeline row with no drill. */

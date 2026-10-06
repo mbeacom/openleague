@@ -21,6 +21,7 @@ import {
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import { BLOCK_STATION_ERROR, FIRST_DRILL_STATION_ERROR, ROTATION_PLACEMENT_ERROR, STATION_GROUP_CAP_ERROR, groupStations } from "@/lib/utils/session-timeline";
 import { drillRows } from "@/lib/utils/session-rows";
+import { AGE_GROUP_REPEAT_MESSAGE, AGE_GROUP_UNKNOWN_MESSAGE, AGE_GROUPS_LIST_MESSAGE } from "@/lib/utils/age-groups";
 import {
     ROW_STAFF_LIMIT_MESSAGE,
     ROW_STAFF_UNKNOWN_MESSAGE,
@@ -145,7 +146,7 @@ describe("serializePlan", () => {
         expect(Object.keys(doc).sort()).toEqual(["exportedAt", "format", "generator", "session", "version"]);
         expect(Object.keys(doc.session).sort()).toEqual(["date", "drills", "durationMinutes", "goaliesAttending", "staff", "startTime", "title", "transitionMinutes"]);
         expect(Object.keys(doc.session.drills[0]).sort()).toEqual(["drill", "durationMinutes", "instructions", "kind", "rotateEveryMinutes", "runsWithPrevious", "sequence", "staff", "stays"]);
-        expect(Object.keys(drillRows(doc.session.drills)[0].drill).sort()).toEqual(["description", "focus", "goalies", "name", "playData"]);
+        expect(Object.keys(drillRows(doc.session.drills)[0].drill).sort()).toEqual(["ageGroups", "description", "focus", "goalies", "name", "playData"]);
     });
 });
 
@@ -625,5 +626,56 @@ describe("quarter-ice areas (additive values, versions stay 1 and 2)", () => {
         const parsed = parsePlan(doc);
         if (!parsed.ok) throw new Error(parsed.error.message);
         expect(drillRows(parsed.plan.session.drills)[0].drill.playData.area).toEqual({ kind: "zone-neutral-top" });
+    });
+});
+
+describe("drill age groups (additive, version 1)", () => {
+    function agedInput(ageGroups?: unknown): PlanSessionInput {
+        return {
+            title: "Station night",
+            durationMinutes: 30,
+            date: null,
+            startTime: null,
+            drills: [
+                { sequence: 0, duration: 10, runsWithPrevious: false, instructions: null, name: "Keep-Away", description: null, playData: null, ageGroups: ageGroups as never },
+                { sequence: 1, duration: 10, runsWithPrevious: false, instructions: null, name: "Weave", description: null, playData: null },
+            ],
+        };
+    }
+
+    const issuesFor = (ageGroups: unknown) => {
+        const raw = JSON.parse(JSON.stringify(serializePlan(agedInput(), "openleague-static", NOW)));
+        raw.session.drills[0].drill.ageGroups = ageGroups;
+        const result = parsePlan(raw);
+        return result.ok ? [] : result.error.issues ?? [];
+    };
+
+    it("always writes the groups: known values once each in table order, [] when none", () => {
+        const doc = serializePlan(agedInput(["u10", "u8", "u8", "u7"]), "openleague-static", NOW);
+        expect(drillRows(doc.session.drills).map((d) => d.drill.ageGroups)).toEqual([["u8", "u10"], []]);
+    });
+
+    it("round-trips through parsePlan", () => {
+        const doc = serializePlan(agedInput(["u6", "u8"]), "openleague-hosted", NOW);
+        expect(parsePlan(JSON.parse(JSON.stringify(doc)))).toEqual({ ok: true, plan: doc });
+    });
+
+    it("reads an older file without the key, or with null, as every age", () => {
+        const raw = JSON.parse(JSON.stringify(serializePlan(agedInput(["u12"]), "openleague-static", NOW)));
+        delete raw.session.drills[0].drill.ageGroups;
+        raw.session.drills[1].drill.ageGroups = null;
+        const result = parsePlan(raw);
+        expect(result.ok && drillRows(result.plan.session.drills).map((d) => d.drill.ageGroups)).toEqual([[], []]);
+    });
+
+    it("refuses an unknown value, a repeat or a non-list with a readable Drill N issue", () => {
+        expect(issuesFor(["u8", "u7"])).toEqual([`Drill 1 ("Keep-Away"): ${AGE_GROUP_UNKNOWN_MESSAGE}`]);
+        expect(issuesFor(["u8", "u8"])).toEqual([`Drill 1 ("Keep-Away"): ${AGE_GROUP_REPEAT_MESSAGE}`]);
+        expect(issuesFor("u8")).toEqual([`Drill 1 ("Keep-Away"): ${AGE_GROUPS_LIST_MESSAGE}`]);
+    });
+
+    it("carries the groups into the editor mapping", () => {
+        const editor = planToEditorSession(serializePlan(agedInput(["u10"]), "openleague-static", NOW));
+        expect(editor.plays[0]).toMatchObject({ ageGroups: ["u10"] });
     });
 });

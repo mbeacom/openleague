@@ -3,12 +3,14 @@ import type { LibraryDateFilter } from "@/lib/planner-store";
 import { STARTER_PLAYS } from "@/lib/data/starter-plays";
 import { PLAY_DATA_UNREADABLE_CODE, PLAY_DATA_UNREADABLE_MESSAGE, parseStoredPlayData } from "@/lib/utils/play-data";
 import { drillTags, toPlayFocus, toPlayGoalies } from "@/lib/utils/drill-tags";
+import { matchesAgeGroup, toAgeGroups } from "@/lib/utils/age-groups";
 import { LEGACY_SEEDED_STARTER_IDS, META_SEEDED_STARTER_IDS, META_STARTERS_SEEDED, type RepoTx, type StoredPlay } from "./records";
 import {
     OWNED_DRILL_DELETE_MESSAGE,
     PLAY_NOT_FOUND_MESSAGE,
     StoreRefusal,
     attempt,
+    checkedAgeGroups,
     drillText,
     ok,
     summary,
@@ -67,6 +69,7 @@ export function createLibraryOps(ctx: StoreContext): LibraryOps {
                     .filter((p) => input.isTemplate === undefined || p.isTemplate === input.isTemplate)
                     .filter((p) => !input.focus || drillTags(p).focus === input.focus)
                     .filter((p) => !input.goalies || drillTags(p).goalies === input.goalies)
+                    .filter((p) => matchesAgeGroup(toAgeGroups(p.ageGroups), input.ageGroup ?? null))
                     .filter((p) => !since || p.createdAt >= since)
                     .filter((p) => !term || p.name.toLowerCase().includes(term) || (p.description ?? "").toLowerCase().includes(term))
                     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || a.name.localeCompare(b.name));
@@ -103,6 +106,7 @@ export function createLibraryOps(ctx: StoreContext): LibraryOps {
                     thumbnail: thumbnailOrNull(input.thumbnail),
                     playData,
                     ...drillTags(input),
+                    ageGroups: input.ageGroups === undefined ? [] : checkedAgeGroups(input.ageGroups),
                     isTemplate: input.isTemplate,
                     sessionId: null,
                     sourcePlayId: null,
@@ -122,6 +126,7 @@ export function createLibraryOps(ctx: StoreContext): LibraryOps {
                 const tags = {
                     ...(input.focus !== undefined && { focus: toPlayFocus(input.focus) }),
                     ...(input.goalies !== undefined && { goalies: toPlayGoalies(input.goalies) }),
+                    ...(input.ageGroups !== undefined && { ageGroups: checkedAgeGroups(input.ageGroups) }),
                 };
                 const at = ctx.now();
                 await write(ctx, async (tx) => {

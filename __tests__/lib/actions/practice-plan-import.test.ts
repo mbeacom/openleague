@@ -154,6 +154,7 @@ describe("importPracticePlan", () => {
             playData: BOARD,
             focus: "team",
             goalies: "optional",
+            ageGroups: [],
             isTemplate: false,
             teamId: TEAM,
             createdById: USER,
@@ -312,5 +313,19 @@ describe("importPracticePlan: block rows, rotation and the gap", () => {
             ["Regroup", true],
             ["Shooting", true],
         ]);
+    });
+});
+
+describe("importPracticePlan: drill age groups", () => {
+    it("stores each drill's groups on the session copy and the library copy", async () => {
+        const document = doc({
+            drills: [{ sequence: 0, duration: 10, runsWithPrevious: false, instructions: "", name: "Keep-Away", description: "", ageGroups: ["u6", "u8"], playData: BOARD }],
+        });
+        const result = await importPracticePlan({ teamId: TEAM, date: DATE, addToLibrary: true, document });
+        expect(result.success).toBe(true);
+        expect(models.play.createMany).toHaveBeenCalled();
+        for (const call of models.play.createMany.mock.calls) {
+            expect(call[0].data[0]).toMatchObject({ ageGroups: ["u6", "u8"] });
+        }
     });
 });
