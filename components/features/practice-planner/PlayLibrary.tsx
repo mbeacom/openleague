@@ -845,8 +845,8 @@ export function PlayLibrary({
                         p: 3,
                     }}
                 >
-                    {/* Say "no drills for this age" only when no starter card matches it either */}
-                    {ageFilter && visibleStarters.length === 0 ? (
+                    {/* Say "no drills for this age" only when the age is the only narrowing and no starter card matches it either */}
+                    {ageFilter && !searchQuery && dateFilter === "all" && !filters.focus && !filters.goalies && visibleStarters.length === 0 ? (
                         <AgeFilterEmpty noun="drills" ageGroup={ageFilter} onShowAll={() => handleAgeChange(null)} />
                     ) : (
                         <>

@@ -73,6 +73,15 @@ describe("PlayLibrary: age filter", () => {
         expect(ageChip("All ages")).toHaveAttribute("aria-pressed", "true");
     });
 
+    it("shows the generic empty state when a search narrows the age too", async () => {
+        localStorage.setItem(AGE_FILTER_STORAGE_KEY, "u8");
+        renderLibrary([], "select");
+        const search = await screen.findByPlaceholderText(/search plays/i);
+        fireEvent.change(search, { target: { value: "zzzz-nothing-matches" } });
+        expect(await screen.findByText("No plays found")).toBeInTheDocument();
+        expect(screen.queryByText("No drills for 8U yet.")).toBeNull();
+    });
+
     it("does not say no drills match while starter cards for that age are showing", async () => {
         localStorage.setItem(AGE_FILTER_STORAGE_KEY, "u8");
         renderLibrary([]);
