@@ -1,9 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { StarterTemplatePicker, starterTemplateImport } from "@/components/features/practice-planner/StarterTemplatePicker";
 import { STARTER_TEMPLATES } from "@/lib/data/starter-templates";
 import { STARTER_PLAYS } from "@/lib/data/starter-plays";
 import { drillRows } from "@/lib/utils/session-rows";
+import { AGE_FILTER_STORAGE_KEY } from "@/lib/utils/age-groups";
 
 describe("StarterTemplatePicker", () => {
     it("lists every template under one heading, with its length and a Use template button", () => {
@@ -68,5 +69,34 @@ describe("StarterTemplatePicker: counts", () => {
         // Skills Stations 2 + 3 + 1 + 1 + 1 drills, Goalie & Skater 3 + 3 + 1 + 1, Team Practice 1 + 3 + 3 + 1 + 1,
         // then the 8U, 10U and 12U templates 4 + 1 each, and 3 + 1 + 1; block rows (warm-up, break, cool-down) never count.
         expect(chips).toEqual(["8 drills", "8 drills", "9 drills", "5 drills", "5 drills", "5 drills"]);
+    });
+});
+
+describe("StarterTemplatePicker: age filter (R3)", () => {
+    beforeEach(() => localStorage.clear());
+    afterEach(() => localStorage.clear());
+
+    const cardNames = () => screen.queryAllByRole("heading", { level: 3 }).map((heading) => heading.textContent);
+
+    it("shows each template's ages, and filters by the remembered age", () => {
+        render(<StarterTemplatePicker onUse={vi.fn()} />);
+        const card = screen.getByRole("heading", { name: "8U Station Practice" }).closest(".MuiCard-root") as HTMLElement;
+        expect(within(card).getByText("6U, 8U")).toBeInTheDocument();
+
+        fireEvent.click(within(screen.getByRole("group", { name: "Age group" })).getByRole("button", { name: "6U" }));
+        expect(cardNames()).toEqual(["8U Station Practice"]);
+        expect(localStorage.getItem(AGE_FILTER_STORAGE_KEY)).toBe("u6");
+        fireEvent.click(within(screen.getByRole("group", { name: "Age group" })).getByRole("button", { name: "14U" }));
+        expect(cardNames()).toEqual(["Skills Stations", "Goalie & Skater Rotation", "Team Practice with Stations", "12U Skills and Small Games"]);
+    });
+
+    it("says when no template matches, and Show all ages brings them back", () => {
+        localStorage.setItem(AGE_FILTER_STORAGE_KEY, "u6");
+        const only12U = STARTER_TEMPLATES.filter((template) => template.id === "template-12u-skills-games");
+        render(<StarterTemplatePicker onUse={vi.fn()} templates={only12U} />);
+        expect(screen.getByText("No templates for 6U yet.")).toBeInTheDocument();
+        expect(cardNames()).toEqual([]);
+        fireEvent.click(screen.getByRole("button", { name: "Show all ages" }));
+        expect(cardNames()).toEqual(["12U Skills and Small Games"]);
     });
 });
