@@ -183,6 +183,10 @@ describe("Starter play ice areas", () => {
         "starter-skate-keep-away": "zone-neutral-bottom",
         "starter-game-3v3-cross-ice": "zone-neutral",
         "starter-game-4v4-cross-ice": "zone-right",
+        "starter-skate-backward-tag": "half-right",
+        "starter-skate-paint-the-cones": "zone-right-top",
+        "starter-skate-low-1v1-2v1": "zone-left",
+        "starter-game-3v3-designated-shooter": "zone-left",
     };
 
     it("gives the obvious set plays an explicit area and leaves full-ice drills unset", () => {
@@ -279,10 +283,10 @@ describe("Starter drill tags", () => {
         }
     });
 
-    it("ships fourteen skater drills, two small-area games and 35 starters in all", () => {
-        expect(STARTER_PLAYS.filter((p) => p.id.startsWith("starter-skate-")).map((p) => p.focus)).toEqual(Array(14).fill("skaters"));
-        expect(STARTER_PLAYS.filter((p) => p.id.startsWith("starter-game-")).map((p) => p.focus)).toEqual(["team", "team"]);
-        expect(STARTER_PLAYS).toHaveLength(35);
+    it("ships seventeen skater drills, three small-area games and 39 starters in all", () => {
+        expect(STARTER_PLAYS.filter((p) => p.id.startsWith("starter-skate-")).map((p) => p.focus)).toEqual(Array(17).fill("skaters"));
+        expect(STARTER_PLAYS.filter((p) => p.id.startsWith("starter-game-")).map((p) => p.focus)).toEqual(["team", "team", "team"]);
+        expect(STARTER_PLAYS).toHaveLength(39);
     });
 
     it("puts every small-area drill on a quarter-ice or zone preset", () => {
@@ -333,6 +337,10 @@ describe("Starter age groups (age-group templates R2)", () => {
         "starter-skate-keep-away": ["u6", "u8", "u10"],
         "starter-game-3v3-cross-ice": [],
         "starter-game-4v4-cross-ice": ["u10", "u12", "u14", "u16plus"],
+        "starter-skate-backward-tag": ["u6", "u8", "u10"],
+        "starter-skate-paint-the-cones": ["u6", "u8", "u10"],
+        "starter-skate-low-1v1-2v1": ["u8", "u10", "u12"],
+        "starter-game-3v3-designated-shooter": ["u8", "u10", "u12"],
     };
 
     it("tags every starter, leaving drills that suit every age untagged", () => {

@@ -21,7 +21,7 @@ const NOW = new Date("2026-10-03T18:00:00.000Z");
 const GOALIE_WARMUP = STARTER_PLAYS.find((play) => play.id === "starter-goalie-warmup")?.name;
 
 describe("starter templates", () => {
-    it("ships six templates with stable unique ids and names, the age-group templates last", () => {
+    it("ships seven templates with stable unique ids and names, the age-group templates last", () => {
         expect(STARTER_TEMPLATES.map((t) => t.id)).toEqual([
             "template-skills-stations",
             "template-goalie-skater-rotation",
@@ -29,8 +29,9 @@ describe("starter templates", () => {
             "template-8u-stations",
             "template-10u-stations",
             "template-12u-skills-games",
+            "template-8u-tag-stops-battles",
         ]);
-        expect(new Set(STARTER_TEMPLATES.map((t) => t.name)).size).toBe(6);
+        expect(new Set(STARTER_TEMPLATES.map((t) => t.name)).size).toBe(7);
     });
 
     it("tags every template with its own age groups (never derived from its drills)", () => {
@@ -41,6 +42,7 @@ describe("starter templates", () => {
             "template-8u-stations": ["u6", "u8"],
             "template-10u-stations": ["u10"],
             "template-12u-skills-games": ["u12", "u14"],
+            "template-8u-tag-stops-battles": ["u8"],
         });
         for (const template of STARTER_TEMPLATES) expect(toAgeGroups(template.ageGroups)).toEqual([...template.ageGroups]);
     });
@@ -61,8 +63,19 @@ describe("starter templates", () => {
         expect(stationAreas("template-8u-stations")).toEqual(["zone-left-bottom", "zone-left-top", "zone-neutral-top", "zone-right-bottom"]);
         expect(stationAreas("template-10u-stations")).toEqual(["zone-left-bottom", "zone-left-top", "zone-right-top", "zone-neutral"]);
         expect(stationAreas("template-12u-skills-games")).toEqual(["zone-left", "zone-neutral", "zone-right"]);
+        expect(stationAreas("template-8u-tag-stops-battles")).toEqual(["zone-left", "half-right"]);
         // Each quarter is half a zone's height.
         expect(areaRect({ kind: "zone-left-top" }).h).toBe(42.5);
+    });
+
+    it("8U Tag, Stops and Battles fills its 50 minutes exactly on one net", () => {
+        const template = STARTER_TEMPLATES.find((t) => t.id === "template-8u-tag-stops-battles");
+        if (!template) throw new Error("8U Tag, Stops and Battles is missing");
+        expect(template.session.durationMinutes).toBe(50);
+        expect(sessionWallMinutes(template.session.drills, template.session.transitionMinutes)).toBe(50);
+        const nets = new Set(drillRows(template.session.drills).flatMap((row) =>
+            (row.playData?.equipment ?? []).filter((item) => item.kind === "net").map((item) => `${item.position.x},${item.position.y}`)));
+        expect([...nets]).toEqual(["11,42.5"]);
     });
 
     it("Skills Stations fills its 60 minutes exactly (spec R12)", () => {
