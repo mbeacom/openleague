@@ -10,6 +10,7 @@
  */
 import type { AnchorHTMLAttributes, ComponentType, Ref } from "react";
 import type { LogoImage, PlayData, PlayFocus, PlayGoalies } from "@/types/practice-planner";
+import type { AgeGroup } from "@/lib/utils/age-groups";
 import type { PlanGenerator } from "@/lib/plan-document";
 
 /** Same shape as the ActionResult each lib/actions file declares. */
@@ -26,6 +27,7 @@ export interface LibraryPlaySummary {
     thumbnail: string | null;
     focus?: PlayFocus;
     goalies?: PlayGoalies;
+    ageGroups?: AgeGroup[];
     isTemplate: boolean;
     createdAt: Date;
     updatedAt: Date;
@@ -53,6 +55,8 @@ export interface LibraryQuery {
     focus?: PlayFocus;
     /** Only drills with this goalies tag. */
     goalies?: PlayGoalies;
+    /** Only drills for this age, untagged drills included (age-group templates R3). */
+    ageGroup?: AgeGroup;
 }
 
 export interface PlayRef {
@@ -67,6 +71,7 @@ export interface NewLibraryPlay {
     playData: PlayData;
     focus?: PlayFocus;
     goalies?: PlayGoalies;
+    ageGroups?: AgeGroup[];
     isTemplate: boolean;
     teamId: string;
 }
@@ -82,6 +87,7 @@ export interface SessionDrillSave {
     playData: PlayData;
     focus?: PlayFocus;
     goalies?: PlayGoalies;
+    ageGroups?: AgeGroup[];
 }
 
 export interface SessionDrillRef {

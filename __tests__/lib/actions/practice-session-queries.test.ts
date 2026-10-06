@@ -229,6 +229,20 @@ describe("goaltender fields in the session queries", () => {
         expect(result?.session.goaliesAttending).toBe(1);
         expect(drillRows(result!.session.plays).map((p) => [p.play.focus, p.play.goalies])).toEqual([["goalies", "required"], ["team", "optional"]]);
     });
+
+    it("both queries return each drill's age groups ([] when untagged)", async () => {
+        mockPrisma.practiceSession.findUnique.mockResolvedValue({
+            ...base,
+            plays: [{ ...row("a", 0), play: { ...row("a", 0).play, ageGroups: ["u10", "u8"] } }, row("b", 1)],
+        });
+        const detail = await getPracticeSessionDetail(SESSION_ID);
+        expect(drillRows(detail!.session.plays).map((p) => p.play.ageGroups)).toEqual([["u8", "u10"], []]);
+        expect(mockPrisma.practiceSession.findUnique.mock.calls[0][0].include.plays.include.play.select).toMatchObject({ ageGroups: true });
+
+        const edit = await getPracticeSessionForEdit(SESSION_ID);
+        expect(drillRows(edit!.initialData.plays).map((p) => p.ageGroups)).toEqual([["u8", "u10"], []]);
+        expect(mockPrisma.practiceSession.findUnique.mock.calls[1][0].include.plays.include.play.select).toMatchObject({ ageGroups: true });
+    });
 });
 
 describe("practice timing in the session queries", () => {

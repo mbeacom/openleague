@@ -33,6 +33,8 @@ export type CloneSource = {
     /** Drill tags (goaltender-aware drills); absent on old fixtures = the column default. */
     focus?: string;
     goalies?: string;
+    /** Age groups; absent on old fixtures = the column default ([]). */
+    ageGroups?: string[];
 };
 
 export const CLONE_SOURCE_SELECT = {
@@ -46,6 +48,7 @@ export const CLONE_SOURCE_SELECT = {
     sessionId: true,
     focus: true,
     goalies: true,
+    ageGroups: true,
 } as const;
 
 /**
@@ -84,6 +87,7 @@ export async function cloneDrillsIntoSessions(
             playData: source.playData as Prisma.InputJsonValue,
             focus: source.focus,
             goalies: source.goalies,
+            ageGroups: source.ageGroups,
             isTemplate: false,
             teamId: input.teamId,
             createdById: input.userId,

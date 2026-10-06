@@ -45,6 +45,7 @@ import {
 } from "@/lib/utils/session-rows";
 import { BLOCK_ROW_FIELDS_ERROR, BLOCK_STATION_ERROR } from "@/lib/utils/session-timeline";
 import { GOALIES_ATTENDING_MESSAGE } from "@/lib/utils/drill-tags";
+import { ageGroupSchema, ageGroupsSchema } from "@/lib/utils/age-groups";
 
 export {
   idSchema,
@@ -1352,6 +1353,7 @@ export const createPlaySchema = z.object({
   isTemplate: z.boolean().default(false),
   focus: playFocusSchema.default("team"),
   goalies: playGoaliesSchema.default("optional"),
+  ageGroups: ageGroupsSchema.default([]),
   teamId: z.string().cuid("Invalid team ID format"),
 });
 
@@ -1365,6 +1367,7 @@ export const updatePlaySchema = z.object({
   // Absent = unchanged.
   focus: playFocusSchema.optional(),
   goalies: playGoaliesSchema.optional(),
+  ageGroups: ageGroupsSchema.optional(),
   teamId: z.string().cuid("Invalid team ID format"),
 });
 
@@ -1387,6 +1390,7 @@ export const getPlaysByTeamSchema = z.object({
   dateFilter: z.enum(["all", "today", "week", "month"]).optional().default("all"),
   focus: playFocusSchema.optional(),
   goalies: playGoaliesSchema.optional(),
+  ageGroup: ageGroupSchema.optional(),
 });
 
 // Optional venue booking for a practice session (FR-019, feature 006). All
@@ -1581,6 +1585,7 @@ export const saveSessionDrillSchema = z.object({
   // Absent: a new drill takes the defaults, an owned drill keeps its tags, a fork inherits its source's.
   focus: playFocusSchema.optional(),
   goalies: playGoaliesSchema.optional(),
+  ageGroups: ageGroupsSchema.optional(),
 });
 
 export const copySessionDrillToLibrarySchema = z.object({

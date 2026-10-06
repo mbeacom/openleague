@@ -6,6 +6,7 @@ import { requireUserId } from "@/lib/auth/session";
 import type { PlayData, SessionItem, SessionRow, SessionStaffMember, StaffOption, TeamMark } from "@/types/practice-planner";
 import { isBlockKind, toRowKind } from "@/lib/utils/session-rows";
 import { drillTags } from "@/lib/utils/drill-tags";
+import { toAgeGroups } from "@/lib/utils/age-groups";
 import { createEmptyPlayData, parseStoredPlayData } from "@/lib/utils/play-data";
 import type { SegmentKind } from "@prisma/client";
 import { normalizeGroups } from "@/lib/utils/session-timeline";
@@ -144,6 +145,7 @@ export async function getPracticeSessionDetail(sessionId: string): Promise<{
               playData: true,
               focus: true,
               goalies: true,
+              ageGroups: true,
             },
           },
           staff: { orderBy: { position: "asc" }, select: { staffId: true } },
@@ -217,6 +219,7 @@ export async function getPracticeSessionDetail(sessionId: string): Promise<{
             description: play.description,
             thumbnail: play.thumbnail,
             ...drillTags(play),
+            ageGroups: toAgeGroups(play.ageGroups),
             playData: (() => {
               const parsed = parseStoredPlayData(play.playData);
               if (!parsed.ok) console.error(`Unreadable playData (play ${play.id}):`, parsed.error);
@@ -290,6 +293,7 @@ export async function getPracticeSessionForEdit(sessionId: string): Promise<{
               playData: true,
               focus: true,
               goalies: true,
+              ageGroups: true,
             },
           },
           staff: { orderBy: { position: "asc" }, select: { staffId: true } },
@@ -370,6 +374,7 @@ export async function getPracticeSessionForEdit(sessionId: string): Promise<{
           rotateEveryMinutes: sp.rotateEveryMinutes ?? null,
           staff: sp.staff.map((assignment) => assignment.staffId),
           ...drillTags(sp.play),
+          ageGroups: toAgeGroups(sp.play.ageGroups),
           ...editorPlayData(sp.play.playData, sp.play.id),
           thumbnail: sp.play.thumbnail || "",
         }];

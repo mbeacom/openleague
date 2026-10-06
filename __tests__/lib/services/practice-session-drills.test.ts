@@ -413,6 +413,12 @@ describe("clones carry the drill tags (materialize, detach and duplicate share c
         expect(data).toMatchObject({ focus: "goalies", goalies: "required", sessionId: SESSION, sourcePlayId: "lib" });
     });
 
+    it("selects and copies the age groups", async () => {
+        expect(CLONE_SOURCE_SELECT).toMatchObject({ ageGroups: true });
+        const data = await cloneOne({ id: "lib", name: "Battle", description: null, thumbnail: null, playData: {}, sourcePlayId: null, focus: "skaters", goalies: "none", ageGroups: ["u8"] });
+        expect(data).toMatchObject({ ageGroups: ["u8"] });
+    });
+
     it("writes every Play column except the timestamps (new-column guard)", async () => {
         // The source carries only what CLONE_SOURCE_SELECT reads, so a column
         // missing from the select comes through undefined and fails here.

@@ -170,6 +170,7 @@ const eslintConfig = [
       // The static planner itself (sub-project 3): it must never reach Next.js or the server.
       `apps/planner/**/${SOURCE_GLOB}`,
       "lib/utils/session-timeline.ts",
+      "lib/utils/age-groups.ts",
       "types/segments.ts",
       "types/practice-planner.ts",
     ],

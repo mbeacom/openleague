@@ -1760,6 +1760,11 @@ model Play {
   // values honest; Prisma can't model them, so keep them by hand.
   focus       String   @default("team")
   goalies     String   @default("optional")
+  // Age groups (age-group templates R2): AGE_GROUPS in lib/utils/age-groups.ts,
+  // [] = every age. CHECK plays_age_groups_check in migration
+  // 20261005130000_play_age_groups keeps the values honest; Prisma can't
+  // model it, so keep it by hand.
+  ageGroups   String[] @default([])
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

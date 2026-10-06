@@ -71,6 +71,7 @@ export async function saveSessionDrill(
         const tags = {
             ...(validated.focus !== undefined && { focus: validated.focus }),
             ...(validated.goalies !== undefined && { goalies: validated.goalies }),
+            ...(validated.ageGroups !== undefined && { ageGroups: validated.ageGroups }),
         };
         const fields = {
             name: validated.name,
@@ -106,7 +107,7 @@ export async function saveSessionDrill(
 
             const play = await tx.play.findFirst({
                 where: { id: validated.playId, teamId: validated.teamId },
-                select: { id: true, sessionId: true, isTemplate: true, sourcePlayId: true, focus: true, goalies: true },
+                select: { id: true, sessionId: true, isTemplate: true, sourcePlayId: true, focus: true, goalies: true, ageGroups: true },
             });
             if (!play) throw new SessionDrillError();
 
@@ -124,7 +125,7 @@ export async function saveSessionDrill(
             }
 
             const forked = await tx.play.create({
-                data: { focus: play.focus, goalies: play.goalies, ...fields, ...ownedCopy, sourcePlayId: play.sourcePlayId ?? play.id },
+                data: { focus: play.focus, goalies: play.goalies, ageGroups: play.ageGroups, ...fields, ...ownedCopy, sourcePlayId: play.sourcePlayId ?? play.id },
                 select: { id: true },
             });
             return forked.id;
@@ -147,7 +148,7 @@ export async function copySessionDrillToLibrary(
 
         const play = await prisma.play.findFirst({
             where: { id: validated.playId, teamId: validated.teamId, session: { teamId: validated.teamId } },
-            select: { name: true, description: true, thumbnail: true, playData: true, sessionId: true, focus: true, goalies: true },
+            select: { name: true, description: true, thumbnail: true, playData: true, sessionId: true, focus: true, goalies: true, ageGroups: true },
         });
         if (!play || play.sessionId === null) {
             return { success: false, error: "Drill not found in this session" };
@@ -161,6 +162,7 @@ export async function copySessionDrillToLibrary(
                 playData: play.playData as Prisma.InputJsonValue,
                 focus: play.focus,
                 goalies: play.goalies,
+                ageGroups: play.ageGroups,
                 isTemplate: true,
                 teamId: validated.teamId,
                 createdById: userId,
