@@ -38,12 +38,19 @@ export function MovementLabel({ movement, startingLevel }: { movement: Movement 
     );
 }
 
-/** One League Blue ramp: the top level darkest, the bottom lightest (spec, Colour). */
+/**
+ * One League Blue ramp: the top level darkest, the bottom lightest (spec, Colour).
+ * On the dark canvas the same alpha steps on League Blue are nearly invisible
+ * (about 1.1:1 against the page), so dark uses a lighter blue and a stronger ramp;
+ * body text stays above 8:1 on every band in both schemes.
+ */
 export function levelBandColor(theme: Theme, index: number, count: number): string {
-    const strongest = 0.18;
-    const weakest = 0.04;
+    const dark = theme.palette.mode === "dark";
+    const strongest = dark ? 0.3 : 0.18;
+    const weakest = dark ? 0.06 : 0.04;
+    const base = dark ? "#42A5F5" : theme.palette.primary.main;
     const t = count <= 1 ? 0 : index / (count - 1);
-    return alpha(theme.palette.primary.main, strongest - (strongest - weakest) * t);
+    return alpha(base, strongest - (strongest - weakest) * t);
 }
 
 export function RankingsStatus({ state, onStartOver }: { state: Exclude<RankingsState, { status: "ready" }> | { status: "empty" }; onStartOver: () => void }) {
