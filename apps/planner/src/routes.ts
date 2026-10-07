@@ -9,6 +9,11 @@ export interface StaticRoutes extends PlannerRoutes {
     library(): string;
     sessionNew(): string;
     importPlan(): string;
+    rankings(): string;
+    rankingsImport(): string;
+    rankingsSetup(): string;
+    rankingsWhatIf(): string;
+    rankingsTeam(number: string): string;
 }
 
 const enc = encodeURIComponent;
@@ -23,6 +28,11 @@ export const staticRoutes: StaticRoutes = {
     library: () => "#/library",
     sessionNew: () => "#/sessions/new",
     importPlan: () => "#/import",
+    rankings: () => "#/rankings",
+    rankingsImport: () => "#/rankings/import",
+    rankingsSetup: () => "#/rankings/setup",
+    rankingsWhatIf: () => "#/rankings/what-if",
+    rankingsTeam: (number) => `#/rankings/team/${enc(number)}`,
 };
 
 export type StaticRoute =
@@ -36,6 +46,11 @@ export type StaticRoute =
     | { name: "libraryEdit"; id: string }
     | { name: "import" }
     | { name: "planLink"; value: string }
+    | { name: "rankings" }
+    | { name: "rankingsImport" }
+    | { name: "rankingsSetup" }
+    | { name: "rankingsWhatIf" }
+    | { name: "rankingsTeam"; number: string }
     | { name: "notFound" };
 
 const NOT_FOUND: StaticRoute = { name: "notFound" };
@@ -77,11 +92,25 @@ export function matchRoute(hash: string): StaticRoute {
         return id && third === "edit" ? { name: "libraryEdit", id } : NOT_FOUND;
     }
     if (section === "import" && second === undefined) return { name: "import" };
+    if (section === "rankings") {
+        if (second === undefined) return { name: "rankings" };
+        if (third === undefined) {
+            if (second === "import") return { name: "rankingsImport" };
+            if (second === "setup") return { name: "rankingsSetup" };
+            if (second === "what-if") return { name: "rankingsWhatIf" };
+            return NOT_FOUND;
+        }
+        if (second === "team") {
+            const number = decodeId(third);
+            return number ? { name: "rankingsTeam", number } : NOT_FOUND;
+        }
+        return NOT_FOUND;
+    }
     return NOT_FOUND;
 }
 
 /** The app bar's sections. */
-export type NavSection = "practices" | "library" | "import";
+export type NavSection = "practices" | "library" | "import" | "rankings";
 
 /** Which app bar section a route belongs to, for aria-current; null when none does. */
 export function navSection(route: StaticRoute): NavSection | null {
@@ -99,6 +128,12 @@ export function navSection(route: StaticRoute): NavSection | null {
         case "import":
         case "planLink":
             return "import";
+        case "rankings":
+        case "rankingsImport":
+        case "rankingsSetup":
+        case "rankingsWhatIf":
+        case "rankingsTeam":
+            return "rankings";
         case "notFound":
             return null;
     }

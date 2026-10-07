@@ -16,6 +16,7 @@ const NAV_ITEMS: ReadonlyArray<{ section: NavSection; label: string; href: strin
     { section: "practices", label: "Practices", href: staticRoutes.list() },
     { section: "library", label: "Drill library", href: staticRoutes.library() },
     { section: "import", label: "Import", href: staticRoutes.importPlan() },
+    { section: "rankings", label: "Rankings", href: staticRoutes.rankings() },
 ];
 
 export function AppShell({

@@ -19,6 +19,11 @@ import { LibraryScreen } from "./screens/LibraryScreen";
 import { SessionDetailScreen } from "./screens/SessionDetailScreen";
 import { SessionEditorScreen } from "./screens/SessionEditorScreen";
 import { SessionListScreen } from "./screens/SessionListScreen";
+import { RankingsImportScreen } from "./screens/rankings/RankingsImportScreen";
+import { RankingsScreen } from "./screens/rankings/RankingsScreen";
+import { RankingsSetupScreen } from "./screens/rankings/RankingsSetupScreen";
+import { RankingsTeamScreen } from "./screens/rankings/RankingsTeamScreen";
+import { RankingsWhatIfScreen } from "./screens/rankings/RankingsWhatIfScreen";
 import { NotFoundScreen } from "./screens/StatusScreens";
 import { YourTeamButton } from "./screens/YourTeam";
 
@@ -74,6 +79,16 @@ function RouteView({ route, store }: { route: StaticRoute; store: LocalPlannerSt
         case "planLink":
             // One key for both: replacing #plan=… with #/import must not remount the screen.
             return <ImportScreen key="import" store={store} linkValue={route.name === "planLink" ? route.value : null} />;
+        case "rankings":
+            return <RankingsScreen store={store} />;
+        case "rankingsImport":
+            return <RankingsImportScreen store={store} />;
+        case "rankingsSetup":
+            return <RankingsSetupScreen store={store} />;
+        case "rankingsWhatIf":
+            return <RankingsWhatIfScreen store={store} />;
+        case "rankingsTeam":
+            return <RankingsTeamScreen key={route.number} store={store} number={route.number} />;
         default:
             return <NotFoundScreen />;
     }

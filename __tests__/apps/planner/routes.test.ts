@@ -26,6 +26,15 @@ describe("matchRoute", () => {
         ["#/sessions/new/edit", { name: "notFound" }],
         ["#/sessions/new/print", { name: "notFound" }],
         ["#/library/new/edit", { name: "notFound" }],
+        ["#/rankings", { name: "rankings" }],
+        ["#/rankings/", { name: "rankings" }],
+        ["#/rankings/import", { name: "rankingsImport" }],
+        ["#/rankings/setup", { name: "rankingsSetup" }],
+        ["#/rankings/what-if", { name: "rankingsWhatIf" }],
+        ["#/rankings/team/903", { name: "rankingsTeam", number: "903" }],
+        ["#/rankings/team", { name: "notFound" }],
+        ["#/rankings/team/903/x", { name: "notFound" }],
+        ["#/rankings/nope", { name: "notFound" }],
         ["#/nope", { name: "notFound" }],
     ])("%s", (hash, expected) => {
         expect(matchRoute(hash)).toEqual(expected);
@@ -41,5 +50,12 @@ describe("matchRoute", () => {
         expect(matchRoute(staticRoutes.library())).toEqual({ name: "library" });
         expect(matchRoute(staticRoutes.sessionNew())).toEqual({ name: "sessionNew" });
         expect(matchRoute(staticRoutes.importPlan())).toEqual({ name: "import" });
+    });
+});
+
+describe("rankings routes", () => {
+    it("builds and matches the team route", () => {
+        expect(staticRoutes.rankingsTeam("903")).toBe("#/rankings/team/903");
+        expect(matchRoute(staticRoutes.rankingsTeam("903"))).toEqual({ name: "rankingsTeam", number: "903" });
     });
 });
