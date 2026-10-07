@@ -10,6 +10,8 @@ export const START_OVER_LABEL = "Start over";
 export const COMPONENTS_WARNING =
     "Some teams never played anyone connected to the rest, so ratings can't be compared across those groups.";
 export const NOT_CONVERGED_WARNING = "The ratings didn't fully settle. Results may shift slightly.";
+export const NO_GAMES_LABEL = "No games yet";
+export const BELOW_LAST_LEVEL = "Below the last level";
 
 export function formatRating(value: number | null, digits = 1): string {
     return value === null ? "—" : value.toFixed(digits);
@@ -39,19 +41,50 @@ export function MovementLabel({ movement, startingBracket }: { movement: Movemen
     );
 }
 
+/** How many teams the levels hold; a size being typed (NaN) counts as 0. */
+export const levelsHeld = (method: { levels: ReadonlyArray<{ size: number }> }) =>
+    method.levels.reduce((sum, level) => sum + (Number.isFinite(level.size) ? level.size : 0), 0);
+
+/** What to show instead of a bare level: why a team has none. */
+export function levelText(row: { level: string | null; rank: number | null; games: number; excluded: boolean }): string {
+    if (row.level) return row.level;
+    if (row.excluded) return "Excluded";
+    if (row.games === 0) return NO_GAMES_LABEL;
+    return row.rank !== null ? BELOW_LAST_LEVEL : "—";
+}
+
+export type ColorScheme = "light" | "dark";
+
 /**
- * One League Blue ramp: the top level darkest, the bottom lightest (spec, Colour).
- * On the dark canvas the same alpha steps on League Blue are nearly invisible
- * (about 1.1:1 against the page), so dark uses a lighter blue and a stronger ramp;
- * body text stays above 8:1 on every band in both schemes.
+ * Band opacity on one League Blue ramp (spec, Colour): the top level most
+ * emphasised, the bottom least. Dark needs stronger steps to read on the Night
+ * Rink canvas. Each top end is as strong as it can be while secondary text on
+ * the band stays at AA: light 0.26 (4.9:1), dark 0.28 (4.6:1; 0.32 drops it to
+ * 4.3:1). Pure, so each scheme's ramp is tested directly.
  */
-export function levelBandColor(theme: Theme, index: number, count: number): string {
-    const dark = theme.palette.mode === "dark";
-    const strongest = dark ? 0.3 : 0.18;
-    const weakest = dark ? 0.06 : 0.04;
-    const base = dark ? "#42A5F5" : theme.palette.primary.main;
-    const t = count <= 1 ? 0 : index / (count - 1);
-    return alpha(base, strongest - (strongest - weakest) * t);
+export const LEVEL_BAND_RAMP: Record<ColorScheme, { strongest: number; weakest: number }> = {
+    light: { strongest: 0.26, weakest: 0.06 },
+    dark: { strongest: 0.28, weakest: 0.08 },
+};
+
+export function levelBandAlpha(scheme: ColorScheme, index: number, count: number): number {
+    const { strongest, weakest } = LEVEL_BAND_RAMP[scheme];
+    const t = count <= 1 ? 0 : Math.min(Math.max(index / (count - 1), 0), 1);
+    return strongest - (strongest - weakest) * t;
+}
+
+/**
+ * The band background for one level, light and dark. Under cssVariables the JS
+ * `theme.palette` is always the light palette, so the dark colour comes from the
+ * dark colour scheme and is emitted with `theme.applyStyles("dark", …)`.
+ */
+export function levelBandSx(theme: Theme, index: number, count: number) {
+    const light = theme.colorSchemes?.light?.palette.primary.main ?? theme.palette.primary.main;
+    const dark = theme.colorSchemes?.dark?.palette.primary.main ?? light;
+    return {
+        backgroundColor: alpha(light, levelBandAlpha("light", index, count)),
+        ...theme.applyStyles("dark", { backgroundColor: alpha(dark, levelBandAlpha("dark", index, count)) }),
+    };
 }
 
 export function RankingsStatus({ state, onStartOver }: { state: Exclude<RankingsState, { status: "ready" }> | { status: "empty" }; onStartOver: () => void }) {

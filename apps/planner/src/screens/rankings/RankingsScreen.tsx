@@ -1,9 +1,9 @@
 /**
  * Rankings (static rankings spec, Screens): my-team tiles, a ladder with level
- * bands (a compact list on phones), a sortable table with every column, filters
- * and export. Movement is always an icon plus a word.
+ * bands (a compact list on phones), a sortable table with every column, filters,
+ * the method summary and export. Movement is always an icon plus a word.
  */
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import {
     Alert,
     Box,
@@ -27,30 +27,69 @@ import {
     Tooltip,
     Typography,
 } from "@mui/material";
-import { useTheme } from "@mui/material/styles";
 import { downloadBlob } from "@/components/features/practice-planner/export/download";
-import { compareTeamNumbers, composite, type RatingsResult, type TeamRating } from "@/lib/ratings";
+import { compareTeamNumbers, composite, type RatingMethod, type RatingsResult, type TeamRating } from "@/lib/ratings";
 import { rankingsFileName, serializeRankings, toRatingInputs, type RankingsDocument } from "@/lib/rankings-document";
 import { staticRoutes } from "../../routes";
 import type { LocalPlannerStore } from "../../store/types";
-import { COMPONENTS_WARNING, MovementLabel, NOT_CONVERGED_WARNING, RankingsStatus, formatRating, formatSigned, levelBandColor } from "./display";
+import {
+    BELOW_LAST_LEVEL,
+    COMPONENTS_WARNING,
+    MovementLabel,
+    NOT_CONVERGED_WARNING,
+    NO_GAMES_LABEL,
+    RankingsStatus,
+    formatRating,
+    formatSigned,
+    levelBandSx,
+    levelText,
+    levelsHeld,
+} from "./display";
 import { useRankingsDoc } from "./useRankingsDoc";
 
 export const PICK_TEAM_LABEL = "Pick your team";
 export const LADDER_LABEL = "Ladder";
 export const TABLE_LABEL = "Table";
 export const EXPORT_LABEL = "Export rankings file";
+export const FEW_GAMES_LABEL = "Few games";
 
-type SortKey = "rank" | "name" | "games" | "agd" | "sched" | "lodin" | "walkush" | "rpi";
-const COLUMNS: Array<{ key: SortKey; label: string; numeric: boolean }> = [
-    { key: "rank", label: "Rank", numeric: true },
-    { key: "name", label: "Team", numeric: false },
-    { key: "games", label: "GP", numeric: true },
-    { key: "agd", label: "AGD", numeric: true },
-    { key: "sched", label: "SCHED", numeric: true },
-    { key: "lodin", label: "Lodin", numeric: true },
-    { key: "walkush", label: "Walkush (approx.)", numeric: true },
-    { key: "rpi", label: "RPI", numeric: true },
+/** "Your levels hold 46 teams but 51 are ranked, so 5 have no suggested level." */
+export function levelsShortMessage(held: number, ranked: number): string {
+    return `Your levels hold ${held} teams but ${ranked} are ranked, so ${ranked - held} have no suggested level.`;
+}
+
+type SortKey = "rank" | "name" | "startingBracket" | "games" | "agd" | "sched" | "lodin" | "walkush" | "lodinScaled" | "walkushScaled" | "rpi";
+
+interface Column {
+    label: string;
+    numeric: boolean;
+    /** Sortable columns name their key. */
+    key?: SortKey;
+    cell: (row: TeamRating) => ReactNode;
+}
+
+const teamLink = (row: TeamRating) => (
+    <Box component="a" href={staticRoutes.rankingsTeam(row.number)} sx={{ display: "inline-flex", alignItems: "center", minHeight: 44, color: "inherit" }}>
+        {row.name}
+    </Box>
+);
+
+const COLUMNS: Column[] = [
+    { key: "rank", label: "Rank", numeric: true, cell: (row) => row.rank ?? "—" },
+    { key: "name", label: "Team", numeric: false, cell: teamLink },
+    { key: "startingBracket", label: "Starting bracket", numeric: false, cell: (row) => row.startingBracket ?? "—" },
+    { key: "games", label: "GP", numeric: true, cell: (row) => row.games },
+    { label: "W-L-T", numeric: false, cell: (row) => `${row.wins}-${row.losses}-${row.ties}` },
+    { key: "agd", label: "AGD", numeric: true, cell: (row) => formatSigned(row.agd) },
+    { key: "sched", label: "SCHED", numeric: true, cell: (row) => formatSigned(row.sched) },
+    { key: "lodin", label: "Lodin", numeric: true, cell: (row) => formatSigned(row.lodin) },
+    { key: "walkush", label: "Walkush (approx.)", numeric: true, cell: (row) => formatRating(row.walkush, 2) },
+    { key: "lodinScaled", label: "Lodin scaled", numeric: true, cell: (row) => formatRating(row.lodinScaled) },
+    { key: "walkushScaled", label: "Walkush (approx.) scaled", numeric: true, cell: (row) => formatRating(row.walkushScaled) },
+    { key: "rpi", label: "CSHL-compatible RPI", numeric: true, cell: (row) => formatRating(row.rpi) },
+    { label: "Level", numeric: false, cell: levelText },
+    { label: "Movement", numeric: false, cell: (row) => <MovementLabel movement={row.movement} startingBracket={row.startingBracket} /> },
+    { label: FEW_GAMES_LABEL, numeric: false, cell: (row) => (row.lowConfidence && row.games > 0 ? FEW_GAMES_LABEL : "") },
 ];
 
 export function useRatings(doc: RankingsDocument): RatingsResult {
@@ -71,10 +110,11 @@ function opponentsOf(doc: RankingsDocument, team: string | null): Set<string> {
 }
 
 function Tiles({ row, total }: { row: TeamRating; total: number }) {
+    const level = levelText(row);
     const tiles = [
         { label: "CSHL-compatible RPI", value: formatRating(row.rpi) },
         { label: "Rank", value: row.rank === null ? "—" : `${row.rank} of ${total}` },
-        { label: "Suggested level", value: row.level ?? "—", extra: <MovementLabel movement={row.movement} startingBracket={row.startingBracket} /> },
+        { label: "Suggested level", value: level, extra: <MovementLabel movement={row.movement} startingBracket={row.startingBracket} /> },
     ];
     return (
         <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" }, gap: 1.5 }}>
@@ -83,7 +123,7 @@ function Tiles({ row, total }: { row: TeamRating; total: number }) {
                     <Typography variant="overline" color="text.secondary">
                         {tile.label}
                     </Typography>
-                    <Typography sx={{ fontSize: { xs: 28, sm: 34 }, fontWeight: 800, lineHeight: 1.1 }}>{tile.value}</Typography>
+                    <Typography sx={{ fontSize: tile.value.length > 8 ? { xs: 22, sm: 24 } : { xs: 28, sm: 34 }, fontWeight: 800, lineHeight: 1.1 }}>{tile.value}</Typography>
                     {tile.extra}
                 </Paper>
             ))}
@@ -92,15 +132,19 @@ function Tiles({ row, total }: { row: TeamRating; total: number }) {
 }
 
 function Ladder({ rows, doc, myTeam }: { rows: TeamRating[]; doc: RankingsDocument; myTeam: string | null }) {
-    const theme = useTheme();
     const levelIndex = new Map(doc.method.levels.map((level, i) => [level.name, i]));
     const groupOf = (row: TeamRating) => (row.rank === null ? "unranked" : row.level === null ? "below" : `level:${row.level}`);
     return (
         <Stack component="ol" sx={{ listStyle: "none", p: 0, m: 0 }} aria-label="Rankings ladder">
             {rows.map((row, index) => {
-                const header = index === 0 || groupOf(row) !== groupOf(rows[index - 1]) ? (row.rank === null ? "Not ranked" : row.level ?? "Below the last level") : null;
-                const band = row.level === null ? "transparent" : levelBandColor(theme, levelIndex.get(row.level) ?? 0, doc.method.levels.length);
+                const header = index === 0 || groupOf(row) !== groupOf(rows[index - 1]) ? (row.rank === null ? "Not ranked" : row.level ?? BELOW_LAST_LEVEL) : null;
+                const level = row.level;
                 const mine = row.number === myTeam;
+                const caption = [
+                    row.number,
+                    row.startingBracket && !row.movement ? `started ${row.startingBracket}` : null,
+                    row.excluded ? "excluded" : row.games === 0 ? NO_GAMES_LABEL : null,
+                ].filter(Boolean);
                 return (
                     <Box component="li" key={row.number}>
                         {header && (
@@ -109,17 +153,18 @@ function Ladder({ rows, doc, myTeam }: { rows: TeamRating[]; doc: RankingsDocume
                             </Typography>
                         )}
                         <Box
-                            sx={{
+                            data-level={level ?? undefined}
+                            sx={(theme) => ({
                                 display: "grid",
-                                gridTemplateColumns: { xs: "2.5rem 1fr auto", sm: "2.5rem minmax(9rem, 14rem) 1fr 3.5rem 8rem" },
+                                gridTemplateColumns: { xs: "2.5rem 1fr auto", sm: "2.5rem minmax(9rem, 14rem) 1fr 3.5rem 12rem" },
                                 alignItems: "center",
                                 gap: 1,
                                 minHeight: 44,
                                 px: 1,
-                                bgcolor: band,
                                 borderLeft: 4,
                                 borderColor: mine ? "secondary.main" : "transparent",
-                            }}
+                                ...(level === null ? {} : levelBandSx(theme, levelIndex.get(level) ?? 0, doc.method.levels.length)),
+                            })}
                         >
                             <Typography sx={{ fontWeight: 700 }}>{row.rank ?? "—"}</Typography>
                             <Box sx={{ minWidth: 0 }}>
@@ -127,14 +172,12 @@ function Ladder({ rows, doc, myTeam }: { rows: TeamRating[]; doc: RankingsDocume
                                     {row.name}
                                 </Box>
                                 <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
-                                    {row.number}
-                                    {row.startingBracket && !row.movement ? ` · started ${row.startingBracket}` : ""}
-                                    {row.excluded ? " · excluded" : ""}
+                                    {caption.join(" · ")}
                                 </Typography>
                                 <Box sx={{ display: { xs: "block", sm: "none" } }}>
                                     <MovementLabel movement={row.movement} startingBracket={row.startingBracket} />
                                 </Box>
-                                {row.lowConfidence && row.rank !== null && <Chip size="small" label="Few games" variant="outlined" sx={{ mt: 0.25 }} />}
+                                {row.lowConfidence && row.games > 0 && row.rank !== null && <Chip size="small" label={FEW_GAMES_LABEL} variant="outlined" sx={{ mt: 0.25 }} />}
                             </Box>
                             <Box sx={{ display: { xs: "none", sm: "block" }, position: "relative", height: 10, borderRadius: 5, bgcolor: "action.hover" }}>
                                 {row.rpi !== null && (
@@ -173,6 +216,7 @@ function Ladder({ rows, doc, myTeam }: { rows: TeamRating[]; doc: RankingsDocume
 
 function sortValue(row: TeamRating, key: SortKey): number | string | null {
     if (key === "name") return row.name.toLowerCase();
+    if (key === "startingBracket") return row.startingBracket?.toLowerCase() ?? null;
     return row[key];
 }
 
@@ -197,43 +241,58 @@ function RatingsTable({ rows, cap }: { rows: TeamRating[]; cap: number }) {
             <Table size="small" aria-label={`Ratings table, margins capped at ${cap}`}>
                 <TableHead>
                     <TableRow>
-                        {COLUMNS.map((column) => (
-                            <TableCell key={column.key} align={column.numeric ? "right" : "left"} sortDirection={sort.key === column.key ? sort.dir : false}>
-                                <TableSortLabel
-                                    active={sort.key === column.key}
-                                    direction={sort.key === column.key ? sort.dir : "asc"}
-                                    onClick={() => setSort((s) => ({ key: column.key, dir: s.key === column.key && s.dir === "asc" ? "desc" : "asc" }))}
-                                >
-                                    {column.label}
-                                </TableSortLabel>
-                            </TableCell>
-                        ))}
-                        <TableCell>W-L-T</TableCell>
-                        <TableCell>Level</TableCell>
+                        {COLUMNS.map((column) => {
+                            const key = column.key;
+                            return (
+                                <TableCell key={column.label} align={column.numeric ? "right" : "left"} sortDirection={key && sort.key === key ? sort.dir : false}>
+                                    {key ? (
+                                        <TableSortLabel
+                                            active={sort.key === key}
+                                            direction={sort.key === key ? sort.dir : "asc"}
+                                            onClick={() => setSort((s) => ({ key, dir: s.key === key && s.dir === "asc" ? "desc" : "asc" }))}
+                                            sx={{ minHeight: 44 }}
+                                        >
+                                            {column.label}
+                                        </TableSortLabel>
+                                    ) : (
+                                        column.label
+                                    )}
+                                </TableCell>
+                            );
+                        })}
                     </TableRow>
                 </TableHead>
                 <TableBody>
                     {sorted.map((row) => (
                         <TableRow key={row.number}>
-                            <TableCell align="right">{row.rank ?? "—"}</TableCell>
-                            <TableCell>
-                                <Box component="a" href={staticRoutes.rankingsTeam(row.number)} sx={{ display: "inline-flex", alignItems: "center", minHeight: 44, color: "inherit" }}>
-                                    {row.name}
-                                </Box>
-                            </TableCell>
-                            <TableCell align="right">{row.games}</TableCell>
-                            <TableCell align="right">{formatSigned(row.agd)}</TableCell>
-                            <TableCell align="right">{formatSigned(row.sched)}</TableCell>
-                            <TableCell align="right">{formatSigned(row.lodin)}</TableCell>
-                            <TableCell align="right">{formatRating(row.walkush, 2)}</TableCell>
-                            <TableCell align="right">{formatRating(row.rpi)}</TableCell>
-                            <TableCell>{`${row.wins}-${row.losses}-${row.ties}`}</TableCell>
-                            <TableCell>{row.level ?? "—"}</TableCell>
+                            {COLUMNS.map((column) => (
+                                <TableCell key={column.label} align={column.numeric ? "right" : "left"} sx={{ whiteSpace: column.key === "name" ? undefined : "nowrap" }}>
+                                    {column.cell(row)}
+                                </TableCell>
+                            ))}
                         </TableRow>
                     ))}
                 </TableBody>
             </Table>
         </TableContainer>
+    );
+}
+
+/** Every method setting, in words (spec success criterion 5). */
+function MethodSummary({ method }: { method: RatingMethod }) {
+    const levels = method.levels.map((level) => `${level.name} ${level.size}`).join(", ");
+    return (
+        <Stack spacing={0.5} component="section" aria-label="Method">
+            <Typography variant="body2" color="text.secondary">
+                {`CSHL-compatible RPI = (Lodin scaled + Walkush (approx.) scaled) ÷ 2, each scaled 0–20 over the teams that aren't excluded. Not the league's official number.`}
+            </Typography>
+            <Typography variant="body2" color="text.secondary" component="ul" sx={{ m: 0, pl: 2.5 }}>
+                <li>{`Goal margins capped at ${method.goalCap} for AGD (Lodin = AGD + SCHED).`}</li>
+                <li>{`Walkush (approx.) variant: ${method.walkush.variant}, a ratio of (goals for + 1) ÷ (goals against + 1) per game.`}</li>
+                <li>{`"${FEW_GAMES_LABEL}" when a team has fewer than ${method.lowConfidenceGames} final games.`}</li>
+                <li>{`Levels, top first: ${levels} (${levelsHeld(method)} teams).`}</li>
+            </Typography>
+        </Stack>
     );
 }
 
@@ -252,6 +311,7 @@ function Ready({ doc, save }: { doc: RankingsDocument; save: (doc: RankingsDocum
             (!onlyOpponents || opponents.has(row.number) || row.number === doc.myTeam),
     );
     const mine = doc.myTeam ? result.byNumber.get(doc.myTeam) : undefined;
+    const held = levelsHeld(doc.method);
 
     return (
         <Stack spacing={2}>
@@ -280,6 +340,18 @@ function Ready({ doc, save }: { doc: RankingsDocument; save: (doc: RankingsDocum
 
             {result.componentCount > 1 && <Alert severity="warning">{COMPONENTS_WARNING}</Alert>}
             {!result.converged && <Alert severity="info">{NOT_CONVERGED_WARNING}</Alert>}
+            {result.ranked.length > held && (
+                <Alert
+                    severity="warning"
+                    action={
+                        <Button color="inherit" href={staticRoutes.rankingsSetup()} sx={{ minHeight: 44 }}>
+                            Edit levels
+                        </Button>
+                    }
+                >
+                    {levelsShortMessage(held, result.ranked.length)}
+                </Alert>
+            )}
 
             {mine ? (
                 <Tiles row={mine} total={result.ranked.length} />
@@ -299,9 +371,9 @@ function Ready({ doc, save }: { doc: RankingsDocument; save: (doc: RankingsDocum
                 </TextField>
             )}
 
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ alignItems: { sm: "center" } }}>
-                <TextField label="Find a team" value={query} onChange={(e) => setQuery(e.target.value)} size="small" />
-                <TextField select label="Starting bracket" value={bracket} onChange={(e) => setBracket(e.target.value)} size="small" sx={{ minWidth: 180 }}>
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ alignItems: { sm: "center" }, flexWrap: { sm: "wrap" }, rowGap: 1 }}>
+                <TextField label="Find a team" value={query} onChange={(e) => setQuery(e.target.value)} />
+                <TextField select label="Starting bracket" value={bracket} onChange={(e) => setBracket(e.target.value)} sx={{ minWidth: 180 }}>
                     <MenuItem value="">All brackets</MenuItem>
                     {brackets.map((b) => (
                         <MenuItem key={b} value={b}>
@@ -310,8 +382,9 @@ function Ready({ doc, save }: { doc: RankingsDocument; save: (doc: RankingsDocum
                     ))}
                 </TextField>
                 <FormControlLabel
-                    control={<Checkbox checked={onlyOpponents} onChange={(e) => setOnlyOpponents(e.target.checked)} disabled={!doc.myTeam} />}
+                    control={<Checkbox sx={{ p: "10px" }} checked={onlyOpponents} onChange={(e) => setOnlyOpponents(e.target.checked)} disabled={!doc.myTeam} />}
                     label="My team's opponents"
+                    sx={{ minHeight: 44 }}
                 />
                 <ToggleButtonGroup exclusive size="small" value={view} onChange={(_e, value) => value && setView(value)} sx={{ ml: { sm: "auto" } }}>
                     <ToggleButton value="ladder" sx={{ minHeight: 44 }}>
@@ -325,9 +398,7 @@ function Ready({ doc, save }: { doc: RankingsDocument; save: (doc: RankingsDocum
 
             {view === "ladder" ? <Ladder rows={rows} doc={doc} myTeam={doc.myTeam} /> : <RatingsTable rows={rows} cap={doc.method.goalCap} />}
 
-            <Typography variant="body2" color="text.secondary">
-                CSHL-compatible RPI = (Lodin scaled + Walkush (approx.) scaled) ÷ 2, each scaled 0–20. Margins capped at {doc.method.goalCap}. Not the league&apos;s official number.
-            </Typography>
+            <MethodSummary method={doc.method} />
         </Stack>
     );
 }

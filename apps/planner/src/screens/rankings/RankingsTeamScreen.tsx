@@ -4,7 +4,7 @@ import { capMargin } from "@/lib/ratings";
 import type { RankingsDocument } from "@/lib/rankings-document";
 import { staticRoutes } from "../../routes";
 import type { LocalPlannerStore } from "../../store/types";
-import { MovementLabel, RankingsStatus, formatRating, formatSigned } from "./display";
+import { MovementLabel, NO_GAMES_LABEL, RankingsStatus, formatRating, formatSigned, levelText } from "./display";
 import { useRatings } from "./RankingsScreen";
 import { useRankingsDoc } from "./useRankingsDoc";
 
@@ -16,7 +16,10 @@ function TeamDetail({ doc, number }: { doc: RankingsDocument; number: string }) 
     if (!row) return <Alert severity="warning">{TEAM_NOT_FOUND_MESSAGE}</Alert>;
     const cap = doc.method.goalCap;
     const names = new Map(doc.teams.map((team) => [team.number, team.name]));
-    const games = doc.games.filter((game) => game.home === number || game.away === number);
+    // Date then time; an unknown time sorts after the timed games that day.
+    const games = doc.games
+        .filter((game) => game.home === number || game.away === number)
+        .sort((a, b) => a.date.localeCompare(b.date) || (a.time ?? "99:99").localeCompare(b.time ?? "99:99"));
     const finals = games.filter((game) => game.status === "final");
     const upcoming = games.filter((game) => game.status === "scheduled");
 
@@ -29,17 +32,30 @@ function TeamDetail({ doc, number }: { doc: RankingsDocument; number: string }) 
                 {row.name} ({row.number})
             </Typography>
             <Typography>
-                Rank {row.rank ?? "—"} · RPI {formatRating(row.rpi)} · Level {row.level ?? "—"} <MovementLabel movement={row.movement} startingBracket={row.startingBracket} />
+                {`Rank ${row.rank ?? "—"} · CSHL-compatible RPI ${formatRating(row.rpi)} · Level ${levelText(row)}`}
+                {row.startingBracket ? ` · Started ${row.startingBracket} ` : " "}
+                <MovementLabel movement={row.movement} startingBracket={row.startingBracket} />
             </Typography>
-            <Paper variant="outlined" sx={{ p: 2 }}>
-                <Typography sx={{ fontVariantNumeric: "tabular-nums", fontWeight: 700 }}>
-                    {`AGD ${formatSigned(row.agd)} + SCHED ${formatSigned(row.sched)} = Lodin ${formatSigned(row.lodin)}`}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                    AGD is the average goal margin, with each game capped at {cap}. SCHED is the average rating of the opponents played.
-                    {row.lowConfidence ? ` Fewer than ${doc.method.lowConfidenceGames} games: treat this rating with caution.` : ""}
-                </Typography>
-            </Paper>
+            {row.games === 0 ? (
+                <Alert severity="info">{`${NO_GAMES_LABEL}: this team has no final games, so it has no rating.`}</Alert>
+            ) : (
+                <Paper variant="outlined" sx={{ p: 2 }}>
+                    <Stack spacing={0.5} sx={{ fontVariantNumeric: "tabular-nums" }}>
+                        <Typography sx={{ fontWeight: 700 }}>{`AGD ${formatSigned(row.agd)} + SCHED ${formatSigned(row.sched)} = Lodin ${formatSigned(row.lodin)}`}</Typography>
+                        <Typography sx={{ fontWeight: 700 }}>{`Walkush (approx.) ${formatRating(row.walkush, 2)}`}</Typography>
+                        {row.rpi !== null && (
+                            <Typography sx={{ fontWeight: 700 }}>
+                                {`(Lodin scaled ${formatRating(row.lodinScaled)} + Walkush (approx.) scaled ${formatRating(row.walkushScaled)}) ÷ 2 = CSHL-compatible RPI ${formatRating(row.rpi)}`}
+                            </Typography>
+                        )}
+                    </Stack>
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                        {`AGD is the average goal margin, with each game capped at ${cap}. SCHED is the average rating of the opponents played. Walkush (approx.) is the log of a ratio rating on (goals for + 1) ÷ (goals against + 1). Each is scaled 0–20 over the teams that aren't excluded.`}
+                        {row.lowConfidence ? ` Fewer than ${doc.method.lowConfidenceGames} games: treat this rating with caution.` : ""}
+                        {row.excluded ? " This team is excluded: it counts as an opponent but isn't scaled or ranked." : ""}
+                    </Typography>
+                </Paper>
+            )}
 
             <TableContainer component={Paper} variant="outlined">
                 <Table size="small" aria-label="Game log">
@@ -62,7 +78,7 @@ function TeamDetail({ doc, number }: { doc: RankingsDocument; number: string }) 
                             const margin = capMargin(raw, cap);
                             return (
                                 <TableRow key={`${game.date}-${opponent}-${i}`}>
-                                    <TableCell>{game.date}</TableCell>
+                                    <TableCell sx={{ whiteSpace: "nowrap" }}>{game.time ? `${game.date} ${game.time}` : game.date}</TableCell>
                                     <TableCell>
                                         <a href={staticRoutes.rankingsTeam(opponent)} style={{ display: "inline-flex", alignItems: "center", minHeight: 44 }}>{names.get(opponent) ?? opponent}</a>
                                     </TableCell>

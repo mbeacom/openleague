@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { RankingsTeamScreen, TEAM_NOT_FOUND_MESSAGE } from "@/apps/planner/src/screens/rankings/RankingsTeamScreen";
 import { CLEAR_ALL_LABEL, RankingsSetupScreen, SAVE_SETUP_LABEL } from "@/apps/planner/src/screens/rankings/RankingsSetupScreen";
+import { composite } from "@/lib/ratings";
+import { toRatingInputs } from "@/lib/rankings-document";
 import { memoryStore, renderScreen } from "./render-screen";
 import { sampleRankingsDoc } from "./rankings-fixtures";
 
@@ -20,6 +22,42 @@ describe("RankingsTeamScreen", () => {
         expect(screen.getAllByText(/Brookside M1/).length).toBeGreaterThan(0);
     });
 
+    it("shows Walkush (approx.) and the RPI arithmetic", async () => {
+        const { store } = memoryStore();
+        const doc = sampleRankingsDoc();
+        await store.saveRankings(doc);
+        const { games, teams, options } = toRatingInputs(doc);
+        const row = composite(games, teams, doc.method, options).byNumber.get("903")!;
+        renderScreen(<RankingsTeamScreen store={store} number="903" />, store);
+        expect(await screen.findByText(`Walkush (approx.) ${row.walkush!.toFixed(2)}`)).toBeInTheDocument();
+        expect(
+            screen.getByText(
+                `(Lodin scaled ${row.lodinScaled!.toFixed(1)} + Walkush (approx.) scaled ${row.walkushScaled!.toFixed(1)}) ÷ 2 = CSHL-compatible RPI ${row.rpi!.toFixed(1)}`,
+            ),
+        ).toBeInTheDocument();
+    });
+
+    it("lists the game log by date, then time", async () => {
+        const { store } = memoryStore();
+        const base = sampleRankingsDoc();
+        const late = { ...base.games[2], date: "2026-09-21", time: "18:00" };
+        const early = { ...base.games[1], date: "2026-09-21", time: "07:30" };
+        // Stored out of order: latest first.
+        await store.saveRankings(sampleRankingsDoc({ games: [base.games[3], late, early] }));
+        renderScreen(<RankingsTeamScreen store={store} number="903" />, store);
+        const log = await screen.findByRole("table", { name: "Game log" });
+        const dates = within(log).getAllByRole("row").slice(1).map((r) => within(r).getAllByRole("cell")[0].textContent);
+        expect(dates).toEqual(["2026-09-21 07:30", "2026-09-21 18:00", "2026-09-23 09:00"]);
+    });
+
+    it("says No games yet for a team without final games", async () => {
+        const { store } = memoryStore();
+        const base = sampleRankingsDoc();
+        await store.saveRankings(sampleRankingsDoc({ teams: [...base.teams, { number: "905", name: "Pinewood M1", startingBracket: null, excluded: false }] }));
+        renderScreen(<RankingsTeamScreen store={store} number="905" />, store);
+        expect(await screen.findByText(/No games yet: this team has no final games/)).toBeInTheDocument();
+    });
+
     it("says when the team doesn't exist", async () => {
         const { store } = memoryStore();
         await store.saveRankings(sampleRankingsDoc());
@@ -34,7 +72,7 @@ describe("RankingsSetupScreen", () => {
         await store.saveRankings(sampleRankingsDoc());
         renderScreen(<RankingsSetupScreen store={store} />, store);
         const row = (await screen.findByLabelText("Name of 904")).closest("tr")!;
-        fireEvent.click(within(row).getByRole("checkbox", { name: "Excluded" }));
+        fireEvent.click(within(row).getByRole("checkbox", { name: "Excluded: Brookside M1" }));
         fireEvent.change(screen.getByLabelText("Size of level 1"), { target: { value: "3" } });
         fireEvent.click(screen.getByRole("button", { name: SAVE_SETUP_LABEL }));
         await waitFor(async () => {
@@ -42,6 +80,26 @@ describe("RankingsSetupScreen", () => {
             expect(saved.success && saved.data!.teams.find((t) => t.number === "904")!.excluded).toBe(true);
             expect(saved.success && saved.data!.method.levels[0].size).toBe(3);
         });
+    });
+
+    it("warns when the levels hold fewer teams than are playing", async () => {
+        const { store } = memoryStore();
+        await store.saveRankings(sampleRankingsDoc());
+        renderScreen(<RankingsSetupScreen store={store} />, store);
+        expect(await screen.findByText("Levels hold 4 teams; 4 teams aren't excluded.")).toBeInTheDocument();
+        fireEvent.change(screen.getByLabelText("Size of level 2"), { target: { value: "1" } });
+        const warning = screen.getByRole("alert");
+        expect(warning).toHaveTextContent("Levels hold 3 teams; 4 teams aren't excluded, so 1 won't get a suggested level.");
+        expect(warning.className).toMatch(/Warning/);
+    });
+
+    it("refuses two levels with the same name", async () => {
+        const { store } = memoryStore();
+        await store.saveRankings(sampleRankingsDoc());
+        renderScreen(<RankingsSetupScreen store={store} />, store);
+        fireEvent.change(await screen.findByLabelText("Name of level 2"), { target: { value: "X" } });
+        fireEvent.click(screen.getByRole("button", { name: SAVE_SETUP_LABEL }));
+        expect(await screen.findByText(/Level name X is used twice/)).toBeInTheDocument();
     });
 
     it("shows the validation message instead of saving bad input", async () => {

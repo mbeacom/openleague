@@ -43,7 +43,42 @@ describe("RankingsScreen", () => {
         await store.saveRankings(sampleRankingsDoc());
         renderScreen(<RankingsScreen store={store} />, store);
         fireEvent.click(await screen.findByRole("button", { name: "Table" }));
-        for (const column of ["AGD", "SCHED", "Lodin", "Walkush (approx.)", "RPI", "Level"]) expect(screen.getByRole("columnheader", { name: new RegExp(column.replace(/[()]/g, "\\$&")) })).toBeInTheDocument();
+        const columns = [
+            "Rank",
+            "Team",
+            "Starting bracket",
+            "GP",
+            "W-L-T",
+            "AGD",
+            "SCHED",
+            "Lodin",
+            "Walkush (approx.)",
+            "Lodin scaled",
+            "Walkush (approx.) scaled",
+            "CSHL-compatible RPI",
+            "Level",
+            "Movement",
+            "Few games",
+        ];
+        expect(screen.getAllByRole("columnheader").map((cell) => cell.textContent)).toEqual(columns);
+        expect(screen.queryByRole("columnheader", { name: "RPI" })).not.toBeInTheDocument();
+    });
+
+    it("fills the scaled, bracket, movement and few-games columns", async () => {
+        const { store } = memoryStore();
+        const doc = sampleRankingsDoc();
+        await store.saveRankings(doc);
+        const { games, teams, options } = toRatingInputs(doc);
+        const row = composite(games, teams, doc.method, options).byNumber.get("903")!;
+        renderScreen(<RankingsScreen store={store} />, store);
+        fireEvent.click(await screen.findByRole("button", { name: "Table" }));
+        const cells = within(screen.getByRole("link", { name: "Hilltop M1" }).closest("tr")!).getAllByRole("cell").map((cell) => cell.textContent);
+        expect(cells[2]).toBe("White Strong");
+        expect(cells[9]).toBe(row.lodinScaled!.toFixed(1));
+        expect(cells[10]).toBe(row.walkushScaled!.toFixed(1));
+        expect(cells[11]).toBe(row.rpi!.toFixed(1));
+        expect(cells[13]).toMatch(/^▲ Up from White Strong$|^▬ Same as White Strong$|^▼ Down from White Strong$/);
+        expect(cells[14]).toBe(row.lowConfidence ? "Few games" : "");
     });
 
     it("filters by team name", async () => {
@@ -143,5 +178,69 @@ describe("RankingsScreen", () => {
         await screen.findByText("CSHL-compatible RPI");
         expect(screen.getByText(`${mine.rank} of 4`)).toBeInTheDocument();
         expect(screen.getByText("Suggested level").parentElement).toHaveTextContent(mine.level ?? "—");
+    });
+
+    it("labels movement with the real starting bracket", async () => {
+        const { store } = memoryStore();
+        // 903 and 904 (White Strong) beat everyone; the chart lists Red Strong first.
+        const base = sampleRankingsDoc();
+        const games = [
+            { ...base.games[0], home: "903", away: "901", homeGoals: 5, awayGoals: 0 },
+            { ...base.games[1], home: "904", away: "902", homeGoals: 5, awayGoals: 0 },
+            { ...base.games[2], home: "903", away: "902", homeGoals: 5, awayGoals: 0 },
+            { ...base.games[3], home: "904", away: "901", homeGoals: 5, awayGoals: 0 },
+        ];
+        await store.saveRankings(sampleRankingsDoc({ games, bracketOrder: ["Red Strong", "White Strong"] }));
+        renderScreen(<RankingsScreen store={store} />, store);
+        expect((await screen.findByText("Suggested level")).parentElement).toHaveTextContent("Up from White Strong");
+        expect(screen.queryByText(/from [XY]\b/)).not.toBeInTheDocument();
+    });
+
+    it("says No games yet for a team without final games", async () => {
+        const { store } = memoryStore();
+        const base = sampleRankingsDoc();
+        await store.saveRankings(sampleRankingsDoc({ teams: [...base.teams, { number: "906", name: "Pinewood M2", startingBracket: null, excluded: false }] }));
+        renderScreen(<RankingsScreen store={store} />, store);
+        const ladder = within(await screen.findByRole("list", { name: "Rankings ladder" }));
+        expect(ladder.getByText("906 · No games yet")).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "Table" }));
+        const cells = within(screen.getByRole("link", { name: "Pinewood M2" }).closest("tr")!).getAllByRole("cell").map((cell) => cell.textContent);
+        expect(cells[12]).toBe("No games yet");
+    });
+
+    it("warns when more teams are ranked than the levels hold, and says so in my tile", async () => {
+        const { store } = memoryStore();
+        const base = sampleRankingsDoc();
+        await store.saveRankings(sampleRankingsDoc({ method: { ...base.method, levels: [{ name: "X", size: 1 }, { name: "Y", size: 1 }] } }));
+        renderScreen(<RankingsScreen store={store} />, store);
+        expect(await screen.findByText("Your levels hold 2 teams but 4 are ranked, so 2 have no suggested level.")).toBeInTheDocument();
+        expect(screen.getByRole("link", { name: "Edit levels" })).toHaveAttribute("href", "#/rankings/setup");
+        const { games, teams, options } = toRatingInputs(sampleRankingsDoc({ method: { ...base.method, levels: [{ name: "X", size: 1 }, { name: "Y", size: 1 }] } }));
+        const mine = composite(games, teams, { ...base.method, levels: [{ name: "X", size: 1 }, { name: "Y", size: 1 }] }, options).byNumber.get("903")!;
+        expect(screen.getByText("Suggested level").parentElement).toHaveTextContent(mine.level ?? "Below the last level");
+    });
+
+    it("lists every method setting", async () => {
+        const { store } = memoryStore();
+        await store.saveRankings(sampleRankingsDoc());
+        renderScreen(<RankingsScreen store={store} />, store);
+        const method = within(await screen.findByRole("region", { name: "Method" }));
+        expect(method.getByText(/capped at 8/)).toBeInTheDocument();
+        expect(method.getByText(/Walkush \(approx\.\) variant: plus-one/)).toBeInTheDocument();
+        expect(method.getByText(/fewer than 3 final games/)).toBeInTheDocument();
+        expect(method.getByText("Levels, top first: X 2, Y 2 (4 teams).")).toBeInTheDocument();
+    });
+
+    it("emits a dark-scheme background for the level bands under the real theme", async () => {
+        const { store } = memoryStore();
+        await store.saveRankings(sampleRankingsDoc());
+        renderScreen(<RankingsScreen store={store} />, store);
+        await screen.findByRole("list", { name: "Rankings ladder" });
+        const css = [...document.querySelectorAll("style")]
+            .map((style) => style.textContent || [...(style.sheet?.cssRules ?? [])].map((rule) => rule.cssText).join("\n"))
+            .join("\n");
+        // Light: League Blue (#0D47A1) at the top level's alpha; dark: the dark primary (#64B5F6) at 0.28, behind the scheme selector.
+        expect(css).toContain("rgba(13, 71, 161, 0.26)");
+        expect(css).toMatch(/\[data-mui-color-scheme="dark"\][^{]*\{[^}]*rgba\(100, 181, 246, 0\.28\)/);
     });
 });

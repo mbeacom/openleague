@@ -24,7 +24,7 @@ import type { RankingsDocument, RankingsGame } from "@/lib/rankings-document";
 import { navigateTo } from "../../platform";
 import { staticRoutes } from "../../routes";
 import type { LocalPlannerStore } from "../../store/types";
-import { RankingsStatus } from "./display";
+import { RankingsStatus, levelsHeld } from "./display";
 import { useRankingsDoc } from "./useRankingsDoc";
 
 export const SAVE_SETUP_LABEL = "Save setup";
@@ -48,6 +48,9 @@ function Editor({ initial, save, clear }: { initial: RankingsDocument; save: Loc
         setDoc((d) => ({ ...d, teams: d.teams.map((t) => (t.number === number ? { ...t, ...patch } : t)) }));
     const setGame = (index: number, patch: Partial<RankingsGame>) =>
         setDoc((d) => ({ ...d, games: d.games.map((g, i) => (i === index ? { ...g, ...patch } : g)) }));
+
+    const held = levelsHeld(doc.method);
+    const playing = doc.teams.filter((t) => !t.excluded).length;
 
     const clearAll = async () => {
         const result = await clear();
@@ -119,9 +122,13 @@ function Editor({ initial, save, clear }: { initial: RankingsDocument; save: Loc
                 >
                     Add level
                 </Button>
-                <Typography variant="body2" color="text.secondary">
-                    {`Levels hold ${doc.method.levels.reduce((sum, l) => sum + (Number.isFinite(l.size) ? l.size : 0), 0)} teams; ${doc.teams.filter((t) => !t.excluded).length} teams aren't excluded.`}
-                </Typography>
+                {playing > held ? (
+                    <Alert severity="warning">{`Levels hold ${held} teams; ${playing} teams aren't excluded, so ${playing - held} won't get a suggested level. Add a level or make one bigger.`}</Alert>
+                ) : (
+                    <Typography variant="body2" color="text.secondary">
+                        {`Levels hold ${held} teams; ${playing} teams aren't excluded.`}
+                    </Typography>
+                )}
             </Stack>
 
             <Stack spacing={1}>
@@ -158,7 +165,7 @@ function Editor({ initial, save, clear }: { initial: RankingsDocument; save: Loc
                                         />
                                     </TableCell>
                                     <TableCell>
-                                        <Checkbox sx={{ p: "10px" }} checked={team.excluded} onChange={(e) => setTeam(team.number, { excluded: e.target.checked })} slotProps={{ input: { "aria-label": "Excluded" } }} />
+                                        <Checkbox sx={{ p: "10px" }} checked={team.excluded} onChange={(e) => setTeam(team.number, { excluded: e.target.checked })} slotProps={{ input: { "aria-label": `Excluded: ${team.name}` } }} />
                                     </TableCell>
                                 </TableRow>
                             ))}
@@ -182,7 +189,6 @@ function Editor({ initial, save, clear }: { initial: RankingsDocument; save: Loc
                                 if (homeGoals === undefined) return;
                                 setGame(i, { homeGoals, status: homeGoals !== null && game.awayGoals !== null ? "final" : "scheduled" });
                             }}
-
                             sx={{ width: 80 }}
                         />
                         <TextField
@@ -193,7 +199,6 @@ function Editor({ initial, save, clear }: { initial: RankingsDocument; save: Loc
                                 if (awayGoals === undefined) return;
                                 setGame(i, { awayGoals, status: game.homeGoals !== null && awayGoals !== null ? "final" : "scheduled" });
                             }}
-
                             sx={{ width: 80 }}
                         />
                         <IconButton aria-label={`Delete game ${i + 1}`} onClick={() => setDoc((d) => ({ ...d, games: d.games.filter((_g, k) => k !== i) }))} sx={{ width: 44, height: 44 }}>
