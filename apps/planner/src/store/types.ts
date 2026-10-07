@@ -70,6 +70,8 @@ export interface LocalStoreOptions {
     newId?: () => string;
     /** A thumbnail for a drill the store creates itself (starters, imports). Errors are swallowed. */
     makeThumbnail?: (playData: PlayData) => string | null;
+    /** Awaited before the store draws thumbnails to store (the diagram font); only when it has something to draw. */
+    beforeStoredDraw?: () => Promise<void>;
 }
 
 export interface LocalPlannerStore extends PlannerStore {

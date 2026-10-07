@@ -22,12 +22,16 @@ import { FULL_RINK, TransformContext, drawRink, rinkToCanvas } from "./rink-rend
 import { buildStrokeGeometry, strokeCenterline, type StrokeGeometry } from "./stroke-geometry";
 import { drawPlayerGlyph, drawEquipmentGlyph } from "./glyphs";
 import { EQUIPMENT_RADIUS_FT, MIN_GLYPH_RADIUS_PX, PLAYER_RADIUS_FT, glyphRadiusPx } from "./glyph-metrics";
-import { BOARD_COLORS } from "./notation";
 import { MIN_LINE_PX, REFERENCE_PX_PER_FT, refPx } from "./scale";
 import type { LineHandle, SnapTarget } from "./line-editing";
+import { DIAGRAM_THEME } from "./diagram-theme";
+import { diagramFont } from "./diagram-fonts";
 
 /** The shortest arrowhead drawn, so a tiny diagram's arrows still read as arrows. */
 export const ARROW_MIN_PX = 4;
+
+/** The notch of a swept arrowhead, as a fraction of its length back from the tip. */
+export const ARROW_NOTCH = 0.7;
 
 /** The thinnest line and shortest arrowhead a stroke is drawn with. */
 export interface StrokeFloors {
@@ -49,7 +53,7 @@ export function boardStrokeFloors(zoom: number): StrokeFloors {
 /**
  * Visual constants for drawing
  */
-const SELECTION_COLOR = "#FFD700"; // Gold highlight for selected elements
+const SELECTION_COLOR = DIAGRAM_THEME.selection;
 
 /**
  * Draws a stroke by hockey action (pattern), path style and end cap.
@@ -148,6 +152,9 @@ function drawArrowHead(
         to.y - headLength * Math.sin(angle - Math.PI / 6)
     );
 
+    // Swept back (spec §3): the head's base dips toward the tip along the line.
+    ctx.lineTo(to.x - headLength * ARROW_NOTCH * Math.cos(angle), to.y - headLength * ARROW_NOTCH * Math.sin(angle));
+
     // Right side of arrow head
     ctx.lineTo(
         to.x - headLength * Math.cos(angle + Math.PI / 6),
@@ -231,14 +238,14 @@ export function drawTextAnnotation(
     const scaledFontSize = annotation.fontSize * Math.min(transform.scaleX, transform.scaleY);
 
     // Measure text for background
-    ctx.font = `${scaledFontSize}px Arial`;
+    ctx.font = diagramFont(600, scaledFontSize);
     const metrics = ctx.measureText(annotation.text);
     const textWidth = metrics.width;
     const textHeight = scaledFontSize;
 
     // Draw selection highlight if selected
     if (isSelected) {
-        ctx.fillStyle = "rgba(255, 215, 0, 0.3)"; // Gold with transparency
+        ctx.fillStyle = DIAGRAM_THEME.selectionFill;
         ctx.fillRect(
             canvasPos.x - selectPad,
             canvasPos.y - textHeight - selectPad,
@@ -247,13 +254,15 @@ export function drawTextAnnotation(
         );
     }
 
-    // Draw semi-transparent background for readability
-    ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
-    ctx.fillRect(canvasPos.x - pad, canvasPos.y - textHeight - pad, textWidth + 2 * pad, textHeight + 2 * pad);
+    // A rounded white chip behind the text, so it reads over lines (spec §3).
+    ctx.fillStyle = DIAGRAM_THEME.noteChip;
+    ctx.beginPath();
+    ctx.roundRect(canvasPos.x - pad, canvasPos.y - textHeight - pad, textWidth + 2 * pad, textHeight + 2 * pad, 0.3 * pxPerFt);
+    ctx.fill();
 
     // Draw text
     ctx.fillStyle = annotation.color;
-    ctx.font = `${scaledFontSize}px Arial`;
+    ctx.font = diagramFont(600, scaledFontSize);
     ctx.textAlign = "left";
     ctx.textBaseline = "top";
     ctx.fillText(annotation.text, canvasPos.x, canvasPos.y - textHeight);
@@ -355,7 +364,7 @@ const SNAP_RING_GAP_PX = 5;
 /** How far a glyph's outline reaches past its radius, as a share of it: half the widest outline (a ring player's, 0.22 r). */
 const GLYPH_OUTLINE_OUTSET = 0.11;
 /** The halo under the snap ring: white, as the handles' fill (LINE_EDIT_COLORS.handleFill) */
-const SNAP_RING_HALO = "#FFFFFF";
+const SNAP_RING_HALO = DIAGRAM_THEME.snapRingHalo;
 
 /**
  * Rings a snap target while a line end is snapping (line editing R4): outside
@@ -411,7 +420,7 @@ export function drawAllElements(
 }
 
 /** Ink (#212121) at 35%: shades the ice outside a drill's area. */
-const AREA_MASK_FILL = "rgba(33, 33, 33, 0.35)";
+const AREA_MASK_FILL = DIAGRAM_THEME.areaMask;
 const AREA_OUTLINE_DASH = [8, 6];
 const AREA_OUTLINE_WIDTH = 2;
 
@@ -443,7 +452,7 @@ export function drawAreaMask(
     ctx.rect(rinkTopLeft.x, rinkTopLeft.y, rinkBottomRight.x - rinkTopLeft.x, rinkBottomRight.y - rinkTopLeft.y);
     ctx.rect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
     ctx.fill("evenodd");
-    ctx.strokeStyle = BOARD_COLORS.actionBlue;
+    ctx.strokeStyle = DIAGRAM_THEME.accent;
     ctx.lineWidth = AREA_OUTLINE_WIDTH / zoom;
     ctx.setLineDash(AREA_OUTLINE_DASH.map((d) => d / zoom));
     ctx.strokeRect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);

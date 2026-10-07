@@ -17,6 +17,13 @@ export function isAcceptableThumbnail(value: string): boolean {
 /** Thumbnails that are stored (library, static store) are generated at 2×: library cards show them larger than 300×128. */
 export const STORED_THUMBNAIL_PIXEL_RATIO = 2;
 
+/**
+ * The look stored thumbnails are drawn in. Bump it when the renderer's look
+ * changes, so the static planner redraws its stored thumbnails once.
+ * 3: the playbook style (rink diagram quality spec §3).
+ */
+export const THUMBNAIL_STYLE_VERSION = 3;
+
 /** A stored thumbnail narrower than this was made before 2× storage (300 logical px × STORED_THUMBNAIL_PIXEL_RATIO). */
 export const STORED_THUMBNAIL_MIN_WIDTH = 600;
 

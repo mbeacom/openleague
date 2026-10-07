@@ -58,6 +58,7 @@ import { ICE_AREA_GROUPS, ICE_AREA_LABELS } from "@/lib/utils/canvas/notation";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import { generateThumbnail } from "@/lib/utils/canvas/thumbnail-generator";
 import { STORED_THUMBNAIL_PIXEL_RATIO } from "@/lib/utils/thumbnail-rules";
+import { waitForDiagramFont } from "@/lib/utils/canvas/diagram-fonts";
 
 /**
  * Props for the PlayEditor component
@@ -281,6 +282,8 @@ export function PlayEditor({
             // Generate thumbnail from play data
             // Requirements: 4.2
             let thumbnail = "";
+            // A stored thumbnail must not bake in the fallback font.
+            await waitForDiagramFont();
             try {
                 thumbnail = generateThumbnail(playData, { pixelRatio: STORED_THUMBNAIL_PIXEL_RATIO });
             } catch (thumbnailError) {

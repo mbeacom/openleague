@@ -5,6 +5,7 @@
  */
 import { planExportFileName } from "@/lib/plan-document";
 import { waitForCrestFont } from "@/lib/utils/canvas/crest-png";
+import { waitForDiagramFont } from "@/lib/utils/canvas/diagram-fonts";
 import { isLogoImage } from "@/lib/utils/team-mark";
 import type { LogoImage } from "@/types/practice-planner";
 import { buildBenchSheetModel, type BenchSheetModel, type ExportSession } from "./bench-sheet-model";
@@ -36,6 +37,8 @@ export async function exportBenchSheet(
     // The Crest stands in for a missing logo: let its font load first, as the printed sheet does.
     // Without a team name no mark is drawn (buildBenchSheetModel), so there is nothing to wait for.
     if (session.teamMark && session.teamName?.trim() && !isLogoImage(options.logo)) await waitForCrestFont();
+    // Exported diagrams must not bake in the fallback font.
+    await waitForDiagramFont();
     const model = buildBenchSheetModel(session, canvasRenderers, { logo: options.logo });
     if (format === "html") {
         const blob = new Blob([renderBenchSheetHtml(model)], { type: "text/html;charset=utf-8" });

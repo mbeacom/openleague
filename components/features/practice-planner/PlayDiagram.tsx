@@ -10,6 +10,7 @@ import { Box, type SxProps, type Theme } from "@mui/material";
 import type { PlayData } from "@/types/practice-planner";
 import { THUMBNAIL_ASPECT, drawThumbnailScene } from "@/lib/utils/canvas/thumbnail-generator";
 import { backingPixelRatio, sizeBackingStore, watchPixelRatio } from "@/lib/utils/canvas/backing-store";
+import { useDiagramFontVersion } from "@/lib/hooks/useDiagramFontVersion";
 
 export interface PlayDiagramProps {
     playData: PlayData;
@@ -24,6 +25,8 @@ export function PlayDiagram({ playData, label, decorative = false, sx }: PlayDia
     const boxRef = useRef<HTMLDivElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [size, setSize] = useState({ width: 0, height: 0 });
+    // Redraw once Cabinet Grotesk arrives, so labels and notes switch from the fallback.
+    const fontVersion = useDiagramFontVersion();
     // Never rendered into markup, so reading it on the first client render can't mismatch hydration.
     const [ratio, setRatio] = useState(backingPixelRatio);
     useEffect(() => watchPixelRatio(() => setRatio(backingPixelRatio())), []);
@@ -54,7 +57,7 @@ export function PlayDiagram({ playData, label, decorative = false, sx }: PlayDia
         } catch (error) {
             console.warn(`Couldn't draw the diagram for "${label}":`, error);
         }
-    }, [playData, label, size, ratio]);
+    }, [playData, label, size, ratio, fontVersion]);
 
     return (
         <Box ref={boxRef} sx={[{ width: "100%", aspectRatio: `${THUMBNAIL_ASPECT}`, maxWidth: "100%" }, ...(Array.isArray(sx) ? sx : [sx])]}>

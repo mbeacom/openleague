@@ -30,6 +30,8 @@ export interface StoreContext {
     now: () => Date;
     newId: () => string;
     makeThumbnail: (playData: PlayData) => string | null;
+    /** Awaited before drawing thumbnails to store; never rejects. */
+    beforeStoredDraw: () => Promise<void>;
     /** Runs after every successful user write (the persistence request). */
     afterWrite: () => void;
 }
@@ -46,6 +48,13 @@ export function createStoreContext(repo: PlannerRepo, options: LocalStoreOptions
                 return makeThumbnail(playData);
             } catch {
                 return null;
+            }
+        },
+        beforeStoredDraw: async () => {
+            try {
+                await options.beforeStoredDraw?.();
+            } catch {
+                // A font that can't be waited for is drawn with the fallback.
             }
         },
         afterWrite,

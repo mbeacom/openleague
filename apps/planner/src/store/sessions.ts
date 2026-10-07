@@ -654,6 +654,8 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                 const date = validDate(options.date);
                 // Diagrams are cleaned and drawn before the transaction (IndexedDB can't wait on other work), keyed by row.
                 const prepared = new Map<number, { playData: PlayData; thumbnail: string | null }>();
+                // Stored thumbnails wait for the diagram font, once, so they never bake in the fallback.
+                if (parsed.plan.session.drills.some((entry) => entry.kind === "drill")) await ctx.beforeStoredDraw();
                 for (const entry of parsed.plan.session.drills) {
                     if (entry.kind !== "drill") continue;
                     const playData = writablePlayData(entry.drill.playData);

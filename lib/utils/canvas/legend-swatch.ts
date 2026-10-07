@@ -8,7 +8,8 @@ import type { LegendEntry } from "./legend";
 import { buildStrokeGeometry } from "./stroke-geometry";
 import { paintStrokeGeometry } from "./drawing-utils";
 import { drawEquipmentGlyph, drawPlayerGlyph } from "./glyphs";
-import { BOARD_COLORS, ROLE_DEFAULT_COLORS } from "./notation";
+import { ROLE_DEFAULT_COLORS } from "./notation";
+import { DIAGRAM_THEME } from "./diagram-theme";
 import { REFERENCE_PX_PER_FT } from "./scale";
 
 export const LEGEND_SWATCH_SIZE = { width: 40, height: 20 } as const;
@@ -26,7 +27,7 @@ export function paintLegendSwatch(ctx: CanvasRenderingContext2D, entry: LegendEn
             { action, path: "straight", end, points: [{ x: 4, y: H / 2 }, { x: W - 6, y: H / 2 }], strokeWidth: 2 },
             SWATCH_PX_PER_FT
         );
-        paintStrokeGeometry(ctx, geometry, BOARD_COLORS.ink, SWATCH_PX_PER_FT);
+        paintStrokeGeometry(ctx, geometry, DIAGRAM_THEME.ink, SWATCH_PX_PER_FT);
     };
     switch (entry.type) {
         case "action":

@@ -100,6 +100,8 @@ export const META_STARTERS_SEEDED = "startersSeeded";
 /** The starter ids this device has received (string[]), so upgrades add only new starters. */
 export const META_SEEDED_STARTER_IDS = "seededStarterIds";
 export const META_PERSIST_REQUESTED = "persistRequested";
+/** The THUMBNAIL_STYLE_VERSION this device's stored thumbnails were drawn in. */
+export const META_THUMBNAIL_STYLE = "thumbnailStyle";
 /** The device's "Your team" profile (practice logo spec R4): a TeamProfile, or null once cleared. Never in plan files. */
 export const META_TEAM_PROFILE = "teamProfile";
 

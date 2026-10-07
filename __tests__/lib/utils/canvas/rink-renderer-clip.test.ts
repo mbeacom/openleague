@@ -3,6 +3,7 @@
  * anything else near the ends stop at the boards instead of running past the
  * curved corners; the boards are stroked after the clip is released.
  */
+import { DIAGRAM_THEME } from "@/lib/utils/canvas/diagram-theme";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
     clearRinkCache,
@@ -41,9 +42,10 @@ function outlineArgs(transform: TransformContext): number[] {
 
 /** Asserts the clip → markings → restore → boards order on one recorded draw. */
 function expectClippedMarkings(calls: Call[], transform: TransformContext): void {
+    // Two clips to the outline: the ice's edge shadow (spec §3), then the markings.
     const clipIndexes = calls.flatMap((c, i) => (c.name === "clip" ? [i] : []));
-    expect(clipIndexes).toHaveLength(1);
-    const clip = clipIndexes[0];
+    expect(clipIndexes).toHaveLength(2);
+    const clip = clipIndexes[1];
 
     // The clip path is the rink outline, freshly begun.
     expect(calls[clip - 1].name).toBe("roundRect");
@@ -71,7 +73,8 @@ function expectClippedMarkings(calls: Call[], transform: TransformContext): void
     expect(goalMove).toBeLessThan(restore);
 
     // The boards are stroked after the restore, along the same outline.
-    const boardStroke = calls.findIndex((c) => c.name === "stroke" && c.strokeStyle === "#000000");
+    // Boards and blue lines share League Blue (spec §3): the boards are the first such stroke after the restore.
+    const boardStroke = calls.findIndex((c, i) => i > restore && c.name === "stroke" && c.strokeStyle === DIAGRAM_THEME.boards);
     expect(boardStroke).toBeGreaterThan(restore);
     expect(calls[boardStroke - 1].name).toBe("roundRect");
     expect(calls[boardStroke - 1].args).toEqual(outlineArgs(transform));

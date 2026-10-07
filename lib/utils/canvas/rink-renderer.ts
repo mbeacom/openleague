@@ -10,6 +10,7 @@
 
 import type { Position, RinkRect } from "@/types/practice-planner";
 import { refPx, snapLineX } from "./scale";
+import { DIAGRAM_THEME } from "./diagram-theme";
 
 /**
  * Standard NHL rink dimensions in feet
@@ -241,7 +242,7 @@ export function drawRink(ctx: CanvasRenderingContext2D, transform: TransformCont
     if (options.cache === false) {
         ctx.save();
         ctx.setTransform(1, 0, 0, 1, 0, 0);
-        ctx.fillStyle = "#FFFFFF";
+        ctx.fillStyle = DIAGRAM_THEME.surround;
         // Identity transform: fill the real backing store (a high-ratio canvas is larger than the CSS size).
         const backing = ctx.canvas as HTMLCanvasElement | undefined;
         const fullW = typeof backing?.width === "number" ? backing.width : transform.canvasWidth;
@@ -270,7 +271,7 @@ export function drawRink(ctx: CanvasRenderingContext2D, transform: TransformCont
  */
 function drawRinkBackground(ctx: CanvasRenderingContext2D, transform: TransformContext): void {
     // Clear canvas
-    ctx.fillStyle = "#FFFFFF";
+    ctx.fillStyle = DIAGRAM_THEME.surround;
     ctx.fillRect(0, 0, transform.canvasWidth, transform.canvasHeight);
 
     drawRinkMarkings(ctx, transform);
@@ -345,24 +346,55 @@ function traceRinkOutline(ctx: CanvasRenderingContext2D, transform: TransformCon
 }
 
 /** The ice colour. The board draws it in both colour schemes, so line-editing colours are checked against it. */
-export const ICE_COLOR = "#E8F4F8";
+export const ICE_COLOR = DIAGRAM_THEME.ice;
 
 /**
  * Draws the ice surface
  */
+/** A radial fill when the context supports it; otherwise null (recorded and mocked test contexts). */
+function radialFill(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, inner: string, outer: string): CanvasGradient | null {
+    if (typeof ctx.createRadialGradient !== "function") return null;
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r) as CanvasGradient | undefined;
+    if (!g || typeof g.addColorStop !== "function") return null;
+    g.addColorStop(0, inner);
+    g.addColorStop(1, outer);
+    return g;
+}
+
 function drawIceSurface(ctx: CanvasRenderingContext2D, transform: TransformContext): void {
-    ctx.fillStyle = ICE_COLOR;
+    const o = rinkOutline(transform);
+    const center = { x: o.x + o.width / 2, y: o.y + o.height / 2 };
+    ctx.fillStyle = radialFill(ctx, center.x, center.y, o.width / 2, DIAGRAM_THEME.iceCenter, DIAGRAM_THEME.ice) ?? DIAGRAM_THEME.ice;
     traceRinkOutline(ctx, transform);
     ctx.fill();
+    // A soft inner shadow along the boards: a wide stroke of the outline, clipped to the ice.
+    ctx.save();
+    traceRinkOutline(ctx, transform);
+    ctx.clip();
+    ctx.strokeStyle = DIAGRAM_THEME.iceEdgeShadow;
+    ctx.lineWidth = 3 * transform.scaleX; // 1.5 ft inside the clip
+    traceRinkOutline(ctx, transform);
+    ctx.stroke();
+    ctx.restore();
 }
 
 /**
  * Draws the boards (rink outline)
  */
 function drawBoards(ctx: CanvasRenderingContext2D, transform: TransformContext): void {
-    ctx.strokeStyle = "#000000";
-    ctx.lineWidth = refPx(3, transform.scaleX);
+    const outer = refPx(3, transform.scaleX);
+    ctx.strokeStyle = DIAGRAM_THEME.boards;
+    ctx.lineWidth = outer;
     traceRinkOutline(ctx, transform);
+    ctx.stroke();
+    // The kick plate: a lighter line just inside the boards.
+    const plate = refPx(1, transform.scaleX);
+    const inset = outer / 2 + plate / 2;
+    const o = rinkOutline(transform);
+    ctx.strokeStyle = DIAGRAM_THEME.kickPlate;
+    ctx.lineWidth = plate;
+    ctx.beginPath();
+    ctx.roundRect(o.x + inset, o.y + inset, o.width - 2 * inset, o.height - 2 * inset, Math.max(0, o.radius - inset));
     ctx.stroke();
 }
 
@@ -374,7 +406,7 @@ function drawCenterRedLine(ctx: CanvasRenderingContext2D, transform: TransformCo
     const top = rinkToCanvas({ x: centerX, y: 0 }, transform);
     const bottom = rinkToCanvas({ x: centerX, y: RINK_DIMENSIONS.height }, transform);
 
-    ctx.strokeStyle = "#C8102E"; // Red
+    ctx.strokeStyle = DIAGRAM_THEME.redLine;
     ctx.lineWidth = LINE_DIMENSIONS.redLineWidth * transform.scaleX;
     // On whole device pixels, so the line is crisp (scale model).
     const topX = snapLineX(ctx, top.x, ctx.lineWidth);
@@ -391,7 +423,7 @@ function drawBlueLines(ctx: CanvasRenderingContext2D, transform: TransformContex
     const leftBlueLineX = BLUE_LINES.left;
     const rightBlueLineX = BLUE_LINES.right;
 
-    ctx.strokeStyle = "#003087"; // Blue
+    ctx.strokeStyle = DIAGRAM_THEME.blueLine;
     ctx.lineWidth = LINE_DIMENSIONS.blueLineWidth * transform.scaleX;
 
     // Left blue line
@@ -422,7 +454,7 @@ function drawGoalLines(ctx: CanvasRenderingContext2D, transform: TransformContex
     const leftGoalLineX = LINE_DIMENSIONS.goalLineDistance;
     const rightGoalLineX = RINK_DIMENSIONS.width - LINE_DIMENSIONS.goalLineDistance;
 
-    ctx.strokeStyle = "#C8102E"; // Red
+    ctx.strokeStyle = DIAGRAM_THEME.redLine;
     ctx.lineWidth = LINE_DIMENSIONS.redLineWidth * transform.scaleX;
 
     // Left goal line
@@ -456,14 +488,14 @@ function drawCenterCircle(ctx: CanvasRenderingContext2D, transform: TransformCon
     );
     const radius = CIRCLE_DIMENSIONS.centerCircleRadius * transform.scaleX;
 
-    ctx.strokeStyle = "#003087"; // Blue
+    ctx.strokeStyle = DIAGRAM_THEME.blueLine;
     ctx.lineWidth = refPx(2, transform.scaleX);
     ctx.beginPath();
     ctx.arc(center.x, center.y, radius, 0, Math.PI * 2);
     ctx.stroke();
 
     // Center dot
-    ctx.fillStyle = "#003087";
+    ctx.fillStyle = DIAGRAM_THEME.blueLine;
     ctx.beginPath();
     ctx.arc(center.x, center.y, CIRCLE_DIMENSIONS.faceoffDotRadius * transform.scaleX, 0, Math.PI * 2);
     ctx.fill();
@@ -472,6 +504,9 @@ function drawCenterCircle(ctx: CanvasRenderingContext2D, transform: TransformCon
 /**
  * Draws the faceoff circles
  */
+/** The gap between a faceoff circle's paired hash marks (5 ft 7 in). */
+const HASH_MARK_SPACING_FT = 5 + 7 / 12;
+
 function drawFaceoffCircles(ctx: CanvasRenderingContext2D, transform: TransformContext): void {
     const circleY1 = RINK_DIMENSIONS.height / 2 - FACEOFF_POSITIONING.circleOffsetY;
     const circleY2 = RINK_DIMENSIONS.height / 2 + FACEOFF_POSITIONING.circleOffsetY;
@@ -481,7 +516,7 @@ function drawFaceoffCircles(ctx: CanvasRenderingContext2D, transform: TransformC
 
     const radius = CIRCLE_DIMENSIONS.faceoffCircleRadius * transform.scaleX;
 
-    ctx.strokeStyle = "#C8102E"; // Red
+    ctx.strokeStyle = DIAGRAM_THEME.redLine;
     ctx.lineWidth = refPx(2, transform.scaleX);
 
     // Draw all four faceoff circles
@@ -497,6 +532,21 @@ function drawFaceoffCircles(ctx: CanvasRenderingContext2D, transform: TransformC
         ctx.beginPath();
         ctx.arc(center.x, center.y, radius, 0, Math.PI * 2);
         ctx.stroke();
+        // Hash marks: at the top and bottom of the circle (toward the side boards), two 2 ft marks
+        // parallel to the goal line, 5 ft 7 in apart, starting on the circle.
+        const ft = transform.scaleX;
+        const half = HASH_MARK_SPACING_FT / 2;
+        const reach = Math.sqrt(CIRCLE_DIMENSIONS.faceoffCircleRadius ** 2 - half ** 2) * ft;
+        for (const side of [-1, 1]) {
+            for (const dx of [-half, half]) {
+                const x = center.x + dx * ft;
+                const y0 = center.y + side * reach;
+                ctx.beginPath();
+                ctx.moveTo(x, y0);
+                ctx.lineTo(x, y0 + side * 2 * ft);
+                ctx.stroke();
+            }
+        }
     });
 }
 
@@ -512,7 +562,7 @@ function drawFaceoffDots(ctx: CanvasRenderingContext2D, transform: TransformCont
 
     const dotRadius = CIRCLE_DIMENSIONS.faceoffDotRadius * transform.scaleX;
 
-    ctx.fillStyle = "#C8102E"; // Red
+    ctx.fillStyle = DIAGRAM_THEME.redLine;
 
     // Draw all four faceoff dots
     const positions = [
@@ -560,8 +610,8 @@ function drawGoalCreases(ctx: CanvasRenderingContext2D, transform: TransformCont
 
     const creaseRadius = LINE_DIMENSIONS.goalCreaseRadius * transform.scaleX;
 
-    ctx.strokeStyle = "#C8102E"; // Red
-    ctx.fillStyle = "rgba(200, 16, 46, 0.1)"; // Light red fill
+    ctx.strokeStyle = DIAGRAM_THEME.redLine;
+    ctx.fillStyle = DIAGRAM_THEME.creaseFill;
     ctx.lineWidth = refPx(2, transform.scaleX);
 
     // Left goal crease

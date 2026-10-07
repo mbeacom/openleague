@@ -16,6 +16,8 @@ import { LINE_EDIT_COLORS } from "@/lib/utils/canvas/notation";
 import { EQUIPMENT_RADIUS_FT, PLAYER_RADIUS_FT, glyphRadiusPx } from "@/lib/utils/canvas/glyph-metrics";
 import type { LineHandle } from "@/lib/utils/canvas/line-editing";
 import { CURVE_SAMPLES_PER_SEGMENT, buildStrokeGeometry } from "@/lib/utils/canvas/stroke-geometry";
+import { diagramFont } from "@/lib/utils/canvas/diagram-fonts";
+import { DIAGRAM_THEME } from "@/lib/utils/canvas/diagram-theme";
 import { clearRinkCache, createTransformContext, FULL_RINK, rinkToCanvas } from "@/lib/utils/canvas/rink-renderer";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import { areaRect } from "@/lib/utils/ice-area";
@@ -354,8 +356,8 @@ describe("stroke ends in proportion to the rink (scale model)", () => {
             pxPerFt
         );
         paintStrokeGeometry(recordingCtx(calls), geometry, "#000", pxPerFt);
-        // The arrowhead is moveTo(tip) then two lineTo corners; its length is the tip-to-corner distance along x.
-        const head = calls.findIndex((c, i) => c.name === "moveTo" && calls[i + 1]?.name === "lineTo" && calls[i + 2]?.name === "lineTo" && calls[i + 3]?.name === "closePath");
+        // The arrowhead is moveTo(tip), a corner, the notch and a corner (spec §3); its length is the tip-to-corner distance along x.
+        const head = calls.findIndex((c, i) => c.name === "moveTo" && calls[i + 1]?.name === "lineTo" && calls[i + 2]?.name === "lineTo" && calls[i + 3]?.name === "lineTo" && calls[i + 4]?.name === "closePath");
         const [tx] = calls[head].args as number[];
         const [cx] = calls[head + 1].args as number[];
         return (tx - cx) / Math.cos(Math.PI / 6);
@@ -403,7 +405,7 @@ describe("note padding (scale model)", () => {
             const calls: Call[] = [];
             const t = createTransformContext(canvasW, canvasH, padding);
             drawTextAnnotation(recordingCtx(calls), { id: "n", text: "Hi", position: { x: 100, y: 40 }, fontSize: 6, color: "#000" }, t);
-            const bg = calls.find((c) => c.name === "fillRect")!;
+            const bg = calls.find((c) => c.name === "roundRect")!; // the note's chip (spec §3)
             const textX = calls.find((c) => c.name === "fillText")!.args[1] as number;
             return textX - (bg.args[0] as number);
         };
@@ -425,7 +427,7 @@ describe("board minimums on narrow boards (scale model)", () => {
         const ctx = recordingCtx(calls);
         Object.defineProperty(ctx, "lineWidth", { set: (v: number) => widths.push(v), get: () => widths.at(-1) ?? 1, configurable: true });
         draw(ctx);
-        const head = calls.findIndex((c, i) => c.name === "moveTo" && calls[i + 1]?.name === "lineTo" && calls[i + 2]?.name === "lineTo" && calls[i + 3]?.name === "closePath");
+        const head = calls.findIndex((c, i) => c.name === "moveTo" && calls[i + 1]?.name === "lineTo" && calls[i + 2]?.name === "lineTo" && calls[i + 3]?.name === "lineTo" && calls[i + 4]?.name === "closePath");
         const [tx, ty] = calls[head].args as number[];
         const [cx, cy] = calls[head + 1].args as number[];
         // The skate line's width is the last width set before the arrowhead.
@@ -450,5 +452,31 @@ describe("board minimums on narrow boards (scale model)", () => {
         const { lineWidth, arrow } = measure((ctx) => drawBoardScene(ctx, phone, drill, { cachedRink: false }));
         expect(lineWidth).toBe(1);
         expect(arrow).toBeLessThan(6);
+    });
+});
+
+describe("playbook strokes and notes (spec §3)", () => {
+    it("draws a swept arrowhead: tip, corner, a notch on the line, corner", () => {
+        const calls: Call[] = [];
+        const geometry = buildStrokeGeometry({ action: "skate", path: "straight", end: "arrow", points: [{ x: 0, y: 0 }, { x: 200, y: 0 }], strokeWidth: 2 }, 3.8);
+        paintStrokeGeometry(recordingCtx(calls), geometry, "#000", 3.8);
+        const head = calls.findIndex((c, i) => c.name === "moveTo" && calls[i + 4]?.name === "closePath");
+        expect(head).toBeGreaterThanOrEqual(0);
+        const [tip, left, notch, right] = [0, 1, 2, 3].map((k) => calls[head + k].args as number[]);
+        expect(notch[1]).toBeCloseTo(0); // on the line
+        expect(tip[0] - notch[0]).toBeCloseTo(10 * 0.7); // 10 px head at the reference scale
+        expect(left[1]).toBeCloseTo(-right[1]); // symmetric
+    });
+
+    it("draws a note on a rounded white chip in the diagram font", () => {
+        const calls: Call[] = [];
+        const ctx = recordingCtx(calls);
+        drawTextAnnotation(ctx, { id: "n", text: "Hi", position: { x: 100, y: 40 }, fontSize: 6, color: "#000" }, createTransformContext(800, 400));
+        expect(calls.some((c) => c.name === "roundRect")).toBe(true);
+        expect((ctx as unknown as { font: string }).font).toBe(diagramFont(600, 6 * 3.8));
+    });
+
+    it("shades outside a drill's area more softly", () => {
+        expect(DIAGRAM_THEME.areaMask).toBe("rgba(33, 33, 33, 0.22)");
     });
 });

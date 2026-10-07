@@ -248,6 +248,32 @@ describe.each(REPOS)("sessions (%s)", (_name, open) => {
         expect(parsePlan(JSON.parse(JSON.stringify(doc))).ok).toBe(true);
     });
 
+    it("waits for the diagram font once before drawing an imported plan's thumbnails", async () => {
+        const h = await openHarness(open);
+        const order: string[] = [];
+        const store = createLocalPlannerStore(h.repo, {
+            ...h.options,
+            beforeStoredDraw: async () => { order.push("font"); },
+            makeThumbnail: () => { order.push("draw"); return null; },
+        });
+        const plan = serializePlan(
+            {
+                title: "Imported",
+                durationMinutes: 20,
+                date: null,
+                startTime: null,
+                drills: [
+                    { sequence: 0, duration: 10, runsWithPrevious: false, instructions: null, name: "One", description: null, playData: createEmptyPlayData() },
+                    { sequence: 1, duration: 10, runsWithPrevious: false, instructions: null, name: "Two", description: null, playData: createEmptyPlayData() },
+                ],
+            },
+            "openleague-hosted",
+        );
+        const result = await store.importPlan(plan, { date: new Date("2026-10-06T19:00:00"), addToLibrary: false });
+        expect(result.success).toBe(true);
+        expect(order).toEqual(["font", "draw", "draw"]);
+    });
+
     it("imports a plan as a session with owned drills, plus library copies on request", async () => {
         const { store } = await setup();
         const plan = serializePlan(

@@ -9,6 +9,7 @@ import { buildLegend, type LegendEntry } from "@/lib/utils/canvas/legend";
 import { LEGEND_SWATCH_SIZE, paintLegendSwatch } from "@/lib/utils/canvas/legend-swatch";
 import { backingPixelRatio, sizeBackingStore, watchPixelRatio } from "@/lib/utils/canvas/backing-store";
 import { iceAreaLabel } from "@/lib/utils/canvas/notation";
+import { useDiagramFontVersion } from "@/lib/hooks/useDiagramFontVersion";
 import { isFullIce } from "@/lib/utils/ice-area";
 
 /** One symbol's sample, drawn on a small canvas. Exported for the bench sheet's LegendList (3b). */
@@ -17,6 +18,8 @@ export function LegendSwatch({ entry }: { entry: LegendEntry }) {
     // Never rendered into markup, so reading it on the first client render can't mismatch hydration.
     const [ratio, setRatio] = useState(backingPixelRatio);
     useEffect(() => watchPixelRatio(() => setRatio(backingPixelRatio())), []);
+    // Redraw once the diagram font arrives (role swatches carry labels).
+    const fontVersion = useDiagramFontVersion();
     useEffect(() => {
         const canvas = ref.current;
         if (!canvas) return;
@@ -26,7 +29,7 @@ export function LegendSwatch({ entry }: { entry: LegendEntry }) {
         if (!ctx) return;
         ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
         paintLegendSwatch(ctx, entry);
-    }, [entry, ratio]);
+    }, [entry, ratio, fontVersion]);
     return (
         <canvas
             ref={ref}

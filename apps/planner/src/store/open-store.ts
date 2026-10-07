@@ -54,15 +54,16 @@ export async function openPlannerStore({ open, stale, storeOptions }: OpenStoreO
         repo = createMemoryRepo();
     }
     const store = createLocalPlannerStore(repo, storeOptions);
-    try {
-        await store.seedStarterDrills();
-    } catch (error) {
-        console.error("Couldn't add the starter drills:", error);
-    }
+    // The refresh runs first: on a fresh device it only records the style, so new starters are drawn once.
     try {
         await store.refreshStoredThumbnails();
     } catch (error) {
         console.error("Couldn't refresh drill thumbnails:", error);
+    }
+    try {
+        await store.seedStarterDrills();
+    } catch (error) {
+        console.error("Couldn't add the starter drills:", error);
     }
     return { store, durable: repo.durable };
 }

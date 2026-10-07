@@ -31,6 +31,12 @@ describe("openPlannerStore", () => {
         expect((await repo.read((tx) => tx.getPlay("old")))?.thumbnail).toBe(pngOfWidth(600));
     });
 
+    it("draws each starter once on a fresh device: the style refresh runs before seeding", async () => {
+        const makeThumbnail = vi.fn(() => pngOfWidth(600));
+        await openPlannerStore({ open: async () => createMemoryRepo(), storeOptions: { makeThumbnail } });
+        expect(makeThumbnail).toHaveBeenCalledTimes(STARTER_PLAYS.length);
+    });
+
     it("logs, and still opens, when the thumbnail upgrade fails", async () => {
         const error = vi.spyOn(console, "error").mockImplementation(() => {});
         const repo = createMemoryRepo();

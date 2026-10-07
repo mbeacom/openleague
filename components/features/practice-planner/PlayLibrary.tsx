@@ -53,6 +53,7 @@ import { STARTER_PLAYS, type StarterPlay } from "@/lib/data/starter-plays";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import { generateThumbnail } from "@/lib/utils/canvas/thumbnail-generator";
 import { STORED_THUMBNAIL_PIXEL_RATIO } from "@/lib/utils/thumbnail-rules";
+import { waitForDiagramFont } from "@/lib/utils/canvas/diagram-fonts";
 import { PlayDiagram } from "./PlayDiagram";
 import { formatDistanceToNow } from "date-fns";
 import { useDebouncedCallback } from "use-debounce";
@@ -536,6 +537,8 @@ export function PlayLibrary({
             setError(null);
 
             try {
+                // The stored thumbnail must not bake in the fallback font.
+                await waitForDiagramFont();
                 const result = await store.createPlay({
                     name: starter.name,
                     description: starter.description,
