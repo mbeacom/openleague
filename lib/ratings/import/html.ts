@@ -16,11 +16,22 @@ export function looksLikeHtml(input: string): boolean {
     return /<(html|body|div|table|tr|td|span|a|p)\b/i.test(input);
 }
 
+/** Repeats a removal until nothing changes, so a removal can't splice a new match together. */
+function removeUntilStable(text: string, pattern: RegExp): string {
+    let previous: string;
+    do {
+        previous = text;
+        text = text.replace(pattern, "");
+    } while (text !== previous);
+    return text;
+}
+
 /** Every element boundary becomes a line break; blank lines dropped; each line trimmed. */
 export function htmlToText(html: string): string {
-    const withoutCode = html
-        .replace(/<!--[\s\S]*?-->/g, "")
-        .replace(/<(script|style|noscript|template)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, "");
+    const withoutCode = removeUntilStable(
+        removeUntilStable(html, /<!--[\s\S]*?-->/g),
+        /<(script|style|noscript|template)\b[^>]*>[\s\S]*?<\/\1\s*>/gi,
+    );
     const text = decodeEntities(withoutCode.replace(/<[^>]*>/g, "\n"));
     return text
         .split("\n")
