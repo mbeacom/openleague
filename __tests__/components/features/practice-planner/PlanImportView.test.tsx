@@ -40,6 +40,7 @@ import {
     type PlanSessionInput,
 } from "@/lib/plan-document";
 import { PENDING_PLAN_KEY } from "@/lib/plan-document/pending";
+import { serializeDocument, wrapDocument } from "@/lib/document-envelope";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import { parseDateTimeLocalToUtc, resolveTimeZone } from "@/lib/utils/date";
 
@@ -188,6 +189,28 @@ describe("PlanImportView: form", () => {
             document: plan(),
             date: parseDateTimeLocalToUtc("2026-10-06T19:00", resolveTimeZone())!.toISOString(),
             addToLibrary: true,
+        });
+    });
+
+    it("imports a wrapped plan file, sending the bare plan to the server", async () => {
+        actions.importPracticePlan.mockResolvedValue({ success: true, data: { sessionId: NEW_SESSION } });
+        render(<PlanImportView teams={[LIONS]} />);
+        const wrapped = wrapDocument(PLAN_FORMAT, plan(), {
+            id: "0b7c1f0e-5a3e-4c1e-9a47-6f0d7b2f8a11",
+            updatedAt: "2026-10-07T18:04:00.000Z",
+            generator: "openleague-static",
+        });
+        upload(serializeDocument(wrapped));
+        await title();
+
+        fireEvent.click(screen.getByRole("button", { name: "Import plan" }));
+
+        await waitFor(() => expect(nav.push).toHaveBeenCalledWith(`/practice-planner/${NEW_SESSION}/edit`));
+        expect(actions.importPracticePlan).toHaveBeenCalledWith({
+            teamId: LIONS.id,
+            document: plan(),
+            date: parseDateTimeLocalToUtc("2026-10-06T19:00", resolveTimeZone())!.toISOString(),
+            addToLibrary: false,
         });
     });
 
