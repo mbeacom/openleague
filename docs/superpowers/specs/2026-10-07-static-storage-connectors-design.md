@@ -32,7 +32,7 @@ A coach can save any OpenLeague portable document to their own Google Drive, One
 1. **One envelope.** Every document the static app writes to a connector has the same wrapper (kind, version, id, updatedAt, payload). Every reader accepts both the wrapped form and today's bare files, with no migration step.
 2. **Local first.** IndexedDB stays the working copy and the source of truth while offline. A connector is a remote the app saves to and opens from, never a requirement to keep working.
 3. **Least privilege.** Google access uses `drive.file` only. OneDrive access uses the narrowest Microsoft scope that does the job (see R6), and the design says plainly where Microsoft offers nothing as narrow as Google.
-4. **No lost writes.** A save against a file that changed since this device last read it is detected and becomes a user choice: keep mine, use theirs, or keep both.
+4. **No lost writes.** A save against a file that changed since this device last read it is detected and becomes a user choice: keep mine, use theirs, or keep both. So is the reverse: when another save replaces a version this device wrote, this device is told and chooses, rather than quietly taking the newer copy (see Sync and conflicts).
 5. **Independently shippable phases**: envelope, then Local, then Drive, then OneDrive. A fork that registers no OAuth apps still gets the envelope and the Local connector; the cloud options are simply absent.
 6. **Mobile first.** Every connector flow works at phone width with 44px tap targets, and in mobile Safari and Chrome. Where a browser can't do something (the File System Access API on iOS, for example), the app falls back rather than failing.
 
@@ -58,7 +58,7 @@ A wrapped document is:
 - `format` / `envelope`: the envelope's own discriminant and integer version. They change only when the wrapper itself changes.
 - `kind` / `version`: copies of the payload's `format` and `version`. They let a list or a router decide what a file is without parsing the payload, and the reader checks that they match the payload (a mismatch is "invalid").
 - `id`: a UUID made when the document is first created and kept for its life. It is how a downloaded copy, a Drive file and a local record are recognised as the same document. "Save as a copy" makes a new id.
-- `updatedAt`: the writer's clock at save time. **Informational only** (shown as "last saved"); it is never used to decide conflicts, because device clocks drift. Conflicts use the provider's revision (R4).
+- `updatedAt`: the writer's clock at save time. **Informational only** (shown as "last saved"); it is never used to decide conflicts, because device clocks drift. Conflicts use the provider's revision (R4). A wrapped document always has it; a bare one may not (R2).
 - `generator`: as in the plan document (`openleague-static` | `openleague-hosted`).
 - `payload`: the existing bare document, validated by its existing parser. The kind schemas do not change.
 
@@ -66,11 +66,13 @@ Kept out of the envelope on purpose: anything about sync state on one device (th
 
 ### R2. Read both forms forever; write wrapped only where every reader understands it
 
-A new pure module, `lib/document-envelope/`, owns the envelope schema and one entry point, `readDocument(raw)`:
+A new pure module, `lib/document-envelope/`, owns the envelope schema and one entry point, `readDocument(raw, source?)`. `source` is what the caller knows about where the text came from, today only `{ modifiedAt?: string }` (a connector's `RemoteFile.modifiedAt`, or a picked file's `File.lastModified`). It returns the parsed payload with `kind`, `version`, `id: string | null` and `updatedAt: string | null`:
 
 1. `raw.format === "openleague.document"` → validate the envelope; refuse `envelope > 1` with "made by a newer version of OpenLeague"; look up `kind` in a registry of known kinds; check `kind`/`version` against the payload; pass the payload to that kind's existing parser (`parsePlan`, `parseRankings`), which keeps its own newer-version message.
-2. `raw.format` is a known bare kind (`openleague.practice-plan`, `openleague.rankings`) → parse it as today, and return it as an envelope with `id: null` (unknown) and `updatedAt` taken from the plan's `exportedAt` or the file's modified time.
+2. `raw.format` is a known bare kind (`openleague.practice-plan`, `openleague.rankings`) → parse it as today, and return it with `id: null` (unknown) and `updatedAt` from the fallback order below.
 3. Anything else → "This file isn't an OpenLeague file."
+
+**`updatedAt` fallback order**, used only for bare documents: (a) the kind's own timestamp, through an optional `updatedAtOf(payload)` on the kind's registry entry (plans: `exportedAt`; rankings have none); then (b) `source.modifiedAt`; then (c) `null`, shown as "last saved: unknown". The writer's own clock comes first because it means the same thing as the envelope field; the store's clock is next best; otherwise the reader says it does not know rather than inventing a time. `updatedAt` stays informational, so a `null` never affects sync.
 
 An unknown `kind` inside a valid envelope gets its own message ("This file needs a newer version of OpenLeague"), never a generic failure, so an older app meeting a future kind (goalie rotation, say) explains itself.
 
@@ -105,6 +107,7 @@ interface DocumentLink {
   remote: { fileId: string; name: string; driveId?: string };
   baseRevision: string | null; // the remote revision this device last read or wrote
   baseHash: string;           // SHA-256 of the payload at that revision
+  baseWrittenHere: boolean;   // true if baseRevision came from this device's own save, false if from a read
   dirty: boolean;             // local edits since baseRevision
   lastSyncedAt: string;
 }
@@ -119,8 +122,8 @@ The single-rankings limit has to go: a connector needs per-document identity, so
 Every save carries the `baseRevision` it expects. The providers differ, and the interface says so instead of hiding it:
 
 - **OneDrive (Microsoft Graph)**: atomic. Upload and update accept `if-match` with the item's eTag or cTag and return `412 Precondition Failed` on mismatch ([createUploadSession](https://learn.microsoft.com/graph/api/driveitem-createuploadsession?view=graph-rest-1.0), [update](https://learn.microsoft.com/graph/api/driveitem-update?view=graph-rest-1.0), [delete](https://learn.microsoft.com/graph/api/driveitem-delete?view=graph-rest-1.0)).
-- **Google Drive (API v3)**: check, then write. The `File` resource has a `version` that increases on every change, and `headRevisionId` and `md5Checksum` for binary content ([File resource](https://developers.google.com/workspace/drive/api/reference/rest/v3/files)). Neither the File reference nor the upload guide ([manage uploads](https://developers.google.com/workspace/drive/api/guides/manage-uploads)) documents an `If-Match` precondition for updates. So the connector reads `version` immediately before writing and refuses if it moved. Two saves in the same second can still race; the next open on either device will see the other's write through the payload hash and flag it.
-- **Local file (File System Access API)**: check, then write, using the file's `lastModified` from `getFile()`.
+- **Google Drive (API v3)**: check, then write. The `File` resource has a `version` that increases on every change, and `headRevisionId` and `md5Checksum` for binary content ([File resource](https://developers.google.com/workspace/drive/api/reference/rest/v3/files)). Neither the File reference nor the upload guide ([manage uploads](https://developers.google.com/workspace/drive/api/guides/manage-uploads)) documents an `If-Match` precondition for updates. So the connector reads the file's metadata immediately before writing and refuses if it moved. Its `revision` is `headRevisionId`, which changes only when content changes (`version` also moves on metadata edits such as a rename or a share, which are not conflicts). Two saves can still race: A and B both check revision 1, A writes revision 2, then B writes revision 3 over it. B's save succeeds and B sees nothing wrong. That race is not prevented; it is caught on A's side by the "Overwritten" rule in Sync and conflicts, and A's version is never lost because it is still A's local working copy.
+- **Local file (File System Access API)**: check, then write, using the file's `lastModified` from `getFile()`. The same race is possible between two tabs or apps on one machine, and the same rule catches it.
 - **Download/upload fallback**: none. A downloaded file is a copy, not a link.
 
 ### R5. Google Drive: Picker plus `drive.file`, token model, no refresh token
@@ -142,7 +145,8 @@ So:
 - **Phase 4a (default): `Files.ReadWrite.AppFolder`.** The app reads and writes only its own folder, `Apps/<app name>/`, created on first use at `/me/drive/special/approot`. Users can see, move and share files there like any other folder ([App folder](https://learn.microsoft.com/graph/onedrive-sharepoint-appfolder), [Get special folder](https://learn.microsoft.com/graph/api/drive-get-specialfolder?view=graph-rest-1.0)). No picker: the app lists its folder itself.
 - **Phase 4b (opt-in, owner's call): the Picker v8 with `Files.ReadWrite`** (personal: `OneDrive.ReadWrite`), to open files outside the app folder, including ones another coach shared. This is a broader grant — every file in the user's OneDrive — and the consent screen says so. It would be requested incrementally, only when the coach taps "Open from OneDrive…", never at connect.
 - **Account types: open question.** The OneDrive permissions reference says `Files.ReadWrite.AppFolder` is valid only for personal accounts ([permissions reference](https://learn.microsoft.com/onedrive/developer/rest-api/concepts/permissions_reference?view=odsp-graph-online)), while the newer Graph app-folder article describes it for OneDrive and SharePoint ([App folder](https://learn.microsoft.com/graph/onedrive-sharepoint-appfolder)). Phase 4a should be verified against a work or school account before it is promised to one.
-- **Tokens: MSAL Browser (`@azure/msal-browser`), authorization code with PKCE.** No client secret. PKCE is required for single-page apps, and the redirect URI must be registered as type `spa` ([third-party cookies and SPAs](https://learn.microsoft.com/entra/identity-platform/reference-third-party-cookies-spas)). Access tokens last about an hour. Refresh tokens issued to an SPA last **24 hours, fixed, not sliding**; after that MSAL tries a hidden iframe, which browsers that block third-party cookies (Safari) defeat, so the app falls back to a popup ([refresh tokens](https://learn.microsoft.com/entra/identity-platform/refresh-tokens), [MSAL token lifetimes](https://learn.microsoft.com/entra/msal/javascript/browser/token-lifetimes), [acquire a token](https://learn.microsoft.com/entra/identity-platform/scenario-spa-acquire-token)).
+- **Tokens: MSAL Browser (`@azure/msal-browser`), authorization code with PKCE.** No client secret. PKCE is required for single-page apps, and the redirect URI must be registered as type `spa` ([third-party cookies and SPAs](https://learn.microsoft.com/entra/identity-platform/reference-third-party-cookies-spas)). Access tokens last about an hour. Refresh tokens issued to an SPA last **24 hours, fixed, not sliding**; after that MSAL tries a hidden iframe (which needs the `frame-src` entries in Security and privacy), and browsers that block third-party cookies (Safari) defeat that, so the app falls back to a popup ([refresh tokens](https://learn.microsoft.com/entra/identity-platform/refresh-tokens), [MSAL token lifetimes](https://learn.microsoft.com/entra/msal/javascript/browser/token-lifetimes), [acquire a token](https://learn.microsoft.com/entra/identity-platform/scenario-spa-acquire-token)).
+- **Redirect page.** MSAL Browser v5 sends every popup and silent-iframe response to a dedicated redirect page that loads only its redirect bridge (`@azure/msal-browser/redirect-bridge`, bundled as its own Vite entry) and calls `broadcastResponseToMainFrame()`. The planner ships it as `auth/redirect.html`. It must not be served with a `Cross-Origin-Opener-Policy` header, must not set `X-Frame-Options` stricter than `SAMEORIGIN` (the silent iframe loads it), and must not run the app or its router ([sign in users](https://learn.microsoft.com/entra/msal/javascript/browser/login-user), [v5 migration](https://learn.microsoft.com/entra/msal/javascript/browser/v4-migration)).
 - **Where tokens live:** MSAL `cacheLocation: "sessionStorage"` (cleared when the tab closes; MSAL keeps temporary request state in session storage or memory regardless — [MSAL caching](https://learn.microsoft.com/entra/msal/javascript/browser/caching)). Not `localStorage`: a 24-hour refresh token at rest in `localStorage` outlives the tab and is readable by any script that runs on the origin.
 - **Revocation:** "Disconnect OneDrive" clears MSAL's cache for the account (`logoutPopup` with the account, or `clearCache`). A browser app cannot revoke a Microsoft refresh token by API; the coach removes the app's consent at their Microsoft account's app permissions page, which the disconnect dialog links to.
 - MSAL is bundled from npm (lazy-loaded on first use, like `docx` under ADR-0020), so the Microsoft path adds no third-party script host.
@@ -158,7 +162,7 @@ So:
 - **Google Drive.** The coach shares the file in Drive. The recipient opens the static planner, taps "Open from Google Drive", and picks it in the Picker; under `drive.file` that pick is what grants this app access to that one file. An editor can save back (with conflict detection); a viewer's save fails with 403, and the app offers "Save a copy to my Drive".
 - **OneDrive (4a, app folder).** The coach shares the file or the whole app folder from OneDrive. The recipient cannot reach someone else's app folder with `Files.ReadWrite.AppFolder`, so they download it and open it (Local tier 2), or, if phase 4b ships, pick it with the Picker v8. Sharing therefore works, but round-tripping edits on OneDrive needs 4b.
 - **Local.** Email or message the file, as today.
-- **What a recipient sees**: the same document in their own static planner, with "last saved" (the envelope `updatedAt`) and, where the provider supplies it, who last modified the file. There is no presence, no live co-editing, no comments and no per-person permissions inside OpenLeague; the provider's sharing settings are the whole permission model.
+- **What a recipient sees**: the same document in their own static planner, with "last saved" (the envelope `updatedAt`, or the R2 fallback for a bare file, possibly "unknown") and, where the provider supplies it, who last modified the file. There is no presence, no live co-editing, no comments and no per-person permissions inside OpenLeague; the provider's sharing settings are the whole permission model.
 - **Hosted-only, per the roadmap's "supplements, never limits" rule**: team rosters and accounts, RSVPs, notifications and email, team sharing with roles, venue booking, audit logs, and any record that needs an authority (official league results). The static app never gains a relay server to emulate these.
 
 ### R9. Build-time configuration; no credentials, no connector
@@ -194,7 +198,11 @@ apps/planner/src/screens/storage/ "Save to…", "Open from…", conflict dialog,
 type ConnectorId = "local-file" | "google-drive" | "onedrive";
 
 interface RemoteRef { connector: ConnectorId; fileId: string; name: string; driveId?: string }
-interface RemoteFile extends RemoteRef { revision: string; modifiedAt: string; modifiedBy?: string; size: number; kind?: string }
+interface RemoteFile extends RemoteRef {
+  revision: string;     // opaque, content-bound: Drive headRevisionId, OneDrive cTag, FSA lastModified
+  modifiedAt: string;   // the provider's clock; passed to readDocument as source.modifiedAt
+  modifiedBy?: string; size: number; kind?: string;
+}
 
 type ConnectorError =
   | { code: "conflict"; remote: RemoteFile }   // revision moved since expectedRevision
@@ -228,14 +236,14 @@ interface StorageConnector {
     name: string;
     text: string;                                    // the serialized envelope
     kind: string; documentId: string;                // for provider metadata (appProperties)
-    expectedRevision: string | null;                 // null with ref = overwrite unconditionally (user chose "keep mine")
+    expectedRevision: string | null;                 // null only with ref = null (create); "Keep mine" passes the revision just seen
   }): Promise<Result<RemoteFile>>;
   delete?(ref: RemoteRef, expectedRevision: string): Promise<Result<void>>;
 }
 ```
 
 Notes:
-- Connectors move **text**, not parsed documents; parsing and validation stay in `lib/document-envelope/` so every connector gets identical checks.
+- Connectors move **text**, not parsed documents; parsing and validation stay in `lib/document-envelope/` so every connector gets identical checks. The sync engine calls `readDocument(text, { modifiedAt: file.modifiedAt })`.
 - `delete` is optional and not exposed in v1 UI: "Unlink" removes the local link only. Deleting a coach's cloud file is left to the provider's own UI, which has a trash.
 - Errors carry codes, never provider response bodies, so nothing a provider echoes back (a file name, an email) reaches logs.
 
@@ -243,20 +251,23 @@ Notes:
 
 States per linked document, derived from the link and the remote's current revision:
 
-| Local | Remote vs `baseRevision` | State | What happens |
-|---|---|---|---|
-| clean | same | **In sync** | nothing |
-| dirty | same | **Unsaved changes** | "Save" writes with `expectedRevision = baseRevision` |
-| clean | moved | **Newer copy available** | on open, refresh silently from remote (local had nothing to lose) |
-| dirty | moved | **Conflict** | the conflict dialog |
+| Local | Remote vs `baseRevision` | Base came from | State | What happens |
+|---|---|---|---|---|
+| clean | same | either | **In sync** | nothing |
+| dirty | same | either | **Unsaved changes** | "Save" writes with `expectedRevision = baseRevision` |
+| clean | moved | a read | **Newer copy available** | refresh silently from remote: this device's copy is one it read from the remote, so the remote's history already contains it |
+| clean | moved | this device's save | **Overwritten** | the conflict dialog, worded "Your save from <time> was replaced by <who> at <time>" |
+| dirty | moved | either | **Conflict** | the conflict dialog |
+
+The "Overwritten" row is what keeps the check-then-write race (R4) from losing work. When A's save is replaced, A's local copy may be the only place A's version still exists, because the other writer may never have read it. So a remote that moved past a version this device wrote is never taken silently. The rule is the same for every connector. On Drive and local files it catches the race; on OneDrive, where `if-match` prevents the race, it fires only when another device chose "Keep mine" over this one's save, which this device's coach should also hear about. `baseWrittenHere` is set by every successful save, including "Keep mine", and cleared by every open or refresh. So after A chooses "Keep mine", a later overwrite of that save prompts A again.
 
 The remote revision is checked when a linked document is opened, when the app regains focus or comes back online (at most once a minute per document), and as part of every save. There is no background polling and no service-worker sync in v1.
 
 **The conflict dialog** (from a failed save, or on open):
-- **Keep mine** — overwrite the remote (`expectedRevision` set to the revision just seen, so a third write still gets caught).
+- **Keep mine** — overwrite the remote (`expectedRevision` set to the revision just seen, so a third write still gets caught). The link then records `baseWrittenHere: true`. From "Overwritten", this restores this device's version as the head; the replaced remote version stays in the provider's history, and the other device sees "Overwritten" in turn.
 - **Use theirs** — replace the local copy with the remote one. The replaced local version is kept as a dated local copy for 30 days ("Recovered copies").
 - **Keep both** — save mine as a new file with a new envelope id ("<title> (my copy)"), and relink the local document to it; the other remains as it is.
-- The dialog shows both sides' "last saved" time and, where the provider gives it, who saved the other one. A side-by-side diff is out of scope; rankings, which already has a merge module (`lib/rankings-document/merge.ts`), could later offer "Merge" as a fourth choice.
+- The dialog shows both sides' "last saved" time (where known) and, where the provider gives it, who saved the other one. A side-by-side diff is out of scope; rankings, which already has a merge module (`lib/rankings-document/merge.ts`), could later offer "Merge" as a fourth choice.
 
 **Offline.** Edits always land in IndexedDB first. A save attempted offline fails with `offline`, leaves `dirty: true`, and the document shows "Saved on this device — will need saving to Drive". The app does not queue writes to replay automatically; the coach taps Save again (or a single "Save all" when back online). This keeps every remote write tied to a moment the coach chose, which matters when the conflict choice needs a person.
 
@@ -282,7 +293,7 @@ The remote revision is checked when a linked document is opened, when the app re
 
 1. Register an application in Microsoft Entra. Supported account types: **personal Microsoft accounts** at least; "any organizational directory and personal accounts" if work/school support is wanted (open question 4).
 2. Add the platform **Single-page application** with redirect URIs (Microsoft redirect URIs are full URLs, paths included):
-   - `https://openleague.dev/planner/auth/redirect.html` — a blank page the planner ships for MSAL popups, so the app itself never re-runs inside the popup.
+   - `https://openleague.dev/planner/auth/redirect.html` — the MSAL redirect-bridge page the planner ships (R6) for popups and the silent-renewal iframe, so the app itself never re-runs inside either.
    - `http://localhost:5173/planner/auth/redirect.html` (or the dev server's equivalent path).
 3. API permissions (delegated): Microsoft Graph `Files.ReadWrite.AppFolder` and `User.Read` (sign-in). Only for phase 4b: `Files.ReadWrite` and the SharePoint/OneDrive picker permissions the Picker v8 setup lists.
 4. No client secret or certificate: an SPA must not have one.
@@ -304,8 +315,9 @@ The deployment docs gain a "Cloud saving for forks" section with these steps. A 
 - **Least privilege.** Google: `drive.file` only. Microsoft: `Files.ReadWrite.AppFolder` by default; anything broader is an explicit, separate opt-in (R6) requested only when used.
 - **Token storage.** Google tokens in memory only (about an hour). Microsoft tokens in `sessionStorage` through MSAL (access about an hour; refresh 24 hours, fixed). Neither is ever written to IndexedDB, `localStorage`, the link table, a document, a URL or a log. The residual risk is script injection on the planner's origin, which could use a live token; the defence is the CSP below, no `innerHTML` with document content, and a narrow dependency set (MSAL is the only new runtime dependency, lazy-loaded).
 - **CSP.** Changes only when a connector is configured at build time, and only for that provider. Expected additions (to confirm against the providers' current behaviour during implementation, since Google's scripts are not versioned):
-  - Google: `script-src https://apis.google.com https://accounts.google.com`; `frame-src https://docs.google.com https://accounts.google.com https://content.googleapis.com`; `connect-src https://www.googleapis.com https://content.googleapis.com https://oauth2.googleapis.com`; `style-src https://accounts.google.com`.
-  - Microsoft: `connect-src https://login.microsoftonline.com https://graph.microsoft.com`, and for 4b the user's SharePoint host (`https://*.sharepoint.com`) and `https://onedrive.live.com`. The picker and sign-in run in popups, so no `frame-src` is needed unless MSAL's silent iframe is used (`frame-src https://login.microsoftonline.com`).
+  - **`frame-src` must list `'self'` whenever it is set.** Today `frame-src` falls back to `default-src 'self'`. Once either provider adds an explicit `frame-src`, that fallback stops, and the MSAL silent iframe, which ends on the planner's own `auth/redirect.html`, would be blocked.
+  - Google: `script-src https://apis.google.com https://accounts.google.com/gsi/client`; `frame-src 'self' https://docs.google.com https://accounts.google.com/gsi/ https://content.googleapis.com`; `connect-src https://accounts.google.com/gsi/ https://www.googleapis.com https://content.googleapis.com https://oauth2.googleapis.com`; `style-src https://accounts.google.com/gsi/style`. The `accounts.google.com/gsi/` entries are the ones Google lists for Identity Services ([GIS setup, Content Security Policy](https://developers.google.com/identity/gsi/web/guides/get-google-api-clientid)); the earlier draft missed `connect-src https://accounts.google.com/gsi/`. The token client itself opens a popup, so it needs no further `frame-src`; the Picker's frames come from `docs.google.com`.
+  - Microsoft: `connect-src https://login.microsoftonline.com https://graph.microsoft.com`, and **required** `frame-src 'self' https://login.microsoftonline.com`. Silent renewal is not optional for this connector: once the 24-hour SPA refresh token expires, `acquireTokenSilent` loads the authority in a hidden iframe, and without these entries every renewal would fail and fall back to a popup even in browsers that allow third-party cookies. Sign-in for personal accounts may redirect inside that iframe through `https://login.live.com`; whether it does for the configured authority (`/consumers` or `/common`) is to be checked in implementation, and if it does, that host joins `frame-src`. For 4b, add the user's SharePoint host (`https://*.sharepoint.com`) and `https://onedrive.live.com` to `connect-src`; the picker itself runs in a popup.
   - `form-action 'none'` stays. The Picker v8 is started by a form POST, but into a popup window it opens, so the planner page's own `form-action` should not apply; this must be checked in implementation, and if it does apply, `form-action` gains only the picker host.
   - Subresource integrity is not possible for Google's scripts (they change without notice). That is a known cost of the Drive connector and a reason it is a build-time opt-in.
 - **Logging.** The static app has no telemetry and this adds none. Console errors carry the connector id and the `ConnectorError` code (and HTTP status for `provider`) only — never tokens, file names, file ids, document content or provider response bodies.
@@ -326,15 +338,16 @@ Each phase ships alone and leaves the app fully working.
 
 ### Testing
 
-- **Envelope (phase 1):** unit tests for bare plan, bare rankings, wrapped of each, `kind`/payload mismatch, newer `envelope`, unknown `kind`, newer payload version (the kind's own message survives), oversized, and round trip (`wrap → serialize → read`). The hosted import gets a test that a wrapped plan file imports.
-- **Connector contract tests.** One shared suite, `describeConnectorContract(make)`, that every connector must pass: create then open returns the same text; save with a stale `expectedRevision` returns `conflict` with the remote's revision; unconditional save after a conflict succeeds; `not-found` after a remote delete; `auth-required` when the token is withdrawn; `offline` when the network fails; list filters by kind. It runs against:
+- **Envelope (phase 1):** unit tests for bare plan, bare rankings, wrapped of each, `updatedAt` fallback (bare plan → `exportedAt`; bare rankings → `null` with no source, `source.modifiedAt` with one; wrapped → the envelope's own value even when a source is given), `kind`/payload mismatch, newer `envelope`, unknown `kind`, newer payload version (the kind's own message survives), oversized, and round trip (`wrap → serialize → read`). The hosted import gets a test that a wrapped plan file imports.
+- **Connector contract tests.** One shared suite, `describeConnectorContract(make)`, that every connector must pass: create then open returns the same text; save with a stale `expectedRevision` returns `conflict` with the remote's revision; a save with the revision returned by that conflict succeeds ("Keep mine"); a metadata-only change (rename) does not change `revision`; `not-found` after a remote delete; `auth-required` when the token is withdrawn; `offline` when the network fails; list filters by kind. It runs against:
   - `fake.ts` (in memory; simulates revisions, concurrent writers, expiry and offline);
   - the Drive and OneDrive connectors over a fake `fetch` that reproduces the documented request and response shapes (metadata, `version`, `If-Match`/412, 401, 403, 404, 429). CI makes no calls to Google or Microsoft;
   - the Local connector over a fake FSA handle.
-  The Drive run asserts its `conditionalWrite` is `"check-then-write"` and that it reads `version` before every overwrite; OneDrive asserts every overwrite sends `if-match`.
+  The Drive run asserts its `conditionalWrite` is `"check-then-write"`, that it reads the file's metadata before every overwrite, and that `revision` is `headRevisionId`; OneDrive asserts every overwrite sends `if-match`.
 - **Sync engine:** state-table tests against the fake (every row of the table above, plus offline save, focus re-check throttling, "keep both" assigning a new id, "use theirs" keeping a recovered copy).
-- **CSP:** a build test that the CSP is unchanged with no connector variables set, and contains exactly the provider's hosts when they are.
-- **Manual, owner-run** (needs real accounts): connect, save, open on a second browser, edit both, resolve a conflict, share to a second account, revoke — once per provider, on desktop and on a phone.
+- **The check-then-write race, step by step**, against the fake in check-then-write mode: A and B open revision 1; A's check passes; B's check passes (still revision 1); A writes revision 2; B writes revision 3. Assert B's save succeeds, A's next check yields "Overwritten" (not a refresh) and A's local content is untouched. A chooses "Keep mine" → revision 4 with A's content; assert B's next check yields "Overwritten" and B's content is untouched. B chooses "Use theirs" → B holds A's content and B's version is in Recovered copies. At no step does either device replace local content without a choice. The same sequence runs in atomic mode, where B's write gets `conflict` instead, B chooses "Keep mine", and A is then told "Overwritten".
+- **CSP:** a build test that the CSP is unchanged with no connector variables set, and contains exactly the hosts listed in Security and privacy when they are, including `'self'` in every `frame-src` and `frame-src https://login.microsoftonline.com` whenever the OneDrive connector is built. A second check confirms `auth/redirect.html` loads only the redirect bridge.
+- **Manual, owner-run** (needs real accounts): connect, save, open on a second browser, edit both, resolve a conflict, let a OneDrive session pass 24 hours and confirm silent renewal works where third-party cookies are allowed, share to a second account, revoke — once per provider, on desktop and on a phone.
 - The existing gates apply: `bun run type-check`, `bun run lint`, the full suite, and `bun run planner:build && bun run planner:check`, which also checks that MSAL and the Google loaders stay out of the entry chunk.
 
 ## Alternatives considered
@@ -353,6 +366,8 @@ Each phase ships alone and leaves the app fully working.
 - *Third-party sync backends (Dropbox, iCloud, WebDAV, a hosted CRDT service).* Not rejected on principle; out of scope until Drive and OneDrive prove the interface. The `StorageConnector` interface is meant to admit them.
 - *Real-time co-editing (CRDTs over the provider).* Rejected for now: providers offer no change feed a static app can use cheaply, and coaches' documents are small and edited by one person at a time. Conflict choice covers the realistic case.
 - *Automatic last-writer-wins.* Rejected: silently loses a coach's work, which success criterion 4 forbids.
+- *Catch the Drive race on the writer that lost it with a read-back after each write.* Rejected as the mechanism: it only narrows the window (the other write can land after the read-back), and it costs a request per save. The "Overwritten" rule needs no extra request and has no window.
+- *Recover the overwritten content from Drive's revision history.* Rejected as the mechanism: Drive downloads only revisions marked `keepForever`, purges the rest after about 30 days or 100 revisions, and counts kept revisions against the coach's storage ([manage revisions](https://developers.google.com/workspace/drive/api/guides/manage-revisions)). The overwritten version is already in the local copy of the device that wrote it. Drive's history remains a recovery path the coach can use in Drive's own UI.
 - *Do nothing (files only).* The current state; it works, but every cross-device or two-coach workflow is manual and error-prone.
 
 ## Out of scope

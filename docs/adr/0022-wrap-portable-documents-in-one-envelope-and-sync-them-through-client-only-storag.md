@@ -66,12 +66,12 @@ OneDrive File Picker v8 only shows what the app's token can already reach.
 We will wrap portable documents in one envelope and save them to the coach's own
 storage through browser-only connectors.
 
-- **Envelope.** `{ format: "openleague.document", envelope: 1, kind, version, id, updatedAt, generator, payload }`. The payload is the existing bare document, unchanged and parsed by its existing parser. Readers accept both bare and wrapped forms indefinitely, with no migration. Wrapped files are written only where every reader understands them, and the plan URL fragment stays bare.
+- **Envelope.** `{ format: "openleague.document", envelope: 1, kind, version, id, updatedAt, generator, payload }`. The payload is the existing bare document, unchanged and parsed by its existing parser. Readers accept both bare and wrapped forms indefinitely, with no migration. `readDocument(raw, source?)` takes the storage's modified time as `source.modifiedAt`; a bare document's `updatedAt` comes from the kind's own timestamp, then that source time, else `null` (unknown). Wrapped files are written only where every reader understands them, and the plan URL fragment stays bare.
 - **Local first.** IndexedDB stays the working copy and the source of truth offline. A connector is a remote: list, pick, open, save (with an expected revision) and optional delete. Per-device sync state lives in a local link table, never in the file.
-- **Conflicts.** Detection uses the provider's revision, never client clocks: atomic `if-match` on OneDrive, a `version` check right before writing on Google Drive (which documents no precondition header), and `lastModified` for local file handles. A detected conflict is the coach's choice: keep mine, use theirs, or keep both.
+- **Conflicts.** Detection uses the provider's revision, never client clocks: atomic `if-match` on OneDrive, a `headRevisionId` check right before writing on Google Drive (which documents no precondition header), and `lastModified` for local file handles. A detected conflict is the coach's choice: keep mine, use theirs, or keep both. A remote that moved past a version this device itself saved (including after "keep mine") is also a conflict, never a silent refresh, so the check-then-write race cannot lose the overwritten save.
 - **Google Drive.** `drive.file` only, the Picker for files the app did not create, and the Google Identity Services token model. The token stays in memory and no refresh token is issued.
 - **OneDrive.** `Files.ReadWrite.AppFolder` by default, with MSAL authorization code + PKCE and tokens in `sessionStorage`. The Picker v8 with `Files.ReadWrite` is a separate, explicit opt-in, because it grants the whole drive.
-- **No backend.** No OpenLeague server sees a token or a document. Cloud connectors exist only in builds configured with their public client identifiers, and the CSP widens only for a configured provider.
+- **No backend.** No OpenLeague server sees a token or a document. Cloud connectors exist only in builds configured with their public client identifiers, and the CSP widens only for a configured provider. When OneDrive is configured, `frame-src 'self' https://login.microsoftonline.com` is required for MSAL silent renewal, and any explicit `frame-src` keeps `'self'`.
 
 ## Options considered
 
@@ -101,7 +101,7 @@ Files and IndexedDB only. It works, but every cross-device or two-coach workflow
 ## Trade-offs
 
 - **The envelope is a second public contract** on top of each kind's. It is versioned on its own and kept small for that reason.
-- **Uneven guarantees.** Drive conflict detection has a small race window that OneDrive's does not. The connector exposes this as a capability, not a hidden difference.
+- **Uneven guarantees.** Drive and local-file writes can race where OneDrive's cannot: a second writer can replace a save without being stopped. The race is caught afterwards on the device whose save was replaced, which still holds that version locally and is asked what to keep. The connector exposes the difference as a capability, not a hidden one.
 - **Uneven privacy.** OneDrive sharing between coaches needs either download-and-open or the broader picker scope. Microsoft has nothing as narrow as `drive.file`.
 - **Third-party script hosts.** Google's loaders cannot carry subresource integrity, which loosens the planner's `script-src 'self'` in builds that enable Drive.
 - **Re-consent.** Microsoft SPA refresh tokens last 24 hours (fixed), and Google issues none, so coaches will see sign-in popups more often than in a server-backed app.
