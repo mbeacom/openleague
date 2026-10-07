@@ -45,17 +45,26 @@ describe("rink markings (scale model)", () => {
     it("puts the vertical lines on the device pixel grid when the transform allows", () => {
         const { ctx, calls } = recordingCtx({ a: 2, b: 0, c: 0, d: 2, e: 0, f: 0 });
         drawRink(ctx, createTransformContext(800, 400), { cache: false });
-        // The 1 ft lines (3.8 px here): center red, two blue, two goal lines; the outline's straight runs are 3 px wide.
+        // The 1 ft lines (3.8 px, 7.6 device px, drawn 8 device px wide): center red, two blue, two goal lines;
+        // the outline's straight runs are 3 px wide.
         const verticals = calls.filter((c, i) =>
-            c.name === "moveTo" && Math.abs(c.lineWidth - 3.8) < 1e-9 &&
+            c.name === "moveTo" && Math.abs(c.lineWidth - 4) < 1e-9 &&
             calls[i + 1]?.name === "lineTo" && (calls[i + 1].args[0] as number) === (c.args[0] as number));
         expect(verticals).toHaveLength(5);
         for (const v of verticals) {
             const deviceX = 2 * (v.args[0] as number);
-            const offset = Math.round(v.lineWidth * 2) % 2 ? 0.5 : 0; // 7.6 → 8 device px, even: whole pixels
+            const offset = Math.round(v.lineWidth * 2) % 2 ? 0.5 : 0; // 8 device px, even: whole pixels
             const onGrid = deviceX - offset;
             expect(Math.abs(onGrid - Math.round(onGrid)), `x ${v.args[0]}`).toBeLessThan(1e-9);
         }
+    });
+
+    it("rounds the vertical lines' width to whole device pixels", () => {
+        const { ctx, calls } = recordingCtx({ a: 2, b: 0, c: 0, d: 2, e: 0, f: 0 });
+        drawRink(ctx, createTransformContext(800, 400), { cache: false });
+        const widths = strokeWidths(calls);
+        expect(widths).not.toContain(3.8);
+        expect(widths.filter((w) => w === 4)).toHaveLength(5);
     });
 
     it("draws unsnapped without getTransform", () => {

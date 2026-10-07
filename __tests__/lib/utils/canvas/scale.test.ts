@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MIN_LINE_PX, REFERENCE_PX_PER_FT, refPx, snapLineX } from "@/lib/utils/canvas/scale";
+import { MIN_LINE_PX, REFERENCE_PX_PER_FT, refPx, snapLineWidth, snapLineX } from "@/lib/utils/canvas/scale";
 
 describe("refPx", () => {
     it("returns the reference size exactly at the reference scale", () => {
@@ -46,5 +46,26 @@ describe("snapLineX", () => {
         expect(snapLineX({ getTransform: () => undefined } as unknown as CanvasRenderingContext2D, 75.3, 1)).toBe(75.3);
         expect(snapLineX(ctxWith({ a: 1, b: 0.5, c: 0, d: 1, e: 0, f: 0 }), 75.3, 1)).toBe(75.3);
         expect(snapLineX(ctxWith({ a: 1, b: 0, c: 0.5, d: 1, e: 0, f: 0 }), 75.3, 1)).toBe(75.3);
+    });
+});
+
+describe("snapLineWidth", () => {
+    const ctxWith = (a: number, b = 0) =>
+        ({ getTransform: () => ({ a, b, c: 0, d: a, e: 0, f: 0 }) }) as unknown as CanvasRenderingContext2D;
+
+    it("rounds the width to whole device pixels", () => {
+        expect(snapLineWidth(ctxWith(2), 3.8)).toBe(4); // 7.6 → 8 device px
+        expect(snapLineWidth(ctxWith(1), 3.8)).toBe(4);
+        expect(snapLineWidth(ctxWith(3), 1.5)).toBeCloseTo(5 / 3); // 4.5 → 5 device px
+    });
+
+    it("never goes below one device pixel", () => {
+        expect(snapLineWidth(ctxWith(2), 0.1)).toBe(0.5);
+    });
+
+    it("leaves the width alone without getTransform, or under a rotation", () => {
+        expect(snapLineWidth({} as CanvasRenderingContext2D, 3.8)).toBe(3.8);
+        expect(snapLineWidth({ getTransform: () => undefined } as unknown as CanvasRenderingContext2D, 3.8)).toBe(3.8);
+        expect(snapLineWidth(ctxWith(1, 0.5), 3.8)).toBe(3.8);
     });
 });

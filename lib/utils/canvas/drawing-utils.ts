@@ -287,7 +287,10 @@ export function drawElement(
     // Draw selection highlight if selected
     if (isSelected) {
         ctx.strokeStyle = SELECTION_COLOR;
-        ctx.lineWidth = refPx(element.strokeWidth + 4, Math.min(transform.scaleX, transform.scaleY));
+        const pxPerFt = Math.min(transform.scaleX, transform.scaleY);
+        // The line plus 2 reference px a side, and never less than a floor's width a side, so it shows on a phone.
+        const line = refPx(element.strokeWidth, pxPerFt, floors.linePx);
+        ctx.lineWidth = Math.max(refPx(element.strokeWidth + 4, pxPerFt), line + 2 * floors.linePx);
         ctx.lineCap = "round";
         ctx.lineJoin = "round";
         ctx.globalAlpha = 0.5;

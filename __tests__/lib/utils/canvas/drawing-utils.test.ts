@@ -5,6 +5,7 @@ import {
     drawBoardScene,
     drawBoardFrame,
     drawElement,
+    boardStrokeFloors,
     drawLineHandles,
     drawSnapRing,
     drawTextAnnotation,
@@ -396,6 +397,18 @@ describe("stroke ends in proportion to the rink (scale model)", () => {
         const pxPerFt = Math.min(zoomed.scaleX, zoomed.scaleY);
         drawElement(ctx, element as never, zoomed, true);
         expect(widths[0]).toBeCloseTo((2 + 4) * (pxPerFt / 3.8));
+    });
+
+    it("keeps at least a floor's width of highlight on each side on a phone-width board", () => {
+        const widths: number[] = [];
+        const ctx = recordingCtx([]);
+        Object.defineProperty(ctx, "lineWidth", { set: (v: number) => widths.push(v), get: () => widths.at(-1) ?? 1, configurable: true });
+        const element = { id: "s", action: "skate" as const, path: "straight" as const, end: "none" as const, points: [{ x: 100, y: 40 }, { x: 110, y: 40 }], color: "#000", strokeWidth: 2 };
+        const phone = createTransformContext(360, 180); // about 1.6 px/ft: the line is floored to 1.5 px
+        const floors = boardStrokeFloors(1);
+        drawElement(ctx, element as never, phone, true, floors);
+        const line = buildStrokeGeometry({ ...element, points: element.points }, Math.min(phone.scaleX, phone.scaleY), floors.linePx).lineWidth;
+        expect(widths[0]).toBeGreaterThanOrEqual(line + 2 * floors.linePx - 1e-9);
     });
 });
 
