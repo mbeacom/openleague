@@ -211,6 +211,23 @@ describe("TeamMarkImage: the Crest's font", () => {
         expect(await screen.findByRole("img", { name: "Ice Hawks logo" })).toHaveAttribute("src", "data:image/png;base64,CREST");
     });
 
+    it("doesn't throw when the font API disappears before the redraw check", async () => {
+        let loaded = false;
+        let readsAfterLoad = 0;
+        const fonts = {
+            load: vi.fn(() => Promise.resolve().then(() => void (loaded = true))),
+            check: () => false,
+        };
+        // The re-render after the load still sees the API; the effect after it doesn't.
+        Object.defineProperty(document, "fonts", {
+            configurable: true,
+            get: () => (!loaded || readsAfterLoad++ === 0 ? fonts : undefined),
+        });
+        render(<TeamMarkImage mark={{ ...MARK, logoUrl: null }} />);
+        expect(await screen.findByRole("img", { name: "Ice Hawks logo" })).toHaveAttribute("src", "data:image/png;base64,CREST");
+        expect(readsAfterLoad).toBeGreaterThan(1);
+    });
+
     it("doesn't wait for a font while the logo shows", () => {
         const load = stubFonts(() => new Promise(() => {}));
         render(<TeamMarkImage mark={MARK} />);
