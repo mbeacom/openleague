@@ -97,10 +97,11 @@ describe("drawStationMap", () => {
 
     it("draws the rink once, its markings clipped to the rounded outline", () => {
         const calls = draw([{ name: "Breakout", playData: breakout }, { name: "Regroup", playData: regroup }]);
+        // Two clips to the outline, drawn once: the ice's edge shadow (spec §3), then the markings.
         const rinkClips = calls.flatMap((c, i) => (c.name === "clip" && calls[i - 1]?.name === "roundRect" ? [i] : []));
-        expect(rinkClips).toHaveLength(1);
-        // The rink's clip is released before the first station's own clip.
-        const restore = calls.findIndex((c, i) => i > rinkClips[0] && c.name === "restore");
+        expect(rinkClips).toHaveLength(2);
+        // The rink's clips are released before the first station's own clip.
+        const restore = calls.findIndex((c, i) => i > rinkClips[1] && c.name === "restore");
         expect(restore).toBeLessThan(stationClipIndexes(calls)[0]);
     });
 

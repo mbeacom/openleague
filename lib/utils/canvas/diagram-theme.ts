@@ -9,11 +9,17 @@ import { DIAGRAM_FONT_FAMILY } from "./diagram-fonts";
 export const DIAGRAM_THEME = {
     /** Canvas outside the rink */
     surround: "#FFFFFF",
-    ice: "#E8F4F8",
-    boards: "#000000",
+    ice: "#F4F9FC",
+    /** The radial lightening toward center ice */
+    iceCenter: "#FFFFFF",
+    /** Inner shadow along the boards, 1.5 ft wide */
+    iceEdgeShadow: "rgba(13, 71, 161, 0.08)",
+    boards: BOARD_COLORS.leagueBlue,
+    /** The lighter inner kick plate inside the boards line */
+    kickPlate: "#B3C7E6",
     redLine: "#C8102E",
-    blueLine: "#003087",
-    creaseFill: "rgba(200, 16, 46, 0.1)",
+    blueLine: BOARD_COLORS.leagueBlue,
+    creaseFill: "rgba(155, 198, 232, 0.6)",
     /** Ink for pucks, outlines and the default text color */
     ink: BOARD_COLORS.ink,
     /** Shading over ice outside a drill's area */

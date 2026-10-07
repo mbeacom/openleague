@@ -351,19 +351,50 @@ export const ICE_COLOR = DIAGRAM_THEME.ice;
 /**
  * Draws the ice surface
  */
+/** A radial fill when the context supports it; otherwise null (recorded and mocked test contexts). */
+function radialFill(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, inner: string, outer: string): CanvasGradient | null {
+    if (typeof ctx.createRadialGradient !== "function") return null;
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r) as CanvasGradient | undefined;
+    if (!g || typeof g.addColorStop !== "function") return null;
+    g.addColorStop(0, inner);
+    g.addColorStop(1, outer);
+    return g;
+}
+
 function drawIceSurface(ctx: CanvasRenderingContext2D, transform: TransformContext): void {
-    ctx.fillStyle = DIAGRAM_THEME.ice;
+    const o = rinkOutline(transform);
+    const center = { x: o.x + o.width / 2, y: o.y + o.height / 2 };
+    ctx.fillStyle = radialFill(ctx, center.x, center.y, o.width / 2, DIAGRAM_THEME.iceCenter, DIAGRAM_THEME.ice) ?? DIAGRAM_THEME.ice;
     traceRinkOutline(ctx, transform);
     ctx.fill();
+    // A soft inner shadow along the boards: a wide stroke of the outline, clipped to the ice.
+    ctx.save();
+    traceRinkOutline(ctx, transform);
+    ctx.clip();
+    ctx.strokeStyle = DIAGRAM_THEME.iceEdgeShadow;
+    ctx.lineWidth = 3 * transform.scaleX; // 1.5 ft inside the clip
+    traceRinkOutline(ctx, transform);
+    ctx.stroke();
+    ctx.restore();
 }
 
 /**
  * Draws the boards (rink outline)
  */
 function drawBoards(ctx: CanvasRenderingContext2D, transform: TransformContext): void {
+    const outer = refPx(3, transform.scaleX);
     ctx.strokeStyle = DIAGRAM_THEME.boards;
-    ctx.lineWidth = refPx(3, transform.scaleX);
+    ctx.lineWidth = outer;
     traceRinkOutline(ctx, transform);
+    ctx.stroke();
+    // The kick plate: a lighter line just inside the boards.
+    const plate = refPx(1, transform.scaleX);
+    const inset = outer / 2 + plate / 2;
+    const o = rinkOutline(transform);
+    ctx.strokeStyle = DIAGRAM_THEME.kickPlate;
+    ctx.lineWidth = plate;
+    ctx.beginPath();
+    ctx.roundRect(o.x + inset, o.y + inset, o.width - 2 * inset, o.height - 2 * inset, Math.max(0, o.radius - inset));
     ctx.stroke();
 }
 
@@ -498,6 +529,17 @@ function drawFaceoffCircles(ctx: CanvasRenderingContext2D, transform: TransformC
         ctx.beginPath();
         ctx.arc(center.x, center.y, radius, 0, Math.PI * 2);
         ctx.stroke();
+        // Hash marks: two 2 ft marks on each side, 1.5 ft above and below the circle's center line.
+        const ft = transform.scaleX;
+        for (const side of [-1, 1]) {
+            for (const dy of [-1.5, 1.5]) {
+                const x0 = center.x + side * radius;
+                ctx.beginPath();
+                ctx.moveTo(x0, center.y + dy * ft);
+                ctx.lineTo(x0 + side * 2 * ft, center.y + dy * ft);
+                ctx.stroke();
+            }
+        }
     });
 }
 
