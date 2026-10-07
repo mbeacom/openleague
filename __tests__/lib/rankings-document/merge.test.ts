@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { parseRankings } from "@/lib/rankings-document";
 import { applySnakeChart, createRankingsDocument, gameKeys, mergeSchedule, resolveConflict } from "@/lib/rankings-document";
 import type { ParsedSchedule } from "@/lib/ratings/import";
 
@@ -55,6 +56,38 @@ describe("mergeSchedule", () => {
         expect(doc.games[0].awayGoals).toBe(1);
         expect(resolveConflict(doc, summary.conflicts[0], "existing")).toBe(doc);
         expect(resolveConflict(doc, summary.conflicts[0], "incoming").games[0].awayGoals).toBe(2);
+    });
+
+    it("resolves a swapped-orientation conflict in the existing game's orientation", () => {
+        const first = mergeSchedule(createRankingsDocument({ title: "x" }), parsed([game("901", "902", 3, 1)])).doc;
+        const { doc, summary } = mergeSchedule(first, parsed([game("902", "901", 5, 3)]));
+        expect(summary.conflicts).toHaveLength(1);
+        expect(resolveConflict(doc, summary.conflicts[0], "incoming").games[0]).toMatchObject({ home: "901", away: "902", homeGoals: 3, awayGoals: 5 });
+    });
+
+    it("keeps a final game when the incoming one is only scheduled", () => {
+        const first = mergeSchedule(createRankingsDocument({ title: "x" }), parsed([game("901", "902", 3, 1)])).doc;
+        const { doc, summary } = mergeSchedule(first, parsed([game("901", "902", null, null)]));
+        expect(summary).toEqual({ added: 0, updated: 0, unchanged: 1, conflicts: [] });
+        expect(doc.games[0]).toMatchObject({ status: "final", homeGoals: 3, awayGoals: 1 });
+    });
+
+    it("clamps imported text so the merged document still parses", () => {
+        const p = parsed([{ ...game("901", "902", 3, 1), rink: "R".repeat(150) }]);
+        p.teams = [
+            { number: "901", name: `A\u0007${"N".repeat(200)}` },
+            { number: "902", name: "\u0007" },
+        ];
+        const { doc } = mergeSchedule(createRankingsDocument({ title: "x" }), p);
+        expect(doc.teams[0].name).toHaveLength(100);
+        expect(doc.teams[0].name).not.toContain("\u0007");
+        expect(doc.teams[1].name).toBe("902");
+        expect(doc.games[0].rink).toHaveLength(100);
+        expect(parseRankings(doc).ok).toBe(true);
+        const chart = applySnakeChart(doc, { teams: [{ number: "901", name: null, startingBracket: "B".repeat(60) }, { number: "902", name: null, startingBracket: "\u0007" }], unparsed: [] });
+        expect(chart.doc.teams[0].startingBracket).toHaveLength(40);
+        expect(chart.doc.teams[1].startingBracket).toBeNull();
+        expect(parseRankings(chart.doc).ok).toBe(true);
     });
 
     it("keeps a double-header as two games", () => {

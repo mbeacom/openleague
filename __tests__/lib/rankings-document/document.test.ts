@@ -64,7 +64,11 @@ describe("parseRankings", () => {
 
     it("drops unknown keys", () => {
         const result = parseRankings({ ...sample(), extra: 1, meta: { ...sample().meta, junk: true } });
-        expect(result.ok && "extra" in result.doc).toBe(false);
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+            expect("extra" in result.doc).toBe(false);
+            expect("junk" in result.doc.meta).toBe(false);
+        }
     });
 });
 

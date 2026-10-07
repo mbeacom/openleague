@@ -6,7 +6,7 @@
  */
 import type { ParsedSchedule, ParsedSnakeChart } from "@/lib/ratings/import";
 import { compareTeamNumbers } from "@/lib/ratings";
-import type { RankingsDocument, RankingsGame } from "./document";
+import { cleanImportedText, type RankingsDocument, type RankingsGame } from "./document";
 
 interface Keyable {
     date: string;
@@ -64,7 +64,7 @@ export function mergeSchedule(doc: RankingsDocument, parsed: ParsedSchedule): { 
             homeGoals: p.homeGoals,
             awayGoals: p.awayGoals,
             status: p.homeGoals === null || p.awayGoals === null ? "scheduled" : "final",
-            rink: p.rink,
+            rink: cleanImportedText(p.rink, 100) || null,
         };
         if (incoming.status === "scheduled") {
             incoming.homeGoals = null;
@@ -98,7 +98,7 @@ export function mergeSchedule(doc: RankingsDocument, parsed: ParsedSchedule): { 
     for (const team of parsed.teams) {
         if (known.has(team.number)) continue;
         known.add(team.number);
-        teams.push({ number: team.number, name: team.name, startingBracket: null, excluded: false });
+        teams.push({ number: team.number, name: cleanImportedText(team.name, 100) || team.number, startingBracket: null, excluded: false });
     }
     for (const game of games) {
         for (const number of [game.home, game.away]) {
@@ -126,7 +126,7 @@ export function applySnakeChart(doc: RankingsDocument, chart: ParsedSnakeChart):
         const bracket = brackets.get(team.number);
         if (bracket === undefined) return team;
         matched += 1;
-        return { ...team, startingBracket: bracket };
+        return { ...team, startingBracket: cleanImportedText(bracket, 40) || null };
     });
     return { doc: { ...doc, teams }, matched, ignored: chart.teams.length - matched };
 }

@@ -20,6 +20,9 @@ export const INVALID_RANKINGS_MESSAGE = "This rankings file has problems and can
 const CONTROL = /[\u0000-\u001f\u007f]/g;
 const clean = (text: string) => text.replace(CONTROL, "").trim();
 
+/** Bring imported text within the schema's rules: strip control characters, trim, truncate to `max`. */
+export const cleanImportedText = (text: string | null | undefined, max: number): string => clean(text ?? "").slice(0, max).trim();
+
 const requiredText = (max: number, label: string) =>
     z
         .string({ message: `${label} must be text` })
