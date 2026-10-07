@@ -19,6 +19,7 @@ import {
     Typography,
 } from "@mui/material";
 import { CSHL_8U_METHOD } from "@/lib/ratings";
+import type { ActionResult } from "@/lib/planner-store";
 import type { RankingsDocument, RankingsGame } from "@/lib/rankings-document";
 import { navigateTo } from "../../platform";
 import { staticRoutes } from "../../routes";
@@ -29,9 +30,13 @@ import { useRankingsDoc } from "./useRankingsDoc";
 export const SAVE_SETUP_LABEL = "Save setup";
 export const CLEAR_ALL_LABEL = "Delete these rankings";
 
-const goalsValue = (text: string): number | null => (text.trim() === "" || !/^\d{1,2}$/.test(text.trim()) ? null : Number(text));
+/** undefined = ignore the keystroke (not 0-2 digits); null = a deliberate clear. */
+const goalsValue = (text: string): number | null | undefined => {
+    if (text === "") return null;
+    return /^\d{1,2}$/.test(text) ? Number(text) : undefined;
+};
 
-function Editor({ initial, save, clear }: { initial: RankingsDocument; save: LocalPlannerStore["saveRankings"]; clear: () => Promise<unknown> }) {
+function Editor({ initial, save, clear }: { initial: RankingsDocument; save: LocalPlannerStore["saveRankings"]; clear: () => Promise<ActionResult<null>> }) {
     const [doc, setDoc] = useState<RankingsDocument>(initial);
     const [error, setError] = useState<string | null>(null);
     const [confirmClear, setConfirmClear] = useState(false);
@@ -44,7 +49,21 @@ function Editor({ initial, save, clear }: { initial: RankingsDocument; save: Loc
     const setGame = (index: number, patch: Partial<RankingsGame>) =>
         setDoc((d) => ({ ...d, games: d.games.map((g, i) => (i === index ? { ...g, ...patch } : g)) }));
 
+    const clearAll = async () => {
+        const result = await clear();
+        if (result.success) navigateTo(staticRoutes.rankings());
+        else {
+            setError(result.error);
+            setConfirmClear(false);
+        }
+    };
+
     const submit = async () => {
+        const half = doc.games.find((g) => (g.homeGoals === null) !== (g.awayGoals === null));
+        if (half) {
+            setError(`Enter both scores or neither for ${half.date} ${half.home} vs ${half.away}.`);
+            return;
+        }
         const result = await save(doc);
         if (result.success) {
             setError(null);
@@ -77,13 +96,13 @@ function Editor({ initial, save, clear }: { initial: RankingsDocument; save: Loc
                 </Typography>
                 {doc.method.levels.map((level, i) => (
                     <Stack key={i} direction="row" spacing={1} sx={{ alignItems: "center" }}>
-                        <TextField label={`Name of level ${i + 1}`} value={level.name} onChange={(e) => setLevel(i, { name: e.target.value })} size="small" />
+                        <TextField label={`Name of level ${i + 1}`} value={level.name} onChange={(e) => setLevel(i, { name: e.target.value })} />
                         <TextField
                             label={`Size of level ${i + 1}`}
                             type="number"
                             value={level.size}
                             onChange={(e) => setLevel(i, { size: Number(e.target.value) })}
-                            size="small"
+                           
                             sx={{ width: 140 }}
                         />
                         <IconButton
@@ -111,7 +130,7 @@ function Editor({ initial, save, clear }: { initial: RankingsDocument; save: Loc
                     Teams
                 </Typography>
                 <TableContainer component={Paper} variant="outlined">
-                    <Table size="small" aria-label="Teams">
+                    <Table aria-label="Teams">
                         <TableHead>
                             <TableRow>
                                 <TableCell>My team</TableCell>
@@ -125,25 +144,22 @@ function Editor({ initial, save, clear }: { initial: RankingsDocument; save: Loc
                             {doc.teams.map((team) => (
                                 <TableRow key={team.number}>
                                     <TableCell>
-                                        <Radio checked={doc.myTeam === team.number} onChange={() => setDoc({ ...doc, myTeam: team.number })} slotProps={{ input: { "aria-label": `My team: ${team.name}` } }} />
+                                        <Radio sx={{ p: "10px" }} checked={doc.myTeam === team.number} onChange={() => setDoc({ ...doc, myTeam: team.number })} slotProps={{ input: { "aria-label": `My team: ${team.name}` } }} />
                                     </TableCell>
                                     <TableCell>{team.number}</TableCell>
                                     <TableCell>
-                                        <Typography component="span" sx={{ display: "none" }}>
-                                            {team.name}
-                                        </Typography>
-                                        <TextField value={team.name} onChange={(e) => setTeam(team.number, { name: e.target.value })} size="small" slotProps={{ htmlInput: { "aria-label": `Name of ${team.number}` } }} />
+                                        <TextField value={team.name} onChange={(e) => setTeam(team.number, { name: e.target.value })} slotProps={{ htmlInput: { "aria-label": `Name of ${team.number}` } }} />
                                     </TableCell>
                                     <TableCell>
                                         <TextField
                                             value={team.startingBracket ?? ""}
                                             onChange={(e) => setTeam(team.number, { startingBracket: e.target.value || null })}
-                                            size="small"
+                                           
                                             slotProps={{ htmlInput: { "aria-label": `Starting bracket of ${team.number}` } }}
                                         />
                                     </TableCell>
                                     <TableCell>
-                                        <Checkbox checked={team.excluded} onChange={(e) => setTeam(team.number, { excluded: e.target.checked })} slotProps={{ input: { "aria-label": "Excluded" } }} />
+                                        <Checkbox sx={{ p: "10px" }} checked={team.excluded} onChange={(e) => setTeam(team.number, { excluded: e.target.checked })} slotProps={{ input: { "aria-label": "Excluded" } }} />
                                     </TableCell>
                                 </TableRow>
                             ))}
@@ -164,9 +180,10 @@ function Editor({ initial, save, clear }: { initial: RankingsDocument; save: Loc
                             value={game.homeGoals ?? ""}
                             onChange={(e) => {
                                 const homeGoals = goalsValue(e.target.value);
+                                if (homeGoals === undefined) return;
                                 setGame(i, { homeGoals, status: homeGoals !== null && game.awayGoals !== null ? "final" : "scheduled" });
                             }}
-                            size="small"
+                           
                             sx={{ width: 80 }}
                         />
                         <TextField
@@ -174,9 +191,10 @@ function Editor({ initial, save, clear }: { initial: RankingsDocument; save: Loc
                             value={game.awayGoals ?? ""}
                             onChange={(e) => {
                                 const awayGoals = goalsValue(e.target.value);
+                                if (awayGoals === undefined) return;
                                 setGame(i, { awayGoals, status: game.homeGoals !== null && awayGoals !== null ? "final" : "scheduled" });
                             }}
-                            size="small"
+                           
                             sx={{ width: 80 }}
                         />
                         <IconButton aria-label={`Delete game ${i + 1}`} onClick={() => setDoc((d) => ({ ...d, games: d.games.filter((_g, k) => k !== i) }))} sx={{ width: 44, height: 44 }}>
@@ -185,9 +203,9 @@ function Editor({ initial, save, clear }: { initial: RankingsDocument; save: Loc
                     </Stack>
                 ))}
                 <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", rowGap: 1, alignItems: "center" }}>
-                    <TextField label="Date" type="date" value={newGame.date} onChange={(e) => setNewGame({ ...newGame, date: e.target.value })} size="small" slotProps={{ inputLabel: { shrink: true } }} />
+                    <TextField label="Date" type="date" value={newGame.date} onChange={(e) => setNewGame({ ...newGame, date: e.target.value })} slotProps={{ inputLabel: { shrink: true } }} />
                     {(["home", "away"] as const).map((side) => (
-                        <TextField key={side} select label={side === "home" ? "Home team" : "Away team"} value={newGame[side]} onChange={(e) => setNewGame({ ...newGame, [side]: e.target.value })} size="small" sx={{ minWidth: 160 }}>
+                        <TextField key={side} select label={side === "home" ? "Home team" : "Away team"} value={newGame[side]} onChange={(e) => setNewGame({ ...newGame, [side]: e.target.value })} sx={{ minWidth: 160 }}>
                             {doc.teams.map((t) => (
                                 <MenuItem key={t.number} value={t.number}>
                                     {t.number} {t.name}
@@ -218,9 +236,14 @@ function Editor({ initial, save, clear }: { initial: RankingsDocument; save: Loc
                     Cancel
                 </Button>
                 {confirmClear ? (
-                    <Button color="error" variant="outlined" onClick={() => void clear().then(() => navigateTo(staticRoutes.rankings()))} sx={{ minHeight: 44 }}>
-                        Yes, delete them
-                    </Button>
+                    <>
+                        <Button color="error" variant="outlined" onClick={() => void clearAll()} sx={{ minHeight: 44 }}>
+                            Yes, delete them
+                        </Button>
+                        <Button onClick={() => setConfirmClear(false)} sx={{ minHeight: 44 }}>
+                            Keep them
+                        </Button>
+                    </>
                 ) : (
                     <Button color="error" onClick={() => setConfirmClear(true)} sx={{ minHeight: 44 }}>
                         {CLEAR_ALL_LABEL}

@@ -64,7 +64,7 @@ function TeamDetail({ doc, number }: { doc: RankingsDocument; number: string }) 
                                 <TableRow key={`${game.date}-${opponent}-${i}`}>
                                     <TableCell>{game.date}</TableCell>
                                     <TableCell>
-                                        <a href={staticRoutes.rankingsTeam(opponent)}>{names.get(opponent) ?? opponent}</a>
+                                        <a href={staticRoutes.rankingsTeam(opponent)} style={{ display: "inline-flex", alignItems: "center", minHeight: 44 }}>{names.get(opponent) ?? opponent}</a>
                                     </TableCell>
                                     <TableCell align="right">{formatSigned(result.byNumber.get(opponent)?.lodin ?? null)}</TableCell>
                                     <TableCell>{`${goalsFor > goalsAgainst ? "W" : goalsFor < goalsAgainst ? "L" : "T"} ${goalsFor}–${goalsAgainst}`}</TableCell>
