@@ -13,9 +13,11 @@ import userEvent from "@testing-library/user-event";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { PlayEditor, PlayEditorProps } from "@/components/features/practice-planner/PlayEditor";
 import { SavedPlay } from "@/types/practice-planner";
+import { generateThumbnail } from "@/lib/utils/canvas/thumbnail-generator";
 
 // Mock the thumbnail generator
-vi.mock("@/lib/utils/canvas/thumbnail-generator", () => ({
+vi.mock("@/lib/utils/canvas/thumbnail-generator", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("@/lib/utils/canvas/thumbnail-generator")>()),
     generateThumbnail: vi.fn(() => "data:image/png;base64,mockThumbnail"),
 }));
 
@@ -185,6 +187,8 @@ describe("PlayEditor", () => {
             expect(savedPlay.description).toBe("Test Description");
             expect(savedPlay.isTemplate).toBe(true);
             expect(savedPlay.thumbnail).toBe("data:image/png;base64,mockThumbnail");
+            // Stored at 2×: library cards show it larger than 300×128 (rink diagram quality spec §1).
+            expect(vi.mocked(generateThumbnail)).toHaveBeenLastCalledWith(expect.anything(), { pixelRatio: 2 });
         });
 
         it("shows success message after successful save", async () => {

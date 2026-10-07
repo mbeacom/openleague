@@ -12,8 +12,7 @@ import {
     stationBlockLabel,
     stationTimingLabel,
 } from "@/lib/utils/session-timeline";
-import { generateThumbnail } from "@/lib/utils/canvas/thumbnail-generator";
-import { useMounted } from "@/lib/hooks/useClockText";
+import { PlayDiagram } from "./PlayDiagram";
 import { plannedLabel } from "@/components/features/practice-planner/SessionTimeline";
 import { planToEditorSession, type PlanDocument } from "@/lib/plan-document";
 import { blockTitle, drillRows, isBlockRow } from "@/lib/utils/session-rows";
@@ -27,25 +26,11 @@ const THUMB = { width: 120, height: 51 } as const;
 export function PlanPreview({ plan, teamMark = null }: { plan: PlanDocument; teamMark?: TeamMark | null }) {
     const session = useMemo(() => planToEditorSession(plan), [plan]);
     const groups = useMemo(() => groupStations(session.plays, session.transitionMinutes), [session]);
-    const mounted = useMounted();
     const staffLine = staffHeaderLabel(session.staff.map((name) => ({ name })));
     // A row's names in the list's spelling (a file may spell them differently; they match ignoring case).
     const listed = useMemo(() => new Map(session.staff.map((name) => [staffNameKey(name), name])), [session]);
     const runBy = (names: readonly string[] | undefined) => runBySuffix((names ?? []).map((name) => listed.get(staffNameKey(name)) ?? name));
 
-    // Canvas needs the DOM: thumbnails are drawn in the first render after mount.
-    const thumbnails = useMemo(() => {
-        const map = new Map<string, string>();
-        if (!mounted) return map;
-        for (const play of drillRows(session.plays)) {
-            try {
-                map.set(play.key, generateThumbnail(play.playData));
-            } catch (error) {
-                console.warn("Plan preview: couldn't draw a diagram", error);
-            }
-        }
-        return map;
-    }, [mounted, session]);
 
     return (
         <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>
@@ -102,20 +87,14 @@ export function PlanPreview({ plan, teamMark = null }: { plan: PlanDocument; tea
                                 )}
                                 <Stack spacing={1}>
                                     {stations.map((play) => {
-                                        const src = thumbnails.get(play.key);
                                         const timing = stationTimingLabel(play, rotation);
                                         return (
                                             <Stack key={play.key} direction="row" spacing={1.5} alignItems="center">
-                                                {src ? (
-                                                    <Box
-                                                        component="img"
-                                                        src={src}
-                                                        alt={`${play.name} diagram`}
-                                                        sx={{ ...THUMB, flexShrink: 0, borderRadius: 1, border: 1, borderColor: "divider" }}
-                                                    />
-                                                ) : (
-                                                    <Box aria-hidden sx={{ ...THUMB, flexShrink: 0, borderRadius: 1, bgcolor: "action.hover" }} />
-                                                )}
+                                                <PlayDiagram
+                                                    playData={play.playData}
+                                                    label={play.name}
+                                                    sx={{ ...THUMB, flexShrink: 0, borderRadius: 1, border: 1, borderColor: "divider", overflow: "hidden" }}
+                                                />
                                                 <Box sx={{ minWidth: 0 }}>
                                                     <Typography fontWeight={600}>{play.name}</Typography>
                                                     <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: "pre-line" }}>

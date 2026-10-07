@@ -1,16 +1,19 @@
 /** Session detail (spec R6, R7): goalie messages, and goalie markers hidden at render time only. */
 import { describe, expect, it, vi } from "vitest";
-import { screen, within } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { renderWithPlanner } from "@/__tests__/helpers/planner";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import type { PlayData, PlayGoalies } from "@/types/practice-planner";
 
-const seen = vi.hoisted(() => ({ legends: [] as PlayData[], diagrams: [] as PlayData[], thumbs: [] as PlayData[], stations: [] as Array<Array<{ playData: PlayData | null }>> }));
-vi.mock("@/lib/utils/canvas/thumbnail-generator", () => ({
-    generateThumbnail: (playData: PlayData) => {
-        seen.thumbs.push(playData);
-        return "data:image/png;base64,LIVE";
+const seen = vi.hoisted(() => ({ legends: [] as PlayData[], diagrams: [] as PlayData[], stations: [] as Array<Array<{ playData: PlayData | null }>> }));
+vi.mock("@/components/features/practice-planner/PlayDiagram", () => ({
+    PlayDiagram: ({ playData, label, decorative }: { playData: PlayData; label: string; decorative?: boolean }) => {
+        seen.diagrams.push(playData);
+        const roles = playData.players.map((p) => p.role).join(",");
+        return decorative
+            ? <div aria-hidden data-diagram={label} data-roles={roles} />
+            : <div role="img" aria-label={`${label} diagram`} data-diagram={label} data-roles={roles} />;
     },
 }));
 vi.mock("@/components/features/practice-planner/StationMap", () => ({
@@ -25,15 +28,6 @@ vi.mock("@/components/features/practice-planner/PlayLegend", () => ({
         return null;
     },
     LegendSwatch: () => null,
-}));
-vi.mock("@/components/features/practice-planner/print/PrintDiagram", () => ({
-    PrintDiagram: ({ playData }: { playData: PlayData | null }) => {
-        if (playData) seen.diagrams.push(playData);
-        return <div data-testid="live-diagram" />;
-    },
-    PRINT_DIAGRAM_SIZE: { width: 720, height: 306, pixelRatio: 3 },
-    printPixelRatio: () => 3,
-    DIAGRAM_UNAVAILABLE: "Diagram unavailable",
 }));
 
 import { SessionDetailView } from "@/app/(dashboard)/practice-planner/[sessionId]/SessionDetailView";
@@ -61,7 +55,6 @@ function renderView(s: ReturnType<typeof session>) {
     seen.legends.length = 0;
     seen.diagrams.length = 0;
     seen.stations.length = 0;
-    seen.thumbs.length = 0;
     renderWithPlanner(
         <ThemeProvider theme={createTheme()}>
             <SessionDetailView session={s} isAdmin={false} />
@@ -69,26 +62,27 @@ function renderView(s: ReturnType<typeof session>) {
     );
 }
 
-/** The drill thumbnail in the sidebar's play sequence (not the main preview). */
-function sidebarThumb() {
+/** The drill diagram in the sidebar's play sequence (not the main preview); decorative, so found by attribute. */
+function sidebarDiagram() {
     const sequence = screen.getByText("Play Sequence").parentElement as HTMLElement;
-    // alt="" (decorative), so it has no img role to query by.
-    const img = within(sequence).getByRole("button", { name: /D-Zone/ }).querySelector("img");
-    expect(img).not.toBeNull();
-    return img as HTMLImageElement;
+    const diagram = sequence.querySelector('[data-diagram="D-Zone"]');
+    expect(diagram).toHaveAttribute("aria-hidden");
+    return diagram as HTMLElement;
 }
 
+/** The marker roles each drawn diagram shows (preview and sidebar). */
+const drawnRoles = () => Array.from(document.querySelectorAll('[data-diagram="D-Zone"]')).map((el) => el.getAttribute("data-roles"));
+
 describe("SessionDetailView goalies", () => {
-    it("draws an optional-goalie drill without its goalie when none attend, from a live diagram", () => {
+    it("draws an optional-goalie drill without its goalie when none attend, in the preview and the sidebar", () => {
         renderView(session(0, "optional"));
-        expect(screen.getByTestId("live-diagram")).toBeInTheDocument();
-        expect(seen.diagrams.at(-1)?.players.map((p) => p.role)).toEqual(["F"]);
+        expect(drawnRoles()).toEqual(["F", "F"]);
         expect(seen.legends.at(-1)?.players.map((p) => p.role)).toEqual(["F"]);
     });
 
-    it("keeps the stored thumbnail and every marker otherwise", () => {
+    it("draws every marker otherwise", () => {
         renderView(session(1, "optional"));
-        expect(screen.queryByTestId("live-diagram")).toBeNull();
+        expect(drawnRoles()).toEqual(["G,F", "G,F"]);
         expect(seen.legends.at(-1)?.players.map((p) => p.role)).toEqual(["G", "F"]);
     });
 
@@ -108,19 +102,14 @@ describe("SessionDetailView goalies", () => {
         expect(G_BOARD.players).toHaveLength(2);
     });
 
-    it("draws the sidebar thumbnail live, without the goalie, when it is hidden", () => {
+    it("draws the sidebar diagram live, without the goalie, when it is hidden", () => {
         renderView(session(0, "optional"));
-        const thumb = sidebarThumb();
-        expect(thumb).not.toHaveAttribute("src", "data:image/png;base64,AA==");
-        expect(thumb).toHaveAttribute("src", "data:image/png;base64,LIVE");
-        expect(seen.thumbs.at(-1)?.players.map((p) => p.role)).toEqual(["F"]);
+        expect(sidebarDiagram()).toHaveAttribute("data-roles", "F");
     });
 
-    it("keeps the stored sidebar thumbnail when goalies attend", () => {
+    it("draws the sidebar diagram with the goalie when goalies attend", () => {
         renderView(session(1, "optional"));
-        const thumb = sidebarThumb();
-        expect(thumb).toHaveAttribute("src", "data:image/png;base64,AA==");
-        expect(seen.thumbs).toHaveLength(0);
+        expect(sidebarDiagram()).toHaveAttribute("data-roles", "G,F");
     });
 
     it("says nothing about goalies when the count is not set", () => {

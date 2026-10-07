@@ -6,7 +6,8 @@ import { createHashPlatform, createMockPlannerStore, renderWithPlanner } from "@
 import { AGE_FILTER_STORAGE_KEY } from "@/lib/utils/age-groups";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 
-vi.mock("@/lib/utils/canvas/thumbnail-generator", () => ({ generateThumbnail: () => "data:image/png;base64,AA==" }));
+vi.mock("@/lib/utils/canvas/thumbnail-generator", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("@/lib/utils/canvas/thumbnail-generator")>()), generateThumbnail: () => "data:image/png;base64,AA==" }));
 
 import { PlayLibrary } from "@/components/features/practice-planner/PlayLibrary";
 

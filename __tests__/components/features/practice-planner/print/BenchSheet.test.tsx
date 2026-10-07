@@ -7,7 +7,8 @@ import { createEmptyPlayData } from "@/lib/utils/play-data";
 import type { DrillRow, PlayData } from "@/types/practice-planner";
 
 const { mockGenerate } = vi.hoisted(() => ({ mockGenerate: vi.fn(() => "data:image/png;base64,AA==") }));
-vi.mock("@/lib/utils/canvas/thumbnail-generator", () => ({ generateThumbnail: mockGenerate }));
+vi.mock("@/lib/utils/canvas/thumbnail-generator", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("@/lib/utils/canvas/thumbnail-generator")>()), generateThumbnail: mockGenerate }));
 vi.mock("@/components/features/practice-planner/PlayLegend", () => ({
     LegendSwatch: () => <span data-testid="swatch" />,
 }));
@@ -170,9 +171,9 @@ describe("BenchSheet", () => {
     });
 
     it("lowers the diagram pixel ratio for a large session", () => {
-        const plays = Array.from({ length: 13 }, (_, i) => sessionPlay(`Drill${i}`, i, false, 1));
+        const plays = Array.from({ length: 25 }, (_, i) => sessionPlay(`Drill${i}`, i, false, 1));
         renderSheet({ ...SESSION, duration: 60, plays });
-        expect(mockGenerate).toHaveBeenCalledTimes(13);
+        expect(mockGenerate).toHaveBeenCalledTimes(25);
         expect(mockGenerate).toHaveBeenCalledWith(expect.anything(), { width: 720, height: 306, pixelRatio: 2 });
     });
 

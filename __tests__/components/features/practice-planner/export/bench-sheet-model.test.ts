@@ -127,8 +127,8 @@ describe("buildBenchSheetModel", () => {
 
     it.each([
         [12, 3],
-        [13, 2],
-        [41, 1],
+        [25, 2],
+        [41, 2],
     ])("uses pixel ratio for %i readable drills: %i", (count, ratio) => {
         const plays = Array.from({ length: count }, (_, i) => play(`Drill ${i}`, i, 1));
         const r = renderers();

@@ -62,3 +62,4 @@ describe("getBase64Size", () => {
     expect(getBase64Size(large)).toBeGreaterThan(getBase64Size(small));
   });
 });
+

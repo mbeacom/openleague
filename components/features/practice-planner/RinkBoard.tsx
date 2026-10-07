@@ -28,6 +28,7 @@ import {
     screenToRink,
 } from "@/lib/utils/canvas/rink-renderer";
 import { drawBoardFrame, drawLineHandles, drawSnapRing, drawStroke } from "@/lib/utils/canvas/drawing-utils";
+import { backingPixelRatio, sizeBackingStore, watchPixelRatio } from "@/lib/utils/canvas/backing-store";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import { areaMaskRect, areaRect, editViewport, withArea } from "@/lib/utils/ice-area";
 import {
@@ -154,6 +155,15 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const [canvasSize, setCanvasSize] = useState({ width, height });
+    // Backing-store pixels per CSS pixel; changes with browser zoom or another screen.
+    // Never rendered into markup, so reading it on the first client render can't mismatch hydration.
+    const [pixelRatio, setPixelRatio] = useState(backingPixelRatio);
+    useEffect(() => watchPixelRatio(() => setPixelRatio(backingPixelRatio())), []);
+    // Sized here, not through JSX width/height, which React would re-apply at the CSS size.
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (canvas) sizeBackingStore(canvas, canvasSize.width, canvasSize.height, pixelRatio);
+    }, [canvasSize, pixelRatio]);
     const [transform, setTransform] = useState<TransformContext | null>(null);
     const historyManagerRef = useRef<HistoryManager>(new HistoryManager());
     const animationFrameRef = useRef<number | null>(null);
@@ -361,6 +371,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
             zoom: scale,
             pan: viewPan,
             maskRect: areaMaskRect(areaDrag, playData.area),
+            pixelRatio,
         });
         // The selected line's handles, over the scene (line editing R3, R6)
         const selected = selectedElementId ? findElement(renderData, selectedElementId) : null;
@@ -392,6 +403,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
         areaDrag,
         linePreview,
         snapRing,
+        pixelRatio,
     ]);
 
     /**
@@ -989,12 +1001,14 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
                 position: "relative",
                 touchAction: "none", // Prevent default touch behaviors
                 overflow: "hidden",
+                // The border is the container's, so clientWidth/Height is the canvas's own box and it draws 1:1.
+                boxSizing: "border-box",
+                border: "1px solid #ccc",
+                borderRadius: "4px",
             }}
         >
             <canvas
                 ref={canvasRef}
-                width={canvasSize.width}
-                height={canvasSize.height}
                 onMouseDown={handleMouseDown}
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
@@ -1004,9 +1018,9 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
                 onTouchCancel={handleTouchCancel}
                 style={{
                     display: "block",
+                    width: canvasSize.width,
+                    height: canvasSize.height,
                     cursor: mode === "edit" ? "crosshair" : "default",
-                    border: "1px solid #ccc",
-                    borderRadius: "4px",
                 }}
             />
         </div>

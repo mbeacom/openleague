@@ -15,19 +15,13 @@ import {
     stationLabel,
     type StationMapStation,
 } from "@/lib/utils/canvas/station-map";
+import { backingPixelRatio, sizeBackingStore, watchPixelRatio } from "@/lib/utils/canvas/backing-store";
 import { PlayLegend } from "./PlayLegend";
 
 // Intrinsic (logical) canvas size; CSS scales it to the container's width.
 const MAP_WIDTH = 960;
 const MAP_HEIGHT = 420;
 const MAP_PADDING = 12;
-const MAX_PIXEL_RATIO = 3;
-
-/** The display's devicePixelRatio, clamped to [1, 3] so the backing store stays bounded. */
-function backingPixelRatio(): number {
-    const dpr = typeof window === "undefined" ? 1 : window.devicePixelRatio;
-    return Number.isFinite(dpr) ? Math.min(MAX_PIXEL_RATIO, Math.max(1, dpr)) : 1;
-}
 
 export interface StationMapProps {
     stations: StationMapStation[];
@@ -42,15 +36,7 @@ export function StationMap({ stations, activeIndex }: StationMapProps) {
     // depends on it so the backing store is resized and the map stays sharp.
     const [pixelRatio, setPixelRatio] = useState<number | null>(null);
 
-    // A resolution query matches only the ratio it was made for, so it is
-    // re-armed for the new ratio after every change (this effect re-runs).
-    useEffect(() => {
-        if (typeof window.matchMedia !== "function") return;
-        const query = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
-        const onChange = () => setPixelRatio(window.devicePixelRatio);
-        query.addEventListener("change", onChange);
-        return () => query.removeEventListener("change", onChange);
-    }, [pixelRatio]);
+    useEffect(() => watchPixelRatio(() => setPixelRatio(window.devicePixelRatio)), []);
 
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -59,8 +45,7 @@ export function StationMap({ stations, activeIndex }: StationMapProps) {
         // height keep the logical size (and aspect ratio) and React doesn't reapply them.
         // drawStationMap draws the rink as vectors (no cached bitmap), so it stays crisp.
         const ratio = backingPixelRatio();
-        canvas.width = MAP_WIDTH * ratio;
-        canvas.height = MAP_HEIGHT * ratio;
+        sizeBackingStore(canvas, MAP_WIDTH, MAP_HEIGHT, ratio);
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
         ctx.setTransform(ratio, 0, 0, ratio, 0, 0);

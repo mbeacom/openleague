@@ -4,6 +4,7 @@ import { STARTER_PLAYS } from "@/lib/data/starter-plays";
 import { PLAY_DATA_UNREADABLE_CODE, PLAY_DATA_UNREADABLE_MESSAGE, parseStoredPlayData } from "@/lib/utils/play-data";
 import { drillTags, toPlayFocus, toPlayGoalies } from "@/lib/utils/drill-tags";
 import { matchesAgeGroup, toAgeGroups } from "@/lib/utils/age-groups";
+import { STORED_THUMBNAIL_MIN_WIDTH, thumbnailPixelWidth } from "@/lib/utils/thumbnail-rules";
 import { LEGACY_SEEDED_STARTER_IDS, META_SEEDED_STARTER_IDS, META_STARTERS_SEEDED, type RepoTx, type StoredPlay } from "./records";
 import {
     OWNED_DRILL_DELETE_MESSAGE,
@@ -23,7 +24,7 @@ import type { LocalPlannerStore } from "./types";
 
 export type LibraryOps = Pick<
     LocalPlannerStore,
-    "getPlaysByTeam" | "getPlayById" | "createPlay" | "updatePlay" | "deletePlay" | "seedStarterDrills"
+    "getPlaysByTeam" | "getPlayById" | "createPlay" | "updatePlay" | "deletePlay" | "seedStarterDrills" | "refreshStoredThumbnails"
 >;
 
 /** Hosted's date filter (getPlaysByTeam): local midnight today, Sunday this week, the 1st this month. */
@@ -149,6 +150,31 @@ export function createLibraryOps(ctx: StoreContext): LibraryOps {
                 // No session ever references a library play here, so nothing is detached.
                 return ok({ id: input.id, detachedSessions: 0 });
             }),
+
+        refreshStoredThumbnails: async () => {
+            const plays = await ctx.repo.read((tx) => tx.allPlays());
+            const stale = plays.filter((play) => {
+                const width = play.thumbnail ? thumbnailPixelWidth(play.thumbnail) : null;
+                return width !== null && width < STORED_THUMBNAIL_MIN_WIDTH;
+            });
+            // Thumbnails first: nothing but repo calls may be awaited inside a transaction.
+            const replacements = new Map<string, string>();
+            for (const play of stale) {
+                const parsed = parseStoredPlayData(play.playData);
+                if (!parsed.ok) continue;
+                const thumbnail = thumbnailOrNull(ctx.makeThumbnail(parsed.data));
+                if (thumbnail) replacements.set(play.id, thumbnail);
+            }
+            if (replacements.size === 0) return 0;
+            // Not a user write (ctx.repo.write, not write): no persistence prompt, and updatedAt stays.
+            await ctx.repo.write(async (tx) => {
+                for (const play of await tx.allPlays()) {
+                    const thumbnail = replacements.get(play.id);
+                    if (thumbnail) await tx.putPlay({ ...play, thumbnail });
+                }
+            });
+            return replacements.size;
+        },
 
         seedStarterDrills: async () => {
             const pending = unseeded(await ctx.repo.read(readSeeded));

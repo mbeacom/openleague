@@ -16,6 +16,46 @@ describe.each(REPOS)("library (%s)", (_name, open) => {
         return { ...h, library: createLibraryOps(createStoreContext(h.repo, h.options)) };
     }
 
+    /** A PNG data URL whose header says `width` px (the probe reads only the header). */
+    function pngOfWidth(width: number): string {
+        const bytes = new Uint8Array(24);
+        bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52]);
+        new DataView(bytes.buffer).setUint32(16, width);
+        return `data:image/png;base64,${btoa(String.fromCharCode(...bytes))}`;
+    }
+
+    it("replaces thumbnails narrower than 600 px once, and leaves 2× ones, non-PNGs and unreadable plays alone", async () => {
+        const h = await openHarness(open);
+        const fresh = pngOfWidth(600);
+        const makeThumbnail = vi.fn(() => fresh);
+        const library = createLibraryOps(createStoreContext(h.repo, { ...h.options, makeThumbnail }));
+        const base = { description: null, isTemplate: true, sessionId: null, sourcePlayId: null, createdAt: h.clock.now, updatedAt: h.clock.now };
+        await h.repo.write(async (tx) => {
+            await tx.putPlay({ ...base, id: "old", name: "Old", thumbnail: pngOfWidth(300), playData: createEmptyPlayData() });
+            await tx.putPlay({ ...base, id: "new", name: "New", thumbnail: pngOfWidth(600), playData: createEmptyPlayData() });
+            await tx.putPlay({ ...base, id: "jpeg", name: "Jpeg", thumbnail: "data:image/jpeg;base64,/9j/4AAQ", playData: createEmptyPlayData() });
+            await tx.putPlay({ ...base, id: "bad", name: "Bad", thumbnail: pngOfWidth(300), playData: { version: 99 } as never });
+        });
+
+        expect(await library.refreshStoredThumbnails()).toBe(1);
+        const thumb = async (id: string) => (await h.repo.read((tx) => tx.getPlay(id)))?.thumbnail;
+        expect(await thumb("old")).toBe(fresh);
+        expect(await thumb("new")).toBe(pngOfWidth(600));
+        expect(await thumb("jpeg")).toBe("data:image/jpeg;base64,/9j/4AAQ");
+        expect(await thumb("bad")).toBe(pngOfWidth(300));
+
+        expect(await library.refreshStoredThumbnails()).toBe(0);
+        expect(makeThumbnail).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps the old thumbnail when a new one can't be made", async () => {
+        const h = await openHarness(open);
+        const library = createLibraryOps(createStoreContext(h.repo, { ...h.options, makeThumbnail: () => { throw new Error("no canvas"); } }));
+        await h.repo.write((tx) => tx.putPlay({ id: "old", name: "Old", description: null, thumbnail: pngOfWidth(300), playData: createEmptyPlayData(), isTemplate: true, sessionId: null, sourcePlayId: null, createdAt: h.clock.now, updatedAt: h.clock.now }));
+        expect(await library.refreshStoredThumbnails()).toBe(0);
+        expect((await h.repo.read((tx) => tx.getPlay("old")))?.thumbnail).toBe(pngOfWidth(300));
+    });
+
     it("seeds each starter with its age groups", async () => {
         const { library } = await setup();
         await library.seedStarterDrills();

@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 
-vi.mock("@/lib/utils/canvas/thumbnail-generator", () => ({ generateThumbnail: () => "data:image/png;base64,AA==" }));
+vi.mock("@/lib/utils/canvas/thumbnail-generator", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("@/lib/utils/canvas/thumbnail-generator")>()),
+    generateThumbnail: () => "data:image/png;base64,AA==",
+}));
 
 import { PlanPreview } from "@/components/features/practice-planner/PlanPreview";
 import { STARTER_TEMPLATES, starterTemplatePlan } from "@/lib/data/starter-templates";

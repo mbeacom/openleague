@@ -4,7 +4,8 @@ import { render, screen } from "@testing-library/react";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 
-vi.mock("@/lib/utils/canvas/thumbnail-generator", () => ({ generateThumbnail: vi.fn(() => "data:image/png;base64,AA==") }));
+vi.mock("@/lib/utils/canvas/thumbnail-generator", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("@/lib/utils/canvas/thumbnail-generator")>()), generateThumbnail: vi.fn(() => "data:image/png;base64,AA==") }));
 
 import { BenchSheetDrill, drillText, stationTag } from "@/components/features/practice-planner/print/BenchSheetDrill";
 

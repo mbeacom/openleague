@@ -9,7 +9,8 @@ import { SessionDrillCard } from "@/components/features/practice-planner/Session
 import { renderWithPlanner } from "@/__tests__/helpers/planner";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 
-vi.mock("@/lib/utils/canvas/thumbnail-generator", () => ({ generateThumbnail: vi.fn(() => "data:image/png;base64,AA==") }));
+vi.mock("@/lib/utils/canvas/thumbnail-generator", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("@/lib/utils/canvas/thumbnail-generator")>()), generateThumbnail: vi.fn(() => "data:image/png;base64,AA==") }));
 
 const themed = (ui: React.ReactElement) => render(<ThemeProvider theme={createTheme()}>{ui}</ThemeProvider>);
 

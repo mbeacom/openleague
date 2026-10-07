@@ -6,7 +6,8 @@ import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 
 const { mockGenerate } = vi.hoisted(() => ({ mockGenerate: vi.fn(() => "data:image/png;base64,AA==") }));
-vi.mock("@/lib/utils/canvas/thumbnail-generator", () => ({ generateThumbnail: mockGenerate }));
+vi.mock("@/lib/utils/canvas/thumbnail-generator", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("@/lib/utils/canvas/thumbnail-generator")>()), generateThumbnail: mockGenerate }));
 
 import { PrintDiagram, printPixelRatio } from "@/components/features/practice-planner/print/PrintDiagram";
 
@@ -22,10 +23,12 @@ describe("printPixelRatio", () => {
     it.each([
         [0, 3],
         [12, 3],
-        [13, 2],
+        [24, 3],
+        [25, 2],
         [40, 2],
-        [41, 1],
-    ])("%i readable drills -> pixel ratio %i", (count, ratio) => {
+        [41, 2],
+        [200, 2],
+    ])("%i readable drills -> pixel ratio %i (never below 2)", (count, ratio) => {
         expect(printPixelRatio(count)).toBe(ratio);
     });
 });

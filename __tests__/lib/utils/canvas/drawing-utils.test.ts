@@ -195,6 +195,25 @@ describe("drawBoardFrame", () => {
         expect(firstDraw).toBeGreaterThan(clear);
     });
 
+    it("at pixelRatio 2, clears in CSS pixels under the ratio transform and folds the ratio into zoom and pan", () => {
+        const calls: Call[] = [];
+        drawBoardFrame(recordingCtx(calls), t, zoned, { ...scene, zoom: 0.5, pan: { x: 30, y: -12 }, pixelRatio: 2 });
+        const base = calls.findIndex((c) => c.name === "setTransform" && c.args.join() === "2,0,0,2,0,0");
+        const clear = calls.findIndex((c) => c.name === "clearRect");
+        const view = calls.findIndex((c) => c.name === "setTransform" && c.args.join() === "1,0,0,1,60,-24");
+        expect(base).toBeGreaterThanOrEqual(0);
+        expect(clear).toBe(base + 1);
+        expect(calls[clear].args).toEqual([0, 0, 800, 400]);
+        expect(view).toBeGreaterThan(clear);
+    });
+
+    it("draws the rink as vectors above ratio 1, even unzoomed, so it isn't upscaled from a CSS-size cache", () => {
+        const calls: Call[] = [];
+        drawBoardFrame(recordingCtx(calls), t, zoned, { ...scene, pixelRatio: 2 });
+        expect(calls.some((c) => c.name === "drawImage")).toBe(false);
+        expect(built).toBe(0);
+    });
+
     it("draws the mask exactly once per frame", () => {
         const calls: Call[] = [];
         drawBoardFrame(recordingCtx(calls), t, zoned, { ...scene, zoom: 2, pan: { x: -100, y: -40 } });

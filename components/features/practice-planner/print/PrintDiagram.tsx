@@ -21,12 +21,11 @@ export const DIAGRAM_UNAVAILABLE = "Diagram unavailable";
 
 /**
  * Backing-store scale for a sheet with this many readable diagrams. Each 3×
- * diagram decodes to ~7.6 MiB, so big sessions trade sharpness for memory.
+ * diagram decodes to ~7.6 MiB and each 2× to ~3.4 MiB; big sessions drop to
+ * 2×, never lower, so a printed diagram stays above ~190 dpi.
  */
 export function printPixelRatio(readableCount: number): number {
-    if (readableCount <= 12) return 3;
-    if (readableCount <= 40) return 2;
-    return 1;
+    return readableCount <= 24 ? 3 : 2;
 }
 
 type Diagram = { src: string } | { failed: true };

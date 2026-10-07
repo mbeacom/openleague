@@ -11,7 +11,8 @@ import { createEmptyPlayData } from "@/lib/utils/play-data";
 import { updateElement } from "@/lib/utils/canvas/element-ops";
 import type { RinkBoardProps } from "@/components/features/practice-planner/RinkBoard";
 
-vi.mock("@/lib/utils/canvas/thumbnail-generator", () => ({ generateThumbnail: () => "data:image/png;base64,AA==" }));
+vi.mock("@/lib/utils/canvas/thumbnail-generator", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("@/lib/utils/canvas/thumbnail-generator")>()), generateThumbnail: () => "data:image/png;base64,AA==" }));
 
 const boardCalls = vi.hoisted(() => ({ updates: [] as Array<{ id: string; patch: object }> }));
 vi.mock("@/components/features/practice-planner/RinkBoard", () => ({

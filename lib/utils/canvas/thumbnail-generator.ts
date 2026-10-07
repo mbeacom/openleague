@@ -52,6 +52,31 @@ function clampPixelRatio(value: number | undefined): number {
     return Math.min(MAX_THUMBNAIL_PIXEL_RATIO, Math.max(1, value));
 }
 
+/** Padding around the rink in every thumbnail-style diagram (logical px). */
+export const THUMBNAIL_PADDING = 10;
+
+/** Width ÷ height of a thumbnail; live diagrams keep the same shape. */
+export const THUMBNAIL_ASPECT = THUMBNAIL_DIMENSIONS.width / THUMBNAIL_DIMENSIONS.height;
+
+/**
+ * The thumbnail scene in logical px on a context already scaled to its
+ * backing store: background, the whole rink (so card sizes stay consistent),
+ * and everything outside the drill's area shaded. Shared by stored
+ * thumbnails, print and PlayDiagram.
+ */
+export function drawThumbnailScene(
+    ctx: CanvasRenderingContext2D,
+    playData: PlayData,
+    width: number,
+    height: number,
+    options: { backgroundColor?: string; cachedRink?: boolean } = {}
+): void {
+    ctx.fillStyle = options.backgroundColor ?? "#FFFFFF";
+    ctx.fillRect(0, 0, width, height);
+    const transform = createTransformContext(width, height, THUMBNAIL_PADDING);
+    drawBoardScene(ctx, transform, playData, { maskRect: areaRect(playData.area), cachedRink: options.cachedRink ?? false });
+}
+
 /**
  * Generates a thumbnail image from play data
  * Requirements: 4.2
@@ -85,16 +110,9 @@ export function generateThumbnail(
     // Scale before any drawing, so everything below works in logical pixels.
     if (scaled) ctx.scale(pixelRatio, pixelRatio);
 
-    // Fill background
-    ctx.fillStyle = backgroundColor;
-    ctx.fillRect(0, 0, width, height);
-
-    // Thumbnails always show the whole rink, so card sizes stay consistent;
-    // the drill's area is shown by shading everything outside it. The cached
-    // rink is a logical-size bitmap that would print blurry under scale(), so
-    // a scaled thumbnail draws the rink as vectors.
-    const transform = createTransformContext(width, height, 10);
-    drawBoardScene(ctx, transform, playData, { maskRect: areaRect(playData.area), cachedRink: !scaled });
+    // The cached rink is a logical-size bitmap that would print blurry under
+    // scale(), so a scaled thumbnail draws the rink as vectors.
+    drawThumbnailScene(ctx, playData, width, height, { backgroundColor, cachedRink: !scaled });
 
     // Export as base64 PNG
     return canvas.toDataURL("image/png");
