@@ -5,7 +5,7 @@
  * message; `snapshots` is reserved for phase 2 and kept as-is.
  */
 import { z } from "zod";
-import { CSHL_8U_METHOD, type CompositeOptions, type RatingGame, type RatingMethod, type RatingTeam } from "@/lib/ratings";
+import { CSHL_8U_METHOD, orderBrackets, type CompositeOptions, type RatingGame, type RatingMethod, type RatingTeam } from "@/lib/ratings";
 
 export const RANKINGS_FORMAT = "openleague.rankings" as const;
 export const RANKINGS_VERSION = 1 as const;
@@ -185,6 +185,26 @@ export function rankingsFileName(doc: RankingsDocument): string {
         .slice(0, 60)
         .replace(/-+$/, "");
     return `${slug || "rankings"}.rankings.json`;
+}
+
+/** The document's starting brackets, strongest first: `bracketOrder`, then any other team bracket in team order. */
+export function docBracketOrder(doc: Pick<RankingsDocument, "bracketOrder" | "teams">): string[] {
+    return orderBrackets(doc.bracketOrder, doc.teams.map((team) => team.startingBracket));
+}
+
+/**
+ * How many teams get a rank: not excluded, with at least one final game. The
+ * same set `composite` ranks, counted without running it, so every screen's
+ * "levels hold fewer teams than are ranked" check uses one number.
+ */
+export function rankedTeamCount(doc: Pick<RankingsDocument, "teams" | "games">): number {
+    const played = new Set<string>();
+    for (const game of doc.games) {
+        if (game.status !== "final") continue;
+        played.add(game.home);
+        played.add(game.away);
+    }
+    return doc.teams.filter((team) => !team.excluded && played.has(team.number)).length;
 }
 
 export function toRatingInputs(doc: RankingsDocument): { games: RatingGame[]; teams: RatingTeam[]; options: CompositeOptions } {

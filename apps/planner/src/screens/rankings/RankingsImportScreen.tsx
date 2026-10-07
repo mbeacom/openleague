@@ -6,7 +6,18 @@
  */
 import { useRef, useState, type ChangeEvent } from "react";
 import { Alert, Box, Button, List, ListItem, MenuItem, Stack, TextField, Typography } from "@mui/material";
-import { applySnakeChart, createRankingsDocument, mergeSchedule, readRankingsFile, resolveConflict, type GameConflict, type RankingsDocument } from "@/lib/rankings-document";
+import {
+    applySnakeChart,
+    createRankingsDocument,
+    mergeSchedule,
+    readRankingsFile,
+    resolveConflict,
+    scheduleTeamNumbers,
+    snakeChartFit,
+    type GameConflict,
+    type RankingsDocument,
+    type SnakeChartFit,
+} from "@/lib/rankings-document";
 import { CSHL_8U_METHOD } from "@/lib/ratings";
 import { defaultSeasonYear, parseSchedule, parseSnakeChart, type ParsedSchedule, type ParsedSnakeChart } from "@/lib/ratings/import";
 import { navigateTo } from "../../platform";
@@ -44,8 +55,11 @@ export function RankingsImportScreen({ store }: { store: LocalPlannerStore }) {
     const [draft, setDraft] = useState<RankingsDocument | null>(null);
     const [conflicts, setConflicts] = useState<GameConflict[]>([]);
     const [choices, setChoices] = useState<Map<string, Choice>>(new Map());
-    /** The snake chart applied to the draft: schedule teams it matched, chart teams it didn't. */
-    const [snakeFit, setSnakeFit] = useState<{ matched: number; ignored: number } | null>(null);
+    /**
+     * How the snake chart fits the teams this import concerns: the schedule just
+     * read, or, when only a chart is read, the saved teams.
+     */
+    const [snakeFit, setSnakeFit] = useState<(SnakeChartFit & { scope: "schedule" | "saved" }) | null>(null);
     /** A rankings file waiting for the user to confirm it replaces the saved rankings. */
     const [pendingOpen, setPendingOpen] = useState<RankingsDocument | null>(null);
     const scheduleFile = useRef<HTMLInputElement>(null);
@@ -81,9 +95,9 @@ export function RankingsImportScreen({ store }: { store: LocalPlannerStore }) {
             }
         }
         if (nextSnake) {
-            const applied = applySnakeChart(doc, nextSnake);
-            doc = applied.doc;
-            setSnakeFit({ matched: applied.matched, ignored: applied.ignored });
+            doc = applySnakeChart(doc, nextSnake).doc;
+            const scope = nextSchedule ? scheduleTeamNumbers(nextSchedule) : undefined;
+            setSnakeFit({ ...snakeChartFit(doc, nextSnake, scope), scope: scope ? "schedule" : "saved" });
         } else setSnakeFit(null);
         setDraft(doc);
         setConflicts(open);
@@ -166,7 +180,7 @@ export function RankingsImportScreen({ store }: { store: LocalPlannerStore }) {
 
     const finals = schedule?.games.filter((g) => g.homeGoals !== null).length ?? 0;
     const scheduled = (schedule?.games.length ?? 0) - finals;
-    const withoutBracket = snakeFit && draft ? draft.teams.filter((team) => !team.startingBracket) : [];
+    const withoutBracket = snakeFit?.without ?? [];
 
     return (
         <Stack spacing={3} sx={{ maxWidth: 820 }}>
@@ -282,12 +296,12 @@ export function RankingsImportScreen({ store }: { store: LocalPlannerStore }) {
                 </Stack>
                 {snake && snakeFit && draft && (
                     <Alert severity={snakeFit.matched > 0 ? (withoutBracket.length > 0 ? "warning" : "success") : "warning"}>
-                        {`${snakeFit.matched} of ${plural(draft.teams.length, "schedule team")} got a starting bracket · ${plural(snakeFit.ignored, "chart team")} ${snakeFit.ignored === 1 ? "isn't" : "aren't"} in this schedule`}
+                        {`${snakeFit.matched} of ${snakeFit.scope === "schedule" ? `${plural(snakeFit.total, "team")} in this schedule` : plural(snakeFit.total, "saved team")} got a starting bracket from the chart · ${plural(snakeFit.ignored, "chart team")} matched no team`}
                         {snake.unparsed.length > 0 ? ` · ${snake.unparsed.length} without a column: ${snake.unparsed.join(", ")}` : ""}
                         {withoutBracket.length > 0 && (
                             <>
                                 <Typography variant="body2" sx={{ mt: 1 }}>
-                                    {`Still without a starting bracket (${withoutBracket.length}):`}
+                                    {`Still without a starting bracket, not counting excluded teams (${withoutBracket.length}):`}
                                 </Typography>
                                 <List dense aria-label="Teams without a starting bracket">
                                     {withoutBracket.map((team) => (

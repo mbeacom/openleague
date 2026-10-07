@@ -93,6 +93,17 @@ function components(games: readonly RatingGame[]): Map<string, number> {
 }
 
 /**
+ * Starting brackets, strongest first: `bracketOrder` (deduplicated), then any
+ * other bracket in `brackets` in the order it first appears. The one rule for
+ * bracket order, shared by the calculation and the screens.
+ */
+export function orderBrackets(bracketOrder: readonly string[], brackets: Iterable<string | null | undefined>): string[] {
+    const order = [...new Set(bracketOrder)];
+    for (const bracket of brackets) if (bracket && !order.includes(bracket)) order.push(bracket);
+    return order;
+}
+
+/**
  * For each starting bracket, the range of level indices its seeded positions
  * fall in: ranked teams ordered by bracket (strongest first), cut by the level
  * sizes, with every position past the last level in one virtual level
@@ -105,11 +116,10 @@ function bracketSpans(
     method: RatingMethod,
     bracketOrder: readonly string[],
 ): Map<string, { min: number; max: number }> {
-    const order = [...new Set(bracketOrder)];
-    for (const number of eligible) {
-        const bracket = roster.get(number)!.startingBracket;
-        if (bracket && !order.includes(bracket)) order.push(bracket);
-    }
+    const order = orderBrackets(
+        bracketOrder,
+        eligible.map((number) => roster.get(number)!.startingBracket),
+    );
     const seeded: string[] = [];
     for (const bracket of order) {
         for (const number of eligible) if (roster.get(number)!.startingBracket === bracket) seeded.push(bracket);

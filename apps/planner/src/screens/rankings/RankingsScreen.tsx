@@ -29,7 +29,7 @@ import {
 } from "@mui/material";
 import { downloadBlob } from "@/components/features/practice-planner/export/download";
 import { compareTeamNumbers, composite, type RatingMethod, type RatingsResult, type TeamRating } from "@/lib/ratings";
-import { rankingsFileName, serializeRankings, toRatingInputs, type RankingsDocument } from "@/lib/rankings-document";
+import { docBracketOrder, rankingsFileName, serializeRankings, toRatingInputs, type RankingsDocument } from "@/lib/rankings-document";
 import { staticRoutes } from "../../routes";
 import type { LocalPlannerStore } from "../../store/types";
 import {
@@ -42,8 +42,10 @@ import {
     formatRating,
     formatSigned,
     levelBandSx,
+    levelFit,
     levelText,
     levelsHeld,
+    levelsShortMessage,
 } from "./display";
 import { useRankingsDoc } from "./useRankingsDoc";
 
@@ -53,11 +55,7 @@ export const TABLE_LABEL = "Table";
 export const EXPORT_LABEL = "Export rankings file";
 export const FEW_GAMES_LABEL = "Few games";
 
-/** "Your levels hold 46 teams but 51 are ranked, so 5 have no suggested level." */
-export function levelsShortMessage(held: number, ranked: number): string {
-    const left = ranked - held;
-    return `Your levels hold ${held} teams but ${ranked} are ranked, so ${left} ${left === 1 ? "has" : "have"} no suggested level.`;
-}
+export { levelsShortMessage } from "./display";
 
 type SortKey = "rank" | "name" | "startingBracket" | "games" | "agd" | "sched" | "lodin" | "walkush" | "lodinScaled" | "walkushScaled" | "rpi";
 
@@ -303,7 +301,9 @@ function Ready({ doc, save }: { doc: RankingsDocument; save: (doc: RankingsDocum
     const [query, setQuery] = useState("");
     const [bracket, setBracket] = useState("");
     const [onlyOpponents, setOnlyOpponents] = useState(false);
-    const brackets = [...new Set(doc.teams.map((team) => team.startingBracket).filter((b): b is string => !!b))];
+    // Strongest first, as in Setup: the brackets teams are actually in.
+    const used = new Set(doc.teams.map((team) => team.startingBracket));
+    const brackets = docBracketOrder(doc).filter((b) => used.has(b));
     const opponents = opponentsOf(doc, doc.myTeam);
     const rows = result.teams.filter(
         (row) =>
@@ -312,7 +312,7 @@ function Ready({ doc, save }: { doc: RankingsDocument; save: (doc: RankingsDocum
             (!onlyOpponents || opponents.has(row.number) || row.number === doc.myTeam),
     );
     const mine = doc.myTeam ? result.byNumber.get(doc.myTeam) : undefined;
-    const held = levelsHeld(doc.method);
+    const fit = levelFit(doc);
 
     return (
         <Stack spacing={2}>
@@ -341,7 +341,7 @@ function Ready({ doc, save }: { doc: RankingsDocument; save: (doc: RankingsDocum
 
             {result.componentCount > 1 && <Alert severity="warning">{COMPONENTS_WARNING}</Alert>}
             {!result.converged && <Alert severity="info">{NOT_CONVERGED_WARNING}</Alert>}
-            {result.ranked.length > held && (
+            {fit.short > 0 && (
                 <Alert
                     severity="warning"
                     action={
@@ -350,7 +350,7 @@ function Ready({ doc, save }: { doc: RankingsDocument; save: (doc: RankingsDocum
                         </Button>
                     }
                 >
-                    {levelsShortMessage(held, result.ranked.length)}
+                    {levelsShortMessage(fit.held, fit.ranked)}
                 </Alert>
             )}
 

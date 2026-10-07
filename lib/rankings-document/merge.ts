@@ -9,7 +9,7 @@
  */
 import type { ParsedSchedule, ParsedSnakeChart } from "@/lib/ratings/import";
 import { compareTeamNumbers } from "@/lib/ratings";
-import { MAX_BRACKETS, MAX_BRACKET_LENGTH, cleanImportedText, type RankingsDocument, type RankingsGame } from "./document";
+import { MAX_BRACKETS, MAX_BRACKET_LENGTH, cleanImportedText, type RankingsDocument, type RankingsGame, type RankingsTeam } from "./document";
 
 interface Keyable {
     date: string;
@@ -164,4 +164,43 @@ export function applySnakeChart(doc: RankingsDocument, chart: ParsedSnakeChart):
     });
     const order = [...new Set(chart.brackets.map((bracket) => cleanImportedText(bracket, MAX_BRACKET_LENGTH)).filter(Boolean))].slice(0, MAX_BRACKETS);
     return { doc: { ...doc, teams, bracketOrder: order.length > 0 ? order : doc.bracketOrder }, matched, ignored: chart.teams.length - matched };
+}
+
+export interface SnakeChartFit {
+    /** Teams in scope that the chart lists (and so gave a starting bracket). */
+    matched: number;
+    /** Teams in scope. */
+    total: number;
+    /** Chart teams that match no team in the document. */
+    ignored: number;
+    /** Teams in scope still without a starting bracket; excluded teams aren't listed. */
+    without: RankingsTeam[];
+}
+
+/**
+ * How a snake chart fits the teams an import concerns. `doc` is the document
+ * after `applySnakeChart`. `scope` is the team numbers the import is about
+ * (the schedule just read); without one, every team in the document.
+ */
+export function snakeChartFit(doc: RankingsDocument, chart: ParsedSnakeChart, scope?: Iterable<string>): SnakeChartFit {
+    const inScope = scope ? new Set(scope) : null;
+    const teams = inScope ? doc.teams.filter((team) => inScope.has(team.number)) : doc.teams;
+    const charted = new Set(chart.teams.map((team) => team.number));
+    const known = new Set(doc.teams.map((team) => team.number));
+    return {
+        matched: teams.filter((team) => charted.has(team.number)).length,
+        total: teams.length,
+        ignored: [...charted].filter((number) => !known.has(number)).length,
+        without: teams.filter((team) => !team.startingBracket && !team.excluded),
+    };
+}
+
+/** Every team number a parsed schedule mentions: its team list and both sides of every game. */
+export function scheduleTeamNumbers(parsed: ParsedSchedule): Set<string> {
+    const numbers = new Set(parsed.teams.map((team) => team.number));
+    for (const game of parsed.games) {
+        numbers.add(game.home);
+        numbers.add(game.away);
+    }
+    return numbers;
 }

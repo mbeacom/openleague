@@ -2,6 +2,7 @@
 import { Alert, Box, Button, CircularProgress, Stack, Typography } from "@mui/material";
 import { alpha, type Theme } from "@mui/material/styles";
 import type { Movement } from "@/lib/ratings";
+import { rankedTeamCount, type RankingsDocument } from "@/lib/rankings-document";
 import { staticRoutes } from "../../routes";
 import type { RankingsState } from "./useRankingsDoc";
 
@@ -44,6 +45,23 @@ export function MovementLabel({ movement, startingBracket }: { movement: Movemen
 /** How many teams the levels hold; a size being typed (NaN) counts as 0. */
 export const levelsHeld = (method: { levels: ReadonlyArray<{ size: number }> }) =>
     method.levels.reduce((sum, level) => sum + (Number.isFinite(level.size) ? level.size : 0), 0);
+
+/**
+ * The levels against the teams they must place: `held` from the level sizes,
+ * `ranked` the teams that get a rank. Setup and Rankings both use this, so they
+ * always agree.
+ */
+export function levelFit(doc: Pick<RankingsDocument, "method" | "teams" | "games">): { held: number; ranked: number; short: number } {
+    const held = levelsHeld(doc.method);
+    const ranked = rankedTeamCount(doc);
+    return { held, ranked, short: Math.max(0, ranked - held) };
+}
+
+/** "Your levels hold 46 teams but 51 are ranked, so 5 have no suggested level." */
+export function levelsShortMessage(held: number, ranked: number): string {
+    const left = ranked - held;
+    return `Your levels hold ${held} teams but ${ranked} are ranked, so ${left} ${left === 1 ? "has" : "have"} no suggested level.`;
+}
 
 /** What to show instead of a bare level: why a team has none. */
 export function levelText(row: { level: string | null; rank: number | null; games: number; excluded: boolean }): string {

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { RankingsTeamScreen, TEAM_NOT_FOUND_MESSAGE } from "@/apps/planner/src/screens/rankings/RankingsTeamScreen";
 import { CLEAR_ALL_LABEL, RankingsSetupScreen, SAVE_SETUP_LABEL } from "@/apps/planner/src/screens/rankings/RankingsSetupScreen";
+import { levelsShortMessage } from "@/apps/planner/src/screens/rankings/display";
 import { composite } from "@/lib/ratings";
 import { toRatingInputs } from "@/lib/rankings-document";
 import { memoryStore, renderScreen } from "./render-screen";
@@ -82,15 +83,126 @@ describe("RankingsSetupScreen", () => {
         });
     });
 
-    it("warns when the levels hold fewer teams than are playing", async () => {
+    it("warns when the levels hold fewer teams than are ranked", async () => {
         const { store } = memoryStore();
         await store.saveRankings(sampleRankingsDoc());
         renderScreen(<RankingsSetupScreen store={store} />, store);
-        expect(await screen.findByText("Levels hold 4 teams; 4 teams aren't excluded.")).toBeInTheDocument();
+        expect(await screen.findByText("Your levels hold 4 teams and 4 are ranked.")).toBeInTheDocument();
         fireEvent.change(screen.getByLabelText("Size of level 2"), { target: { value: "1" } });
         const warning = screen.getByRole("alert");
-        expect(warning).toHaveTextContent("Levels hold 3 teams; 4 teams aren't excluded, so 1 won't get a suggested level.");
+        expect(warning).toHaveTextContent(levelsShortMessage(3, 4));
         expect(warning.className).toMatch(/Warning/);
+    });
+
+    it("counts ranked teams the way the rankings screen does: a team with no games isn't ranked", async () => {
+        const { store } = memoryStore();
+        const base = sampleRankingsDoc();
+        const doc = sampleRankingsDoc({
+            teams: [...base.teams, { number: "905", name: "Pinewood M1", startingBracket: null, excluded: false }],
+            method: { ...base.method, levels: [{ name: "X", size: 2 }, { name: "Y", size: 1 }] },
+        });
+        await store.saveRankings(doc);
+        const { games, teams, options } = toRatingInputs(doc);
+        const ranked = composite(games, teams, doc.method, options).ranked.length;
+        expect(ranked).toBe(4);
+        renderScreen(<RankingsSetupScreen store={store} />, store);
+        expect(await screen.findByRole("alert")).toHaveTextContent(levelsShortMessage(3, ranked));
+    });
+
+    describe("starting brackets", () => {
+        it("lists the brackets strongest first, in the saved order", async () => {
+            const { store } = memoryStore();
+            await store.saveRankings(sampleRankingsDoc({ bracketOrder: ["White Strong", "Red Strong"] }));
+            renderScreen(<RankingsSetupScreen store={store} />, store);
+            expect(await screen.findByLabelText("Name of bracket 1")).toHaveValue("White Strong");
+            expect(screen.getByLabelText("Name of bracket 2")).toHaveValue("Red Strong");
+            expect(screen.getByRole("button", { name: "Move White Strong up" })).toBeDisabled();
+            expect(screen.getByRole("button", { name: "Move Red Strong down" })).toBeDisabled();
+        });
+
+        it("moves a bracket up, saves the order, and the movement follows it", async () => {
+            const { store } = memoryStore();
+            const doc = sampleRankingsDoc();
+            await store.saveRankings(doc);
+            const before = toRatingInputs(doc);
+            expect(composite(before.games, before.teams, doc.method, before.options).byNumber.get("903")!.movement).toBe("same");
+
+            renderScreen(<RankingsSetupScreen store={store} />, store);
+            const up = await screen.findByRole("button", { name: "Move White Strong up" });
+            expect(up).toHaveStyle({ width: "44px", height: "44px" });
+            fireEvent.click(up);
+            expect(screen.getByLabelText("Name of bracket 1")).toHaveValue("White Strong");
+            fireEvent.click(screen.getByRole("button", { name: SAVE_SETUP_LABEL }));
+            await waitFor(async () => {
+                const saved = await store.getRankings();
+                expect(saved.success && saved.data!.bracketOrder).toEqual(["White Strong", "Red Strong"]);
+            });
+            const saved = await store.getRankings();
+            if (!saved.success || !saved.data) throw new Error("not saved");
+            const after = toRatingInputs(saved.data);
+            expect(composite(after.games, after.teams, saved.data.method, after.options).byNumber.get("903")!.movement).toBe("down");
+        });
+
+        it("renames a bracket for every team in it", async () => {
+            const { store } = memoryStore();
+            await store.saveRankings(sampleRankingsDoc());
+            renderScreen(<RankingsSetupScreen store={store} />, store);
+            fireEvent.change(await screen.findByLabelText("Name of bracket 1"), { target: { value: "Red Top" } });
+            expect(screen.getByLabelText("Starting bracket of 901")).toHaveDisplayValue("Red Top");
+            fireEvent.click(screen.getByRole("button", { name: SAVE_SETUP_LABEL }));
+            await waitFor(async () => {
+                const saved = await store.getRankings();
+                expect(saved.success && saved.data!.bracketOrder).toEqual(["Red Top", "White Strong"]);
+                expect(saved.success && saved.data!.teams.filter((t) => t.startingBracket === "Red Top").map((t) => t.number)).toEqual(["901", "902"]);
+            });
+        });
+
+        it("adds a bracket and puts a team in it", async () => {
+            const { store } = memoryStore();
+            await store.saveRankings(sampleRankingsDoc());
+            renderScreen(<RankingsSetupScreen store={store} />, store);
+            fireEvent.click(await screen.findByRole("button", { name: "Add bracket" }));
+            fireEvent.change(screen.getByLabelText("Name of bracket 3"), { target: { value: "White Weak" } });
+            fireEvent.change(screen.getByLabelText("Starting bracket of 904"), { target: { value: "2" } });
+            expect(screen.getByLabelText("Starting bracket of 904")).toHaveDisplayValue("White Weak");
+            fireEvent.click(screen.getByRole("button", { name: SAVE_SETUP_LABEL }));
+            await waitFor(async () => {
+                const saved = await store.getRankings();
+                expect(saved.success && saved.data!.bracketOrder).toEqual(["Red Strong", "White Strong", "White Weak"]);
+                expect(saved.success && saved.data!.teams.find((t) => t.number === "904")!.startingBracket).toBe("White Weak");
+            });
+        });
+
+        it("removes a bracket that has teams, so a file with too many brackets can be saved again", async () => {
+            const { store } = memoryStore();
+            const base = sampleRankingsDoc({ bracketOrder: [] });
+            const extra = Array.from({ length: 21 }, (_, i) => ({ number: String(910 + i), name: `Pinewood ${i + 1}`, startingBracket: `Bracket ${i + 1}`, excluded: false }));
+            await store.saveRankings({ ...base, teams: [...base.teams.map((t) => ({ ...t, startingBracket: null })), ...extra] });
+            renderScreen(<RankingsSetupScreen store={store} />, store);
+            fireEvent.click(await screen.findByRole("button", { name: SAVE_SETUP_LABEL }));
+            expect(await screen.findByText("At most 20 starting brackets. Remove 1 to save.")).toBeInTheDocument();
+            fireEvent.click(screen.getByRole("button", { name: "Remove Bracket 21 (its 1 team gets no starting bracket)" }));
+            fireEvent.click(screen.getByRole("button", { name: SAVE_SETUP_LABEL }));
+            await waitFor(async () => {
+                const saved = await store.getRankings();
+                expect(saved.success && saved.data!.bracketOrder).toHaveLength(20);
+                expect(saved.success && saved.data!.teams.find((t) => t.number === "930")!.startingBracket).toBeNull();
+            });
+        });
+
+        it("refuses a repeated or empty bracket name", async () => {
+            const { store } = memoryStore();
+            await store.saveRankings(sampleRankingsDoc());
+            renderScreen(<RankingsSetupScreen store={store} />, store);
+            fireEvent.change(await screen.findByLabelText("Name of bracket 2"), { target: { value: "Red Strong" } });
+            fireEvent.click(screen.getByRole("button", { name: SAVE_SETUP_LABEL }));
+            expect(await screen.findByText("Starting bracket Red Strong is listed twice.")).toBeInTheDocument();
+            fireEvent.change(screen.getByLabelText("Name of bracket 2"), { target: { value: " " } });
+            fireEvent.click(screen.getByRole("button", { name: SAVE_SETUP_LABEL }));
+            expect(await screen.findByText("Give starting bracket 2 a name.")).toBeInTheDocument();
+            const saved = await store.getRankings();
+            expect(saved.success && saved.data!.bracketOrder).toEqual([]);
+        });
     });
 
     it("refuses two levels with the same name", async () => {
