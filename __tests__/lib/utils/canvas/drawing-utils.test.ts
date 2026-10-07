@@ -7,13 +7,14 @@ import {
     drawElement,
     drawLineHandles,
     drawSnapRing,
+    paintStrokeGeometry,
     LINE_HANDLE_RADIUS_PX,
     SNAP_RING_RADIUS_PX,
 } from "@/lib/utils/canvas/drawing-utils";
 import { LINE_EDIT_COLORS } from "@/lib/utils/canvas/notation";
 import { EQUIPMENT_RADIUS_FT, PLAYER_RADIUS_FT, glyphRadiusPx } from "@/lib/utils/canvas/glyph-metrics";
 import type { LineHandle } from "@/lib/utils/canvas/line-editing";
-import { CURVE_SAMPLES_PER_SEGMENT } from "@/lib/utils/canvas/stroke-geometry";
+import { CURVE_SAMPLES_PER_SEGMENT, buildStrokeGeometry } from "@/lib/utils/canvas/stroke-geometry";
 import { clearRinkCache, createTransformContext, FULL_RINK, rinkToCanvas } from "@/lib/utils/canvas/rink-renderer";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import { areaRect } from "@/lib/utils/ice-area";
@@ -341,5 +342,56 @@ describe("drawSnapRing", () => {
         const ring = arcs(calls)[0].args[2] as number;
         expect(ring).toBe(SNAP_RING_RADIUS_PX);
         expect(ring - 3).toBeGreaterThan(glyphRadiusPx(EQUIPMENT_RADIUS_FT.puck, pxPerFt, zoom) * 1.11);
+    });
+});
+
+describe("stroke ends in proportion to the rink (scale model)", () => {
+    const arrowLength = (pxPerFt: number, strokeWidth = 2) => {
+        const calls: Call[] = [];
+        const geometry = buildStrokeGeometry(
+            { action: "skate", path: "straight", end: "arrow", points: [{ x: 0, y: 0 }, { x: 500, y: 0 }], strokeWidth },
+            pxPerFt
+        );
+        paintStrokeGeometry(recordingCtx(calls), geometry, "#000", pxPerFt);
+        // The arrowhead is moveTo(tip) then two lineTo corners; its length is the tip-to-corner distance along x.
+        const head = calls.findIndex((c, i) => c.name === "moveTo" && calls[i + 1]?.name === "lineTo" && calls[i + 2]?.name === "lineTo" && calls[i + 3]?.name === "closePath");
+        const [tx] = calls[head].args as number[];
+        const [cx] = calls[head + 1].args as number[];
+        return (tx - cx) / Math.cos(Math.PI / 6);
+    };
+
+    it("keeps today's arrowhead on the reference board", () => {
+        expect(arrowLength(3.8)).toBeCloseTo(10);
+    });
+
+    it("keeps the same arrowhead-to-rink proportion at thumbnail, board and zoomed scales", () => {
+        for (const pxPerFt of [1.9, 3.8, 9.5]) {
+            expect(arrowLength(pxPerFt) / pxPerFt, `${pxPerFt} px/ft`).toBeCloseTo(10 / 3.8, 5);
+        }
+    });
+
+    it("never draws an arrowhead shorter than 4 px", () => {
+        // At 0.05 px/ft refPx(10) is 0.13 px and the line is floored to 1 px (5 px of head); the 4 px floor is the
+        // lower bound either way, so assert the bound rather than which term wins.
+        expect(arrowLength(0.05)).toBeGreaterThanOrEqual(4);
+    });
+
+    it("keeps line width to rink in proportion too", () => {
+        for (const pxPerFt of [1.9, 3.8, 9.5]) {
+            const g = buildStrokeGeometry({ action: "skate", path: "straight", end: "none", points: [{ x: 0, y: 0 }, { x: 100, y: 0 }], strokeWidth: 2 }, pxPerFt);
+            expect(g.lineWidth / pxPerFt).toBeCloseTo(2 / 3.8, 5);
+        }
+    });
+
+    it("sizes the selection highlight in proportion: the line plus 4 reference px", () => {
+        const widths: number[] = [];
+        const calls: Call[] = [];
+        const ctx = recordingCtx(calls);
+        Object.defineProperty(ctx, "lineWidth", { set: (v: number) => widths.push(v), get: () => widths.at(-1) ?? 1, configurable: true });
+        const element = { id: "s", action: "skate" as const, path: "straight" as const, end: "none" as const, points: [{ x: 100, y: 40 }, { x: 110, y: 40 }], color: "#000", strokeWidth: 2 };
+        const zoomed = createTransformContext(800, 400, 20, { x: 95, y: 25, w: 30, h: 30 }); // well above 3.8 px/ft
+        const pxPerFt = Math.min(zoomed.scaleX, zoomed.scaleY);
+        drawElement(ctx, element as never, zoomed, true);
+        expect(widths[0]).toBeCloseTo((2 + 4) * (pxPerFt / 3.8));
     });
 });

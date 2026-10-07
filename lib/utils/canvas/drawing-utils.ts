@@ -23,7 +23,11 @@ import { buildStrokeGeometry, strokeCenterline, type StrokeGeometry } from "./st
 import { drawPlayerGlyph, drawEquipmentGlyph } from "./glyphs";
 import { EQUIPMENT_RADIUS_FT, PLAYER_RADIUS_FT, glyphRadiusPx } from "./glyph-metrics";
 import { BOARD_COLORS } from "./notation";
+import { refPx } from "./scale";
 import type { LineHandle, SnapTarget } from "./line-editing";
+
+/** The shortest arrowhead drawn, so a tiny diagram's arrows still read as arrows. */
+export const ARROW_MIN_PX = 4;
 
 /**
  * Visual constants for drawing
@@ -74,9 +78,9 @@ export function paintStrokeGeometry(
     const { tip, angle, type } = geometry.end;
     if (type === "arrow") {
         const from = { x: tip.x - Math.cos(angle), y: tip.y - Math.sin(angle) };
-        drawArrowHead(ctx, from, tip, color, geometry.lineWidth);
+        drawArrowHead(ctx, from, tip, color, geometry.lineWidth, pxPerFt);
     } else {
-        const half = Math.max(1.8 * pxPerFt, 4);
+        const half = Math.max(1.8 * pxPerFt, 2);
         const nx = -Math.sin(angle);
         const ny = Math.cos(angle);
         ctx.beginPath();
@@ -93,16 +97,19 @@ export function paintStrokeGeometry(
  * @param from - Starting point of the arrow segment
  * @param to - End point where arrow head is drawn
  * @param color - Arrow color
- * @param strokeWidth - Base stroke width for sizing
+ * @param strokeWidth - The drawn (already scaled) line width
+ * @param pxPerFt - The diagram's scale, so the head stays in proportion to the rink
  */
 function drawArrowHead(
     ctx: CanvasRenderingContext2D,
     from: Position,
     to: Position,
     color: string,
-    strokeWidth: number
+    strokeWidth: number,
+    pxPerFt: number
 ): void {
-    const headLength = Math.max(10, strokeWidth * 5); // Arrow head length
+    // 10 px, or 5 line widths, on the reference board; in proportion elsewhere (scale model).
+    const headLength = Math.max(refPx(10, pxPerFt, ARROW_MIN_PX), strokeWidth * 5);
 
     // Calculate angle of the line
     const angle = Math.atan2(to.y - from.y, to.x - from.x);
@@ -240,7 +247,7 @@ export function drawElement(
     // Draw selection highlight if selected
     if (isSelected) {
         ctx.strokeStyle = SELECTION_COLOR;
-        ctx.lineWidth = element.strokeWidth + 4;
+        ctx.lineWidth = refPx(element.strokeWidth + 4, Math.min(transform.scaleX, transform.scaleY));
         ctx.lineCap = "round";
         ctx.lineJoin = "round";
         ctx.globalAlpha = 0.5;
