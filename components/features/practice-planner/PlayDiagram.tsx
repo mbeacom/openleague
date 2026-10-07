@@ -15,10 +15,12 @@ export interface PlayDiagramProps {
     playData: PlayData;
     /** The drill's name; the canvas is announced as "<label> diagram". */
     label: string;
+    /** Hidden from assistive tech: for cards that already name the drill next to it. */
+    decorative?: boolean;
     sx?: SxProps<Theme>;
 }
 
-export function PlayDiagram({ playData, label, sx }: PlayDiagramProps) {
+export function PlayDiagram({ playData, label, decorative = false, sx }: PlayDiagramProps) {
     const boxRef = useRef<HTMLDivElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [size, setSize] = useState({ width: 0, height: 0 });
@@ -54,7 +56,11 @@ export function PlayDiagram({ playData, label, sx }: PlayDiagramProps) {
 
     return (
         <Box ref={boxRef} sx={[{ width: "100%", aspectRatio: `${THUMBNAIL_ASPECT}`, maxWidth: "100%" }, ...(Array.isArray(sx) ? sx : [sx])]}>
-            <canvas ref={canvasRef} role="img" aria-label={`${label} diagram`} style={{ display: "block", width: "100%", height: "100%" }} />
+            <canvas
+                ref={canvasRef}
+                {...(decorative ? { "aria-hidden": true } : { role: "img", "aria-label": `${label} diagram` })}
+                style={{ display: "block", width: "100%", height: "100%" }}
+            />
         </Box>
     );
 }

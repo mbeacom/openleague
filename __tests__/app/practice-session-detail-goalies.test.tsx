@@ -1,6 +1,6 @@
 /** Session detail (spec R6, R7): goalie messages, and goalie markers hidden at render time only. */
 import { describe, expect, it, vi } from "vitest";
-import { screen, within } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { renderWithPlanner } from "@/__tests__/helpers/planner";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
@@ -8,9 +8,12 @@ import type { PlayData, PlayGoalies } from "@/types/practice-planner";
 
 const seen = vi.hoisted(() => ({ legends: [] as PlayData[], diagrams: [] as PlayData[], stations: [] as Array<Array<{ playData: PlayData | null }>> }));
 vi.mock("@/components/features/practice-planner/PlayDiagram", () => ({
-    PlayDiagram: ({ playData, label }: { playData: PlayData; label: string }) => {
+    PlayDiagram: ({ playData, label, decorative }: { playData: PlayData; label: string; decorative?: boolean }) => {
         seen.diagrams.push(playData);
-        return <div role="img" aria-label={`${label} diagram`} data-roles={playData.players.map((p) => p.role).join(",")} />;
+        const roles = playData.players.map((p) => p.role).join(",");
+        return decorative
+            ? <div aria-hidden data-diagram={label} data-roles={roles} />
+            : <div role="img" aria-label={`${label} diagram`} data-diagram={label} data-roles={roles} />;
     },
 }));
 vi.mock("@/components/features/practice-planner/StationMap", () => ({
@@ -59,14 +62,16 @@ function renderView(s: ReturnType<typeof session>) {
     );
 }
 
-/** The drill diagram in the sidebar's play sequence (not the main preview). */
+/** The drill diagram in the sidebar's play sequence (not the main preview); decorative, so found by attribute. */
 function sidebarDiagram() {
     const sequence = screen.getByText("Play Sequence").parentElement as HTMLElement;
-    return within(sequence).getByRole("img", { name: "D-Zone diagram" });
+    const diagram = sequence.querySelector('[data-diagram="D-Zone"]');
+    expect(diagram).toHaveAttribute("aria-hidden");
+    return diagram as HTMLElement;
 }
 
 /** The marker roles each drawn diagram shows (preview and sidebar). */
-const drawnRoles = () => screen.getAllByRole("img", { name: "D-Zone diagram" }).map((el) => el.getAttribute("data-roles"));
+const drawnRoles = () => Array.from(document.querySelectorAll('[data-diagram="D-Zone"]')).map((el) => el.getAttribute("data-roles"));
 
 describe("SessionDetailView goalies", () => {
     it("draws an optional-goalie drill without its goalie when none attend, in the preview and the sidebar", () => {

@@ -40,6 +40,12 @@ describe("PlayDiagram", () => {
         expect(drawThumbnailScene).toHaveBeenLastCalledWith(expect.anything(), expect.anything(), 600, 256, { cachedRink: false });
     });
 
+    it("is hidden from assistive tech when decorative, so a card that names the drill doesn't announce it twice", () => {
+        const { container } = render(<PlayDiagram playData={createEmptyPlayData()} label="Low Cycle" decorative />);
+        expect(screen.queryByRole("img")).toBeNull();
+        expect(container.querySelector("canvas")).toHaveAttribute("aria-hidden", "true");
+    });
+
     it("draws nothing until the container has a size", () => {
         render(<PlayDiagram playData={createEmptyPlayData()} label="Hidden" />);
         act(() => resize!([{ contentRect: { width: 0, height: 0 } }]));

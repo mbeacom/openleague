@@ -43,6 +43,14 @@ describe("RinkBoard pixel ratio", () => {
         expect([canvas.style.width, canvas.style.height]).toEqual(["800px", "400px"]);
     });
 
+    it("puts the border on the container, so the canvas's CSS box equals its backing store and draws 1:1", () => {
+        const { container } = render(<RinkBoard playData={createEmptyPlayData()} mode="view" height={400} />);
+        const canvas = container.querySelector("canvas")!;
+        expect(canvas.style.border).toBe("");
+        expect(canvas.parentElement!.style.border).toMatch(/^1px solid/);
+        expect(canvas.parentElement!.style.boxSizing).toBe("border-box");
+    });
+
     it("re-sizes when the ratio changes (window moved to another screen)", () => {
         let fire: (() => void) | undefined;
         vi.stubGlobal("matchMedia", () => ({ addEventListener: (_: string, fn: () => void) => (fire = fn), removeEventListener: vi.fn() }));

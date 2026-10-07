@@ -77,7 +77,7 @@ export function SidebarPlayCard({ sp, drawn, timing, index, active, onSelect, ru
             }}
           >
             {drawn ? (
-              <PlayDiagram playData={drawn} label={sp.play.name} sx={{ width: 48, height: 32 }} />
+              <PlayDiagram playData={drawn} label={sp.play.name} decorative sx={{ width: 48, height: 32 }} />
             ) : thumbnail ? (
               <Image src={thumbnail} alt="" fit="cover" />
             ) : (

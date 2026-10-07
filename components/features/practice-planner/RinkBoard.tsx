@@ -1001,6 +1001,10 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
                 position: "relative",
                 touchAction: "none", // Prevent default touch behaviors
                 overflow: "hidden",
+                // The border is the container's, so clientWidth/Height is the canvas's own box and it draws 1:1.
+                boxSizing: "border-box",
+                border: "1px solid #ccc",
+                borderRadius: "4px",
             }}
         >
             <canvas
@@ -1016,10 +1020,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
                     display: "block",
                     width: canvasSize.width,
                     height: canvasSize.height,
-                    boxSizing: "border-box",
                     cursor: mode === "edit" ? "crosshair" : "default",
-                    border: "1px solid #ccc",
-                    borderRadius: "4px",
                 }}
             />
         </div>
