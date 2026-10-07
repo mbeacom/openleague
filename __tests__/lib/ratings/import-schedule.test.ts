@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { decodeEntities, defaultSeasonYear, htmlToText, parseSchedule } from "@/lib/ratings/import";
+import { SCHEDULE_COPIED, SCHEDULE_EXPECTED, SCHEDULE_HTML } from "./league-page-fixtures";
 
 // Made-up programs in the token shapes the real schedule page produces (spec R6).
 const PAGE_TEXT = [
@@ -127,5 +128,59 @@ describe("defaultSeasonYear", () => {
     it("is this year from July on, else last year", () => {
         expect(defaultSeasonYear(new Date(2026, 9, 7))).toBe(2026);
         expect(defaultSeasonYear(new Date(2027, 1, 7))).toBe(2026);
+    });
+});
+
+describe("parseSchedule on a div-row league page", () => {
+    const summary = (input: string) => {
+        const result = parseSchedule(input, { seasonYear: 2026 });
+        return {
+            games: result.games.length,
+            finals: result.games.filter((g) => g.homeGoals !== null).length,
+            teams: result.teams,
+            rinks: result.games.map((g) => g.rink),
+            unparsed: result.unparsed,
+        };
+    };
+
+    it("reads the saved page's HTML", () => {
+        expect(summary(SCHEDULE_HTML)).toEqual(SCHEDULE_EXPECTED);
+    });
+
+    it("reads a plain-text copy whose cells run together, the same as the HTML", () => {
+        expect(summary(SCHEDULE_COPIED)).toEqual(SCHEDULE_EXPECTED);
+        expect(parseSchedule(SCHEDULE_COPIED, { seasonYear: 2026 }).games).toEqual(parseSchedule(SCHEDULE_HTML, { seasonYear: 2026 }).games);
+    });
+
+    it("splits a time run into the home team", () => {
+        const result = parseSchedule("9/18\n5:40pm901 Riverside M1\n5 - 3\n902 Lakeview M1", { seasonYear: 2026 });
+        expect(result.games).toEqual([{ date: "2026-09-18", time: "17:40", home: "901", away: "902", homeGoals: 5, awayGoals: 3, rink: null }]);
+    });
+
+    it("counts a game whose away team and rink it can't tell apart, but reports the line and guesses no name or rink", () => {
+        const result = parseSchedule("9/18\n5:40pm901 Riverside M1\n5 - 3\n907 Lakeview M1Rink C\n", { seasonYear: 2026 });
+        expect(result.games).toEqual([{ date: "2026-09-18", time: "17:40", home: "901", away: "907", homeGoals: 5, awayGoals: 3, rink: null }]);
+        expect(result.teams).toEqual([
+            { number: "901", name: "Riverside M1" },
+            { number: "907", name: "907" },
+        ]);
+        expect(result.unparsed).toEqual(["907 Lakeview M1Rink C"]);
+    });
+
+    it("reports a one-line game whose home and away teams it can't tell apart", () => {
+        // Two known team numbers could start the away team: "901 Club" or "902 Lakeview M1".
+        const page = [
+            ...["9/18", "5:40pm902 Lakeview M1", "5 - 3", "901 Riverside M1Rink A"],
+            ...["9/18", "6:40pm901 Riverside M1", "2 - 2", "902 Lakeview M1Rink A"],
+            ...["9/19", "8:00am903 Hilltop901 Club902 Lakeview M1Rink A"],
+        ].join("\n");
+        const result = parseSchedule(page, { seasonYear: 2026 });
+        expect(result.games).toHaveLength(2);
+        expect(result.unparsed).toEqual(["903 Hilltop901 Club902 Lakeview M1Rink A"]);
+    });
+
+    it("never takes the text after a glued copy's last game as its rink", () => {
+        const result = parseSchedule("9/18\n5:40pm901 Riverside M1\n5 - 3\n902 Lakeview M1Rink A\n9/19\n8:00am902 Lakeview M1901 Riverside M1Rink A\nABOUT US", { seasonYear: 2026 });
+        expect(result.games.map((g) => g.rink)).toEqual(["Rink A", "Rink A"]);
     });
 });

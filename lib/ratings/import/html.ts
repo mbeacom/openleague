@@ -26,6 +26,22 @@ function removeUntilStable(text: string, pattern: RegExp): string {
     return text;
 }
 
+/**
+ * A saved page's text from the file's bytes. Safari's default "Save As" format is a web
+ * archive: a binary property list holding the page's HTML bytes verbatim, followed by its
+ * images and scripts. Its page is the first `<html>…</html>` span (the main resource comes
+ * first). Returns null for a web archive with no page in it.
+ */
+export function savedPageText(bytes: Uint8Array, fileName = ""): string | null {
+    const text = new TextDecoder("utf-8").decode(bytes);
+    const archive = /\.webarchive$/i.test(fileName) || text.startsWith("bplist");
+    if (!archive) return text;
+    const start = text.search(/<!doctype html|<html[\s>]/i);
+    if (start === -1) return null;
+    const close = /<\/html\s*>/i.exec(text.slice(start));
+    return close ? text.slice(start, start + close.index + close[0].length) : text.slice(start);
+}
+
 /** Every element boundary becomes a line break; blank lines dropped; each line trimmed. */
 export function htmlToText(html: string): string {
     const withoutCode = removeUntilStable(

@@ -156,13 +156,17 @@ export function resolveConflict(doc: RankingsDocument, conflict: GameConflict, c
 export function applySnakeChart(doc: RankingsDocument, chart: ParsedSnakeChart): { doc: RankingsDocument; matched: number; ignored: number } {
     const brackets = new Map(chart.teams.map((team) => [team.number, team.startingBracket]));
     let matched = 0;
+    const held = new Set<string>();
     const teams = doc.teams.map((team) => {
         const bracket = brackets.get(team.number);
         if (bracket === undefined) return team;
         matched += 1;
-        return { ...team, startingBracket: cleanImportedText(bracket, MAX_BRACKET_LENGTH) || null };
+        const startingBracket = cleanImportedText(bracket, MAX_BRACKET_LENGTH) || null;
+        if (startingBracket) held.add(startingBracket);
+        return { ...team, startingBracket };
     });
-    const order = [...new Set(chart.brackets.map((bracket) => cleanImportedText(bracket, MAX_BRACKET_LENGTH)).filter(Boolean))].slice(0, MAX_BRACKETS);
+    // Only brackets a schedule team starts in: a chart's other columns (or other age divisions) don't belong.
+    const order = [...new Set(chart.brackets.map((bracket) => cleanImportedText(bracket, MAX_BRACKET_LENGTH)).filter((bracket) => held.has(bracket)))].slice(0, MAX_BRACKETS);
     return { doc: { ...doc, teams, bracketOrder: order.length > 0 ? order : doc.bracketOrder }, matched, ignored: chart.teams.length - matched };
 }
 
