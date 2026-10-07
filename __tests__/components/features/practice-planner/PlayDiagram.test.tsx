@@ -40,20 +40,18 @@ describe("PlayDiagram", () => {
     });
 
     it.each([
-        // [css width, css height, dpr, logical height, transform scale]
-        [600, 256, 2, 128, 4],
-        [48, 32, 2, 200, 0.32],
-        [120, 51, 1, 127.5, 0.4],
-    ])("draws a %i×%i box in the stored thumbnail's 300 px space, so proportions match the stored image", (w, h, dpr, logicalH, scale) => {
+        // [css width, css height, dpr]
+        [600, 256, 2],
+        [48, 32, 2],
+        [120, 51, 1],
+    ])("draws a %i×%i box at its real size, so the 1 px floors land in CSS pixels (proportions come from the scale model)", (w, h, dpr) => {
         setDpr(dpr);
         const setTransform = vi.fn();
         const getContext = vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({ setTransform } as unknown as CanvasRenderingContext2D);
         render(<PlayDiagram playData={createEmptyPlayData()} label="Low Cycle" />);
         act(() => resize!([{ contentRect: { width: w, height: h } }]));
-        expect(setTransform).toHaveBeenLastCalledWith(scale, 0, 0, scale, 0, 0);
-        const [, , width, height, options] = vi.mocked(drawThumbnailScene).mock.lastCall!;
-        expect([width, options]).toEqual([300, { cachedRink: false }]);
-        expect(height).toBeCloseTo(logicalH);
+        expect(setTransform).toHaveBeenLastCalledWith(dpr, 0, 0, dpr, 0, 0);
+        expect(vi.mocked(drawThumbnailScene).mock.lastCall?.slice(2)).toEqual([w, h, { cachedRink: false }]);
         getContext.mockRestore();
     });
 

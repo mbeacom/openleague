@@ -105,10 +105,10 @@ becomes ratio-aware:
 
 **A live diagram component.** Add `components/features/practice-planner/PlayDiagram.tsx`:
 a canvas that draws `playData` at its CSS size × pixel ratio (the StationMap
-pattern), redrawing on resize (`ResizeObserver`) and ratio change. It draws in the
-stored thumbnail's 300 px-wide space scaled to the box, so a live diagram keeps
-the stored image's proportions (the renderer's minimum glyph and arrow sizes are
-in drawing pixels until phase 2) and only gets sharper. Surfaces that
+pattern), redrawing on resize (`ResizeObserver`) and ratio change. With the
+scale model (§2) it draws at its real size, so proportions match the stored image
+and the 1 px floors land in CSS pixels; padding shrinks in proportion below 300 px
+wide. Surfaces that
 have `playData` in hand use it instead of a stored PNG: the session detail
 preview, `PlanPreview`, and `SidebarPlayCard`. The goalies-hidden branch of the
 session detail view, which already renders sharp through `PrintDiagram`, uses it

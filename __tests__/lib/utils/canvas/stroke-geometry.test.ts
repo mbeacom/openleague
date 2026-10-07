@@ -183,6 +183,11 @@ describe("stroke sizes in proportion to the rink (scale model)", () => {
         expect(buildStrokeGeometry(line("skate", 2), 0.5).lineWidth).toBe(1);
     });
 
+    it("applies the plain line's lighter weight before the floor, so it never drops below 1 px either", () => {
+        expect(buildStrokeGeometry(line("line", 2), 0.5).lineWidth).toBe(1);
+        expect(buildStrokeGeometry(line("line", 2), 3.8).lineWidth).toBe(1.5);
+    });
+
     it("sizes pass dashes in feet, with only the 1 px floor, so a small diagram keeps their rhythm", () => {
         // 1 px/ft: dash 2.5 px, gap 1.5 px (the old floors, 4 and 3 px, would have stretched them).
         const g = buildStrokeGeometry(line("pass", 2), 1);

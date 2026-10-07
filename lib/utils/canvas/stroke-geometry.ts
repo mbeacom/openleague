@@ -166,8 +166,8 @@ export function buildStrokeGeometry(
     const total = pathLength(base);
     const pattern = ACTION_PATTERN[stroke.action];
     // Stored widths are px on the reference board (scale model); drawn in proportion here.
-    const width = refPx(stroke.strokeWidth, pxPerFt, minLinePx);
-    const lineWidth = pattern === "thin" ? width * 0.75 : width;
+    // The plain line's lighter weight applies before the floor, so no stroke drops below it.
+    const lineWidth = refPx(pattern === "thin" ? stroke.strokeWidth * 0.75 : stroke.strokeWidth, pxPerFt, minLinePx);
     if (base.length < 2 || total === 0) return { polylines: [], lineWidth, end: null };
 
     let polylines: Position[][];

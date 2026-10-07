@@ -12,6 +12,7 @@ import { createTransformContext, rinkToCanvas } from "@/lib/utils/canvas/rink-re
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import {
   drawThumbnailScene,
+  thumbnailPadding,
   isValidPngBase64,
   getBase64Size,
   THUMBNAIL_DIMENSIONS,
@@ -80,5 +81,17 @@ describe("thumbnail glyph size (scale model)", () => {
         const puckArcs = calls.filter((c) => c.name === "arc" && Math.abs((c.args[0] as number) - at.x) < 0.01 && Math.abs((c.args[1] as number) - at.y) < 0.01);
         expect(puckArcs.length).toBeGreaterThan(0);
         expect(Math.max(...puckArcs.map((c) => c.args[2] as number))).toBeLessThan(2); // 0.6 · 1.5 px minimum, not 0.6 · 8
+    });
+});
+
+describe("thumbnailPadding", () => {
+    it("keeps 10 px from the stored 300 px width up, so stored and printed thumbnails don't change", () => {
+        expect(thumbnailPadding(300)).toBe(10);
+        expect(thumbnailPadding(720)).toBe(10);
+    });
+
+    it("shrinks in proportion below 300 px, so a 48 px sidebar card isn't mostly padding", () => {
+        expect(thumbnailPadding(48)).toBeCloseTo(1.6);
+        expect(thumbnailPadding(120)).toBe(4);
     });
 });
