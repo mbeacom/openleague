@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CSHL_8U_METHOD, canonicalGames, capMargin, srs, type RatingGame } from "@/lib/ratings";
+import { CSHL_8U_METHOD, canonicalGames, capMargin, compareTeamNumbers, srs, type RatingGame } from "@/lib/ratings";
 
 const g = (home: string, away: string, homeGoals: number, awayGoals: number): RatingGame => ({ home, away, homeGoals, awayGoals });
 
@@ -79,5 +79,15 @@ describe("srs", () => {
         const result = srs([], 8);
         expect(result.rating.size).toBe(0);
         expect(result.converged).toBe(true);
+    });
+});
+
+describe("compareTeamNumbers", () => {
+    it("orders \"102\" before \"1010\" and treats \"01\" and \"1\" as distinct", () => {
+        expect(compareTeamNumbers("102", "1010")).toBeLessThan(0);
+        expect(compareTeamNumbers("1010", "102")).toBeGreaterThan(0);
+        expect(compareTeamNumbers("01", "1")).not.toBe(0);
+        expect(compareTeamNumbers("01", "1")).toBeLessThan(0);
+        expect(compareTeamNumbers("1", "01")).toBeGreaterThan(0);
     });
 });

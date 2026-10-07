@@ -58,8 +58,10 @@ export function capMargin(margin: number, cap: number): number {
 }
 
 /** "101" < "102" < "1010": numeric where both are digits. */
+const TEAM_NUMBER_COLLATOR = new Intl.Collator("en", { numeric: true });
+
 export function compareTeamNumbers(a: string, b: string): number {
-    return a.localeCompare(b, undefined, { numeric: true });
+    return TEAM_NUMBER_COLLATOR.compare(a, b) || (a < b ? -1 : a > b ? 1 : 0);
 }
 
 export function mean(values: readonly number[]): number {
