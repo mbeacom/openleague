@@ -1,0 +1,80 @@
+import { describe, expect, it } from "vitest";
+import { applySnakeChart, createRankingsDocument, gameKeys, mergeSchedule, resolveConflict } from "@/lib/rankings-document";
+import type { ParsedSchedule } from "@/lib/ratings/import";
+
+const parsed = (games: ParsedSchedule["games"]): ParsedSchedule => ({
+    games,
+    teams: [
+        { number: "901", name: "Riverside M1" },
+        { number: "902", name: "Lakeview M2" },
+    ],
+    unparsed: [],
+});
+const game = (home: string, away: string, homeGoals: number | null, awayGoals: number | null, time: string | null = "09:00", date = "2026-09-20") => ({
+    date,
+    time,
+    home,
+    away,
+    homeGoals,
+    awayGoals,
+    rink: null,
+});
+
+describe("gameKeys", () => {
+    it("keys by date, unordered pair and order within the day", () => {
+        expect(gameKeys([game("901", "902", 1, 0, "10:00"), game("902", "901", 2, 0, "09:00")])).toEqual(["2026-09-20|901~902|1", "2026-09-20|901~902|0"]);
+    });
+});
+
+describe("mergeSchedule", () => {
+    it("adds games and teams to an empty document", () => {
+        const { doc, summary } = mergeSchedule(createRankingsDocument({ title: "x" }), parsed([game("901", "902", 3, 1), game("902", "901", null, null, null, "2026-10-12")]));
+        expect(summary).toEqual({ added: 2, updated: 0, unchanged: 0, conflicts: [] });
+        expect(doc.games.map((g) => g.status)).toEqual(["final", "scheduled"]);
+        expect(doc.teams.map((t) => t.name)).toEqual(["Riverside M1", "Lakeview M2"]);
+    });
+
+    it("fills in a scheduled game's score, even when home and away are listed the other way", () => {
+        const first = mergeSchedule(createRankingsDocument({ title: "x" }), parsed([game("901", "902", null, null)])).doc;
+        const { doc, summary } = mergeSchedule(first, parsed([game("902", "901", 1, 4)]));
+        expect(summary.updated).toBe(1);
+        expect(doc.games[0]).toMatchObject({ home: "901", away: "902", homeGoals: 4, awayGoals: 1, status: "final" });
+    });
+
+    it("leaves the same score unchanged and never duplicates a game", () => {
+        const first = mergeSchedule(createRankingsDocument({ title: "x" }), parsed([game("901", "902", 3, 1)])).doc;
+        const { doc, summary } = mergeSchedule(first, parsed([game("902", "901", 1, 3)]));
+        expect(summary.unchanged).toBe(1);
+        expect(doc.games).toHaveLength(1);
+    });
+
+    it("reports a different score as a conflict and keeps the existing one until resolved", () => {
+        const first = mergeSchedule(createRankingsDocument({ title: "x" }), parsed([game("901", "902", 3, 1)])).doc;
+        const { doc, summary } = mergeSchedule(first, parsed([game("901", "902", 3, 2)]));
+        expect(summary.conflicts).toHaveLength(1);
+        expect(doc.games[0].awayGoals).toBe(1);
+        expect(resolveConflict(doc, summary.conflicts[0], "existing")).toBe(doc);
+        expect(resolveConflict(doc, summary.conflicts[0], "incoming").games[0].awayGoals).toBe(2);
+    });
+
+    it("keeps a double-header as two games", () => {
+        const { doc } = mergeSchedule(createRankingsDocument({ title: "x" }), parsed([game("901", "902", 3, 1, "09:00"), game("901", "902", 2, 2, "11:00")]));
+        expect(doc.games).toHaveLength(2);
+    });
+});
+
+describe("applySnakeChart", () => {
+    it("sets brackets for known teams only and keeps their names", () => {
+        const base = mergeSchedule(createRankingsDocument({ title: "x" }), parsed([game("901", "902", 3, 1)])).doc;
+        const { doc, matched, ignored } = applySnakeChart(base, {
+            teams: [
+                { number: "901", name: "Riverside Other", startingBracket: "Red Strong" },
+                { number: "950", name: null, startingBracket: "White Weak" },
+            ],
+            unparsed: [],
+        });
+        expect([matched, ignored]).toEqual([1, 1]);
+        expect(doc.teams[0]).toMatchObject({ name: "Riverside M1", startingBracket: "Red Strong" });
+        expect(doc.teams).toHaveLength(2);
+    });
+});
