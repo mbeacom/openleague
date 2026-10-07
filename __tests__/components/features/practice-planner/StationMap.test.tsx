@@ -157,18 +157,20 @@ describe("StationMap re-sharpens when the pixel ratio changes", () => {
     });
 
     const mapCanvas = () => screen.getByRole("img", { name: /^Station map:/ }) as HTMLCanvasElement;
+    // The map and its legend swatches each watch the ratio (backing-store.ts), so compare the set of media.
     const armed = () => queries.filter((q) => q.listeners.size > 0);
+    const armedMedia = () => [...new Set(armed().map((q) => q.media))];
     const changeTo = (dpr: number) => {
-        const [query] = armed();
+        const fired = armed();
         vi.stubGlobal("devicePixelRatio", dpr);
-        act(() => { for (const fn of [...query.listeners]) fn(); });
+        act(() => { for (const query of fired) for (const fn of [...query.listeners]) fn(); });
     };
 
     it("listens for the current resolution and redraws at the new ratio when it changes", () => {
         vi.stubGlobal("devicePixelRatio", 1);
         renderMap();
         expect(mapCanvas().width).toBe(960);
-        expect(armed().map((q) => q.media)).toEqual(["(resolution: 1dppx)"]);
+        expect(armedMedia()).toEqual(["(resolution: 1dppx)"]);
 
         changeTo(2); // e.g. browser zoom to 200%, or the window moved to a retina display
         expect([mapCanvas().width, mapCanvas().height]).toEqual([1920, 840]);
@@ -181,9 +183,9 @@ describe("StationMap re-sharpens when the pixel ratio changes", () => {
         vi.stubGlobal("devicePixelRatio", 1);
         renderMap();
         changeTo(2);
-        expect(armed().map((q) => q.media)).toEqual(["(resolution: 2dppx)"]);
+        expect(armedMedia()).toEqual(["(resolution: 2dppx)"]);
         changeTo(1.5);
-        expect(armed().map((q) => q.media)).toEqual(["(resolution: 1.5dppx)"]);
+        expect(armedMedia()).toEqual(["(resolution: 1.5dppx)"]);
         expect(mapCanvas().width).toBe(1440);
     });
 
@@ -194,7 +196,7 @@ describe("StationMap re-sharpens when the pixel ratio changes", () => {
                 <StationMap stations={[{ name: "Breakout", playData: breakout }]} activeIndex={0} />
             </ThemeProvider>,
         );
-        expect(armed()).toHaveLength(1);
+        expect(armed().length).toBeGreaterThan(0);
         view.unmount();
         expect(armed()).toHaveLength(0);
     });

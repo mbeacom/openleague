@@ -5,7 +5,8 @@ import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { PlayEditor } from "@/components/features/practice-planner/PlayEditor";
 import type { AgeGroup } from "@/lib/utils/age-groups";
 
-vi.mock("@/lib/utils/canvas/thumbnail-generator", () => ({ generateThumbnail: vi.fn(() => "data:image/png;base64,AA==") }));
+vi.mock("@/lib/utils/canvas/thumbnail-generator", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("@/lib/utils/canvas/thumbnail-generator")>()), generateThumbnail: vi.fn(() => "data:image/png;base64,AA==") }));
 
 const themed = (ui: React.ReactElement) => render(<ThemeProvider theme={createTheme()}>{ui}</ThemeProvider>);
 const field = () => screen.getByRole("group", { name: "Age groups" });

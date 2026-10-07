@@ -5,7 +5,8 @@ const { mockGenerate, mockCrest } = vi.hoisted(() => ({
     mockGenerate: vi.fn(() => "data:image/png;base64,AAAA"),
     mockCrest: vi.fn((): string | null => "data:image/png;base64,CREST"),
 }));
-vi.mock("@/lib/utils/canvas/thumbnail-generator", () => ({ generateThumbnail: mockGenerate }));
+vi.mock("@/lib/utils/canvas/thumbnail-generator", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("@/lib/utils/canvas/thumbnail-generator")>()), generateThumbnail: mockGenerate }));
 vi.mock("@/lib/utils/canvas/crest-png", () => ({ CREST_EXPORT_PX: 192, crestPng: mockCrest }));
 
 import { canvasRenderers } from "@/components/features/practice-planner/export/export-images";

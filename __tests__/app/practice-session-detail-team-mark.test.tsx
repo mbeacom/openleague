@@ -5,7 +5,8 @@ import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { renderWithPlanner } from "@/__tests__/helpers/planner";
 import type { PracticeSessionView } from "@/types/practice-planner";
 
-vi.mock("@/lib/utils/canvas/thumbnail-generator", () => ({ generateThumbnail: () => "data:image/png;base64,LIVE" }));
+vi.mock("@/lib/utils/canvas/thumbnail-generator", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("@/lib/utils/canvas/thumbnail-generator")>()), generateThumbnail: () => "data:image/png;base64,LIVE" }));
 vi.mock("@/components/features/practice-planner/StationMap", () => ({ StationMap: () => null }));
 vi.mock("@/components/features/practice-planner/PlayLegend", () => ({ PlayLegend: () => null, LegendSwatch: () => null }));
 

@@ -31,13 +31,30 @@ describe("PlayDiagram", () => {
         vi.unstubAllGlobals();
     });
 
-    it("draws at the measured size × the screen's ratio, as vectors", () => {
+    it("backs the canvas at the measured size × the screen's ratio", () => {
         setDpr(2);
         render(<PlayDiagram playData={createEmptyPlayData()} label="Backward Tag" />);
         act(() => resize!([{ contentRect: { width: 600, height: 256 } }]));
         const canvas = screen.getByRole("img", { name: "Backward Tag diagram" }) as HTMLCanvasElement;
         expect([canvas.width, canvas.height]).toEqual([1200, 512]);
-        expect(drawThumbnailScene).toHaveBeenLastCalledWith(expect.anything(), expect.anything(), 600, 256, { cachedRink: false });
+    });
+
+    it.each([
+        // [css width, css height, dpr, logical height, transform scale]
+        [600, 256, 2, 128, 4],
+        [48, 32, 2, 200, 0.32],
+        [120, 51, 1, 127.5, 0.4],
+    ])("draws a %i×%i box in the stored thumbnail's 300 px space, so proportions match the stored image", (w, h, dpr, logicalH, scale) => {
+        setDpr(dpr);
+        const setTransform = vi.fn();
+        const getContext = vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({ setTransform } as unknown as CanvasRenderingContext2D);
+        render(<PlayDiagram playData={createEmptyPlayData()} label="Low Cycle" />);
+        act(() => resize!([{ contentRect: { width: w, height: h } }]));
+        expect(setTransform).toHaveBeenLastCalledWith(scale, 0, 0, scale, 0, 0);
+        const [, , width, height, options] = vi.mocked(drawThumbnailScene).mock.lastCall!;
+        expect([width, options]).toEqual([300, { cachedRink: false }]);
+        expect(height).toBeCloseTo(logicalH);
+        getContext.mockRestore();
     });
 
     it("is hidden from assistive tech when decorative, so a card that names the drill doesn't announce it twice", () => {

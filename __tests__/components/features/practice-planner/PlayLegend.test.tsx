@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, it, expect, vi } from "vitest";
+import { act, render, screen } from "@testing-library/react";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { LegendSwatch, PlayLegend } from "@/components/features/practice-planner/PlayLegend";
 import { buildLegend } from "@/lib/utils/canvas/legend";
@@ -57,6 +57,23 @@ describe("LegendSwatch", () => {
             expect([canvas.style.width, canvas.style.height]).toEqual(["40px", "20px"]);
         } finally {
             Object.defineProperty(window, "devicePixelRatio", { value: 1, configurable: true });
+        }
+    });
+
+    it("re-sizes when the screen's ratio changes", () => {
+        let fire: (() => void) | undefined;
+        vi.stubGlobal("matchMedia", () => ({ addEventListener: (_: string, fn: () => void) => (fire = fn), removeEventListener: vi.fn() }));
+        try {
+            const data = { ...createEmptyPlayData(), equipment: [{ id: "n", kind: "net" as const, position: { x: 1, y: 1 }, rotation: 0 }] };
+            const { container } = render(<LegendSwatch entry={buildLegend(data)[0]} />);
+            const canvas = container.querySelector("canvas")!;
+            expect(canvas.width).toBe(40);
+            Object.defineProperty(window, "devicePixelRatio", { value: 2, configurable: true });
+            act(() => fire!());
+            expect(canvas.width).toBe(80);
+        } finally {
+            Object.defineProperty(window, "devicePixelRatio", { value: 1, configurable: true });
+            vi.unstubAllGlobals();
         }
     });
 });

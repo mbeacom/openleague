@@ -15,7 +15,8 @@ import type { IceArea, PlayData } from "@/types/practice-planner";
 
 const boardProps: { current: RinkBoardProps | null } = { current: null };
 
-vi.mock("@/lib/utils/canvas/thumbnail-generator", () => ({ generateThumbnail: () => "" }));
+vi.mock("@/lib/utils/canvas/thumbnail-generator", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("@/lib/utils/canvas/thumbnail-generator")>()), generateThumbnail: () => "" }));
 vi.mock("@/components/features/practice-planner/RinkBoard", () => ({
     RinkBoard: forwardRef(function MockBoard(props: RinkBoardProps, ref) {
         boardProps.current = props;

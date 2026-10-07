@@ -1,30 +1,32 @@
 "use client";
 
 /** Collapsible legend listing only the notation a drill actually uses. */
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Accordion, AccordionDetails, AccordionSummary, Box, Chip, Stack, Typography } from "@mui/material";
 import { ExpandMore as ExpandMoreIcon } from "@mui/icons-material";
 import type { PlayData } from "@/types/practice-planner";
 import { buildLegend, type LegendEntry } from "@/lib/utils/canvas/legend";
 import { LEGEND_SWATCH_SIZE, paintLegendSwatch } from "@/lib/utils/canvas/legend-swatch";
-import { backingPixelRatio, sizeBackingStore } from "@/lib/utils/canvas/backing-store";
+import { backingPixelRatio, sizeBackingStore, watchPixelRatio } from "@/lib/utils/canvas/backing-store";
 import { iceAreaLabel } from "@/lib/utils/canvas/notation";
 import { isFullIce } from "@/lib/utils/ice-area";
 
 /** One symbol's sample, drawn on a small canvas. Exported for the bench sheet's LegendList (3b). */
 export function LegendSwatch({ entry }: { entry: LegendEntry }) {
     const ref = useRef<HTMLCanvasElement>(null);
+    // Never rendered into markup, so reading it on the first client render can't mismatch hydration.
+    const [ratio, setRatio] = useState(backingPixelRatio);
+    useEffect(() => watchPixelRatio(() => setRatio(backingPixelRatio())), []);
     useEffect(() => {
         const canvas = ref.current;
         if (!canvas) return;
         // At the screen's ratio, so it is sharp on screen and in print (browsers print a canvas at its backing size).
-        const ratio = backingPixelRatio();
         sizeBackingStore(canvas, LEGEND_SWATCH_SIZE.width, LEGEND_SWATCH_SIZE.height, ratio);
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
         ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
         paintLegendSwatch(ctx, entry);
-    }, [entry]);
+    }, [entry, ratio]);
     return (
         <canvas
             ref={ref}

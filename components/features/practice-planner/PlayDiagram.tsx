@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Box, type SxProps, type Theme } from "@mui/material";
 import type { PlayData } from "@/types/practice-planner";
-import { THUMBNAIL_ASPECT, drawThumbnailScene } from "@/lib/utils/canvas/thumbnail-generator";
+import { THUMBNAIL_ASPECT, THUMBNAIL_DIMENSIONS, drawThumbnailScene } from "@/lib/utils/canvas/thumbnail-generator";
 import { backingPixelRatio, sizeBackingStore, watchPixelRatio } from "@/lib/utils/canvas/backing-store";
 
 export interface PlayDiagramProps {
@@ -46,9 +46,13 @@ export function PlayDiagram({ playData, label, decorative = false, sx }: PlayDia
         sizeBackingStore(canvas, size.width, size.height, ratio);
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
-        ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+        // Drawn in the stored thumbnail's 300 px-wide space and scaled to the box, so a live
+        // diagram has the stored image's proportions (the renderer's minimum glyph and arrow
+        // sizes are in drawing px); only the sharpness changes. Phase 2 moves sizes into feet.
+        const scale = size.width / THUMBNAIL_DIMENSIONS.width;
+        ctx.setTransform(ratio * scale, 0, 0, ratio * scale, 0, 0);
         try {
-            drawThumbnailScene(ctx, playData, size.width, size.height, { cachedRink: false });
+            drawThumbnailScene(ctx, playData, THUMBNAIL_DIMENSIONS.width, size.height / scale, { cachedRink: false });
         } catch (error) {
             console.warn(`Couldn't draw the diagram for "${label}":`, error);
         }

@@ -53,6 +53,7 @@ import { STARTER_PLAYS, type StarterPlay } from "@/lib/data/starter-plays";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import { generateThumbnail } from "@/lib/utils/canvas/thumbnail-generator";
 import { STORED_THUMBNAIL_PIXEL_RATIO } from "@/lib/utils/thumbnail-rules";
+import { PlayDiagram } from "./PlayDiagram";
 import { formatDistanceToNow } from "date-fns";
 import { useDebouncedCallback } from "use-debounce";
 import { DrillFilterChips, type DrillFilters } from "./DrillFilterChips";
@@ -252,10 +253,20 @@ function PlayCard({
  */
 interface StarterPlayCardProps {
     starter: StarterPlay;
-    thumbnail?: string;
     isAdding: boolean;
     disabled: boolean;
     onAdd: (starter: StarterPlay) => void;
+}
+
+/** A starter's thumbnail as stored on "Add to my library": 2×, whatever the screen (rink diagram quality spec §1). */
+function storedStarterThumbnail(starter: StarterPlay): string | undefined {
+    try {
+        return generateThumbnail(starter.playData, { pixelRatio: STORED_THUMBNAIL_PIXEL_RATIO });
+    } catch (err) {
+        // The play still saves, without a thumbnail.
+        console.error(`Error generating thumbnail for ${starter.name}:`, err);
+        return undefined;
+    }
 }
 
 /**
@@ -265,12 +276,10 @@ interface StarterPlayCardProps {
  */
 function StarterPlayCard({
     starter,
-    thumbnail,
     isAdding,
     disabled,
     onAdd,
 }: StarterPlayCardProps) {
-    const { Image } = usePlannerPlatform();
     return (
         <Card
             sx={{
@@ -293,13 +302,8 @@ function StarterPlayCard({
                     position: "relative",
                 }}
             >
-                {thumbnail ? (
-                    <Image src={thumbnail} alt={starter.name} fit="contain" />
-                ) : (
-                    <Typography variant="body2" color="text.secondary">
-                        No preview
-                    </Typography>
-                )}
+                {/* Drawn live at the screen's ratio; the stored 2× image is made on "Add". */}
+                <PlayDiagram playData={starter.playData} label={starter.name} sx={{ height: "100%", width: "auto" }} />
                 {needsGoalie(starter) && <GoalieBadge sx={{ position: "absolute", top: 8, left: 8 }} />}
                 <Chip
                     label="Starter"
@@ -389,7 +393,6 @@ export function PlayLibrary({
     const [isDeleting, setIsDeleting] = useState(false);
 
     // Starter pack state (manage mode only)
-    const [starterThumbnails, setStarterThumbnails] = useState<Record<string, string>>({});
     const [addingStarterId, setAddingStarterId] = useState<string | null>(null);
     const [copiedStarterNames, setCopiedStarterNames] = useState<Set<string>>(new Set());
     // Every drill name in the library; null until loaded (or if that fails).
@@ -495,23 +498,6 @@ export function PlayLibrary({
         loadPlays(searchQuery, dateFilter, queryFilters, !libraryNamesLoaded.current);
     }, [currentPage, dateFilter, queryFilters]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Render starter play thumbnails client-side once (manage mode only)
-    useEffect(() => {
-        if (mode !== "manage") return;
-
-        const thumbnails: Record<string, string> = {};
-        for (const starter of STARTER_PLAYS) {
-            try {
-                // At the stored 2×: "Add to my library" stores this same image.
-                thumbnails[starter.id] = generateThumbnail(starter.playData, { pixelRatio: STORED_THUMBNAIL_PIXEL_RATIO });
-            } catch (err) {
-                // Card falls back to "No preview"; play still saves without a thumbnail
-                console.error(`Error generating thumbnail for ${starter.name}:`, err);
-            }
-        }
-        setStarterThumbnails(thumbnails);
-    }, [mode]);
-
     /**
      * Starter plays not yet copied into the team's library, matched by name
      * against the whole library (plus the loaded page and starters added this
@@ -553,7 +539,7 @@ export function PlayLibrary({
                 const result = await store.createPlay({
                     name: starter.name,
                     description: starter.description,
-                    thumbnail: starterThumbnails[starter.id] || undefined,
+                    thumbnail: storedStarterThumbnail(starter),
                     playData: starter.playData,
                     focus: starter.focus,
                     goalies: starter.goalies,
@@ -579,7 +565,7 @@ export function PlayLibrary({
                 setAddingStarterId(null);
             }
         },
-        [store, starterThumbnails, teamId, loadPlays, searchQuery, dateFilter, queryFilters]
+        [store, teamId, loadPlays, searchQuery, dateFilter, queryFilters]
     );
 
     /**
@@ -935,7 +921,6 @@ export function PlayLibrary({
                             <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }} key={starter.id}>
                                 <StarterPlayCard
                                     starter={starter}
-                                    thumbnail={starterThumbnails[starter.id]}
                                     isAdding={addingStarterId === starter.id}
                                     disabled={addingStarterId !== null}
                                     onAdd={handleAddStarter}

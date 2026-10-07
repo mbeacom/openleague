@@ -7,7 +7,8 @@ import { createEmptyPlayData } from "@/lib/utils/play-data";
 import type { DrillRow, PlayData } from "@/types/practice-planner";
 
 const { mockGenerate } = vi.hoisted(() => ({ mockGenerate: vi.fn(() => "data:image/png;base64,AA==") }));
-vi.mock("@/lib/utils/canvas/thumbnail-generator", () => ({ generateThumbnail: mockGenerate }));
+vi.mock("@/lib/utils/canvas/thumbnail-generator", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("@/lib/utils/canvas/thumbnail-generator")>()), generateThumbnail: mockGenerate }));
 vi.mock("@/components/features/practice-planner/PlayLegend", () => ({
     LegendSwatch: () => <span data-testid="swatch" />,
 }));

@@ -16,7 +16,8 @@ import { SavedPlay } from "@/types/practice-planner";
 import { generateThumbnail } from "@/lib/utils/canvas/thumbnail-generator";
 
 // Mock the thumbnail generator
-vi.mock("@/lib/utils/canvas/thumbnail-generator", () => ({
+vi.mock("@/lib/utils/canvas/thumbnail-generator", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("@/lib/utils/canvas/thumbnail-generator")>()),
     generateThumbnail: vi.fn(() => "data:image/png;base64,mockThumbnail"),
 }));
 

@@ -82,8 +82,8 @@ Three phases, each its own PR.
 ```ts
 /** The device pixel ratio to draw at: window.devicePixelRatio clamped to [1, 3], 1 off the browser. */
 export function backingPixelRatio(): number;
-/** Size the canvas backing store to css × ratio and return ratio, so callers can set the base transform. */
-export function sizeBackingStore(canvas: HTMLCanvasElement, cssWidth: number, cssHeight: number, ratio: number): number;
+/** Size the canvas backing store to css × ratio (at least 1×1); callers then set the base transform to the ratio. */
+export function sizeBackingStore(canvas: HTMLCanvasElement, cssWidth: number, cssHeight: number, ratio: number): void;
 /** Calls `onChange` when the ratio changes (window moved between screens, zoom); returns an unsubscribe. */
 export function watchPixelRatio(onChange: () => void): () => void;
 ```
@@ -91,20 +91,24 @@ export function watchPixelRatio(onChange: () => void): () => void;
 `StationMap.tsx` moves onto it (behavior unchanged) so there is one implementation.
 
 **Rink board.** `RinkBoard` sizes its backing store with the helper and sets the
-canvas CSS size explicitly (which also fixes the 2 px border overflow). Every
-transform the board sets becomes ratio-aware:
+canvas CSS size explicitly. The border moves to the container, so the canvas's
+box equals its backing store and draws 1:1. Every transform the board sets
+becomes ratio-aware:
 
 - `drawBoardFrame` clears under `setTransform(ratio, 0, 0, ratio, 0, 0)` and
   draws under `setTransform(zoom·ratio, 0, 0, zoom·ratio, pan.x·ratio, pan.y·ratio)`.
-- `drawRink`'s identity fill and `getCachedRinkCanvas` take the ratio; the rink
-  cache key gains it, and the cache sizes its offscreen canvas in device pixels.
+- `drawRink`'s identity fill covers the context's real backing store.
+- Above ratio 1 the board draws the rink as vectors, as high-ratio thumbnails
+  already do; the single-slot rink cache (a CSS-size bitmap) is used only at
+  ratio 1, unzoomed and unpanned. (Simpler than a ratio-keyed cache, same result.)
 - Hit-testing stays in CSS pixels (`getMousePosition` is unchanged).
-- The rink cache becomes a small keyed map (board, thumbnail, print) instead of
-  one module slot, so thumbnail generation stops evicting the board's rink.
 
 **A live diagram component.** Add `components/features/practice-planner/PlayDiagram.tsx`:
 a canvas that draws `playData` at its CSS size × pixel ratio (the StationMap
-pattern), redrawing on resize (`ResizeObserver`) and ratio change. Surfaces that
+pattern), redrawing on resize (`ResizeObserver`) and ratio change. It draws in the
+stored thumbnail's 300 px-wide space scaled to the box, so a live diagram keeps
+the stored image's proportions (the renderer's minimum glyph and arrow sizes are
+in drawing pixels until phase 2) and only gets sharper. Surfaces that
 have `playData` in hand use it instead of a stored PNG: the session detail
 preview, `PlanPreview`, and `SidebarPlayCard`. The goalies-hidden branch of the
 session detail view, which already renders sharp through `PrintDiagram`, uses it
@@ -115,7 +119,8 @@ keep using it, so the stored image gets better:
 
 - `generateThumbnail` stores at pixelRatio 2 by default (600×256 device px,
   about 60–120 KB, well inside the 1,000,000-character limit).
-- Starter cards already draw from `playData`; they render at the screen's ratio.
+- Starter cards in the library draw live with `PlayDiagram` at the screen's
+  ratio; "Add to my library" generates and stores the 2× image at that moment.
 - The static planner regenerates any stored thumbnail narrower than 600 px when
   it opens the library (a one-time, local, idempotent pass; the width is read
   from the PNG header in the data URL).
