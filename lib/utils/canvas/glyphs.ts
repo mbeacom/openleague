@@ -67,6 +67,20 @@ export function drawPlayerGlyph(
     const text = player.label.trim() || player.role;
     let textColor = contrastText(player.color);
 
+    // A soft drop shadow: the marker's silhouette, offset down and right (≈ 0.4 ft for a 6 ft marker).
+    const off = r * 0.07;
+    ctx.fillStyle = DIAGRAM_THEME.markerShadow;
+    ctx.beginPath();
+    if (shape === "triangle") {
+        ctx.moveTo(c.x + off, c.y - r * 1.1 + off);
+        ctx.lineTo(c.x + r + off, c.y + r * 0.75 + off);
+        ctx.lineTo(c.x - r + off, c.y + r * 0.75 + off);
+        ctx.closePath();
+    } else {
+        ctx.arc(c.x + off, c.y + off, r, 0, Math.PI * 2);
+    }
+    ctx.fill();
+
     ctx.lineWidth = outline(r, 0.12, 1.5, scale);
     switch (shape) {
         case "disc":
@@ -76,6 +90,12 @@ export function drawPlayerGlyph(
             ctx.beginPath();
             ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
             ctx.fill();
+            ctx.stroke();
+            // A white inner ring, inside the outline: it lifts any fill color off the ice.
+            ctx.strokeStyle = DIAGRAM_THEME.markerRing;
+            ctx.lineWidth = r * 0.08;
+            ctx.beginPath();
+            ctx.arc(c.x, c.y, r * 0.86, 0, Math.PI * 2);
             ctx.stroke();
             if (shape === "goalie") {
                 ctx.fillStyle = textColor;
@@ -131,6 +151,9 @@ export function drawEquipmentGlyph(
             ctx.beginPath();
             ctx.arc(c.x, c.y, r * 0.6, 0, Math.PI * 2);
             ctx.fill();
+            ctx.strokeStyle = DIAGRAM_THEME.puckRim;
+            ctx.lineWidth = outline(r, 0.1, 1, scale);
+            ctx.stroke();
             break;
         case "puckPile":
             ctx.fillStyle = BOARD_COLORS.ink;
@@ -151,6 +174,14 @@ export function drawEquipmentGlyph(
             ctx.closePath();
             ctx.fill();
             ctx.stroke();
+            // The lit half, for a little depth.
+            ctx.fillStyle = DIAGRAM_THEME.coneShade;
+            ctx.beginPath();
+            ctx.moveTo(c.x, c.y - r);
+            ctx.lineTo(c.x, c.y + r * 0.8);
+            ctx.lineTo(c.x - w, c.y + r * 0.8);
+            ctx.closePath();
+            ctx.fill();
             break;
         }
         case "tire":
@@ -170,6 +201,15 @@ export function drawEquipmentGlyph(
             ctx.lineTo(r * 0.4, r);
             ctx.lineTo(-r * 0.4, r);
             ctx.stroke();
+            // The mesh: three light lines across the inside of the frame.
+            ctx.strokeStyle = DIAGRAM_THEME.netMesh;
+            ctx.lineWidth = outline(r, 0.06, 0.75, scale);
+            for (const t of [-0.5, 0, 0.5]) {
+                ctx.beginPath();
+                ctx.moveTo(-r * 0.4, t * r);
+                ctx.lineTo(r * 0.4, t * r);
+                ctx.stroke();
+            }
             ctx.restore();
             break;
     }

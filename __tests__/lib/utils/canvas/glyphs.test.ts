@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { drawPlayerGlyph, drawEquipmentGlyph, PLAYER_GLYPH_SHAPE } from "@/lib/utils/canvas/glyphs";
+import { DIAGRAM_THEME } from "@/lib/utils/canvas/diagram-theme";
 import { glyphRadiusPx, PLAYER_RADIUS_FT, MIN_GLYPH_RADIUS_PX, EQUIPMENT_RADIUS_FT } from "@/lib/utils/canvas/glyph-metrics";
 import { drawAllElements } from "@/lib/utils/canvas/drawing-utils";
 import { createTransformContext } from "@/lib/utils/canvas/rink-renderer";
@@ -76,7 +77,8 @@ describe("drawPlayerGlyph", () => {
     it("O is a hollow ring: white backing fill, player-colored stroke", () => {
         const ctx = mockCtx();
         drawPlayerGlyph(ctx, player("O", "#D32F2F"), P, 20, false);
-        expect(ctx.events.filter((e) => e.startsWith("fill:"))).toEqual(["fill:#FFFFFF"]);
+        // After the drop shadow (spec §3), the ring's only fill is its white backing.
+        expect(ctx.events.filter((e) => e.startsWith("fill:") && e !== `fill:${DIAGRAM_THEME.markerShadow}`)).toEqual(["fill:#FFFFFF"]);
         expect(ctx.events).toContain("stroke:#D32F2F");
         expect(ctx.fillText).toHaveBeenCalledWith("O", 0, expect.any(Number));
     });
@@ -84,7 +86,8 @@ describe("drawPlayerGlyph", () => {
     it("disc roles fill with the player color", () => {
         const ctx = mockCtx();
         drawPlayerGlyph(ctx, player("F", "#123456"), P, 20, false);
-        expect(ctx.events[0]).toBe("fill:#123456");
+        // The drop shadow (spec §3) comes first, then the player's color.
+        expect(ctx.events.slice(0, 2)).toEqual([`fill:${DIAGRAM_THEME.markerShadow}`, "fill:#123456"]);
     });
 
     it.each(["X", "F", "D"] as const)("%s is a disc: arc, no goalie bar, no triangle", (role) => {
@@ -161,7 +164,8 @@ describe("drawEquipmentGlyph", () => {
     it("rotates nets inside save/restore, in order", () => {
         const ctx = draw("net", 90);
         const order = ctx.calls.filter((c) => ["save", "translate", "rotate", "stroke", "restore"].includes(c));
-        expect(order).toEqual(["save", "translate", "rotate", "stroke", "restore"]);
+        // The frame and the three mesh lines (spec §3) are all stroked inside the rotation.
+        expect(order).toEqual(["save", "translate", "rotate", "stroke", "stroke", "stroke", "stroke", "restore"]);
     });
 });
 
@@ -248,5 +252,74 @@ describe("glyph minimum radius (scale model)", () => {
         expect(glyphRadiusPx(EQUIPMENT_RADIUS_FT.puck, 1.4)).toBe(8);
         expect(glyphRadiusPx(EQUIPMENT_RADIUS_FT.puck, 1.4, 1, 1.5)).toBe(1.5);
         expect(glyphRadiusPx(PLAYER_RADIUS_FT, 1.4, 1, 1.5)).toBeCloseTo(8.4);
+    });
+});
+
+type StyleCall = { name: string; args: unknown[]; state: Record<string, unknown> };
+
+/** Records each call with the fill/stroke/width state in effect. */
+function recordingStyleCtx() {
+    const calls: StyleCall[] = [];
+    const state: Record<string, unknown> = { lineWidth: 1 };
+    const ctx = new Proxy({} as Record<string, unknown>, {
+        get: (_t, prop) => {
+            if (typeof prop !== "string") return undefined;
+            if (prop === "measureText") return (text: string) => ({ width: text.length * 4 });
+            if (prop in state) return state[prop];
+            return (...args: unknown[]) => { calls.push({ name: prop, args, state: { ...state } }); return undefined; };
+        },
+        set: (_t, prop, value) => { if (typeof prop === "string") state[prop] = value; return true; },
+    }) as unknown as CanvasRenderingContext2D;
+    return { ctx, calls };
+}
+
+describe("playbook markers (spec §3)", () => {
+    const at = { x: 100, y: 100 };
+    const player = (color: string) => ({ id: "p", role: "F" as const, label: "F1", color, position: { x: 0, y: 0 } });
+
+    it("draws a soft shadow below and offset from the marker, before the marker", () => {
+        const { ctx, calls } = recordingStyleCtx();
+        drawPlayerGlyph(ctx, player("#1976D2"), at, 20, false, 1);
+        const shadow = calls.findIndex((c) => c.name === "fill" && c.state.fillStyle === DIAGRAM_THEME.markerShadow);
+        const body = calls.findIndex((c) => c.name === "fill" && c.state.fillStyle === "#1976D2");
+        expect(shadow).toBeGreaterThanOrEqual(0);
+        expect(shadow).toBeLessThan(body);
+        const shadowArc = calls.slice(0, shadow).reverse().find((c) => c.name === "arc")!;
+        expect(shadowArc.args[0] as number).toBeGreaterThan(at.x);
+        expect(shadowArc.args[1] as number).toBeGreaterThan(at.y);
+    });
+
+    it("rings a filled marker in white inside its outline, keeping a custom color visible", () => {
+        const { ctx, calls } = recordingStyleCtx();
+        drawPlayerGlyph(ctx, player("#7B1FA2"), at, 20, false, 1);
+        expect(calls.some((c) => c.name === "fill" && c.state.fillStyle === "#7B1FA2")).toBe(true);
+        const ring = calls.find((c) => c.name === "stroke" && c.state.strokeStyle === DIAGRAM_THEME.markerRing);
+        expect(ring).toBeDefined();
+        expect(ring!.state.lineWidth).toBeCloseTo(20 * 0.08);
+    });
+
+    it("keeps the label readable on a custom color", () => {
+        const { ctx, calls } = recordingStyleCtx();
+        drawPlayerGlyph(ctx, player("#FFEB3B"), at, 20, false, 1); // a light fill
+        expect(calls.find((c) => c.name === "fillText")!.state.fillStyle).toBe(DIAGRAM_THEME.labelOnLight);
+    });
+
+    it("draws a net as a frame with a mesh, rotated with the net", () => {
+        for (const rotation of [0, 90, 180, 270]) {
+            const { ctx, calls } = recordingStyleCtx();
+            drawEquipmentGlyph(ctx, { kind: "net", rotation }, at, 12, false, 1);
+            expect(calls.find((c) => c.name === "rotate")!.args[0]).toBeCloseTo((rotation * Math.PI) / 180);
+            expect(calls.some((c) => c.name === "stroke" && c.state.strokeStyle === DIAGRAM_THEME.net)).toBe(true);
+            expect(calls.filter((c) => c.name === "stroke" && c.state.strokeStyle === DIAGRAM_THEME.netMesh).length).toBeGreaterThanOrEqual(3);
+        }
+    });
+
+    it("shades a cone and rims a puck", () => {
+        const cone = recordingStyleCtx();
+        drawEquipmentGlyph(cone.ctx, { kind: "cone", rotation: 0 }, at, 12, false, 1);
+        expect(cone.calls.some((c) => c.name === "fill" && c.state.fillStyle === DIAGRAM_THEME.coneShade)).toBe(true);
+        const puck = recordingStyleCtx();
+        drawEquipmentGlyph(puck.ctx, { kind: "puck", rotation: 0 }, at, 12, false, 1);
+        expect(puck.calls.some((c) => c.name === "stroke" && c.state.strokeStyle === DIAGRAM_THEME.puckRim)).toBe(true);
     });
 });

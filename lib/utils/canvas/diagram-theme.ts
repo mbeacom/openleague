@@ -29,7 +29,15 @@ export const DIAGRAM_THEME = {
     noteChip: "rgba(255, 255, 255, 0.8)",
     snapRingHalo: "#FFFFFF",
     cone: "#F57C00",
+    /** The lit half of a cone */
+    coneShade: "#FFB74D",
     net: BOARD_COLORS.penaltyRed,
+    netMesh: "rgba(211, 47, 47, 0.35)",
+    puckRim: "#616161",
+    /** The white inner ring on a filled marker */
+    markerRing: "#FFFFFF",
+    /** A marker's soft drop shadow */
+    markerShadow: "rgba(26, 36, 51, 0.2)",
     /** Marker label text on a light fill */
     labelOnLight: BOARD_COLORS.ink,
     /** Marker label text on a dark fill */
