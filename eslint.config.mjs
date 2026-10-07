@@ -167,6 +167,8 @@ const eslintConfig = [
       SESSION_DETAIL_VIEW,
       `lib/planner-store/**/${SOURCE_GLOB}`,
       `lib/plan-document/**/${SOURCE_GLOB}`,
+      `lib/ratings/**/${SOURCE_GLOB}`,
+      `lib/rankings-document/**/${SOURCE_GLOB}`,
       // The static planner itself (sub-project 3): it must never reach Next.js or the server.
       `apps/planner/**/${SOURCE_GLOB}`,
       "lib/utils/session-timeline.ts",
