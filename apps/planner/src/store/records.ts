@@ -104,6 +104,8 @@ export const META_PERSIST_REQUESTED = "persistRequested";
 export const META_THUMBNAIL_STYLE = "thumbnailStyle";
 /** The device's "Your team" profile (practice logo spec R4): a TeamProfile, or null once cleared. Never in plan files. */
 export const META_TEAM_PROFILE = "teamProfile";
+/** The rankings document (static rankings spec): one per device, in the meta store, so no schema bump. */
+export const META_RANKINGS = "rankings";
 
 /**
  * The starters every device seeded under META_STARTERS_SEEDED. Hard-coded on
