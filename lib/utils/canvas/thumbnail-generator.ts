@@ -11,6 +11,7 @@
 import { PlayData } from "@/types/practice-planner";
 import { createTransformContext } from "./rink-renderer";
 import { drawBoardScene } from "./drawing-utils";
+import { THUMBNAIL_MIN_GLYPH_RADIUS_PX } from "./glyph-metrics";
 import { areaRect } from "@/lib/utils/ice-area";
 
 /**
@@ -54,9 +55,6 @@ function clampPixelRatio(value: number | undefined): number {
 
 /** Padding around the rink in every thumbnail-style diagram (logical px). */
 export const THUMBNAIL_PADDING = 10;
-
-/** Thumbnail-style diagrams aren't edited, so markers keep their real size; this only keeps a puck visible. */
-export const THUMBNAIL_MIN_GLYPH_RADIUS_PX = 1.5;
 
 /** Width ÷ height of a thumbnail; live diagrams keep the same shape. */
 export const THUMBNAIL_ASPECT = THUMBNAIL_DIMENSIONS.width / THUMBNAIL_DIMENSIONS.height;
