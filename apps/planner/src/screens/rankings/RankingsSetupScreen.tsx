@@ -102,7 +102,6 @@ function Editor({ initial, save, clear }: { initial: RankingsDocument; save: Loc
                             type="number"
                             value={level.size}
                             onChange={(e) => setLevel(i, { size: Number(e.target.value) })}
-
                             sx={{ width: 140 }}
                         />
                         <IconButton
@@ -148,13 +147,13 @@ function Editor({ initial, save, clear }: { initial: RankingsDocument; save: Loc
                                     </TableCell>
                                     <TableCell>{team.number}</TableCell>
                                     <TableCell>
-                                        <TextField value={team.name} onChange={(e) => setTeam(team.number, { name: e.target.value })} slotProps={{ htmlInput: { "aria-label": `Name of ${team.number}` } }} />
+                                        <TextField sx={{ minWidth: 190 }} value={team.name} onChange={(e) => setTeam(team.number, { name: e.target.value })} slotProps={{ htmlInput: { "aria-label": `Name of ${team.number}` } }} />
                                     </TableCell>
                                     <TableCell>
                                         <TextField
+                                            sx={{ minWidth: 150 }}
                                             value={team.startingBracket ?? ""}
                                             onChange={(e) => setTeam(team.number, { startingBracket: e.target.value || null })}
-
                                             slotProps={{ htmlInput: { "aria-label": `Starting bracket of ${team.number}` } }}
                                         />
                                     </TableCell>
