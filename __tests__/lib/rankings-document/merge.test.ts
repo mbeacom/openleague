@@ -90,6 +90,32 @@ describe("mergeSchedule", () => {
         expect(parseRankings(chart.doc).ok).toBe(true);
     });
 
+    it("matches same-day games on time first, so an added earlier game can't take a saved result", () => {
+        const first = mergeSchedule(createRankingsDocument({ title: "x" }), parsed([game("901", "902", 3, 1, "10:00")])).doc;
+        const { doc, summary } = mergeSchedule(first, parsed([game("901", "902", null, null, "09:00"), game("901", "902", 3, 1, "10:00")]));
+        expect(summary).toEqual({ added: 1, updated: 0, unchanged: 1, conflicts: [] });
+        expect(doc.games.map((g) => [g.time, g.status])).toEqual([
+            ["10:00", "final"],
+            ["09:00", "scheduled"],
+        ]);
+    });
+
+    it("still matches a same-day game whose time moved", () => {
+        const first = mergeSchedule(createRankingsDocument({ title: "x" }), parsed([game("901", "902", null, null, "10:00")])).doc;
+        const { doc, summary } = mergeSchedule(first, parsed([game("901", "902", 4, 2, "11:00")]));
+        expect(summary.updated).toBe(1);
+        expect(doc.games).toHaveLength(1);
+    });
+
+    it("resolves a conflict on the right game when an earlier same-day game is added", () => {
+        const first = mergeSchedule(createRankingsDocument({ title: "x" }), parsed([game("901", "902", 3, 1, "10:00")])).doc;
+        const { doc, summary } = mergeSchedule(first, parsed([game("901", "902", 1, 1, "09:00"), game("901", "902", 3, 2, "10:00")]));
+        expect(summary.conflicts).toHaveLength(1);
+        const resolved = resolveConflict(doc, summary.conflicts[0], "incoming");
+        expect(resolved.games.find((g) => g.time === "10:00")).toMatchObject({ homeGoals: 3, awayGoals: 2 });
+        expect(resolved.games.find((g) => g.time === "09:00")).toMatchObject({ homeGoals: 1, awayGoals: 1 });
+    });
+
     it("keeps a double-header as two games", () => {
         const { doc } = mergeSchedule(createRankingsDocument({ title: "x" }), parsed([game("901", "902", 3, 1, "09:00"), game("901", "902", 2, 2, "11:00")]));
         expect(doc.games).toHaveLength(2);

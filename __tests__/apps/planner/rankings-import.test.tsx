@@ -42,6 +42,25 @@ describe("RankingsImportScreen", () => {
         expect(saved.success && saved.data!.teams.find((t) => t.number === "902")!.startingBracket).toBe("White Strong");
     });
 
+    it("won't save an edited snake chart until it is read again", async () => {
+        const { store } = memoryStore();
+        renderScreen(<RankingsImportScreen store={store} />, store);
+        fireEvent.change(await screen.findByLabelText("Season starts in"), { target: { value: "2026" } });
+        fireEvent.change(screen.getByLabelText("Schedule page"), { target: { value: PAGE } });
+        fireEvent.click(screen.getByRole("button", { name: READ_SCHEDULE_LABEL }));
+        await screen.findByText(/1 completed game, 1 scheduled, 2 teams/);
+        const save = screen.getByRole("button", { name: SAVE_IMPORT_LABEL });
+        expect(save).toBeEnabled();
+
+        fireEvent.change(screen.getByLabelText("Snake chart"), { target: { value: SNAKE } });
+        expect(save).toBeDisabled();
+        fireEvent.click(screen.getByRole("button", { name: READ_SNAKE_LABEL }));
+        await waitFor(() => expect(save).toBeEnabled());
+
+        fireEvent.change(screen.getByLabelText("Snake chart"), { target: { value: "" } });
+        expect(save).toBeEnabled();
+    });
+
     it("shows conflicts on re-import and lets the user take the imported score", async () => {
         const { store } = memoryStore();
         await store.saveRankings(sampleRankingsDoc());

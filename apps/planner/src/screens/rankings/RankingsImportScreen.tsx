@@ -117,7 +117,8 @@ export function RankingsImportScreen({ store }: { store: LocalPlannerStore }) {
         setSnake(null);
         setSnakeFit(null);
         setMessage(null);
-        if (schedule) rebuild(schedule, null, choices);
+        // An edited chart must be read again before saving; a cleared one simply drops out of the preview.
+        if (schedule && !text.trim()) rebuild(schedule, null, choices);
         else setDraft(null);
     };
     /** Reads a picked text file; sets the text only when a file was actually read. */
