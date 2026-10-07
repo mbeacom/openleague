@@ -5,6 +5,11 @@ import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
 const CREST = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggh==";
 const { mockDocx } = vi.hoisted(() => ({ mockDocx: vi.fn() }));
+// These tests are about the Crest's font; the diagram font (spec §3) resolves at once here.
+vi.mock("@/lib/utils/canvas/diagram-fonts", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("@/lib/utils/canvas/diagram-fonts")>()),
+    waitForDiagramFont: () => Promise.resolve(),
+}));
 vi.mock("@/components/features/practice-planner/export/export-images", () => ({
     canvasRenderers: { diagram: () => PNG, swatch: () => PNG, crest: () => CREST },
 }));

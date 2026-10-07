@@ -4,6 +4,7 @@
  * it never reads prefers-color-scheme. No server or Next imports.
  */
 import { BOARD_COLORS } from "./notation";
+import { DIAGRAM_FONT_FAMILY } from "./diagram-fonts";
 
 export const DIAGRAM_THEME = {
     /** Canvas outside the rink */
@@ -31,8 +32,6 @@ export const DIAGRAM_THEME = {
     ringFill: "#FFFFFF",
     /** Behind station-map labels */
     stationLabelBacking: "rgba(255, 255, 255, 0.85)",
-    labelFont: `"Source Sans 3", system-ui, sans-serif`,
-    noteFont: "Arial",
-    /** Station-map labels and messages */
-    uiFont: "sans-serif",
+    /** Labels, notes and station-map text (spec §3: Cabinet Grotesk) */
+    font: DIAGRAM_FONT_FAMILY,
 } as const;

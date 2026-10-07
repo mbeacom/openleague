@@ -14,6 +14,12 @@ import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { PlayEditor, PlayEditorProps } from "@/components/features/practice-planner/PlayEditor";
 import { SavedPlay } from "@/types/practice-planner";
 import { generateThumbnail } from "@/lib/utils/canvas/thumbnail-generator";
+import { waitForDiagramFont } from "@/lib/utils/canvas/diagram-fonts";
+
+vi.mock("@/lib/utils/canvas/diagram-fonts", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("@/lib/utils/canvas/diagram-fonts")>()),
+    waitForDiagramFont: vi.fn(() => Promise.resolve()),
+}));
 
 // Mock the thumbnail generator
 vi.mock("@/lib/utils/canvas/thumbnail-generator", async (importOriginal) => ({
@@ -189,6 +195,8 @@ describe("PlayEditor", () => {
             expect(savedPlay.thumbnail).toBe("data:image/png;base64,mockThumbnail");
             // Stored at 2×: library cards show it larger than 300×128 (rink diagram quality spec §1).
             expect(vi.mocked(generateThumbnail)).toHaveBeenLastCalledWith(expect.anything(), { pixelRatio: 2 });
+            // The stored thumbnail waits for the diagram font, so it never bakes in the fallback face.
+            expect(vi.mocked(waitForDiagramFont).mock.invocationCallOrder.at(-1)!).toBeLessThan(vi.mocked(generateThumbnail).mock.invocationCallOrder.at(-1)!);
         });
 
         it("shows success message after successful save", async () => {

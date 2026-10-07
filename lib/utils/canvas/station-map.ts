@@ -14,6 +14,7 @@ import { drawAllElements } from "./drawing-utils";
 import { THUMBNAIL_MIN_GLYPH_RADIUS_PX } from "./glyph-metrics";
 import { BOARD_COLORS } from "./notation";
 import { DIAGRAM_THEME } from "./diagram-theme";
+import { diagramFont } from "./diagram-fonts";
 
 export interface StationMapStation {
     /** The drill's name, shown in the station's label. */
@@ -22,8 +23,8 @@ export interface StationMapStation {
     playData: PlayData | null;
 }
 
-const LABEL_FONT = `700 14px ${DIAGRAM_THEME.uiFont}`;
-const MESSAGE_FONT = `400 12px ${DIAGRAM_THEME.uiFont}`;
+const LABEL_FONT = diagramFont(800, 14);
+const MESSAGE_FONT = diagramFont(600, 12);
 const LABEL_INSET_PX = 6;
 const LABEL_LINE_PX = 18;
 const LABEL_BACKING = DIAGRAM_THEME.stationLabelBacking;

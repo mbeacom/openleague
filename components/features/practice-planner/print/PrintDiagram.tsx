@@ -15,6 +15,7 @@ import { Box, Typography } from "@mui/material";
 import type { PlayData } from "@/types/practice-planner";
 import { generateThumbnail } from "@/lib/utils/canvas/thumbnail-generator";
 import { useMounted } from "@/lib/hooks/useClockText";
+import { diagramFontReady, waitForDiagramFont } from "@/lib/utils/canvas/diagram-fonts";
 
 export const PRINT_DIAGRAM_SIZE = { width: 720, height: 306, pixelRatio: 3 } as const;
 export const DIAGRAM_UNAVAILABLE = "Diagram unavailable";
@@ -70,9 +71,22 @@ export interface PrintDiagramProps {
 
 export function PrintDiagram({ playData, name, pixelRatio = PRINT_DIAGRAM_SIZE.pixelRatio, onReady }: PrintDiagramProps) {
     const mounted = useMounted();
+    // A printed diagram must not bake in the fallback font: draw once it has loaded (or timed out).
+    // Ready at once when the font is already loaded (or there is no Font Loading API).
+    const [fontReady, setFontReady] = useState(diagramFontReady);
+    useEffect(() => {
+        if (fontReady) return;
+        let live = true;
+        void waitForDiagramFont().then(() => {
+            if (live) setFontReady(true);
+        });
+        return () => {
+            live = false;
+        };
+    }, [fontReady]);
     const diagram = useMemo(
-        () => (mounted && playData ? renderDiagram(playData, name, pixelRatio) : null),
-        [mounted, playData, name, pixelRatio]
+        () => (mounted && fontReady && playData ? renderDiagram(playData, name, pixelRatio) : null),
+        [mounted, fontReady, playData, name, pixelRatio]
     );
     // The src whose <img> failed to decode (e.g. toDataURL gave "data:" under memory pressure).
     const [brokenSrc, setBrokenSrc] = useState<string | null>(null);

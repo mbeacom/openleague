@@ -26,6 +26,7 @@ import { BOARD_COLORS } from "./notation";
 import { MIN_LINE_PX, REFERENCE_PX_PER_FT, refPx } from "./scale";
 import type { LineHandle, SnapTarget } from "./line-editing";
 import { DIAGRAM_THEME } from "./diagram-theme";
+import { diagramFont } from "./diagram-fonts";
 
 /** The shortest arrowhead drawn, so a tiny diagram's arrows still read as arrows. */
 export const ARROW_MIN_PX = 4;
@@ -232,7 +233,7 @@ export function drawTextAnnotation(
     const scaledFontSize = annotation.fontSize * Math.min(transform.scaleX, transform.scaleY);
 
     // Measure text for background
-    ctx.font = `${scaledFontSize}px ${DIAGRAM_THEME.noteFont}`;
+    ctx.font = diagramFont(600, scaledFontSize);
     const metrics = ctx.measureText(annotation.text);
     const textWidth = metrics.width;
     const textHeight = scaledFontSize;
@@ -254,7 +255,7 @@ export function drawTextAnnotation(
 
     // Draw text
     ctx.fillStyle = annotation.color;
-    ctx.font = `${scaledFontSize}px ${DIAGRAM_THEME.noteFont}`;
+    ctx.font = diagramFont(600, scaledFontSize);
     ctx.textAlign = "left";
     ctx.textBaseline = "top";
     ctx.fillText(annotation.text, canvasPos.x, canvasPos.y - textHeight);

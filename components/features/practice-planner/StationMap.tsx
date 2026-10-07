@@ -17,6 +17,7 @@ import {
 } from "@/lib/utils/canvas/station-map";
 import { backingPixelRatio, sizeBackingStore, watchPixelRatio } from "@/lib/utils/canvas/backing-store";
 import { PlayLegend } from "./PlayLegend";
+import { useDiagramFontVersion } from "@/lib/hooks/useDiagramFontVersion";
 
 // Intrinsic (logical) canvas size; CSS scales it to the container's width.
 const MAP_WIDTH = 960;
@@ -35,6 +36,8 @@ export function StationMap({ stations, activeIndex }: StationMapProps) {
     // zoom or moving the window to another display changes it; the redraw below
     // depends on it so the backing store is resized and the map stays sharp.
     const [pixelRatio, setPixelRatio] = useState<number | null>(null);
+    // Redraw once the diagram font arrives.
+    const fontVersion = useDiagramFontVersion();
 
     useEffect(() => watchPixelRatio(() => setPixelRatio(window.devicePixelRatio)), []);
 
@@ -51,7 +54,7 @@ export function StationMap({ stations, activeIndex }: StationMapProps) {
         ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
         ctx.clearRect(0, 0, MAP_WIDTH, MAP_HEIGHT);
         drawStationMap(ctx, createTransformContext(MAP_WIDTH, MAP_HEIGHT, MAP_PADDING), stations, activeIndex);
-    }, [stations, activeIndex, pixelRatio]);
+    }, [stations, activeIndex, pixelRatio, fontVersion]);
 
     if (stations.length === 0) return null;
 

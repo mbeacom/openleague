@@ -6,9 +6,9 @@ import type { EquipmentItem, PlayerIcon, PlayerRole, Position } from "@/types/pr
 import { BOARD_COLORS } from "./notation";
 import { MIN_LINE_PX } from "./scale";
 import { DIAGRAM_THEME } from "./diagram-theme";
+import { diagramFont } from "./diagram-fonts";
 
 const SELECTION_COLOR = DIAGRAM_THEME.selection;
-const FONT_FAMILY = DIAGRAM_THEME.labelFont;
 
 /** An outline: a fraction of the radius, never below `floorPx` on the reference board (× scale) or 1 px. */
 const outline = (r: number, fraction: number, floorPx: number, scale: number) => Math.max(r * fraction, floorPx * scale, MIN_LINE_PX);
@@ -40,10 +40,10 @@ function selectionRing(ctx: CanvasRenderingContext2D, c: Position, r: number) {
 function fitText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number, startPx: number): string {
     const MIN_FONT_PX = 6;
     let size = startPx;
-    ctx.font = `800 ${size}px ${FONT_FAMILY}`;
+    ctx.font = diagramFont(800, size);
     while (size > MIN_FONT_PX && ctx.measureText(text).width > maxWidth) {
         size -= 0.5;
-        ctx.font = `800 ${size}px ${FONT_FAMILY}`;
+        ctx.font = diagramFont(800, size);
     }
     if (ctx.measureText(text).width <= maxWidth) return text;
     let shown = text;
