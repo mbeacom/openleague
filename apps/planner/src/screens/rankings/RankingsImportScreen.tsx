@@ -4,7 +4,7 @@
  * into the device's rankings, resolving score conflicts; or open a rankings file.
  * Never fetches anything (spec R2).
  */
-import { useRef, useState, type ChangeEvent } from "react";
+import { useRef, useState, type ChangeEvent, type ClipboardEvent } from "react";
 import { Alert, Box, Button, List, ListItem, MenuItem, Stack, TextField, Typography } from "@mui/material";
 import {
     applySnakeChart,
@@ -19,7 +19,7 @@ import {
     type SnakeChartFit,
 } from "@/lib/rankings-document";
 import { CSHL_8U_METHOD } from "@/lib/ratings";
-import { defaultSeasonYear, parseSchedule, parseSnakeChart, type ParsedSchedule, type ParsedSnakeChart } from "@/lib/ratings/import";
+import { defaultSeasonYear, looksLikeHtml, parseSchedule, parseSnakeChart, savedPageText, type ParsedSchedule, type ParsedSnakeChart } from "@/lib/ratings/import";
 import { navigateTo } from "../../platform";
 import { staticRoutes } from "../../routes";
 import type { LocalPlannerStore } from "../../store/types";
@@ -40,6 +40,38 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 type Choice = "existing" | "incoming";
 
+/** A pasted or opened page. It stays out of the text box: a page is hundreds of kilobytes of markup. */
+interface PageSource {
+    label: string;
+    content: string;
+}
+
+export const PASTED_PAGE_LABEL = "Pasted page content";
+const PAGE_FILE_TYPES = ".html,.htm,.txt,.webarchive,text/html,text/plain,application/x-webarchive";
+
+/**
+ * A pasted page's HTML when the clipboard has it: a plain-text copy of a page runs its cells
+ * together, the HTML keeps them apart. Falls back to the plain text if only that reads.
+ */
+function pastedPage(event: ClipboardEvent<HTMLElement>, found: (content: string) => number): string | null {
+    const html = event.clipboardData.getData("text/html");
+    if (!looksLikeHtml(html)) return null;
+    event.preventDefault();
+    const plain = event.clipboardData.getData("text/plain");
+    return found(html) === 0 && plain.trim() && found(plain) > 0 ? plain : html;
+}
+
+function LoadedPage({ source, found, onClear, clearLabel }: { source: PageSource; found: string; onClear: () => void; clearLabel: string }) {
+    return (
+        <Box role="status" sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", border: 1, borderColor: "divider", borderRadius: 1, pl: 2, pr: 1, py: 0.5 }}>
+            <Typography sx={{ flex: "1 1 14rem", overflowWrap: "anywhere" }}>{`${source.label} (${found})`}</Typography>
+            <Button onClick={onClear} aria-label={clearLabel} sx={{ minHeight: 44 }}>
+                Clear
+            </Button>
+        </Box>
+    );
+}
+
 const score = (game: { homeGoals: number | null; awayGoals: number | null }, home: string, gameHome: string) =>
     home === gameHome ? `${game.homeGoals}–${game.awayGoals}` : `${game.awayGoals}–${game.homeGoals}`;
 
@@ -47,6 +79,10 @@ export function RankingsImportScreen({ store }: { store: LocalPlannerStore }) {
     const { state, save, clear } = useRankingsDoc(store);
     const [scheduleText, setScheduleText] = useState("");
     const [snakeText, setSnakeText] = useState("");
+    const [scheduleSource, setScheduleSource] = useState<PageSource | null>(null);
+    const [snakeSource, setSnakeSource] = useState<PageSource | null>(null);
+    /** The age division picked on a snake chart with several; null follows the schedule's teams. */
+    const [snakeDivision, setSnakeDivision] = useState<number | null>(null);
     const [seasonYear, setSeasonYear] = useState(() => defaultSeasonYear(new Date()));
     const [presetId, setPresetId] = useState(PRESETS[0].id);
     const [title, setTitle] = useState("Pre-season rankings");
@@ -103,19 +139,63 @@ export function RankingsImportScreen({ store }: { store: LocalPlannerStore }) {
         setConflicts(open);
     };
 
-    const readSchedule = () => {
-        const parsed = parseSchedule(scheduleText, { seasonYear });
+    /**
+     * A chart with several age divisions is scoped to the picked one, else to the schedule's, else
+     * (a chart read on its own over saved rankings) to the saved teams'.
+     */
+    const parseSnake = (content: string, forSchedule: ParsedSchedule | null, division: number | null) =>
+        parseSnakeChart(content, { scheduleTeams: (forSchedule?.teams ?? existing?.teams)?.map((team) => team.number), division: division ?? undefined });
+    const readSchedule = (content = scheduleSource?.content ?? scheduleText) => {
+        const parsed = parseSchedule(content, { seasonYear });
         const fresh = new Map<string, Choice>();
+        // A chart read before the schedule picks its division again, now that the teams are known.
+        const snakeContent = snakeSource?.content ?? snakeText;
+        const nextSnake = (snake || snakeSource) && snakeContent.trim() ? parseSnake(snakeContent, parsed, snakeDivision) : snake;
         setSchedule(parsed);
+        setSnake(nextSnake);
         setChoices(fresh);
         setMessage(null);
-        rebuild(parsed, snake, fresh);
+        rebuild(parsed, nextSnake, fresh);
     };
-    const readSnake = () => {
-        const parsed = parseSnakeChart(snakeText);
+    const readSnake = (content = snakeSource?.content ?? snakeText, division = snakeDivision) => {
+        const parsed = parseSnake(content, schedule, division);
         setSnake(parsed);
         setMessage(null);
         rebuild(schedule, parsed, choices);
+    };
+    const pickDivision = (division: number) => {
+        setSnakeDivision(division);
+        readSnake(undefined, division);
+    };
+    const loadSchedule = (source: PageSource) => {
+        setScheduleSource(source);
+        setScheduleText("");
+        readSchedule(source.content);
+    };
+    const loadSnake = (source: PageSource) => {
+        setSnakeSource(source);
+        setSnakeText("");
+        setSnakeDivision(null);
+        const parsed = parseSnake(source.content, schedule, null);
+        setSnake(parsed);
+        setMessage(null);
+        rebuild(schedule, parsed, choices);
+    };
+    const pasteSchedule = (event: ClipboardEvent<HTMLElement>) => {
+        const content = pastedPage(event, (text) => parseSchedule(text, { seasonYear }).games.length);
+        if (content !== null) loadSchedule({ label: PASTED_PAGE_LABEL, content });
+    };
+    const pasteSnake = (event: ClipboardEvent<HTMLElement>) => {
+        const content = pastedPage(event, (text) => parseSnakeChart(text).teams.length);
+        if (content !== null) loadSnake({ label: PASTED_PAGE_LABEL, content });
+    };
+    const clearSchedule = () => {
+        setScheduleSource(null);
+        editSchedule("");
+    };
+    const clearSnake = () => {
+        setSnakeSource(null);
+        editSnake("");
     };
     const choose = (conflict: GameConflict, choice: Choice) => {
         const next = new Map(choices).set(conflict.key, choice);
@@ -128,6 +208,8 @@ export function RankingsImportScreen({ store }: { store: LocalPlannerStore }) {
     };
     const editSnake = (text: string) => {
         setSnakeText(text);
+        // A replaced chart may list its divisions in another order: the old pick's index means nothing now.
+        setSnakeDivision(null);
         setSnake(null);
         setSnakeFit(null);
         setMessage(null);
@@ -135,17 +217,21 @@ export function RankingsImportScreen({ store }: { store: LocalPlannerStore }) {
         if (schedule && !text.trim()) rebuild(schedule, null, choices);
         else setDraft(null);
     };
-    /** Reads a picked text file; sets the text only when a file was actually read. */
-    const pickText = async (event: ChangeEvent<HTMLInputElement>, apply: (text: string) => void) => {
+    /** Reads a saved page (HTML, text or a Safari web archive) and reads it straight away. */
+    const pickPage = async (event: ChangeEvent<HTMLInputElement>, load: (source: PageSource) => void) => {
         const input = event.target;
         const file = input.files?.[0];
         input.value = "";
         if (!file) return;
+        let content: string | null;
         try {
-            apply(await file.text());
+            content = savedPageText(new Uint8Array(await file.arrayBuffer()), file.name);
         } catch {
             setMessage({ severity: "error", text: "Couldn't read that file." });
+            return;
         }
+        if (content === null) setMessage({ severity: "error", text: "That web archive has no page in it. Try saving the page as HTML." });
+        else load({ label: file.name, content });
     };
     const commit = async () => {
         if (!draft) return;
@@ -187,10 +273,12 @@ export function RankingsImportScreen({ store }: { store: LocalPlannerStore }) {
             <Typography component="h1" variant="h5" sx={{ fontWeight: 800 }}>
                 Import rankings
             </Typography>
-            <Typography color="text.secondary">
-                Open your league&rsquo;s schedule page, select everything (Ctrl/⌘ + A), copy, and paste it below. You can also save the page and open the file.
-                Nothing is sent anywhere: it stays in this browser.
-            </Typography>
+            <Box component="ol" sx={{ m: 0, pl: 3, color: "text.secondary", "& li": { mb: 0.5 } }}>
+                <li>Open your division&rsquo;s full schedule on the league site: the page that lists every game with its score.</li>
+                <li>Select everything (Ctrl/⌘ + A) and copy it (Ctrl/⌘ + C).</li>
+                <li>Paste it into the schedule box below. Or save the page (Web Archive is fine) and open the file.</li>
+            </Box>
+            <Typography color="text.secondary">Nothing is sent anywhere: it stays in this browser.</Typography>
 
             {!existing && (
                 <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
@@ -225,7 +313,19 @@ export function RankingsImportScreen({ store }: { store: LocalPlannerStore }) {
                 <Typography component="h2" variant="h6">
                     1. Schedule
                 </Typography>
-                <TextField label="Schedule page" multiline minRows={4} maxRows={10} value={scheduleText} onChange={(e) => editSchedule(e.target.value)} />
+                {scheduleSource ? (
+                    <LoadedPage source={scheduleSource} found={`${plural(schedule?.games.length ?? 0, "game")} found`} onClear={clearSchedule} clearLabel="Clear schedule page" />
+                ) : (
+                    <TextField
+                        label="Schedule page"
+                        multiline
+                        minRows={4}
+                        maxRows={10}
+                        value={scheduleText}
+                        onChange={(e) => editSchedule(e.target.value)}
+                        slotProps={{ htmlInput: { onPaste: pasteSchedule } }}
+                    />
+                )}
                 <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap", rowGap: 1 }}>
                     <TextField
                         label="Season starts in"
@@ -245,10 +345,10 @@ export function RankingsImportScreen({ store }: { store: LocalPlannerStore }) {
                         hidden
                         type="file"
                         data-testid="schedule-file-input"
-                        accept=".html,.htm,.txt,text/html,text/plain"
-                        onChange={(e) => void pickText(e, editSchedule)}
+                        accept={PAGE_FILE_TYPES}
+                        onChange={(e) => void pickPage(e, loadSchedule)}
                     />
-                    <Button variant="contained" onClick={readSchedule} disabled={!scheduleText.trim()} sx={{ minHeight: 44 }}>
+                    <Button variant="contained" onClick={() => readSchedule()} disabled={!scheduleSource && !scheduleText.trim()} sx={{ minHeight: 44 }}>
                         {READ_SCHEDULE_LABEL}
                     </Button>
                 </Stack>
@@ -277,7 +377,31 @@ export function RankingsImportScreen({ store }: { store: LocalPlannerStore }) {
                 <Typography component="h2" variant="h6">
                     2. Snake chart (optional)
                 </Typography>
-                <TextField label="Snake chart" multiline minRows={3} maxRows={8} value={snakeText} onChange={(e) => editSnake(e.target.value)} />
+                <Typography variant="body2" color="text.secondary">
+                    The same steps on the league&rsquo;s snake chart page give each team its starting bracket.
+                </Typography>
+                {snakeSource ? (
+                    <LoadedPage source={snakeSource} found={`${plural(snake?.teams.length ?? 0, "team")} found`} onClear={clearSnake} clearLabel="Clear snake chart page" />
+                ) : (
+                    <TextField
+                        label="Snake chart"
+                        multiline
+                        minRows={3}
+                        maxRows={8}
+                        value={snakeText}
+                        onChange={(e) => editSnake(e.target.value)}
+                        slotProps={{ htmlInput: { onPaste: pasteSnake } }}
+                    />
+                )}
+                {snake?.divisions && snake.divisions.length > 1 && (
+                    <TextField select label="Age division" value={snake.division ?? 0} onChange={(e) => pickDivision(Number(e.target.value))} sx={{ maxWidth: 420 }}>
+                        {snake.divisions.map((division, index) => (
+                            <MenuItem key={index} value={index}>
+                                {`${division.name} (${plural(division.teams.length, "team")})`}
+                            </MenuItem>
+                        ))}
+                    </TextField>
+                )}
                 <Stack direction="row" spacing={1}>
                     <Button onClick={() => snakeFile.current?.click()} sx={{ minHeight: 44 }}>
                         Open saved page
@@ -287,10 +411,10 @@ export function RankingsImportScreen({ store }: { store: LocalPlannerStore }) {
                         hidden
                         type="file"
                         data-testid="snake-file-input"
-                        accept=".html,.htm,.txt,text/html,text/plain"
-                        onChange={(e) => void pickText(e, editSnake)}
+                        accept={PAGE_FILE_TYPES}
+                        onChange={(e) => void pickPage(e, loadSnake)}
                     />
-                    <Button variant="outlined" onClick={readSnake} disabled={!snakeText.trim()} sx={{ minHeight: 44 }}>
+                    <Button variant="outlined" onClick={() => readSnake()} disabled={!snakeSource && !snakeText.trim()} sx={{ minHeight: 44 }}>
                         {READ_SNAKE_LABEL}
                     </Button>
                 </Stack>

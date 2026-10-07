@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import {
     KEEP_MINE_LABEL,
+    PASTED_PAGE_LABEL,
     READ_SCHEDULE_LABEL,
     READ_SNAKE_LABEL,
     REPLACE_CONFIRM_MESSAGE,
@@ -13,6 +14,8 @@ import {
 import { serializeRankings } from "@/lib/rankings-document";
 import { memoryStore, renderScreen } from "./render-screen";
 import { sampleRankingsDoc } from "./rankings-fixtures";
+import { SCHEDULE_COPIED, SCHEDULE_HTML, SNAKE_COPIED, SNAKE_HTML } from "../../lib/ratings/league-page-fixtures";
+import { webArchive } from "../../lib/ratings/bplist-writer";
 
 const PAGE = ["9/20", "9:25am", "901 Riverside M1", "11", "-", "4", "902 Lakeview M2", "North Rink", "10/12", "8:00am", "901 Riverside M1", "902 Lakeview M2", "904 Orphan Team"].join("\n");
 const SNAKE = ["Program\tRed\tWhite", "Strength\tstr\tstr", "Riverside\t901\t", "Lakeview\t\t902"].join("\n");
@@ -128,12 +131,126 @@ describe("RankingsImportScreen", () => {
         expect(screen.getByRole("button", { name: SAVE_IMPORT_LABEL })).toBeDisabled();
     });
 
-    it("fills the schedule box from a picked file", async () => {
-        const { store } = memoryStore();
-        renderScreen(<RankingsImportScreen store={store} />, store);
-        const input = await screen.findByTestId("schedule-file-input");
-        fireEvent.change(input, { target: { files: [new File(["9/20\n9:00am"], "page.txt", { type: "text/plain" })] } });
-        await waitFor(() => expect(screen.getByLabelText("Schedule page")).toHaveValue("9/20\n9:00am"));
+    describe("a real league page", () => {
+        const clipboard = (data: Record<string, string>) => ({ clipboardData: { getData: (type: string) => data[type] ?? "" } });
+
+        async function ready() {
+            const { store } = memoryStore();
+            renderScreen(<RankingsImportScreen store={store} />, store);
+            fireEvent.change(await screen.findByLabelText("Season starts in"), { target: { value: "2026" } });
+            return store;
+        }
+
+        it("reads a pasted page from its HTML, not its run-together text, and shows a summary instead of the markup", async () => {
+            const store = await ready();
+            fireEvent.paste(screen.getByLabelText("Schedule page"), clipboard({ "text/html": SCHEDULE_HTML, "text/plain": "not used" }));
+            expect(await screen.findByText(`${PASTED_PAGE_LABEL} (7 games found)`)).toBeInTheDocument();
+            expect(screen.getByText(/4 completed games, 3 scheduled, 6 teams/)).toBeInTheDocument();
+            expect(screen.queryByLabelText("Schedule page")).not.toBeInTheDocument();
+
+            fireEvent.click(screen.getByRole("button", { name: SAVE_IMPORT_LABEL }));
+            await waitFor(async () => {
+                const saved = await store.getRankings();
+                expect(saved.success && saved.data?.games).toHaveLength(7);
+            });
+        });
+
+        it("reads a plain-text paste whose cells run together", async () => {
+            await ready();
+            fireEvent.change(screen.getByLabelText("Schedule page"), { target: { value: SCHEDULE_COPIED } });
+            fireEvent.click(screen.getByRole("button", { name: READ_SCHEDULE_LABEL }));
+            expect(await screen.findByText(/4 completed games, 3 scheduled, 6 teams/)).toBeInTheDocument();
+        });
+
+        it("clears a pasted page back to an empty box", async () => {
+            await ready();
+            fireEvent.paste(screen.getByLabelText("Schedule page"), clipboard({ "text/html": SCHEDULE_HTML }));
+            fireEvent.click(await screen.findByRole("button", { name: "Clear schedule page" }));
+            expect(screen.getByLabelText("Schedule page")).toHaveValue("");
+            expect(screen.getByRole("button", { name: SAVE_IMPORT_LABEL })).toBeDisabled();
+        });
+
+        it("reads an opened saved page straight away and names the file", async () => {
+            await ready();
+            const file = new File([SCHEDULE_HTML], "schedule.html", { type: "text/html" });
+            fireEvent.change(screen.getByTestId("schedule-file-input"), { target: { files: [file] } });
+            expect(await screen.findByText("schedule.html (7 games found)")).toBeInTheDocument();
+            expect(screen.getByText(/4 completed games, 3 scheduled, 6 teams/)).toBeInTheDocument();
+        });
+
+        it("opens a Safari web archive", async () => {
+            await ready();
+            const archive = new File([webArchive({ main: SCHEDULE_HTML, subframes: ["<html><body>a frame</body></html>"] })], "Schedule.webarchive");
+            fireEvent.change(screen.getByTestId("schedule-file-input"), { target: { files: [archive] } });
+            expect(await screen.findByText("Schedule.webarchive (7 games found)")).toBeInTheDocument();
+        });
+
+        it("scopes a pasted multi-division snake chart to the schedule's division, and lets the user pick another", async () => {
+            const store = await ready();
+            fireEvent.paste(screen.getByLabelText("Schedule page"), clipboard({ "text/html": SCHEDULE_HTML }));
+            await screen.findByText(`${PASTED_PAGE_LABEL} (7 games found)`);
+            fireEvent.paste(screen.getByLabelText("Snake chart"), clipboard({ "text/html": SNAKE_HTML, "text/plain": SNAKE_COPIED }));
+            expect(await screen.findByText(`${PASTED_PAGE_LABEL} (9 teams found)`)).toBeInTheDocument();
+            expect(screen.getByRole("combobox", { name: "Age division" })).toHaveTextContent("8U 901 et al. (9 teams)");
+
+            fireEvent.click(screen.getByRole("button", { name: SAVE_IMPORT_LABEL }));
+            await waitFor(async () => {
+                const saved = await store.getRankings();
+                expect(saved.success && saved.data?.bracketOrder).toEqual(["Red Strong", "Red Weak", "White Strong", "White Weak"]);
+            });
+            const saved = await store.getRankings();
+            expect(saved.success && saved.data!.teams.find((t) => t.number === "903")!.startingBracket).toBe("White Weak");
+        });
+
+        it("picks the saved teams' division when only a chart is read", async () => {
+            const { store } = memoryStore();
+            const base = sampleRankingsDoc();
+            const tenU = (n: string) => String(Number(n) + 50);
+            await store.saveRankings(
+                sampleRankingsDoc({
+                    teams: base.teams.map((t) => ({ ...t, number: tenU(t.number) })),
+                    games: base.games.map((g) => ({ ...g, home: tenU(g.home), away: tenU(g.away) })),
+                    myTeam: tenU(base.myTeam!),
+                }),
+            );
+            renderScreen(<RankingsImportScreen store={store} />, store);
+            fireEvent.paste(await screen.findByLabelText("Snake chart"), clipboard({ "text/html": SNAKE_HTML }));
+            expect(await screen.findByText(`${PASTED_PAGE_LABEL} (4 teams found)`)).toBeInTheDocument();
+            expect(screen.getByRole("combobox", { name: "Age division" })).toHaveTextContent("10U 951 et al. (4 teams)");
+            expect(screen.getByText(/4 of 4 saved teams got a starting bracket from the chart/)).toBeInTheDocument();
+        });
+
+        it("drops the picked age division when the chart text is replaced", async () => {
+            await ready();
+            const table = (name: string, teams: string[]) => [`${name}\t1\t2`, "Program\tRed\tWhite", "Strength\tstr\tstr", ...teams.map((t, k) => `Riverside${k}\t${t}\t`)];
+            const eight = table("8U", ["901", "902"]);
+            const ten = table("10U", ["951", "952", "953"]);
+            fireEvent.change(screen.getByLabelText("Snake chart"), { target: { value: [...eight, ...ten].join("\n") } });
+            fireEvent.click(screen.getByRole("button", { name: READ_SNAKE_LABEL }));
+            fireEvent.mouseDown(await screen.findByRole("combobox", { name: "Age division" }));
+            fireEvent.click(await screen.findByRole("option", { name: "10U (3 teams)" }));
+            await waitFor(() => expect(screen.getByRole("combobox", { name: "Age division" })).toHaveTextContent("10U (3 teams)"));
+
+            // The same divisions in the other order: the old pick's position now holds 8U.
+            fireEvent.change(screen.getByLabelText("Snake chart"), { target: { value: [...ten, ...eight].join("\n") } });
+            fireEvent.click(screen.getByRole("button", { name: READ_SNAKE_LABEL }));
+            await waitFor(() => expect(screen.getByRole("combobox", { name: "Age division" })).toHaveTextContent("10U (3 teams)"));
+        });
+
+        it("says a web archive it can't read has no page in it", async () => {
+            await ready();
+            const archive = new File([webArchive({ main: SCHEDULE_HTML }).slice(0, -10)], "Schedule.webarchive");
+            fireEvent.change(screen.getByTestId("schedule-file-input"), { target: { files: [archive] } });
+            expect(await screen.findByText("That web archive has no page in it. Try saving the page as HTML.")).toBeInTheDocument();
+        });
+
+        it("switches the snake chart's age division", async () => {
+            await ready();
+            fireEvent.paste(screen.getByLabelText("Snake chart"), clipboard({ "text/html": SNAKE_HTML }));
+            fireEvent.mouseDown(await screen.findByRole("combobox", { name: "Age division" }));
+            fireEvent.click(await screen.findByRole("option", { name: "10U 951 et al. (4 teams)" }));
+            expect(await screen.findByText(`${PASTED_PAGE_LABEL} (4 teams found)`)).toBeInTheDocument();
+        });
     });
 
     it("previews how the snake chart fits the schedule and lists teams left without a bracket", async () => {

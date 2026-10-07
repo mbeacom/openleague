@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseSnakeChart } from "@/lib/ratings/import";
+import { SNAKE_8U_EXPECTED, SNAKE_COPIED, SNAKE_HTML } from "./league-page-fixtures";
 
 const HTML = `
 <h2>8U Snake Chart</h2>
@@ -42,6 +43,51 @@ describe("parseSnakeChart", () => {
 
     it("leaves out bracket columns with no teams", () => {
         expect(parseSnakeChart(["Program\tRed\tWhite", "Strength\tstr\tstr", "Riverside\t901\t"].join("\n")).brackets).toEqual(["Red Strong"]);
+    });
+
+    describe("a page with one table per age division", () => {
+        const assignments = (teams: Array<{ number: string; startingBracket: string }>) => byNumber(teams).map((t) => `${t.number}:${t.startingBracket}`);
+
+        it("scopes teams and brackets to the first division by default", () => {
+            const chart = parseSnakeChart(SNAKE_HTML);
+            expect(chart.divisions?.map((d) => d.name)).toEqual(["8U 901 et al.", "10U 951 et al."]);
+            expect(chart.division).toBe(0);
+            expect(assignments(chart.teams)).toEqual(SNAKE_8U_EXPECTED);
+            expect(chart.brackets).toEqual(["Red Strong", "Red Weak", "White Strong", "White Weak"]);
+        });
+
+        it("reads a copy the same as the HTML: continuation rows, and uppercased colours", () => {
+            const copied = parseSnakeChart(SNAKE_COPIED);
+            const html = parseSnakeChart(SNAKE_HTML);
+            expect(assignments(copied.teams)).toEqual(SNAKE_8U_EXPECTED);
+            expect(copied.brackets).toEqual(html.brackets);
+            expect(copied.divisions?.map((d) => assignments(d.teams))).toEqual(html.divisions?.map((d) => assignments(d.teams)));
+            expect(copied.unparsed).toEqual([]);
+        });
+
+        it("reads an uppercased compound colour the same as the HTML's", () => {
+            const html = `<table><tr><th>Program</th><th>Light Blue</th><th>AA</th><th>B</th></tr><tr><th>Strength</th><th>str</th><th>str</th><th>weak</th></tr><tr><th>Riverside</th><td>901</td><td>902</td><td>903</td></tr></table>`;
+            const text = ["PROGRAM\tLIGHT BLUE\tAA\tB", "STRENGTH\tSTR\tSTR\tWEAK", "Riverside\t901\t902\t903"].join("\n");
+            const brackets = ["Light Blue Strong", "AA Strong", "B Weak"];
+            expect(parseSnakeChart(html).brackets).toEqual(brackets);
+            expect(parseSnakeChart(text).brackets).toEqual(brackets);
+            expect(parseSnakeChart(text).teams.map((t) => t.startingBracket)).toEqual(parseSnakeChart(html).teams.map((t) => t.startingBracket));
+        });
+
+        it("keeps short program names as written", () => {
+            expect(parseSnakeChart(SNAKE_COPIED, { division: 1 }).brackets).toEqual(["AA Strong", "AA Weak", "A1 Strong", "A1 Weak"]);
+        });
+
+        it("picks the division holding the schedule's teams", () => {
+            const chart = parseSnakeChart(SNAKE_COPIED, { scheduleTeams: ["952", "954", "901"] });
+            expect(chart.division).toBe(1);
+            expect(chart.teams.map((t) => t.number).sort()).toEqual(["951", "952", "953", "954"]);
+        });
+
+        it("uses the division the user picked", () => {
+            expect(parseSnakeChart(SNAKE_HTML, { division: 1, scheduleTeams: ["901"] }).division).toBe(1);
+            expect(parseSnakeChart(SNAKE_HTML, { division: 7 }).division).toBe(0);
+        });
     });
 
     it("reports team numbers outside any labelled column", () => {

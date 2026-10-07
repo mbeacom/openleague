@@ -1,4 +1,5 @@
 /** Minimal HTML → text for pasted or saved league pages (spec R2). Pure: no DOM. */
+import { isBinaryPlist, webArchiveMainPage } from "./bplist";
 
 const NAMED: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", ndash: "–", mdash: "—" };
 
@@ -24,6 +25,19 @@ function removeUntilStable(text: string, pattern: RegExp): string {
         text = text.replace(pattern, "");
     } while (text !== previous);
     return text;
+}
+
+/**
+ * A saved page's text from the file's bytes. Safari's default "Save As" format is a web
+ * archive: a binary property list holding the main page's bytes (`WebMainResource`) beside
+ * its frames, images and scripts, in any order. The page is read from that structure and
+ * decoded in the encoding the archive names. Returns null for a web archive whose structure
+ * can't be read or holds no main page: a real archive always parses, so a damaged one gets
+ * the "save as HTML" advice rather than a guess at which bytes are the page.
+ */
+export function savedPageText(bytes: Uint8Array, fileName = ""): string | null {
+    if (isBinaryPlist(bytes) || /\.webarchive$/i.test(fileName)) return webArchiveMainPage(bytes);
+    return new TextDecoder("utf-8").decode(bytes);
 }
 
 /** Every element boundary becomes a line break; blank lines dropped; each line trimmed. */

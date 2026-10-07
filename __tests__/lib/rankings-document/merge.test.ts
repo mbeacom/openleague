@@ -90,6 +90,21 @@ describe("mergeSchedule", () => {
         expect(parseRankings(chart.doc).ok).toBe(true);
     });
 
+    it("orders only the brackets a schedule team starts in", () => {
+        const { doc } = mergeSchedule(createRankingsDocument({ title: "x" }), parsed([game("901", "902", 3, 1)]));
+        const chart = applySnakeChart(doc, {
+            teams: [
+                { number: "901", name: null, startingBracket: "White Strong" },
+                { number: "902", name: null, startingBracket: "Red Weak" },
+                { number: "903", name: null, startingBracket: "Red Strong" },
+            ],
+            brackets: ["Red Strong", "Red Weak", "White Strong"],
+            unparsed: [],
+        });
+        expect(chart.doc.bracketOrder).toEqual(["Red Weak", "White Strong"]);
+        expect(chart).toMatchObject({ matched: 2, ignored: 1 });
+    });
+
     it("matches same-day games on time first, so an added earlier game can't take a saved result", () => {
         const first = mergeSchedule(createRankingsDocument({ title: "x" }), parsed([game("901", "902", 3, 1, "10:00")])).doc;
         const { doc, summary } = mergeSchedule(first, parsed([game("901", "902", null, null, "09:00"), game("901", "902", 3, 1, "10:00")]));
@@ -136,13 +151,34 @@ describe("applySnakeChart", () => {
         expect([matched, ignored]).toEqual([1, 1]);
         expect(doc.teams[0]).toMatchObject({ name: "Riverside M1", startingBracket: "Red Strong" });
         expect(doc.teams).toHaveLength(2);
-        expect(doc.bracketOrder).toEqual(["Red Strong", "White Weak"]);
+        // "White Weak" holds only a team that isn't in the schedule.
+        expect(doc.bracketOrder).toEqual(["Red Strong"]);
         expect(parseRankings(doc).ok).toBe(true);
     });
 
+    it("keeps the strength order of brackets that only unmatched saved teams hold", () => {
+        const base = mergeSchedule(createRankingsDocument({ title: "x" }), parsed([game("901", "902", 3, 1)])).doc;
+        const saved = { ...base, teams: base.teams.map((t) => (t.number === "901" ? { ...t, startingBracket: "Red Strong" } : t)) };
+        // 901 isn't on this chart and keeps Red Strong; 999 (Red Strong) matches no saved team.
+        const { doc } = applySnakeChart(saved, {
+            teams: [
+                { number: "999", name: null, startingBracket: "Red Strong" },
+                { number: "902", name: null, startingBracket: "White Strong" },
+            ],
+            brackets: ["Red Strong", "White Strong"],
+            unparsed: [],
+        });
+        expect(doc.teams.find((t) => t.number === "901")!.startingBracket).toBe("Red Strong");
+        expect(doc.bracketOrder).toEqual(["Red Strong", "White Strong"]);
+    });
+
     it("cleans the chart's bracket order and keeps the old order when the chart has none", () => {
-        const base = { ...createRankingsDocument({ title: "x" }), bracketOrder: ["White Strong", "Red Strong"] };
-        const cleaned = applySnakeChart(base, { teams: [], brackets: ["  Red Strong\u0007 ", "Red Strong", "", "C".repeat(60)], unparsed: [] }).doc;
+        const base = { ...mergeSchedule(createRankingsDocument({ title: "x" }), parsed([game("901", "902", 3, 1)])).doc, bracketOrder: ["White Strong", "Red Strong"] };
+        const teams = [
+            { number: "901", name: null, startingBracket: "Red Strong" },
+            { number: "902", name: null, startingBracket: "C".repeat(60) },
+        ];
+        const cleaned = applySnakeChart(base, { teams, brackets: ["  Red Strong\u0007 ", "Red Strong", "", "C".repeat(60)], unparsed: [] }).doc;
         expect(cleaned.bracketOrder).toEqual(["Red Strong", "C".repeat(40)]);
         expect(applySnakeChart(base, { teams: [], brackets: [], unparsed: [] }).doc.bracketOrder).toEqual(["White Strong", "Red Strong"]);
     });

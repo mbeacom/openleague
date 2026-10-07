@@ -162,7 +162,10 @@ export function applySnakeChart(doc: RankingsDocument, chart: ParsedSnakeChart):
         matched += 1;
         return { ...team, startingBracket: cleanImportedText(bracket, MAX_BRACKET_LENGTH) || null };
     });
-    const order = [...new Set(chart.brackets.map((bracket) => cleanImportedText(bracket, MAX_BRACKET_LENGTH)).filter(Boolean))].slice(0, MAX_BRACKETS);
+    // Only brackets a team starts in: a chart's other columns (or other age divisions) don't belong.
+    // A saved team the chart doesn't list keeps its bracket, so that bracket keeps its place too.
+    const held = new Set(teams.map((team) => team.startingBracket).filter((bracket): bracket is string => !!bracket));
+    const order = [...new Set(chart.brackets.map((bracket) => cleanImportedText(bracket, MAX_BRACKET_LENGTH)).filter((bracket) => held.has(bracket)))].slice(0, MAX_BRACKETS);
     return { doc: { ...doc, teams, bracketOrder: order.length > 0 ? order : doc.bracketOrder }, matched, ignored: chart.teams.length - matched };
 }
 
