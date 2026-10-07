@@ -330,6 +330,7 @@ export default function SocialProofSection() {
                     fontWeight: 800,
                     textDecoration: 'none',
                     px: 1,
+                    minHeight: 44,
                     '&:hover': {
                       textDecoration: 'underline',
                     },
@@ -337,6 +338,26 @@ export default function SocialProofSection() {
                 >
                   <GitHubIcon fontSize="small" />
                   View OpenLeague on GitHub
+                </Typography>
+                <Typography
+                  component="a"
+                  href={process.env.NEXT_PUBLIC_STATIC_PLANNER_URL?.trim() || 'https://openleague.dev/planner/'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  sx={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    color: 'primary.main',
+                    fontWeight: 800,
+                    textDecoration: 'none',
+                    px: 1,
+                    minHeight: 44,
+                    '&:hover': {
+                      textDecoration: 'underline',
+                    },
+                  }}
+                >
+                  Free practice planner — no account needed
                 </Typography>
               </Stack>
             </Stack>

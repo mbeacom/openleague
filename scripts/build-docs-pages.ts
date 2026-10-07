@@ -12,7 +12,7 @@ export const DOCS_PAGES_DOMAIN_ENV = 'DOCS_PAGES_DOMAIN';
 
 const docsDomain = process.env[DOCS_PAGES_DOMAIN_ENV]?.trim() || DEFAULT_DOCS_PAGES_DOMAIN;
 
-interface StaticPage {
+export interface StaticPage {
   title: string;
   description: string;
   href: string;
@@ -86,11 +86,23 @@ function pagePathForHref(href: string): string {
   return relative ? path.join(relative, 'index.html') : 'index.html';
 }
 
-function wrapPage(page: StaticPage, navItems: DocsNavItem[]): string {
+const plannerLink = {
+  title: 'Practice planner',
+  description: 'Draw drills and plan practices in your browser. Free, no account needed. Your plans stay on this device.',
+};
+
+/** Relative URL to the sibling `planner/` site, so it resolves on openleague.dev and on a fork's Pages subpath. */
+export function plannerUrlFor(page: StaticPage): string {
+  const depth = staticDocsUrlForHref(page.href).split('/').filter(Boolean).length;
+  return `${'../'.repeat(depth)}planner/`;
+}
+
+export function wrapPage(page: StaticPage, navItems: DocsNavItem[]): string {
   const navLinks = navItems
     .map((item) => {
       return `<a href="${staticDocsUrlForHref(item.href)}">${escapeHtml(item.title)}</a>`;
     })
+    .concat(`<a href="${plannerUrlFor(page)}">${escapeHtml(plannerLink.title)}</a>`)
     .join('');
 
   return `<!doctype html>
@@ -130,20 +142,17 @@ function wrapPage(page: StaticPage, navItems: DocsNavItem[]): string {
 `;
 }
 
-async function buildAppDocsPages(): Promise<StaticPage[]> {
+export async function buildAppDocsPages(): Promise<StaticPage[]> {
   const pages: StaticPage[] = [];
   const cards = docsSections
     .map((section) => section.items
       .map((item) => `<article class="card"><p class="muted">${escapeHtml(section.title)}</p><h2><a href="${staticDocsUrlForHref(item.href)}">${escapeHtml(item.title)}</a></h2><p>${escapeHtml(item.description)}</p></article>`)
       .join('\n'))
     .join('\n');
+  const home = { title: docsHome.title, description: docsHome.description, href: docsHome.href };
+  const plannerCard = `<article class="card"><p class="muted">Tools</p><h2><a href="${plannerUrlFor({ ...home, html: '' })}">${escapeHtml(plannerLink.title)}</a></h2><p>${escapeHtml(plannerLink.description)}</p></article>`;
 
-  pages.push({
-    title: docsHome.title,
-    description: docsHome.description,
-    href: docsHome.href,
-    html: `<div class="cards">${cards}</div>`,
-  });
+  pages.push({ ...home, html: `<div class="cards">${cards}\n${plannerCard}</div>` });
 
   for (const item of docsItems) {
     const slug = item.href.replace(/^\/docs\/?/, '');
