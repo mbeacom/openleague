@@ -80,6 +80,7 @@ describe("PlannerApp", () => {
         expect(within(nav).getByRole("link", { name: "Drill library" })).toHaveAttribute("aria-current", "page");
         expect(within(nav).getByRole("link", { name: "Practices" })).not.toHaveAttribute("aria-current");
         expect(within(nav).getByRole("link", { name: "Import" })).not.toHaveAttribute("aria-current");
+        expect(within(nav).getByRole("link", { name: "Rankings" })).toHaveAttribute("href", "#/rankings");
     });
 
     it("shows a session's detail without team sharing", async () => {

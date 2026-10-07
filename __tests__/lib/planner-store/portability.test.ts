@@ -19,6 +19,9 @@ const ENTRIES = [
     "app/(dashboard)/practice-planner/[sessionId]/SessionDetailView.tsx",
     "lib/plan-document/index.ts",
     "lib/planner-store/index.ts",
+    "lib/ratings/index.ts",
+    "lib/ratings/import/index.ts",
+    "lib/rankings-document/index.ts",
     // The static planner's whole bundle (sub-project 3).
     "apps/planner/src/main.tsx",
 ];
