@@ -28,7 +28,8 @@ describe("RankingsImportScreen", () => {
             expect(saved.success && saved.data?.games).toHaveLength(2);
         });
         const saved = await store.getRankings();
-        if (saved.success) expect(saved.data!.teams.find((t) => t.number === "902")!.startingBracket).toBe("White Strong");
+        expect(saved.success).toBe(true);
+        expect(saved.success && saved.data!.teams.find((t) => t.number === "902")!.startingBracket).toBe("White Strong");
     });
 
     it("shows conflicts on re-import and lets the user take the imported score", async () => {
@@ -46,5 +47,62 @@ describe("RankingsImportScreen", () => {
             const saved = await store.getRankings();
             expect(saved.success && saved.data!.games[0].awayGoals).toBe(2);
         });
+    });
+
+    const CHANGED = ["9/20", "9:00am", "901 Riverside M1", "3 - 2", "902 Lakeview M2"].join("\n");
+    async function readChanged() {
+        const { store } = memoryStore();
+        await store.saveRankings(sampleRankingsDoc());
+        renderScreen(<RankingsImportScreen store={store} />, store);
+        fireEvent.change(await screen.findByLabelText("Season starts in"), { target: { value: "2026" } });
+        fireEvent.change(screen.getByLabelText("Schedule page"), { target: { value: CHANGED } });
+        fireEvent.click(screen.getByRole("button", { name: READ_SCHEDULE_LABEL }));
+        await screen.findByRole("button", { name: "Use imported 3–2" });
+        return store;
+    }
+
+    it("keeps Save disabled while a conflict remains", async () => {
+        await readChanged();
+        expect(screen.getByRole("button", { name: SAVE_IMPORT_LABEL })).toBeDisabled();
+    });
+
+    it("keeps the existing score when the user chooses Keep", async () => {
+        const store = await readChanged();
+        fireEvent.click(screen.getByRole("button", { name: "Keep 3–1" }));
+        fireEvent.click(screen.getByRole("button", { name: SAVE_IMPORT_LABEL }));
+        await waitFor(async () => {
+            const saved = await store.getRankings();
+            expect(saved.success && saved.data!.games[0].awayGoals).toBe(1);
+        });
+    });
+
+    it("keeps a resolved conflict when a snake chart is read afterwards", async () => {
+        const store = await readChanged();
+        fireEvent.click(screen.getByRole("button", { name: "Use imported 3–2" }));
+        fireEvent.change(screen.getByLabelText("Snake chart"), { target: { value: SNAKE } });
+        fireEvent.click(screen.getByRole("button", { name: READ_SNAKE_LABEL }));
+        await screen.findByText(/2 teams with a starting bracket/);
+        expect(screen.queryByRole("button", { name: "Use imported 3–2" })).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: SAVE_IMPORT_LABEL }));
+        await waitFor(async () => {
+            const saved = await store.getRankings();
+            expect(saved.success && saved.data!.games[0].awayGoals).toBe(2);
+        });
+    });
+
+    it("disables Save when the schedule text is edited after reading", async () => {
+        await readChanged();
+        fireEvent.click(screen.getByRole("button", { name: "Keep 3–1" }));
+        expect(screen.getByRole("button", { name: SAVE_IMPORT_LABEL })).toBeEnabled();
+        fireEvent.change(screen.getByLabelText("Schedule page"), { target: { value: `${CHANGED}\n` } });
+        expect(screen.getByRole("button", { name: SAVE_IMPORT_LABEL })).toBeDisabled();
+    });
+
+    it("fills the schedule box from a picked file", async () => {
+        const { store } = memoryStore();
+        renderScreen(<RankingsImportScreen store={store} />, store);
+        const input = await screen.findByTestId("schedule-file-input");
+        fireEvent.change(input, { target: { files: [new File(["9/20\n9:00am"], "page.txt", { type: "text/plain" })] } });
+        await waitFor(() => expect(screen.getByLabelText("Schedule page")).toHaveValue("9/20\n9:00am"));
     });
 });

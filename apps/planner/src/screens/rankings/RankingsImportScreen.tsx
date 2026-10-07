@@ -4,7 +4,7 @@
  * into the device's rankings, resolving score conflicts; or open a rankings file.
  * Never fetches anything (spec R2).
  */
-import { useState, type ChangeEvent } from "react";
+import { useRef, useState, type ChangeEvent } from "react";
 import { Alert, Box, Button, List, ListItem, MenuItem, Stack, TextField, Typography } from "@mui/material";
 import { applySnakeChart, createRankingsDocument, mergeSchedule, readRankingsFile, resolveConflict, type GameConflict, type RankingsDocument } from "@/lib/rankings-document";
 import { CSHL_8U_METHOD } from "@/lib/ratings";
@@ -23,11 +23,7 @@ export const OPEN_FILE_LABEL = "Open rankings file";
 const PRESETS = [{ id: CSHL_8U_METHOD.preset, label: "CSHL 8U", method: CSHL_8U_METHOD }];
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
-async function readTextFile(event: ChangeEvent<HTMLInputElement>): Promise<string | null> {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    return file ? file.text() : null;
-}
+type Choice = "existing" | "incoming";
 
 const score = (game: { homeGoals: number | null; awayGoals: number | null }, home: string, gameHome: string) =>
     home === gameHome ? `${game.homeGoals}–${game.awayGoals}` : `${game.awayGoals}–${game.homeGoals}`;
@@ -43,38 +39,84 @@ export function RankingsImportScreen({ store }: { store: LocalPlannerStore }) {
     const [snake, setSnake] = useState<ParsedSnakeChart | null>(null);
     const [draft, setDraft] = useState<RankingsDocument | null>(null);
     const [conflicts, setConflicts] = useState<GameConflict[]>([]);
+    const [choices, setChoices] = useState<Map<string, Choice>>(new Map());
+    const scheduleFile = useRef<HTMLInputElement>(null);
+    const snakeFile = useRef<HTMLInputElement>(null);
+    const rankingsFile = useRef<HTMLInputElement>(null);
     const [message, setMessage] = useState<{ severity: "error" | "success" | "info"; text: string } | null>(null);
 
     if (state.status !== "ready") return <RankingsStatus state={state} onStartOver={() => void clear()} />;
     const existing = state.doc;
 
-    const rebuild = (nextSchedule: ParsedSchedule | null, nextSnake: ParsedSnakeChart | null) => {
+    /** Everything derived from the inputs: nothing may be saved until the user reads again. */
+    const invalidate = () => {
+        setSchedule(null);
+        setSnake(null);
+        setDraft(null);
+        setConflicts([]);
+        setChoices(new Map());
+        setMessage(null);
+    };
+
+    const rebuild = (nextSchedule: ParsedSchedule | null, nextSnake: ParsedSnakeChart | null, picked: Map<string, Choice>) => {
         const method = PRESETS.find((p) => p.id === presetId)!.method;
         let doc = existing ?? createRankingsDocument({ title, method });
-        let found: GameConflict[] = [];
+        const open: GameConflict[] = [];
         if (nextSchedule) {
             const merged = mergeSchedule(doc, nextSchedule);
             doc = merged.doc;
-            found = merged.summary.conflicts;
+            for (const conflict of merged.summary.conflicts) {
+                const choice = picked.get(conflict.key);
+                if (choice) doc = resolveConflict(doc, conflict, choice);
+                else open.push(conflict);
+            }
         }
         if (nextSnake) doc = applySnakeChart(doc, nextSnake).doc;
         setDraft(doc);
-        setConflicts(found);
+        setConflicts(open);
     };
 
     const readSchedule = () => {
         const parsed = parseSchedule(scheduleText, { seasonYear });
+        const fresh = new Map<string, Choice>();
         setSchedule(parsed);
-        rebuild(parsed, snake);
+        setChoices(fresh);
+        setMessage(null);
+        rebuild(parsed, snake, fresh);
     };
     const readSnake = () => {
         const parsed = parseSnakeChart(snakeText);
         setSnake(parsed);
-        rebuild(schedule, parsed);
+        setMessage(null);
+        rebuild(schedule, parsed, choices);
     };
-    const choose = (conflict: GameConflict, choice: "existing" | "incoming") => {
-        if (draft) setDraft(resolveConflict(draft, conflict, choice));
-        setConflicts((list) => list.filter((c) => c !== conflict));
+    const choose = (conflict: GameConflict, choice: Choice) => {
+        const next = new Map(choices).set(conflict.key, choice);
+        setChoices(next);
+        rebuild(schedule, snake, next);
+    };
+    const editSchedule = (text: string) => {
+        setScheduleText(text);
+        invalidate();
+    };
+    const editSnake = (text: string) => {
+        setSnakeText(text);
+        setSnake(null);
+        setMessage(null);
+        if (schedule) rebuild(schedule, null, choices);
+        else setDraft(null);
+    };
+    /** Reads a picked text file; sets the text only when a file was actually read. */
+    const pickText = async (event: ChangeEvent<HTMLInputElement>, apply: (text: string) => void) => {
+        const input = event.target;
+        const file = input.files?.[0];
+        input.value = "";
+        if (!file) return;
+        try {
+            apply(await file.text());
+        } catch {
+            setMessage({ severity: "error", text: "Couldn't read that file." });
+        }
     };
     const commit = async () => {
         if (!draft) return;
@@ -83,8 +125,9 @@ export function RankingsImportScreen({ store }: { store: LocalPlannerStore }) {
         else setMessage({ severity: "error", text: result.error });
     };
     const openFile = async (event: ChangeEvent<HTMLInputElement>) => {
-        const file = event.target.files?.[0];
-        event.target.value = "";
+        const input = event.target;
+        const file = input.files?.[0];
+        input.value = "";
         if (!file) return;
         const parsed = await readRankingsFile(file);
         if (!parsed.ok) {
@@ -111,8 +154,14 @@ export function RankingsImportScreen({ store }: { store: LocalPlannerStore }) {
 
             {!existing && (
                 <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-                    <TextField label="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
-                    <TextField select label="Rules" value={presetId} onChange={(e) => setPresetId(e.target.value)} sx={{ minWidth: 160 }}>
+                    <TextField label="Title" value={title} onChange={(e) => {
+                            setTitle(e.target.value);
+                            invalidate();
+                        }} />
+                    <TextField select label="Rules" value={presetId} onChange={(e) => {
+                            setPresetId(e.target.value);
+                            invalidate();
+                        }} sx={{ minWidth: 160 }}>
                         {PRESETS.map((p) => (
                             <MenuItem key={p.id} value={p.id}>
                                 {p.label}
@@ -126,20 +175,30 @@ export function RankingsImportScreen({ store }: { store: LocalPlannerStore }) {
                 <Typography component="h2" variant="h6">
                     1. Schedule
                 </Typography>
-                <TextField label="Schedule page" multiline minRows={4} maxRows={10} value={scheduleText} onChange={(e) => setScheduleText(e.target.value)} />
+                <TextField label="Schedule page" multiline minRows={4} maxRows={10} value={scheduleText} onChange={(e) => editSchedule(e.target.value)} />
                 <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap", rowGap: 1 }}>
                     <TextField
                         label="Season starts in"
                         type="number"
                         value={seasonYear}
-                        onChange={(e) => setSeasonYear(Number(e.target.value) || defaultSeasonYear(new Date()))}
+                        onChange={(e) => {
+                            setSeasonYear(Number(e.target.value) || defaultSeasonYear(new Date()));
+                            invalidate();
+                        }}
                         size="small"
                         sx={{ width: 150 }}
                     />
-                    <Button component="label" sx={{ minHeight: 44 }}>
+                    <Button onClick={() => scheduleFile.current?.click()} sx={{ minHeight: 44 }}>
                         Open saved page
-                        <input hidden type="file" accept=".html,.htm,.txt,text/html,text/plain" onChange={async (e) => setScheduleText((await readTextFile(e)) ?? scheduleText)} />
                     </Button>
+                    <input
+                        ref={scheduleFile}
+                        hidden
+                        type="file"
+                        data-testid="schedule-file-input"
+                        accept=".html,.htm,.txt,text/html,text/plain"
+                        onChange={(e) => void pickText(e, editSchedule)}
+                    />
                     <Button variant="contained" onClick={readSchedule} disabled={!scheduleText.trim()} sx={{ minHeight: 44 }}>
                         {READ_SCHEDULE_LABEL}
                     </Button>
@@ -153,8 +212,8 @@ export function RankingsImportScreen({ store }: { store: LocalPlannerStore }) {
                                     {plural(schedule.unparsed.length, "line")} not understood:
                                 </Typography>
                                 <List dense>
-                                    {schedule.unparsed.map((line) => (
-                                        <ListItem key={line} sx={{ py: 0 }}>
+                                    {schedule.unparsed.map((line, i) => (
+                                        <ListItem key={`${i}-${line}`} sx={{ py: 0 }}>
                                             {line}
                                         </ListItem>
                                     ))}
@@ -169,12 +228,19 @@ export function RankingsImportScreen({ store }: { store: LocalPlannerStore }) {
                 <Typography component="h2" variant="h6">
                     2. Snake chart (optional)
                 </Typography>
-                <TextField label="Snake chart" multiline minRows={3} maxRows={8} value={snakeText} onChange={(e) => setSnakeText(e.target.value)} />
+                <TextField label="Snake chart" multiline minRows={3} maxRows={8} value={snakeText} onChange={(e) => editSnake(e.target.value)} />
                 <Stack direction="row" spacing={1}>
-                    <Button component="label" sx={{ minHeight: 44 }}>
+                    <Button onClick={() => snakeFile.current?.click()} sx={{ minHeight: 44 }}>
                         Open saved page
-                        <input hidden type="file" accept=".html,.htm,.txt,text/html,text/plain" onChange={async (e) => setSnakeText((await readTextFile(e)) ?? snakeText)} />
                     </Button>
+                    <input
+                        ref={snakeFile}
+                        hidden
+                        type="file"
+                        data-testid="snake-file-input"
+                        accept=".html,.htm,.txt,text/html,text/plain"
+                        onChange={(e) => void pickText(e, editSnake)}
+                    />
                     <Button variant="outlined" onClick={readSnake} disabled={!snakeText.trim()} sx={{ minHeight: 44 }}>
                         {READ_SNAKE_LABEL}
                     </Button>
@@ -214,10 +280,10 @@ export function RankingsImportScreen({ store }: { store: LocalPlannerStore }) {
                 <Button variant="contained" size="large" onClick={() => void commit()} disabled={!draft || conflicts.length > 0} sx={{ minHeight: 44 }}>
                     {SAVE_IMPORT_LABEL}
                 </Button>
-                <Button component="label" sx={{ minHeight: 44 }}>
+                <Button onClick={() => rankingsFile.current?.click()} sx={{ minHeight: 44 }}>
                     {OPEN_FILE_LABEL}
-                    <input hidden type="file" accept=".json,application/json" onChange={(e) => void openFile(e)} />
                 </Button>
+                <input ref={rankingsFile} hidden type="file" data-testid="rankings-file-input" accept=".json,application/json" onChange={(e) => void openFile(e)} />
             </Stack>
         </Stack>
     );
