@@ -40,9 +40,10 @@ function useCrestFont(active: boolean): number {
     }, [waiting]);
     const late = canWait && active && loaded;
     useEffect(() => {
-        if (!late || typeof document.fonts.check !== "function" || document.fonts.check(CREST_EXPORT_FONT)) return;
+        const fonts = document.fonts as FontFaceSet | undefined;
+        if (!late || !fonts || typeof fonts.check !== "function" || fonts.check(CREST_EXPORT_FONT)) return;
         let live = true;
-        document.fonts.load(CREST_EXPORT_FONT).then(
+        fonts.load(CREST_EXPORT_FONT).then(
             () => {
                 if (live) setRedraws((n) => n + 1);
             },
