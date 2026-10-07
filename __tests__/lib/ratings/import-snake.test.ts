@@ -65,6 +65,15 @@ describe("parseSnakeChart", () => {
             expect(copied.unparsed).toEqual([]);
         });
 
+        it("reads an uppercased compound colour the same as the HTML's", () => {
+            const html = `<table><tr><th>Program</th><th>Light Blue</th><th>AA</th><th>B</th></tr><tr><th>Strength</th><th>str</th><th>str</th><th>weak</th></tr><tr><th>Riverside</th><td>901</td><td>902</td><td>903</td></tr></table>`;
+            const text = ["PROGRAM\tLIGHT BLUE\tAA\tB", "STRENGTH\tSTR\tSTR\tWEAK", "Riverside\t901\t902\t903"].join("\n");
+            const brackets = ["Light Blue Strong", "AA Strong", "B Weak"];
+            expect(parseSnakeChart(html).brackets).toEqual(brackets);
+            expect(parseSnakeChart(text).brackets).toEqual(brackets);
+            expect(parseSnakeChart(text).teams.map((t) => t.startingBracket)).toEqual(parseSnakeChart(html).teams.map((t) => t.startingBracket));
+        });
+
         it("keeps short program names as written", () => {
             expect(parseSnakeChart(SNAKE_COPIED, { division: 1 }).brackets).toEqual(["AA Strong", "AA Weak", "A1 Strong", "A1 Weak"]);
         });

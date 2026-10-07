@@ -79,6 +79,8 @@ interface Tokens {
     tokens: string[];
     /** True when cells were found run together, so the input is a glued plain-text copy. */
     glued: boolean;
+    /** The input was HTML: its cells are delimited by markup, so none is ever split. */
+    html: boolean;
 }
 
 function tokenize(input: string): Tokens {
@@ -97,7 +99,7 @@ function tokenize(input: string): Tokens {
             if (!/\s$/.test(timeTeam[1]) && cell[timeTeam[1].length] !== " ") glued = true;
         } else tokens.push(cell);
     }
-    return { tokens, glued };
+    return { tokens, glued, html };
 }
 
 function isStructural(token: string): boolean {
@@ -138,7 +140,8 @@ interface Unglued {
     rinkAt: Map<number, string | null>;
 }
 
-function unglue({ tokens: input, glued: timeGlued }: Tokens): Unglued {
+function unglue({ tokens: input, glued: timeGlued, html }: Tokens): Unglued {
+    if (html) return { tokens: input, names: new Map(), unclear: new Set(), rinkAt: new Map() };
     let glued = timeGlued;
     const names = new Map<string, string>();
     const learn = (cell: string) => {
@@ -170,6 +173,12 @@ function unglue({ tokens: input, glued: timeGlued }: Tokens): Unglued {
         }
         const known = names.get(home[1]);
         const byName = known === undefined ? [] : starts.filter((at) => token.slice(0, at).trimEnd() === `${home[1]} ${known}`);
+        // In a copy that keeps cells apart, a team cell right after this one is the away team, so
+        // this cell is whole ("901 Riverside 2016 Blue"). A glued copy puts a game on one line.
+        if (!timeGlued && TEAM.test(input[i + 1] ?? "")) {
+            tokens.push(token);
+            return;
+        }
         const byNumber = starts.filter((at) => names.has(token.slice(at, at + 3)));
         const at = byName.length === 1 ? byName[0] : starts.length === 1 ? starts[0] : byNumber.length === 1 ? byNumber[0] : -1;
         if (at === -1) {

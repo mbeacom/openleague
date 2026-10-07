@@ -156,6 +156,22 @@ describe("applySnakeChart", () => {
         expect(parseRankings(doc).ok).toBe(true);
     });
 
+    it("keeps the strength order of brackets that only unmatched saved teams hold", () => {
+        const base = mergeSchedule(createRankingsDocument({ title: "x" }), parsed([game("901", "902", 3, 1)])).doc;
+        const saved = { ...base, teams: base.teams.map((t) => (t.number === "901" ? { ...t, startingBracket: "Red Strong" } : t)) };
+        // 901 isn't on this chart and keeps Red Strong; 999 (Red Strong) matches no saved team.
+        const { doc } = applySnakeChart(saved, {
+            teams: [
+                { number: "999", name: null, startingBracket: "Red Strong" },
+                { number: "902", name: null, startingBracket: "White Strong" },
+            ],
+            brackets: ["Red Strong", "White Strong"],
+            unparsed: [],
+        });
+        expect(doc.teams.find((t) => t.number === "901")!.startingBracket).toBe("Red Strong");
+        expect(doc.bracketOrder).toEqual(["Red Strong", "White Strong"]);
+    });
+
     it("cleans the chart's bracket order and keeps the old order when the chart has none", () => {
         const base = { ...mergeSchedule(createRankingsDocument({ title: "x" }), parsed([game("901", "902", 3, 1)])).doc, bracketOrder: ["White Strong", "Red Strong"] };
         const teams = [

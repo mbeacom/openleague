@@ -179,6 +179,40 @@ describe("parseSchedule on a div-row league page", () => {
         expect(result.unparsed).toEqual(["903 Hilltop901 Club902 Lakeview M1Rink A"]);
     });
 
+    describe("an unplayed game whose home name ends in a number", () => {
+        const expected = [{ date: "2026-10-03", time: "18:10", home: "901", away: "902", homeGoals: null, awayGoals: null, rink: "Rink A" }];
+
+        it("keeps separate home and away cells apart in a plain-text copy", () => {
+            const result = parseSchedule(["10/3", "6:10pm", "901 Riverside 2016 Blue", "902 Lakeview", "Rink A"].join("\n"), { seasonYear: 2026 });
+            expect(result.games).toEqual(expected);
+            expect(result.teams).toEqual([
+                { number: "901", name: "Riverside 2016 Blue" },
+                { number: "902", name: "Lakeview" },
+            ]);
+            expect(result.unparsed).toEqual([]);
+        });
+
+        it("never splits an HTML cell", () => {
+            const html = '<div class="row"><div>10/3<br>6:10pm</div><div><a>901 Riverside 2016 Blue</a></div><div></div><div><a>902 Lakeview</a></div><div>Rink A</div></div>';
+            const result = parseSchedule(html, { seasonYear: 2026 });
+            expect(result.games).toEqual(expected);
+            expect(result.teams.map((t) => t.name)).toEqual(["Riverside 2016 Blue", "Lakeview"]);
+        });
+
+        it("still splits a glued one-line game that a stray team line follows", () => {
+            const result = parseSchedule(["10/3", "6:10pm901 Riverside M1902 Lakeview M2Rink A", "904 Orphan Team"].join("\n"), { seasonYear: 2026 });
+            expect(result.games.map((g) => [g.home, g.away])).toEqual([["901", "902"]]);
+            expect(result.unparsed).toContain("904 Orphan Team");
+        });
+
+        it("never splits an HTML cell, even one no away team follows", () => {
+            const html = '<div class="row"><div>10/3<br>6:10pm</div><div><a>901 Riverside 2016 Blue</a></div><div>Rink A</div></div>';
+            const result = parseSchedule(html, { seasonYear: 2026 });
+            expect(result.games).toEqual([]);
+            expect(result.unparsed).toEqual(["901 Riverside 2016 Blue"]);
+        });
+    });
+
     it("never takes the text after a glued copy's last game as its rink", () => {
         const result = parseSchedule("9/18\n5:40pm901 Riverside M1\n5 - 3\n902 Lakeview M1Rink A\n9/19\n8:00am902 Lakeview M1901 Riverside M1Rink A\nABOUT US", { seasonYear: 2026 });
         expect(result.games.map((g) => g.rink)).toEqual(["Rink A", "Rink A"]);

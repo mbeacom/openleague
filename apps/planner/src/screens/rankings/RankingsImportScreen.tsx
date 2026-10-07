@@ -139,9 +139,12 @@ export function RankingsImportScreen({ store }: { store: LocalPlannerStore }) {
         setConflicts(open);
     };
 
-    /** A chart with several age divisions is scoped to the picked one, else to the schedule's. */
+    /**
+     * A chart with several age divisions is scoped to the picked one, else to the schedule's, else
+     * (a chart read on its own over saved rankings) to the saved teams'.
+     */
     const parseSnake = (content: string, forSchedule: ParsedSchedule | null, division: number | null) =>
-        parseSnakeChart(content, { scheduleTeams: forSchedule?.teams.map((team) => team.number), division: division ?? undefined });
+        parseSnakeChart(content, { scheduleTeams: (forSchedule?.teams ?? existing?.teams)?.map((team) => team.number), division: division ?? undefined });
     const readSchedule = (content = scheduleSource?.content ?? scheduleText) => {
         const parsed = parseSchedule(content, { seasonYear });
         const fresh = new Map<string, Choice>();
@@ -192,7 +195,6 @@ export function RankingsImportScreen({ store }: { store: LocalPlannerStore }) {
     };
     const clearSnake = () => {
         setSnakeSource(null);
-        setSnakeDivision(null);
         editSnake("");
     };
     const choose = (conflict: GameConflict, choice: Choice) => {
@@ -206,6 +208,8 @@ export function RankingsImportScreen({ store }: { store: LocalPlannerStore }) {
     };
     const editSnake = (text: string) => {
         setSnakeText(text);
+        // A replaced chart may list its divisions in another order: the old pick's index means nothing now.
+        setSnakeDivision(null);
         setSnake(null);
         setSnakeFit(null);
         setMessage(null);

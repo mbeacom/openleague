@@ -15,6 +15,7 @@ import { serializeRankings } from "@/lib/rankings-document";
 import { memoryStore, renderScreen } from "./render-screen";
 import { sampleRankingsDoc } from "./rankings-fixtures";
 import { SCHEDULE_COPIED, SCHEDULE_HTML, SNAKE_COPIED, SNAKE_HTML } from "../../lib/ratings/league-page-fixtures";
+import { webArchive } from "../../lib/ratings/bplist-writer";
 
 const PAGE = ["9/20", "9:25am", "901 Riverside M1", "11", "-", "4", "902 Lakeview M2", "North Rink", "10/12", "8:00am", "901 Riverside M1", "902 Lakeview M2", "904 Orphan Team"].join("\n");
 const SNAKE = ["Program\tRed\tWhite", "Strength\tstr\tstr", "Riverside\t901\t", "Lakeview\t\t902"].join("\n");
@@ -179,7 +180,7 @@ describe("RankingsImportScreen", () => {
 
         it("opens a Safari web archive", async () => {
             await ready();
-            const archive = new File(["bplist00\u0000\u0001WebMainResource", SCHEDULE_HTML, "\u0000ÿ<html>a frame</html>"], "Schedule.webarchive");
+            const archive = new File([webArchive({ main: SCHEDULE_HTML, subframes: ["<html><body>a frame</body></html>"] })], "Schedule.webarchive");
             fireEvent.change(screen.getByTestId("schedule-file-input"), { target: { files: [archive] } });
             expect(await screen.findByText("Schedule.webarchive (7 games found)")).toBeInTheDocument();
         });
@@ -199,6 +200,48 @@ describe("RankingsImportScreen", () => {
             });
             const saved = await store.getRankings();
             expect(saved.success && saved.data!.teams.find((t) => t.number === "903")!.startingBracket).toBe("White Weak");
+        });
+
+        it("picks the saved teams' division when only a chart is read", async () => {
+            const { store } = memoryStore();
+            const base = sampleRankingsDoc();
+            const tenU = (n: string) => String(Number(n) + 50);
+            await store.saveRankings(
+                sampleRankingsDoc({
+                    teams: base.teams.map((t) => ({ ...t, number: tenU(t.number) })),
+                    games: base.games.map((g) => ({ ...g, home: tenU(g.home), away: tenU(g.away) })),
+                    myTeam: tenU(base.myTeam!),
+                }),
+            );
+            renderScreen(<RankingsImportScreen store={store} />, store);
+            fireEvent.paste(await screen.findByLabelText("Snake chart"), clipboard({ "text/html": SNAKE_HTML }));
+            expect(await screen.findByText(`${PASTED_PAGE_LABEL} (4 teams found)`)).toBeInTheDocument();
+            expect(screen.getByRole("combobox", { name: "Age division" })).toHaveTextContent("10U 951 et al. (4 teams)");
+            expect(screen.getByText(/4 of 4 saved teams got a starting bracket from the chart/)).toBeInTheDocument();
+        });
+
+        it("drops the picked age division when the chart text is replaced", async () => {
+            await ready();
+            const table = (name: string, teams: string[]) => [`${name}\t1\t2`, "Program\tRed\tWhite", "Strength\tstr\tstr", ...teams.map((t, k) => `Riverside${k}\t${t}\t`)];
+            const eight = table("8U", ["901", "902"]);
+            const ten = table("10U", ["951", "952", "953"]);
+            fireEvent.change(screen.getByLabelText("Snake chart"), { target: { value: [...eight, ...ten].join("\n") } });
+            fireEvent.click(screen.getByRole("button", { name: READ_SNAKE_LABEL }));
+            fireEvent.mouseDown(await screen.findByRole("combobox", { name: "Age division" }));
+            fireEvent.click(await screen.findByRole("option", { name: "10U (3 teams)" }));
+            await waitFor(() => expect(screen.getByRole("combobox", { name: "Age division" })).toHaveTextContent("10U (3 teams)"));
+
+            // The same divisions in the other order: the old pick's position now holds 8U.
+            fireEvent.change(screen.getByLabelText("Snake chart"), { target: { value: [...ten, ...eight].join("\n") } });
+            fireEvent.click(screen.getByRole("button", { name: READ_SNAKE_LABEL }));
+            await waitFor(() => expect(screen.getByRole("combobox", { name: "Age division" })).toHaveTextContent("10U (3 teams)"));
+        });
+
+        it("says a web archive it can't read has no page in it", async () => {
+            await ready();
+            const archive = new File([webArchive({ main: SCHEDULE_HTML }).slice(0, -10)], "Schedule.webarchive");
+            fireEvent.change(screen.getByTestId("schedule-file-input"), { target: { files: [archive] } });
+            expect(await screen.findByText("That web archive has no page in it. Try saving the page as HTML.")).toBeInTheDocument();
         });
 
         it("switches the snake chart's age division", async () => {

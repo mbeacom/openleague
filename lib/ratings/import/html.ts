@@ -1,4 +1,5 @@
 /** Minimal HTML → text for pasted or saved league pages (spec R2). Pure: no DOM. */
+import { isBinaryPlist, webArchiveMainPage } from "./bplist";
 
 const NAMED: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", ndash: "–", mdash: "—" };
 
@@ -28,18 +29,15 @@ function removeUntilStable(text: string, pattern: RegExp): string {
 
 /**
  * A saved page's text from the file's bytes. Safari's default "Save As" format is a web
- * archive: a binary property list holding the page's HTML bytes verbatim, followed by its
- * images and scripts. Its page is the first `<html>…</html>` span (the main resource comes
- * first). Returns null for a web archive with no page in it.
+ * archive: a binary property list holding the main page's bytes (`WebMainResource`) beside
+ * its frames, images and scripts, in any order. The page is read from that structure and
+ * decoded in the encoding the archive names. Returns null for a web archive whose structure
+ * can't be read or holds no main page: a real archive always parses, so a damaged one gets
+ * the "save as HTML" advice rather than a guess at which bytes are the page.
  */
 export function savedPageText(bytes: Uint8Array, fileName = ""): string | null {
-    const text = new TextDecoder("utf-8").decode(bytes);
-    const archive = /\.webarchive$/i.test(fileName) || text.startsWith("bplist");
-    if (!archive) return text;
-    const start = text.search(/<!doctype html|<html[\s>]/i);
-    if (start === -1) return null;
-    const close = /<\/html\s*>/i.exec(text.slice(start));
-    return close ? text.slice(start, start + close.index + close[0].length) : text.slice(start);
+    if (isBinaryPlist(bytes) || /\.webarchive$/i.test(fileName)) return webArchiveMainPage(bytes);
+    return new TextDecoder("utf-8").decode(bytes);
 }
 
 /** Every element boundary becomes a line break; blank lines dropped; each line trimmed. */

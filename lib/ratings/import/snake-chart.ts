@@ -57,9 +57,15 @@ interface Row {
 const STRENGTH: Record<string, string> = { str: "Strong", strong: "Strong", mid: "Mid", middle: "Mid", weak: "Weak" };
 const NUMBER = /^\d{3}$/;
 
-/** "RED" (a copy carries the page's CSS uppercasing) reads as the HTML's "Red"; "AA" and "A1" stay. */
+/**
+ * "RED" or "LIGHT BLUE" (a copy carries the page's CSS uppercasing) reads as the HTML's "Red"
+ * or "Light Blue", word by word; short or repeated-letter words such as "AA", "A1" and "B" stay.
+ */
 function programName(text: string): string {
-    return /^[A-Z]{3,}$/.test(text) && !/^(.)\1+$/.test(text) ? text[0] + text.slice(1).toLowerCase() : text;
+    return text
+        .split(" ")
+        .map((word) => (/^[A-Z]{3,}$/.test(word) && !/^(.)\1+$/.test(word) ? word[0] + word.slice(1).toLowerCase() : word))
+        .join(" ");
 }
 
 const stripTags = (html: string) => decodeEntities(html.replace(/<[^>]*>/g, " ")).replace(/\s+/g, " ").trim();
