@@ -140,28 +140,32 @@ keep their 2× swatches.
 
 ### 2. Scale model (phase 2)
 
-Everything is sized in rink feet, with small floors in device pixels for
-legibility only. No stored value changes meaning on the board.
+Everything is sized in proportion to the rink, with a 1 px legibility floor. No
+stored value changes meaning.
 
-- **Strokes.** A stored `strokeWidth` keeps its value and is read as "pixels at
-  the board's reference scale" (`REFERENCE_PX_PER_FT = 4`, close to today's
-  800 px board). Rendered width = `strokeWidth / 4` ft × px/ft, floored at
-  1 device px. A width-2 stroke is 0.5 ft wide everywhere.
-- **Arrowheads** are `3 ft + 1.5 × stroke width` long (floor 5 device px) and
-  filled, replacing the fixed 10 px minimum. The stop bar and selection
-  highlight follow the same rule.
+The rule: every size the renderer used to draw in fixed pixels is now "pixels on
+the reference board" (`REFERENCE_PX_PER_FT = 3.8`, the 800×400 board showing the
+whole rink), converted at the current scale by `refPx(px, pxPerFt) = px ×
+pxPerFt ÷ 3.8`. The board at that size is unchanged (the legacy geometry
+snapshot guards it); smaller diagrams scale down and print scales up.
+
+- **Strokes.** A stored `strokeWidth` keeps its value and means "px on the
+  reference board". A width-2 stroke is 2 px on the board, about 0.74 px
+  (floored to 1) on a 300 px thumbnail and about 1.9 px in print.
+- **Arrowheads** are `max(refPx(10), 5 × line width)` long, floored at 4 px.
+  The stop bar is 1.8 ft each side of the tip (floor 2 px), and the selection
+  highlight is the line width plus `refPx(4)`.
 - **Patterns** (carry wave, lateral zigzag, pass dashes, shot rails, backskate
-  ticks) drop their px floors except a 1 device px minimum. A thumbnail shows the
-  same pattern as the board, just smaller.
-- **Rink markings** are all in feet, using real proportions with a 1 device px
-  floor: center red line and blue lines 1 ft, goal lines and circles 2 in (shown
-  at 0.35 ft so they stay visible), boards 0.6 ft. Straight lines snap to the
-  device pixel grid when the scale makes that possible.
-- **Glyphs** keep `PLAYER_RADIUS_FT = 6`. Outline widths become a fraction of the
-  radius with a 1 device px floor; the 8 px minimum radius stays on the board
-  only (where it keeps markers grabbable), not in thumbnails or print.
+  ticks) keep their sizes in feet; their old pixel floors become the 1 px floor.
+  Legend swatches draw at the reference scale, so they show the board's look.
+- **Rink markings.** The red and blue lines stay 1 ft wide. Boards (3 px),
+  circles and creases (2 px) become `refPx(3)` and `refPx(2)`. Vertical lines
+  snap to the device pixel grid when the transform allows.
+- **Glyphs** keep `PLAYER_RADIUS_FT = 6`. Outline floors scale with `refPx`;
+  the 8 px minimum radius stays on the board only, and thumbnail-style diagrams
+  use a 1.5 px minimum so a puck stays visible.
 - **Text.** Labels size continuously from the marker radius (no integer
-  flooring; `fitText` shrinks by 0.5 px steps). Note box padding is in feet.
+  flooring; `fitText` shrinks by 0.5 px steps). Note box padding uses `refPx`.
 
 ### 3. Playbook style (phase 3)
 
