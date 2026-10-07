@@ -87,6 +87,6 @@ describe("legend swatches at the reference scale (scale model)", () => {
         expect(ctx.lineWidth).toBe(2);
         // 30 px of line at 3.8 px/ft: 9.5 px dashes with 5.7 px gaps → 2–3 dash paths plus the arrowhead
         // (the old 0.5 px/ft floors gave 4 px dashes with 3 px gaps: 5 dashes).
-        expect(ctx.beginPath.mock.calls.length).toBeLessThanOrEqual(4);
+        expect(vi.mocked(ctx.beginPath).mock.calls.length).toBeLessThanOrEqual(4);
     });
 });
