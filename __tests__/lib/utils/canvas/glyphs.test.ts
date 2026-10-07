@@ -22,7 +22,7 @@ function mockCtx(measure: (t: string) => number = () => 10) {
         fill: fn("fill", () => events.push(`fill:${ctx.fillStyle}`)),
         stroke: fn("stroke", () => events.push(`stroke:${ctx.strokeStyle}`)),
         fillText: fn("fillText", (t) => events.push(`text:${t}`)),
-        fillRect: fn("fillRect"), strokeRect: fn("strokeRect"), save: fn("save"), restore: fn("restore"),
+        fillRect: fn("fillRect"), roundRect: fn("roundRect"), strokeRect: fn("strokeRect"), save: fn("save"), restore: fn("restore"),
         translate: fn("translate"), rotate: fn("rotate"),
         setLineDash: vi.fn(), scale: vi.fn(), quadraticCurveTo: vi.fn(),
         measureText: vi.fn((t: string) => ({ width: measure(t) })),

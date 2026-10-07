@@ -23,10 +23,10 @@ export const DIAGRAM_THEME = {
     /** Ink for pucks, outlines and the default text color */
     ink: BOARD_COLORS.ink,
     /** Shading over ice outside a drill's area */
-    areaMask: "rgba(33, 33, 33, 0.35)",
+    areaMask: "rgba(33, 33, 33, 0.22)",
     selection: "#FFD700",
     selectionFill: "rgba(255, 215, 0, 0.3)",
-    noteChip: "rgba(255, 255, 255, 0.8)",
+    noteChip: "rgba(255, 255, 255, 0.9)",
     snapRingHalo: "#FFFFFF",
     cone: "#F57C00",
     /** The lit half of a cone */

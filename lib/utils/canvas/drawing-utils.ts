@@ -31,6 +31,9 @@ import { diagramFont } from "./diagram-fonts";
 /** The shortest arrowhead drawn, so a tiny diagram's arrows still read as arrows. */
 export const ARROW_MIN_PX = 4;
 
+/** The notch of a swept arrowhead, as a fraction of its length back from the tip. */
+export const ARROW_NOTCH = 0.7;
+
 /** The thinnest line and shortest arrowhead a stroke is drawn with. */
 export interface StrokeFloors {
     linePx: number;
@@ -150,6 +153,9 @@ function drawArrowHead(
         to.y - headLength * Math.sin(angle - Math.PI / 6)
     );
 
+    // Swept back (spec §3): the head's base dips toward the tip along the line.
+    ctx.lineTo(to.x - headLength * ARROW_NOTCH * Math.cos(angle), to.y - headLength * ARROW_NOTCH * Math.sin(angle));
+
     // Right side of arrow head
     ctx.lineTo(
         to.x - headLength * Math.cos(angle + Math.PI / 6),
@@ -249,9 +255,11 @@ export function drawTextAnnotation(
         );
     }
 
-    // Draw semi-transparent background for readability
+    // A rounded white chip behind the text, so it reads over lines (spec §3).
     ctx.fillStyle = DIAGRAM_THEME.noteChip;
-    ctx.fillRect(canvasPos.x - pad, canvasPos.y - textHeight - pad, textWidth + 2 * pad, textHeight + 2 * pad);
+    ctx.beginPath();
+    ctx.roundRect(canvasPos.x - pad, canvasPos.y - textHeight - pad, textWidth + 2 * pad, textHeight + 2 * pad, 0.3 * pxPerFt);
+    ctx.fill();
 
     // Draw text
     ctx.fillStyle = annotation.color;
