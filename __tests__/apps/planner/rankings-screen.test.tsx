@@ -4,7 +4,7 @@ import { fireEvent, screen, within } from "@testing-library/react";
 import { composite } from "@/lib/ratings";
 import { toRatingInputs } from "@/lib/rankings-document";
 import { downloadBlob } from "@/components/features/practice-planner/export/download";
-import { RankingsScreen } from "@/apps/planner/src/screens/rankings/RankingsScreen";
+import { RankingsScreen, levelsShortMessage } from "@/apps/planner/src/screens/rankings/RankingsScreen";
 import { NO_RANKINGS_MESSAGE, START_OVER_LABEL } from "@/apps/planner/src/screens/rankings/display";
 import { META_RANKINGS } from "@/apps/planner/src/store/records";
 import { memoryStore, renderScreen } from "./render-screen";
@@ -218,6 +218,10 @@ describe("RankingsScreen", () => {
         const { games, teams, options } = toRatingInputs(sampleRankingsDoc({ method: { ...base.method, levels: [{ name: "X", size: 1 }, { name: "Y", size: 1 }] } }));
         const mine = composite(games, teams, { ...base.method, levels: [{ name: "X", size: 1 }, { name: "Y", size: 1 }] }, options).byNumber.get("903")!;
         expect(screen.getByText("Suggested level").parentElement).toHaveTextContent(mine.level ?? "Below the last level");
+    });
+
+    it("says has for a single team past the levels", () => {
+        expect(levelsShortMessage(6, 7)).toBe("Your levels hold 6 teams but 7 are ranked, so 1 has no suggested level.");
     });
 
     it("lists every method setting", async () => {

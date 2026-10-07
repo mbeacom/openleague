@@ -55,7 +55,8 @@ export const FEW_GAMES_LABEL = "Few games";
 
 /** "Your levels hold 46 teams but 51 are ranked, so 5 have no suggested level." */
 export function levelsShortMessage(held: number, ranked: number): string {
-    return `Your levels hold ${held} teams but ${ranked} are ranked, so ${ranked - held} have no suggested level.`;
+    const left = ranked - held;
+    return `Your levels hold ${held} teams but ${ranked} are ranked, so ${left} ${left === 1 ? "has" : "have"} no suggested level.`;
 }
 
 type SortKey = "rank" | "name" | "startingBracket" | "games" | "agd" | "sched" | "lodin" | "walkush" | "lodinScaled" | "walkushScaled" | "rpi";
@@ -373,7 +374,14 @@ function Ready({ doc, save }: { doc: RankingsDocument; save: (doc: RankingsDocum
 
             <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ alignItems: { sm: "center" }, flexWrap: { sm: "wrap" }, rowGap: 1 }}>
                 <TextField label="Find a team" value={query} onChange={(e) => setQuery(e.target.value)} />
-                <TextField select label="Starting bracket" value={bracket} onChange={(e) => setBracket(e.target.value)} sx={{ minWidth: 180 }}>
+                <TextField
+                    select
+                    label="Starting bracket"
+                    value={bracket}
+                    onChange={(e) => setBracket(e.target.value)}
+                    slotProps={{ select: { displayEmpty: true }, inputLabel: { shrink: true } }}
+                    sx={{ minWidth: 180 }}
+                >
                     <MenuItem value="">All brackets</MenuItem>
                     {brackets.map((b) => (
                         <MenuItem key={b} value={b}>

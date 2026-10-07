@@ -33,7 +33,7 @@ function TeamDetail({ doc, number }: { doc: RankingsDocument; number: string }) 
             </Typography>
             <Typography>
                 {`Rank ${row.rank ?? "—"} · CSHL-compatible RPI ${formatRating(row.rpi)} · Level ${levelText(row)}`}
-                {row.startingBracket ? ` · Started ${row.startingBracket} ` : " "}
+                {row.startingBracket && !row.movement ? ` · Started ${row.startingBracket}` : " "}
                 <MovementLabel movement={row.movement} startingBracket={row.startingBracket} />
             </Typography>
             {row.games === 0 ? (
