@@ -163,3 +163,32 @@ describe("curve lines (line editing R2)", () => {
         expect(curvePoint(straight, 0, 0.5)).toEqual({ x: 50, y: 0 });
     });
 });
+
+describe("stroke sizes in proportion to the rink (scale model)", () => {
+    const line = (action: StrokeAction, strokeWidth: number) =>
+        ({ action, path: "straight" as const, end: "none" as const, points: [{ x: 0, y: 0 }, { x: 400, y: 0 }], strokeWidth });
+
+    it("keeps a stroke's width on the reference board, and scales it elsewhere", () => {
+        expect(buildStrokeGeometry(line("skate", 2), 3.8).lineWidth).toBe(2);
+        expect(buildStrokeGeometry(line("skate", 2), 7.6).lineWidth).toBeCloseTo(4);
+        expect(buildStrokeGeometry(line("line", 2), 7.6).lineWidth).toBeCloseTo(3);
+    });
+
+    it("scales the thickest stroke down on a small diagram instead of swallowing the rink", () => {
+        // 300 px thumbnail: (300 − 20) ÷ 200 = 1.4 px/ft; a width-20 stroke is 20 · 1.4/3.8 ≈ 7.4 px, not 20.
+        expect(buildStrokeGeometry(line("skate", 20), 1.4).lineWidth).toBeCloseTo(7.37, 1);
+    });
+
+    it("never draws a line thinner than 1 px", () => {
+        expect(buildStrokeGeometry(line("skate", 2), 0.5).lineWidth).toBe(1);
+    });
+
+    it("sizes pass dashes in feet, with only the 1 px floor, so a small diagram keeps their rhythm", () => {
+        // 1 px/ft: dash 2.5 px, gap 1.5 px (the old floors, 4 and 3 px, would have stretched them).
+        const g = buildStrokeGeometry(line("pass", 2), 1);
+        const first = g.polylines[0];
+        const dashLength = Math.hypot(first[first.length - 1].x - first[0].x, first[first.length - 1].y - first[0].y);
+        expect(dashLength).toBeLessThan(3.5);
+        expect(g.polylines.length).toBeGreaterThan(80); // 400 px of 4 px cycles
+    });
+});

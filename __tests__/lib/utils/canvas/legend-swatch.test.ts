@@ -78,3 +78,15 @@ describe("paintLegendSwatch", () => {
         expect(drew).toBe(true);
     });
 });
+
+describe("legend swatches at the reference scale (scale model)", () => {
+    it("draw a 2 px pass line in about two dashes, the board's look, not floor-bound stubs", () => {
+        const ctx = recordingContext();
+        const entry: LegendEntry = { key: "pass", label: "Pass", type: "action", action: "pass" };
+        paintLegendSwatch(ctx, entry);
+        expect(ctx.lineWidth).toBe(2);
+        // 30 px of line at 3.8 px/ft: 9.5 px dashes with 5.7 px gaps → 2–3 dash paths plus the arrowhead
+        // (the old 0.5 px/ft floors gave 4 px dashes with 3 px gaps: 5 dashes).
+        expect(ctx.beginPath.mock.calls.length).toBeLessThanOrEqual(4);
+    });
+});

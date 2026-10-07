@@ -9,11 +9,12 @@ import { buildStrokeGeometry } from "./stroke-geometry";
 import { paintStrokeGeometry } from "./drawing-utils";
 import { drawEquipmentGlyph, drawPlayerGlyph } from "./glyphs";
 import { BOARD_COLORS, ROLE_DEFAULT_COLORS } from "./notation";
+import { REFERENCE_PX_PER_FT } from "./scale";
 
 export const LEGEND_SWATCH_SIZE = { width: 40, height: 20 } as const;
 
-// Swatches are drawn in raw canvas px; a small pxPerFt makes the patterns' px minimums bind.
-const SWATCH_PX_PER_FT = 0.5;
+// Swatches are drawn at the reference board's scale, so they show the board's look.
+const SWATCH_PX_PER_FT = REFERENCE_PX_PER_FT;
 
 export function paintLegendSwatch(ctx: CanvasRenderingContext2D, entry: LegendEntry): void {
     const W = LEGEND_SWATCH_SIZE.width;
