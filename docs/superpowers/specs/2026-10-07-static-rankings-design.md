@@ -103,7 +103,7 @@ Movement needs to know which starting brackets are stronger. That order comes fr
 
 - The document stores it as `bracketOrder`, strongest first. Reading a snake chart replaces it with the chart's `brackets` (when the chart has any).
 - A bracket that a team uses but `bracketOrder` doesn't list follows the listed ones, in the order it first appears in the team list. Older v1 files have no `bracketOrder`, so all their brackets are ordered this way.
-- Setup shows the full order and lets the user move a bracket up or down, rename it (every team in it follows), add one, and remove one that no team uses. Saving writes the whole order to `bracketOrder`.
+- Setup shows the full order and lets the user move a bracket up or down, rename it (every team in it follows), add one, and remove one; its teams are left with no starting bracket. Saving writes the whole order to `bracketOrder`, and refuses more than 20 brackets, saying how many to remove.
 - Movement: the ranked teams are laid out by starting bracket in this order and cut by the level sizes. Each bracket's seeded positions cover a span of levels, and every position past the last level counts as one extra level after it. A team whose suggested level is above its bracket's span moves up, below it moves down, and inside it stays the same.
 
 ## Calculation

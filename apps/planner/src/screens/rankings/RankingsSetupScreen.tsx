@@ -50,6 +50,7 @@ const bracketLabel = (bracket: BracketDraft, index: number) => bracket.name.trim
 
 /** Why the brackets can't be saved, or null. */
 function bracketProblem(brackets: readonly BracketDraft[]): string | null {
+    if (brackets.length > MAX_BRACKETS) return `At most ${MAX_BRACKETS} starting brackets. Remove ${brackets.length - MAX_BRACKETS} to save.`;
     const seen = new Set<string>();
     for (const [i, bracket] of brackets.entries()) {
         const name = bracket.name.trim();
@@ -88,6 +89,11 @@ function Editor({ initial, save, clear }: { initial: RankingsDocument; save: Loc
             next.splice(to, 0, moved);
             return next;
         });
+    /** Removes a bracket; its teams are left without a starting bracket. */
+    const removeBracket = (key: number) => {
+        setBrackets((list) => list.filter((b) => b.key !== key));
+        setAssigned((current) => Object.fromEntries(Object.entries(current).map(([number, k]) => [number, k === key ? null : k])));
+    };
     const addBracket = () =>
         setBrackets((list) => {
             const names = new Set(list.map((b) => b.name.trim()));
@@ -229,9 +235,10 @@ function Editor({ initial, save, clear }: { initial: RankingsDocument; save: Loc
                                     <span aria-hidden="true">▼</span>
                                 </IconButton>
                                 <IconButton
-                                    aria-label={count > 0 ? `Remove ${label} (move its teams out first)` : `Remove ${label}`}
-                                    disabled={count > 0}
-                                    onClick={() => setBrackets((list) => list.filter((b) => b.key !== bracket.key))}
+                                    aria-label={
+                                        count > 0 ? `Remove ${label} (its ${count} ${count === 1 ? "team gets" : "teams get"} no starting bracket)` : `Remove ${label}`
+                                    }
+                                    onClick={() => removeBracket(bracket.key)}
                                     sx={{ width: 44, height: 44 }}
                                 >
                                     ×

@@ -173,6 +173,23 @@ describe("RankingsSetupScreen", () => {
             });
         });
 
+        it("removes a bracket that has teams, so a file with too many brackets can be saved again", async () => {
+            const { store } = memoryStore();
+            const base = sampleRankingsDoc({ bracketOrder: [] });
+            const extra = Array.from({ length: 21 }, (_, i) => ({ number: String(910 + i), name: `Pinewood ${i + 1}`, startingBracket: `Bracket ${i + 1}`, excluded: false }));
+            await store.saveRankings({ ...base, teams: [...base.teams.map((t) => ({ ...t, startingBracket: null })), ...extra] });
+            renderScreen(<RankingsSetupScreen store={store} />, store);
+            fireEvent.click(await screen.findByRole("button", { name: SAVE_SETUP_LABEL }));
+            expect(await screen.findByText("At most 20 starting brackets. Remove 1 to save.")).toBeInTheDocument();
+            fireEvent.click(screen.getByRole("button", { name: "Remove Bracket 21 (its 1 team gets no starting bracket)" }));
+            fireEvent.click(screen.getByRole("button", { name: SAVE_SETUP_LABEL }));
+            await waitFor(async () => {
+                const saved = await store.getRankings();
+                expect(saved.success && saved.data!.bracketOrder).toHaveLength(20);
+                expect(saved.success && saved.data!.teams.find((t) => t.number === "930")!.startingBracket).toBeNull();
+            });
+        });
+
         it("refuses a repeated or empty bracket name", async () => {
             const { store } = memoryStore();
             await store.saveRankings(sampleRankingsDoc());
