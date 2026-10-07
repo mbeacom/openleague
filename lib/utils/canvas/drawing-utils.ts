@@ -21,9 +21,9 @@ import type { RinkRect, StrokeOptions } from "@/types/practice-planner";
 import { FULL_RINK, TransformContext, drawRink, rinkToCanvas } from "./rink-renderer";
 import { buildStrokeGeometry, strokeCenterline, type StrokeGeometry } from "./stroke-geometry";
 import { drawPlayerGlyph, drawEquipmentGlyph } from "./glyphs";
-import { EQUIPMENT_RADIUS_FT, PLAYER_RADIUS_FT, glyphRadiusPx } from "./glyph-metrics";
+import { EQUIPMENT_RADIUS_FT, MIN_GLYPH_RADIUS_PX, PLAYER_RADIUS_FT, glyphRadiusPx } from "./glyph-metrics";
 import { BOARD_COLORS } from "./notation";
-import { refPx } from "./scale";
+import { REFERENCE_PX_PER_FT, refPx } from "./scale";
 import type { LineHandle, SnapTarget } from "./line-editing";
 
 /** The shortest arrowhead drawn, so a tiny diagram's arrows still read as arrows. */
@@ -150,15 +150,17 @@ export function drawPlayerIcon(
     player: PlayerIcon,
     transform: TransformContext,
     isSelected: boolean = false,
-    zoom: number = 1
+    zoom: number = 1,
+    minGlyphRadiusPx: number = MIN_GLYPH_RADIUS_PX
 ): void {
     const pxPerFt = Math.min(transform.scaleX, transform.scaleY);
     drawPlayerGlyph(
         ctx,
         player,
         rinkToCanvas(player.position, transform),
-        glyphRadiusPx(PLAYER_RADIUS_FT, pxPerFt, zoom),
-        isSelected
+        glyphRadiusPx(PLAYER_RADIUS_FT, pxPerFt, zoom, minGlyphRadiusPx),
+        isSelected,
+        pxPerFt / REFERENCE_PX_PER_FT
     );
 }
 
@@ -170,15 +172,17 @@ export function drawEquipmentItem(
     item: EquipmentItem,
     transform: TransformContext,
     isSelected: boolean = false,
-    zoom: number = 1
+    zoom: number = 1,
+    minGlyphRadiusPx: number = MIN_GLYPH_RADIUS_PX
 ): void {
     const pxPerFt = Math.min(transform.scaleX, transform.scaleY);
     drawEquipmentGlyph(
         ctx,
         item,
         rinkToCanvas(item.position, transform),
-        glyphRadiusPx(EQUIPMENT_RADIUS_FT[item.kind], pxPerFt, zoom),
-        isSelected
+        glyphRadiusPx(EQUIPMENT_RADIUS_FT[item.kind], pxPerFt, zoom, minGlyphRadiusPx),
+        isSelected,
+        pxPerFt / REFERENCE_PX_PER_FT
     );
 }
 
@@ -369,11 +373,12 @@ export function drawAllElements(
     playData: PlayData,
     transform: TransformContext,
     selectedId?: string,
-    zoom: number = 1
+    zoom: number = 1,
+    minGlyphRadiusPx: number = MIN_GLYPH_RADIUS_PX
 ): void {
     playData.drawings.forEach((d) => drawElement(ctx, d, transform, d.id === selectedId));
-    playData.equipment.forEach((e) => drawEquipmentItem(ctx, e, transform, e.id === selectedId, zoom));
-    playData.players.forEach((p) => drawPlayerIcon(ctx, p, transform, p.id === selectedId, zoom));
+    playData.equipment.forEach((e) => drawEquipmentItem(ctx, e, transform, e.id === selectedId, zoom, minGlyphRadiusPx));
+    playData.players.forEach((p) => drawPlayerIcon(ctx, p, transform, p.id === selectedId, zoom, minGlyphRadiusPx));
     playData.annotations.forEach((a) => drawTextAnnotation(ctx, a, transform, a.id === selectedId));
 }
 
@@ -426,6 +431,8 @@ export interface BoardSceneOptions {
     maskRect?: RinkRect;
     /** Draw the rink from its cached background (default true); see DrawRinkOptions.cache */
     cachedRink?: boolean;
+    /** Smallest glyph radius in screen px (default the board's 8, which keeps markers grabbable) */
+    minGlyphRadiusPx?: number;
 }
 
 /**
@@ -440,7 +447,7 @@ export function drawBoardScene(
     options: BoardSceneOptions = {}
 ): void {
     drawRink(ctx, transform, { cache: options.cachedRink ?? true });
-    drawAllElements(ctx, playData, transform, options.selectedId, options.zoom ?? 1);
+    drawAllElements(ctx, playData, transform, options.selectedId, options.zoom ?? 1, options.minGlyphRadiusPx ?? MIN_GLYPH_RADIUS_PX);
     if (options.maskRect) drawAreaMask(ctx, options.maskRect, transform, options.zoom ?? 1);
 }
 

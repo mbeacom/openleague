@@ -4,9 +4,13 @@
  */
 import type { EquipmentItem, PlayerIcon, PlayerRole, Position } from "@/types/practice-planner";
 import { BOARD_COLORS } from "./notation";
+import { MIN_LINE_PX } from "./scale";
 
 const SELECTION_COLOR = "#FFD700";
 const FONT_FAMILY = `"Source Sans 3", system-ui, sans-serif`;
+
+/** An outline: a fraction of the radius, never below `floorPx` on the reference board (× scale) or 1 px. */
+const outline = (r: number, fraction: number, floorPx: number, scale: number) => Math.max(r * fraction, floorPx * scale, MIN_LINE_PX);
 
 export const PLAYER_GLYPH_SHAPE: Record<PlayerRole, "disc" | "ring" | "goalie" | "triangle"> = {
     X: "disc",
@@ -37,7 +41,7 @@ function fitText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number, 
     let size = startPx;
     ctx.font = `800 ${size}px ${FONT_FAMILY}`;
     while (size > MIN_FONT_PX && ctx.measureText(text).width > maxWidth) {
-        size -= 1;
+        size -= 0.5;
         ctx.font = `800 ${size}px ${FONT_FAMILY}`;
     }
     if (ctx.measureText(text).width <= maxWidth) return text;
@@ -53,14 +57,16 @@ export function drawPlayerGlyph(
     player: PlayerIcon,
     c: Position,
     r: number,
-    isSelected: boolean
+    isSelected: boolean,
+    /** pxPerFt ÷ the reference board's (scale model); outline floors scale with it */
+    scale: number = 1
 ): void {
     if (isSelected) selectionRing(ctx, c, r);
     const shape = PLAYER_GLYPH_SHAPE[player.role];
     const text = player.label.trim() || player.role;
     let textColor = contrastText(player.color);
 
-    ctx.lineWidth = Math.max(1.5, r * 0.12);
+    ctx.lineWidth = outline(r, 0.12, 1.5, scale);
     switch (shape) {
         case "disc":
         case "goalie":
@@ -78,7 +84,7 @@ export function drawPlayerGlyph(
         case "ring":
             ctx.fillStyle = "#FFFFFF";
             ctx.strokeStyle = player.color;
-            ctx.lineWidth = Math.max(2, r * 0.22);
+            ctx.lineWidth = outline(r, 0.22, 2, scale);
             ctx.beginPath();
             ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
             ctx.fill();
@@ -98,7 +104,7 @@ export function drawPlayerGlyph(
             break;
     }
 
-    const shownText = fitText(ctx, text, r * 1.6, Math.floor(r * 1.05));
+    const shownText = fitText(ctx, text, r * 1.6, r * 1.05);
     ctx.fillStyle = textColor;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
@@ -110,10 +116,12 @@ export function drawEquipmentGlyph(
     item: Pick<EquipmentItem, "kind" | "rotation">,
     c: Position,
     r: number,
-    isSelected: boolean
+    isSelected: boolean,
+    /** pxPerFt ÷ the reference board's (scale model); outline floors scale with it */
+    scale: number = 1
 ): void {
     if (isSelected) selectionRing(ctx, c, r);
-    ctx.lineWidth = Math.max(1.5, r * 0.15);
+    ctx.lineWidth = outline(r, 0.15, 1.5, scale);
     ctx.strokeStyle = BOARD_COLORS.ink;
 
     switch (item.kind) {
@@ -145,7 +153,7 @@ export function drawEquipmentGlyph(
             break;
         }
         case "tire":
-            ctx.lineWidth = Math.max(2.5, r * 0.35);
+            ctx.lineWidth = outline(r, 0.35, 2.5, scale);
             ctx.beginPath();
             ctx.arc(c.x, c.y, r * 0.8, 0, Math.PI * 2);
             ctx.stroke();

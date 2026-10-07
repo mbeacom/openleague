@@ -55,6 +55,9 @@ function clampPixelRatio(value: number | undefined): number {
 /** Padding around the rink in every thumbnail-style diagram (logical px). */
 export const THUMBNAIL_PADDING = 10;
 
+/** Thumbnail-style diagrams aren't edited, so markers keep their real size; this only keeps a puck visible. */
+export const THUMBNAIL_MIN_GLYPH_RADIUS_PX = 1.5;
+
 /** Width ÷ height of a thumbnail; live diagrams keep the same shape. */
 export const THUMBNAIL_ASPECT = THUMBNAIL_DIMENSIONS.width / THUMBNAIL_DIMENSIONS.height;
 
@@ -74,7 +77,11 @@ export function drawThumbnailScene(
     ctx.fillStyle = options.backgroundColor ?? "#FFFFFF";
     ctx.fillRect(0, 0, width, height);
     const transform = createTransformContext(width, height, THUMBNAIL_PADDING);
-    drawBoardScene(ctx, transform, playData, { maskRect: areaRect(playData.area), cachedRink: options.cachedRink ?? false });
+    drawBoardScene(ctx, transform, playData, {
+        maskRect: areaRect(playData.area),
+        cachedRink: options.cachedRink ?? false,
+        minGlyphRadiusPx: THUMBNAIL_MIN_GLYPH_RADIUS_PX,
+    });
 }
 
 /**
