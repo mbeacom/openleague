@@ -16,13 +16,16 @@ affects:
     note: The provider interface, the fetch-based adapters, redaction, and the per-task draft schemas and prompts.
   - type: path
     pattern: "apps/planner/src/ai/**"
-    note: AI settings, the device key store, the disclosure dialog, the request preview and the task screens.
+    note: AI settings, the in-memory key holder, the disclosure dialog, the request preview and the task screens.
+  - type: path
+    pattern: "apps/planner/ai-origins.ts"
+    note: The one validated origin allowlist that drives both connect-src and the adapters' base-URL check.
   - type: path
     pattern: "apps/planner/build-config.ts"
-    note: PLANNER_CSP's connect-src allowlist of provider origins and the self-hosting origin variable.
+    note: PLANNER_CSP's connect-src, generated from the origin allowlist, and Trusted Types.
   - type: path
     pattern: "apps/planner/src/store/**"
-    note: The separate ai-credentials object store; no document store may hold a key.
+    note: No document store may hold a key; the ai-credentials store arrives only after origin isolation.
   - type: path
     pattern: "apps/planner/src/config.ts"
     note: The privacy note shown to coaches.
@@ -64,9 +67,9 @@ We will let a coach connect **their own** AI provider to the static app, and
 the browser will call that provider **directly**. OpenLeague never proxies,
 pays for, logs or sees the key or the traffic.
 
-- **Off by default.** No request goes to any provider until the coach turns the feature on, sees a disclosure for that provider, and presses Send on a preview of the exact text.
-- **A fixed allowlist.** `connect-src` allows only `https://api.anthropic.com`, `https://api.openai.com` and loopback (`http://localhost:*`, `http://127.0.0.1:*`) for local OpenAI-compatible servers such as Ollama and LM Studio. Self-hosters may add origins at build time. Adding a provider to the public build amends this ADR.
-- **Where keys live.** A key is held in memory by default. With an explicit opt-in it is kept in a separate IndexedDB store that no export or document path reads. A key is never put in a document, URL, link or log.
+- **Off by default.** No request goes to any provider until the coach turns the feature on, sees a disclosure for that provider, and presses Send on a preview of the exact text. Settings never contact a provider: the model is a local field with preset defaults and free text, and no model list is fetched.
+- **One fixed allowlist.** A single build-time list of origins drives both the CSP `connect-src` and the adapters' base-URL check. The public build lists only `https://api.anthropic.com`, `https://api.openai.com` and loopback (`http://localhost:*`, `http://127.0.0.1:*`) for local OpenAI-compatible servers such as Ollama and LM Studio. Self-hosters add exact `https` origins, without wildcards, in one build variable. A test checks that the CSP and the adapters accept exactly the same URLs. Adding a provider to the public build amends this ADR.
+- **Where keys live.** In phase 1 a key is held in memory only. "Remember on this device" ships only after the planner moves to its own origin, and then in a separate IndexedDB store that no export or document path reads. A key is never put in a document, URL, link or log.
 - **No vendor SDKs.** A small `lib/ai/` interface (streamed completion with JSON-Schema structured output) is implemented with `fetch` per provider and loaded lazily.
 - **Drafts only.** AI output is a draft. It is validated by a task's draft schema and then by the same parsers as a file import (`parsePlan`), and it lands in the existing review screens. It never changes a rating, a score or a saved document without the coach confirming. `lib/ratings` never calls a model.
 - **No Copilot or GitHub Models.** GitHub Models was retired on 2026-07-30, and no documented browser path lets a Copilot subscription be used by a third-party page.
@@ -79,7 +82,7 @@ pays for, logs or sees the key or the traffic.
 |---|---|
 | Cost to the project | None: the coach's account pays, or their own machine runs it. |
 | Privacy | The text goes only to the provider the coach picked, after a preview, with optional name redaction. A local model keeps it on the computer. |
-| Security | A key is exposed to scripts on the page's origin. The CSP stops it being sent anywhere except the listed providers. |
+| Security | A key is exposed to scripts on the page's origin. The planner's CSP stops `fetch`, XHR and similar requests from the planner page to unlisted origins, but not a top-level navigation carrying the key in a URL, and it doesn't apply to the docs pages that share the origin and its IndexedDB. The real mitigations are no third-party scripts, a strict `script-src` with Trusted Types, keeping the key out of persistent storage, and origin isolation before any key is stored. |
 | Portability | Three adapters, including OpenAI-compatible local servers. No vendor lock-in or SDK. |
 
 ### Option B: An OpenLeague-run relay or proxy
@@ -109,8 +112,8 @@ redaction.
 
 ## Trade-offs
 
-- **A remembered key is readable by any script on `openleague.dev`.** That includes the docs pages, which share the origin. Mitigations: memory-only by default, no third-party scripts, no HTML rendering of model output, and a proposal to move the planner to its own origin.
-- **Widening `connect-src` weakens a strong guarantee.** Today the app can send nothing anywhere. Afterwards it can reach three fixed destinations, but only those.
+- **A key on the page is readable by any script on `openleague.dev`.** That includes the docs pages, which share the origin and don't carry the planner's CSP. Mitigations: memory-only keys in phase 1, no third-party scripts, a strict `script-src` with Trusted Types, no HTML rendering of model output, and no stored key until the planner has its own origin.
+- **Widening `connect-src` weakens a strong guarantee.** Today the planner page can `fetch` nothing beyond its own origin. Afterwards it can reach three fixed destinations, but only those. The CSP never covered navigation, so it limits where a bug can send data, not what injected script can do.
 - **Third-party behaviour we don't control.** Provider CORS policies, schema subsets and model names change. Adapters, presets and contract fixtures need maintenance, and a provider can withdraw browser access.
 - **Coaches carry the spend risk.** The app can bound each request and recommend hard spend limits, but it can't enforce a cap on a coach's account.
 
@@ -132,6 +135,6 @@ redaction.
 ## Action items
 
 1. [ ] Owner review of `docs/superpowers/specs/2026-10-07-static-byo-ai-key-design.md` and its open questions.
-2. [ ] Phase 1 plan: `lib/ai/` seam and three adapters, the CSP change, settings, the key store, disclosure and preview, redaction, notes → draft plan.
+2. [ ] Phase 1 plan: `lib/ai/` seam and three adapters, the origin allowlist and CSP change (Trusted Types once confirmed compatible), settings with a memory-only key, disclosure and preview, redaction, notes → draft plan.
 3. [ ] Manual browser check of each phase-1 provider's CORS behaviour before release.
-4. [ ] Decide on origin isolation before "remember on this device" ships.
+4. [ ] Decide when and where the planner moves to its own origin. "Remember on this device" ships only after that move.
