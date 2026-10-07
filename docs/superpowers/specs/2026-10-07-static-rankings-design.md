@@ -9,7 +9,7 @@
 
 Many youth hockey leagues place teams into divisions after a short pre-season. The Cleveland Suburban Hockey League (CSHL) does it this way:
 
-- **Starting brackets.** A published "snake chart" gives each team a number by starting bracket. For 8U these are Red strong/mid/weak and White strong/mid/weak. The number's leading digit is the age group (`1xx` = 8U).
+- **Starting brackets.** A published "snake chart" gives each team a number by starting bracket. For 8U these are Red strong/mid/weak and White strong/mid/weak. The number's leading digit is the age group (`1xx` = 8U). In 2026, number ranges follow bracket order. In 2025 they did not. So the tool takes starting brackets from the snake chart, never from number ranges.
 - **Results.** Every pre-season game and final score is published on the division schedule page as `date · time · home team · score · away team · rink`, e.g. `9/26 · 3:40pm · 903 Hilltop M1 · 4 - 9 · 901 Riverside M1 · Rink A`. Teams play anywhere from about 6 to 15 games.
 - **Ratings and placement.** The league publishes an "RPI" in versions (V1, V2, V3-final). Final levels are cut by division sizes it picks each year; in 2025 that was R1–R3 and W1–W4. Programs can then petition to move up or down.
 - **The formula.** The league states that "RPI score is average of Lodin & Walkush scaled scores". It does not publish how those two are computed.

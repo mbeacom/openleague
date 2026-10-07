@@ -37,7 +37,7 @@ On top of them, the static app gets four parts:
 
 1. **Real pasted page text differs from the fixtures.** Pasting the live schedule page must still produce games, or list each line it can't read. Task 4 pins the token shapes seen on the real page: date and time as separate lines, the score split as `11` / `-` / `4`, a combined `4 - 9`, and tab-separated rows. Task 14 re-checks with a real paste in the browser and fixes the parser if needed.
 2. **The same matchup played twice on one day, or the same matchup listed with home and away swapped on re-import.** It must merge as the same game, never as a duplicate or a false conflict. The tests in Task 6 cover `gameKeys` ordinals and orientation.
-3. **A team excluded after import.** It must still count in its opponents' SCHED but drop out of ranks and scaling. Covered in Task 2.
+3. **A team excluded after import.** It must still count in its opponents' SCHED but drop out of ranks and scaling. Covered in Task 2 (composite) and Task 12 (the setup toggle saves it).
 4. **A saved record that fails validation** (damaged storage, or an older build). The screen must show an error with a "Start over" action, not crash. Covered in Task 8 (store) and Task 10 (screen).
 5. **What-if input left blank or invalid.** Blank or non-numeric score fields mean "not applied". They never throw, and they never write to storage. Covered in Task 13.
 
@@ -2530,7 +2530,7 @@ The others are the same: `RankingsImportScreen` (heading "Import rankings"), `Ra
 - [ ] **Step 9: Run the tests and type-check**
 
 Run: `bun run test __tests__/apps/planner/routes.test.ts __tests__/apps/planner/app.test.tsx && bun run type-check`
-Expected: PASS. If `app.test.tsx` asserts the exact nav item count or labels, add "Rankings" to that assertion.
+Expected: PASS. `app.test.tsx` checks nav links by name (Practices, Drill library, Import), so adding Rankings breaks none of them. Add this line after line 82 of its "marks the active section" test: `expect(within(nav).getByRole("link", { name: "Rankings" })).toHaveAttribute("href", "#/rankings");`
 
 - [ ] **Step 10: Commit**
 
@@ -3299,6 +3299,8 @@ export function RankingsImportScreen({ store }: { store: LocalPlannerStore }) {
     );
 }
 ```
+
+Note: every navigation in these screens goes to a `#…` hash route through `navigateTo`. jsdom can't do a full-page `location.assign`, so a non-hash target would throw in tests.
 
 Note: with the sample document, the re-imported `901 vs 902 3 - 2` keys to the existing 2026-09-20 game, because both are the first game of that pair that day. Its existing score is 3–1, so it is a conflict, and the button reads "Use imported 3–2".
 
