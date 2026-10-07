@@ -1,7 +1,7 @@
 /**
  * The CSHL-compatible RPI (spec, Calculation): (Lodin scaled + Walkush scaled) / 2,
  * each min–max scaled to 0–20 over the rated teams that aren't excluded; then
- * rank, levels by method.levels sizes, starting levels from brackets, movement,
+ * rank, levels by method.levels sizes, movement against the starting bracket,
  * low confidence and connected groups.
  */
 import { srs } from "./srs";
@@ -30,7 +30,7 @@ export interface TeamRating {
     rpi: number | null;
     rank: number | null;
     level: string | null;
-    startingLevel: string | null;
+    /** Suggested level against the levels the team's starting bracket was seeded into; null without a bracket or a rank. */
     movement: Movement | null;
     lowConfidence: boolean;
     component: number | null;
@@ -44,6 +44,15 @@ export interface RatingsResult {
     /** Connected groups among ranked teams; above 1, ratings aren't comparable across groups. */
     componentCount: number;
     converged: boolean;
+}
+
+export interface CompositeOptions {
+    /**
+     * Starting brackets, strongest first (the snake chart's column order). Brackets
+     * missing from it follow in the order they first appear in `teams`. Team
+     * numbers never set this order (spec, Context).
+     */
+    bracketOrder?: readonly string[];
 }
 
 export function scale0to20(values: Map<string, number>, include: readonly string[]): Map<string, number> {
@@ -83,7 +92,52 @@ function components(games: readonly RatingGame[]): Map<string, number> {
     return new Map([...parent.keys()].map((team) => [team, ids.get(find(team))!]));
 }
 
-export function composite(games: readonly RatingGame[], teams: readonly RatingTeam[], method: RatingMethod): RatingsResult {
+/**
+ * For each starting bracket, the range of level indices its seeded positions
+ * fall in: ranked teams ordered by bracket (strongest first), cut by the level
+ * sizes, with every position past the last level in one virtual level
+ * (index `levels.length`). Order within a bracket doesn't matter: the range
+ * covers all of the bracket's positions.
+ */
+function bracketSpans(
+    eligible: readonly string[],
+    roster: ReadonlyMap<string, RatingTeam>,
+    method: RatingMethod,
+    bracketOrder: readonly string[],
+): Map<string, { min: number; max: number }> {
+    const order = [...new Set(bracketOrder)];
+    for (const number of eligible) {
+        const bracket = roster.get(number)!.startingBracket;
+        if (bracket && !order.includes(bracket)) order.push(bracket);
+    }
+    const seeded: string[] = [];
+    for (const bracket of order) {
+        for (const number of eligible) if (roster.get(number)!.startingBracket === bracket) seeded.push(bracket);
+    }
+    const spans = new Map<string, { min: number; max: number }>();
+    let position = 0;
+    const indexAt = (p: number) => {
+        let end = 0;
+        for (let i = 0; i < method.levels.length; i++) {
+            end += method.levels[i].size;
+            if (p < end) return i;
+        }
+        return method.levels.length;
+    };
+    for (const bracket of seeded) {
+        const index = indexAt(position++);
+        const current = spans.get(bracket);
+        spans.set(bracket, current ? { min: Math.min(current.min, index), max: Math.max(current.max, index) } : { min: index, max: index });
+    }
+    return spans;
+}
+
+export function composite(
+    games: readonly RatingGame[],
+    teams: readonly RatingTeam[],
+    method: RatingMethod,
+    options: CompositeOptions = {},
+): RatingsResult {
     const roster = new Map<string, RatingTeam>(teams.map((team) => [team.number, team]));
     for (const game of games) {
         for (const number of [game.home, game.away]) if (!roster.has(number)) roster.set(number, { number, name: number });
@@ -123,19 +177,7 @@ export function composite(games: readonly RatingGame[], teams: readonly RatingTe
     const order = [...eligible].sort((a, b) => rpi.get(b)! - rpi.get(a)! || lodin.get(b)! - lodin.get(a)! || compareTeamNumbers(a, b));
     const levels = cutLevels(order, method);
 
-    // Starting order: brackets ordered by their lowest team number (snake-chart numbering), then team number.
-    const bracketMin = new Map<string, string>();
-    for (const number of eligible) {
-        const bracket = roster.get(number)!.startingBracket;
-        if (!bracket) continue;
-        const current = bracketMin.get(bracket);
-        if (current === undefined || compareTeamNumbers(number, current) < 0) bracketMin.set(bracket, number);
-    }
-    const bracketRank = new Map([...bracketMin.entries()].sort((a, b) => compareTeamNumbers(a[1], b[1])).map(([bracket], i) => [bracket, i]));
-    const seeded = eligible
-        .filter((number) => bracketRank.has(roster.get(number)!.startingBracket ?? ""))
-        .sort((a, b) => bracketRank.get(roster.get(a)!.startingBracket!)! - bracketRank.get(roster.get(b)!.startingBracket!)! || compareTeamNumbers(a, b));
-    const startingLevels = cutLevels(seeded, method);
+    const span = bracketSpans(eligible, roster, method, options.bracketOrder ?? []);
     const levelIndex = new Map(method.levels.map((level, i) => [level.name, i]));
 
     const rows = new Map<string, TeamRating>();
@@ -143,11 +185,12 @@ export function composite(games: readonly RatingGame[], teams: readonly RatingTe
         const r = record.get(team.number) ?? { games: 0, wins: 0, losses: 0, ties: 0, goalsFor: 0, goalsAgainst: 0 };
         const rank = order.indexOf(team.number);
         const level = levels.get(team.number) ?? null;
-        const startingLevel = startingLevels.get(team.number) ?? null;
+        const seededInto = team.startingBracket ? span.get(team.startingBracket) : undefined;
         let movement: Movement | null = null;
-        if (level !== null && startingLevel !== null) {
-            const diff = levelIndex.get(level)! - levelIndex.get(startingLevel)!;
-            movement = diff < 0 ? "up" : diff > 0 ? "down" : "same";
+        if (rank !== -1 && seededInto) {
+            // Ranked past the last level counts as one virtual level after it.
+            const current = level === null ? method.levels.length : levelIndex.get(level)!;
+            movement = current < seededInto.min ? "up" : current > seededInto.max ? "down" : "same";
         }
         rows.set(team.number, {
             number: team.number,
@@ -164,7 +207,6 @@ export function composite(games: readonly RatingGame[], teams: readonly RatingTe
             rpi: rpi.get(team.number) ?? null,
             rank: rank === -1 ? null : rank + 1,
             level,
-            startingLevel,
             movement,
             lowConfidence: r.games < method.lowConfidenceGames,
             component: groups.get(team.number) ?? null,
@@ -188,6 +230,7 @@ export function whatIf(
     hypotheticals: readonly RatingGame[],
     teams: readonly RatingTeam[],
     method: RatingMethod,
+    options: CompositeOptions = {},
 ): RatingsResult {
-    return composite([...games, ...hypotheticals], teams, method);
+    return composite([...games, ...hypotheticals], teams, method, options);
 }

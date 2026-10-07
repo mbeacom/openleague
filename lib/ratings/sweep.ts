@@ -3,7 +3,7 @@
  * final margin from −cap to +cap for one fixture. The losing (or tied) side is
  * assumed to score `otherGoals`, which matters only to the Walkush ratio.
  */
-import { composite } from "./composite";
+import { composite, type CompositeOptions } from "./composite";
 import type { RatingGame, RatingMethod, RatingTeam } from "./types";
 
 export interface SweepCell {
@@ -25,6 +25,7 @@ export function marginSweep(
     teams: readonly RatingTeam[],
     method: RatingMethod,
     otherGoals: number = SWEEP_OTHER_GOALS,
+    options: CompositeOptions = {},
 ): SweepCell[] {
     if (team !== fixture.home && team !== fixture.away) throw new Error("The swept team must play in the fixture");
     const cells: SweepCell[] = [];
@@ -35,7 +36,7 @@ export function marginSweep(
             team === fixture.home
                 ? { home: fixture.home, away: fixture.away, homeGoals: teamGoals, awayGoals: opponentGoals }
                 : { home: fixture.home, away: fixture.away, homeGoals: opponentGoals, awayGoals: teamGoals };
-        const row = composite([...games, game], teams, method).byNumber.get(team);
+        const row = composite([...games, game], teams, method, options).byNumber.get(team);
         cells.push({ margin, teamGoals, opponentGoals, rank: row?.rank ?? null, level: row?.level ?? null, rpi: row?.rpi ?? null, lodin: row?.lodin ?? null });
     }
     return cells;

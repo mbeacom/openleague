@@ -84,7 +84,7 @@ describe("mergeSchedule", () => {
         expect(doc.teams[1].name).toBe("902");
         expect(doc.games[0].rink).toHaveLength(100);
         expect(parseRankings(doc).ok).toBe(true);
-        const chart = applySnakeChart(doc, { teams: [{ number: "901", name: null, startingBracket: "B".repeat(60) }, { number: "902", name: null, startingBracket: "\u0007" }], unparsed: [] });
+        const chart = applySnakeChart(doc, { teams: [{ number: "901", name: null, startingBracket: "B".repeat(60) }, { number: "902", name: null, startingBracket: "\u0007" }], brackets: [], unparsed: [] });
         expect(chart.doc.teams[0].startingBracket).toHaveLength(40);
         expect(chart.doc.teams[1].startingBracket).toBeNull();
         expect(parseRankings(chart.doc).ok).toBe(true);
@@ -104,10 +104,20 @@ describe("applySnakeChart", () => {
                 { number: "901", name: "Riverside Other", startingBracket: "Red Strong" },
                 { number: "950", name: null, startingBracket: "White Weak" },
             ],
+            brackets: ["Red Strong", "White Weak"],
             unparsed: [],
         });
         expect([matched, ignored]).toEqual([1, 1]);
         expect(doc.teams[0]).toMatchObject({ name: "Riverside M1", startingBracket: "Red Strong" });
         expect(doc.teams).toHaveLength(2);
+        expect(doc.bracketOrder).toEqual(["Red Strong", "White Weak"]);
+        expect(parseRankings(doc).ok).toBe(true);
+    });
+
+    it("cleans the chart's bracket order and keeps the old order when the chart has none", () => {
+        const base = { ...createRankingsDocument({ title: "x" }), bracketOrder: ["White Strong", "Red Strong"] };
+        const cleaned = applySnakeChart(base, { teams: [], brackets: ["  Red Strong\u0007 ", "Red Strong", "", "C".repeat(60)], unparsed: [] }).doc;
+        expect(cleaned.bracketOrder).toEqual(["Red Strong", "C".repeat(40)]);
+        expect(applySnakeChart(base, { teams: [], brackets: [], unparsed: [] }).doc.bracketOrder).toEqual(["White Strong", "Red Strong"]);
     });
 });

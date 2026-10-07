@@ -15,6 +15,12 @@ export interface ParsedSnakeTeam {
 
 export interface ParsedSnakeChart {
     teams: ParsedSnakeTeam[];
+    /**
+     * Starting brackets that hold at least one team, in the chart's left-to-right
+     * column order (first appearance wins across several tables). This, not the
+     * team numbers, is the bracket order: numbers needn't follow it (spec, Context).
+     */
+    brackets: string[];
     unparsed: string[];
 }
 
@@ -62,6 +68,7 @@ export function parseSnakeChart(input: string): ParsedSnakeChart {
     const rows = looksLikeHtml(input) ? htmlRows(input) : textRows(input);
     const teams: ParsedSnakeTeam[] = [];
     const unparsed: string[] = [];
+    const columnOrder: string[] = [];
     let colours: string[] = [];
     let labels: string[] = [];
     for (const row of rows) {
@@ -73,6 +80,7 @@ export function parseSnakeChart(input: string): ParsedSnakeChart {
         }
         if (label === "strength") {
             labels = row.cells.map((cell, k) => `${colours[k] ?? ""} ${STRENGTH[cell.text.toLowerCase()] ?? cell.text}`.trim());
+            for (const bracket of labels) if (bracket && !columnOrder.includes(bracket)) columnOrder.push(bracket);
             continue;
         }
         row.cells.forEach((cell, k) => {
@@ -85,5 +93,6 @@ export function parseSnakeChart(input: string): ParsedSnakeChart {
             teams.push({ number: cell.text, name: cell.title, startingBracket: bracket });
         });
     }
-    return { teams, unparsed };
+    const used = new Set(teams.map((team) => team.startingBracket));
+    return { teams, brackets: columnOrder.filter((bracket) => used.has(bracket)), unparsed };
 }

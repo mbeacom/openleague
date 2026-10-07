@@ -27,13 +27,14 @@ const MOVEMENT: Record<Movement, { icon: string; word: string }> = {
     down: { icon: "▼", word: "Down" },
 };
 
-export function MovementLabel({ movement, startingLevel }: { movement: Movement | null; startingLevel: string | null }) {
+/** "▲ Up from White Strong": always an icon plus a word, with the real starting bracket (spec). */
+export function MovementLabel({ movement, startingBracket }: { movement: Movement | null; startingBracket: string | null }) {
     if (!movement) return null;
     const { icon, word } = MOVEMENT[movement];
     return (
         <Box component="span" sx={{ whiteSpace: "nowrap", color: "text.secondary" }}>
             <span aria-hidden="true">{icon}</span> {word}
-            {startingLevel ? ` from ${startingLevel}` : ""}
+            {startingBracket ? ` ${movement === "same" ? "as" : "from"} ${startingBracket}` : ""}
         </Box>
     );
 }

@@ -5,7 +5,7 @@
  * message; `snapshots` is reserved for phase 2 and kept as-is.
  */
 import { z } from "zod";
-import { CSHL_8U_METHOD, type RatingGame, type RatingMethod, type RatingTeam } from "@/lib/ratings";
+import { CSHL_8U_METHOD, type CompositeOptions, type RatingGame, type RatingMethod, type RatingTeam } from "@/lib/ratings";
 
 export const RANKINGS_FORMAT = "openleague.rankings" as const;
 export const RANKINGS_VERSION = 1 as const;
@@ -70,16 +70,27 @@ const teamSchema = z.object({
     excluded: z.boolean().optional().transform((value) => value ?? false),
 });
 
-const methodSchema = z.object({
-    preset: requiredText(40, "Preset"),
-    goalCap: z.number().int().min(1, "Goal cap must be 1–20").max(20, "Goal cap must be 1–20"),
-    walkush: z.object({ variant: z.literal("plus-one") }),
-    lowConfidenceGames: z.number().int().min(0).max(20),
-    levels: z
-        .array(z.object({ name: requiredText(20, "Level name"), size: z.number().int().min(1, "Level size must be at least 1").max(200) }))
-        .min(1, "Add at least one level")
-        .max(20),
-});
+const methodSchema = z
+    .object({
+        preset: requiredText(40, "Preset"),
+        goalCap: z.number().int().min(1, "Goal cap must be 1–20").max(20, "Goal cap must be 1–20"),
+        walkush: z.object({ variant: z.literal("plus-one") }),
+        lowConfidenceGames: z.number().int().min(0).max(20),
+        levels: z
+            .array(z.object({ name: requiredText(20, "Level name"), size: z.number().int().min(1, "Level size must be at least 1").max(200) }))
+            .min(1, "Add at least one level")
+            .max(20),
+    })
+    .superRefine((method, ctx) => {
+        const seen = new Set<string>();
+        method.levels.forEach((level, i) => {
+            if (seen.has(level.name)) ctx.addIssue({ code: "custom", path: ["levels", i, "name"], message: `Level name ${level.name} is used twice` });
+            seen.add(level.name);
+        });
+    });
+
+export const MAX_BRACKETS = 20;
+export const MAX_BRACKET_LENGTH = 40;
 
 const rankingsSchema = z
     .object({
@@ -95,6 +106,12 @@ const rankingsSchema = z
         teams: z.array(teamSchema).max(MAX_TEAMS, `At most ${MAX_TEAMS} teams`),
         games: z.array(gameSchema).max(MAX_GAMES, `At most ${MAX_GAMES} games`),
         myTeam: teamNumber.nullish().transform((value) => value ?? null),
+        /** Starting brackets, strongest first (the snake chart's column order). Optional: older v1 files have none. */
+        bracketOrder: z
+            .array(requiredText(MAX_BRACKET_LENGTH, "Starting bracket"))
+            .max(MAX_BRACKETS, `At most ${MAX_BRACKETS} starting brackets`)
+            .optional()
+            .transform((value) => value ?? []),
         snapshots: z.array(z.unknown()).optional().transform((value) => value ?? []),
     })
     .superRefine((doc, ctx) => {
@@ -149,6 +166,7 @@ export function createRankingsDocument({ title, method = CSHL_8U_METHOD }: { tit
         teams: [],
         games: [],
         myTeam: null,
+        bracketOrder: [],
         snapshots: [],
     };
 }
@@ -169,8 +187,9 @@ export function rankingsFileName(doc: RankingsDocument): string {
     return `${slug || "rankings"}.rankings.json`;
 }
 
-export function toRatingInputs(doc: RankingsDocument): { games: RatingGame[]; teams: RatingTeam[] } {
+export function toRatingInputs(doc: RankingsDocument): { games: RatingGame[]; teams: RatingTeam[]; options: CompositeOptions } {
     return {
+        options: { bracketOrder: doc.bracketOrder },
         games: doc.games
             .filter((game) => game.status === "final")
             .map((game) => ({ home: game.home, away: game.away, homeGoals: game.homeGoals!, awayGoals: game.awayGoals! })),

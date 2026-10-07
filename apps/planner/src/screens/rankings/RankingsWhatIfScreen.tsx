@@ -6,7 +6,7 @@
  */
 import { useMemo, useRef, useState } from "react";
 import { Alert, Box, Button, List, ListItem, MenuItem, Paper, Stack, TextField, Typography } from "@mui/material";
-import { composite, marginSweep, whatIf, SWEEP_OTHER_GOALS, type RatingGame, type RatingMethod, type RatingTeam } from "@/lib/ratings";
+import { composite, marginSweep, whatIf, SWEEP_OTHER_GOALS, type CompositeOptions, type RatingGame, type RatingMethod, type RatingTeam } from "@/lib/ratings";
 import type { ActionResult } from "@/lib/planner-store";
 import { toRatingInputs, type RankingsDocument, type RankingsGame } from "@/lib/rankings-document";
 import type { LocalPlannerStore } from "../../store/types";
@@ -42,16 +42,24 @@ const keyOfEntered = (fixtures: readonly Fixture[], scores: Record<string, { hom
     JSON.stringify(fixtures.filter((f) => f.id !== skipId).map((f) => enteredGame(f, scores)).filter((g) => g !== null));
 
 // Keyed on serialized scores so typing in the swept fixture's own fields never recomputes the sweep.
-function useAfter(games: readonly RatingGame[], teams: readonly RatingTeam[], method: RatingMethod, hypotheticalsKey: string) {
-    return useMemo(() => whatIf(games, parseGames(hypotheticalsKey), teams, method), [games, teams, method, hypotheticalsKey]);
+function useAfter(games: readonly RatingGame[], teams: readonly RatingTeam[], method: RatingMethod, options: CompositeOptions, hypotheticalsKey: string) {
+    return useMemo(() => whatIf(games, parseGames(hypotheticalsKey), teams, method, options), [games, teams, method, options, hypotheticalsKey]);
 }
 
-function useSweep(games: readonly RatingGame[], teams: readonly RatingTeam[], method: RatingMethod, team: string, fixture: { home: string; away: string } | null, otherKey: string) {
+function useSweep(
+    games: readonly RatingGame[],
+    teams: readonly RatingTeam[],
+    method: RatingMethod,
+    options: CompositeOptions,
+    team: string,
+    fixture: { home: string; away: string } | null,
+    otherKey: string,
+) {
     const home = fixture?.home;
     const away = fixture?.away;
     return useMemo(
-        () => (home !== undefined && away !== undefined ? marginSweep([...games, ...parseGames(otherKey)], { home, away }, team, teams, method) : []),
-        [games, teams, method, team, home, away, otherKey],
+        () => (home !== undefined && away !== undefined ? marginSweep([...games, ...parseGames(otherKey)], { home, away }, team, teams, method, SWEEP_OTHER_GOALS, options) : []),
+        [games, teams, method, options, team, home, away, otherKey],
     );
 }
 
@@ -65,7 +73,7 @@ function WhatIf({ doc, save }: { doc: RankingsDocument; save: (doc: RankingsDocu
     const [saveError, setSaveError] = useState<string | null>(null);
     const names = new Map(doc.teams.map((t) => [t.number, t.name]));
     const name = (number: string) => names.get(number) ?? number;
-    const { games, teams } = useMemo(() => toRatingInputs(doc), [doc]);
+    const { games, teams, options } = useMemo(() => toRatingInputs(doc), [doc]);
 
     const fixtures: Fixture[] = [
         ...doc.games
@@ -82,16 +90,16 @@ function WhatIf({ doc, save }: { doc: RankingsDocument; save: (doc: RankingsDocu
         return h === null || a === null ? null : { home: f.home, away: f.away, homeGoals: h, awayGoals: a };
     };
     const hypotheticals = fixtures.map(entered).filter((g): g is RatingGame => g !== null);
-    const before = useMemo(() => composite(games, teams, doc.method), [games, teams, doc.method]);
+    const before = useMemo(() => composite(games, teams, doc.method, options), [games, teams, doc.method, options]);
     const hypotheticalsKey = keyOfEntered(fixtures, scores);
-    const after = useAfter(games, teams, doc.method, hypotheticalsKey);
+    const after = useAfter(games, teams, doc.method, options, hypotheticalsKey);
     const mineBefore = before.byNumber.get(team);
     const mineAfter = after.byNumber.get(team);
     const movers = after.ranked.filter((row) => before.byNumber.get(row.number)?.rank !== row.rank);
 
     const sweepFixture = fixtures.find((f) => f.id === sweepId) ?? fixtures[0];
     const otherKey = keyOfEntered(fixtures, scores, sweepFixture?.id);
-    const sweep = useSweep(games, teams, doc.method, team, sweepFixture ? { home: sweepFixture.home, away: sweepFixture.away } : null, otherKey);
+    const sweep = useSweep(games, teams, doc.method, options, team, sweepFixture ? { home: sweepFixture.home, away: sweepFixture.away } : null, otherKey);
 
     const record = async (f: Fixture) => {
         const game = entered(f);

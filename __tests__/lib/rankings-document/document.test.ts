@@ -54,12 +54,25 @@ describe("parseRankings", () => {
         ["a duplicate team number", (d: RankingsDocument) => (d.teams[1] = { ...d.teams[1], number: "901" }), "teams.1.number"],
         ["an unknown my-team", (d: RankingsDocument) => (d.myTeam = "999"), "myTeam"],
         ["a zero level size", (d: RankingsDocument) => (d.method.levels[0] = { name: "R1", size: 0 }), "method.levels.0.size"],
+        ["a repeated level name", (d: RankingsDocument) => (d.method.levels[2] = { name: "R1", size: 6 }), "method.levels.2.name"],
+        ["too many starting brackets", (d: RankingsDocument) => (d.bracketOrder = Array.from({ length: 21 }, (_v, i) => `B${i}`)), "bracketOrder"],
     ])("rejects %s with the field path", (_label, mutate, path) => {
         const doc = structuredClone(sample());
         mutate(doc);
         const result = parseRankings(doc);
         expect(result.ok).toBe(false);
         if (!result.ok) expect(result.error.issues?.some((issue) => issue.startsWith(path))).toBe(true);
+    });
+
+    it("reads an older v1 file without a bracket order", () => {
+        const { bracketOrder: _omit, ...older } = sample();
+        const result = parseRankings(JSON.parse(JSON.stringify(older)));
+        expect(result.ok && result.doc.bracketOrder).toEqual([]);
+    });
+
+    it("keeps and cleans the bracket order", () => {
+        const result = parseRankings({ ...sample(), bracketOrder: [" Red Strong\u0007", "White Strong"] });
+        expect(result.ok && result.doc.bracketOrder).toEqual(["Red Strong", "White Strong"]);
     });
 
     it("drops unknown keys", () => {

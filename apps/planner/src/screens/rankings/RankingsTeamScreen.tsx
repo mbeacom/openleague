@@ -29,7 +29,7 @@ function TeamDetail({ doc, number }: { doc: RankingsDocument; number: string }) 
                 {row.name} ({row.number})
             </Typography>
             <Typography>
-                Rank {row.rank ?? "—"} · RPI {formatRating(row.rpi)} · Level {row.level ?? "—"} <MovementLabel movement={row.movement} startingLevel={row.startingLevel} />
+                Rank {row.rank ?? "—"} · RPI {formatRating(row.rpi)} · Level {row.level ?? "—"} <MovementLabel movement={row.movement} startingBracket={row.startingBracket} />
             </Typography>
             <Paper variant="outlined" sx={{ p: 2 }}>
                 <Typography sx={{ fontVariantNumeric: "tabular-nums", fontWeight: 700 }}>

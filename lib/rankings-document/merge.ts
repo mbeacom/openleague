@@ -6,7 +6,7 @@
  */
 import type { ParsedSchedule, ParsedSnakeChart } from "@/lib/ratings/import";
 import { compareTeamNumbers } from "@/lib/ratings";
-import { cleanImportedText, type RankingsDocument, type RankingsGame } from "./document";
+import { MAX_BRACKETS, MAX_BRACKET_LENGTH, cleanImportedText, type RankingsDocument, type RankingsGame } from "./document";
 
 interface Keyable {
     date: string;
@@ -126,7 +126,8 @@ export function applySnakeChart(doc: RankingsDocument, chart: ParsedSnakeChart):
         const bracket = brackets.get(team.number);
         if (bracket === undefined) return team;
         matched += 1;
-        return { ...team, startingBracket: cleanImportedText(bracket, 40) || null };
+        return { ...team, startingBracket: cleanImportedText(bracket, MAX_BRACKET_LENGTH) || null };
     });
-    return { doc: { ...doc, teams }, matched, ignored: chart.teams.length - matched };
+    const order = [...new Set(chart.brackets.map((bracket) => cleanImportedText(bracket, MAX_BRACKET_LENGTH)).filter(Boolean))].slice(0, MAX_BRACKETS);
+    return { doc: { ...doc, teams, bracketOrder: order.length > 0 ? order : doc.bracketOrder }, matched, ignored: chart.teams.length - matched };
 }

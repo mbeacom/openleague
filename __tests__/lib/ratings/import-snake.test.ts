@@ -34,9 +34,20 @@ describe("parseSnakeChart", () => {
         expect(teams[0].name).toBeNull();
     });
 
+    it("lists starting brackets in column order, not by team number", () => {
+        expect(parseSnakeChart(HTML).brackets).toEqual(["Red Strong", "Red Weak", "White Strong", "White Weak"]);
+        const reversed = ["Program\tWhite\tRed", "Strength\tstr\tstr", "Riverside\t901\t903", "Lakeview\t902\t904"].join("\n");
+        expect(parseSnakeChart(reversed).brackets).toEqual(["White Strong", "Red Strong"]);
+    });
+
+    it("leaves out bracket columns with no teams", () => {
+        expect(parseSnakeChart(["Program\tRed\tWhite", "Strength\tstr\tstr", "Riverside\t901\t"].join("\n")).brackets).toEqual(["Red Strong"]);
+    });
+
     it("reports team numbers outside any labelled column", () => {
         const result = parseSnakeChart("Riverside\t901");
         expect(result.teams).toEqual([]);
+        expect(result.brackets).toEqual([]);
         expect(result.unparsed).toEqual(["901"]);
     });
 });

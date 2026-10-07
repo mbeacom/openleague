@@ -55,8 +55,8 @@ const COLUMNS: Array<{ key: SortKey; label: string; numeric: boolean }> = [
 
 export function useRatings(doc: RankingsDocument): RatingsResult {
     return useMemo(() => {
-        const { games, teams } = toRatingInputs(doc);
-        return composite(games, teams, doc.method);
+        const { games, teams, options } = toRatingInputs(doc);
+        return composite(games, teams, doc.method, options);
     }, [doc]);
 }
 
@@ -74,7 +74,7 @@ function Tiles({ row, total }: { row: TeamRating; total: number }) {
     const tiles = [
         { label: "CSHL-compatible RPI", value: formatRating(row.rpi) },
         { label: "Rank", value: row.rank === null ? "—" : `${row.rank} of ${total}` },
-        { label: "Suggested level", value: row.level ?? "—", extra: <MovementLabel movement={row.movement} startingLevel={row.startingLevel} /> },
+        { label: "Suggested level", value: row.level ?? "—", extra: <MovementLabel movement={row.movement} startingBracket={row.startingBracket} /> },
     ];
     return (
         <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" }, gap: 1.5 }}>
@@ -128,11 +128,11 @@ function Ladder({ rows, doc, myTeam }: { rows: TeamRating[]; doc: RankingsDocume
                                 </Box>
                                 <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
                                     {row.number}
-                                    {row.startingBracket ? ` · started ${row.startingBracket}` : ""}
+                                    {row.startingBracket && !row.movement ? ` · started ${row.startingBracket}` : ""}
                                     {row.excluded ? " · excluded" : ""}
                                 </Typography>
                                 <Box sx={{ display: { xs: "block", sm: "none" } }}>
-                                    <MovementLabel movement={row.movement} startingLevel={row.startingLevel} />
+                                    <MovementLabel movement={row.movement} startingBracket={row.startingBracket} />
                                 </Box>
                                 {row.lowConfidence && row.rank !== null && <Chip size="small" label="Few games" variant="outlined" sx={{ mt: 0.25 }} />}
                             </Box>
@@ -161,7 +161,7 @@ function Ladder({ rows, doc, myTeam }: { rows: TeamRating[]; doc: RankingsDocume
                             </Box>
                             <Typography sx={{ fontVariantNumeric: "tabular-nums", textAlign: "right" }}>{formatRating(row.rpi)}</Typography>
                             <Box sx={{ display: { xs: "none", sm: "block" } }}>
-                                <MovementLabel movement={row.movement} startingLevel={row.startingLevel} />
+                                <MovementLabel movement={row.movement} startingBracket={row.startingBracket} />
                             </Box>
                         </Box>
                     </Box>

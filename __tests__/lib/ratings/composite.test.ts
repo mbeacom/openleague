@@ -103,7 +103,7 @@ describe("composite", () => {
         expect(result.byNumber.get("901")!.component).not.toBe(result.byNumber.get("903")!.component);
     });
 
-    it("derives starting levels from brackets and reports movement", () => {
+    it("reports movement against the levels the starting bracket was seeded into", () => {
         const teams = [
             t("901", { startingBracket: "Red Strong" }),
             t("902", { startingBracket: "Red Strong" }),
@@ -111,13 +111,73 @@ describe("composite", () => {
             t("904", { startingBracket: "White Strong" }),
         ];
         const games = [g("904", "901", 4, 0), g("904", "902", 4, 0), g("901", "903", 4, 0), g("902", "903", 1, 0)];
-        const result = composite(games, teams, method([["X", 2], ["Y", 2]]));
+        const result = composite(games, teams, method([["X", 2], ["Y", 2]]), { bracketOrder: ["Red Strong", "White Strong"] });
         const top = result.byNumber.get("904")!;
         expect(top.rank).toBe(1);
-        expect(top.startingLevel).toBe("Y");
         expect(top.level).toBe("X");
         expect(top.movement).toBe("up");
         expect(result.byNumber.get("903")!.movement).toBe("same");
+        expect(result.ranked.find((row) => row.level === "Y" && row.startingBracket === "Red Strong")!.movement).toBe("down");
+    });
+
+    describe("starting bracket order", () => {
+        // White Strong carries the LOWER numbers but sits below Red Strong on the chart.
+        const teams = [
+            t("901", { startingBracket: "White Strong" }),
+            t("902", { startingBracket: "White Strong" }),
+            t("903", { startingBracket: "Red Strong" }),
+            t("904", { startingBracket: "Red Strong" }),
+        ];
+        // Results that put the White Strong teams on top.
+        const games = [g("901", "903", 5, 0), g("902", "904", 5, 0), g("901", "904", 5, 0), g("902", "903", 5, 0)];
+        const levels = method([["X", 2], ["Y", 2]]);
+
+        it("comes from the chart's column order, never from team numbers", () => {
+            const result = composite(games, teams, levels, { bracketOrder: ["Red Strong", "White Strong"] });
+            expect(result.byNumber.get("901")!.level).toBe("X");
+            expect(result.byNumber.get("901")!.movement).toBe("up");
+            expect(result.byNumber.get("903")!.level).toBe("Y");
+            expect(result.byNumber.get("903")!.movement).toBe("down");
+        });
+
+        it("falls back to the order brackets first appear in the team list", () => {
+            const result = composite(games, teams, levels);
+            expect(result.byNumber.get("901")!.movement).toBe("same");
+            expect(result.byNumber.get("903")!.movement).toBe("same");
+            const reversed = composite(games, [...teams].reverse(), levels);
+            expect(reversed.byNumber.get("901")!.movement).toBe("up");
+        });
+
+        it("treats a bracket that straddles a cut as spanning both levels", () => {
+            // Seeds: Red Strong ×3 then White Strong ×1 into X(2), Y(2): Red Strong spans X..Y.
+            const straddle = [
+                t("901", { startingBracket: "Red Strong" }),
+                t("902", { startingBracket: "Red Strong" }),
+                t("903", { startingBracket: "Red Strong" }),
+                t("904", { startingBracket: "White Strong" }),
+            ];
+            const chain = [g("901", "902", 4, 0), g("902", "903", 4, 0), g("903", "904", 4, 0)];
+            const result = composite(chain, straddle, levels, { bracketOrder: ["Red Strong", "White Strong"] });
+            expect(result.ranked.map((row) => row.movement)).toEqual(["same", "same", "same", "same"]);
+        });
+
+        it("gives teams below the last level movement through a virtual level", () => {
+            const result = composite(games, teams, method([["X", 1], ["Y", 1]]), { bracketOrder: ["Red Strong", "White Strong"] });
+            // Seeds: Red Strong → X, Y; White Strong → below, below.
+            const below = result.ranked.filter((row) => row.level === null);
+            expect(below).toHaveLength(2);
+            expect(below.every((row) => row.startingBracket === "Red Strong" && row.movement === "down")).toBe(true);
+            expect(result.byNumber.get("901")!.movement).toBe("up");
+        });
+    });
+
+    it("leaves ranked teams past the level sizes without a level, still ranked", () => {
+        const teams = [...chainTeams, t("905"), t("906")];
+        const games = [...[g("901", "902", 4, 0), g("902", "903", 4, 0), g("903", "904", 4, 0)], g("904", "905", 4, 0), g("905", "906", 4, 0)];
+        const result = composite(games, teams, method([["X", 2], ["Y", 2]]));
+        expect(result.ranked).toHaveLength(6);
+        expect(result.ranked.map((row) => row.level)).toEqual(["X", "X", "Y", "Y", null, null]);
+        expect(result.byNumber.get("906")!.rank).toBe(6);
     });
 
     it("whatIf adds hypothetical games without changing its inputs", () => {
