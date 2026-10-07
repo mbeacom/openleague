@@ -1,5 +1,7 @@
 # Static Pre-Season Placement Rankings Implementation Plan
 
+> **Superseded in part.** This plan orders starting brackets by their lowest team number and gives each team a `startingLevel`. The shipped code does neither. Bracket order comes from the snake chart's column order (`bracketOrder` on the document, editable in Setup), and movement compares a team's suggested level with the span of levels its bracket was seeded into. See "Bracket order" in the spec.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add a Rankings tool to the static app (openleague.dev/planner/). A coach pastes a league's public schedule and snake chart, and sees CSHL-compatible placement ratings, a per-team explanation and what-if results. All data stays on the device, and it exports and imports as a portable `openleague.rankings` v1 file.

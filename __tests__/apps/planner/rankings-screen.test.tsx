@@ -220,6 +220,15 @@ describe("RankingsScreen", () => {
         expect(screen.getByText("Suggested level").parentElement).toHaveTextContent(mine.level ?? "Below the last level");
     });
 
+    it("offers the starting brackets strongest first in the filter", async () => {
+        const { store } = memoryStore();
+        await store.saveRankings(sampleRankingsDoc({ bracketOrder: ["White Strong", "Red Strong"] }));
+        renderScreen(<RankingsScreen store={store} />, store);
+        fireEvent.mouseDown(await screen.findByRole("combobox", { name: "Starting bracket" }));
+        const options = within(screen.getByRole("listbox")).getAllByRole("option").map((o) => o.textContent);
+        expect(options).toEqual(["All brackets", "White Strong", "Red Strong"]);
+    });
+
     it("says has for a single team past the levels", () => {
         expect(levelsShortMessage(6, 7)).toBe("Your levels hold 6 teams but 7 are ranked, so 1 has no suggested level.");
     });

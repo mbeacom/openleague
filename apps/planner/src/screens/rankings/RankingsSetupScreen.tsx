@@ -1,4 +1,8 @@
-/** Setup (static rankings spec): title, goal cap, levels, teams (name, bracket, excluded, my team), games; validated on save. */
+/**
+ * Setup (static rankings spec): title, goal cap, levels, starting brackets
+ * (strongest first), teams (name, bracket, excluded, my team), games; validated
+ * on save.
+ */
 import { useState } from "react";
 import {
     Alert,
@@ -20,11 +24,11 @@ import {
 } from "@mui/material";
 import { CSHL_8U_METHOD } from "@/lib/ratings";
 import type { ActionResult } from "@/lib/planner-store";
-import type { RankingsDocument, RankingsGame } from "@/lib/rankings-document";
+import { MAX_BRACKETS, docBracketOrder, type RankingsDocument, type RankingsGame } from "@/lib/rankings-document";
 import { navigateTo } from "../../platform";
 import { staticRoutes } from "../../routes";
 import type { LocalPlannerStore } from "../../store/types";
-import { RankingsStatus, levelsHeld } from "./display";
+import { RankingsStatus, levelFit, levelsShortMessage } from "./display";
 import { useRankingsDoc } from "./useRankingsDoc";
 
 export const SAVE_SETUP_LABEL = "Save setup";
@@ -36,10 +40,36 @@ const goalsValue = (text: string): number | null | undefined => {
     return /^\d{1,2}$/.test(text) ? Number(text) : undefined;
 };
 
+/** A starting bracket while editing: the key keeps its teams through a rename. */
+interface BracketDraft {
+    key: number;
+    name: string;
+}
+
+const bracketLabel = (bracket: BracketDraft, index: number) => bracket.name.trim() || `bracket ${index + 1}`;
+
+/** Why the brackets can't be saved, or null. */
+function bracketProblem(brackets: readonly BracketDraft[]): string | null {
+    const seen = new Set<string>();
+    for (const [i, bracket] of brackets.entries()) {
+        const name = bracket.name.trim();
+        if (!name) return `Give starting bracket ${i + 1} a name.`;
+        if (seen.has(name)) return `Starting bracket ${name} is listed twice.`;
+        seen.add(name);
+    }
+    return null;
+}
+
 function Editor({ initial, save, clear }: { initial: RankingsDocument; save: LocalPlannerStore["saveRankings"]; clear: () => Promise<ActionResult<null>> }) {
     const [doc, setDoc] = useState<RankingsDocument>(initial);
     const [error, setError] = useState<string | null>(null);
     const [confirmClear, setConfirmClear] = useState(false);
+    const [brackets, setBrackets] = useState<BracketDraft[]>(() => docBracketOrder(initial).map((name, key) => ({ key, name })));
+    /** Team number to bracket key (null: no starting bracket). */
+    const [assigned, setAssigned] = useState<Record<string, number | null>>(() => {
+        const order = docBracketOrder(initial);
+        return Object.fromEntries(initial.teams.map((team) => [team.number, team.startingBracket ? order.indexOf(team.startingBracket) : null]));
+    });
     const [newGame, setNewGame] = useState<RankingsGame>({ date: "", time: null, home: "", away: "", homeGoals: null, awayGoals: null, status: "final", rink: null });
 
     const setLevel = (index: number, patch: Partial<{ name: string; size: number }>) =>
@@ -49,8 +79,22 @@ function Editor({ initial, save, clear }: { initial: RankingsDocument; save: Loc
     const setGame = (index: number, patch: Partial<RankingsGame>) =>
         setDoc((d) => ({ ...d, games: d.games.map((g, i) => (i === index ? { ...g, ...patch } : g)) }));
 
-    const held = levelsHeld(doc.method);
-    const playing = doc.teams.filter((t) => !t.excluded).length;
+    const fit = levelFit(doc);
+    const teamsIn = (key: number) => doc.teams.filter((team) => assigned[team.number] === key).length;
+    const moveBracket = (from: number, to: number) =>
+        setBrackets((list) => {
+            const next = [...list];
+            const [moved] = next.splice(from, 1);
+            next.splice(to, 0, moved);
+            return next;
+        });
+    const addBracket = () =>
+        setBrackets((list) => {
+            const names = new Set(list.map((b) => b.name.trim()));
+            let n = list.length + 1;
+            while (names.has(`Bracket ${n}`)) n += 1;
+            return [...list, { key: list.reduce((max, b) => Math.max(max, b.key), -1) + 1, name: `Bracket ${n}` }];
+        });
 
     const clearAll = async () => {
         const result = await clear();
@@ -67,7 +111,20 @@ function Editor({ initial, save, clear }: { initial: RankingsDocument; save: Loc
             setError(`Enter both scores or neither for ${half.date} ${half.home} vs ${half.away}.`);
             return;
         }
-        const result = await save(doc);
+        const problem = bracketProblem(brackets);
+        if (problem) {
+            setError(problem);
+            return;
+        }
+        const names = new Map(brackets.map((b) => [b.key, b.name.trim()]));
+        const result = await save({
+            ...doc,
+            teams: doc.teams.map((team) => {
+                const key = assigned[team.number];
+                return { ...team, startingBracket: key === null || key === undefined ? null : names.get(key) ?? null };
+            }),
+            bracketOrder: brackets.map((b) => b.name.trim()),
+        });
         if (result.success) {
             setError(null);
             navigateTo(staticRoutes.rankings());
@@ -122,13 +179,70 @@ function Editor({ initial, save, clear }: { initial: RankingsDocument; save: Loc
                 >
                     Add level
                 </Button>
-                {playing > held ? (
-                    <Alert severity="warning">{`Levels hold ${held} teams; ${playing} teams aren't excluded, so ${playing - held} won't get a suggested level. Add a level or make one bigger.`}</Alert>
+                {fit.short > 0 ? (
+                    <Alert severity="warning">{`${levelsShortMessage(fit.held, fit.ranked)} Add a level or make one bigger.`}</Alert>
                 ) : (
                     <Typography variant="body2" color="text.secondary">
-                        {`Levels hold ${held} teams; ${playing} teams aren't excluded.`}
+                        {`Your levels hold ${fit.held} teams and ${fit.ranked} ${fit.ranked === 1 ? "is" : "are"} ranked.`}
                     </Typography>
                 )}
+            </Stack>
+
+            <Stack spacing={1} component="section" aria-labelledby="brackets-heading">
+                <Typography id="brackets-heading" component="h2" variant="h6">
+                    Starting brackets (strongest first)
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                    Movement compares each team&rsquo;s suggested level with where its starting bracket sits in this order. The snake chart sets it from its
+                    columns, left to right; team numbers never do.
+                </Typography>
+                {brackets.length === 0 && (
+                    <Typography variant="body2" color="text.secondary">
+                        No starting brackets yet. Read a snake chart on the import screen, or add them here.
+                    </Typography>
+                )}
+                <Stack component="ol" spacing={1} sx={{ listStyle: "none", p: 0, m: 0 }}>
+                    {brackets.map((bracket, i) => {
+                        const label = bracketLabel(bracket, i);
+                        const count = teamsIn(bracket.key);
+                        return (
+                            <Stack component="li" key={bracket.key} direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap", rowGap: 1 }}>
+                                <TextField
+                                    label={`Name of bracket ${i + 1}`}
+                                    value={bracket.name}
+                                    onChange={(e) => setBrackets((list) => list.map((b) => (b.key === bracket.key ? { ...b, name: e.target.value } : b)))}
+                                    slotProps={{ htmlInput: { maxLength: 40 } }}
+                                    sx={{ flex: "1 1 10rem", maxWidth: 260 }}
+                                />
+                                <Typography variant="body2" color="text.secondary" sx={{ minWidth: "4.5rem" }}>
+                                    {`${count} ${count === 1 ? "team" : "teams"}`}
+                                </Typography>
+                                <IconButton aria-label={`Move ${label} up`} disabled={i === 0} onClick={() => moveBracket(i, i - 1)} sx={{ width: 44, height: 44 }}>
+                                    <span aria-hidden="true">▲</span>
+                                </IconButton>
+                                <IconButton
+                                    aria-label={`Move ${label} down`}
+                                    disabled={i === brackets.length - 1}
+                                    onClick={() => moveBracket(i, i + 1)}
+                                    sx={{ width: 44, height: 44 }}
+                                >
+                                    <span aria-hidden="true">▼</span>
+                                </IconButton>
+                                <IconButton
+                                    aria-label={count > 0 ? `Remove ${label} (move its teams out first)` : `Remove ${label}`}
+                                    disabled={count > 0}
+                                    onClick={() => setBrackets((list) => list.filter((b) => b.key !== bracket.key))}
+                                    sx={{ width: 44, height: 44 }}
+                                >
+                                    ×
+                                </IconButton>
+                            </Stack>
+                        );
+                    })}
+                </Stack>
+                <Button onClick={addBracket} disabled={brackets.length >= MAX_BRACKETS} sx={{ alignSelf: "flex-start", minHeight: 44 }}>
+                    Add bracket
+                </Button>
             </Stack>
 
             <Stack spacing={1}>
@@ -158,11 +272,19 @@ function Editor({ initial, save, clear }: { initial: RankingsDocument; save: Loc
                                     </TableCell>
                                     <TableCell>
                                         <TextField
+                                            select
                                             sx={{ minWidth: 150 }}
-                                            value={team.startingBracket ?? ""}
-                                            onChange={(e) => setTeam(team.number, { startingBracket: e.target.value || null })}
-                                            slotProps={{ htmlInput: { "aria-label": `Starting bracket of ${team.number}` } }}
-                                        />
+                                            value={assigned[team.number] ?? ""}
+                                            onChange={(e) => setAssigned((map) => ({ ...map, [team.number]: e.target.value === "" ? null : Number(e.target.value) }))}
+                                            slotProps={{ select: { native: true }, htmlInput: { "aria-label": `Starting bracket of ${team.number}` } }}
+                                        >
+                                            <option value="">None</option>
+                                            {brackets.map((b, i) => (
+                                                <option key={b.key} value={b.key}>
+                                                    {bracketLabel(b, i)}
+                                                </option>
+                                            ))}
+                                        </TextField>
                                     </TableCell>
                                     <TableCell>
                                         <Checkbox sx={{ p: "10px" }} checked={team.excluded} onChange={(e) => setTeam(team.number, { excluded: e.target.checked })} slotProps={{ input: { "aria-label": `Excluded: ${team.name}` } }} />

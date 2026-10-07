@@ -85,7 +85,10 @@ Four units, each with one job:
    - `parseSchedule(textOrHtml)` returns `{ games, teams, unparsed: string[] }`. HTML is reduced to text nodes first, then both inputs go through one line-token parser.
    - A row with a score is `final`. A row without one is `scheduled`.
    - Repeat meetings between the same two teams are separate games.
-   - `parseSnakeChart(textOrHtml)` returns `{ teams: { number, name, startingBracket }[], unparsed }`.
+   - `parseSnakeChart(textOrHtml)` returns `{ teams: { number, name, startingBracket }[], brackets: string[], unparsed }`.
+     - A "Program" header row names each column's colour and a "Strength" header row its strength (str/mid/weak). Together they name the column's bracket, such as "Red Strong". Header rows reset the columns, so a page with several tables works.
+     - `brackets` lists the starting brackets in the chart's column order, left to right. A bracket keeps its first position when it appears in more than one table, and only brackets that hold at least one team are listed.
+     - `unparsed` lists team numbers found in a column with no bracket.
 3. **`lib/rankings-document/` (the portable format).** It follows ADR-0020's conventions:
    - a `format` and `version` discriminant, and a strict parser returning a typed result;
    - files from a newer version are rejected with a clear message;
@@ -93,6 +96,15 @@ Four units, each with one job:
 4. **`apps/planner/src/screens/rankings/` (the screens).** They are routed under `#/rankings`, use a rankings repository in the static store (IndexedDB plus the in-memory fallback), and are reached from a top-level "Practice planner | Rankings" switch in the app shell.
 
 Data flow: paste → parser → review and edit the games → `composite` with the selected method → screens. Every change is saved locally. Export writes the document.
+
+## Bracket order
+
+Movement needs to know which starting brackets are stronger. That order comes from the snake chart's columns, never from team numbers: in some seasons the number ranges follow bracket order, and in others they don't.
+
+- The document stores it as `bracketOrder`, strongest first. Reading a snake chart replaces it with the chart's `brackets` (when the chart has any).
+- A bracket that a team uses but `bracketOrder` doesn't list follows the listed ones, in the order it first appears in the team list. Older v1 files have no `bracketOrder`, so all their brackets are ordered this way.
+- Setup shows the full order and lets the user move a bracket up or down, rename it (every team in it follows), add one, and remove one that no team uses. Saving writes the whole order to `bracketOrder`.
+- Movement: the ranked teams are laid out by starting bracket in this order and cut by the level sizes. Each bracket's seeded positions cover a span of levels, and every position past the last level counts as one extra level after it. A team whose suggested level is above its bracket's span moves up, below it moves down, and inside it stays the same.
 
 ## Calculation
 
@@ -107,6 +119,7 @@ Data flow: paste → parser → review and edit the games → `composite` with t
 | Rank | Sorted by RPI descending. Ties are broken by Lodin, then by team number. |
 | Level | Rank order cut by `method.levels` sizes. Teams past the total size get no level. |
 | Low confidence | Fewer than `method.lowConfidenceGames` final games |
+| Movement | The suggested level against the span of levels the team's starting bracket was seeded into (see Bracket order) |
 
 Edge cases:
 - 0–0 and other ties give a margin of 0 and a ratio of 1.
@@ -118,10 +131,12 @@ Edge cases:
 - **Import screen (`#/rankings/import`).** There are two inputs: the schedule (paste, or open a saved HTML file) and the snake chart (paste).
   - A preview reports the counts ("171 completed games, 4 scheduled, 52 teams") and lists the lines that weren't understood.
   - The user picks a preset and confirms.
+  - After a snake chart is read, the preview says how many of the teams in the schedule just read got a starting bracket from the chart (or, when only a chart is read, how many of the saved teams did), how many chart teams matched no team, and which non-excluded teams still have no bracket.
 - **Re-import merges.** Games are matched on date + the unordered pair of teams + the order within that day.
   - A new score fills in a scheduled game.
   - A conflicting score is shown for the user to choose, never overwritten silently.
-- **Games editor.** The user can add, edit or delete a game, mark a team excluded, and edit names, starting brackets and level sizes.
+- **Games editor.** The user can add, edit or delete a game, mark a team excluded, and edit names, starting brackets, the bracket order and level sizes.
+  - Setup and Rankings warn when the levels hold fewer teams than are ranked (not excluded, with at least one final game). Both screens count the same way, so they show the same number.
 
 ## Screens and charts
 
@@ -164,6 +179,7 @@ Edge cases:
   "teams": [{ "number": "901", "name": "Riverside M1", "startingBracket": "White Strong", "excluded": false }],
   "games": [{ "date": "2026-09-26", "time": "15:40", "home": "903", "away": "901", "homeGoals": 4, "awayGoals": 9, "status": "final", "rink": "Rink A" }],
   "myTeam": "901",
+  "bracketOrder": ["Red Strong", "White Strong"],
   "snapshots": []
 }
 ```

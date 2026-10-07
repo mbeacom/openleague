@@ -97,12 +97,23 @@ export function plannerUrlFor(page: StaticPage): string {
   return `${'../'.repeat(depth)}planner/`;
 }
 
+const rankingsLink = {
+  title: 'Team rankings',
+  description: 'Paste your league\'s public schedule and snake chart to see placement ratings and who might move up or down. Computed in your browser; nothing is sent anywhere.',
+};
+
+/** The planner's rankings route (a hash route), relative like `plannerUrlFor`. */
+export function rankingsUrlFor(page: StaticPage): string {
+  return `${plannerUrlFor(page)}#/rankings`;
+}
+
 export function wrapPage(page: StaticPage, navItems: DocsNavItem[]): string {
   const navLinks = navItems
     .map((item) => {
       return `<a href="${staticDocsUrlForHref(item.href)}">${escapeHtml(item.title)}</a>`;
     })
     .concat(`<a href="${plannerUrlFor(page)}">${escapeHtml(plannerLink.title)}</a>`)
+    .concat(`<a href="${rankingsUrlFor(page)}">${escapeHtml(rankingsLink.title)}</a>`)
     .join('');
 
   return `<!doctype html>
@@ -150,9 +161,12 @@ export async function buildAppDocsPages(): Promise<StaticPage[]> {
       .join('\n'))
     .join('\n');
   const home = { title: docsHome.title, description: docsHome.description, href: docsHome.href };
-  const plannerCard = `<article class="card"><p class="muted">Tools</p><h2><a href="${plannerUrlFor({ ...home, html: '' })}">${escapeHtml(plannerLink.title)}</a></h2><p>${escapeHtml(plannerLink.description)}</p></article>`;
+  const toolCard = (link: { title: string; description: string }, href: string) =>
+    `<article class="card"><p class="muted">Tools</p><h2><a href="${href}">${escapeHtml(link.title)}</a></h2><p>${escapeHtml(link.description)}</p></article>`;
+  const homePage = { ...home, html: '' };
+  const toolCards = [toolCard(plannerLink, plannerUrlFor(homePage)), toolCard(rankingsLink, rankingsUrlFor(homePage))].join('\n');
 
-  pages.push({ ...home, html: `<div class="cards">${cards}\n${plannerCard}</div>` });
+  pages.push({ ...home, html: `<div class="cards">${cards}\n${toolCards}</div>` });
 
   for (const item of docsItems) {
     const slug = item.href.replace(/^\/docs\/?/, '');

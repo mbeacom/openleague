@@ -29,7 +29,7 @@ describe("RankingsImportScreen", () => {
 
         fireEvent.change(screen.getByLabelText("Snake chart"), { target: { value: SNAKE } });
         fireEvent.click(screen.getByRole("button", { name: READ_SNAKE_LABEL }));
-        expect(await screen.findByText(/2 of 2 schedule teams got a starting bracket · 0 chart teams aren't in this schedule/)).toBeInTheDocument();
+        expect(await screen.findByText(/2 of 2 teams in this schedule got a starting bracket from the chart · 0 chart teams matched no team/)).toBeInTheDocument();
         expect(screen.queryByRole("list", { name: "Teams without a starting bracket" })).not.toBeInTheDocument();
 
         fireEvent.click(screen.getByRole("button", { name: SAVE_IMPORT_LABEL }));
@@ -110,7 +110,8 @@ describe("RankingsImportScreen", () => {
         fireEvent.click(screen.getByRole("button", { name: "Use imported 3–2" }));
         fireEvent.change(screen.getByLabelText("Snake chart"), { target: { value: SNAKE } });
         fireEvent.click(screen.getByRole("button", { name: READ_SNAKE_LABEL }));
-        await screen.findByText(/2 of 4 schedule teams got a starting bracket/);
+        // Counted against the two teams this schedule lists, not the four already saved.
+        await screen.findByText(/2 of 2 teams in this schedule got a starting bracket from the chart/);
         expect(screen.queryByRole("button", { name: "Use imported 3–2" })).not.toBeInTheDocument();
         fireEvent.click(screen.getByRole("button", { name: SAVE_IMPORT_LABEL }));
         await waitFor(async () => {
@@ -145,10 +146,27 @@ describe("RankingsImportScreen", () => {
         const chart = ["Program\tRed\tWhite", "Strength\tstr\tstr", "Riverside\t901\t", "Hilltop\t\t903", "Brookside\t\t904"].join("\n");
         fireEvent.change(screen.getByLabelText("Snake chart"), { target: { value: chart } });
         fireEvent.click(screen.getByRole("button", { name: READ_SNAKE_LABEL }));
-        expect(await screen.findByText(/1 of 2 schedule teams got a starting bracket · 2 chart teams aren't in this schedule/)).toBeInTheDocument();
+        expect(await screen.findByText(/1 of 2 teams in this schedule got a starting bracket from the chart · 2 chart teams matched no team/)).toBeInTheDocument();
         const missing = screen.getByRole("list", { name: "Teams without a starting bracket" });
         expect(missing).toHaveTextContent("902 Lakeview M2");
         expect(missing).not.toHaveTextContent("901");
+    });
+
+    it("reads a chart against the saved teams and leaves excluded teams off the missing list", async () => {
+        const { store } = memoryStore();
+        const base = sampleRankingsDoc();
+        await store.saveRankings(
+            sampleRankingsDoc({
+                teams: base.teams.map((t) => (t.number === "903" ? { ...t, startingBracket: null } : t.number === "904" ? { ...t, startingBracket: null, excluded: true } : t)),
+            }),
+        );
+        renderScreen(<RankingsImportScreen store={store} />, store);
+        fireEvent.change(await screen.findByLabelText("Snake chart"), { target: { value: SNAKE } });
+        fireEvent.click(screen.getByRole("button", { name: READ_SNAKE_LABEL }));
+        expect(await screen.findByText(/2 of 4 saved teams got a starting bracket from the chart · 0 chart teams matched no team/)).toBeInTheDocument();
+        const missing = screen.getByRole("list", { name: "Teams without a starting bracket" });
+        expect(missing).toHaveTextContent("903 Hilltop M1");
+        expect(missing).not.toHaveTextContent("904");
     });
 
     describe("opening a rankings file over saved rankings", () => {
