@@ -298,6 +298,12 @@ describe("playbook markers (spec §3)", () => {
         expect(ring!.state.lineWidth).toBeCloseTo(20 * 0.08);
     });
 
+    it("leaves the white ring off the goalie, whose glove bar is its mark", () => {
+        const { ctx, calls } = recordingStyleCtx();
+        drawPlayerGlyph(ctx, { id: "g", role: "G", label: "G", color: "#212121", position: { x: 0, y: 0 } }, at, 20, false, 1);
+        expect(calls.some((c) => c.name === "stroke" && c.state.strokeStyle === DIAGRAM_THEME.markerRing)).toBe(false);
+    });
+
     it("keeps the label readable on a custom color", () => {
         const { ctx, calls } = recordingStyleCtx();
         drawPlayerGlyph(ctx, player("#FFEB3B"), at, 20, false, 1); // a light fill

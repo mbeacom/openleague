@@ -92,11 +92,14 @@ export function drawPlayerGlyph(
             ctx.fill();
             ctx.stroke();
             // A white inner ring, inside the outline: it lifts any fill color off the ice.
-            ctx.strokeStyle = DIAGRAM_THEME.markerRing;
-            ctx.lineWidth = r * 0.08;
-            ctx.beginPath();
-            ctx.arc(c.x, c.y, r * 0.86, 0, Math.PI * 2);
-            ctx.stroke();
+            // The goalie skips it: its glove bar is its mark, and the ring would crowd it.
+            if (shape === "disc") {
+                ctx.strokeStyle = DIAGRAM_THEME.markerRing;
+                ctx.lineWidth = r * 0.08;
+                ctx.beginPath();
+                ctx.arc(c.x, c.y, r * 0.86, 0, Math.PI * 2);
+                ctx.stroke();
+            }
             if (shape === "goalie") {
                 ctx.fillStyle = textColor;
                 ctx.fillRect(c.x - r * 0.7, c.y + r * 0.45, r * 1.4, r * 0.22);
