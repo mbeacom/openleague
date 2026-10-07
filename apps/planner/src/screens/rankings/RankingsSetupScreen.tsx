@@ -102,7 +102,7 @@ function Editor({ initial, save, clear }: { initial: RankingsDocument; save: Loc
                             type="number"
                             value={level.size}
                             onChange={(e) => setLevel(i, { size: Number(e.target.value) })}
-                           
+
                             sx={{ width: 140 }}
                         />
                         <IconButton
@@ -154,7 +154,7 @@ function Editor({ initial, save, clear }: { initial: RankingsDocument; save: Loc
                                         <TextField
                                             value={team.startingBracket ?? ""}
                                             onChange={(e) => setTeam(team.number, { startingBracket: e.target.value || null })}
-                                           
+
                                             slotProps={{ htmlInput: { "aria-label": `Starting bracket of ${team.number}` } }}
                                         />
                                     </TableCell>
@@ -183,7 +183,7 @@ function Editor({ initial, save, clear }: { initial: RankingsDocument; save: Loc
                                 if (homeGoals === undefined) return;
                                 setGame(i, { homeGoals, status: homeGoals !== null && game.awayGoals !== null ? "final" : "scheduled" });
                             }}
-                           
+
                             sx={{ width: 80 }}
                         />
                         <TextField
@@ -194,7 +194,7 @@ function Editor({ initial, save, clear }: { initial: RankingsDocument; save: Loc
                                 if (awayGoals === undefined) return;
                                 setGame(i, { awayGoals, status: game.homeGoals !== null && awayGoals !== null ? "final" : "scheduled" });
                             }}
-                           
+
                             sx={{ width: 80 }}
                         />
                         <IconButton aria-label={`Delete game ${i + 1}`} onClick={() => setDoc((d) => ({ ...d, games: d.games.filter((_g, k) => k !== i) }))} sx={{ width: 44, height: 44 }}>

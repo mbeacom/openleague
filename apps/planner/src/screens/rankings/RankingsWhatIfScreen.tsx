@@ -84,7 +84,8 @@ function WhatIf({ doc, save }: { doc: RankingsDocument; save: (doc: RankingsDocu
     const hypotheticals = fixtures.map(entered).filter((g): g is RatingGame => g !== null);
     const before = useMemo(() => composite(games, teams, doc.method), [games, teams, doc.method]);
     const hypotheticalsKey = keyOfEntered(fixtures, scores);
-    const after = useAfter(games, teams, doc.method, hypotheticalsKey);    const mineBefore = before.byNumber.get(team);
+    const after = useAfter(games, teams, doc.method, hypotheticalsKey);
+    const mineBefore = before.byNumber.get(team);
     const mineAfter = after.byNumber.get(team);
     const movers = after.ranked.filter((row) => before.byNumber.get(row.number)?.rank !== row.rank);
 
