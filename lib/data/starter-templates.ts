@@ -281,6 +281,35 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
             { block: "cooldown", minutes: 6, note: "Easy laps, then a stretch." },
         ]),
     },
+    {
+        id: "template-8u-partner-puck-forecheck",
+        name: "8U Partner Puck Control and Forecheck",
+        description:
+            "A 50-minute practice for 8U that needs one net, two cones and a goalie: trucks and trailers while a coach warms up the goalie, then two skater groups rotate every 9 minutes between mirror puck control across the red line and forecheck vs. breakout on the goalie, a water break, a chariot race relay with the two cones moved to the lanes, and a cool-down.",
+        ageGroups: ["u8"],
+        session: practice("8U Partner Puck Control and Forecheck", 50, 0, [
+            {
+                stations: [
+                    { drill: "starter-goalie-warmup", minutes: 8, instructions: "A coach warms up the goalie while the skaters play trucks and trailers." },
+                    { drill: "starter-skate-trucks-trailers", minutes: 8 },
+                ],
+            },
+            {
+                rotateEveryMinutes: 9,
+                stations: [
+                    { drill: "starter-skate-mirror-puck-control", minutes: 9, instructions: "Pairs straddle the center red line, one puck each." },
+                    {
+                        drill: "starter-skate-forecheck-breakout",
+                        minutes: 9,
+                        instructions: "The goalie plays in net. Set the two cones as the exit gate; three skaters go at a time and the rest wait by the boards.",
+                    },
+                ],
+            },
+            { block: "break", minutes: 3 },
+            { stations: [{ drill: "starter-skate-chariot-relay", minutes: 15, instructions: "Move the two cones to the far end of the lanes. Two even teams; the goalie can join one." }] },
+            { block: "cooldown", minutes: 6, note: "Easy laps, then a stretch." },
+        ]),
+    },
 ];
 
 /** The template as a plan document from the running app, ready for the import flow. */
