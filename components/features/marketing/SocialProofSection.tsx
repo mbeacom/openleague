@@ -330,6 +330,7 @@ export default function SocialProofSection() {
                     fontWeight: 800,
                     textDecoration: 'none',
                     px: 1,
+                    minHeight: 44,
                     '&:hover': {
                       textDecoration: 'underline',
                     },
@@ -350,6 +351,7 @@ export default function SocialProofSection() {
                     fontWeight: 800,
                     textDecoration: 'none',
                     px: 1,
+                    minHeight: 44,
                     '&:hover': {
                       textDecoration: 'underline',
                     },
