@@ -152,6 +152,9 @@ snapshot guards it); smaller diagrams scale down and print scales up.
 - **Strokes.** A stored `strokeWidth` keeps its value and means "px on the
   reference board". A width-2 stroke is 2 px on the board, about 0.74 px
   (floored to 1) on a 300 px thumbnail and about 1.9 px in print.
+- **Board minimums.** The editing board keeps lines at least 1.5 px and
+  arrowheads at least 6 px on screen (divided by its pinch zoom), so a phone's
+  small rink stays readable; diagrams nobody edits use the 1 px and 4 px floors.
 - **Arrowheads** are `max(refPx(10), 5 × line width)` long, floored at 4 px.
   The stop bar is 1.8 ft each side of the tip (floor 2 px), and the selection
   highlight is the line width plus `refPx(4)`.

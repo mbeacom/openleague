@@ -158,13 +158,15 @@ function offsetAlong(samples: Position[], offset: (i: number) => number): Positi
 
 export function buildStrokeGeometry(
     stroke: StrokeOptions & { points: Position[]; strokeWidth: number },
-    pxPerFt: number
+    pxPerFt: number,
+    /** Thinnest line drawn (the editing board passes a higher minimum) */
+    minLinePx: number = MIN_LINE_PX
 ): StrokeGeometry {
     const base = strokeCenterline(stroke);
     const total = pathLength(base);
     const pattern = ACTION_PATTERN[stroke.action];
     // Stored widths are px on the reference board (scale model); drawn in proportion here.
-    const width = refPx(stroke.strokeWidth, pxPerFt);
+    const width = refPx(stroke.strokeWidth, pxPerFt, minLinePx);
     const lineWidth = pattern === "thin" ? width * 0.75 : width;
     if (base.length < 2 || total === 0) return { polylines: [], lineWidth, end: null };
 

@@ -411,3 +411,44 @@ describe("note padding (scale model)", () => {
         expect(pad(300, 128, 10)).toBeCloseTo(1); // 2 · 1.4/3.8 ≈ 0.74, floored to 1
     });
 });
+
+describe("board minimums on narrow boards (scale model)", () => {
+    // A phone board: 360 px wide shows the rink at (360 − 40) ÷ 200 = 1.6 px/ft.
+    const phone = createTransformContext(360, 220);
+    const drill = {
+        ...createEmptyPlayData(),
+        drawings: [{ id: "s", action: "skate" as const, path: "straight" as const, end: "arrow" as const, points: [{ x: 20, y: 40 }, { x: 120, y: 40 }], color: "#000", strokeWidth: 2 }],
+    };
+    const measure = (draw: (ctx: CanvasRenderingContext2D) => void) => {
+        const calls: Call[] = [];
+        const widths: number[] = [];
+        const ctx = recordingCtx(calls);
+        Object.defineProperty(ctx, "lineWidth", { set: (v: number) => widths.push(v), get: () => widths.at(-1) ?? 1, configurable: true });
+        draw(ctx);
+        const head = calls.findIndex((c, i) => c.name === "moveTo" && calls[i + 1]?.name === "lineTo" && calls[i + 2]?.name === "lineTo" && calls[i + 3]?.name === "closePath");
+        const [tx, ty] = calls[head].args as number[];
+        const [cx, cy] = calls[head + 1].args as number[];
+        // The skate line's width is the last width set before the arrowhead.
+        return { lineWidth: widths.at(-1)!, arrow: Math.hypot(tx - cx, ty - cy) };
+    };
+
+    it("keeps lines at least 1.5 px and arrowheads at least 6 px on the editing board", () => {
+        const { lineWidth, arrow } = measure((ctx) => drawBoardFrame(ctx, phone, drill));
+        expect(lineWidth).toBeGreaterThanOrEqual(1.5);
+        expect(arrow).toBeGreaterThanOrEqual(6 - 1e-9);
+    });
+
+    it("keeps those minimums constant on screen under the board's pinch zoom", () => {
+        const { lineWidth, arrow } = measure((ctx) => drawBoardFrame(ctx, phone, drill, { zoom: 2 }));
+        // In user space the floors halve (1.5 / 2, 6 / 2), so on screen (× zoom 2) they stay 1.5 and 6 px.
+        expect(lineWidth).toBeCloseTo(Math.max(2 * (1.6 / 3.8), 1.5 / 2));
+        expect(lineWidth * 2).toBeGreaterThanOrEqual(1.5);
+        expect(arrow * 2).toBeGreaterThanOrEqual(6 - 1e-9);
+    });
+
+    it("leaves diagrams nobody edits at the 1 px and 4 px floors", () => {
+        const { lineWidth, arrow } = measure((ctx) => drawBoardScene(ctx, phone, drill, { cachedRink: false }));
+        expect(lineWidth).toBe(1);
+        expect(arrow).toBeLessThan(6);
+    });
+});

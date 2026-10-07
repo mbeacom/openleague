@@ -23,11 +23,28 @@ import { buildStrokeGeometry, strokeCenterline, type StrokeGeometry } from "./st
 import { drawPlayerGlyph, drawEquipmentGlyph } from "./glyphs";
 import { EQUIPMENT_RADIUS_FT, MIN_GLYPH_RADIUS_PX, PLAYER_RADIUS_FT, glyphRadiusPx } from "./glyph-metrics";
 import { BOARD_COLORS } from "./notation";
-import { REFERENCE_PX_PER_FT, refPx } from "./scale";
+import { MIN_LINE_PX, REFERENCE_PX_PER_FT, refPx } from "./scale";
 import type { LineHandle, SnapTarget } from "./line-editing";
 
 /** The shortest arrowhead drawn, so a tiny diagram's arrows still read as arrows. */
 export const ARROW_MIN_PX = 4;
+
+/** The thinnest line and shortest arrowhead a stroke is drawn with. */
+export interface StrokeFloors {
+    linePx: number;
+    arrowPx: number;
+}
+
+/** Diagrams nobody edits: thumbnails, print, the station map. */
+export const DIAGRAM_STROKE_FLOORS: StrokeFloors = { linePx: MIN_LINE_PX, arrowPx: ARROW_MIN_PX };
+
+/** The editing board keeps lines and arrows readable on a phone, where the rink is small. */
+export const BOARD_STROKE_FLOORS: StrokeFloors = { linePx: 1.5, arrowPx: 6 };
+
+/** Board floors in user space under the board's pinch zoom, so they stay constant on screen. */
+export function boardStrokeFloors(zoom: number): StrokeFloors {
+    return { linePx: BOARD_STROKE_FLOORS.linePx / zoom, arrowPx: BOARD_STROKE_FLOORS.arrowPx / zoom };
+}
 
 /**
  * Visual constants for drawing
@@ -41,16 +58,18 @@ const SELECTION_COLOR = "#FFD700"; // Gold highlight for selected elements
 export function drawStroke(
     ctx: CanvasRenderingContext2D,
     stroke: StrokeOptions & { points: Position[]; color: string; strokeWidth: number },
-    transform: TransformContext
+    transform: TransformContext,
+    floors: StrokeFloors = DIAGRAM_STROKE_FLOORS
 ): void {
     if (stroke.points.length < 2) return;
     const pxPerFt = Math.min(transform.scaleX, transform.scaleY);
     const geometry = buildStrokeGeometry(
         { ...stroke, points: stroke.points.map((p) => rinkToCanvas(p, transform)) },
-        pxPerFt
+        pxPerFt,
+        floors.linePx
     );
 
-    paintStrokeGeometry(ctx, geometry, stroke.color, pxPerFt);
+    paintStrokeGeometry(ctx, geometry, stroke.color, pxPerFt, floors.arrowPx);
 }
 
 /**
@@ -61,7 +80,8 @@ export function paintStrokeGeometry(
     ctx: CanvasRenderingContext2D,
     geometry: StrokeGeometry,
     color: string,
-    pxPerFt: number
+    pxPerFt: number,
+    minArrowPx: number = ARROW_MIN_PX
 ): void {
     ctx.strokeStyle = color;
     ctx.lineWidth = geometry.lineWidth;
@@ -78,7 +98,7 @@ export function paintStrokeGeometry(
     const { tip, angle, type } = geometry.end;
     if (type === "arrow") {
         const from = { x: tip.x - Math.cos(angle), y: tip.y - Math.sin(angle) };
-        drawArrowHead(ctx, from, tip, color, geometry.lineWidth, pxPerFt);
+        drawArrowHead(ctx, from, tip, color, geometry.lineWidth, pxPerFt, minArrowPx);
     } else {
         const half = Math.max(1.8 * pxPerFt, 2);
         const nx = -Math.sin(angle);
@@ -99,6 +119,7 @@ export function paintStrokeGeometry(
  * @param color - Arrow color
  * @param strokeWidth - The drawn (already scaled) line width
  * @param pxPerFt - The diagram's scale, so the head stays in proportion to the rink
+ * @param minArrowPx - The shortest head drawn
  */
 function drawArrowHead(
     ctx: CanvasRenderingContext2D,
@@ -106,10 +127,11 @@ function drawArrowHead(
     to: Position,
     color: string,
     strokeWidth: number,
-    pxPerFt: number
+    pxPerFt: number,
+    minArrowPx: number
 ): void {
     // 10 px, or 5 line widths, on the reference board; in proportion elsewhere (scale model).
-    const headLength = Math.max(refPx(10, pxPerFt, ARROW_MIN_PX), strokeWidth * 5);
+    const headLength = Math.max(refPx(10, pxPerFt, minArrowPx), strokeWidth * 5);
 
     // Calculate angle of the line
     const angle = Math.atan2(to.y - from.y, to.x - from.x);
@@ -250,7 +272,8 @@ export function drawElement(
     ctx: CanvasRenderingContext2D,
     element: DrawingElement,
     transform: TransformContext,
-    isSelected: boolean = false
+    isSelected: boolean = false,
+    floors: StrokeFloors = DIAGRAM_STROKE_FLOORS
 ): void {
     // Draw selection highlight if selected
     if (isSelected) {
@@ -270,7 +293,7 @@ export function drawElement(
         ctx.globalAlpha = 1.0;
     }
 
-    drawStroke(ctx, element, transform);
+    drawStroke(ctx, element, transform, floors);
 }
 
 /** A line handle's radius on screen, at any zoom (line editing R6). */
@@ -378,9 +401,10 @@ export function drawAllElements(
     transform: TransformContext,
     selectedId?: string,
     zoom: number = 1,
-    minGlyphRadiusPx: number = MIN_GLYPH_RADIUS_PX
+    minGlyphRadiusPx: number = MIN_GLYPH_RADIUS_PX,
+    strokeFloors: StrokeFloors = DIAGRAM_STROKE_FLOORS
 ): void {
-    playData.drawings.forEach((d) => drawElement(ctx, d, transform, d.id === selectedId));
+    playData.drawings.forEach((d) => drawElement(ctx, d, transform, d.id === selectedId, strokeFloors));
     playData.equipment.forEach((e) => drawEquipmentItem(ctx, e, transform, e.id === selectedId, zoom, minGlyphRadiusPx));
     playData.players.forEach((p) => drawPlayerIcon(ctx, p, transform, p.id === selectedId, zoom, minGlyphRadiusPx));
     playData.annotations.forEach((a) => drawTextAnnotation(ctx, a, transform, a.id === selectedId));
@@ -437,6 +461,8 @@ export interface BoardSceneOptions {
     cachedRink?: boolean;
     /** Smallest glyph radius in screen px (default the board's 8, which keeps markers grabbable) */
     minGlyphRadiusPx?: number;
+    /** Thinnest line and shortest arrowhead (default the 1 px / 4 px diagram floors; the board passes its own) */
+    strokeFloors?: StrokeFloors;
 }
 
 /**
@@ -451,7 +477,15 @@ export function drawBoardScene(
     options: BoardSceneOptions = {}
 ): void {
     drawRink(ctx, transform, { cache: options.cachedRink ?? true });
-    drawAllElements(ctx, playData, transform, options.selectedId, options.zoom ?? 1, options.minGlyphRadiusPx ?? MIN_GLYPH_RADIUS_PX);
+    drawAllElements(
+        ctx,
+        playData,
+        transform,
+        options.selectedId,
+        options.zoom ?? 1,
+        options.minGlyphRadiusPx ?? MIN_GLYPH_RADIUS_PX,
+        options.strokeFloors ?? DIAGRAM_STROKE_FLOORS
+    );
     if (options.maskRect) drawAreaMask(ctx, options.maskRect, transform, options.zoom ?? 1);
 }
 
@@ -490,5 +524,11 @@ export function drawBoardFrame(
     ctx.setTransform(zoom * ratio, 0, 0, zoom * ratio, pan.x * ratio, pan.y * ratio);
     const shifted = zoom !== 1 || pan.x !== 0 || pan.y !== 0;
     // The cached rink is a CSS-size bitmap: use it only where it maps 1:1 onto the backing store.
-    drawBoardScene(ctx, transform, playData, { ...options, zoom, cachedRink: !shifted && ratio === 1 });
+    drawBoardScene(ctx, transform, playData, {
+        ...options,
+        zoom,
+        cachedRink: !shifted && ratio === 1,
+        // The editing board keeps lines and arrows readable on a phone (scale model).
+        strokeFloors: options.strokeFloors ?? boardStrokeFloors(zoom),
+    });
 }
