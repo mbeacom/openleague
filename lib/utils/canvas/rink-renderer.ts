@@ -9,6 +9,7 @@
  */
 
 import type { Position, RinkRect } from "@/types/practice-planner";
+import { refPx, snapLineX } from "./scale";
 
 /**
  * Standard NHL rink dimensions in feet
@@ -360,7 +361,7 @@ function drawIceSurface(ctx: CanvasRenderingContext2D, transform: TransformConte
  */
 function drawBoards(ctx: CanvasRenderingContext2D, transform: TransformContext): void {
     ctx.strokeStyle = "#000000";
-    ctx.lineWidth = 3;
+    ctx.lineWidth = refPx(3, transform.scaleX);
     traceRinkOutline(ctx, transform);
     ctx.stroke();
 }
@@ -375,9 +376,11 @@ function drawCenterRedLine(ctx: CanvasRenderingContext2D, transform: TransformCo
 
     ctx.strokeStyle = "#C8102E"; // Red
     ctx.lineWidth = LINE_DIMENSIONS.redLineWidth * transform.scaleX;
+    // On whole device pixels, so the line is crisp (scale model).
+    const topX = snapLineX(ctx, top.x, ctx.lineWidth);
     ctx.beginPath();
-    ctx.moveTo(top.x, top.y);
-    ctx.lineTo(bottom.x, bottom.y);
+    ctx.moveTo(topX, top.y);
+    ctx.lineTo(topX, bottom.y);
     ctx.stroke();
 }
 
@@ -394,17 +397,21 @@ function drawBlueLines(ctx: CanvasRenderingContext2D, transform: TransformContex
     // Left blue line
     const leftTop = rinkToCanvas({ x: leftBlueLineX, y: 0 }, transform);
     const leftBottom = rinkToCanvas({ x: leftBlueLineX, y: RINK_DIMENSIONS.height }, transform);
+    // On whole device pixels, so the line is crisp (scale model).
+    const leftTopX = snapLineX(ctx, leftTop.x, ctx.lineWidth);
     ctx.beginPath();
-    ctx.moveTo(leftTop.x, leftTop.y);
-    ctx.lineTo(leftBottom.x, leftBottom.y);
+    ctx.moveTo(leftTopX, leftTop.y);
+    ctx.lineTo(leftTopX, leftBottom.y);
     ctx.stroke();
 
     // Right blue line
     const rightTop = rinkToCanvas({ x: rightBlueLineX, y: 0 }, transform);
     const rightBottom = rinkToCanvas({ x: rightBlueLineX, y: RINK_DIMENSIONS.height }, transform);
+    // On whole device pixels, so the line is crisp (scale model).
+    const rightTopX = snapLineX(ctx, rightTop.x, ctx.lineWidth);
     ctx.beginPath();
-    ctx.moveTo(rightTop.x, rightTop.y);
-    ctx.lineTo(rightBottom.x, rightBottom.y);
+    ctx.moveTo(rightTopX, rightTop.y);
+    ctx.lineTo(rightTopX, rightBottom.y);
     ctx.stroke();
 }
 
@@ -421,17 +428,21 @@ function drawGoalLines(ctx: CanvasRenderingContext2D, transform: TransformContex
     // Left goal line
     const leftTop = rinkToCanvas({ x: leftGoalLineX, y: 0 }, transform);
     const leftBottom = rinkToCanvas({ x: leftGoalLineX, y: RINK_DIMENSIONS.height }, transform);
+    // On whole device pixels, so the line is crisp (scale model).
+    const leftTopX = snapLineX(ctx, leftTop.x, ctx.lineWidth);
     ctx.beginPath();
-    ctx.moveTo(leftTop.x, leftTop.y);
-    ctx.lineTo(leftBottom.x, leftBottom.y);
+    ctx.moveTo(leftTopX, leftTop.y);
+    ctx.lineTo(leftTopX, leftBottom.y);
     ctx.stroke();
 
     // Right goal line
     const rightTop = rinkToCanvas({ x: rightGoalLineX, y: 0 }, transform);
     const rightBottom = rinkToCanvas({ x: rightGoalLineX, y: RINK_DIMENSIONS.height }, transform);
+    // On whole device pixels, so the line is crisp (scale model).
+    const rightTopX = snapLineX(ctx, rightTop.x, ctx.lineWidth);
     ctx.beginPath();
-    ctx.moveTo(rightTop.x, rightTop.y);
-    ctx.lineTo(rightBottom.x, rightBottom.y);
+    ctx.moveTo(rightTopX, rightTop.y);
+    ctx.lineTo(rightTopX, rightBottom.y);
     ctx.stroke();
 }
 
@@ -446,7 +457,7 @@ function drawCenterCircle(ctx: CanvasRenderingContext2D, transform: TransformCon
     const radius = CIRCLE_DIMENSIONS.centerCircleRadius * transform.scaleX;
 
     ctx.strokeStyle = "#003087"; // Blue
-    ctx.lineWidth = 2;
+    ctx.lineWidth = refPx(2, transform.scaleX);
     ctx.beginPath();
     ctx.arc(center.x, center.y, radius, 0, Math.PI * 2);
     ctx.stroke();
@@ -471,7 +482,7 @@ function drawFaceoffCircles(ctx: CanvasRenderingContext2D, transform: TransformC
     const radius = CIRCLE_DIMENSIONS.faceoffCircleRadius * transform.scaleX;
 
     ctx.strokeStyle = "#C8102E"; // Red
-    ctx.lineWidth = 2;
+    ctx.lineWidth = refPx(2, transform.scaleX);
 
     // Draw all four faceoff circles
     const positions = [
@@ -551,7 +562,7 @@ function drawGoalCreases(ctx: CanvasRenderingContext2D, transform: TransformCont
 
     ctx.strokeStyle = "#C8102E"; // Red
     ctx.fillStyle = "rgba(200, 16, 46, 0.1)"; // Light red fill
-    ctx.lineWidth = 2;
+    ctx.lineWidth = refPx(2, transform.scaleX);
 
     // Left goal crease
     const leftGoal = rinkToCanvas({ x: leftGoalX, y: centerY }, transform);

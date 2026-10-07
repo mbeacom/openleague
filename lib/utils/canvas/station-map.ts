@@ -11,6 +11,7 @@ import { areaRect } from "@/lib/utils/ice-area";
 import { PLAY_DATA_UNREADABLE_MESSAGE } from "@/lib/utils/play-data";
 import { drawRink, rinkToCanvas, type TransformContext } from "./rink-renderer";
 import { drawAllElements } from "./drawing-utils";
+import { THUMBNAIL_MIN_GLYPH_RADIUS_PX } from "./glyph-metrics";
 import { BOARD_COLORS } from "./notation";
 
 export interface StationMapStation {
@@ -102,7 +103,8 @@ export function drawStationMap(
         ctx.beginPath();
         ctx.rect(topLeft.x, topLeft.y, width, height);
         ctx.clip();
-        if (station.playData) drawAllElements(ctx, station.playData, transform);
+        // Nobody edits the station map: markers at real size, like a thumbnail (scale model).
+        if (station.playData) drawAllElements(ctx, station.playData, transform, undefined, 1, THUMBNAIL_MIN_GLYPH_RADIUS_PX);
         ctx.restore();
 
         const active = i === activeIndex;

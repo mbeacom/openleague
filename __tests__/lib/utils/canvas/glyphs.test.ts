@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { drawPlayerGlyph, drawEquipmentGlyph, PLAYER_GLYPH_SHAPE } from "@/lib/utils/canvas/glyphs";
-import { glyphRadiusPx, PLAYER_RADIUS_FT, MIN_GLYPH_RADIUS_PX } from "@/lib/utils/canvas/glyph-metrics";
+import { glyphRadiusPx, PLAYER_RADIUS_FT, MIN_GLYPH_RADIUS_PX, EQUIPMENT_RADIUS_FT } from "@/lib/utils/canvas/glyph-metrics";
 import { drawAllElements } from "@/lib/utils/canvas/drawing-utils";
 import { createTransformContext } from "@/lib/utils/canvas/rink-renderer";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
@@ -199,5 +199,54 @@ describe("drawAllElements", () => {
         const order = [idx("stroke:#AA0001"), idx("fill:#F57C00"), idx("fill:#BB0002"), idx("text:NOTE")];
         expect(order.every((i) => i >= 0)).toBe(true);
         expect([...order].sort((x, y) => x - y)).toEqual(order);
+    });
+});
+
+function recordingGlyphCtx() {
+    const lineWidths: number[] = [];
+    const fonts: string[] = [];
+    const ctx = {
+        lineWidths,
+        fonts,
+        beginPath: vi.fn(), arc: vi.fn(), fill: vi.fn(), stroke: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(), closePath: vi.fn(),
+        fillRect: vi.fn(), fillText: vi.fn(), save: vi.fn(), restore: vi.fn(), translate: vi.fn(), rotate: vi.fn(), rect: vi.fn(),
+        measureText: (text: string) => ({ width: text.length * 4 }),
+        set lineWidth(v: number) { lineWidths.push(v); },
+        get lineWidth() { return lineWidths.at(-1) ?? 1; },
+        set font(v: string) { fonts.push(v); },
+        get font() { return fonts.at(-1) ?? ""; },
+        fillStyle: "", strokeStyle: "", textAlign: "", textBaseline: "",
+    };
+    return ctx as unknown as CanvasRenderingContext2D & { lineWidths: number[]; fonts: string[] };
+}
+
+describe("glyph outlines and labels (scale model)", () => {
+    const player = { id: "p", role: "F" as const, label: "F1", color: "#1976D2", position: { x: 0, y: 0 } };
+
+    it("keeps today's outline on the reference board", () => {
+        const ctx = recordingGlyphCtx();
+        drawPlayerGlyph(ctx, player, { x: 50, y: 50 }, 22.8, false, 1);
+        expect(ctx.lineWidths[0]).toBeCloseTo(22.8 * 0.12);
+    });
+
+    it("scales the outline floor with the diagram, down to 1 px", () => {
+        const ctx = recordingGlyphCtx();
+        // A 300 px thumbnail: r = 6 ft · 1.4 = 8.4 px; 8.4 · 0.12 ≈ 1.0, and the old 1.5 px floor no longer applies.
+        drawPlayerGlyph(ctx, player, { x: 50, y: 50 }, 8.4, false, 1.4 / 3.8);
+        expect(ctx.lineWidths[0]).toBeCloseTo(1.008, 2);
+    });
+
+    it("sizes the label from the radius without rounding it down to a whole pixel", () => {
+        const ctx = recordingGlyphCtx();
+        drawPlayerGlyph(ctx, player, { x: 50, y: 50 }, 10, false, 1);
+        expect(ctx.fonts[0]).toContain("10.5px");
+    });
+});
+
+describe("glyph minimum radius (scale model)", () => {
+    it("keeps the 8 px minimum on the board, and uses the given minimum elsewhere", () => {
+        expect(glyphRadiusPx(EQUIPMENT_RADIUS_FT.puck, 1.4)).toBe(8);
+        expect(glyphRadiusPx(EQUIPMENT_RADIUS_FT.puck, 1.4, 1, 1.5)).toBe(1.5);
+        expect(glyphRadiusPx(PLAYER_RADIUS_FT, 1.4, 1, 1.5)).toBeCloseTo(8.4);
     });
 });

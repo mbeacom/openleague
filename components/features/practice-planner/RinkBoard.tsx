@@ -27,7 +27,7 @@ import {
     TransformContext,
     screenToRink,
 } from "@/lib/utils/canvas/rink-renderer";
-import { drawBoardFrame, drawLineHandles, drawSnapRing, drawStroke } from "@/lib/utils/canvas/drawing-utils";
+import { boardStrokeFloors, drawBoardFrame, drawLineHandles, drawSnapRing, drawStroke } from "@/lib/utils/canvas/drawing-utils";
 import { backingPixelRatio, sizeBackingStore, watchPixelRatio } from "@/lib/utils/canvas/backing-store";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import { areaMaskRect, areaRect, editViewport, withArea } from "@/lib/utils/ice-area";
@@ -385,7 +385,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
             const previewPoints = strokeOptions.path === "straight"
                 ? [head, tail]
                 : [head, ...currentDrawingPoints.slice(1, -1), tail];
-            drawStroke(ctx, { ...strokeOptions, points: previewPoints, color: selectedColor, strokeWidth: 2 }, transform);
+            drawStroke(ctx, { ...strokeOptions, points: previewPoints, color: selectedColor, strokeWidth: 2 }, transform, boardStrokeFloors(scale));
         }
         if (snapRing) drawSnapRing(ctx, snapRing, transform, LINE_EDIT_COLORS.snapRing, scale);
     }, [

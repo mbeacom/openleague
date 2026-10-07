@@ -4,6 +4,7 @@
  * pattern is unit-testable.
  */
 import type { Position, StrokeAction, StrokeEnd, StrokeOptions, StrokePath } from "@/types/practice-planner";
+import { MIN_LINE_PX, refPx } from "./scale";
 
 export type StrokePattern = "solid" | "ticks" | "wave" | "dashed" | "double" | "zigzag" | "thin";
 
@@ -23,7 +24,8 @@ export interface StrokeGeometry {
     end: { type: Exclude<StrokeEnd, "none">; tip: Position; angle: number } | null;
 }
 
-const ft = (feet: number, pxPerFt: number, minPx: number) => Math.max(feet * pxPerFt, minPx);
+/** A pattern size in feet at this scale, never below the 1 px floor. */
+const ft = (feet: number, pxPerFt: number) => Math.max(feet * pxPerFt, MIN_LINE_PX);
 
 export function smoothPath(points: Position[], iterations = 2): Position[] {
     let pts = points;
@@ -156,12 +158,16 @@ function offsetAlong(samples: Position[], offset: (i: number) => number): Positi
 
 export function buildStrokeGeometry(
     stroke: StrokeOptions & { points: Position[]; strokeWidth: number },
-    pxPerFt: number
+    pxPerFt: number,
+    /** Thinnest line drawn (the editing board passes a higher minimum) */
+    minLinePx: number = MIN_LINE_PX
 ): StrokeGeometry {
     const base = strokeCenterline(stroke);
     const total = pathLength(base);
     const pattern = ACTION_PATTERN[stroke.action];
-    const lineWidth = pattern === "thin" ? stroke.strokeWidth * 0.75 : stroke.strokeWidth;
+    // Stored widths are px on the reference board (scale model); drawn in proportion here.
+    // The plain line's lighter weight applies before the floor, so no stroke drops below it.
+    const lineWidth = refPx(pattern === "thin" ? stroke.strokeWidth * 0.75 : stroke.strokeWidth, pxPerFt, minLinePx);
     if (base.length < 2 || total === 0) return { polylines: [], lineWidth, end: null };
 
     let polylines: Position[][];
@@ -171,23 +177,23 @@ export function buildStrokeGeometry(
             polylines = [base];
             break;
         case "wave": {
-            const amp = ft(1.0, pxPerFt, 1.5);
-            const wavelength = ft(4, pxPerFt, 6);
+            const amp = ft(1.0, pxPerFt);
+            const wavelength = ft(4, pxPerFt);
             const samples = resampleByArcLength(base, wavelength / 12);
             const spacing = total / (samples.length - 1);
             polylines = [offsetAlong(samples, (i) => amp * Math.sin((2 * Math.PI * i * spacing) / wavelength))];
             break;
         }
         case "zigzag": {
-            const amp = ft(1.2, pxPerFt, 1.5);
-            const half = ft(3, pxPerFt, 5) / 2;
+            const amp = ft(1.2, pxPerFt);
+            const half = ft(3, pxPerFt) / 2;
             const samples = resampleByArcLength(base, half);
             polylines = [offsetAlong(samples, (i) => (i === 0 || i === samples.length - 1 ? 0 : i % 2 ? amp : -amp))];
             break;
         }
         case "dashed": {
-            const dash = ft(2.5, pxPerFt, 4);
-            const gap = ft(1.5, pxPerFt, 3);
+            const dash = ft(2.5, pxPerFt);
+            const gap = ft(1.5, pxPerFt);
             const samples = resampleByArcLength(base, Math.min(dash, gap) / 2);
             const spacing = total / (samples.length - 1);
             polylines = [];
@@ -204,14 +210,14 @@ export function buildStrokeGeometry(
             break;
         }
         case "double": {
-            const rail = ft(0.7, pxPerFt, 1.5);
-            const samples = resampleByArcLength(base, ft(1, pxPerFt, 2));
+            const rail = ft(0.7, pxPerFt);
+            const samples = resampleByArcLength(base, ft(1, pxPerFt));
             polylines = [offsetAlong(samples, () => rail), offsetAlong(samples, () => -rail)];
             break;
         }
         case "ticks": {
-            const every = ft(4, pxPerFt, 6);
-            const half = ft(1.2, pxPerFt, 2);
+            const every = ft(4, pxPerFt);
+            const half = ft(1.2, pxPerFt);
             const samples = resampleByArcLength(base, every);
             const ns = normals(samples);
             polylines = [base];

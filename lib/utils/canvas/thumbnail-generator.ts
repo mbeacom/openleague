@@ -11,6 +11,7 @@
 import { PlayData } from "@/types/practice-planner";
 import { createTransformContext } from "./rink-renderer";
 import { drawBoardScene } from "./drawing-utils";
+import { THUMBNAIL_MIN_GLYPH_RADIUS_PX } from "./glyph-metrics";
 import { areaRect } from "@/lib/utils/ice-area";
 
 /**
@@ -52,8 +53,13 @@ function clampPixelRatio(value: number | undefined): number {
     return Math.min(MAX_THUMBNAIL_PIXEL_RATIO, Math.max(1, value));
 }
 
-/** Padding around the rink in every thumbnail-style diagram (logical px). */
+/** Padding around the rink in a thumbnail-style diagram at least 300 px wide (logical px). */
 export const THUMBNAIL_PADDING = 10;
+
+/** The padding for a diagram this wide: 10 px from 300 px up (stored and printed sizes), proportionally less below. */
+export function thumbnailPadding(width: number): number {
+    return Math.min(THUMBNAIL_PADDING, (THUMBNAIL_PADDING * width) / THUMBNAIL_DIMENSIONS.width);
+}
 
 /** Width ÷ height of a thumbnail; live diagrams keep the same shape. */
 export const THUMBNAIL_ASPECT = THUMBNAIL_DIMENSIONS.width / THUMBNAIL_DIMENSIONS.height;
@@ -73,8 +79,12 @@ export function drawThumbnailScene(
 ): void {
     ctx.fillStyle = options.backgroundColor ?? "#FFFFFF";
     ctx.fillRect(0, 0, width, height);
-    const transform = createTransformContext(width, height, THUMBNAIL_PADDING);
-    drawBoardScene(ctx, transform, playData, { maskRect: areaRect(playData.area), cachedRink: options.cachedRink ?? false });
+    const transform = createTransformContext(width, height, thumbnailPadding(width));
+    drawBoardScene(ctx, transform, playData, {
+        maskRect: areaRect(playData.area),
+        cachedRink: options.cachedRink ?? false,
+        minGlyphRadiusPx: THUMBNAIL_MIN_GLYPH_RADIUS_PX,
+    });
 }
 
 /**

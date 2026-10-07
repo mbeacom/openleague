@@ -243,3 +243,19 @@ describe("combinedLegendData", () => {
         expect(combinedLegendData([{ name: "Lost", playData: null }])).toBeNull();
     });
 });
+
+describe("drawStationMap glyph size (scale model)", () => {
+    it("draws equipment at its real size, not the board's 8 px minimum: nobody edits the station map", () => {
+        const withPuck: PlayData = {
+            ...createEmptyPlayData(),
+            area: { kind: "zone-left" },
+            equipment: [{ id: "p", kind: "puck", position: { x: 40, y: 30 }, rotation: 0 }],
+        };
+        const calls = draw([{ name: "Puck drill", playData: withPuck }]);
+        const at = rinkToCanvas({ x: 40, y: 30 }, t);
+        const puckArcs = calls.filter((c) => c.name === "arc" && Math.abs((c.args[0] as number) - at.x) < 0.01 && Math.abs((c.args[1] as number) - at.y) < 0.01);
+        expect(puckArcs.length).toBeGreaterThan(0);
+        // 0.75 ft · ~4.66 px/ft ≈ 3.5 px radius, drawn as a 0.6 r disc ≈ 2.1 px (the board minimum would give 4.8).
+        expect(Math.max(...puckArcs.map((c) => c.args[2] as number))).toBeLessThan(3);
+    });
+});
