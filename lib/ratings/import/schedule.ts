@@ -27,9 +27,9 @@ const DATE = /^(\d{1,2})\/(\d{1,2})(?:\/(\d{2}|\d{4}))?$/;
 const TIME = /^(\d{1,2}):(\d{2})\s*([ap])\.?m\.?$/i;
 const DATE_TIME = /^(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)\s+(\d{1,2}:\d{2}\s*[ap]\.?m\.?)$/i;
 const TEAM = /^(\d{3})\s+(\S.*)$/;
-const SCORE = /^(\d{1,2})\s*[-–]\s*(\d{1,2})$/;
+const SCORE = /^(\d{1,2})\s*[-–—−]\s*(\d{1,2})$/;
 const GOALS = /^\d{1,2}$/;
-const DASH = /^[-–]$/;
+const DASH = /^[-–—−]$/;
 const VERSUS = /^(vs\.?|v\.?|@|at)$/i;
 
 /** Pre-season starts in late summer: from July on it's this year, else last year. */
@@ -47,6 +47,9 @@ function toIsoDate(token: string, seasonYear: number): string | null {
     if (month < 1 || month > 12 || day < 1 || day > 31) return null;
     let year = m[3] ? Number(m[3]) : month >= 7 ? seasonYear : seasonYear + 1;
     if (year < 100) year += 2000;
+    // Validate against real calendar: construct date and check month/day round-trip
+    const date = new Date(Date.UTC(year, month - 1, day));
+    if (date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
     return `${year}-${pad(month)}-${pad(day)}`;
 }
 
@@ -139,6 +142,7 @@ export function parseSchedule(input: string, options: { seasonYear: number }): P
         if (!names.has(home[1])) names.set(home[1], home[2]);
         if (!names.has(away[1])) names.set(away[1], away[2]);
         games.push({ date, time, home: home[1], away: away[1], homeGoals, awayGoals, rink });
+        time = null;
         i = end;
     }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { defaultSeasonYear, htmlToText, parseSchedule } from "@/lib/ratings/import";
+import { decodeEntities, defaultSeasonYear, htmlToText, parseSchedule } from "@/lib/ratings/import";
 
 // Made-up programs in the token shapes the real schedule page produces (spec R6).
 const PAGE_TEXT = [
@@ -38,11 +38,13 @@ describe("parseSchedule", () => {
 
     it("reads a saved page's HTML, ignoring scripts and decoding entities", () => {
         const html =
-            '<html><head><script>var d="9/21";</script><style>.x{}</style></head><body>' +
+            '<html><head><script>9/21\n9:25am\n901 Bad Team\n11 - 4\n902 Fake Team</script><style>.x{}</style></head><body>' +
             '<div class="game"><span>9/20</span><span>9:25am</span><a href="#">901 Riverside M1</a><b>11</b><b>-</b><b>4</b>' +
             '<a href="#">902 Lake &amp; View M2</a><span>North&nbsp;Rink</span></div></body></html>';
         const result = parseSchedule(html, { seasonYear: 2026 });
         expect(result.games).toHaveLength(1);
+        expect(result.games[0].home).toBe("901");
+        expect(result.games[0].away).toBe("902");
         expect(result.teams[1]).toEqual({ number: "902", name: "Lake & View M2" });
         expect(result.games[0].rink).toBe("North Rink");
     });
@@ -61,6 +63,57 @@ describe("parseSchedule", () => {
         const result = parseSchedule("901 Riverside M1\n2 - 1\n902 Lakeview M2\n9/1\n901 A\n1 - 0\n901 A", { seasonYear: 2026 });
         expect(result.games).toHaveLength(0);
         expect(result.unparsed).toEqual(["901 Riverside M1", "902 Lakeview M2", "901 A"]);
+    });
+
+    it("resets time to null after each game, so later same-date games without time get null", () => {
+        const result = parseSchedule("9/1\n9:00am\n901 A\n1 - 0\n902 B\n901 C\n2 - 1\n902 D", { seasonYear: 2026 });
+        expect(result.games).toHaveLength(2);
+        expect(result.games[0].time).toBe("09:00");
+        expect(result.games[1].time).toBeNull();
+    });
+
+    it("rejects invalid calendar dates like 2/30 and 4/31", () => {
+        const result = parseSchedule("2/30\n9:00am\n901 A\n1 - 0\n902 B\n4/31\n901 C\n2 - 1\n902 D", { seasonYear: 2026 });
+        expect(result.games).toHaveLength(0);
+        expect(result.unparsed).toEqual(["901 A", "902 B", "901 C", "902 D"]);
+    });
+
+    it("accepts em dash, minus sign, en dash, and hyphen as score separators", () => {
+        const hyphen = parseSchedule("9/1\n901 A\n1 - 0\n902 B", { seasonYear: 2026 });
+        const enDash = parseSchedule("9/1\n901 A\n1 – 0\n902 B", { seasonYear: 2026 });
+        const emDash = parseSchedule("9/1\n901 A\n1 — 0\n902 B", { seasonYear: 2026 });
+        const minusSign = parseSchedule("9/1\n901 A\n1 − 0\n902 B", { seasonYear: 2026 });
+        expect(hyphen.games).toHaveLength(1);
+        expect(enDash.games).toHaveLength(1);
+        expect(emDash.games).toHaveLength(1);
+        expect(minusSign.games).toHaveLength(1);
+        expect(hyphen.games[0]).toMatchObject({ homeGoals: 1, awayGoals: 0 });
+        expect(enDash.games[0]).toMatchObject({ homeGoals: 1, awayGoals: 0 });
+        expect(emDash.games[0]).toMatchObject({ homeGoals: 1, awayGoals: 0 });
+        expect(minusSign.games[0]).toMatchObject({ homeGoals: 1, awayGoals: 0 });
+    });
+});
+
+describe("decodeEntities", () => {
+    it("decodes named entities like &amp; and &nbsp;", () => {
+        expect(decodeEntities("A&amp;B")).toBe("A&B");
+        expect(decodeEntities("A&nbsp;B")).toBe("A B");
+    });
+
+    it("decodes decimal numeric entities like &#39;", () => {
+        expect(decodeEntities("A&#39;B")).toBe("A'B");
+    });
+
+    it("decodes hex numeric entities like &#x27;", () => {
+        expect(decodeEntities("A&#x27;B")).toBe("A'B");
+    });
+
+    it("leaves invalid numeric entities unchanged like &#0;", () => {
+        expect(decodeEntities("A&#0;B")).toBe("A&#0;B");
+    });
+
+    it("leaves unknown named entities unchanged like &bogus;", () => {
+        expect(decodeEntities("A&bogus;B")).toBe("A&bogus;B");
     });
 });
 
