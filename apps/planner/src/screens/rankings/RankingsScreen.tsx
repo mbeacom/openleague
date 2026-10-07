@@ -29,7 +29,7 @@ import {
 } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import { downloadBlob } from "@/components/features/practice-planner/export/download";
-import { composite, type RatingsResult, type TeamRating } from "@/lib/ratings";
+import { compareTeamNumbers, composite, type RatingsResult, type TeamRating } from "@/lib/ratings";
 import { rankingsFileName, serializeRankings, toRatingInputs, type RankingsDocument } from "@/lib/rankings-document";
 import { staticRoutes } from "../../routes";
 import type { LocalPlannerStore } from "../../store/types";
@@ -123,7 +123,7 @@ function Ladder({ rows, doc, myTeam }: { rows: TeamRating[]; doc: RankingsDocume
                         >
                             <Typography sx={{ fontWeight: 700 }}>{row.rank ?? "—"}</Typography>
                             <Box sx={{ minWidth: 0 }}>
-                                <Box component="a" href={staticRoutes.rankingsTeam(row.number)} sx={{ color: "text.primary", fontWeight: mine ? 800 : 500 }}>
+                                <Box component="a" href={staticRoutes.rankingsTeam(row.number)} sx={{ color: "text.primary", fontWeight: mine ? 800 : 500, display: "inline-flex", alignItems: "center", minHeight: 44 }}>
                                     {row.name}
                                 </Box>
                                 <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
@@ -131,6 +131,9 @@ function Ladder({ rows, doc, myTeam }: { rows: TeamRating[]; doc: RankingsDocume
                                     {row.startingBracket ? ` · started ${row.startingBracket}` : ""}
                                     {row.excluded ? " · excluded" : ""}
                                 </Typography>
+                                <Box sx={{ display: { xs: "block", sm: "none" } }}>
+                                    <MovementLabel movement={row.movement} startingLevel={row.startingLevel} />
+                                </Box>
                                 {row.lowConfidence && row.rank !== null && <Chip size="small" label="Few games" variant="outlined" sx={{ mt: 0.25 }} />}
                             </Box>
                             <Box sx={{ display: { xs: "none", sm: "block" }, position: "relative", height: 10, borderRadius: 5, bgcolor: "action.hover" }}>
@@ -138,6 +141,7 @@ function Ladder({ rows, doc, myTeam }: { rows: TeamRating[]; doc: RankingsDocume
                                     <Tooltip title={`RPI ${formatRating(row.rpi)} · Lodin ${formatRating(row.lodin)} · Walkush (approx.) ${formatRating(row.walkush, 2)} · ${row.wins}-${row.losses}-${row.ties}`}>
                                         <Box
                                             tabIndex={0}
+                                            role="img"
                                             aria-label={`${row.name} RPI ${formatRating(row.rpi)}`}
                                             sx={{
                                                 position: "absolute",
@@ -167,20 +171,27 @@ function Ladder({ rows, doc, myTeam }: { rows: TeamRating[]; doc: RankingsDocume
     );
 }
 
-function sortValue(row: TeamRating, key: SortKey): number | string {
+function sortValue(row: TeamRating, key: SortKey): number | string | null {
     if (key === "name") return row.name.toLowerCase();
-    const value = row[key];
-    return value === null ? Number.NEGATIVE_INFINITY : value;
+    return row[key];
+}
+
+/** Nulls (unranked, excluded) always sort last, in both directions; ties fall back to team number. */
+function compareRows(a: TeamRating, b: TeamRating, key: SortKey, dir: "asc" | "desc"): number {
+    const x = sortValue(a, key);
+    const y = sortValue(b, key);
+    if (x === null && y !== null) return 1;
+    if (y === null && x !== null) return -1;
+    if (x !== null && y !== null && x !== y) {
+        const cmp = typeof x === "string" && typeof y === "string" ? x.localeCompare(y) : (x as number) - (y as number);
+        if (cmp !== 0) return dir === "asc" ? cmp : -cmp;
+    }
+    return compareTeamNumbers(a.number, b.number);
 }
 
 function RatingsTable({ rows, cap }: { rows: TeamRating[]; cap: number }) {
     const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "rank", dir: "asc" });
-    const sorted = [...rows].sort((a, b) => {
-        const x = sortValue(a, sort.key);
-        const y = sortValue(b, sort.key);
-        const cmp = typeof x === "string" && typeof y === "string" ? x.localeCompare(y) : (x as number) - (y as number);
-        return sort.dir === "asc" ? cmp : -cmp;
-    });
+    const sorted = [...rows].sort((a, b) => compareRows(a, b, sort.key, sort.dir));
     return (
         <TableContainer component={Paper} variant="outlined">
             <Table size="small" aria-label={`Ratings table, margins capped at ${cap}`}>
@@ -206,7 +217,9 @@ function RatingsTable({ rows, cap }: { rows: TeamRating[]; cap: number }) {
                         <TableRow key={row.number}>
                             <TableCell align="right">{row.rank ?? "—"}</TableCell>
                             <TableCell>
-                                <a href={staticRoutes.rankingsTeam(row.number)}>{row.name}</a>
+                                <Box component="a" href={staticRoutes.rankingsTeam(row.number)} sx={{ display: "inline-flex", alignItems: "center", minHeight: 44, color: "inherit" }}>
+                                    {row.name}
+                                </Box>
                             </TableCell>
                             <TableCell align="right">{row.games}</TableCell>
                             <TableCell align="right">{formatSigned(row.agd)}</TableCell>
