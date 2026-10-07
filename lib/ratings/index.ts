@@ -3,3 +3,4 @@ export * from "./types";
 export * from "./srs";
 export * from "./walkush";
 export * from "./composite";
+export * from "./sweep";
