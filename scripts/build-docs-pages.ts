@@ -86,11 +86,23 @@ function pagePathForHref(href: string): string {
   return relative ? path.join(relative, 'index.html') : 'index.html';
 }
 
+const plannerLink = {
+  title: 'Practice planner',
+  description: 'Draw drills and plan practices in your browser. Free, no account needed. Your plans stay on this device.',
+};
+
+/** Relative URL to the sibling `planner/` site, so it resolves on openleague.dev and on a fork's Pages subpath. */
+function plannerUrlFor(page: StaticPage): string {
+  const depth = staticDocsUrlForHref(page.href).split('/').filter(Boolean).length;
+  return `${'../'.repeat(depth)}planner/`;
+}
+
 function wrapPage(page: StaticPage, navItems: DocsNavItem[]): string {
   const navLinks = navItems
     .map((item) => {
       return `<a href="${staticDocsUrlForHref(item.href)}">${escapeHtml(item.title)}</a>`;
     })
+    .concat(`<a href="${plannerUrlFor(page)}">${escapeHtml(plannerLink.title)}</a>`)
     .join('');
 
   return `<!doctype html>
@@ -137,12 +149,13 @@ async function buildAppDocsPages(): Promise<StaticPage[]> {
       .map((item) => `<article class="card"><p class="muted">${escapeHtml(section.title)}</p><h2><a href="${staticDocsUrlForHref(item.href)}">${escapeHtml(item.title)}</a></h2><p>${escapeHtml(item.description)}</p></article>`)
       .join('\n'))
     .join('\n');
+  const plannerCard = `<article class="card"><p class="muted">Tools</p><h2><a href="planner/">${escapeHtml(plannerLink.title)}</a></h2><p>${escapeHtml(plannerLink.description)}</p></article>`;
 
   pages.push({
     title: docsHome.title,
     description: docsHome.description,
     href: docsHome.href,
-    html: `<div class="cards">${cards}</div>`,
+    html: `<div class="cards">${cards}\n${plannerCard}</div>`,
   });
 
   for (const item of docsItems) {

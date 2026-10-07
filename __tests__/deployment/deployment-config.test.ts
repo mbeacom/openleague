@@ -95,6 +95,8 @@ describe('deployment configuration', () => {
     expect(docsWorkflow).toContain('actions/deploy-pages');
     expect(docsBuilder).toContain('openleague.dev');
     expect(docsBuilder).toContain('CNAME');
+    expect(docsBuilder).toContain("title: 'Practice planner'");
+    expect(docsBuilder).toContain('planner/');
   });
 
   it('runs scheduled uptime monitoring for the main and docs sites', async () => {
