@@ -187,6 +187,10 @@ describe("Starter play ice areas", () => {
         "starter-skate-paint-the-cones": "zone-right-top",
         "starter-skate-low-1v1-2v1": "zone-left",
         "starter-game-3v3-designated-shooter": "zone-left",
+        "starter-skate-trucks-trailers": "zone-right",
+        "starter-skate-mirror-puck-control": "zone-neutral",
+        "starter-skate-forecheck-breakout": "zone-left",
+        "starter-skate-chariot-relay": "zone-neutral",
     };
 
     it("gives the obvious set plays an explicit area and leaves full-ice drills unset", () => {
@@ -283,10 +287,10 @@ describe("Starter drill tags", () => {
         }
     });
 
-    it("ships seventeen skater drills, three small-area games and 39 starters in all", () => {
-        expect(STARTER_PLAYS.filter((p) => p.id.startsWith("starter-skate-")).map((p) => p.focus)).toEqual(Array(17).fill("skaters"));
+    it("ships twenty-one skater drills, three small-area games and 43 starters in all", () => {
+        expect(STARTER_PLAYS.filter((p) => p.id.startsWith("starter-skate-")).map((p) => p.focus)).toEqual(Array(21).fill("skaters"));
         expect(STARTER_PLAYS.filter((p) => p.id.startsWith("starter-game-")).map((p) => p.focus)).toEqual(["team", "team", "team"]);
-        expect(STARTER_PLAYS).toHaveLength(39);
+        expect(STARTER_PLAYS).toHaveLength(43);
     });
 
     it("puts every small-area drill on a quarter-ice or zone preset", () => {
@@ -298,6 +302,57 @@ describe("Starter drill tags", () => {
         }
     });
 
+});
+
+describe("8U partner puck control and forecheck drills", () => {
+    const find = (id: string) => {
+        const play = STARTER_PLAYS.find((p) => p.id === id);
+        if (!play) throw new Error(`${id} is missing`);
+        return play;
+    };
+    const kinds = (id: string, kind: string) => find(id).playData.equipment.filter((item) => item.kind === kind);
+
+    it("adds the four drills with their tags", () => {
+        expect(Object.fromEntries([
+            "starter-skate-trucks-trailers",
+            "starter-skate-mirror-puck-control",
+            "starter-skate-forecheck-breakout",
+            "starter-skate-chariot-relay",
+        ].map((id) => [id, [find(id).name, find(id).focus, find(id).goalies]]))).toEqual({
+            "starter-skate-trucks-trailers": ["Trucks and Trailers", "skaters", "none"],
+            "starter-skate-mirror-puck-control": ["Mirror Puck Control", "skaters", "none"],
+            "starter-skate-forecheck-breakout": ["Forecheck vs. Breakout", "skaters", "required"],
+            "starter-skate-chariot-relay": ["Chariot Race Relay", "skaters", "none"],
+        });
+    });
+
+    it("draws trucks and trailers as partner pairs, each carrying a puck", () => {
+        const play = find("starter-skate-trucks-trailers");
+        expect(play.playData.players).toHaveLength(6);
+        expect(play.playData.drawings.every((d) => d.action === "carry")).toBe(true);
+    });
+
+    it("puts the mirror pairs on either side of the center red line, each with a figure eight on its own side", () => {
+        const play = find("starter-skate-mirror-puck-control");
+        const left = play.playData.players.filter((p) => p.position.x < 100);
+        const right = play.playData.players.filter((p) => p.position.x > 100);
+        expect([left.length, right.length]).toEqual([2, 2]);
+        for (const d of play.playData.drawings) {
+            const xs = d.points.map((point) => point.x);
+            expect(xs.every((x) => x < 100) || xs.every((x) => x > 100), d.id).toBe(true);
+        }
+    });
+
+    it("runs forecheck vs. breakout on one net with a two-cone exit gate", () => {
+        const play = find("starter-skate-forecheck-breakout");
+        expect(kinds(play.id, "net").map((n) => [n.position.x, n.position.y])).toEqual([[11, 42.5]]);
+        expect(kinds(play.id, "cone")).toHaveLength(2);
+        expect(play.playData.players.filter((p) => p.role === "G")).toHaveLength(1);
+    });
+
+    it("runs the chariot relay in two lanes around the practice's two cones", () => {
+        expect(kinds("starter-skate-chariot-relay", "cone")).toHaveLength(2);
+    });
 });
 
 describe("Starter age groups (age-group templates R2)", () => {
@@ -341,6 +396,10 @@ describe("Starter age groups (age-group templates R2)", () => {
         "starter-skate-paint-the-cones": ["u6", "u8", "u10"],
         "starter-skate-low-1v1-2v1": ["u8", "u10", "u12"],
         "starter-game-3v3-designated-shooter": ["u8", "u10", "u12"],
+        "starter-skate-trucks-trailers": ["u6", "u8", "u10"],
+        "starter-skate-mirror-puck-control": ["u6", "u8", "u10"],
+        "starter-skate-forecheck-breakout": ["u8", "u10", "u12"],
+        "starter-skate-chariot-relay": ["u6", "u8", "u10"],
     };
 
     it("tags every starter, leaving drills that suit every age untagged", () => {
