@@ -202,6 +202,10 @@ export function drawTextAnnotation(
     isSelected: boolean = false
 ): void {
     const canvasPos = rinkToCanvas(annotation.position, transform);
+    const pxPerFt = Math.min(transform.scaleX, transform.scaleY);
+    // 2 px of padding (4 for the selection) on the reference board, in proportion elsewhere (scale model).
+    const pad = refPx(2, pxPerFt);
+    const selectPad = refPx(4, pxPerFt);
     const scaledFontSize = annotation.fontSize * Math.min(transform.scaleX, transform.scaleY);
 
     // Measure text for background
@@ -214,16 +218,16 @@ export function drawTextAnnotation(
     if (isSelected) {
         ctx.fillStyle = "rgba(255, 215, 0, 0.3)"; // Gold with transparency
         ctx.fillRect(
-            canvasPos.x - 4,
-            canvasPos.y - textHeight - 4,
-            textWidth + 8,
-            textHeight + 8
+            canvasPos.x - selectPad,
+            canvasPos.y - textHeight - selectPad,
+            textWidth + 2 * selectPad,
+            textHeight + 2 * selectPad
         );
     }
 
     // Draw semi-transparent background for readability
     ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
-    ctx.fillRect(canvasPos.x - 2, canvasPos.y - textHeight - 2, textWidth + 4, textHeight + 4);
+    ctx.fillRect(canvasPos.x - pad, canvasPos.y - textHeight - pad, textWidth + 2 * pad, textHeight + 2 * pad);
 
     // Draw text
     ctx.fillStyle = annotation.color;

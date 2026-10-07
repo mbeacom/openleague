@@ -42,6 +42,8 @@ describe("snapLineX", () => {
 
     it("leaves x alone without getTransform, or under a rotation or skew", () => {
         expect(snapLineX({} as CanvasRenderingContext2D, 75.3, 1)).toBe(75.3);
+        // A mocked or partial context whose getTransform reports nothing.
+        expect(snapLineX({ getTransform: () => undefined } as unknown as CanvasRenderingContext2D, 75.3, 1)).toBe(75.3);
         expect(snapLineX(ctxWith({ a: 1, b: 0.5, c: 0, d: 1, e: 0, f: 0 }), 75.3, 1)).toBe(75.3);
         expect(snapLineX(ctxWith({ a: 1, b: 0, c: 0.5, d: 1, e: 0, f: 0 }), 75.3, 1)).toBe(75.3);
     });

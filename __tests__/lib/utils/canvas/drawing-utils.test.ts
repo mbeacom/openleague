@@ -7,6 +7,7 @@ import {
     drawElement,
     drawLineHandles,
     drawSnapRing,
+    drawTextAnnotation,
     paintStrokeGeometry,
     LINE_HANDLE_RADIUS_PX,
     SNAP_RING_RADIUS_PX,
@@ -393,5 +394,20 @@ describe("stroke ends in proportion to the rink (scale model)", () => {
         const pxPerFt = Math.min(zoomed.scaleX, zoomed.scaleY);
         drawElement(ctx, element as never, zoomed, true);
         expect(widths[0]).toBeCloseTo((2 + 4) * (pxPerFt / 3.8));
+    });
+});
+
+describe("note padding (scale model)", () => {
+    it("pads a note's background in proportion: 2 reference px on the board, less on a thumbnail", () => {
+        const pad = (canvasW: number, canvasH: number, padding: number) => {
+            const calls: Call[] = [];
+            const t = createTransformContext(canvasW, canvasH, padding);
+            drawTextAnnotation(recordingCtx(calls), { id: "n", text: "Hi", position: { x: 100, y: 40 }, fontSize: 6, color: "#000" }, t);
+            const bg = calls.find((c) => c.name === "fillRect")!;
+            const textX = calls.find((c) => c.name === "fillText")!.args[1] as number;
+            return textX - (bg.args[0] as number);
+        };
+        expect(pad(800, 400, 20)).toBeCloseTo(2);
+        expect(pad(300, 128, 10)).toBeCloseTo(1); // 2 · 1.4/3.8 ≈ 0.74, floored to 1
     });
 });

@@ -21,12 +21,12 @@ export function refPx(px: number, pxPerFt: number, floorPx: number = MIN_LINE_PX
  * The x, in the context's user space, that puts a vertical line of `lineWidth`
  * on whole device pixels: an odd device width is centered on a half pixel, an
  * even one on a whole pixel. Unchanged when the context can't report its
- * transform, or the transform rotates or skews.
+ * transform (or reports nothing), or the transform rotates or skews.
  */
 export function snapLineX(ctx: CanvasRenderingContext2D, x: number, lineWidth: number): number {
     if (typeof ctx.getTransform !== "function") return x;
-    const m = ctx.getTransform();
-    if (m.b !== 0 || m.c !== 0 || m.a <= 0) return x;
+    const m = ctx.getTransform() as DOMMatrix | undefined;
+    if (!m || m.b !== 0 || m.c !== 0 || !(m.a > 0)) return x;
     const deviceX = m.a * x + m.e;
     const deviceWidth = Math.max(1, Math.round(lineWidth * m.a));
     const snapped = deviceWidth % 2 === 1 ? Math.floor(deviceX) + 0.5 : Math.round(deviceX);
