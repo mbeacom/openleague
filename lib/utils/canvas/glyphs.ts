@@ -127,7 +127,8 @@ export function drawPlayerGlyph(
             break;
     }
 
-    const shownText = fitText(ctx, text, r * 1.6, r * 1.05);
+    // A disc's white ring's inner edge is at 0.82 r; 1.44 r keeps the label clear of it at cap height.
+    const shownText = fitText(ctx, text, shape === "disc" ? r * 1.44 : r * 1.6, r * 1.05);
     ctx.fillStyle = textColor;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
@@ -175,7 +176,6 @@ export function drawEquipmentGlyph(
             ctx.lineTo(c.x - w, c.y + r * 0.8);
             ctx.closePath();
             ctx.fill();
-            ctx.stroke();
             // The lit half, for a little depth.
             ctx.fillStyle = DIAGRAM_THEME.coneShade;
             ctx.beginPath();
@@ -184,6 +184,13 @@ export function drawEquipmentGlyph(
             ctx.lineTo(c.x - w, c.y + r * 0.8);
             ctx.closePath();
             ctx.fill();
+            // The outline last, so the shading never covers it.
+            ctx.beginPath();
+            ctx.moveTo(c.x, c.y - r);
+            ctx.lineTo(c.x + w, c.y + r * 0.8);
+            ctx.lineTo(c.x - w, c.y + r * 0.8);
+            ctx.closePath();
+            ctx.stroke();
             break;
         }
         case "tire":

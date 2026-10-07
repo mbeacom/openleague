@@ -9,7 +9,7 @@
  */
 
 import type { Position, RinkRect } from "@/types/practice-planner";
-import { refPx, snapLineX } from "./scale";
+import { refPx, snapLineWidth, snapLineX } from "./scale";
 import { DIAGRAM_THEME } from "./diagram-theme";
 
 /**
@@ -407,7 +407,7 @@ function drawCenterRedLine(ctx: CanvasRenderingContext2D, transform: TransformCo
     const bottom = rinkToCanvas({ x: centerX, y: RINK_DIMENSIONS.height }, transform);
 
     ctx.strokeStyle = DIAGRAM_THEME.redLine;
-    ctx.lineWidth = LINE_DIMENSIONS.redLineWidth * transform.scaleX;
+    ctx.lineWidth = snapLineWidth(ctx, LINE_DIMENSIONS.redLineWidth * transform.scaleX);
     // On whole device pixels, so the line is crisp (scale model).
     const topX = snapLineX(ctx, top.x, ctx.lineWidth);
     ctx.beginPath();
@@ -424,7 +424,7 @@ function drawBlueLines(ctx: CanvasRenderingContext2D, transform: TransformContex
     const rightBlueLineX = BLUE_LINES.right;
 
     ctx.strokeStyle = DIAGRAM_THEME.blueLine;
-    ctx.lineWidth = LINE_DIMENSIONS.blueLineWidth * transform.scaleX;
+    ctx.lineWidth = snapLineWidth(ctx, LINE_DIMENSIONS.blueLineWidth * transform.scaleX);
 
     // Left blue line
     const leftTop = rinkToCanvas({ x: leftBlueLineX, y: 0 }, transform);
@@ -455,7 +455,7 @@ function drawGoalLines(ctx: CanvasRenderingContext2D, transform: TransformContex
     const rightGoalLineX = RINK_DIMENSIONS.width - LINE_DIMENSIONS.goalLineDistance;
 
     ctx.strokeStyle = DIAGRAM_THEME.redLine;
-    ctx.lineWidth = LINE_DIMENSIONS.redLineWidth * transform.scaleX;
+    ctx.lineWidth = snapLineWidth(ctx, LINE_DIMENSIONS.redLineWidth * transform.scaleX);
 
     // Left goal line
     const leftTop = rinkToCanvas({ x: leftGoalLineX, y: 0 }, transform);

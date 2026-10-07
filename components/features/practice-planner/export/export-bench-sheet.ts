@@ -36,9 +36,9 @@ export async function exportBenchSheet(
     await yieldToBrowser();
     // The Crest stands in for a missing logo: let its font load first, as the printed sheet does.
     // Without a team name no mark is drawn (buildBenchSheetModel), so there is nothing to wait for.
-    if (session.teamMark && session.teamName?.trim() && !isLogoImage(options.logo)) await waitForCrestFont();
-    // Exported diagrams must not bake in the fallback font.
-    await waitForDiagramFont();
+    const needsCrest = Boolean(session.teamMark && session.teamName?.trim() && !isLogoImage(options.logo));
+    // Exported diagrams must not bake in the fallback font. Both load at once.
+    await Promise.all([needsCrest ? waitForCrestFont() : undefined, waitForDiagramFont()]);
     const model = buildBenchSheetModel(session, canvasRenderers, { logo: options.logo });
     if (format === "html") {
         const blob = new Blob([renderBenchSheetHtml(model)], { type: "text/html;charset=utf-8" });

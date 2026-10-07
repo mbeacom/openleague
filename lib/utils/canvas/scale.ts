@@ -32,3 +32,15 @@ export function snapLineX(ctx: CanvasRenderingContext2D, x: number, lineWidth: n
     const snapped = deviceWidth % 2 === 1 ? Math.floor(deviceX) + 0.5 : Math.round(deviceX);
     return (snapped - m.e) / m.a;
 }
+
+/**
+ * `lineWidth` rounded to whole device pixels (at least one), so a snapped line
+ * has no blurred edge. Unchanged when the context can't report its transform
+ * (or reports nothing), or the transform rotates or skews.
+ */
+export function snapLineWidth(ctx: CanvasRenderingContext2D, lineWidth: number): number {
+    if (typeof ctx.getTransform !== "function") return lineWidth;
+    const m = ctx.getTransform() as DOMMatrix | undefined;
+    if (!m || m.b !== 0 || m.c !== 0 || !(m.a > 0)) return lineWidth;
+    return Math.max(1, Math.round(lineWidth * m.a)) / m.a;
+}

@@ -121,6 +121,14 @@ describe("drawPlayerGlyph", () => {
         expect(10 * drawn.length).toBeLessThanOrEqual(20 * 1.6);
     });
 
+    it("keeps a disc's label inside its white ring", () => {
+        const ctx = mockCtx((t) => 10 * t.length);
+        drawPlayerGlyph(ctx, player("F", "#1976D2", "AAA"), P, 20, false);
+        const drawn = ctx.fillText.mock.calls[0][0] as string;
+        // The ring's inner edge is at 0.82 r: a label 1.44 r wide clears it at cap height.
+        expect(10 * drawn.length).toBeLessThanOrEqual(20 * 1.44);
+    });
+
     it("leaves a short label untouched", () => {
         const ctx = mockCtx((t) => 10 * t.length);
         drawPlayerGlyph(ctx, player("X", "#1976D2", "LW"), P, 20, false);
@@ -143,6 +151,12 @@ describe("drawEquipmentGlyph", () => {
         const ctx = draw(kind);
         expect(ctx.events).toContain("fill:#F57C00");
         expect(ctx.calls).toContain("closePath");
+    });
+
+    it.each(["cone", "pylon"] as const)("%s strokes its outline over the lit half", (kind) => {
+        const events = draw(kind).events;
+        expect(events.at(-1)).toBe(`stroke:${DIAGRAM_THEME.ink}`);
+        expect(events.filter((e) => e.startsWith("fill:"))).toHaveLength(2);
     });
 
     it("puck fills a single dot", () => {
