@@ -20,7 +20,11 @@ export const READ_SNAKE_LABEL = "Read snake chart";
 export const SAVE_IMPORT_LABEL = "Save rankings";
 export const OPEN_FILE_LABEL = "Open rankings file";
 
-const PRESETS = [{ id: CSHL_8U_METHOD.preset, label: "CSHL 8U", method: CSHL_8U_METHOD }];
+export const REPLACE_CONFIRM_MESSAGE = "Replace your current rankings?";
+export const REPLACE_LABEL = "Replace";
+export const KEEP_MINE_LABEL = "Keep mine";
+
+const PRESETS = [{ id: CSHL_8U_METHOD.preset, label: "CSHL 8U (2025 level sizes)", method: CSHL_8U_METHOD }];
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 type Choice = "existing" | "incoming";
@@ -40,6 +44,10 @@ export function RankingsImportScreen({ store }: { store: LocalPlannerStore }) {
     const [draft, setDraft] = useState<RankingsDocument | null>(null);
     const [conflicts, setConflicts] = useState<GameConflict[]>([]);
     const [choices, setChoices] = useState<Map<string, Choice>>(new Map());
+    /** The snake chart applied to the draft: schedule teams it matched, chart teams it didn't. */
+    const [snakeFit, setSnakeFit] = useState<{ matched: number; ignored: number } | null>(null);
+    /** A rankings file waiting for the user to confirm it replaces the saved rankings. */
+    const [pendingOpen, setPendingOpen] = useState<RankingsDocument | null>(null);
     const scheduleFile = useRef<HTMLInputElement>(null);
     const snakeFile = useRef<HTMLInputElement>(null);
     const rankingsFile = useRef<HTMLInputElement>(null);
@@ -52,6 +60,7 @@ export function RankingsImportScreen({ store }: { store: LocalPlannerStore }) {
     const invalidate = () => {
         setSchedule(null);
         setSnake(null);
+        setSnakeFit(null);
         setDraft(null);
         setConflicts([]);
         setChoices(new Map());
@@ -71,7 +80,11 @@ export function RankingsImportScreen({ store }: { store: LocalPlannerStore }) {
                 else open.push(conflict);
             }
         }
-        if (nextSnake) doc = applySnakeChart(doc, nextSnake).doc;
+        if (nextSnake) {
+            const applied = applySnakeChart(doc, nextSnake);
+            doc = applied.doc;
+            setSnakeFit({ matched: applied.matched, ignored: applied.ignored });
+        } else setSnakeFit(null);
         setDraft(doc);
         setConflicts(open);
     };
@@ -102,6 +115,7 @@ export function RankingsImportScreen({ store }: { store: LocalPlannerStore }) {
     const editSnake = (text: string) => {
         setSnakeText(text);
         setSnake(null);
+        setSnakeFit(null);
         setMessage(null);
         if (schedule) rebuild(schedule, null, choices);
         else setDraft(null);
@@ -134,13 +148,24 @@ export function RankingsImportScreen({ store }: { store: LocalPlannerStore }) {
             setMessage({ severity: "error", text: parsed.error.message });
             return;
         }
-        const result = await save(parsed.doc);
+        if (existing) {
+            setPendingOpen(parsed.doc);
+            return;
+        }
+        await replaceWith(parsed.doc);
+    };
+    const replaceWith = async (doc: RankingsDocument) => {
+        const result = await save(doc);
         if (result.success) navigateTo(staticRoutes.rankings());
-        else setMessage({ severity: "error", text: result.error });
+        else {
+            setPendingOpen(null);
+            setMessage({ severity: "error", text: result.error });
+        }
     };
 
     const finals = schedule?.games.filter((g) => g.homeGoals !== null).length ?? 0;
     const scheduled = (schedule?.games.length ?? 0) - finals;
+    const withoutBracket = snakeFit && draft ? draft.teams.filter((team) => !team.startingBracket) : [];
 
     return (
         <Stack spacing={3} sx={{ maxWidth: 820 }}>
@@ -154,14 +179,24 @@ export function RankingsImportScreen({ store }: { store: LocalPlannerStore }) {
 
             {!existing && (
                 <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-                    <TextField label="Title" value={title} onChange={(e) => {
+                    <TextField
+                        label="Title"
+                        value={title}
+                        onChange={(e) => {
                             setTitle(e.target.value);
                             invalidate();
-                        }} />
-                    <TextField select label="Rules" value={presetId} onChange={(e) => {
+                        }}
+                    />
+                    <TextField
+                        select
+                        label="Rules"
+                        value={presetId}
+                        onChange={(e) => {
                             setPresetId(e.target.value);
                             invalidate();
-                        }} sx={{ minWidth: 160 }}>
+                        }}
+                        sx={{ minWidth: 240 }}
+                    >
                         {PRESETS.map((p) => (
                             <MenuItem key={p.id} value={p.id}>
                                 {p.label}
@@ -185,8 +220,7 @@ export function RankingsImportScreen({ store }: { store: LocalPlannerStore }) {
                             setSeasonYear(Number(e.target.value) || defaultSeasonYear(new Date()));
                             invalidate();
                         }}
-                        size="small"
-                        sx={{ width: 150 }}
+                        sx={{ width: 160 }}
                     />
                     <Button onClick={() => scheduleFile.current?.click()} sx={{ minHeight: 44 }}>
                         Open saved page
@@ -245,10 +279,24 @@ export function RankingsImportScreen({ store }: { store: LocalPlannerStore }) {
                         {READ_SNAKE_LABEL}
                     </Button>
                 </Stack>
-                {snake && (
-                    <Alert severity={snake.teams.length ? "success" : "warning"}>
-                        {`${plural(snake.teams.length, "team")} with a starting bracket`}
+                {snake && snakeFit && draft && (
+                    <Alert severity={snakeFit.matched > 0 ? (withoutBracket.length > 0 ? "warning" : "success") : "warning"}>
+                        {`${snakeFit.matched} of ${plural(draft.teams.length, "schedule team")} got a starting bracket · ${plural(snakeFit.ignored, "chart team")} ${snakeFit.ignored === 1 ? "isn't" : "aren't"} in this schedule`}
                         {snake.unparsed.length > 0 ? ` · ${snake.unparsed.length} without a column: ${snake.unparsed.join(", ")}` : ""}
+                        {withoutBracket.length > 0 && (
+                            <>
+                                <Typography variant="body2" sx={{ mt: 1 }}>
+                                    {`Still without a starting bracket (${withoutBracket.length}):`}
+                                </Typography>
+                                <List dense aria-label="Teams without a starting bracket">
+                                    {withoutBracket.map((team) => (
+                                        <ListItem key={team.number} sx={{ py: 0 }}>
+                                            {`${team.number} ${team.name}`}
+                                        </ListItem>
+                                    ))}
+                                </List>
+                            </>
+                        )}
                     </Alert>
                 )}
             </Stack>
@@ -275,6 +323,21 @@ export function RankingsImportScreen({ store }: { store: LocalPlannerStore }) {
             )}
 
             {message && <Alert severity={message.severity}>{message.text}</Alert>}
+
+            {pendingOpen && (
+                <Alert severity="warning">
+                    <Typography sx={{ fontWeight: 700 }}>{REPLACE_CONFIRM_MESSAGE}</Typography>
+                    <Typography variant="body2">{`Opening "${pendingOpen.meta.title}" replaces "${existing?.meta.title ?? ""}" on this device. Export yours first if you want to keep a copy.`}</Typography>
+                    <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: "wrap", rowGap: 1 }}>
+                        <Button color="error" variant="outlined" onClick={() => void replaceWith(pendingOpen)} sx={{ minHeight: 44 }}>
+                            {REPLACE_LABEL}
+                        </Button>
+                        <Button onClick={() => setPendingOpen(null)} sx={{ minHeight: 44 }}>
+                            {KEEP_MINE_LABEL}
+                        </Button>
+                    </Stack>
+                </Alert>
+            )}
 
             <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
                 <Button variant="contained" size="large" onClick={() => void commit()} disabled={!draft || conflicts.length > 0} sx={{ minHeight: 44 }}>
