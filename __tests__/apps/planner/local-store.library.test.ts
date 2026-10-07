@@ -3,7 +3,8 @@ import { REPOS, addLibraryPlay, openHarness } from "./store-harness";
 import { createLibraryOps, dateFilterStart } from "@/apps/planner/src/store/library";
 import { STORAGE_FULL_MESSAGE, createStoreContext } from "@/apps/planner/src/store/shared";
 import { createMemoryRepo } from "@/apps/planner/src/store/memory-repo";
-import { LEGACY_SEEDED_STARTER_IDS, META_SEEDED_STARTER_IDS, META_STARTERS_SEEDED, type StoredPlay } from "@/apps/planner/src/store/records";
+import { LEGACY_SEEDED_STARTER_IDS, META_SEEDED_STARTER_IDS, META_STARTERS_SEEDED, META_THUMBNAIL_STYLE, type StoredPlay } from "@/apps/planner/src/store/records";
+import { THUMBNAIL_STYLE_VERSION } from "@/lib/utils/thumbnail-rules";
 import { LOCAL_TEAM_ID } from "@/apps/planner/src/config";
 import { STARTER_PLAYS } from "@/lib/data/starter-plays";
 import { PLAY_DATA_UNREADABLE_CODE, PLAY_DATA_UNREADABLE_MESSAGE, createEmptyPlayData } from "@/lib/utils/play-data";
@@ -31,6 +32,8 @@ describe.each(REPOS)("library (%s)", (_name, open) => {
         const library = createLibraryOps(createStoreContext(h.repo, { ...h.options, makeThumbnail }));
         const base = { description: null, isTemplate: true, sessionId: null, sourcePlayId: null, createdAt: h.clock.now, updatedAt: h.clock.now };
         await h.repo.write(async (tx) => {
+            // Thumbnails already in the current style: only the width decides here.
+            await tx.putMeta(META_THUMBNAIL_STYLE, THUMBNAIL_STYLE_VERSION);
             await tx.putPlay({ ...base, id: "old", name: "Old", thumbnail: pngOfWidth(300), playData: createEmptyPlayData() });
             await tx.putPlay({ ...base, id: "new", name: "New", thumbnail: pngOfWidth(600), playData: createEmptyPlayData() });
             await tx.putPlay({ ...base, id: "jpeg", name: "Jpeg", thumbnail: "data:image/jpeg;base64,/9j/4AAQ", playData: createEmptyPlayData() });
@@ -46,6 +49,34 @@ describe.each(REPOS)("library (%s)", (_name, open) => {
 
         expect(await library.refreshStoredThumbnails()).toBe(0);
         expect(makeThumbnail).toHaveBeenCalledTimes(1);
+    });
+
+    it("redraws every stored thumbnail once when the thumbnail style changes, even full-width ones", async () => {
+        const h = await openHarness(open);
+        const fresh = pngOfWidth(600) + "NEW";
+        const library = createLibraryOps(createStoreContext(h.repo, { ...h.options, makeThumbnail: () => fresh }));
+        await h.repo.write((tx) => tx.putPlay({ id: "styled", name: "Styled", description: null, thumbnail: pngOfWidth(600), playData: createEmptyPlayData(), isTemplate: true, sessionId: null, sourcePlayId: null, createdAt: h.clock.now, updatedAt: h.clock.now }));
+        expect(await library.refreshStoredThumbnails()).toBe(1);
+        expect((await h.repo.read((tx) => tx.getPlay("styled")))?.thumbnail).toBe(fresh);
+        expect(await h.repo.read((tx) => tx.getMeta(META_THUMBNAIL_STYLE))).toBe(THUMBNAIL_STYLE_VERSION);
+        expect(await library.refreshStoredThumbnails()).toBe(0);
+    });
+
+    it("waits for the diagram font only when there is something to draw", async () => {
+        const h = await openHarness(open);
+        const order: string[] = [];
+        const beforeStoredDraw = vi.fn(async () => { order.push("font"); });
+        const makeThumbnail = vi.fn(() => { order.push("draw"); return pngOfWidth(600); });
+        const library = createLibraryOps(createStoreContext(h.repo, { ...h.options, makeThumbnail, beforeStoredDraw }));
+        await h.repo.write((tx) => tx.putMeta(META_THUMBNAIL_STYLE, THUMBNAIL_STYLE_VERSION));
+        await library.refreshStoredThumbnails(); // nothing stored: nothing to draw
+        expect(beforeStoredDraw).not.toHaveBeenCalled();
+        await library.seedStarterDrills(); // starters to draw
+        expect(order[0]).toBe("font");
+        expect(order.filter((o) => o === "font")).toHaveLength(1);
+        order.length = 0;
+        await library.seedStarterDrills(); // already seeded
+        expect(order).toEqual([]);
     });
 
     it("keeps the old thumbnail when a new one can't be made", async () => {

@@ -12,11 +12,13 @@ async function boot(): Promise<void> {
     const container = document.getElementById("root");
     if (!container) throw new Error("index.html has no #root");
     const stale = createStaleSignal();
-    // Seeding and the thumbnail refresh store diagrams: wait for their font (at most 1.5 s).
-    await waitForDiagramFont();
     const { store, durable } = await openPlannerStore({
         stale,
-        storeOptions: { makeThumbnail: (playData) => generateThumbnail(playData, { pixelRatio: STORED_THUMBNAIL_PIXEL_RATIO }) },
+        storeOptions: {
+            makeThumbnail: (playData) => generateThumbnail(playData, { pixelRatio: STORED_THUMBNAIL_PIXEL_RATIO }),
+            // Only when seeding or the refresh has thumbnails to draw, so a normal open never waits.
+            beforeStoredDraw: waitForDiagramFont,
+        },
     });
     createRoot(container).render(
         <StrictMode>

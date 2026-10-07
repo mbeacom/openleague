@@ -504,6 +504,9 @@ function drawCenterCircle(ctx: CanvasRenderingContext2D, transform: TransformCon
 /**
  * Draws the faceoff circles
  */
+/** The gap between a faceoff circle's paired hash marks (5 ft 7 in). */
+const HASH_MARK_SPACING_FT = 5 + 7 / 12;
+
 function drawFaceoffCircles(ctx: CanvasRenderingContext2D, transform: TransformContext): void {
     const circleY1 = RINK_DIMENSIONS.height / 2 - FACEOFF_POSITIONING.circleOffsetY;
     const circleY2 = RINK_DIMENSIONS.height / 2 + FACEOFF_POSITIONING.circleOffsetY;
@@ -529,14 +532,18 @@ function drawFaceoffCircles(ctx: CanvasRenderingContext2D, transform: TransformC
         ctx.beginPath();
         ctx.arc(center.x, center.y, radius, 0, Math.PI * 2);
         ctx.stroke();
-        // Hash marks: two 2 ft marks on each side, 1.5 ft above and below the circle's center line.
+        // Hash marks: at the top and bottom of the circle (toward the side boards), two 2 ft marks
+        // parallel to the goal line, 5 ft 7 in apart, starting on the circle.
         const ft = transform.scaleX;
+        const half = HASH_MARK_SPACING_FT / 2;
+        const reach = Math.sqrt(CIRCLE_DIMENSIONS.faceoffCircleRadius ** 2 - half ** 2) * ft;
         for (const side of [-1, 1]) {
-            for (const dy of [-1.5, 1.5]) {
-                const x0 = center.x + side * radius;
+            for (const dx of [-half, half]) {
+                const x = center.x + dx * ft;
+                const y0 = center.y + side * reach;
                 ctx.beginPath();
-                ctx.moveTo(x0, center.y + dy * ft);
-                ctx.lineTo(x0 + side * 2 * ft, center.y + dy * ft);
+                ctx.moveTo(x, y0);
+                ctx.lineTo(x, y0 + side * 2 * ft);
                 ctx.stroke();
             }
         }

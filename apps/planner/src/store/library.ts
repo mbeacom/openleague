@@ -4,8 +4,8 @@ import { STARTER_PLAYS } from "@/lib/data/starter-plays";
 import { PLAY_DATA_UNREADABLE_CODE, PLAY_DATA_UNREADABLE_MESSAGE, parseStoredPlayData } from "@/lib/utils/play-data";
 import { drillTags, toPlayFocus, toPlayGoalies } from "@/lib/utils/drill-tags";
 import { matchesAgeGroup, toAgeGroups } from "@/lib/utils/age-groups";
-import { STORED_THUMBNAIL_MIN_WIDTH, thumbnailPixelWidth } from "@/lib/utils/thumbnail-rules";
-import { LEGACY_SEEDED_STARTER_IDS, META_SEEDED_STARTER_IDS, META_STARTERS_SEEDED, type RepoTx, type StoredPlay } from "./records";
+import { STORED_THUMBNAIL_MIN_WIDTH, THUMBNAIL_STYLE_VERSION, thumbnailPixelWidth } from "@/lib/utils/thumbnail-rules";
+import { LEGACY_SEEDED_STARTER_IDS, META_SEEDED_STARTER_IDS, META_STARTERS_SEEDED, META_THUMBNAIL_STYLE, type RepoTx, type StoredPlay } from "./records";
 import {
     OWNED_DRILL_DELETE_MESSAGE,
     PLAY_NOT_FOUND_MESSAGE,
@@ -152,11 +152,14 @@ export function createLibraryOps(ctx: StoreContext): LibraryOps {
             }),
 
         refreshStoredThumbnails: async () => {
-            const plays = await ctx.repo.read((tx) => tx.allPlays());
+            const [plays, style] = await ctx.repo.read(async (tx) => [await tx.allPlays(), await tx.getMeta(META_THUMBNAIL_STYLE)] as const);
+            // Every stored thumbnail is redrawn once when the renderer's look changes; otherwise only pre-2× ones.
+            const restyle = style !== THUMBNAIL_STYLE_VERSION;
             const stale = plays.filter((play) => {
                 const width = play.thumbnail ? thumbnailPixelWidth(play.thumbnail) : null;
-                return width !== null && width < STORED_THUMBNAIL_MIN_WIDTH;
+                return width !== null && (restyle || width < STORED_THUMBNAIL_MIN_WIDTH);
             });
+            if (stale.length > 0) await ctx.beforeStoredDraw();
             // Thumbnails first: nothing but repo calls may be awaited inside a transaction.
             const replacements = new Map<string, string>();
             for (const play of stale) {
@@ -165,13 +168,14 @@ export function createLibraryOps(ctx: StoreContext): LibraryOps {
                 const thumbnail = thumbnailOrNull(ctx.makeThumbnail(parsed.data));
                 if (thumbnail) replacements.set(play.id, thumbnail);
             }
-            if (replacements.size === 0) return 0;
+            if (replacements.size === 0 && !restyle) return 0;
             // Not a user write (ctx.repo.write, not write): no persistence prompt, and updatedAt stays.
             await ctx.repo.write(async (tx) => {
                 for (const play of await tx.allPlays()) {
                     const thumbnail = replacements.get(play.id);
                     if (thumbnail) await tx.putPlay({ ...play, thumbnail });
                 }
+                if (restyle) await tx.putMeta(META_THUMBNAIL_STYLE, THUMBNAIL_STYLE_VERSION);
             });
             return replacements.size;
         },
@@ -179,6 +183,7 @@ export function createLibraryOps(ctx: StoreContext): LibraryOps {
         seedStarterDrills: async () => {
             const pending = unseeded(await ctx.repo.read(readSeeded));
             if (pending.length === 0) return;
+            await ctx.beforeStoredDraw();
             // Thumbnails first: nothing but repo calls may be awaited inside a transaction.
             const thumbnails = new Map(pending.map((starter) => [starter.id, ctx.makeThumbnail(starter.playData)]));
             // Not a user write (ctx.repo.write, not write): no persistence prompt at first load.

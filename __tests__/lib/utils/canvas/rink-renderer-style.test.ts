@@ -53,14 +53,25 @@ describe("playbook rink (spec §3)", () => {
         expect(calls.some((c) => c.name === "stroke" && c.state.strokeStyle === DIAGRAM_THEME.iceEdgeShadow)).toBe(true);
     });
 
-    it("adds hash marks to the four end-zone faceoff circles", () => {
+    it("adds hash marks where hockey has them: top and bottom of each end-zone circle, toward the side boards", () => {
         const { ctx, calls } = recordingCtx(false);
         drawRink(ctx, board, { cache: false });
-        // Two marks on each side of each circle: 4 circles × 2 sides × 2 marks, each 2 ft (7.6 px here) and horizontal.
-        const hashes = calls.filter((c, i) => c.name === "moveTo" && c.state.strokeStyle === DIAGRAM_THEME.redLine && calls[i + 1]?.name === "lineTo"
-            && Math.abs((calls[i + 1].args[1] as number) - (c.args[1] as number)) < 1e-9
-            && Math.abs(Math.abs((calls[i + 1].args[0] as number) - (c.args[0] as number)) - 2 * 3.8) < 1e-9);
-        expect(hashes.length).toBe(16);
+        const ft = board.scaleX;
+        // 2 ft marks parallel to the goal line (vertical here), sticking out from the circle toward the boards.
+        const hashes = calls.flatMap((c, i) => {
+            const next = calls[i + 1];
+            if (c.name !== "moveTo" || c.state.strokeStyle !== DIAGRAM_THEME.redLine || next?.name !== "lineTo") return [];
+            const [x0, y0] = c.args as number[];
+            const [x1, y1] = next.args as number[];
+            return Math.abs(x1 - x0) < 1e-9 && Math.abs(Math.abs(y1 - y0) - 2 * ft) < 1e-9 ? [{ x0, y0, y1 }] : [];
+        });
+        expect(hashes).toHaveLength(16); // 4 circles × top and bottom × 2 marks
+        for (const h of hashes) {
+            // Each points away from its circle's center line, toward the nearer side boards.
+            const centerY = h.y0 < board.offsetY + 42.5 * ft ? 20.5 : 64.5;
+            const cy = board.offsetY + centerY * ft;
+            expect(Math.sign(h.y1 - h.y0)).toBe(Math.sign(h.y0 - cy));
+        }
     });
 
     it("fills the creases light blue", () => {
