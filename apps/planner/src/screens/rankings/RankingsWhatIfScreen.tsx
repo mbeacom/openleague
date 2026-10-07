@@ -1,4 +1,3 @@
-
 /**
  * What-if (static rankings spec): scores typed for unplayed or hypothetical
  * games re-run everything in memory; a sweep shows the chosen team's level and
@@ -7,7 +6,8 @@
  */
 import { useMemo, useRef, useState } from "react";
 import { Alert, Box, Button, List, ListItem, MenuItem, Paper, Stack, TextField, Typography } from "@mui/material";
-import { composite, marginSweep, whatIf, SWEEP_OTHER_GOALS, type RatingGame } from "@/lib/ratings";
+import { composite, marginSweep, whatIf, SWEEP_OTHER_GOALS, type RatingGame, type RatingMethod, type RatingTeam } from "@/lib/ratings";
+import type { ActionResult } from "@/lib/planner-store";
 import { toRatingInputs, type RankingsDocument, type RankingsGame } from "@/lib/rankings-document";
 import type { LocalPlannerStore } from "../../store/types";
 import { RankingsStatus, formatRating } from "./display";
@@ -27,15 +27,42 @@ interface Fixture {
     gameIndex: number | null;
 }
 
+const parseGames = (key: string): RatingGame[] => JSON.parse(key) as RatingGame[];
+
 const goals = (text: string | undefined): number | null => (text !== undefined && /^\d{1,2}$/.test(text.trim()) ? Number(text) : null);
 
-function WhatIf({ doc, save }: { doc: RankingsDocument; save: (doc: RankingsDocument) => Promise<unknown> }) {
+function enteredGame(f: Fixture, scores: Record<string, { home?: string; away?: string }>): RatingGame | null {
+    const s = scores[f.id];
+    const h = goals(s?.home);
+    const a = goals(s?.away);
+    return h === null || a === null ? null : { home: f.home, away: f.away, homeGoals: h, awayGoals: a };
+}
+
+const keyOfEntered = (fixtures: readonly Fixture[], scores: Record<string, { home?: string; away?: string }>, skipId?: string): string =>
+    JSON.stringify(fixtures.filter((f) => f.id !== skipId).map((f) => enteredGame(f, scores)).filter((g) => g !== null));
+
+// Keyed on serialized scores so typing in the swept fixture's own fields never recomputes the sweep.
+function useAfter(games: readonly RatingGame[], teams: readonly RatingTeam[], method: RatingMethod, hypotheticalsKey: string) {
+    return useMemo(() => whatIf(games, parseGames(hypotheticalsKey), teams, method), [games, teams, method, hypotheticalsKey]);
+}
+
+function useSweep(games: readonly RatingGame[], teams: readonly RatingTeam[], method: RatingMethod, team: string, fixture: { home: string; away: string } | null, otherKey: string) {
+    const home = fixture?.home;
+    const away = fixture?.away;
+    return useMemo(
+        () => (home !== undefined && away !== undefined ? marginSweep([...games, ...parseGames(otherKey)], { home, away }, team, teams, method) : []),
+        [games, teams, method, team, home, away, otherKey],
+    );
+}
+
+function WhatIf({ doc, save }: { doc: RankingsDocument; save: (doc: RankingsDocument) => Promise<ActionResult<RankingsDocument>> }) {
     const [team, setTeam] = useState(doc.myTeam ?? doc.teams[0]?.number ?? "");
     const [scores, setScores] = useState<Record<string, { home?: string; away?: string }>>({});
     const [extra, setExtra] = useState<Fixture[]>([]);
     const [opponent, setOpponent] = useState("");
     const [sweepId, setSweepId] = useState<string | null>(null);
     const nextId = useRef(0);
+    const [saveError, setSaveError] = useState<string | null>(null);
     const names = new Map(doc.teams.map((t) => [t.number, t.name]));
     const name = (number: string) => names.get(number) ?? number;
     const { games, teams } = useMemo(() => toRatingInputs(doc), [doc]);
@@ -56,21 +83,26 @@ function WhatIf({ doc, save }: { doc: RankingsDocument; save: (doc: RankingsDocu
     };
     const hypotheticals = fixtures.map(entered).filter((g): g is RatingGame => g !== null);
     const before = useMemo(() => composite(games, teams, doc.method), [games, teams, doc.method]);
-    const after = whatIf(games, hypotheticals, teams, doc.method);
-    const mineBefore = before.byNumber.get(team);
+    const hypotheticalsKey = keyOfEntered(fixtures, scores);
+    const after = useAfter(games, teams, doc.method, hypotheticalsKey);    const mineBefore = before.byNumber.get(team);
     const mineAfter = after.byNumber.get(team);
     const movers = after.ranked.filter((row) => before.byNumber.get(row.number)?.rank !== row.rank);
 
     const sweepFixture = fixtures.find((f) => f.id === sweepId) ?? fixtures[0];
-    const otherEntered = sweepFixture ? fixtures.filter((f) => f.id !== sweepFixture.id).map(entered).filter((g): g is RatingGame => g !== null) : [];
-    const sweep = sweepFixture ? marginSweep([...games, ...otherEntered], sweepFixture, team, teams, doc.method) : [];
+    const otherKey = keyOfEntered(fixtures, scores, sweepFixture?.id);
+    const sweep = useSweep(games, teams, doc.method, team, sweepFixture ? { home: sweepFixture.home, away: sweepFixture.away } : null, otherKey);
 
     const record = async (f: Fixture) => {
         const game = entered(f);
         if (!game || f.gameIndex === null) return;
         const updated: RankingsGame = { ...doc.games[f.gameIndex], homeGoals: game.homeGoals, awayGoals: game.awayGoals, status: "final" };
-        await save({ ...doc, games: doc.games.map((g, i) => (i === f.gameIndex ? updated : g)) });
-        setScores((s) => ({ ...s, [f.id]: {} }));
+        const result = await save({ ...doc, games: doc.games.map((g, i) => (i === f.gameIndex ? updated : g)) });
+        if (result.success) {
+            setSaveError(null);
+            setScores((s) => ({ ...s, [f.id]: {} }));
+        } else {
+            setSaveError(result.error);
+        }
     };
 
     return (
@@ -86,6 +118,7 @@ function WhatIf({ doc, save }: { doc: RankingsDocument; save: (doc: RankingsDocu
                 ))}
             </TextField>
 
+            {saveError && <Alert severity="error">{saveError}</Alert>}
             {fixtures.length === 0 && <Alert severity="info">No unplayed games for this team. Add a hypothetical one below.</Alert>}
             {fixtures.map((f) => {
                 const valid = entered(f) !== null;
@@ -97,7 +130,6 @@ function WhatIf({ doc, save }: { doc: RankingsDocument; save: (doc: RankingsDocu
                                 label={`${name(f.home)} goals`}
                                 value={scores[f.id]?.home ?? ""}
                                 onChange={(e) => setScores((s) => ({ ...s, [f.id]: { ...s[f.id], home: e.target.value } }))}
-                                size="small"
                                 slotProps={{ htmlInput: { inputMode: "numeric" } }}
                                 sx={{ width: 150 }}
                             />
@@ -105,7 +137,6 @@ function WhatIf({ doc, save }: { doc: RankingsDocument; save: (doc: RankingsDocu
                                 label={`${name(f.away)} goals`}
                                 value={scores[f.id]?.away ?? ""}
                                 onChange={(e) => setScores((s) => ({ ...s, [f.id]: { ...s[f.id], away: e.target.value } }))}
-                                size="small"
                                 slotProps={{ htmlInput: { inputMode: "numeric" } }}
                                 sx={{ width: 150 }}
                             />
@@ -127,7 +158,7 @@ function WhatIf({ doc, save }: { doc: RankingsDocument; save: (doc: RankingsDocu
             })}
 
             <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap", rowGap: 1 }}>
-                <TextField select label="Opponent" value={opponent} onChange={(e) => setOpponent(e.target.value)} size="small" sx={{ minWidth: 200 }}>
+                <TextField select label="Opponent" value={opponent} onChange={(e) => setOpponent(e.target.value)} sx={{ minWidth: 200 }}>
                     {doc.teams
                         .filter((t) => t.number !== team)
                         .map((t) => (
@@ -157,7 +188,7 @@ function WhatIf({ doc, save }: { doc: RankingsDocument; save: (doc: RankingsDocu
 
             {sweepFixture && (
                 <Stack spacing={1}>
-                    <Typography component="h2" variant="h6" id="sweep-heading">
+                    <Typography component="h2" variant="h6">
                         {SWEEP_HEADING}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
