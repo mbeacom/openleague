@@ -5,9 +5,10 @@
 import type { EquipmentItem, PlayerIcon, PlayerRole, Position } from "@/types/practice-planner";
 import { BOARD_COLORS } from "./notation";
 import { MIN_LINE_PX } from "./scale";
+import { DIAGRAM_THEME } from "./diagram-theme";
 
-const SELECTION_COLOR = "#FFD700";
-const FONT_FAMILY = `"Source Sans 3", system-ui, sans-serif`;
+const SELECTION_COLOR = DIAGRAM_THEME.selection;
+const FONT_FAMILY = DIAGRAM_THEME.labelFont;
 
 /** An outline: a fraction of the radius, never below `floorPx` on the reference board (× scale) or 1 px. */
 const outline = (r: number, fraction: number, floorPx: number, scale: number) => Math.max(r * fraction, floorPx * scale, MIN_LINE_PX);
@@ -24,7 +25,7 @@ export const PLAYER_GLYPH_SHAPE: Record<PlayerRole, "disc" | "ring" | "goalie" |
 function contrastText(hex: string): string {
     const n = parseInt(hex.slice(1), 16);
     const lum = (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
-    return lum > 0.6 ? BOARD_COLORS.ink : "#FFFFFF";
+    return lum > 0.6 ? DIAGRAM_THEME.labelOnLight : DIAGRAM_THEME.labelOnDark;
 }
 
 function selectionRing(ctx: CanvasRenderingContext2D, c: Position, r: number) {
@@ -82,7 +83,7 @@ export function drawPlayerGlyph(
             }
             break;
         case "ring":
-            ctx.fillStyle = "#FFFFFF";
+            ctx.fillStyle = DIAGRAM_THEME.ringFill;
             ctx.strokeStyle = player.color;
             ctx.lineWidth = outline(r, 0.22, 2, scale);
             ctx.beginPath();
@@ -142,7 +143,7 @@ export function drawEquipmentGlyph(
         case "cone":
         case "pylon": {
             const w = item.kind === "cone" ? r : r * 0.6;
-            ctx.fillStyle = "#F57C00";
+            ctx.fillStyle = DIAGRAM_THEME.cone;
             ctx.beginPath();
             ctx.moveTo(c.x, c.y - r);
             ctx.lineTo(c.x + w, c.y + r * 0.8);
@@ -162,7 +163,7 @@ export function drawEquipmentGlyph(
             ctx.save();
             ctx.translate(c.x, c.y);
             ctx.rotate((item.rotation * Math.PI) / 180);
-            ctx.strokeStyle = BOARD_COLORS.penaltyRed;
+            ctx.strokeStyle = DIAGRAM_THEME.net;
             ctx.beginPath();
             ctx.moveTo(-r * 0.4, -r);
             ctx.lineTo(r * 0.4, -r);

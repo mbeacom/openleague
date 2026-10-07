@@ -25,6 +25,7 @@ import { EQUIPMENT_RADIUS_FT, MIN_GLYPH_RADIUS_PX, PLAYER_RADIUS_FT, glyphRadius
 import { BOARD_COLORS } from "./notation";
 import { MIN_LINE_PX, REFERENCE_PX_PER_FT, refPx } from "./scale";
 import type { LineHandle, SnapTarget } from "./line-editing";
+import { DIAGRAM_THEME } from "./diagram-theme";
 
 /** The shortest arrowhead drawn, so a tiny diagram's arrows still read as arrows. */
 export const ARROW_MIN_PX = 4;
@@ -49,7 +50,7 @@ export function boardStrokeFloors(zoom: number): StrokeFloors {
 /**
  * Visual constants for drawing
  */
-const SELECTION_COLOR = "#FFD700"; // Gold highlight for selected elements
+const SELECTION_COLOR = DIAGRAM_THEME.selection;
 
 /**
  * Draws a stroke by hockey action (pattern), path style and end cap.
@@ -231,14 +232,14 @@ export function drawTextAnnotation(
     const scaledFontSize = annotation.fontSize * Math.min(transform.scaleX, transform.scaleY);
 
     // Measure text for background
-    ctx.font = `${scaledFontSize}px Arial`;
+    ctx.font = `${scaledFontSize}px ${DIAGRAM_THEME.noteFont}`;
     const metrics = ctx.measureText(annotation.text);
     const textWidth = metrics.width;
     const textHeight = scaledFontSize;
 
     // Draw selection highlight if selected
     if (isSelected) {
-        ctx.fillStyle = "rgba(255, 215, 0, 0.3)"; // Gold with transparency
+        ctx.fillStyle = DIAGRAM_THEME.selectionFill;
         ctx.fillRect(
             canvasPos.x - selectPad,
             canvasPos.y - textHeight - selectPad,
@@ -248,12 +249,12 @@ export function drawTextAnnotation(
     }
 
     // Draw semi-transparent background for readability
-    ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
+    ctx.fillStyle = DIAGRAM_THEME.noteChip;
     ctx.fillRect(canvasPos.x - pad, canvasPos.y - textHeight - pad, textWidth + 2 * pad, textHeight + 2 * pad);
 
     // Draw text
     ctx.fillStyle = annotation.color;
-    ctx.font = `${scaledFontSize}px Arial`;
+    ctx.font = `${scaledFontSize}px ${DIAGRAM_THEME.noteFont}`;
     ctx.textAlign = "left";
     ctx.textBaseline = "top";
     ctx.fillText(annotation.text, canvasPos.x, canvasPos.y - textHeight);
@@ -355,7 +356,7 @@ const SNAP_RING_GAP_PX = 5;
 /** How far a glyph's outline reaches past its radius, as a share of it: half the widest outline (a ring player's, 0.22 r). */
 const GLYPH_OUTLINE_OUTSET = 0.11;
 /** The halo under the snap ring: white, as the handles' fill (LINE_EDIT_COLORS.handleFill) */
-const SNAP_RING_HALO = "#FFFFFF";
+const SNAP_RING_HALO = DIAGRAM_THEME.snapRingHalo;
 
 /**
  * Rings a snap target while a line end is snapping (line editing R4): outside
@@ -411,7 +412,7 @@ export function drawAllElements(
 }
 
 /** Ink (#212121) at 35%: shades the ice outside a drill's area. */
-const AREA_MASK_FILL = "rgba(33, 33, 33, 0.35)";
+const AREA_MASK_FILL = DIAGRAM_THEME.areaMask;
 const AREA_OUTLINE_DASH = [8, 6];
 const AREA_OUTLINE_WIDTH = 2;
 

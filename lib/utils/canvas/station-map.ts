@@ -13,6 +13,7 @@ import { drawRink, rinkToCanvas, type TransformContext } from "./rink-renderer";
 import { drawAllElements } from "./drawing-utils";
 import { THUMBNAIL_MIN_GLYPH_RADIUS_PX } from "./glyph-metrics";
 import { BOARD_COLORS } from "./notation";
+import { DIAGRAM_THEME } from "./diagram-theme";
 
 export interface StationMapStation {
     /** The drill's name, shown in the station's label. */
@@ -21,11 +22,11 @@ export interface StationMapStation {
     playData: PlayData | null;
 }
 
-const LABEL_FONT = "700 14px sans-serif";
-const MESSAGE_FONT = "400 12px sans-serif";
+const LABEL_FONT = `700 14px ${DIAGRAM_THEME.uiFont}`;
+const MESSAGE_FONT = `400 12px ${DIAGRAM_THEME.uiFont}`;
 const LABEL_INSET_PX = 6;
 const LABEL_LINE_PX = 18;
-const LABEL_BACKING = "rgba(255, 255, 255, 0.85)";
+const LABEL_BACKING = DIAGRAM_THEME.stationLabelBacking;
 const OUTLINE_PX = 2;
 const ACTIVE_OUTLINE_PX = 4;
 const OUTLINE_DASH = [8, 6];
