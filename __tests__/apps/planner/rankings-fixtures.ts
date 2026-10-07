@@ -21,7 +21,7 @@ export function sampleRankingsDoc(overrides: Partial<RankingsDocument> = {}): Ra
             { date: "2026-09-22", time: "09:00", home: "901", away: "903", homeGoals: 12, awayGoals: 0, status: "final", rink: null },
             { date: "2026-09-23", time: "09:00", home: "904", away: "903", homeGoals: 2, awayGoals: 2, status: "final", rink: null },
             { date: "2026-09-24", time: "09:00", home: "902", away: "904", homeGoals: 3, awayGoals: 2, status: "final", rink: null },
-            { date: "2026-10-12", time: "08:00", home: "903", away: "904", homeGoals: null, awayGoals: null, status: "scheduled", rink: "The Pond" },
+            { date: "2026-10-12", time: "08:00", home: "903", away: "904", homeGoals: null, awayGoals: null, status: "scheduled", rink: "Rink B" },
         ],
         myTeam: "903",
         ...overrides,

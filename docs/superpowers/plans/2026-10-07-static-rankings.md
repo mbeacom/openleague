@@ -943,9 +943,9 @@ import { defaultSeasonYear, htmlToText, parseSchedule } from "@/lib/ratings/impo
 const PAGE_TEXT = [
     "Schedule", "Home", "Score", "Away", "Location",
     "9/20", "9:25am", "901 Riverside M1", "11", "-", "4", "902 Lakeview M2", "North Rink",
-    "9/26", "3:40pm", "903 Hilltop M1", "4 - 9", "901 Riverside M1", "Center Ice",
-    "9/26", "4:30pm", "902 Lakeview M2", "6", "-", "5", "903 Hilltop M1", "Center Ice",
-    "10/12", "8:00am", "901 Riverside M1", "vs", "903 Hilltop M1", "The Pond",
+    "9/26", "3:40pm", "903 Hilltop M1", "4 - 9", "901 Riverside M1", "Rink A",
+    "9/26", "4:30pm", "902 Lakeview M2", "6", "-", "5", "903 Hilltop M1", "Rink A",
+    "10/12", "8:00am", "901 Riverside M1", "vs", "903 Hilltop M1", "Rink B",
     "10/12", "12:30pm", "902 Lakeview M2", "903 Hilltop M1",
     "904 Orphan Team",
 ].join("\n");
@@ -955,9 +955,9 @@ describe("parseSchedule", () => {
         const result = parseSchedule(PAGE_TEXT, { seasonYear: 2026 });
         expect(result.games).toEqual([
             { date: "2026-09-20", time: "09:25", home: "901", away: "902", homeGoals: 11, awayGoals: 4, rink: "North Rink" },
-            { date: "2026-09-26", time: "15:40", home: "903", away: "901", homeGoals: 4, awayGoals: 9, rink: "Center Ice" },
-            { date: "2026-09-26", time: "16:30", home: "902", away: "903", homeGoals: 6, awayGoals: 5, rink: "Center Ice" },
-            { date: "2026-10-12", time: "08:00", home: "901", away: "903", homeGoals: null, awayGoals: null, rink: "The Pond" },
+            { date: "2026-09-26", time: "15:40", home: "903", away: "901", homeGoals: 4, awayGoals: 9, rink: "Rink A" },
+            { date: "2026-09-26", time: "16:30", home: "902", away: "903", homeGoals: 6, awayGoals: 5, rink: "Rink A" },
+            { date: "2026-10-12", time: "08:00", home: "901", away: "903", homeGoals: null, awayGoals: null, rink: "Rink B" },
             { date: "2026-10-12", time: "12:30", home: "902", away: "903", homeGoals: null, awayGoals: null, rink: null },
         ]);
         expect(result.teams).toEqual([
@@ -969,7 +969,7 @@ describe("parseSchedule", () => {
     });
 
     it("reads tab-separated rows and combined date and time cells", () => {
-        const result = parseSchedule("9/26 3:40pm\t903 Hilltop M1\t4 - 9\t901 Riverside M1\tCenter Ice", { seasonYear: 2026 });
+        const result = parseSchedule("9/26 3:40pm\t903 Hilltop M1\t4 - 9\t901 Riverside M1\tRink A", { seasonYear: 2026 });
         expect(result.games).toHaveLength(1);
         expect(result.games[0]).toMatchObject({ date: "2026-09-26", time: "15:40", homeGoals: 4, awayGoals: 9 });
     });
@@ -2582,7 +2582,7 @@ export function sampleRankingsDoc(overrides: Partial<RankingsDocument> = {}): Ra
             { date: "2026-09-22", time: "09:00", home: "901", away: "903", homeGoals: 12, awayGoals: 0, status: "final", rink: null },
             { date: "2026-09-23", time: "09:00", home: "904", away: "903", homeGoals: 2, awayGoals: 2, status: "final", rink: null },
             { date: "2026-09-24", time: "09:00", home: "902", away: "904", homeGoals: 3, awayGoals: 2, status: "final", rink: null },
-            { date: "2026-10-12", time: "08:00", home: "903", away: "904", homeGoals: null, awayGoals: null, status: "scheduled", rink: "The Pond" },
+            { date: "2026-10-12", time: "08:00", home: "903", away: "904", homeGoals: null, awayGoals: null, status: "scheduled", rink: "Rink B" },
         ],
         myTeam: "903",
         ...overrides,
