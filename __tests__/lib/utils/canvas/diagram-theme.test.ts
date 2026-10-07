@@ -17,6 +17,11 @@ describe("diagram theme", () => {
         expect(code(file).match(/#[0-9a-fA-F]{3,8}\b|rgba?\(/g) ?? []).toEqual([]);
     });
 
+    it.each(RENDERER_FILES)("%s reads palette colors through the theme, not BOARD_COLORS directly", (file) => {
+        // Role colors still come from ROLE_DEFAULT_COLORS or the play's stored colors.
+        expect(code(file).match(/BOARD_COLORS\./g) ?? []).toEqual([]);
+    });
+
     it.each(RENDERER_FILES)("%s takes its fonts from the theme", (file) => {
         expect(code(file).match(/"Source Sans 3"|\bArial\b|sans-serif/g) ?? []).toEqual([]);
     });

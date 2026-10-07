@@ -12,7 +12,6 @@ import { PLAY_DATA_UNREADABLE_MESSAGE } from "@/lib/utils/play-data";
 import { drawRink, rinkToCanvas, type TransformContext } from "./rink-renderer";
 import { drawAllElements } from "./drawing-utils";
 import { THUMBNAIL_MIN_GLYPH_RADIUS_PX } from "./glyph-metrics";
-import { BOARD_COLORS } from "./notation";
 import { DIAGRAM_THEME } from "./diagram-theme";
 import { diagramFont } from "./diagram-fonts";
 
@@ -85,7 +84,7 @@ export function drawStationMap(
 
     const outline = (topLeft: { x: number; y: number }, width: number, height: number, active: boolean) => {
         ctx.save();
-        ctx.strokeStyle = active ? BOARD_COLORS.actionBlue : BOARD_COLORS.ink;
+        ctx.strokeStyle = active ? DIAGRAM_THEME.accent : DIAGRAM_THEME.ink;
         ctx.lineWidth = active ? ACTIVE_OUTLINE_PX : OUTLINE_PX;
         ctx.setLineDash(active ? [] : OUTLINE_DASH);
         ctx.strokeRect(topLeft.x, topLeft.y, width, height);
@@ -110,7 +109,7 @@ export function drawStationMap(
         ctx.restore();
 
         const active = i === activeIndex;
-        const color = active ? BOARD_COLORS.actionBlue : BOARD_COLORS.ink;
+        const color = active ? DIAGRAM_THEME.accent : DIAGRAM_THEME.ink;
         const label = stationLabel(i + 1, station.name);
         ctx.font = LABEL_FONT;
         let labelWidth = ctx.measureText(label).width;

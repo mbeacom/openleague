@@ -22,7 +22,6 @@ import { FULL_RINK, TransformContext, drawRink, rinkToCanvas } from "./rink-rend
 import { buildStrokeGeometry, strokeCenterline, type StrokeGeometry } from "./stroke-geometry";
 import { drawPlayerGlyph, drawEquipmentGlyph } from "./glyphs";
 import { EQUIPMENT_RADIUS_FT, MIN_GLYPH_RADIUS_PX, PLAYER_RADIUS_FT, glyphRadiusPx } from "./glyph-metrics";
-import { BOARD_COLORS } from "./notation";
 import { MIN_LINE_PX, REFERENCE_PX_PER_FT, refPx } from "./scale";
 import type { LineHandle, SnapTarget } from "./line-editing";
 import { DIAGRAM_THEME } from "./diagram-theme";
@@ -453,7 +452,7 @@ export function drawAreaMask(
     ctx.rect(rinkTopLeft.x, rinkTopLeft.y, rinkBottomRight.x - rinkTopLeft.x, rinkBottomRight.y - rinkTopLeft.y);
     ctx.rect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
     ctx.fill("evenodd");
-    ctx.strokeStyle = BOARD_COLORS.actionBlue;
+    ctx.strokeStyle = DIAGRAM_THEME.accent;
     ctx.lineWidth = AREA_OUTLINE_WIDTH / zoom;
     ctx.setLineDash(AREA_OUTLINE_DASH.map((d) => d / zoom));
     ctx.strokeRect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);

@@ -3,7 +3,6 @@
  * Callers convert rink feet to canvas px; these draw at a center + radius.
  */
 import type { EquipmentItem, PlayerIcon, PlayerRole, Position } from "@/types/practice-planner";
-import { BOARD_COLORS } from "./notation";
 import { MIN_LINE_PX } from "./scale";
 import { DIAGRAM_THEME } from "./diagram-theme";
 import { diagramFont } from "./diagram-fonts";
@@ -86,7 +85,7 @@ export function drawPlayerGlyph(
         case "disc":
         case "goalie":
             ctx.fillStyle = player.color;
-            ctx.strokeStyle = BOARD_COLORS.ink;
+            ctx.strokeStyle = DIAGRAM_THEME.ink;
             ctx.beginPath();
             ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
             ctx.fill();
@@ -117,7 +116,7 @@ export function drawPlayerGlyph(
             break;
         case "triangle":
             ctx.fillStyle = player.color;
-            ctx.strokeStyle = BOARD_COLORS.ink;
+            ctx.strokeStyle = DIAGRAM_THEME.ink;
             ctx.beginPath();
             ctx.moveTo(c.x, c.y - r * 1.1);
             ctx.lineTo(c.x + r, c.y + r * 0.75);
@@ -146,11 +145,11 @@ export function drawEquipmentGlyph(
 ): void {
     if (isSelected) selectionRing(ctx, c, r);
     ctx.lineWidth = outline(r, 0.15, 1.5, scale);
-    ctx.strokeStyle = BOARD_COLORS.ink;
+    ctx.strokeStyle = DIAGRAM_THEME.ink;
 
     switch (item.kind) {
         case "puck":
-            ctx.fillStyle = BOARD_COLORS.ink;
+            ctx.fillStyle = DIAGRAM_THEME.ink;
             ctx.beginPath();
             ctx.arc(c.x, c.y, r * 0.6, 0, Math.PI * 2);
             ctx.fill();
@@ -159,7 +158,7 @@ export function drawEquipmentGlyph(
             ctx.stroke();
             break;
         case "puckPile":
-            ctx.fillStyle = BOARD_COLORS.ink;
+            ctx.fillStyle = DIAGRAM_THEME.ink;
             for (const [dx, dy] of [[-0.4, 0.25], [0.4, 0.25], [0, -0.35]]) {
                 ctx.beginPath();
                 ctx.arc(c.x + dx * r, c.y + dy * r, r * 0.38, 0, Math.PI * 2);

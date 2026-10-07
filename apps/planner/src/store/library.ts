@@ -157,7 +157,8 @@ export function createLibraryOps(ctx: StoreContext): LibraryOps {
             const restyle = style !== THUMBNAIL_STYLE_VERSION;
             const stale = plays.filter((play) => {
                 const width = play.thumbnail ? thumbnailPixelWidth(play.thumbnail) : null;
-                return width !== null && (restyle || width < STORED_THUMBNAIL_MIN_WIDTH);
+                // A style change redraws every stored thumbnail, whatever its format; otherwise only pre-2× PNGs.
+                return Boolean(play.thumbnail) && (restyle || (width !== null && width < STORED_THUMBNAIL_MIN_WIDTH));
             });
             if (stale.length > 0) await ctx.beforeStoredDraw();
             // Thumbnails first: nothing but repo calls may be awaited inside a transaction.

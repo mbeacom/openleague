@@ -20,8 +20,10 @@ export const DIAGRAM_THEME = {
     redLine: "#C8102E",
     blueLine: BOARD_COLORS.leagueBlue,
     creaseFill: "rgba(155, 198, 232, 0.6)",
-    /** Ink for pucks, outlines and the default text color */
+    /** Ink for pucks, outlines, legend strokes and inactive station outlines */
     ink: BOARD_COLORS.ink,
+    /** The accent for a drill's area outline and the active station */
+    accent: BOARD_COLORS.actionBlue,
     /** Shading over ice outside a drill's area */
     areaMask: "rgba(33, 33, 33, 0.22)",
     selection: "#FFD700",

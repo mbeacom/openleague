@@ -62,6 +62,15 @@ describe.each(REPOS)("library (%s)", (_name, open) => {
         expect(await library.refreshStoredThumbnails()).toBe(0);
     });
 
+    it("redraws every stored thumbnail on a style change, whatever its format", async () => {
+        const h = await openHarness(open);
+        const fresh = pngOfWidth(600);
+        const library = createLibraryOps(createStoreContext(h.repo, { ...h.options, makeThumbnail: () => fresh }));
+        await h.repo.write((tx) => tx.putPlay({ id: "jpeg", name: "Jpeg", description: null, thumbnail: "data:image/jpeg;base64,/9j/4AAQ", playData: createEmptyPlayData(), isTemplate: true, sessionId: null, sourcePlayId: null, createdAt: h.clock.now, updatedAt: h.clock.now }));
+        expect(await library.refreshStoredThumbnails()).toBe(1);
+        expect((await h.repo.read((tx) => tx.getPlay("jpeg")))?.thumbnail).toBe(fresh);
+    });
+
     it("waits for the diagram font only when there is something to draw", async () => {
         const h = await openHarness(open);
         const order: string[] = [];
