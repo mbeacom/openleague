@@ -153,6 +153,41 @@ export function rowOffset(row: number): number {
     return row === 0 ? 0 : row % 2 === 1 ? -(row + 1) / 2 : row / 2;
 }
 
+/**
+ * The point nearest (px, py) within `maxDistance`, or null. The chart resolves
+ * every pointer through this instead of per-dot hit circles, so neighbouring
+ * dots never share a tap target and each still gets a 44px-wide reach.
+ * Ties keep the earlier point.
+ */
+export function nearestPoint<T extends { x: number; y: number }>(points: readonly T[], px: number, py: number, maxDistance: number): T | null {
+    let best: T | null = null;
+    let bestDistance = maxDistance;
+    for (const point of points) {
+        const distance = Math.hypot(point.x - px, point.y - py);
+        if (distance < bestDistance || (distance === bestDistance && best === null)) {
+            best = point;
+            bestDistance = distance;
+        }
+    }
+    return best;
+}
+
+/** A conservative average advance for a 12px semibold label, so labels can be fitted without measuring text. */
+export const LABEL_CHAR_PX = 7;
+
+/**
+ * `text` plus `suffix`, shortened with an ellipsis so it spans at most
+ * `availablePx` at LABEL_CHAR_PX a character. The suffix is kept whole; at
+ * least one character of the text always remains.
+ */
+export function fitLabel(text: string, availablePx: number, suffix = ""): string {
+    const full = `${text}${suffix}`;
+    const cap = Math.floor(availablePx / LABEL_CHAR_PX);
+    if (full.length <= cap) return full;
+    const keep = Math.max(1, cap - suffix.length - 1);
+    return `${text.slice(0, keep).trimEnd()}…${suffix}`;
+}
+
 /** The teams that get a direct label: your team, the top team, and the last ranked team. */
 export function labelledTeams(data: TierChartData, myTeam: string | null): Set<string> {
     const all = data.lanes.flatMap((l) => l.teams);
@@ -167,17 +202,26 @@ export function labelledTeams(data: TierChartData, myTeam: string | null): Set<s
 
 /**
  * The tier key colours: one League Blue hue (OKLCH h 258, the same hue as the
- * band washes), stepped in OKLCH lightness so every neighbouring pair is at
- * least 0.06 apart and the faintest step still clears 2:1 on the paper
- * surface. Light runs dark (top level) to light; dark mode flips the anchor so
- * the top level is the brightest against Night Rink. Validated with the dataviz
- * palette validator (--ordinal) at 7 levels in both schemes.
+ * band washes), stepped evenly in OKLCH lightness from the top level to the
+ * bottom, with the faintest step still clearing 2:1 on the paper surface.
+ * Light runs dark (top level) to light; dark mode flips the anchor so the top
+ * level is the brightest against Night Rink. Validated with the dataviz palette
+ * validator (--ordinal) at 7 levels in both schemes.
+ *
+ * Neighbouring levels are at least 0.06 apart only up to TIER_DISTINCT_LEVELS
+ * levels: the ramp's range is fixed, so past that the step shrinks to
+ * range / (count - 1) (about 0.02 at 20 levels). Colour is never the only cue:
+ * every lane is named and in rank order, so a long ladder stays readable when
+ * its neighbouring swatches are close.
  */
 export const TIER_RAMP: Record<ColorScheme, { top: number; bottom: number; chroma: number }> = {
     light: { top: 0.39, bottom: 0.78, chroma: 0.15 },
     dark: { top: 0.88, bottom: 0.48, chroma: 0.13 },
 };
 const TIER_HUE = 258;
+
+/** The most levels whose neighbouring tier colours stay at least 0.06 apart in lightness. */
+export const TIER_DISTINCT_LEVELS = 7;
 
 export function tierLightness(scheme: ColorScheme, index: number, count: number): number {
     const { top, bottom } = TIER_RAMP[scheme];
@@ -239,9 +283,16 @@ export function describeTierChart(data: TierChartData, myTeam: string | null): s
                 `${l.level ?? "Below the last level"}: ${l.teams.length} ${l.teams.length === 1 ? "team" : "teams"}, RPI ${l.min!.toFixed(1)} to ${l.max!.toFixed(1)}`,
         )
         .join("; ");
+    const laneName = (key: string) => {
+        const found = data.lanes.find((l) => l.key === key);
+        return found?.level ?? "Below the last level";
+    };
+    const cuts = data.cuts.length
+        ? ` Cuts: ${data.cuts.map((cut) => `${laneName(cut.above)} and ${laneName(cut.below)} at RPI ${cut.rpi.toFixed(1)}`).join("; ")}.`
+        : "";
     const mine = myTeam ? filled.flatMap((l) => l.teams).find((t) => t.number === myTeam) : undefined;
     const you = mine
         ? ` Your team, ${mine.name}, is rank ${mine.rank} among ${data.rankedCount} with RPI ${mine.rpi.toFixed(1)}, in ${mine.level ?? "no level"}.`
         : "";
-    return `${data.rankedCount} ranked teams on the 0–20 RPI scale. ${lanes}.${you}`;
+    return `${data.rankedCount} ranked teams on the 0–20 RPI scale. ${lanes}.${cuts}${you}`;
 }

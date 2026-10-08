@@ -33,9 +33,11 @@ export const LEAGUE_BRACKETS = ["Red Strong", "Red Mid", "Red Weak", "White Stro
 
 /**
  * A made-up league at real scale (spec R6: never real data): `count` teams
- * numbered from 901 across six starting brackets, seven levels holding 46, and
- * a seeded schedule of about six games each. The second-to-last team has no
- * games and the last is excluded. Deterministic, so every run is identical.
+ * numbered from 901 across six starting brackets, seven levels holding 47
+ * (6 + 6 + 5 × 7), and a seeded schedule of about six games each. The
+ * second-to-last team has no games and the last is excluded, so 49 are ranked
+ * and the two lowest fall below the last level. Deterministic, so every run is
+ * identical.
  */
 export function leagueRankingsDoc(count = 51): RankingsDocument {
     let seed = 7;

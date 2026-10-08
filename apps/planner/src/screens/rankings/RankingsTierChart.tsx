@@ -9,7 +9,7 @@
  * order, Home/End jump to the ends, Enter opens the team, Escape hides the
  * tooltip. Every value in a tooltip is also in the table view.
  */
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { Box, Button, Typography } from "@mui/material";
 import { alpha, keyframes, type Theme } from "@mui/material/styles";
 import type { TeamRating } from "@/lib/ratings";
@@ -20,7 +20,9 @@ import {
     RPI_MAX,
     describeTierChart,
     dodgeRows,
+    fitLabel,
     labelledTeams,
+    nearestPoint,
     rowOffset,
     tierChartData,
     tierColor,
@@ -34,7 +36,10 @@ export const VIEW_AS_TABLE_LABEL = "View as table";
 const DEFAULT_WIDTH = 640;
 const DOT_R = 5;
 const MINE_R = 7;
-const HIT_R = 12;
+/** How far from a dot a pointer still reaches it: a 44px-wide target, resolved to the nearest dot. */
+const REACH = 22;
+/** Tooltip clearance above or below the active dot. */
+const TIP_GAP = 16;
 const ROW_STEP = 12;
 const LABEL_ROOM = 16;
 const AXIS_H = 40;
@@ -143,7 +148,7 @@ export function RankingsTierChart({ teams, levels, myTeam, logos, onShowTable }:
     const tipId = `${ids}-tip`;
 
     const narrow = width < 480;
-    const labelWidth = narrow ? 76 : 148;
+    const labelWidth = narrow ? 84 : 148;
     const plotWidth = Math.max(160, width - labelWidth);
     const x = useCallback(
         (rpi: number) => PLOT_PAD_LEFT + (Math.min(Math.max(rpi, 0), RPI_MAX) / RPI_MAX) * (plotWidth - PLOT_PAD_LEFT - PLOT_PAD_RIGHT),
@@ -196,7 +201,7 @@ export function RankingsTierChart({ teams, levels, myTeam, logos, onShowTable }:
         if (!active) return;
         // A tap anywhere but a dot dismisses the tooltip (touch has no hover-out).
         const dismiss = (event: PointerEvent) => {
-            if (!(event.target instanceof Element) || !event.target.closest(".tier-hit")) setActive(null);
+            if (!(event.target instanceof Element) || !event.target.closest(".tier-hit, .tier-hit-layer")) setActive(null);
         };
         document.addEventListener("pointerdown", dismiss);
         return () => document.removeEventListener("pointerdown", dismiss);
@@ -229,6 +234,14 @@ export function RankingsTierChart({ teams, levels, myTeam, logos, onShowTable }:
     };
 
     const activeDot = active ? dots.find((d) => d.team.number === active) : undefined;
+
+    // One pointer layer over the plot resolves every hover and tap to the nearest dot, so
+    // dodged neighbours (closer than a finger) never share a target.
+    const dotAt = (event: ReactMouseEvent<SVGRectElement>) => {
+        const box = event.currentTarget.ownerSVGElement?.getBoundingClientRect();
+        return nearestPoint(dots, event.clientX - (box?.left ?? 0), event.clientY - (box?.top ?? 0), REACH);
+    };
+    const [hovering, setHovering] = useState(false);
     const totalHeight = plotHeight + AXIS_H;
 
     if (data.rankedCount === 0) return null;
@@ -276,10 +289,10 @@ export function RankingsTierChart({ teams, levels, myTeam, logos, onShowTable }:
                             display: "block",
                             fontFamily: "inherit",
                             overflow: "visible",
-                            "& .tier-hit": { cursor: "pointer", outline: "none" },
+                            "& .tier-hit": { outline: "none" },
                             "& .tier-hit .focus-ring": { opacity: 0 },
                             "& .tier-hit:focus-visible .focus-ring": { opacity: 1 },
-                            "& .tier-hit:hover .tier-dot, & .tier-hit:focus-visible .tier-dot": { strokeWidth: 3 },
+                            "& .tier-hit[data-active='true'] .tier-dot, & .tier-hit:focus-visible .tier-dot": { strokeWidth: 3 },
                             // One staggered reveal, lane by lane; nothing moves for reduced-motion users.
                             "@media (prefers-reduced-motion: no-preference)": {
                                 "& .tier-dots": { animation: `${fadeIn} 360ms ease-out both` },
@@ -394,19 +407,12 @@ export function RankingsTierChart({ teams, levels, myTeam, logos, onShowTable }:
                                             dot={dot}
                                             total={data.rankedCount}
                                             tabbable={dot.team.number === rovingStop}
+                                            active={active === dot.team.number}
                                             describedBy={active === dot.team.number ? tipId : undefined}
                                             register={(node) => {
                                                 if (node) refs.current.set(dot.team.number, node);
                                                 else refs.current.delete(dot.team.number);
                                             }}
-                                            onEnter={() => setActive(dot.team.number)}
-                                            onLeave={() =>
-                                                setActive((current) =>
-                                                    current === dot.team.number && document.activeElement !== refs.current.get(dot.team.number)
-                                                        ? null
-                                                        : current,
-                                                )
-                                            }
                                             onFocus={() => {
                                                 setFocusable(dot.team.number);
                                                 setActive(dot.team.number);
@@ -419,11 +425,40 @@ export function RankingsTierChart({ teams, levels, myTeam, logos, onShowTable }:
                             </g>
                         ))}
 
-                        <g aria-hidden="true">
+                        <rect
+                            className="tier-hit-layer"
+                            aria-hidden="true"
+                            x={0}
+                            y={0}
+                            width={plotWidth}
+                            height={plotHeight}
+                            fill="transparent"
+                            style={{ cursor: hovering ? "pointer" : "default" }}
+                            onPointerMove={(event) => {
+                                if (event.pointerType !== "mouse") return;
+                                const hit = dotAt(event);
+                                setHovering(Boolean(hit));
+                                const focused = document.activeElement?.closest?.(".tier-hit")?.getAttribute("data-team") ?? null;
+                                setActive(hit ? hit.team.number : focused);
+                            }}
+                            onPointerLeave={(event) => {
+                                if (event.pointerType !== "mouse") return;
+                                setHovering(false);
+                                setActive(document.activeElement?.closest?.(".tier-hit")?.getAttribute("data-team") ?? null);
+                            }}
+                            onClick={(event) => setActive(dotAt(event)?.team.number ?? null)}
+                        />
+
+                        <g aria-hidden="true" className="tier-labels">
                             {dots
                                 .filter((d) => labelled.has(d.team.number))
                                 .map((dot) => {
-                                    const right = dot.x < plotWidth * 0.62;
+                                    // Run the label toward the roomier side and shorten it to fit inside
+                                    // the plot; the dot's name and the tooltip keep the full name.
+                                    const right = plotWidth - dot.x >= dot.x;
+                                    const textX = right ? dot.x - 4 : dot.x + 4;
+                                    const room = right ? plotWidth - textX - 2 : textX - 2;
+                                    const text = fitLabel(dot.team.name, room, dot.mine ? " (you)" : "");
                                     const labelY = placedLanes[dot.laneIndex].labelY ?? dot.y + 4;
                                     const leaderEnd = dot.y - (dot.mine ? MINE_R + 4 : DOT_R + 2);
                                     return (
@@ -443,7 +478,7 @@ export function RankingsTierChart({ teams, levels, myTeam, logos, onShowTable }:
                                             )}
                                             <Box
                                                 component="text"
-                                                x={right ? dot.x - 4 : dot.x + 4}
+                                                x={textX}
                                                 y={labelY}
                                                 textAnchor={right ? "start" : "end"}
                                                 sx={(theme) => ({
@@ -457,7 +492,7 @@ export function RankingsTierChart({ teams, levels, myTeam, logos, onShowTable }:
                                                     pointerEvents: "none",
                                                 })}
                                             >
-                                                {dot.mine ? `${dot.team.name} (you)` : dot.team.name}
+                                                {text}
                                             </Box>
                                         </g>
                                     );
@@ -497,6 +532,8 @@ export function RankingsTierChart({ teams, levels, myTeam, logos, onShowTable }:
 function LaneLabel({ lane, height, narrow, levelCount }: { lane: TierLane; height: number; narrow: boolean; levelCount: number }) {
     const name = lane.level ?? (narrow ? "Below last" : BELOW_LAST_LEVEL);
     const count = `${lane.teams.length} ${lane.teams.length === 1 ? "team" : "teams"}`;
+    // The narrow layout puts the range on its own line rather than dropping it.
+    const range = lane.min !== null && lane.max !== null ? `${formatRating(lane.min)}–${formatRating(lane.max)}` : null;
     return (
         <Box
             data-lane={lane.key}
@@ -544,8 +581,13 @@ function LaneLabel({ lane, height, narrow, levelCount }: { lane: TierLane; heigh
                 </Typography>
                 <Typography variant="caption" color="text.secondary" sx={{ display: "block", lineHeight: 1.2 }}>
                     {count}
-                    {!narrow && lane.min !== null && lane.max !== null ? ` · ${formatRating(lane.min)}–${formatRating(lane.max)}` : ""}
+                    {range && !narrow ? ` · ${range}` : ""}
                 </Typography>
+                {range && narrow && (
+                    <Typography variant="caption" color="text.secondary" sx={{ display: "block", lineHeight: 1.2, fontVariantNumeric: "tabular-nums" }}>
+                        {range}
+                    </Typography>
+                )}
             </Box>
         </Box>
     );
@@ -555,19 +597,19 @@ interface DotProps {
     dot: PlacedDot;
     total: number;
     tabbable: boolean;
+    active: boolean;
     describedBy: string | undefined;
     register: (node: SVGGElement | null) => void;
-    onEnter: () => void;
-    onLeave: () => void;
     onFocus: () => void;
     onBlur: () => void;
     onTap: () => void;
     onKeyDown: (event: KeyboardEvent<SVGGElement>) => void;
 }
 
-function Dot({ dot, total, tabbable, describedBy, register, onEnter, onLeave, onFocus, onBlur, onTap, onKeyDown }: DotProps) {
+function Dot({ dot, total, tabbable, active, describedBy, register, onFocus, onBlur, onTap, onKeyDown }: DotProps) {
     const { team, x, y, mine } = dot;
-    const hollow = team.lowConfidence && !mine;
+    // Few games reads as a hollow mark for every team, yours included (inside its ring).
+    const hollow = team.lowConfidence;
     return (
         <g
             ref={register}
@@ -578,14 +620,12 @@ function Dot({ dot, total, tabbable, describedBy, register, onEnter, onLeave, on
             tabIndex={tabbable ? 0 : -1}
             data-team={team.number}
             data-mine={mine ? "true" : undefined}
-            onPointerEnter={(event) => event.pointerType === "mouse" && onEnter()}
-            onPointerLeave={(event) => event.pointerType === "mouse" && onLeave()}
+            data-active={active ? "true" : undefined}
             onClick={onTap}
             onFocus={onFocus}
             onBlur={onBlur}
             onKeyDown={onKeyDown}
         >
-            <circle cx={x} cy={y} r={HIT_R} fill="transparent" />
             <Box
                 component="circle"
                 className="focus-ring"
@@ -614,11 +654,18 @@ function Dot({ dot, total, tabbable, describedBy, register, onEnter, onLeave, on
             <Box
                 component="circle"
                 className="tier-dot"
+                data-hollow={hollow ? "true" : undefined}
                 cx={x}
                 cy={y}
-                r={mine ? MINE_R : hollow ? DOT_R - 1 : DOT_R}
+                r={mine ? (hollow ? MINE_R - 1 : MINE_R) : hollow ? DOT_R - 1 : DOT_R}
                 sx={(theme) => {
                     const vars = (theme.vars || theme).palette;
+                    if (mine && hollow)
+                        return {
+                            fill: vars.background.paper,
+                            stroke: vars.secondary.main,
+                            strokeWidth: 2.5,
+                        };
                     if (mine)
                         return {
                             fill: vars.secondary.main,
@@ -656,7 +703,7 @@ function TierTooltip({ id, dot, total, left, top, width }: { id: string; dot: Pl
             sx={{
                 position: "absolute",
                 left: clamped,
-                top: below ? top + HIT_R + 4 : top - HIT_R - 4,
+                top: below ? top + TIP_GAP : top - TIP_GAP,
                 transform: below ? "translate(-50%, 0)" : "translate(-50%, -100%)",
                 width: 2 * half,
                 p: 1.25,

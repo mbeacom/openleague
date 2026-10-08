@@ -1,5 +1,5 @@
 // __tests__/apps/planner/rankings-tier-chart.test.tsx
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, screen, within } from "@testing-library/react";
 import { composite, type RatingsResult } from "@/lib/ratings";
 import { toRatingInputs, type RankingsDocument } from "@/lib/rankings-document";
@@ -7,10 +7,14 @@ import { RankingsScreen } from "@/apps/planner/src/screens/rankings/RankingsScre
 import { RankingsTierChart, TIER_CHART_TITLE, VIEW_AS_TABLE_LABEL, dotLabel } from "@/apps/planner/src/screens/rankings/RankingsTierChart";
 import {
     BELOW_LANE_KEY,
+    LABEL_CHAR_PX,
+    TIER_DISTINCT_LEVELS,
     TIER_RAMP,
     describeTierChart,
     dodgeRows,
+    fitLabel,
     labelledTeams,
+    nearestPoint,
     rowOffset,
     tierChartData,
     tierColor,
@@ -18,6 +22,7 @@ import {
 } from "@/apps/planner/src/screens/rankings/tierChart";
 import { memoryStore, renderScreen } from "./render-screen";
 import { leagueRankingsDoc, sampleRankingsDoc } from "./rankings-fixtures";
+import { formatRating } from "@/apps/planner/src/screens/rankings/display";
 
 function ratings(doc: RankingsDocument): RatingsResult {
     const { games, teams, options } = toRatingInputs(doc);
@@ -36,6 +41,9 @@ describe("tierChartData", () => {
         expect(new Set(placed).size).toBe(result.ranked.length);
         expect(placed).toHaveLength(result.ranked.length);
         for (const lane of data.lanes) for (const team of lane.teams) expect(team.level).toBe(lane.level);
+        const capacity = doc.method.levels.reduce((sum, level) => sum + level.size, 0);
+        expect(capacity).toBe(47);
+        expect(data.lanes.at(-1)!.teams).toHaveLength(result.ranked.length - capacity);
     });
 
     it("names the teams it can't place instead of dropping them", () => {
@@ -101,6 +109,13 @@ describe("tierChartData", () => {
         expect(text).toContain(`A1: 6 teams`);
         expect(text).toContain(`Your team, ${mine.name}, is rank ${mine.rank}`);
     });
+
+    it("gives every cut between neighbouring levels in words, since the cut labels are hidden from assistive tech", () => {
+        const text = describeTierChart(data, doc.myTeam);
+        const name = (key: string) => data.lanes.find((lane) => lane.key === key)!.level ?? "Below the last level";
+        expect(data.cuts.length).toBeGreaterThan(0);
+        for (const cut of data.cuts) expect(text).toContain(`${name(cut.above)} and ${name(cut.below)} at RPI ${cut.rpi.toFixed(1)}`);
+    });
 });
 
 describe("dodgeRows", () => {
@@ -123,11 +138,41 @@ describe("dodgeRows", () => {
     });
 });
 
+describe("fitLabel", () => {
+    it("keeps a label that fits and shortens one that doesn't, keeping the suffix", () => {
+        expect(fitLabel("Hilltop M1", 200)).toBe("Hilltop M1");
+        const long = "Riverside ".repeat(10).trim();
+        const fitted = fitLabel(long, 100, " (you)");
+        expect(fitted.endsWith("… (you)")).toBe(true);
+        expect(fitted.length * LABEL_CHAR_PX).toBeLessThanOrEqual(100);
+        expect(fitLabel(long, 0).length).toBeGreaterThan(0);
+    });
+});
+
+describe("nearestPoint", () => {
+    it("picks the closest point within reach, so neighbouring dots never share a tap", () => {
+        const points = [
+            { id: "a", x: 50, y: 40 },
+            { id: "b", x: 50, y: 52 },
+        ];
+        // Inside both 12px hit circles, but nearer b.
+        expect(nearestPoint(points, 50, 49, 22)?.id).toBe("b");
+        expect(nearestPoint(points, 50, 45, 22)?.id).toBe("a");
+        expect(nearestPoint(points, 200, 200, 22)).toBeNull();
+    });
+});
+
 describe("tierColor", () => {
     it.each(["light", "dark"] as const)("steps lightness at least 0.06 between neighbouring levels in %s", (scheme) => {
         const steps = Array.from({ length: 7 }, (_v, i) => tierLightness(scheme, i, 7));
         for (let i = 1; i < steps.length; i++) expect(Math.abs(steps[i] - steps[i - 1])).toBeGreaterThanOrEqual(0.06 - 1e-9);
         expect(steps[0]).toBe(TIER_RAMP[scheme].top);
+    });
+
+    it.each(["light", "dark"] as const)("only promises the 0.06 step up to the distinct-level count in %s", (scheme) => {
+        const step = (count: number) => Math.abs(tierLightness(scheme, 1, count) - tierLightness(scheme, 0, count));
+        expect(step(TIER_DISTINCT_LEVELS)).toBeGreaterThanOrEqual(0.06 - 1e-9);
+        expect(step(TIER_DISTINCT_LEVELS + 1)).toBeLessThan(0.06);
     });
 
     it("reads dark to light from the top level on light, and flips the anchor on dark", () => {
@@ -146,10 +191,95 @@ describe("RankingsTierChart", () => {
     const doc = leagueRankingsDoc();
     const result = ratings(doc);
 
-    function renderChart(onShowTable?: () => void) {
+    function renderChart(onShowTable?: () => void, teams = result.teams) {
         const { store } = memoryStore();
-        return renderScreen(<RankingsTierChart teams={result.teams} levels={doc.method.levels} myTeam={doc.myTeam} onShowTable={onShowTable} />, store);
+        return renderScreen(<RankingsTierChart teams={teams} levels={doc.method.levels} myTeam={doc.myTeam} onShowTable={onShowTable} />, store);
     }
+
+    function atWidth(width: number) {
+        vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+            width,
+            height: 0,
+            top: 0,
+            left: 0,
+            right: width,
+            bottom: 0,
+            x: 0,
+            y: 0,
+            toJSON: () => ({}),
+        } as DOMRect);
+    }
+
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    it("shortens long direct labels to stay inside the chart, keeping the full name in the dot and tooltip", () => {
+        atWidth(320);
+        const longName = `Riverside ${"Northern Valley ".repeat(6)}Juniors`.slice(0, 100);
+        const top = result.ranked[0].number;
+        const teams = result.teams.map((row) => (row.number === top ? { ...row, name: longName } : row));
+        const { container } = renderChart(undefined, teams);
+        const svg = container.querySelector<SVGSVGElement>("svg[role='group']")!;
+        const plotWidth = Number(svg.getAttribute("width"));
+        const labels = [...container.querySelectorAll<SVGTextElement>(".tier-labels text")];
+        expect(labels.length).toBeGreaterThan(0);
+        const label = labels.find((node) => node.textContent!.startsWith("Riverside Northern"))!;
+        expect(label.textContent!.endsWith("…")).toBe(true);
+        const x = Number(label.getAttribute("x"));
+        const extent = label.textContent!.length * LABEL_CHAR_PX;
+        if (label.getAttribute("text-anchor") === "end") expect(x - extent).toBeGreaterThanOrEqual(0);
+        else expect(x + extent).toBeLessThanOrEqual(plotWidth);
+        expect(screen.getByRole("img", { name: new RegExp(`^${longName}, rank 1`) })).toBeInTheDocument();
+        fireEvent.click(container.querySelector(`[data-team="${top}"]`)!);
+        expect(screen.getByRole("tooltip")).toHaveTextContent(longName);
+    });
+
+    it("keeps each lane's RPI range in the narrow layout", () => {
+        atWidth(320);
+        const { container } = renderChart();
+        const data = tierChartData(result.teams, doc.method.levels);
+        for (const lane of data.lanes.filter((l) => l.teams.length > 0)) {
+            const label = container.querySelector(`[data-lane="${lane.key}"]`)!;
+            expect(label.textContent).toContain(`${formatRating(lane.min)}–${formatRating(lane.max)}`);
+        }
+    });
+
+    it("resolves a tap to the nearest dot, so a neighbour's tooltip never opens", () => {
+        const { container } = renderChart();
+        const position = (number: string) => {
+            const dot = container.querySelector(`[data-team="${number}"] .tier-dot`)!;
+            return { x: Number(dot.getAttribute("cx")), y: Number(dot.getAttribute("cy")) };
+        };
+        // Two teams in one lane on neighbouring dodge rows: their old 12px hit circles overlapped.
+        const data = tierChartData(result.teams, doc.method.levels);
+        let pair: [string, string] | null = null;
+        for (const lane of data.lanes) {
+            for (const a of lane.teams) {
+                for (const b of lane.teams) {
+                    if (a === b || pair) continue;
+                    const pa = position(a.number);
+                    const pb = position(b.number);
+                    if (Math.hypot(pa.x - pb.x, pa.y - pb.y) < 24 && pb.y > pa.y) pair = [a.number, b.number];
+                }
+            }
+        }
+        expect(pair).not.toBeNull();
+        const [, near] = pair!;
+        const target = position(near);
+        const layer = container.querySelector(".tier-hit-layer")!;
+        fireEvent.click(layer, { clientX: target.x, clientY: target.y - 2 });
+        expect(screen.getByRole("tooltip")).toHaveTextContent(result.byNumber.get(near)!.name);
+    });
+
+    it("draws a low-confidence selected team hollow inside its ring", () => {
+        const teams = result.teams.map((row) => (row.number === doc.myTeam ? { ...row, lowConfidence: true } : row));
+        const { container } = renderChart(undefined, teams);
+        const mine = container.querySelector(`[data-team="${doc.myTeam}"] .tier-dot`)!;
+        expect(mine.getAttribute("data-hollow")).toBe("true");
+        const solid = container.querySelector(`[data-team="${doc.myTeam}"]`)!;
+        expect(solid.getAttribute("data-mine")).toBe("true");
+    });
 
     it("is a labelled, described group with one dot per ranked team", () => {
         const { container } = renderChart();
