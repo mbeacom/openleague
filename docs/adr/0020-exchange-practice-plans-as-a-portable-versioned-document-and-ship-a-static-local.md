@@ -265,3 +265,22 @@ Each drill gains `ageGroups`: a list of up to six distinct values from `u6`, `u8
 - A hosted tab opened before the deploy sends no age groups when it saves a drill, which the server reads as "unchanged".
 
 Spec: `docs/superpowers/specs/2026-10-05-practice-adm-style-templates-design.md`.
+
+### 2026-10-07: Practice equipment (additive fields, versions stay 1 and 2)
+
+The document gains, without a version bump:
+- per session: `equipment`, the practice's own items, a list of at most 20 `{ name, count }` (names 1–40 characters once control characters are removed, whitespace is collapsed and it is trimmed, unique ignoring case; counts whole numbers 1–999). A name that names a diagram kind ("Pucks") adds to that kind's total;
+- inside each drill's `playData` (`PlayData.version` stays 2): an optional `equipmentNeeds`, the coach's changes to the list the diagram's equipment implies. It holds per-kind changes relative to the diagram's count, or removal, plus up to 12 typed items with fixed counts.
+
+**Rules:**
+- A missing or `null` session list reads as none, and a missing `equipmentNeeds` reads as the diagram's list unchanged, so every earlier file reads as before.
+- The session list is strict, like staff: a broken list is reported as an "Equipment" issue, never silently dropped.
+- `equipmentNeeds` is advisory, like an ice area: an unreadable one is dropped (and logged), never a reason to call the diagram unreadable.
+- Writers always emit the session list (`[]` when empty) and only items that pass the rules. They emit `equipmentNeeds` only when the coach changed something.
+
+**Compatibility:**
+- A reader built before this amendment strips both keys and opens the file with each drill's list derived from its diagram. A round trip through an older build drops the changes and the practice's items.
+- The static planner's IndexedDB goes from version 4 to 5 with no data change, so a tab still running an older build reloads before it can save a drill without its changes.
+- A hosted tab opened before the deploy sends no session list, which the server reads as "unchanged".
+
+Spec: `docs/superpowers/specs/2026-10-07-practice-equipment-design.md`.

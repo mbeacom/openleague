@@ -10,7 +10,9 @@
  * Versions: 1 = the first release; 2 = practice timing rows (a row's playId
  * may be null, block rows carry kind and label); 3 = practice staff (sessions
  * and rows gained optional staff fields); 4 = drill age groups and quarter-ice
- * areas (plays gained an optional ageGroups field and new area values).
+ * areas (plays gained an optional ageGroups field and new area values); 5 =
+ * practice equipment (sessions gained an optional equipment list, and stored
+ * diagrams an optional equipmentNeeds).
  * Bumping the version is what makes a tab still running an older build close
  * its connection and reload (onversionchange below) before this build writes
  * rows it can't read.
@@ -18,7 +20,7 @@
 import type { PlannerRepo, RepoTx, StoredPlay, StoredSession } from "./records";
 
 export const DB_NAME = "openleague-planner";
-export const DB_VERSION = 4;
+export const DB_VERSION = 5;
 const STORES = ["plays", "sessions", "meta"];
 
 export class StorageBlockedError extends Error {
@@ -57,6 +59,11 @@ export function upgradeDatabase(db: IDBDatabase, oldVersion: number): void {
         // area values (older records read as every age), so there is nothing to migrate. The
         // bump makes a tab still running an older build reload before it can save a drill
         // without its age groups or its quarter-ice area.
+    }
+    if (oldVersion < 5) {
+        // Practice equipment: sessions gained an optional list and diagrams an optional key
+        // (older records read with none), so there is nothing to migrate. The bump makes a tab
+        // still running an older build reload before it can save a drill without its changes.
     }
 }
 

@@ -30,6 +30,8 @@ export function toLocalSessionSave(session: PracticeSessionSubmitData): LocalSes
         ...(session.transitionMinutes !== undefined && { transitionMinutes: session.transitionMinutes }),
         // Absent = unchanged (as EditSessionWrapper): an editor that holds no list sends none.
         ...(session.staff !== undefined && { staff: toSessionStaffInputs(session.staff) }),
+        // Absent = unchanged (practice equipment spec R3): an editor that holds no list sends none.
+        ...(session.equipment !== undefined && { equipment: session.equipment }),
     };
 }
 

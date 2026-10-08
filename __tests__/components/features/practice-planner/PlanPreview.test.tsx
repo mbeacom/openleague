@@ -10,6 +10,7 @@ vi.mock("@/lib/utils/canvas/thumbnail-generator", async (importOriginal) => ({
 import { PlanPreview } from "@/components/features/practice-planner/PlanPreview";
 import { STARTER_TEMPLATES, starterTemplatePlan } from "@/lib/data/starter-templates";
 import { parsePlan, serializePlan } from "@/lib/plan-document";
+import { createEmptyPlayData } from "@/lib/utils/play-data";
 
 const NOW = new Date("2026-10-04T18:00:00.000Z");
 
@@ -140,5 +141,40 @@ describe("PlanPreview: the device team's mark (practice logo spec R5)", () => {
             </ThemeProvider>,
         );
         expect(screen.queryByText("IH")).toBeNull();
+    });
+});
+
+describe("PlanPreview: equipment (practice equipment spec R5)", () => {
+    it("lists the practice's total under the header and each drill's own line", () => {
+        const cones = (count: number, nets = 0) => ({
+            ...createEmptyPlayData(),
+            equipment: [
+                ...Array.from({ length: count }, (_, i) => ({ id: `c${i}`, kind: "cone" as const, position: { x: 10 + i * 5, y: 10 }, rotation: 0 })),
+                ...Array.from({ length: nets }, (_, i) => ({ id: `n${i}`, kind: "net" as const, position: { x: 100, y: 20 + i * 10 }, rotation: 0 })),
+            ],
+        });
+        const plan = serializePlan(
+            {
+                title: "Lakeview Thursday",
+                durationMinutes: 60,
+                date: null,
+                startTime: null,
+                equipment: [{ name: "Water bottles", count: 20 }],
+                drills: [
+                    { sequence: 0, duration: 10, runsWithPrevious: false, instructions: null, name: "Station A", description: null, playData: cones(2, 1) },
+                    { sequence: 1, duration: 10, runsWithPrevious: true, instructions: null, name: "Station B", description: null, playData: cones(3) },
+                ],
+            },
+            "openleague-static",
+            NOW,
+        );
+        render(
+            <ThemeProvider theme={createTheme()}>
+                <PlanPreview plan={plan} />
+            </ThemeProvider>,
+        );
+        expect(screen.getByText("Equipment: Cones ×5 · Net ×1 · Water bottles ×20")).toBeInTheDocument();
+        expect(screen.getByText("Equipment: Cones ×2 · Net ×1")).toBeInTheDocument();
+        expect(screen.getByText("Equipment: Cones ×3")).toBeInTheDocument();
     });
 });

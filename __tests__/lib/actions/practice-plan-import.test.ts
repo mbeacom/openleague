@@ -136,6 +136,7 @@ describe("importPracticePlan", () => {
                 duration: 60,
                 goaliesAttending: null,
                 transitionMinutes: 0,
+                equipment: [],
                 isShared: false,
                 teamId: TEAM,
                 createdById: USER,
@@ -327,5 +328,19 @@ describe("importPracticePlan: drill age groups", () => {
         for (const call of models.play.createMany.mock.calls) {
             expect(call[0].data[0]).toMatchObject({ ageGroups: ["u6", "u8"] });
         }
+    });
+});
+
+describe("importPracticePlan: practice equipment (practice equipment spec R3, R6)", () => {
+    it("stores the practice's items and keeps each drill's overrides in its diagram", async () => {
+        const needs = { kinds: [{ kind: "cone" as const, delta: 2, removed: false }], custom: [{ name: "Tennis balls", count: 6 }] };
+        const document = doc({
+            equipment: [{ name: "Water bottles", count: 20 }],
+            drills: [{ sequence: 0, duration: 10, runsWithPrevious: false, instructions: "", name: "Cone Weave", description: "", playData: { ...BOARD, equipmentNeeds: needs } }],
+        });
+        const result = await importPracticePlan({ teamId: TEAM, date: DATE, addToLibrary: false, document });
+        expect(result.success).toBe(true);
+        expect(models.practiceSession.create.mock.calls[0][0].data.equipment).toEqual([{ name: "Water bottles", count: 20 }]);
+        expect(models.play.createMany.mock.calls[0][0].data[0].playData.equipmentNeeds).toEqual(needs);
     });
 });

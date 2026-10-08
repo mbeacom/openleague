@@ -3,7 +3,7 @@
  * store logic runs on. Two adapters implement PlannerRepo: IndexedDB (the
  * real one) and memory (the fallback when IndexedDB is unavailable).
  */
-import type { PlayFocus, PlayGoalies, SessionRowKind } from "@/types/practice-planner";
+import type { EquipmentCountItem, PlayFocus, PlayGoalies, SessionRowKind } from "@/types/practice-planner";
 import type { AgeGroup } from "@/lib/utils/age-groups";
 
 export interface StoredPlay {
@@ -63,6 +63,8 @@ export interface StoredSession {
     transitionMinutes?: number;
     /** The practice's staff, in order. Absent on sessions stored before practice staff: none. */
     staff?: StoredStaffMember[];
+    /** The practice's own equipment (practice equipment spec R7). Absent on sessions stored before it: none. */
+    equipment?: EquipmentCountItem[];
     rows: StoredSessionRow[];
     createdAt: Date;
     updatedAt: Date;

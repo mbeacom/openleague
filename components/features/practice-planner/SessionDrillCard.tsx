@@ -39,6 +39,7 @@ import { needsGoalie } from "@/lib/utils/drill-tags";
 import type { RowEdit } from "@/lib/utils/session-rows";
 import { GoalieBadge } from "./GoalieBadge";
 import { RunByField, type RowRunBy } from "./RunByField";
+import { drillEquipment, drillEquipmentText } from "@/lib/utils/equipment-needs";
 
 /** Hidden from sight but read by screen readers (the standard clip pattern). */
 const VISUALLY_HIDDEN = {
@@ -144,6 +145,8 @@ export function SessionDrillCard({
     // Local state for editing
     const [editDuration, setEditDuration] = useState(play.duration);
     const [editInstructions, setEditInstructions] = useState(play.instructions);
+    // The drill's equipment line (practice equipment spec R5); an unreadable diagram has none.
+    const equipmentText = play.playDataUnreadable ? null : drillEquipmentText(drillEquipment(play.playData));
 
     const titleId = useId();
     const slotLabelId = useId();
@@ -331,6 +334,13 @@ export function SessionDrillCard({
                                 </Typography>
                             </Box>
                         )
+                    )}
+
+                    {/* The drill's equipment (practice equipment spec R5); edited in the drill dialog. */}
+                    {!isEditing && equipmentText && (
+                        <Typography variant="body2" color="text.secondary" data-testid="drill-equipment-line">
+                            {equipmentText}
+                        </Typography>
                     )}
 
                     {runBy && <RunByField {...runBy} title={play.name || `Drill ${number}`} disabled={disabled || locked} />}

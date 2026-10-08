@@ -5,7 +5,7 @@
  * else the viewer's), printPixelRatio for diagrams, one combined legend.
  * Images come from injected renderers, so this module never touches a canvas.
  */
-import type { BlockKind, LogoImage, PlayData, PlayFocus, PlayGoalies, SessionStaffMember, TeamMark } from "@/types/practice-planner";
+import type { BlockKind, EquipmentCountItem, LogoImage, PlayData, PlayFocus, PlayGoalies, SessionStaffMember, TeamMark } from "@/types/practice-planner";
 import type { AgeGroup } from "@/lib/utils/age-groups";
 import { resolveCrestColor } from "@/lib/utils/crest";
 import { EXPORT_MARK_HEIGHT, exportMarkSize, isLogoImage, teamLogoAlt } from "@/lib/utils/team-mark";
@@ -28,6 +28,8 @@ import { plannedLabel, stationsLabel } from "../SessionTimeline";
 import { drillText, stationTag } from "../print/BenchSheetDrill";
 import { printPixelRatio } from "../print/PrintDiagram";
 import { runBySuffix, runByText, staffHeaderLabel, staffNames } from "@/lib/utils/session-staff";
+import { drillEquipment, drillEquipmentText, equipmentLabel } from "@/lib/utils/equipment-needs";
+import { rollupEquipment } from "@/lib/utils/practice-equipment";
 
 export interface ExportSessionPlay {
     kind?: "drill";
@@ -77,6 +79,8 @@ export interface ExportSession {
     transitionMinutes?: number;
     /** The practice's staff, in list order; absent reads as none. */
     staff?: SessionStaffMember[];
+    /** The practice's own equipment; absent reads as none. */
+    equipment?: EquipmentCountItem[];
     plays: ExportSessionRow[];
 }
 
@@ -128,6 +132,8 @@ export interface BenchSheetDrillItem {
     diagram: string | null;
     /** Instructions, else description, else null */
     text: string | null;
+    /** "Equipment: Cones ×6 · Net ×1", or null when the drill needs none */
+    equipment: string | null;
 }
 
 /** The team's mark in an export header: a PNG data URI at its drawn size. */
@@ -154,6 +160,8 @@ export interface BenchSheetModel {
     /** "Staff: Coach Lee, Sam, Alex", or null when the practice lists none */
     staff: string | null;
     timeline: BenchSheetTimelineRow[];
+    /** The practice's equipment, one "Cones ×12" per item (practice equipment spec R5); empty: omitted */
+    equipment: string[];
     planned: string;
     overTime: boolean;
     legend: Array<{ label: string; image: string | null }>;
@@ -238,6 +246,7 @@ export function buildBenchSheetModel(
                 ...(block ? {} : runBy(stations[0])),
             };
         }),
+        equipment: benchSheetEquipment(session),
         planned: plannedLabel(planned, session.duration),
         overTime: planned > session.duration,
         legend: legendData ? buildLegend(legendData).map((entry) => ({ label: entry.label, image: renderers.swatch(entry) })) : [],
@@ -249,8 +258,15 @@ export function buildBenchSheetModel(
             station,
             diagram: sp.play.playData ? renderers.diagram(sp.play.playData, pixelRatio) : null,
             text: drillText(sp.instructions, sp.play.description),
+            equipment: drillEquipmentText(drillEquipment(sp.play.playData)),
         })),
     };
+}
+
+/** The practice's equipment as the bench sheet lists it (practice equipment spec R4, R5). */
+export function benchSheetEquipment(session: Pick<ExportSession, "plays" | "equipment">): string[] {
+    return rollupEquipment(session.plays, (row) => (isBlockRow(row) ? null : { name: row.play.name, playData: row.play.playData }), session.equipment)
+        .map((item) => equipmentLabel(item, item.count));
 }
 
 /** The logo when it is a valid normalized PNG, else the Crest; none without a team (spec R3, R5). */

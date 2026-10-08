@@ -354,3 +354,36 @@ describe("buildBenchSheetModel: the team mark (practice logo spec R2, R3, R5)", 
         expect(buildBenchSheetModel({ ...BOOKED, teamMark: MARK }, renderers({ crest: () => null })).mark).toBeNull();
     });
 });
+
+describe("buildBenchSheetModel: equipment (practice equipment spec R4, R5)", () => {
+    const gear = (kinds: Array<"cone" | "net" | "puck">, extra: Partial<PlayData> = {}): PlayData => ({
+        ...createEmptyPlayData(),
+        equipment: kinds.map((kind, i) => ({ id: `${kind}${i}`, kind, position: { x: 10 + i, y: 10 }, rotation: 0 })),
+        ...extra,
+    });
+
+    it("rolls the drills up (stations summed, blocks maxed) and adds the practice's items", () => {
+        const session: ExportSession = {
+            ...UNBOOKED,
+            equipment: [{ name: "Water bottles", count: 20 }],
+            plays: [
+                play("Solo", 0, 10, false, { playData: gear(["cone", "cone", "cone"]) }),
+                play("Station A", 1, 10, false, { playData: gear(["cone", "cone", "net"]) }),
+                play("Station B", 2, 10, true, { playData: gear(["cone", "cone", "net"], { equipmentNeeds: { kinds: [], custom: [{ name: "Tennis balls", count: 6 }] } }) }),
+            ],
+        };
+        const model = buildBenchSheetModel(session, renderers());
+        expect(model.equipment).toEqual(["Cones ×4", "Nets ×2", "Tennis balls ×6", "Water bottles ×20"]);
+        expect(model.drills.map((drill) => drill.equipment)).toEqual([
+            "Equipment: Cones ×3",
+            "Equipment: Cones ×2 · Net ×1",
+            "Equipment: Cones ×2 · Net ×1 · Tennis balls ×6",
+        ]);
+    });
+
+    it("is empty for a practice that needs nothing, and null for an unreadable drill", () => {
+        const model = buildBenchSheetModel(UNBOOKED, renderers());
+        expect(model.equipment).toEqual([]);
+        expect(model.drills.map((drill) => drill.equipment)).toEqual([null, null, null]);
+    });
+});

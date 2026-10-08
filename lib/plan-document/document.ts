@@ -22,6 +22,8 @@ import {
 import { drillTags, toGoaliesAttending, toPlayFocus, toPlayGoalies } from "@/lib/utils/drill-tags";
 import { ageGroupsSchema, toAgeGroups, type AgeGroup } from "@/lib/utils/age-groups";
 import { createEmptyPlayData, parseStoredPlayData } from "@/lib/utils/play-data";
+import { exportPracticeEquipment, practiceEquipmentSchema } from "@/lib/utils/equipment-needs";
+import type { EquipmentCountItem } from "@/types/practice-planner";
 import { CONTROL_CHARS, isBlockRow, toBlockLabel, toRotateEveryMinutes, toTransitionMinutes } from "@/lib/utils/session-rows";
 import { normalizeGroups, sessionRowsError, sessionWallMinutes, settleRotations, withRotationMinutes } from "@/lib/utils/session-timeline";
 
@@ -154,6 +156,13 @@ function planStaffSchema(max: number, message: string) {
         .transform((names) => names ?? []);
 }
 
+/**
+ * The practice's own equipment (practice equipment spec R6). Missing or null is
+ * none: every file written before it. Strict, like staff: a broken list is an
+ * "Equipment" issue. Each drill's own list rides inside its playData.
+ */
+const planEquipmentSchema = practiceEquipmentSchema.nullish().transform((items): EquipmentCountItem[] => items ?? []);
+
 const sequenceSchema = z.number({ message: "Sequence must be a number" }).int("Sequence must be a whole number").min(0, "Sequence can't be negative");
 
 const planDrillSchema = z.object({
@@ -218,6 +227,7 @@ const planSessionSchema = z
         goaliesAttending: goaliesAttendingSchema,
         transitionMinutes: transitionMinutesSchema,
         staff: planStaffSchema(MAX_SESSION_STAFF, STAFF_LIMIT_MESSAGE),
+        equipment: planEquipmentSchema,
         drills: z.array(planEntrySchema).max(MAX_PLAN_DRILLS, `A plan can hold at most ${MAX_PLAN_DRILLS} rows (drills and blocks)`),
     })
     .superRefine((session, ctx) => {
@@ -339,6 +349,8 @@ export interface PlanSessionInput {
     transitionMinutes?: number;
     /** The practice's staff names; absent = none. */
     staff?: string[];
+    /** The practice's own equipment; absent = none. Items that break the rules are dropped. */
+    equipment?: EquipmentCountItem[];
     drills: Array<PlanDrillInput | PlanBlockInput>;
 }
 
@@ -412,6 +424,7 @@ export function serializePlan(input: PlanSessionInput, generator: PlanGenerator,
             goaliesAttending: toGoaliesAttending(input.goaliesAttending),
             transitionMinutes: toTransitionMinutes(input.transitionMinutes),
             staff,
+            equipment: exportPracticeEquipment(input.equipment),
             drills,
         },
     };
@@ -446,6 +459,7 @@ function drillNameAt(raw: unknown, index: number): string | null {
 
 function describeIssue(issue: z.ZodError["issues"][number], raw: unknown): string {
     const [scope, list, index] = issue.path;
+    if (scope === "session" && list === "equipment") return `Equipment: ${issue.message}`;
     if (scope === "session" && list === "drills" && typeof index === "number") {
         const name = drillNameAt(raw, index);
         return `Drill ${index + 1}${name ? ` ("${name}")` : ""}: ${issue.message}`;
@@ -545,6 +559,7 @@ export interface PlanEditorSession {
     goaliesAttending: number | null;
     transitionMinutes: number;
     staff: string[];
+    equipment: EquipmentCountItem[];
     plays: Array<PlanEditorDrill | PlanEditorBlock>;
 }
 
@@ -558,6 +573,7 @@ export function planToEditorSession(plan: PlanDocument): PlanEditorSession {
         goaliesAttending: plan.session.goaliesAttending,
         transitionMinutes: plan.session.transitionMinutes,
         staff: plan.session.staff,
+        equipment: plan.session.equipment,
         plays: plan.session.drills.map((entry): PlanEditorDrill | PlanEditorBlock =>
             entry.kind === "drill"
                 ? {

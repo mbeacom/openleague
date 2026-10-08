@@ -28,6 +28,7 @@ import {
 } from "@/lib/utils/validation";
 import type { SessionRow } from "@/types/practice-planner";
 import { playDataOrEmpty } from "@/lib/utils/play-data";
+import { equipmentJson } from "@/lib/utils/equipment-needs";
 import {
     assignVenueReservation,
     createVenueReservation,
@@ -655,6 +656,8 @@ export async function createPracticeSession(
                     isShared: false,
                     goaliesAttending: validated.goaliesAttending ?? null,
                     transitionMinutes: validated.transitionMinutes ?? 0,
+                    // A create without equipment stores none (practice equipment spec R3).
+                    equipment: equipmentJson(validated.equipment ?? []),
                     teamId: validated.teamId,
                     createdById: userId,
                     venueId: canonical.venueId,
@@ -1040,6 +1043,8 @@ export async function updatePracticeSession(
                     ...(validated.goaliesAttending !== undefined && { goaliesAttending: validated.goaliesAttending }),
                     // Absent = unchanged: an editor that never loaded or set the gap sends none.
                     ...(validated.transitionMinutes !== undefined && { transitionMinutes: validated.transitionMinutes }),
+                    // Absent = unchanged (practice equipment spec R3); [] clears.
+                    ...(validated.equipment !== undefined && { equipment: equipmentJson(validated.equipment) }),
                     venueId: canonical.venueId,
                     surfaceId: canonical.surfaceId,
                     segmentId: canonical.segmentId,

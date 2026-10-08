@@ -1604,6 +1604,11 @@ model PracticeSession {
   // between top-level blocks, never inside a station block or after the last.
   // CHECK in migration 20261004120000_practice_session_timing.
   transitionMinutes Int @default(0)
+  // The practice's own equipment (practice equipment spec R3): a JSON list of
+  // { name, count }, checked by practiceEquipmentSchema on every write. Each
+  // drill's list lives in its play's playData (equipmentNeeds). Migration
+  // 20261007130000_practice_session_equipment.
+  equipment Json @default("[]")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

@@ -17,6 +17,7 @@ import { newPlayId } from "@/lib/services/play-ids";
 import { StaffNameConflictError, isStaffNameConflict, writeRowStaff } from "@/lib/services/practice-session-staff";
 import { STAFF_NAME_TAKEN_MESSAGE, staffNameKey } from "@/lib/utils/session-staff";
 import { sanitizePlayDataForWrite } from "@/lib/utils/play-data";
+import { equipmentJson } from "@/lib/utils/equipment-needs";
 import { parsePlan, type PlanDrill } from "@/lib/plan-document";
 import type { PlayData } from "@/types/practice-planner";
 
@@ -87,6 +88,7 @@ export async function importPracticePlan(
                     duration: planSession.durationMinutes,
                     goaliesAttending: planSession.goaliesAttending,
                     transitionMinutes: planSession.transitionMinutes,
+                    equipment: equipmentJson(planSession.equipment),
                     isShared: false,
                     teamId,
                     createdById: userId,

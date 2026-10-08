@@ -439,3 +439,32 @@ describe("inherited timing that no longer fits is settled, not rejected (spec R3
         expect(models.practiceSession.update).not.toHaveBeenCalled();
     });
 });
+
+describe("practice equipment (practice equipment spec R3)", () => {
+    const BOTTLES = { name: "Water bottles", count: 20 };
+
+    it("create stores the list cleaned, and none when it is absent", async () => {
+        await createPracticeSession({ ...input([]), equipment: [{ name: "  Water\tbottles ", count: 20 }] });
+        expect(models.practiceSession.create.mock.calls[0][0].data.equipment).toEqual([BOTTLES]);
+        await createPracticeSession(input([]));
+        expect(models.practiceSession.create.mock.calls[1][0].data.equipment).toEqual([]);
+    });
+
+    it("update writes the list only when it is sent, and [] clears it", async () => {
+        await updatePracticeSession({ id: SESSION, ...input([]), equipment: [BOTTLES] });
+        expect(models.practiceSession.update.mock.calls[0][0].data.equipment).toEqual([BOTTLES]);
+        await updatePracticeSession({ id: SESSION, ...input([]) });
+        expect(models.practiceSession.update.mock.calls[1][0].data).not.toHaveProperty("equipment");
+        await updatePracticeSession({ id: SESSION, ...input([]), equipment: [] });
+        expect(models.practiceSession.update.mock.calls[2][0].data.equipment).toEqual([]);
+    });
+
+    it("refuses a repeated name, a bad count or too many items before writing", async () => {
+        const repeated = await createPracticeSession({ ...input([]), equipment: [{ name: "Marker", count: 1 }, { name: "MARKER", count: 1 }] });
+        const zero = await updatePracticeSession({ id: SESSION, ...input([]), equipment: [{ name: "Marker", count: 0 }] });
+        const many = await createPracticeSession({ ...input([]), equipment: Array.from({ length: 21 }, (_, i) => ({ name: `Item ${i}`, count: 1 })) });
+        for (const result of [repeated, zero, many]) expect(result.success).toBe(false);
+        expect(models.practiceSession.create).not.toHaveBeenCalled();
+        expect(models.practiceSession.update).not.toHaveBeenCalled();
+    });
+});

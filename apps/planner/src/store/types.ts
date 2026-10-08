@@ -10,7 +10,7 @@ import type { SavedDrillId } from "@/lib/utils/session-drill-ids";
 import type { SessionRowInput } from "@/lib/utils/session-rows";
 import type { SessionStaffInput } from "@/lib/utils/session-staff";
 import type { TeamProfileInput } from "@/lib/utils/team-mark";
-import type { PlayData, PlayFocus, PlayGoalies, PracticeSessionData, PracticeSessionView, TeamProfile } from "@/types/practice-planner";
+import type { EquipmentCountItem, PlayData, PlayFocus, PlayGoalies, PracticeSessionData, PracticeSessionView, TeamProfile } from "@/types/practice-planner";
 import type { AgeGroup } from "@/lib/utils/age-groups";
 import type { RankingsOps } from "./rankings";
 import type { AiSettingsOps } from "./ai-settings";
@@ -37,6 +37,8 @@ export interface LocalSessionSave {
     transitionMinutes?: number;
     /** The practice's staff. Absent = unchanged on update (none on create); a row's `staff` is read only with it. */
     staff?: SessionStaffInput[];
+    /** The practice's own equipment. Absent = unchanged on update (none on create); [] clears. */
+    equipment?: EquipmentCountItem[];
     plays: LocalSessionDrill[];
 }
 

@@ -23,6 +23,7 @@ import {
     type Position,
     type StrokeOptions,
 } from "@/types/practice-planner";
+import { equipmentNeedsSchema, normalizeEquipmentNeeds, readEquipmentNeeds } from "@/lib/utils/equipment-needs";
 
 /** Mirrors RINK_DIMENSIONS in lib/utils/canvas/rink-renderer.ts (asserted in tests). */
 export const RINK_WIDTH_FT = 200;
@@ -105,6 +106,8 @@ export const playDataSchema = z
         equipment: z.array(equipmentSchema).max(C.MAX_EQUIPMENT),
         annotations: z.array(annotationSchema).max(C.MAX_ANNOTATIONS),
         area: iceAreaSchema.optional(),
+        // Practice equipment (spec R2): the coach's changes to the diagram's list.
+        equipmentNeeds: equipmentNeedsSchema.optional(),
     })
     .refine(
         (d) => d.players.length + d.drawings.length + d.equipment.length + d.annotations.length <= C.MAX_ELEMENTS_PER_PLAY,
@@ -230,6 +233,22 @@ function dropInvalidArea(raw: object): object {
     return rest;
 }
 
+/**
+ * Equipment overrides are advisory (practice equipment spec R2): unreadable
+ * ones are dropped and logged, readable ones normalized, never a reason to
+ * call the drill unreadable. Returns `raw` itself when there is nothing to change.
+ */
+function readableEquipmentNeeds(raw: object): object {
+    if (!("equipmentNeeds" in raw)) return raw;
+    const { equipmentNeeds, ...rest } = raw as { equipmentNeeds: unknown } & Record<string, unknown>;
+    const needs = readEquipmentNeeds(equipmentNeeds);
+    // A null key is none, not damage: only a list that fails the schema is logged.
+    if (!needs && equipmentNeeds != null && !equipmentNeedsSchema.safeParse(equipmentNeeds).success) {
+        console.error("Dropping invalid equipment list from play data:", equipmentNeeds);
+    }
+    return needs ? { ...rest, equipmentNeeds: needs } : rest;
+}
+
 /** Converts stored play data of any supported version to v2. Throws PlayDataError. */
 export function upgradePlayData(raw: unknown): PlayData {
     if (typeof raw !== "object" || raw === null) throw new PlayDataError("Play data must be an object");
@@ -238,7 +257,7 @@ export function upgradePlayData(raw: unknown): PlayData {
         if ((raw as { version: unknown }).version !== PLAY_DATA_VERSION) {
             throw new PlayDataError(`Unsupported play data version: ${String((raw as { version: unknown }).version)}`);
         }
-        const readable = dropInvalidArea(raw);
+        const readable = readableEquipmentNeeds(dropInvalidArea(raw));
         const annotations = (readable as { annotations?: unknown }).annotations;
         return parseV2(Array.isArray(annotations) ? { ...readable, annotations: annotations.filter(isNotBlankAnnotation) } : readable);
     }
@@ -330,8 +349,11 @@ function cleanText(text: string | null | undefined, maxLength: number): string {
 export function sanitizePlayDataForWrite(
     playData: PlayData,
 ): { ok: true; data: PlayData } | { ok: false; issues: z.ZodError["issues"] } {
+    const { equipmentNeeds, ...rest } = playData;
+    const needs = normalizeEquipmentNeeds(equipmentNeeds);
     const sanitized: PlayData = {
-        ...playData,
+        ...rest,
+        ...(needs ? { equipmentNeeds: needs } : {}),
         players: playData.players.map((player) => ({
             ...player,
             label: cleanText(player.label, C.MAX_PLAYER_LABEL_LENGTH),

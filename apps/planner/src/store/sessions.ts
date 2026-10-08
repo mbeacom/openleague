@@ -59,6 +59,8 @@ import {
     staffNames,
     type SessionStaffInput,
 } from "@/lib/utils/session-staff";
+import { cleanPracticeEquipment, practiceEquipmentError, readPracticeEquipment } from "@/lib/utils/equipment-needs";
+import type { EquipmentCountItem } from "@/types/practice-planner";
 import { LOCAL_AUTHOR_NAME, LOCAL_TEAM_ID } from "../config";
 import { META_TEAM_PROFILE } from "./records";
 import type { RepoTx, StoredPlay, StoredSession, StoredSessionRow, StoredStaffMember } from "./records";
@@ -185,6 +187,18 @@ function checkStaff(input: LocalSessionSave): StoredStaffMember[] | undefined {
 }
 
 /**
+ * Hosted's equipment rules (practice equipment spec R3, R7) in its words, on
+ * the payload as sent. Returns the list to store, or undefined when the save
+ * sends none (absent = unchanged).
+ */
+function checkEquipment(input: LocalSessionSave): EquipmentCountItem[] | undefined {
+    if (input.equipment === undefined) return undefined;
+    const error = practiceEquipmentError(input.equipment);
+    if (error) throw new StoreRefusal(error);
+    return cleanPracticeEquipment(input.equipment);
+}
+
+/**
  * Each row's staff to store (spec R3, R7). A sent list: the row's keys as sent,
  * nobody when it sends none. Absent: the stored row with the same id keeps its
  * staff. A row's id is the editor's clientKey and survives every save, so this
@@ -208,7 +222,7 @@ function storedTiming(session: StoredSession): StoredTiming[] {
 
 /** Synchronous, so it can run inside a transaction: the session must be a valid plan document. */
 function assertExportable(
-    meta: { title: string; duration: number; goaliesAttending?: number | null; transitionMinutes?: number; staff?: StoredStaffMember[] },
+    meta: { title: string; duration: number; goaliesAttending?: number | null; transitionMinutes?: number; staff?: StoredStaffMember[]; equipment?: EquipmentCountItem[] },
     rows: StoredSessionRow[],
     plays: Map<string, StoredPlay>,
     at: Date,
@@ -222,6 +236,7 @@ function assertExportable(
             goaliesAttending: meta.goaliesAttending ?? null,
             transitionMinutes: meta.transitionMinutes ?? 0,
             staff: meta.staff?.map((member) => member.name),
+            equipment: meta.equipment,
             drills: rows.map((row): PlanDrillInput | PlanBlockInput => {
                 const kind = toRowKind(row.kind);
                 if (isBlockKind(kind)) {
@@ -384,6 +399,8 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                     transitionMinutes: session.transitionMinutes ?? 0,
                     // Legacy sessions read as no staff (spec R7).
                     staff: (session.staff ?? []).map((member) => ({ id: member.id, name: member.name })),
+                    // Legacy sessions read as none (practice equipment spec R7).
+                    equipment: readPracticeEquipment(session.equipment ?? []),
                     plays: sortedRows(session).flatMap((row): SessionRow[] => {
                         const kind = toRowKind(row.kind);
                         if (isBlockKind(kind)) {
@@ -466,6 +483,7 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                         goaliesAttending: session.goaliesAttending ?? null,
                         transitionMinutes: session.transitionMinutes ?? 0,
                         staff: (session.staff ?? []).map((member) => ({ id: member.id, name: member.name })),
+                        equipment: readPracticeEquipment(session.equipment ?? []),
                         plays: normalizeGroups(editorPlays),
                     },
                 });
@@ -476,6 +494,8 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                 const meta = sessionMeta(input);
                 checkRows(input.plays);
                 const staff = checkStaff(input);
+                // A create without equipment stores none.
+                const equipment = checkEquipment(input) ?? [];
                 const goaliesAttending = checkedGoalieCount(input.goaliesAttending) ?? null;
                 const transitionMinutes = checkedTransition(input.transitionMinutes) ?? 0;
                 // A create has nothing stored: absent timing takes the defaults.
@@ -487,8 +507,8 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                     const rows = withRowStaff(materialized, input.plays, staff);
                     // A create without staff stores none.
                     const sessionStaff = staff ?? [];
-                    assertExportable({ ...meta, goaliesAttending, transitionMinutes, staff: sessionStaff }, rows, plays, at);
-                    await tx.putSession({ id, ...meta, goaliesAttending, transitionMinutes, staff: sessionStaff, rows, createdAt: at, updatedAt: at });
+                    assertExportable({ ...meta, goaliesAttending, transitionMinutes, staff: sessionStaff, equipment }, rows, plays, at);
+                    await tx.putSession({ id, ...meta, goaliesAttending, transitionMinutes, staff: sessionStaff, equipment, rows, createdAt: at, updatedAt: at });
                     return { id, plays: mapping };
                 });
                 return ok(saved);
@@ -499,6 +519,7 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                 const meta = sessionMeta(input);
                 checkRows(input.plays);
                 const staff = checkStaff(input);
+                const sentEquipment = checkEquipment(input);
                 const count = checkedGoalieCount(input.goaliesAttending);
                 const sentGap = checkedTransition(input.transitionMinutes);
                 const saved = await write(ctx, async (tx) => {
@@ -513,8 +534,10 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                     const rows = withRowStaff(materialized, input.plays, staff, existing);
                     // Absent = unchanged: the stored list stays (a legacy session has none).
                     const sessionStaff = staff ?? existing.staff ?? [];
-                    assertExportable({ ...meta, goaliesAttending, transitionMinutes, staff: sessionStaff }, rows, plays, at);
-                    await tx.putSession({ ...existing, ...meta, goaliesAttending, transitionMinutes, staff: sessionStaff, rows, updatedAt: at });
+                    // Absent = unchanged (practice equipment spec R3); a legacy session has none.
+                    const equipment = sentEquipment ?? existing.equipment ?? [];
+                    assertExportable({ ...meta, goaliesAttending, transitionMinutes, staff: sessionStaff, equipment }, rows, plays, at);
+                    await tx.putSession({ ...existing, ...meta, goaliesAttending, transitionMinutes, staff: sessionStaff, equipment, rows, updatedAt: at });
                     // Drop-only cleanup: copies this session referenced before and no longer does.
                     // A copy the drill dialog made but the editor hasn't sent is never touched here.
                     const referenced = new Set(rows.flatMap((row) => (row.playId ? [row.playId] : [])));
@@ -627,6 +650,7 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                         goaliesAttending: source.goaliesAttending ?? null,
                         transitionMinutes: source.transitionMinutes ?? 0,
                         staff,
+                        equipment: [...(source.equipment ?? [])],
                     };
                     assertExportable(meta, rows, plays, at);
                     await tx.putSession({ id: newId, ...meta, rows, createdAt: at, updatedAt: at });
@@ -715,6 +739,7 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                         goaliesAttending: parsed.plan.session.goaliesAttending,
                         transitionMinutes: parsed.plan.session.transitionMinutes,
                         staff,
+                        equipment: parsed.plan.session.equipment,
                         rows,
                         createdAt: at,
                         updatedAt: at,

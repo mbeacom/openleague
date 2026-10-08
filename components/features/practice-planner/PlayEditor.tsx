@@ -41,11 +41,14 @@ import { CustomAreaFields, rectFromFields } from "./CustomAreaFields";
 import { DrillTagFields, type DrillTagValues } from "./DrillTagFields";
 import { drillTags } from "@/lib/utils/drill-tags";
 import { AgeGroupsField } from "./AgeGroupsField";
+import { DrillEquipmentField } from "./DrillEquipmentField";
+import { withEquipmentNeeds } from "@/lib/utils/equipment-needs";
 import { toAgeGroups, type AgeGroup } from "@/lib/utils/age-groups";
 import { findElement } from "@/lib/utils/canvas/element-ops";
 import {
     type DrawingTool,
     type EquipmentKind,
+    type EquipmentNeeds,
     type IceAreaPreset,
     type PlayData,
     type PlayerRole,
@@ -117,6 +120,11 @@ export function PlayEditor({
     const [playData, setPlayData] = useState<PlayData>(
         initialData?.playData || createEmptyPlayData()
     );
+
+    // The equipment list's changes (practice equipment spec R2): kept outside the board's
+    // undo history and merged into the diagram on save, so undo and Clear never touch them.
+    const [equipmentNeeds, setEquipmentNeeds] = useState<EquipmentNeeds | undefined>(initialData?.playData?.equipmentNeeds);
+    const playDataToSave = useMemo(() => withEquipmentNeeds(playData, equipmentNeeds), [playData, equipmentNeeds]);
 
     // Drawing tool state
     const [selectedTool, setSelectedTool] = useState<DrawingTool>("select");
@@ -247,6 +255,12 @@ export function PlayEditor({
         setSaveSuccess(false);
     };
 
+    const handleEquipmentNeedsChange = (next: EquipmentNeeds | undefined) => {
+        setEquipmentNeeds(next);
+        setHasUnsavedChanges(true);
+        setSaveSuccess(false);
+    };
+
     const handleAgeGroupsChange = (next: AgeGroup[]) => {
         setAgeGroups(next);
         setHasUnsavedChanges(true);
@@ -285,7 +299,7 @@ export function PlayEditor({
             // A stored thumbnail must not bake in the fallback font.
             await waitForDiagramFont();
             try {
-                thumbnail = generateThumbnail(playData, { pixelRatio: STORED_THUMBNAIL_PIXEL_RATIO });
+                thumbnail = generateThumbnail(playDataToSave, { pixelRatio: STORED_THUMBNAIL_PIXEL_RATIO });
             } catch (thumbnailError) {
                 console.error("Error generating thumbnail:", thumbnailError);
                 // Continue with save even if thumbnail generation fails
@@ -298,7 +312,7 @@ export function PlayEditor({
                 name: name.trim(),
                 description: description.trim(),
                 thumbnail,
-                playData,
+                playData: playDataToSave,
                 isTemplate,
                 ...tags,
                 ageGroups,
@@ -329,7 +343,7 @@ export function PlayEditor({
         } finally {
             setIsSaving(false);
         }
-    }, [name, description, playData, isTemplate, tags, ageGroups, playId, initialData, onSave]);
+    }, [name, description, playDataToSave, isTemplate, tags, ageGroups, playId, initialData, onSave]);
 
     // Keep handleSaveRef updated with latest handleSave function
     useEffect(() => {
@@ -544,6 +558,9 @@ export function PlayEditor({
                 selected={selectedElementId ? findElement(playData, selectedElementId) : null}
                 onChange={(patch) => selectedElementId && rinkBoardRef.current?.updateElement(selectedElementId, patch)}
             />
+
+            {/* Equipment the drill needs: the diagram's, with the coach's changes */}
+            <DrillEquipmentField playData={playDataToSave} onChange={handleEquipmentNeedsChange} disabled={isSaving} />
 
             {/* Save Status and Actions */}
             <Paper elevation={2} sx={{ p: 2 }}>

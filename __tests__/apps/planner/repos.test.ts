@@ -184,7 +184,7 @@ describe("IndexedDB schema versions (practice timing rows, practice staff)", () 
         });
     }
 
-    it("is version 4", () => expect(DB_VERSION).toBe(4));
+    it("is version 5", () => expect(DB_VERSION).toBe(5));
 
     it("opens a version 1 database at the current version with every store, index and record intact", async () => {
         const factory = new IDBFactory();
@@ -263,7 +263,24 @@ describe("IndexedDB schema versions (practice timing rows, practice staff)", () 
         expect(reload).toHaveBeenCalledTimes(1);
         expect(await repo.read((tx) => tx.getSession("s1"))).toEqual(v1Session);
         expect((await repo.read((tx) => tx.allPlays())).map((p) => p.id).sort()).toEqual(["lib", "p1"]);
-        expect(await versionOf(factory, "v3-open-tab")).toBe(4);
+        expect(await versionOf(factory, "v3-open-tab")).toBe(DB_VERSION);
+        repo.close();
+    });
+
+    it("makes a tab still open at version 4 (before practice equipment) reload before this build writes, keeping its data", async () => {
+        const factory = new IDBFactory();
+        const v4 = await openAt(factory, "v4-open-tab", 4);
+        await seed(v4);
+        // A build without equipment would save a drill without its changes: its tab must reload first.
+        const reload = vi.fn();
+        v4.onversionchange = () => {
+            v4.close();
+            reload();
+        };
+        const repo = await openIdbRepo({ factory, name: "v4-open-tab" });
+        expect(reload).toHaveBeenCalledTimes(1);
+        expect(await repo.read((tx) => tx.getSession("s1"))).toEqual(v1Session);
+        expect(await versionOf(factory, "v4-open-tab")).toBe(5);
         repo.close();
     });
 });

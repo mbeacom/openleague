@@ -343,3 +343,41 @@ describe("the curve path (line editing R1)", () => {
         expect(playDataSchema.safeParse(withPath("spline")).success).toBe(false);
     });
 });
+
+describe("equipment overrides (practice equipment R2)", () => {
+    const withNeeds = (needs: unknown) => ({ ...createEmptyPlayData(), equipmentNeeds: needs });
+
+    it("keeps a valid list through the schema and the read path", () => {
+        const needs = { kinds: [{ kind: "cone", delta: 2, removed: false }], custom: [{ name: "Boards", count: 2 }] };
+        expect(playDataSchema.safeParse(withNeeds(needs)).success).toBe(true);
+        expect(upgradePlayData(withNeeds(needs)).equipmentNeeds).toEqual(needs);
+    });
+
+    it("drops an unreadable list without making the drill unreadable", () => {
+        const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+        const parsed = parseStoredPlayData(withNeeds({ kinds: "lots" }));
+        expect(parsed.ok).toBe(true);
+        if (parsed.ok) expect("equipmentNeeds" in parsed.data).toBe(false);
+        expect(spy).toHaveBeenCalled();
+        spy.mockRestore();
+    });
+
+    it("drops a list with nothing in it, quietly", () => {
+        const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+        const data = upgradePlayData(withNeeds({ kinds: [{ kind: "net", delta: 0, removed: false }], custom: [] }));
+        expect("equipmentNeeds" in data).toBe(false);
+        expect(spy).not.toHaveBeenCalled();
+        spy.mockRestore();
+    });
+
+    it("normalizes on write: names cleaned, no-op entries dropped", () => {
+        const result = sanitizePlayDataForWrite({
+            ...createEmptyPlayData(),
+            equipmentNeeds: { kinds: [{ kind: "tire", delta: 0, removed: false }], custom: [{ name: "  Tennis\tballs ", count: 4 }] },
+        });
+        expect(result.ok).toBe(true);
+        if (result.ok) expect(result.data.equipmentNeeds).toEqual({ kinds: [], custom: [{ name: "Tennis balls", count: 4 }] });
+        const untouched = sanitizePlayDataForWrite(createEmptyPlayData());
+        expect(untouched.ok && "equipmentNeeds" in untouched.data).toBe(false);
+    });
+});

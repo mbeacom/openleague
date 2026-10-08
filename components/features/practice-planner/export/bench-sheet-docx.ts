@@ -10,7 +10,7 @@
 import { Document, HeadingLevel, ImageRun, Packer, Paragraph, Table, TableCell, TableRow, TextRun, WidthType } from "docx";
 import { ROTATION_ALL, type RotationTable } from "@/lib/utils/session-timeline";
 import type { BenchSheetModel } from "./bench-sheet-model";
-import { DIAGRAM_UNAVAILABLE_TEXT, LEGEND_HEADING, NO_DRILLS_TEXT } from "./labels";
+import { DIAGRAM_UNAVAILABLE_TEXT, EQUIPMENT_HEADING, LEGEND_HEADING, NO_DRILLS_TEXT } from "./labels";
 import { isPngDataUri, pngDataUriToBytes } from "./png";
 
 export const DOCX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -137,6 +137,15 @@ function timeline(model: BenchSheetModel): Array<Paragraph | Table> {
     ];
 }
 
+/** The practice's equipment (practice equipment spec R5): after the timeline, before the legend. */
+function equipment(model: BenchSheetModel): Paragraph[] {
+    if (model.equipment.length === 0) return [];
+    return [
+        new Paragraph({ heading: HeadingLevel.HEADING_2, spacing: { before: 240 }, children: textRuns(EQUIPMENT_HEADING, { bold: true, color: LEAGUE_BLUE }) }),
+        ...model.equipment.map((item) => new Paragraph({ children: textRuns(`• ${item}`) })),
+    ];
+}
+
 function legend(model: BenchSheetModel): Paragraph[] {
     if (model.legend.length === 0) return [];
     return [
@@ -173,6 +182,7 @@ function drills(model: BenchSheetModel): Paragraph[] {
                     ...(drill.station ? [new TextRun({ text: "  " }), ...textRuns(drill.station, { bold: true })] : []),
                 ],
             }),
+            ...(drill.equipment ? [new Paragraph({ keepNext: true, children: textRuns(drill.equipment) })] : []),
             isPngDataUri(drill.diagram)
                 ? new Paragraph({ keepNext: hasText, children: [picture(drill.diagram, DIAGRAM, `Diagram: ${drill.name}`)] })
                 : new Paragraph({ keepNext: hasText, children: textRuns(DIAGRAM_UNAVAILABLE_TEXT, { italics: true }) }),
@@ -184,8 +194,8 @@ function drills(model: BenchSheetModel): Paragraph[] {
 function benchSheetDocument(model: BenchSheetModel): Document {
     const body =
         model.timeline.length === 0
-            ? [...header(model), new Paragraph({ children: textRuns(NO_DRILLS_TEXT, { bold: true }) })]
-            : [...header(model), ...timeline(model), ...legend(model), ...drills(model)];
+            ? [...header(model), new Paragraph({ children: textRuns(NO_DRILLS_TEXT, { bold: true }) }), ...equipment(model)]
+            : [...header(model), ...timeline(model), ...equipment(model), ...legend(model), ...drills(model)];
     return new Document({
         title: xmlSafe(model.title),
         creator: "OpenLeague",
