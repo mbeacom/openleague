@@ -15,7 +15,7 @@ import { z } from "zod";
 import { requireUserId } from "@/lib/auth/session";
 import { checkRateLimit, RATE_LIMITS, rateLimitMessage } from "@/lib/utils/durable-rate-limit";
 import { checkLeagueUrl, fetchLeaguePage, LeagueFetchError, type LeagueFetchErrorKind } from "@/lib/league-fetch/guard";
-import { leagueFetchAllowedHosts, leagueFetchTimeoutMs, staticPullUrl } from "@/lib/league-fetch/config";
+import { leagueFetchAllowedHosts, staticPullUrl } from "@/lib/league-fetch/config";
 import { encodeSchedulePull, SchedulePullTooLargeError } from "@/lib/rankings-document";
 import { defaultSeasonYear, parseSchedule } from "@/lib/ratings/import";
 
@@ -44,7 +44,7 @@ const MESSAGES: Record<LeagueFetchErrorKind, string> = {
     "http-status": "The league site didn't return the page.",
     "content-type": "That address isn't a web page.",
     "too-large": "That page is larger than OpenLeague will fetch.",
-    timeout: "The league site was too slow to respond, so the request timed out.",
+    timeout: "The league site took too long to respond. Please try again later.",
     network: "Couldn't reach the league site. Please try again later.",
 };
 
@@ -81,7 +81,7 @@ export async function fetchLeagueSchedule(input: FetchLeagueScheduleInput): Prom
             return { success: false, error: rateLimitMessage(limit.retryAfterSec), details: { kind: "rate-limited" } };
         }
 
-        const page = await fetchLeaguePage(url.toString(), { allowedHosts, timeoutMs: leagueFetchTimeoutMs() });
+        const page = await fetchLeaguePage(url.toString(), { allowedHosts });
         const schedule = parseSchedule(page.html, { seasonYear: defaultSeasonYear(new Date()) });
         if (schedule.games.length === 0) {
             return { success: false, error: NO_GAMES_MESSAGE, details: { kind: "no-games" } };

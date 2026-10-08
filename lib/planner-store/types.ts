@@ -167,6 +167,12 @@ export interface PlannerRoutes {
     sessionPrint(id: string): string;
     libraryNew(): string;
     libraryEdit(playId: string): string;
+    /** The drill library itself. */
+    library(): string;
+    /** A library drill's read-only details page. */
+    libraryPlay(playId: string): string;
+    /** A new practice that starts with this library drill as its first row. */
+    sessionNewWithDrill(playId: string): string;
 }
 
 /**

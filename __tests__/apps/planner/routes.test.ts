@@ -22,7 +22,13 @@ describe("matchRoute", () => {
         ["#/sessions/a%2Fb", { name: "notFound" }],
         ["#/sessions/%E0%A4%A", { name: "notFound" }],
         ["#/sessions/abc/delete", { name: "notFound" }],
-        ["#/library/p1", { name: "notFound" }],
+        ["#/library/p1", { name: "libraryPlay", id: "p1" }],
+        ["#/library/p1/", { name: "libraryPlay", id: "p1" }],
+        ["#/library/p%201", { name: "libraryPlay", id: "p 1" }],
+        ["#/library/p1/practice", { name: "sessionNewWithDrill", drillId: "p1" }],
+        ["#/library/p1/delete", { name: "notFound" }],
+        ["#/library/p1/edit/x", { name: "notFound" }],
+        ["#/library/a%2Fb", { name: "notFound" }],
         ["#/sessions/new/edit", { name: "notFound" }],
         ["#/sessions/new/print", { name: "notFound" }],
         ["#/library/new/edit", { name: "notFound" }],
@@ -60,6 +66,19 @@ describe("matchRoute", () => {
         expect(matchRoute(staticRoutes.importPlan())).toEqual({ name: "import" });
         expect(matchRoute(staticRoutes.aiSettings())).toEqual({ name: "aiSettings" });
         expect(matchRoute(staticRoutes.importNotes())).toEqual({ name: "importNotes" });
+    });
+
+    it("builds and matches the drill details and start-a-practice routes", () => {
+        expect(staticRoutes.libraryPlay("p-1")).toBe("#/library/p-1");
+        expect(matchRoute(staticRoutes.libraryPlay("p-1"))).toEqual({ name: "libraryPlay", id: "p-1" });
+        expect(matchRoute(staticRoutes.sessionNewWithDrill("p-1"))).toEqual({ name: "sessionNewWithDrill", drillId: "p-1" });
+        // "new" stays the create route, never a drill id.
+        expect(matchRoute(staticRoutes.libraryNew())).toEqual({ name: "libraryNew" });
+    });
+
+    it("puts drill details under Library and a practice started from a drill under Practices", () => {
+        expect(navSection({ name: "libraryPlay", id: "p1" })).toBe("library");
+        expect(navSection({ name: "sessionNewWithDrill", drillId: "p1" })).toBe("practices");
     });
 
     it("puts the notes draft under Import and AI settings under no section", () => {

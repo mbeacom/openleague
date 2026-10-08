@@ -32,6 +32,8 @@ export const staticRoutes: StaticRoutes = {
     libraryNew: () => "#/library/new",
     libraryEdit: (playId) => `#/library/${enc(playId)}/edit`,
     library: () => "#/library",
+    libraryPlay: (playId) => `#/library/${enc(playId)}`,
+    sessionNewWithDrill: (playId) => `#/library/${enc(playId)}/practice`,
     sessionNew: () => "#/sessions/new",
     importPlan: () => "#/import",
     rankings: () => "#/rankings",
@@ -53,6 +55,8 @@ export type StaticRoute =
     | { name: "library" }
     | { name: "libraryNew" }
     | { name: "libraryEdit"; id: string }
+    | { name: "libraryPlay"; id: string }
+    | { name: "sessionNewWithDrill"; drillId: string }
     | { name: "import" }
     | { name: "planLink"; value: string }
     | { name: "rankings" }
@@ -113,7 +117,11 @@ export function matchRoute(hash: string): StaticRoute {
         if (second === undefined) return { name: "library" };
         if (second === "new") return third === undefined ? { name: "libraryNew" } : NOT_FOUND;
         const id = decodeId(second);
-        return id && third === "edit" ? { name: "libraryEdit", id } : NOT_FOUND;
+        if (!id) return NOT_FOUND;
+        if (third === undefined) return { name: "libraryPlay", id };
+        if (third === "edit") return { name: "libraryEdit", id };
+        if (third === "practice") return { name: "sessionNewWithDrill", drillId: id };
+        return NOT_FOUND;
     }
     if (section === "import" && second === undefined) return { name: "import" };
     if (section === "import" && second === "notes" && third === undefined) return { name: "importNotes" };
@@ -147,10 +155,12 @@ export function navSection(route: StaticRoute): NavSection | null {
         case "session":
         case "sessionEdit":
         case "sessionPrint":
+        case "sessionNewWithDrill":
             return "practices";
         case "library":
         case "libraryNew":
         case "libraryEdit":
+        case "libraryPlay":
             return "library";
         case "import":
         case "planLink":

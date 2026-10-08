@@ -15,6 +15,7 @@ import { staticRoutes } from "../routes";
 import type { LocalPlannerStore, LocalSessionSave } from "../store/types";
 import { toSessionRowInputs } from "@/lib/utils/session-rows";
 import { toSessionStaffInputs } from "@/lib/utils/session-staff";
+import type { PlayInSession } from "@/types/practice-planner";
 import { LoadingScreen, MissingScreen } from "./StatusScreens";
 import { useStoreResult } from "./useStoreResult";
 
@@ -41,7 +42,8 @@ export function SessionEditorScreen({ store, id }: { store: LocalPlannerStore; i
     return id ? <ExistingSessionEditor store={store} id={id} /> : <NewSessionEditor store={store} />;
 }
 
-function NewSessionEditor({ store }: { store: LocalPlannerStore }) {
+/** `initialPlays`: rows the practice starts with (a library drill's "Add to new practice"). */
+export function NewSessionEditor({ store, initialPlays }: { store: LocalPlannerStore; initialPlays?: PlayInSession[] }) {
     const { navigate } = usePlannerPlatform();
     const handleSave = useCallback(
         async (session: PracticeSessionSubmitData): Promise<PracticeSessionSaveResult> => {
@@ -53,7 +55,14 @@ function NewSessionEditor({ store }: { store: LocalPlannerStore }) {
         },
         [store, navigate],
     );
-    return <PracticeSessionEditor teamId={LOCAL_TEAM_ID} onSave={handleSave} onCancel={() => navigate(staticRoutes.list())} />;
+    return (
+        <PracticeSessionEditor
+            teamId={LOCAL_TEAM_ID}
+            {...(initialPlays && { initialData: { plays: initialPlays } })}
+            onSave={handleSave}
+            onCancel={() => navigate(staticRoutes.list())}
+        />
+    );
 }
 
 function ExistingSessionEditor({ store, id }: { store: LocalPlannerStore; id: string }) {

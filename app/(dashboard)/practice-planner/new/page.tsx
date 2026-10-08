@@ -5,13 +5,19 @@ import { PracticeSessionEditorWrapper } from "./PracticeSessionEditorWrapper";
 import { getUserAdminTeamContext } from "@/lib/actions/team-context";
 import { getPracticeRosterOptions, getPracticeStaffOptions } from "@/lib/actions/practice-session-queries";
 import { getVenueBookingOptions } from "../venue-booking-options";
+import { startingDrillRows } from "./starting-drill";
 
 export const metadata: Metadata = {
   title: "New Practice Session | OpenLeague",
   description: "Create a new practice session",
 };
 
-export default async function NewPracticeSessionPage() {
+interface PageProps {
+  /** `?drill=<playId>`: start the practice with this library drill (the drill details page's "Add to new practice"). */
+  searchParams?: Promise<{ drill?: string | string[] }>;
+}
+
+export default async function NewPracticeSessionPage({ searchParams }: PageProps) {
   const context = await getUserAdminTeamContext();
 
   if (!context) {
@@ -22,6 +28,7 @@ export default async function NewPracticeSessionPage() {
   const bookingOptions = await getVenueBookingOptions(context.teamId);
   const staffOptions = await getPracticeStaffOptions(context.teamId);
   const rosterOptions = await getPracticeRosterOptions(context.teamId);
+  const plays = await startingDrillRows((await searchParams)?.drill, context.teamId);
 
   return (
     <PageContainer>
@@ -30,6 +37,7 @@ export default async function NewPracticeSessionPage() {
         bookingOptions={bookingOptions}
         staffOptions={staffOptions}
         rosterOptions={rosterOptions}
+        {...(plays.length > 0 && { initialPlays: plays })}
       />
     </PageContainer>
   );

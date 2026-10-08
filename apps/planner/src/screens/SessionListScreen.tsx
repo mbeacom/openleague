@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
-import { Alert, Button, Card, CardActionArea, CardContent, Stack, Typography } from "@mui/material";
-import { Add as AddIcon, FileUploadOutlined as UploadIcon, SportsHockey as HockeyIcon, StarBorder as StarBorderIcon, ViewQuiltOutlined as TemplateIcon } from "@mui/icons-material";
+import { Alert, Button, Card, CardActionArea, CardActions, CardContent, Stack, Typography } from "@mui/material";
+import { Add as AddIcon, EditOutlined as EditIcon, FileUploadOutlined as UploadIcon, SportsHockey as HockeyIcon, StarBorder as StarBorderIcon, ViewQuiltOutlined as TemplateIcon } from "@mui/icons-material";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FavoriteToggle, FavoritesFilterChip } from "@/components/features/practice-planner/FavoriteToggle";
@@ -76,8 +76,8 @@ export function SessionListScreen({ store }: { store: LocalPlannerStore }) {
             ) : (
                 <Stack spacing={1.5}>
                     {sessions.map((session) => (
-                        <Card key={session.id} variant="outlined" sx={{ display: "flex", alignItems: "center" }}>
-                            <CardActionArea href={staticRoutes.session(session.id)} sx={{ flex: 1, minWidth: 0 }}>
+                        <Card key={session.id} variant="outlined">
+                            <CardActionArea href={staticRoutes.session(session.id)}>
                                 <CardContent>
                                     <Typography variant="h6" component="h2" sx={{ fontWeight: 700 }}>
                                         {session.title}
@@ -88,15 +88,27 @@ export function SessionListScreen({ store }: { store: LocalPlannerStore }) {
                                     </Typography>
                                 </CardContent>
                             </CardActionArea>
-                            {/* Beside the link, never inside it: the star doesn't open the practice. */}
-                            {favorites.supported && (
-                                <FavoriteToggle
-                                    name={session.title}
-                                    active={favorites.isFavorite(session.id)}
-                                    onToggle={(next) => void favorites.setFavorite(session.id, next)}
-                                    sx={{ mx: 1 }}
-                                />
-                            )}
+                            {/* Beside the link, never inside it: the star doesn't open the practice. The card
+                                opens the details page; editing is the secondary action. */}
+                            <CardActions sx={{ justifyContent: "flex-end", pt: 0 }}>
+                                {favorites.supported && (
+                                    <FavoriteToggle
+                                        name={session.title}
+                                        active={favorites.isFavorite(session.id)}
+                                        onToggle={(next) => void favorites.setFavorite(session.id, next)}
+                                        sx={{ mr: "auto" }}
+                                    />
+                                )}
+                                <Button
+                                    href={staticRoutes.sessionEdit(session.id)}
+                                    size="small"
+                                    startIcon={<EditIcon />}
+                                    aria-label={`Edit ${session.title}`}
+                                    sx={{ minHeight: 44 }}
+                                >
+                                    Edit
+                                </Button>
+                            </CardActions>
                         </Card>
                     ))}
                 </Stack>

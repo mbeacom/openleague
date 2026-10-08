@@ -84,7 +84,7 @@ itself still never requests a league site.
 - **Guard.** Only https on port 443; only hosts on a server-configured exact
   allowlist (`LEAGUE_FETCH_ALLOWED_HOSTS`); no IP-literal hosts and no user
   info; redirects followed by hand, at most three, same host only, every check
-  re-run; every resolved address public; a 60 s total deadline (configurable, 5-90 s) over DNS, connect and
+  re-run; every resolved address public; a 10 s deadline over DNS, connect and
   body; a 2 MB streamed cap; `text/html` only; a fixed User-Agent; no
   cookies, credentials or cache. Logs carry the host, status and an error
   kind, never the path, query or content.

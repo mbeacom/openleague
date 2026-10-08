@@ -8,10 +8,8 @@ export const metadata: Metadata = {
   description: "Fetch a league schedule page for the rankings planner",
 };
 
-// The fetch has a 60 s default deadline (LEAGUE_FETCH_TIMEOUT_MS, at most 90 s);
-// this page-level setting also governs the server action it invokes. Leave
-// headroom for parsing and the response.
-export const maxDuration = 120;
+// The fetch has a 10 s deadline; leave headroom for parsing and the response.
+export const maxDuration = 30;
 
 // "Fetch it for me" (ADR-0024). The (dashboard) layout requires sign-in, and
 // its redirect to /login keeps the #src= fragment, which the login page

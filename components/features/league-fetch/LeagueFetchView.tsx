@@ -9,7 +9,7 @@
  */
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { Alert, AlertTitle, Box, Button, Card, CardActions, CardContent, CircularProgress, Link, Stack, Typography } from "@mui/material";
+import { Alert, Box, Button, Card, CardActions, CardContent, CircularProgress, Stack, Typography } from "@mui/material";
 import { CloudDownloadOutlined as FetchIcon } from "@mui/icons-material";
 import { fetchLeagueSchedule } from "@/lib/actions/league-fetch";
 import { takeIncomingLeagueSource } from "@/lib/plan-document/pending";
@@ -17,10 +17,6 @@ import { takeIncomingLeagueSource } from "@/lib/plan-document/pending";
 export const FETCH_BUTTON_LABEL = "Fetch schedule";
 export const NO_SOURCE_MESSAGE =
   "There's no league page to fetch. Start from “Fetch it for me” in the planner's rankings.";
-export const SLOW_MESSAGE = "League sites can be slow — this can take up to a minute.";
-/** How long a fetch runs before the slow-site line appears. */
-export const SLOW_NOTICE_AFTER_MS = 5_000;
-export const TRY_AGAIN_LABEL = "Try again";
 export const UNSUPPORTED_MESSAGE = "OpenLeague can't fetch pages from that site yet. Save the page and open it in the planner instead.";
 
 type Source = { kind: "none" } | { kind: "unsupported"; host: string | null } | { kind: "ready"; url: string; host: string };
@@ -55,8 +51,6 @@ export function LeagueFetchView({ allowedHosts, plannerUrl, navigate = replaceLo
   const incoming = useRef<string | null | undefined>(undefined);
   const [source, setSource] = useState<Source | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [timedOut, setTimedOut] = useState(false);
-  const [slow, setSlow] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [pending, startTransition] = useTransition();
 
@@ -67,12 +61,10 @@ export function LeagueFetchView({ allowedHosts, plannerUrl, navigate = replaceLo
 
   const fetchIt = (url: string) => {
     setError(null);
-    setTimedOut(false);
     startTransition(async () => {
       const result = await fetchLeagueSchedule({ url });
       if (!result.success) {
         setError(result.error);
-        setTimedOut((result.details as { kind?: string } | undefined)?.kind === "timeout");
         return;
       }
       setLeaving(true);
@@ -81,18 +73,6 @@ export function LeagueFetchView({ allowedHosts, plannerUrl, navigate = replaceLo
   };
 
   const busy = pending || leaving;
-  // The planner's rankings import, where a saved page can be pasted.
-  const importUrl = `${plannerUrl}#/rankings/import`;
-
-  // The slow-site line appears once a fetch has run for a few seconds.
-  useEffect(() => {
-    if (!pending) {
-      setSlow(false);
-      return;
-    }
-    const timer = setTimeout(() => setSlow(true), SLOW_NOTICE_AFTER_MS);
-    return () => clearTimeout(timer);
-  }, [pending]);
 
   return (
     <Box sx={{ maxWidth: 560, mx: "auto", py: { xs: 2, sm: 4 } }}>
@@ -117,23 +97,9 @@ export function LeagueFetchView({ allowedHosts, plannerUrl, navigate = replaceLo
               <Typography variant="body2" sx={{ mt: 1.5, fontFamily: "monospace", overflowWrap: "anywhere" }}>
                 {source.url}
               </Typography>
-              {/* Always mounted so assistive tech announces the text when it appears. */}
-              <Typography role="status" aria-live="polite" variant="body2" color="text.secondary" sx={{ mt: 2, minHeight: pending ? 20 : 0 }}>
-                {slow && pending ? SLOW_MESSAGE : ""}
-              </Typography>
               {error ? (
                 <Alert severity="error" sx={{ mt: 2 }}>
-                  {timedOut ? <AlertTitle>The league site was slow</AlertTitle> : null}
                   {error}
-                  {timedOut ? (
-                    <Typography variant="body2" sx={{ mt: 1 }}>
-                      Try again, or open the league page yourself, save it, and paste it into the{" "}
-                      <Link href={importUrl} sx={{ display: "inline-block", minHeight: 44, lineHeight: "44px" }}>
-                        planner&apos;s import
-                      </Link>
-                      .
-                    </Typography>
-                  ) : null}
                 </Alert>
               ) : null}
             </CardContent>
@@ -146,7 +112,7 @@ export function LeagueFetchView({ allowedHosts, plannerUrl, navigate = replaceLo
                 disabled={busy}
                 sx={{ minHeight: 44, flex: { xs: "1 1 100%", sm: "0 0 auto" } }}
               >
-                {leaving ? "Opening the planner…" : pending ? "Fetching…" : timedOut ? TRY_AGAIN_LABEL : FETCH_BUTTON_LABEL}
+                {leaving ? "Opening the planner…" : pending ? "Fetching…" : FETCH_BUTTON_LABEL}
               </Button>
               <Button href={plannerUrl} disabled={busy} sx={{ minHeight: 44 }}>
                 Back to the planner

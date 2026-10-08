@@ -122,11 +122,11 @@ the fetch and DNS lookup as options so every rule is tested without a network.
 | Allowlist | exact host match against `LEAGUE_FETCH_ALLOWED_HOSTS` (comma or space separated; default `www.cshlhockey.org`); subdomains and lookalikes refused | refuses other hosts, `x.<host>`, `<host>.evil…`; no DNS or fetch happens |
 | Redirects | `redirect: "manual"`; at most 3; same host only (never another host, even an allowlisted one); every URL rule and the DNS check re-run per hop; a 3xx without `Location` refused | follows 3, refuses a 4th; refuses another host, an internal IP, http, another port, a host that now resolves inward |
 | DNS | every address the host resolves to must be public: refuses loopback, private, link-local, CGNAT, unspecified, multicast, reserved, documentation, unique-local and IPv4-mapped or NAT64 forms of those | address table; refuses when any one address is private; refuses DNS failure or no answer |
-| Deadline | one total deadline over DNS, every hop and the body: 60 s by default, or `LEAGUE_FETCH_TIMEOUT_MS` clamped to 5-90 s | the default, the override and the clamp; a fetch, a body and a lookup that never settle all time out |
+| Deadline | one 10 s deadline over DNS, every hop and the body | a fetch, a body and a lookup that never settle all time out |
 | Size | `Content-Length` over 2 MB refused unread; the body streamed and aborted past 2 MB of decoded bytes | both, with the stream stopped after a few chunks |
 | Content type | `text/html` only (charset honoured) | refuses JSON, plain text, XHTML, `text/htmlx`, missing |
 | Status | 200 only | 404 refused and logged |
-| Identity | fixed, identifiable `User-Agent: OpenLeague-LeaguePageFetch/1.0 (+https://openleague.dev; user-requested)`, `Accept: text/html`; never a browser's string | asserted on the request |
+| Identity | fixed `User-Agent: OpenLeague-LeaguePageFetch/1.0 (+https://openleague.dev; user-requested)`, `Accept: text/html` | asserted on the request |
 | No credentials | `credentials: "omit"`, no headers forwarded from the user's request, `referrerPolicy: "no-referrer"` | asserted on the request |
 | No cache | `cache: "no-store"`; nothing cached in memory | asserted on the request |
 | Rate limit | 10 per user per hour, durable (database), fail-closed; taken only after the URL rules pass, so a typo costs nothing | action tests: limited before any fetch, key and fail-closed asserted; a disallowed host doesn't touch the limit |
@@ -140,18 +140,8 @@ isn't worth it here: the allowlist is exact and operator-set, so an attacker
 would have to control an allowlisted league's DNS. The check is defense in
 depth, not the primary control.
 
-**Function duration.** The page exports `maxDuration = 120`. In Next.js 16 a
-page-level `maxDuration` sets the limit for the Server Actions used on that
-page, so the action can run its full deadline (at most 90 s) plus parsing.
-
-**Slow sites.** A real league site measured about 27 s to first byte for a
-414 KB schedule page with our User-Agent, and did not answer within 30 s with
-a generic browser User-Agent. The site is slow regardless of the User-Agent, so
-we keep the identifiable one rather than imitating a browser, and raise the
-deadline instead. While waiting, the confirm card shows a progress button and,
-after about 5 s, a polite live-region line saying league sites can be slow. On
-a timeout the error says the site was slow, the button becomes Try again, and
-a link points to the planner's import for pasting a saved page.
+**Function duration.** The page exports `maxDuration = 30`, so a 10 s fetch
+plus parsing fits on any Vercel plan.
 
 ## Authorization
 
