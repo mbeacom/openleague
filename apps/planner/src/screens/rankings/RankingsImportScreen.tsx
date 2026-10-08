@@ -2,21 +2,26 @@
  * Import (static rankings spec, Import and editing): paste or open the schedule
  * page, then optionally the snake chart; preview counts and unread lines; merge
  * into the device's rankings, resolving score conflicts; or open a rankings file.
- * Never fetches anything (spec R2).
+ * Each page's address can be remembered for "Update results" (spec, Updating
+ * results). Never fetches anything (spec R2).
  */
 import { useRef, useState, type ChangeEvent, type ClipboardEvent } from "react";
 import { Alert, Box, Button, List, ListItem, MenuItem, Stack, TextField, Typography } from "@mui/material";
 import {
     applySnakeChart,
     createRankingsDocument,
+    docSource,
     mergeSchedule,
+    pageAddressProblem,
     readRankingsFile,
     resolveConflict,
     scheduleTeamNumbers,
     snakeChartFit,
     type GameConflict,
+    type MergeSummary,
     type RankingsDocument,
     type SnakeChartFit,
+    withSource,
 } from "@/lib/rankings-document";
 import { CSHL_8U_METHOD } from "@/lib/ratings";
 import { defaultSeasonYear, looksLikeHtml, parseSchedule, parseSnakeChart, savedPageText, type ParsedSchedule, type ParsedSnakeChart } from "@/lib/ratings/import";
@@ -34,6 +39,17 @@ export const OPEN_FILE_LABEL = "Open rankings file";
 export const REPLACE_CONFIRM_MESSAGE = "Replace your current rankings?";
 export const REPLACE_LABEL = "Replace";
 export const KEEP_MINE_LABEL = "Keep mine";
+
+export const UPDATE_TITLE = "Update results";
+export const UPDATE_HINT = "Select all on the league page, copy, then paste here.";
+export const SCHEDULE_ADDRESS_LABEL = "Schedule page address (optional)";
+export const SNAKE_ADDRESS_LABEL = "Snake chart page address (optional)";
+
+/** "3 added · 1 updated · 40 unchanged · 1 conflict": what a re-import does to the saved games. */
+export function mergeSummaryText(summary: MergeSummary): string {
+    const conflicts = summary.conflicts.length;
+    return `${summary.added} added · ${summary.updated} updated · ${summary.unchanged} unchanged · ${conflicts} ${conflicts === 1 ? "conflict" : "conflicts"}`;
+}
 
 const PRESETS = [{ id: CSHL_8U_METHOD.preset, label: "CSHL 8U (2025 level sizes)", method: CSHL_8U_METHOD }];
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
@@ -75,7 +91,24 @@ function LoadedPage({ source, found, onClear, clearLabel }: { source: PageSource
 const score = (game: { homeGoals: number | null; awayGoals: number | null }, home: string, gameHome: string) =>
     home === gameHome ? `${game.homeGoals}–${game.awayGoals}` : `${game.awayGoals}–${game.homeGoals}`;
 
-export function RankingsImportScreen({ store }: { store: LocalPlannerStore }) {
+/** An optional https address field for a league page; it is remembered with the rankings on save. */
+function PageAddress({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+    const problem = pageAddressProblem(value);
+    return (
+        <TextField
+            label={label}
+            type="url"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder="https://"
+            error={problem !== null}
+            helperText={problem ?? undefined}
+            slotProps={{ htmlInput: { inputMode: "url", autoComplete: "url", spellCheck: false, maxLength: 2000 } }}
+        />
+    );
+}
+
+export function RankingsImportScreen({ store, update = false }: { store: LocalPlannerStore; update?: boolean }) {
     const { state, save, clear } = useRankingsDoc(store);
     const [scheduleText, setScheduleText] = useState("");
     const [snakeText, setSnakeText] = useState("");
@@ -90,6 +123,11 @@ export function RankingsImportScreen({ store }: { store: LocalPlannerStore }) {
     const [snake, setSnake] = useState<ParsedSnakeChart | null>(null);
     const [draft, setDraft] = useState<RankingsDocument | null>(null);
     const [conflicts, setConflicts] = useState<GameConflict[]>([]);
+    /** What merging the schedule just read did to the saved games. */
+    const [summary, setSummary] = useState<MergeSummary | null>(null);
+    /** The pages' addresses as typed; null shows the saved address. */
+    const [scheduleUrl, setScheduleUrl] = useState<string | null>(null);
+    const [snakeUrl, setSnakeUrl] = useState<string | null>(null);
     const [choices, setChoices] = useState<Map<string, Choice>>(new Map());
     /**
      * How the snake chart fits the teams this import concerns: the schedule just
@@ -105,6 +143,9 @@ export function RankingsImportScreen({ store }: { store: LocalPlannerStore }) {
 
     if (state.status !== "ready") return <RankingsStatus state={state} onStartOver={() => void clear()} />;
     const existing = state.doc;
+    const scheduleAddress = scheduleUrl ?? docSource(existing, "schedule")?.url ?? "";
+    const snakeAddress = snakeUrl ?? docSource(existing, "snakeChart")?.url ?? "";
+    const addressProblem = pageAddressProblem(scheduleAddress) ?? pageAddressProblem(snakeAddress);
 
     /** Everything derived from the inputs: nothing may be saved until the user reads again. */
     const invalidate = () => {
@@ -113,6 +154,7 @@ export function RankingsImportScreen({ store }: { store: LocalPlannerStore }) {
         setSnakeFit(null);
         setDraft(null);
         setConflicts([]);
+        setSummary(null);
         setChoices(new Map());
         setMessage(null);
     };
@@ -121,9 +163,11 @@ export function RankingsImportScreen({ store }: { store: LocalPlannerStore }) {
         const method = PRESETS.find((p) => p.id === presetId)!.method;
         let doc = existing ?? createRankingsDocument({ title, method });
         const open: GameConflict[] = [];
+        setSummary(null);
         if (nextSchedule) {
             const merged = mergeSchedule(doc, nextSchedule);
             doc = merged.doc;
+            setSummary(merged.summary);
             for (const conflict of merged.summary.conflicts) {
                 const choice = picked.get(conflict.key);
                 if (choice) doc = resolveConflict(doc, conflict, choice);
@@ -167,10 +211,16 @@ export function RankingsImportScreen({ store }: { store: LocalPlannerStore }) {
         setSnakeDivision(division);
         readSnake(undefined, division);
     };
-    const loadSchedule = (source: PageSource) => {
-        setScheduleSource(source);
+    /**
+     * The one way incoming schedule text or HTML reaches the import draft: a paste, an opened saved
+     * page, or a future handoff. It loads the page, reads it straight away, and fills in the page's
+     * address when it is known, so saving remembers it.
+     */
+    const importScheduleSource = (text: string, { sourceUrl, label = PASTED_PAGE_LABEL }: { sourceUrl?: string | null; label?: string } = {}) => {
+        if (sourceUrl) setScheduleUrl(sourceUrl);
+        setScheduleSource({ label, content: text });
         setScheduleText("");
-        readSchedule(source.content);
+        readSchedule(text);
     };
     const loadSnake = (source: PageSource) => {
         setSnakeSource(source);
@@ -183,7 +233,7 @@ export function RankingsImportScreen({ store }: { store: LocalPlannerStore }) {
     };
     const pasteSchedule = (event: ClipboardEvent<HTMLElement>) => {
         const content = pastedPage(event, (text) => parseSchedule(text, { seasonYear }).games.length);
-        if (content !== null) loadSchedule({ label: PASTED_PAGE_LABEL, content });
+        if (content !== null) importScheduleSource(content);
     };
     const pasteSnake = (event: ClipboardEvent<HTMLElement>) => {
         const content = pastedPage(event, (text) => parseSnakeChart(text).teams.length);
@@ -234,8 +284,11 @@ export function RankingsImportScreen({ store }: { store: LocalPlannerStore }) {
         else load({ label: file.name, content });
     };
     const commit = async () => {
-        if (!draft) return;
-        const result = await save(draft);
+        if (!draft || addressProblem) return;
+        // A page read in this import is stamped as read now; the other keeps its last read time.
+        const readAt = new Date().toISOString();
+        const withSchedule = withSource(draft, "schedule", scheduleAddress, schedule ? { readAt } : {});
+        const result = await save(withSource(withSchedule, "snakeChart", snakeAddress, snake ? { readAt } : {}));
         if (result.success) navigateTo(staticRoutes.rankings());
         else setMessage({ severity: "error", text: result.error });
     };
@@ -271,13 +324,15 @@ export function RankingsImportScreen({ store }: { store: LocalPlannerStore }) {
     return (
         <Stack spacing={3} sx={{ maxWidth: 820 }}>
             <Typography component="h1" variant="h5" sx={{ fontWeight: 800 }}>
-                Import rankings
+                {update ? UPDATE_TITLE : "Import rankings"}
             </Typography>
-            <Box component="ol" sx={{ m: 0, pl: 3, color: "text.secondary", "& li": { mb: 0.5 } }}>
-                <li>Open your division&rsquo;s full schedule on the league site: the page that lists every game with its score.</li>
-                <li>Select everything (Ctrl/⌘ + A) and copy it (Ctrl/⌘ + C).</li>
-                <li>Paste it into the schedule box below. Or save the page (Web Archive is fine) and open the file.</li>
-            </Box>
+            {!update && (
+                <Box component="ol" sx={{ m: 0, pl: 3, color: "text.secondary", "& li": { mb: 0.5 } }}>
+                    <li>Open your division&rsquo;s full schedule on the league site: the page that lists every game with its score.</li>
+                    <li>Select everything (Ctrl/⌘ + A) and copy it (Ctrl/⌘ + C).</li>
+                    <li>Paste it into the schedule box below. Or save the page (Web Archive is fine) and open the file.</li>
+                </Box>
+            )}
             <Typography color="text.secondary">Nothing is sent anywhere: it stays in this browser.</Typography>
 
             {!existing && (
@@ -323,9 +378,12 @@ export function RankingsImportScreen({ store }: { store: LocalPlannerStore }) {
                         maxRows={10}
                         value={scheduleText}
                         onChange={(e) => editSchedule(e.target.value)}
+                        autoFocus={update}
+                        helperText={update ? UPDATE_HINT : undefined}
                         slotProps={{ htmlInput: { onPaste: pasteSchedule } }}
                     />
                 )}
+                <PageAddress label={SCHEDULE_ADDRESS_LABEL} value={scheduleAddress} onChange={setScheduleUrl} />
                 <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap", rowGap: 1 }}>
                     <TextField
                         label="Season starts in"
@@ -346,7 +404,7 @@ export function RankingsImportScreen({ store }: { store: LocalPlannerStore }) {
                         type="file"
                         data-testid="schedule-file-input"
                         accept={PAGE_FILE_TYPES}
-                        onChange={(e) => void pickPage(e, loadSchedule)}
+                        onChange={(e) => void pickPage(e, (source) => importScheduleSource(source.content, { label: source.label }))}
                     />
                     <Button variant="contained" onClick={() => readSchedule()} disabled={!scheduleSource && !scheduleText.trim()} sx={{ minHeight: 44 }}>
                         {READ_SCHEDULE_LABEL}
@@ -355,6 +413,11 @@ export function RankingsImportScreen({ store }: { store: LocalPlannerStore }) {
                 {schedule && (
                     <Alert severity={schedule.games.length ? "success" : "warning"}>
                         {`${plural(finals, "completed game")}, ${scheduled} scheduled, ${plural(schedule.teams.length, "team")}`}
+                        {existing && summary && (
+                            <Typography variant="body2" sx={{ mt: 0.5 }} data-testid="merge-summary">
+                                {mergeSummaryText(summary)}
+                            </Typography>
+                        )}
                         {schedule.unparsed.length > 0 && (
                             <>
                                 <Typography variant="body2" sx={{ mt: 1 }}>
@@ -393,6 +456,7 @@ export function RankingsImportScreen({ store }: { store: LocalPlannerStore }) {
                         slotProps={{ htmlInput: { onPaste: pasteSnake } }}
                     />
                 )}
+                <PageAddress label={SNAKE_ADDRESS_LABEL} value={snakeAddress} onChange={setSnakeUrl} />
                 {snake?.divisions && snake.divisions.length > 1 && (
                     <TextField select label="Age division" value={snake.division ?? 0} onChange={(e) => pickDivision(Number(e.target.value))} sx={{ maxWidth: 420 }}>
                         {snake.divisions.map((division, index) => (
@@ -479,7 +543,7 @@ export function RankingsImportScreen({ store }: { store: LocalPlannerStore }) {
             )}
 
             <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-                <Button variant="contained" size="large" onClick={() => void commit()} disabled={!draft || conflicts.length > 0} sx={{ minHeight: 44 }}>
+                <Button variant="contained" size="large" onClick={() => void commit()} disabled={!draft || conflicts.length > 0 || addressProblem !== null} sx={{ minHeight: 44 }}>
                     {SAVE_IMPORT_LABEL}
                 </Button>
                 <Button onClick={() => rankingsFile.current?.click()} sx={{ minHeight: 44 }}>

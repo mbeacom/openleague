@@ -90,6 +90,49 @@ const methodSchema = z
         });
     });
 
+export const MAX_SOURCE_URL_LENGTH = 2000;
+export const SOURCE_URL_MESSAGE = "Page address must start with https://";
+export const SOURCE_URL_LENGTH_MESSAGE = `Page address must be at most ${MAX_SOURCE_URL_LENGTH} characters`;
+
+/** Why `text` (already trimmed) can't be a page address, or null: https only, no user name or password, at most 2,000 characters. */
+export function sourceUrlProblem(text: string): string | null {
+    if (text.length > MAX_SOURCE_URL_LENGTH) return SOURCE_URL_LENGTH_MESSAGE;
+    let url: URL;
+    try {
+        url = new URL(text);
+    } catch {
+        return SOURCE_URL_MESSAGE;
+    }
+    if (url.protocol !== "https:" || !url.hostname) return SOURCE_URL_MESSAGE;
+    if (url.username || url.password) return "Page address can't include a user name or password";
+    return null;
+}
+
+/**
+ * A league page the user reads results from (spec, Updating results). Only the
+ * address and when it was last read and saved: never the page's content.
+ */
+const sourceSchema = z.object({
+    url: z
+        .string({ message: SOURCE_URL_MESSAGE })
+        .transform((value) => value.trim())
+        .superRefine((value, ctx) => {
+            const problem = sourceUrlProblem(value);
+            if (problem) ctx.addIssue({ code: "custom", message: problem });
+        }),
+    /** null until the page is read and saved once (an address typed in Setup). */
+    lastReadAt: z.iso
+        .datetime({ offset: true, message: "Last read must be a date and time" })
+        .nullish()
+        .transform((value) => value ?? null),
+});
+
+/** Optional and additive under v1: older files have none, and older readers strip it as an unknown key. */
+const sourcesSchema = z.object({
+    schedule: sourceSchema.optional(),
+    snakeChart: sourceSchema.optional(),
+});
+
 export const MAX_BRACKETS = 20;
 export const MAX_BRACKET_LENGTH = 40;
 
@@ -114,6 +157,8 @@ const rankingsSchema = z
             .optional()
             .transform((value) => value ?? []),
         snapshots: z.array(z.unknown()).optional().transform((value) => value ?? []),
+        /** The league pages results are read from. Optional: older v1 files have none. */
+        sources: sourcesSchema.optional(),
     })
     .superRefine((doc, ctx) => {
         const seen = new Set<string>();
@@ -131,6 +176,9 @@ const rankingsSchema = z
 export type RankingsDocument = z.output<typeof rankingsSchema>;
 export type RankingsGame = RankingsDocument["games"][number];
 export type RankingsTeam = RankingsDocument["teams"][number];
+export type RankingsSources = NonNullable<RankingsDocument["sources"]>;
+export type RankingsSourceKind = keyof RankingsSources;
+export type RankingsSource = NonNullable<RankingsSources[RankingsSourceKind]>;
 
 export interface RankingsError {
     code: "not-rankings" | "newer-version" | "invalid";

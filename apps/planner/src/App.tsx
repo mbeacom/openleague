@@ -82,7 +82,7 @@ function RouteView({ route, store }: { route: StaticRoute; store: LocalPlannerSt
         case "rankings":
             return <RankingsScreen store={store} />;
         case "rankingsImport":
-            return <RankingsImportScreen store={store} />;
+            return <RankingsImportScreen key={route.update ? "update" : "import"} store={store} update={route.update === true} />;
         case "rankingsSetup":
             return <RankingsSetupScreen store={store} />;
         case "rankingsWhatIf":

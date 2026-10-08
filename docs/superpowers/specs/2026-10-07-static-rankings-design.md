@@ -138,6 +138,21 @@ Edge cases:
 - **Games editor.** The user can add, edit or delete a game, mark a team excluded, and edit names, starting brackets, the bracket order and level sizes.
   - Setup and Rankings warn when the levels hold fewer teams than are ranked (not excluded, with at least one final game). Both screens count the same way, so they show the same number.
 
+### Updating results
+
+- **Remembered pages.** The document can keep the address of the league schedule page and of the snake chart page (`sources`). Only the address and when it was last read are kept, never the page itself.
+  - Setup has one optional field for each ("League schedule page", "Snake chart page"). An empty field forgets that page.
+  - Import has an optional address field next to each paste box, filled in with the saved address, so the address is captured the first time a page is read.
+  - Addresses must be `https:`, at most 2,000 characters, with no user name or password.
+  - `lastReadAt` is set when that page is read and saved. A page not read in that import keeps its time. A new address typed in Setup has none until it is read.
+- **Update results (`#/rankings`).** With a schedule page saved, the Rankings screen shows one primary action, "Update results", with "Last updated <relative date>".
+  - It opens the saved page in a new tab (`noopener`, `noreferrer`) and takes this tab to `#/rankings/import/update`: the import screen with the schedule paste box focused and the hint "Select all on the league page, copy, then paste here."
+  - Once the paste is read, the preview adds the merge summary (added · updated · unchanged · conflicts). Conflicts are resolved and saved as in any re-import.
+  - With no schedule page saved, the panel invites the user to add one in Setup, and still offers a manual import.
+- **Still no fetching (R2).** The app opens the page for the user to copy; it never requests it.
+  - The Update results panel has a reserved, unused slot for a second action (a hosted "Fetch it for me"), built separately.
+  - All incoming schedule text or HTML (a paste, an opened saved page, or a future handoff) goes through one function on the import screen, `importScheduleSource(text, { sourceUrl })`.
+
 ## Screens and charts
 
 - **Rankings (`#/rankings`).**
@@ -180,11 +195,16 @@ Edge cases:
   "games": [{ "date": "2026-09-26", "time": "15:40", "home": "903", "away": "901", "homeGoals": 4, "awayGoals": 9, "status": "final", "rink": "Rink A" }],
   "myTeam": "901",
   "bracketOrder": ["Red Strong", "White Strong"],
+  "sources": {
+    "schedule": { "url": "https://league.example/schedule", "lastReadAt": "2026-10-04T15:00:00.000Z" },
+    "snakeChart": { "url": "https://league.example/snake-chart", "lastReadAt": null }
+  },
   "snapshots": []
 }
 ```
 
 - `snapshots` is reserved for phase 2 (published V1/V2/V3). v1 parsers accept it and keep it as-is.
+- `sources` is optional and additive under v1 (see Updating results). Files without it open as before, and an older reader drops it as an unknown key. Each entry holds only `url` (`https:`, at most 2,000 characters) and `lastReadAt` (an ISO date-time, or null before the first read).
 - Hypothetical what-if games are never written to the document.
 - Validation:
   - Goals are integers between 0 and 99.

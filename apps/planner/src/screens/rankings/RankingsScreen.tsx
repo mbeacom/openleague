@@ -1,7 +1,8 @@
 /**
  * Rankings (static rankings spec, Screens): my-team tiles, a ladder with level
  * bands (a compact list on phones), a sortable table with every column, filters,
- * the method summary and export. Movement is always an icon plus a word.
+ * the method summary and export, and Update results from the saved league page.
+ * Movement is always an icon plus a word.
  */
 import { useMemo, useState, type ReactNode } from "react";
 import {
@@ -29,7 +30,7 @@ import {
 } from "@mui/material";
 import { downloadBlob } from "@/components/features/practice-planner/export/download";
 import { compareTeamNumbers, composite, type RatingMethod, type RatingsResult, type TeamRating } from "@/lib/ratings";
-import { docBracketOrder, rankingsFileName, serializeRankings, toRatingInputs, type RankingsDocument } from "@/lib/rankings-document";
+import { docBracketOrder, docSource, rankingsFileName, serializeRankings, toRatingInputs, type RankingsDocument } from "@/lib/rankings-document";
 import { staticRoutes } from "../../routes";
 import type { LocalPlannerStore } from "../../store/types";
 import {
@@ -47,6 +48,7 @@ import {
     levelsHeld,
     levelsShortMessage,
 } from "./display";
+import { UpdateResultsPanel } from "./UpdateResultsPanel";
 import { useRankingsDoc } from "./useRankingsDoc";
 
 export const PICK_TEAM_LABEL = "Pick your team";
@@ -321,11 +323,8 @@ function Ready({ doc, save }: { doc: RankingsDocument; save: (doc: RankingsDocum
                     {doc.meta.title}
                 </Typography>
                 <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", rowGap: 1 }}>
-                    <Button href={staticRoutes.rankingsWhatIf()} variant="contained" sx={{ minHeight: 44 }}>
+                    <Button href={staticRoutes.rankingsWhatIf()} variant="outlined" sx={{ minHeight: 44 }}>
                         What-if
-                    </Button>
-                    <Button href={staticRoutes.rankingsImport()} sx={{ minHeight: 44 }}>
-                        Update from schedule
                     </Button>
                     <Button href={staticRoutes.rankingsSetup()} sx={{ minHeight: 44 }}>
                         Setup
@@ -338,6 +337,8 @@ function Ready({ doc, save }: { doc: RankingsDocument; save: (doc: RankingsDocum
                     </Button>
                 </Stack>
             </Stack>
+
+            <UpdateResultsPanel source={docSource(doc, "schedule")} />
 
             {result.componentCount > 1 && <Alert severity="warning">{COMPONENTS_WARNING}</Alert>}
             {!result.converged && <Alert severity="info">{NOT_CONVERGED_WARNING}</Alert>}
