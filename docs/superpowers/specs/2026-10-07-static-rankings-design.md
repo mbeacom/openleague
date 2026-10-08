@@ -47,6 +47,8 @@ Ratings and results for 8U teams stay in the static app, which computes from pub
 
 The app parses text or HTML that the user supplies. It makes no request to league or third-party sites: browsers would block such requests (CORS), page structures change, and automated collection may conflict with site terms. The parser checks against the page structure, but nothing depends on a live site.
 
+**Amended by ADR-0024.** The static app still never fetches. A signed-in user may ask the hosted app to fetch one page from an allowlisted league site and hand the parsed games back to this import (`2026-10-07-hosted-league-page-fetch-design.md`). The result goes through the same preview and merge, and nothing is stored on the hosted platform.
+
 ### R3. The team number is the key
 
 Snake chart, schedule and standings all carry the 3-digit team number, but display names differ between pages (e.g. "Riverside Red 1"). Teams are matched on number, and the first name seen is shown unless the user edits it.

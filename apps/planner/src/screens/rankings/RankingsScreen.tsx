@@ -49,6 +49,7 @@ import {
     levelsShortMessage,
 } from "./display";
 import { UpdateResultsPanel } from "./UpdateResultsPanel";
+import { FetchForMeAction } from "./FetchForMeAction";
 import { useRankingsDoc } from "./useRankingsDoc";
 
 export const PICK_TEAM_LABEL = "Pick your team";
@@ -338,7 +339,7 @@ function Ready({ doc, save }: { doc: RankingsDocument; save: (doc: RankingsDocum
                 </Stack>
             </Stack>
 
-            <UpdateResultsPanel source={docSource(doc, "schedule")} />
+            <UpdateResultsPanel source={docSource(doc, "schedule")} fetchAction={<FetchForMeAction source={docSource(doc, "schedule")} />} />
 
             {result.componentCount > 1 && <Alert severity="warning">{COMPONENTS_WARNING}</Alert>}
             {!result.converged && <Alert severity="info">{NOT_CONVERGED_WARNING}</Alert>}

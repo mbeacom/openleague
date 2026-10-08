@@ -47,8 +47,8 @@ export interface UpdateResultsPanelProps {
     source: RankingsSource | null;
     now?: Date;
     /**
-     * Reserved for a second action next to Update results: a hosted "Fetch it for me" that hands the
-     * page to the import screen's `importScheduleSource`. Unused by default; the static app never fetches.
+     * A second action next to Update results: RankingsScreen passes the hosted "Fetch it for me"
+     * link (FetchForMeAction, ADR-0024). The static app itself never fetches.
      */
     fetchAction?: ReactNode;
 }

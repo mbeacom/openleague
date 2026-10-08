@@ -36,6 +36,10 @@ const envSchema = z.object({
     NEXT_PUBLIC_HOTJAR_ID: z.string().optional(),
     NEXT_PUBLIC_MIXPANEL_TOKEN: z.string().optional(),
 
+    // "Fetch it for me" (ADR-0024): league hosts the hosted app may fetch a
+    // schedule page from, comma-separated. Unset means the built-in default.
+    LEAGUE_FETCH_ALLOWED_HOSTS: z.string().optional(),
+
     // AWS — SES transport. AWS_ROLE_ARN switches credential resolution to
     // Vercel OIDC (short-lived STS credentials, no stored secret); when it is
     // unset the SDK's default provider chain is used instead.

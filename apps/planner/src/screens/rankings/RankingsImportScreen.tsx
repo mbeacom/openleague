@@ -30,6 +30,7 @@ import { staticRoutes } from "../../routes";
 import type { LocalPlannerStore } from "../../store/types";
 import { RankingsStatus } from "./display";
 import { useRankingsDoc } from "./useRankingsDoc";
+import { usePulledSchedule } from "./pulled-schedule";
 
 export const READ_SCHEDULE_LABEL = "Read schedule";
 export const READ_SNAKE_LABEL = "Read snake chart";
@@ -114,8 +115,9 @@ function PageAddress({ label, value, onChange }: { label: string; value: string;
     );
 }
 
-export function RankingsImportScreen({ store, update = false }: { store: LocalPlannerStore; update?: boolean }) {
+export function RankingsImportScreen({ store, update = false, pull }: { store: LocalPlannerStore; update?: boolean; pull?: string }) {
     const { state, save, clear } = useRankingsDoc(store);
+    const pulled = usePulledSchedule(pull);
     const [scheduleText, setScheduleText] = useState("");
     const [snakeText, setSnakeText] = useState("");
     const [scheduleSource, setScheduleSource] = useState<PageSource | null>(null);
@@ -253,6 +255,12 @@ export function RankingsImportScreen({ store, update = false }: { store: LocalPl
         setSnakeSource(null);
         editSnake("");
     };
+    // A schedule from "Fetch it for me" (ADR-0024) loads like an opened page, once.
+    const arrived = pulled.take();
+    if (arrived) {
+        if (arrived.ok) importScheduleSource(arrived.schedule.content, { sourceUrl: arrived.schedule.sourceUrl, label: arrived.schedule.label });
+        else setMessage({ severity: "error", text: arrived.message });
+    }
     const choose = (conflict: GameConflict, choice: Choice) => {
         const next = new Map(choices).set(conflict.key, choice);
         setChoices(next);
