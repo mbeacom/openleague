@@ -91,6 +91,17 @@ describe("fetchLeagueSchedule", () => {
         fetchMock.mockImplementationOnce(() => new Promise(() => {}));
         const pending = fetchLeagueSchedule({ url: PAGE });
         await vi.advanceTimersByTimeAsync(10_001);
+        // Still waiting: the default deadline is 60 s, not 10 s.
+        await vi.advanceTimersByTimeAsync(50_000);
+        expect(await pending).toMatchObject({ success: false, error: expect.stringMatching(/too slow/), details: { kind: "timeout" } });
+    });
+
+    it("uses LEAGUE_FETCH_TIMEOUT_MS as the deadline", async () => {
+        vi.useFakeTimers();
+        vi.stubEnv("LEAGUE_FETCH_TIMEOUT_MS", "5000");
+        fetchMock.mockImplementationOnce(() => new Promise(() => {}));
+        const pending = fetchLeagueSchedule({ url: PAGE });
+        await vi.advanceTimersByTimeAsync(5_001);
         expect(await pending).toMatchObject({ success: false, details: { kind: "timeout" } });
     });
 
