@@ -30,6 +30,7 @@ import { printPixelRatio } from "../print/PrintDiagram";
 import { runBySuffix, runByText, staffHeaderLabel, staffNames } from "@/lib/utils/session-staff";
 import { drillEquipment, drillEquipmentText, equipmentLabel } from "@/lib/utils/equipment-needs";
 import { rollupEquipment } from "@/lib/utils/practice-equipment";
+import { rosterSheetLines, type PracticeRoster } from "@/lib/utils/practice-roster";
 
 export interface ExportSessionPlay {
     kind?: "drill";
@@ -81,6 +82,8 @@ export interface ExportSession {
     staff?: SessionStaffMember[];
     /** The practice's own equipment; absent reads as none. */
     equipment?: EquipmentCountItem[];
+    /** The practice's roster (roster spec R15); absent or null: none. */
+    roster?: PracticeRoster | null;
     plays: ExportSessionRow[];
 }
 
@@ -159,6 +162,10 @@ export interface BenchSheetModel {
     gap: string | null;
     /** "Staff: Coach Lee, Sam, Alex", or null when the practice lists none */
     staff: string | null;
+    /** "Roster: 7 skaters · 1 goalie", or null when the practice has no players (roster spec R15) */
+    roster: string | null;
+    /** "Goalie: #30 Pat" per position; empty unless names were included (roster spec R10) */
+    rosterPlayers: string[];
     timeline: BenchSheetTimelineRow[];
     /** The practice's equipment, one "Cones ×12" per item (practice equipment spec R5); empty: omitted */
     equipment: string[];
@@ -182,8 +189,10 @@ const MS_PER_MINUTE = 60_000;
 export function buildBenchSheetModel(
     stored: ExportSession,
     renderers: BenchSheetRenderers,
-    options: { logo?: LogoImage | null } = {},
+    options: { logo?: LogoImage | null; includeRosterNames?: boolean } = {},
 ): BenchSheetModel {
+    // Counts always; names and numbers only when the coach asked (roster spec R10).
+    const rosterLines = rosterSheetLines(stored.roster, options.includeRosterNames === true);
     // Goalie markers hidden at render time only (spec R7). The plan JSON export never calls this.
     const session = sessionForDisplay(stored);
     const start = sessionStart(session);
@@ -220,6 +229,8 @@ export function buildBenchSheetModel(
         place: [session.venueName, session.surfaceName, session.segmentName].filter(Boolean).join(" · ") || null,
         gap: gap > 0 ? betweenBlocksLabel(gap) : null,
         staff: staffHeaderLabel(session.staff),
+        roster: rosterLines?.counts ?? null,
+        rosterPlayers: rosterLines?.players ?? [],
         timeline: rows.map(({ group, startsAt, roundStarts }): BenchSheetTimelineRow => {
             const head = group.stations[0];
             if (isBlockRow(head)) {

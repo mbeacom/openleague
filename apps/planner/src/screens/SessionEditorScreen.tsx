@@ -32,6 +32,8 @@ export function toLocalSessionSave(session: PracticeSessionSubmitData): LocalSes
         ...(session.staff !== undefined && { staff: toSessionStaffInputs(session.staff) }),
         // Absent = unchanged (practice equipment spec R3): an editor that holds no list sends none.
         ...(session.equipment !== undefined && { equipment: session.equipment }),
+        // Absent = unchanged (roster spec R7): an editor that never loaded or touched a roster sends none.
+        ...(session.roster !== undefined && { roster: session.roster }),
     };
 }
 

@@ -18,7 +18,8 @@ import { StaffNameConflictError, isStaffNameConflict, writeRowStaff } from "@/li
 import { STAFF_NAME_TAKEN_MESSAGE, staffNameKey } from "@/lib/utils/session-staff";
 import { sanitizePlayDataForWrite } from "@/lib/utils/play-data";
 import { equipmentJson } from "@/lib/utils/equipment-needs";
-import { parsePlan, type PlanDrill } from "@/lib/plan-document";
+import { parsePlan, planRosterToPractice, type PlanDrill } from "@/lib/plan-document";
+import { replaceSessionRoster } from "@/lib/services/practice-session-roster";
 import type { PlayData } from "@/types/practice-planner";
 
 export type ActionResult<T> =
@@ -116,6 +117,9 @@ export async function importPracticePlan(
                 }
             }
             const staffByName = new Map(planSession.staff.map((name, index) => [staffNameKey(name), staffIds[index]]));
+            // Roster (roster spec R11): typed players from the file, never linked to team players.
+            const roster = planRosterToPractice(planSession.roster);
+            if (roster) await replaceSessionRoster(tx, session.id, roster);
             if (planSession.drills.length === 0) return session.id;
 
             const drillFields = drillEntries.map((entry) => ({

@@ -49,6 +49,7 @@ import { SessionEquipmentCard } from "@/components/features/practice-planner/Ses
 import { StationMap } from "@/components/features/practice-planner/StationMap";
 import { SessionTimeline } from "@/components/features/practice-planner/SessionTimeline";
 import { ExportPlanMenu } from "@/components/features/practice-planner/ExportPlanMenu";
+import { RosterSummary } from "@/components/features/practice-planner/RosterSummary";
 import { PlayDiagram } from "@/components/features/practice-planner/PlayDiagram";
 import { useSessionGoalies } from "@/components/features/practice-planner/useSessionGoalies";
 import { SidebarPlayCard } from "@/components/features/practice-planner/SidebarPlayCard";
@@ -396,6 +397,8 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
           />
         </Box>
       </Paper>
+
+      <RosterSummary roster={session.roster} />
 
       {/* Timeline (3b): when each block runs */}
       {session.plays.length > 0 && (

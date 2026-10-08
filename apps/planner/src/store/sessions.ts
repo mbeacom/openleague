@@ -6,7 +6,7 @@
 import { z } from "zod";
 import type { PlayData, PracticeSessionView, SessionItem, SessionRow } from "@/types/practice-planner";
 import { MAX_BLOCK_LABEL_LENGTH, MAX_ROW_STAFF, VALIDATION_CONSTRAINTS } from "@/types/practice-planner";
-import { parsePlan, serializePlan, type PlanBlockInput, type PlanDrillInput } from "@/lib/plan-document";
+import { parsePlan, planRosterToPractice, serializePlan, type PlanBlockInput, type PlanDrillInput, type PlanRoster } from "@/lib/plan-document";
 import { createEmptyPlayData, parseStoredPlayData } from "@/lib/utils/play-data";
 import { drillTags, toPlayFocus, toPlayGoalies } from "@/lib/utils/drill-tags";
 import { toAgeGroups } from "@/lib/utils/age-groups";
@@ -61,9 +61,10 @@ import {
 } from "@/lib/utils/session-staff";
 import { cleanPracticeEquipment, practiceEquipmentError, readPracticeEquipment } from "@/lib/utils/equipment-needs";
 import type { EquipmentCountItem } from "@/types/practice-planner";
+import { ROSTER_INVALID_MESSAGE, ROSTER_NO_TEAM_LINK_MESSAGE, practiceRosterSchema, toPracticeRoster, type PracticeRoster } from "@/lib/utils/practice-roster";
 import { LOCAL_AUTHOR_NAME, LOCAL_TEAM_ID } from "../config";
 import { META_TEAM_PROFILE } from "./records";
-import type { RepoTx, StoredPlay, StoredSession, StoredSessionRow, StoredStaffMember } from "./records";
+import type { RepoTx, StoredPlay, StoredRoster, StoredSession, StoredSessionRow, StoredStaffMember } from "./records";
 import { StoreRefusal, attempt, checkedAgeGroups, checkedGoalieCount, drillText, ok, thumbnailOrNull, writablePlayData, write, type StoreContext } from "./shared";
 import type { LocalPlannerStore, LocalSessionDrill, LocalSessionSave } from "./types";
 
@@ -197,6 +198,35 @@ function checkEquipment(input: LocalSessionSave): EquipmentCountItem[] | undefin
     if (error) throw new StoreRefusal(error);
     return cleanPracticeEquipment(input.equipment);
 }
+
+/**
+ * The roster to store (roster spec R7, R12), checked by hosted's schema in its
+ * words. Undefined when the save sends none (absent = unchanged); null clears.
+ * This planner has no team roster, so a team link is refused.
+ */
+function checkRoster(input: LocalSessionSave): StoredRoster | null | undefined {
+    if (input.roster === undefined || input.roster === null) return input.roster;
+    const parsed = practiceRosterSchema.safeParse(input.roster);
+    if (!parsed.success) throw new StoreRefusal(parsed.error.issues[0]?.message ?? ROSTER_INVALID_MESSAGE);
+    if (parsed.data.players.some((player) => player.playerId != null)) throw new StoreRefusal(ROSTER_NO_TEAM_LINK_MESSAGE);
+    return toStoredRoster(parsed.data, (player) => player.key);
+}
+
+function toStoredRoster(roster: PracticeRoster, id: (player: PracticeRoster["players"][number]) => string): StoredRoster {
+    return {
+        ageGroup: roster.ageGroup,
+        roles: [...roster.roles],
+        players: roster.players.map((player) => ({ id: id(player), name: player.name, number: player.number, role: player.role })),
+    };
+}
+
+function planRosterToStored(roster: PlanRoster | null, newId: () => string): StoredRoster | null {
+    const practice = planRosterToPractice(roster);
+    return practice ? toStoredRoster(practice, () => newId()) : null;
+}
+
+/** A stored roster as the views and the editor read it (legacy sessions: none). */
+const readRoster = (session: StoredSession): PracticeRoster | null => toPracticeRoster(session.roster);
 
 /**
  * Each row's staff to store (spec R3, R7). A sent list: the row's keys as sent,
@@ -401,6 +431,7 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                     staff: (session.staff ?? []).map((member) => ({ id: member.id, name: member.name })),
                     // Legacy sessions read as none (practice equipment spec R7).
                     equipment: readPracticeEquipment(session.equipment ?? []),
+                    roster: readRoster(session),
                     plays: sortedRows(session).flatMap((row): SessionRow[] => {
                         const kind = toRowKind(row.kind);
                         if (isBlockKind(kind)) {
@@ -484,6 +515,7 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                         transitionMinutes: session.transitionMinutes ?? 0,
                         staff: (session.staff ?? []).map((member) => ({ id: member.id, name: member.name })),
                         equipment: readPracticeEquipment(session.equipment ?? []),
+                        roster: readRoster(session),
                         plays: normalizeGroups(editorPlays),
                     },
                 });
@@ -496,6 +528,8 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                 const staff = checkStaff(input);
                 // A create without equipment stores none.
                 const equipment = checkEquipment(input) ?? [];
+                // A create without a roster stores none.
+                const roster = checkRoster(input) ?? null;
                 const goaliesAttending = checkedGoalieCount(input.goaliesAttending) ?? null;
                 const transitionMinutes = checkedTransition(input.transitionMinutes) ?? 0;
                 // A create has nothing stored: absent timing takes the defaults.
@@ -508,7 +542,7 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                     // A create without staff stores none.
                     const sessionStaff = staff ?? [];
                     assertExportable({ ...meta, goaliesAttending, transitionMinutes, staff: sessionStaff, equipment }, rows, plays, at);
-                    await tx.putSession({ id, ...meta, goaliesAttending, transitionMinutes, staff: sessionStaff, equipment, rows, createdAt: at, updatedAt: at });
+                    await tx.putSession({ id, ...meta, goaliesAttending, transitionMinutes, staff: sessionStaff, equipment, roster, rows, createdAt: at, updatedAt: at });
                     return { id, plays: mapping };
                 });
                 return ok(saved);
@@ -520,6 +554,7 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                 checkRows(input.plays);
                 const staff = checkStaff(input);
                 const sentEquipment = checkEquipment(input);
+                const sentRoster = checkRoster(input);
                 const count = checkedGoalieCount(input.goaliesAttending);
                 const sentGap = checkedTransition(input.transitionMinutes);
                 const saved = await write(ctx, async (tx) => {
@@ -537,7 +572,9 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                     // Absent = unchanged (practice equipment spec R3); a legacy session has none.
                     const equipment = sentEquipment ?? existing.equipment ?? [];
                     assertExportable({ ...meta, goaliesAttending, transitionMinutes, staff: sessionStaff, equipment }, rows, plays, at);
-                    await tx.putSession({ ...existing, ...meta, goaliesAttending, transitionMinutes, staff: sessionStaff, equipment, rows, updatedAt: at });
+                    // Absent = unchanged; null clears (roster spec R7).
+                    const roster = sentRoster === undefined ? (existing.roster ?? null) : sentRoster;
+                    await tx.putSession({ ...existing, ...meta, goaliesAttending, transitionMinutes, staff: sessionStaff, equipment, roster, rows, updatedAt: at });
                     // Drop-only cleanup: copies this session referenced before and no longer does.
                     // A copy the drill dialog made but the editor hasn't sent is never touched here.
                     const referenced = new Set(rows.flatMap((row) => (row.playId ? [row.playId] : [])));
@@ -653,7 +690,10 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                         equipment: [...(source.equipment ?? [])],
                     };
                     assertExportable(meta, rows, plays, at);
-                    await tx.putSession({ id: newId, ...meta, rows, createdAt: at, updatedAt: at });
+                    // The roster is copied with new player ids (roster spec R7).
+                    const sourceRoster = readRoster(source);
+                    const roster = sourceRoster ? toStoredRoster(sourceRoster, () => ctx.newId()) : null;
+                    await tx.putSession({ id: newId, ...meta, roster, rows, createdAt: at, updatedAt: at });
                     return newId;
                 });
                 return ok({ id });
@@ -740,6 +780,8 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                         transitionMinutes: parsed.plan.session.transitionMinutes,
                         staff,
                         equipment: parsed.plan.session.equipment,
+                        // Typed players, new ids; names only when the file carried them (roster spec R11).
+                        roster: planRosterToStored(parsed.plan.session.roster, () => ctx.newId()),
                         rows,
                         createdAt: at,
                         updatedAt: at,

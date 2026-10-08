@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PracticeSessionEditorWrapper } from "./PracticeSessionEditorWrapper";
 import { getUserAdminTeamContext } from "@/lib/actions/team-context";
-import { getPracticeStaffOptions } from "@/lib/actions/practice-session-queries";
+import { getPracticeRosterOptions, getPracticeStaffOptions } from "@/lib/actions/practice-session-queries";
 import { getVenueBookingOptions } from "../venue-booking-options";
 
 export const metadata: Metadata = {
@@ -21,6 +21,7 @@ export default async function NewPracticeSessionPage() {
   // Venue/surface/segment options for the optional ice booking (006, FR-019).
   const bookingOptions = await getVenueBookingOptions(context.teamId);
   const staffOptions = await getPracticeStaffOptions(context.teamId);
+  const rosterOptions = await getPracticeRosterOptions(context.teamId);
 
   return (
     <PageContainer>
@@ -28,6 +29,7 @@ export default async function NewPracticeSessionPage() {
         teamId={context.teamId}
         bookingOptions={bookingOptions}
         staffOptions={staffOptions}
+        rosterOptions={rosterOptions}
       />
     </PageContainer>
   );

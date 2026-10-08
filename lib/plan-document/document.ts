@@ -20,7 +20,19 @@ import {
     staffNameKey,
 } from "@/lib/utils/session-staff";
 import { drillTags, toGoaliesAttending, toPlayFocus, toPlayGoalies } from "@/lib/utils/drill-tags";
-import { ageGroupsSchema, toAgeGroups, type AgeGroup } from "@/lib/utils/age-groups";
+import { AGE_GROUPS, ageGroupsSchema, toAgeGroup, toAgeGroups, type AgeGroup } from "@/lib/utils/age-groups";
+import {
+    MAX_ROSTER_PLAYERS,
+    ROSTER_LIMIT_MESSAGE,
+    ROSTER_NAME_LENGTH_MESSAGE,
+    ROSTER_NAME_MAX,
+    ROSTER_NUMBER_MESSAGE,
+    cleanRosterName,
+    normalizeRosterRoles,
+    toRosterNumber,
+    toRosterRole,
+    type PracticeRoster,
+} from "@/lib/utils/practice-roster";
 import { createEmptyPlayData, parseStoredPlayData } from "@/lib/utils/play-data";
 import { exportPracticeEquipment, practiceEquipmentSchema } from "@/lib/utils/equipment-needs";
 import type { EquipmentCountItem } from "@/types/practice-planner";
@@ -162,6 +174,61 @@ function planStaffSchema(max: number, message: string) {
  * "Equipment" issue. Each drill's own list rides inside its playData.
  */
 const planEquipmentSchema = practiceEquipmentSchema.nullish().transform((items): EquipmentCountItem[] => items ?? []);
+// Practice roster (roster and suggestions spec R11): positions always, names and
+// numbers only when the exporter included them. Repairable values read leniently
+// (an unknown position or age); a broken list, an over-long name or a number
+// that isn't 1–3 digits is a "Roster: …" issue.
+const planRosterNameSchema = z
+    .string({ message: ROSTER_NAME_LENGTH_MESSAGE })
+    .transform(cleanRosterName)
+    .pipe(z.string().max(ROSTER_NAME_MAX, ROSTER_NAME_LENGTH_MESSAGE))
+    .nullish()
+    .transform((value) => value ?? "");
+
+const planRosterNumberSchema = z
+    .union([z.string(), z.number()], { message: ROSTER_NUMBER_MESSAGE })
+    .nullish()
+    .transform((value, ctx) => {
+        if (value === null || value === undefined || value === "") return "";
+        const number = toRosterNumber(value);
+        if (!number) {
+            ctx.addIssue({ code: "custom", message: ROSTER_NUMBER_MESSAGE });
+            return z.NEVER;
+        }
+        return number;
+    });
+
+/** A plan's roster: positions always; a player's name and number only when the exporter included them. */
+export interface PlanRoster {
+    ageGroup: AgeGroup | null;
+    roles: string[];
+    players: Array<{ role: string; name?: string; number?: string }>;
+}
+
+const planRosterSchema = z
+    .object({
+        ageGroup: z.preprocess(toAgeGroup, z.enum(AGE_GROUPS).nullable()),
+        roles: z.preprocess((value) => (Array.isArray(value) ? value : []), z.array(z.unknown())),
+        players: z
+            .array(z.object({ role: z.unknown(), name: planRosterNameSchema, number: planRosterNumberSchema }), {
+                message: "The roster's players must be a list",
+            })
+            .max(MAX_ROSTER_PLAYERS, ROSTER_LIMIT_MESSAGE),
+    })
+    .nullish()
+    .transform((roster): PlanRoster | null => {
+        if (!roster) return null;
+        const roles = normalizeRosterRoles(roster.roles);
+        return {
+            ageGroup: roster.ageGroup,
+            roles,
+            players: roster.players.map((player) => ({
+                role: toRosterRole(player.role, roles),
+                ...(player.name && { name: player.name }),
+                ...(player.number && { number: player.number }),
+            })),
+        };
+    });
 
 const sequenceSchema = z.number({ message: "Sequence must be a number" }).int("Sequence must be a whole number").min(0, "Sequence can't be negative");
 
@@ -228,6 +295,7 @@ const planSessionSchema = z
         transitionMinutes: transitionMinutesSchema,
         staff: planStaffSchema(MAX_SESSION_STAFF, STAFF_LIMIT_MESSAGE),
         equipment: planEquipmentSchema,
+        roster: planRosterSchema,
         drills: z.array(planEntrySchema).max(MAX_PLAN_DRILLS, `A plan can hold at most ${MAX_PLAN_DRILLS} rows (drills and blocks)`),
     })
     .superRefine((session, ctx) => {
@@ -351,7 +419,49 @@ export interface PlanSessionInput {
     staff?: string[];
     /** The practice's own equipment; absent = none. Items that break the rules are dropped. */
     equipment?: EquipmentCountItem[];
+    /** The practice's roster; absent or null = none. Names go in only with includeRosterNames. */
+    roster?: PracticeRoster | null;
     drills: Array<PlanDrillInput | PlanBlockInput>;
+}
+
+export interface SerializePlanOptions {
+    /**
+     * Write each roster player's name and number (roster spec R10). Off by
+     * default: a plan link never sets it; a downloaded file sets it only when
+     * the coach checks "Include player names".
+     */
+    includeRosterNames?: boolean;
+}
+
+/** The roster a plan writes: positions always; names and numbers only when asked; never a team link. */
+export function exportRoster(roster: PracticeRoster | null | undefined, includeNames: boolean): PlanRoster | null {
+    if (!roster) return null;
+    const roles = normalizeRosterRoles(roster.roles);
+    return {
+        ageGroup: toAgeGroup(roster.ageGroup),
+        roles,
+        players: roster.players.slice(0, MAX_ROSTER_PLAYERS).map((player) => {
+            const name = includeNames ? cleanRosterName(player.name).slice(0, ROSTER_NAME_MAX).trim() : "";
+            const number = includeNames ? toRosterNumber(player.number) : "";
+            return { role: toRosterRole(player.role, roles), ...(name && { name }), ...(number && { number }) };
+        }),
+    };
+}
+
+/** A plan's roster as the editor and the stores hold it: fresh keys, typed players (never linked). */
+export function planRosterToPractice(roster: PlanRoster | null, keyPrefix = "plan-roster"): PracticeRoster | null {
+    if (!roster) return null;
+    return {
+        ageGroup: roster.ageGroup,
+        roles: [...roster.roles],
+        players: roster.players.map((player, index) => ({
+            key: `${keyPrefix}-${index}`,
+            name: player.name ?? "",
+            number: player.number ?? "",
+            role: player.role,
+            playerId: null,
+        })),
+    };
 }
 
 /** The staff an export writes: cleaned names, the first spelling wins ignoring case, up to 12 names of 1–60 characters. */
@@ -385,7 +495,7 @@ function exportRowStaff(names: readonly string[] | undefined, listed: ReadonlyMa
  * previous one; a rotation that can't run is dropped), and keeps only staff
  * names that fit the plan's rules, so every export imports.
  */
-export function serializePlan(input: PlanSessionInput, generator: PlanGenerator, now: Date = new Date()): PlanDocument {
+export function serializePlan(input: PlanSessionInput, generator: PlanGenerator, now: Date = new Date(), options: SerializePlanOptions = {}): PlanDocument {
     const rows = settleRotations(normalizeGroups([...input.drills].sort((a, b) => a.sequence - b.sequence)));
     const staff = exportStaff(input.staff);
     const listed = new Map(staff.map((name) => [staffNameKey(name), name]));
@@ -425,6 +535,7 @@ export function serializePlan(input: PlanSessionInput, generator: PlanGenerator,
             transitionMinutes: toTransitionMinutes(input.transitionMinutes),
             staff,
             equipment: exportPracticeEquipment(input.equipment),
+            roster: exportRoster(input.roster, options.includeRosterNames === true),
             drills,
         },
     };
@@ -460,6 +571,7 @@ function drillNameAt(raw: unknown, index: number): string | null {
 function describeIssue(issue: z.ZodError["issues"][number], raw: unknown): string {
     const [scope, list, index] = issue.path;
     if (scope === "session" && list === "equipment") return `Equipment: ${issue.message}`;
+    if (scope === "session" && list === "roster") return `Roster: ${issue.message}`;
     if (scope === "session" && list === "drills" && typeof index === "number") {
         const name = drillNameAt(raw, index);
         return `Drill ${index + 1}${name ? ` ("${name}")` : ""}: ${issue.message}`;
@@ -560,6 +672,7 @@ export interface PlanEditorSession {
     transitionMinutes: number;
     staff: string[];
     equipment: EquipmentCountItem[];
+    roster: PracticeRoster | null;
     plays: Array<PlanEditorDrill | PlanEditorBlock>;
 }
 
@@ -574,6 +687,7 @@ export function planToEditorSession(plan: PlanDocument): PlanEditorSession {
         transitionMinutes: plan.session.transitionMinutes,
         staff: plan.session.staff,
         equipment: plan.session.equipment,
+        roster: planRosterToPractice(plan.session.roster),
         plays: plan.session.drills.map((entry): PlanEditorDrill | PlanEditorBlock =>
             entry.kind === "drill"
                 ? {

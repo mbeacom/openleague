@@ -6,7 +6,8 @@ vi.mock("@/lib/services/play-ids", () => ({ newPlayId: () => `cowned${playIds.ne
 
 const { mockAuth, models, mockPrisma, mockCache } = vi.hoisted(() => {
     const models = {
-        practiceSession: { create: vi.fn() },
+        practiceSession: { create: vi.fn(), update: vi.fn() },
+        practiceSessionRosterPlayer: { deleteMany: vi.fn(), createMany: vi.fn() },
         play: { createMany: vi.fn() },
         practiceSessionPlay: { createMany: vi.fn(), findMany: vi.fn() },
         practiceSessionStaff: { createMany: vi.fn() },
@@ -256,6 +257,28 @@ describe("importPracticePlan", () => {
         await call();
         expect(models.practiceSessionStaff.createMany).not.toHaveBeenCalled();
         expect(models.practiceSessionPlayStaff.createMany).not.toHaveBeenCalled();
+    });
+
+    it("creates the plan's roster as typed players, never linked (roster spec R11)", async () => {
+        const roster = { ageGroup: "u8" as const, roles: ["S", "G"], players: [{ key: "a", name: "Alex", number: "7", role: "S" }, { key: "b", name: "", number: "", role: "G" }] };
+        const named = serializePlan(
+            { title: "Brookside 8U", durationMinutes: 60, date: "2026-10-06", startTime: "19:00", roster, drills: [] },
+            "openleague-static",
+            new Date(DATE),
+            { includeRosterNames: true },
+        );
+        expect(await call({ document: named })).toEqual({ success: true, data: { sessionId: SESSION } });
+        expect(models.practiceSession.update).toHaveBeenCalledWith({ where: { id: SESSION }, data: { rosterAgeGroup: "u8", rosterRoles: ["S", "G"] } });
+        expect(models.practiceSessionRosterPlayer.createMany.mock.calls[0][0].data).toEqual([
+            { sessionId: SESSION, position: 0, role: "S", playerId: null, name: "Alex", number: "7" },
+            { sessionId: SESSION, position: 1, role: "G", playerId: null, name: null, number: null },
+        ]);
+    });
+
+    it("writes no roster for a plan without one", async () => {
+        await call();
+        expect(models.practiceSessionRosterPlayer.createMany).not.toHaveBeenCalled();
+        expect(models.practiceSession.update).not.toHaveBeenCalled();
     });
 });
 

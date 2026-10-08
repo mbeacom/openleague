@@ -49,6 +49,10 @@ import { SessionStaffSection } from "./SessionStaffSection";
 import { useSessionStaff } from "./useSessionStaff";
 import { SessionEquipmentSection } from "./SessionEquipmentSection";
 import { useSessionEquipment } from "./useSessionEquipment";
+import { SessionRosterSection } from "./SessionRosterSection";
+import { DrillSuggestionsPanel } from "./DrillSuggestionsPanel";
+import { useSessionRoster } from "./useSessionRoster";
+import type { RosterOption } from "@/lib/utils/practice-roster";
 import { BookingConflictAlert, VenueBookingFields } from "./VenueBookingFields";
 import {
     useVenueBooking,
@@ -110,6 +114,8 @@ export interface PracticeSessionEditorProps {
     wholeLabelBySurface?: Record<string, string>;
     /** Hosted: the team's officials and admins for the Staff picker (spec R4). The static planner passes none. */
     staffOptions?: StaffOption[];
+    /** Hosted: the team's players for the roster's "Add from team" (roster spec R8). The static planner passes none. */
+    rosterOptions?: RosterOption[];
     onSave?: (session: PracticeSessionSubmitData) => Promise<PracticeSessionSaveResult>;
     onShare?: (sessionId: string) => Promise<void>;
     onCancel?: () => void;
@@ -130,6 +136,7 @@ export function PracticeSessionEditor({
     segmentsBySurface = {},
     wholeLabelBySurface = {},
     staffOptions = [],
+    rosterOptions = [],
     onSave,
     onShare,
     onCancel,
@@ -193,6 +200,8 @@ export function PracticeSessionEditor({
     const staff = useSessionStaff({ initial: initialData?.staff, plays, setPlays, markDirty, locked: creating });
     const { staff: staffList, applySaved: applySavedStaff } = staff;
     const equipment = useSessionEquipment(initialData?.equipment, markDirty, creating);
+    const roster = useSessionRoster({ initial: initialData?.roster, markDirty, locked: creating });
+    const rosterPayload = roster.payload;
 
     // Optional ice booking (feature 006, FR-019).
     const booking = useVenueBooking({
@@ -366,6 +375,8 @@ export function PracticeSessionEditor({
                 // The list loads in sequence order and every edit keeps it so, as settleRotations groups by position.
                 plays: staffed ? staffed.rows : settled,
                 ...(staffed?.staff && { staff: staffed.staff }),
+                // Absent = unchanged: an untouched new practice sends no roster (roster spec R7).
+                ...(rosterPayload !== undefined && { roster: rosterPayload }),
                 isShared,
                 goaliesAttending: goalies.goaliesAttending,
                 transitionMinutes: betweenBlocks.transitionMinutes,
@@ -419,7 +430,7 @@ export function PracticeSessionEditor({
             setIsSaving(false);
             saveFlight.finish(outcome);
         }
-    }, [title, date, duration, plays, isShared, goalies.goaliesAttending, betweenBlocks.transitionMinutes, equipment.items, staffList, applySavedStaff, sessionId, booking, onSave, validateForm, saveFlight]);
+    }, [title, date, duration, plays, isShared, goalies.goaliesAttending, betweenBlocks.transitionMinutes, equipment.items, staffList, applySavedStaff, rosterPayload, sessionId, booking, onSave, validateForm, saveFlight]);
 
     // Keep handleSaveRef updated with latest handleSave function
     useEffect(() => {
@@ -644,6 +655,22 @@ export function PracticeSessionEditor({
                 onAddTyped={staff.addTyped}
                 onRename={staff.rename}
                 onRemove={staff.remove}
+            />
+
+            <SessionRosterSection
+                state={roster}
+                teamOptions={rosterOptions}
+                goaliesAttending={goalies.goaliesAttending}
+                onUseGoalies={goalies.setGoaliesAttending}
+                disabled={busy}
+            />
+            <DrillSuggestionsPanel
+                teamId={teamId}
+                roster={roster.roster}
+                goaliesAttending={goalies.goaliesAttending}
+                plays={plays}
+                disabled={busy || creating}
+                onAdd={(play) => handleAddPlayFromLibrary(play)}
             />
 
             <VenueBookingFields

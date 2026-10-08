@@ -33,6 +33,14 @@ export interface StoredStaffMember {
     name: string;
 }
 
+/** A practice roster as stored (roster spec R12): typed players only, never a team link. Read through toPracticeRoster. */
+export interface StoredRoster {
+    ageGroup: AgeGroup | null;
+    roles: string[];
+    /** `id` is the editor's key, so it survives every save. */
+    players: Array<{ id: string; name: string; number: string; role: string }>;
+}
+
 /** One row in a session. `id` is the editor's clientKey, so card keys survive reloads. */
 export interface StoredSessionRow {
     id: string;
@@ -65,6 +73,8 @@ export interface StoredSession {
     staff?: StoredStaffMember[];
     /** The practice's own equipment (practice equipment spec R7). Absent on sessions stored before it: none. */
     equipment?: EquipmentCountItem[];
+    /** The practice's tentative roster (roster spec R12). Absent on sessions stored before it, or null: none. */
+    roster?: StoredRoster | null;
     rows: StoredSessionRow[];
     createdAt: Date;
     updatedAt: Date;

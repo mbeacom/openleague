@@ -16,6 +16,7 @@ import {
 import type { PracticeSessionData, SessionStaffMember, StaffOption } from "@/types/practice-planner";
 import { toSessionRowInputs } from "@/lib/utils/session-rows";
 import { toSessionStaffInputs } from "@/lib/utils/session-staff";
+import type { RosterOption } from "@/lib/utils/practice-roster";
 import type { VenueBookingOptions } from "../../venue-booking-options";
 
 interface EditSessionWrapperProps {
@@ -30,6 +31,8 @@ interface EditSessionWrapperProps {
   initialData: Partial<PracticeSessionData> & Partial<PracticeVenueAttachment> & { transitionMinutes: number; staff: SessionStaffMember[] };
   /** The team's officials and admins for the Staff picker (spec R4). */
   staffOptions?: StaffOption[];
+  /** The team's players for the roster's "Add from team" (roster spec R8). */
+  rosterOptions?: RosterOption[];
   /** Venue/surface/segment options for the optional ice booking (006, FR-019). */
   bookingOptions: VenueBookingOptions;
 }
@@ -40,6 +43,7 @@ export function EditSessionWrapper({
   initialData,
   bookingOptions,
   staffOptions = [],
+  rosterOptions = [],
 }: EditSessionWrapperProps) {
   const router = useRouter();
 
@@ -60,6 +64,8 @@ export function EditSessionWrapper({
         ...(session.staff !== undefined && { staff: toSessionStaffInputs(session.staff) }),
         // Absent = unchanged (practice equipment spec R3): an editor that holds no list sends none.
         ...(session.equipment !== undefined && { equipment: session.equipment }),
+        // Absent = unchanged; null clears (roster spec R7).
+        ...(session.roster !== undefined && { roster: session.roster }),
         reservationId: session.reservationId ?? undefined,
         // Optional venue booking (006, FR-019); the attachment is replaced
         // wholesale — omitting venueId detaches the practice.
@@ -119,6 +125,7 @@ export function EditSessionWrapper({
       segmentsBySurface={bookingOptions.segmentsBySurface}
       wholeLabelBySurface={bookingOptions.wholeLabelBySurface}
       staffOptions={staffOptions}
+      rosterOptions={rosterOptions}
       onSave={handleSave}
       onShare={handleShare}
       onCancel={handleCancel}

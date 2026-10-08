@@ -10,6 +10,7 @@
 
 import type { SegmentKind } from "@/types/segments";
 import type { AgeGroup } from "@/lib/utils/age-groups";
+import type { PracticeRoster } from "@/lib/utils/practice-roster";
 
 // ============================================================================
 // Core Play Data Types
@@ -385,6 +386,8 @@ export interface PracticeSessionData {
     staff?: SessionStaffMember[];
     /** Items the practice adds to its drills' equipment. Absent = unchanged on save; reads as none. */
     equipment?: EquipmentCountItem[];
+    /** The practice's tentative roster (roster spec R1). Absent = unchanged on save; null = none. */
+    roster?: PracticeRoster | null;
 }
 
 /**
@@ -465,6 +468,8 @@ export interface PracticeSessionView {
     staff?: SessionStaffMember[];
     /** Items the practice adds to its drills' equipment; absent reads as none. */
     equipment?: EquipmentCountItem[];
+    /** The practice's tentative roster (roster spec R1); absent or null reads as none. */
+    roster?: PracticeRoster | null;
     plays: SessionRow[];
 }
 

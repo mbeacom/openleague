@@ -11,6 +11,7 @@ import {
 import { createPracticeSession } from "@/lib/actions/practice-sessions";
 import { toSessionRowInputs } from "@/lib/utils/session-rows";
 import { toSessionStaffInputs } from "@/lib/utils/session-staff";
+import type { RosterOption } from "@/lib/utils/practice-roster";
 import type { StaffOption } from "@/types/practice-planner";
 import type { VenueBookingOptions } from "../venue-booking-options";
 
@@ -20,12 +21,15 @@ interface PracticeSessionEditorWrapperProps {
   bookingOptions: VenueBookingOptions;
   /** The team's officials and admins for the Staff picker (spec R4). */
   staffOptions?: StaffOption[];
+  /** The team's players for the roster's "Add from team" (roster spec R8). */
+  rosterOptions?: RosterOption[];
 }
 
 export function PracticeSessionEditorWrapper({
   teamId,
   bookingOptions,
   staffOptions = [],
+  rosterOptions = [],
 }: PracticeSessionEditorWrapperProps) {
   const router = useRouter();
 
@@ -44,6 +48,8 @@ export function PracticeSessionEditorWrapper({
         ...(session.staff !== undefined && { staff: toSessionStaffInputs(session.staff) }),
         // Absent = unchanged (practice equipment spec R3): an editor that holds no list sends none.
         ...(session.equipment !== undefined && { equipment: session.equipment }),
+        // A create without a roster stores none (roster spec R7).
+        ...(session.roster !== undefined && { roster: session.roster }),
         reservationId: session.reservationId ?? undefined,
         // Optional venue booking (006, FR-019); omitted fields mean unbooked.
         venueId: session.venueId || undefined,
@@ -82,6 +88,7 @@ export function PracticeSessionEditorWrapper({
       segmentsBySurface={bookingOptions.segmentsBySurface}
       wholeLabelBySurface={bookingOptions.wholeLabelBySurface}
       staffOptions={staffOptions}
+      rosterOptions={rosterOptions}
       onSave={handleSave}
       onCancel={handleCancel}
     />

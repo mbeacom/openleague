@@ -107,6 +107,8 @@ ${model.teamName ? html`<p class="team">${model.teamName}</p>` : null}
 <p class="when">${model.when}</p>
 ${model.place ? html`<p class="place">${model.place}</p>` : null}
 ${model.staff ? html`<p class="staff">${model.staff}</p>` : null}
+${model.roster ? html`<p class="roster">${model.roster}</p>` : null}
+${model.rosterPlayers.map((line) => html`<p class="roster-players">${line}</p>`)}
 ${model.gap ? html`<p class="gap">${model.gap}</p>` : null}
 </header>`;
 }

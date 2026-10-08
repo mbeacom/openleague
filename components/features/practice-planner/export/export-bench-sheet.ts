@@ -31,7 +31,8 @@ function yieldToBrowser(): Promise<void> {
 export async function exportBenchSheet(
     session: ExportSession,
     format: BenchSheetFormat,
-    options: { logo: LogoImage | null },
+    /** includeRosterNames: the Export menu's "Include player names" (roster spec R10); off by default. */
+    options: { logo: LogoImage | null; includeRosterNames?: boolean },
 ): Promise<void> {
     await yieldToBrowser();
     // The Crest stands in for a missing logo: let its font load first, as the printed sheet does.
@@ -39,7 +40,7 @@ export async function exportBenchSheet(
     const needsCrest = Boolean(session.teamMark && session.teamName?.trim() && !isLogoImage(options.logo));
     // Exported diagrams must not bake in the fallback font. Both load at once.
     await Promise.all([needsCrest ? waitForCrestFont() : undefined, waitForDiagramFont()]);
-    const model = buildBenchSheetModel(session, canvasRenderers, { logo: options.logo });
+    const model = buildBenchSheetModel(session, canvasRenderers, { logo: options.logo, includeRosterNames: options.includeRosterNames });
     if (format === "html") {
         const blob = new Blob([renderBenchSheetHtml(model)], { type: "text/html;charset=utf-8" });
         downloadBlob(blob, planExportFileName(session.title, "html"));

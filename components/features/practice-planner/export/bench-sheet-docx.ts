@@ -62,6 +62,8 @@ function header(model: BenchSheetModel): Paragraph[] {
         new Paragraph({ children: textRuns(model.when) }),
         ...(model.place ? [new Paragraph({ children: textRuns(model.place) })] : []),
         ...(model.staff ? [new Paragraph({ children: textRuns(model.staff) })] : []),
+        ...(model.roster ? [new Paragraph({ children: textRuns(model.roster) })] : []),
+        ...model.rosterPlayers.map((line) => new Paragraph({ children: textRuns(line) })),
         ...(model.gap ? [new Paragraph({ children: textRuns(model.gap) })] : []),
     ];
 }

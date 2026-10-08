@@ -327,6 +327,35 @@ describe("buildBenchSheetModel: practice staff (spec R9)", () => {
     });
 });
 
+describe("buildBenchSheetModel: practice roster (roster spec R10, R15)", () => {
+    const ROSTERED: ExportSession = {
+        ...BOOKED,
+        roster: {
+            ageGroup: "u8",
+            roles: ["S", "G"],
+            players: [
+                { key: "a", name: "Alex", number: "7", role: "S" },
+                { key: "b", name: "", number: "", role: "S" },
+                { key: "c", name: "Pat", number: "", role: "G" },
+            ],
+        },
+    };
+
+    it("prints the counts always and the names only when included", () => {
+        const plain = buildBenchSheetModel(ROSTERED, renderers());
+        expect(plain.roster).toBe("Roster: 2 skaters · 1 goalie");
+        expect(plain.rosterPlayers).toEqual([]);
+        expect(JSON.stringify(plain)).not.toContain("Alex");
+        const named = buildBenchSheetModel(ROSTERED, renderers(), { includeRosterNames: true });
+        expect(named.rosterPlayers).toEqual(["Skater: #7 Alex, Skater 2", "Goalie: Pat"]);
+    });
+
+    it("has no roster line without players", () => {
+        expect(buildBenchSheetModel(BOOKED, renderers()).roster).toBeNull();
+        expect(buildBenchSheetModel({ ...BOOKED, roster: { ageGroup: null, roles: ["S", "G"], players: [] } }, renderers()).roster).toBeNull();
+    });
+});
+
 describe("buildBenchSheetModel: the team mark (practice logo spec R2, R3, R5)", () => {
     const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
     const MARK = { id: "cteamxxxxxxxxxxxxxxxxxxxx", name: "Hawks <U12>", logoUrl: "https://x.blob.vercel-storage.com/a.png", color: "#9B1B30" };

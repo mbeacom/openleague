@@ -16,6 +16,7 @@ import { betweenBlocksLabel, buildSchedule } from "@/lib/utils/session-timeline"
 import { sessionForDisplay } from "@/lib/utils/drill-tags";
 import { drillRows } from "@/lib/utils/session-rows";
 import { staffHeaderLabel } from "@/lib/utils/session-staff";
+import { rosterSheetLines } from "@/lib/utils/practice-roster";
 import { combinedLegendData } from "@/lib/utils/canvas/station-map";
 import { sessionStart, sessionTimeZone } from "@/lib/utils/date";
 import { useClockText } from "@/lib/hooks/useClockText";
@@ -54,6 +55,8 @@ export function BenchSheet({ session: stored }: { session: BenchSheetSession }) 
     const place = [session.venueName, session.surfaceName, session.segmentName].filter(Boolean).join(" · ");
     const gap = session.transitionMinutes ?? 0;
     const staffLine = staffHeaderLabel(session.staff);
+    // The coach's own sheet on screen and on paper: names shown (roster spec R10).
+    const rosterLines = rosterSheetLines(session.roster, true);
     const legend = combinedLegendData(drillRows(session.plays).map((sp) => ({ name: sp.play.name, playData: sp.play.playData })));
     // The practice's equipment (practice equipment spec R5): after the timeline, before the legend.
     const equipment = benchSheetEquipment(session);
@@ -136,6 +139,12 @@ export function BenchSheet({ session: stored }: { session: BenchSheetSession }) 
                 </Typography>
                 {place && <Typography variant="body1">{place}</Typography>}
                 {staffLine && <Typography variant="body1">{staffLine}</Typography>}
+                {rosterLines && <Typography variant="body1">{rosterLines.counts}</Typography>}
+                {rosterLines?.players.map((line) => (
+                    <Typography key={line} variant="body2">
+                        {line}
+                    </Typography>
+                ))}
                 {gap > 0 && <Typography variant="body1">{betweenBlocksLabel(gap)}</Typography>}
             </Box>
 
