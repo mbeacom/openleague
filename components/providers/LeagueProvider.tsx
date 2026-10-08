@@ -168,6 +168,9 @@ export const LeagueProvider: React.FC<LeagueProviderProps> = ({
         } else if (segments[1] === 'import') {
           breadcrumbs.push({ label: 'Practice Planner', href: '/practice-planner' });
           breadcrumbs.push({ label: 'Import Plan' });
+        } else if (segments[1] === 'fetch-schedule') {
+          breadcrumbs.push({ label: 'Practice Planner', href: '/practice-planner' });
+          breadcrumbs.push({ label: 'Fetch Schedule' });
         } else if (segments[1] === 'library') {
           breadcrumbs.push({ label: 'Practice Planner', href: '/practice-planner' });
           breadcrumbs.push({ label: 'Play Library' });

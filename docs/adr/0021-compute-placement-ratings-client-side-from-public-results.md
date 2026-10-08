@@ -69,7 +69,7 @@ discriminant, strict parser, newer-version refusal).
 ## Alternatives considered
 
 - **Hosted league feature.** Rejected for now: it conflicts with FR-026 for sub-threshold ages, and it would require accounts for a one-coach task.
-- **Fetching or scraping league pages.** Rejected: browsers block cross-origin reads, page structure changes, and site terms may forbid it.
+- **Fetching or scraping league pages.** Rejected: browsers block cross-origin reads, page structure changes, and site terms may forbid it. ADR-0024 amends this for one path: a signed-in user's request to the hosted app, for allowlisted hosts only. The static app still makes no such request.
 - **Hard-coding CSHL's formula.** Rejected: other leagues differ, and CSHL's Walkush component is unpublished, so it is approximated and labelled.
 
 ## What would make this wrong

@@ -3,3 +3,4 @@ export * from "./document";
 export * from "./merge";
 export * from "./file";
 export * from "./sources";
+export * from "./pull";

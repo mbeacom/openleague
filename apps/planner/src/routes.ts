@@ -56,7 +56,7 @@ export type StaticRoute =
     | { name: "import" }
     | { name: "planLink"; value: string }
     | { name: "rankings" }
-    | { name: "rankingsImport"; update?: true }
+    | { name: "rankingsImport"; pull?: string; update?: boolean }
     | { name: "rankingsSetup" }
     | { name: "rankingsWhatIf" }
     | { name: "rankingsTeam"; number: string }
@@ -75,11 +75,24 @@ function decodeId(raw: string): string | null {
     }
 }
 
+/**
+ * `rankings/import?pull=…`: a schedule the hosted "Fetch it for me" page sends
+ * (ADR-0024). Only this route takes a query; null for anything else.
+ */
+function matchPull(body: string): StaticRoute | null {
+    const at = body.indexOf("?");
+    if (at === -1 || body.slice(0, at).replace(/\/+$/, "") !== "rankings/import") return null;
+    const pull = new URLSearchParams(body.slice(at + 1)).get("pull");
+    return pull ? { name: "rankingsImport", pull } : { name: "rankingsImport" };
+}
+
 /** Pure: location.hash in, route out. A hash holding `plan=` is a plan link (the hosted Export menu's). */
 export function matchRoute(hash: string): StaticRoute {
     const body = (hash.startsWith("#") ? hash.slice(1) : hash).replace(/^\/+/, "");
     const plan = planFragmentValue(body);
     if (plan) return { name: "planLink", value: plan };
+    const pulled = matchPull(body);
+    if (pulled) return pulled;
 
     const parts = body.replace(/\/+$/, "").split("/");
     if (parts.length === 1 && parts[0] === "") return { name: "list" };

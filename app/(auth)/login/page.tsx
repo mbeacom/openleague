@@ -20,7 +20,14 @@ import { loginSchema, pickField } from "@/lib/utils/validation";
 import { AUTH_MESSAGES, AUTH_ERROR_CODES } from "@/lib/config/constants";
 import { resendVerificationEmail } from "@/lib/actions/account-lifecycle";
 import { trackAuth } from "@/lib/analytics/umami";
-import { hasPendingPlan, PLAN_IMPORT_PATH, stashPlanFragment } from "@/lib/plan-document/pending";
+import {
+  hasPendingLeagueSource,
+  hasPendingPlan,
+  LEAGUE_FETCH_PATH,
+  PLAN_IMPORT_PATH,
+  stashLeagueSourceFragment,
+  stashPlanFragment,
+} from "@/lib/plan-document/pending";
 
 function LoginForm() {
   const router = useRouter();
@@ -63,8 +70,10 @@ function LoginForm() {
   // An "Open in OpenLeague" plan link (#plan=…) that reached login: keep the
   // plan for the import page and drop it from the URL (ADR-0020). The auth
   // redirect carries no callbackUrl, so the redirect below picks the target.
+  // A "Fetch it for me" league page (#src=…, ADR-0024) is carried the same way.
   useEffect(() => {
     stashPlanFragment();
+    stashLeagueSourceFragment();
   }, []);
 
   const handleResendVerification = async () => {
@@ -179,8 +188,8 @@ function LoginForm() {
       trackAuth('login');
 
       // Redirect to callback URL or dashboard
-      // A fresh stashed plan wins: the coach came here to import it.
-      router.push(hasPendingPlan() ? PLAN_IMPORT_PATH : callbackUrl);
+      // A fresh stashed plan or league page wins: the coach came here for it.
+      router.push(hasPendingPlan() ? PLAN_IMPORT_PATH : hasPendingLeagueSource() ? LEAGUE_FETCH_PATH : callbackUrl);
       router.refresh();
     } catch (error) {
       console.error("Login error:", error);

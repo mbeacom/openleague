@@ -90,7 +90,8 @@ function RouteView({ route, store }: { route: StaticRoute; store: LocalPlannerSt
         case "rankings":
             return <RankingsScreen store={store} />;
         case "rankingsImport":
-            return <RankingsImportScreen key={route.update ? "update" : "import"} store={store} update={route.update === true} />;
+            // A pull (ADR-0024) keeps the "import" key: dropping it from the hash must not remount the screen.
+            return <RankingsImportScreen key={route.update ? "update" : "import"} store={store} update={route.update === true} pull={route.pull} />;
         case "rankingsSetup":
             return <RankingsSetupScreen store={store} />;
         case "rankingsWhatIf":

@@ -415,6 +415,7 @@ export const NO_ID_ARGUMENTS: Record<string, string> = {
   "event-registrations#getMyEventRegistrations": "no arguments",
   "guardians#getMyPlayers": "no arguments",
   "league#createLeague": "league fields only; creates a new record",
+  "league-fetch#fetchLeagueSchedule": "a league page URL only; the user comes from the session",
   "logout#logout": "no arguments",
   "notifications#getAllNotificationPreferences": "no arguments",
   "practice-session-queries#getPlanImportTeams": "no arguments",
