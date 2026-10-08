@@ -16,6 +16,7 @@ const MAX_GAMES = 5000;
 export const NOT_RANKINGS_MESSAGE = "This file isn't an OpenLeague rankings file.";
 export const NEWER_RANKINGS_MESSAGE = "This rankings file was made by a newer version of OpenLeague. Update to open it.";
 export const INVALID_RANKINGS_MESSAGE = "This rankings file has problems and can't be opened.";
+export const RANKINGS_FILE_TOO_LARGE_MESSAGE = `This file is too large to be a rankings file (the limit is ${MAX_RANKINGS_FILE_BYTES / 1_000_000} MB).`;
 
 const CONTROL = /[\u0000-\u001f\u007f]/g;
 const clean = (text: string) => text.replace(CONTROL, "").trim();

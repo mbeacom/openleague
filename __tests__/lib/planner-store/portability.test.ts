@@ -22,6 +22,7 @@ const ENTRIES = [
     "lib/ratings/index.ts",
     "lib/ratings/import/index.ts",
     "lib/rankings-document/index.ts",
+    "lib/document-envelope/index.ts",
     // The static planner's whole bundle (sub-project 3).
     "apps/planner/src/main.tsx",
 ];

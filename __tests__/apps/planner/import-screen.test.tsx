@@ -3,7 +3,8 @@ import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { memoryStore, renderScreen, wrapScreen } from "./render-screen";
 import { ImportScreen, planStartDate } from "@/apps/planner/src/screens/ImportScreen";
 import { PRIVACY_NOTE } from "@/apps/planner/src/config";
-import { FILE_TOO_LARGE_MESSAGE, MAX_PLAN_FILE_BYTES, NOT_A_PLAN_MESSAGE, encodePlanLink, serializePlan, type PlanSessionInput } from "@/lib/plan-document";
+import { FILE_TOO_LARGE_MESSAGE, MAX_PLAN_FILE_BYTES, NOT_A_PLAN_MESSAGE, PLAN_FORMAT, encodePlanLink, serializePlan, type PlanSessionInput } from "@/lib/plan-document";
+import { serializeDocument, wrapDocument } from "@/lib/document-envelope";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import { STARTER_PLAYS } from "@/lib/data/starter-plays";
 import { drillRows, toSessionRowInputs } from "@/lib/utils/session-rows";
@@ -56,6 +57,16 @@ describe("ImportScreen", () => {
         await waitFor(() => expect(window.location.hash).toMatch(/^#\/sessions\/[^/]+$/));
         const library = await store.getPlaysByTeam({ teamId: "local", isTemplate: true, page: 1, limit: 20, dateFilter: "all" });
         expect(library.success && library.data.plays.map((p) => p.name)).toEqual(["Breakout"]);
+    });
+
+    it("opens a wrapped plan file", async () => {
+        const { store } = memoryStore();
+        renderScreen(<ImportScreen store={store} linkValue={null} />, store);
+        const wrapped = wrapDocument(PLAN_FORMAT, PLAN, { id: "0b7c1f0e-5a3e-4c1e-9a47-6f0d7b2f8a11", updatedAt: "2026-10-07T18:04:00.000Z", generator: "openleague-static" });
+        chooseFile(new File([serializeDocument(wrapped)], "tuesday.olplan.json", { type: "application/json" }));
+        expect(await screen.findByText("Tuesday Skills")).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: /save to my practices/i }));
+        await waitFor(() => expect(window.location.hash).toMatch(/^#\/sessions\/[^/]+$/));
     });
 
     it("shows the reason a file can't be imported", async () => {

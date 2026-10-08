@@ -169,6 +169,8 @@ const eslintConfig = [
       `lib/plan-document/**/${SOURCE_GLOB}`,
       `lib/ratings/**/${SOURCE_GLOB}`,
       `lib/rankings-document/**/${SOURCE_GLOB}`,
+      // The shared document envelope (ADR-0022), read by both deployables.
+      `lib/document-envelope/**/${SOURCE_GLOB}`,
       // The static planner itself (sub-project 3): it must never reach Next.js or the server.
       `apps/planner/**/${SOURCE_GLOB}`,
       "lib/utils/session-timeline.ts",

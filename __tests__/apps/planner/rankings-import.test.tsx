@@ -11,7 +11,8 @@ import {
     RankingsImportScreen,
     SAVE_IMPORT_LABEL,
 } from "@/apps/planner/src/screens/rankings/RankingsImportScreen";
-import { serializeRankings } from "@/lib/rankings-document";
+import { RANKINGS_FORMAT, serializeRankings } from "@/lib/rankings-document";
+import { serializeDocument, wrapDocument } from "@/lib/document-envelope";
 import { memoryStore, renderScreen } from "./render-screen";
 import { sampleRankingsDoc } from "./rankings-fixtures";
 import { SCHEDULE_COPIED, SCHEDULE_HTML, SNAKE_COPIED, SNAKE_HTML } from "../../lib/ratings/league-page-fixtures";
@@ -327,6 +328,18 @@ describe("RankingsImportScreen", () => {
                 expect(saved.success && saved.data?.meta.title).toBe("Other rankings");
             });
             expect(screen.queryByText(REPLACE_CONFIRM_MESSAGE)).not.toBeInTheDocument();
+        });
+
+        it("opens a wrapped rankings file", async () => {
+            const { store } = memoryStore();
+            renderScreen(<RankingsImportScreen store={store} />, store);
+            const wrapped = wrapDocument(RANKINGS_FORMAT, incoming, { id: "0b7c1f0e-5a3e-4c1e-9a47-6f0d7b2f8a11", updatedAt: "2026-10-07T18:04:00.000Z", generator: "openleague-static" });
+            const file = new File([serializeDocument(wrapped)], "other.rankings.json", { type: "application/json" });
+            fireEvent.change(await screen.findByTestId("rankings-file-input"), { target: { files: [file] } });
+            await waitFor(async () => {
+                const saved = await store.getRankings();
+                expect(saved.success && saved.data?.meta.title).toBe("Other rankings");
+            });
         });
     });
 

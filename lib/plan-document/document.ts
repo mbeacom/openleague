@@ -47,6 +47,7 @@ const MAX_GENERATOR_LENGTH = 100;
 export const NOT_A_PLAN_MESSAGE = "This file isn't an OpenLeague practice plan.";
 export const NEWER_VERSION_MESSAGE = "This plan was made by a newer version of OpenLeague. Update to open it.";
 export const INVALID_PLAN_MESSAGE = "This practice plan has problems and can't be opened.";
+export const FILE_TOO_LARGE_MESSAGE = `This file is too large to be a practice plan (the limit is ${MAX_PLAN_FILE_BYTES / 1000} KB).`;
 /** A plan row's kind is unknown (session-rows has its own ROW_KIND_MESSAGE for the save schema). */
 export const PLAN_ROW_KIND_MESSAGE = "Row kind must be drill, warmup, break, transition or cooldown";
 
