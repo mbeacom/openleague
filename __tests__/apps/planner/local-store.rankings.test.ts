@@ -29,6 +29,15 @@ describe.each(REPOS)("rankings on %s", (_name, open) => {
         if (!result.success) expect(result.error).toContain("Your team isn't in the team list");
     });
 
+    it("says where in the document the first issue is", async () => {
+        const { repo, options } = await openHarness(open);
+        const store = createLocalPlannerStore(repo, options);
+        const bad = { ...createRankingsDocument({ title: "Fall" }), teams: [{ number: "901", name: "", startingBracket: null, excluded: false }] };
+        const result = await store.saveRankings(bad);
+        expect(result.success).toBe(false);
+        if (!result.success) expect(result.details).toEqual({ path: ["teams", 0, "name"] });
+    });
+
     it("reports a damaged saved record instead of crashing", async () => {
         const { repo, options } = await openHarness(open);
         await repo.write((tx) => tx.putMeta(META_RANKINGS, { format: "openleague.rankings", version: 1, junk: true }));

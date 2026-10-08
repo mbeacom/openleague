@@ -87,7 +87,7 @@ export function UpdateResultsPanel({ source, now = new Date(), fetchAction }: Up
                     </Button>
                 ) : (
                     <>
-                        <Button variant="contained" href={staticRoutes.rankingsSetup()} sx={{ minHeight: 44 }}>
+                        <Button variant="contained" href={staticRoutes.rankingsSetup("pages")} sx={{ minHeight: 44 }}>
                             {ADD_SCHEDULE_PAGE_LABEL}
                         </Button>
                         <Button href={staticRoutes.rankingsImport()} sx={{ minHeight: 44 }}>

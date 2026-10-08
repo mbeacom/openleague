@@ -72,7 +72,7 @@ describe("Rankings screen: Update results", () => {
         await store.saveRankings(sampleRankingsDoc());
         renderScreen(<RankingsScreen store={store} />, store);
         expect(await screen.findByText(NO_SCHEDULE_PAGE_MESSAGE)).toBeInTheDocument();
-        expect(screen.getByRole("link", { name: ADD_SCHEDULE_PAGE_LABEL })).toHaveAttribute("href", staticRoutes.rankingsSetup());
+        expect(screen.getByRole("link", { name: ADD_SCHEDULE_PAGE_LABEL })).toHaveAttribute("href", staticRoutes.rankingsSetup("pages"));
         expect(screen.queryByRole("link", { name: UPDATE_RESULTS_LABEL })).not.toBeInTheDocument();
         expect(open).not.toHaveBeenCalled();
     });
@@ -167,7 +167,8 @@ describe("Setup: the league pages", () => {
         const { store } = memoryStore();
         await store.saveRankings(sampleRankingsDoc({ sources: { schedule: { url: SCHEDULE_URL, lastReadAt: READ_AT } } }));
         renderScreen(<RankingsSetupScreen store={store} />, store);
-        expect(await screen.findByLabelText(SCHEDULE_PAGE_LABEL)).toHaveValue(SCHEDULE_URL);
+        fireEvent.click(await screen.findByRole("tab", { name: "League pages" }));
+        expect(screen.getByLabelText(SCHEDULE_PAGE_LABEL)).toHaveValue(SCHEDULE_URL);
         fireEvent.change(screen.getByLabelText(SNAKE_PAGE_LABEL), { target: { value: SNAKE_URL } });
         fireEvent.click(screen.getByRole("button", { name: SAVE_SETUP_LABEL }));
         await waitFor(async () =>
@@ -179,7 +180,8 @@ describe("Setup: the league pages", () => {
         const { store } = memoryStore();
         await store.saveRankings(sampleRankingsDoc({ sources: { schedule: { url: SCHEDULE_URL, lastReadAt: READ_AT } } }));
         renderScreen(<RankingsSetupScreen store={store} />, store);
-        fireEvent.change(await screen.findByLabelText(SNAKE_PAGE_LABEL), { target: { value: "http://league.example/snake" } });
+        fireEvent.click(await screen.findByRole("tab", { name: "League pages" }));
+        fireEvent.change(screen.getByLabelText(SNAKE_PAGE_LABEL), { target: { value: "http://league.example/snake" } });
         fireEvent.click(screen.getByRole("button", { name: SAVE_SETUP_LABEL }));
         expect(await screen.findAllByText(SOURCE_URL_MESSAGE)).not.toHaveLength(0);
         expect((await saved(store)).sources?.snakeChart).toBeUndefined();
