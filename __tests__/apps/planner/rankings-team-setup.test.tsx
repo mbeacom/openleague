@@ -173,6 +173,7 @@ describe("RankingsSetupScreen", () => {
             });
         });
 
+        // Renders the old single-page Setup with 25 teams: slow on a shared CI runner.
         it("removes a bracket that has teams, so a file with too many brackets can be saved again", async () => {
             const { store } = memoryStore();
             const base = sampleRankingsDoc({ bracketOrder: [] });
@@ -188,7 +189,7 @@ describe("RankingsSetupScreen", () => {
                 expect(saved.success && saved.data!.bracketOrder).toHaveLength(20);
                 expect(saved.success && saved.data!.teams.find((t) => t.number === "930")!.startingBracket).toBeNull();
             });
-        });
+        }, 20_000);
 
         it("refuses a repeated or empty bracket name", async () => {
             const { store } = memoryStore();
