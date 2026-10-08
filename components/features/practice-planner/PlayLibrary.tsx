@@ -48,7 +48,7 @@ import {
     Add as AddIcon,
 } from "@mui/icons-material";
 import { SavedPlay } from "@/types/practice-planner";
-import { usePlannerPlatform, usePlannerStore, type PlannerStore } from "@/lib/planner-store";
+import { usePlannerPlatform, usePlannerStore, type LibraryPlaySummary, type PlannerStore } from "@/lib/planner-store";
 import { STARTER_PLAYS, type StarterPlay } from "@/lib/data/starter-plays";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import { generateThumbnail } from "@/lib/utils/canvas/thumbnail-generator";
@@ -63,6 +63,9 @@ import { needsGoalie } from "@/lib/utils/drill-tags";
 import { matchesAgeGroup, type AgeGroup } from "@/lib/utils/age-groups";
 import { AgeFilter, AgeFilterEmpty } from "./AgeFilter";
 import { useAgeFilter } from "./useAgeFilter";
+import { FavoriteToggle, FavoritesFilterChip } from "./FavoriteToggle";
+import { usePlannerFavorites } from "./usePlannerFavorites";
+import { loadFavoritePlays } from "./favorite-plays";
 
 /** The most rows one library query may ask for (getPlaysByTeamSchema). */
 const NAMES_PAGE_SIZE = 100;
@@ -71,6 +74,16 @@ const NAMES_PAGE_SIZE = 100;
 type LibraryFilters = DrillFilters & { ageGroup?: AgeGroup };
 
 const nameKey = (name: string) => name.trim().toLowerCase();
+
+/** Library summaries as grid cards; a drill's playData is loaded when it is picked. */
+function toSavedPlays(plays: LibraryPlaySummary[]): SavedPlay[] {
+    return plays.map((play) => ({
+        ...play,
+        description: play.description ?? "",
+        thumbnail: play.thumbnail ?? "",
+        playData: createEmptyPlayData(),
+    })) as SavedPlay[];
+}
 
 /**
  * Every drill name in the team's library, whatever the current page, search
@@ -111,6 +124,30 @@ interface PlayCardProps {
     onSelect: (play: SavedPlay) => void;
     onEdit?: (playId: string) => void;
     onDelete?: (playId: string) => void;
+    /** The star; absent when the store has no favorites. */
+    favorite?: CardFavorite;
+}
+
+/** A card's star: whether it is on, and what a tap asks for. */
+interface CardFavorite {
+    active: boolean;
+    onToggle: (next: boolean) => void;
+}
+
+/** The card's title, with its star beside it when favorites are on (practice favorites spec R7). */
+function CardTitle({ name, favorite }: { name: string; favorite?: CardFavorite }) {
+    const title = (
+        <Typography variant="h6" component="h3" gutterBottom={!favorite} noWrap sx={{ minWidth: 0, flex: 1 }}>
+            {name}
+        </Typography>
+    );
+    if (!favorite) return title;
+    return (
+        <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mt: -1, mr: -1, mb: 0.5 }}>
+            {title}
+            <FavoriteToggle name={name} active={favorite.active} onToggle={favorite.onToggle} />
+        </Stack>
+    );
 }
 
 /**
@@ -127,6 +164,7 @@ function PlayCard({
     onSelect,
     onEdit,
     onDelete,
+    favorite,
 }: PlayCardProps) {
     const theme = useTheme();
     const { Image } = usePlannerPlatform();
@@ -188,9 +226,7 @@ function PlayCard({
 
             {/* Content */}
             <CardContent sx={{ flexGrow: 1 }}>
-                <Typography variant="h6" component="h3" gutterBottom noWrap>
-                    {play.name}
-                </Typography>
+                <CardTitle name={play.name} favorite={favorite} />
                 <Typography
                     variant="body2"
                     color="text.secondary"
@@ -257,6 +293,7 @@ interface StarterPlayCardProps {
     isAdding: boolean;
     disabled: boolean;
     onAdd: (starter: StarterPlay) => void;
+    favorite?: CardFavorite;
 }
 
 /** A starter's thumbnail as stored on "Add to my library": 2×, whatever the screen (rink diagram quality spec §1). */
@@ -280,6 +317,7 @@ function StarterPlayCard({
     isAdding,
     disabled,
     onAdd,
+    favorite,
 }: StarterPlayCardProps) {
     return (
         <Card
@@ -319,9 +357,7 @@ function StarterPlayCard({
             </CardMedia>
 
             <CardContent sx={{ flexGrow: 1 }}>
-                <Typography variant="h6" component="h3" gutterBottom noWrap>
-                    {starter.name}
-                </Typography>
+                <CardTitle name={starter.name} favorite={favorite} />
                 <Typography
                     variant="body2"
                     color="text.secondary"
@@ -382,7 +418,17 @@ export function PlayLibrary({
     // Remembered on this device, and shared with the drill picker and the template picker (R3).
     const [ageFilter, setAgeFilter] = useAgeFilter();
     const queryFilters = useMemo<LibraryFilters>(() => (ageFilter ? { ...filters, ageGroup: ageFilter } : filters), [filters, ageFilter]);
-    const filtersActive = Boolean(filters.focus || filters.goalies || ageFilter);
+    // Favorites (practice favorites spec): stars on every card, and a filter that walks the whole library.
+    const favorites = usePlannerFavorites("DRILL");
+    const [favoritesOnly, setFavoritesOnly] = useState(false);
+    // Read by loadPlays, which the load effect below calls; this effect is declared first, so it runs first.
+    const favoritesRef = useRef(favorites);
+    const favoritesOnlyRef = useRef(favoritesOnly);
+    useEffect(() => {
+        favoritesRef.current = favorites;
+        favoritesOnlyRef.current = favoritesOnly;
+    }, [favorites, favoritesOnly]);
+    const filtersActive = Boolean(filters.focus || filters.goalies || ageFilter || favoritesOnly);
     // Only the latest load may set the grid: on the hosted page the remembered age arrives after
     // hydration, and a quick chip change can also leave an earlier, slower answer in flight.
     const latestLoad = useRef(0);
@@ -446,28 +492,32 @@ export function PlayLibrary({
         setError(null);
 
         try {
-            const result = await store.getPlaysByTeam({
+            const query = {
                 teamId,
                 isTemplate: true, // Only load library plays
-                page: currentPage,
-                limit: playsPerPage,
                 search: search.trim() || undefined,
                 dateFilter: dateFilterValue,
                 ...(drillFilters.focus && { focus: drillFilters.focus }),
                 ...(drillFilters.goalies && { goalies: drillFilters.goalies }),
                 ...(drillFilters.ageGroup && { ageGroup: drillFilters.ageGroup }),
-            });
+            };
+            if (favoritesOnlyRef.current) {
+                // Every starred drill matching the query; the grid pages through them itself.
+                const favoriteResult = await loadFavoritePlays(store, query, favoritesRef.current.isFavorite);
+                if (load !== latestLoad.current) return;
+                if (favoriteResult.success) {
+                    setPlays(toSavedPlays(favoriteResult.data));
+                    if (refreshNames) refreshLibraryNames(null);
+                } else {
+                    setError(favoriteResult.error);
+                }
+                return;
+            }
+            const result = await store.getPlaysByTeam({ ...query, page: currentPage, limit: playsPerPage });
             if (load !== latestLoad.current) return;
 
             if (result.success) {
-                const playsData = result.data.plays.map((play) => ({
-                    ...play,
-                    description: play.description ?? "",
-                    thumbnail: play.thumbnail ?? "",
-                    playData: createEmptyPlayData(), // Will be loaded when needed
-                })) as SavedPlay[];
-
-                setPlays(playsData);
+                setPlays(toSavedPlays(result.data.plays));
                 setTotalPages(Math.ceil(result.data.total / playsPerPage));
                 if (refreshNames) {
                     const unfiltered = !search.trim() && dateFilterValue === "all" && !drillFilters.focus && !drillFilters.goalies && !drillFilters.ageGroup;
@@ -495,9 +545,11 @@ export function PlayLibrary({
     );
 
     // Load plays on mount and when page or a filter changes; the first load also reads the library's names
+    // The favorites walk ignores the page (the grid pages it) and reruns once the favorites have loaded.
+    const loadKey = favoritesOnly ? "favorites:" + String(favorites.loaded) : "page:" + String(currentPage);
     useEffect(() => {
         loadPlays(searchQuery, dateFilter, queryFilters, !libraryNamesLoaded.current);
-    }, [currentPage, dateFilter, queryFilters]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [loadKey, dateFilter, queryFilters]); // eslint-disable-line react-hooks/exhaustive-deps
 
     /**
      * Starter plays not yet copied into the team's library, matched by name
@@ -524,9 +576,26 @@ export function PlayLibrary({
             if (filters.focus && starter.focus !== filters.focus) return false;
             if (filters.goalies && starter.goalies !== filters.goalies) return false;
             if (!matchesAgeGroup(starter.ageGroups, ageFilter)) return false;
+            if (favoritesOnly && !favorites.isFavorite(starter.id)) return false;
             return true;
         });
-    }, [mode, plays, libraryNames, copiedStarterNames, searchQuery, filters, ageFilter]);
+    }, [mode, plays, libraryNames, copiedStarterNames, searchQuery, filters, ageFilter, favoritesOnly, favorites]);
+
+    /** The grid's drills: with the Favorites filter on, the ones still starred, paged here. */
+    const favoritePlays = useMemo(() => (favoritesOnly ? plays.filter((play) => favorites.isFavorite(play.id)) : plays), [favoritesOnly, plays, favorites]);
+    const shownPlays = favoritesOnly ? favoritePlays.slice((currentPage - 1) * playsPerPage, currentPage * playsPerPage) : plays;
+    const pageCount = favoritesOnly ? Math.max(1, Math.ceil(favoritePlays.length / playsPerPage)) : totalPages;
+
+    /** A card's star, or none when the store has no favorites. */
+    const cardFavorite = useCallback(
+        (id: string) => (favorites.supported ? { active: favorites.isFavorite(id), onToggle: (next: boolean) => void favorites.setFavorite(id, next) } : undefined),
+        [favorites]
+    );
+
+    const handleFavoritesOnlyChange = useCallback((next: boolean) => {
+        setFavoritesOnly(next);
+        setCurrentPage(1);
+    }, []);
 
     /**
      * Copy a starter play into the team's library as an editable template
@@ -552,6 +621,8 @@ export function PlayLibrary({
                 });
 
                 if (result.success) {
+                    // A starred starter's copy is starred too; the starter keeps its own star (spec R3).
+                    if (favorites.isFavorite(starter.id)) void favorites.setFavorite(result.data.id, true);
                     setCopiedStarterNames((prev) => {
                         const next = new Set(prev);
                         next.add(nameKey(starter.name));
@@ -568,7 +639,7 @@ export function PlayLibrary({
                 setAddingStarterId(null);
             }
         },
-        [store, teamId, loadPlays, searchQuery, dateFilter, queryFilters]
+        [store, teamId, loadPlays, searchQuery, dateFilter, queryFilters, favorites]
     );
 
     /**
@@ -797,9 +868,16 @@ export function PlayLibrary({
 
             {/* Drill-tag filters (goaltender-aware drills) and the age filter (R3) */}
             <Stack spacing={1} sx={{ mb: 3 }}>
+                {favorites.supported && <FavoritesFilterChip active={favoritesOnly} onChange={handleFavoritesOnlyChange} />}
                 <DrillFilterChips value={filters} onChange={handleFiltersChange} />
                 <AgeFilter value={ageFilter} onChange={handleAgeChange} />
             </Stack>
+
+            {favorites.error && (
+                <Alert severity="error" onClose={favorites.clearError} sx={{ mb: 3 }}>
+                    {favorites.error}
+                </Alert>
+            )}
 
             {/* Error Alert */}
             {error && (
@@ -824,7 +902,7 @@ export function PlayLibrary({
 
             {/* Empty State */}
             {/* Requirements: 4.2 - Empty state for no plays */}
-            {!isLoading && plays.length === 0 && (
+            {!isLoading && shownPlays.length === 0 && (
                 <Box
                     sx={{
                         display: "flex",
@@ -837,7 +915,16 @@ export function PlayLibrary({
                     }}
                 >
                     {/* Say "no drills for this age" only when the age is the only narrowing and no starter card matches it either */}
-                    {ageFilter && !searchQuery && dateFilter === "all" && !filters.focus && !filters.goalies && visibleStarters.length === 0 ? (
+                    {favoritesOnly && favorites.ids.size === 0 ? (
+                        <>
+                            <Typography variant="h6" color="text.secondary" gutterBottom>
+                                No favorite drills yet
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary" mb={2}>
+                                Tap the star on a drill to find it here.
+                            </Typography>
+                        </>
+                    ) : ageFilter && !favoritesOnly && !searchQuery && dateFilter === "all" && !filters.focus && !filters.goalies && visibleStarters.length === 0 ? (
                         <AgeFilterEmpty noun="drills" ageGroup={ageFilter} onShowAll={() => handleAgeChange(null)} />
                     ) : (
                         <>
@@ -867,10 +954,10 @@ export function PlayLibrary({
 
             {/* Play Grid */}
             {/* Requirements: 4.2 - Responsive grid for play thumbnails */}
-            {!isLoading && plays.length > 0 && (
+            {!isLoading && shownPlays.length > 0 && (
                 <>
                     <Grid container spacing={3}>
-                        {plays.map((play) => (
+                        {shownPlays.map((play) => (
                             <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }} key={play.id}>
                                 <PlayCard
                                     play={play}
@@ -880,6 +967,7 @@ export function PlayLibrary({
                                     onSelect={handleSelectPlay}
                                     onEdit={handleEditPlay}
                                     onDelete={handleDeleteClick}
+                                    favorite={cardFavorite(play.id)}
                                 />
                             </Grid>
                         ))}
@@ -887,7 +975,7 @@ export function PlayLibrary({
 
                     {/* Pagination */}
                     {/* Requirements: 4.2 - Pagination for large libraries */}
-                    {totalPages > 1 && (
+                    {pageCount > 1 && (
                         <Box
                             sx={{
                                 display: "flex",
@@ -896,7 +984,7 @@ export function PlayLibrary({
                             }}
                         >
                             <Pagination
-                                count={totalPages}
+                                count={pageCount}
                                 page={currentPage}
                                 onChange={handlePageChange}
                                 color="primary"
@@ -927,6 +1015,7 @@ export function PlayLibrary({
                                     isAdding={addingStarterId === starter.id}
                                     disabled={addingStarterId !== null}
                                     onAdd={handleAddStarter}
+                                    favorite={cardFavorite(starter.id)}
                                 />
                             </Grid>
                         ))}

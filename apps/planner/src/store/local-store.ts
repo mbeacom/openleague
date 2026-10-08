@@ -4,6 +4,7 @@
  * PlannerProvider, so its identity never changes between renders.
  */
 import { createAiSettingsOps } from "./ai-settings";
+import { createFavoriteOps } from "./favorites";
 import { createLibraryOps } from "./library";
 import { META_PERSIST_REQUESTED, type PlannerRepo } from "./records";
 import { createRankingsOps } from "./rankings";
@@ -40,5 +41,5 @@ export function createLocalPlannerStore(repo: PlannerRepo, options: LocalStoreOp
         asked = true;
         void requestPersistence(repo);
     });
-    return { ...createLibraryOps(ctx), ...createSessionOps(ctx), ...createTeamProfileOps(ctx), ...createRankingsOps(ctx), ...createAiSettingsOps(ctx) };
+    return { ...createLibraryOps(ctx), ...createSessionOps(ctx), ...createTeamProfileOps(ctx), ...createRankingsOps(ctx), ...createAiSettingsOps(ctx), ...createFavoriteOps(ctx) };
 }

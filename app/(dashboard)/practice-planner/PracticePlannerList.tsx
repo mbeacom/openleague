@@ -39,7 +39,11 @@ import PersonIcon from "@mui/icons-material/Person";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import FileUploadOutlinedIcon from "@mui/icons-material/FileUploadOutlined";
 import ViewQuiltOutlinedIcon from "@mui/icons-material/ViewQuiltOutlined";
+import StarBorderIcon from "@mui/icons-material/StarBorder";
 import { DuplicateSessionDialog } from "@/components/features/practice-planner/DuplicateSessionDialog";
+import { FavoriteToggle, FavoritesFilterChip } from "@/components/features/practice-planner/FavoriteToggle";
+import { usePlannerFavorites } from "@/components/features/practice-planner/usePlannerFavorites";
+import { favoritesFirst } from "@/lib/utils/planner-favorites";
 
 interface SessionSummary {
   id: string;
@@ -59,6 +63,8 @@ interface PracticePlannerListProps {
   /** The user can schedule practices for at least one team (getPlanImportTeams). */
   canImport: boolean;
   teamName: string;
+  /** The user's starred practices, read on the server; absent = loaded in the browser. */
+  favoriteSessionIds?: string[];
 }
 
 type TimeFilter = "all" | "upcoming" | "past";
@@ -70,6 +76,7 @@ export default function PracticePlannerList({
   isAdmin,
   canImport,
   teamName,
+  favoriteSessionIds,
 }: PracticePlannerListProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
@@ -78,6 +85,9 @@ export default function PracticePlannerList({
   const [timeFilter, setTimeFilter] = useState<TimeFilter>("upcoming");
   const [sortDir, setSortDir] = useState<SortDirection>("asc");
   const [duplicating, setDuplicating] = useState<SessionSummary | null>(null);
+  // Favorites (practice favorites spec): per user, starred practices first.
+  const favorites = usePlannerFavorites("PRACTICE", favoriteSessionIds);
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
 
   const now = useMemo(() => new Date(), []);
 
@@ -101,15 +111,24 @@ export default function PracticePlannerList({
       filtered = filtered.filter((s) => new Date(s.date) < now);
     }
 
-    // Sort by date
-    filtered = [...filtered].sort((a, b) => {
-      const dateA = new Date(a.date).getTime();
-      const dateB = new Date(b.date).getTime();
-      return sortDir === "asc" ? dateA - dateB : dateB - dateA;
-    });
+    if (favoritesOnly) {
+      filtered = filtered.filter((s) => favorites.isFavorite(s.id));
+    }
+
+    // Favorites first, then by date
+    filtered = [...filtered].sort(
+      favoritesFirst<SessionSummary>(
+        (s) => favorites.isFavorite(s.id),
+        (a, b) => {
+          const dateA = new Date(a.date).getTime();
+          const dateB = new Date(b.date).getTime();
+          return sortDir === "asc" ? dateA - dateB : dateB - dateA;
+        }
+      )
+    );
 
     return filtered;
-  }, [sessions, search, timeFilter, sortDir, now]);
+  }, [sessions, search, timeFilter, sortDir, now, favoritesOnly, favorites]);
 
   const formatDate = (iso: string) => {
     const d = new Date(iso);
@@ -253,6 +272,10 @@ export default function PracticePlannerList({
           <ToggleButton value="all">All</ToggleButton>
         </ToggleButtonGroup>
 
+        {favorites.supported && (
+          <FavoritesFilterChip active={favoritesOnly} onChange={setFavoritesOnly} />
+        )}
+
         <Tooltip title={sortDir === "asc" ? "Oldest first" : "Newest first"}>
           <IconButton
             size="small"
@@ -272,6 +295,12 @@ export default function PracticePlannerList({
         </Tooltip>
       </Paper>
 
+      {favorites.error && (
+        <Alert severity="error" onClose={favorites.clearError} sx={{ mb: 2 }}>
+          {favorites.error}
+        </Alert>
+      )}
+
       {/* Results count */}
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
         {filteredSessions.length} session{filteredSessions.length !== 1 ? "s" : ""}
@@ -284,6 +313,8 @@ export default function PracticePlannerList({
           isAdmin={isAdmin}
           hasSearch={!!search.trim()}
           timeFilter={timeFilter}
+          favoritesOnly={favoritesOnly}
+          hasFavorites={sessions.some((s) => favorites.isFavorite(s.id))}
         />
       ) : (
         <Box
@@ -306,6 +337,14 @@ export default function PracticePlannerList({
               formatTime={formatTime}
               isAdmin={isAdmin}
               onDuplicate={setDuplicating}
+              favorite={
+                favorites.supported
+                  ? {
+                      active: favorites.isFavorite(session.id),
+                      onToggle: (next: boolean) => void favorites.setFavorite(session.id, next),
+                    }
+                  : undefined
+              }
             />
           ))}
         </Box>
@@ -330,6 +369,7 @@ function SessionCard({
   formatTime,
   isAdmin,
   onDuplicate,
+  favorite,
 }: {
   session: SessionSummary;
   isUpcoming: boolean;
@@ -337,6 +377,8 @@ function SessionCard({
   formatTime: (iso: string) => string;
   isAdmin: boolean;
   onDuplicate: (session: SessionSummary) => void;
+  /** The star; absent when there are no favorites here. */
+  favorite?: { active: boolean; onToggle: (next: boolean) => void };
 }) {
   return (
     <Card
@@ -460,16 +502,27 @@ function SessionCard({
           </Stack>
         </CardContent>
       </CardActionArea>
-      {isAdmin && (
+      {(isAdmin || favorite) && (
+        // Outside the card's link: the star never opens the practice.
         <CardActions sx={{ justifyContent: "flex-end", pt: 0 }}>
-          <Button
-            size="small"
-            startIcon={<ContentCopyIcon />}
-            onClick={() => onDuplicate(session)}
-            sx={{ minHeight: 44 }}
-          >
-            Duplicate
-          </Button>
+          {favorite && (
+            <FavoriteToggle
+              name={session.title}
+              active={favorite.active}
+              onToggle={favorite.onToggle}
+              sx={{ mr: "auto" }}
+            />
+          )}
+          {isAdmin && (
+            <Button
+              size="small"
+              startIcon={<ContentCopyIcon />}
+              onClick={() => onDuplicate(session)}
+              sx={{ minHeight: 44 }}
+            >
+              Duplicate
+            </Button>
+          )}
         </CardActions>
       )}
     </Card>
@@ -480,11 +533,34 @@ function SessionsEmptyState({
   isAdmin,
   hasSearch,
   timeFilter,
+  favoritesOnly,
+  hasFavorites,
 }: {
   isAdmin: boolean;
   hasSearch: boolean;
   timeFilter: TimeFilter;
+  favoritesOnly: boolean;
+  hasFavorites: boolean;
 }) {
+  if (favoritesOnly && !hasFavorites) {
+    return (
+      <EmptyState
+        icon={<StarBorderIcon />}
+        title="No favorite practices yet"
+        description="Tap the star on a practice to find it here."
+      />
+    );
+  }
+  if (favoritesOnly && !hasSearch) {
+    return (
+      <EmptyState
+        icon={<StarBorderIcon />}
+        title={timeFilter === "all" ? "No favorite practices" : `No ${timeFilter} favorite practices`}
+        description="Your starred practices are under another tab. Try All."
+      />
+    );
+  }
+
   if (hasSearch) {
     return (
       <EmptyState

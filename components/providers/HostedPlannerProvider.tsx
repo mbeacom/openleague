@@ -18,6 +18,7 @@ import {
     saveSessionDrill,
 } from "@/lib/actions/practice-session-drills";
 import { getPracticeLogoImage } from "@/lib/actions/practice-logo";
+import { listPlannerFavorites, setPlannerFavorite } from "@/lib/actions/planner-favorites";
 import { deletePracticeSession, sharePracticeSession } from "@/lib/actions/practice-sessions";
 import { useHostedPlannerPlatform } from "./hosted-planner-platform";
 
@@ -32,6 +33,8 @@ export const hostedPlannerStore: PlannerStore = {
     deletePracticeSession,
     sharePracticeSession,
     getPracticeLogoImage,
+    listPlannerFavorites,
+    setPlannerFavorite,
 };
 
 export function HostedPlannerProvider({ children }: { children: ReactNode }) {

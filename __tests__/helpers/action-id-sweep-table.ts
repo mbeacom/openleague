@@ -232,6 +232,10 @@ export const ACTION_ID_ARGUMENTS: Record<string, TableEntry> = {
   "placements#createDivisionInline": [{ leagueId: ID, name: "Sample" }],
   "placements#getPlacementBoard": [{ seasonId: ID, phaseId: ID }],
   "placements#recordPlacement": [{ seasonId: ID, teamId: ID, divisionId: ID }],
+  "planner-favorites#setPlannerFavorite": variants(
+    [{ kind: "DRILL", targetId: ID, favorite: true }],
+    [{ kind: "PRACTICE", targetId: ID, favorite: true }],
+  ),
   "plays#createPlay": [{ teamId: ID, name: "Sample", playData: { version: 2, players: [], drawings: [], equipment: [], annotations: [] } }],
   "plays#deletePlay": [{ id: ID, teamId: ID }],
   "plays#getPlayById": [{ id: ID, teamId: ID }],
@@ -418,6 +422,7 @@ export const NO_ID_ARGUMENTS: Record<string, string> = {
   "league-fetch#fetchLeagueSchedule": "a league page URL only; the user comes from the session",
   "logout#logout": "no arguments",
   "notifications#getAllNotificationPreferences": "no arguments",
+  "planner-favorites#listPlannerFavorites": "a favorite kind only; the user comes from the session",
   "practice-session-queries#getPlanImportTeams": "no arguments",
   "practice-session-queries#getPlayLibraryContext": "no arguments",
   "practice-session-queries#getPracticePlannerListData": "no arguments",
