@@ -55,6 +55,11 @@ describe("LeagueFetchView", () => {
         expect(await screen.findByRole("heading", { name: `Fetch ${HOST} schedule page?` })).toBeInTheDocument();
     });
 
+    it("accepts an allowed host written with a trailing dot, as the server does", async () => {
+        open(`#src=${encodeURIComponent(`https://${HOST}./schedule/8u`)}`);
+        expect(await screen.findByRole("heading", { name: `Fetch ${HOST} schedule page?` })).toBeInTheDocument();
+    });
+
     it("explains when there is nothing to fetch", async () => {
         open("");
         expect(await screen.findByText(NO_SOURCE_MESSAGE)).toBeInTheDocument();

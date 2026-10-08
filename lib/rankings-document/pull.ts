@@ -105,6 +105,11 @@ export async function encodeSchedulePull(pull: SchedulePull): Promise<string> {
 }
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+/** A real calendar day: JavaScript rolls 2026-02-31 over to March 3, so it must round-trip. */
+function isCalendarDate(date: string): boolean {
+    const parsed = new Date(`${date}T00:00:00Z`);
+    return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === date;
+}
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 const TEAM_NUMBER = /^\d{3}$/;
 
@@ -145,7 +150,7 @@ function fromWire(raw: unknown): SchedulePull | null {
     for (const entry of g) {
         if (!Array.isArray(entry) || entry.length !== 7) return null;
         const [date, time, home, away, homeGoals, awayGoals, rink] = entry as unknown[];
-        if (typeof date !== "string" || !DATE.test(date) || Number.isNaN(Date.parse(`${date}T00:00:00Z`))) return null;
+        if (typeof date !== "string" || !DATE.test(date) || !isCalendarDate(date)) return null;
         if (time !== null && (typeof time !== "string" || !TIME.test(time))) return null;
         if (typeof home !== "string" || typeof away !== "string" || !numbers.has(home) || !numbers.has(away) || home === away) return null;
         const scored = homeGoals !== null || awayGoals !== null;

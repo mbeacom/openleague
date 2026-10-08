@@ -106,6 +106,11 @@ describe("schedule pull codec", () => {
         expect(await decodeSchedulePull(await encodeRaw({ ...WIRE, v: 2 }))).toEqual({ ok: false, code: "newer-version", message: PULL_NEWER_MESSAGE });
     });
 
+    it("rejects a calendar date that doesn't exist", async () => {
+        const g = [["2026-02-31", "15:40", "901", "902", 4, 9, 0]];
+        expect(await decodeSchedulePull(await encodeRaw({ ...WIRE, g }))).toEqual({ ok: false, code: "unreadable", message: PULL_UNREADABLE_MESSAGE });
+    });
+
     it("reads a minimal valid wire payload", async () => {
         const result = await decodeSchedulePull(await encodeRaw(WIRE));
         expect(result.ok && result.pull.schedule.games).toEqual([

@@ -171,6 +171,7 @@ function isPublicIpv6(address: string): boolean {
     if (g[0] === 0x64 && g[1] === 0xff9b && g.slice(2, 6).every((x) => x === 0)) return isPublicIpv4(embeddedV4());
     if ((g[0] & 0xfe00) === 0xfc00) return false; // unique local
     if ((g[0] & 0xffc0) === 0xfe80) return false; // link-local
+    if ((g[0] & 0xffc0) === 0xfec0) return false; // deprecated site-local
     if ((g[0] & 0xff00) === 0xff00) return false; // multicast
     if (g[0] === 0x2001 && g[1] === 0x0db8) return false; // documentation
     if (g.slice(0, 6).every((x) => x === 0)) return false; // deprecated IPv4-compatible

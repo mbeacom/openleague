@@ -93,6 +93,13 @@ function fragmentCarrier(key: string, valueOf: (hash: string) => string | null) 
             clearLocationHash();
             return stored;
         },
+        clear(): void {
+            try {
+                storage()?.removeItem(key);
+            } catch {
+                // Storage unavailable: nothing to remove.
+            }
+        },
         has: (now: number) => read(now) !== null,
         take,
         takeIncoming(now: number): string | null {
@@ -109,7 +116,10 @@ const leagueSource = fragmentCarrier(PENDING_LEAGUE_SOURCE_KEY, leagueSourceFrag
 
 /** Login page: moves a `#plan=` fragment into sessionStorage. Returns whether it was stored. */
 export function stashPlanFragment(now: number = Date.now()): boolean {
-    return plan.stash(now);
+    const stored = plan.stash(now);
+    // One hand-off at a time: a newer plan link replaces an older league page.
+    if (stored) leagueSource.clear();
+    return stored;
 }
 
 export function hasPendingPlan(now: number = Date.now()): boolean {
@@ -128,7 +138,10 @@ export function takeIncomingPlan(now: number = Date.now()): string | null {
 
 /** Login page: moves a `#src=` fragment into sessionStorage. Returns whether it was stored. */
 export function stashLeagueSourceFragment(now: number = Date.now()): boolean {
-    return leagueSource.stash(now);
+    const stored = leagueSource.stash(now);
+    // One hand-off at a time: a newer league page replaces an older plan link.
+    if (stored) plan.clear();
+    return stored;
 }
 
 export function hasPendingLeagueSource(now: number = Date.now()): boolean {

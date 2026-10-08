@@ -63,3 +63,20 @@ describe("login carry-over", () => {
         expect(window.location.hash).toBe("");
     });
 });
+
+describe("one hand-off at a time", () => {
+    it("stashing a league page clears an earlier stashed plan, and the other way round", () => {
+        window.history.replaceState(null, "", "/login#plan=abc");
+        expect(stashPlanFragment(NOW)).toBe(true);
+        window.history.replaceState(null, "", `/login${SRC}`);
+        expect(stashLeagueSourceFragment(NOW + 1000)).toBe(true);
+        expect(hasPendingPlan(NOW + 2000)).toBe(false);
+        expect(hasPendingLeagueSource(NOW + 2000)).toBe(true);
+
+        window.history.replaceState(null, "", "/login#plan=abc");
+        expect(stashPlanFragment(NOW + 3000)).toBe(true);
+        expect(hasPendingLeagueSource(NOW + 4000)).toBe(false);
+        expect(hasPendingPlan(NOW + 4000)).toBe(true);
+    });
+});
+

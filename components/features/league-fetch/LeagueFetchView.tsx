@@ -29,7 +29,8 @@ function toSource(raw: string | null, allowedHosts: readonly string[]): Source {
   } catch {
     return { kind: "unsupported", host: null };
   }
-  const host = url.hostname.toLowerCase();
+  // Normalized as the server's guard does: lower case, without a trailing dot.
+  const host = url.hostname.toLowerCase().replace(/\.$/, "");
   // A first check for a clear message; the server action re-checks everything.
   if (url.protocol !== "https:" || url.port !== "" || !allowedHosts.includes(host)) return { kind: "unsupported", host };
   return { kind: "ready", url: url.toString(), host };
