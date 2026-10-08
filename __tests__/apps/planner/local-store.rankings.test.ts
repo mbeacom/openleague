@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createLocalPlannerStore } from "@/apps/planner/src/store/local-store";
 import { META_RANKINGS } from "@/apps/planner/src/store/records";
 import { RANKINGS_DAMAGED } from "@/apps/planner/src/store/rankings";
-import { createRankingsDocument } from "@/lib/rankings-document";
+import { MAX_RANKINGS_FILE_BYTES, RANKINGS_TOO_LARGE_TO_SAVE_MESSAGE, createRankingsDocument } from "@/lib/rankings-document";
 import { REPOS, openHarness } from "./store-harness";
 
 describe.each(REPOS)("rankings on %s", (_name, open) => {
@@ -36,6 +36,15 @@ describe.each(REPOS)("rankings on %s", (_name, open) => {
         const result = await store.saveRankings(bad);
         expect(result.success).toBe(false);
         if (!result.success) expect(result.details).toEqual({ path: ["teams", 0, "name"] });
+    });
+
+    it("refuses a document past the file cap, so a saved document always exports and reopens", async () => {
+        const { repo, options } = await openHarness(open);
+        const store = createLocalPlannerStore(repo, options);
+        // Valid to the schema, but its file is larger than the cap (UTF-8 bytes, not characters).
+        const big = { ...createRankingsDocument({ title: "Fall" }), snapshots: ["é".repeat(MAX_RANKINGS_FILE_BYTES / 2)] };
+        expect(await store.saveRankings(big)).toEqual({ success: false, error: RANKINGS_TOO_LARGE_TO_SAVE_MESSAGE });
+        expect(await store.getRankings()).toEqual({ success: true, data: null });
     });
 
     it("reports a damaged saved record instead of crashing", async () => {

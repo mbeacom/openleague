@@ -30,7 +30,16 @@ const refuse = (error: string): LogoFileResult => ({ ok: false, error });
 const errorName = (error: unknown) =>
     typeof error === "object" && error !== null && typeof (error as { name?: unknown }).name === "string" ? (error as { name: string }).name : "unknown error";
 
-export async function normalizeLogoFile(file: Blob): Promise<LogoFileResult> {
+/** The sizes an upload is drawn at (largest first) and the most its PNG may hold. */
+export interface LogoNormalizeOptions {
+    sides: readonly number[];
+    maxPngBytes: number;
+}
+
+/** The practice logo (spec R4): within 512, then 256; at most 200 KB. */
+export const PRACTICE_LOGO_OPTIONS: LogoNormalizeOptions = { sides: [LOGO_IMAGE_MAX_PX, LOGO_IMAGE_FALLBACK_PX], maxPngBytes: MAX_LOGO_PNG_BYTES };
+
+export async function normalizeLogoFile(file: Blob, options: LogoNormalizeOptions = PRACTICE_LOGO_OPTIONS): Promise<LogoFileResult> {
     if (file.size > LOGO_MAX_BYTES) return refuse(LOGO_FILE_SIZE_MESSAGE);
     // The whole file (already capped at LOGO_MAX_BYTES above): a JPEG's frame header can sit behind
     // metadata segments (EXIF, ICC) that run past any fixed prefix.
@@ -56,7 +65,7 @@ export async function normalizeLogoFile(file: Blob): Promise<LogoFileResult> {
     }
     try {
         if (!(bitmap.width > 0 && bitmap.height > 0)) return refuse(LOGO_UNREADABLE_MESSAGE);
-        for (const side of [LOGO_IMAGE_MAX_PX, LOGO_IMAGE_FALLBACK_PX]) {
+        for (const side of options.sides) {
             const size = fitWithin(bitmap.width, bitmap.height, side);
             const canvas = document.createElement("canvas");
             canvas.width = size.width;
@@ -66,7 +75,7 @@ export async function normalizeLogoFile(file: Blob): Promise<LogoFileResult> {
             ctx.drawImage(bitmap, 0, 0, size.width, size.height);
             const dataUrl = canvas.toDataURL("image/png");
             if (!dataUrl.startsWith("data:image/png;base64,")) return refuse(LOGO_UNREADABLE_MESSAGE);
-            const fits = dataUrl.length <= MAX_PNG_DATA_URI_LENGTH && isPngDataUri(dataUrl) && pngDataUriByteLength(dataUrl) <= MAX_LOGO_PNG_BYTES;
+            const fits = dataUrl.length <= MAX_PNG_DATA_URI_LENGTH && isPngDataUri(dataUrl) && pngDataUriByteLength(dataUrl) <= options.maxPngBytes;
             if (fits) return { ok: true, logo: { dataUrl, width: size.width, height: size.height } };
         }
         return refuse(LOGO_TOO_DETAILED_MESSAGE);

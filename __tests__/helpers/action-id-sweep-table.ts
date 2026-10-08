@@ -8,6 +8,7 @@ import {
   type TableEntry,
 } from "@/__tests__/helpers/action-id-sweep";
 import { serializePlan } from "@/lib/plan-document";
+import { createRankingsDocument } from "@/lib/rankings-document";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 
 /** A minimal valid practice plan document for the import action. */
@@ -32,6 +33,9 @@ const SAMPLE_PLAN = serializePlan(
   "openleague-static",
   new Date("2026-10-01T00:00:00.000Z"),
 );
+
+/** A minimal valid rankings document for the hosted rankings save action. */
+const SAMPLE_RANKINGS = createRankingsDocument({ title: "Sweep Rankings" });
 
 /**
  * Every export of every "use server" module under lib/actions, keyed
@@ -242,6 +246,10 @@ export const ACTION_ID_ARGUMENTS: Record<string, TableEntry> = {
   "plays#getPlaysByTeam": [{ teamId: ID }],
   "plays#updatePlay": [{ id: ID, teamId: ID, name: "Sample", playData: { version: 2, players: [], drawings: [], equipment: [], annotations: [] } }],
   "practice-logo#getPracticeLogoImage": [ID],
+  "rankings#clearRankingsRecord": [ID],
+  "rankings#deleteRankingsRecord": [ID],
+  "rankings#getRankingsRecord": [ID],
+  "rankings#saveRankingsRecord": [{ id: ID, document: SAMPLE_RANKINGS }],
   "practice-plan-import#importPracticePlan": [{ teamId: ID, date: "2026-11-01T18:00:00.000Z", document: SAMPLE_PLAN }],
   "practice-session-drills#copySessionDrillToLibrary": [{ playId: ID, teamId: ID }],
   "practice-session-drills#duplicatePracticeSession": [{ id: ID, teamId: ID, date: "2026-11-01T18:00:00.000Z" }],
@@ -422,6 +430,8 @@ export const NO_ID_ARGUMENTS: Record<string, string> = {
   "league#createLeague": "league fields only; creates a new record",
   "league-fetch#fetchLeagueSchedule": "a league page URL only; the user comes from the session",
   "logout#logout": "no arguments",
+  "rankings#createRankingsRecord": "a title or a rankings document only; the owner comes from the session",
+  "rankings#listRankingsRecords": "no arguments; the owner comes from the session",
   "notifications#getAllNotificationPreferences": "no arguments",
   "planner-favorites#listPlannerFavorites": "a favorite kind only; the user comes from the session",
   "practice-session-queries#getPlanImportTeams": "no arguments",

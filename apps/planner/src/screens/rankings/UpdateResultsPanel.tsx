@@ -6,8 +6,7 @@
 import type { MouseEvent, ReactNode } from "react";
 import { Box, Button, Paper, Stack, Typography } from "@mui/material";
 import type { RankingsSource } from "@/lib/rankings-document";
-import { navigateTo } from "../../platform";
-import { staticRoutes } from "../../routes";
+import { useRankingsPlatform } from "./rankings-platform";
 
 export const UPDATE_RESULTS_LABEL = "Update results";
 export const ADD_SCHEDULE_PAGE_LABEL = "Add the schedule page";
@@ -54,12 +53,13 @@ export interface UpdateResultsPanelProps {
 }
 
 export function UpdateResultsPanel({ source, now = new Date(), fetchAction }: UpdateResultsPanelProps) {
+    const { routes, navigate } = useRankingsPlatform();
     const open = (event: MouseEvent<HTMLAnchorElement>) => {
         if (!source) return;
         event.preventDefault();
         // A new tab for the league page; this tab goes on to the paste box.
         window.open(source.url, "_blank", "noopener,noreferrer");
-        navigateTo(staticRoutes.rankingsUpdate());
+        navigate(routes.rankingsUpdate());
     };
     return (
         <Paper
@@ -87,10 +87,10 @@ export function UpdateResultsPanel({ source, now = new Date(), fetchAction }: Up
                     </Button>
                 ) : (
                     <>
-                        <Button variant="contained" href={staticRoutes.rankingsSetup("pages")} sx={{ minHeight: 44 }}>
+                        <Button variant="contained" href={routes.rankingsSetup("pages")} sx={{ minHeight: 44 }}>
                             {ADD_SCHEDULE_PAGE_LABEL}
                         </Button>
-                        <Button href={staticRoutes.rankingsImport()} sx={{ minHeight: 44 }}>
+                        <Button href={routes.rankingsImport()} sx={{ minHeight: 44 }}>
                             {IMPORT_BY_HAND_LABEL}
                         </Button>
                     </>

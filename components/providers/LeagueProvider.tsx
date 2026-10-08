@@ -35,6 +35,7 @@ const SECTION_LABELS: Record<string, string> = {
   calendar: 'Calendar',
   events: 'Events',
   seasons: 'Seasons',
+  rankings: 'Rankings',
   venues: 'Venues',
   'venue-admin': 'Venue Admin',
   league: 'Leagues',

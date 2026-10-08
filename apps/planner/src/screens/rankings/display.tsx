@@ -3,8 +3,8 @@ import { Alert, Box, Button, CircularProgress, Stack, Typography } from "@mui/ma
 import { alpha, type Theme } from "@mui/material/styles";
 import type { Movement } from "@/lib/ratings";
 import { rankedTeamCount, type RankingsDocument } from "@/lib/rankings-document";
-import { staticRoutes } from "../../routes";
 import type { RankingsState } from "./useRankingsDoc";
+import { useRankingsPlatform } from "./rankings-platform";
 
 export const NO_RANKINGS_MESSAGE = "No rankings yet. Paste your league's schedule page to get started.";
 export const START_OVER_LABEL = "Start over";
@@ -106,6 +106,7 @@ export function levelBandSx(theme: Theme, index: number, count: number) {
 }
 
 export function RankingsStatus({ state, onStartOver }: { state: Exclude<RankingsState, { status: "ready" }> | { status: "empty" }; onStartOver: () => void }) {
+    const { routes } = useRankingsPlatform();
     if (state.status === "loading") {
         return (
             <Box sx={{ display: "flex", justifyContent: "center", p: 4 }}>
@@ -130,7 +131,7 @@ export function RankingsStatus({ state, onStartOver }: { state: Exclude<Rankings
     return (
         <Stack spacing={2} sx={{ alignItems: "flex-start", py: 2 }}>
             <Typography>{NO_RANKINGS_MESSAGE}</Typography>
-            <Button variant="contained" href={staticRoutes.rankingsImport()} sx={{ minHeight: 44 }}>
+            <Button variant="contained" href={routes.rankingsImport()} sx={{ minHeight: 44 }}>
                 Import schedule
             </Button>
         </Stack>

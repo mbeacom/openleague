@@ -73,6 +73,16 @@ const nextConfig: NextConfig = {
   compiler: {
     emotion: true,
   },
+  experimental: {
+    serverActions: {
+      // Hosted rankings (ADR-0025) save a whole openleague.rankings document,
+      // which may be up to MAX_RANKINGS_FILE_BYTES (3 MB) so any file the
+      // static planner writes opens on hosted. The 1 MB default would refuse
+      // the largest ones; the rankings actions still check the size
+      // themselves, and every other action validates its own input.
+      bodySizeLimit: "4mb",
+    },
+  },
   images: {
     formats: ["image/avif", "image/webp"],
     minimumCacheTTL: 604800,

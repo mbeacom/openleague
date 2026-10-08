@@ -42,22 +42,32 @@ export function isTeamColor(value: string): boolean {
     return HEX6.test(value);
 }
 
-function isSide(value: unknown): boolean {
-    return Number.isInteger(value) && (value as number) >= 1 && (value as number) <= LOGO_IMAGE_MAX_PX;
-}
-
 /** The smallest valid PNG: signature, IHDR, one IDAT and IEND. Anything shorter is a stub. */
 const MIN_LOGO_PNG_BYTES = 57;
 /** Signature (8) + IHDR length and type (8) + width and height (8), as base64 characters (24 bytes = 32 characters). */
 const PNG_HEADER_BASE64_CHARS = 32;
 
-/** A normalized logo (spec R2): a real PNG data URL whose IHDR matches the stored sides, 1–512, at most 200 KB decoded. */
-export function isLogoImage(value: unknown): value is LogoImage {
+/** The bounds a normalized PNG logo must meet: its longest side and its decoded size. */
+export interface PngLogoBounds {
+    maxSide: number;
+    maxBytes: number;
+}
+
+/** The practice logo's bounds (spec R2): within 512×512, at most 200 KB. */
+export const PRACTICE_LOGO_BOUNDS: PngLogoBounds = { maxSide: LOGO_IMAGE_MAX_PX, maxBytes: MAX_LOGO_PNG_BYTES };
+
+/**
+ * A normalized PNG logo within `bounds`: a real PNG data URL whose IHDR
+ * matches the stored sides. Shared by the practice logo (isLogoImage) and
+ * the rankings document's team logos, which use smaller bounds.
+ */
+export function isPngLogo(value: unknown, bounds: PngLogoBounds): value is LogoImage {
     if (typeof value !== "object" || value === null) return false;
     const { dataUrl, width, height } = value as Record<string, unknown>;
+    const isSide = (side: unknown) => Number.isInteger(side) && (side as number) >= 1 && (side as number) <= bounds.maxSide;
     if (typeof dataUrl !== "string" || !isPngDataUri(dataUrl) || !isSide(width) || !isSide(height)) return false;
     const byteLength = pngDataUriByteLength(dataUrl);
-    if (byteLength < MIN_LOGO_PNG_BYTES || byteLength > MAX_LOGO_PNG_BYTES) return false;
+    if (byteLength < MIN_LOGO_PNG_BYTES || byteLength > bounds.maxBytes) return false;
     // Decode only the header: the declared size must be the stored size.
     const payload = dataUrl.slice(dataUrl.indexOf(",") + 1, dataUrl.indexOf(",") + 1 + PNG_HEADER_BASE64_CHARS);
     const binary = atob(payload);
@@ -65,6 +75,11 @@ export function isLogoImage(value: unknown): value is LogoImage {
     for (let i = 0; i < binary.length; i++) header[i] = binary.charCodeAt(i);
     const declared = readImageDimensions(header);
     return declared !== null && declared.width === width && declared.height === height && header[0] === 0x89;
+}
+
+/** A normalized logo (spec R2): a real PNG data URL whose IHDR matches the stored sides, 1–512, at most 200 KB decoded. */
+export function isLogoImage(value: unknown): value is LogoImage {
+    return isPngLogo(value, PRACTICE_LOGO_BOUNDS);
 }
 
 export function teamProfileErrors(input: TeamProfileInput): Partial<Record<TeamProfileField, string>> {

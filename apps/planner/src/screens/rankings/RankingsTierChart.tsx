@@ -13,7 +13,7 @@ import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useSta
 import { Box, Button, Typography } from "@mui/material";
 import { alpha, keyframes, type Theme } from "@mui/material/styles";
 import type { TeamRating } from "@/lib/ratings";
-import { staticRoutes } from "../../routes";
+import { useRankingsPlatform } from "./rankings-platform";
 import { BELOW_LAST_LEVEL, levelBandAlpha, formatRating } from "./display";
 import {
     DOT_COLORS,
@@ -140,6 +140,7 @@ export interface RankingsTierChartProps {
 }
 
 export function RankingsTierChart({ teams, levels, myTeam, logos, onShowTable }: RankingsTierChartProps) {
+    const { routes, navigate } = useRankingsPlatform();
     const data = useMemo(() => tierChartData(teams, levels, logos), [teams, levels, logos]);
     const [measureRef, width] = useWidth();
     const ids = useId();
@@ -229,7 +230,7 @@ export function RankingsTierChart({ teams, levels, myTeam, logos, onShowTable }:
             setActive(null);
         } else if (event.key === "Enter") {
             event.preventDefault();
-            window.location.assign(staticRoutes.rankingsTeam(number));
+            navigate(routes.rankingsTeam(number));
         }
     };
 

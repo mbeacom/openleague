@@ -25,13 +25,12 @@ import {
 } from "@/lib/rankings-document";
 import { CSHL_8U_METHOD } from "@/lib/ratings";
 import { defaultSeasonYear, looksLikeHtml, parseSchedule, parseSnakeChart, savedPageText, type ParsedSchedule, type ParsedSnakeChart } from "@/lib/ratings/import";
-import { navigateTo } from "../../platform";
-import { staticRoutes } from "../../routes";
-import type { LocalPlannerStore } from "../../store/types";
+import type { RankingsOps } from "../../store/rankings";
 import { RankingsStatus } from "./display";
 import { useRankingsDoc } from "./useRankingsDoc";
 import { usePulledSchedule } from "./pulled-schedule";
 import { DOCUMENT_FILE_ACCEPT } from "@/lib/document-formats";
+import { useRankingsPlatform } from "./rankings-platform";
 
 export const READ_SCHEDULE_LABEL = "Read schedule";
 export const READ_SNAKE_LABEL = "Read snake chart";
@@ -117,7 +116,8 @@ function PageAddress({ label, value, onChange }: { label: string; value: string;
     );
 }
 
-export function RankingsImportScreen({ store, update = false, pull }: { store: LocalPlannerStore; update?: boolean; pull?: string }) {
+export function RankingsImportScreen({ store, update = false, pull }: { store: RankingsOps; update?: boolean; pull?: string }) {
+    const { routes, navigate } = useRankingsPlatform();
     const { state, save, clear } = useRankingsDoc(store);
     const pulled = usePulledSchedule(pull);
     const [scheduleText, setScheduleText] = useState("");
@@ -305,7 +305,7 @@ export function RankingsImportScreen({ store, update = false, pull }: { store: L
         const readAt = new Date().toISOString();
         const withSchedule = withSource(draft, "schedule", scheduleAddress, schedule ? { readAt } : {});
         const result = await save(withSource(withSchedule, "snakeChart", snakeAddress, snake ? { readAt } : {}));
-        if (result.success) navigateTo(staticRoutes.rankings());
+        if (result.success) navigate(routes.rankings());
         else setMessage({ severity: "error", text: result.error });
     };
     const openFile = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -326,7 +326,7 @@ export function RankingsImportScreen({ store, update = false, pull }: { store: L
     };
     const replaceWith = async (doc: RankingsDocument) => {
         const result = await save(doc);
-        if (result.success) navigateTo(staticRoutes.rankings());
+        if (result.success) navigate(routes.rankings());
         else {
             setPendingOpen(null);
             setMessage({ severity: "error", text: result.error });
