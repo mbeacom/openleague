@@ -2,9 +2,10 @@
  * Rankings (static rankings spec, Screens): my-team tiles, a ladder with level
  * bands (a compact list on phones), a sortable table with every column, filters,
  * the method summary and export, and Update results from the saved league page.
- * Movement is always an icon plus a word.
+ * The tier chart sits above the filters and always shows every team, so its
+ * level cuts stay true whatever is filtered. Movement is always an icon plus a word.
  */
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import {
     Alert,
     Box,
@@ -50,6 +51,7 @@ import {
 } from "./display";
 import { UpdateResultsPanel } from "./UpdateResultsPanel";
 import { FetchForMeAction } from "./FetchForMeAction";
+import { RankingsTierChart } from "./RankingsTierChart";
 import { useRankingsDoc } from "./useRankingsDoc";
 
 export const PICK_TEAM_LABEL = "Pick your team";
@@ -304,6 +306,7 @@ function Ready({ doc, save }: { doc: RankingsDocument; save: (doc: RankingsDocum
     const [query, setQuery] = useState("");
     const [bracket, setBracket] = useState("");
     const [onlyOpponents, setOnlyOpponents] = useState(false);
+    const tableAnchor = useRef<HTMLDivElement>(null);
     // Strongest first, as in Setup: the brackets teams are actually in.
     const used = new Set(doc.teams.map((team) => team.startingBracket));
     const brackets = docBracketOrder(doc).filter((b) => used.has(b));
@@ -374,7 +377,17 @@ function Ready({ doc, save }: { doc: RankingsDocument; save: (doc: RankingsDocum
                 </TextField>
             )}
 
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ alignItems: { sm: "center" }, flexWrap: { sm: "wrap" }, rowGap: 1 }}>
+            <RankingsTierChart
+                teams={result.teams}
+                levels={doc.method.levels}
+                myTeam={doc.myTeam}
+                onShowTable={() => {
+                    setView("table");
+                    tableAnchor.current?.scrollIntoView?.({ block: "start" });
+                }}
+            />
+
+            <Stack ref={tableAnchor} direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ alignItems: { sm: "center" }, flexWrap: { sm: "wrap" }, rowGap: 1 }}>
                 <TextField label="Find a team" value={query} onChange={(e) => setQuery(e.target.value)} />
                 <TextField
                     select
