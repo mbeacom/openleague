@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/db/prisma", () => ({
     prisma: {
-        plannerFavorite: { findMany: vi.fn(), upsert: vi.fn(), deleteMany: vi.fn() },
+        plannerFavorite: { findMany: vi.fn(), findUnique: vi.fn(), count: vi.fn(), upsert: vi.fn(), deleteMany: vi.fn() },
         play: { findFirst: vi.fn() },
         practiceSession: { findUnique: vi.fn() },
     },
@@ -13,7 +13,12 @@ import { prisma } from "@/lib/db/prisma";
 import { getUserTeamRole, requireUserId } from "@/lib/auth/session";
 import { listPlannerFavorites, setPlannerFavorite } from "@/lib/actions/planner-favorites";
 import { STARTER_PLAYS } from "@/lib/data/starter-plays";
-import { FAVORITE_DRILL_NOT_FOUND, FAVORITE_PRACTICE_NOT_FOUND } from "@/lib/utils/planner-favorites";
+import {
+    FAVORITE_DRILL_NOT_FOUND,
+    FAVORITE_PRACTICE_NOT_FOUND,
+    MAX_PLANNER_FAVORITES,
+    plannerFavoriteLimitMessage,
+} from "@/lib/utils/planner-favorites";
 
 const USER = "cjld2cjxh0000qzrmn831i7us";
 const TEAM = "cjld2cjxh0000qzrmn831i7rn";
@@ -26,6 +31,8 @@ describe("planner favorite actions", () => {
         vi.mocked(requireUserId).mockResolvedValue(USER);
         vi.mocked(prisma.plannerFavorite.upsert).mockResolvedValue({} as never);
         vi.mocked(prisma.plannerFavorite.deleteMany).mockResolvedValue({ count: 1 } as never);
+        vi.mocked(prisma.plannerFavorite.count).mockResolvedValue(0 as never);
+        vi.mocked(prisma.plannerFavorite.findUnique).mockResolvedValue(null as never);
     });
 
     it("lists only the signed-in user's favorites of one kind", async () => {
@@ -112,5 +119,51 @@ describe("planner favorite actions", () => {
         vi.spyOn(console, "error").mockImplementation(() => {});
         vi.mocked(prisma.plannerFavorite.findMany).mockRejectedValue(new Error("connection reset"));
         expect(await listPlannerFavorites({ kind: "PRACTICE" })).toMatchObject({ success: false });
+    });
+    it("lists every favorite, reading in pages with a stable order instead of dropping rows past a limit", async () => {
+        const AT = new Date("2026-09-01T00:00:00Z");
+        const row = (n: number) => ({ id: `cfav${String(n).padStart(21, "0")}`, targetId: `ctarget${String(n).padStart(18, "0")}`, createdAt: AT });
+        let served = 0;
+        // More rows than one read takes: the action must keep reading until a short page.
+        vi.mocked(prisma.plannerFavorite.findMany).mockImplementation((async (args: { take: number }) => {
+            const total = MAX_PLANNER_FAVORITES + 5;
+            const page = Array.from({ length: Math.min(args.take, total - served) }, (_, i) => row(served + i));
+            served += page.length;
+            return page;
+        }) as never);
+        const result = await listPlannerFavorites({ kind: "PRACTICE" });
+        expect(result.success && result.data.length).toBe(MAX_PLANNER_FAVORITES + 5);
+        expect(result.success && result.data[MAX_PLANNER_FAVORITES + 4]).toBe(row(MAX_PLANNER_FAVORITES + 4).targetId);
+        const calls = vi.mocked(prisma.plannerFavorite.findMany).mock.calls.map((call) => call[0] as Record<string, unknown>);
+        expect(calls.length).toBeGreaterThan(1);
+        expect(calls[0]).toMatchObject({ where: { userId: USER, kind: "PRACTICE" }, orderBy: [{ createdAt: "desc" }, { id: "desc" }] });
+        expect((calls[0].where as Record<string, unknown>).OR).toBeUndefined();
+        // Each later read continues strictly after the last row of the one before.
+        const last = row((calls[0].take as number) - 1);
+        expect(calls[1].where).toEqual({
+            userId: USER,
+            kind: "PRACTICE",
+            OR: [{ createdAt: { lt: AT } }, { createdAt: AT, id: { lt: last.id } }],
+        });
+    });
+
+    it("refuses a new star past the per-user limit with a friendly message", async () => {
+        vi.mocked(prisma.play.findFirst).mockResolvedValue({ teamId: TEAM } as never);
+        vi.mocked(getUserTeamRole).mockResolvedValue("MEMBER");
+        vi.mocked(prisma.plannerFavorite.count).mockResolvedValue(MAX_PLANNER_FAVORITES as never);
+        const result = await setPlannerFavorite({ kind: "DRILL", targetId: PLAY, favorite: true });
+        expect(result).toEqual({ success: false, error: plannerFavoriteLimitMessage("DRILL") });
+        expect(plannerFavoriteLimitMessage("DRILL")).toMatch(/2,000 drills/);
+        expect(vi.mocked(prisma.plannerFavorite.count).mock.calls[0][0]).toEqual({ where: { userId: USER, kind: "DRILL" } });
+        expect(prisma.plannerFavorite.upsert).not.toHaveBeenCalled();
+    });
+
+    it("still re-stars an already starred drill at the limit, and always allows unstarring", async () => {
+        vi.mocked(prisma.play.findFirst).mockResolvedValue({ teamId: TEAM } as never);
+        vi.mocked(getUserTeamRole).mockResolvedValue("MEMBER");
+        vi.mocked(prisma.plannerFavorite.count).mockResolvedValue(MAX_PLANNER_FAVORITES as never);
+        vi.mocked(prisma.plannerFavorite.findUnique).mockResolvedValue({ id: "cfavexistingxxxxxxxxxxxxx" } as never);
+        expect((await setPlannerFavorite({ kind: "DRILL", targetId: PLAY, favorite: true })).success).toBe(true);
+        expect((await setPlannerFavorite({ kind: "DRILL", targetId: PLAY, favorite: false })).success).toBe(true);
     });
 });

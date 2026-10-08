@@ -583,8 +583,14 @@ export function PlayLibrary({
 
     /** The grid's drills: with the Favorites filter on, the ones still starred, paged here. */
     const favoritePlays = useMemo(() => (favoritesOnly ? plays.filter((play) => favorites.isFavorite(play.id)) : plays), [favoritesOnly, plays, favorites]);
-    const shownPlays = favoritesOnly ? favoritePlays.slice((currentPage - 1) * playsPerPage, currentPage * playsPerPage) : plays;
     const pageCount = favoritesOnly ? Math.max(1, Math.ceil(favoritePlays.length / playsPerPage)) : totalPages;
+    // Unstarring the last favorite on the last page removes that page: show the new last page, not an empty one.
+    const favoritesPage = Math.min(currentPage, pageCount);
+    const shownPage = favoritesOnly ? favoritesPage : currentPage;
+    const shownPlays = favoritesOnly ? favoritePlays.slice((favoritesPage - 1) * playsPerPage, favoritesPage * playsPerPage) : plays;
+    // Keep the page state in step with the clamp, adjusted during render rather than in an effect
+    // (the favorites grid pages locally, so this never reloads).
+    if (favoritesOnly && currentPage > pageCount) setCurrentPage(pageCount);
 
     /** A card's star, or none when the store has no favorites. */
     const cardFavorite = useCallback(
@@ -985,7 +991,7 @@ export function PlayLibrary({
                         >
                             <Pagination
                                 count={pageCount}
-                                page={currentPage}
+                                page={shownPage}
                                 onChange={handlePageChange}
                                 color="primary"
                                 size={isMobile ? "small" : "medium"}

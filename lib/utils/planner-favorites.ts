@@ -38,6 +38,19 @@ export const FAVORITE_DRILL_NOT_FOUND = "Drill not found";
 export const FAVORITE_PRACTICE_NOT_FOUND = "Practice not found";
 
 /**
+ * Most favorites one user may keep of each kind (hosted). Enforced when
+ * starring, so the list a page loads stays bounded without ever silently
+ * dropping a saved star; far more than anyone stars.
+ */
+export const MAX_PLANNER_FAVORITES = 2000;
+
+/** The friendly refusal when a new star would pass MAX_PLANNER_FAVORITES. */
+export function plannerFavoriteLimitMessage(kind: PlannerFavoriteKind): string {
+    const noun = kind === "DRILL" ? "drills" : "practices";
+    return `You can favorite up to ${MAX_PLANNER_FAVORITES.toLocaleString("en-US")} ${noun}. Unstar one to add another.`;
+}
+
+/**
  * A comparator that puts favorites first and otherwise defers to `compare`.
  * For any list that wants starred items on top (practice lists, drill suggestions).
  */

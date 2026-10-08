@@ -89,4 +89,114 @@ describe("usePlannerFavorites", () => {
         expect(result.current.isFavorite("new")).toBe(true);
         expect(result.current.isFavorite("old")).toBe(true);
     });
+    describe("rapid taps on one star", () => {
+        type Answer = (value: unknown) => void;
+        function controlledSave() {
+            const answers: Answer[] = [];
+            const save = vi.fn(() => new Promise((resolve) => answers.push(resolve)));
+            return { save, answers };
+        }
+        const ok = (favorite: boolean) => ({ success: true, data: { kind: "DRILL", targetId: "d1", favorite } });
+
+        async function loadedHook(save: ReturnType<typeof vi.fn>, initial: string[] = []) {
+            const { wrapper } = setup({ listPlannerFavorites: vi.fn().mockResolvedValue({ success: true, data: initial }), setPlannerFavorite: save });
+            const hook = renderHook(() => usePlannerFavorites("DRILL"), { wrapper });
+            await waitFor(() => expect(hook.result.current.loaded).toBe(true));
+            return hook;
+        }
+
+        it("sends one save at a time, so an older save can never land after a newer one", async () => {
+            const { save, answers } = controlledSave();
+            const { result } = await loadedHook(save);
+            let first: Promise<boolean> = Promise.resolve(false);
+            let second: Promise<boolean> = Promise.resolve(false);
+            act(() => {
+                first = result.current.setFavorite("d1", true);
+            });
+            act(() => {
+                second = result.current.setFavorite("d1", false);
+            });
+            expect(result.current.isFavorite("d1")).toBe(false);
+            // The unstar waits for the star to settle.
+            expect(save).toHaveBeenCalledTimes(1);
+            await act(async () => answers[0](ok(true)));
+            expect(save).toHaveBeenCalledTimes(2);
+            expect(save).toHaveBeenLastCalledWith({ kind: "DRILL", targetId: "d1", favorite: false });
+            await act(async () => answers[1](ok(false)));
+            expect(await first).toBe(true);
+            expect(await second).toBe(true);
+            expect(result.current.isFavorite("d1")).toBe(false);
+            expect(result.current.error).toBeNull();
+        });
+
+        it("sends only the latest state after the save in flight settles", async () => {
+            const { save, answers } = controlledSave();
+            const { result } = await loadedHook(save);
+            act(() => void result.current.setFavorite("d1", true));
+            act(() => void result.current.setFavorite("d1", false));
+            act(() => void result.current.setFavorite("d1", true));
+            act(() => void result.current.setFavorite("d1", false));
+            await act(async () => answers[0](ok(true)));
+            expect(save).toHaveBeenCalledTimes(2);
+            expect(save).toHaveBeenLastCalledWith({ kind: "DRILL", targetId: "d1", favorite: false });
+            await act(async () => answers[1](ok(false)));
+            expect(save).toHaveBeenCalledTimes(2);
+            expect(result.current.isFavorite("d1")).toBe(false);
+        });
+
+        it("sends nothing more when the taps end where the settled save left the star", async () => {
+            const { save, answers } = controlledSave();
+            const { result } = await loadedHook(save);
+            act(() => void result.current.setFavorite("d1", true));
+            act(() => void result.current.setFavorite("d1", false));
+            act(() => void result.current.setFavorite("d1", true));
+            await act(async () => answers[0](ok(true)));
+            expect(save).toHaveBeenCalledTimes(1);
+            expect(result.current.isFavorite("d1")).toBe(true);
+        });
+
+        it("still sends the newer state when an older save fails, without an error once it succeeds", async () => {
+            const { save, answers } = controlledSave();
+            const { result } = await loadedHook(save);
+            act(() => void result.current.setFavorite("d1", true));
+            act(() => void result.current.setFavorite("d1", false));
+            await act(async () => answers[0]({ success: false, error: "Couldn't update your favorites. Please try again." }));
+            expect(save).toHaveBeenCalledTimes(2);
+            expect(save).toHaveBeenLastCalledWith({ kind: "DRILL", targetId: "d1", favorite: false });
+            expect(result.current.isFavorite("d1")).toBe(false);
+            await act(async () => answers[1](ok(false)));
+            expect(result.current.isFavorite("d1")).toBe(false);
+            expect(result.current.error).toBeNull();
+        });
+
+        it("puts the star back to the last saved state when the newest save fails mid-queue", async () => {
+            const { save, answers } = controlledSave();
+            const { result } = await loadedHook(save);
+            let second: Promise<boolean> = Promise.resolve(true);
+            act(() => void result.current.setFavorite("d1", true));
+            act(() => {
+                second = result.current.setFavorite("d1", false);
+            });
+            await act(async () => answers[0](ok(true)));
+            await act(async () => answers[1]({ success: false, error: "Drill not found" }));
+            expect(await second).toBe(false);
+            // The star was saved; the unstar was not.
+            expect(result.current.isFavorite("d1")).toBe(true);
+            expect(result.current.error).toBe("Drill not found");
+        });
+
+        it("keeps other stars independent", async () => {
+            const { save, answers } = controlledSave();
+            const { result } = await loadedHook(save);
+            act(() => void result.current.setFavorite("d1", true));
+            act(() => void result.current.setFavorite("d2", true));
+            expect(save).toHaveBeenCalledTimes(2);
+            await act(async () => {
+                answers[0](ok(true));
+                answers[1](ok(true));
+            });
+            expect(result.current.isFavorite("d1")).toBe(true);
+            expect(result.current.isFavorite("d2")).toBe(true);
+        });
+    });
 });

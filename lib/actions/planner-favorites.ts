@@ -13,10 +13,12 @@ import type { PlannerFavoriteChange, PlannerFavoriteQuery } from "@/lib/planner-
 import {
     FAVORITE_DRILL_NOT_FOUND,
     FAVORITE_PRACTICE_NOT_FOUND,
+    MAX_PLANNER_FAVORITES,
     PLANNER_FAVORITE_LOAD_FAILED,
     PLANNER_FAVORITE_SAVE_FAILED,
     isStarterDrillId,
     listPlannerFavoritesSchema,
+    plannerFavoriteLimitMessage,
     setPlannerFavoriteSchema,
 } from "@/lib/utils/planner-favorites";
 
@@ -24,21 +26,37 @@ export type ActionResult<T> =
     | { success: true; data: T }
     | { success: false; error: string; details?: unknown };
 
-/** Far more than anyone stars; bounds the read. */
-const MAX_LISTED = 2000;
+/** Rows per read when listing; the list itself is complete (bounded by MAX_PLANNER_FAVORITES at write time). */
+const LIST_PAGE_SIZE = 500;
 
-/** Ids of the signed-in user's favorites of one kind, newest first. */
+/** Ids of the signed-in user's favorites of one kind, newest first. Every row, never a truncated list. */
 export async function listPlannerFavorites(input: PlannerFavoriteQuery): Promise<ActionResult<string[]>> {
     const userId = await requireUserId();
     try {
         const { kind } = listPlannerFavoritesSchema.parse(input);
-        const rows = await prisma.plannerFavorite.findMany({
-            where: { userId, kind },
-            select: { targetId: true },
-            orderBy: { createdAt: "desc" },
-            take: MAX_LISTED,
-        });
-        return { success: true, data: rows.map((row) => row.targetId) };
+        const ids: string[] = [];
+        // Keyset pages over a total order (createdAt, then id), so no row is skipped or repeated between
+        // reads, even when the previous page's last row is unstarred in the meantime.
+        let after: { createdAt: Date; id: string } | undefined;
+        for (;;) {
+            const rows = await prisma.plannerFavorite.findMany({
+                where: {
+                    userId,
+                    kind,
+                    ...(after && {
+                        OR: [{ createdAt: { lt: after.createdAt } }, { createdAt: after.createdAt, id: { lt: after.id } }],
+                    }),
+                },
+                select: { id: true, targetId: true, createdAt: true },
+                orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+                take: LIST_PAGE_SIZE,
+            });
+            for (const row of rows) ids.push(row.targetId);
+            if (rows.length < LIST_PAGE_SIZE) break;
+            const last = rows[rows.length - 1];
+            after = { createdAt: last.createdAt, id: last.id };
+        }
+        return { success: true, data: ids };
     } catch (error) {
         if (error instanceof z.ZodError) return { success: false, error: "Invalid input", details: error.issues };
         console.error("Error loading planner favorites:", error);
@@ -77,6 +95,15 @@ export async function setPlannerFavorite(input: PlannerFavoriteChange): Promise<
         if (kind === "DRILL" ? !(await canSeeDrill(userId, targetId)) : !(await canSeePractice(userId, targetId))) {
             // The same answer as a missing target, so the action never reveals what exists.
             return { success: false, error: kind === "DRILL" ? FAVORITE_DRILL_NOT_FOUND : FAVORITE_PRACTICE_NOT_FOUND };
+        }
+
+        // The per-user limit applies only to a new star; re-starring a starred target stays idempotent.
+        if ((await prisma.plannerFavorite.count({ where: { userId, kind } })) >= MAX_PLANNER_FAVORITES) {
+            const existing = await prisma.plannerFavorite.findUnique({
+                where: { userId_kind_targetId: { userId, kind, targetId } },
+                select: { id: true },
+            });
+            if (!existing) return { success: false, error: plannerFavoriteLimitMessage(kind) };
         }
 
         await prisma.plannerFavorite.upsert({

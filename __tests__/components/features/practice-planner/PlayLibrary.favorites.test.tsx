@@ -110,4 +110,34 @@ describe("PlayLibrary favorites", () => {
         fireEvent.click(within(card).getByRole("button", { name: /Add to my library/ }));
         await waitFor(() => expect(save).toHaveBeenCalledWith({ kind: "DRILL", targetId: created, favorite: true }));
     });
+    it("moves back a page when unstarring the last favorite on the last page empties it", async () => {
+        // 21 starred drills: 20 on page 1, one on page 2.
+        const many = Array.from({ length: 21 }, (_, i) => summary(`cplaym${String(i).padStart(2, "0")}xxxxxxxxxxxxxxxxx`, `Drill ${String(i + 1).padStart(2, "0")}`));
+        const store = createMockPlannerStore();
+        store.getPlaysByTeam.mockImplementation(async ({ page, limit }: { page: number; limit: number }) => ({
+            success: true,
+            data: { plays: many.slice((page - 1) * limit, page * limit), total: many.length, page, limit },
+        }));
+        const fullStore = {
+            ...store,
+            listPlannerFavorites: vi.fn().mockResolvedValue({ success: true, data: many.map((play) => play.id) }),
+            setPlannerFavorite: vi.fn(async (input: unknown) => ({ success: true, data: input })),
+        };
+        renderWithPlanner(
+            <ThemeProvider theme={createTheme()}>
+                <PlayLibrary teamId={TEAM} mode="manage" />
+            </ThemeProvider>,
+            { store: fullStore as never, platform: createHashPlatform() },
+        );
+        await screen.findByText("Drill 01");
+        await waitFor(() => expect(star("Drill 01")).toHaveAttribute("aria-pressed", "true"));
+        fireEvent.click(screen.getByRole("button", { name: "Favorites" }));
+        fireEvent.click(await screen.findByRole("button", { name: "Go to page 2" }));
+        await screen.findByText("Drill 21");
+        fireEvent.click(star("Drill 21"));
+        // Page 2 no longer exists: the grid shows page 1 instead of an empty page with no way back.
+        expect(await screen.findByText("Drill 01")).toBeInTheDocument();
+        expect(screen.queryByText("Drill 21")).toBeNull();
+        expect(screen.queryByText("No plays found")).toBeNull();
+    }, 20000);
 });
