@@ -37,6 +37,7 @@ import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
 import PersonIcon from "@mui/icons-material/Person";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import FileUploadOutlinedIcon from "@mui/icons-material/FileUploadOutlined";
 import ViewQuiltOutlinedIcon from "@mui/icons-material/ViewQuiltOutlined";
 import StarBorderIcon from "@mui/icons-material/StarBorder";
@@ -514,14 +515,27 @@ function SessionCard({
             />
           )}
           {isAdmin && (
-            <Button
-              size="small"
-              startIcon={<ContentCopyIcon />}
-              onClick={() => onDuplicate(session)}
-              sx={{ minHeight: 44 }}
-            >
-              Duplicate
-            </Button>
+            <>
+              {/* The card opens the details page; editing is the secondary action. */}
+              <Button
+                component={Link}
+                href={`/practice-planner/${session.id}/edit`}
+                size="small"
+                startIcon={<EditOutlinedIcon />}
+                aria-label={`Edit ${session.title}`}
+                sx={{ minHeight: 44 }}
+              >
+                Edit
+              </Button>
+              <Button
+                size="small"
+                startIcon={<ContentCopyIcon />}
+                onClick={() => onDuplicate(session)}
+                sx={{ minHeight: 44 }}
+              >
+                Duplicate
+              </Button>
+            </>
           )}
         </CardActions>
       )}

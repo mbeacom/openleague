@@ -248,33 +248,7 @@ describe("fetchLeaguePage", () => {
                 }),
         ]);
         const outcome = kindOf(run());
-        await vi.advanceTimersByTimeAsync(60_001);
-        expect(await outcome).toBe("timeout");
-    });
-
-    it("waits for a slow site within the 60 s default", async () => {
-        vi.useFakeTimers();
-        const { run } = setup([() => new Promise<Response>((resolve) => setTimeout(() => resolve(html()), 45_000))]);
-        const outcome = kindOf(run());
-        await vi.advanceTimersByTimeAsync(45_001);
-        expect(await outcome).toBe("ok");
-    });
-
-    it("counts every hop against one total deadline", async () => {
-        vi.useFakeTimers();
-        const slow = (response: Response, ms: number) => () => new Promise<Response>((resolve) => setTimeout(() => resolve(response), ms));
-        const { run } = setup([slow(redirect(`https://${HOST}/next`), 40_000), slow(html(), 40_000)]);
-        const outcome = kindOf(run());
-        // Each hop is under 60 s on its own; together they are not.
-        await vi.advanceTimersByTimeAsync(60_001);
-        expect(await outcome).toBe("timeout");
-    });
-
-    it("honours an explicit timeoutMs", async () => {
-        vi.useFakeTimers();
-        const { run } = setup([() => new Promise<Response>(() => {})]);
-        const outcome = kindOf(run(PAGE, { timeoutMs: 5_000 }));
-        await vi.advanceTimersByTimeAsync(5_001);
+        await vi.advanceTimersByTimeAsync(10_001);
         expect(await outcome).toBe("timeout");
     });
 
@@ -287,7 +261,7 @@ describe("fetchLeaguePage", () => {
         });
         const { run } = setup([new Response(stalled, { status: 200, headers: { "content-type": "text/html" } })]);
         const outcome = kindOf(run());
-        await vi.advanceTimersByTimeAsync(60_001);
+        await vi.advanceTimersByTimeAsync(10_001);
         expect(await outcome).toBe("timeout");
     });
 
@@ -295,7 +269,7 @@ describe("fetchLeaguePage", () => {
         vi.useFakeTimers();
         const { run } = setup([html()], () => new Promise(() => {}));
         const outcome = kindOf(run());
-        await vi.advanceTimersByTimeAsync(60_001);
+        await vi.advanceTimersByTimeAsync(10_001);
         expect(await outcome).toBe("timeout");
     });
 

@@ -39,10 +39,6 @@ const envSchema = z.object({
     // "Fetch it for me" (ADR-0024): league hosts the hosted app may fetch a
     // schedule page from, comma-separated. Unset means the built-in default.
     LEAGUE_FETCH_ALLOWED_HOSTS: z.string().optional(),
-    // Total deadline for one fetch in milliseconds (default 60000, clamped to
-    // 5000-90000 by lib/league-fetch/config.ts; unparseable falls back to the
-    // default). Keep the fetch-schedule page's maxDuration above it.
-    LEAGUE_FETCH_TIMEOUT_MS: z.string().optional(),
 
     // AWS — SES transport. AWS_ROLE_ARN switches credential resolution to
     // Vercel OIDC (short-lived STS credentials, no stored secret); when it is

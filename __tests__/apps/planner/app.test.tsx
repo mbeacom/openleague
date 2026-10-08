@@ -47,7 +47,7 @@ describe("PlannerApp", () => {
         const { store } = memoryStore();
         const id = await savedSession(store);
         render(app(store));
-        const card = await screen.findByRole("link", { name: /tuesday skills/i });
+        const card = await screen.findByRole("link", { name: /^tuesday skills/i });
         expect(card).toHaveAttribute("href", `#/sessions/${id}`);
     });
 

@@ -13,7 +13,9 @@ import type { LocalPlannerStore } from "./store/types";
 import { StaticThemeProvider } from "./theme";
 import { AppShell } from "./screens/AppShell";
 import { BenchSheetScreen } from "./screens/BenchSheetScreen";
+import { DrillDetailScreen } from "./screens/DrillDetailScreen";
 import { DrillEditorScreen } from "./screens/DrillEditorScreen";
+import { NewSessionFromDrillScreen } from "./screens/NewSessionFromDrillScreen";
 import { ImportScreen } from "./screens/ImportScreen";
 import { LibraryScreen } from "./screens/LibraryScreen";
 import { SessionDetailScreen } from "./screens/SessionDetailScreen";
@@ -83,6 +85,10 @@ function RouteView({ route, store }: { route: StaticRoute; store: LocalPlannerSt
             return <DrillEditorScreen key="new" store={store} />;
         case "libraryEdit":
             return <DrillEditorScreen key={route.id} store={store} id={route.id} />;
+        case "libraryPlay":
+            return <DrillDetailScreen key={route.id} store={store} id={route.id} />;
+        case "sessionNewWithDrill":
+            return <NewSessionFromDrillScreen key={route.drillId} store={store} drillId={route.drillId} />;
         case "import":
         case "planLink":
             // One key for both: replacing #plan=… with #/import must not remount the screen.

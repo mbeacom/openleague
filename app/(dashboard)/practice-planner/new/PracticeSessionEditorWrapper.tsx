@@ -12,7 +12,7 @@ import { createPracticeSession } from "@/lib/actions/practice-sessions";
 import { toSessionRowInputs } from "@/lib/utils/session-rows";
 import { toSessionStaffInputs } from "@/lib/utils/session-staff";
 import type { RosterOption } from "@/lib/utils/practice-roster";
-import type { StaffOption } from "@/types/practice-planner";
+import type { PlayInSession, StaffOption } from "@/types/practice-planner";
 import type { VenueBookingOptions } from "../venue-booking-options";
 
 interface PracticeSessionEditorWrapperProps {
@@ -23,6 +23,8 @@ interface PracticeSessionEditorWrapperProps {
   staffOptions?: StaffOption[];
   /** The team's players for the roster's "Add from team" (roster spec R8). */
   rosterOptions?: RosterOption[];
+  /** Rows the new practice starts with (a library drill's "Add to new practice"). */
+  initialPlays?: PlayInSession[];
 }
 
 export function PracticeSessionEditorWrapper({
@@ -30,6 +32,7 @@ export function PracticeSessionEditorWrapper({
   bookingOptions,
   staffOptions = [],
   rosterOptions = [],
+  initialPlays,
 }: PracticeSessionEditorWrapperProps) {
   const router = useRouter();
 
@@ -89,6 +92,7 @@ export function PracticeSessionEditorWrapper({
       wholeLabelBySurface={bookingOptions.wholeLabelBySurface}
       staffOptions={staffOptions}
       rosterOptions={rosterOptions}
+      {...(initialPlays && { initialData: { plays: initialPlays } })}
       onSave={handleSave}
       onCancel={handleCancel}
     />

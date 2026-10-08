@@ -91,6 +91,8 @@ export interface LocalPlannerStore extends PlannerStore, RankingsOps, AiSettings
     createSession: (input: LocalSessionSave) => Promise<ActionResult<LocalSessionSaved>>;
     updateSession: (id: string, input: LocalSessionSave) => Promise<ActionResult<LocalSessionSaved>>;
     updatePlay: (input: LocalPlayUpdate) => Promise<ActionResult<{ id: string }>>;
+    /** How many practices on this device use a library drill (their copies name it as their source). */
+    countPlayUsage: (playId: string) => Promise<ActionResult<number>>;
     importPlan: (plan: PlanDocument, options: PlanImportOptions) => Promise<ActionResult<{ sessionId: string }>>;
     seedStarterDrills: () => Promise<void>;
     /** Replaces stored thumbnails made before 2× storage (rink diagram quality spec §1); resolves to how many it replaced. */

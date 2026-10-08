@@ -19,6 +19,9 @@ export const hostedPlannerRoutes: PlannerRoutes = {
     sessionPrint: (id) => `/practice-planner/${id}/print`,
     libraryNew: () => "/practice-planner/library/new",
     libraryEdit: (playId) => `/practice-planner/library/${playId}/edit`,
+    library: () => "/practice-planner/library",
+    libraryPlay: (playId) => `/practice-planner/library/${encodeURIComponent(playId)}`,
+    sessionNewWithDrill: (playId) => `/practice-planner/new?drill=${encodeURIComponent(playId)}`,
 };
 
 /** next/link: keeps prefetch and client-side navigation. */

@@ -30,6 +30,9 @@ describe("hosted planner platform", () => {
         expect(hostedPlannerRoutes.sessionPrint(ID)).toBe(`/practice-planner/${ID}/print`);
         expect(hostedPlannerRoutes.libraryNew()).toBe("/practice-planner/library/new");
         expect(hostedPlannerRoutes.libraryEdit(ID)).toBe(`/practice-planner/library/${ID}/edit`);
+        expect(hostedPlannerRoutes.library()).toBe("/practice-planner/library");
+        expect(hostedPlannerRoutes.libraryPlay(ID)).toBe(`/practice-planner/library/${ID}`);
+        expect(hostedPlannerRoutes.sessionNewWithDrill(ID)).toBe(`/practice-planner/new?drill=${ID}`);
     });
 
     it("navigates with router.push", () => {

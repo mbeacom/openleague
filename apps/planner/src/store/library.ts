@@ -24,7 +24,7 @@ import type { LocalPlannerStore } from "./types";
 
 export type LibraryOps = Pick<
     LocalPlannerStore,
-    "getPlaysByTeam" | "getPlayById" | "createPlay" | "updatePlay" | "deletePlay" | "seedStarterDrills" | "refreshStoredThumbnails"
+    "getPlaysByTeam" | "getPlayById" | "createPlay" | "updatePlay" | "deletePlay" | "seedStarterDrills" | "refreshStoredThumbnails" | "countPlayUsage"
 >;
 
 /** Hosted's date filter (getPlaysByTeam): local midnight today, Sunday this week, the 1st this month. */
@@ -149,6 +149,14 @@ export function createLibraryOps(ctx: StoreContext): LibraryOps {
                 });
                 // No session ever references a library play here, so nothing is detached.
                 return ok({ id: input.id, detachedSessions: 0 });
+            }),
+
+        countPlayUsage: (id) =>
+            attempt("Failed to count the practices using this drill.", async () => {
+                const plays = await ctx.repo.read((tx) => tx.allPlays());
+                // Each practice holds its own copy of a library drill; the copy's provenance names the original.
+                const sessions = new Set(plays.filter((p) => p.sessionId !== null && p.sourcePlayId === id).map((p) => p.sessionId));
+                return ok(sessions.size);
             }),
 
         refreshStoredThumbnails: async () => {

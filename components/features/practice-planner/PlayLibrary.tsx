@@ -14,6 +14,7 @@ import {
     Box,
     Grid,
     Card,
+    CardActionArea,
     CardContent,
     CardMedia,
     CardActions,
@@ -151,6 +152,24 @@ function CardTitle({ name, favorite }: { name: string; favorite?: CardFavorite }
 }
 
 /**
+ * A library card's primary click (manage mode): the drill's details page.
+ * Select mode keeps the card's own click, which picks the drill.
+ */
+function DetailsArea({ mode, playId, children }: { mode: "select" | "manage"; playId: string; children: React.ReactNode }) {
+    const { Link, routes } = usePlannerPlatform();
+    if (mode !== "manage") return <>{children}</>;
+    return (
+        <CardActionArea
+            component={Link}
+            href={routes.libraryPlay(playId)}
+            sx={{ flexGrow: 1, display: "flex", flexDirection: "column", alignItems: "stretch", justifyContent: "flex-start" }}
+        >
+            {children}
+        </CardActionArea>
+    );
+}
+
+/**
  * PlayCard Component
  *
  * Individual play card showing thumbnail, name, and description
@@ -189,6 +208,7 @@ function PlayCard({
             }}
             onClick={() => mode === "select" && !isLoading && onSelect(play)}
         >
+            <DetailsArea mode={mode} playId={play.id}>
             {/* Thumbnail */}
             {/* Requirements: 4.2 - Display play thumbnails */}
             <CardMedia
@@ -254,6 +274,7 @@ function PlayCard({
                     )}
                 </Stack>
             </CardContent>
+            </DetailsArea>
 
             {/* Actions */}
             {/* Requirements: 4.5 - Add edit and delete buttons in manage mode */}

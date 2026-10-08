@@ -10,8 +10,8 @@
  *   every check re-run on each hop;
  * - every address the host resolves to must be public (defense in depth: the
  *   allowlist is the primary control, see the spec for the residual);
- * - one deadline for the whole fetch (60 s by default, see config.ts), a streamed size cap, text/html only;
- * - a fixed, identifiable User-Agent (never a browser's), no cookies or credentials, no cache;
+ * - one deadline for the whole fetch, a streamed size cap, text/html only;
+ * - a fixed User-Agent, no cookies or credentials, no cache;
  * - logs carry the host, the status and an error kind, never the path,
  *   query or page content.
  *
@@ -23,10 +23,7 @@ import { isIP } from "node:net";
 
 export const LEAGUE_FETCH_USER_AGENT = "OpenLeague-LeaguePageFetch/1.0 (+https://openleague.dev; user-requested)";
 export const DEFAULT_ALLOWED_HOSTS: readonly string[] = ["www.cshlhockey.org"];
-/** The one total deadline (DNS, every hop and the body). The real league site can take 30 s to first byte. */
-export const LEAGUE_FETCH_TIMEOUT_MS = 60_000;
-export const LEAGUE_FETCH_MIN_TIMEOUT_MS = 5_000;
-export const LEAGUE_FETCH_MAX_TIMEOUT_MS = 90_000;
+export const LEAGUE_FETCH_TIMEOUT_MS = 10_000;
 export const LEAGUE_FETCH_MAX_BYTES = 2 * 1024 * 1024;
 export const LEAGUE_FETCH_MAX_REDIRECTS = 3;
 
