@@ -32,6 +32,9 @@ describe("matchRoute", () => {
         ["#/rankings/import/update", { name: "rankingsImport", update: true }],
         ["#/rankings/import/other", { name: "notFound" }],
         ["#/rankings/setup", { name: "rankingsSetup" }],
+        ["#/rankings/setup/pages", { name: "rankingsSetup", section: "pages" }],
+        ["#/rankings/setup/games", { name: "rankingsSetup", section: "games" }],
+        ["#/rankings/setup/nope", { name: "notFound" }],
         ["#/rankings/what-if", { name: "rankingsWhatIf" }],
         ["#/rankings/team/903", { name: "rankingsTeam", number: "903" }],
         ["#/rankings/team", { name: "notFound" }],
@@ -72,6 +75,13 @@ describe("rankings routes", () => {
     it("builds and matches the team route", () => {
         expect(staticRoutes.rankingsTeam("903")).toBe("#/rankings/team/903");
         expect(matchRoute(staticRoutes.rankingsTeam("903"))).toEqual({ name: "rankingsTeam", number: "903" });
+    });
+
+    it("builds and matches Setup, opened at a section", () => {
+        expect(matchRoute(staticRoutes.rankingsSetup())).toEqual({ name: "rankingsSetup" });
+        expect(staticRoutes.rankingsSetup("pages")).toBe("#/rankings/setup/pages");
+        expect(matchRoute(staticRoutes.rankingsSetup("pages"))).toEqual({ name: "rankingsSetup", section: "pages" });
+        expect(navSection(matchRoute(staticRoutes.rankingsSetup("teams")))).toBe("rankings");
     });
 
     it("builds and matches the update-results route, which is the import screen", () => {

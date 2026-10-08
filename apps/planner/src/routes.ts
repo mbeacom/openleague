@@ -5,6 +5,11 @@
 import type { PlannerRoutes } from "@/lib/planner-store";
 import { planFragmentValue } from "@/lib/plan-document/pending";
 
+/** Rankings Setup's sections, each one tab; a route can open one directly. */
+export const RANKINGS_SETUP_SECTIONS = ["rules", "brackets", "teams", "games", "pages", "danger"] as const;
+export type RankingsSetupSection = (typeof RANKINGS_SETUP_SECTIONS)[number];
+const isSetupSection = (value: string): value is RankingsSetupSection => (RANKINGS_SETUP_SECTIONS as readonly string[]).includes(value);
+
 export interface StaticRoutes extends PlannerRoutes {
     library(): string;
     sessionNew(): string;
@@ -13,7 +18,8 @@ export interface StaticRoutes extends PlannerRoutes {
     rankingsImport(): string;
     /** Import, arriving from "Update results": the schedule paste box is focused, with a one-line hint. */
     rankingsUpdate(): string;
-    rankingsSetup(): string;
+    /** Setup, opened at `section` (the first, Rules & levels, when omitted). */
+    rankingsSetup(section?: RankingsSetupSection): string;
     rankingsWhatIf(): string;
     rankingsTeam(number: string): string;
     /** AI settings (ADR-0023). */
@@ -37,7 +43,7 @@ export const staticRoutes: StaticRoutes = {
     rankings: () => "#/rankings",
     rankingsImport: () => "#/rankings/import",
     rankingsUpdate: () => "#/rankings/import/update",
-    rankingsSetup: () => "#/rankings/setup",
+    rankingsSetup: (section) => (section ? `#/rankings/setup/${section}` : "#/rankings/setup"),
     rankingsWhatIf: () => "#/rankings/what-if",
     rankingsTeam: (number) => `#/rankings/team/${enc(number)}`,
     aiSettings: () => "#/ai",
@@ -57,7 +63,7 @@ export type StaticRoute =
     | { name: "planLink"; value: string }
     | { name: "rankings" }
     | { name: "rankingsImport"; pull?: string; update?: boolean }
-    | { name: "rankingsSetup" }
+    | { name: "rankingsSetup"; section?: RankingsSetupSection }
     | { name: "rankingsWhatIf" }
     | { name: "rankingsTeam"; number: string }
     | { name: "aiSettings" }
@@ -127,6 +133,7 @@ export function matchRoute(hash: string): StaticRoute {
             return NOT_FOUND;
         }
         if (second === "import" && third === "update") return { name: "rankingsImport", update: true };
+        if (second === "setup") return isSetupSection(third) ? { name: "rankingsSetup", section: third } : NOT_FOUND;
         if (second === "team") {
             const number = decodeId(third);
             return number ? { name: "rankingsTeam", number } : NOT_FOUND;
