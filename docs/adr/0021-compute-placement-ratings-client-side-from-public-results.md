@@ -58,7 +58,7 @@ discriminant, strict parser, newer-version refusal).
 
 - The calculation (`lib/ratings`) is pure and parameterised by a `RatingMethod`. League rules are presets, never hard-coded.
 - The app makes no network request to league or third-party sites.
-- Placement ratings for ages below the score-recording threshold stay off the hosted platform.
+- Placement ratings for ages below the score-recording threshold stay off the hosted platform's league surfaces. ADR-0025 amends this: a signed-in user may keep their own rankings documents on hosted, private to them and never published to a team or league.
 
 ## Consequences
 
@@ -68,7 +68,7 @@ discriminant, strict parser, newer-version refusal).
 
 ## Alternatives considered
 
-- **Hosted league feature.** Rejected for now: it conflicts with FR-026 for sub-threshold ages, and it would require accounts for a one-coach task.
+- **Hosted league feature.** Rejected for now: it conflicts with FR-026 for sub-threshold ages, and it would require accounts for a one-coach task. ADR-0025 adds a personal (not league) hosted variant: owner-only documents, so FR-026's publication rule doesn't apply.
 - **Fetching or scraping league pages.** Rejected: browsers block cross-origin reads, page structure changes, and site terms may forbid it. ADR-0024 amends this for one path: a signed-in user's request to the hosted app, for allowlisted hosts only. The static app still makes no such request.
 - **Hard-coding CSHL's formula.** Rejected: other leagues differ, and CSHL's Walkush component is unpublished, so it is approximated and labelled.
 

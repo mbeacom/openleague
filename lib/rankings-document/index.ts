@@ -4,3 +4,4 @@ export * from "./merge";
 export * from "./file";
 export * from "./sources";
 export * from "./pull";
+export * from "./team-logos";

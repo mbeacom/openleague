@@ -34,6 +34,7 @@ import {
   Article as NewsIcon,
   Assessment as OperationsIcon,
   EventAvailable as VenueReservationsIcon,
+  Leaderboard as RankingsIcon,
 } from "@mui/icons-material";
 import { logout } from "@/lib/actions/logout";
 import { useLeague } from "@/components/providers/LeagueProvider";
@@ -83,6 +84,8 @@ export default function DashboardNav({
         { label: "My Registrations", path: "/my-registrations", icon: <ConfirmationNumberIcon /> },
         { label: "Seasons", path: "/seasons", icon: <DateRangeIcon /> },
         { label: "Practice Planner", path: "/practice-planner", icon: <SportsHockeyIcon /> },
+        // Personal, not team-scoped (ADR-0025): the user's own rankings documents.
+        { label: "Rankings", path: "/rankings", icon: <RankingsIcon /> },
         // Entry point into league mode. Without this, /league (which hosts the
         // create-a-league form) is unreachable by navigation for single-team
         // users, hiding every league-scoped surface behind it — gear included.
@@ -119,6 +122,7 @@ export default function DashboardNav({
       { label: "Venue Admin", path: "/venue-admin", icon: <StorefrontIcon /> },
       { label: "My Registrations", path: "/my-registrations", icon: <ConfirmationNumberIcon /> },
       { label: "Seasons", path: "/seasons", icon: <DateRangeIcon /> },
+      { label: "Rankings", path: "/rankings", icon: <RankingsIcon /> },
       { label: "Roster", path: `${leaguePrefix}/roster`, icon: <PeopleIcon /> },
       { label: "Statistics", path: `${leaguePrefix}/statistics`, icon: <AnalyticsIcon /> },
       { label: "Reports", path: `${leaguePrefix}/reports`, icon: <ReportsIcon /> },

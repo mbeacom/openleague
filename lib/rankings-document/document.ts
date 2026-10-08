@@ -5,17 +5,25 @@
  * message; `snapshots` is reserved for phase 2 and kept as-is.
  */
 import { z } from "zod";
+import { isPngLogo, type PngLogoBounds } from "@/lib/utils/team-mark";
+import { pngDataUriByteLength } from "@/lib/utils/png-data-uri";
 import { CSHL_8U_METHOD, orderBrackets, type CompositeOptions, type RatingGame, type RatingMethod, type RatingTeam } from "@/lib/ratings";
 
 export const RANKINGS_FORMAT = "openleague.rankings" as const;
 export const RANKINGS_VERSION = 1 as const;
-export const MAX_RANKINGS_FILE_BYTES = 2_000_000;
+/**
+ * The largest rankings file, bare. Raised from 2 MB when team logos were
+ * added (hosted rankings and team logos spec, R6): 5,000 games and the logo
+ * budget below still fit.
+ */
+export const MAX_RANKINGS_FILE_BYTES = 3_000_000;
 const MAX_TEAMS = 400;
 const MAX_GAMES = 5000;
 
 export const NOT_RANKINGS_MESSAGE = "This file isn't an OpenLeague rankings file.";
 export const NEWER_RANKINGS_MESSAGE = "This rankings file was made by a newer version of OpenLeague. Update to open it.";
 export const INVALID_RANKINGS_MESSAGE = "This rankings file has problems and can't be opened.";
+export const RANKINGS_TOO_LARGE_TO_SAVE_MESSAGE = `These rankings are too large to save: a rankings file can be at most ${MAX_RANKINGS_FILE_BYTES / 1_000_000} MB. Remove a team logo or some games, then try again.`;
 export const RANKINGS_FILE_TOO_LARGE_MESSAGE = `This file is too large to be a rankings file (the limit is ${MAX_RANKINGS_FILE_BYTES / 1_000_000} MB).`;
 
 const CONTROL = /[\u0000-\u001f\u007f]/g;
@@ -64,11 +72,27 @@ const gameSchema = z
         if (game.status === "scheduled" && !unscored) ctx.addIssue({ code: "custom", message: "A scheduled game has no score" });
     });
 
+/** A team logo is drawn small, so it is stored small: within 128×128 (64 when that is too large), at most 12 KB. */
+export const TEAM_LOGO_MAX_PX = 128;
+export const TEAM_LOGO_FALLBACK_PX = 64;
+export const MAX_TEAM_LOGO_PNG_BYTES = 12 * 1024;
+/** Every team logo in one document together, decoded bytes: keeps a document with logos within the file cap. */
+export const MAX_TEAM_LOGOS_TOTAL_BYTES = 600 * 1024;
+export const TEAM_LOGO_BOUNDS: PngLogoBounds = { maxSide: TEAM_LOGO_MAX_PX, maxBytes: MAX_TEAM_LOGO_PNG_BYTES };
+export const TEAM_LOGO_INVALID_MESSAGE = `A team logo must be a PNG of at most ${TEAM_LOGO_MAX_PX} × ${TEAM_LOGO_MAX_PX} pixels and ${MAX_TEAM_LOGO_PNG_BYTES / 1024} KB`;
+export const TEAM_LOGOS_TOTAL_MESSAGE = `Team logos in one rankings file can total at most ${MAX_TEAM_LOGOS_TOTAL_BYTES / 1024} KB. Remove a logo to add another.`;
+
+/** Optional and additive under v1: older files have none, and older readers strip it as an unknown key. */
+const teamLogoSchema = z
+    .custom<{ dataUrl: string; width: number; height: number }>((value) => isPngLogo(value, TEAM_LOGO_BOUNDS), { message: TEAM_LOGO_INVALID_MESSAGE })
+    .transform(({ dataUrl, width, height }) => ({ dataUrl, width, height }));
+
 const teamSchema = z.object({
     number: teamNumber,
     name: requiredText(100, "Team name"),
     startingBracket: optionalText(40, "Starting bracket"),
     excluded: z.boolean().optional().transform((value) => value ?? false),
+    logo: teamLogoSchema.optional(),
 });
 
 const methodSchema = z
@@ -166,6 +190,8 @@ const rankingsSchema = z
             if (seen.has(team.number)) ctx.addIssue({ code: "custom", path: ["teams", i, "number"], message: `Team ${team.number} is listed twice` });
             seen.add(team.number);
         });
+        const logoBytes = doc.teams.reduce((sum, team) => sum + (team.logo ? pngDataUriByteLength(team.logo.dataUrl) : 0), 0);
+        if (logoBytes > MAX_TEAM_LOGOS_TOTAL_BYTES) ctx.addIssue({ code: "custom", path: ["teams"], message: TEAM_LOGOS_TOTAL_MESSAGE });
         doc.games.forEach((game, i) => {
             if (!seen.has(game.home)) ctx.addIssue({ code: "custom", path: ["games", i, "home"], message: `Team ${game.home} isn't in the team list` });
             if (!seen.has(game.away)) ctx.addIssue({ code: "custom", path: ["games", i, "away"], message: `Team ${game.away} isn't in the team list` });
@@ -176,6 +202,7 @@ const rankingsSchema = z
 export type RankingsDocument = z.output<typeof rankingsSchema>;
 export type RankingsGame = RankingsDocument["games"][number];
 export type RankingsTeam = RankingsDocument["teams"][number];
+export type RankingsTeamLogo = NonNullable<RankingsTeam["logo"]>;
 export type RankingsSources = NonNullable<RankingsDocument["sources"]>;
 export type RankingsSourceKind = keyof RankingsSources;
 export type RankingsSource = NonNullable<RankingsSources[RankingsSourceKind]>;
@@ -229,6 +256,16 @@ export function createRankingsDocument({ title, method = CSHL_8U_METHOD }: { tit
 
 export function serializeRankings(doc: RankingsDocument): string {
     return `${JSON.stringify(doc, null, 2)}\n`;
+}
+
+/** The size of the document's rankings file: its canonical serialization, in UTF-8 bytes. */
+export function rankingsFileBytes(doc: RankingsDocument): number {
+    return new TextEncoder().encode(serializeRankings(doc)).byteLength;
+}
+
+/** Whether the document's rankings file fits the cap, so a saved document always exports and reopens. */
+export function fitsRankingsFile(doc: RankingsDocument): boolean {
+    return rankingsFileBytes(doc) <= MAX_RANKINGS_FILE_BYTES;
 }
 
 export function rankingsFileName(doc: RankingsDocument): string {

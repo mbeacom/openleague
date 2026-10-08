@@ -1,16 +1,22 @@
 /** Team detail (static rankings spec): game log with capped margins and the arithmetic behind the numbers. */
+import { useState } from "react";
 import { Alert, Box, Button, Paper, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from "@mui/material";
 import { capMargin } from "@/lib/ratings";
+import type { ActionResult } from "@/lib/planner-store";
 import type { RankingsDocument } from "@/lib/rankings-document";
-import { staticRoutes } from "../../routes";
-import type { LocalPlannerStore } from "../../store/types";
+import type { RankingsOps } from "../../store/rankings";
 import { MovementLabel, NO_GAMES_LABEL, RankingsStatus, formatRating, formatSigned, levelText } from "./display";
 import { useRatings } from "./RankingsScreen";
 import { useRankingsDoc } from "./useRankingsDoc";
+import { useRankingsPlatform } from "./rankings-platform";
+import { TeamLogoDialog, TEAM_DETAILS_LABEL } from "./TeamLogoDialog";
+import { TeamLogosProvider, TeamMark } from "./TeamMark";
 
 export const TEAM_NOT_FOUND_MESSAGE = "That team isn't in these rankings.";
 
-function TeamDetail({ doc, number }: { doc: RankingsDocument; number: string }) {
+function TeamDetail({ doc, number, save }: { doc: RankingsDocument; number: string; save: (doc: RankingsDocument) => Promise<ActionResult<RankingsDocument>> }) {
+    const { routes } = useRankingsPlatform();
+    const [detailsOpen, setDetailsOpen] = useState(false);
     const result = useRatings(doc);
     const row = result.byNumber.get(number);
     if (!row) return <Alert severity="warning">{TEAM_NOT_FOUND_MESSAGE}</Alert>;
@@ -25,12 +31,19 @@ function TeamDetail({ doc, number }: { doc: RankingsDocument; number: string }) 
 
     return (
         <Stack spacing={2}>
-            <Button href={staticRoutes.rankings()} sx={{ alignSelf: "flex-start", minHeight: 44 }}>
+            <Button href={routes.rankings()} sx={{ alignSelf: "flex-start", minHeight: 44 }}>
                 ← All teams
             </Button>
-            <Typography component="h1" variant="h5" sx={{ fontWeight: 800 }}>
-                {row.name} ({row.number})
-            </Typography>
+            <Stack direction="row" spacing={1.5} sx={{ alignItems: "center", flexWrap: "wrap", rowGap: 1 }}>
+                <TeamMark number={row.number} name={row.name} size="md" crestOnly />
+                <Typography component="h1" variant="h5" sx={{ fontWeight: 800, flex: "1 1 auto", minWidth: 0, overflowWrap: "anywhere" }}>
+                    {row.name} ({row.number})
+                </Typography>
+                <Button variant="outlined" onClick={() => setDetailsOpen(true)} sx={{ minHeight: 44 }}>
+                    {TEAM_DETAILS_LABEL}
+                </Button>
+            </Stack>
+            <TeamLogoDialog open={detailsOpen} onClose={() => setDetailsOpen(false)} doc={doc} number={row.number} save={save} />
             <Typography>
                 {`Rank ${row.rank ?? "—"} · CSHL-compatible RPI ${formatRating(row.rpi)} · Level ${levelText(row)}`}
                 {row.startingBracket && !row.movement ? ` · Started ${row.startingBracket}` : " "}
@@ -80,7 +93,10 @@ function TeamDetail({ doc, number }: { doc: RankingsDocument; number: string }) 
                                 <TableRow key={`${game.date}-${opponent}-${i}`}>
                                     <TableCell sx={{ whiteSpace: "nowrap" }}>{game.time ? `${game.date} ${game.time}` : game.date}</TableCell>
                                     <TableCell>
-                                        <a href={staticRoutes.rankingsTeam(opponent)} style={{ display: "inline-flex", alignItems: "center", minHeight: 44 }}>{names.get(opponent) ?? opponent}</a>
+                                        <a href={routes.rankingsTeam(opponent)} style={{ display: "inline-flex", alignItems: "center", gap: 8, minHeight: 44 }}>
+                                            <TeamMark number={opponent} name={names.get(opponent) ?? opponent} size="xs" crestOnly />
+                                            {names.get(opponent) ?? opponent}
+                                        </a>
                                     </TableCell>
                                     <TableCell align="right">{formatSigned(result.byNumber.get(opponent)?.lodin ?? null)}</TableCell>
                                     <TableCell>{`${goalsFor > goalsAgainst ? "W" : goalsFor < goalsAgainst ? "L" : "T"} ${goalsFor}–${goalsAgainst}`}</TableCell>
@@ -115,7 +131,7 @@ function TeamDetail({ doc, number }: { doc: RankingsDocument; number: string }) 
                         const opponent = game.home === number ? game.away : game.home;
                         return <Typography key={`${game.date}-${opponent}-${i}`}>{`${game.date} vs ${names.get(opponent) ?? opponent}`}</Typography>;
                     })}
-                    <Button href={staticRoutes.rankingsWhatIf()} variant="contained" sx={{ alignSelf: "flex-start", minHeight: 44 }}>
+                    <Button href={routes.rankingsWhatIf()} variant="contained" sx={{ alignSelf: "flex-start", minHeight: 44 }}>
                         Try results in What-if
                     </Button>
                 </Stack>
@@ -124,9 +140,13 @@ function TeamDetail({ doc, number }: { doc: RankingsDocument; number: string }) 
     );
 }
 
-export function RankingsTeamScreen({ store, number }: { store: LocalPlannerStore; number: string }) {
-    const { state, clear } = useRankingsDoc(store);
+export function RankingsTeamScreen({ store, number }: { store: RankingsOps; number: string }) {
+    const { state, save, clear } = useRankingsDoc(store);
     if (state.status !== "ready") return <RankingsStatus state={state} onStartOver={() => void clear()} />;
     if (!state.doc) return <RankingsStatus state={{ status: "empty" }} onStartOver={() => void clear()} />;
-    return <TeamDetail doc={state.doc} number={number} />;
+    return (
+        <TeamLogosProvider teams={state.doc.teams}>
+            <TeamDetail doc={state.doc} number={number} save={save} />
+        </TeamLogosProvider>
+    );
 }

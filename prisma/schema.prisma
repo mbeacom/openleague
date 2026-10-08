@@ -103,6 +103,29 @@ model User {
 
   // Feature 007 US4 — public profiles and content.
   publicContentItems  PublicContentItem[] @relation("PublicContentAuthor")
+
+  // Hosted rankings (ADR-0025): the user's own, private rankings documents.
+  rankingsRecords RankingsRecord[] @relation("RankingsRecordOwner")
+}
+
+// Hosted rankings (ADR-0025): one signed-in user's private copy of a portable
+// openleague.rankings v1 document, computed from public league pages. Owner-
+// only: no team, league or public read path. `document` is the whole document
+// as JSON (validated by lib/rankings-document on every write); null means the
+// owner chose "Start over" and the record waits for a fresh import. `title`
+// mirrors document.meta.title for the list page.
+model RankingsRecord {
+  id        String   @id @default(cuid())
+  ownerId   String
+  title     String   @db.VarChar(100)
+  document  Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  owner User @relation("RankingsRecordOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId, updatedAt])
+  @@map("rankings_records")
 }
 
 // Single-use, hashed account-lifecycle tokens (email verification, password

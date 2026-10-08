@@ -32,8 +32,7 @@ import {
 import { downloadBlob } from "@/components/features/practice-planner/export/download";
 import { compareTeamNumbers, composite, type RatingMethod, type RatingsResult, type TeamRating } from "@/lib/ratings";
 import { docBracketOrder, docSource, rankingsFileName, serializeRankings, toRatingInputs, type RankingsDocument } from "@/lib/rankings-document";
-import { staticRoutes } from "../../routes";
-import type { LocalPlannerStore } from "../../store/types";
+import type { RankingsOps } from "../../store/rankings";
 import {
     BELOW_LAST_LEVEL,
     COMPONENTS_WARNING,
@@ -50,10 +49,11 @@ import {
     levelsShortMessage,
 } from "./display";
 import { UpdateResultsPanel } from "./UpdateResultsPanel";
-import { FetchForMeAction } from "./FetchForMeAction";
 import { RankingsTierChart } from "./RankingsTierChart";
 import { RankingsFormatMenu } from "./RankingsFormatMenu";
 import { useRankingsDoc } from "./useRankingsDoc";
+import { useRankingsPlatform } from "./rankings-platform";
+import { TeamLogosProvider, TeamMark, teamLogoUrls } from "./TeamMark";
 
 export const PICK_TEAM_LABEL = "Pick your team";
 export const LADDER_LABEL = "Ladder";
@@ -73,15 +73,19 @@ interface Column {
     cell: (row: TeamRating) => ReactNode;
 }
 
-const teamLink = (row: TeamRating) => (
-    <Box component="a" href={staticRoutes.rankingsTeam(row.number)} sx={{ display: "inline-flex", alignItems: "center", minHeight: 44, color: "inherit" }}>
-        {row.name}
-    </Box>
-);
+function TeamLink({ row }: { row: TeamRating }) {
+    const { routes } = useRankingsPlatform();
+    return (
+        <Box component="a" href={routes.rankingsTeam(row.number)} sx={{ display: "inline-flex", alignItems: "center", gap: 1, minHeight: 44, color: "inherit" }}>
+            <TeamMark number={row.number} name={row.name} size="xs" crestOnly />
+            {row.name}
+        </Box>
+    );
+}
 
 const COLUMNS: Column[] = [
     { key: "rank", label: "Rank", numeric: true, cell: (row) => row.rank ?? "—" },
-    { key: "name", label: "Team", numeric: false, cell: teamLink },
+    { key: "name", label: "Team", numeric: false, cell: (row) => <TeamLink row={row} /> },
     { key: "startingBracket", label: "Starting bracket", numeric: false, cell: (row) => row.startingBracket ?? "—" },
     { key: "games", label: "GP", numeric: true, cell: (row) => row.games },
     { label: "W-L-T", numeric: false, cell: (row) => `${row.wins}-${row.losses}-${row.ties}` },
@@ -137,6 +141,7 @@ function Tiles({ row, total }: { row: TeamRating; total: number }) {
 }
 
 function Ladder({ rows, doc, myTeam }: { rows: TeamRating[]; doc: RankingsDocument; myTeam: string | null }) {
+    const { routes } = useRankingsPlatform();
     const levelIndex = new Map(doc.method.levels.map((level, i) => [level.name, i]));
     const groupOf = (row: TeamRating) => (row.rank === null ? "unranked" : row.level === null ? "below" : `level:${row.level}`);
     return (
@@ -173,7 +178,8 @@ function Ladder({ rows, doc, myTeam }: { rows: TeamRating[]; doc: RankingsDocume
                         >
                             <Typography sx={{ fontWeight: 700 }}>{row.rank ?? "—"}</Typography>
                             <Box sx={{ minWidth: 0 }}>
-                                <Box component="a" href={staticRoutes.rankingsTeam(row.number)} sx={{ color: "text.primary", fontWeight: mine ? 800 : 500, display: "inline-flex", alignItems: "center", minHeight: 44 }}>
+                                <Box component="a" href={routes.rankingsTeam(row.number)} sx={{ color: "text.primary", fontWeight: mine ? 800 : 500, display: "inline-flex", alignItems: "center", gap: 1, minHeight: 44 }}>
+                                    <TeamMark number={row.number} name={row.name} size="xs" crestOnly />
                                     {row.name}
                                 </Box>
                                 <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
@@ -302,7 +308,9 @@ function MethodSummary({ method }: { method: RatingMethod }) {
 }
 
 function Ready({ doc, save }: { doc: RankingsDocument; save: (doc: RankingsDocument) => Promise<unknown> }) {
+    const { routes, fetchAction } = useRankingsPlatform();
     const result = useRatings(doc);
+    const logos = useMemo(() => teamLogoUrls(doc.teams), [doc.teams]);
     const [view, setView] = useState<"ladder" | "table">("ladder");
     const [query, setQuery] = useState("");
     const [bracket, setBracket] = useState("");
@@ -328,10 +336,10 @@ function Ready({ doc, save }: { doc: RankingsDocument; save: (doc: RankingsDocum
                     {doc.meta.title}
                 </Typography>
                 <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", rowGap: 1 }}>
-                    <Button href={staticRoutes.rankingsWhatIf()} variant="outlined" sx={{ minHeight: 44 }}>
+                    <Button href={routes.rankingsWhatIf()} variant="outlined" sx={{ minHeight: 44 }}>
                         What-if
                     </Button>
-                    <Button href={staticRoutes.rankingsSetup()} sx={{ minHeight: 44 }}>
+                    <Button href={routes.rankingsSetup()} sx={{ minHeight: 44 }}>
                         Setup
                     </Button>
                     <Button
@@ -344,7 +352,7 @@ function Ready({ doc, save }: { doc: RankingsDocument; save: (doc: RankingsDocum
                 </Stack>
             </Stack>
 
-            <UpdateResultsPanel source={docSource(doc, "schedule")} fetchAction={<FetchForMeAction source={docSource(doc, "schedule")} />} />
+            <UpdateResultsPanel source={docSource(doc, "schedule")} fetchAction={fetchAction(docSource(doc, "schedule"))} />
 
             {result.componentCount > 1 && <Alert severity="warning">{COMPONENTS_WARNING}</Alert>}
             {!result.converged && <Alert severity="info">{NOT_CONVERGED_WARNING}</Alert>}
@@ -352,7 +360,7 @@ function Ready({ doc, save }: { doc: RankingsDocument; save: (doc: RankingsDocum
                 <Alert
                     severity="warning"
                     action={
-                        <Button color="inherit" href={staticRoutes.rankingsSetup()} sx={{ minHeight: 44 }}>
+                        <Button color="inherit" href={routes.rankingsSetup()} sx={{ minHeight: 44 }}>
                             Edit levels
                         </Button>
                     }
@@ -383,6 +391,7 @@ function Ready({ doc, save }: { doc: RankingsDocument; save: (doc: RankingsDocum
                 teams={result.teams}
                 levels={doc.method.levels}
                 myTeam={doc.myTeam}
+                logos={logos}
                 onShowTable={() => {
                     setView("table");
                     tableAnchor.current?.scrollIntoView?.({ block: "start" });
@@ -428,9 +437,13 @@ function Ready({ doc, save }: { doc: RankingsDocument; save: (doc: RankingsDocum
     );
 }
 
-export function RankingsScreen({ store }: { store: LocalPlannerStore }) {
+export function RankingsScreen({ store }: { store: RankingsOps }) {
     const { state, save, clear } = useRankingsDoc(store);
     if (state.status !== "ready") return <RankingsStatus state={state} onStartOver={() => void clear()} />;
     if (!state.doc) return <RankingsStatus state={{ status: "empty" }} onStartOver={() => void clear()} />;
-    return <Ready doc={state.doc} save={save} />;
+    return (
+        <TeamLogosProvider teams={state.doc.teams}>
+            <Ready doc={state.doc} save={save} />
+        </TeamLogosProvider>
+    );
 }

@@ -9,7 +9,7 @@ import { Alert, Box, Button, List, ListItem, MenuItem, Paper, Stack, TextField, 
 import { composite, marginSweep, whatIf, SWEEP_OTHER_GOALS, type CompositeOptions, type RatingGame, type RatingMethod, type RatingTeam } from "@/lib/ratings";
 import type { ActionResult } from "@/lib/planner-store";
 import { toRatingInputs, type RankingsDocument, type RankingsGame } from "@/lib/rankings-document";
-import type { LocalPlannerStore } from "../../store/types";
+import type { RankingsOps } from "../../store/rankings";
 import { RankingsStatus, formatRating } from "./display";
 import { useRankingsDoc } from "./useRankingsDoc";
 
@@ -239,7 +239,7 @@ function WhatIf({ doc, save }: { doc: RankingsDocument; save: (doc: RankingsDocu
     );
 }
 
-export function RankingsWhatIfScreen({ store }: { store: LocalPlannerStore }) {
+export function RankingsWhatIfScreen({ store }: { store: RankingsOps }) {
     const { state, save, clear } = useRankingsDoc(store);
     if (state.status !== "ready") return <RankingsStatus state={state} onStartOver={() => void clear()} />;
     if (!state.doc) return <RankingsStatus state={{ status: "empty" }} onStartOver={() => void clear()} />;

@@ -168,14 +168,14 @@ describe("RankingsScreen", () => {
             const doc = sampleRankingsDoc();
             expect(rankingsReopenProblem(doc, "x".repeat(MAX_RANKINGS_FILE_BYTES), "json")).toBeNull();
             const problem = rankingsReopenProblem(doc, "x".repeat(MAX_RANKINGS_FILE_BYTES + 1), "json");
-            expect(problem).toBe("This JSON file is too large to open again (the limit is 2 MB).");
+            expect(problem).toBe(`This JSON file is too large to open again (the limit is ${MAX_RANKINGS_FILE_BYTES / 1_000_000} MB).`);
             expect(problem).not.toMatch(/as JSON/);
         });
 
         it("another format is also measured as compact JSON once decoded", () => {
             // The written text fits its ceiling; the decoded document does not.
             expect(rankingsReopenProblem(sized(-1), "short", "yaml")).toBeNull();
-            expect(rankingsReopenProblem(sized(1), "short", "yaml")).toBe("This YAML file is too large to open again (the limit is 2 MB).");
+            expect(rankingsReopenProblem(sized(1), "short", "yaml")).toBe(`This YAML file is too large to open again (the limit is ${MAX_RANKINGS_FILE_BYTES / 1_000_000} MB).`);
         });
 
         it("another format's written text is held to the limit plus the envelope allowance", () => {
@@ -183,7 +183,7 @@ describe("RankingsScreen", () => {
             expect(serializeRankings(doc).length).toBeLessThan(MAX_RANKINGS_FILE_BYTES);
             expect(rankingsReopenProblem(doc, "x".repeat(MAX_RANKINGS_FILE_BYTES + ENVELOPE_OVERHEAD_BYTES), "toml")).toBeNull();
             expect(rankingsReopenProblem(doc, "x".repeat(MAX_RANKINGS_FILE_BYTES + ENVELOPE_OVERHEAD_BYTES + 1), "toml")).toBe(
-                "This TOML file is too large to open again (the limit is 2 MB). Export it as JSON instead.",
+                `This TOML file is too large to open again (the limit is ${MAX_RANKINGS_FILE_BYTES / 1_000_000} MB). Export it as JSON instead.`,
             );
         });
     });

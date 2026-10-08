@@ -1,8 +1,8 @@
 /**
  * Setup → Teams: a searchable, filterable list of compact team rows (crest,
  * number and name, starting bracket, record), each opening an edit dialog.
- * The dialog edits its own copy, which goes into Setup's draft on Done; nothing
- * is kept until Save setup.
+ * The dialog edits its own copy (logo included), which goes into Setup's draft
+ * on Done; Cancel drops it, and nothing is kept until Save setup.
  */
 import { useId, useState } from "react";
 import {
@@ -24,9 +24,10 @@ import {
     useMediaQuery,
 } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
-import type { RankingsTeam } from "@/lib/rankings-document";
+import type { RankingsTeam, RankingsTeamLogo } from "@/lib/rankings-document";
 import { NO_GAMES_LABEL } from "./display";
 import { Scoreboard } from "./Scoreboard";
+import { TeamLogoField } from "./TeamLogoDialog";
 import { TeamMark } from "./TeamMark";
 import { DEFAULT_TEAM_FILTER, filterTeams, formatRecord, recordOf, type TeamFilter, type TeamRecord, type TeamShow } from "./setup-model";
 
@@ -241,12 +242,13 @@ export function SetupTeamsPanel({
     );
 }
 
-/** What the team dialog changes: the team's name and exclusion, its starting bracket, and whether it is mine. */
+/** What the team dialog changes: the team's name, exclusion and logo, its starting bracket, and whether it is mine. */
 export interface TeamEdit {
     name: string;
     excluded: boolean;
     bracketKey: number | null;
     mine: boolean;
+    logo: RankingsTeamLogo | null;
 }
 
 export const TEAM_NAME_MISSING = "A team needs a name.";
@@ -261,6 +263,7 @@ export function TeamDialog({
     onDone,
     onShowGames,
     onClose,
+    checkLogo,
 }: {
     team: RankingsTeam;
     record: TeamRecord;
@@ -271,11 +274,13 @@ export function TeamDialog({
     /** Keeps the edit, then lists the team's games. */
     onShowGames: (edit: TeamEdit) => void;
     onClose: () => void;
+    /** Why this logo can't be set on the draft (bounds, the document's logo budget), or null. */
+    checkLogo: (logo: RankingsTeamLogo | null) => string | null;
 }) {
     const theme = useTheme();
     const fullScreen = useMediaQuery(theme.breakpoints.down("sm"));
     const titleId = useId();
-    const [edit, setEdit] = useState<TeamEdit>({ name: team.name, excluded: team.excluded, bracketKey, mine });
+    const [edit, setEdit] = useState<TeamEdit>({ name: team.name, excluded: team.excluded, bracketKey, mine, logo: team.logo ?? null });
     const change = (patch: Partial<TeamEdit>) => setEdit((current) => ({ ...current, ...patch }));
     const nameMissing = edit.name.trim() === "";
     return (
@@ -287,7 +292,7 @@ export function TeamDialog({
             </DialogTitle>
             <DialogContent>
                 <Stack spacing={2.5} sx={{ pt: 0.5 }}>
-                    <TeamMark number={team.number} name={edit.name || team.number} size="md" mine={edit.mine} />
+                    <TeamMark number={team.number} name={edit.name || team.number} logoUrl={edit.logo?.dataUrl ?? null} size="md" mine={edit.mine} />
                     <Scoreboard
                         columns={3}
                         stats={[
@@ -323,6 +328,17 @@ export function TeamDialog({
                             </option>
                         ))}
                     </TextField>
+                    <TeamLogoField
+                        number={team.number}
+                        name={edit.name || team.number}
+                        logo={edit.logo}
+                        showMark={false}
+                        onChange={(logo) => {
+                            const problem = checkLogo(logo);
+                            if (problem === null) change({ logo });
+                            return problem;
+                        }}
+                    />
                     <Stack>
                         <FormControlLabel
                             control={<Checkbox checked={edit.mine} onChange={(e) => change({ mine: e.target.checked })} sx={{ p: "10px" }} />}

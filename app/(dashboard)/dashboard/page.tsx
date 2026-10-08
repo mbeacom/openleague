@@ -74,6 +74,12 @@ export default async function DashboardPage() {
         >
           Your season at a glance
         </Typography>
+        {/* Personal tools that aren't tied to one team (ADR-0025). */}
+        <Stack direction="row" spacing={1} sx={{ mt: 1.5, flexWrap: "wrap", rowGap: 1 }}>
+          <LinkButton href="/rankings" variant="outlined" sx={{ minHeight: 44 }}>
+            Placement rankings
+          </LinkButton>
+        </Stack>
       </Box>
 
       {teams.length > 0 && (

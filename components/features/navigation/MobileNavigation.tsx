@@ -19,6 +19,7 @@ import {
   MoreVert as MoreVertIcon,
   Settings as SettingsIcon,
   SportsHockey as SportsHockeyIcon,
+  Leaderboard as RankingsIcon,
   HowToReg as HowToRegIcon,
   ManageAccounts as ManageAccountsIcon,
   AdminPanelSettings as AdminPanelSettingsIcon,
@@ -188,6 +189,13 @@ export default function MobileNavigation({ isLeagueMode = false, isPlatformAdmin
             <ListItemText>Practice Planner</ListItemText>
           </MenuItem>
         )}
+        {/* Personal rankings (ADR-0025): in both modes, like the sidebar. */}
+        <MenuItem component={Link} href="/rankings" onClick={handleMenuClose}>
+          <ListItemIcon>
+            <RankingsIcon />
+          </ListItemIcon>
+          <ListItemText>Rankings</ListItemText>
+        </MenuItem>
         {/* Mirrors the desktop sidebar: the only navigable route to /league,
             where single-team users create or join a league. */}
         {!isLeagueMode && (
