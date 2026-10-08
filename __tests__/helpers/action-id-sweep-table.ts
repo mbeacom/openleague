@@ -249,6 +249,7 @@ export const ACTION_ID_ARGUMENTS: Record<string, TableEntry> = {
   "practice-session-queries#getPracticeSessionDetail": [ID],
   "practice-session-queries#getPracticeSessionForEdit": [ID],
   "practice-session-queries#getPracticeStaffOptions": [ID],
+  "practice-session-queries#getPracticeRosterOptions": [ID],
   "practice-sessions#createPracticeSession": [{ teamId: ID, venueId: ID, surfaceId: ID, segmentId: ID, reservationId: ID, title: "Sample", duration: 1, date: "2026-11-01T18:00:00.000Z", startAt: "2026-11-01T18:00:00.000Z" }],
   "practice-sessions#deletePracticeSession": [{ id: ID, teamId: ID }],
   "practice-sessions#getPracticeSessionById": [{ id: ID, teamId: ID }],

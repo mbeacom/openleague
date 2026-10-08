@@ -28,6 +28,7 @@ import {
     duplicateSessionTitle,
 } from "@/lib/services/practice-session-drills";
 import { PRACTICE_STAFF_COPY_SELECT, ROW_STAFF_COPY_SELECT, copySessionStaff, withLiveStaffLinks, writeRowStaff } from "@/lib/services/practice-session-staff";
+import { PRACTICE_ROSTER_SELECT, copySessionRoster } from "@/lib/services/practice-session-roster";
 
 export type ActionResult<T> =
     | { success: true; data: T }
@@ -201,6 +202,7 @@ export async function duplicatePracticeSession(
                 transitionMinutes: true,
                 equipment: true,
                 staff: { orderBy: { position: "asc" }, select: PRACTICE_STAFF_COPY_SELECT },
+                ...PRACTICE_ROSTER_SELECT,
                 plays: {
                     orderBy: { sequence: "asc" },
                     include: {
@@ -265,6 +267,8 @@ export async function duplicatePracticeSession(
                     }),
                 })),
             );
+            // The roster (roster spec R7): same team, so team links are kept.
+            await copySessionRoster(tx, source, session.id);
             return session;
         });
 

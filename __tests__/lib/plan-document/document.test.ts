@@ -144,7 +144,7 @@ describe("serializePlan", () => {
         const withIds = Object.assign({}, base.drills[0], { id: "row-1", playId: "cplayxxxxxxxxxxxxxxxxxxxx", thumbnail: "data:image/png;base64,AA==" });
         const doc = serializePlan(Object.assign({}, base, { drills: [withIds], teamId: "cteamxxxxxxxxxxxxxxxxxxxx" }), "openleague-hosted", NOW);
         expect(Object.keys(doc).sort()).toEqual(["exportedAt", "format", "generator", "session", "version"]);
-        expect(Object.keys(doc.session).sort()).toEqual(["date", "drills", "durationMinutes", "equipment", "goaliesAttending", "staff", "startTime", "title", "transitionMinutes"]);
+        expect(Object.keys(doc.session).sort()).toEqual(["date", "drills", "durationMinutes", "equipment", "goaliesAttending", "roster", "staff", "startTime", "title", "transitionMinutes"]);
         expect(Object.keys(doc.session.drills[0]).sort()).toEqual(["drill", "durationMinutes", "instructions", "kind", "rotateEveryMinutes", "runsWithPrevious", "sequence", "staff", "stays"]);
         expect(Object.keys(drillRows(doc.session.drills)[0].drill).sort()).toEqual(["ageGroups", "description", "focus", "goalies", "name", "playData"]);
     });

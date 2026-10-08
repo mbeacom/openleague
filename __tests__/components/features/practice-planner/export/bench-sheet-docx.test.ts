@@ -23,6 +23,8 @@ const MODEL: BenchSheetModel = {
     place: "Ice House · Rink A",
     gap: null,
     staff: null,
+    roster: null,
+    rosterPlayers: [],
     mark: null,
     timeline: [{ start: "6:00 PM MDT", minutes: 10, label: "Stations · 2", stations: ["Breakout · 10 min", "Regroup · 8 min"] }],
     planned: "Planned 10 of 60 min",
@@ -168,6 +170,16 @@ describe("renderBenchSheetDocx: rotation and the gap (spec R10)", () => {
         expect(widths).toHaveLength(4);
         expect(widths[0]).toBeLessThan(widths[1]);
         expect(new Set(widths.slice(1)).size).toBe(1);
+    });
+});
+
+describe("renderBenchSheetDocx: practice roster (roster spec R15)", () => {
+    it("writes the counts and each position's players as safe text", async () => {
+        const xml = await documentXml({ ...MODEL, roster: "Roster: 2 skaters · 1 goalie", rosterPlayers: ["Skater: #7 <Alex>\u0007", "Goalie: Pat"] });
+        expect(xml).toContain("Roster: 2 skaters · 1 goalie");
+        expect(xml).toContain("Skater: #7 &lt;Alex&gt;");
+        expect(xml).toContain("Goalie: Pat");
+        expect(xml).not.toContain("\u0007");
     });
 });
 

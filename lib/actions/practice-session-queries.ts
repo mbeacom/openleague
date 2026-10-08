@@ -15,6 +15,8 @@ import { TEAM_OFFICIAL_ROLE_LABELS } from "@/lib/utils/validation";
 import { toStaffName } from "@/lib/utils/session-staff";
 import { parseId } from "@/lib/utils/ids";
 import { canViewPracticeSession } from "@/lib/utils/practice-access";
+import { PRACTICE_ROSTER_SELECT, readPracticeRoster } from "@/lib/services/practice-session-roster";
+import { toRosterNumber, type PracticeRoster, type RosterOption } from "@/lib/utils/practice-roster";
 
 /**
  * Get the practice planner list page data for the user's primary team.
@@ -116,6 +118,8 @@ export async function getPracticeSessionDetail(sessionId: string): Promise<{
     staff: SessionStaffMember[];
     /** The practice's own equipment (practice equipment spec R3). */
     equipment: EquipmentCountItem[];
+    /** The practice's roster (roster spec R15); null = none. */
+    roster: PracticeRoster | null;
     plays: SessionRow[];
   };
   isAdmin: boolean;
@@ -159,6 +163,7 @@ export async function getPracticeSessionDetail(sessionId: string): Promise<{
       surface: { select: { name: true } },
       segment: { select: { name: true, kind: true } },
       staff: { orderBy: { position: "asc" }, select: { id: true, name: true } },
+      rosterPlayers: PRACTICE_ROSTER_SELECT.rosterPlayers,
     },
   });
 
@@ -200,6 +205,7 @@ export async function getPracticeSessionDetail(sessionId: string): Promise<{
       transitionMinutes: session.transitionMinutes ?? 0,
       staff: session.staff.map((member) => ({ id: member.id, name: member.name })),
       equipment: readPracticeEquipment(session.equipment),
+      roster: readPracticeRoster(session),
       plays: session.plays.flatMap((sp): SessionRow[] => {
         const kind = toRowKind(sp.kind);
         if (isBlockKind(kind)) {
@@ -276,6 +282,8 @@ export async function getPracticeSessionForEdit(sessionId: string): Promise<{
     staff: SessionStaffMember[];
     /** The practice's own equipment (practice equipment spec R3). */
     equipment: EquipmentCountItem[];
+    /** The practice's roster (roster spec R7); null = none. */
+    roster: PracticeRoster | null;
     plays: SessionItem[];
   };
 } | null> {
@@ -309,6 +317,7 @@ export async function getPracticeSessionForEdit(sessionId: string): Promise<{
         orderBy: { position: "asc" },
         select: { id: true, name: true, teamOfficialId: true, userId: true, teamOfficial: { select: { status: true } } },
       },
+      rosterPlayers: PRACTICE_ROSTER_SELECT.rosterPlayers,
     },
   });
 
@@ -356,6 +365,7 @@ export async function getPracticeSessionForEdit(sessionId: string): Promise<{
         teamOfficialId: member.teamOfficialId && activeOfficial(member.teamOfficial?.status) ? member.teamOfficialId : null,
         userId: member.userId && admins.has(member.userId) ? member.userId : null,
       })),
+      roster: readPracticeRoster(session),
       // Plays are ordered by sequence asc. Before 3a, deleting a library play
       // cascaded its PracticeSessionPlay row away and could leave gaps (e.g.
       // 0,2), which the save validator rejects, or a block's stations without
@@ -477,4 +487,37 @@ export async function getPracticeStaffOptions(teamId: string): Promise<StaffOpti
       return name && !officialUsers.has(member.userId) ? [{ kind: "admin", id: member.userId, name, roleLabel: "Team admin" }] : [];
     }),
   ];
+}
+
+/**
+ * What the roster picker reads of a Player (roster spec R8): the name, jersey
+ * number and free-text position only. Never a contact, birth date, membership
+ * id or guardian. A guard test reads this select.
+ */
+const ROSTER_OPTION_SELECT = { id: true, name: true, jerseyNumber: true, position: true } as const;
+
+/**
+ * The roster's "Add from team" (roster spec R8): the team's players, by
+ * jersey number then name. Admin callers only, as the Staff picker. A team id
+ * that isn't a cuid string gets nothing, before any query.
+ */
+export async function getPracticeRosterOptions(teamId: string): Promise<RosterOption[]> {
+  if (!staffOptionsTeamIdSchema.safeParse(teamId).success) return [];
+  const userId = await requireUserId();
+  const admin = await prisma.teamMember.findFirst({
+    where: { userId, teamId, role: "ADMIN" },
+    select: { id: true },
+  });
+  if (!admin) return [];
+  const players = await prisma.player.findMany({
+    where: { teamId },
+    orderBy: [{ jerseyNumber: { sort: "asc", nulls: "last" } }, { name: "asc" }],
+    select: ROSTER_OPTION_SELECT,
+  });
+  return players.map((player) => ({
+    playerId: player.id,
+    name: player.name,
+    number: toRosterNumber(player.jerseyNumber ?? ""),
+    position: player.position,
+  }));
 }

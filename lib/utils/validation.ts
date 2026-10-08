@@ -47,6 +47,7 @@ import { BLOCK_ROW_FIELDS_ERROR, BLOCK_STATION_ERROR } from "@/lib/utils/session
 import { GOALIES_ATTENDING_MESSAGE } from "@/lib/utils/drill-tags";
 import { ageGroupSchema, ageGroupsSchema } from "@/lib/utils/age-groups";
 import { practiceEquipmentSchema } from "@/lib/utils/equipment-needs";
+import { practiceRosterSchema } from "@/lib/utils/practice-roster";
 
 export {
   idSchema,
@@ -1516,6 +1517,10 @@ const sessionEquipmentSchema = practiceEquipmentSchema.optional();
 // Absent = unchanged on update, none on create; [] clears (spec R3).
 const sessionStaffSchema = z.array(sessionStaffInputSchema).max(MAX_SESSION_STAFF, STAFF_LIMIT_MESSAGE).optional();
 
+// Practice roster (roster spec R7): absent = unchanged on update, none on create; null clears.
+// Team links are checked against the practice's team in the save's transaction.
+const sessionRosterSchema = practiceRosterSchema.nullable().optional();
+
 // Practice session validation schemas
 export const createPracticeSessionSchema = z.object({
   title: sanitizedStringWithMin(1, 100),
@@ -1530,6 +1535,7 @@ export const createPracticeSessionSchema = z.object({
   transitionMinutes: transitionMinutesSchema.optional(),
   staff: sessionStaffSchema,
   equipment: sessionEquipmentSchema,
+  roster: sessionRosterSchema,
   ...practiceVenueAttachmentFields,
 }).refine(practiceHasStartAtWhenVenueSet, practiceStartAtRequiredIssue);
 
@@ -1547,6 +1553,7 @@ export const updatePracticeSessionSchema = z.object({
   transitionMinutes: transitionMinutesSchema.optional(),
   staff: sessionStaffSchema,
   equipment: sessionEquipmentSchema,
+  roster: sessionRosterSchema,
   // Explicit Save only; autosave omits it so shared sessions do not email the
   // team on every debounce.
   notify: z.boolean().optional().default(false),

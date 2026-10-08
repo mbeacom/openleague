@@ -59,6 +59,7 @@ import {
     staffLinkError,
     writeRowStaff,
 } from "@/lib/services/practice-session-staff";
+import { replaceSessionRoster, rosterTeamError } from "@/lib/services/practice-session-roster";
 
 export type ActionResult<T> =
     | { success: true; data: T }
@@ -584,6 +585,9 @@ export async function createPracticeSession(
                 const staffError = await staffSaveError(tx, validated.teamId, validated.staff, rows);
                 if (staffError) throw new SessionRowsRejected(staffError);
             }
+            // A sent roster's team links (roster spec R7), checked before anything is written.
+            const rosterError = validated.roster ? await rosterTeamError(tx, validated.teamId, validated.roster) : null;
+            if (rosterError) throw new SessionRowsRejected(rosterError);
             let reservation: ConfirmedPracticeReservation | null = null;
 
             if (reservationInput.reservationId) {
@@ -683,6 +687,8 @@ export async function createPracticeSession(
             }
             // Every sent key with its new id, for the editor's swap; none when no staff was sent.
             const savedStaff = validated.staff ? await writeSentStaff(tx, createdSession.id, validated.staff, rows) : [];
+            // A create without a roster stores none.
+            if (validated.roster) await replaceSessionRoster(tx, createdSession.id, validated.roster);
 
             if (reservation) {
                 await assignVenueReservation(tx, {
@@ -925,6 +931,9 @@ export async function updatePracticeSession(
                 if (staffError) throw new SessionRowsRejected(staffError);
             }
             const carried = validated.staff ? null : await readCarriedRowStaff(tx, validated.id);
+            // A sent roster's team links (roster spec R7); absent = unchanged.
+            const rosterError = validated.roster ? await rosterTeamError(tx, validated.teamId, validated.roster) : null;
+            if (rosterError) throw new SessionRowsRejected(rosterError);
 
             const oldEvent = current.venueReservationId
                 ? await tx.event.findUnique({
@@ -1087,6 +1096,8 @@ export async function updatePracticeSession(
                     ),
                 );
             }
+            // Absent = unchanged; null clears; sent replaces whole (roster spec R7).
+            if (validated.roster !== undefined) await replaceSessionRoster(tx, validated.id, validated.roster);
             // Both `return saved` paths (with and without a booking) hand the editor its staff ids.
             const saved = { ...updated, plays: toSavedDrills(mapping), staff: savedStaff };
 

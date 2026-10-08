@@ -284,3 +284,22 @@ The document gains, without a version bump:
 - A hosted tab opened before the deploy sends no session list, which the server reads as "unchanged".
 
 Spec: `docs/superpowers/specs/2026-10-07-practice-equipment-design.md`.
+### 2026-10-07: Practice roster (one additive session field, version stays 1)
+
+The session gains `roster`, a practice's tentative roster, or `null`:
+- `ageGroup`: one of the six age-group values, or `null`;
+- `roles`: the positions in use: built-in codes `S` (skater), `F` (forward), `D` (defense) and `G` (goalie), plus up to 3 custom positions of 1–12 characters;
+- `players`: at most 40, each `{ role, name?, number? }`, where `name` is at most 40 characters and `number` is 1–3 digits.
+
+**Rules:**
+- **Positions always; names and numbers only on request.** A writer emits each player's position, and adds `name` and `number` only when the coach checks "Include player names" for a downloaded file. A plan link (`#plan=`) never carries them. A plan never carries a link to a team player, an id or any other personal field.
+- A missing or `null` roster reads as none, so every earlier file reads as before. Writers always emit the key (`null` when the practice has no roster).
+- Repairable values read leniently: an unknown age reads as `null`, the positions are normalized (Goalie always on, at least one skater position, custom positions validated and capped), and a player's unknown position becomes the first skater position.
+- Structural problems are strict and reported as readable `Roster: …` issues: players that aren't a list, more than 40 players, a name over 40 characters, a number that isn't 1–3 digits.
+- An import creates typed players; a hosted import never links them to team players.
+
+**Compatibility:**
+- A reader built before this amendment strips the key and opens the file without a roster.
+- The static planner's IndexedDB goes from version 5 to 6 with no data change, so a tab still running an older build reloads before it can rewrite a session without its roster.
+
+Spec: `docs/superpowers/specs/2026-10-07-practice-roster-suggestions-design.md`.

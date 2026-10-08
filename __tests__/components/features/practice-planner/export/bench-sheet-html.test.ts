@@ -16,6 +16,8 @@ const MODEL: BenchSheetModel = {
     place: "Ice House · Rink A",
     gap: null,
     staff: null,
+    roster: null,
+    rosterPlayers: [],
     mark: null,
     timeline: [
         { start: "6:00 PM MDT", minutes: 10, label: "Stations · 2", stations: ["Breakout · 10 min", "Regroup · 8 min"] },
@@ -236,6 +238,17 @@ describe("renderBenchSheetHtml: rotation and the gap (spec R10)", () => {
         expect(doc.querySelector("g")).toBeNull();
         // A round's start time never wraps.
         expect(doc.querySelector("style")?.textContent).toMatch(/\.rotation \.time\s*\{\s*white-space:\s*nowrap;/);
+    });
+});
+
+describe("renderBenchSheetHtml: practice roster (roster spec R15)", () => {
+    it("prints the counts and each position's players, escaped, and nothing without a roster", () => {
+        const out = renderBenchSheetHtml({ ...MODEL, roster: "Roster: 2 skaters · 1 goalie", rosterPlayers: ["Skater: #7 <Alex> & Co", "Goalie: Pat"] });
+        const doc = parse(out);
+        expect(doc.querySelector(".roster")?.textContent).toBe("Roster: 2 skaters · 1 goalie");
+        expect(Array.from(doc.querySelectorAll(".roster-players")).map((p) => p.textContent)).toEqual(["Skater: #7 <Alex> & Co", "Goalie: Pat"]);
+        expect(out).toContain("#7 &lt;Alex&gt; &amp; Co");
+        expect(parse(renderBenchSheetHtml(MODEL)).querySelector(".roster")).toBeNull();
     });
 });
 

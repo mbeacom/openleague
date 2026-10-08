@@ -7,7 +7,8 @@ import { Prisma } from "@prisma/client";
 
 const { mockAuth, tx, mockPrisma } = vi.hoisted(() => {
     const tx = {
-        practiceSession: { findUnique: vi.fn(), create: vi.fn() },
+        practiceSession: { findUnique: vi.fn(), create: vi.fn(), update: vi.fn() },
+        practiceSessionRosterPlayer: { deleteMany: vi.fn(), createMany: vi.fn() },
         practiceSessionPlay: { findFirst: vi.fn(), findMany: vi.fn(), createMany: vi.fn() },
         practiceSessionStaff: { createMany: vi.fn() },
         practiceSessionPlayStaff: { createMany: vi.fn() },
@@ -255,6 +256,30 @@ describe("duplicatePracticeSession", () => {
         const copied: Array<Record<string, unknown>> = tx.practiceSessionPlay.createMany.mock.calls[0][0].data;
         expect(copied.map((row) => row.playId)).toEqual(["cclone0xxxxxxxxxxxxxxxxxx", null, "cclone1xxxxxxxxxxxxxxxxxx"]);
         expect(copied[1]).toMatchObject({ kind: "break", label: "Water", sessionId: COPY });
+    });
+
+    it("copies the roster with its team links (roster spec R7), and writes none when the source has none", async () => {
+        mockPrisma.practiceSession.findUnique.mockResolvedValue({
+            teamId: TEAM, title: "Tuesday", duration: 75, staff: [], plays: [],
+            rosterAgeGroup: "u12", rosterRoles: ["F", "D", "G"],
+            rosterPlayers: [
+                { id: "r1", name: "Sam", number: "9", role: "D", playerId: null, player: null },
+                { id: "r2", name: null, number: null, role: "G", playerId: "cplayerxxxxxxxxxxxxxxxxxx", player: { name: "Pat", jerseyNumber: 30, teamId: TEAM } },
+            ],
+        });
+        await duplicatePracticeSession({ id: SOURCE, teamId: TEAM, date: DATE });
+        expect(tx.practiceSession.update).toHaveBeenCalledWith({ where: { id: COPY }, data: { rosterAgeGroup: "u12", rosterRoles: ["F", "D", "G"] } });
+        expect(tx.practiceSessionRosterPlayer.createMany.mock.calls[0][0].data).toEqual([
+            { sessionId: COPY, position: 0, role: "D", playerId: null, name: "Sam", number: "9" },
+            { sessionId: COPY, position: 1, role: "G", playerId: "cplayerxxxxxxxxxxxxxxxxxx", name: null, number: null },
+        ]);
+
+        vi.clearAllMocks();
+        mockPrisma.practiceSession.findUnique.mockResolvedValue({ teamId: TEAM, title: "Tuesday", duration: 75, staff: [], plays: [], rosterAgeGroup: null, rosterRoles: [], rosterPlayers: [] });
+        tx.practiceSession.create.mockResolvedValue({ id: COPY });
+        mockAuth.requireTeamAdmin.mockResolvedValue("cuserxxxxxxxxxxxxxxxxxxxx");
+        await duplicatePracticeSession({ id: SOURCE, teamId: TEAM, date: DATE });
+        expect(tx.practiceSessionRosterPlayer.createMany).not.toHaveBeenCalled();
     });
 
     describe("practice staff (spec R5)", () => {

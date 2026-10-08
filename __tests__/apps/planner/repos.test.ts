@@ -184,7 +184,7 @@ describe("IndexedDB schema versions (practice timing rows, practice staff)", () 
         });
     }
 
-    it("is version 5", () => expect(DB_VERSION).toBe(5));
+    it("is version 6", () => expect(DB_VERSION).toBe(6));
 
     it("opens a version 1 database at the current version with every store, index and record intact", async () => {
         const factory = new IDBFactory();
@@ -280,7 +280,24 @@ describe("IndexedDB schema versions (practice timing rows, practice staff)", () 
         const repo = await openIdbRepo({ factory, name: "v4-open-tab" });
         expect(reload).toHaveBeenCalledTimes(1);
         expect(await repo.read((tx) => tx.getSession("s1"))).toEqual(v1Session);
-        expect(await versionOf(factory, "v4-open-tab")).toBe(5);
+        expect(await versionOf(factory, "v4-open-tab")).toBe(DB_VERSION);
+        repo.close();
+    });
+
+    it("makes a tab still open at version 5 (before the practice roster) reload before this build writes, keeping its data", async () => {
+        const factory = new IDBFactory();
+        const v5 = await openAt(factory, "v5-open-tab", 5);
+        await seed(v5);
+        // A build without the roster would rewrite a session without it: its tab must reload first.
+        const reload = vi.fn();
+        v5.onversionchange = () => {
+            v5.close();
+            reload();
+        };
+        const repo = await openIdbRepo({ factory, name: "v5-open-tab" });
+        expect(reload).toHaveBeenCalledTimes(1);
+        expect(await repo.read((tx) => tx.getSession("s1"))).toEqual(v1Session);
+        expect(await versionOf(factory, "v5-open-tab")).toBe(DB_VERSION);
         repo.close();
     });
 });

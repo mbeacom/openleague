@@ -30,7 +30,10 @@ import {
     type PlanDocument,
     type PlanGenerator,
     type PlanSessionInput,
+    type SerializePlanOptions,
 } from "@/lib/plan-document";
+import { rosterHasNames } from "@/lib/utils/practice-roster";
+import { RosterNamesToggle } from "./RosterNamesToggle";
 import { usePlannerPlatform, usePlannerStore, type PlannerPlanLink } from "@/lib/planner-store";
 import { drillRows, isBlockRow } from "@/lib/utils/session-rows";
 import { staffNames } from "@/lib/utils/session-staff";
@@ -79,6 +82,8 @@ export function buildPlanDocument(
     session: ExportableSession,
     now: Date = new Date(),
     generator: PlanGenerator = "openleague-hosted",
+    /** Names and numbers in the roster (roster spec R10): only a downloaded file, only when the coach asked. */
+    options: SerializePlanOptions = {},
 ): PlanDocument {
     const local = formatDateTimeLocalInput(sessionStart(session), resolveTimeZone(session.venueTimezone));
     const [date, startTime] = local ? local.split("T") : [null, null];
@@ -92,10 +97,12 @@ export function buildPlanDocument(
             transitionMinutes: session.transitionMinutes ?? 0,
             staff: session.staff?.map((member) => member.name),
             equipment: session.equipment,
+            roster: session.roster ?? null,
             drills: toPlanRows(session.plays, session.staff),
         },
         generator,
         now,
+        options,
     );
 }
 
@@ -142,11 +149,15 @@ export function ExportPlanMenu({ session, size = "medium" }: ExportPlanMenuProps
     const [anchor, setAnchor] = useState<HTMLElement | null>(null);
     const [notice, setNotice] = useState<Notice | null>(null);
     const [exporting, setExporting] = useState<BenchSheetFormat | null>(null);
+    // Roster names leave only in downloaded files, only when checked (roster spec R10).
+    const [includeNames, setIncludeNames] = useState(false);
+    const offerNames = rosterHasNames(session.roster);
+    const namesOption = { includeRosterNames: offerNames && includeNames };
     const unreadable = unreadableDiagramNotice(drillRows(session.plays).filter((sp) => sp.play.playData === null).length);
 
     const download = () => {
         setAnchor(null);
-        const doc = buildPlanDocument(session, new Date(), planGenerator);
+        const doc = buildPlanDocument(session, new Date(), planGenerator, namesOption);
         const text = JSON.stringify(doc, null, 2);
         downloadBlob(new Blob([text], { type: "application/json" }), planFileName(session.title));
         const warnings = [unreadable, importProblemNotice(doc, text)].filter((text): text is string => text !== null);
@@ -162,7 +173,7 @@ export function ExportPlanMenu({ session, size = "medium" }: ExportPlanMenuProps
         try {
             // The team's logo, else its Crest (practice logo spec R5); never fails the export.
             const logo = await resolveExportLogo(session, store.getPracticeLogoImage);
-            await exportBenchSheet(session, format, { logo });
+            await exportBenchSheet(session, format, { logo, ...namesOption });
             // Clear only our own notice: another action may have replaced it meanwhile.
             setNotice((current) => (current === preparing ? null : current));
         } catch (error) {
@@ -175,6 +186,7 @@ export function ExportPlanMenu({ session, size = "medium" }: ExportPlanMenuProps
 
     const handOff = async (link: PlannerPlanLink) => {
         setAnchor(null);
+        // Never names: a link is the most forwardable form (roster spec R10).
         const doc = buildPlanDocument(session, new Date(), planGenerator);
         // A link the import page would refuse is worse than none: warn instead.
         const problem = importProblemNotice(doc);
@@ -228,6 +240,7 @@ export function ExportPlanMenu({ session, size = "medium" }: ExportPlanMenuProps
                 Export plan
             </Button>
             <Menu id="export-plan-menu" anchorEl={anchor} open={anchor !== null} onClose={() => setAnchor(null)}>
+                {offerNames && <RosterNamesToggle checked={includeNames} onChange={setIncludeNames} />}
                 <MenuItem onClick={download}>
                     <ListItemIcon>
                         <DownloadIcon fontSize="small" />

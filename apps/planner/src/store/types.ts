@@ -9,6 +9,7 @@ import type { PlanDocument } from "@/lib/plan-document";
 import type { SavedDrillId } from "@/lib/utils/session-drill-ids";
 import type { SessionRowInput } from "@/lib/utils/session-rows";
 import type { SessionStaffInput } from "@/lib/utils/session-staff";
+import type { PracticeRosterInput } from "@/lib/utils/practice-roster";
 import type { TeamProfileInput } from "@/lib/utils/team-mark";
 import type { EquipmentCountItem, PlayData, PlayFocus, PlayGoalies, PracticeSessionData, PracticeSessionView, TeamProfile } from "@/types/practice-planner";
 import type { AgeGroup } from "@/lib/utils/age-groups";
@@ -39,6 +40,8 @@ export interface LocalSessionSave {
     staff?: SessionStaffInput[];
     /** The practice's own equipment. Absent = unchanged on update (none on create); [] clears. */
     equipment?: EquipmentCountItem[];
+    /** The practice's roster (roster spec R7). Absent = unchanged on update (none on create); null clears. */
+    roster?: PracticeRosterInput | null;
     plays: LocalSessionDrill[];
 }
 
