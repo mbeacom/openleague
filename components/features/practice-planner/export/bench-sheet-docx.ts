@@ -194,7 +194,7 @@ function drills(model: BenchSheetModel): Paragraph[] {
 function benchSheetDocument(model: BenchSheetModel): Document {
     const body =
         model.timeline.length === 0
-            ? [...header(model), new Paragraph({ children: textRuns(NO_DRILLS_TEXT, { bold: true }) })]
+            ? [...header(model), new Paragraph({ children: textRuns(NO_DRILLS_TEXT, { bold: true }) }), ...equipment(model)]
             : [...header(model), ...timeline(model), ...equipment(model), ...legend(model), ...drills(model)];
     return new Document({
         title: xmlSafe(model.title),

@@ -191,7 +191,8 @@ ${pages}</section>`;
 export function renderBenchSheetHtml(model: BenchSheetModel): string {
     const body =
         model.timeline.length === 0
-            ? html`<p class="empty">${NO_DRILLS_TEXT}</p>`
+            ? html`<p class="empty">${NO_DRILLS_TEXT}</p>
+${equipment(model)}`
             : html`${timeline(model)}
 ${equipment(model)}
 ${legend(model)}

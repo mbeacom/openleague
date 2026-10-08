@@ -305,6 +305,12 @@ describe("renderBenchSheetHtml: equipment (practice equipment spec R5)", () => {
         expect(out).not.toContain("<Water>");
     });
 
+    it("keeps the practice equipment when there are no timeline rows", () => {
+        const doc = parse(renderBenchSheetHtml({ ...equipped, timeline: [], legend: [], drills: [] }));
+        expect(doc.querySelector(".empty")?.textContent).toBe("No drills planned");
+        expect([...doc.querySelectorAll("section.equipment li")].map((li) => li.textContent)).toEqual(["Cones ×12", "Net ×1", "<Water> bottles ×20"]);
+    });
+
     it("prints each drill's own line, and nothing for a drill without equipment", () => {
         const doc = parse(renderBenchSheetHtml(equipped));
         const lines = [...doc.querySelectorAll("article.drill")].map((article) => article.querySelector(".equipment-line")?.textContent ?? null);

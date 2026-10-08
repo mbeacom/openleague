@@ -81,6 +81,22 @@ export function BenchSheet({ session: stored }: { session: BenchSheetSession }) 
     const onMarkReady = useCallback(() => setMarkShown(true), []);
     const allReady = drills.every(({ sp }) => readyIds.has(sp.id)) && (!mark || markShown);
 
+    const equipmentSection =
+        equipment.length > 0 ? (
+                <Box component="section" aria-labelledby="bench-equipment-heading" className="bench-equipment" sx={{ mt: 2 }}>
+                    <Typography id="bench-equipment-heading" variant="h6" component="h2" sx={{ fontWeight: 800 }}>
+                        {EQUIPMENT_HEADING}
+                    </Typography>
+                    <Box component="ul" sx={{ m: 0, pl: 2.5, columns: { xs: 2, sm: 3 }, columnGap: 3 }}>
+                        {equipment.map((item) => (
+                            <Typography key={item} component="li" variant="body2" sx={{ breakInside: "avoid" }}>
+                                {item}
+                            </Typography>
+                        ))}
+                    </Box>
+                </Box>
+        ) : null;
+
     return (
         <Box className="bench-sheet" sx={{ maxWidth: 820, mx: "auto", p: { xs: 2, sm: 4 }, bgcolor: "#fff", color: "#000" }}>
             <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap className="no-print" sx={{ mb: 3 }}>
@@ -124,9 +140,12 @@ export function BenchSheet({ session: stored }: { session: BenchSheetSession }) 
             </Box>
 
             {session.plays.length === 0 ? (
-                <Typography variant="body1" sx={{ fontWeight: 700 }}>
-                    {NO_DRILLS_MESSAGE}
-                </Typography>
+                <>
+                    <Typography variant="body1" sx={{ fontWeight: 700 }}>
+                        {NO_DRILLS_MESSAGE}
+                    </Typography>
+                    {equipmentSection}
+                </>
             ) : (
                 <>
                     {/* Timing reads the stored rows; the display copy only redraws diagrams. */}
@@ -140,20 +159,7 @@ export function BenchSheet({ session: stored }: { session: BenchSheetSession }) 
                         transitionMinutes={gap}
                         staff={session.staff}
                     />
-                    {equipment.length > 0 && (
-                        <Box component="section" aria-labelledby="bench-equipment-heading" className="bench-equipment" sx={{ mt: 2 }}>
-                            <Typography id="bench-equipment-heading" variant="h6" component="h2" sx={{ fontWeight: 800 }}>
-                                {EQUIPMENT_HEADING}
-                            </Typography>
-                            <Box component="ul" sx={{ m: 0, pl: 2.5, columns: { xs: 2, sm: 3 }, columnGap: 3 }}>
-                                {equipment.map((item) => (
-                                    <Typography key={item} component="li" variant="body2" sx={{ breakInside: "avoid" }}>
-                                        {item}
-                                    </Typography>
-                                ))}
-                            </Box>
-                        </Box>
-                    )}
+                    {equipmentSection}
                     <LegendList playData={legend} />
                     {drills.length > 0 && (
                     <Box component="section" aria-label="Drills" className="bench-page-break" sx={{ mt: 4 }}>

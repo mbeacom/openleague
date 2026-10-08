@@ -423,6 +423,13 @@ describe("BenchSheet: equipment (practice equipment spec R5)", () => {
         expect(within(drills()[1]).getByText("Equipment: Cone ×1 · Net ×1")).toBeInTheDocument();
     });
 
+    it("keeps the practice equipment when there are no drills", () => {
+        renderSheet({ ...SESSION, plays: [], equipment: [{ name: "Water bottles", count: 20 }] });
+        expect(screen.getByText("No drills planned")).toBeInTheDocument();
+        const section = screen.getByRole("region", { name: "Equipment" });
+        expect(within(section).getAllByRole("listitem").map((li) => li.textContent)).toEqual(["Water bottles ×20"]);
+    });
+
     it("leaves the section out when nothing is needed", () => {
         renderSheet();
         expect(screen.queryByRole("region", { name: "Equipment" })).toBeNull();

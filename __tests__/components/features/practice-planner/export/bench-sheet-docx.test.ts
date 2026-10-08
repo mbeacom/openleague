@@ -229,6 +229,13 @@ describe("renderBenchSheetDocx: equipment (practice equipment spec R5)", () => {
         expect(xml.indexOf(">Equipment<")).toBeLessThan(xml.indexOf(">Legend<"));
     });
 
+    it("keeps the practice equipment when there are no timeline rows", async () => {
+        const xml = await documentXml({ ...MODEL, timeline: [], legend: [], drills: [], equipment: ["Cones ×12"] });
+        expect(xml).toContain("No drills planned");
+        expect(xml).toContain(">Equipment<");
+        expect(xml).toContain("• Cones ×12");
+    });
+
     it("has no Equipment heading when the practice needs nothing", async () => {
         expect(await documentXml(MODEL)).not.toContain(">Equipment<");
     });
