@@ -67,13 +67,19 @@ const PAGE_FILE_TYPES = ".html,.htm,.txt,.webarchive,text/html,text/plain,applic
 
 /**
  * A pasted page's HTML when the clipboard has it: a plain-text copy of a page runs its cells
- * together, the HTML keeps them apart. Falls back to the plain text if only that reads.
+ * together, the HTML keeps them apart. Falls back to the plain text if only that reads, and
+ * takes a plain-text-only paste as a page when it reads. Null leaves the paste to the text box.
  */
 function pastedPage(event: ClipboardEvent<HTMLElement>, found: (content: string) => number): string | null {
     const html = event.clipboardData.getData("text/html");
-    if (!looksLikeHtml(html)) return null;
-    event.preventDefault();
     const plain = event.clipboardData.getData("text/plain");
+    if (!looksLikeHtml(html)) {
+        // Plain text only: treat it as a page when it reads; otherwise it is ordinary typing in the box.
+        if (!plain.trim() || found(plain) === 0) return null;
+        event.preventDefault();
+        return plain;
+    }
+    event.preventDefault();
     return found(html) === 0 && plain.trim() && found(plain) > 0 ? plain : html;
 }
 

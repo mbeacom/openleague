@@ -163,6 +163,20 @@ describe("RankingsImportScreen", () => {
             expect(await screen.findByText(/4 completed games, 3 scheduled, 6 teams/)).toBeInTheDocument();
         });
 
+        it("reads a plain-text-only paste through the same path as an HTML paste", async () => {
+            await ready();
+            fireEvent.paste(screen.getByLabelText("Schedule page"), clipboard({ "text/plain": SCHEDULE_COPIED }));
+            expect(await screen.findByText(`${PASTED_PAGE_LABEL} (7 games found)`)).toBeInTheDocument();
+            expect(screen.getByText(/4 completed games, 3 scheduled, 6 teams/)).toBeInTheDocument();
+        });
+
+        it("leaves a plain-text paste with no games in the box for editing", async () => {
+            await ready();
+            fireEvent.paste(screen.getByLabelText("Schedule page"), clipboard({ "text/plain": "just a note" }));
+            expect(screen.getByLabelText("Schedule page")).toBeInTheDocument();
+            expect(screen.queryByText(new RegExp(PASTED_PAGE_LABEL))).not.toBeInTheDocument();
+        });
+
         it("clears a pasted page back to an empty box", async () => {
             await ready();
             fireEvent.paste(screen.getByLabelText("Schedule page"), clipboard({ "text/html": SCHEDULE_HTML }));
