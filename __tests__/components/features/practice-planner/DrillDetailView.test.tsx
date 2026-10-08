@@ -47,11 +47,11 @@ function play(overrides: Partial<LibraryPlay> = {}): LibraryPlay {
     };
 }
 
-function renderView(props: Partial<Parameters<typeof DrillDetailView>[0]> = {}) {
+function renderView(props: Partial<Parameters<typeof DrillDetailView>[0]> = {}, theme = createTheme()) {
     const store = createMockPlannerStore();
     const platform = createHashPlatform();
     renderWithPlanner(
-        <ThemeProvider theme={createTheme()}>
+        <ThemeProvider theme={theme}>
             <DrillDetailView play={play()} teamId={TEAM} canEdit {...props} />
         </ThemeProvider>,
         { store, platform },
@@ -74,6 +74,17 @@ describe("DrillDetailView", () => {
         expect(screen.getByText("Cone ×2")).toBeInTheDocument();
         expect(screen.getAllByText("Puck pile").length).toBeGreaterThan(0);
         expect(screen.getByTestId("drill-usage")).toHaveTextContent("Used in 3 practices");
+    });
+
+    it("paints the header stripe from the color-scheme variables, so it follows dark mode", () => {
+        // The app's theme uses CSS variables, where theme.palette always holds the light literals.
+        renderView({}, createTheme({ cssVariables: { colorSchemeSelector: "data-mui-color-scheme" }, colorSchemes: { light: true, dark: true } }));
+        const css = Array.from(document.querySelectorAll("style"), (style) => style.textContent ?? "").join("\n");
+        // Earlier renders' rules stay in the head, so look for this theme's among them.
+        const stripes = css.match(/linear-gradient\(90deg,[^;}]*\)/g) ?? [];
+        expect(stripes.find((stripe) => stripe.includes("var(--"))).toMatch(
+            /var\(--mui-palette-primary-dark.*var\(--mui-palette-primary-main.*var\(--mui-palette-primary-light/,
+        );
     });
 
     it("says so when there is no description, no gear and every age", () => {

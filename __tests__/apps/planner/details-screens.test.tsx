@@ -29,6 +29,15 @@ async function libraryDrill(store: LocalPlannerStore, name = "Hilltop Breakout")
     return created.data.id;
 }
 
+/** An unowned legacy play outside the library: no session, and not a template. */
+async function legacyNonTemplate(repo: ReturnType<typeof memoryStore>["repo"]): Promise<string> {
+    const at = new Date();
+    await repo.write((tx) =>
+        tx.putPlay({ id: "legacy", name: "Old Sketch", description: null, thumbnail: null, playData: createEmptyPlayData(), isTemplate: false, sessionId: null, sourcePlayId: null, createdAt: at, updatedAt: at }),
+    );
+    return "legacy";
+}
+
 async function practiceWith(store: LocalPlannerStore, playId: string): Promise<string> {
     const created = await store.createSession({
         title: "Brookside Tuesday",
@@ -72,6 +81,14 @@ describe("DrillDetailScreen", () => {
         expect(await screen.findByText(DRILL_NOT_ON_DEVICE_MESSAGE)).toBeInTheDocument();
     });
 
+    it("treats an unowned play that isn't a library template as not on this device", async () => {
+        const { store, repo } = memoryStore();
+        const id = await legacyNonTemplate(repo);
+        renderScreen(<DrillDetailScreen store={store} id={id} />, store);
+        expect(await screen.findByText(DRILL_NOT_ON_DEVICE_MESSAGE)).toBeInTheDocument();
+        expect(screen.queryByRole("heading", { level: 1, name: "Old Sketch" })).toBeNull();
+    });
+
     it("shows an unreadable diagram's message instead of an empty board", async () => {
         const { store, repo } = memoryStore();
         const at = new Date();
@@ -104,6 +121,14 @@ describe("NewSessionFromDrillScreen", () => {
         const { store } = memoryStore();
         renderScreen(<NewSessionFromDrillScreen store={store} drillId="missing" />, store);
         expect(await screen.findByText(DRILL_NOT_ON_DEVICE_MESSAGE)).toBeInTheDocument();
+    });
+
+    it("rejects an unowned play that isn't a library template before showing an editor", async () => {
+        const { store, repo } = memoryStore();
+        const id = await legacyNonTemplate(repo);
+        renderScreen(<NewSessionFromDrillScreen store={store} drillId={id} />, store);
+        expect(await screen.findByText(DRILL_NOT_ON_DEVICE_MESSAGE)).toBeInTheDocument();
+        expect(screen.queryByLabelText(/session title/i)).toBeNull();
     });
 });
 

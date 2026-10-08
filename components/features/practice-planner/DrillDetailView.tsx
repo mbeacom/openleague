@@ -145,7 +145,12 @@ export function DrillDetailView({ play, teamId, canEdit, usageCount, extras }: D
                         left: 0,
                         right: 0,
                         height: "4px",
-                        background: (theme) => `linear-gradient(90deg, ${theme.palette.primary.dark} 0%, ${theme.palette.primary.main} 55%, ${theme.palette.primary.light} 100%)`,
+                        // Tokens, not theme.palette: under cssVariables the JS palette always holds the
+                        // LIGHT literals, so the stripe would stay light-scheme blue in dark mode.
+                        background: (theme) => {
+                            const { primary } = (theme.vars || theme).palette;
+                            return `linear-gradient(90deg, ${primary.dark} 0%, ${primary.main} 55%, ${primary.light} 100%)`;
+                        },
                     },
                 }}
             >

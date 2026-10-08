@@ -34,6 +34,10 @@ export function DrillDetailScreen({ store, id }: { store: LocalPlannerStore; id:
             </Stack>
         );
     }
+    // getPlayById also returns legacy unowned plays outside the library; only a library template is a drill here.
+    if (!state.data.isTemplate) {
+        return <MissingScreen message={DRILL_NOT_ON_DEVICE_MESSAGE} backHref={staticRoutes.library()} backLabel="Back to the drill library" />;
+    }
     return (
         <DrillDetailView
             play={state.data}

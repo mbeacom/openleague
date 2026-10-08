@@ -54,6 +54,9 @@ export default async function DrillDetailPage({ params }: PageProps) {
     );
   }
 
+  // getPlayById also returns legacy unowned plays outside the library: only a library template has a details page.
+  if (!result.data.isTemplate) notFound();
+
   // Only after getPlayById accepted the id for this team.
   const usageCount = await countPlayUsage(result.data.id, context.teamId);
 

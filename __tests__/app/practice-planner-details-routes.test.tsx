@@ -100,6 +100,12 @@ describe("drill details page", () => {
         expect(mocks.findMany).not.toHaveBeenCalled();
     });
 
+    it("404s an unowned legacy play that isn't a library template, without counting anything", async () => {
+        mocks.getPlayById.mockResolvedValue({ success: true, data: { ...PLAY, isTemplate: false } });
+        await expect(DrillDetailPage({ params: params() })).rejects.toThrow("NEXT_NOT_FOUND");
+        expect(mocks.findMany).not.toHaveBeenCalled();
+    });
+
     it("explains an unreadable diagram instead of drawing an empty board", async () => {
         mocks.getPlayById.mockResolvedValue({ success: false, error: "This drill's diagram can't be read.", details: { code: PLAY_DATA_UNREADABLE_CODE } });
         render(await DrillDetailPage({ params: params() }));
@@ -122,6 +128,11 @@ describe("a new practice started from a drill", () => {
         expect(mocks.getPlayById).not.toHaveBeenCalled();
         mocks.getPlayById.mockResolvedValue({ success: false, error: "Invalid play ID format" });
         expect(await startingDrillRows("not-an-id", TEAM)).toEqual([]);
+    });
+
+    it("starts empty for an unowned legacy play that isn't a library template, as a missing drill", async () => {
+        mocks.getPlayById.mockResolvedValue({ success: true, data: { ...PLAY, isTemplate: false } });
+        expect(await startingDrillRows(PLAY_ID, TEAM)).toEqual([]);
     });
 });
 

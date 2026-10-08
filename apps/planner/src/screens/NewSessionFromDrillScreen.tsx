@@ -12,7 +12,8 @@ export function NewSessionFromDrillScreen({ store, drillId }: { store: LocalPlan
     const load = useCallback(() => store.getPlayById({ id: drillId, teamId: LOCAL_TEAM_ID }), [store, drillId]);
     const state = useStoreResult(load);
     if (state.kind === "loading") return <LoadingScreen />;
-    if (state.kind === "error") {
+    // A legacy unowned play outside the library is not a drill a new practice can hold: its save would reject it.
+    if (state.kind === "error" || !state.data.isTemplate) {
         return <MissingScreen message={DRILL_NOT_ON_DEVICE_MESSAGE} backHref={staticRoutes.library()} backLabel="Back to the drill library" />;
     }
     return <NewSessionEditor store={store} initialPlays={[libraryDrillRow(state.data, `play-start-${state.data.id}`)]} />;
