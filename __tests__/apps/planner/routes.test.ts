@@ -38,6 +38,12 @@ describe("matchRoute", () => {
         ["#/rankings/team/903/x", { name: "notFound" }],
         ["#/rankings/nope", { name: "notFound" }],
         ["#/nope", { name: "notFound" }],
+        ["#/ai", { name: "aiSettings" }],
+        ["#/ai/", { name: "aiSettings" }],
+        ["#/ai/x", { name: "notFound" }],
+        ["#/import/notes", { name: "importNotes" }],
+        ["#/import/notes/x", { name: "notFound" }],
+        ["#/import/other", { name: "notFound" }],
     ])("%s", (hash, expected) => {
         expect(matchRoute(hash)).toEqual(expected);
     });
@@ -52,6 +58,13 @@ describe("matchRoute", () => {
         expect(matchRoute(staticRoutes.library())).toEqual({ name: "library" });
         expect(matchRoute(staticRoutes.sessionNew())).toEqual({ name: "sessionNew" });
         expect(matchRoute(staticRoutes.importPlan())).toEqual({ name: "import" });
+        expect(matchRoute(staticRoutes.aiSettings())).toEqual({ name: "aiSettings" });
+        expect(matchRoute(staticRoutes.importNotes())).toEqual({ name: "importNotes" });
+    });
+
+    it("puts the notes draft under Import and AI settings under no section", () => {
+        expect(navSection({ name: "importNotes" })).toBe("import");
+        expect(navSection({ name: "aiSettings" })).toBeNull();
     });
 });
 

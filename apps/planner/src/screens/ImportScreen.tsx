@@ -5,30 +5,26 @@
  * URL or history. One instance serves both routes (App keys it "import"), and
  * the pending link lives in state, so the URL change can't cancel decoding.
  * Leaving #plan= clears the pending link, so pasting the same link again reads it again.
+ * With AI assistance on (ADR-0023), the start view also offers a draft from notes.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, Box, Button, Checkbox, FormControlLabel, Paper, Stack, Typography } from "@mui/material";
-import { FileUploadOutlined as UploadIcon } from "@mui/icons-material";
+import { Alert, Box, Button, Paper, Stack, Typography } from "@mui/material";
+import { FileUploadOutlined as UploadIcon, NotesOutlined as NotesIcon } from "@mui/icons-material";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { PlanPreview } from "@/components/features/practice-planner/PlanPreview";
 import { StarterTemplatePicker, starterTemplateImport } from "@/components/features/practice-planner/StarterTemplatePicker";
 import { usePlannerPlatform } from "@/lib/planner-store";
 import { readPlanFile, readPlanLink, type ParsePlanResult, type PlanDocument, type PlanError } from "@/lib/plan-document";
-import { parseDateTimeLocalToUtc, resolveTimeZone } from "@/lib/utils/date";
 import { toTeamMark } from "@/lib/utils/team-mark";
 import { LOCAL_TEAM_ID } from "../config";
 import { replaceHash } from "../platform";
 import { staticRoutes } from "../routes";
 import type { LocalPlannerStore } from "../store/types";
+import { PlanReviewPanel, planStartDate, usePlanSave } from "./PlanReviewPanel";
+import { useAiSettings } from "./useAiSettings";
 import { useStoreResult } from "./useStoreResult";
 import { useTeamProfileVersion } from "./useTeamProfile";
 
-/** The plan's local date and start in this browser's zone; midnight without a start; now without a date. */
-export function planStartDate(plan: PlanDocument, now: Date = new Date()): Date {
-    const { date, startTime } = plan.session;
-    if (!date) return now;
-    return parseDateTimeLocalToUtc(`${date}T${startTime ?? "00:00"}`, resolveTimeZone(null)) ?? now;
-}
+export { planStartDate };
 
 type ViewState =
     | { kind: "pick" }
@@ -40,10 +36,10 @@ function toViewState(result: ParsePlanResult, fromTemplate = false): ViewState {
     return result.ok ? { kind: "ready", plan: result.plan, fromTemplate } : { kind: "error", error: result.error };
 }
 
-const UNDATED_PLAN_NOTE = "This plan has no date, so it will be saved with today's date and time. You can change the date in Edit.";
+export const NOTES_CARD_TITLE = "Draft a plan from notes";
 
 export function ImportScreen({ store, linkValue }: { store: LocalPlannerStore; linkValue: string | null }) {
-    const { navigate, planGenerator } = usePlannerPlatform();
+    const { planGenerator } = usePlannerPlatform();
     const fileInput = useRef<HTMLInputElement>(null);
     const [pending, setPending] = useState<string | null>(linkValue);
     const [state, setState] = useState<ViewState>(linkValue ? { kind: "reading" } : { kind: "pick" });
@@ -58,12 +54,13 @@ export function ImportScreen({ store, linkValue }: { store: LocalPlannerStore; l
     // The newest choice (a link read or a file pick); an older one's result is dropped when it lands.
     const latestChoice = useRef<symbol | null>(null);
     const [addToLibrary, setAddToLibrary] = useState(false);
-    const [saving, setSaving] = useState(false);
-    const [saveError, setSaveError] = useState<string | null>(null);
+    const { save, saving, saveError, clearError } = usePlanSave(store);
     // The device's "Your team": a plan file has no team, so the preview shows this device's (spec R5).
     const loadProfile = useCallback(() => store.getTeamProfile(), [store]);
     const profile = useStoreResult(loadProfile, useTeamProfileVersion(store));
     const teamMark = profile.kind === "ready" && profile.data ? toTeamMark(profile.data, LOCAL_TEAM_ID) : null;
+    const ai = useAiSettings(store);
+    const aiOn = ai.kind === "ready" && ai.data.enabled;
 
     useEffect(() => {
         if (!pending) return;
@@ -82,7 +79,7 @@ export function ImportScreen({ store, linkValue }: { store: LocalPlannerStore; l
     // Back to the import page, with the templates offered again.
     const startOver = () => {
         latestChoice.current = null;
-        setSaveError(null);
+        clearError();
         setState({ kind: "pick" });
     };
 
@@ -92,23 +89,10 @@ export function ImportScreen({ store, linkValue }: { store: LocalPlannerStore; l
         if (!file) return;
         const choice = Symbol("file");
         latestChoice.current = choice;
-        setSaveError(null);
+        clearError();
         const result = await readPlanFile(file);
         // A link pasted while the file was being read wins.
         if (latestChoice.current === choice) setState(toViewState(result));
-    };
-
-    const save = async (plan: PlanDocument, fromTemplate: boolean) => {
-        setSaving(true);
-        setSaveError(null);
-        // A template's drills are already offered in the library as starters.
-        const result = await store.importPlan(plan, { date: planStartDate(plan), addToLibrary: addToLibrary && !fromTemplate });
-        setSaving(false);
-        if (!result.success) {
-            setSaveError(result.error);
-            return;
-        }
-        navigate(staticRoutes.session(result.data.sessionId));
     };
 
     return (
@@ -132,12 +116,26 @@ export function ImportScreen({ store, linkValue }: { store: LocalPlannerStore; l
                     </Paper>
                 )}
 
+                {state.kind === "pick" && aiOn && (
+                    <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>
+                        <Typography variant="h6" component="h2" fontWeight={700}>
+                            {NOTES_CARD_TITLE}
+                        </Typography>
+                        <Typography color="text.secondary" sx={{ mb: 2 }}>
+                            Paste your practice notes and send them to the AI provider you set up. You review the draft before anything is saved.
+                        </Typography>
+                        <Button variant="outlined" startIcon={<NotesIcon />} href={staticRoutes.importNotes()} sx={{ minHeight: 44 }}>
+                            Paste notes
+                        </Button>
+                    </Paper>
+                )}
+
                 {state.kind === "pick" && (
                     <StarterTemplatePicker
                         onUse={(template) => {
                             // Newest choice wins, as for a file or a link.
                             latestChoice.current = Symbol("template");
-                            setSaveError(null);
+                            clearError();
                             setState(toViewState(starterTemplateImport(template, planGenerator), true));
                         }}
                     />
@@ -166,40 +164,18 @@ export function ImportScreen({ store, linkValue }: { store: LocalPlannerStore; l
                 )}
 
                 {state.kind === "ready" && (
-                    <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>
-                        <PlanPreview plan={state.plan} teamMark={teamMark} />
-                        {!state.plan.session.date && (
-                            <Alert severity="info" sx={{ mt: 2 }}>
-                                {UNDATED_PLAN_NOTE}
-                            </Alert>
-                        )}
-                        {!state.fromTemplate && (
-                            <FormControlLabel
-                                sx={{ mt: 2 }}
-                                control={<Checkbox checked={addToLibrary} onChange={(event) => setAddToLibrary(event.target.checked)} />}
-                                label="Also add these drills to my library"
-                            />
-                        )}
-                        {saveError && (
-                            <Alert severity="error" sx={{ mt: 2 }}>
-                                {saveError}
-                            </Alert>
-                        )}
-                        <Stack direction="row" spacing={1} sx={{ mt: 2 }} flexWrap="wrap" useFlexGap>
-                            <Button variant="contained" disabled={saving} onClick={() => void save(state.plan, state.fromTemplate)}>
-                                {saving ? "Saving…" : "Save to my practices"}
-                            </Button>
-                            {state.fromTemplate ? (
-                                <Button onClick={startOver} disabled={saving}>
-                                    Start over
-                                </Button>
-                            ) : (
-                                <Button onClick={chooseFile} disabled={saving}>
-                                    Choose another file
-                                </Button>
-                            )}
-                        </Stack>
-                    </Paper>
+                    <PlanReviewPanel
+                        plan={state.plan}
+                        teamMark={teamMark}
+                        offerAddToLibrary={!state.fromTemplate}
+                        addToLibrary={addToLibrary}
+                        onAddToLibraryChange={setAddToLibrary}
+                        saving={saving}
+                        saveError={saveError}
+                        // A template's drills are already offered in the library as starters.
+                        onSave={() => void save(state.plan, addToLibrary && !state.fromTemplate)}
+                        secondary={state.fromTemplate ? { label: "Start over", onClick: startOver } : { label: "Choose another file", onClick: chooseFile }}
+                    />
                 )}
             </Stack>
         </>

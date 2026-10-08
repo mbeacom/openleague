@@ -106,6 +106,8 @@ export const META_THUMBNAIL_STYLE = "thumbnailStyle";
 export const META_TEAM_PROFILE = "teamProfile";
 /** The rankings document (static rankings spec): one per device, in the meta store, so no schema bump. */
 export const META_RANKINGS = "rankings";
+/** AI settings (ADR-0023): provider, model, base URL and acknowledgement. Never a key. */
+export const META_AI_SETTINGS = "aiSettings";
 
 /**
  * The starters every device seeded under META_STARTERS_SEEDED. Hard-coded on

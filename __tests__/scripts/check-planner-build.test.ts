@@ -3,13 +3,18 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { checkPlannerBuild, unguardedProcessEnvCount } from "@/scripts/check-planner-build";
+import { aiConnectSrc, resolveAiOrigins } from "@/apps/planner/ai-origins";
 
-const GOOD_HTML =
-    '<html><head><meta http-equiv="Content-Security-Policy" content="default-src \'self\'">' +
+const PUBLIC_CSP = "default-src 'self'; connect-src 'self' https://api.anthropic.com https://api.openai.com http://localhost:* http://127.0.0.1:*; form-action 'none'";
+const cspHtml = (csp: string) =>
+    `<html><head><meta http-equiv="Content-Security-Policy" content="${csp}">` +
     '<script type="module" src="./assets/index-abc.js"></script></head><body></body></html>';
+const GOOD_HTML = cspHtml(PUBLIC_CSP);
 const GOOD_JS = 'const FORMAT = "openleague.practice-plan"; export {};';
 /** The lazily loaded Word export chunk. */
 const LAZY_JS = 'const PART = "word/document.xml"; export {};';
+/** The lazily loaded AI adapter chunk (ADR-0023). */
+const AI_JS = 'const H = { "anthropic-dangerous-direct-browser-access": "true" }; export {};';
 
 async function fixture(files: Record<string, string>): Promise<string> {
     const dir = await mkdtemp(path.join(os.tmpdir(), "planner-build-"));
@@ -23,8 +28,64 @@ async function fixture(files: Record<string, string>): Promise<string> {
 describe("checkPlannerBuild", () => {
     it("passes a relative, CSP-protected, telemetry-free bundle", async () => {
         expect(
-            await checkPlannerBuild(await fixture({ "index.html": GOOD_HTML, "assets/index-abc.js": GOOD_JS, "assets/docx-abc.js": LAZY_JS })),
+            await checkPlannerBuild(
+                await fixture({ "index.html": GOOD_HTML, "assets/index-abc.js": GOOD_JS, "assets/docx-abc.js": LAZY_JS, "assets/ai-abc.js": AI_JS }),
+            ),
         ).toEqual([]);
+    });
+
+    it("reads a CSP whose quotes are written as entities", async () => {
+        const html = cspHtml(PUBLIC_CSP.replace(/'/g, "&#39;"));
+        expect(
+            await checkPlannerBuild(await fixture({ "index.html": html, "assets/index-abc.js": GOOD_JS, "assets/docx-abc.js": LAZY_JS, "assets/ai-abc.js": AI_JS })),
+        ).toEqual([]);
+    });
+
+    it("fails when the built connect-src differs from the resolved AI origin allowlist", async () => {
+        const files = { "assets/index-abc.js": GOOD_JS, "assets/docx-abc.js": LAZY_JS, "assets/ai-abc.js": AI_JS };
+        const narrow = await checkPlannerBuild(await fixture({ ...files, "index.html": cspHtml("default-src 'self'; connect-src 'self'") }));
+        expect(narrow.join("\n")).toMatch(/connect-src is "connect-src 'self'", but the AI origin allowlist resolves to/);
+        // A self-hosted build: the public CSP no longer matches the resolved list.
+        const selfHosted = await checkPlannerBuild(await fixture({ ...files, "index.html": GOOD_HTML }), {
+            aiOrigins: resolveAiOrigins("https://models.example:8443"),
+        });
+        expect(selfHosted.join("\n")).toMatch(/https:\/\/models\.example:8443/);
+        const matching = await checkPlannerBuild(
+            await fixture({ ...files, "index.html": cspHtml(`default-src 'self'; ${aiConnectSrc(resolveAiOrigins("https://models.example:8443"))}`) }),
+            { aiOrigins: resolveAiOrigins("https://models.example:8443") },
+        );
+        expect(matching).toEqual([]);
+    });
+
+    it("requires Trusted Types in the CSP when it is enabled", async () => {
+        const files = { "assets/index-abc.js": GOOD_JS, "assets/docx-abc.js": LAZY_JS, "assets/ai-abc.js": AI_JS };
+        const problems = await checkPlannerBuild(await fixture({ ...files, "index.html": GOOD_HTML }), { trustedTypes: true });
+        expect(problems.join("\n")).toMatch(/require-trusted-types-for/);
+        const withTt = await checkPlannerBuild(await fixture({ ...files, "index.html": cspHtml(`${PUBLIC_CSP}; require-trusted-types-for 'script'`) }), {
+            trustedTypes: true,
+        });
+        expect(withTt).toEqual([]);
+    });
+
+    it("fails when AI adapter code is in the entry chunk, or missing", async () => {
+        const inEntry = await checkPlannerBuild(
+            await fixture({ "index.html": GOOD_HTML, "assets/index-abc.js": `${GOOD_JS}\n${AI_JS}`, "assets/docx-abc.js": LAZY_JS }),
+        );
+        expect(inEntry.join("\n")).toMatch(/\(the entry chunk\) contains "anthropic-dangerous-direct-browser-access"/);
+        const missing = await checkPlannerBuild(await fixture({ "index.html": GOOD_HTML, "assets/index-abc.js": GOOD_JS, "assets/docx-abc.js": LAZY_JS }));
+        expect(missing.join("\n")).toMatch(/no emitted file contains "anthropic-dangerous-direct-browser-access"/);
+    });
+
+    it("fails when an AI chunk carries eval-style dynamic code", async () => {
+        const problems = await checkPlannerBuild(
+            await fixture({
+                "index.html": GOOD_HTML,
+                "assets/index-abc.js": GOOD_JS,
+                "assets/docx-abc.js": LAZY_JS,
+                "assets/ai-abc.js": `${AI_JS}\nconst f = new Function("return 1");`,
+            }),
+        );
+        expect(problems.join("\n")).toMatch(/ai-abc\.js carries AI adapter code and eval-style dynamic code/);
     });
 
     it("fails when nothing was built", async () => {
@@ -54,7 +115,7 @@ describe("checkPlannerBuild", () => {
         const guarded = 'const m = typeof process !== "undefined" && process.env.DEBUG;';
         expect(
             await checkPlannerBuild(
-                await fixture({ "index.html": GOOD_HTML, "assets/index-abc.js": `${GOOD_JS}\n${guarded}`, "assets/docx-abc.js": LAZY_JS }),
+                await fixture({ "index.html": GOOD_HTML, "assets/index-abc.js": `${GOOD_JS}\n${guarded}`, "assets/docx-abc.js": LAZY_JS, "assets/ai-abc.js": AI_JS }),
             ),
         ).toEqual([]);
         const bare = "const m = process.env.DEBUG;";

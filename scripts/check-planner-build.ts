@@ -2,12 +2,16 @@
  * Checks dist/planner after `bun run planner:build` (ADR-0020): the static
  * planner must work from any subfolder, carry its CSP, contain no Next.js
  * runtime or unguarded process.env (both crash or bloat a browser-only
- * bundle), contain no telemetry, and actually include the plan format.
+ * bundle), contain no telemetry, and actually include the plan format. Its
+ * CSP's connect-src must equal the AI origin allowlist, and AI adapter code
+ * must load lazily (ADR-0023).
  */
 import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { aiConnectSrc, resolveAiOrigins } from "../apps/planner/ai-origins";
+import { TRUSTED_TYPES_ENABLED } from "../apps/planner/build-config";
 
 export const FORBIDDEN_IN_BUNDLE: ReadonlyArray<{ pattern: string; reason: string }> = [
     { pattern: "NEXT_PUBLIC_", reason: "a Next.js environment variable reached the static bundle" },
@@ -22,12 +26,42 @@ export const FORBIDDEN_IN_BUNDLE: ReadonlyArray<{ pattern: string; reason: strin
     { pattern: "vitals.vercel", reason: "analytics are not allowed in the static planner" },
 ];
 
-export const REQUIRED_IN_BUNDLE = ["openleague.practice-plan", "word/document.xml"];
+/** A literal only the AI adapters contain (ADR-0023): the Anthropic browser-access header. */
+export const AI_ADAPTER_MARKER = "anthropic-dangerous-direct-browser-access";
+
+export const REQUIRED_IN_BUNDLE = ["openleague.practice-plan", "word/document.xml", AI_ADAPTER_MARKER];
 
 /** Code that must load only on demand, by a literal only it contains. */
 export const LAZY_ONLY_IN_BUNDLE: ReadonlyArray<{ pattern: string; reason: string }> = [
     { pattern: "word/document.xml", reason: "the Word export (docx) must load only through import(), on click" },
+    { pattern: AI_ADAPTER_MARKER, reason: "AI adapter code must load only through import(), when the coach opens an AI feature (ADR-0023)" },
 ];
+
+/** Dynamic code that must never appear in an AI chunk (spec R6). */
+const EVAL_STYLE = /\beval\s*\(|\bnew\s+Function\s*\(/;
+
+export interface CheckOptions {
+    /** The resolved AI origin allowlist; the built connect-src must equal aiConnectSrc(aiOrigins). */
+    aiOrigins?: readonly string[];
+    /** Whether the build should carry Trusted Types. */
+    trustedTypes?: boolean;
+}
+
+function decodeAttribute(value: string): string {
+    return value
+        .replace(/&#39;|&#x27;|&apos;/g, "'")
+        .replace(/&quot;|&#34;/g, '"')
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&amp;/g, "&");
+}
+
+/** The CSP meta's content, decoded, or null. */
+export function builtCsp(html: string): string | null {
+    const tag = Array.from(html.matchAll(/<meta\b[^>]*>/g), (match) => match[0]).find((meta) => /http-equiv="Content-Security-Policy"/.test(meta));
+    const content = tag ? /\bcontent="([^"]*)"/.exec(tag)?.[1] : undefined;
+    return content === undefined ? null : decodeAttribute(content);
+}
 
 /** The module scripts and modulepreload chunks index.html loads up front, relative to outDir. */
 function entryScripts(html: string): string[] {
@@ -137,7 +171,10 @@ async function listFiles(dir: string): Promise<string[]> {
     return nested.flat();
 }
 
-export async function checkPlannerBuild(outDir: string): Promise<string[]> {
+export async function checkPlannerBuild(
+    outDir: string,
+    { aiOrigins = resolveAiOrigins(undefined), trustedTypes = TRUSTED_TYPES_ENABLED }: CheckOptions = {},
+): Promise<string[]> {
     const indexPath = path.join(outDir, "index.html");
     if (!existsSync(indexPath)) return [`${indexPath} is missing: run bun run planner:build first`];
 
@@ -146,8 +183,19 @@ export async function checkPlannerBuild(outDir: string): Promise<string[]> {
     if (/(?:src|href)="\/assets\//.test(html)) {
         problems.push('index.html uses absolute /assets/ URLs; the planner must work from any subfolder (base: "./")');
     }
-    if (!html.includes('http-equiv="Content-Security-Policy"')) {
+    const csp = builtCsp(html);
+    if (csp === null) {
         problems.push("index.html has no Content-Security-Policy meta");
+    } else {
+        // ADR-0023: connect-src is exactly the resolved allowlist, the one the adapters check against.
+        const connect = csp.split(";").map((directive) => directive.trim()).filter((directive) => directive.startsWith("connect-src"));
+        const expected = aiConnectSrc(aiOrigins);
+        if (connect.length !== 1 || connect[0] !== expected) {
+            problems.push(`the CSP's connect-src is "${connect.join("; ")}", but the AI origin allowlist resolves to "${expected}"`);
+        }
+        if (trustedTypes && !/require-trusted-types-for 'script'/.test(csp)) {
+            problems.push("Trusted Types is enabled, but the CSP lacks require-trusted-types-for 'script'");
+        }
     }
 
     const files = (await listFiles(outDir)).filter((file) => /\.(?:js|html)$/.test(file));
@@ -157,6 +205,9 @@ export async function checkPlannerBuild(outDir: string): Promise<string[]> {
         if (bare > 0) problems.push(`${file} reads process.env ${bare} time(s) without a guard (Vite has no process)`);
         for (const { pattern, reason } of FORBIDDEN_IN_BUNDLE) {
             if (text.includes(pattern)) problems.push(`${file} contains "${pattern}": ${reason}`);
+        }
+        if (text.includes(AI_ADAPTER_MARKER) && EVAL_STYLE.test(text)) {
+            problems.push(`${file} carries AI adapter code and eval-style dynamic code (eval or new Function), which the AI features must never use`);
         }
     }
     for (const entry of entryScripts(html)) {
@@ -179,7 +230,8 @@ export async function checkPlannerBuild(outDir: string): Promise<string[]> {
 
 async function main() {
     const outDir = path.join(process.cwd(), "dist", "planner");
-    const problems = await checkPlannerBuild(outDir);
+    // The same variable the Vite config read for this build.
+    const problems = await checkPlannerBuild(outDir, { aiOrigins: resolveAiOrigins(process.env.OPENLEAGUE_AI_CONNECT_ORIGINS) });
     if (problems.length > 0) {
         console.error(`Static planner bundle check failed (${problems.length}):`);
         for (const problem of problems) console.error(`  - ${problem}`);

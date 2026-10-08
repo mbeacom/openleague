@@ -13,6 +13,7 @@ import type { TeamProfileInput } from "@/lib/utils/team-mark";
 import type { PlayData, PlayFocus, PlayGoalies, PracticeSessionData, PracticeSessionView, TeamProfile } from "@/types/practice-planner";
 import type { AgeGroup } from "@/lib/utils/age-groups";
 import type { RankingsOps } from "./rankings";
+import type { AiSettingsOps } from "./ai-settings";
 
 export interface LocalSessionSummary {
     id: string;
@@ -75,7 +76,7 @@ export interface LocalStoreOptions {
     beforeStoredDraw?: () => Promise<void>;
 }
 
-export interface LocalPlannerStore extends PlannerStore, RankingsOps {
+export interface LocalPlannerStore extends PlannerStore, RankingsOps, AiSettingsOps {
     listSessions: () => Promise<ActionResult<LocalSessionSummary[]>>;
     getSessionView: (id: string) => Promise<ActionResult<PracticeSessionView>>;
     getSessionForEdit: (id: string) => Promise<ActionResult<LocalSessionEdit>>;
