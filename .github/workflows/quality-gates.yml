@@ -5,6 +5,14 @@ name: Quality Gates
 # only in release.yml and tag-release.yml, both push-triggered, and `bun run
 # test` ran in no workflow at all -- so a change that broke a test merged green
 # and surfaced later on main, in the pipeline that cuts releases (#310).
+#
+# Layout: the checks run as parallel jobs -- type-check, lint, the suite split
+# into four shards, a merged test report, and the static planner build -- and
+# one final job, "Type-check, lint, and test", passes only if every one of them
+# passed. That final job is the status check the `main` ruleset requires; its
+# name must not change unless the ruleset changes with it. The individual jobs
+# are not required checks themselves, so they can be renamed or re-split
+# freely.
 
 on:
   pull_request:
@@ -22,11 +30,80 @@ concurrency:
   group: quality-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # Prisma client generation runs during bun install and only needs a URL that
+  # parses. A placeholder, never the repository secret: this workflow runs pull
+  # request code (postinstall, tests, builds), which must never hold a real
+  # database credential. Migrations and integration tests use TEST_DATABASE_URL.
+  DATABASE_URL: postgresql://postgres:postgres@localhost:5432/openleague_ci
+
+# Every gated job below except mcp-pins repeats the same `if:` (mcp-pins has no
+# skip condition and still runs on a `[skip ci]` push). Version-bump commits change no
+# source; release.yml skips them the same way. Scoped to `push` on purpose:
+# `github.event.head_commit` does not exist on a pull_request event, and an
+# expression that skipped there would silently disable this gate on exactly the
+# PRs it exists to protect -- a skipped job reports as skipped, not failed, so
+# nobody would notice. The final job is what turns a skip into a failure.
+
 jobs:
-  quality:
-    name: Type-check, lint, and test
+  typecheck:
+    name: Type-check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: ${{ github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip ci]') }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Set up Bun and install dependencies
+        uses: ./.github/actions/setup-bun-deps
+
+      # Five test files and the type-checker import `@prisma/client`, so the
+      # generated client has to exist before either runs. `bun install` runs
+      # this via postinstall, but only when DATABASE_URL parses -- hence the env
+      # above. Running it explicitly makes the dependency visible rather than
+      # implicit in a lifecycle script.
+      - name: Generate Prisma Client
+        run: bun run db:generate
+
+      - name: Type check
+        run: bun run type-check
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: ${{ github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip ci]') }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Set up Bun and install dependencies
+        uses: ./.github/actions/setup-bun-deps
+
+      # Fails on errors, not warnings. See the pull request that added this
+      # workflow for why zero-warning enforcement was left as a separate call.
+      - name: Lint
+        run: bun run lint
+
+  # The full suite (ADR-0019), split by file across four runners with Vitest's
+  # --shard. Every shard gets its own PostgreSQL service and migrated schema:
+  # Vitest assigns files to shards by a hash of their path, so any shard may
+  # draw the PostgreSQL-backed integration tests, and those fall back to
+  # `describe.skip` when TEST_DATABASE_URL is unset -- a shard without a
+  # database would drop them silently rather than fail.
+  test:
+    name: Unit tests (shard ${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    if: ${{ github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip ci]') }}
+    strategy:
+      # Let every shard finish so one failure doesn't hide another.
+      fail-fast: false
+      matrix:
+        # Changing the shard count? Update the `/4` in the job name and the
+        # test command, and the blob count checked in `test-report`.
+        shard: [1, 2, 3, 4]
     services:
       postgres:
         image: postgres:16-alpine
@@ -41,38 +118,20 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
-    # Version-bump commits change no source; release.yml skips them the same
-    # way. Scoped to `push` on purpose: `github.event.head_commit` does not
-    # exist on a pull_request event, and an expression that skipped there would
-    # silently disable this gate on exactly the PRs it exists to protect --
-    # a skipped job reports as skipped, not failed, so nobody would notice.
-    if: ${{ github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip ci]') }}
 
     env:
       # Dedicated ephemeral service database for PostgreSQL-backed integration
       # tests. It is never pointed at a shared or secret-backed environment.
       TEST_DATABASE_URL: postgresql://openleague_test:openleague_test@localhost:5432/openleague_t018
-      # Prisma client generation runs during bun install. A real secret is used
-      # when available; the fallback only satisfies generate-time URL parsing.
-      DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/openleague_ci' }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
-        with:
-          bun-version: latest
+      - name: Set up Bun and install dependencies
+        uses: ./.github/actions/setup-bun-deps
 
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      # Five test files and the type-checker import `@prisma/client`, so the
-      # generated client has to exist before either runs. `bun install` runs
-      # this via postinstall, but only when DATABASE_URL parses -- hence the env
-      # above. Running it explicitly makes the dependency visible rather than
-      # implicit in a lifecycle script.
+      # See the note on the same step in `typecheck`.
       - name: Generate Prisma Client
         run: bun run db:generate
 
@@ -81,29 +140,92 @@ jobs:
           DATABASE_URL: ${{ env.TEST_DATABASE_URL }}
         run: bun run db:migrate:deploy
 
-      - name: Type check
-        run: bun run type-check
-
-      # Fails on errors, not warnings. See the pull request that added this
-      # workflow for why zero-warning enforcement was left as a separate call.
-      - name: Lint
-        run: bun run lint
-
+      # The blob reporter writes this shard's results for `test-report` to
+      # merge; github-actions keeps failure annotations on the diff, which
+      # Vitest only adds by itself when no reporter is named.
       - name: Unit tests
-        run: bun run test
+        id: tests
+        run: >-
+          bun run test
+          --shard=${{ matrix.shard }}/4
+          --reporter=default
+          --reporter=github-actions
+          --reporter=blob
+          --outputFile.blob=.vitest-reports/blob-${{ matrix.shard }}.json
 
-      # ADR-0020: shared planner code also ships in the static planner. A change
-      # that breaks its bundle fails here, not in the next Pages deploy.
+      - name: Upload the shard's test results
+        if: ${{ !cancelled() && steps.tests.outcome != 'skipped' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: vitest-blob-${{ matrix.shard }}
+          path: .vitest-reports/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
+
+  # One report for the whole suite: the shards' results merged, with a single
+  # pass/fail/skip count. Runs when a shard failed too, so the summary is there
+  # to read; it fails if any shard's results are missing.
+  test-report:
+    name: Unit test report
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: ${{ !cancelled() && (github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip ci]')) }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Set up Bun and install dependencies
+        uses: ./.github/actions/setup-bun-deps
+
+      - name: Download the shards' test results
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: vitest-blob-*
+          path: .vitest-reports
+          merge-multiple: true
+
+      - name: Check every shard reported
+        run: |
+          count=$(find .vitest-reports -name 'blob-*.json' | wc -l)
+          echo "Found ${count} of 4 shard reports."
+          if [ "${count}" -ne 4 ]; then
+            echo "::error::Expected 4 shard reports, found ${count}."
+            exit 1
+          fi
+
+      - name: Merge the test reports
+        run: bunx vitest run --merge-reports
+
+  # ADR-0020: shared planner code also ships in the static planner. A change
+  # that breaks its bundle fails here, not in the next Pages deploy.
+  planner:
+    name: Static planner build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: ${{ github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip ci]') }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Set up Bun and install dependencies
+        uses: ./.github/actions/setup-bun-deps
+
+      # See the note on the same step in `typecheck`.
+      - name: Generate Prisma Client
+        run: bun run db:generate
+
       - name: Build the static planner
         run: bun run planner:build
 
       - name: Check the static planner bundle
         run: bun run planner:check
 
-  # A separate job rather than a step in `quality`, and deliberately without
-  # `bun install`: the check imports only node: builtins and makes no network
-  # calls, precisely so it cannot be defeated by a dependency or install
-  # failure -- the same reasoning as the raw-sql job in adr.yml.
+  # A separate job, and deliberately without `bun install`: the check imports
+  # only node: builtins and makes no network calls, precisely so it cannot be
+  # defeated by a dependency or install failure -- the same reasoning as the
+  # raw-sql job in adr.yml.
   #
   # It enforces the ADR-0005 MCP-launch policy: every server in .mcp.json and
   # .vscode/mcp.json must run a pinned local binary or fetch an exact version.
@@ -124,3 +246,31 @@ jobs:
 
       - name: Check MCP server pins
         run: bun run check:mcp-pins
+
+  # The required status check. The `main` ruleset requires a check named
+  # exactly "Type-check, lint, and test"; this job carries that name and
+  # passes only if every job above succeeded.
+  #
+  # `always()` makes it run, and so report, when a needed job failed or was
+  # cancelled -- without it this job would be skipped, and a required check
+  # that is skipped does not block a merge. A needed job that was *skipped*
+  # counts as a failure here, for the same reason. The one deliberate skip is
+  # the `[skip ci]` rule above: on such a push this job skips too, exactly as
+  # the single job it replaced did, while mcp-pins (which has no skip
+  # condition) still runs on its own.
+  quality:
+    name: Type-check, lint, and test
+    needs: [typecheck, lint, test, test-report, planner, mcp-pins]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: ${{ always() && (github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip ci]')) }}
+    steps:
+      - name: Require every gate to have passed
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          echo "${NEEDS}" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          if echo "${NEEDS}" | jq -e 'any(.[]; .result != "success")' > /dev/null; then
+            echo "::error::A quality gate did not pass (results above)."
+            exit 1
+          fi

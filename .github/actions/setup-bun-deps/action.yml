@@ -1,0 +1,36 @@
+name: Set up Bun and install dependencies
+description: >-
+  Installs Bun, restores Bun's package cache keyed on bun.lock, and runs
+  `bun install --frozen-lockfile`. Shared by the quality-gates jobs so each one
+  installs the same way. The caller must check out the repository first.
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Bun
+      uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
+      with:
+        bun-version: latest
+
+    # setup-bun caches only the Bun executable, not the packages it downloads.
+    # Asking Bun for its cache directory, rather than hard-coding one, keeps
+    # this right if BUN_INSTALL or BUN_INSTALL_CACHE_DIR is ever set.
+    - name: Locate Bun's package cache
+      id: bun-cache
+      shell: bash
+      run: echo "dir=$(bun pm cache)" >> "$GITHUB_OUTPUT"
+
+    # The cache holds downloaded tarballs only. `--frozen-lockfile` below still
+    # decides what is installed, so a stale or partial restore cannot change
+    # the dependency tree -- at worst it downloads what is missing.
+    - name: Cache Bun packages
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.bun-cache.outputs.dir }}
+        key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+        restore-keys: |
+          bun-${{ runner.os }}-
+
+    - name: Install dependencies
+      shell: bash
+      run: bun install --frozen-lockfile

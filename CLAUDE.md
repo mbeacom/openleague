@@ -606,6 +606,27 @@ workflow at all — so a change that broke a test merged green and surfaced late
 in the release pipeline. Alongside these run the ADR corpus checks, the runtime
 smoke tests, deployment checks, and CodeQL.
 
+The workflow runs as parallel jobs: type-check, lint, the suite split into four
+`vitest --shard` runners (each with its own migrated PostgreSQL service, since
+any shard may draw the integration tests), a job that merges the shards' blob
+reports into one count, the static planner build, and the MCP pin check. A final
+job named **"Type-check, lint, and test"** needs all of them and fails unless
+every one succeeded — a skipped job counts as a failure, except on a `[skip ci]`
+push to `main`, where the gated jobs and the final job skip (the MCP pin check
+has no skip condition and still runs). Every job uses a placeholder
+`DATABASE_URL`, never the repository secret, because the workflow runs pull
+request code. That job's name is the status check the
+`main` ruleset requires, so do not rename it; the jobs it aggregates can change
+freely. Bun's package cache is restored from `bun.lock` by the shared
+`.github/actions/setup-bun-deps` composite action.
+
+The suite itself (`vitest.config.ts`) runs as two Vitest projects: `node` for
+`.test.ts` files and `jsdom` for `.test.tsx` files plus the short
+`DOM_TS_TESTS` list of `.test.ts` files that need a DOM. A new `.test.ts` that
+fails with "window is not defined" (or `document`, `sessionStorage`, …) goes on
+that list. Tests run in worker threads (`pool: 'threads'`) with per-file
+isolation left on.
+
 **Release process**:
 1. Merge to `main` branch triggers automated release workflow
 2. GitHub Actions runs type-checking, linting, and the build

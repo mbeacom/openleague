@@ -1,11 +1,17 @@
-import '@testing-library/jest-dom/vitest';
-import { cleanup } from '@testing-library/react';
 import { afterEach, vi } from 'vitest';
 
-// Cleanup after each test
-afterEach(() => {
-  cleanup();
-});
+// DOM-only setup. Tests in the `node` project (see vitest.config.ts) have no
+// document, so they skip loading jest-dom and React Testing Library -- this
+// file runs once per test file, and those imports are not free.
+if (typeof document !== 'undefined') {
+  await import('@testing-library/jest-dom/vitest');
+  const { cleanup } = await import('@testing-library/react');
+
+  // Cleanup after each test
+  afterEach(() => {
+    cleanup();
+  });
+}
 
 // Mock Next.js router
 vi.mock('next/navigation', () => ({
@@ -45,7 +51,7 @@ class MockResizeObserver implements ResizeObserver {
 
 global.ResizeObserver = MockResizeObserver;
 
-// Canvas mocks for canvas-based components. Node-environment tests (sharp) have no DOM, so they skip these.
+// Canvas mocks for canvas-based components. Node-environment tests have no DOM, so they skip these.
 if (typeof HTMLCanvasElement !== 'undefined') {
   // Mock HTMLCanvasElement.getContext for canvas-based components
   HTMLCanvasElement.prototype.getContext = vi.fn().mockImplementation(

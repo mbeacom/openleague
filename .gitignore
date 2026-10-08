@@ -25,6 +25,9 @@ coverage
 # nyc test coverage
 .nyc_output
 
+# Vitest blob reports (sharded CI runs, `vitest --merge-reports`)
+.vitest-reports
+
 # Grunt intermediate storage (https://gruntjs.com/creating-plugins#storing-task-files)
 .grunt
 
