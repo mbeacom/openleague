@@ -46,6 +46,7 @@ import {
 import { BLOCK_ROW_FIELDS_ERROR, BLOCK_STATION_ERROR } from "@/lib/utils/session-timeline";
 import { GOALIES_ATTENDING_MESSAGE } from "@/lib/utils/drill-tags";
 import { ageGroupSchema, ageGroupsSchema } from "@/lib/utils/age-groups";
+import { practiceEquipmentSchema } from "@/lib/utils/equipment-needs";
 
 export {
   idSchema,
@@ -1509,6 +1510,9 @@ export const sessionStaffInputSchema = z
 
 export type SessionStaffSaveInput = z.output<typeof sessionStaffInputSchema>;
 
+// Practice equipment (practice equipment spec R3): absent = unchanged on update, none on create; [] clears.
+const sessionEquipmentSchema = practiceEquipmentSchema.optional();
+
 // Absent = unchanged on update, none on create; [] clears (spec R3).
 const sessionStaffSchema = z.array(sessionStaffInputSchema).max(MAX_SESSION_STAFF, STAFF_LIMIT_MESSAGE).optional();
 
@@ -1525,6 +1529,7 @@ export const createPracticeSessionSchema = z.object({
   goaliesAttending: goaliesAttendingSchema.nullable().optional(),
   transitionMinutes: transitionMinutesSchema.optional(),
   staff: sessionStaffSchema,
+  equipment: sessionEquipmentSchema,
   ...practiceVenueAttachmentFields,
 }).refine(practiceHasStartAtWhenVenueSet, practiceStartAtRequiredIssue);
 
@@ -1541,6 +1546,7 @@ export const updatePracticeSessionSchema = z.object({
   goaliesAttending: goaliesAttendingSchema.nullable().optional(),
   transitionMinutes: transitionMinutesSchema.optional(),
   staff: sessionStaffSchema,
+  equipment: sessionEquipmentSchema,
   // Explicit Save only; autosave omits it so shared sessions do not email the
   // team on every debounce.
   notify: z.boolean().optional().default(false),

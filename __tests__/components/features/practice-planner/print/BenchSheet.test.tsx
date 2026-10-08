@@ -401,3 +401,30 @@ describe("BenchSheet: practice staff (spec R9)", () => {
         expect(screen.queryByText(/^Staff:/)).toBeNull();
     });
 });
+
+describe("BenchSheet: equipment (practice equipment spec R5)", () => {
+    const geared = (kinds: Array<"cone" | "net">): PlayData => ({
+        ...createEmptyPlayData(),
+        equipment: kinds.map((kind, i) => ({ id: `${kind}${i}`, kind, position: { x: 10 + i * 5, y: 10 }, rotation: 0 })),
+    });
+
+    it("lists the practice's equipment on page 1 and each drill's line on its page", () => {
+        renderSheet({
+            ...SESSION,
+            equipment: [{ name: "Water bottles", count: 20 }],
+            plays: [
+                sessionPlay("Station A", 0, false, 10, { playData: geared(["cone", "cone", "net"]) }),
+                sessionPlay("Station B", 1, true, 10, { playData: geared(["cone", "net"]) }),
+            ],
+        });
+        const section = screen.getByRole("region", { name: "Equipment" });
+        expect(within(section).getAllByRole("listitem").map((li) => li.textContent)).toEqual(["Cones ×3", "Nets ×2", "Water bottles ×20"]);
+        expect(within(drills()[0]).getByText("Equipment: Cones ×2 · Net ×1")).toBeInTheDocument();
+        expect(within(drills()[1]).getByText("Equipment: Cone ×1 · Net ×1")).toBeInTheDocument();
+    });
+
+    it("leaves the section out when nothing is needed", () => {
+        renderSheet();
+        expect(screen.queryByRole("region", { name: "Equipment" })).toBeNull();
+    });
+});

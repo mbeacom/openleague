@@ -45,6 +45,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Crest } from "@/components/ui/Crest";
 import { DuplicateSessionDialog } from "@/components/features/practice-planner/DuplicateSessionDialog";
 import { PlayLegend } from "@/components/features/practice-planner/PlayLegend";
+import { SessionEquipmentCard } from "@/components/features/practice-planner/SessionEquipmentCard";
 import { StationMap } from "@/components/features/practice-planner/StationMap";
 import { SessionTimeline } from "@/components/features/practice-planner/SessionTimeline";
 import { ExportPlanMenu } from "@/components/features/practice-planner/ExportPlanMenu";
@@ -419,6 +420,9 @@ export function SessionDetailView({ session, isAdmin }: SessionDetailViewProps) 
           />
         </Paper>
       )}
+
+      {/* Practice equipment: the drills' lists rolled up, plus the practice's own items */}
+      <SessionEquipmentCard plays={session.plays} equipment={session.equipment} />
 
       {/* Content area */}
       {drills.length === 0 ? (

@@ -144,7 +144,7 @@ describe("serializePlan", () => {
         const withIds = Object.assign({}, base.drills[0], { id: "row-1", playId: "cplayxxxxxxxxxxxxxxxxxxxx", thumbnail: "data:image/png;base64,AA==" });
         const doc = serializePlan(Object.assign({}, base, { drills: [withIds], teamId: "cteamxxxxxxxxxxxxxxxxxxxx" }), "openleague-hosted", NOW);
         expect(Object.keys(doc).sort()).toEqual(["exportedAt", "format", "generator", "session", "version"]);
-        expect(Object.keys(doc.session).sort()).toEqual(["date", "drills", "durationMinutes", "goaliesAttending", "staff", "startTime", "title", "transitionMinutes"]);
+        expect(Object.keys(doc.session).sort()).toEqual(["date", "drills", "durationMinutes", "equipment", "goaliesAttending", "staff", "startTime", "title", "transitionMinutes"]);
         expect(Object.keys(doc.session.drills[0]).sort()).toEqual(["drill", "durationMinutes", "instructions", "kind", "rotateEveryMinutes", "runsWithPrevious", "sequence", "staff", "stays"]);
         expect(Object.keys(drillRows(doc.session.drills)[0].drill).sort()).toEqual(["ageGroups", "description", "focus", "goalies", "name", "playData"]);
     });
@@ -677,5 +677,79 @@ describe("drill age groups (additive, version 1)", () => {
     it("carries the groups into the editor mapping", () => {
         const editor = planToEditorSession(serializePlan(agedInput(["u10"]), "openleague-static", NOW));
         expect(editor.plays[0]).toMatchObject({ ageGroups: ["u10"] });
+    });
+});
+
+describe("practice equipment in plan files (practice equipment spec R6)", () => {
+    const CONED: PlayData = {
+        ...BOARD,
+        equipment: [
+            { id: "c1", kind: "cone", position: { x: 20, y: 20 }, rotation: 0 },
+            { id: "n1", kind: "net", position: { x: 40, y: 40 }, rotation: 90 },
+        ],
+        equipmentNeeds: { kinds: [{ kind: "cone", delta: 3, removed: false }], custom: [{ name: "Tennis balls", count: 12 }] },
+    };
+    const equipped = (): PlanSessionInput =>
+        input({
+            equipment: [{ name: " Water bottles ", count: 20 }, { name: "water bottles", count: 3 }, { name: "Marker", count: 0 }, { name: "Pucks", count: 30 }],
+            drills: [{ sequence: 0, duration: 10, runsWithPrevious: false, instructions: null, name: "Cone Weave", description: null, playData: CONED }],
+        });
+
+    it("writes the practice's valid items and each drill's overrides inside its diagram", () => {
+        const doc = serializePlan(equipped(), "openleague-static", NOW);
+        expect(doc.session.equipment).toEqual([{ name: "Water bottles", count: 20 }, { name: "Pucks", count: 30 }]);
+        expect(drillRows(doc.session.drills)[0].drill.playData.equipmentNeeds).toEqual(CONED.equipmentNeeds);
+        expect(serializePlan(input(), "openleague-hosted", NOW).session.equipment).toEqual([]);
+    });
+
+    it("round-trips through a file", () => {
+        const raw = JSON.parse(JSON.stringify(serializePlan(equipped(), "openleague-static", NOW)));
+        const result = parsePlan(raw);
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.plan.session.equipment).toEqual([{ name: "Water bottles", count: 20 }, { name: "Pucks", count: 30 }]);
+        expect(drillRows(result.plan.session.drills)[0].drill.playData.equipmentNeeds).toEqual(CONED.equipmentNeeds);
+        expect(planToEditorSession(result.plan).equipment).toEqual(result.plan.session.equipment);
+    });
+
+    it("reads an older file without the key, or with null, as none", () => {
+        const raw = JSON.parse(JSON.stringify(serializePlan(input(), "openleague-static", NOW)));
+        delete raw.session.equipment;
+        const missing = parsePlan(raw);
+        expect(missing.ok && missing.plan.session.equipment).toEqual([]);
+        raw.session.equipment = null;
+        const nulled = parsePlan(raw);
+        expect(nulled.ok && nulled.plan.session.equipment).toEqual([]);
+    });
+
+    it("refuses a broken list with an Equipment issue", () => {
+        const raw = JSON.parse(JSON.stringify(serializePlan(input(), "openleague-static", NOW)));
+        raw.session.equipment = [{ name: "Marker", count: 1 }, { name: "MARKER", count: 2 }];
+        const result = parsePlan(raw);
+        expect(result.ok).toBe(false);
+        if (!result.ok) expect(result.error.issues).toEqual(["Equipment: Two items can't share a name"]);
+    });
+
+    it("drops a malformed drill list rather than refusing the file", () => {
+        const raw = JSON.parse(JSON.stringify(serializePlan(equipped(), "openleague-static", NOW)));
+        raw.session.drills[0].drill.playData.equipmentNeeds = { kinds: "many" };
+        const errors: unknown[] = [];
+        const original = console.error;
+        console.error = (...args: unknown[]) => void errors.push(args);
+        const result = parsePlan(raw);
+        console.error = original;
+        expect(result.ok).toBe(true);
+        if (result.ok) expect(drillRows(result.plan.session.drills)[0].drill.playData.equipmentNeeds).toBeUndefined();
+        expect(errors).toHaveLength(1);
+    });
+
+    it("opens in a reader that predates the keys, which strips them", async () => {
+        // An older reader's diagram schema: an object without equipmentNeeds (Zod strips unknown keys).
+        const { z } = await import("zod");
+        const older = z.object({ version: z.literal(2), players: z.array(z.unknown()), drawings: z.array(z.unknown()), equipment: z.array(z.unknown()), annotations: z.array(z.unknown()) });
+        const file = JSON.parse(JSON.stringify(serializePlan(equipped(), "openleague-static", NOW)));
+        const parsed = older.safeParse(file.session.drills[0].drill.playData);
+        expect(parsed.success).toBe(true);
+        expect(parsed.success && "equipmentNeeds" in parsed.data).toBe(false);
     });
 });

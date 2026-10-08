@@ -91,6 +91,7 @@ export function buildPlanDocument(
             goaliesAttending: session.goaliesAttending ?? null,
             transitionMinutes: session.transitionMinutes ?? 0,
             staff: session.staff?.map((member) => member.name),
+            equipment: session.equipment,
             drills: toPlanRows(session.plays, session.staff),
         },
         generator,

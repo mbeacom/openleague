@@ -20,6 +20,8 @@ import { BLOCK_ICONS } from "@/components/features/practice-planner/BlockRowCard
 import { runBySuffix, staffHeaderLabel, staffNameKey } from "@/lib/utils/session-staff";
 import { Crest } from "@/components/ui/Crest";
 import type { PlayData, TeamMark } from "@/types/practice-planner";
+import { rollupEquipment, rollupLine } from "@/lib/utils/practice-equipment";
+import { drillEquipment, drillEquipmentText } from "@/lib/utils/equipment-needs";
 
 const THUMB = { width: 120, height: 51 } as const;
 
@@ -44,6 +46,11 @@ export function PlanPreview({
     // A row's names in the list's spelling (a file may spell them differently; they match ignoring case).
     const listed = useMemo(() => new Map(session.staff.map((name) => [staffNameKey(name), name])), [session]);
     const runBy = (names: readonly string[] | undefined) => runBySuffix((names ?? []).map((name) => listed.get(staffNameKey(name)) ?? name));
+    // Practice equipment (spec R5): the drills' lists rolled up with the plan's own items.
+    const equipmentLine = useMemo(() => {
+        const line = rollupLine(rollupEquipment(session.plays, (row) => (row.kind === "drill" ? { name: row.name, playData: row.playData } : null), session.equipment));
+        return line ? `Equipment: ${line}` : null;
+    }, [session]);
 
 
     return (
@@ -62,8 +69,13 @@ export function PlanPreview({
                 ].join(" · ")}
             </Typography>
             {staffLine && (
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: equipmentLine ? 0.5 : 2 }}>
                     {staffLine}
+                </Typography>
+            )}
+            {equipmentLine && (
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    {equipmentLine}
                 </Typography>
             )}
             {session.plays.length === 0 ? (
@@ -102,6 +114,7 @@ export function PlanPreview({
                                 <Stack spacing={1}>
                                     {stations.map((play) => {
                                         const timing = stationTimingLabel(play, rotation);
+                                        const gear = drillEquipmentText(drillEquipment(play.playData));
                                         return (
                                             <Stack key={play.key} direction="row" spacing={1.5} alignItems="center">
                                                 <PlayDiagram
@@ -114,6 +127,11 @@ export function PlanPreview({
                                                     <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: "pre-line" }}>
                                                         {`${play.instructions ? `${timing} · ${play.instructions}` : timing}${runBy(play.staff)}`}
                                                     </Typography>
+                                                    {gear && (
+                                                        <Typography variant="body2" color="text.secondary">
+                                                            {gear}
+                                                        </Typography>
+                                                    )}
                                                     {emptyDiagramCaption && isBlankDiagram(play.playData) && (
                                                         <Typography variant="caption" fontWeight={600} sx={(theme) => ({ color: theme.palette.warning.dark, ...theme.applyStyles("dark", { color: theme.palette.warning.light }) })}>
                                                             {emptyDiagramCaption}

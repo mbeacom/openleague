@@ -47,6 +47,8 @@ import { useSessionRowEdits } from "./useSessionRowEdits";
 import { ShareSessionDialog } from "./ShareSessionDialog";
 import { SessionStaffSection } from "./SessionStaffSection";
 import { useSessionStaff } from "./useSessionStaff";
+import { SessionEquipmentSection } from "./SessionEquipmentSection";
+import { useSessionEquipment } from "./useSessionEquipment";
 import { BookingConflictAlert, VenueBookingFields } from "./VenueBookingFields";
 import {
     useVenueBooking,
@@ -190,6 +192,7 @@ export function PracticeSessionEditor({
     const rowEdits = useSessionRowEdits({ plays, setPlays, markDirty, locked: creating });
     const staff = useSessionStaff({ initial: initialData?.staff, plays, setPlays, markDirty, locked: creating });
     const { staff: staffList, applySaved: applySavedStaff } = staff;
+    const equipment = useSessionEquipment(initialData?.equipment, markDirty, creating);
 
     // Optional ice booking (feature 006, FR-019).
     const booking = useVenueBooking({
@@ -366,6 +369,7 @@ export function PracticeSessionEditor({
                 isShared,
                 goaliesAttending: goalies.goaliesAttending,
                 transitionMinutes: betweenBlocks.transitionMinutes,
+                equipment: equipment.items,
                 ...booking.attachment(resolvedStart.startAt),
                 overrideConflicts,
                 overrideReason: overrideConflicts ? booking.overrideReason.trim() : "",
@@ -415,7 +419,7 @@ export function PracticeSessionEditor({
             setIsSaving(false);
             saveFlight.finish(outcome);
         }
-    }, [title, date, duration, plays, isShared, goalies.goaliesAttending, betweenBlocks.transitionMinutes, staffList, applySavedStaff, sessionId, booking, onSave, validateForm, saveFlight]);
+    }, [title, date, duration, plays, isShared, goalies.goaliesAttending, betweenBlocks.transitionMinutes, equipment.items, staffList, applySavedStaff, sessionId, booking, onSave, validateForm, saveFlight]);
 
     // Keep handleSaveRef updated with latest handleSave function
     useEffect(() => {
@@ -678,6 +682,8 @@ export function PracticeSessionEditor({
                 staff={staff.staff}
                 onSetRowStaff={staff.setRowStaff}
             />
+
+            <SessionEquipmentSection plays={plays} items={equipment.items} disabled={busy} onAdd={equipment.add} onCount={equipment.setCount} onRemove={equipment.remove} />
 
             {/* Save Status and Actions */}
             <Paper elevation={2} sx={{ p: 2 }}>

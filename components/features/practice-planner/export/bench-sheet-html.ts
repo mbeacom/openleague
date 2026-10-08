@@ -10,7 +10,7 @@
  */
 import type { RotationTable } from "@/lib/utils/session-timeline";
 import type { BenchSheetDrillItem, BenchSheetModel } from "./bench-sheet-model";
-import { DIAGRAM_UNAVAILABLE_TEXT, LEGEND_HEADING, NO_DRILLS_TEXT } from "./labels";
+import { DIAGRAM_UNAVAILABLE_TEXT, EQUIPMENT_HEADING, LEGEND_HEADING, NO_DRILLS_TEXT } from "./labels";
 import { isPngDataUri } from "./png";
 
 export const EXPORT_CSP = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'";
@@ -81,6 +81,10 @@ td ul { margin: 2px 0 0; padding-left: 1.1em; }
 .run-by { color: #37474F; }
 .planned { margin: 6px 0 0; }
 .planned.over { font-weight: 700; color: #C62828; }
+.equipment { margin-top: 14px; }
+.equipment ul { margin: 0; padding-left: 1.1em; columns: 3 150px; }
+.equipment li { margin: 2px 0; break-inside: avoid; }
+.equipment-line { margin: 0 0 6px; font-size: 10pt; }
 .legend { margin-top: 14px; }
 .legend ul { list-style: none; margin: 0; padding: 0; columns: 3 150px; }
 .legend li { margin: 2px 0; break-inside: avoid; }
@@ -140,6 +144,15 @@ ${rows}</tbody>
 </section>`;
 }
 
+/** The practice's equipment (practice equipment spec R5): after the timeline, before the legend. */
+function equipment(model: BenchSheetModel): Trusted | null {
+    if (model.equipment.length === 0) return null;
+    return html`<section class="equipment">
+<h2>${EQUIPMENT_HEADING}</h2>
+<ul>${model.equipment.map((item) => html`<li>${item}</li>`)}</ul>
+</section>`;
+}
+
 function legend(model: BenchSheetModel): Trusted | null {
     if (model.legend.length === 0) return null;
     const items = model.legend.map(
@@ -158,6 +171,7 @@ function drill(item: BenchSheetDrillItem): Trusted {
     return html`<article class="drill">
 <h2>${item.number}. ${item.name}</h2>
 <p class="meta">${item.start} · ${item.minutes} min${item.station ? html` <span class="tag">${item.station}</span>` : null}</p>
+${item.equipment ? html`<p class="equipment-line">${item.equipment}</p>` : null}
 ${diagram}
 ${item.text ? html`<p class="text">${multiline(item.text)}</p>` : null}
 </article>
@@ -179,6 +193,7 @@ export function renderBenchSheetHtml(model: BenchSheetModel): string {
         model.timeline.length === 0
             ? html`<p class="empty">${NO_DRILLS_TEXT}</p>`
             : html`${timeline(model)}
+${equipment(model)}
 ${legend(model)}
 ${drills(model)}`;
     return html`<!doctype html>

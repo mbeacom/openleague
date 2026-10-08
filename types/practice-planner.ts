@@ -192,6 +192,45 @@ export interface EquipmentItem {
     rotation: number;
 }
 
+// ============================================================================
+// Practice equipment (practice equipment spec R1–R3)
+// ============================================================================
+
+/** An item's count is a whole number from 1 (0 for a removed kind) to this. */
+export const MAX_EQUIPMENT_COUNT = 999;
+/** A typed item's name is 1–40 characters once cleaned. */
+export const EQUIPMENT_NAME_MAX = 40;
+/** A drill lists at most this many typed items. */
+export const MAX_DRILL_CUSTOM_EQUIPMENT = 12;
+/** A practice adds at most this many items of its own. */
+export const MAX_PRACTICE_EQUIPMENT = 20;
+
+/** A diagram kind's change from what the diagram shows (spec R2). */
+export interface EquipmentKindChange {
+    kind: EquipmentKind;
+    /** Added to the diagram's count (−999…999); a kind the diagram lacks is added from 0. */
+    delta: number;
+    /** Not needed, however many the diagram shows. */
+    removed: boolean;
+}
+
+/** A named item with a fixed count: a drill's typed item or a practice's addition. */
+export interface EquipmentCountItem {
+    name: string;
+    count: number;
+}
+
+/**
+ * A drill's changes to the equipment its diagram shows (spec R2). Lives in
+ * PlayData so it rides every drill save, copy and plan file.
+ */
+export interface EquipmentNeeds {
+    /** At most one entry per kind. */
+    kinds: EquipmentKindChange[];
+    /** Typed items: names unique ignoring case, never a kind's name. */
+    custom: EquipmentCountItem[];
+}
+
 /**
  * Text annotation placed on the rink board
  * Requirements: 1.4
@@ -248,6 +287,8 @@ export interface PlayData {
     annotations: TextAnnotation[];
     /** Where on the ice the drill runs. Absent = full ice. */
     area?: IceArea;
+    /** The coach's changes to the diagram's equipment list. Absent = the diagram's list as is. */
+    equipmentNeeds?: EquipmentNeeds;
 }
 
 // ============================================================================
@@ -342,6 +383,8 @@ export interface PracticeSessionData {
     transitionMinutes?: number;
     /** The practice's staff. Absent = unchanged on save (spec R3); reads as none. */
     staff?: SessionStaffMember[];
+    /** Items the practice adds to its drills' equipment. Absent = unchanged on save; reads as none. */
+    equipment?: EquipmentCountItem[];
 }
 
 /**
@@ -420,6 +463,8 @@ export interface PracticeSessionView {
     transitionMinutes?: number;
     /** The practice's staff, in list order; absent reads as none. */
     staff?: SessionStaffMember[];
+    /** Items the practice adds to its drills' equipment; absent reads as none. */
+    equipment?: EquipmentCountItem[];
     plays: SessionRow[];
 }
 

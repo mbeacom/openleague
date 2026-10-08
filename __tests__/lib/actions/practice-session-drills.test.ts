@@ -175,13 +175,22 @@ describe("duplicatePracticeSession", () => {
         expect(mockPrisma.practiceSession.findUnique.mock.calls[0][0].select).toMatchObject({ goaliesAttending: true });
     });
 
+    it("copies the practice's own equipment (practice equipment spec R3)", async () => {
+        mockPrisma.practiceSession.findUnique.mockResolvedValue({
+            teamId: TEAM, title: "Tuesday", duration: 75, equipment: [{ name: "Water bottles", count: 20 }], staff: [], plays: [sourceRow(0)],
+        });
+        await duplicatePracticeSession({ id: SOURCE, teamId: TEAM, date: DATE });
+        expect(tx.practiceSession.create.mock.calls[0][0].data.equipment).toEqual([{ name: "Water bottles", count: 20 }]);
+        expect(mockPrisma.practiceSession.findUnique.mock.calls[0][0].select).toMatchObject({ equipment: true });
+    });
+
     it("creates an unshared, unbooked copy on the chosen date", async () => {
         const result = await duplicatePracticeSession({ id: SOURCE, teamId: TEAM, date: DATE });
 
         expect(result).toEqual({ success: true, data: { id: COPY } });
         const data = tx.practiceSession.create.mock.calls[0][0].data;
         expect(data).toEqual({
-            title: "Copy of Tuesday", date: DATE, duration: 75, goaliesAttending: null, isShared: false, teamId: TEAM, createdById: USER,
+            title: "Copy of Tuesday", date: DATE, duration: 75, goaliesAttending: null, equipment: [], isShared: false, teamId: TEAM, createdById: USER,
         });
         for (const key of ["venueId", "surfaceId", "segmentId", "startAt", "venueReservationId", "conflictOverriddenById"]) {
             expect(data).not.toHaveProperty(key);

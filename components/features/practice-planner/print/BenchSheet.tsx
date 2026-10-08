@@ -21,6 +21,9 @@ import { sessionStart, sessionTimeZone } from "@/lib/utils/date";
 import { useClockText } from "@/lib/hooks/useClockText";
 import { SessionTimeline } from "../SessionTimeline";
 import { BenchSheetDrill, drillText } from "./BenchSheetDrill";
+import { drillEquipment, drillEquipmentText } from "@/lib/utils/equipment-needs";
+import { benchSheetEquipment } from "../export/bench-sheet-model";
+import { EQUIPMENT_HEADING } from "../export/labels";
 import { printPixelRatio } from "./PrintDiagram";
 import { LegendList } from "./LegendList";
 import { TeamMarkImage } from "./TeamMarkImage";
@@ -52,6 +55,8 @@ export function BenchSheet({ session: stored }: { session: BenchSheetSession }) 
     const gap = session.transitionMinutes ?? 0;
     const staffLine = staffHeaderLabel(session.staff);
     const legend = combinedLegendData(drillRows(session.plays).map((sp) => ({ name: sp.play.name, playData: sp.play.playData })));
+    // The practice's equipment (practice equipment spec R5): after the timeline, before the legend.
+    const equipment = benchSheetEquipment(session);
     // One page per drill; a block (warm-up, break…) is a timeline row only. Start times come
     // from the stored rows, as the timeline's do; each page draws the display copy of its drill.
     const shown = new Map(drillRows(session.plays).map((sp) => [sp.id, sp]));
@@ -135,6 +140,20 @@ export function BenchSheet({ session: stored }: { session: BenchSheetSession }) 
                         transitionMinutes={gap}
                         staff={session.staff}
                     />
+                    {equipment.length > 0 && (
+                        <Box component="section" aria-labelledby="bench-equipment-heading" className="bench-equipment" sx={{ mt: 2 }}>
+                            <Typography id="bench-equipment-heading" variant="h6" component="h2" sx={{ fontWeight: 800 }}>
+                                {EQUIPMENT_HEADING}
+                            </Typography>
+                            <Box component="ul" sx={{ m: 0, pl: 2.5, columns: { xs: 2, sm: 3 }, columnGap: 3 }}>
+                                {equipment.map((item) => (
+                                    <Typography key={item} component="li" variant="body2" sx={{ breakInside: "avoid" }}>
+                                        {item}
+                                    </Typography>
+                                ))}
+                            </Box>
+                        </Box>
+                    )}
                     <LegendList playData={legend} />
                     {drills.length > 0 && (
                     <Box component="section" aria-label="Drills" className="bench-page-break" sx={{ mt: 4 }}>
@@ -150,6 +169,7 @@ export function BenchSheet({ session: stored }: { session: BenchSheetSession }) 
                                         station={station}
                                         playData={sp.play.playData}
                                         text={drillText(sp.instructions, sp.play.description)}
+                                        equipment={drillEquipmentText(drillEquipment(sp.play.playData))}
                                         pixelRatio={pixelRatio}
                                         onReady={() => markReady(sp.id)}
                                     />

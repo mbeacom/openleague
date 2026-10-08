@@ -6,3 +6,4 @@
 export const NO_DRILLS_TEXT = "No drills planned";
 export const DIAGRAM_UNAVAILABLE_TEXT = "Diagram unavailable";
 export const LEGEND_HEADING = "Legend";
+export const EQUIPMENT_HEADING = "Equipment";

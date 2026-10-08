@@ -3,7 +3,8 @@
 import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
 import { requireUserId } from "@/lib/auth/session";
-import type { PlayData, SessionItem, SessionRow, SessionStaffMember, StaffOption, TeamMark } from "@/types/practice-planner";
+import type { EquipmentCountItem, PlayData, SessionItem, SessionRow, SessionStaffMember, StaffOption, TeamMark } from "@/types/practice-planner";
+import { readPracticeEquipment } from "@/lib/utils/equipment-needs";
 import { isBlockKind, toRowKind } from "@/lib/utils/session-rows";
 import { drillTags } from "@/lib/utils/drill-tags";
 import { toAgeGroups } from "@/lib/utils/age-groups";
@@ -113,6 +114,8 @@ export async function getPracticeSessionDetail(sessionId: string): Promise<{
     transitionMinutes: number;
     /** The practice's staff (spec R9); rows name them by id. */
     staff: SessionStaffMember[];
+    /** The practice's own equipment (practice equipment spec R3). */
+    equipment: EquipmentCountItem[];
     plays: SessionRow[];
   };
   isAdmin: boolean;
@@ -196,6 +199,7 @@ export async function getPracticeSessionDetail(sessionId: string): Promise<{
       goaliesAttending: session.goaliesAttending ?? null,
       transitionMinutes: session.transitionMinutes ?? 0,
       staff: session.staff.map((member) => ({ id: member.id, name: member.name })),
+      equipment: readPracticeEquipment(session.equipment),
       plays: session.plays.flatMap((sp): SessionRow[] => {
         const kind = toRowKind(sp.kind);
         if (isBlockKind(kind)) {
@@ -270,6 +274,8 @@ export async function getPracticeSessionForEdit(sessionId: string): Promise<{
     transitionMinutes: number;
     /** The practice's staff; a stale link loads unlinked (spec R4). */
     staff: SessionStaffMember[];
+    /** The practice's own equipment (practice equipment spec R3). */
+    equipment: EquipmentCountItem[];
     plays: SessionItem[];
   };
 } | null> {
@@ -343,6 +349,7 @@ export async function getPracticeSessionForEdit(sessionId: string): Promise<{
       startAt: session.startAt,
       goaliesAttending: session.goaliesAttending ?? null,
       transitionMinutes: session.transitionMinutes ?? 0,
+      equipment: readPracticeEquipment(session.equipment),
       staff: session.staff.map((member) => ({
         id: member.id,
         name: member.name,

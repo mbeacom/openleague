@@ -6,7 +6,7 @@ import type { BenchSheetModel } from "@/components/features/practice-planner/exp
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
 
 function drill(number: number, extra: Partial<BenchSheetModel["drills"][number]> = {}): BenchSheetModel["drills"][number] {
-    return { number, name: `Drill ${number}`, start: "6:00 PM", minutes: 10, station: null, diagram: PNG, text: null, ...extra };
+    return { number, name: `Drill ${number}`, start: "6:00 PM", minutes: 10, station: null, diagram: PNG, text: null, equipment: null, ...extra };
 }
 
 const MODEL: BenchSheetModel = {
@@ -23,6 +23,7 @@ const MODEL: BenchSheetModel = {
     ],
     planned: "Planned 25 of 60 min",
     overTime: false,
+    equipment: [],
     legend: [{ label: "Pass", image: PNG }],
     drills: [drill(1, { station: "Station 1 of 2", text: "Hard to the net" }), drill(2), drill(3)],
 };
@@ -283,5 +284,34 @@ describe("renderBenchSheetHtml: the team mark (practice logo spec R5)", () => {
     it("leaves out a mark whose image isn't a PNG data URI, and shows none without a mark", () => {
         expect(parse(withMark({ image: "https://example.com/a.png", width: 48, height: 48, alt: "x logo" })).querySelector("img.mark")).toBeNull();
         expect(parse(withMark(null)).querySelector("img.mark")).toBeNull();
+    });
+});
+
+describe("renderBenchSheetHtml: equipment (practice equipment spec R5)", () => {
+    const equipped: BenchSheetModel = {
+        ...MODEL,
+        equipment: ["Cones ×12", "Net ×1", "<Water> bottles ×20"],
+        drills: [drill(1, { equipment: "Equipment: Cones ×6 · <Net> ×1" }), drill(2)],
+    };
+
+    it("lists the practice's equipment after the timeline and before the legend, escaped", () => {
+        const out = renderBenchSheetHtml(equipped);
+        const doc = parse(out);
+        const items = [...doc.querySelectorAll("section.equipment li")].map((li) => li.textContent);
+        expect(doc.querySelector("section.equipment h2")?.textContent).toBe("Equipment");
+        expect(items).toEqual(["Cones ×12", "Net ×1", "<Water> bottles ×20"]);
+        expect(out.indexOf('class="timeline"')).toBeLessThan(out.indexOf('class="equipment"'));
+        expect(out.indexOf('class="equipment"')).toBeLessThan(out.indexOf('class="legend"'));
+        expect(out).not.toContain("<Water>");
+    });
+
+    it("prints each drill's own line, and nothing for a drill without equipment", () => {
+        const doc = parse(renderBenchSheetHtml(equipped));
+        const lines = [...doc.querySelectorAll("article.drill")].map((article) => article.querySelector(".equipment-line")?.textContent ?? null);
+        expect(lines).toEqual(["Equipment: Cones ×6 · <Net> ×1", null]);
+    });
+
+    it("leaves the section out when the practice needs nothing", () => {
+        expect(parse(renderBenchSheetHtml(MODEL)).querySelector("section.equipment")).toBeNull();
     });
 });

@@ -42,6 +42,8 @@ export function PracticeSessionEditorWrapper({
         ...(session.transitionMinutes !== undefined && { transitionMinutes: session.transitionMinutes }),
         // Absent = unchanged: an editor that holds no list sends none.
         ...(session.staff !== undefined && { staff: toSessionStaffInputs(session.staff) }),
+        // Absent = unchanged (practice equipment spec R3): an editor that holds no list sends none.
+        ...(session.equipment !== undefined && { equipment: session.equipment }),
         reservationId: session.reservationId ?? undefined,
         // Optional venue booking (006, FR-019); omitted fields mean unbooked.
         venueId: session.venueId || undefined,

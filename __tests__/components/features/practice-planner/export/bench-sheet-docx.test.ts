@@ -13,7 +13,7 @@ import { unzipEntry, zipEntryNames } from "@/__tests__/helpers/zip";
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
 
 function drill(number: number, extra: Partial<BenchSheetModel["drills"][number]> = {}): BenchSheetModel["drills"][number] {
-    return { number, name: `Drill ${number}`, start: "6:00 PM", minutes: 10, station: null, diagram: PNG, text: null, ...extra };
+    return { number, name: `Drill ${number}`, start: "6:00 PM", minutes: 10, station: null, diagram: PNG, text: null, equipment: null, ...extra };
 }
 
 const MODEL: BenchSheetModel = {
@@ -27,6 +27,7 @@ const MODEL: BenchSheetModel = {
     timeline: [{ start: "6:00 PM MDT", minutes: 10, label: "Stations · 2", stations: ["Breakout · 10 min", "Regroup · 8 min"] }],
     planned: "Planned 10 of 60 min",
     overTime: false,
+    equipment: [],
     legend: [{ label: "Pass", image: PNG }],
     drills: [
         drill(1, { name: `Breakout "fast"`, station: "Station 1 of 2", text: "Line one\r\nLine <two>" }),
@@ -210,5 +211,25 @@ describe("renderBenchSheetDocx: the team mark (practice logo spec R5)", () => {
     it("has no title drawing without a mark", async () => {
         const xml = await documentXml(MODEL);
         expect(xml.slice(0, xml.indexOf("Tuesday &lt;Skills&gt; &amp; Co"))).not.toContain("<w:drawing>");
+    });
+});
+
+describe("renderBenchSheetDocx: equipment (practice equipment spec R5)", () => {
+    it("adds an Equipment heading with one item per line, and each drill's line, XML-safe", async () => {
+        const xml = await documentXml({
+            ...MODEL,
+            equipment: ["Cones ×12", "<Water>\u0001 bottles ×20"],
+            drills: [drill(1, { equipment: "Equipment: Cones ×6 · Net ×1" }), drill(2)],
+        });
+        expect(xml).toContain(">Equipment<");
+        expect(xml).toContain("• Cones ×12");
+        expect(xml).toContain("• &lt;Water&gt; bottles ×20");
+        expect(xml).not.toContain("\u0001");
+        expect(xml).toContain("Equipment: Cones ×6 · Net ×1");
+        expect(xml.indexOf(">Equipment<")).toBeLessThan(xml.indexOf(">Legend<"));
+    });
+
+    it("has no Equipment heading when the practice needs nothing", async () => {
+        expect(await documentXml(MODEL)).not.toContain(">Equipment<");
     });
 });

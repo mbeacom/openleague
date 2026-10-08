@@ -19,6 +19,7 @@ import {
     type SaveSessionDrillInput,
 } from "@/lib/utils/validation";
 import { sanitizePlayDataForWrite } from "@/lib/utils/play-data";
+import { equipmentJson, readPracticeEquipment } from "@/lib/utils/equipment-needs";
 import {
     CLONE_SOURCE_SELECT,
     SessionDrillError,
@@ -198,6 +199,7 @@ export async function duplicatePracticeSession(
                 duration: true,
                 goaliesAttending: true,
                 transitionMinutes: true,
+                equipment: true,
                 staff: { orderBy: { position: "asc" }, select: PRACTICE_STAFF_COPY_SELECT },
                 plays: {
                     orderBy: { sequence: "asc" },
@@ -220,6 +222,8 @@ export async function duplicatePracticeSession(
                     duration: source.duration,
                     goaliesAttending: source.goaliesAttending ?? null,
                     transitionMinutes: source.transitionMinutes,
+                    // The practice's own items (practice equipment spec R3); each drill's ride in its copied playData.
+                    equipment: equipmentJson(readPracticeEquipment(source.equipment)),
                     isShared: false,
                     teamId: validated.teamId,
                     createdById: userId,
