@@ -93,7 +93,8 @@ describe("LeagueFetchView", () => {
         expect(screen.getByRole("link", { name: /planner's import/ })).toHaveAttribute("href", `${PLANNER}#/rankings/import`);
 
         mocks.fetchLeagueSchedule.mockResolvedValueOnce({ success: true, data: { redirectUrl: `${PLANNER}#/rankings/import?pull=abc`, host: HOST, games: 1, teams: 2 } });
-        fireEvent.click(screen.getByRole("button", { name: TRY_AGAIN_LABEL }));
+        // The alert can render a beat before the transition settles and the button relabels.
+        fireEvent.click(await screen.findByRole("button", { name: TRY_AGAIN_LABEL }));
         await waitFor(() => expect(navigate).toHaveBeenCalledWith(`${PLANNER}#/rankings/import?pull=abc`));
         expect(mocks.fetchLeagueSchedule).toHaveBeenCalledTimes(2);
     });
