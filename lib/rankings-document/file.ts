@@ -1,9 +1,11 @@
 /**
  * Reading a chosen rankings file. Size first, then the shared envelope reader
  * (ADR-0022), which accepts bare or wrapped rankings and hands them to
- * parseRankings. Never throws.
+ * parseRankings. Reads JSON, YAML, TOML or JSONC (lib/document-formats).
+ * Never throws.
  */
-import { ENVELOPE_OVERHEAD_BYTES, readDocumentText, type DocumentError } from "@/lib/document-envelope";
+import { ENVELOPE_OVERHEAD_BYTES, type DocumentError } from "@/lib/document-envelope";
+import { readAnyDocumentText } from "@/lib/document-formats";
 import { MAX_RANKINGS_FILE_BYTES, NOT_RANKINGS_MESSAGE, RANKINGS_FILE_TOO_LARGE_MESSAGE, RANKINGS_FORMAT, type ParseRankingsResult, type RankingsError } from "./document";
 
 /** The envelope's errors in the rankings reader's codes; messages and issues pass through. */
@@ -28,6 +30,6 @@ export async function readRankingsFile(file: File): Promise<ParseRankingsResult>
     } catch {
         return { ok: false, error: { code: "not-rankings", message: NOT_RANKINGS_MESSAGE } };
     }
-    const result = readDocumentText(text, undefined, { kind: RANKINGS_FORMAT });
+    const result = await readAnyDocumentText(text, file.name, undefined, { kind: RANKINGS_FORMAT });
     return result.ok ? { ok: true, doc: result.document.payload } : { ok: false, error: toRankingsError(result.error) };
 }

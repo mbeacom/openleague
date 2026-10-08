@@ -52,6 +52,7 @@ import {
 import { UpdateResultsPanel } from "./UpdateResultsPanel";
 import { FetchForMeAction } from "./FetchForMeAction";
 import { RankingsTierChart } from "./RankingsTierChart";
+import { RankingsFormatMenu } from "./RankingsFormatMenu";
 import { useRankingsDoc } from "./useRankingsDoc";
 
 export const PICK_TEAM_LABEL = "Pick your team";
@@ -339,6 +340,7 @@ function Ready({ doc, save }: { doc: RankingsDocument; save: (doc: RankingsDocum
                     >
                         {EXPORT_LABEL}
                     </Button>
+                    <RankingsFormatMenu doc={doc} />
                 </Stack>
             </Stack>
 

@@ -93,7 +93,7 @@ The order matters: hosted `parsePlan` must accept the envelope **before** the st
 - The envelope and each kind are versioned independently. A kind change follows ADR-0020 (additive fields without a bump; a bump only with an upgrader). An envelope change is rare and bumps `envelope`.
 - Readers strip unknown envelope keys (as the kind parsers do), so an additive envelope field never needs a bump.
 - Size limits are per kind; the envelope allows the kind's limit plus 4 KB.
-- File names keep their kind's extension (`.olplan.json`, `.rankings.json`); new kinds pick their own (`.<kind>.json`). The extension is a hint for pickers and people; the reader trusts only the content.
+- File names keep their kind's extension (`.olplan.json`, `.rankings.json`); new kinds pick their own (`.<kind>.json`). The extension is a hint for pickers and people; the reader trusts only the content. The same documents may also be saved as `.yaml`, `.toml` or `.jsonc` (see the [config-format exports spec](./2026-10-07-config-format-exports-design.md)), and connectors save and open those too.
 
 ### R3. IndexedDB is the working copy; connectors are remotes
 

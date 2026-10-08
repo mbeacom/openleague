@@ -15,6 +15,9 @@ affects:
     pattern: "lib/document-envelope/**"
     note: The shared envelope schema, readDocument and the registry of document kinds.
   - type: path
+    pattern: "lib/document-formats/**"
+    note: YAML, TOML and JSONC encodings of the same documents, and readAnyDocumentText in front of the envelope reader.
+  - type: path
     pattern: "apps/planner/src/storage/**"
     note: The StorageConnector interface, the sync engine, and the Local, Google Drive and OneDrive connectors.
   - type: path
@@ -67,6 +70,7 @@ We will wrap portable documents in one envelope and save them to the coach's own
 storage through browser-only connectors.
 
 - **Envelope.** `{ format: "openleague.document", envelope: 1, kind, version, id, updatedAt, generator, payload }`. The payload is the existing bare document, unchanged and parsed by its existing parser. Readers accept both bare and wrapped forms indefinitely, with no migration. `readDocument(raw, source?)` takes the storage's modified time as `source.modifiedAt`; a bare document's `updatedAt` comes from the kind's own timestamp, then that source time, else `null` (unknown). Wrapped files are written only where every reader understands them, and the plan URL fragment stays bare.
+- **Encodings (amended 2026-10-07).** JSON is the canonical encoding. A document may also be saved as YAML, TOML or JSONC (`.olplan.yaml`, `.rankings.toml` and so on). These are the same bare document, or later the same envelope, with no field of their own. Readers detect the format by extension, then by content, and decode it to plain data. That data passes through `readDocument` as JSON, so the size limits and phase rules above apply to every format. Connectors save and open all four formats. See the [config-format exports spec](../superpowers/specs/2026-10-07-config-format-exports-design.md).
 - **Local first.** IndexedDB stays the working copy and the source of truth offline. A connector is a remote: list, pick, open, save (with an expected revision) and optional delete. Per-device sync state lives in a local link table, never in the file.
 - **Conflicts.** Detection uses the provider's revision, never client clocks: atomic `if-match` on OneDrive, a `headRevisionId` check right before writing on Google Drive (which documents no precondition header), and `lastModified` for local file handles. A detected conflict is the coach's choice: keep mine, use theirs, or keep both. A remote that moved past a version this device itself saved (including after "keep mine") is also a conflict, never a silent refresh, so the check-then-write race cannot lose the overwritten save.
 - **Google Drive.** `drive.file` only, the Picker for files the app did not create, and the Google Identity Services token model. The token stays in memory and no refresh token is issued.

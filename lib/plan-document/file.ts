@@ -2,9 +2,10 @@
  * Reading a chosen plan file (ADR-0020), shared by the hosted import page and
  * the static planner. Size first, then the shared envelope reader (ADR-0022),
  * which accepts a bare plan or a wrapped one and hands it to parsePlan.
- * Never throws.
+ * Reads JSON, YAML, TOML or JSONC (lib/document-formats). Never throws.
  */
-import { ENVELOPE_OVERHEAD_BYTES, readDocumentText, type DocumentError } from "@/lib/document-envelope";
+import { ENVELOPE_OVERHEAD_BYTES, type DocumentError } from "@/lib/document-envelope";
+import { readAnyDocumentText } from "@/lib/document-formats";
 import { FILE_TOO_LARGE_MESSAGE, MAX_PLAN_FILE_BYTES, NOT_A_PLAN_MESSAGE, PLAN_FORMAT, type ParsePlanResult, type PlanError } from "./document";
 
 /** The envelope's errors in the plan reader's codes; messages and issues pass through. */
@@ -29,6 +30,6 @@ export async function readPlanFile(file: File): Promise<ParsePlanResult> {
     } catch {
         return { ok: false, error: { code: "not-a-plan", message: NOT_A_PLAN_MESSAGE } };
     }
-    const result = readDocumentText(text, undefined, { kind: PLAN_FORMAT });
+    const result = await readAnyDocumentText(text, file.name, undefined, { kind: PLAN_FORMAT });
     return result.ok ? { ok: true, plan: result.document.payload } : { ok: false, error: toPlanError(result.error) };
 }
