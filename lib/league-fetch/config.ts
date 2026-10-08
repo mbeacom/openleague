@@ -2,7 +2,7 @@
  * Server configuration for the hosted league page fetch (ADR-0024). The
  * redirect target always comes from here, never from the request.
  */
-import { parseAllowedHosts } from "./guard";
+import { LEAGUE_FETCH_MAX_TIMEOUT_MS, LEAGUE_FETCH_MIN_TIMEOUT_MS, LEAGUE_FETCH_TIMEOUT_MS, parseAllowedHosts } from "./guard";
 
 export const DEFAULT_STATIC_PLANNER_URL = "https://openleague.dev/planner/";
 /** The static app's rankings import route, with the pulled schedule in its query. */
@@ -11,6 +11,18 @@ export const PULL_ROUTE = "#/rankings/import?pull=";
 /** LEAGUE_FETCH_ALLOWED_HOSTS, or the default allowlist. */
 export function leagueFetchAllowedHosts(env: Record<string, string | undefined> = process.env): string[] {
     return parseAllowedHosts(env.LEAGUE_FETCH_ALLOWED_HOSTS);
+}
+
+/**
+ * LEAGUE_FETCH_TIMEOUT_MS, clamped to 5-90 s; the default (60 s) when it is
+ * unset, empty or not a number. One total deadline, not per hop.
+ */
+export function leagueFetchTimeoutMs(env: Record<string, string | undefined> = process.env): number {
+    const raw = env.LEAGUE_FETCH_TIMEOUT_MS?.trim();
+    if (!raw) return LEAGUE_FETCH_TIMEOUT_MS;
+    const value = Number(raw);
+    if (!Number.isFinite(value)) return LEAGUE_FETCH_TIMEOUT_MS;
+    return Math.min(LEAGUE_FETCH_MAX_TIMEOUT_MS, Math.max(LEAGUE_FETCH_MIN_TIMEOUT_MS, Math.round(value)));
 }
 
 /**
