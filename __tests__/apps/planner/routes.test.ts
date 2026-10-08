@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { matchRoute, staticRoutes, type StaticRoute } from "@/apps/planner/src/routes";
+import { matchRoute, navSection, staticRoutes, type StaticRoute } from "@/apps/planner/src/routes";
 
 describe("matchRoute", () => {
     it.each<[string, StaticRoute]>([
@@ -29,6 +29,8 @@ describe("matchRoute", () => {
         ["#/rankings", { name: "rankings" }],
         ["#/rankings/", { name: "rankings" }],
         ["#/rankings/import", { name: "rankingsImport" }],
+        ["#/rankings/import/update", { name: "rankingsImport", update: true }],
+        ["#/rankings/import/other", { name: "notFound" }],
         ["#/rankings/setup", { name: "rankingsSetup" }],
         ["#/rankings/what-if", { name: "rankingsWhatIf" }],
         ["#/rankings/team/903", { name: "rankingsTeam", number: "903" }],
@@ -57,5 +59,10 @@ describe("rankings routes", () => {
     it("builds and matches the team route", () => {
         expect(staticRoutes.rankingsTeam("903")).toBe("#/rankings/team/903");
         expect(matchRoute(staticRoutes.rankingsTeam("903"))).toEqual({ name: "rankingsTeam", number: "903" });
+    });
+
+    it("builds and matches the update-results route, which is the import screen", () => {
+        expect(matchRoute(staticRoutes.rankingsUpdate())).toEqual({ name: "rankingsImport", update: true });
+        expect(navSection(matchRoute(staticRoutes.rankingsUpdate()))).toBe("rankings");
     });
 });

@@ -1,7 +1,7 @@
 /**
  * Setup (static rankings spec): title, goal cap, levels, starting brackets
- * (strongest first), teams (name, bracket, excluded, my team), games; validated
- * on save.
+ * (strongest first), the league pages results are read from, teams (name,
+ * bracket, excluded, my team), games; validated on save.
  */
 import { useState } from "react";
 import {
@@ -24,7 +24,7 @@ import {
 } from "@mui/material";
 import { CSHL_8U_METHOD } from "@/lib/ratings";
 import type { ActionResult } from "@/lib/planner-store";
-import { MAX_BRACKETS, docBracketOrder, type RankingsDocument, type RankingsGame } from "@/lib/rankings-document";
+import { MAX_BRACKETS, MAX_SOURCE_URL_LENGTH, docBracketOrder, docSource, pageAddressProblem, withSource, type RankingsDocument, type RankingsGame } from "@/lib/rankings-document";
 import { navigateTo } from "../../platform";
 import { staticRoutes } from "../../routes";
 import type { LocalPlannerStore } from "../../store/types";
@@ -33,6 +33,8 @@ import { useRankingsDoc } from "./useRankingsDoc";
 
 export const SAVE_SETUP_LABEL = "Save setup";
 export const CLEAR_ALL_LABEL = "Delete these rankings";
+export const SCHEDULE_PAGE_LABEL = "League schedule page";
+export const SNAKE_PAGE_LABEL = "Snake chart page";
 
 /** undefined = ignore the keystroke (not 0-2 digits); null = a deliberate clear. */
 const goalsValue = (text: string): number | null | undefined => {
@@ -71,6 +73,8 @@ function Editor({ initial, save, clear }: { initial: RankingsDocument; save: Loc
         const order = docBracketOrder(initial);
         return Object.fromEntries(initial.teams.map((team) => [team.number, team.startingBracket ? order.indexOf(team.startingBracket) : null]));
     });
+    /** The league pages' addresses as typed; an empty field forgets that page. */
+    const [pages, setPages] = useState(() => ({ schedule: docSource(initial, "schedule")?.url ?? "", snakeChart: docSource(initial, "snakeChart")?.url ?? "" }));
     const [newGame, setNewGame] = useState<RankingsGame>({ date: "", time: null, home: "", away: "", homeGoals: null, awayGoals: null, status: "final", rink: null });
 
     const setLevel = (index: number, patch: Partial<{ name: string; size: number }>) =>
@@ -117,14 +121,16 @@ function Editor({ initial, save, clear }: { initial: RankingsDocument; save: Loc
             setError(`Enter both scores or neither for ${half.date} ${half.home} vs ${half.away}.`);
             return;
         }
-        const problem = bracketProblem(brackets);
+        const problem = bracketProblem(brackets) ?? pageAddressProblem(pages.schedule) ?? pageAddressProblem(pages.snakeChart);
         if (problem) {
             setError(problem);
             return;
         }
         const names = new Map(brackets.map((b) => [b.key, b.name.trim()]));
+        // An unchanged address keeps its last read time; a new one has none until it is read.
+        const withPages = withSource(withSource(doc, "schedule", pages.schedule), "snakeChart", pages.snakeChart);
         const result = await save({
-            ...doc,
+            ...withPages,
             teams: doc.teams.map((team) => {
                 const key = assigned[team.number];
                 return { ...team, startingBracket: key === null || key === undefined ? null : names.get(key) ?? null };
@@ -192,6 +198,37 @@ function Editor({ initial, save, clear }: { initial: RankingsDocument; save: Loc
                         {`Your levels hold ${fit.held} teams and ${fit.ranked} ${fit.ranked === 1 ? "is" : "are"} ranked.`}
                     </Typography>
                 )}
+            </Stack>
+
+            <Stack spacing={1} component="section" aria-labelledby="pages-heading">
+                <Typography id="pages-heading" component="h2" variant="h6">
+                    League pages
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                    Optional. With the schedule page saved, Update results opens it for you. Only the address is kept.
+                </Typography>
+                {(
+                    [
+                        ["schedule", SCHEDULE_PAGE_LABEL],
+                        ["snakeChart", SNAKE_PAGE_LABEL],
+                    ] as const
+                ).map(([kind, label]) => {
+                    const problem = pageAddressProblem(pages[kind]);
+                    return (
+                        <TextField
+                            key={kind}
+                            label={label}
+                            type="url"
+                            value={pages[kind]}
+                            onChange={(e) => setPages((current) => ({ ...current, [kind]: e.target.value }))}
+                            placeholder="https://"
+                            error={problem !== null}
+                            helperText={problem ?? undefined}
+                            slotProps={{ htmlInput: { inputMode: "url", autoComplete: "url", spellCheck: false, maxLength: MAX_SOURCE_URL_LENGTH } }}
+                            sx={{ maxWidth: 560 }}
+                        />
+                    );
+                })}
             </Stack>
 
             <Stack spacing={1} component="section" aria-labelledby="brackets-heading">

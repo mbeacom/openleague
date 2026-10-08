@@ -11,6 +11,8 @@ export interface StaticRoutes extends PlannerRoutes {
     importPlan(): string;
     rankings(): string;
     rankingsImport(): string;
+    /** Import, arriving from "Update results": the schedule paste box is focused, with a one-line hint. */
+    rankingsUpdate(): string;
     rankingsSetup(): string;
     rankingsWhatIf(): string;
     rankingsTeam(number: string): string;
@@ -30,6 +32,7 @@ export const staticRoutes: StaticRoutes = {
     importPlan: () => "#/import",
     rankings: () => "#/rankings",
     rankingsImport: () => "#/rankings/import",
+    rankingsUpdate: () => "#/rankings/import/update",
     rankingsSetup: () => "#/rankings/setup",
     rankingsWhatIf: () => "#/rankings/what-if",
     rankingsTeam: (number) => `#/rankings/team/${enc(number)}`,
@@ -47,7 +50,7 @@ export type StaticRoute =
     | { name: "import" }
     | { name: "planLink"; value: string }
     | { name: "rankings" }
-    | { name: "rankingsImport" }
+    | { name: "rankingsImport"; update?: true }
     | { name: "rankingsSetup" }
     | { name: "rankingsWhatIf" }
     | { name: "rankingsTeam"; number: string }
@@ -100,6 +103,7 @@ export function matchRoute(hash: string): StaticRoute {
             if (second === "what-if") return { name: "rankingsWhatIf" };
             return NOT_FOUND;
         }
+        if (second === "import" && third === "update") return { name: "rankingsImport", update: true };
         if (second === "team") {
             const number = decodeId(third);
             return number ? { name: "rankingsTeam", number } : NOT_FOUND;
