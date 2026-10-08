@@ -16,6 +16,7 @@ import {
     parseNotesReply,
     withLibraryDiagrams,
     type AiProvider,
+    type LibraryEntry,
     type NotesRequest,
     type ProviderConfig,
 } from "@/lib/ai";
@@ -230,7 +231,7 @@ export function NotesDraftScreen({ store, providerFactory = realFactory }: { sto
                             redaction={phase.built.redaction}
                             destination={preset.destination}
                             model={ready.model}
-                            requestsSoFar={requestCount()}
+                            requestNumber={phase.kind === "sending" ? requestCount() : requestCount() + 1}
                         />
                         {phase.kind === "sending" && (
                             <Box sx={{ mt: 2 }} role="status">
@@ -311,11 +312,28 @@ export function NotesDraftScreen({ store, providerFactory = realFactory }: { sto
     );
 }
 
+/** The most rows one library query may ask for (getPlaysByTeamSchema), as PlayLibrary pages. */
+const LIBRARY_PAGE_SIZE = 100;
+
+/** Every library drill (isTemplate, as PlayLibrary lists them), newest first, a page at a time; null when a page fails. */
+async function libraryEntries(store: LocalPlannerStore): Promise<LibraryEntry[] | null> {
+    const entries: LibraryEntry[] = [];
+    let pages = 1;
+    for (let page = 1; page <= pages; page++) {
+        const result = await store.getPlaysByTeam({ teamId: LOCAL_TEAM_ID, isTemplate: true, page, limit: LIBRARY_PAGE_SIZE, dateFilter: "all" });
+        if (!result.success) return null;
+        for (const play of result.data.plays) entries.push({ id: play.id, name: play.name });
+        // Bounded by the first answer's total, so the loop always ends.
+        if (page === 1) pages = Math.ceil(result.data.total / LIBRARY_PAGE_SIZE);
+    }
+    return entries;
+}
+
 /** Diagrams from library drills whose names match drafted drills (spec R1), by row sequence. Read on the device only. */
 async function libraryDiagrams(store: LocalPlannerStore, plan: PlanDocument): Promise<Map<number, PlayData>> {
-    const listed = await store.getPlaysByTeam({ teamId: LOCAL_TEAM_ID, page: 1, limit: 10_000, dateFilter: "all" });
-    if (!listed.success) return new Map();
-    const matches = libraryMatches(plan, listed.data.plays);
+    const library = await libraryEntries(store);
+    if (!library) return new Map();
+    const matches = libraryMatches(plan, library);
     const diagrams = new Map<number, PlayData>();
     for (const [sequence, id] of matches) {
         const play = await store.getPlayById({ id, teamId: LOCAL_TEAM_ID });

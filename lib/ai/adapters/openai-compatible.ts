@@ -7,7 +7,7 @@
  */
 import { readSse } from "../sse";
 import type { AiEvent, AiProvider, AiRequest, AiUsage } from "../types";
-import { CUT_OFF_MESSAGE, NOT_ALLOWED_MESSAGE, aiError, failureEvent, mentionsSpendLimit, openStream, otherHttpError, parseJson, type ProviderErrorBody } from "./shared";
+import { CUT_OFF_MESSAGE, NOT_ALLOWED_MESSAGE, aiError, failureEvent, mentionsSpendLimit, openStream, otherHttpError, parseJson, readErrorBody, type ProviderErrorBody } from "./shared";
 import { isAllowedUrl } from "../origins";
 
 export const INVALID_BASE_URL_MESSAGE = "Enter the server's address, such as http://localhost:11434/v1.";
@@ -32,12 +32,12 @@ export function chatCompletionsUrl(baseUrl: string, allowedOrigins: readonly str
     return { ok: true, url };
 }
 
-export function classifyCompatible(status: number | null, body: ProviderErrorBody, apiKey: string): AiEvent {
+export function classifyCompatible(status: number | null, body: ProviderErrorBody): AiEvent {
     if (status === 401 || status === 403) return aiError("auth");
     if (status === 402 || (status === 429 && mentionsSpendLimit(body))) return aiError("spend-limit");
     if (status === 429) return aiError("rate-limit");
     if (status === null) return aiError("other", "The server reported an error mid-reply. Try again.");
-    return otherHttpError(status, body, apiKey);
+    return otherHttpError(status, body);
 }
 
 export function createOpenAiCompatibleProvider(
@@ -72,7 +72,7 @@ export function createOpenAiCompatibleProvider(
                             : {}),
                     },
                 },
-                { fetchImpl, allowedOrigins, signal, apiKey, classify: (status, body) => classifyCompatible(status, body, apiKey) },
+                { fetchImpl, allowedOrigins, signal, apiKey, classify: classifyCompatible },
             );
             if (!opened.ok) {
                 yield opened.event;
@@ -92,7 +92,7 @@ export function createOpenAiCompatibleProvider(
                     const data = parseJson(frame.data) as Record<string, unknown> | null;
                     if (!data) continue;
                     if (data.error) {
-                        yield classifyCompatible(null, { type: null, code: null, message: null }, apiKey);
+                        yield classifyCompatible(null, readErrorBody(data, apiKey));
                         return;
                     }
                     const raw = data.usage as Record<string, unknown> | undefined;

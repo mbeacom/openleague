@@ -21,6 +21,8 @@ import {
     OPENAI_REFUSAL,
     OPENAI_STREAM,
     OPENAI_STREAM_ERROR,
+    REFLECTED_ERROR,
+    REFLECTED_STREAM_ERRORS,
     SENTINEL_KEY,
     anthropicStop,
     jsonResponse,
@@ -290,5 +292,42 @@ describe("aborting", () => {
         const p = createProvider({ kind: "openai", apiKey: SENTINEL_KEY }, { allowedOrigins: ORIGINS, fetch: recorder.fetchImpl });
         expect(lastOf(await collect(p, controller.signal))).toMatchObject({ code: "aborted" });
         expect(recorder.calls).toHaveLength(0);
+    });
+});
+
+describe("a provider's error fields never carry the key into an error event", () => {
+    const anthropic: ProviderConfig = { kind: "anthropic", apiKey: SENTINEL_KEY };
+    const openai: ProviderConfig = { kind: "openai", apiKey: SENTINEL_KEY };
+    const compatible: ProviderConfig = { kind: "openai-compatible", apiKey: SENTINEL_KEY, baseUrl: "http://localhost:11434/v1" };
+    const httpBody = { error: REFLECTED_ERROR };
+
+    it.each<[string, ProviderConfig, () => Response]>([
+        ["anthropic HTTP 400", anthropic, () => jsonResponse(400, { type: "error", ...httpBody })],
+        ["anthropic HTTP 500", anthropic, () => jsonResponse(500, { type: "error", ...httpBody })],
+        ["anthropic mid-stream", anthropic, () => sseResponse(REFLECTED_STREAM_ERRORS.anthropic)],
+        ["openai HTTP 400", openai, () => jsonResponse(400, httpBody)],
+        ["openai HTTP 500 (type only)", openai, () => jsonResponse(500, { error: { type: REFLECTED_ERROR.type, message: REFLECTED_ERROR.message } })],
+        ["openai mid-stream error code", openai, () => sseResponse(REFLECTED_STREAM_ERRORS.openaiError)],
+        ["openai mid-stream error type", openai, () => sseResponse(REFLECTED_STREAM_ERRORS.openaiErrorType)],
+        ["openai response.failed", openai, () => sseResponse(REFLECTED_STREAM_ERRORS.openaiFailed)],
+        ["openai-compatible HTTP 400", compatible, () => jsonResponse(400, httpBody)],
+        ["openai-compatible HTTP 500 (code only)", compatible, () => jsonResponse(500, { error: { code: REFLECTED_ERROR.code } })],
+        ["openai-compatible mid-stream", compatible, () => sseResponse(REFLECTED_STREAM_ERRORS.compatible)],
+    ])("%s", async (_label, config, respond) => {
+        const events = await collect(provider(config, respond).provider);
+        const last = lastOf(events);
+        expect(last.type).toBe("error");
+        expect(JSON.stringify(events)).not.toContain(SENTINEL_KEY);
+    });
+
+    it.each<[string, ProviderConfig, () => Response]>([
+        ["anthropic HTTP", anthropic, () => jsonResponse(500, { type: "error", error: { type: "t".repeat(5000), message: "m".repeat(5000) } })],
+        ["anthropic mid-stream", anthropic, () => sseResponse(`event: error\ndata: ${JSON.stringify({ type: "error", error: { type: "t".repeat(5000) } })}\n\n`)],
+        ["openai HTTP", openai, () => jsonResponse(400, { error: { code: "c".repeat(5000), message: "m".repeat(5000) } })],
+        ["openai mid-stream", openai, () => sseResponse(`data: ${JSON.stringify({ type: "error", code: "c".repeat(5000) })}\n\n`)],
+        ["openai-compatible HTTP", compatible, () => jsonResponse(500, { error: { type: "t".repeat(5000) } })],
+    ])("bounds the length of a provider's error label (%s)", async (_label, config, respond) => {
+        const last = lastOf(await collect(provider(config, respond).provider));
+        expect(last.type === "error" && last.message.length).toBeLessThan(700);
     });
 });

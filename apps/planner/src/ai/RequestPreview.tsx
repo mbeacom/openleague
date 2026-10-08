@@ -26,13 +26,14 @@ export function RequestPreview({
     redaction,
     destination,
     model,
-    requestsSoFar,
+    requestNumber,
 }: {
     request: AiRequest;
     redaction: Redaction;
     destination: string;
     model: string;
-    requestsSoFar: number;
+    /** This request's number in the tab: the next one before Send, the one in flight while sending. */
+    requestNumber: number;
 }) {
     const size = requestSize(request);
     const prefix = request.input.slice(0, request.input.length - redaction.text.length);
@@ -44,9 +45,9 @@ export function RequestPreview({
             <Typography variant="body2" color="text.secondary">
                 About {number(size.wordsIn)} words in, up to {number(size.maxWordsOut)} out · {number(request.system.length + request.input.length)} characters
             </Typography>
-            {requestsSoFar >= REQUEST_WARNING_THRESHOLD && (
+            {requestNumber > REQUEST_WARNING_THRESHOLD && (
                 <Alert severity="warning">
-                    This tab has sent {requestsSoFar} requests. Each one counts toward your provider account&apos;s usage.
+                    This is request {requestNumber} from this tab.
                 </Alert>
             )}
             <Box>

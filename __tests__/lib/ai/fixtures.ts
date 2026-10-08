@@ -118,3 +118,21 @@ export const ERROR_BODIES = {
     openaiQuota: { error: { message: "You exceeded your current quota.", type: "insufficient_quota", param: null, code: "insufficient_quota" } },
     openaiBadModel: { error: { message: `The model \`gpt-x\` does not exist. Key ${SENTINEL_KEY} was used.`, type: "invalid_request_error", param: null, code: "model_not_found" } },
 };
+
+/**
+ * Provider error fields that reflect the key: a type, code and message that
+ * each carry it, joined to other text so only the key-holder's own value
+ * (not the generic token mask) can catch it.
+ */
+export const REFLECTED_ERROR = { type: `err${SENTINEL_KEY}`, code: `code${SENTINEL_KEY}`, message: `Bad request from ${SENTINEL_KEY}` };
+
+/** A mid-stream error frame in each vendor's format, carrying the reflected fields. */
+export const REFLECTED_STREAM_ERRORS = {
+    anthropic:
+        sse("message_start", { type: "message_start", message: { usage: { input_tokens: 5 } } }) +
+        sse("error", { type: "error", error: REFLECTED_ERROR }),
+    openaiError: sse("error", { type: "error", code: REFLECTED_ERROR.code, message: REFLECTED_ERROR.message, sequence_number: 1 }),
+    openaiErrorType: sse("error", { type: "error", error: { type: REFLECTED_ERROR.type, message: REFLECTED_ERROR.message }, sequence_number: 1 }),
+    openaiFailed: sse("response.failed", { type: "response.failed", response: { status: "failed", error: REFLECTED_ERROR }, sequence_number: 1 }),
+    compatible: sse(null, { error: REFLECTED_ERROR }),
+};

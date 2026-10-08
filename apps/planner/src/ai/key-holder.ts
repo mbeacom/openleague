@@ -11,7 +11,7 @@ const listeners = new Set<() => void>();
 let version = 0;
 let requests = 0;
 
-/** The count after which the preview warns. */
+/** The count after which the preview warns: from the 21st request on. */
 export const REQUEST_WARNING_THRESHOLD = 20;
 
 function changed(): void {

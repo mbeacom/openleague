@@ -6,24 +6,18 @@
  */
 import { readSse } from "../sse";
 import type { AiEvent, AiProvider, AiRequest, AiUsage } from "../types";
-import { CUT_OFF_MESSAGE, aiError, failureEvent, mentionsSpendLimit, openStream, otherHttpError, parseJson, type ProviderErrorBody } from "./shared";
+import { CUT_OFF_MESSAGE, aiError, failureEvent, mentionsSpendLimit, openStream, otherHttpError, parseJson, readErrorBody, type ProviderErrorBody } from "./shared";
 
 export const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 
 /** OpenAI HTTP or stream error → our code (Ruling 7: 429 insufficient_quota is the spend limit). */
-export function classifyOpenAi(status: number | null, body: ProviderErrorBody, apiKey: string): AiEvent {
+export function classifyOpenAi(status: number | null, body: ProviderErrorBody): AiEvent {
     const code = body.code ?? body.type;
     if (status === 401 || status === 403 || code === "invalid_api_key") return aiError("auth");
     if (code === "insufficient_quota" || code === "billing_hard_limit_reached" || (status === 429 && mentionsSpendLimit(body))) return aiError("spend-limit");
     if (status === 429 || code === "rate_limit_exceeded") return aiError("rate-limit");
     if (status === null) return aiError("other", `The provider reported an error mid-reply (${code ?? "unknown"}). Try again.`);
-    return otherHttpError(status, body, apiKey);
-}
-
-function errorFields(raw: unknown): ProviderErrorBody {
-    const error = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
-    const text = (value: unknown) => (typeof value === "string" && value ? value : null);
-    return { type: text(error.type), code: text(error.code), message: text(error.message) };
+    return otherHttpError(status, body);
 }
 
 export function createOpenAiProvider(apiKey: string, fetchImpl: typeof fetch, allowedOrigins: readonly string[]): AiProvider {
@@ -46,7 +40,7 @@ export function createOpenAiProvider(apiKey: string, fetchImpl: typeof fetch, al
                             : {}),
                     },
                 },
-                { fetchImpl, allowedOrigins, signal, apiKey, classify: (status, body) => classifyOpenAi(status, body, apiKey) },
+                { fetchImpl, allowedOrigins, signal, apiKey, classify: classifyOpenAi },
             );
             if (!opened.ok) {
                 yield opened.event;
@@ -78,10 +72,10 @@ export function createOpenAiProvider(apiKey: string, fetchImpl: typeof fetch, al
                         yield reason === "content_filter" ? aiError("refused") : aiError("bad-output", CUT_OFF_MESSAGE);
                         return;
                     } else if (type === "response.failed") {
-                        yield classifyOpenAi(null, errorFields((data.response as Record<string, unknown> | undefined)?.error), apiKey);
+                        yield classifyOpenAi(null, readErrorBody((data.response as Record<string, unknown> | undefined)?.error, apiKey));
                         return;
                     } else if (type === "error") {
-                        yield classifyOpenAi(null, errorFields(data.error ?? data), apiKey);
+                        yield classifyOpenAi(null, readErrorBody(data, apiKey));
                         return;
                     }
                 }

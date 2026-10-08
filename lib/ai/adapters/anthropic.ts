@@ -5,13 +5,13 @@
  */
 import { readSse } from "../sse";
 import type { AiEvent, AiProvider, AiRequest, AiUsage } from "../types";
-import { CUT_OFF_MESSAGE, aiError, failureEvent, mentionsSpendLimit, openStream, otherHttpError, parseJson, type ProviderErrorBody } from "./shared";
+import { CUT_OFF_MESSAGE, aiError, failureEvent, mentionsSpendLimit, openStream, otherHttpError, parseJson, readErrorBody, type ProviderErrorBody } from "./shared";
 
 export const ANTHROPIC_MESSAGES_URL = "https://api.anthropic.com/v1/messages";
 export const ANTHROPIC_VERSION = "2023-06-01";
 
 /** Anthropic HTTP or stream error → our code (Ruling 7: a spend limit is a 400 or 429 naming it, or a 402). */
-export function classifyAnthropic(status: number | null, body: ProviderErrorBody, apiKey: string): AiEvent {
+export function classifyAnthropic(status: number | null, body: ProviderErrorBody): AiEvent {
     const type = body.type;
     if (status === 401 || status === 403 || type === "authentication_error" || type === "permission_error") return aiError("auth");
     if (status === 402 || type === "billing_error") return aiError("spend-limit");
@@ -20,7 +20,7 @@ export function classifyAnthropic(status: number | null, body: ProviderErrorBody
     }
     if (status === 429 || type === "rate_limit_error") return aiError("rate-limit");
     if (status === null) return aiError("other", `The provider reported an error mid-reply (${type ?? "unknown"}). Try again.`);
-    return otherHttpError(status, body, apiKey);
+    return otherHttpError(status, body);
 }
 
 export function createAnthropicProvider(apiKey: string, fetchImpl: typeof fetch, allowedOrigins: readonly string[]): AiProvider {
@@ -45,7 +45,7 @@ export function createAnthropicProvider(apiKey: string, fetchImpl: typeof fetch,
                         ...(request.output ? { output_config: { format: { type: "json_schema", schema: request.output.schema } } } : {}),
                     },
                 },
-                { fetchImpl, allowedOrigins, signal, apiKey, classify: (status, body) => classifyAnthropic(status, body, apiKey) },
+                { fetchImpl, allowedOrigins, signal, apiKey, classify: classifyAnthropic },
             );
             if (!opened.ok) {
                 yield opened.event;
@@ -75,8 +75,7 @@ export function createAnthropicProvider(apiKey: string, fetchImpl: typeof fetch,
                         const output = (data.usage as Record<string, unknown> | undefined)?.output_tokens;
                         if (typeof output === "number") usage.outputTokens = output;
                     } else if (type === "error") {
-                        const error = (data.error ?? {}) as Record<string, unknown>;
-                        yield classifyAnthropic(null, { type: typeof error.type === "string" ? error.type : null, code: null, message: typeof error.message === "string" ? error.message : null }, apiKey);
+                        yield classifyAnthropic(null, readErrorBody(data.error ?? {}, apiKey));
                         return;
                     } else if (type === "message_stop") {
                         stopped = true;

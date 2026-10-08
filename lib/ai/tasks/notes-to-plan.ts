@@ -19,7 +19,7 @@ export const NOTES_TASK_NAME = "practice_plan_draft";
 export const NOTES_MAX_OUTPUT_TOKENS = 4000;
 export const NOTES_MAX_INPUT_CHARS = 20_000;
 /** Prompts are versioned strings, so a change shows up in review (spec R8). */
-export const NOTES_PROMPT_VERSION = "notes-to-plan/1";
+export const NOTES_PROMPT_VERSION = "notes-to-plan/2";
 
 export const NOTES_SYSTEM_PROMPT = [
     `You turn a hockey coach's practice notes into a draft practice plan (${NOTES_PROMPT_VERSION}).`,
@@ -35,7 +35,7 @@ export const NOTES_SYSTEM_PROMPT = [
     '- focus is "team", "skaters" or "goalies", and goalies is "none", "optional" or "required"; use null when the notes don\'t say.',
     '- ageGroups lists any of "u6", "u8", "u10", "u12", "u14", "u16plus" that the notes name for a drill, or [] when they don\'t.',
     "- runsWithPrevious is true only when a drill runs at the same time as the drill before it (stations); otherwise false. Always false for blocks.",
-    "- durationMinutes is the whole practice's length. If the notes don't say, use the sum of the rows' minutes.",
+    "- durationMinutes is the whole practice's length. If the notes don't say, add up the rows that run one after another, and count each station group (a drill plus the drills after it with runsWithPrevious true, which run at the same time) once, by its longest row.",
     "- date is YYYY-MM-DD and startTime is HH:mm (24-hour) when the notes give them; otherwise null.",
     "- staff lists the coaches named in the notes; each row's staff lists who runs that row, using the same names.",
     '- Names like "Coach 1" or "Player 2" stand in for real names. Copy them exactly as written.',

@@ -15,6 +15,7 @@ import { schemaSubsetViolations, toProviderSchema } from "@/lib/ai/schema";
 import { isEmptyDiagram, libraryMatches, withLibraryDiagrams } from "@/lib/ai/library-match";
 import { parsePlan, serializePlan, type PlanSessionInput } from "@/lib/plan-document";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
+import { sessionWallMinutes } from "@/lib/utils/session-timeline";
 import { STARTER_PLAYS } from "@/lib/data/starter-plays";
 
 const NOW = new Date("2026-10-07T12:00:00Z");
@@ -205,5 +206,37 @@ describe("library-name matching", () => {
         const third = swapped.session.drills[2];
         expect(third.kind === "drill" && isEmptyDiagram(third.drill.playData)).toBe(true);
         expect(parsePlan(JSON.parse(JSON.stringify(swapped))).ok).toBe(true);
+    });
+});
+
+describe("the practice length with stations", () => {
+    // Warm-up 5, then two 10-minute stations at the same time, then a 10-minute drill: 25 minutes, not 35.
+    const STATIONS: NotesDraft = {
+        ...DRAFT,
+        durationMinutes: 25,
+        rows: [
+            row({ kind: "warmup", name: "", minutes: 5, description: "" }),
+            row({ name: "Station A", minutes: 10 }),
+            row({ name: "Station B", minutes: 10, runsWithPrevious: true }),
+            row({ name: "Breakout", minutes: 10 }),
+        ],
+    };
+
+    it("tells the model to count a station group once, by its longest row, not to sum every row", () => {
+        expect(NOTES_SYSTEM_PROMPT).not.toMatch(/sum of the rows' minutes/);
+        const rule = NOTES_SYSTEM_PROMPT.split("\n").find((line) => line.startsWith("- durationMinutes"));
+        expect(rule).toMatch(/runsWithPrevious/);
+        expect(rule).toMatch(/once/);
+        expect(rule).toMatch(/longest/);
+    });
+
+    it("times a station group once, as the planner does (sessionWallMinutes)", () => {
+        const timeline = STATIONS.rows.map((r, sequence) => ({ sequence, duration: r.minutes, runsWithPrevious: r.runsWithPrevious, kind: r.kind === "drill" ? undefined : r.kind }));
+        expect(sessionWallMinutes(timeline)).toBe(25);
+        expect(STATIONS.rows.reduce((sum, r) => sum + r.minutes, 0)).toBe(35);
+        const result = parseNotesReply(JSON.stringify(STATIONS), id, NOW);
+        if (!result.ok) throw new Error(result.issues.join("\n"));
+        expect(result.plan.session.durationMinutes).toBe(25);
+        expect(result.plan.session.drills.map((r) => (r.kind === "drill" ? r.runsWithPrevious : null))).toEqual([null, false, true, false]);
     });
 });

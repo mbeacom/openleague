@@ -1,7 +1,8 @@
 /**
  * Request, abort and error plumbing the three adapters share (spec R2, R5).
  * Never throws. Errors carry our own wording, the HTTP status and the
- * provider's error type, never a request header or the key.
+ * provider's error type, never a request header or the key: every provider
+ * field passes through readErrorBody, which scrubs and bounds it.
  */
 import { isAllowedUrl, isLoopbackHost } from "../origins";
 import type { AiErrorCode, AiEvent } from "../types";
@@ -29,39 +30,52 @@ export function aiError(code: AiErrorCode, message?: string): AiEvent {
     return { type: "error", code, message: message ?? (code === "other" ? "The provider returned an error." : AI_ERROR_MESSAGES[code]) };
 }
 
-/** A provider's error text, safe to show: the key removed, one line, bounded. */
-export function scrubbed(text: unknown, apiKey: string): string | null {
+/** The longest provider message shown, and the longest provider type or code (a label). */
+export const MAX_MESSAGE_CHARS = 300;
+export const MAX_LABEL_CHARS = 80;
+
+/** A provider's error text, safe to show: the key removed, one line, bounded to `max` characters. */
+export function scrubbed(text: unknown, apiKey: string, max = MAX_MESSAGE_CHARS): string | null {
     if (typeof text !== "string" || !text.trim()) return null;
     let clean = text;
     if (apiKey) clean = clean.split(apiKey).join("[key]");
     // Anything that still looks like a credential (a long token after sk- or similar) is masked too.
     clean = clean.replace(/\b(sk|key|token)[-_][A-Za-z0-9_-]{8,}/gi, "[key]");
     clean = clean.replace(/\s+/g, " ").trim();
-    return clean.length > 300 ? `${clean.slice(0, 297)}…` : clean;
+    return clean.length > max ? `${clean.slice(0, max - 1)}…` : clean;
 }
 
-/** The parsed JSON error body of a failed response: `{ error: { type?, code?, message? } }` or `{ type, message }`. */
+/**
+ * A provider's error fields, each already scrubbed and bounded, so whatever
+ * reaches an error event or the page is safe by construction. Only
+ * readErrorBody builds one.
+ */
 export interface ProviderErrorBody {
     type: string | null;
     code: string | null;
     message: string | null;
 }
 
-export function readErrorBody(raw: unknown): ProviderErrorBody {
+/**
+ * The error fields of a failed response or a mid-stream error frame:
+ * `{ error: { type?, code?, message? } }`, `{ type, code?, message }` or
+ * `{ error: "text" }`. Every field goes through scrubbed(): the key removed,
+ * one line, type and code bounded as labels, the message as a message.
+ */
+export function readErrorBody(raw: unknown, apiKey: string): ProviderErrorBody {
     const root = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
     const inner = (root.error && typeof root.error === "object" ? root.error : root) as Record<string, unknown>;
-    const text = (value: unknown) => (typeof value === "string" && value ? value : null);
     return {
-        type: text(inner.type),
-        code: text(inner.code),
-        message: text(inner.message) ?? (typeof root.error === "string" ? root.error : null),
+        type: scrubbed(inner.type, apiKey, MAX_LABEL_CHARS),
+        code: scrubbed(inner.code, apiKey, MAX_LABEL_CHARS),
+        message: scrubbed(inner.message, apiKey) ?? scrubbed(root.error, apiKey),
     };
 }
 
-/** An HTTP failure the adapter didn't classify: the status, the provider's error type, its scrubbed message, and the model hint. */
-export function otherHttpError(status: number, body: ProviderErrorBody, apiKey: string): AiEvent {
+/** An HTTP failure the adapter didn't classify: the status, the provider's error type, its message, and the model hint. */
+export function otherHttpError(status: number, body: ProviderErrorBody): AiEvent {
     const label = [`HTTP ${status}`, body.type ?? body.code].filter(Boolean).join(", ");
-    const detail = status === 400 || status === 404 || status === 422 ? scrubbed(body.message, apiKey) : null;
+    const detail = status === 400 || status === 404 || status === 422 ? body.message : null;
     const hint = status === 400 || status === 404 || status === 422 ? ` ${MODEL_HINT}` : "";
     return aiError("other", `The provider returned an error (${label}).${detail ? ` It said: "${detail}"` : ""}${hint}`);
 }
@@ -137,7 +151,7 @@ export async function openStream(target: StreamTarget, options: OpenStreamOption
         } catch {
             raw = null;
         }
-        return { ok: false, event: classify(response.status, readErrorBody(raw)) };
+        return { ok: false, event: classify(response.status, readErrorBody(raw, options.apiKey)) };
     }
     if (!response.body) return { ok: false, event: aiError("other", "The provider sent an empty response.") };
     return { ok: true, body: response.body };
