@@ -26,8 +26,8 @@ import type { LocalPlannerStore } from "../../store/types";
 import { RankingsStatus, levelFit, levelsShortMessage } from "./display";
 import { Scoreboard } from "./Scoreboard";
 import { AddGameDialog, EMPTY_GAME, EditGameDialog, GAMES_PAGE_SIZE, SetupGamesPanel } from "./SetupGamesPanel";
-import { SetupTeamsPanel, TeamDialog, type BracketOption } from "./SetupTeamsPanel";
-import { DEFAULT_GAME_FILTER, DEFAULT_TEAM_FILTER, recordOf, teamRecords, type GameFilter, type TeamFilter } from "./setup-model";
+import { SetupTeamsPanel, TeamDialog, type BracketOption, type TeamEdit } from "./SetupTeamsPanel";
+import { DEFAULT_GAME_FILTER, DEFAULT_TEAM_FILTER, recordOf, sectionOfPath, teamRecords, type GameFilter, type TeamFilter } from "./setup-model";
 import { useRankingsDoc } from "./useRankingsDoc";
 
 export const SAVE_SETUP_LABEL = "Save setup";
@@ -117,19 +117,26 @@ function Section({ title, intro, action, children }: { title: string; intro?: Re
 
 function Editor({
     initial,
-    initialSection = "rules",
+    routeSection = "rules",
     save,
     clear,
 }: {
     initial: RankingsDocument;
-    initialSection?: SetupSection;
+    /** The section the route names; following it again when the route changes. */
+    routeSection?: SetupSection;
     save: LocalPlannerStore["saveRankings"];
     clear: () => Promise<ActionResult<null>>;
 }) {
     const [doc, setDoc] = useState<RankingsDocument>(initial);
     const [error, setError] = useState<string | null>(null);
     const [confirmClear, setConfirmClear] = useState(false);
-    const [section, setSection] = useState<SetupSection>(initialSection);
+    const [section, setSection] = useState<SetupSection>(routeSection);
+    // A new route (back/forward, or a link to another section) opens its section; the draft stays.
+    const [shownRoute, setShownRoute] = useState<SetupSection>(routeSection);
+    if (shownRoute !== routeSection) {
+        setShownRoute(routeSection);
+        setSection(routeSection);
+    }
     const [brackets, setBrackets] = useState<BracketDraft[]>(() => docBracketOrder(initial).map((name, key) => ({ key, name })));
     /** Team number to bracket key (null: no starting bracket). */
     const [assigned, setAssigned] = useState<Record<string, number | null>>(() => {
@@ -150,7 +157,13 @@ function Editor({
     const setLevel = (index: number, patch: Partial<{ name: string; size: number }>) =>
         setDoc((d) => ({ ...d, method: { ...d.method, levels: d.method.levels.map((l, i) => (i === index ? { ...l, ...patch } : l)) } }));
     const setTeam = (number: string, patch: Partial<RankingsTeam>) => setDoc((d) => ({ ...d, teams: d.teams.map((t) => (t.number === number ? { ...t, ...patch } : t)) }));
-    const setGame = (index: number, patch: Partial<RankingsGame>) => setDoc((d) => ({ ...d, games: d.games.map((g, i) => (i === index ? { ...g, ...patch } : g)) }));
+    const setGame = (index: number, game: RankingsGame) => setDoc((d) => ({ ...d, games: d.games.map((g, i) => (i === index ? game : g)) }));
+    /** Keeps a team dialog's edit in the draft. */
+    const applyTeamEdit = (number: string, edit: TeamEdit) => {
+        setTeam(number, { name: edit.name, excluded: edit.excluded });
+        setAssigned((map) => ({ ...map, [number]: edit.bracketKey }));
+        setDoc((d) => ({ ...d, myTeam: edit.mine ? number : d.myTeam === number ? null : d.myTeam }));
+    };
 
     const records = useMemo(() => teamRecords(doc.games), [doc.games]);
     const ranked = rankedTeamCount(doc);
@@ -215,7 +228,11 @@ function Editor({
         if (result.success) {
             setError(null);
             navigateTo(staticRoutes.rankings());
-        } else setError(result.error);
+        } else {
+            // The store reports where in the document the problem is: open that section.
+            const details = result.details as { path?: unknown } | undefined;
+            fail(result.error, sectionOfPath(details?.path));
+        }
     };
 
     const counts: Partial<Record<SetupSection, number>> = { brackets: brackets.length, teams: doc.teams.length, games: doc.games.length };
@@ -537,15 +554,18 @@ function Editor({
 
             {team && (
                 <TeamDialog
+                    key={team.number}
                     team={team}
                     record={recordOf(records, team.number)}
                     bracketKey={assigned[team.number] ?? null}
                     brackets={bracketOptions}
                     mine={doc.myTeam === team.number}
-                    onChange={(patch) => setTeam(team.number, patch)}
-                    onBracket={(key) => setAssigned((map) => ({ ...map, [team.number]: key }))}
-                    onMine={(mine) => setDoc((d) => ({ ...d, myTeam: mine ? team.number : d.myTeam === team.number ? null : d.myTeam }))}
-                    onShowGames={() => {
+                    onDone={(edit) => {
+                        applyTeamEdit(team.number, edit);
+                        setEditingTeam(null);
+                    }}
+                    onShowGames={(edit) => {
+                        applyTeamEdit(team.number, edit);
                         setGameFilter({ ...DEFAULT_GAME_FILTER, team: team.number });
                         setGameLimit(GAMES_PAGE_SIZE);
                         setEditingTeam(null);
@@ -556,9 +576,13 @@ function Editor({
             )}
             {game && typeof editingGame === "number" && (
                 <EditGameDialog
+                    key={editingGame}
                     game={game}
                     teams={doc.teams}
-                    onChange={(patch) => setGame(editingGame, patch)}
+                    onDone={(edited) => {
+                        setGame(editingGame, edited);
+                        setEditingGame(null);
+                    }}
                     onDelete={() => {
                         setDoc((d) => ({ ...d, games: d.games.filter((_g, k) => k !== editingGame) }));
                         setEditingGame(null);
@@ -586,5 +610,5 @@ export function RankingsSetupScreen({ store, section }: { store: LocalPlannerSto
     const { state, save, clear } = useRankingsDoc(store);
     if (state.status !== "ready") return <RankingsStatus state={state} onStartOver={() => void clear()} />;
     if (!state.doc) return <RankingsStatus state={{ status: "empty" }} onStartOver={() => void clear()} />;
-    return <Editor initial={state.doc} initialSection={section} save={save} clear={clear} />;
+    return <Editor initial={state.doc} routeSection={section} save={save} clear={clear} />;
 }

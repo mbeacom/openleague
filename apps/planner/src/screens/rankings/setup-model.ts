@@ -1,10 +1,12 @@
 /**
  * Pure helpers behind the Setup screen's Teams and Games lists: each team's
  * record from its final games, the list filters, and games grouped by day.
- * Pure, so the filters are tested without rendering.
+ * Also which section a save problem belongs to. Pure, so these are tested
+ * without rendering.
  */
 import { format, parseISO } from "date-fns";
 import type { RankingsGame, RankingsTeam } from "@/lib/rankings-document";
+import type { RankingsSetupSection } from "../../routes";
 
 export interface TeamRecord {
     played: number;
@@ -131,4 +133,21 @@ export function gameDates(games: readonly RankingsGame[]): { date: string; count
 export function dayHeading(date: string): string {
     const parsed = parseISO(date);
     return Number.isNaN(parsed.getTime()) ? date : format(parsed, "EEE d MMM yyyy");
+}
+
+/** Setup's section for each top-level field of the rankings document. */
+const SECTION_OF_FIELD: ReadonlyMap<string, RankingsSetupSection> = new Map([
+    ["meta", "rules"],
+    ["method", "rules"],
+    ["bracketOrder", "brackets"],
+    ["teams", "teams"],
+    ["myTeam", "teams"],
+    ["games", "games"],
+    ["sources", "pages"],
+]);
+
+/** The Setup section holding the field a save problem's path points into, if any. */
+export function sectionOfPath(path: unknown): RankingsSetupSection | undefined {
+    if (!Array.isArray(path) || typeof path[0] !== "string") return undefined;
+    return SECTION_OF_FIELD.get(path[0]);
 }

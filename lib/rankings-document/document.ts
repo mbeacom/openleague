@@ -184,6 +184,8 @@ export interface RankingsError {
     code: "not-rankings" | "newer-version" | "invalid";
     message: string;
     issues?: string[];
+    /** Each issue's path into the document, in the same order as `issues`. */
+    paths?: (string | number)[][];
 }
 
 export type ParseRankingsResult = { ok: true; doc: RankingsDocument } | { ok: false; error: RankingsError };
@@ -200,7 +202,12 @@ export function parseRankings(raw: unknown): ParseRankingsResult {
     if (!result.success) {
         return {
             ok: false,
-            error: { code: "invalid", message: INVALID_RANKINGS_MESSAGE, issues: result.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`) },
+            error: {
+                code: "invalid",
+                message: INVALID_RANKINGS_MESSAGE,
+                issues: result.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`),
+                paths: result.error.issues.map((issue) => issue.path.map((key) => (typeof key === "number" ? key : String(key)))),
+            },
         };
     }
     return { ok: true, doc: result.data };

@@ -4,11 +4,11 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { RankingsTeamScreen, TEAM_NOT_FOUND_MESSAGE } from "@/apps/planner/src/screens/rankings/RankingsTeamScreen";
 import { CLEAR_ALL_LABEL, RankingsSetupScreen, SAVE_SETUP_LABEL, SCHEDULE_PAGE_LABEL } from "@/apps/planner/src/screens/rankings/RankingsSetupScreen";
 import { levelsShortMessage } from "@/apps/planner/src/screens/rankings/display";
-import { ADD_GAME_LABEL, GAMES_PAGE_SIZE, HALF_SCORE_MESSAGE, SAME_TEAM_MESSAGE } from "@/apps/planner/src/screens/rankings/SetupGamesPanel";
-import { NO_TEAMS_MATCH, TEAM_SEARCH_LABEL } from "@/apps/planner/src/screens/rankings/SetupTeamsPanel";
+import { ADD_GAME_LABEL, GAMES_PAGE_SIZE, HALF_SCORE_MESSAGE, SAME_TEAM_MESSAGE, editGameLabel } from "@/apps/planner/src/screens/rankings/SetupGamesPanel";
+import { NO_TEAMS_MATCH, TEAM_NAME_MISSING, TEAM_SEARCH_LABEL } from "@/apps/planner/src/screens/rankings/SetupTeamsPanel";
 import { composite } from "@/lib/ratings";
 import { toRatingInputs } from "@/lib/rankings-document";
-import { memoryStore, renderScreen } from "./render-screen";
+import { memoryStore, renderScreen, wrapScreen } from "./render-screen";
 import { sampleRankingsDoc } from "./rankings-fixtures";
 
 describe("RankingsTeamScreen", () => {
@@ -68,6 +68,14 @@ describe("RankingsTeamScreen", () => {
         expect(await screen.findByText(TEAM_NOT_FOUND_MESSAGE)).toBeInTheDocument();
     });
 });
+
+/** A sample game card's accessible name, by its date and teams. */
+function gameName(date: string, home: string, away: string): string {
+    const doc = sampleRankingsDoc();
+    const game = doc.games.find((g) => g.date === date && g.home === home && g.away === away);
+    if (!game) throw new Error(`no sample game ${date} ${home} vs ${away}`);
+    return editGameLabel(game, (number) => doc.teams.find((t) => t.number === number)?.name ?? number);
+}
 
 /** Opens a Setup section (its tab's name starts with the label). */
 async function openTab(label: string) {
@@ -275,12 +283,12 @@ describe("RankingsSetupScreen", () => {
         });
     });
 
-    it("ignores bad score keystrokes and refuses a half-entered score", async () => {
+    it("ignores bad score keystrokes and won't keep a half-entered score", async () => {
         const { store } = memoryStore();
         await store.saveRankings(sampleRankingsDoc());
         renderScreen(<RankingsSetupScreen store={store} />, store);
         await openTab("Games");
-        const dialog = openDialog("Edit game 2026-09-20 901 vs 902");
+        const dialog = openDialog(gameName("2026-09-20", "901", "902"));
         const home = dialog.getByLabelText("Home");
         fireEvent.change(home, { target: { value: "123" } });
         expect(home).toHaveValue("3");
@@ -289,13 +297,101 @@ describe("RankingsSetupScreen", () => {
         fireEvent.change(home, { target: { value: "" } });
         expect(home).toHaveValue("");
         expect(dialog.getByText(HALF_SCORE_MESSAGE)).toBeInTheDocument();
+        expect(dialog.getByRole("button", { name: "Done" })).toBeDisabled();
+        fireEvent.click(dialog.getByRole("button", { name: "Cancel" }));
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+        // The draft still has the game as it was.
+        expect(screen.getByRole("button", { name: gameName("2026-09-20", "901", "902") })).toBeInTheDocument();
+    });
+
+    it("keeps a game's edits only on Done, and drops them on Cancel or close", async () => {
+        const { store } = memoryStore();
+        await store.saveRankings(sampleRankingsDoc());
+        renderScreen(<RankingsSetupScreen store={store} />, store);
+        await openTab("Games");
+        const original = gameName("2026-09-20", "901", "902");
+
+        let dialog = openDialog(original);
+        fireEvent.change(dialog.getByLabelText("Away team"), { target: { value: "901" } });
+        expect(dialog.getByText(SAME_TEAM_MESSAGE)).toBeInTheDocument();
+        expect(dialog.getByRole("button", { name: "Done" })).toBeDisabled();
+        fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+        await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+        expect(screen.getByRole("button", { name: original })).toBeInTheDocument();
+
+        dialog = openDialog(original);
+        expect(dialog.getByLabelText("Away team")).toHaveValue("902");
+        fireEvent.change(dialog.getByLabelText("Home"), { target: { value: "7" } });
+        fireEvent.click(dialog.getByRole("button", { name: "Cancel" }));
+        expect(screen.getByRole("button", { name: original })).toBeInTheDocument();
+
+        dialog = openDialog(original);
+        fireEvent.change(dialog.getByLabelText("Home"), { target: { value: "7" } });
         fireEvent.click(dialog.getByRole("button", { name: "Done" }));
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+        expect(screen.getByRole("button", { name: /^Edit game: Sun 20 Sep 2026, 09:00, final, 901 Riverside M1 7, 902 Lakeview M2 1$/ })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: SAVE_SETUP_LABEL }));
+        await waitFor(async () => {
+            const saved = await store.getRankings();
+            expect(saved.success && saved.data!.games[0]).toMatchObject({ home: "901", away: "902", homeGoals: 7, awayGoals: 1 });
+        });
+    });
+
+    it("names each game card by what it shows: day, time, rink, status, teams and score", async () => {
+        const { store } = memoryStore();
+        await store.saveRankings(sampleRankingsDoc());
+        renderScreen(<RankingsSetupScreen store={store} />, store);
+        await openTab("Games");
+        expect(screen.getByRole("button", { name: "Edit game: Sun 20 Sep 2026, 09:00, final, 901 Riverside M1 3, 902 Lakeview M2 1" })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Edit game: Mon 12 Oct 2026, 08:00, Rink B, scheduled, 903 Hilltop M1, 904 Brookside M1" })).toBeInTheDocument();
+    });
+
+    it("won't keep a team without a name, and drops a cancelled edit", async () => {
+        const { store } = memoryStore();
+        await store.saveRankings(sampleRankingsDoc());
+        renderScreen(<RankingsSetupScreen store={store} />, store);
+        await openTab("Teams");
+        const dialog = openDialog("Edit 901 Riverside M1");
+        fireEvent.change(dialog.getByLabelText("Name of 901"), { target: { value: " " } });
+        expect(dialog.getByText(TEAM_NAME_MISSING)).toBeInTheDocument();
+        expect(dialog.getByRole("button", { name: "Done" })).toBeDisabled();
+        expect(dialog.getByRole("button", { name: "Show this team's games" })).toBeDisabled();
+        fireEvent.click(dialog.getByRole("checkbox", { name: "This is my team" }));
+        fireEvent.click(dialog.getByRole("button", { name: "Cancel" }));
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Edit 901 Riverside M1" })).toBeInTheDocument();
+        expect(within(screen.getByRole("button", { name: "Edit 903 Hilltop M1" })).getByText("My team")).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: SAVE_SETUP_LABEL }));
+        await waitFor(async () => {
+            const saved = await store.getRankings();
+            expect(saved.success && saved.data!.teams[0].name).toBe("Riverside M1");
+            expect(saved.success && saved.data!.myTeam).toBe("903");
+        });
+    });
+
+    it("opens the section a save problem is in", async () => {
+        const { store } = memoryStore();
+        await store.saveRankings(sampleRankingsDoc());
+        // The store refuses a blank team name; reach it without the dialog, which no longer keeps one.
+        const blanking = { ...store, saveRankings: (doc: Parameters<typeof store.saveRankings>[0]) => store.saveRankings({ ...doc, teams: doc.teams.map((t, i) => (i === 0 ? { ...t, name: "" } : t)) }) };
+        renderScreen(<RankingsSetupScreen store={blanking} />, blanking);
         await openTab("Rules");
         fireEvent.click(screen.getByRole("button", { name: SAVE_SETUP_LABEL }));
-        expect(await screen.findByText("Enter both scores or neither for 2026-09-20 901 vs 902.")).toBeInTheDocument();
+        expect(await screen.findByText(/^teams\.0\.name: /)).toBeInTheDocument();
+        expect(screen.getByRole("tab", { name: /^Teams/ })).toHaveAttribute("aria-selected", "true");
+    });
+
+    it("follows the route to another section and keeps the draft", async () => {
+        const { store } = memoryStore();
+        await store.saveRankings(sampleRankingsDoc());
+        const { rerender } = renderScreen(<RankingsSetupScreen store={store} section="pages" />, store);
+        await openTab("Rules");
+        fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Fall draft" } });
+        rerender(wrapScreen(<RankingsSetupScreen store={store} section="games" />, store));
         expect(screen.getByRole("tab", { name: /^Games/ })).toHaveAttribute("aria-selected", "true");
-        const saved = await store.getRankings();
-        expect(saved.success && saved.data!.games[0].homeGoals).toBe(3);
+        rerender(wrapScreen(<RankingsSetupScreen store={store} />, store));
+        expect(screen.getByRole("tab", { name: /^Rules/ })).toHaveAttribute("aria-selected", "true");
+        expect(screen.getByLabelText("Title")).toHaveValue("Fall draft");
     });
 
     it("sets and moves my team from the team dialog", async () => {
@@ -358,22 +454,22 @@ describe("RankingsSetupScreen", () => {
         await openTab("Games");
         const days = screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent);
         expect(days).toEqual(["Sun 20 Sep 2026", "Mon 21 Sep 2026", "Tue 22 Sep 2026", "Wed 23 Sep 2026", "Thu 24 Sep 2026", "Mon 12 Oct 2026"]);
-        const scheduled = screen.getByRole("button", { name: "Edit game 2026-10-12 903 vs 904" });
+        const scheduled = screen.getByRole("button", { name: gameName("2026-10-12", "903", "904") });
         expect(within(scheduled).getByText("Scheduled")).toBeInTheDocument();
         expect(within(scheduled).getByText("Rink B")).toBeInTheDocument();
-        expect(within(screen.getByRole("button", { name: "Edit game 2026-09-22 901 vs 903" })).getByText("12")).toBeInTheDocument();
+        expect(within(screen.getByRole("button", { name: gameName("2026-09-22", "901", "903") })).getByText("12")).toBeInTheDocument();
 
         fireEvent.change(screen.getByLabelText("Team"), { target: { value: "904" } });
         expect(screen.getAllByRole("button", { name: /^Edit game/ }).map((b) => b.getAttribute("aria-label"))).toEqual([
-            "Edit game 2026-09-23 904 vs 903",
-            "Edit game 2026-09-24 902 vs 904",
-            "Edit game 2026-10-12 903 vs 904",
+            gameName("2026-09-23", "904", "903"),
+            gameName("2026-09-24", "902", "904"),
+            gameName("2026-10-12", "903", "904"),
         ]);
         fireEvent.click(screen.getByRole("button", { name: "Scheduled" }));
         expect(screen.getAllByRole("button", { name: /^Edit game/ })).toHaveLength(1);
         fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
         fireEvent.change(screen.getByLabelText("Date"), { target: { value: "2026-09-21" } });
-        expect(screen.getAllByRole("button", { name: /^Edit game/ }).map((b) => b.getAttribute("aria-label"))).toEqual(["Edit game 2026-09-21 902 vs 903"]);
+        expect(screen.getAllByRole("button", { name: /^Edit game/ }).map((b) => b.getAttribute("aria-label"))).toEqual([gameName("2026-09-21", "902", "903")]);
     });
 
     it("shows a long schedule a page at a time", async () => {
@@ -412,9 +508,9 @@ describe("RankingsSetupScreen", () => {
         fireEvent.click(confirm);
         expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 
-        const edit = openDialog("Edit game 2026-09-21 902 vs 903");
+        const edit = openDialog(gameName("2026-09-21", "902", "903"));
         fireEvent.click(edit.getByRole("button", { name: "Delete this game" }));
-        expect(screen.queryByRole("button", { name: "Edit game 2026-09-21 902 vs 903" })).not.toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: gameName("2026-09-21", "902", "903") })).not.toBeInTheDocument();
 
         fireEvent.click(screen.getByRole("button", { name: SAVE_SETUP_LABEL }));
         await waitFor(async () => {

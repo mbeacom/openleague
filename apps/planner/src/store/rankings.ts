@@ -31,7 +31,7 @@ export function createRankingsOps(ctx: StoreContext): RankingsOps {
         saveRankings: (doc) =>
             attempt(RANKINGS_SAVE_FAILED, async () => {
                 const parsed = parseRankings(doc);
-                if (!parsed.ok) return { success: false, error: parsed.error.issues?.[0] ?? parsed.error.message };
+                if (!parsed.ok) return { success: false, error: parsed.error.issues?.[0] ?? parsed.error.message, details: { path: parsed.error.paths?.[0] ?? [] } };
                 await write(ctx, (tx) => tx.putMeta(META_RANKINGS, parsed.doc));
                 return ok(parsed.doc);
             }),

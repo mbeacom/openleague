@@ -1,7 +1,8 @@
 /**
  * Setup → Games: games grouped by day as compact scoreboard cards, filtered by
  * team, status and date, shown a page at a time. A card opens an edit dialog;
- * "Add game" opens the same form empty. Edits go into Setup's draft.
+ * "Add game" opens the same form empty. Each dialog edits its own copy, which
+ * goes into Setup's draft only when it is valid and confirmed.
  */
 import { useId, useState } from "react";
 import {
@@ -40,7 +41,19 @@ export const goalsValue = (text: string): number | null | undefined => {
     return /^\d{1,2}$/.test(text) ? Number(text) : undefined;
 };
 
-export const editGameLabel = (game: RankingsGame) => `Edit game ${game.date} ${game.home} vs ${game.away}`;
+const isFinal = (game: RankingsGame) => game.status === "final" && game.homeGoals !== null && game.awayGoals !== null;
+
+/**
+ * A game card's accessible name: everything the card shows, since an explicit
+ * label replaces its visible content for screen readers. "Edit game: Sat 12 Sep
+ * 2026, 19:30, Rink B, final, 920 Maple Ridge 6, 902 Lakeview 5".
+ */
+export function editGameLabel(game: RankingsGame, nameOf: (number: string) => string): string {
+    const final = isFinal(game);
+    const side = (number: string, goals: number | null) => [number, nameOf(number), final ? goals : null].filter((part) => part !== null && part !== "").join(" ");
+    const details = [dayHeading(game.date), game.time ?? "no time", game.rink, final ? "final" : "scheduled", side(game.home, game.homeGoals), side(game.away, game.awayGoals)];
+    return `Edit game: ${details.filter((part) => part).join(", ")}`;
+}
 
 export const EMPTY_GAME: RankingsGame = { date: "", time: null, home: "", away: "", homeGoals: null, awayGoals: null, status: "scheduled", rink: null };
 
@@ -52,7 +65,7 @@ export function gameFormProblem(game: RankingsGame): string | null {
 }
 
 function GameCard({ game, nameOf, myTeam, onEdit }: { game: RankingsGame; nameOf: (number: string) => string; myTeam: string | null; onEdit: () => void }) {
-    const final = game.status === "final" && game.homeGoals !== null && game.awayGoals !== null;
+    const final = isFinal(game);
     const side = (number: string, goals: number | null, other: number | null) => {
         const won = final && goals !== null && other !== null && goals > other;
         const lost = final && goals !== null && other !== null && goals < other;
@@ -70,7 +83,7 @@ function GameCard({ game, nameOf, myTeam, onEdit }: { game: RankingsGame; nameOf
     return (
         <ButtonBase
             onClick={onEdit}
-            aria-label={editGameLabel(game)}
+            aria-label={editGameLabel(game, nameOf)}
             focusRipple
             sx={{
                 width: "100%",
@@ -304,23 +317,27 @@ function GameFields({ game, teams, onChange }: { game: RankingsGame; teams: read
     );
 }
 
-/** Edits a game in place; Done just closes (Save setup keeps it). */
+/** Whether a game in the form can be kept: dated, two teams, and no problem. */
+const gameReady = (game: RankingsGame) => Boolean(game.date && game.home && game.away) && gameFormProblem(game) === null;
+
+/** Edits a copy of a game: Done keeps it when valid (Save setup saves it); Cancel or closing drops it. */
 export function EditGameDialog({
-    game,
+    game: initial,
     teams,
-    onChange,
+    onDone,
     onDelete,
     onClose,
 }: {
     game: RankingsGame;
     teams: readonly RankingsTeam[];
-    onChange: (patch: Partial<RankingsGame>) => void;
+    onDone: (game: RankingsGame) => void;
     onDelete: () => void;
     onClose: () => void;
 }) {
     const theme = useTheme();
     const fullScreen = useMediaQuery(theme.breakpoints.down("sm"));
     const titleId = useId();
+    const [game, setGame] = useState<RankingsGame>(initial);
     const problem = gameFormProblem(game);
     return (
         <Dialog open onClose={onClose} fullScreen={fullScreen} fullWidth maxWidth="xs" aria-labelledby={titleId}>
@@ -329,7 +346,7 @@ export function EditGameDialog({
             </DialogTitle>
             <DialogContent>
                 <Stack spacing={2} sx={{ pt: 1 }}>
-                    <GameFields game={game} teams={teams} onChange={onChange} />
+                    <GameFields game={game} teams={teams} onChange={(patch) => setGame((g) => ({ ...g, ...patch }))} />
                     {problem && <Alert severity="warning">{problem}</Alert>}
                 </Stack>
             </DialogContent>
@@ -337,7 +354,10 @@ export function EditGameDialog({
                 <Button color="error" onClick={onDelete} sx={{ ...TARGET, mr: "auto" }}>
                     Delete this game
                 </Button>
-                <Button variant="contained" onClick={onClose} sx={TARGET}>
+                <Button onClick={onClose} sx={TARGET}>
+                    Cancel
+                </Button>
+                <Button variant="contained" disabled={!gameReady(game)} onClick={() => onDone(game)} sx={TARGET}>
                     Done
                 </Button>
             </DialogActions>
@@ -352,7 +372,7 @@ export function AddGameDialog({ teams, initial, onAdd, onClose }: { teams: reado
     const titleId = useId();
     const [game, setGame] = useState<RankingsGame>(initial);
     const problem = gameFormProblem(game);
-    const ready = Boolean(game.date && game.home && game.away) && problem === null;
+    const ready = gameReady(game);
     return (
         <Dialog open onClose={onClose} fullScreen={fullScreen} fullWidth maxWidth="xs" aria-labelledby={titleId}>
             <DialogTitle id={titleId} sx={{ fontWeight: 800 }}>

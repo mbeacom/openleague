@@ -1,9 +1,10 @@
 /**
  * Setup → Teams: a searchable, filterable list of compact team rows (crest,
  * number and name, starting bracket, record), each opening an edit dialog.
- * Edits go straight into Setup's draft; nothing is kept until Save setup.
+ * The dialog edits its own copy, which goes into Setup's draft on Done; nothing
+ * is kept until Save setup.
  */
-import { useId } from "react";
+import { useId, useState } from "react";
 import {
     Box,
     Button,
@@ -240,15 +241,24 @@ export function SetupTeamsPanel({
     );
 }
 
+/** What the team dialog changes: the team's name and exclusion, its starting bracket, and whether it is mine. */
+export interface TeamEdit {
+    name: string;
+    excluded: boolean;
+    bracketKey: number | null;
+    mine: boolean;
+}
+
+export const TEAM_NAME_MISSING = "A team needs a name.";
+
+/** Edits a copy of a team: Done keeps it when it has a name; Cancel or closing drops it. */
 export function TeamDialog({
     team,
     record,
     bracketKey,
     brackets,
     mine,
-    onChange,
-    onBracket,
-    onMine,
+    onDone,
     onShowGames,
     onClose,
 }: {
@@ -257,16 +267,17 @@ export function TeamDialog({
     bracketKey: number | null;
     brackets: readonly BracketOption[];
     mine: boolean;
-    onChange: (patch: Partial<RankingsTeam>) => void;
-    onBracket: (key: number | null) => void;
-    onMine: (mine: boolean) => void;
-    onShowGames: () => void;
+    onDone: (edit: TeamEdit) => void;
+    /** Keeps the edit, then lists the team's games. */
+    onShowGames: (edit: TeamEdit) => void;
     onClose: () => void;
 }) {
     const theme = useTheme();
     const fullScreen = useMediaQuery(theme.breakpoints.down("sm"));
     const titleId = useId();
-    const nameMissing = team.name.trim() === "";
+    const [edit, setEdit] = useState<TeamEdit>({ name: team.name, excluded: team.excluded, bracketKey, mine });
+    const change = (patch: Partial<TeamEdit>) => setEdit((current) => ({ ...current, ...patch }));
+    const nameMissing = edit.name.trim() === "";
     return (
         <Dialog open onClose={onClose} fullScreen={fullScreen} fullWidth maxWidth="xs" aria-labelledby={titleId}>
             <DialogTitle id={titleId} component="div" sx={{ pb: 1 }}>
@@ -276,7 +287,7 @@ export function TeamDialog({
             </DialogTitle>
             <DialogContent>
                 <Stack spacing={2.5} sx={{ pt: 0.5 }}>
-                    <TeamMark number={team.number} name={team.name || team.number} size="md" mine={mine} />
+                    <TeamMark number={team.number} name={edit.name || team.number} size="md" mine={edit.mine} />
                     <Scoreboard
                         columns={3}
                         stats={[
@@ -290,18 +301,18 @@ export function TeamDialog({
                     />
                     <TextField
                         label="Team name"
-                        value={team.name}
-                        onChange={(e) => onChange({ name: e.target.value })}
+                        value={edit.name}
+                        onChange={(e) => change({ name: e.target.value })}
                         error={nameMissing}
-                        helperText={nameMissing ? "A team needs a name." : undefined}
+                        helperText={nameMissing ? TEAM_NAME_MISSING : undefined}
                         slotProps={{ htmlInput: { "aria-label": `Name of ${team.number}`, maxLength: 100 } }}
                         fullWidth
                     />
                     <TextField
                         select
                         label="Starting bracket"
-                        value={bracketKey ?? ""}
-                        onChange={(e) => onBracket(e.target.value === "" ? null : Number(e.target.value))}
+                        value={edit.bracketKey ?? ""}
+                        onChange={(e) => change({ bracketKey: e.target.value === "" ? null : Number(e.target.value) })}
                         slotProps={{ select: { native: true }, inputLabel: { shrink: true }, htmlInput: { "aria-label": `Starting bracket of ${team.number}` } }}
                         fullWidth
                     >
@@ -314,15 +325,15 @@ export function TeamDialog({
                     </TextField>
                     <Stack>
                         <FormControlLabel
-                            control={<Checkbox checked={mine} onChange={(e) => onMine(e.target.checked)} sx={{ p: "10px" }} />}
+                            control={<Checkbox checked={edit.mine} onChange={(e) => change({ mine: e.target.checked })} sx={{ p: "10px" }} />}
                             label="This is my team"
                             sx={TARGET}
                         />
                         <FormControlLabel
                             control={
                                 <Checkbox
-                                    checked={team.excluded}
-                                    onChange={(e) => onChange({ excluded: e.target.checked })}
+                                    checked={edit.excluded}
+                                    onChange={(e) => change({ excluded: e.target.checked })}
                                     sx={{ p: "10px" }}
                                     slotProps={{ input: { "aria-label": `Excluded: ${team.name}` } }}
                                 />
@@ -334,10 +345,13 @@ export function TeamDialog({
                 </Stack>
             </DialogContent>
             <DialogActions sx={{ px: 3, pb: 2, gap: 1, flexWrap: "wrap" }}>
-                <Button onClick={onShowGames} sx={{ ...TARGET, mr: "auto" }}>
+                <Button onClick={() => onShowGames(edit)} disabled={nameMissing} sx={{ ...TARGET, mr: "auto" }}>
                     {"Show this team's games"}
                 </Button>
-                <Button variant="contained" onClick={onClose} sx={TARGET}>
+                <Button onClick={onClose} sx={TARGET}>
+                    Cancel
+                </Button>
+                <Button variant="contained" disabled={nameMissing} onClick={() => onDone(edit)} sx={TARGET}>
                     Done
                 </Button>
             </DialogActions>

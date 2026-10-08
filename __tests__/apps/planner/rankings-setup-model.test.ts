@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dayHeading, filterGames, formatRecord, gameDates, groupByDate, recordOf, teamRecords } from "@/apps/planner/src/screens/rankings/setup-model";
+import { dayHeading, filterGames, formatRecord, gameDates, groupByDate, recordOf, sectionOfPath, teamRecords } from "@/apps/planner/src/screens/rankings/setup-model";
 import { sampleRankingsDoc } from "./rankings-fixtures";
 
 describe("setup-model", () => {
@@ -33,5 +33,18 @@ describe("setup-model", () => {
     it("writes a day heading, or the raw text when it isn't a date", () => {
         expect(dayHeading("2026-09-12")).toBe("Sat 12 Sep 2026");
         expect(dayHeading("")).toBe("");
+    });
+
+    it("maps a save problem's path to the Setup section holding it", () => {
+        expect(sectionOfPath(["teams", 0, "name"])).toBe("teams");
+        expect(sectionOfPath(["myTeam"])).toBe("teams");
+        expect(sectionOfPath(["games", 3, "home"])).toBe("games");
+        expect(sectionOfPath(["method", "levels", 1, "name"])).toBe("rules");
+        expect(sectionOfPath(["meta", "title"])).toBe("rules");
+        expect(sectionOfPath(["bracketOrder", 2])).toBe("brackets");
+        expect(sectionOfPath(["sources", "schedule", "url"])).toBe("pages");
+        expect(sectionOfPath(["snapshots"])).toBeUndefined();
+        expect(sectionOfPath([])).toBeUndefined();
+        expect(sectionOfPath(undefined)).toBeUndefined();
     });
 });
