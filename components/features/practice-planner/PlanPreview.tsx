@@ -19,11 +19,25 @@ import { blockTitle, drillRows, isBlockRow } from "@/lib/utils/session-rows";
 import { BLOCK_ICONS } from "@/components/features/practice-planner/BlockRowCard";
 import { runBySuffix, staffHeaderLabel, staffNameKey } from "@/lib/utils/session-staff";
 import { Crest } from "@/components/ui/Crest";
-import type { TeamMark } from "@/types/practice-planner";
+import type { PlayData, TeamMark } from "@/types/practice-planner";
 
 const THUMB = { width: 120, height: 51 } as const;
 
-export function PlanPreview({ plan, teamMark = null }: { plan: PlanDocument; teamMark?: TeamMark | null }) {
+/** True when a diagram has nothing on it. */
+function isBlankDiagram(playData: PlayData): boolean {
+    return playData.players.length === 0 && playData.drawings.length === 0 && playData.equipment.length === 0 && playData.annotations.length === 0;
+}
+
+export function PlanPreview({
+    plan,
+    teamMark = null,
+    emptyDiagramCaption,
+}: {
+    plan: PlanDocument;
+    teamMark?: TeamMark | null;
+    /** Shown under a drill whose diagram is empty, such as an AI draft's "No diagram yet". */
+    emptyDiagramCaption?: string;
+}) {
     const session = useMemo(() => planToEditorSession(plan), [plan]);
     const groups = useMemo(() => groupStations(session.plays, session.transitionMinutes), [session]);
     const staffLine = staffHeaderLabel(session.staff.map((name) => ({ name })));
@@ -100,6 +114,11 @@ export function PlanPreview({ plan, teamMark = null }: { plan: PlanDocument; tea
                                                     <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: "pre-line" }}>
                                                         {`${play.instructions ? `${timing} · ${play.instructions}` : timing}${runBy(play.staff)}`}
                                                     </Typography>
+                                                    {emptyDiagramCaption && isBlankDiagram(play.playData) && (
+                                                        <Typography variant="caption" fontWeight={600} sx={(theme) => ({ color: theme.palette.warning.dark, ...theme.applyStyles("dark", { color: theme.palette.warning.light }) })}>
+                                                            {emptyDiagramCaption}
+                                                        </Typography>
+                                                    )}
                                                 </Box>
                                             </Stack>
                                         );

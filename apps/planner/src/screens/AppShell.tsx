@@ -11,6 +11,8 @@ import type { StaleSignal } from "../store/open-store";
 export const NOT_SAVING_MESSAGE =
     "This browser isn't letting the planner save. Your work will be lost when you close this tab. Download plan files to keep it.";
 export const STALE_TAB_MESSAGE = "The planner was updated in another tab. Reload to continue.";
+/** The footer's way to the AI settings (ADR-0023, Ruling 15): a settings link, not an AI control. */
+export const AI_SETTINGS_LINK = "AI assistance settings";
 
 const NAV_ITEMS: ReadonlyArray<{ section: NavSection; label: string; href: string }> = [
     { section: "practices", label: "Practices", href: staticRoutes.list() },
@@ -122,6 +124,11 @@ export function AppShell({
                     <Stack spacing={0.5}>
                         <Typography variant="body2" color="text.secondary">
                             {PRIVACY_NOTE}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                            <Link href={staticRoutes.aiSettings()} underline="always">
+                                {AI_SETTINGS_LINK}
+                            </Link>
                         </Typography>
                         <Typography variant="body2" color="text.secondary">
                             Team sharing, RSVPs and venue booking live in{" "}

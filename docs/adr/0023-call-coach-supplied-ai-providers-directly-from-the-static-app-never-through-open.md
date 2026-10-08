@@ -64,8 +64,8 @@ guarantees about where data and keys can go.
 ## Decision
 
 We will let a coach connect **their own** AI provider to the static app, and
-the browser will call that provider **directly**. OpenLeague never proxies,
-pays for, logs or sees the key or the traffic.
+the browser will call that provider **directly**. OpenLeague runs no server in
+that path and does not proxy or pay for the requests.
 
 - **Off by default.** No request goes to any provider until the coach turns the feature on, sees a disclosure for that provider, and presses Send on a preview of the exact text. Settings never contact a provider: the model is a local field with preset defaults and free text, and no model list is fetched.
 - **One fixed allowlist.** A single build-time list of origins drives both the CSP `connect-src` and the adapters' base-URL check. The public build lists only `https://api.anthropic.com`, `https://api.openai.com` and loopback (`http://localhost:*`, `http://127.0.0.1:*`) for local OpenAI-compatible servers such as Ollama and LM Studio. Self-hosters add exact `https` origins, without wildcards, in one build variable. A test checks that the CSP and the adapters accept exactly the same URLs. Adding a provider to the public build amends this ADR.
@@ -81,7 +81,7 @@ pays for, logs or sees the key or the traffic.
 | Dimension | Assessment |
 |---|---|
 | Cost to the project | None: the coach's account pays, or their own machine runs it. |
-| Privacy | The text goes only to the provider the coach picked, after a preview, with optional name redaction. A local model keeps it on the computer. |
+| Privacy | The request goes to the address the coach configured, only after a preview and Send, with optional name replacement. OpenLeague makes no statement about what a provider does with it; coaches review their provider's terms and privacy policy (owner ruling, spec R9). |
 | Security | A key is exposed to scripts on the page's origin. The planner's CSP stops `fetch`, XHR and similar requests from the planner page to unlisted origins, but not a top-level navigation carrying the key in a URL, and it doesn't apply to the docs pages that share the origin and its IndexedDB. The real mitigations are no third-party scripts, a strict `script-src` with Trusted Types, keeping the key out of persistent storage, and origin isolation before any key is stored. |
 | Portability | Three adapters, including OpenAI-compatible local servers. No vendor lock-in or SDK. |
 

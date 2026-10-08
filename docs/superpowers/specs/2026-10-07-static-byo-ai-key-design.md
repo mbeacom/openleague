@@ -1,7 +1,7 @@
 # Bring-Your-Own AI Key Assistance (Static) — Design
 
 **Date:** 2026-10-07
-**Status:** Proposed (design for owner review); no implementation plan yet
+**Status:** Proposed (design for owner review). Phase 1 plan: `docs/superpowers/plans/2026-10-07-static-byo-ai-phase-1.md`.
 **Applies to:** the static, local-first app in `apps/planner/` (deployed to `https://openleague.dev/planner/`). Nothing on the hosted platform changes.
 **Depends on:** ADR-0020 (portable documents and the static app), ADR-0021 (client-side rankings), ADR-0008 (core stays free and provider-portable), the portability guard (`adr-0020/portable-practice-planner` in `eslint.config.mjs`), the static CSP (`PLANNER_CSP` in `apps/planner/build-config.ts`) and the build check (`scripts/check-planner-build.ts`).
 **Proposed ADR:** ADR-0023, "Call coach-supplied AI providers directly from the static app, never through OpenLeague".
@@ -139,7 +139,7 @@ All claims below were checked against official documentation on **2026-10-07**. 
 
 **Browser caveats for local servers.** These are discovered at runtime and explained in the UI; they aren't worked around:
 
-- Chrome now gates requests from a public site to loopback or local-network addresses behind a **Local Network Access** permission prompt, and Chrome's own guidance is to mark such requests with `targetAddressSpace: "local"`. The `openai-compatible` adapter sets that `fetch` option when the base URL is loopback. The settings screen tells the coach to expect a browser prompt, and to allow it.
+- Chrome now gates requests from a public site to loopback or local-network addresses behind a **Local Network Access** permission prompt, and Chrome's guidance is to mark such requests with the `targetAddressSpace` fetch option. Its post shows `"local"`, but the phase 1 browser check found Chrome refuses a `localhost` server for a request marked `"local"`: the value must name the target's address space, so the `openai-compatible` adapter sets `targetAddressSpace: "loopback"` when the base URL is loopback. The settings screen tells the coach to expect a browser prompt, and to allow it.
 - An `https` page calling `http://localhost` can still be blocked as mixed content in browsers that don't exempt loopback. When a request to a local server fails, the adapter reports `cors`/`network` with a message naming both causes (the server's CORS setting, and the browser) rather than guessing which one.
 
 ### R4. One origin allowlist drives both the CSP and the adapters
@@ -258,12 +258,14 @@ So each task defines a small **draft schema** in Zod v4, in `lib/ai/tasks/*`, ma
 
 **Nothing is sent by default.** No provider is configured when the app ships, AI assistance is off, and turning it on sends nothing until the coach runs a task and presses Send. Settings never contact a provider: there is no model-list request and no connection test (R10). The first request that carries the key is the first previewed task.
 
-**Disclosure, once per provider.** Before the first request to a provider, a dialog explains, in plain words:
+**Disclosure, once per provider.** Before the first request to a provider, a dialog explains, in plain words, only the mechanics the coach controls:
 
-- that the text in the preview will be sent to that provider under the coach's own account;
-- that the provider's own terms and data policies apply, with a link to them;
-- that OpenLeague never receives the text or the key;
-- for a local server, that the text stays on this computer.
+- that pressing Send sends the request shown in the preview from this page to the provider address the coach configured, with the coach's key;
+- that the coach should review the provider's terms and privacy policy before use, with a link to the provider's policy page only where it is a stable official URL;
+- that "Replace names" swaps only the names the coach lists, and finds nothing on its own;
+- that nothing is sent before Send, and a draft is saved only if the coach chooses Save.
+
+**Owner ruling (2026-10-07), replacing this section's earlier list (which promised that OpenLeague never receives the text and that a local server keeps it on the computer).** OpenLeague isn't the processor of the coach's data, so the app makes no assertion about what is or isn't sent, retained or processed by a provider: no claims about retention, training, logging, privacy or compliance, and no privacy promises such as "never leaves your device" or "OpenLeague never sees your data". This applies to the disclosure, the settings and preview copy, and the disclosure constant (`AI_DISCLOSURE`). Redaction is presented as a tool the coach uses, never as making anything safe.
 
 The coach's acknowledgement is stored with the provider settings. Changing the provider or its base URL shows the dialog again.
 
@@ -279,7 +281,7 @@ Rejected: **detecting names automatically** with a local model or a name list. I
 
 **No logging.** Prompts, responses and keys are not written to IndexedDB, the console or any history. The only AI data kept is the provider settings (kind, model, base URL, acknowledgement). Once "remember on this device" ships on the planner's own origin (R5), the key is kept too, but only if the coach opts in. The draft lives only in the review screen until it is imported or discarded.
 
-**Privacy note.** `PRIVACY_NOTE` in `apps/planner/src/config.ts` gains one sentence: "If you turn on AI assistance, the text you choose to send goes directly from this browser to the AI provider you set up, under your own account." Its "Nothing is uploaded" sentence becomes "Nothing is uploaded unless you send it to your own AI provider", so the note stays true with the feature on.
+**Privacy note.** `PRIVACY_NOTE` in `apps/planner/src/config.ts` describes the mechanics only (owner ruling above): "The planner uploads nothing on its own, and there's no account or tracking. If you turn on AI assistance, pressing Send sends the request you previewed from this browser to the AI provider you set up, using your key."
 
 ### R10. Model defaults are data, not logic
 
@@ -312,7 +314,7 @@ No test calls a real provider, in CI or by default locally.
   - the request body's structured-output field for that vendor;
   - the event stream the adapter produces, including events split across chunks;
   - that every error maps to its `AiErrorCode`;
-  - that `targetAddressSpace: "local"` is set for loopback base URLs only.
+  - that `targetAddressSpace: "loopback"` is set for loopback base URLs only.
 - **Key containment.**
   - With a sentinel key, every task runs and every export path (plan file, plan link, bench sheet HTML, Word, rankings file) is serialized. The test asserts the sentinel appears nowhere except the one provider request header.
   - A test asserts that no IndexedDB store receives it in phase 1, and that the `sessions`, `plays`, `rankings` and `team-profile` stores never do.
@@ -356,7 +358,7 @@ Decided, no longer open: "remember on this device" is not offered in phase 1, an
 3. **Marking AI drafts in files.** Should a plan imported from an AI draft carry a marker in the plan document (an additive field under ADR-0020's amendment rules), or is a marker only in the import preview enough?
 4. **Hosted platform.** Is bring-your-own-key on the hosted platform ever wanted? If so, it needs its own ADR: server data, multiple users and roles change the threat model.
 5. **Copilot.** If GitHub later documents a browser-callable, personal-use endpoint for Copilot subscribers, should it be added? Until then this spec doesn't offer Copilot.
-6. **Wording review.** Who reviews the disclosure text? It makes statements about third-party data handling and should be checked against each provider's current policy before release.
+6. **Wording review.** Partly decided (owner ruling, 2026-10-07, recorded in R9): the disclosure, settings and preview copy make no statements about third-party data handling; they describe only the mechanics the coach controls and point the coach to the provider's own terms and privacy policy. Still open: the owner's review of the drafted `AI_DISCLOSURE` text before release.
 
 ## Sources (checked 2026-10-07)
 

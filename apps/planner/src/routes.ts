@@ -16,6 +16,10 @@ export interface StaticRoutes extends PlannerRoutes {
     rankingsSetup(): string;
     rankingsWhatIf(): string;
     rankingsTeam(number: string): string;
+    /** AI settings (ADR-0023). */
+    aiSettings(): string;
+    /** Practice notes → a draft plan (ADR-0023). */
+    importNotes(): string;
 }
 
 const enc = encodeURIComponent;
@@ -36,6 +40,8 @@ export const staticRoutes: StaticRoutes = {
     rankingsSetup: () => "#/rankings/setup",
     rankingsWhatIf: () => "#/rankings/what-if",
     rankingsTeam: (number) => `#/rankings/team/${enc(number)}`,
+    aiSettings: () => "#/ai",
+    importNotes: () => "#/import/notes",
 };
 
 export type StaticRoute =
@@ -54,6 +60,8 @@ export type StaticRoute =
     | { name: "rankingsSetup" }
     | { name: "rankingsWhatIf" }
     | { name: "rankingsTeam"; number: string }
+    | { name: "aiSettings" }
+    | { name: "importNotes" }
     | { name: "notFound" };
 
 const NOT_FOUND: StaticRoute = { name: "notFound" };
@@ -95,6 +103,8 @@ export function matchRoute(hash: string): StaticRoute {
         return id && third === "edit" ? { name: "libraryEdit", id } : NOT_FOUND;
     }
     if (section === "import" && second === undefined) return { name: "import" };
+    if (section === "import" && second === "notes" && third === undefined) return { name: "importNotes" };
+    if (section === "ai" && second === undefined) return { name: "aiSettings" };
     if (section === "rankings") {
         if (second === undefined) return { name: "rankings" };
         if (third === undefined) {
@@ -131,6 +141,7 @@ export function navSection(route: StaticRoute): NavSection | null {
             return "library";
         case "import":
         case "planLink":
+        case "importNotes":
             return "import";
         case "rankings":
         case "rankingsImport":
@@ -138,6 +149,7 @@ export function navSection(route: StaticRoute): NavSection | null {
         case "rankingsWhatIf":
         case "rankingsTeam":
             return "rankings";
+        case "aiSettings":
         case "notFound":
             return null;
     }

@@ -161,6 +161,28 @@ const eslintConfig = [
     },
   },
   {
+    // ADR-0023 (spec R6): model output is never rendered as HTML. The raw-SQL
+    // selectors are repeated because flat config replaces a rule's options
+    // wholesale (see adr-0003/no-raw-sql-in-application-code above).
+    name: "adr-0023/no-html-from-ai",
+    files: [`lib/ai/**/${SOURCE_GLOB}`, `apps/planner/src/ai/**/${SOURCE_GLOB}`],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        ...unsafeRawSqlSelectors,
+        ...rawSqlSelectors,
+        {
+          selector: "JSXAttribute[name.name='dangerouslySetInnerHTML']",
+          message: "ADR-0023: AI output is never rendered as HTML. Use React text nodes or the plan parser.",
+        },
+        {
+          selector: "MemberExpression[property.name=/^(innerHTML|outerHTML)$/]",
+          message: "ADR-0023: AI features never write HTML into the DOM.",
+        },
+      ],
+    },
+  },
+  {
     name: "adr-0020/portable-practice-planner",
     files: [
       `components/features/practice-planner/**/${SOURCE_GLOB}`,
@@ -171,6 +193,8 @@ const eslintConfig = [
       `lib/rankings-document/**/${SOURCE_GLOB}`,
       // The shared document envelope (ADR-0022), read by both deployables.
       `lib/document-envelope/**/${SOURCE_GLOB}`,
+      // Bring-your-own-key AI assistance (ADR-0023): browser-only, loaded lazily by the static planner.
+      `lib/ai/**/${SOURCE_GLOB}`,
       // The static planner itself (sub-project 3): it must never reach Next.js or the server.
       `apps/planner/**/${SOURCE_GLOB}`,
       "lib/utils/session-timeline.ts",

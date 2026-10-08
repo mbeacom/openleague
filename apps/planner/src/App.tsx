@@ -3,8 +3,8 @@
  * in main.tsx, and the platform is a module constant, so neither identity
  * changes between renders (PlayLibrary's loadPlays depends on the store).
  */
-import { Component, type ErrorInfo, type ReactNode } from "react";
-import { Alert, Box, Button } from "@mui/material";
+import { Component, Suspense, lazy, type ErrorInfo, type ReactNode } from "react";
+import { Alert, Box, Button, Typography } from "@mui/material";
 import { PlannerProvider } from "@/lib/planner-store";
 import { staticPlannerPlatform, useHashRoute } from "./platform";
 import { navSection, type StaticRoute } from "./routes";
@@ -26,6 +26,14 @@ import { RankingsTeamScreen } from "./screens/rankings/RankingsTeamScreen";
 import { RankingsWhatIfScreen } from "./screens/rankings/RankingsWhatIfScreen";
 import { NotFoundScreen } from "./screens/StatusScreens";
 import { YourTeamButton } from "./screens/YourTeam";
+
+// AI screens and lib/ai load only when opened (ADR-0023): the build check keeps adapter code out of the entry chunk.
+const AiSettingsScreen = lazy(() => import("./ai/AiSettingsScreen").then((module) => ({ default: module.AiSettingsScreen })));
+const NotesDraftScreen = lazy(() => import("./ai/NotesDraftScreen").then((module) => ({ default: module.NotesDraftScreen })));
+
+function LazyScreen({ children }: { children: ReactNode }) {
+    return <Suspense fallback={<Typography color="text.secondary">Loading…</Typography>}>{children}</Suspense>;
+}
 
 export const CRASH_MESSAGE = "Something went wrong. Your saved practices are safe in this browser.";
 
@@ -89,6 +97,18 @@ function RouteView({ route, store }: { route: StaticRoute; store: LocalPlannerSt
             return <RankingsWhatIfScreen store={store} />;
         case "rankingsTeam":
             return <RankingsTeamScreen key={route.number} store={store} number={route.number} />;
+        case "aiSettings":
+            return (
+                <LazyScreen>
+                    <AiSettingsScreen store={store} />
+                </LazyScreen>
+            );
+        case "importNotes":
+            return (
+                <LazyScreen>
+                    <NotesDraftScreen store={store} />
+                </LazyScreen>
+            );
         default:
             return <NotFoundScreen />;
     }

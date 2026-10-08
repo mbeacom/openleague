@@ -6,16 +6,20 @@
 import path from "path";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
-import { PLANNER_CSP, resolveHostedUrl } from "./build-config";
+import { resolveAiOrigins } from "./ai-origins";
+import { plannerCsp, resolveHostedUrl } from "./build-config";
 
 const ROOT = path.resolve(__dirname, "../..");
+
+/** One list for connect-src and the adapters (ADR-0023); a bad OPENLEAGUE_AI_CONNECT_ORIGINS fails here. */
+const AI_ORIGINS = resolveAiOrigins(process.env.OPENLEAGUE_AI_CONNECT_ORIGINS);
 
 function contentSecurityPolicy(): Plugin {
     return {
         name: "openleague-planner-csp",
         apply: "build",
         transformIndexHtml: () => [
-            { tag: "meta", attrs: { "http-equiv": "Content-Security-Policy", content: PLANNER_CSP }, injectTo: "head-prepend" },
+            { tag: "meta", attrs: { "http-equiv": "Content-Security-Policy", content: plannerCsp(AI_ORIGINS) }, injectTo: "head-prepend" },
         ],
     };
 }
@@ -28,6 +32,7 @@ export default defineConfig(({ mode }) => ({
     resolve: { alias: { "@": ROOT } },
     define: {
         __OPENLEAGUE_HOSTED_URL__: JSON.stringify(resolveHostedUrl(process.env.OPENLEAGUE_HOSTED_URL)),
+        __OPENLEAGUE_AI_ORIGINS__: JSON.stringify(AI_ORIGINS),
         "process.env.NODE_ENV": JSON.stringify(mode === "production" ? "production" : "development"),
     },
     server: { fs: { allow: [ROOT] } },
