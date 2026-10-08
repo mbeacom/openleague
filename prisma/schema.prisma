@@ -40,6 +40,7 @@ model User {
   practiceSessions             PracticeSession[]
   practiceStaff                PracticeSessionStaff[]
   plays                        Play[]
+  plannerFavorites             PlannerFavorite[]
   venues                       Venue[]
   createdSeasons               Season[]                     @relation("SeasonCreator")
   createdSeasonGames           SeasonGame[]                 @relation("SeasonGameCreator")
@@ -1793,6 +1794,27 @@ model Play {
   @@index([sessionId])
   @@index([sourcePlayId])
   @@map("plays")
+}
+
+enum PlannerFavoriteKind {
+  DRILL
+  PRACTICE
+}
+
+// A practice planner favorite (practice favorites spec): personal to the user.
+// targetId is polymorphic (a library play, a starter drill's stable id, or a
+// practice session), so there is no foreign key to the target; a deleted
+// target leaves an inert row, since ids are never reused (spec R4).
+model PlannerFavorite {
+  id        String              @id @default(cuid())
+  userId    String
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      PlannerFavoriteKind
+  targetId  String
+  createdAt DateTime            @default(now())
+
+  @@unique([userId, kind, targetId])
+  @@map("planner_favorites")
 }
 
 // Venue/Rink model for structured location management

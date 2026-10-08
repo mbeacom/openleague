@@ -79,6 +79,9 @@ export interface LocalStoreOptions {
 }
 
 export interface LocalPlannerStore extends PlannerStore, RankingsOps, AiSettingsOps {
+    /** Favorites on this device (practice favorites spec): always present here. */
+    listPlannerFavorites: NonNullable<PlannerStore["listPlannerFavorites"]>;
+    setPlannerFavorite: NonNullable<PlannerStore["setPlannerFavorite"]>;
     listSessions: () => Promise<ActionResult<LocalSessionSummary[]>>;
     getSessionView: (id: string) => Promise<ActionResult<PracticeSessionView>>;
     getSessionForEdit: (id: string) => Promise<ActionResult<LocalSessionEdit>>;

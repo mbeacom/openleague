@@ -108,6 +108,21 @@ export interface SessionShare extends SessionRef {
     isShared: boolean;
 }
 
+/** What a favorite points at (practice favorites spec R1): a drill or a practice. A plain union, never the Prisma enum. */
+export type PlannerFavoriteKind = "DRILL" | "PRACTICE";
+
+export interface PlannerFavoriteQuery {
+    kind: PlannerFavoriteKind;
+}
+
+export interface PlannerFavoriteChange {
+    kind: PlannerFavoriteKind;
+    /** A library drill, a starter drill's stable id, or a practice. */
+    targetId: string;
+    /** The state wanted, not a toggle: retries and double taps are harmless. */
+    favorite: boolean;
+}
+
 export interface PlannerStore {
     getPlaysByTeam: (input: LibraryQuery) => Promise<ActionResult<LibraryPage>>;
     getPlayById: (input: PlayRef) => Promise<ActionResult<LibraryPlay>>;
@@ -125,6 +140,12 @@ export interface PlannerStore {
      * stored logo (TeamMark.logoImage).
      */
     getPracticeLogoImage?: (sessionId: string) => Promise<LogoImage | null>;
+    /**
+     * Favorites (practice favorites spec): per user on hosted, per device on
+     * the static planner. A store without them hides every star and filter.
+     */
+    listPlannerFavorites?: (input: PlannerFavoriteQuery) => Promise<ActionResult<string[]>>;
+    setPlannerFavorite?: (input: PlannerFavoriteChange) => Promise<ActionResult<PlannerFavoriteChange>>;
 }
 
 export type PlannerLinkProps = Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "href"> & {

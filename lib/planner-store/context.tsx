@@ -31,6 +31,11 @@ export function usePlannerStore(): PlannerStore {
     return store;
 }
 
+/** The store when one is provided, else null: for hosted-only screens that also render outside the planner layout. */
+export function useOptionalPlannerStore(): PlannerStore | null {
+    return useContext(PlannerStoreContext);
+}
+
 export function usePlannerPlatform(): PlannerPlatform {
     const platform = useContext(PlannerPlatformContext);
     if (!platform) throw new Error(MISSING_PROVIDER_MESSAGE);
