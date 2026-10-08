@@ -1,8 +1,10 @@
 // __tests__/apps/planner/rankings-screen.test.tsx
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, screen, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { composite } from "@/lib/ratings";
-import { toRatingInputs } from "@/lib/rankings-document";
+import { MAX_RANKINGS_FILE_BYTES, parseRankings, readRankingsFile, serializeRankings, toRatingInputs } from "@/lib/rankings-document";
+import { DOWNLOAD_AS_LABEL, rankingsReopenProblem } from "@/apps/planner/src/screens/rankings/RankingsFormatMenu";
+import { ENVELOPE_OVERHEAD_BYTES } from "@/lib/document-envelope";
 import { downloadBlob } from "@/components/features/practice-planner/export/download";
 import { RankingsScreen, levelsShortMessage } from "@/apps/planner/src/screens/rankings/RankingsScreen";
 import { NO_RANKINGS_MESSAGE, START_OVER_LABEL } from "@/apps/planner/src/screens/rankings/display";
@@ -134,6 +136,56 @@ describe("RankingsScreen", () => {
         expect(parsed.format).toBe("openleague.rankings");
         expect(parsed.teams).toHaveLength(doc.teams.length);
         expect(parsed.games).toHaveLength(doc.games.length);
+    });
+
+    it.each([
+        ["YAML (.yaml)", "fall-pre-season.rankings.yaml"],
+        ["TOML (.toml)", "fall-pre-season.rankings.toml"],
+        ["JSONC (.jsonc)", "fall-pre-season.rankings.jsonc"],
+    ])("downloads the rankings as %s, readable again", async (label, fileName) => {
+        const { store } = memoryStore();
+        const doc = sampleRankingsDoc();
+        await store.saveRankings(doc);
+        renderScreen(<RankingsScreen store={store} />, store);
+        fireEvent.click(await screen.findByRole("button", { name: DOWNLOAD_AS_LABEL }));
+        fireEvent.click(await screen.findByRole("menuitem", { name: label }));
+        await waitFor(() => expect(vi.mocked(downloadBlob).mock.calls.at(-1)?.[1]).toBe(fileName));
+        const [blob] = vi.mocked(downloadBlob).mock.calls.at(-1) as [Blob, string];
+        const read = await readRankingsFile(new File([await blob.text()], fileName));
+        const expected = parseRankings(JSON.parse(JSON.stringify(doc)));
+        expect(read.ok && expected.ok && read.doc).toEqual(expected.ok && expected.doc);
+    });
+
+    describe("warns when a downloaded file couldn't be opened again", () => {
+        /** A document whose compact JSON is `extra` bytes over (or, negative, under) the limit. */
+        const sized = (extra: number) => {
+            const base = sampleRankingsDoc({ snapshots: [{ note: "" }] });
+            const pad = MAX_RANKINGS_FILE_BYTES - new TextEncoder().encode(JSON.stringify(base)).byteLength + extra;
+            return sampleRankingsDoc({ snapshots: [{ note: "x".repeat(pad) }] });
+        };
+
+        it("bare JSON is held to the limit with no envelope allowance, and never suggests JSON", () => {
+            const doc = sampleRankingsDoc();
+            expect(rankingsReopenProblem(doc, "x".repeat(MAX_RANKINGS_FILE_BYTES), "json")).toBeNull();
+            const problem = rankingsReopenProblem(doc, "x".repeat(MAX_RANKINGS_FILE_BYTES + 1), "json");
+            expect(problem).toBe("This JSON file is too large to open again (the limit is 2 MB).");
+            expect(problem).not.toMatch(/as JSON/);
+        });
+
+        it("another format is also measured as compact JSON once decoded", () => {
+            // The written text fits its ceiling; the decoded document does not.
+            expect(rankingsReopenProblem(sized(-1), "short", "yaml")).toBeNull();
+            expect(rankingsReopenProblem(sized(1), "short", "yaml")).toBe("This YAML file is too large to open again (the limit is 2 MB).");
+        });
+
+        it("another format's written text is held to the limit plus the envelope allowance", () => {
+            const doc = sampleRankingsDoc();
+            expect(serializeRankings(doc).length).toBeLessThan(MAX_RANKINGS_FILE_BYTES);
+            expect(rankingsReopenProblem(doc, "x".repeat(MAX_RANKINGS_FILE_BYTES + ENVELOPE_OVERHEAD_BYTES), "toml")).toBeNull();
+            expect(rankingsReopenProblem(doc, "x".repeat(MAX_RANKINGS_FILE_BYTES + ENVELOPE_OVERHEAD_BYTES + 1), "toml")).toBe(
+                "This TOML file is too large to open again (the limit is 2 MB). Export it as JSON instead.",
+            );
+        });
     });
 
     it("filters by starting bracket", async () => {

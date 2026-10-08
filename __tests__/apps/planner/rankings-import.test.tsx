@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import {
     KEEP_MINE_LABEL,
+    OPEN_FILE_HINT,
+    OPEN_FILE_LABEL,
     PASTED_PAGE_LABEL,
     READ_SCHEDULE_LABEL,
     READ_SNAKE_LABEL,
@@ -22,6 +24,14 @@ const PAGE = ["9/20", "9:25am", "901 Riverside M1", "11", "-", "4", "902 Lakevie
 const SNAKE = ["Program\tRed\tWhite", "Strength\tstr\tstr", "Riverside\t901\t", "Lakeview\t\t902"].join("\n");
 
 describe("RankingsImportScreen", () => {
+    it("names the file types Open rankings file accepts, next to the button", async () => {
+        const { store } = memoryStore();
+        renderScreen(<RankingsImportScreen store={store} />, store);
+        const hint = await screen.findByText("Open a rankings file exported from this planner (.rankings.json, or .yaml, .toml or .jsonc).");
+        expect(OPEN_FILE_HINT).toBe(hint.textContent);
+        expect(hint.parentElement).toContainElement(screen.getByRole("button", { name: OPEN_FILE_LABEL }));
+    });
+
     it("previews a pasted schedule, applies a snake chart and saves", async () => {
         const { store } = memoryStore();
         renderScreen(<RankingsImportScreen store={store} />, store);

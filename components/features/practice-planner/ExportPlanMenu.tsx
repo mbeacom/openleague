@@ -39,6 +39,9 @@ import { drillRows, isBlockRow } from "@/lib/utils/session-rows";
 import { staffNames } from "@/lib/utils/session-staff";
 import type { SessionStaffMember } from "@/types/practice-planner";
 import { downloadBlob } from "./export/download";
+import { downloadDocumentFile } from "./export/download-document";
+import { ENVELOPE_OVERHEAD_BYTES } from "@/lib/document-envelope";
+import { DOCUMENT_FORMAT_INFO, DocumentEncodeError, type DocumentFormat } from "@/lib/document-formats";
 import type { ExportSession, ExportSessionRow } from "./export/bench-sheet-model";
 import { ExportModuleLoadError, exportBenchSheet, type BenchSheetFormat } from "./export/export-bench-sheet";
 import { resolveExportLogo } from "./export/export-logo";
@@ -128,6 +131,26 @@ export function importProblemNotice(doc: PlanDocument, text: string = JSON.strin
     return `This file can't be imported as-is: ${result.error.issues?.[0] ?? result.error.message}`;
 }
 
+/**
+ * The text the importer measures against MAX_PLAN_FILE_BYTES for a file in
+ * `format`: a JSON file as written (pretty-printed), any other format once
+ * decoded, as compact JSON.
+ */
+export function importMeasuredText(doc: PlanDocument, format: DocumentFormat, prettyJson: string = JSON.stringify(doc, null, 2)): string {
+    return format === "json" ? prettyJson : JSON.stringify(doc);
+}
+
+/** The "Download plan file as …" formats; JSON is the plain "Download plan file". */
+export const ALTERNATE_FILE_FORMATS = ["yaml", "toml", "jsonc"] as const satisfies readonly DocumentFormat[];
+export const FORMAT_EXPORT_FAILED_NOTICE = "Couldn't create the file. Check your connection and try again, or download the plan file (JSON).";
+
+/** A file in `format` the importers would refuse unread (they hold every format to the JSON size limit). */
+export function formatTooLargeNotice(text: string, format: DocumentFormat): string[] {
+    return new TextEncoder().encode(text).byteLength > MAX_PLAN_FILE_BYTES + ENVELOPE_OVERHEAD_BYTES
+        ? [`This ${DOCUMENT_FORMAT_INFO[format].label} file is too large to open again. Download the plan file (JSON) instead.`]
+        : [];
+}
+
 type Notice = { severity: "success" | "info" | "warning" | "error"; text: string };
 
 interface ExportPlanMenuProps {
@@ -155,13 +178,28 @@ export function ExportPlanMenu({ session, size = "medium" }: ExportPlanMenuProps
     const namesOption = { includeRosterNames: offerNames && includeNames };
     const unreadable = unreadableDiagramNotice(drillRows(session.plays).filter((sp) => sp.play.playData === null).length);
 
-    const download = () => {
+    const download = (format: DocumentFormat = "json") => {
         setAnchor(null);
         const doc = buildPlanDocument(session, new Date(), planGenerator, namesOption);
         const text = JSON.stringify(doc, null, 2);
-        downloadBlob(new Blob([text], { type: "application/json" }), planFileName(session.title));
-        const warnings = [unreadable, importProblemNotice(doc, text)].filter((text): text is string => text !== null);
-        setNotice(warnings.length > 0 ? { severity: "warning", text: warnings.join(" ") } : null);
+        const warnings = [unreadable, importProblemNotice(doc, importMeasuredText(doc, format, text))].filter((text): text is string => text !== null);
+        const warn = (extra: string[] = []) => {
+            const all = [...warnings, ...extra];
+            setNotice(all.length > 0 ? { severity: "warning", text: all.join(" ") } : null);
+        };
+        if (format === "json") {
+            downloadBlob(new Blob([text], { type: "application/json" }), planFileName(session.title));
+            warn();
+            return;
+        }
+        // YAML, TOML and JSONC carry the same document; their library loads on click.
+        downloadDocumentFile(doc, planFileName(session.title), format).then(
+            (written) => warn(formatTooLargeNotice(written, format)),
+            (error: unknown) => {
+                console.error("Plan file export failed:", error);
+                setNotice({ severity: "error", text: error instanceof DocumentEncodeError ? error.message : FORMAT_EXPORT_FAILED_NOTICE });
+            },
+        );
     };
 
     const exportSheet = async (format: BenchSheetFormat) => {
@@ -241,12 +279,20 @@ export function ExportPlanMenu({ session, size = "medium" }: ExportPlanMenuProps
             </Button>
             <Menu id="export-plan-menu" anchorEl={anchor} open={anchor !== null} onClose={() => setAnchor(null)}>
                 {offerNames && <RosterNamesToggle checked={includeNames} onChange={setIncludeNames} />}
-                <MenuItem onClick={download}>
+                <MenuItem onClick={() => download()}>
                     <ListItemIcon>
                         <DownloadIcon fontSize="small" />
                     </ListItemIcon>
                     <ListItemText>Download plan file</ListItemText>
                 </MenuItem>
+                {ALTERNATE_FILE_FORMATS.map((format) => (
+                    <MenuItem key={format} onClick={() => download(format)}>
+                        <ListItemIcon>
+                            <DownloadIcon fontSize="small" />
+                        </ListItemIcon>
+                        <ListItemText>{`Download plan file as ${DOCUMENT_FORMAT_INFO[format].label}`}</ListItemText>
+                    </MenuItem>
+                ))}
                 <MenuItem onClick={() => void exportSheet("html")} disabled={exporting !== null}>
                     <ListItemIcon>
                         <HtmlIcon fontSize="small" />

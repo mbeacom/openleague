@@ -28,6 +28,7 @@ import {
 } from "@/lib/plan-document";
 import { takeIncomingPlan } from "@/lib/plan-document/pending";
 import { usePlannerPlatform } from "@/lib/planner-store";
+import { DOCUMENT_FILE_ACCEPT } from "@/lib/document-formats";
 
 export { FILE_TOO_LARGE_MESSAGE, readPlanFile };
 
@@ -94,7 +95,7 @@ export function PlanImportView({ teams }: PlanImportViewProps) {
             <input
                 ref={fileInput}
                 type="file"
-                accept=".json,application/json"
+                accept={DOCUMENT_FILE_ACCEPT}
                 hidden
                 data-testid="plan-file-input"
                 onChange={(event) => void onFile(event)}
@@ -104,7 +105,7 @@ export function PlanImportView({ teams }: PlanImportViewProps) {
 
                 {state.kind === "pick" && (
                     <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>
-                        <Typography sx={{ mb: 2 }}>Choose a plan file (.olplan.json) exported from OpenLeague.</Typography>
+                        <Typography sx={{ mb: 2 }}>Choose a plan file exported from OpenLeague (.olplan.json, or .yaml, .toml or .jsonc).</Typography>
                         <Button variant="contained" startIcon={<UploadIcon />} onClick={chooseFile}>
                             Choose plan file
                         </Button>

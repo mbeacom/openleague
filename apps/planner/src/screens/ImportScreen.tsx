@@ -23,6 +23,7 @@ import { PlanReviewPanel, planStartDate, usePlanSave } from "./PlanReviewPanel";
 import { useAiSettings } from "./useAiSettings";
 import { useStoreResult } from "./useStoreResult";
 import { useTeamProfileVersion } from "./useTeamProfile";
+import { DOCUMENT_FILE_ACCEPT } from "@/lib/document-formats";
 
 export { planStartDate };
 
@@ -101,7 +102,7 @@ export function ImportScreen({ store, linkValue }: { store: LocalPlannerStore; l
             <input
                 ref={fileInput}
                 type="file"
-                accept=".json,application/json"
+                accept={DOCUMENT_FILE_ACCEPT}
                 hidden
                 data-testid="plan-file-input"
                 onChange={(event) => void onFile(event)}
@@ -109,7 +110,7 @@ export function ImportScreen({ store, linkValue }: { store: LocalPlannerStore; l
             <Stack spacing={2}>
                 {state.kind === "pick" && (
                     <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>
-                        <Typography sx={{ mb: 2 }}>Choose a plan file (.olplan.json) exported from OpenLeague or this planner.</Typography>
+                        <Typography sx={{ mb: 2 }}>Choose a plan file exported from OpenLeague or this planner (.olplan.json, or .yaml, .toml or .jsonc).</Typography>
                         <Button variant="contained" startIcon={<UploadIcon />} onClick={chooseFile}>
                             Choose plan file
                         </Button>

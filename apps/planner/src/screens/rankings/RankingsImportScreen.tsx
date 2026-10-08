@@ -31,11 +31,13 @@ import type { LocalPlannerStore } from "../../store/types";
 import { RankingsStatus } from "./display";
 import { useRankingsDoc } from "./useRankingsDoc";
 import { usePulledSchedule } from "./pulled-schedule";
+import { DOCUMENT_FILE_ACCEPT } from "@/lib/document-formats";
 
 export const READ_SCHEDULE_LABEL = "Read schedule";
 export const READ_SNAKE_LABEL = "Read snake chart";
 export const SAVE_IMPORT_LABEL = "Save rankings";
 export const OPEN_FILE_LABEL = "Open rankings file";
+export const OPEN_FILE_HINT = "Open a rankings file exported from this planner (.rankings.json, or .yaml, .toml or .jsonc).";
 
 export const REPLACE_CONFIRM_MESSAGE = "Replace your current rankings?";
 export const REPLACE_LABEL = "Replace";
@@ -556,14 +558,19 @@ export function RankingsImportScreen({ store, update = false, pull }: { store: L
                 </Alert>
             )}
 
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-                <Button variant="contained" size="large" onClick={() => void commit()} disabled={!draft || conflicts.length > 0 || addressProblem !== null} sx={{ minHeight: 44 }}>
-                    {SAVE_IMPORT_LABEL}
-                </Button>
-                <Button onClick={() => rankingsFile.current?.click()} sx={{ minHeight: 44 }}>
-                    {OPEN_FILE_LABEL}
-                </Button>
-                <input ref={rankingsFile} hidden type="file" data-testid="rankings-file-input" accept=".json,application/json" onChange={(e) => void openFile(e)} />
+            <Stack spacing={0.5}>
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+                    <Button variant="contained" size="large" onClick={() => void commit()} disabled={!draft || conflicts.length > 0 || addressProblem !== null} sx={{ minHeight: 44 }}>
+                        {SAVE_IMPORT_LABEL}
+                    </Button>
+                    <Button onClick={() => rankingsFile.current?.click()} sx={{ minHeight: 44 }}>
+                        {OPEN_FILE_LABEL}
+                    </Button>
+                    <input ref={rankingsFile} hidden type="file" data-testid="rankings-file-input" accept={DOCUMENT_FILE_ACCEPT} onChange={(e) => void openFile(e)} />
+                </Stack>
+                <Typography variant="body2" color="text.secondary">
+                    {OPEN_FILE_HINT}
+                </Typography>
             </Stack>
         </Stack>
     );

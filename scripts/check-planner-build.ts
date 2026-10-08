@@ -29,12 +29,27 @@ export const FORBIDDEN_IN_BUNDLE: ReadonlyArray<{ pattern: string; reason: strin
 /** A literal only the AI adapters contain (ADR-0023): the Anthropic browser-access header. */
 export const AI_ADAPTER_MARKER = "anthropic-dangerous-direct-browser-access";
 
-export const REQUIRED_IN_BUNDLE = ["openleague.practice-plan", "word/document.xml", AI_ADAPTER_MARKER];
+/**
+ * Literals only each file-format library contains (config-format exports spec):
+ * `yaml`'s alias-limit error, `smol-toml`'s parse error prefix, and a name from
+ * `jsonc-parser`'s scanner.
+ */
+export const FORMAT_LIBRARY_MARKERS = {
+    yaml: "Excessive alias count",
+    toml: "Invalid TOML document",
+    jsonc: "closeBracket",
+} as const;
+
+export const REQUIRED_IN_BUNDLE = ["openleague.practice-plan", "word/document.xml", AI_ADAPTER_MARKER, ...Object.values(FORMAT_LIBRARY_MARKERS)];
 
 /** Code that must load only on demand, by a literal only it contains. */
 export const LAZY_ONLY_IN_BUNDLE: ReadonlyArray<{ pattern: string; reason: string }> = [
     { pattern: "word/document.xml", reason: "the Word export (docx) must load only through import(), on click" },
     { pattern: AI_ADAPTER_MARKER, reason: "AI adapter code must load only through import(), when the coach opens an AI feature (ADR-0023)" },
+    ...Object.entries(FORMAT_LIBRARY_MARKERS).map(([format, pattern]) => ({
+        pattern,
+        reason: `the ${format} file-format library must load only through import(), when a file in that format is saved or opened`,
+    })),
 ];
 
 /** Dynamic code that must never appear in an AI chunk (spec R6). */

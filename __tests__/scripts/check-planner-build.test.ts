@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { checkPlannerBuild, unguardedProcessEnvCount } from "@/scripts/check-planner-build";
+import { FORMAT_LIBRARY_MARKERS, checkPlannerBuild, unguardedProcessEnvCount } from "@/scripts/check-planner-build";
 import { aiConnectSrc, resolveAiOrigins } from "@/apps/planner/ai-origins";
 
 const PUBLIC_CSP = "default-src 'self'; connect-src 'self' https://api.anthropic.com https://api.openai.com http://localhost:* http://127.0.0.1:*; form-action 'none'";
@@ -11,8 +11,10 @@ const cspHtml = (csp: string) =>
     '<script type="module" src="./assets/index-abc.js"></script></head><body></body></html>';
 const GOOD_HTML = cspHtml(PUBLIC_CSP);
 const GOOD_JS = 'const FORMAT = "openleague.practice-plan"; export {};';
-/** The lazily loaded Word export chunk. */
-const LAZY_JS = 'const PART = "word/document.xml"; export {};';
+/** The lazily loaded file-format libraries (config-format exports), as one fixture line. */
+const FORMATS_JS = `const F = ${JSON.stringify(Object.values(FORMAT_LIBRARY_MARKERS))};`;
+/** The lazily loaded Word export chunk, with the format libraries beside it. */
+const LAZY_JS = `const PART = "word/document.xml"; ${FORMATS_JS} export {};`;
 /** The lazily loaded AI adapter chunk (ADR-0023). */
 const AI_JS = 'const H = { "anthropic-dangerous-direct-browser-access": "true" }; export {};';
 
@@ -65,6 +67,19 @@ describe("checkPlannerBuild", () => {
             trustedTypes: true,
         });
         expect(withTt).toEqual([]);
+    });
+
+    it("fails when a file-format library is in the entry chunk, or missing", async () => {
+        const inEntry = await checkPlannerBuild(
+            await fixture({ "index.html": GOOD_HTML, "assets/index-abc.js": `${GOOD_JS}\n${FORMATS_JS}`, "assets/docx-abc.js": LAZY_JS, "assets/ai-abc.js": AI_JS }),
+        );
+        expect(inEntry.join("\n")).toMatch(/\(the entry chunk\) contains "Excessive alias count": the yaml file-format library/);
+        expect(inEntry.join("\n")).toMatch(/\(the entry chunk\) contains "Invalid TOML document"/);
+        const docxOnly = 'const PART = "word/document.xml"; export {};';
+        const missing = await checkPlannerBuild(
+            await fixture({ "index.html": GOOD_HTML, "assets/index-abc.js": GOOD_JS, "assets/docx-abc.js": docxOnly, "assets/ai-abc.js": AI_JS }),
+        );
+        expect(missing.join("\n")).toMatch(/no emitted file contains "closeBracket"/);
     });
 
     it("fails when AI adapter code is in the entry chunk, or missing", async () => {

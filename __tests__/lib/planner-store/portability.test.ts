@@ -23,6 +23,7 @@ const ENTRIES = [
     "lib/ratings/import/index.ts",
     "lib/rankings-document/index.ts",
     "lib/document-envelope/index.ts",
+    "lib/document-formats/index.ts",
     // The schedule handoff codec, shared by the hosted fetch page and the static import (ADR-0024).
     "lib/rankings-document/pull.ts",
     // The static planner's whole bundle (sub-project 3).

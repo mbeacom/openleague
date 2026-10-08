@@ -2,7 +2,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { ExportPlanMenu, type ExportableSession } from "@/components/features/practice-planner/ExportPlanMenu";
-import { decodePlanLink } from "@/lib/plan-document";
+import { readAnyDocumentText } from "@/lib/document-formats";
+import { PLAN_FORMAT, decodePlanLink } from "@/lib/plan-document";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import { renderWithPlanner } from "@/__tests__/helpers/planner";
 
@@ -62,6 +63,30 @@ describe("Export plan: Include player names", () => {
         expect(screen.getByRole("menuitemcheckbox", { name: /Include player names/ })).toHaveAttribute("aria-checked", "true");
         fireEvent.click(screen.getByRole("menuitem", { name: "Download plan file" }));
         expect((await downloaded()).session.roster.players).toEqual([{ role: "S", name: "Alex", number: "7" }, { role: "G" }]);
+    });
+
+    it.each(["YAML", "TOML", "JSONC"])("a plan file as %s carries names only once checked", async (label) => {
+        const ext = label.toLowerCase();
+        const readBack = async () => {
+            await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalled());
+            const text = await (vi.mocked(URL.createObjectURL).mock.calls.at(-1)?.[0] as Blob).text();
+            const result = await readAnyDocumentText(text, `pinewood-8u.olplan.${ext}`, undefined, { kind: PLAN_FORMAT });
+            if (!result.ok) throw new Error(result.error.message);
+            return { text, players: result.document.payload.session.roster?.players };
+        };
+
+        renderWithPlanner(<ExportPlanMenu session={ROSTERED} />);
+        openMenu();
+        fireEvent.click(screen.getByRole("menuitem", { name: `Download plan file as ${label}` }));
+        const off = await readBack();
+        expect(off.players).toEqual([{ role: "S" }, { role: "G" }]);
+        expect(off.text).not.toContain("Alex");
+
+        vi.mocked(URL.createObjectURL).mockClear();
+        openMenu();
+        fireEvent.click(screen.getByRole("menuitemcheckbox", { name: /Include player names/ }));
+        fireEvent.click(screen.getByRole("menuitem", { name: `Download plan file as ${label}` }));
+        expect((await readBack()).players).toEqual([{ role: "S", name: "Alex", number: "7" }, { role: "G" }]);
     });
 
     it("never puts names in a plan link, even when checked", async () => {
