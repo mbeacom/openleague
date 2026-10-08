@@ -67,4 +67,9 @@ describe("readPlanFile", () => {
         expect(await readPlanFile(new File([newer], "x.json"))).toEqual({ ok: false, error: { code: "newer-version", message: NEWER_ENVELOPE_MESSAGE } });
         expect(await readPlanFile(new File([future], "x.json"))).toEqual({ ok: false, error: { code: "newer-version", message: UNKNOWN_KIND_MESSAGE } });
     });
+
+    it("treats a file that can't be read as not a plan, without throwing", async () => {
+        const unreadable = { size: 10, text: () => Promise.reject(new Error("read failed")) } as unknown as File;
+        await expect(readPlanFile(unreadable)).resolves.toEqual({ ok: false, error: { code: "not-a-plan", message: NOT_A_PLAN_MESSAGE } });
+    });
 });

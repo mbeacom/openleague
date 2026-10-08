@@ -5,7 +5,7 @@
  * Never throws.
  */
 import { ENVELOPE_OVERHEAD_BYTES, readDocumentText, type DocumentError } from "@/lib/document-envelope";
-import { FILE_TOO_LARGE_MESSAGE, MAX_PLAN_FILE_BYTES, PLAN_FORMAT, type ParsePlanResult, type PlanError } from "./document";
+import { FILE_TOO_LARGE_MESSAGE, MAX_PLAN_FILE_BYTES, NOT_A_PLAN_MESSAGE, PLAN_FORMAT, type ParsePlanResult, type PlanError } from "./document";
 
 /** The envelope's errors in the plan reader's codes; messages and issues pass through. */
 function toPlanError(error: DocumentError): PlanError {
@@ -23,6 +23,12 @@ export async function readPlanFile(file: File): Promise<ParsePlanResult> {
     if (file.size > MAX_PLAN_FILE_BYTES + ENVELOPE_OVERHEAD_BYTES) {
         return { ok: false, error: { code: "invalid", message: FILE_TOO_LARGE_MESSAGE } };
     }
-    const result = readDocumentText(await file.text(), undefined, { kind: PLAN_FORMAT });
+    let text: string;
+    try {
+        text = await file.text();
+    } catch {
+        return { ok: false, error: { code: "not-a-plan", message: NOT_A_PLAN_MESSAGE } };
+    }
+    const result = readDocumentText(text, undefined, { kind: PLAN_FORMAT });
     return result.ok ? { ok: true, plan: result.document.payload } : { ok: false, error: toPlanError(result.error) };
 }

@@ -43,4 +43,9 @@ describe("readRankingsFile", () => {
             error: { code: "invalid", message: INVALID_ENVELOPE_MESSAGE },
         });
     });
+
+    it("treats a file that can't be read as not a rankings file, without throwing", async () => {
+        const unreadable = { size: 10, text: () => Promise.reject(new Error("read failed")) } as unknown as File;
+        await expect(readRankingsFile(unreadable)).resolves.toEqual({ ok: false, error: { code: "not-rankings", message: NOT_RANKINGS_MESSAGE } });
+    });
 });
