@@ -13,6 +13,7 @@ vi.mock("@/lib/auth/session", () => ({ requireUserId: vi.fn().mockResolvedValue(
 
 import { getPracticeRosterOptions } from "@/lib/actions/practice-session-queries";
 import { PRACTICE_ROSTER_SELECT, readPracticeRoster } from "@/lib/services/practice-session-roster";
+import { practiceRosterSchema } from "@/lib/utils/practice-roster";
 
 const TEAM_ID = "cteamxxxxxxxxxxxxxxxxxxxx";
 
@@ -80,6 +81,18 @@ describe("readPracticeRoster (R6)", () => {
                 { key: "r2", name: "Pat", number: "30", role: "G", playerId: "p1" },
             ],
         });
+    });
+
+    it("reads a long linked team name whole, and the roster it reads saves", () => {
+        const long = "Alexandra ".repeat(10).trim();
+        const roster = readPracticeRoster({
+            teamId: TEAM_ID,
+            rosterAgeGroup: null,
+            rosterRoles: ["S", "G"],
+            rosterPlayers: [row("r1", { playerId: "p1", player: { name: long, jerseyNumber: 7, teamId: TEAM_ID } })],
+        });
+        expect(roster?.players[0].name).toBe(long);
+        expect(practiceRosterSchema.safeParse(roster).success).toBe(true);
     });
 
     it("selects nothing of Player but its name, jersey number and team", () => {

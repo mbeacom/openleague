@@ -5,7 +5,7 @@ import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
 import { SESSION, TEAM, drill, renderEditor, save, stubResizeObserver } from "@/__tests__/helpers/session-editor";
-import { createMockPlannerStore, renderWithPlanner } from "@/__tests__/helpers/planner";
+import { EMPTY_LIBRARY_PAGE, createMockPlannerStore, renderWithPlanner } from "@/__tests__/helpers/planner";
 import { PracticeSessionEditor } from "@/components/features/practice-planner/PracticeSessionEditor";
 import { STARTER_PLAYS } from "@/lib/data/starter-plays";
 import type { PracticeRoster, RosterOption } from "@/lib/utils/practice-roster";
@@ -144,8 +144,7 @@ describe("PracticeSessionEditor: the Roster section", () => {
 });
 
 describe("PracticeSessionEditor: Suggested drills", () => {
-    function renderWithStore(extra: Partial<PracticeSessionData> = {}) {
-        const store = createMockPlannerStore();
+    function renderWithStore(extra: Partial<PracticeSessionData> = {}, store = createMockPlannerStore()) {
         const onSave = vi.fn().mockResolvedValue({ success: true });
         renderWithPlanner(
             <ThemeProvider theme={createTheme()}>
@@ -200,5 +199,53 @@ describe("PracticeSessionEditor: Suggested drills", () => {
         expect(store.createPlay).toHaveBeenCalledWith(expect.objectContaining({ name, isTemplate: true, teamId: TEAM }));
         await save();
         expect(sent(onSave).plays.map((play) => ("playId" in play ? play.playId : null))).toEqual(["cnewplayxxxxxxxxxxxxxxxxx"]);
+    });
+
+    it("keeps Add off until the library has loaded, so a starter never duplicates a library drill", async () => {
+        const players = Array.from({ length: 6 }, (_, i) => ({ key: `s${i}`, name: "", number: "", role: "S" }));
+        const store = createMockPlannerStore();
+        let finish: (value: unknown) => void = () => undefined;
+        store.getPlaysByTeam.mockReturnValueOnce(new Promise((resolve) => (finish = resolve)));
+        renderWithStore({ roster: { ageGroup: "u8", roles: ["S", "G"], players } }, store);
+        const panel = screen.getByRole("region", { name: "Suggested drills" });
+        const pending = await within(panel).findAllByRole("button", { name: /^Add / });
+        expect(pending.length).toBeGreaterThan(0);
+        for (const button of pending) expect(button).toBeDisabled();
+        await act(async () => {
+            finish(EMPTY_LIBRARY_PAGE);
+        });
+        await waitFor(() => {
+            for (const button of within(panel).getAllByRole("button", { name: /^Add / })) expect(button).toBeEnabled();
+        });
+    });
+
+    it("keeps Add off while the library reloads after a starter is copied in", async () => {
+        const players = Array.from({ length: 6 }, (_, i) => ({ key: `s${i}`, name: "", number: "", role: "S" }));
+        const store = createMockPlannerStore();
+        renderWithStore({ roster: { ageGroup: "u8", roles: ["S", "G"], players } }, store);
+        const panel = screen.getByRole("region", { name: "Suggested drills" });
+        await waitFor(() => expect(within(panel).getAllByRole("button", { name: /^Add / })[0]).toBeEnabled());
+        const [first] = within(panel).getAllByRole("listitem");
+        const name = within(first).getAllByText(/./)[0].textContent ?? "";
+        let finish: (value: unknown) => void = () => undefined;
+        store.getPlaysByTeam.mockReturnValueOnce(new Promise((resolve) => (finish = resolve)));
+        store.createPlay.mockResolvedValue({ success: true, data: { id: "cnewplayxxxxxxxxxxxxxxxxx", name, isTemplate: true } });
+        store.getPlayById.mockResolvedValue({
+            success: true,
+            data: { id: "cnewplayxxxxxxxxxxxxxxxxx", name, description: "", thumbnail: null, playData: STARTER_PLAYS[0].playData, isTemplate: true, createdAt: new Date(), updatedAt: new Date() },
+        });
+        await act(async () => {
+            fireEvent.click(within(first).getByRole("button", { name: `Add ${name}` }));
+        });
+        await waitFor(() => expect(store.getPlaysByTeam).toHaveBeenCalledTimes(2));
+        await waitFor(() => expect(store.getPlayById).toHaveBeenCalled());
+        await act(async () => {});
+        for (const button of within(panel).getAllByRole("button", { name: /^Add / })) expect(button).toBeDisabled();
+        await act(async () => {
+            finish(EMPTY_LIBRARY_PAGE);
+        });
+        await waitFor(() => {
+            for (const button of within(panel).getAllByRole("button", { name: /^Add / })) expect(button).toBeEnabled();
+        });
     });
 });

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { PLAY_DATA_VERSION, type PlayData, type PlayerRole } from "@/types/practice-planner";
 import { STARTER_PLAYS } from "@/lib/data/starter-plays";
 import {
+    FALLBACK_LIBRARY_REASON,
+    FALLBACK_REASON,
     MAX_SUGGESTIONS,
     impliedSkaterMinimum,
     mostStations,
@@ -105,6 +107,16 @@ describe("rankDrillSuggestions scores and reasons", () => {
     it("gives no count reason when the count is unknown", () => {
         const [unknown] = rankDrillSuggestions([drill("own", { playData: null })], context());
         expect(unknown.reasons.some((reason) => /skaters|station/.test(reason))).toBe(false);
+    });
+
+    it("always gives at least one reason, a fallback when no rule gave one", () => {
+        // Untagged, count unknown, no goalie reason: optional goalies with none on the roster, or no goalie with one.
+        const [library] = rankDrillSuggestions([drill("own", { goalies: "optional", playData: null })], context({ goalies: 0 }));
+        expect(library.reasons).toEqual([FALLBACK_LIBRARY_REASON]);
+        const [starter] = rankDrillSuggestions([drill("goalie work", { source: "starter", goalies: "none", playData: board(["G"]) })], context({ goalies: 1 }));
+        expect(starter.reasons).toEqual([FALLBACK_REASON]);
+        const [scored] = rankDrillSuggestions([drill("own", { goalies: "none", playData: null })], context({ goalies: 0 }));
+        expect(scored.reasons).toEqual(["No goalie needed"]);
     });
 });
 

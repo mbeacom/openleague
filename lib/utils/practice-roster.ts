@@ -356,33 +356,55 @@ function roleForToken(token: string, roles: readonly string[]): string | null {
     return builtin ? toRosterRole(builtin, roles) : null;
 }
 
+const pasteTokens = (text: string) => cleanRosterText(text.replace(/[(),:]/g, " ").replace(/\s[-–—]+(?=\s)/g, " ")).split(" ").filter(Boolean);
+
+/** The longest custom position whose words begin (or end) the line, ignoring case, with how many tokens it spans. */
+function customRoleAt(tokens: readonly string[], roles: readonly string[], end: boolean): { role: string; length: number } | null {
+    const lower = tokens.map((token) => token.toLowerCase());
+    let best: { role: string; length: number } | null = null;
+    for (const role of roles) {
+        if (isBuiltinRosterRole(role)) continue;
+        const words = pasteTokens(role).map((word) => word.toLowerCase());
+        if (words.length === 0 || words.length > tokens.length || (best && words.length <= best.length)) continue;
+        const slice = end ? lower.slice(tokens.length - words.length) : lower.slice(0, words.length);
+        if (slice.every((word, index) => word === words[index])) best = { role, length: words.length };
+    }
+    return best;
+}
+
 /**
  * One player per line (or ";"-separated): the first 1–3 digit token (an
- * optional "#") is the number, a position word at the start or the end is
- * the position, the rest is the name (cut to the limit). Players past the
- * roster limit are counted in `overflow`, not returned.
+ * optional "#") is the number, a position at the start or the end is the
+ * position (the longest custom position first, then a one-word position),
+ * the rest is the name (cut to the limit). Players past the roster limit are
+ * counted in `overflow`, not returned.
  */
 export function parseRosterPaste(text: string, roles: readonly string[], existing: number): { players: PastedPlayer[]; overflow: number } {
     const room = Math.max(0, MAX_ROSTER_PLAYERS - existing);
     const players: PastedPlayer[] = [];
     let overflow = 0;
     for (const line of text.split(/[\n;]/)) {
-        const tokens = cleanRosterText(line.replace(/[(),:]/g, " ").replace(/\s[-–—]+(?=\s)/g, " "))
-            .split(" ")
-            .filter(Boolean);
+        const tokens = pasteTokens(line);
         if (tokens.length === 0) continue;
         let role: string | null = null;
-        if (tokens.length > 0) {
-            const first = roleForToken(tokens[0], roles);
-            if (first) {
-                role = first;
-                tokens.shift();
-            } else if (tokens.length > 1 || !/^#?\d+$/.test(tokens[0])) {
-                const last = roleForToken(tokens[tokens.length - 1], roles);
-                if (last && tokens.length > 1) {
-                    role = last;
-                    tokens.pop();
-                }
+        const startCustom = customRoleAt(tokens, roles, false);
+        const first = startCustom ? null : roleForToken(tokens[0], roles);
+        if (startCustom) {
+            role = startCustom.role;
+            tokens.splice(0, startCustom.length);
+        } else if (first) {
+            role = first;
+            tokens.shift();
+        } else if (tokens.length > 1 || !/^#?\d+$/.test(tokens[0])) {
+            // An end position must leave something before it.
+            const endCustom = customRoleAt(tokens, roles, true);
+            const last = roleForToken(tokens[tokens.length - 1], roles);
+            if (endCustom && endCustom.length < tokens.length) {
+                role = endCustom.role;
+                tokens.splice(tokens.length - endCustom.length);
+            } else if (last && tokens.length > 1) {
+                role = last;
+                tokens.pop();
             }
         }
         let number = "";
@@ -404,16 +426,18 @@ export function parseRosterPaste(text: string, roles: readonly string[], existin
 // Save schema (R7) and lenient reader
 // ---------------------------------------------------------------------------
 
+const ROSTER_NUMBER_PATTERN = new RegExp(`^\\d{0,${ROSTER_NUMBER_MAX_DIGITS}}$`);
+
+/**
+ * Name and number are checked against the stored-value rules in the roster's
+ * refinement, and only for a player who isn't linked: a linked player stores
+ * only the link (R6), its name and number are the team's, shown live. So a long
+ * team name, or a rename after the practice was planned, never blocks a save.
+ */
 const rosterPlayerSchema = z.object({
     key: z.string({ message: ROSTER_KEY_MESSAGE }).min(1, ROSTER_KEY_MESSAGE).max(ROSTER_KEY_MAX, ROSTER_KEY_MESSAGE),
-    name: z
-        .string({ message: ROSTER_NAME_LENGTH_MESSAGE })
-        .transform(cleanRosterName)
-        .pipe(z.string().max(ROSTER_NAME_MAX, ROSTER_NAME_LENGTH_MESSAGE)),
-    number: z
-        .string({ message: ROSTER_NUMBER_MESSAGE })
-        .transform((value) => value.trim())
-        .pipe(z.string().regex(new RegExp(`^\\d{0,${ROSTER_NUMBER_MAX_DIGITS}}$`), ROSTER_NUMBER_MESSAGE)),
+    name: z.string({ message: ROSTER_NAME_LENGTH_MESSAGE }).transform(cleanRosterName),
+    number: z.string({ message: ROSTER_NUMBER_MESSAGE }).transform((value) => value.trim()),
     role: z.string().max(40),
     playerId: z.string().min(1).max(ROSTER_KEY_MAX).nullish(),
 });
@@ -422,6 +446,7 @@ const rosterPlayerSchema = z.object({
  * A roster as a save sends it (hosted action and static store). Strict on
  * structure, limits, names and numbers; positions are normalized and each
  * player moved onto the list (R3), so a stray position never blocks a save.
+ * A linked player's name and number are dropped (the save stores the link).
  */
 export const practiceRosterSchema = z
     .object({
@@ -438,7 +463,10 @@ export const practiceRosterSchema = z
             if (player.playerId) {
                 if (linked.has(player.playerId)) ctx.addIssue({ code: "custom", path: ["players", index, "playerId"], message: ROSTER_PLAYER_TWICE_MESSAGE });
                 linked.add(player.playerId);
+                return;
             }
+            if (player.name.length > ROSTER_NAME_MAX) ctx.addIssue({ code: "custom", path: ["players", index, "name"], message: ROSTER_NAME_LENGTH_MESSAGE });
+            if (!ROSTER_NUMBER_PATTERN.test(player.number)) ctx.addIssue({ code: "custom", path: ["players", index, "number"], message: ROSTER_NUMBER_MESSAGE });
         });
     })
     .transform((roster): PracticeRoster => {
@@ -448,8 +476,8 @@ export const practiceRosterSchema = z
             roles,
             players: roster.players.map((player) => ({
                 key: player.key,
-                name: player.name,
-                number: player.number,
+                name: player.playerId ? "" : player.name,
+                number: player.playerId ? "" : player.number,
                 role: toRosterRole(player.role, roles),
                 playerId: player.playerId ?? null,
             })),
@@ -473,12 +501,14 @@ export function toPracticeRoster(value: unknown): PracticeRoster | null {
         .slice(0, MAX_ROSTER_PLAYERS)
         .map((player, index): RosterPlayer => {
             const key = typeof player.key === "string" ? player.key : typeof player.id === "string" ? player.id : `roster-${index}`;
+            const playerId = typeof player.playerId === "string" && player.playerId ? player.playerId : null;
             return {
                 key,
-                name: typeof player.name === "string" ? cleanRosterName(player.name).slice(0, ROSTER_NAME_MAX) : "",
+                // A linked player's name is the team's, read live and never stored: shown whole.
+                name: typeof player.name === "string" ? (playerId ? cleanRosterName(player.name) : cleanRosterName(player.name).slice(0, ROSTER_NAME_MAX).trim()) : "",
                 number: toRosterNumber(player.number),
                 role: toRosterRole(player.role, roles),
-                playerId: typeof player.playerId === "string" && player.playerId ? player.playerId : null,
+                playerId,
             };
         });
     return { ageGroup: toAgeGroup(raw.ageGroup), roles, players };

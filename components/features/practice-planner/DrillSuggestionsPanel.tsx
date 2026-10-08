@@ -198,7 +198,8 @@ export function DrillSuggestionsPanel({ teamId, roster, goaliesAttending, plays,
                                 size="small"
                                 startIcon={<AddOutlined />}
                                 onClick={() => void add(candidate)}
-                                disabled={disabled || adding !== null}
+                                // Off until the library is loaded for this key: an unloaded library reads every starter as absent (a duplicate copy).
+                                disabled={disabled || adding !== null || loading}
                                 aria-label={`Add ${candidate.name}`}
                                 sx={{ minWidth: 44, minHeight: 44, flexShrink: 0 }}
                             >

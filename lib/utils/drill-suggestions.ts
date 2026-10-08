@@ -22,6 +22,10 @@ const MAX_SPLIT_STATIONS = 4;
 /** A drill's best group: its minimum skaters up to this many times it. */
 const BEST_GROUP_FACTOR = 3;
 
+/** The reason a drill shows when no rule gave one (untagged, count unknown, no goalie reason). */
+export const FALLBACK_LIBRARY_REASON = "From your library";
+export const FALLBACK_REASON = "Fits your practice";
+
 /** Markers that stand for a skater on the ice: generic, forwards, defense and opponents (played by your skaters). */
 const SKATER_MARKERS = new Set(["X", "O", "F", "D"]);
 
@@ -119,6 +123,7 @@ function scoreDrill(drill: SuggestionCandidate, context: SuggestionContext, excl
             }
         }
     }
+    if (reasons.length === 0) reasons.push(drill.source === "library" ? FALLBACK_LIBRARY_REASON : FALLBACK_REASON);
     return { candidate: drill, score, reasons };
 }
 

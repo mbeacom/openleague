@@ -202,6 +202,24 @@ describe("parseRosterPaste (R9)", () => {
         ]);
     });
 
+    it("reads a multi-word custom position at the start or the end, ignoring case", () => {
+        const roles = ["S", "Left Wing", "G"];
+        expect(parseRosterPaste("Sam - Left Wing\nleft wing: 9 Alex\nLEFT WING Jo\n#4 Riley left   wing", roles, 0).players).toEqual([
+            { name: "Sam", number: "", role: "Left Wing" },
+            { name: "Alex", number: "9", role: "Left Wing" },
+            { name: "Jo", number: "", role: "Left Wing" },
+            { name: "Riley", number: "4", role: "Left Wing" },
+        ]);
+    });
+
+    it("prefers the longest custom position over a one-word alias", () => {
+        expect(parseRosterPaste("Sam Wing Back\nWing Back Alex\nPat Wing", ["S", "Wing", "Wing Back", "G"], 0).players).toEqual([
+            { name: "Sam", number: "", role: "Wing Back" },
+            { name: "Alex", number: "", role: "Wing Back" },
+            { name: "Pat", number: "", role: "Wing" },
+        ]);
+    });
+
     it("stops at the limit and reports the rest", () => {
         const text = Array.from({ length: 5 }, (_, i) => `${i + 1}`).join("\n");
         const result = parseRosterPaste(text, ["S", "G"], MAX_ROSTER_PLAYERS - 2);
@@ -258,6 +276,44 @@ describe("practiceRosterSchema (R7)", () => {
             }),
         ).toBe(ROSTER_PLAYER_TWICE_MESSAGE);
         expect(practiceRosterSchema.safeParse({ ...valid, ageGroup: "u7" }).success).toBe(false);
+    });
+});
+
+describe("practiceRosterSchema team links", () => {
+    it("takes a linked player's name and number from the team, so a long team name never blocks a save", () => {
+        const parsed = practiceRosterSchema.parse({
+            ageGroup: null,
+            roles: ["S", "G"],
+            players: [
+                { key: "a", name: "Alexandra ".repeat(10).trim(), number: "7", role: "S", playerId: "p1" },
+                { key: "b", name: "Sam", number: "9", role: "S" },
+            ],
+        });
+        expect(parsed.players).toEqual([
+            { key: "a", name: "", number: "", role: "S", playerId: "p1" },
+            { key: "b", name: "Sam", number: "9", role: "S", playerId: null },
+        ]);
+    });
+
+    it("still checks an unlinked player's name", () => {
+        const result = practiceRosterSchema.safeParse({ ageGroup: null, roles: ["S", "G"], players: [{ key: "a", name: "x".repeat(41), number: "", role: "S", playerId: null }] });
+        expect(result.error?.issues[0]?.message).toBe(ROSTER_NAME_LENGTH_MESSAGE);
+    });
+});
+
+describe("toPracticeRoster linked names", () => {
+    it("keeps a linked player's whole team name and cuts only a typed one", () => {
+        const long = "Alexandra ".repeat(10).trim();
+        const read = toPracticeRoster({
+            ageGroup: null,
+            roles: ["S", "G"],
+            players: [
+                { key: "a", name: long, number: "7", role: "S", playerId: "p1" },
+                { key: "b", name: long, number: "", role: "S" },
+            ],
+        });
+        expect(read?.players.map((p) => p.name)).toEqual([long, long.slice(0, 40).trim()]);
+        expect(practiceRosterSchema.safeParse(read).success).toBe(true);
     });
 });
 
