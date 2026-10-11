@@ -212,6 +212,23 @@ describe("sync engine, row by row", () => {
         expect(a.title()).toBe("Fall, mine");
     });
 
+    it("Save a copy (R8): a new file and a new id, relinked; the shared file is untouched", async () => {
+        const { remote, a, file } = await openedFromRemote();
+        a.edit("Fall, my edits");
+        const outcome = await a.engine.saveCopy(KEY);
+        expectState(outcome, "in-sync");
+        if (!outcome.ok) return;
+        expect(outcome.link.documentId).not.toBe(DOCUMENT_ID);
+        expect(outcome.link.remote.name).toBe("fall (my copy).rankings.json");
+        expect(outcome.link.baseWrittenHere).toBe(true);
+        expect(a.documents.docs.get(KEY)?.documentId).toBe(outcome.link.documentId);
+        const copy = readDocumentText(remote.peek(outcome.link.remote.fileId)!.text, undefined, { kind: RANKINGS_FORMAT });
+        expect(copy.ok && { id: copy.document.id, title: copy.document.payload.meta.title }).toEqual({ id: outcome.link.documentId, title: "Fall, my edits" });
+        expect(remote.peek(file.fileId)!.revision).toBe(file.revision);
+        expect(await a.engine.saveCopy(KEY, "onedrive")).toEqual({ ok: false, error: { code: "no-connector" } });
+        expect(await a.engine.saveCopy("openleague.rankings:unlinked")).toEqual({ ok: false, error: { code: "not-linked" } });
+    });
+
     it("offline: the save fails, the edits stay, and the link stays dirty", async () => {
         const { remote, a, file } = await openedFromRemote();
         a.edit("Fall, offline edit");

@@ -84,6 +84,12 @@ export interface StorageConnector {
     status: () => ConnectorStatus;
     /** Interactive: call from a user gesture. */
     connect: () => Promise<Result<void>>;
+    /**
+     * Loads what connect() and a picker need (a lazy chunk, a provider script)
+     * ahead of the tap, so the popup opens while the browser still counts the
+     * tap as its cause. Called when a menu offering this connector opens; never fails.
+     */
+    prepare?: () => Promise<void>;
     /** Revokes or clears tokens; links are kept. */
     disconnect: () => Promise<void>;
     list: (filter?: { kind?: string }) => Promise<Result<RemoteFile[]>>;

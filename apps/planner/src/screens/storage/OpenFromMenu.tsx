@@ -18,7 +18,8 @@ import type { RemoteRef, StorageConnector } from "../../storage/connector";
 import { planStartDate } from "../PlanReviewPanel";
 import { useStorage } from "./StorageContext";
 import { ReplaceOrKeepDialog } from "./ReplaceOrKeepDialog";
-import { CONNECTOR_LABELS, DOWNLOAD_COPY_HINT, IMPORT_COPY_LABEL, OPEN_FROM_LABEL, STORE_FAILED_MESSAGE, syncErrorText } from "./messages";
+import { connectIfNeeded, prepareConnectors } from "./connection";
+import { CONNECTOR_LABELS, DOWNLOAD_COPY_HINT, connectErrorText, IMPORT_COPY_LABEL, OPEN_FROM_LABEL, STORE_FAILED_MESSAGE, syncErrorText } from "./messages";
 
 export interface OpenFromMenuProps {
     kind: DocumentKind;
@@ -70,6 +71,12 @@ export function OpenFromMenu({ kind, importHref, onOpened }: OpenFromMenuProps) 
     const pick = (connector: StorageConnector) =>
         attempt(async () => {
             setAnchor(null);
+            // A cloud connector signs in first, from this tap; its picker needs the session.
+            const unconnected = await connectIfNeeded(connector);
+            if (unconnected) {
+                setProblem(connectErrorText(unconnected, connector.id));
+                return;
+            }
             const picked = await connector.pickToOpen({ kind });
             if (!picked.ok) {
                 setProblem(syncErrorText(picked.error, "the file"));
@@ -133,7 +140,10 @@ export function OpenFromMenu({ kind, importHref, onOpened }: OpenFromMenuProps) 
                 aria-haspopup="menu"
                 aria-controls={anchor ? `open-from-${kind}` : undefined}
                 aria-expanded={anchor ? "true" : undefined}
-                onClick={(event) => setAnchor(event.currentTarget)}
+                onClick={(event) => {
+                    prepareConnectors(connectors);
+                    setAnchor(event.currentTarget);
+                }}
                 sx={{ minHeight: 44 }}
             >
                 {OPEN_FROM_LABEL}

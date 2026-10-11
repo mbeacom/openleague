@@ -22,6 +22,7 @@ import type { DocumentLink } from "../../store/records";
 import type { ConnectorId, RemoteFile } from "../../storage/connector";
 import { needsChoice, type LocalSyncState, type Resolution, type SyncOutcome } from "../../storage/sync";
 import { ConflictDialog } from "./ConflictDialog";
+import { connectIfNeeded, prepareConnectors } from "./connection";
 import { useStorage } from "./StorageContext";
 import {
     ALLOW_ACCESS_LABEL,
@@ -33,6 +34,8 @@ import {
     SAVE_TO_LABEL,
     STORE_FAILED_MESSAGE,
     UNLINK_LABEL,
+    connectErrorText,
+    saveCopyLabel,
     statusText,
     syncErrorText,
 } from "./messages";
@@ -71,6 +74,8 @@ function StorageBar({ docKey, kind, fileName, onReplaced, editVersion = 0 }: Doc
     const [choice, setChoice] = useState<Choice | null>(null);
     const [dialogOpen, setDialogOpen] = useState(false);
     const [menu, setMenu] = useState<HTMLElement | null>(null);
+    /** The linked file refused a save (a view-only share, spec R8): offer a copy. */
+    const [refused, setRefused] = useState(false);
     const replaced = useRef(onReplaced);
     useEffect(() => {
         replaced.current = onReplaced;
@@ -92,6 +97,7 @@ function StorageBar({ docKey, kind, fileName, onReplaced, editVersion = 0 }: Doc
     const apply = useCallback(
         async (outcome: SyncOutcome | null, fileName: string) => {
             if (outcome === null) return;
+            setRefused(!outcome.ok && outcome.error.code === "forbidden");
             if (!outcome.ok) {
                 await readLocal();
                 if (outcome.error.code === "auth-required") setShown("needs-permission");
@@ -159,9 +165,26 @@ function StorageBar({ docKey, kind, fileName, onReplaced, editVersion = 0 }: Doc
         };
     }, [link, run, engine, docKey]);
 
+    /** A step that needs the connector's session: a cloud connector signs in first, from this tap. */
+    const connected = useCallback(
+        async (id: ConnectorId, step: () => Promise<SyncOutcome | null>): Promise<SyncOutcome | null> => {
+            const error = await connectIfNeeded(storage.connector(id));
+            if (!error) return step();
+            setProblem(connectErrorText(error, id));
+            return null;
+        },
+        [storage],
+    );
+
     const saveTo = (connector: ConnectorId) => {
         setMenu(null);
-        void run(() => engine.saveNew(docKey, connector, fileName), fileName);
+        void run(() => connected(connector, () => engine.saveNew(docKey, connector, fileName)), fileName);
+    };
+
+    const saveCopy = () => {
+        if (!link) return;
+        const id = link.connector;
+        void run(() => connected(id, () => engine.saveCopy(docKey)), name);
     };
 
     const downloadCopy = async () => {
@@ -229,7 +252,13 @@ function StorageBar({ docKey, kind, fileName, onReplaced, editVersion = 0 }: Doc
                 </Box>
                 <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", rowGap: 1 }}>
                     {shown === "needs-permission" && link && (
-                        <Button variant="contained" startIcon={<LockIcon />} disabled={busy} onClick={() => void run(() => engine.check(docKey), name)} sx={{ minHeight: 44 }}>
+                        <Button
+                            variant="contained"
+                            startIcon={<LockIcon />}
+                            disabled={busy}
+                            onClick={() => void run(() => connected(link.connector, () => engine.check(docKey)), name)}
+                            sx={{ minHeight: 44 }}
+                        >
                             {ALLOW_ACCESS_LABEL}
                         </Button>
                     )}
@@ -239,7 +268,7 @@ function StorageBar({ docKey, kind, fileName, onReplaced, editVersion = 0 }: Doc
                         </Button>
                     )}
                     {canSaveLinked && shown !== "needs-permission" && (
-                        <Button variant={shown === "unsaved" || shown === "offline" ? "contained" : "outlined"} startIcon={<SaveIcon />} disabled={busy} onClick={() => void run(() => engine.save(docKey), name)} sx={{ minHeight: 44 }}>
+                        <Button variant={shown === "unsaved" || shown === "offline" ? "contained" : "outlined"} startIcon={<SaveIcon />} disabled={busy} onClick={() => void run(() => connected(link.connector, () => engine.save(docKey)), name)} sx={{ minHeight: 44 }}>
                             {SAVE_LABEL}
                         </Button>
                     )}
@@ -249,7 +278,10 @@ function StorageBar({ docKey, kind, fileName, onReplaced, editVersion = 0 }: Doc
                         aria-haspopup="menu"
                         aria-controls={menu ? `save-to-${docKey}` : undefined}
                         aria-expanded={menu ? "true" : undefined}
-                        onClick={(event) => setMenu(event.currentTarget)}
+                        onClick={(event) => {
+                            prepareConnectors(connectors);
+                            setMenu(event.currentTarget);
+                        }}
                         sx={{ minHeight: 44 }}
                     >
                         {SAVE_TO_LABEL}
@@ -262,7 +294,18 @@ function StorageBar({ docKey, kind, fileName, onReplaced, editVersion = 0 }: Doc
                 </Typography>
             )}
             {problem && (
-                <Alert severity={shown === "offline" ? "info" : "error"} onClose={() => setProblem(null)} sx={{ mt: 1 }}>
+                <Alert
+                    severity={shown === "offline" ? "info" : "error"}
+                    onClose={() => setProblem(null)}
+                    action={
+                        refused && link && canSaveLinked ? (
+                            <Button color="inherit" size="small" disabled={busy} onClick={saveCopy} sx={{ minHeight: 44 }}>
+                                {saveCopyLabel(link.connector)}
+                            </Button>
+                        ) : undefined
+                    }
+                    sx={{ mt: 1 }}
+                >
                     {problem}
                 </Alert>
             )}

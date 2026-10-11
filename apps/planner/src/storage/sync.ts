@@ -166,6 +166,13 @@ export interface SyncEngine {
     save: (docKey: string) => Promise<SyncOutcome>;
     /** The conflict dialog's choice, with the remote it was shown. */
     resolve: (docKey: string, resolution: Resolution, remote: RemoteFile) => Promise<SyncOutcome>;
+    /**
+     * "Save a copy" (spec R8, a view-only share): saves the working copy as a
+     * new file next to the linked one's name ("<name> (my copy)") with a new
+     * envelope id, and relinks the document to it. The linked file is left as
+     * it is. `connector` defaults to the linked file's.
+     */
+    saveCopy: (docKey: string, connector?: ConnectorId) => Promise<SyncOutcome>;
     /** Marks a linked document dirty after a local edit. */
     noteLocalEdit: (docKey: string) => Promise<void>;
 }
@@ -278,6 +285,19 @@ export function createSyncEngine({ connectors, links, documents, now = () => new
         return keepDirty(link, saved.error);
     }
 
+    /** The working copy as a new file with a new envelope id, relinked to it ("Keep both", "Save a copy"). */
+    async function saveAsCopy(docKey: string, link: DocumentLink, local: LocalDocument, connector: StorageConnector): Promise<SyncOutcome> {
+        const documentId = newId();
+        const mine: LocalDocument = { ...local, documentId };
+        const name = copyName(link.remote.name);
+        const text = await textOf(mine, stamp(), name);
+        if (!text.ok) return keepDirty(link, text.error);
+        const saved = await connector.save({ ref: null, name, text: text.text, kind: local.kind, documentId, expectedRevision: null });
+        if (!saved.ok) return keepDirty(link, saved.error);
+        await documents.setDocumentId(docKey, documentId);
+        return recordSave(docKey, mine, saved.value);
+    }
+
     return {
         saveNew: async (docKey, connectorId, name) => {
             const connector = byId.get(connectorId);
@@ -345,15 +365,16 @@ export function createSyncEngine({ connectors, links, documents, now = () => new
                 return adopt(docKey, { ...opened.value, kind: local.kind, previous: local, recover: true, link });
             }
             // Keep both: mine becomes a new document with a new envelope id; theirs stays as it is.
-            const documentId = newId();
-            const mine: LocalDocument = { ...local, documentId };
-            const name = copyName(link.remote.name);
-            const text = await textOf(mine, stamp(), name);
-            if (!text.ok) return keepDirty(link, text.error);
-            const saved = await connector.save({ ref: null, name, text: text.text, kind: local.kind, documentId, expectedRevision: null });
-            if (!saved.ok) return keepDirty(link, saved.error);
-            await documents.setDocumentId(docKey, documentId);
-            return recordSave(docKey, mine, saved.value);
+            return saveAsCopy(docKey, link, local, connector);
+        },
+
+        saveCopy: async (docKey, connectorId) => {
+            const loaded = await load(docKey);
+            if (!loaded.ok) return loaded.outcome;
+            const { link, local } = loaded.ctx;
+            const connector = connectorId ? byId.get(connectorId) : loaded.ctx.connector;
+            if (!connector) return failed({ code: "no-connector" });
+            return saveAsCopy(docKey, link, local, connector);
         },
 
         noteLocalEdit: async (docKey) => {

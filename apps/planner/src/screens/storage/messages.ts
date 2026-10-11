@@ -1,5 +1,5 @@
 /** What the storage screens say (storage connectors spec, Sync and conflicts). */
-import type { ConnectorId } from "../../storage/connector";
+import type { ConnectorError, ConnectorId } from "../../storage/connector";
 import type { SyncError, SyncState } from "../../storage/sync";
 
 export interface ConnectorLabels {
@@ -15,6 +15,29 @@ export const CONNECTOR_LABELS: Record<ConnectorId, ConnectorLabels> = {
     onedrive: { item: "OneDrive…", where: "in OneDrive" },
 };
 
+/** The storage itself, in sentences ("Google Drive didn't allow access"). */
+export const CONNECTOR_NAMES: Record<ConnectorId, string> = {
+    "local-file": "This computer",
+    "google-drive": "Google Drive",
+    onedrive: "OneDrive",
+};
+
+/** A cloud sign-in that didn't finish, in words; null when the coach closed it. */
+export function connectErrorText(error: ConnectorError, connector: ConnectorId): string | null {
+    const name = CONNECTOR_NAMES[connector];
+    switch (error.code) {
+        case "cancelled":
+            return null;
+        case "auth-required":
+            return `${name} didn't allow access. Try again, and allow OpenLeague to use the files it creates or you open with it.`;
+        case "unavailable":
+        case "offline":
+            return `${name} couldn't be reached. Check your connection and try again.`;
+        default:
+            return syncErrorText(error, name);
+    }
+}
+
 export const SAVE_TO_LABEL = "Save to…";
 export const OPEN_FROM_LABEL = "Open from…";
 export const SAVE_LABEL = "Save";
@@ -22,6 +45,18 @@ export const UNLINK_LABEL = "Unlink";
 export const ALLOW_ACCESS_LABEL = "Allow access";
 export const DOWNLOAD_COPY_LABEL = "Download a copy";
 export const IMPORT_COPY_LABEL = "Import a file (a copy)";
+
+/** Spec R8: offered when the linked file refuses a save (a view-only share). */
+export function saveCopyLabel(connector: ConnectorId): string {
+    switch (connector) {
+        case "google-drive":
+            return "Save a copy to my Drive";
+        case "onedrive":
+            return "Save a copy to my OneDrive";
+        case "local-file":
+            return "Save a copy";
+    }
+}
 
 export const SAVED_IN_BROWSER = "Saved in this browser";
 /** Tier 2 (spec R7): said wherever a download stands in for a linked file. */
@@ -61,7 +96,7 @@ export function syncErrorText(error: SyncError, name: string): string | null {
         case "not-found":
             return `${name} is gone, or was moved or renamed outside the planner. Save to a new file, or unlink it.`;
         case "forbidden":
-            return `You can't save to ${name}. Save a copy to a new file instead.`;
+            return `You can't save to ${name}: it may be shared with you as view-only. Save a copy instead.`;
         case "auth-required":
             return `The browser needs your permission to use ${name}. Tap ${ALLOW_ACCESS_LABEL}.`;
         case "offline":

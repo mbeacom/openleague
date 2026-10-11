@@ -2,10 +2,21 @@ import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { FORMAT_LIBRARY_MARKERS, SAVED_FILES_MARKER, checkPlannerBuild, unguardedProcessEnvCount } from "@/scripts/check-planner-build";
-import { aiConnectSrc, resolveAiOrigins } from "@/apps/planner/ai-origins";
+import { FORMAT_LIBRARY_MARKERS, GOOGLE_DRIVE_MARKERS, SAVED_FILES_MARKER, checkPlannerBuild, unguardedProcessEnvCount } from "@/scripts/check-planner-build";
+import { resolveAiOrigins } from "@/apps/planner/ai-origins";
+import { plannerCsp } from "@/apps/planner/build-config";
+import { resolveCloudSettings } from "@/apps/planner/cloud-config";
 
-const PUBLIC_CSP = "default-src 'self'; connect-src 'self' https://api.anthropic.com https://api.openai.com http://localhost:* http://127.0.0.1:*; form-action 'none'";
+const PUBLIC_CSP = plannerCsp(resolveAiOrigins(undefined));
+/** A build configured for Google Drive (fictional values), and its policy. */
+const GOOGLE_CLOUD = resolveCloudSettings({
+    OPENLEAGUE_GOOGLE_CLIENT_ID: "123-fictional.apps.googleusercontent.com",
+    OPENLEAGUE_GOOGLE_API_KEY: "fictional-key",
+    OPENLEAGUE_GOOGLE_APP_ID: "123456789",
+});
+const GOOGLE_CSP = plannerCsp(resolveAiOrigins(undefined), { cloud: GOOGLE_CLOUD });
+/** The lazily loaded Google Drive connector chunk. */
+const GOOGLE_JS = `const G = ${JSON.stringify(GOOGLE_DRIVE_MARKERS)}; export {};`;
 const cspHtml = (csp: string) =>
     `<html><head><meta http-equiv="Content-Security-Policy" content="${csp}">` +
     '<script type="module" src="./assets/index-abc.js"></script></head><body></body></html>';
@@ -48,17 +59,47 @@ describe("checkPlannerBuild", () => {
     it("fails when the built connect-src differs from the resolved AI origin allowlist", async () => {
         const files = { "assets/index-abc.js": GOOD_JS, "assets/docx-abc.js": LAZY_JS, "assets/ai-abc.js": AI_JS };
         const narrow = await checkPlannerBuild(await fixture({ ...files, "index.html": cspHtml("default-src 'self'; connect-src 'self'") }));
-        expect(narrow.join("\n")).toMatch(/connect-src is "connect-src 'self'", but the AI origin allowlist resolves to/);
+        expect(narrow.join("\n")).toMatch(/connect-src is "connect-src 'self'", but the AI origin allowlist and cloud connectors resolve to/);
         // A self-hosted build: the public CSP no longer matches the resolved list.
         const selfHosted = await checkPlannerBuild(await fixture({ ...files, "index.html": GOOD_HTML }), {
             aiOrigins: resolveAiOrigins("https://models.example:8443"),
         });
         expect(selfHosted.join("\n")).toMatch(/https:\/\/models\.example:8443/);
         const matching = await checkPlannerBuild(
-            await fixture({ ...files, "index.html": cspHtml(`default-src 'self'; ${aiConnectSrc(resolveAiOrigins("https://models.example:8443"))}`) }),
+            await fixture({ ...files, "index.html": cspHtml(plannerCsp(resolveAiOrigins("https://models.example:8443"))) }),
             { aiOrigins: resolveAiOrigins("https://models.example:8443") },
         );
         expect(matching).toEqual([]);
+    });
+
+    it("fails when the CSP differs from the build's in any directive", async () => {
+        const files = { "assets/index-abc.js": GOOD_JS, "assets/docx-abc.js": LAZY_JS, "assets/ai-abc.js": AI_JS };
+        const loose = await checkPlannerBuild(await fixture({ ...files, "index.html": cspHtml(PUBLIC_CSP.replace("script-src 'self'", "script-src 'self' https://cdn.example")) }));
+        expect(loose.join("\n")).toMatch(/the CSP is ".*https:\/\/cdn\.example.*", but this build's settings resolve to/);
+    });
+
+    it("requires Google Drive's hosts and lazy chunk exactly when the build configures it (spec R9)", async () => {
+        const files = { "assets/index-abc.js": GOOD_JS, "assets/docx-abc.js": LAZY_JS, "assets/ai-abc.js": AI_JS };
+        expect(await checkPlannerBuild(await fixture({ ...files, "assets/google-drive-abc.js": GOOGLE_JS, "index.html": cspHtml(GOOGLE_CSP) }), { cloud: GOOGLE_CLOUD })).toEqual([]);
+
+        // Configured, but the policy left the hosts out, and the chunk is missing.
+        const bare = (await checkPlannerBuild(await fixture({ ...files, "index.html": GOOD_HTML }), { cloud: GOOGLE_CLOUD })).join("\n");
+        expect(bare).toMatch(/connect-src is .*, but the AI origin allowlist and cloud connectors resolve to ".*https:\/\/www\.googleapis\.com/);
+        expect(bare).toMatch(/no emitted file contains "apis\.google\.com\/js\/api\.js"/);
+
+        // Not configured: neither the hosts nor the connector may ship.
+        const unasked = (await checkPlannerBuild(await fixture({ ...files, "assets/google-drive-abc.js": GOOGLE_JS, "index.html": cspHtml(GOOGLE_CSP) }))).join("\n");
+        expect(unasked).toMatch(/the CSP is ".*https:\/\/accounts\.google\.com.*", but this build's settings resolve to/);
+        expect(unasked).toMatch(/google-drive-abc\.js contains "initTokenClient", but this build doesn't configure Google Drive/);
+    });
+
+    it("fails when the Google Drive connector is in the entry chunk", async () => {
+        const problems = await checkPlannerBuild(
+            await fixture({ "index.html": cspHtml(GOOGLE_CSP), "assets/index-abc.js": `${GOOD_JS}\n${GOOGLE_JS}`, "assets/docx-abc.js": LAZY_JS, "assets/ai-abc.js": AI_JS }),
+            { cloud: GOOGLE_CLOUD },
+        );
+        expect(problems.join("\n")).toMatch(/\(the entry chunk\) contains "apis\.google\.com\/js\/api\.js": the Google Drive connector/);
+        expect(problems.join("\n")).toMatch(/\(the entry chunk\) contains "initTokenClient"/);
     });
 
     it("requires Trusted Types in the CSP when it is enabled", async () => {

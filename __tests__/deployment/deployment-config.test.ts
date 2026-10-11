@@ -10,7 +10,7 @@ import {
   parseTimeoutMs,
   parseUptimeTargets,
 } from '@/scripts/check-uptime';
-import { validateDeploymentConfig } from '@/scripts/validate-deployment-config';
+import { PLANNER_CLOUD_ENV, docsWorkflowCloudProblems, validateDeploymentConfig } from '@/scripts/validate-deployment-config';
 
 const rootDir = process.cwd();
 
@@ -95,6 +95,38 @@ describe('deployment configuration', () => {
     expect(docsWorkflow).toContain('actions/deploy-pages');
     expect(docsBuilder).toContain('openleague.dev');
     expect(docsBuilder).toContain('CNAME');
+  });
+
+  it("passes the planner's cloud connector identifiers to its build and check only (storage connectors spec R9)", async () => {
+    const docsWorkflow = await readText('.github/workflows/docs-pages.yml');
+    expect(docsWorkflowCloudProblems(docsWorkflow)).toEqual([]);
+    expect(PLANNER_CLOUD_ENV.map((entry) => `${entry.source}.${entry.name}`)).toEqual([
+      'vars.OPENLEAGUE_GOOGLE_CLIENT_ID',
+      'vars.OPENLEAGUE_GOOGLE_APP_ID',
+      'secrets.OPENLEAGUE_GOOGLE_API_KEY',
+      'vars.OPENLEAGUE_MICROSOFT_CLIENT_ID',
+    ]);
+
+    // The build job must read the environment without recording a deployment.
+    const noEnvironment = docsWorkflow.replace(/\n {4}environment:\n {6}name: github-pages\n {6}deployment: false/, '');
+    expect(docsWorkflowCloudProblems(noEnvironment).join('\n')).toMatch(/github-pages environment with deployment: false/);
+    const recordsDeployment = docsWorkflow.replace('      deployment: false\n', '');
+    expect(docsWorkflowCloudProblems(recordsDeployment).join('\n')).toMatch(/deployment: false/);
+
+    // A value read from the wrong place, or left out.
+    const keyFromVars = docsWorkflow.replace(/secrets\.OPENLEAGUE_GOOGLE_API_KEY/g, 'vars.OPENLEAGUE_GOOGLE_API_KEY');
+    expect(docsWorkflowCloudProblems(keyFromVars).join('\n')).toMatch(/must set OPENLEAGUE_GOOGLE_API_KEY from secrets\.OPENLEAGUE_GOOGLE_API_KEY/);
+    const noMicrosoft = docsWorkflow.replace(/\n\s+OPENLEAGUE_MICROSOFT_CLIENT_ID: .*/g, '');
+    expect(docsWorkflowCloudProblems(noMicrosoft).join('\n')).toMatch(/"Build the static planner" step must set OPENLEAGUE_MICROSOFT_CLIENT_ID/);
+
+    // The secret reaching the whole job, or another step.
+    const jobWide = docsWorkflow.replace('    env:\n', '    env:\n      OPENLEAGUE_GOOGLE_API_KEY: ${{ secrets.OPENLEAGUE_GOOGLE_API_KEY }}\n');
+    expect(docsWorkflowCloudProblems(jobWide).join('\n')).toMatch(/OPENLEAGUE_GOOGLE_API_KEY must reach only the planner build and check steps, not the job env/);
+    const otherStep = docsWorkflow.replace(
+      '        run: bun run docs:build-pages\n',
+      '        run: bun run docs:build-pages\n        env:\n          OPENLEAGUE_GOOGLE_API_KEY: ${{ secrets.OPENLEAGUE_GOOGLE_API_KEY }}\n',
+    );
+    expect(docsWorkflowCloudProblems(otherStep).join('\n')).toMatch(/not Build docs pages artifact/);
   });
 
   it('runs scheduled uptime monitoring for the main and docs sites', async () => {
