@@ -91,6 +91,50 @@ describe("PlayLibrary: age filter", () => {
         expect(screen.queryByRole("button", { name: "Show all ages" })).toBeNull();
     });
 
+    it("shows the empty library's own message and Create Play whatever age is remembered", async () => {
+        localStorage.setItem(AGE_FILTER_STORAGE_KEY, "u8");
+        renderLibrary([]);
+        expect(await screen.findByText("No plays in your library yet")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Create Play" })).toBeInTheDocument();
+        expect(screen.queryByText("No plays found")).toBeNull();
+    });
+
+    it("still says nothing matched when the library has drills but none for the remembered age", async () => {
+        localStorage.setItem(AGE_FILTER_STORAGE_KEY, "u8");
+        const store = createMockPlannerStore();
+        store.getPlaysByTeam.mockImplementation(async (query: { ageGroup?: string }) => page(query.ageGroup ? [] : [FOUR_ON_FOUR]));
+        renderWithPlanner(
+            <ThemeProvider theme={createTheme()}>
+                <PlayLibrary teamId={TEAM} mode="manage" />
+            </ThemeProvider>,
+            { store, platform: createHashPlatform() },
+        );
+        expect(await screen.findByText("No plays found")).toBeInTheDocument();
+        await waitFor(() => expect(store.getPlaysByTeam).toHaveBeenCalledWith(expect.not.objectContaining({ ageGroup: "u8" })));
+        expect(screen.getByText("No plays found")).toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "Create Play" })).toBeNull();
+    });
+
+    it("goes back to page 1 when another tab changes the age", async () => {
+        const store = createMockPlannerStore();
+        const many = Array.from({ length: 20 }, (_, i) => summary(`cplay${String(i).padStart(2, "0")}xxxxxxxxxxxxxxxxx`, `Drill ${i}`));
+        store.getPlaysByTeam.mockResolvedValue({ success: true, data: { plays: many, total: 40, page: 1, limit: 20 } });
+        renderWithPlanner(
+            <ThemeProvider theme={createTheme()}>
+                <PlayLibrary teamId={TEAM} mode="select" />
+            </ThemeProvider>,
+            { store, platform: createHashPlatform() },
+        );
+        fireEvent.click(await screen.findByRole("button", { name: "Go to page 2" }));
+        await waitFor(() => expect(store.getPlaysByTeam).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2 })));
+        act(() => {
+            localStorage.setItem(AGE_FILTER_STORAGE_KEY, "u10");
+            window.dispatchEvent(new StorageEvent("storage", { key: AGE_FILTER_STORAGE_KEY, newValue: "u10" }));
+        });
+        await waitFor(() => expect(store.getPlaysByTeam).toHaveBeenLastCalledWith(expect.objectContaining({ ageGroup: "u10", page: 1 })));
+        expect(store.getPlaysByTeam).not.toHaveBeenCalledWith(expect.objectContaining({ ageGroup: "u10", page: 2 }));
+    });
+
     it("shows the latest answer when an earlier, slower one arrives after it", async () => {
         const store = createMockPlannerStore();
         let releaseFirst: (value: unknown) => void = () => undefined;

@@ -39,9 +39,10 @@ export function RotationGridTable({ table, caption, variant = "screen" }: { tabl
         );
     }
     return (
-        // Long station names hyphenate (or, failing that, wrap anywhere) so the grid fits a phone; the box scrolls only as a last resort.
+        // Long station names wrap between words, never inside one: a column is at least its longest word wide, and
+        // when the words can't all fit a phone the box scrolls sideways instead.
         <Box sx={{ mt: 1, overflowX: "auto" }}>
-            <Table size="small" aria-label={caption} sx={{ "& td, & th": { textAlign: "center", px: { xs: 0.5, sm: 1 } }, "& th": { hyphens: "auto", overflowWrap: "anywhere" } }}>
+            <Table size="small" aria-label={caption} sx={{ "& td, & th": { textAlign: "center", px: { xs: 0.5, sm: 1 } }, "& thead th": { overflowWrap: "break-word", wordBreak: "normal", hyphens: "manual" } }}>
                 <TableHead>
                     <TableRow>
                         <TableCell sx={{ fontWeight: 700 }}>Start</TableCell>

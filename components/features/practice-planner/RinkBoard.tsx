@@ -426,11 +426,30 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
     }, [render]);
 
     /**
+     * Drops any press in progress (a line edit, an element drag, a stroke
+     * being drawn, an area drag) without committing it. Undo and redo call
+     * this first: a release after them would otherwise write the gesture's
+     * stale copy of the board back over the state they just restored.
+     */
+    const dropGestures = useCallback(() => {
+        cancelLine();
+        setIsDragging(false);
+        setDragOffset(null);
+        setDragPreviewPosition(null);
+        grabPointRef.current = null;
+        setIsDrawing(false);
+        setCurrentDrawingPoints([]);
+        strokeStartSnapRef.current = null;
+        setAreaDrag(null);
+    }, [cancelLine]);
+
+    /**
      * Handle undo operation
      * Requirements: 5.5
      */
     const handleUndo = useCallback(() => {
         if (mode === "view") return;
+        dropGestures();
 
         const previousState = historyManagerRef.current.undo();
         if (previousState && onPlayDataChange) {
@@ -444,7 +463,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
                 );
             }
         }
-    }, [mode, onPlayDataChange, onUndoRedoStateChange]);
+    }, [mode, onPlayDataChange, onUndoRedoStateChange, dropGestures]);
 
     /**
      * Handle redo operation
@@ -452,6 +471,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
      */
     const handleRedo = useCallback(() => {
         if (mode === "view") return;
+        dropGestures();
 
         const nextState = historyManagerRef.current.redo();
         if (nextState && onPlayDataChange) {
@@ -465,7 +485,7 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
                 );
             }
         }
-    }, [mode, onPlayDataChange, onUndoRedoStateChange]);
+    }, [mode, onPlayDataChange, onUndoRedoStateChange, dropGestures]);
 
     /**
      * Handle clear operation - removes all elements from the canvas
@@ -595,7 +615,8 @@ export const RinkBoard = forwardRef<RinkBoardHandle, RinkBoardProps>(function Ri
                         const found = findElement(playData, hitResult.elementId);
                         if (found?.kind === "drawing") {
                             // A line moves as a whole from wherever it is grabbed
-                            grabLine(found.element, hitPos);
+                            // This press may be the first tap of a double-tap on one of its bends
+                            grabLine(found.element, { point: hitPos, hitRadiusFt: minHitRadiusFt(), time: Date.now() });
                             break;
                         }
                         setIsDragging(true);

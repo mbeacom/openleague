@@ -3,7 +3,8 @@
 /**
  * Gesture state for editing lines on the rink board (line editing spec R3,
  * R4, R5): drag the whole selected line, an end, a bend or a freehand
- * anchor, or a "+" handle to add a bend; double-tap a bend to remove it;
+ * anchor, or a "+" handle to add a bend; double-tap a bend to remove it
+ * (on an unselected line, the first tap selects it and counts as the first);
  * snap a line end (drawn or dragged) to a player, equipment or another
  * line's end, with a ring on the target. The geometry is pure
  * (lib/utils/canvas/line-editing.ts); this hook holds the gesture between
@@ -61,8 +62,8 @@ export interface StrokeEditingOptions {
 export interface StrokeEditing {
     /** A Select press on the selected line's handles or body starts a gesture (or removes a double-tapped bend); false (and nothing) otherwise */
     press: (press: LinePress) => boolean;
-    /** Starts a whole-line move on a line a press has just selected */
-    grab: (stroke: DrawingElement, point: Position) => void;
+    /** Starts a whole-line move on a line a press has just selected; a press on its bend is a double-tap's first tap */
+    grab: (stroke: DrawingElement, press: Omit<LinePress, "selectedId">) => void;
     /** Updates the preview; false when no gesture is in progress */
     move: (pointer: Position, move: LineMove) => boolean;
     /** Commits the preview as one history entry, or nothing if it changed nothing */
@@ -185,7 +186,17 @@ export function useStrokeEditing({ playDataRef, commit }: StrokeEditingOptions):
         [playDataRef, begin, commit]
     );
 
-    const grab = useCallback((stroke: DrawingElement, point: Position) => begin(stroke, null, point), [begin]);
+    const grab = useCallback(
+        (stroke: DrawingElement, { point, hitRadiusFt, time }: Omit<LinePress, "selectedId">) => {
+            // Recorded as press() would, so a second tap on the same bend removes it: two taps, not three
+            const handle = hitTestLineHandle(lineHandles(stroke), point, hitRadiusFt);
+            lastTapRef.current = handle?.kind === "bend" || handle?.kind === "corner"
+                ? { id: stroke.id, index: handle.index, position: point, time }
+                : null;
+            begin(stroke, null, point);
+        },
+        [begin]
+    );
 
     const move = useCallback(
         (pointer: Position, { area, thresholdFt, snapRadiusFt, bypassSnap }: LineMove): boolean => {

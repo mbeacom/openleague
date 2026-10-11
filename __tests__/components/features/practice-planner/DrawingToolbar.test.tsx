@@ -427,6 +427,18 @@ describe("DrawingToolbar", () => {
     });
 });
 
+describe("on a phone", () => {
+    it("keeps the round color button a 44px circle in the stretched column", () => {
+        vi.stubGlobal("matchMedia", (media: string) => ({ matches: true, media, addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(), removeListener: vi.fn() }));
+        try {
+            renderWithTheme(createDefaultProps());
+            expect(screen.getByLabelText("color picker")).toHaveStyle({ alignSelf: "flex-start", width: "44px", height: "44px", flexShrink: "0" });
+        } finally {
+            vi.unstubAllGlobals();
+        }
+    });
+});
+
 describe("stroke path choices (line editing R1)", () => {
     it("offers Straight and Freehand only: a curve comes from editing, never from drawing", () => {
         renderWithTheme(createDefaultProps({ selectedTool: "stroke" }));
