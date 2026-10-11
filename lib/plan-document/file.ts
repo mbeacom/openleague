@@ -5,8 +5,8 @@
  * Reads JSON, YAML, TOML or JSONC (lib/document-formats). Never throws.
  */
 import { ENVELOPE_OVERHEAD_BYTES, type DocumentError } from "@/lib/document-envelope";
-import { readAnyDocumentText } from "@/lib/document-formats";
-import { FILE_TOO_LARGE_MESSAGE, MAX_PLAN_FILE_BYTES, NOT_A_PLAN_MESSAGE, PLAN_FORMAT, type ParsePlanResult, type PlanError } from "./document";
+import { fileSource, readAnyDocumentText } from "@/lib/document-formats";
+import { FILE_TOO_LARGE_MESSAGE, MAX_PLAN_FILE_BYTES, NOT_A_PLAN_MESSAGE, PLAN_FORMAT, type ParsePlanResult, type PlanDocument, type PlanError } from "./document";
 
 /** The envelope's errors in the plan reader's codes; messages and issues pass through. */
 function toPlanError(error: DocumentError): PlanError {
@@ -19,7 +19,19 @@ function toPlanError(error: DocumentError): PlanError {
     return { code, message: error.message, ...(error.issues ? { issues: error.issues } : {}) };
 }
 
-export async function readPlanFile(file: File): Promise<ParsePlanResult> {
+/** What a plan file says about itself besides the plan (ADR-0022). */
+export interface PlanFileIdentity {
+    /** The envelope id; null for a bare file. */
+    id: string | null;
+    /** The envelope's updatedAt; for a bare file, the plan's exportedAt, then the file's lastModified, else null (spec R2). */
+    updatedAt: string | null;
+    wrapped: boolean;
+}
+
+export type ReadPlanFileDocumentResult = ({ ok: true; plan: PlanDocument } & PlanFileIdentity) | { ok: false; error: PlanError };
+
+/** readPlanFile plus the file's identity: the envelope id and updatedAt, with the file's own time as the fallback. */
+export async function readPlanFileDocument(file: File): Promise<ReadPlanFileDocumentResult> {
     // No plan, bare or wrapped, is larger than this: refuse without reading it.
     if (file.size > MAX_PLAN_FILE_BYTES + ENVELOPE_OVERHEAD_BYTES) {
         return { ok: false, error: { code: "invalid", message: FILE_TOO_LARGE_MESSAGE } };
@@ -30,6 +42,13 @@ export async function readPlanFile(file: File): Promise<ParsePlanResult> {
     } catch {
         return { ok: false, error: { code: "not-a-plan", message: NOT_A_PLAN_MESSAGE } };
     }
-    const result = await readAnyDocumentText(text, file.name, undefined, { kind: PLAN_FORMAT });
-    return result.ok ? { ok: true, plan: result.document.payload } : { ok: false, error: toPlanError(result.error) };
+    const result = await readAnyDocumentText(text, file.name, fileSource(file), { kind: PLAN_FORMAT });
+    if (!result.ok) return { ok: false, error: toPlanError(result.error) };
+    const { payload, id, updatedAt, wrapped } = result.document;
+    return { ok: true, plan: payload, id, updatedAt, wrapped };
+}
+
+export async function readPlanFile(file: File): Promise<ParsePlanResult> {
+    const result = await readPlanFileDocument(file);
+    return result.ok ? { ok: true, plan: result.plan } : result;
 }

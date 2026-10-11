@@ -1,6 +1,16 @@
 // __tests__/apps/planner/rankings-fixtures.ts
 /** Made-up programs (spec R6): never real league data. */
 import { createRankingsDocument, type RankingsDocument } from "@/lib/rankings-document";
+import type { StoredRankings } from "@/apps/planner/src/store/records";
+
+/** A rankings record whose document fails parsing: the screens offer "Start over". */
+export const DAMAGED_RANKINGS_RECORD: StoredRankings = {
+    id: "damaged",
+    documentId: "damaged",
+    document: { format: "openleague.rankings", version: 1, junk: true },
+    createdAt: new Date("2026-10-01T12:00:00Z"),
+    updatedAt: new Date("2026-10-01T12:00:00Z"),
+};
 
 export function sampleRankingsDoc(overrides: Partial<RankingsDocument> = {}): RankingsDocument {
     const base = createRankingsDocument({

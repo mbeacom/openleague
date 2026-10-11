@@ -8,9 +8,8 @@ import { ENVELOPE_OVERHEAD_BYTES } from "@/lib/document-envelope";
 import { downloadBlob } from "@/components/features/practice-planner/export/download";
 import { RankingsScreen, levelsShortMessage } from "@/apps/planner/src/screens/rankings/RankingsScreen";
 import { NO_RANKINGS_MESSAGE, START_OVER_LABEL } from "@/apps/planner/src/screens/rankings/display";
-import { META_RANKINGS } from "@/apps/planner/src/store/records";
 import { memoryStore, renderScreen } from "./render-screen";
-import { sampleRankingsDoc } from "./rankings-fixtures";
+import { DAMAGED_RANKINGS_RECORD, sampleRankingsDoc } from "./rankings-fixtures";
 
 vi.mock("@/components/features/practice-planner/export/download", () => ({ downloadBlob: vi.fn() }));
 
@@ -94,7 +93,7 @@ describe("RankingsScreen", () => {
 
     it("offers Start over for a damaged record", async () => {
         const { store, repo } = memoryStore();
-        await repo.write((tx) => tx.putMeta(META_RANKINGS, { format: "openleague.rankings", version: 1 }));
+        await repo.write((tx) => tx.putRankingsRecord(DAMAGED_RANKINGS_RECORD));
         renderScreen(<RankingsScreen store={store} />, store);
         fireEvent.click(await screen.findByRole("button", { name: START_OVER_LABEL }));
         expect(await screen.findByText(NO_RANKINGS_MESSAGE)).toBeInTheDocument();

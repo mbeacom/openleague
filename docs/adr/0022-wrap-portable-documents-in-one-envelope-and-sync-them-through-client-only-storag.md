@@ -25,7 +25,7 @@ affects:
     note: The local link table that ties a local document to its remote file and last-seen revision.
   - type: path
     pattern: "apps/planner/src/store/idb-repo.ts"
-    note: IndexedDB version 5 adds the links store and keys rankings by id.
+    note: IndexedDB version 7 adds the links store and keys rankings by id.
   - type: path
     pattern: "apps/planner/build-config.ts"
     note: The planner CSP, which gains provider hosts only when a connector is configured at build time.
@@ -122,8 +122,8 @@ Files and IndexedDB only. It works, but every cross-device or two-coach workflow
 
 ## Action items
 
-1. [ ] Phase 1: `lib/document-envelope/`; hosted plan import and static file open read both forms.
-2. [ ] Phase 2: `StorageConnector`, sync engine, link table (IndexedDB v5), rankings keyed by id, Local connector, conflict dialog, contract tests.
+1. [x] Phase 1: `lib/document-envelope/`; hosted plan import and static file open read both forms (#442).
+2. [ ] Phase 2: `StorageConnector`, sync engine, link table (IndexedDB v7; versions 5 and 6 went to practice equipment and the practice roster), rankings keyed by id, Local connector, conflict dialog, contract tests.
 3. [ ] Phase 3: Google Drive connector, once the owner registers the Google Cloud project.
 4. [ ] Phase 4a: OneDrive app-folder connector, once the owner registers the Entra app.
 5. [ ] Phase 4b (owner's decision): OneDrive Picker v8 with `Files.ReadWrite`.

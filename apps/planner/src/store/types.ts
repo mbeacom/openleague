@@ -13,7 +13,7 @@ import type { PracticeRosterInput } from "@/lib/utils/practice-roster";
 import type { TeamProfileInput } from "@/lib/utils/team-mark";
 import type { EquipmentCountItem, PlayData, PlayFocus, PlayGoalies, PracticeSessionData, PracticeSessionView, TeamProfile } from "@/types/practice-planner";
 import type { AgeGroup } from "@/lib/utils/age-groups";
-import type { RankingsOps } from "./rankings";
+import type { RankingsDocumentOps, RankingsOps } from "./rankings";
 import type { AiSettingsOps } from "./ai-settings";
 
 export interface LocalSessionSummary {
@@ -81,7 +81,7 @@ export interface LocalStoreOptions {
     beforeStoredDraw?: () => Promise<void>;
 }
 
-export interface LocalPlannerStore extends PlannerStore, RankingsOps, AiSettingsOps {
+export interface LocalPlannerStore extends PlannerStore, RankingsOps, RankingsDocumentOps, AiSettingsOps {
     /** Favorites on this device (practice favorites spec): always present here. */
     listPlannerFavorites: NonNullable<PlannerStore["listPlannerFavorites"]>;
     setPlannerFavorite: NonNullable<PlannerStore["setPlannerFavorite"]>;

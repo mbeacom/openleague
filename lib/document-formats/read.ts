@@ -38,6 +38,16 @@ const LARGEST_KIND_BYTES = Math.max(...Object.values(DOCUMENT_KINDS).map((entry)
 
 const byteLength = (text: string) => new TextEncoder().encode(text).byteLength;
 
+/**
+ * A picked file's own time (File.lastModified) as the reader's source, for a
+ * bare document's updatedAt fallback (storage connectors spec R2). Empty when
+ * the file has no usable time.
+ */
+export function fileSource(file: Pick<File, "lastModified">): DocumentSource {
+    const { lastModified } = file;
+    return typeof lastModified === "number" && Number.isFinite(lastModified) && lastModified > 0 ? { modifiedAt: new Date(lastModified).toISOString() } : {};
+}
+
 /** Reads `text` in any supported format. `fileName` picks the format when its extension is known. */
 export async function readAnyDocumentText(text: string, fileName: string | null | undefined, source?: DocumentSource): Promise<ReadDocumentResult>;
 export async function readAnyDocumentText<K extends DocumentKind>(

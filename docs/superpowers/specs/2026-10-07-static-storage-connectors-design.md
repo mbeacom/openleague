@@ -1,7 +1,7 @@
 # Shared Document Envelope and Storage Connectors (Static) — Design
 
 **Date:** 2026-10-07
-**Status:** Proposed (design for owner review); no implementation yet
+**Status:** Proposed (design for owner review). Phase 1 (the envelope) shipped in #442; phase 2 is planned in `../plans/2026-10-11-static-storage-connectors-phase-2.md`.
 **Applies to:** the static, local-first app in `apps/planner/` (deployed to openleague.dev/planner/) and the portable document modules in `lib/`. The hosted platform changes only in that its plan import learns to read the envelope (phase 1).
 **Depends on:** ADR-0020 (portable versioned documents, the static app), ADR-0021 (the `openleague.rankings` document), ADR-0008 and ADR-0010 (free, provider-portable, non-commercial), ADR-0011 (capability links are bearer credentials).
 **Proposes:** ADR-0022.
@@ -19,7 +19,7 @@ What exists (verified in the code):
   - `lib/plan-document/document.ts`: `format: "openleague.practice-plan"`, `version: 1`, `exportedAt`, `generator`, `session`. File name `<slug>.olplan.json`, at most 900,000 bytes (`MAX_PLAN_FILE_BYTES`). Also encoded into a URL fragment for the hosted import page, at most 65,536 bytes (`MAX_PLAN_LINK_BYTES`).
   - `lib/rankings-document/document.ts`: `format: "openleague.rankings"`, `version: 1`, `meta`, `method`, `teams`, `games`, `myTeam`, `bracketOrder`, `snapshots`. File name `<slug>.rankings.json`, at most 2,000,000 bytes.
   - Both parsers check `format` first, refuse a newer integer `version` with their own message, validate with Zod v4, and strip unknown keys. Neither document has a stable id or a last-modified time, so nothing can tell that two files are the same document.
-- **The static store** (`apps/planner/src/store/`): IndexedDB database `openleague-planner` at `DB_VERSION = 4` with `plays`, `sessions` and `meta` stores, behind a `PlannerRepo` with an in-memory fallback. Sessions have local ids and `updatedAt`. Rankings are a **single** document stored under one `meta` key (`META_RANKINGS`), so a device holds one rankings document at a time.
+- **The static store** (`apps/planner/src/store/`): IndexedDB database `openleague-planner` at `DB_VERSION = 4` when this was written (6 by phase 2: practice equipment took 5 and the practice roster 6) with `plays`, `sessions` and `meta` stores, behind a `PlannerRepo` with an in-memory fallback. Sessions have local ids and `updatedAt`. Rankings are a **single** document stored under one `meta` key (`META_RANKINGS`), so a device holds one rankings document at a time.
 - **CSP** (`apps/planner/build-config.ts`, `PLANNER_CSP`): `default-src 'self'`, `script-src 'self'`, `connect-src 'self'`, `form-action 'none'`, delivered as a `<meta>` tag. Today the app talks to no third-party host except font CDNs.
 - **Personal data.** Plans carry practice staff names (adults). Later documents — goalie rotation, mentorship — will carry players' names, and players are often minors.
 
@@ -82,9 +82,9 @@ Where wrapped files are written, by phase:
 |---|---|---|
 | Hosted plan import (file) | Reads both | Reads both |
 | Static: connector saves (Local file handle, Drive, OneDrive) | — | Wrapped |
-| Static: "Download plan file" | Bare (unchanged) | Wrapped, once a hosted release that reads the envelope has been live for one release cycle |
+| Static: "Download plan file" | Bare (unchanged) | Wrapped, starting with phase 2 (open question 7, resolved) |
 | Plan URL fragment ("Open in OpenLeague") | Bare | **Bare, always** — the fragment has a 64 KB budget and its target is a one-shot import that needs no id |
-| Hosted plan export | Bare | Owner's call (open question 5) |
+| Hosted plan export | Bare | Wrapped (open question 5, resolved) |
 
 The order matters: hosted `parsePlan` must accept the envelope **before** the static app writes a wrapped `.olplan.json`, or a coach's file would fail on the hosted import page. Phase 1 therefore ships the hosted reader first.
 
@@ -113,9 +113,9 @@ interface DocumentLink {
 }
 ```
 
-It is a new `links` object store (an IndexedDB upgrade to version 5, additive, nothing to migrate). A document has at most one link in v1 (one remote per document); several remotes per document is out of scope.
+It is a new `links` object store (an IndexedDB upgrade to version 7, additive; versions 5 and 6 went to practice equipment and the practice roster). A document has at most one link in v1 (one remote per document); several remotes per document is out of scope.
 
-The single-rankings limit has to go: a connector needs per-document identity, so rankings move from one `meta` key to a `rankings` store keyed by id, and the existing record becomes the first entry. This is a store change this design implies, scheduled in phase 2.
+The single-rankings limit has to go: a connector needs per-document identity, so rankings move from one `meta` key to a `rankings` store keyed by id, and the existing record becomes the first entry. This is a store change this design implies, scheduled in phase 2, in the same version 7 upgrade as the links store.
 
 ### R4. Conflict detection uses the provider's revision, and the connector says how strong it is
 
@@ -144,7 +144,7 @@ So:
 
 - **Phase 4a (default): `Files.ReadWrite.AppFolder`.** The app reads and writes only its own folder, `Apps/<app name>/`, created on first use at `/me/drive/special/approot`. Users can see, move and share files there like any other folder ([App folder](https://learn.microsoft.com/graph/onedrive-sharepoint-appfolder), [Get special folder](https://learn.microsoft.com/graph/api/drive-get-specialfolder?view=graph-rest-1.0)). No picker: the app lists its folder itself.
 - **Phase 4b (opt-in, owner's call): the Picker v8 with `Files.ReadWrite`** (personal: `OneDrive.ReadWrite`), to open files outside the app folder, including ones another coach shared. This is a broader grant — every file in the user's OneDrive — and the consent screen says so. It would be requested incrementally, only when the coach taps "Open from OneDrive…", never at connect.
-- **Account types: open question.** The OneDrive permissions reference says `Files.ReadWrite.AppFolder` is valid only for personal accounts ([permissions reference](https://learn.microsoft.com/onedrive/developer/rest-api/concepts/permissions_reference?view=odsp-graph-online)), while the newer Graph app-folder article describes it for OneDrive and SharePoint ([App folder](https://learn.microsoft.com/graph/onedrive-sharepoint-appfolder)). Phase 4a should be verified against a work or school account before it is promised to one.
+- **Account types: personal accounts only for now** (open question 4, resolved). The OneDrive permissions reference says `Files.ReadWrite.AppFolder` is valid only for personal accounts ([permissions reference](https://learn.microsoft.com/onedrive/developer/rest-api/concepts/permissions_reference?view=odsp-graph-online)), while the newer Graph app-folder article describes it for OneDrive and SharePoint ([App folder](https://learn.microsoft.com/graph/onedrive-sharepoint-appfolder)). Phase 4a should be verified against a work or school account before it is promised to one.
 - **Tokens: MSAL Browser (`@azure/msal-browser`), authorization code with PKCE.** No client secret. PKCE is required for single-page apps, and the redirect URI must be registered as type `spa` ([third-party cookies and SPAs](https://learn.microsoft.com/entra/identity-platform/reference-third-party-cookies-spas)). Access tokens last about an hour. Refresh tokens issued to an SPA last **24 hours, fixed, not sliding**; after that MSAL tries a hidden iframe (which needs the `frame-src` entries in Security and privacy), and browsers that block third-party cookies (Safari) defeat that, so the app falls back to a popup ([refresh tokens](https://learn.microsoft.com/entra/identity-platform/refresh-tokens), [MSAL token lifetimes](https://learn.microsoft.com/entra/msal/javascript/browser/token-lifetimes), [acquire a token](https://learn.microsoft.com/entra/identity-platform/scenario-spa-acquire-token)).
 - **Redirect page.** MSAL Browser v5 sends every popup and silent-iframe response to a dedicated redirect page that loads only its redirect bridge (`@azure/msal-browser/redirect-bridge`, bundled as its own Vite entry) and calls `broadcastResponseToMainFrame()`. The planner ships it as `auth/redirect.html`. It must not be served with a `Cross-Origin-Opener-Policy` header, must not set `X-Frame-Options` stricter than `SAMEORIGIN` (the silent iframe loads it), and must not run the app or its router ([sign in users](https://learn.microsoft.com/entra/msal/javascript/browser/login-user), [v5 migration](https://learn.microsoft.com/entra/msal/javascript/browser/v4-migration)).
 - **Where tokens live:** MSAL `cacheLocation: "sessionStorage"` (cleared when the tab closes; MSAL keeps temporary request state in session storage or memory regardless — [MSAL caching](https://learn.microsoft.com/entra/msal/javascript/browser/caching)). Not `localStorage`: a 24-hour refresh token at rest in `localStorage` outlives the tab and is readable by any script that runs on the origin.
@@ -186,7 +186,7 @@ apps/planner/src/storage/         static-only
   google-drive.ts                 R5 (lazy chunk)
   onedrive.ts                     R6 (lazy chunk; imports @azure/msal-browser)
   fake.ts                         in-memory connector for tests and dev
-apps/planner/src/store/links.ts   the DocumentLink table (IndexedDB v5)
+apps/planner/src/store/links.ts   the DocumentLink table (IndexedDB v7)
 apps/planner/src/screens/storage/ "Save to…", "Open from…", conflict dialog, connections settings
 ```
 
@@ -291,7 +291,7 @@ The remote revision is checked when a linked document is opened, when the app re
 
 ### Microsoft Entra (OneDrive)
 
-1. Register an application in Microsoft Entra. Supported account types: **personal Microsoft accounts** at least; "any organizational directory and personal accounts" if work/school support is wanted (open question 4).
+1. Register an application in Microsoft Entra. Supported account types: **personal Microsoft accounts** only for now (open question 4, resolved); "any organizational directory and personal accounts" only if work/school support is added later.
 2. Add the platform **Single-page application** with redirect URIs (Microsoft redirect URIs are full URLs, paths included):
    - `https://openleague.dev/planner/auth/redirect.html` — the MSAL redirect-bridge page the planner ships (R6) for popups and the silent-renewal iframe, so the app itself never re-runs inside either.
    - `http://localhost:5173/planner/auth/redirect.html` (or the dev server's equivalent path).
@@ -331,7 +331,7 @@ Each phase ships alone and leaves the app fully working.
 | # | Phase | Ships | Depends on |
 |---|---|---|---|
 | 1 | **Envelope** | `lib/document-envelope/`; hosted plan import and static file open read both forms; nothing writes wrapped yet | — |
-| 2 | **Local connector** | `StorageConnector`, sync engine, link table (IndexedDB v5), rankings keyed by id, conflict dialog, FSA tier and download tier; wrapped writes through file handles; "Download" switches to wrapped one release after phase 1's hosted reader is live | 1 |
+| 2 | **Local connector** | `StorageConnector`, sync engine, link table (IndexedDB v7), rankings keyed by id, conflict dialog, FSA tier and download tier; wrapped writes through file handles; "Download" writes wrapped files (open question 7, resolved) | 1 |
 | 3 | **Google Drive** | Drive connector (GIS token model, Picker, `drive.file`, `appProperties` listing); CSP additions behind build config | 2; owner's Google setup |
 | 4a | **OneDrive (app folder)** | OneDrive connector with MSAL and `Files.ReadWrite.AppFolder` | 2; owner's Entra setup |
 | 4b | **OneDrive picker (optional)** | Picker v8 with `Files.ReadWrite`, requested incrementally | 4a; owner's decision |
@@ -383,9 +383,12 @@ Each phase ships alone and leaves the app fully working.
 2. **OneDrive 4b.** Is the broader `Files.ReadWrite` grant acceptable as an opt-in, so OneDrive users can open files other coaches share? Without it, OneDrive sharing is download-and-open.
 3. **Autosave.** Should a linked document save to the cloud automatically a few seconds after edits, or stay explicit (v1 default)?
 4. **Account types for OneDrive.** Personal accounts only at first, or work/school too? The docs disagree on whether `Files.ReadWrite.AppFolder` works for work/school accounts (R6); this needs a live check.
+   **Resolved (2026-10-11): personal accounts only for now.** The Entra app registration targets personal Microsoft accounts; work/school support waits for a live check of the app folder on such an account and for publisher verification.
 5. **Hosted export.** Should the hosted platform's plan export write the envelope too (giving hosted-exported files an id), or stay bare?
+   **Resolved (2026-10-11): yes.** The hosted export writes the envelope too, so a hosted-exported file has an id like a static one. The plan URL fragment stays bare (R2).
 6. **Privacy policy.** Google's consent screen needs a privacy policy URL. Does the existing site policy cover "the static planner stores your files in your own Drive/OneDrive and OpenLeague receives nothing", or does it need a section?
-7. **Download default.** After phase 2, should "Download" write wrapped files immediately (better identity) or wait for a release cycle after the hosted reader ships (safer for coaches on older hosted builds)? The design assumes wait.
+7. **Download default.** After phase 2, should "Download" write wrapped files immediately (better identity) or wait for a release cycle after the hosted reader ships (safer for coaches on older hosted builds)? The design assumed wait.
+   **Resolved (2026-10-11): yes, wrapped, starting with the Local connector phase (phase 2).** The hosted reader shipped in phase 1 (#442), so every current reader already accepts the envelope.
 
 ## ADR
 
