@@ -40,7 +40,15 @@ export type ConnectorError =
     | { code: "quota" }
     | { code: "unavailable"; retryAfterSeconds?: number }
     /** Anything else, with no body text. */
-    | { code: "provider"; status: number };
+    | { code: "provider"; status: number }
+    /** The coach dismissed a picker this call opened (the local file connector's save picker). Nothing was written. */
+    | { code: "cancelled" }
+    /**
+     * The document can't be written in the file's format (TOML has no null for a
+     * drill diagram's empty value). `message` is the encoder's own text, never a
+     * provider's.
+     */
+    | { code: "unwritable"; message: string };
 
 export type Result<T> = { ok: true; value: T } | { ok: false; error: ConnectorError };
 

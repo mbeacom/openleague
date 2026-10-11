@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { composite } from "@/lib/ratings";
-import { MAX_RANKINGS_FILE_BYTES, parseRankings, readRankingsFile, serializeRankings, toRatingInputs } from "@/lib/rankings-document";
+import { MAX_RANKINGS_FILE_BYTES, parseRankings, readRankingsFile, readRankingsFileDocument, serializeRankings, toRatingInputs } from "@/lib/rankings-document";
 import { DOWNLOAD_AS_LABEL, rankingsReopenProblem } from "@/apps/planner/src/screens/rankings/RankingsFormatMenu";
 import { ENVELOPE_OVERHEAD_BYTES } from "@/lib/document-envelope";
 import { downloadBlob } from "@/components/features/practice-planner/export/download";
@@ -124,17 +124,25 @@ describe("RankingsScreen", () => {
     });
 
     it("exports the document as a rankings file", async () => {
-        const { store } = memoryStore();
+        const { store } = memoryStore({ uuids: true });
         const doc = sampleRankingsDoc();
         await store.saveRankings(doc);
         renderScreen(<RankingsScreen store={store} />, store);
         fireEvent.click(await screen.findByRole("button", { name: "Export rankings file" }));
+        await waitFor(() => expect(downloadBlob).toHaveBeenCalled());
         const [blob, name] = vi.mocked(downloadBlob).mock.calls.at(-1) as [Blob, string];
         expect(name).toBe("fall-pre-season.rankings.json");
-        const parsed = JSON.parse(await blob.text());
+        // Wrapped (storage connectors spec R2), with the document's own envelope id.
+        const wrapped = JSON.parse(await blob.text());
+        expect(wrapped).toMatchObject({ format: "openleague.document", kind: "openleague.rankings", generator: "openleague-static" });
+        const id = await store.getRankingsDocumentId();
+        expect(wrapped.id).toBe(id.success && id.data);
+        const parsed = wrapped.payload;
         expect(parsed.format).toBe("openleague.rankings");
         expect(parsed.teams).toHaveLength(doc.teams.length);
         expect(parsed.games).toHaveLength(doc.games.length);
+        const read = await readRankingsFileDocument(new File([await blob.text()], name));
+        expect(read.ok && read.id).toBe(wrapped.id);
     });
 
     it.each([
@@ -142,7 +150,7 @@ describe("RankingsScreen", () => {
         ["TOML (.toml)", "fall-pre-season.rankings.toml"],
         ["JSONC (.jsonc)", "fall-pre-season.rankings.jsonc"],
     ])("downloads the rankings as %s, readable again", async (label, fileName) => {
-        const { store } = memoryStore();
+        const { store } = memoryStore({ uuids: true });
         const doc = sampleRankingsDoc();
         await store.saveRankings(doc);
         renderScreen(<RankingsScreen store={store} />, store);
@@ -163,10 +171,10 @@ describe("RankingsScreen", () => {
             return sampleRankingsDoc({ snapshots: [{ note: "x".repeat(pad) }] });
         };
 
-        it("bare JSON is held to the limit with no envelope allowance, and never suggests JSON", () => {
+        it("wrapped JSON is held to the limit plus the envelope allowance, and never suggests JSON", () => {
             const doc = sampleRankingsDoc();
-            expect(rankingsReopenProblem(doc, "x".repeat(MAX_RANKINGS_FILE_BYTES), "json")).toBeNull();
-            const problem = rankingsReopenProblem(doc, "x".repeat(MAX_RANKINGS_FILE_BYTES + 1), "json");
+            expect(rankingsReopenProblem(doc, "x".repeat(MAX_RANKINGS_FILE_BYTES + ENVELOPE_OVERHEAD_BYTES), "json")).toBeNull();
+            const problem = rankingsReopenProblem(doc, "x".repeat(MAX_RANKINGS_FILE_BYTES + ENVELOPE_OVERHEAD_BYTES + 1), "json");
             expect(problem).toBe(`This JSON file is too large to open again (the limit is ${MAX_RANKINGS_FILE_BYTES / 1_000_000} MB).`);
             expect(problem).not.toMatch(/as JSON/);
         });

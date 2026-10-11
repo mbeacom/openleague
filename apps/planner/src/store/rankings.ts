@@ -11,7 +11,7 @@
  */
 import type { ActionResult } from "@/lib/planner-store";
 import { RANKINGS_FORMAT, RANKINGS_TOO_LARGE_TO_SAVE_MESSAGE, fitsRankingsFile, parseRankings, type RankingsDocument } from "@/lib/rankings-document";
-import { docKeyOf } from "./links";
+import { docKeyOf, noteLocalEditInTx } from "./links";
 import type { RepoTx, StoredRankings } from "./records";
 import { StoreRefusal, attempt, ok, write, type StoreContext } from "./shared";
 
@@ -25,6 +25,11 @@ export interface RankingsOps {
     getRankings: () => Promise<ActionResult<RankingsDocument | null>>;
     saveRankings: (doc: RankingsDocument) => Promise<ActionResult<RankingsDocument>>;
     clearRankings: () => Promise<ActionResult<null>>;
+    /**
+     * The document's envelope id, written into downloaded files (storage
+     * connectors spec R1). Optional: a store without it gets a new id per file.
+     */
+    getRankingsDocumentId?: () => Promise<ActionResult<string | null>>;
 }
 
 export interface RankingsSummary {
@@ -53,6 +58,15 @@ export interface RankingsDocumentOps {
     saveRankingsDocument: (id: string, doc: RankingsDocument) => Promise<ActionResult<RankingsRecordView>>;
     /** Deletes the record and its link (the remote file, if any, is left alone). */
     deleteRankingsDocument: (id: string) => Promise<ActionResult<null>>;
+    /** The record on this device with this envelope id, if any. */
+    findRankingsByDocumentId: (documentId: string) => Promise<ActionResult<{ id: string; title: string | null } | null>>;
+    /**
+     * Replaces record `id`, or creates it with that id (a file opened through a
+     * connector, "Use theirs", "Replace my copy"). `documentId` replaces the
+     * envelope id; a new record without one takes its own id.
+     */
+    putRankingsDocument: (id: string, doc: RankingsDocument, options?: { documentId?: string }) => Promise<ActionResult<RankingsRecordView>>;
+    setRankingsDocumentId: (id: string, documentId: string) => Promise<ActionResult<null>>;
 }
 
 /** Newest first; ties by creation, then id, so "the current one" never flickers. */
@@ -81,7 +95,7 @@ function viewOf(record: StoredRankings, document: RankingsDocument): RankingsRec
     return { id: record.id, documentId: record.documentId, document, updatedAt: record.updatedAt };
 }
 
-export function createRankingsOps(ctx: StoreContext): RankingsOps & RankingsDocumentOps {
+export function createRankingsOps(ctx: StoreContext): RankingsOps & Required<Pick<RankingsOps, "getRankingsDocumentId">> & RankingsDocumentOps {
     return {
         getRankings: () =>
             attempt(RANKINGS_LOAD_FAILED, async () => {
@@ -102,6 +116,7 @@ export function createRankingsOps(ctx: StoreContext): RankingsOps & RankingsDocu
                     await tx.putRankingsRecord(
                         current ? { ...current, document: checked.doc, updatedAt: at } : { id: freshId, documentId: freshId, document: checked.doc, createdAt: at, updatedAt: at },
                     );
+                    if (current) await noteLocalEditInTx(tx, docKeyOf(RANKINGS_FORMAT, current.id));
                 });
                 return ok(checked.doc);
             }),
@@ -157,9 +172,49 @@ export function createRankingsOps(ctx: StoreContext): RankingsOps & RankingsDocu
                     if (!existing) throw new StoreRefusal(RANKINGS_NOT_FOUND);
                     const next: StoredRankings = { ...existing, document: checked.doc, updatedAt: at };
                     await tx.putRankingsRecord(next);
+                    await noteLocalEditInTx(tx, docKeyOf(RANKINGS_FORMAT, id));
                     return next;
                 });
                 return ok(viewOf(saved, checked.doc));
+            }),
+
+        getRankingsDocumentId: () =>
+            attempt(RANKINGS_LOAD_FAILED, async () => ok((await ctx.repo.read((tx) => currentRecord(tx)))?.documentId ?? null)),
+
+        findRankingsByDocumentId: (documentId) =>
+            attempt(RANKINGS_LOAD_FAILED, async () => {
+                const records = (await ctx.repo.read((tx) => tx.allRankingsRecords())).sort(newestFirst);
+                const found = records.find((record) => record.documentId === documentId);
+                if (!found) return ok(null);
+                const parsed = parseRankings(found.document);
+                return ok({ id: found.id, title: parsed.ok ? parsed.doc.meta.title : null });
+            }),
+
+        putRankingsDocument: (id, doc, options = {}) =>
+            attempt(RANKINGS_SAVE_FAILED, async () => {
+                const checked = checkForWrite(doc);
+                if (!checked.ok) return checked.result;
+                const at = ctx.now();
+                const saved = await write(ctx, async (tx) => {
+                    const existing = await tx.getRankingsRecord(id);
+                    const next: StoredRankings = existing
+                        ? { ...existing, document: checked.doc, documentId: options.documentId ?? existing.documentId, updatedAt: at }
+                        : { id, documentId: options.documentId ?? id, document: checked.doc, createdAt: at, updatedAt: at };
+                    await tx.putRankingsRecord(next);
+                    return next;
+                });
+                return ok(viewOf(saved, checked.doc));
+            }),
+
+        setRankingsDocumentId: (id, documentId) =>
+            attempt(RANKINGS_SAVE_FAILED, async () => {
+                await write(ctx, async (tx) => {
+                    const existing = await tx.getRankingsRecord(id);
+                    if (!existing) throw new StoreRefusal(RANKINGS_NOT_FOUND);
+                    // Identity only: not an edit, so updatedAt (which picks "the current" document) stays.
+                    await tx.putRankingsRecord({ ...existing, documentId });
+                });
+                return ok(null);
             }),
 
         deleteRankingsDocument: (id) =>

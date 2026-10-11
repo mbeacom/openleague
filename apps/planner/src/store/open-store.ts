@@ -65,5 +65,13 @@ export async function openPlannerStore({ open, stale, storeOptions }: OpenStoreO
     } catch (error) {
         console.error("Couldn't add the starter drills:", error);
     }
+    // Recovered copies are kept 30 days; file handles only while a link uses them (storage connectors spec).
+    try {
+        await store.sweepRecoveredCopies();
+        const linked = new Set((await store.links.list()).filter((link) => link.connector === "local-file").map((link) => link.remote.fileId));
+        await store.fileHandles.sweep(linked);
+    } catch (error) {
+        console.error("Couldn't tidy saved-file records:", error);
+    }
     return { store, durable: repo.durable };
 }

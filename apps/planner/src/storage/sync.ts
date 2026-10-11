@@ -14,11 +14,12 @@
  * replaced only by a refresh of a copy this device read, or by the coach's
  * choice, with the replaced version kept as a recovered copy.
  */
-import { serializeDocument, wrapDocument, type DocumentGenerator, type DocumentKind, type DocumentPayloads } from "@/lib/document-envelope";
+import { wrapDocument, type DocumentGenerator, type DocumentKind, type DocumentPayloads } from "@/lib/document-envelope";
 import { readAnyDocumentText } from "@/lib/document-formats";
 import type { LinkStore } from "../store/links";
 import type { DocumentLink } from "../store/records";
 import { refOf, type ConnectorError, type ConnectorId, type RemoteFile, type RemoteRef, type StorageConnector } from "./connector";
+import { documentFileText } from "./encode";
 
 export type SyncState =
     /** Clean, and the remote is at baseRevision: nothing to do. */
@@ -137,11 +138,26 @@ export interface SyncEngineOptions {
     generator?: DocumentGenerator;
 }
 
+/** What this device knows about a document without asking its remote. */
+export interface LocalSyncState {
+    link: DocumentLink | null;
+    /** Local edits since the link's base (the flag, or content that no longer matches baseHash). False when unlinked. */
+    dirty: boolean;
+}
+
 export interface SyncEngine {
     /** Saves a local document to a new remote file and links it. */
     saveNew: (docKey: string, connector: ConnectorId, name: string) => Promise<SyncOutcome>;
-    /** Opens a remote file into the working copy `docKey` and links it; an existing copy is recovered first. */
-    openLinked: (docKey: string, ref: RemoteRef) => Promise<SyncOutcome>;
+    /**
+     * Opens a remote file into the working copy `docKey` and links it; an
+     * existing copy is recovered first. `kind` refuses a file of another kind
+     * (the existing copy's kind is used when there is one).
+     */
+    openLinked: (docKey: string, ref: RemoteRef, options?: { kind?: DocumentKind }) => Promise<SyncOutcome>;
+    /** The link and whether there are unsaved edits, with no remote call. */
+    localState: (docKey: string) => Promise<LocalSyncState>;
+    /** "Unlink": drops the link only; the remote file and the working copy stay. */
+    unlink: (docKey: string) => Promise<void>;
     /** Reads the remote's revision and applies the state table. */
     check: (docKey: string) => Promise<SyncOutcome>;
     /** check, at most once per RECHECK_INTERVAL_MS per document (focus, back online); null when skipped. */
@@ -163,8 +179,15 @@ export function createSyncEngine({ connectors, links, documents, now = () => new
     const lastChecked = new Map<string, number>();
     const stamp = () => now().toISOString();
 
-    const textOf = (doc: LocalDocument, at: string) =>
-        serializeDocument(wrapDocument(doc.kind, doc.payload as DocumentPayloads[DocumentKind], { id: doc.documentId, updatedAt: at, generator }));
+    /** The envelope as the text of `fileName`, in that file's own format (Ruling 10). */
+    const textOf = (doc: LocalDocument, at: string, fileName: string) =>
+        documentFileText(wrapDocument(doc.kind, doc.payload as DocumentPayloads[DocumentKind], { id: doc.documentId, updatedAt: at, generator }), fileName);
+
+    /** The base hash of a working copy as the store holds it: what the next read returns, which a store may normalize. */
+    async function storedHash(docKey: string, fallback: unknown): Promise<string> {
+        const stored = await documents.read(docKey);
+        return hashPayload(stored ? stored.payload : fallback);
+    }
 
     type Context = { link: DocumentLink; connector: StorageConnector; local: LocalDocument; dirty: boolean };
 
@@ -191,7 +214,7 @@ export function createSyncEngine({ connectors, links, documents, now = () => new
         const documentId = read.document.id ?? link?.documentId ?? previous?.documentId ?? newId();
         const payload = read.document.payload;
         await documents.replace(docKey, { kind: read.document.kind, documentId, payload });
-        const next = linkFromRemote({ docKey, documentId, file, hash: await hashPayload(payload), writtenHere: false, at });
+        const next = linkFromRemote({ docKey, documentId, file, hash: await storedHash(docKey, payload), writtenHere: false, at });
         await links.put(next);
         return { ok: true, state: "in-sync", link: next };
     }
@@ -235,10 +258,12 @@ export function createSyncEngine({ connectors, links, documents, now = () => new
 
     async function writeOver(docKey: string, ctx: Context, expectedRevision: string): Promise<SyncOutcome> {
         const { link, connector, local } = ctx;
+        const text = await textOf(local, stamp(), link.remote.name);
+        if (!text.ok) return keepDirty(link, text.error);
         const saved = await connector.save({
             ref: refFromLink(link),
             name: link.remote.name,
-            text: textOf(local, stamp()),
+            text: text.text,
             kind: local.kind,
             documentId: local.documentId,
             expectedRevision,
@@ -259,18 +284,32 @@ export function createSyncEngine({ connectors, links, documents, now = () => new
             if (!connector) return failed({ code: "no-connector" });
             const local = await documents.read(docKey);
             if (!local) return failed({ code: "missing-local" });
-            const saved = await connector.save({ ref: null, name, text: textOf(local, stamp()), kind: local.kind, documentId: local.documentId, expectedRevision: null });
+            const text = await textOf(local, stamp(), name);
+            if (!text.ok) return failed(text.error);
+            const saved = await connector.save({ ref: null, name, text: text.text, kind: local.kind, documentId: local.documentId, expectedRevision: null });
             if (!saved.ok) return failed(saved.error);
             return recordSave(docKey, local, saved.value);
         },
 
-        openLinked: async (docKey, ref) => {
+        openLinked: async (docKey, ref, options = {}) => {
             const connector = byId.get(ref.connector);
             if (!connector) return failed({ code: "no-connector" });
             const opened = await connector.open(refOf(ref));
             if (!opened.ok) return failed(opened.error);
             const previous = await documents.read(docKey);
-            return adopt(docKey, { ...opened.value, kind: previous?.kind, previous, recover: previous !== null, link: await links.get(docKey) });
+            return adopt(docKey, { ...opened.value, kind: previous?.kind ?? options.kind, previous, recover: previous !== null, link: await links.get(docKey) });
+        },
+
+        localState: async (docKey) => {
+            const link = await links.get(docKey);
+            if (!link) return { link: null, dirty: false };
+            const local = await documents.read(docKey);
+            if (!local) return { link, dirty: link.dirty };
+            return { link, dirty: link.dirty || (await hashPayload(local.payload)) !== link.baseHash };
+        },
+
+        unlink: async (docKey) => {
+            await links.delete(docKey);
         },
 
         check,
@@ -308,7 +347,10 @@ export function createSyncEngine({ connectors, links, documents, now = () => new
             // Keep both: mine becomes a new document with a new envelope id; theirs stays as it is.
             const documentId = newId();
             const mine: LocalDocument = { ...local, documentId };
-            const saved = await connector.save({ ref: null, name: copyName(link.remote.name), text: textOf(mine, stamp()), kind: local.kind, documentId, expectedRevision: null });
+            const name = copyName(link.remote.name);
+            const text = await textOf(mine, stamp(), name);
+            if (!text.ok) return keepDirty(link, text.error);
+            const saved = await connector.save({ ref: null, name, text: text.text, kind: local.kind, documentId, expectedRevision: null });
             if (!saved.ok) return keepDirty(link, saved.error);
             await documents.setDocumentId(docKey, documentId);
             return recordSave(docKey, mine, saved.value);

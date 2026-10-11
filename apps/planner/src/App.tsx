@@ -3,7 +3,7 @@
  * in main.tsx, and the platform is a module constant, so neither identity
  * changes between renders (PlayLibrary's loadPlays depends on the store).
  */
-import { Component, Suspense, lazy, type ErrorInfo, type ReactNode } from "react";
+import { Component, Suspense, lazy, useMemo, type ErrorInfo, type ReactNode } from "react";
 import { Alert, Box, Button, Typography } from "@mui/material";
 import { PlannerProvider } from "@/lib/planner-store";
 import { staticPlannerPlatform, useHashRoute } from "./platform";
@@ -22,16 +22,21 @@ import { SessionDetailScreen } from "./screens/SessionDetailScreen";
 import { SessionEditorScreen } from "./screens/SessionEditorScreen";
 import { SessionListScreen } from "./screens/SessionListScreen";
 import { RankingsImportScreen } from "./screens/rankings/RankingsImportScreen";
-import { RankingsScreen } from "./screens/rankings/RankingsScreen";
 import { RankingsSetupScreen } from "./screens/rankings/RankingsSetupScreen";
 import { RankingsTeamScreen } from "./screens/rankings/RankingsTeamScreen";
 import { RankingsWhatIfScreen } from "./screens/rankings/RankingsWhatIfScreen";
 import { NotFoundScreen } from "./screens/StatusScreens";
 import { YourTeamButton } from "./screens/YourTeam";
+import { StorageProvider } from "./screens/storage/StorageContext";
+import { StaticRankingsScreen } from "./screens/storage/StaticRankingsScreen";
+import { createRankingsFileOps } from "./storage/documents";
+import { createStorageService, type StorageService } from "./storage/service";
 
 // AI screens and lib/ai load only when opened (ADR-0023): the build check keeps adapter code out of the entry chunk.
 const AiSettingsScreen = lazy(() => import("./ai/AiSettingsScreen").then((module) => ({ default: module.AiSettingsScreen })));
 const NotesDraftScreen = lazy(() => import("./ai/NotesDraftScreen").then((module) => ({ default: module.NotesDraftScreen })));
+// Saved files loads when opened: linked files and recovered copies are a rare visit.
+const StorageScreen = lazy(() => import("./screens/storage/StorageScreen").then((module) => ({ default: module.StorageScreen })));
 
 function LazyScreen({ children }: { children: ReactNode }) {
     return <Suspense fallback={<Typography color="text.secondary">Loading…</Typography>}>{children}</Suspense>;
@@ -94,10 +99,10 @@ function RouteView({ route, store }: { route: StaticRoute; store: LocalPlannerSt
             // One key for both: replacing #plan=… with #/import must not remount the screen.
             return <ImportScreen key="import" store={store} linkValue={route.name === "planLink" ? route.value : null} />;
         case "rankings":
-            return <RankingsScreen store={store} />;
+            return <StaticRankingsScreen store={store} />;
         case "rankingsImport":
             // A pull (ADR-0024) keeps the "import" key: dropping it from the hash must not remount the screen.
-            return <RankingsImportScreen key={route.update ? "update" : "import"} store={store} update={route.update === true} pull={route.pull} />;
+            return <RankingsImportScreen key={route.update ? "update" : "import"} store={store} update={route.update === true} pull={route.pull} files={createRankingsFileOps(store)} />;
         case "rankingsSetup":
             return <RankingsSetupScreen store={store} section={route.section} />;
         case "rankingsWhatIf":
@@ -108,6 +113,12 @@ function RouteView({ route, store }: { route: StaticRoute; store: LocalPlannerSt
             return (
                 <LazyScreen>
                     <AiSettingsScreen store={store} />
+                </LazyScreen>
+            );
+        case "files":
+            return (
+                <LazyScreen>
+                    <StorageScreen />
                 </LazyScreen>
             );
         case "importNotes":
@@ -128,14 +139,18 @@ export interface PlannerAppProps {
     store: LocalPlannerStore;
     durable: boolean;
     stale: StaleSignal;
+    /** The storage connectors (ADR-0022); made from the store when omitted. */
+    storage?: StorageService;
 }
 
-export function PlannerApp({ store, durable, stale }: PlannerAppProps) {
+export function PlannerApp({ store, durable, stale, storage }: PlannerAppProps) {
     const route = useHashRoute();
+    const service = useMemo(() => storage ?? createStorageService(store), [storage, store]);
     return (
         <StaticThemeProvider>
             <RootErrorBoundary>
                 <PlannerProvider store={store} platform={staticPlannerPlatform}>
+                    <StorageProvider service={service}>
                     {route.name === "sessionPrint" ? (
                         <BenchSheetScreen key={route.id} store={store} id={route.id} />
                     ) : (
@@ -149,6 +164,7 @@ export function PlannerApp({ store, durable, stale }: PlannerAppProps) {
                             <RouteView route={route} store={store} />
                         </AppShell>
                     )}
+                    </StorageProvider>
                 </PlannerProvider>
             </RootErrorBoundary>
         </StaticThemeProvider>

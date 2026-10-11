@@ -61,11 +61,11 @@ describe("ExportPlanMenu formats", () => {
         expect(result.ok && expected.ok && result.document.payload.session).toEqual(expected.ok && expected.plan.session);
     });
 
-    it("the plain item still downloads JSON at once", () => {
+    it("the plain item still downloads JSON", async () => {
         renderWithPlanner(<ExportPlanMenu session={SESSION} />);
         openMenu();
         fireEvent.click(screen.getByRole("menuitem", { name: "Download plan file" }));
-        expect(clicks).toEqual(["tuesday-skills.olplan.json"]);
+        await waitFor(() => expect(clicks).toEqual(["tuesday-skills.olplan.json"]));
     });
 
     it("says so when a format's library can't load", async () => {
