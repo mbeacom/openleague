@@ -113,8 +113,8 @@ export interface SessionDrillCardProps {
     dragHandle?: ReactNode;
     /**
      * Compact rows (useDrillDensity): one line with a small thumbnail, the
-     * minutes and every control as an icon. Edit opens the full card; the
-     * station switch, Stays and Run by are on the full card only.
+     * minutes, the station switch and every other control as an icon. Edit
+     * opens the full card, where Stays and Run by are.
      */
     compact?: boolean;
 }
@@ -247,6 +247,34 @@ export function SessionDrillCard({
                         </Typography>
                         {fitWarning && <Chip label={fitWarning} color="warning" size="small" variant="outlined" />}
                         {goalieWarning && <Chip label={goalieWarning} color="warning" size="small" variant="outlined" />}
+                        {/* The full card shows its switch only while not editing, so the row carries it too. */}
+                        {station && (
+                            <Tooltip title={capped ? STATION_CAP_TOOLTIP : STATION_SWITCH_LABEL}>
+                                <FormControlLabel
+                                    control={
+                                        <Switch
+                                            size="small"
+                                            checked={station.checked}
+                                            onChange={() => onToggleStation(index)}
+                                            slotProps={{
+                                                input: {
+                                                    "aria-label": STATION_SWITCH_LABEL,
+                                                    "aria-describedby": capped ? `${titleId} ${capReasonId}` : titleId,
+                                                },
+                                            }}
+                                        />
+                                    }
+                                    label={<Typography variant="body2">Station</Typography>}
+                                    disabled={locked || capped}
+                                    sx={{ minHeight: 44, ml: 0, mr: 0 }}
+                                />
+                            </Tooltip>
+                        )}
+                        {capped && (
+                            <Box component="span" id={capReasonId} sx={VISUALLY_HIDDEN}>
+                                {STATION_CAP_TOOLTIP}
+                            </Box>
+                        )}
                     </Stack>
                 </Box>
                 <Stack direction="row" alignItems="center" sx={{ ml: "auto", "& .MuiIconButton-root": { minWidth: 44, minHeight: 44 } }}>

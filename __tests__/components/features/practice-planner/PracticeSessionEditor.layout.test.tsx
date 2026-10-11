@@ -3,6 +3,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, screen, within } from "@testing-library/react";
 import { drill, renderEditor, stubResizeObserver } from "@/__tests__/helpers/session-editor";
 import { COMPACT_ROWS_LABEL } from "@/components/features/practice-planner/SessionDrillList";
+import { STATION_SWITCH_LABEL } from "@/components/features/practice-planner/SessionDrillCard";
 import { DRILL_DENSITY_STORAGE_KEY } from "@/components/features/practice-planner/useDrillDensity";
 
 beforeAll(stubResizeObserver);
@@ -89,6 +90,21 @@ describe("PracticeSessionEditor: Compact rows", () => {
         fireEvent.click(screen.getByRole("button", { name: "Edit play 1" }));
         expect(screen.getByRole("spinbutton", { name: "Duration (minutes)" })).toBeInTheDocument();
         expect(screen.getByRole("textbox", { name: "Instructions" })).toHaveValue("Hard first pass");
+    });
+
+    it("keeps the station switch on a compact row, so a drill can join or leave a station block", () => {
+        localStorage.setItem(DRILL_DENSITY_STORAGE_KEY, "compact");
+        renderEditor(PLAYS);
+        // The first drill always runs on its own: no switch.
+        expect(within(card("Breakout")).queryByRole("switch", { name: STATION_SWITCH_LABEL })).not.toBeInTheDocument();
+        const toggle = within(card("Shooting")).getByRole("switch", { name: STATION_SWITCH_LABEL });
+        expect(toggle).not.toBeChecked();
+        fireEvent.click(toggle);
+        expect(screen.getByRole("group", { name: "Station 2 of 2: Shooting" })).toHaveAttribute("data-density", "compact");
+        const joined = within(card("Shooting")).getByRole("switch", { name: STATION_SWITCH_LABEL });
+        expect(joined).toBeChecked();
+        fireEvent.click(joined);
+        expect(screen.queryByRole("group", { name: "Station 2 of 2: Shooting" })).not.toBeInTheDocument();
     });
 
     it("reads a stored value it doesn't know as the full cards", () => {
