@@ -23,11 +23,15 @@ const byteLength = (text: string) => new TextEncoder().encode(text).byteLength;
 
 /**
  * The rankings file's envelope id: the store's (the static planner keeps one
- * per document), else a new one (a store that keeps none).
+ * per document), else a new one (a store that keeps none). Throws when the
+ * store can't read its id: a new id on every download would defeat the id
+ * match when the file is opened again.
  */
 export async function rankingsDocumentId(store: Pick<RankingsOps, "getRankingsDocumentId">): Promise<string> {
-    const kept = await store.getRankingsDocumentId?.();
-    return kept?.success && isEnvelopeId(kept.data) ? kept.data : crypto.randomUUID();
+    if (!store.getRankingsDocumentId) return crypto.randomUUID();
+    const kept = await store.getRankingsDocumentId();
+    if (!kept.success) throw new Error(kept.error);
+    return isEnvelopeId(kept.data) ? kept.data : crypto.randomUUID();
 }
 
 /** The rankings file as written: the envelope, saved now. */

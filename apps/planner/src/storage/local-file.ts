@@ -4,9 +4,11 @@
  *
  * - "Save to…" opens the save picker; the file's handle is kept in IndexedDB
  *   (handles are structured-cloneable) by a file id this connector makes.
- * - Every save checks the file's revision (its lastModified and size, from
- *   getFile()) before writing: check, then write (R4). Two tabs or apps can
- *   still race; the sync engine's "Overwritten" rule catches it.
+ * - Every save checks the file's revision (its lastModified, size and a
+ *   digest of its content, from one getFile()) before writing: check, then
+ *   write (R4). The digest catches a same-size edit inside the timestamp's
+ *   resolution. Two tabs or apps can still race; the sync engine's
+ *   "Overwritten" rule catches it.
  * - Permission is asked for before a read or write. After a reload the
  *   browser asks again, and only from a tap: a check made without one reports
  *   auth-required and the screen offers "Allow access".
@@ -104,8 +106,22 @@ function toConnectorError(error: unknown): ConnectorError {
     }
 }
 
-/** The file's revision: its lastModified and size, both from the same getFile(). */
-export const revisionOf = (file: Pick<File, "lastModified" | "size">): string => `${file.lastModified}:${file.size}`;
+/**
+ * The file's revision: its lastModified, size and a SHA-256 digest of `text`,
+ * all from the same getFile(). Content-bound: a same-size edit that keeps
+ * lastModified (within the timestamp's resolution) still moves it.
+ */
+export async function revisionOf(file: Pick<File, "lastModified" | "size">, text: string): Promise<string> {
+    const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)));
+    const hex = Array.from(digest.subarray(0, 16), (byte) => byte.toString(16).padStart(2, "0")).join("");
+    return `${file.lastModified}:${file.size}:${hex}`;
+}
+
+/** lastModified as ISO; the epoch when it is outside the Date range (toISOString would throw). */
+function isoOf(lastModified: number): string {
+    const date = new Date(lastModified);
+    return Number.isNaN(date.getTime()) ? new Date(0).toISOString() : date.toISOString();
+}
 
 export interface LocalFileConnectorOptions {
     /** null: this browser has no File System Access API. */
@@ -115,8 +131,14 @@ export interface LocalFileConnectorOptions {
 }
 
 export function createLocalFileConnector({ pickers, handles, newId = () => crypto.randomUUID() }: LocalFileConnectorOptions): StorageConnector {
-    function remoteOf(fileId: string, handle: FsaFileHandle, file: Pick<File, "lastModified" | "size">): RemoteFile {
-        return { connector: "local-file", fileId, name: handle.name, revision: revisionOf(file), modifiedAt: new Date(file.lastModified).toISOString(), size: file.size };
+    /** The file as a RemoteFile, with its text: one getFile() for both, so the revision matches the text. */
+    async function read(fileId: string, handle: FsaFileHandle): Promise<{ file: RemoteFile; text: string }> {
+        const file = await handle.getFile();
+        const text = await file.text();
+        return {
+            file: { connector: "local-file", fileId, name: handle.name, revision: await revisionOf(file, text), modifiedAt: isoOf(file.lastModified), size: file.size },
+            text,
+        };
     }
 
     /** Granted already, or asked now (works only from a tap); anything else needs the coach. */
@@ -186,8 +208,7 @@ export function createLocalFileConnector({ pickers, handles, newId = () => crypt
                 const handle = await handleFor(ref);
                 if (!handle) return connectorFail({ code: "not-found" });
                 if (!(await permitted(handle, "read"))) return connectorFail({ code: "auth-required" });
-                const file = await handle.getFile();
-                return connectorOk({ file: remoteOf(ref.fileId, handle, file), text: await file.text() });
+                return connectorOk(await read(ref.fileId, handle));
             }),
 
         save: (input) =>
@@ -200,19 +221,19 @@ export function createLocalFileConnector({ pickers, handles, newId = () => crypt
                     await writeText(handle, text.text);
                     const fileId = newId();
                     await handles.put(fileId, handle);
-                    return connectorOk(remoteOf(fileId, handle, await handle.getFile()));
+                    return connectorOk((await read(fileId, handle)).file);
                 }
                 const handle = await handleFor(input.ref);
                 if (!handle) return connectorFail({ code: "not-found" });
                 if (!(await permitted(handle, "readwrite"))) return connectorFail({ code: "auth-required" });
                 // The check…
-                const current = await handle.getFile();
-                if (input.expectedRevision === null || revisionOf(current) !== input.expectedRevision) {
-                    return connectorFail({ code: "conflict", remote: remoteOf(input.ref.fileId, handle, current) });
+                const current = (await read(input.ref.fileId, handle)).file;
+                if (input.expectedRevision === null || current.revision !== input.expectedRevision) {
+                    return connectorFail({ code: "conflict", remote: current });
                 }
                 // …then the write. Another app may write in between (R4); "Overwritten" catches it.
                 await writeText(handle, input.text);
-                return connectorOk(remoteOf(input.ref.fileId, handle, await handle.getFile()));
+                return connectorOk((await read(input.ref.fileId, handle)).file);
             }),
     };
 }
