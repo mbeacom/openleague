@@ -182,11 +182,11 @@ export async function validateDeploymentConfig(rootDir = process.cwd()): Promise
     const docsWorkflow = await readFile(docsWorkflowPath, 'utf8');
     requireCondition(
       failures,
-      includesAll(docsWorkflow, ['actions/configure-pages', 'actions/upload-pages-artifact', 'actions/deploy-pages', 'bun run docs:build-pages']),
+      includesAll(docsWorkflow, ['actions/configure-pages', 'actions/upload-artifact', 'name: github-pages', 'actions/deploy-pages', 'bun run docs:build-pages']),
       'GitHub Pages workflow must build, upload, and deploy the documentation artifact.',
     );
 
-    for (const actionName of ['actions/configure-pages', 'actions/upload-pages-artifact', 'actions/deploy-pages']) {
+    for (const actionName of ['actions/configure-pages', 'actions/upload-artifact', 'actions/deploy-pages']) {
       requireCondition(
         failures,
         workflowUsesPinnedAction(docsWorkflow, actionName),

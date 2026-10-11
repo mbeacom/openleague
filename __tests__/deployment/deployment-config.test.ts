@@ -91,7 +91,11 @@ describe('deployment configuration', () => {
 
     expect(docsWorkflow).toContain('bun run docs:build-pages');
     expect(docsWorkflow).toContain('actions/configure-pages');
-    expect(docsWorkflow).toContain('actions/upload-pages-artifact');
+    // upload-pages-artifact drops dot-paths such as /.well-known/, so the workflow archives the site itself.
+    expect(docsWorkflow).not.toContain('actions/upload-pages-artifact');
+    expect(docsWorkflow).toContain('actions/upload-artifact');
+    expect(docsWorkflow).toContain('name: github-pages');
+    expect(docsWorkflow).toContain('./.well-known/microsoft-identity-association.json');
     expect(docsWorkflow).toContain('actions/deploy-pages');
     expect(docsBuilder).toContain('openleague.dev');
     expect(docsBuilder).toContain('CNAME');
