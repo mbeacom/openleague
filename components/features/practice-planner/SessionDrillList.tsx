@@ -23,10 +23,11 @@ import {
     stationWarnings,
     type StationGroup,
 } from "@/lib/utils/session-timeline";
-import { drillRows, isBlockRow, isDrillRow, type RowEdit } from "@/lib/utils/session-rows";
+import { blockTitle, drillRows, isBlockRow, isDrillRow, type RowEdit } from "@/lib/utils/session-rows";
 import { AddBlockMenu } from "./AddBlockMenu";
 import { BlockRowCard } from "./BlockRowCard";
 import { SessionDrillCard } from "./SessionDrillCard";
+import { SessionSortable, SortableSessionRow, buildSortLayout, type SortMove } from "./SessionSortable";
 import { StationBlockHeader, type StationRotationControls } from "./StationBlockHeader";
 import type { RowRunBy } from "./RunByField";
 
@@ -48,6 +49,14 @@ export interface SessionDrillListProps {
     onCancelEdit: () => void;
     onMoveUp: (index: number) => void;
     onMoveDown: (index: number) => void;
+    /**
+     * Drag and drop: moves the unit (a standalone row or a whole station block)
+     * holding `fromIndex` to the place of the unit holding `toIndex`. Absent =
+     * no drag handles (the arrows still move rows).
+     */
+    onMoveUnitTo?: (fromIndex: number, toIndex: number) => void;
+    /** Drag and drop within a station block: the station at `fromIndex` takes the place of the one at `toIndex`. */
+    onMoveStationTo?: (fromIndex: number, toIndex: number) => void;
     /** Flips "Run as a station with the previous drill" on the drill at this position (2b). */
     onToggleStation: (index: number) => void;
     /** Diagram editing and new drills need a saved session. */
@@ -100,6 +109,8 @@ export function SessionDrillList({
     onCancelEdit,
     onMoveUp,
     onMoveDown,
+    onMoveUnitTo,
+    onMoveStationTo,
     onToggleStation,
     canEditDiagram,
     onEditDiagram,
@@ -141,6 +152,25 @@ export function SessionDrillList({
     const staffed = Boolean(staff?.some(isNamedStaff));
     const runByFor = (row: SessionItem): RowRunBy | null =>
         staffed && staff && onSetRowStaff ? { staff, value: row.staff ?? [], onChange: (keys) => onSetRowStaff(row.id, keys) } : null;
+    const drillName = (play: PlayInSession) => play.name || `Drill ${drillNumbers.get(play.id) ?? drillNumbers.size + 1}`;
+    // Drag and drop's view of the list: one unit per block, named for the handles and announcements.
+    const sortLayout = buildSortLayout(
+        groups.map((group) => {
+            const rows = group.stations.map((row) => ({
+                id: row.id,
+                index: plays.indexOf(row),
+                name: isDrillRow(row) ? drillName(row) : blockTitle(row.kind, row.label),
+            }));
+            return rows.length > 1
+                ? { rows, headerId: `header-${group.stations[0].id}`, name: `station block starting with ${rows[0].name}` }
+                : { rows, name: rows[0].name };
+        }),
+    );
+    const onSortMove =
+        onMoveUnitTo && onMoveStationTo
+            ? ({ scope, fromIndex, toIndex }: SortMove) => (scope === "unit" ? onMoveUnitTo : onMoveStationTo)(fromIndex, toIndex)
+            : undefined;
+
     const renderCard = (
         play: PlayInSession,
         stationSlot?: { position: number; count: number },
@@ -151,54 +181,62 @@ export function SessionDrillList({
         // A drill right after a block row (or first) can't join a station block.
         const previous = plays[index - 1];
         return (
-            <SessionDrillCard
-                key={play.id}
-                play={play}
-                index={index}
-                number={drillNumbers.get(play.id) ?? drillNumbers.size + 1}
-                stationSlot={stationSlot}
-                canMoveUp={canMove(plays, index, -1)}
-                canMoveDown={canMove(plays, index, 1)}
-                station={previous === undefined || isBlockRow(previous) ? null : {
-                    checked: play.runsWithPrevious,
-                    canToggle: canToggleRunsWithPrevious(plays, index),
-                }}
-                onToggleStation={onToggleStation}
-                fitWarning={fitLabel && warnings.tooBig.includes(play.sequence) ? `Larger than the booked ${fitLabel}` : null}
-                goalieWarning={goalieWarning}
-                stays={stays}
-                runBy={runByFor(play)}
-                isEditing={editingPlayId === play.id}
-                onDelete={onDelete}
-                onEdit={onEdit}
-                onUpdate={onUpdate}
-                onCancelEdit={onCancelEdit}
-                onMoveUp={onMoveUp}
-                onMoveDown={onMoveDown}
-                canEditDiagram={canEditDiagram}
-                disabled={disabled}
-                locked={locked}
-                onEditDiagram={onEditDiagram}
-            />
+            <SortableSessionRow key={play.id} id={play.id}>
+                {(dragHandle) => (
+                    <SessionDrillCard
+                        play={play}
+                        index={index}
+                        number={drillNumbers.get(play.id) ?? drillNumbers.size + 1}
+                        stationSlot={stationSlot}
+                        canMoveUp={canMove(plays, index, -1)}
+                        canMoveDown={canMove(plays, index, 1)}
+                        station={previous === undefined || isBlockRow(previous) ? null : {
+                            checked: play.runsWithPrevious,
+                            canToggle: canToggleRunsWithPrevious(plays, index),
+                        }}
+                        onToggleStation={onToggleStation}
+                        fitWarning={fitLabel && warnings.tooBig.includes(play.sequence) ? `Larger than the booked ${fitLabel}` : null}
+                        goalieWarning={goalieWarning}
+                        stays={stays}
+                        runBy={runByFor(play)}
+                        isEditing={editingPlayId === play.id}
+                        onDelete={onDelete}
+                        onEdit={onEdit}
+                        onUpdate={onUpdate}
+                        onCancelEdit={onCancelEdit}
+                        onMoveUp={onMoveUp}
+                        onMoveDown={onMoveDown}
+                        canEditDiagram={canEditDiagram}
+                        disabled={disabled}
+                        locked={locked}
+                        onEditDiagram={onEditDiagram}
+                        dragHandle={dragHandle}
+                    />
+                )}
+            </SortableSessionRow>
         );
     };
 
     const renderBlock = (item: BlockInSession) => {
         const index = plays.indexOf(item);
         return (
-            <BlockRowCard
-                key={item.id}
-                item={item}
-                index={index}
-                canMoveUp={canMove(plays, index, -1)}
-                canMoveDown={canMove(plays, index, 1)}
-                locked={locked}
-                runBy={runByFor(item)}
-                onUpdate={onUpdate}
-                onDelete={onDelete}
-                onMoveUp={onMoveUp}
-                onMoveDown={onMoveDown}
-            />
+            <SortableSessionRow key={item.id} id={item.id}>
+                {(dragHandle) => (
+                    <BlockRowCard
+                        item={item}
+                        index={index}
+                        canMoveUp={canMove(plays, index, -1)}
+                        canMoveDown={canMove(plays, index, 1)}
+                        locked={locked}
+                        runBy={runByFor(item)}
+                        onUpdate={onUpdate}
+                        onDelete={onDelete}
+                        onMoveUp={onMoveUp}
+                        onMoveDown={onMoveDown}
+                        dragHandle={dragHandle}
+                    />
+                )}
+            </SortableSessionRow>
         );
     };
 
@@ -283,53 +321,60 @@ export function SessionDrillList({
 
                 {/* One flat, play.id-keyed list (no per-block wrapper or keyed Fragment): */}
                 {/* block headers are keyed siblings, so regrouping never remounts a card. */}
+                {/* Drag and drop keeps it flat too: one sortable per element (SessionSortable). */}
                 {plays.length > 0 && (
-                    <Stack spacing={2}>
-                        {groups.flatMap((group): ReactNode[] => {
-                            const only = group.stations[0];
-                            if (group.stations.length === 1) {
-                                return [isDrillRow(only) ? renderCard(only, undefined, goalieMessage(group)) : renderBlock(only)];
-                            }
-                            // A station block's stations are drills: a block row never joins one.
-                            const stations = drillRows(group.stations);
-                            const blockGoalieMessage = goalieMessage(group);
-                            const headerId = `station-block-${only.id}`;
-                            const head = stations[0];
-                            const headIndex = plays.indexOf(head);
-                            const grid = group.rotation;
-                            // Set to rotate, even when it can't yet: Stays stays visible with the note (spec R3).
-                            const rotateOn = head.rotateEveryMinutes != null;
-                            const rotation: StationRotationControls = {
-                                rotateEveryMinutes: head.rotateEveryMinutes ?? null,
-                                rotatingCount: rotatingStations(stations).length,
-                                table: grid
-                                    ? rotationTable(grid, (row) => (isDrillRow(row) ? row.name || "Drill" : ""), (start) => rotationRoundLabel(start, grid.minutes))
-                                    : null,
-                                onRotateChange: (on) => onSetRotation(headIndex, on ? defaultRotationMinutes(stations) : null),
-                                onMinutesChange: (minutes) => onSetRotation(headIndex, minutes),
-                                disabled: locked,
-                            };
-                            return [
-                                <StationBlockHeader
-                                    key={`header-${only.id}`}
-                                    id={headerId}
-                                    label={stationBlockLabel(stations.length, group.wallMinutes)}
-                                    warnings={[
-                                        ...overlapMessages(group, warnings.overlaps),
-                                        ...(blockGoalieMessage ? [blockGoalieMessage] : []),
-                                    ]}
-                                    rotation={rotation}
-                                />,
-                                ...stations.map((play, slot) =>
-                                    renderCard(
-                                        play,
-                                        { position: slot + 1, count: stations.length },
-                                        null,
-                                        rotateOn ? { checked: Boolean(play.stays), onToggle: () => onSetStays(plays.indexOf(play), !play.stays) } : null,
-                                    )),
-                            ];
-                        })}
-                    </Stack>
+                    <SessionSortable layout={sortLayout} onMove={onSortMove} locked={locked}>
+                        <Stack spacing={2}>
+                            {groups.flatMap((group): ReactNode[] => {
+                                const only = group.stations[0];
+                                if (group.stations.length === 1) {
+                                    return [isDrillRow(only) ? renderCard(only, undefined, goalieMessage(group)) : renderBlock(only)];
+                                }
+                                // A station block's stations are drills: a block row never joins one.
+                                const stations = drillRows(group.stations);
+                                const blockGoalieMessage = goalieMessage(group);
+                                const headerId = `station-block-${only.id}`;
+                                const head = stations[0];
+                                const headIndex = plays.indexOf(head);
+                                const grid = group.rotation;
+                                // Set to rotate, even when it can't yet: Stays stays visible with the note (spec R3).
+                                const rotateOn = head.rotateEveryMinutes != null;
+                                const rotation: StationRotationControls = {
+                                    rotateEveryMinutes: head.rotateEveryMinutes ?? null,
+                                    rotatingCount: rotatingStations(stations).length,
+                                    table: grid
+                                        ? rotationTable(grid, (row) => (isDrillRow(row) ? row.name || "Drill" : ""), (start) => rotationRoundLabel(start, grid.minutes))
+                                        : null,
+                                    onRotateChange: (on) => onSetRotation(headIndex, on ? defaultRotationMinutes(stations) : null),
+                                    onMinutesChange: (minutes) => onSetRotation(headIndex, minutes),
+                                    disabled: locked,
+                                };
+                                return [
+                                    <SortableSessionRow key={`header-${only.id}`} id={`header-${only.id}`}>
+                                        {(dragHandle) => (
+                                            <StationBlockHeader
+                                                id={headerId}
+                                                label={stationBlockLabel(stations.length, group.wallMinutes)}
+                                                warnings={[
+                                                    ...overlapMessages(group, warnings.overlaps),
+                                                    ...(blockGoalieMessage ? [blockGoalieMessage] : []),
+                                                ]}
+                                                rotation={rotation}
+                                                dragHandle={dragHandle}
+                                            />
+                                        )}
+                                    </SortableSessionRow>,
+                                    ...stations.map((play, slot) =>
+                                        renderCard(
+                                            play,
+                                            { position: slot + 1, count: stations.length },
+                                            null,
+                                            rotateOn ? { checked: Boolean(play.stays), onToggle: () => onSetStays(plays.indexOf(play), !play.stays) } : null,
+                                        )),
+                                ];
+                            })}
+                        </Stack>
+                    </SessionSortable>
                 )}
             </Stack>
         </Paper>

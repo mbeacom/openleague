@@ -6,7 +6,7 @@
  * from PracticeSessionEditor.
  */
 
-import { useId, useState } from "react";
+import { useId, useState, type ReactNode } from "react";
 import {
     Box,
     Button,
@@ -108,6 +108,8 @@ export interface SessionDrillCardProps {
     /** The session is being created: nothing on the card may change. */
     locked?: boolean;
     onEditDiagram: (clientKey: string) => void;
+    /** The drag handle (SessionSortable), placed first among the move controls; absent without drag and drop. */
+    dragHandle?: ReactNode;
 }
 
 /**
@@ -140,6 +142,7 @@ export function SessionDrillCard({
     disabled = false,
     locked = false,
     onEditDiagram,
+    dragHandle = null,
 }: SessionDrillCardProps) {
     const { Image } = usePlannerPlatform();
     // Local state for editing
@@ -427,7 +430,8 @@ export function SessionDrillCard({
                         },
                     }}
                 >
-                    {/* Requirements: 2.5 - Reordering controls (station-aware, 2b) */}
+                    {/* Requirements: 2.5 - Reordering controls (station-aware, 2b); drag first, arrows as the fallback */}
+                    {dragHandle}
                     <IconButton
                         size="small"
                         onClick={() => onMoveUp(index)}

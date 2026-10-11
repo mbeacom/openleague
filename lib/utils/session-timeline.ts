@@ -17,7 +17,7 @@
  * `groupStations`, `sessionWallMinutes`, `buildSchedule` and the save checks
  * order by `sequence`, because a payload's array order is not trusted. The
  * list helpers (`normalizeGroups`, `toggleRunsWithPrevious`, `moveItem`,
- * `removeItem`, `settleRotations`) work on array order, which the editor keeps
+ * `moveUnitTo`, `moveStationTo`, `removeItem`, `settleRotations`) work on array order, which the editor keeps
  * equal to sequence order: every edit ends in `normalizeGroups`.
  */
 
@@ -316,6 +316,62 @@ export function moveItem<T extends TimelinePlay>(plays: T[], index: number, dir:
         ...plays.slice(first.start, first.end),
         ...plays.slice(second.end),
     ]);
+}
+
+function isPosition(plays: readonly TimelinePlay[], index: number): boolean {
+    return Number.isInteger(index) && index >= 0 && index < plays.length;
+}
+
+/**
+ * Drag and drop of a whole unit (a standalone row or a station block): the
+ * unit holding `fromIndex` takes the place of the unit holding `toIndex`, and
+ * the units between shift one place toward where it came from. Blocks never
+ * split and a moved unit never joins its new neighbor: each unit's first row
+ * runs on its own. A one-unit step is moveItem on the unit's first row.
+ * Returns `plays` itself when nothing moves.
+ */
+export function moveUnitTo<T extends TimelinePlay>(plays: T[], fromIndex: number, toIndex: number): T[] {
+    if (!isPosition(plays, fromIndex) || !isPosition(plays, toIndex)) return plays;
+    const units: T[][] = [];
+    let from = -1;
+    let to = -1;
+    for (let start = 0; start < plays.length; ) {
+        const { end } = groupRange(plays, start);
+        const unit = plays.slice(start, end);
+        // A stored flagged first row heads its unit wherever it lands.
+        if (unit[0].runsWithPrevious) unit[0] = { ...unit[0], runsWithPrevious: false };
+        if (fromIndex >= start && fromIndex < end) from = units.length;
+        if (toIndex >= start && toIndex < end) to = units.length;
+        units.push(unit);
+        start = end;
+    }
+    if (from === to) return plays;
+    const [moved] = units.splice(from, 1);
+    units.splice(to, 0, moved);
+    return normalizeGroups(units.flat());
+}
+
+/**
+ * Drag and drop inside a station block: the station at `fromIndex` takes the
+ * place of the station at `toIndex`, which must be in the same block. Flags
+ * stay positional (the first drill runs on its own), the block's rotation
+ * moves to whichever drill is now first, and stays ticks go with their
+ * stations. A one-step move of a station after the first is moveItem.
+ * Returns `plays` itself when nothing moves.
+ */
+export function moveStationTo<T extends TimelinePlay>(plays: T[], fromIndex: number, toIndex: number): T[] {
+    if (!isPosition(plays, fromIndex) || !isPosition(plays, toIndex) || fromIndex === toIndex) return plays;
+    const group = groupRange(plays, fromIndex);
+    if (toIndex < group.start || toIndex >= group.end) return plays;
+    const stations = plays.slice(group.start, group.end);
+    const [moved] = stations.splice(fromIndex - group.start, 1);
+    stations.splice(toIndex - group.start, 0, moved);
+    const next = [...plays];
+    stations.forEach((row, k) => {
+        const runsWithPrevious = k > 0;
+        next[group.start + k] = row.runsWithPrevious === runsWithPrevious ? row : { ...row, runsWithPrevious };
+    });
+    return normalizeGroups(carryRotation(next, group.start, plays[group.start].rotateEveryMinutes));
 }
 
 /** Whether `moveItem` would change the order. */
