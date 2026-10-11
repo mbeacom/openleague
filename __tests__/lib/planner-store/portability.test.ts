@@ -28,8 +28,7 @@ const ENTRIES = [
     "lib/rankings-document/pull.ts",
     // The static planner's whole bundle (sub-project 3).
     "apps/planner/src/main.tsx",
-    // The storage connector seam (ADR-0022), not yet reached from main.tsx.
-    "apps/planner/src/storage/sync.ts",
+    // The storage connectors (ADR-0022): main.tsx reaches the engine and the Local connector; the fake is for tests and development.
     "apps/planner/src/storage/fake.ts",
 ];
 

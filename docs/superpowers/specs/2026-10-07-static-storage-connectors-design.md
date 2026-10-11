@@ -144,7 +144,7 @@ So:
 
 - **Phase 4a (default): `Files.ReadWrite.AppFolder`.** The app reads and writes only its own folder, `Apps/<app name>/`, created on first use at `/me/drive/special/approot`. Users can see, move and share files there like any other folder ([App folder](https://learn.microsoft.com/graph/onedrive-sharepoint-appfolder), [Get special folder](https://learn.microsoft.com/graph/api/drive-get-specialfolder?view=graph-rest-1.0)). No picker: the app lists its folder itself.
 - **Phase 4b (opt-in, owner's call): the Picker v8 with `Files.ReadWrite`** (personal: `OneDrive.ReadWrite`), to open files outside the app folder, including ones another coach shared. This is a broader grant — every file in the user's OneDrive — and the consent screen says so. It would be requested incrementally, only when the coach taps "Open from OneDrive…", never at connect.
-- **Account types: personal accounts only for now** (open question 4, resolved). The OneDrive permissions reference says `Files.ReadWrite.AppFolder` is valid only for personal accounts ([permissions reference](https://learn.microsoft.com/onedrive/developer/rest-api/concepts/permissions_reference?view=odsp-graph-online)), while the newer Graph app-folder article describes it for OneDrive and SharePoint ([App folder](https://learn.microsoft.com/graph/onedrive-sharepoint-appfolder)). Phase 4a should be verified against a work or school account before it is promised to one.
+- **Account types: personal and work or school accounts** (open question 4, resolved; revised 2026-10-11). The OneDrive permissions reference says `Files.ReadWrite.AppFolder` is valid only for personal accounts ([permissions reference](https://learn.microsoft.com/onedrive/developer/rest-api/concepts/permissions_reference?view=odsp-graph-online)), while the newer Graph app-folder article describes it for OneDrive and SharePoint ([App folder](https://learn.microsoft.com/graph/onedrive-sharepoint-appfolder)). Phase 4a should be verified against a work or school account before it is promised to one.
 - **Tokens: MSAL Browser (`@azure/msal-browser`), authorization code with PKCE.** No client secret. PKCE is required for single-page apps, and the redirect URI must be registered as type `spa` ([third-party cookies and SPAs](https://learn.microsoft.com/entra/identity-platform/reference-third-party-cookies-spas)). Access tokens last about an hour. Refresh tokens issued to an SPA last **24 hours, fixed, not sliding**; after that MSAL tries a hidden iframe (which needs the `frame-src` entries in Security and privacy), and browsers that block third-party cookies (Safari) defeat that, so the app falls back to a popup ([refresh tokens](https://learn.microsoft.com/entra/identity-platform/refresh-tokens), [MSAL token lifetimes](https://learn.microsoft.com/entra/msal/javascript/browser/token-lifetimes), [acquire a token](https://learn.microsoft.com/entra/identity-platform/scenario-spa-acquire-token)).
 - **Redirect page.** MSAL Browser v5 sends every popup and silent-iframe response to a dedicated redirect page that loads only its redirect bridge (`@azure/msal-browser/redirect-bridge`, bundled as its own Vite entry) and calls `broadcastResponseToMainFrame()`. The planner ships it as `auth/redirect.html`. It must not be served with a `Cross-Origin-Opener-Policy` header, must not set `X-Frame-Options` stricter than `SAMEORIGIN` (the silent iframe loads it), and must not run the app or its router ([sign in users](https://learn.microsoft.com/entra/msal/javascript/browser/login-user), [v5 migration](https://learn.microsoft.com/entra/msal/javascript/browser/v4-migration)).
 - **Where tokens live:** MSAL `cacheLocation: "sessionStorage"` (cleared when the tab closes; MSAL keeps temporary request state in session storage or memory regardless — [MSAL caching](https://learn.microsoft.com/entra/msal/javascript/browser/caching)). Not `localStorage`: a 24-hour refresh token at rest in `localStorage` outlives the tab and is readable by any script that runs on the origin.
@@ -213,7 +213,9 @@ type ConnectorError =
   | { code: "too-large" }
   | { code: "quota" }
   | { code: "unavailable"; retryAfterSeconds?: number }
-  | { code: "provider"; status: number };      // anything else, with no body text
+  | { code: "provider"; status: number }       // anything else, with no body text
+  | { code: "cancelled" }                      // the coach dismissed a picker this call opened (phase 2)
+  | { code: "unwritable"; message: string };   // the file's format can't hold the document (phase 2)
 
 type Result<T> = { ok: true; value: T } | { ok: false; error: ConnectorError };
 
@@ -291,7 +293,7 @@ The remote revision is checked when a linked document is opened, when the app re
 
 ### Microsoft Entra (OneDrive)
 
-1. Register an application in Microsoft Entra. Supported account types: **personal Microsoft accounts** only for now (open question 4, resolved); "any organizational directory and personal accounts" only if work/school support is added later.
+1. Register an application in Microsoft Entra. Supported account types: **any organizational directory and personal Microsoft accounts** (open question 4, resolved). The publisher domain is verified with `/.well-known/microsoft-identity-association.json` on openleague.dev.
 2. Add the platform **Single-page application** with redirect URIs (Microsoft redirect URIs are full URLs, paths included):
    - `https://openleague.dev/planner/auth/redirect.html` — the MSAL redirect-bridge page the planner ships (R6) for popups and the silent-renewal iframe, so the app itself never re-runs inside either.
    - `http://localhost:5173/planner/auth/redirect.html` (or the dev server's equivalent path).
@@ -383,7 +385,7 @@ Each phase ships alone and leaves the app fully working.
 2. **OneDrive 4b.** Is the broader `Files.ReadWrite` grant acceptable as an opt-in, so OneDrive users can open files other coaches share? Without it, OneDrive sharing is download-and-open.
 3. **Autosave.** Should a linked document save to the cloud automatically a few seconds after edits, or stay explicit (v1 default)?
 4. **Account types for OneDrive.** Personal accounts only at first, or work/school too? The docs disagree on whether `Files.ReadWrite.AppFolder` works for work/school accounts (R6); this needs a live check.
-   **Resolved (2026-10-11): personal accounts only for now.** The Entra app registration targets personal Microsoft accounts; work/school support waits for a live check of the app folder on such an account and for publisher verification.
+   **Resolved (2026-10-11): personal and work or school accounts.** First recorded as personal only; revised the same day once the publisher domain was verified. The app registration accepts both. Phase 4a still has to confirm the app folder on a work or school account before the UI promises it there, and a tenant's admin may require approval before its users can consent.
 5. **Hosted export.** Should the hosted platform's plan export write the envelope too (giving hosted-exported files an id), or stay bare?
    **Resolved (2026-10-11): yes.** The hosted export writes the envelope too, so a hosted-exported file has an id like a static one. The plan URL fragment stays bare (R2).
 6. **Privacy policy.** Google's consent screen needs a privacy policy URL. Does the existing site policy cover "the static planner stores your files in your own Drive/OneDrive and OpenLeague receives nothing", or does it need a section?

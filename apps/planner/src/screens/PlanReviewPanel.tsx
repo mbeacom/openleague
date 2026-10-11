@@ -28,10 +28,10 @@ export function usePlanSave(store: LocalPlannerStore) {
     const [saving, setSaving] = useState(false);
     const [saveError, setSaveError] = useState<string | null>(null);
     const save = useCallback(
-        async (plan: PlanDocument, addToLibrary: boolean) => {
+        async (plan: PlanDocument, addToLibrary: boolean, options: { documentId?: string } = {}) => {
             setSaving(true);
             setSaveError(null);
-            const result = await store.importPlan(plan, { date: planStartDate(plan), addToLibrary });
+            const result = await store.importPlan(plan, { date: planStartDate(plan), addToLibrary, ...options });
             setSaving(false);
             if (!result.success) {
                 setSaveError(result.error);

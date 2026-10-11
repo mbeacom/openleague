@@ -26,6 +26,8 @@ export interface StaticRoutes extends PlannerRoutes {
     aiSettings(): string;
     /** Practice notes → a draft plan (ADR-0023). */
     importNotes(): string;
+    /** Saved files: linked files and recovered copies (ADR-0022). */
+    files(): string;
 }
 
 const enc = encodeURIComponent;
@@ -50,6 +52,7 @@ export const staticRoutes: StaticRoutes = {
     rankingsTeam: (number) => `#/rankings/team/${enc(number)}`,
     aiSettings: () => "#/ai",
     importNotes: () => "#/import/notes",
+    files: () => "#/files",
 };
 
 export type StaticRoute =
@@ -72,6 +75,7 @@ export type StaticRoute =
     | { name: "rankingsTeam"; number: string }
     | { name: "aiSettings" }
     | { name: "importNotes" }
+    | { name: "files" }
     | { name: "notFound" };
 
 const NOT_FOUND: StaticRoute = { name: "notFound" };
@@ -132,6 +136,7 @@ export function matchRoute(hash: string): StaticRoute {
     if (section === "import" && second === undefined) return { name: "import" };
     if (section === "import" && second === "notes" && third === undefined) return { name: "importNotes" };
     if (section === "ai" && second === undefined) return { name: "aiSettings" };
+    if (section === "files" && second === undefined) return { name: "files" };
     if (section === "rankings") {
         if (second === undefined) return { name: "rankings" };
         if (third === undefined) {
@@ -180,6 +185,7 @@ export function navSection(route: StaticRoute): NavSection | null {
         case "rankingsTeam":
             return "rankings";
         case "aiSettings":
+        case "files":
         case "notFound":
             return null;
     }

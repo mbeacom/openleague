@@ -146,6 +146,12 @@ export interface PlannerStore {
      */
     listPlannerFavorites?: (input: PlannerFavoriteQuery) => Promise<ActionResult<string[]>>;
     setPlannerFavorite?: (input: PlannerFavoriteChange) => Promise<ActionResult<PlannerFavoriteChange>>;
+    /**
+     * The envelope id a practice's plan file carries (storage connectors spec
+     * R1), made once and kept. Static only: hosted derives one from the
+     * session id.
+     */
+    getPlanDocumentId?: (sessionId: string) => Promise<ActionResult<string>>;
 }
 
 export type PlannerLinkProps = Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "href"> & {

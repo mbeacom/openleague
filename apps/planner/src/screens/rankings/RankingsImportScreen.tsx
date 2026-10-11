@@ -13,7 +13,7 @@ import {
     docSource,
     mergeSchedule,
     pageAddressProblem,
-    readRankingsFile,
+    readRankingsFileDocument,
     resolveConflict,
     scheduleTeamNumbers,
     snakeChartFit,
@@ -31,6 +31,23 @@ import { useRankingsDoc } from "./useRankingsDoc";
 import { usePulledSchedule } from "./pulled-schedule";
 import { DOCUMENT_FILE_ACCEPT } from "@/lib/document-formats";
 import { useRankingsPlatform } from "./rankings-platform";
+import type { ActionResult } from "@/lib/planner-store";
+import { ReplaceOrKeepDialog } from "../storage/ReplaceOrKeepDialog";
+
+/**
+ * Static only (storage connectors spec R7): an opened rankings file whose
+ * envelope id matches a document here offers "Replace my copy" or "Keep
+ * both"; a file with an id and no match keeps its id. Hosted passes none.
+ */
+export interface RankingsFileOps {
+    findByDocumentId: (documentId: string) => Promise<{ id: string; title: string | null } | null>;
+    /** Replaces document `id` with the file; the replaced version goes to Recovered copies. */
+    replaceMine: (id: string, doc: RankingsDocument) => Promise<ActionResult<unknown>>;
+    /** The file as a new document with its own id. */
+    keepBoth: (doc: RankingsDocument) => Promise<ActionResult<unknown>>;
+    /** The file as a new document that keeps the file's id. */
+    createWithId: (doc: RankingsDocument, documentId: string) => Promise<ActionResult<unknown>>;
+}
 
 export const READ_SCHEDULE_LABEL = "Read schedule";
 export const READ_SNAKE_LABEL = "Read snake chart";
@@ -116,7 +133,7 @@ function PageAddress({ label, value, onChange }: { label: string; value: string;
     );
 }
 
-export function RankingsImportScreen({ store, update = false, pull }: { store: RankingsOps; update?: boolean; pull?: string }) {
+export function RankingsImportScreen({ store, update = false, pull, files }: { store: RankingsOps; update?: boolean; pull?: string; files?: RankingsFileOps }) {
     const { routes, navigate } = useRankingsPlatform();
     const { state, save, clear } = useRankingsDoc(store);
     const pulled = usePulledSchedule(pull);
@@ -146,6 +163,7 @@ export function RankingsImportScreen({ store, update = false, pull }: { store: R
     const [snakeFit, setSnakeFit] = useState<(SnakeChartFit & { scope: "schedule" | "saved" }) | null>(null);
     /** A rankings file waiting for the user to confirm it replaces the saved rankings. */
     const [pendingOpen, setPendingOpen] = useState<RankingsDocument | null>(null);
+    const [sameDocument, setSameDocument] = useState<{ doc: RankingsDocument; match: { id: string; title: string | null } } | null>(null);
     const scheduleFile = useRef<HTMLInputElement>(null);
     const snakeFile = useRef<HTMLInputElement>(null);
     const rankingsFile = useRef<HTMLInputElement>(null);
@@ -313,16 +331,33 @@ export function RankingsImportScreen({ store, update = false, pull }: { store: R
         const file = input.files?.[0];
         input.value = "";
         if (!file) return;
-        const parsed = await readRankingsFile(file);
+        const parsed = await readRankingsFileDocument(file);
         if (!parsed.ok) {
             setMessage({ severity: "error", text: parsed.error.message });
             return;
+        }
+        if (files && parsed.id) {
+            const match = await files.findByDocumentId(parsed.id);
+            if (match) {
+                setSameDocument({ doc: parsed.doc, match });
+                return;
+            }
+            if (!existing) {
+                await finishWith(files.createWithId(parsed.doc, parsed.id));
+                return;
+            }
         }
         if (existing) {
             setPendingOpen(parsed.doc);
             return;
         }
         await replaceWith(parsed.doc);
+    };
+    const finishWith = async (pending: Promise<ActionResult<unknown>>) => {
+        const result = await pending;
+        setSameDocument(null);
+        if (result.success) navigate(routes.rankings());
+        else setMessage({ severity: "error", text: result.error });
     };
     const replaceWith = async (doc: RankingsDocument) => {
         const result = await save(doc);
@@ -542,6 +577,17 @@ export function RankingsImportScreen({ store, update = false, pull }: { store: R
             )}
 
             {message && <Alert severity={message.severity}>{message.text}</Alert>}
+
+            {sameDocument && files && (
+                <ReplaceOrKeepDialog
+                    open
+                    existingTitle={sameDocument.match.title ?? "Rankings"}
+                    noun="rankings"
+                    onReplace={() => void finishWith(files.replaceMine(sameDocument.match.id, sameDocument.doc))}
+                    onKeepBoth={() => void finishWith(files.keepBoth(sameDocument.doc))}
+                    onCancel={() => setSameDocument(null)}
+                />
+            )}
 
             {pendingOpen && (
                 <Alert severity="warning">

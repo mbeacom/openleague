@@ -22,7 +22,7 @@
 
 - **Download writes wrapped files starting with this phase** (spec open question 7). The hosted reader shipped in phase 1, so no current reader is left behind.
 - **The hosted plan export writes the envelope too** (open question 5). It lands in 2b with the static Download change, so both apps start writing wrapped files together.
-- **OneDrive is personal accounts only for now** (open question 4). This affects phase 4a, not phase 2; recorded here so the connector's account handling isn't built for work or school accounts.
+- **OneDrive accepts personal and work or school accounts** (open question 4, revised 2026-10-11 after publisher domain verification). This affects phase 4a, not phase 2; the app folder still needs a live check on a work or school account.
 
 ## Rulings
 
@@ -103,29 +103,42 @@ Where the spec leaves a choice open, this plan decides it:
 
 ## PR 2b: the Local connector
 
+### Rulings made in 2b
+
+13. **Recovered copies live in meta**, under `recoveredCopies`, not a version 8 store. The list is small and rarely written, and older builds never read the key, so no version bump (and no forced reload of other tabs) is needed. Each entry keeps the bare document, its title, its document key and envelope id, and when it was replaced. Boot drops entries older than 30 days.
+14. **File handles live in meta too**, under `fileHandles`, by the Local connector's own file id. A handle is not a credential (the browser asks again after a reload). Boot drops handles no link uses.
+15. **Two connector error codes are added**: `cancelled` (the coach dismissed the save picker; nothing was written) and `unwritable` (the file's format can't hold the document, such as TOML and a null inside a drill diagram; the message is the encoder's own). Neither carries provider text.
+16. **The contract's offline case is optional.** A local file has no network; the Local connector's subject leaves `goOffline` out and that case is skipped. A drive that can't be read reports `unavailable`.
+17. **The Local connector's revision is `lastModified:size`**, both from one `getFile()`, so two writes in the same millisecond still differ unless their sizes match.
+18. **The base hash is taken from the working copy as the store reads it back** after a refresh or an open, not from the remote's payload. A practice's plan is rebuilt from the store (as "Download plan file" builds it, with the practice's last edit as `exportedAt`), so the two can differ in form without any edit.
+19. **Connector saves leave roster names out**, as the plan URL fragment does (roster spec R10's default). A file opened with names keeps them in this browser; a later save from here writes positions only. Offering the "Include player names" choice on Save to… is a follow-up.
+20. **Hosted exports derive their id** from the record: SHA-256 of a namespace and the record id, shaped as a version 8 UUID (`derivedDocumentId`), so every download of one hosted session or rankings record carries the same id. The static planner keeps a stored id per document. The hosted rankings export is wrapped too: the rankings screens are shared, and the hosted rankings import already reads both forms.
+21. **Every download format is wrapped**: JSON, YAML, TOML and JSONC all carry the envelope, so an id survives whichever format the coach picks. The wrapper's own indentation counts against a wrapped file's allowance (the kind's limit plus 4 KB); "Download plan file" warns when a plan near the limit no longer fits once wrapped.
+22. **Where a download is the only option (no File System Access API), the screens say so**: saving downloads a copy, later changes stay in the browser, and opening a file imports a copy.
+
 ### Task 8: Store adapters
 
-- [ ] `storage/documents.ts`: `LocalDocuments` for rankings (over `RankingsDocumentOps`) and sessions (a session's plan document is built and imported through the existing plan functions). Sessions need an envelope id: add an optional `documentId` to `StoredSession`, made on first save to a connector or first wrapped download and kept for the session's life.
-- [ ] Recovered copies: where they live (a `recovered` store in a version 8 upgrade, or meta) and the 30-day sweep on boot. Decide before writing the upgrade.
-- [ ] Every store write to a linked document calls `noteLocalEdit`.
+- [x] `storage/documents.ts`: `LocalDocuments` for rankings (over `RankingsDocumentOps`) and sessions (a session's plan document is built and imported through the existing plan functions). Sessions need an envelope id: add an optional `documentId` to `StoredSession`, made on first save to a connector or first wrapped download and kept for the session's life.
+- [x] Recovered copies: meta (Ruling 13), with the 30-day sweep on boot.
+- [x] Every store write to a linked document marks its link dirty in the same transaction (`noteLocalEditInTx`): practice saves, a practice's drill edits, rankings saves. Deleting a practice drops its link.
 
 ### Task 9: The Local connector (R7)
 
-- [ ] File System Access tier: `showSaveFilePicker` / `showOpenFilePicker`, handles stored in IndexedDB, `requestPermission` once per session from a user gesture, `revision` = `lastModified`, check-then-write.
-- [ ] Download tier: no link, no conflict detection; an opened wrapped file whose `id` matches a local document offers "Replace my copy" or "Keep both".
-- [ ] The contract suite over a fake file handle.
-- [ ] Saves in the linked file's own format (Ruling 10).
+- [x] File System Access tier: `showSaveFilePicker` / `showOpenFilePicker`, handles stored in IndexedDB, permission asked before each read or write (a check without a tap reports `auth-required`, and the screen offers "Allow access"), revision from `lastModified` (Ruling 17), check-then-write.
+- [x] Download tier: no link, no conflict detection; an opened wrapped file whose `id` matches a local document offers "Replace my copy" or "Keep both" (the import screen for plans, "Open rankings file" for rankings, and "Open from…" for a linked open).
+- [x] The contract suite over a fake file handle.
+- [x] Saves in the linked file's own format (Ruling 10), including a format the coach types into the save picker.
 
 ### Task 10: Wrapped writes
 
-- [ ] Static "Download plan file" and the rankings download write the envelope, with the document's id.
-- [ ] The hosted plan export writes the envelope (owner decision). The plan URL fragment stays bare.
+- [x] Static "Download plan file" and the rankings download write the envelope, with the document's id; YAML, TOML and JSONC too (Ruling 21).
+- [x] The hosted plan export writes the envelope (owner decision), with a derived id (Ruling 20). The plan URL fragment stays bare.
 
 ### Task 11: Screens
 
-- [ ] "Save to…", "Open from…", the conflict dialog (both sides' "last saved", and who saved theirs where known), a connections page. Phone width, 44px targets, mobile Safari falls back to the download tier.
+- [x] "Save to…", "Open from…", the conflict dialog (both sides' "last saved", and who saved theirs where known), the overwritten wording, and a Saved files page (where this browser can save, linked files with Unlink, Recovered copies). Phone width, 44px targets; without the File System Access API (mobile Safari, Firefox) the menus offer the download tier and say what it can't do. Google Drive and OneDrive will join the same menus when configured and are absent otherwise.
 
 ### Task 12: Gates and ADR
 
-- [ ] The existing gates, plus a check that nothing in `storage/` reaches the entry chunk unless it must.
+- [x] The existing gates, plus a build check that the Saved files screen stays out of the entry chunk. The storage bar and the engine are in it: a practice's page needs them on open.
 - [ ] Tick ADR-0022 action item 2 when 2b merges. Its status remains the owner's call.

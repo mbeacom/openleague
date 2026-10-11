@@ -13,6 +13,7 @@
  */
 import { createContext, useContext, type ReactNode } from "react";
 import type { RankingsSource } from "@/lib/rankings-document";
+import type { PlanGenerator } from "@/lib/plan-document";
 import { navigateTo } from "../../platform";
 import { staticRoutes, type RankingsSetupSection } from "../../routes";
 import { FetchForMeAction } from "./FetchForMeAction";
@@ -33,12 +34,15 @@ export interface RankingsPlatform {
     navigate(href: string): void;
     /** The Update results panel's second action for the saved schedule page; null renders nothing. */
     fetchAction(source: RankingsSource | null): ReactNode;
+    /** Written into downloaded rankings files (the envelope's generator). */
+    generator: PlanGenerator;
 }
 
 export const staticRankingsPlatform: RankingsPlatform = {
     routes: staticRoutes,
     navigate: navigateTo,
     fetchAction: (source) => <FetchForMeAction source={source} />,
+    generator: "openleague-static",
 };
 
 const RankingsPlatformContext = createContext<RankingsPlatform>(staticRankingsPlatform);

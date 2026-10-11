@@ -4,8 +4,9 @@
  * document. Readers accept both the wrapped and the bare form, forever. Pure
  * and portable (ADR-0020).
  *
- * Phase 1 reads only: no surface writes the envelope yet. `wrapDocument` and
- * `serializeDocument` exist for the round trip and for the phase that does.
+ * Since phase 2, connector saves, the static "Download" and the hosted plan
+ * export write the envelope (`wrapDocument`, `serializeDocument`); the plan
+ * URL fragment stays bare.
  */
 import { z } from "zod";
 import type { PlanGenerator } from "@/lib/plan-document/document";
@@ -175,6 +176,11 @@ export function readDocumentText(text: string, source?: DocumentSource, expect?:
         return fail("too-large", tooLargeMessage);
     }
     return expect ? readDocument(raw, source, expect) : readDocument(raw, source);
+}
+
+/** Whether `id` can be an envelope id (a UUID). */
+export function isEnvelopeId(id: unknown): id is string {
+    return documentEnvelopeSchema.shape.id.safeParse(id).success;
 }
 
 /** Wraps a bare document. The caller supplies the id (made once, kept for the document's life) and the save time. */

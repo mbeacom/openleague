@@ -26,6 +26,7 @@ import { RankingsWhatIfScreen } from "@/apps/planner/src/screens/rankings/Rankin
 import { RankingsTeamScreen } from "@/apps/planner/src/screens/rankings/RankingsTeamScreen";
 import type { RankingsSetupSection } from "@/apps/planner/src/routes";
 import { RANKINGS_LIST_PATH } from "./paths";
+import { HOSTED_RANKINGS_ID_NAMESPACE, derivedDocumentId } from "@/lib/document-envelope";
 
 export const ALL_RANKINGS_LABEL = "All rankings";
 
@@ -53,6 +54,8 @@ export function hostedRankingsStore(id: string): RankingsOps {
         },
         saveRankings: (document) => saveRankingsRecord({ id, document }),
         clearRankings: () => clearRankingsRecord(id),
+        // Every download of this record carries the same envelope id (storage connectors spec R1).
+        getRankingsDocumentId: async () => ({ success: true, data: await derivedDocumentId(HOSTED_RANKINGS_ID_NAMESPACE, id) }),
     };
 }
 
@@ -75,7 +78,7 @@ export function HostedRankingsScreen({ id, view }: { id: string; view: HostedRan
     const router = useRouter();
     const store = useMemo(() => hostedRankingsStore(id), [id]);
     const platform = useMemo<RankingsPlatform>(
-        () => ({ routes: hostedRankingsRoutes(id), navigate: (href) => router.push(href), fetchAction: () => null }),
+        () => ({ routes: hostedRankingsRoutes(id), navigate: (href) => router.push(href), fetchAction: () => null, generator: "openleague-hosted" }),
         [id, router],
     );
     return (

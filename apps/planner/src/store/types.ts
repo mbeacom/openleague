@@ -15,6 +15,9 @@ import type { EquipmentCountItem, PlayData, PlayFocus, PlayGoalies, PracticeSess
 import type { AgeGroup } from "@/lib/utils/age-groups";
 import type { RankingsDocumentOps, RankingsOps } from "./rankings";
 import type { AiSettingsOps } from "./ai-settings";
+import type { RecoveredOps } from "./recovered";
+import type { LinkStore } from "./links";
+import type { FileHandleStore } from "./file-handles";
 
 export interface LocalSessionSummary {
     id: string;
@@ -70,6 +73,17 @@ export interface LocalPlayUpdate {
 export interface PlanImportOptions {
     date: Date;
     addToLibrary: boolean;
+    /** An opened wrapped file's envelope id, kept as the new practice's (storage connectors spec R1). */
+    documentId?: string;
+}
+
+/** What the storage screens need to know about a practice's plan file. */
+export interface LocalSessionDocumentInfo {
+    id: string;
+    title: string;
+    /** The envelope id; null until the first wrapped download or connector save. */
+    documentId: string | null;
+    updatedAt: Date;
 }
 
 export interface LocalStoreOptions {
@@ -81,7 +95,14 @@ export interface LocalStoreOptions {
     beforeStoredDraw?: () => Promise<void>;
 }
 
-export interface LocalPlannerStore extends PlannerStore, RankingsOps, RankingsDocumentOps, AiSettingsOps {
+export interface LocalPlannerStore extends PlannerStore, RankingsOps, RankingsDocumentOps, AiSettingsOps, RecoveredOps {
+    /** The current rankings document's envelope id (what Download writes), or null with none. Always present here. */
+    getRankingsDocumentId: NonNullable<RankingsOps["getRankingsDocumentId"]>;
+    getPlanDocumentId: NonNullable<PlannerStore["getPlanDocumentId"]>;
+    /** The link table (storage connectors spec R3): which remote file each document is saved to. */
+    links: LinkStore;
+    /** File System Access handles for linked local files, by the connector's file id (storage connectors spec R7). */
+    fileHandles: FileHandleStore;
     /** Favorites on this device (practice favorites spec): always present here. */
     listPlannerFavorites: NonNullable<PlannerStore["listPlannerFavorites"]>;
     setPlannerFavorite: NonNullable<PlannerStore["setPlannerFavorite"]>;
@@ -94,6 +115,18 @@ export interface LocalPlannerStore extends PlannerStore, RankingsOps, RankingsDo
     /** How many practices on this device use a library drill (their copies name it as their source). */
     countPlayUsage: (playId: string) => Promise<ActionResult<number>>;
     importPlan: (plan: PlanDocument, options: PlanImportOptions) => Promise<ActionResult<{ sessionId: string }>>;
+    /**
+     * Replaces practice `id` with a plan, or creates it with that id (a file
+     * opened through a connector, "Use theirs", "Replace my copy"). The date is
+     * the plan's, else the practice's. `documentId` replaces the envelope id.
+     */
+    replaceSessionFromPlan: (id: string, plan: PlanDocument, options: { documentId?: string }) => Promise<ActionResult<{ sessionId: string }>>;
+    getSessionDocumentInfo: (id: string) => Promise<ActionResult<LocalSessionDocumentInfo>>;
+    /** The practice's envelope id, made (and kept) on first use. */
+    ensureSessionDocumentId: (id: string) => Promise<ActionResult<string>>;
+    setSessionDocumentId: (id: string, documentId: string) => Promise<ActionResult<null>>;
+    /** The practice on this device whose plan file has this envelope id, if any. */
+    findSessionByDocumentId: (documentId: string) => Promise<ActionResult<{ id: string; title: string } | null>>;
     seedStarterDrills: () => Promise<void>;
     /** Replaces stored thumbnails made before 2× storage (rink diagram quality spec §1); resolves to how many it replaced. */
     refreshStoredThumbnails: () => Promise<number>;

@@ -40,12 +40,21 @@ export const FORMAT_LIBRARY_MARKERS = {
     jsonc: "closeBracket",
 } as const;
 
-export const REQUIRED_IN_BUNDLE = ["openleague.practice-plan", "word/document.xml", AI_ADAPTER_MARKER, ...Object.values(FORMAT_LIBRARY_MARKERS)];
+/**
+ * A literal only the Saved files screen contains (ADR-0022): linked files and
+ * recovered copies are a rare visit, so that screen loads on demand. The
+ * storage bar and the sync engine stay in the entry chunk: a practice's page
+ * needs them on open.
+ */
+export const SAVED_FILES_MARKER = "Nothing to recover. When a document is replaced from a file";
+
+export const REQUIRED_IN_BUNDLE = ["openleague.practice-plan", "word/document.xml", AI_ADAPTER_MARKER, SAVED_FILES_MARKER, ...Object.values(FORMAT_LIBRARY_MARKERS)];
 
 /** Code that must load only on demand, by a literal only it contains. */
 export const LAZY_ONLY_IN_BUNDLE: ReadonlyArray<{ pattern: string; reason: string }> = [
     { pattern: "word/document.xml", reason: "the Word export (docx) must load only through import(), on click" },
     { pattern: AI_ADAPTER_MARKER, reason: "AI adapter code must load only through import(), when the coach opens an AI feature (ADR-0023)" },
+    { pattern: SAVED_FILES_MARKER, reason: "the Saved files screen must load only through import(), when the coach opens it (ADR-0022)" },
     ...Object.entries(FORMAT_LIBRARY_MARKERS).map(([format, pattern]) => ({
         pattern,
         reason: `the ${format} file-format library must load only through import(), when a file in that format is saved or opened`,
