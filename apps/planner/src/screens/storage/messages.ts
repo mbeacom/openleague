@@ -63,6 +63,8 @@ export const SAVED_IN_BROWSER = "Saved in this browser";
 export const DOWNLOAD_IS_A_COPY =
     "This browser can't keep a file linked, so saving downloads a copy. Later changes stay here until you download again, and opening a file imports it as a copy.";
 export const DOWNLOAD_COPY_HINT = "A copy: later changes won't update it.";
+/** A cloud connector's menu item while its sign-in loads. */
+export const LOADING_HINT = "Loading…";
 
 export function statusText(state: SyncState | "unlinked" | "needs-permission" | "offline", name: string): string {
     switch (state) {

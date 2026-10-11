@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { DOCUMENT_KINDS, ENVELOPE_OVERHEAD_BYTES } from "@/lib/document-envelope";
 import type { GoogleCloudSettings } from "@/apps/planner/cloud-config";
 import type { RemoteFile, SaveInput, StorageConnector } from "@/apps/planner/src/storage/connector";
 import { DRIVE_FOLDER_NAME, DRIVE_UPLOAD_API, createGoogleDriveConnector, driveQuoted } from "@/apps/planner/src/storage/google-drive";
@@ -269,6 +270,27 @@ describe("Google Drive connector", () => {
         drive.goOffline();
         expect(await connector.save(create())).toEqual({ ok: false, error: { code: "offline" } });
         expect(await connector.list()).toEqual({ ok: false, error: { code: "offline" } });
+    });
+
+    it("refuses a file larger than any document from its metadata, without downloading it", async () => {
+        const { drive, connector } = await connected();
+        const limit = Math.max(...Object.values(DOCUMENT_KINDS).map((entry) => entry.maxBytes)) + ENVELOPE_OVERHEAD_BYTES;
+        const big = drive.addFile({ name: "huge.rankings.json", mimeType: "application/json", content: "x".repeat(limit + 1) });
+        expect(await connector.open({ connector: "google-drive", fileId: big.id, name: big.name })).toEqual({ ok: false, error: { code: "too-large" } });
+        expect(drive.apiCalls().some((call) => call.endsWith("?alt=media"))).toBe(false);
+    });
+
+    it("says offline when the download breaks after the response began", async () => {
+        const drive = createFakeDrive();
+        const brokenBody: typeof fetch = async (input, init) => {
+            const response = await drive.fetch(input, init);
+            if (!String(input).includes("alt=media")) return response;
+            return new Response(new ReadableStream({ start: (controller) => controller.error(new TypeError("network")) }), { status: 200 });
+        };
+        const connector = createGoogleDriveConnector({ settings: SETTINGS, fetch: brokenBody, auth: drive.auth, picker: drive.picker });
+        await connector.connect();
+        const file = await created(connector);
+        expect(await connector.open(file)).toEqual({ ok: false, error: { code: "offline" } });
     });
 
     it("maps the token popup's outcome: cancelled, refused, or Google's script not loading", async () => {

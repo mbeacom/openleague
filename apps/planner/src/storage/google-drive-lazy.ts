@@ -52,6 +52,7 @@ export function createLazyGoogleDriveConnector(settings: GoogleCloudSettings, lo
         disconnect: async () => {
             if (inner) await inner.disconnect();
         },
+        prepared: () => (inner ? (inner.prepared?.() ?? true) : false),
         prepare: async () => {
             try {
                 await (await ensure()).prepare?.();

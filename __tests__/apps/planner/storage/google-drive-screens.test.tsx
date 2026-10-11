@@ -55,10 +55,41 @@ async function newPractice(store: LocalPlannerStore, title = "Tuesday skills") {
     return created.data.id;
 }
 
+/** A menu item once its connector has loaded (it waits while loading, so the sign-in popup opens from the tap). */
+async function readyItem(name: RegExp) {
+    const item = await screen.findByRole("menuitem", { name });
+    await waitFor(() => expect(item).not.toHaveAttribute("aria-disabled", "true"));
+    return item;
+}
+
 async function saveToDrive() {
     fireEvent.click(await screen.findByRole("button", { name: SAVE_TO_LABEL }));
-    fireEvent.click(await screen.findByRole("menuitem", { name: /Google Drive/ }));
+    fireEvent.click(await readyItem(/Google Drive/));
     expect(await screen.findByText(`Saved to ${FILE} in Google Drive`)).toBeInTheDocument();
+}
+
+/** Connect on Saved files: a cold first tap loads Google's sign-in; the next tap opens it. */
+async function connectGoogle() {
+    fireEvent.click(await screen.findByRole("button", { name: "Connect Google Drive" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Connect Google Drive" }));
+}
+
+/** Holds Google's sign-in script "loading" until open() is called, and counts token requests (popups). */
+function gateGooglePrepare(drive: ReturnType<typeof createFakeDrive>) {
+    let open!: () => void;
+    const gate = new Promise<void>((resolve) => (open = resolve));
+    const prepare = drive.auth.prepare!;
+    const requestToken = drive.auth.requestToken;
+    let tokens = 0;
+    drive.auth.prepare = async () => {
+        await gate;
+        await prepare();
+    };
+    drive.auth.requestToken = async () => {
+        tokens++;
+        return requestToken();
+    };
+    return { open, tokens: () => tokens };
 }
 
 describe("Google Drive in the storage screens", () => {
@@ -110,7 +141,7 @@ describe("Google Drive in the storage screens", () => {
         const key = docKeyOf(PLAN_FORMAT, id);
         const first = renderWithStorage(<DocumentStorageBar docKey={key} kind={PLAN_FORMAT} fileName="thursday-flow.olplan.json" />, store, service);
         fireEvent.click(await screen.findByRole("button", { name: SAVE_TO_LABEL }));
-        fireEvent.click(await screen.findByRole("menuitem", { name: /Google Drive/ }));
+        fireEvent.click(await readyItem(/Google Drive/));
         await screen.findByText("Saved to thursday-flow.olplan.json in Google Drive");
         first.unmount();
         const file = [...drive.files.values()].find((entry) => entry.name === "thursday-flow.olplan.json")!;
@@ -122,7 +153,7 @@ describe("Google Drive in the storage screens", () => {
         renderWithStorage(<OpenFromMenu kind={PLAN_FORMAT} importHref="#/import" onOpened={(localId) => opened.push(localId)} />, other.store, other.service);
         other.drive.queuePick([{ id: file.id, name: file.name }]);
         fireEvent.click(await screen.findByRole("button", { name: OPEN_FROM_LABEL }));
-        fireEvent.click(await screen.findByRole("menuitem", { name: /Google Drive/ }));
+        fireEvent.click(await readyItem(/Google Drive/));
         await waitFor(() => expect(opened).toHaveLength(1));
         expect(other.drive.pickInputs).toHaveLength(1);
         const link = await other.store.links.get(docKeyOf(PLAN_FORMAT, opened[0]));
@@ -133,7 +164,7 @@ describe("Google Drive in the storage screens", () => {
         const { store, drive, service } = setup();
         renderWithStorage(<StorageScreen />, store, service);
         expect(await screen.findByText(/Google Drive: not connected/)).toBeInTheDocument();
-        fireEvent.click(screen.getByRole("button", { name: "Connect Google Drive" }));
+        await connectGoogle();
         expect(await screen.findByText(/Google Drive: connected in this tab/)).toBeInTheDocument();
         fireEvent.click(screen.getByRole("button", { name: "Disconnect Google Drive" }));
         expect(await screen.findByText(/Disconnected from Google Drive in this tab/)).toBeInTheDocument();
@@ -146,7 +177,40 @@ describe("Google Drive in the storage screens", () => {
         const { store, drive, service } = setup();
         renderWithStorage(<StorageScreen />, store, service);
         drive.queueToken({ ok: false, reason: "denied" });
-        fireEvent.click(await screen.findByRole("button", { name: "Connect Google Drive" }));
+        await connectGoogle();
         expect(await screen.findByText(/Google Drive didn't allow access/)).toBeInTheDocument();
+    });
+
+    it("keeps Google Drive in Save to… waiting while its sign-in loads, so the popup opens from the tap", async () => {
+        const { store, drive, service } = setup();
+        const gate = gateGooglePrepare(drive);
+        const id = await newPractice(store);
+        renderWithStorage(<DocumentStorageBar docKey={docKeyOf(PLAN_FORMAT, id)} kind={PLAN_FORMAT} fileName={FILE} />, store, service);
+        fireEvent.click(await screen.findByRole("button", { name: SAVE_TO_LABEL }));
+        const item = await screen.findByRole("menuitem", { name: /Google Drive/ });
+        await waitFor(() => expect(item).toHaveAttribute("aria-disabled", "true"));
+        expect(item).toHaveTextContent("Loading…");
+        fireEvent.click(item);
+        expect(gate.tokens()).toBe(0);
+
+        gate.open();
+        fireEvent.click(await readyItem(/Google Drive/));
+        expect(await screen.findByText(`Saved to ${FILE} in Google Drive`)).toBeInTheDocument();
+        expect(gate.tokens()).toBe(1);
+    });
+
+    it("on a cold load, Connect loads Google's sign-in first and connects from the next tap", async () => {
+        const { store, drive, service } = setup();
+        const gate = gateGooglePrepare(drive);
+        renderWithStorage(<StorageScreen />, store, service);
+        fireEvent.click(await screen.findByRole("button", { name: "Connect Google Drive" }));
+        const loading = await screen.findByRole("button", { name: "Loading Google Drive…" });
+        expect(loading).toBeDisabled();
+        expect(gate.tokens()).toBe(0);
+
+        gate.open();
+        fireEvent.click(await screen.findByRole("button", { name: "Connect Google Drive" }));
+        expect(await screen.findByText(/Google Drive: connected in this tab/)).toBeInTheDocument();
+        expect(gate.tokens()).toBe(1);
     });
 });

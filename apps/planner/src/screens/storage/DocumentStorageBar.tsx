@@ -22,7 +22,7 @@ import type { DocumentLink } from "../../store/records";
 import type { ConnectorId, RemoteFile } from "../../storage/connector";
 import { needsChoice, type LocalSyncState, type Resolution, type SyncOutcome } from "../../storage/sync";
 import { ConflictDialog } from "./ConflictDialog";
-import { connectIfNeeded, prepareConnectors } from "./connection";
+import { connectIfNeeded, useConnectorPreparation } from "./connection";
 import { useStorage } from "./StorageContext";
 import {
     ALLOW_ACCESS_LABEL,
@@ -30,6 +30,7 @@ import {
     DOWNLOAD_COPY_HINT,
     DOWNLOAD_COPY_LABEL,
     DOWNLOAD_IS_A_COPY,
+    LOADING_HINT,
     SAVE_LABEL,
     SAVE_TO_LABEL,
     STORE_FAILED_MESSAGE,
@@ -76,6 +77,8 @@ function StorageBar({ docKey, kind, fileName, onReplaced, editVersion = 0 }: Doc
     const [menu, setMenu] = useState<HTMLElement | null>(null);
     /** The linked file refused a save (a view-only share, spec R8): offer a copy. */
     const [refused, setRefused] = useState(false);
+    const preparation = useConnectorPreparation();
+    const { prepare } = preparation;
     const replaced = useRef(onReplaced);
     useEffect(() => {
         replaced.current = onReplaced;
@@ -165,6 +168,13 @@ function StorageBar({ docKey, kind, fileName, onReplaced, editVersion = 0 }: Doc
         };
     }, [link, run, engine, docKey]);
 
+    // A linked cloud file's Save and "Allow access" sign in from the tap: load that sign-in now, not on the tap.
+    const linkedConnector = link?.connector;
+    useEffect(() => {
+        const connector = linkedConnector ? storage.connector(linkedConnector) : undefined;
+        if (connector?.status() === "disconnected") prepare([connector]);
+    }, [linkedConnector, storage, prepare]);
+
     /** A step that needs the connector's session: a cloud connector signs in first, from this tap. */
     const connected = useCallback(
         async (id: ConnectorId, step: () => Promise<SyncOutcome | null>): Promise<SyncOutcome | null> => {
@@ -223,6 +233,8 @@ function StorageBar({ docKey, kind, fileName, onReplaced, editVersion = 0 }: Doc
 
     const where = link ? CONNECTOR_LABELS[link.connector].where : "";
     const canSaveLinked = link !== null && connectors.some((connector) => connector.id === link.connector);
+    /** The linked connector's sign-in is loading: the steps that may sign in wait for it. */
+    const linkedLoading = link !== null && preparation.isPreparing(link.connector);
     const icon =
         shown === "in-sync" || shown === "newer-available" ? (
             <SyncedIcon />
@@ -255,7 +267,7 @@ function StorageBar({ docKey, kind, fileName, onReplaced, editVersion = 0 }: Doc
                         <Button
                             variant="contained"
                             startIcon={<LockIcon />}
-                            disabled={busy}
+                            disabled={busy || linkedLoading}
                             onClick={() => void run(() => connected(link.connector, () => engine.check(docKey)), name)}
                             sx={{ minHeight: 44 }}
                         >
@@ -268,7 +280,7 @@ function StorageBar({ docKey, kind, fileName, onReplaced, editVersion = 0 }: Doc
                         </Button>
                     )}
                     {canSaveLinked && shown !== "needs-permission" && (
-                        <Button variant={shown === "unsaved" || shown === "offline" ? "contained" : "outlined"} startIcon={<SaveIcon />} disabled={busy} onClick={() => void run(() => connected(link.connector, () => engine.save(docKey)), name)} sx={{ minHeight: 44 }}>
+                        <Button variant={shown === "unsaved" || shown === "offline" ? "contained" : "outlined"} startIcon={<SaveIcon />} disabled={busy || linkedLoading} onClick={() => void run(() => connected(link.connector, () => engine.save(docKey)), name)} sx={{ minHeight: 44 }}>
                             {SAVE_LABEL}
                         </Button>
                     )}
@@ -279,7 +291,7 @@ function StorageBar({ docKey, kind, fileName, onReplaced, editVersion = 0 }: Doc
                         aria-controls={menu ? `save-to-${docKey}` : undefined}
                         aria-expanded={menu ? "true" : undefined}
                         onClick={(event) => {
-                            prepareConnectors(connectors);
+                            preparation.prepare(connectors);
                             setMenu(event.currentTarget);
                         }}
                         sx={{ minHeight: 44 }}
@@ -299,7 +311,7 @@ function StorageBar({ docKey, kind, fileName, onReplaced, editVersion = 0 }: Doc
                     onClose={() => setProblem(null)}
                     action={
                         refused && link && canSaveLinked ? (
-                            <Button color="inherit" size="small" disabled={busy} onClick={saveCopy} sx={{ minHeight: 44 }}>
+                            <Button color="inherit" size="small" disabled={busy || linkedLoading} onClick={saveCopy} sx={{ minHeight: 44 }}>
                                 {saveCopyLabel(link.connector)}
                             </Button>
                         ) : undefined
@@ -310,11 +322,15 @@ function StorageBar({ docKey, kind, fileName, onReplaced, editVersion = 0 }: Doc
                 </Alert>
             )}
             <Menu id={`save-to-${docKey}`} anchorEl={menu} open={menu !== null} onClose={() => setMenu(null)}>
-                {connectors.map((connector) => (
-                    <MenuItem key={connector.id} onClick={() => saveTo(connector.id)} sx={{ minHeight: 44 }}>
-                        <ListItemText primary={CONNECTOR_LABELS[connector.id].item} secondary={link ? "Saves to a new file and links it" : undefined} />
-                    </MenuItem>
-                ))}
+                {connectors.map((connector) => {
+                    // Held while its sign-in loads, so the popup opens from the tap.
+                    const loading = preparation.isPreparing(connector.id);
+                    return (
+                        <MenuItem key={connector.id} disabled={loading} onClick={() => !loading && saveTo(connector.id)} sx={{ minHeight: 44 }}>
+                            <ListItemText primary={CONNECTOR_LABELS[connector.id].item} secondary={loading ? LOADING_HINT : link ? "Saves to a new file and links it" : undefined} />
+                        </MenuItem>
+                    );
+                })}
                 <MenuItem onClick={() => void downloadCopy()} sx={{ minHeight: 44 }}>
                     <ListItemText primary={DOWNLOAD_COPY_LABEL} secondary={DOWNLOAD_COPY_HINT} />
                 </MenuItem>

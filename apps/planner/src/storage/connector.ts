@@ -90,6 +90,12 @@ export interface StorageConnector {
      * tap as its cause. Called when a menu offering this connector opens; never fails.
      */
     prepare?: () => Promise<void>;
+    /**
+     * True once prepare() has finished, so connect() can open its popup
+     * straight from the tap. Absent with prepare(): the screens wait for the
+     * prepare() they started.
+     */
+    prepared?: () => boolean;
     /** Revokes or clears tokens; links are kept. */
     disconnect: () => Promise<void>;
     list: (filter?: { kind?: string }) => Promise<Result<RemoteFile[]>>;

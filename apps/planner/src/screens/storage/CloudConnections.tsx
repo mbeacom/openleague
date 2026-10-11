@@ -9,7 +9,7 @@
 import { useState } from "react";
 import { Alert, Box, Button, Link, Stack, Typography } from "@mui/material";
 import type { ConnectorId, StorageConnector } from "../../storage/connector";
-import { connectIfNeeded, prepareConnectors } from "./connection";
+import { connectIfNeeded, useConnectorPreparation } from "./connection";
 import { CONNECTOR_NAMES, connectErrorText } from "./messages";
 
 /** Where a coach removes the app's access to their account. */
@@ -19,6 +19,7 @@ export const CONNECTOR_ACCOUNT_PAGES: Partial<Record<ConnectorId, { href: string
 
 export const CONNECT_LABEL = "Connect";
 export const DISCONNECT_LABEL = "Disconnect";
+export const loadingLabel = (connector: ConnectorId) => `Loading ${CONNECTOR_NAMES[connector]}…`;
 
 export function disconnectedText(connector: ConnectorId): string {
     return `Disconnected from ${CONNECTOR_NAMES[connector]} in this tab. Your linked files stay linked; connect again to keep saving to them.`;
@@ -30,9 +31,15 @@ export function CloudConnections({ connectors }: { connectors: readonly StorageC
     const [busy, setBusy] = useState(false);
     const [problem, setProblem] = useState<string | null>(null);
     const [disconnected, setDisconnected] = useState<ConnectorId | null>(null);
+    const preparation = useConnectorPreparation();
     if (cloud.length === 0) return null;
 
     const connect = async (connector: StorageConnector) => {
+        // A cold tap loads the sign-in first; the next tap connects, so its popup opens from that tap.
+        if (!preparation.isReady(connector)) {
+            preparation.prepare([connector]);
+            return;
+        }
         setBusy(true);
         setProblem(null);
         setDisconnected(null);
@@ -75,13 +82,13 @@ export function CloudConnections({ connectors }: { connectors: readonly StorageC
                             ) : (
                                 <Button
                                     variant="outlined"
-                                    disabled={busy}
-                                    onPointerEnter={() => prepareConnectors([connector])}
-                                    onFocus={() => prepareConnectors([connector])}
+                                    disabled={busy || preparation.isPreparing(connector.id)}
+                                    onPointerEnter={() => preparation.prepare([connector])}
+                                    onFocus={() => preparation.prepare([connector])}
                                     onClick={() => void connect(connector)}
                                     sx={{ minHeight: 44, flexShrink: 0 }}
                                 >
-                                    {`${CONNECT_LABEL} ${CONNECTOR_NAMES[connector.id]}`}
+                                    {preparation.isPreparing(connector.id) ? loadingLabel(connector.id) : `${CONNECT_LABEL} ${CONNECTOR_NAMES[connector.id]}`}
                                 </Button>
                             )}
                         </Stack>

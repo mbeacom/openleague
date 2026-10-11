@@ -19,7 +19,7 @@
  * - Errors become ConnectorError codes; provider bodies are read only for
  *   Drive's error reason and never surface.
  */
-import { DOCUMENT_KINDS } from "@/lib/document-envelope";
+import { DOCUMENT_KINDS, ENVELOPE_OVERHEAD_BYTES } from "@/lib/document-envelope";
 import { DOCUMENT_FORMAT_INFO, formatFromFileName } from "@/lib/document-formats";
 import type { GoogleCloudSettings } from "../../cloud-config";
 import { connectorFail, connectorOk, type ConnectorError, type RemoteFile, type RemoteRef, type Result, type SaveInput, type StorageConnector } from "./connector";
@@ -47,6 +47,9 @@ export const PICKER_MIME_TYPES = [
     "application/toml",
     "application/octet-stream",
 ].join(",");
+
+/** The largest file any document kind can be read from (the readers' own pre-parse limit); a larger one isn't downloaded. */
+const MAX_OPEN_BYTES = Math.max(...Object.values(DOCUMENT_KINDS).map((entry) => entry.maxBytes)) + ENVELOPE_OVERHEAD_BYTES;
 
 /** A token is treated as expired this long before Google says it is, so a save doesn't start on one about to lapse. */
 const EXPIRY_MARGIN_MS = 60_000;
@@ -129,6 +132,8 @@ export function createGoogleDriveConnector({
     boundary = () => `openleague-${crypto.randomUUID()}`,
 }: GoogleDriveOptions): StorageConnector {
     let token: { value: string; expiresAt: number } | null = null;
+    /** Google's sign-in and Picker scripts have loaded (prepare()). */
+    let prepared = false;
     let folderId: string | null = null;
 
     function accessToken(): string | null {
@@ -305,8 +310,14 @@ export function createGoogleDriveConnector({
         },
 
         prepare: async () => {
-            await Promise.all([auth.prepare?.(), picker.prepare?.()]).catch(() => undefined);
+            try {
+                await Promise.all([auth.prepare?.(), picker.prepare?.()]);
+                prepared = true;
+            } catch {
+                // Not loaded: the next tap tries again and reports the failure.
+            }
         },
+        prepared: () => prepared,
 
         list: async (filter) => {
             const kinds = filter?.kind ? [filter.kind] : Object.keys(DOCUMENT_KINDS);
@@ -345,9 +356,16 @@ export function createGoogleDriveConnector({
             if (!meta.ok) return meta;
             const file = remoteOf(meta.value);
             if (!file.ok) return file;
+            // Refused before the download: the reader would refuse it anyway, after holding all of it in memory.
+            if (file.value.size > MAX_OPEN_BYTES) return connectorFail({ code: "too-large" });
             const media = await call(fileUrl(ref.fileId, { alt: "media" }));
             if (!media.ok) return media;
-            return connectorOk({ file: file.value, text: await media.value.text() });
+            try {
+                return connectorOk({ file: file.value, text: await media.value.text() });
+            } catch {
+                // The response began but its body didn't arrive.
+                return connectorFail({ code: "offline" });
+            }
         },
 
         save: (input) => (input.ref === null ? create(input) : overwrite(input.ref, input)),
