@@ -27,6 +27,8 @@ export interface FakeFsa {
     read: (name: string) => string | undefined;
     /** Another app writes the file. */
     overwrite: (name: string, text: string) => void;
+    /** Another app writes the file within the timestamp's resolution: the content moves, lastModified doesn't. */
+    overwriteKeepingTime: (name: string, text: string) => void;
     /** A metadata-only change: the handle's name moves; content and lastModified don't. */
     rename: (from: string, to: string) => void;
     remove: (name: string) => void;
@@ -80,6 +82,11 @@ export function createFakeFsa(start = Date.parse("2026-10-11T12:00:00.000Z")): F
             if (!file) throw new Error(`No file ${name}`);
             clock += 1000;
             Object.assign(file, { text, lastModified: clock });
+        },
+        overwriteKeepingTime: (name, text) => {
+            const file = disk.get(name);
+            if (!file) throw new Error(`No file ${name}`);
+            file.text = text;
         },
         rename: (from, to) => {
             const file = disk.get(from);
