@@ -22,8 +22,8 @@ const TITLE_LINES = 3;
 const HEADER_GAP_LINES = 2;
 /** A section heading plus its top margin (equipment, legend, the drills' top margin). */
 const SECTION_LINES = 2;
-/** Equipment and legend items run in three columns. */
-const COLUMNS = 3;
+/** Equipment and legend items run in three columns (the HTML file's CSS columns, the Word file's table). */
+export const LIST_COLUMNS = 3;
 /** A drill's heading and time line, and the space after it. */
 const DRILL_FRAME_LINES = 4.5;
 /** The diagram: 720×306 across the text column, at most 85 mm high. */
@@ -58,7 +58,7 @@ export function firstPageLines(sheet: BenchSheetLayoutInput): number {
         sheet.rosterPlayers.length +
         HEADER_GAP_LINES;
     const timelineLines = sheet.timeline.length === 0 ? 0 : 1 + sheet.timeline.reduce((sum, row) => sum + timelineRowLines(row), 0) + 1.5;
-    const listLines = (items: readonly unknown[]) => (items.length === 0 ? 0 : SECTION_LINES + Math.ceil(items.length / COLUMNS));
+    const listLines = (items: readonly unknown[]) => (items.length === 0 ? 0 : SECTION_LINES + Math.ceil(items.length / LIST_COLUMNS));
     return headerLines + timelineLines + listLines(sheet.equipment) + listLines(sheet.legend);
 }
 

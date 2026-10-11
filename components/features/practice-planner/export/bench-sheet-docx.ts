@@ -7,11 +7,11 @@
  * every user string goes through xmlSafe(); images come only from PNG data URIs.
  */
 // eslint-disable-next-line no-restricted-imports -- the one module allowed to load docx; reached only through import()
-import { BorderStyle, Document, HeadingLevel, ImageRun, Packer, Paragraph, Table, TableCell, TableRow, TextRun, WidthType } from "docx";
+import { BorderStyle, Document, HeadingLevel, ImageRun, Packer, Paragraph, Table, TableBorders, TableCell, TableRow, TextRun, WidthType } from "docx";
 import { ROTATION_ALL, type RotationTable } from "@/lib/utils/session-timeline";
 import type { TeamPalette } from "@/lib/utils/team-palette";
 import type { BenchSheetModel } from "./bench-sheet-model";
-import { benchSheetPages } from "./bench-sheet-layout";
+import { LIST_COLUMNS, benchSheetPages } from "./bench-sheet-layout";
 import { DIAGRAM_UNAVAILABLE_TEXT, EQUIPMENT_HEADING, LEGEND_HEADING, NO_DRILLS_TEXT } from "./labels";
 import { isPngDataUri, pngDataUriToBytes } from "./png";
 
@@ -178,27 +178,52 @@ function timeline(model: BenchSheetModel, colors: DocxColors): Array<Paragraph |
     ];
 }
 
+/** The text column: the page less its margins (twips). */
+const TEXT_WIDTH = PAGE.size.width - PAGE.margin.left - PAGE.margin.right;
+
+/**
+ * Items in LIST_COLUMNS borderless columns, filled down each column first as
+ * the HTML file's CSS columns are, so the Word file is as tall as the page-1
+ * estimate in bench-sheet-layout.ts assumes.
+ */
+function columns(items: readonly Paragraph[]): Table {
+    const rowCount = Math.ceil(items.length / LIST_COLUMNS);
+    const width = Math.floor(TEXT_WIDTH / LIST_COLUMNS);
+    const rows = Array.from({ length: rowCount }, (_, row) =>
+        new TableRow({
+            cantSplit: true,
+            children: Array.from({ length: LIST_COLUMNS }, (_, column) => {
+                const item = items[column * rowCount + row];
+                return new TableCell({ width: { size: width, type: WidthType.DXA }, children: [item ?? new Paragraph({ children: [] })] });
+            }),
+        }),
+    );
+    return new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, columnWidths: Array.from({ length: LIST_COLUMNS }, () => width), borders: TableBorders.NONE, rows });
+}
+
 /** The practice's equipment (practice equipment spec R5): after the timeline, before the legend. */
-function equipment(model: BenchSheetModel, colors: DocxColors): Paragraph[] {
+function equipment(model: BenchSheetModel, colors: DocxColors): Array<Paragraph | Table> {
     if (model.equipment.length === 0) return [];
     return [
         new Paragraph({ heading: HeadingLevel.HEADING_2, spacing: { before: 240 }, children: textRuns(EQUIPMENT_HEADING, { bold: true, color: colors.ink }) }),
-        ...model.equipment.map((item) => new Paragraph({ children: textRuns(`• ${item}`) })),
+        columns(model.equipment.map((item) => new Paragraph({ children: textRuns(`• ${item}`) }))),
     ];
 }
 
-function legend(model: BenchSheetModel, colors: DocxColors): Paragraph[] {
+function legend(model: BenchSheetModel, colors: DocxColors): Array<Paragraph | Table> {
     if (model.legend.length === 0) return [];
     return [
         new Paragraph({ heading: HeadingLevel.HEADING_2, spacing: { before: 240 }, children: textRuns(LEGEND_HEADING, { bold: true, color: colors.ink }) }),
-        ...model.legend.map(
-            (entry) =>
-                new Paragraph({
-                    children: [
-                        ...(isPngDataUri(entry.image) ? [picture(entry.image, SWATCH, entry.label), new TextRun({ text: "  " })] : []),
-                        ...textRuns(entry.label),
-                    ],
-                }),
+        columns(
+            model.legend.map(
+                (entry) =>
+                    new Paragraph({
+                        children: [
+                            ...(isPngDataUri(entry.image) ? [picture(entry.image, SWATCH, entry.label), new TextRun({ text: "  " })] : []),
+                            ...textRuns(entry.label),
+                        ],
+                    }),
+            ),
         ),
     ];
 }

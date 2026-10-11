@@ -82,16 +82,24 @@ export function BenchSheet({ session: stored }: { session: BenchSheetSession }) 
     });
     const pixelRatio = printPixelRatio(drills.filter(({ sp }) => sp.play.playData !== null).length);
 
+    // The colors the diagrams are drawn in. A change redraws every diagram, so each remounts under the new
+    // key (its own "reported" resets) and the readiness gathered for the old drawing no longer counts.
+    const drawingKey = useMemo(() => JSON.stringify(teamColors.roleColors), [teamColors.roleColors]);
     // Keyed by session-play row id: a session may schedule the same play twice.
-    const [readyIds, setReadyIds] = useState<ReadonlySet<string>>(() => new Set());
+    const [ready, setReady] = useState<{ drawingKey: string; ids: ReadonlySet<string> }>(() => ({ drawingKey, ids: new Set() }));
     const markReady = useCallback(
-        (id: string) => setReadyIds((prev) => (prev.has(id) ? prev : new Set(prev).add(id))),
+        (key: string, id: string) =>
+            setReady((prev) => {
+                if (prev.drawingKey !== key) return { drawingKey: key, ids: new Set([id]) };
+                return prev.ids.has(id) ? prev : { drawingKey: key, ids: new Set(prev.ids).add(id) };
+            }),
         []
     );
+    const readyIds = ready.drawingKey === drawingKey ? ready.ids : null;
     // The team mark counts too: a hosted logo is a network image (practice logo spec R5).
     const [markShown, setMarkShown] = useState(false);
     const onMarkReady = useCallback(() => setMarkShown(true), []);
-    const allReady = drills.every(({ sp }) => readyIds.has(sp.id)) && (!mark || markShown);
+    const allReady = drills.every(({ sp }) => readyIds?.has(sp.id) ?? false) && (!mark || markShown);
 
     const equipmentSection =
         equipment.length > 0 ? (
@@ -199,7 +207,7 @@ export function BenchSheet({ session: stored }: { session: BenchSheetSession }) 
                             <div className="bench-page" key={page.items[0].sp.id}>
                                 {page.items.map(({ sp, startsAt, station }, k) => (
                                     <BenchSheetDrill
-                                        key={sp.id}
+                                        key={`${drawingKey}:${sp.id}`}
                                         number={page.first + k + 1}
                                         name={sp.play.name}
                                         startLabel={clock.time(startsAt)}
@@ -209,7 +217,7 @@ export function BenchSheet({ session: stored }: { session: BenchSheetSession }) 
                                         text={drillText(sp.instructions, sp.play.description)}
                                         equipment={drillEquipmentText(drillEquipment(sp.play.playData))}
                                         pixelRatio={pixelRatio}
-                                        onReady={() => markReady(sp.id)}
+                                        onReady={() => markReady(drawingKey, sp.id)}
                                     />
                                 ))}
                             </div>

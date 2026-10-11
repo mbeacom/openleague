@@ -177,6 +177,7 @@ describe("renderBenchSheetDocx: rotation and the gap (spec R10)", () => {
         const xml = await documentXml({
             ...MODEL,
             gap: "2 min between blocks",
+            legend: [],
             timeline: [{
                 kind: "rotation",
                 start: "6:00 PM",
@@ -274,6 +275,31 @@ describe("renderBenchSheetDocx: equipment (practice equipment spec R5)", () => {
         expect(xml).toContain("No drills planned");
         expect(xml).toContain(">Equipment<");
         expect(xml).toContain("• Cones ×12");
+    });
+
+    it("runs the equipment and the legend in three columns, as the HTML file and the page-1 estimate do", async () => {
+        const xml = await documentXml({
+            ...MODEL,
+            equipment: ["Cones", "Pucks", "Nets", "Pylons", "Sticks"],
+            legend: ["Pass", "Shot", "Skate", "Backward"].map((label) => ({ label, image: PNG })),
+            drills: [],
+        });
+        // Timeline, equipment, legend
+        const tables = xml.split("<w:tbl>").slice(1).map((table) => table.slice(0, table.indexOf("</w:tbl>")));
+        expect(tables).toHaveLength(3);
+        for (const [table, rows] of [[tables[1], 2], [tables[2], 2]] as const) {
+            expect(table.match(/<w:gridCol /g)).toHaveLength(3);
+            expect(table.match(/<w:tr\b/g)).toHaveLength(rows);
+            expect(table).toMatch(/<w:tblBorders>(?:(?!<\/w:tblBorders>)[\s\S])*w:val="none"/);
+        }
+        // Down each column first, as CSS columns fill: Cones and Pucks share the first column
+        const equipment = tables[1];
+        expect(equipment.indexOf("• Cones")).toBeLessThan(equipment.indexOf("• Nets"));
+        const firstRow = equipment.slice(0, equipment.indexOf("</w:tr>"));
+        expect(firstRow).toContain("• Cones");
+        expect(firstRow).toContain("• Nets");
+        expect(firstRow).toContain("• Sticks");
+        expect(firstRow).not.toContain("• Pucks");
     });
 
     it("has no Equipment heading when the practice needs nothing", async () => {

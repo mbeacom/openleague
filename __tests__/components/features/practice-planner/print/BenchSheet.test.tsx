@@ -331,6 +331,25 @@ describe("BenchSheet: team colors", () => {
         expect((COLORED.plays[0] as DrillRow).play.playData?.players[0].color).toBe("#1976D2");
     });
 
+    it("holds Print again while the diagrams redraw for a changed option", async () => {
+        renderSheet(COLORED);
+        const button = screen.getByRole("button", { name: "Print" });
+        await waitFor(() => expect(screen.getAllByRole("img", { name: /^Diagram: / })).toHaveLength(1));
+        screen.getAllByRole("img").forEach((img) => fireEvent.load(img));
+        await waitFor(() => expect(button).toBeEnabled());
+        fireEvent.click(screen.getByRole("switch", { name: "Team colors" }));
+        await waitFor(() => expect(drawnColors()).toEqual(["#7A0019", "#1B5E20", "#D32F2F"]));
+        expect(button).toBeDisabled();
+        fireEvent.load(screen.getByRole("img", { name: /^Diagram: / }));
+        expect(button).toBeEnabled();
+        // And back: the earlier mode's readiness does not count again
+        fireEvent.click(screen.getByRole("switch", { name: "Team colors" }));
+        await waitFor(() => expect(drawnColors()).toEqual(["#1976D2", "#0D47A1", "#D32F2F"]));
+        expect(button).toBeDisabled();
+        fireEvent.load(screen.getByRole("img", { name: /^Diagram: / }));
+        expect(button).toBeEnabled();
+    });
+
     it("offers no option when the team has no color a marker can wear", () => {
         renderSheet({ ...COLORED, teamMark: { ...MARK, color: null, secondaryColor: null } });
         expect(screen.queryByRole("switch", { name: "Team colors" })).toBeNull();
