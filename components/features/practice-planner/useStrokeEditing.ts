@@ -240,9 +240,10 @@ export function useStrokeEditing({ playDataRef, commit }: StrokeEditingOptions):
         if (next !== current) commit(next);
     }, [playDataRef, commit, setPreview, setSnap]);
 
-    // The double-tap record is kept on purpose: the board cancels before every Select press, so clearing it here would
-    // make a second tap on a bend never count.
+    // A cancelled tap keeps its double-tap record on purpose: the board cancels before every Select press, so clearing
+    // it here would make a second tap on a bend never count. A cancelled drag (undo, redo, a pinch) was never a tap.
     const cancel = useCallback(() => {
+        if (gestureRef.current?.started) lastTapRef.current = null;
         gestureRef.current = null;
         setPreview(null);
         setActive(false);

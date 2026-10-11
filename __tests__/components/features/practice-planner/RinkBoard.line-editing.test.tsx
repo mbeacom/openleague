@@ -399,6 +399,28 @@ describe("RinkBoard line editing: removing bends", () => {
         expect(ctx.last().drawings[0].points).toHaveLength(2);
     });
 
+    it("never counts a bend drag dropped by undo as the first tap of a double-click", () => {
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(10_000);
+        const other = line([{ x: 40, y: 70 }, { x: 120, y: 70 }], "straight", "m");
+        const ctx = setup({ playData: withLines(line(BENT, "curve"), other) });
+        // One edit on the other line, so there is something to undo
+        ctx.click(60, 70);
+        ctx.drag([80, 70], [80, 60]);
+        ctx.rerender(ctx.last());
+        ctx.click(60, 30);
+        fireEvent.mouseDown(ctx.canvas, ctx.at(80, 20));
+        fireEvent.mouseMove(ctx.canvas, ctx.at(90, 30));
+        act(() => ctx.ref.current!.undo());
+        ctx.rerender(ctx.last());
+        fireEvent.mouseUp(window);
+        const calls = ctx.onPlayDataChange.mock.calls.length;
+        vi.setSystemTime(10_100);
+        ctx.click(80, 20);
+        expect(ctx.onPlayDataChange).toHaveBeenCalledTimes(calls);
+        expect(ctx.last().drawings.find((d) => d.id === "l")!.points).toEqual(BENT);
+    });
+
     it("never removes an end", () => {
         vi.useFakeTimers({ toFake: ["Date"] });
         vi.setSystemTime(10_000);
