@@ -72,10 +72,22 @@ jobs:
       - name: Configure GitHub Pages
         uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
 
+      # The stock Pages upload action drops every dot-path (--exclude=".[^/]*"), which would
+      # leave out /.well-known/ (the Microsoft identity association file). This archives the
+      # site the same way, keeping dot-paths, and uploads it under the name deploy-pages reads.
+      - name: Archive Pages artifact
+        run: |
+          tar --dereference --hard-dereference --directory dist/docs-pages \
+            -cvf "$RUNNER_TEMP/artifact.tar" --exclude=.git --exclude=.github .
+          tar -tf "$RUNNER_TEMP/artifact.tar" | grep -qx './.well-known/microsoft-identity-association.json'
+
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          path: dist/docs-pages
+          name: github-pages
+          path: ${{ runner.temp }}/artifact.tar
+          retention-days: 1
+          if-no-files-found: error
 
   deploy:
     name: Deploy documentation site
