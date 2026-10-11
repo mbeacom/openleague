@@ -228,6 +228,18 @@ async function writePage(page: StaticPage, navItems: DocsNavItem[]) {
 /** The static planner's Microsoft Entra app registration (a public client id, not a secret). */
 const microsoftApplicationId = '91f29b89-9f2c-4210-93e2-c69502692bdd';
 
+/**
+ * Microsoft Entra publisher domain verification: ties the planner's app registration to this
+ * domain. Served at /.well-known/microsoft-identity-association.json (`.nojekyll` lets Pages
+ * serve the dot-directory).
+ */
+export async function writeMicrosoftIdentityAssociation(dir: string): Promise<string> {
+  const file = path.join(dir, '.well-known', 'microsoft-identity-association.json');
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, `${JSON.stringify({ associatedApplications: [{ applicationId: microsoftApplicationId }] }, null, 2)}\n`);
+  return file;
+}
+
 async function main() {
   await rm(outputDir, { recursive: true, force: true });
   await mkdir(outputDir, { recursive: true });
@@ -240,12 +252,7 @@ async function main() {
   await Promise.all(pages.map((page) => writePage(page, navItems)));
   await writeFile(path.join(outputDir, '.nojekyll'), '');
   await writeFile(path.join(outputDir, 'CNAME'), `${docsDomain}\n`);
-  // Microsoft Entra publisher domain verification: ties the planner's app registration to this domain.
-  await mkdir(path.join(outputDir, '.well-known'), { recursive: true });
-  await writeFile(
-    path.join(outputDir, '.well-known', 'microsoft-identity-association.json'),
-    `${JSON.stringify({ associatedApplications: [{ applicationId: microsoftApplicationId }] }, null, 2)}\n`,
-  );
+  await writeMicrosoftIdentityAssociation(outputDir);
   await writeFile(
     path.join(outputDir, 'sitemap.xml'),
     `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${pages
