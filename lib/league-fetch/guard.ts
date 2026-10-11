@@ -12,6 +12,11 @@
  *   allowlist is the primary control, see the spec for the residual);
  * - one deadline for the whole fetch (60 s by default, see config.ts), a streamed size cap, text/html only;
  * - a fixed, identifiable User-Agent (never a browser's), no cookies or credentials, no cache;
+ * - when a RobotsGate is passed (the action always passes one), the host's
+ *   robots.txt is fetched first under these same rules (with up to 5
+ *   redirects, as RFC 9309 allows) and the same deadline,
+ *   and a disallowed page is refused; Crawl-delay spaces our requests, and a
+ *   robots.txt that can't be read fails closed (see robots.ts);
  * - logs carry the host, the status and an error kind, never the path,
  *   query or page content.
  *
@@ -20,15 +25,29 @@
  */
 import { lookup as dnsLookup } from "node:dns/promises";
 import { isIP } from "node:net";
+import {
+    ALLOW_ALL,
+    isAllowedByRobots,
+    parseRobotsTxt,
+    ROBOTS_MAX_BYTES,
+    ROBOTS_MAX_REDIRECTS,
+    ROBOTS_MAX_WAIT_MS,
+    ROBOTS_PRODUCT_TOKEN,
+    type RobotsGate,
+    type RobotsPolicy,
+} from "./robots";
 
-export const LEAGUE_FETCH_USER_AGENT = "OpenLeague-LeaguePageFetch/1.0 (+https://openleague.dev; user-requested)";
+/** Starts with the robots.txt product token, so a site's `User-agent: OpenLeague` group is the one we follow. */
+export const LEAGUE_FETCH_USER_AGENT = `${ROBOTS_PRODUCT_TOKEN}/1.1 (+https://openleague.dev; league page fetch on a user's request; honours robots.txt)`;
 export const DEFAULT_ALLOWED_HOSTS: readonly string[] = ["www.cshlhockey.org"];
-/** The one total deadline (DNS, every hop and the body). The real league site can take 30 s to first byte. */
+/** The one total deadline (robots.txt, DNS, every hop and the body). The real league site can take 30 s to first byte. */
 export const LEAGUE_FETCH_TIMEOUT_MS = 60_000;
 export const LEAGUE_FETCH_MIN_TIMEOUT_MS = 5_000;
 export const LEAGUE_FETCH_MAX_TIMEOUT_MS = 90_000;
 export const LEAGUE_FETCH_MAX_BYTES = 2 * 1024 * 1024;
 export const LEAGUE_FETCH_MAX_REDIRECTS = 3;
+/** A Crawl-delay wait must leave at least this much of the deadline for the page itself. */
+export const ROBOTS_PAGE_RESERVE_MS = 5_000;
 
 export type LeagueFetchErrorKind =
     | "invalid-url"
@@ -46,13 +65,18 @@ export type LeagueFetchErrorKind =
     | "content-type"
     | "too-large"
     | "timeout"
-    | "network";
+    | "network"
+    | "robots-disallowed"
+    | "robots-unavailable"
+    | "crawl-delay";
 
 /** Carries a kind (and an HTTP status), never the URL: messages may reach logs and telemetry. */
 export class LeagueFetchError extends Error {
     constructor(
         readonly kind: LeagueFetchErrorKind,
         readonly status?: number,
+        /** crawl-delay only: seconds until the site's requested gap has passed. */
+        readonly retryAfterSec?: number,
     ) {
         super(status === undefined ? `League page fetch refused: ${kind}` : `League page fetch refused: ${kind} (${status})`);
         this.name = "LeagueFetchError";
@@ -70,12 +94,16 @@ export interface LeagueFetchLogEntry {
 
 export interface LeagueFetchOptions {
     allowedHosts: readonly string[];
+    /** The robots.txt state (robots.ts). Required so every caller decides; only tests of the other rules pass null. */
+    robots: RobotsGate | null;
     fetchImpl?: typeof fetch;
     lookup?: LookupFn;
     timeoutMs?: number;
     maxBytes?: number;
     maxRedirects?: number;
     log?: (entry: LeagueFetchLogEntry) => void;
+    /** A Crawl-delay wait. A seam for tests. */
+    sleep?: (ms: number) => Promise<void>;
 }
 
 export interface LeagueFetchResult {
@@ -244,24 +272,138 @@ function defaultLog(entry: LeagueFetchLogEntry): void {
     console.info(JSON.stringify(entry));
 }
 
+
+/** What one guarded request needs: the shared deadline and the injected fetch and DNS. */
+interface RequestContext {
+    allowedHosts: readonly string[];
+    fetchImpl: typeof fetch;
+    lookup: LookupFn;
+    controller: AbortController;
+    deadline: Promise<never>;
+    timedOut: () => boolean;
+    onStatus: (status: number) => void;
+}
+
+/**
+ * One GET under every URL rule, the DNS check per hop, same-host redirects
+ * and the shared deadline. Returns the first non-redirect response; the
+ * caller judges its status and reads its body. `beforeHop` runs before each
+ * redirected request (the page uses it to re-check robots.txt).
+ */
+async function guardedGet(
+    start: URL,
+    accept: string,
+    maxRedirects: number,
+    ctx: RequestContext,
+    beforeHop?: (url: URL) => Promise<void> | void,
+): Promise<{ response: Response; url: URL }> {
+    const host = normalizeHost(start.hostname);
+    let url = start;
+    for (let hop = 0; ; hop++) {
+        await Promise.race([assertPublicHost(host, ctx.lookup), ctx.deadline]);
+        let response: Response;
+        try {
+            response = await Promise.race([
+                ctx.fetchImpl(url.toString(), {
+                    method: "GET",
+                    redirect: "manual",
+                    credentials: "omit",
+                    cache: "no-store",
+                    referrerPolicy: "no-referrer",
+                    headers: { "User-Agent": LEAGUE_FETCH_USER_AGENT, Accept: accept },
+                    signal: ctx.controller.signal,
+                }),
+                ctx.deadline,
+            ]);
+        } catch (error) {
+            if (error instanceof LeagueFetchError) throw error;
+            throw new LeagueFetchError(ctx.timedOut() ? "timeout" : "network");
+        }
+        ctx.onStatus(response.status);
+
+        if (!REDIRECTS.has(response.status)) return { response, url };
+        await response.body?.cancel().catch(() => {});
+        if (hop >= maxRedirects) throw new LeagueFetchError("too-many-redirects");
+        const location = response.headers.get("location");
+        if (!location) throw new LeagueFetchError("bad-redirect");
+        let next: URL;
+        try {
+            next = new URL(location, url);
+        } catch {
+            throw new LeagueFetchError("bad-redirect");
+        }
+        // Never to another host, even an allowlisted one; then every URL rule again.
+        if (normalizeHost(next.hostname) !== host) throw new LeagueFetchError("redirect-off-host");
+        url = checkLeagueUrl(next.toString(), ctx.allowedHosts);
+        await beforeHop?.(url);
+    }
+}
+
+/** Cache-Control's max-age in ms (no-store: 0), or null when it says neither. */
+function cacheMaxAgeMs(headers: Headers): number | null {
+    const value = headers.get("cache-control") ?? "";
+    if (/(^|,)\s*no-store\s*(,|$)/i.test(value)) return 0;
+    const match = /(^|,)\s*max-age\s*=\s*"?(\d+)"?/i.exec(value);
+    return match ? Number(match[2]) * 1000 : null;
+}
+
+/**
+ * Fetches and parses https://<host>/robots.txt through guardedGet (RFC 9309
+ * section 2.3.1): 2xx is parsed; 4xx means there are no rules, except 429,
+ * which asks us to slow down; 5xx, a network error, a timeout, a redirect the
+ * guard refuses, a file over 500 KiB or one that isn't UTF-8 fail closed.
+ */
+async function readRobots(host: string, gate: RobotsGate, ctx: RequestContext): Promise<{ policy: RobotsPolicy; maxAgeMs: number | null }> {
+    try {
+        gate.noteRequest(host);
+        const { response } = await guardedGet(new URL(`https://${host}/robots.txt`), "text/plain", ROBOTS_MAX_REDIRECTS, ctx);
+        const status = response.status;
+        if (status >= 200 && status < 300) {
+            const declared = Number(response.headers.get("content-length"));
+            if (Number.isFinite(declared) && declared > ROBOTS_MAX_BYTES) {
+                await response.body?.cancel().catch(() => {});
+                throw new LeagueFetchError("robots-unavailable");
+            }
+            // An oversized robots.txt stops the read only, not the shared deadline.
+            const bytes = await Promise.race([readCapped(response, ROBOTS_MAX_BYTES, () => {}), ctx.deadline]);
+            const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+            return { policy: parseRobotsTxt(text, ROBOTS_PRODUCT_TOKEN), maxAgeMs: cacheMaxAgeMs(response.headers) };
+        }
+        await response.body?.cancel().catch(() => {});
+        if (status >= 400 && status < 500 && status !== 429) return { policy: ALLOW_ALL, maxAgeMs: cacheMaxAgeMs(response.headers) };
+        throw new LeagueFetchError("robots-unavailable");
+    } catch (error) {
+        // A host that resolves inward or not at all is refused as such; anything else means we couldn't check.
+        if (error instanceof LeagueFetchError && (error.kind === "private-address" || error.kind === "dns-failed")) throw error;
+        throw new LeagueFetchError("robots-unavailable");
+    }
+}
+
+function defaultSleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /** Fetches one allowlisted league page under every rule above. Throws LeagueFetchError. */
 export async function fetchLeaguePage(raw: string, options: LeagueFetchOptions): Promise<LeagueFetchResult> {
     const {
         allowedHosts,
+        robots,
         fetchImpl = fetch,
         lookup = dnsLookup as LookupFn,
         timeoutMs = LEAGUE_FETCH_TIMEOUT_MS,
         maxBytes = LEAGUE_FETCH_MAX_BYTES,
         maxRedirects = LEAGUE_FETCH_MAX_REDIRECTS,
         log = defaultLog,
+        sleep = defaultSleep,
     } = options;
 
-    let url = checkLeagueUrl(raw, allowedHosts);
-    const host = normalizeHost(url.hostname);
+    const start = checkLeagueUrl(raw, allowedHosts);
+    const host = normalizeHost(start.hostname);
     let status: number | null = null;
 
     const controller = new AbortController();
     let timedOut = false;
+    const deadlineAt = Date.now() + timeoutMs;
     const timer = setTimeout(() => {
         timedOut = true;
         controller.abort();
@@ -271,71 +413,64 @@ export async function fetchLeaguePage(raw: string, options: LeagueFetchOptions):
         controller.signal.addEventListener("abort", () => reject(new LeagueFetchError(timedOut ? "timeout" : "too-large")), { once: true });
     });
     deadline.catch(() => {});
+    const ctx: RequestContext = {
+        allowedHosts,
+        fetchImpl,
+        lookup,
+        controller,
+        deadline,
+        timedOut: () => timedOut,
+        onStatus: (value) => {
+            status = value;
+        },
+    };
 
     try {
-        for (let hop = 0; ; hop++) {
-            await Promise.race([assertPublicHost(host, lookup), deadline]);
-            let response: Response;
-            try {
-                response = await Promise.race([
-                    fetchImpl(url.toString(), {
-                        method: "GET",
-                        redirect: "manual",
-                        credentials: "omit",
-                        cache: "no-store",
-                        referrerPolicy: "no-referrer",
-                        headers: { "User-Agent": LEAGUE_FETCH_USER_AGENT, Accept: "text/html" },
-                        signal: controller.signal,
-                    }),
-                    deadline,
-                ]);
-            } catch (error) {
-                if (error instanceof LeagueFetchError) throw error;
-                throw new LeagueFetchError(timedOut ? "timeout" : "network");
+        let policy: RobotsPolicy | null = null;
+        const permitted = robots?.hasPermission(host) ?? false;
+        const assertRobotsAllow = (url: URL) => {
+            if (policy && !permitted && !isAllowedByRobots(policy, url.pathname + url.search)) throw new LeagueFetchError("robots-disallowed");
+        };
+        if (robots) {
+            policy = robots.cached(host);
+            if (!policy) {
+                const read = await readRobots(host, robots, ctx);
+                policy = read.policy;
+                robots.store(host, policy, read.maxAgeMs);
             }
-            status = response.status;
-
-            if (REDIRECTS.has(response.status)) {
-                await response.body?.cancel().catch(() => {});
-                if (hop >= maxRedirects) throw new LeagueFetchError("too-many-redirects");
-                const location = response.headers.get("location");
-                if (!location) throw new LeagueFetchError("bad-redirect");
-                let next: URL;
-                try {
-                    next = new URL(location, url);
-                } catch {
-                    throw new LeagueFetchError("bad-redirect");
-                }
-                // Never to another host, even an allowlisted one; then every URL rule again.
-                if (normalizeHost(next.hostname) !== host) throw new LeagueFetchError("redirect-off-host");
-                url = checkLeagueUrl(next.toString(), allowedHosts);
-                continue;
-            }
-            if (response.status !== 200) {
-                await response.body?.cancel().catch(() => {});
-                throw new LeagueFetchError("http-status", response.status);
-            }
-            const contentType = response.headers.get("content-type") ?? "";
-            if (!/^text\/html\s*(;|$)/i.test(contentType)) {
-                await response.body?.cancel().catch(() => {});
-                throw new LeagueFetchError("content-type");
-            }
-            const declared = Number(response.headers.get("content-length"));
-            if (Number.isFinite(declared) && declared > maxBytes) {
-                await response.body?.cancel().catch(() => {});
-                throw new LeagueFetchError("too-large");
-            }
-            let bytes: Uint8Array;
-            try {
-                bytes = await Promise.race([readCapped(response, maxBytes, () => controller.abort()), deadline]);
-            } catch (error) {
-                if (error instanceof LeagueFetchError) throw error;
-                throw new LeagueFetchError(timedOut ? "timeout" : "network");
-            }
-            const html = decode(bytes, charsetOf(contentType));
-            log({ event: "league_page_fetch", host, status, outcome: "ok" });
-            return { url: url.toString(), html };
+            assertRobotsAllow(start);
+            // Crawl-delay: wait for a short gap that fits the deadline, refuse a longer one.
+            const maxWaitMs = Math.max(0, Math.min(ROBOTS_MAX_WAIT_MS, deadlineAt - Date.now() - ROBOTS_PAGE_RESERVE_MS));
+            const slot = robots.reserve(host, policy.crawlDelaySec, maxWaitMs);
+            if ("refusedMs" in slot) throw new LeagueFetchError("crawl-delay", undefined, Math.max(1, Math.ceil(slot.refusedMs / 1000)));
+            if (slot.waitMs > 0) await Promise.race([sleep(slot.waitMs), deadline]);
         }
+
+        const { response, url } = await guardedGet(start, "text/html", maxRedirects, ctx, assertRobotsAllow);
+        if (response.status !== 200) {
+            await response.body?.cancel().catch(() => {});
+            throw new LeagueFetchError("http-status", response.status);
+        }
+        const contentType = response.headers.get("content-type") ?? "";
+        if (!/^text\/html\s*(;|$)/i.test(contentType)) {
+            await response.body?.cancel().catch(() => {});
+            throw new LeagueFetchError("content-type");
+        }
+        const declared = Number(response.headers.get("content-length"));
+        if (Number.isFinite(declared) && declared > maxBytes) {
+            await response.body?.cancel().catch(() => {});
+            throw new LeagueFetchError("too-large");
+        }
+        let bytes: Uint8Array;
+        try {
+            bytes = await Promise.race([readCapped(response, maxBytes, () => controller.abort()), deadline]);
+        } catch (error) {
+            if (error instanceof LeagueFetchError) throw error;
+            throw new LeagueFetchError(timedOut ? "timeout" : "network");
+        }
+        const html = decode(bytes, charsetOf(contentType));
+        log({ event: "league_page_fetch", host, status, outcome: "ok" });
+        return { url: url.toString(), html };
     } catch (error) {
         const failure = error instanceof LeagueFetchError ? error : new LeagueFetchError(timedOut ? "timeout" : "network");
         log({ event: "league_page_fetch", host, status, outcome: failure.kind });

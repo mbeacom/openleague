@@ -4,6 +4,7 @@
  */
 import type { PlannerRoutes } from "@/lib/planner-store";
 import { planFragmentValue } from "@/lib/plan-document/pending";
+import { isFetchNotice, type FetchNotice } from "@/lib/rankings-document/fetch-notice";
 
 /** Rankings Setup's sections, each one tab; a route can open one directly. */
 export const RANKINGS_SETUP_SECTIONS = ["rules", "brackets", "teams", "games", "pages", "danger"] as const;
@@ -69,7 +70,7 @@ export type StaticRoute =
     | { name: "import" }
     | { name: "planLink"; value: string }
     | { name: "rankings" }
-    | { name: "rankingsImport"; pull?: string; update?: boolean }
+    | { name: "rankingsImport"; pull?: string; update?: boolean; notice?: FetchNotice }
     | { name: "rankingsSetup"; section?: RankingsSetupSection }
     | { name: "rankingsWhatIf" }
     | { name: "rankingsTeam"; number: string }
@@ -91,13 +92,18 @@ function decodeId(raw: string): string | null {
 
 /**
  * `rankings/import?pull=…`: a schedule the hosted "Fetch it for me" page sends
- * (ADR-0024). Only this route takes a query; null for anything else.
+ * (ADR-0024); `?notice=…`: why it couldn't fetch one (a robots.txt refusal),
+ * shown above the paste and upload boxes. Only this route takes a query; null
+ * for anything else.
  */
 function matchPull(body: string): StaticRoute | null {
     const at = body.indexOf("?");
     if (at === -1 || body.slice(0, at).replace(/\/+$/, "") !== "rankings/import") return null;
-    const pull = new URLSearchParams(body.slice(at + 1)).get("pull");
-    return pull ? { name: "rankingsImport", pull } : { name: "rankingsImport" };
+    const query = new URLSearchParams(body.slice(at + 1));
+    const pull = query.get("pull");
+    if (pull) return { name: "rankingsImport", pull };
+    const notice = query.get("notice");
+    return isFetchNotice(notice) ? { name: "rankingsImport", notice } : { name: "rankingsImport" };
 }
 
 /** Pure: location.hash in, route out. A hash holding `plan=` is a plan link (the hosted Export menu's). */

@@ -17,7 +17,9 @@ vi.mock("@/lib/utils/durable-rate-limit", () => ({
 vi.mock("node:dns/promises", () => ({ lookup: mocks.lookup, default: { lookup: mocks.lookup } }));
 
 import { fetchLeagueSchedule } from "@/lib/actions/league-fetch";
-import { decodeSchedulePull } from "@/lib/rankings-document";
+import { decodeSchedulePull, ROBOTS_DISALLOWED_MESSAGE, ROBOTS_UNAVAILABLE_MESSAGE } from "@/lib/rankings-document";
+import { leagueFetchRobotsGate } from "@/lib/league-fetch/config";
+import { LEAGUE_FETCH_USER_AGENT } from "@/lib/league-fetch/guard";
 
 const USER = "cuserxxxxxxxxxxxxxxxxxxxx";
 const HOST = "league.example.org";
@@ -25,6 +27,8 @@ const PAGE = `https://${HOST}/schedule/8u`;
 const PLANNER = "https://planner.example.org/planner/";
 
 const fetchMock = vi.fn();
+/** robots.txt requests go here; every other request to fetchMock. No robots.txt (404) unless a test says otherwise. */
+const robotsMock = vi.fn();
 
 function page(body = SCHEDULE_HTML, init: ResponseInit = {}) {
     return new Response(body, { status: 200, headers: { "content-type": "text/html; charset=utf-8" }, ...init });
@@ -34,7 +38,9 @@ beforeEach(() => {
     vi.clearAllMocks();
     vi.stubEnv("LEAGUE_FETCH_ALLOWED_HOSTS", HOST);
     vi.stubEnv("NEXT_PUBLIC_STATIC_PLANNER_URL", PLANNER);
-    vi.stubGlobal("fetch", fetchMock);
+    leagueFetchRobotsGate.clear();
+    robotsMock.mockResolvedValue(new Response("", { status: 404 }));
+    vi.stubGlobal("fetch", (url: string, init?: RequestInit) => (String(url).endsWith("/robots.txt") ? robotsMock(url, init) : fetchMock(url, init)));
     vi.spyOn(console, "info").mockImplementation(() => {});
     mocks.requireUserId.mockResolvedValue(USER);
     mocks.checkRateLimit.mockResolvedValue({ allowed: true });
@@ -150,5 +156,40 @@ describe("fetchLeagueSchedule", () => {
         fetchMock.mockResolvedValueOnce(page());
         const result = await fetchLeagueSchedule({ url: PAGE });
         expect(result.success && result.data.redirectUrl.startsWith("https://openleague.dev/planner/#/rankings/import?pull=")).toBe(true);
+    });
+
+    describe("robots.txt", () => {
+        const robots = (body: string, status = 200) => new Response(body, { status, headers: { "content-type": "text/plain" } });
+
+        it("checks robots.txt first with the same User-Agent as the page", async () => {
+            fetchMock.mockResolvedValueOnce(page());
+            expect((await fetchLeagueSchedule({ url: PAGE })).success).toBe(true);
+            expect(robotsMock).toHaveBeenCalledTimes(1);
+            expect(robotsMock.mock.calls[0][0]).toBe(`https://${HOST}/robots.txt`);
+            expect(robotsMock.mock.calls[0][1].headers["User-Agent"]).toBe(LEAGUE_FETCH_USER_AGENT);
+            expect(fetchMock.mock.calls[0][1].headers["User-Agent"]).toBe(LEAGUE_FETCH_USER_AGENT);
+            expect(LEAGUE_FETCH_USER_AGENT.startsWith("OpenLeague/")).toBe(true);
+        });
+
+        it("refuses a page robots.txt disallows, with the paste-or-upload message, without fetching it", async () => {
+            robotsMock.mockResolvedValueOnce(robots("User-agent: *\nDisallow: /schedule/"));
+            const result = await fetchLeagueSchedule({ url: PAGE });
+            expect(result).toMatchObject({ success: false, error: ROBOTS_DISALLOWED_MESSAGE, details: { kind: "robots-disallowed" } });
+            expect(fetchMock).not.toHaveBeenCalled();
+        });
+
+        it("fails closed when robots.txt can't be read", async () => {
+            robotsMock.mockResolvedValueOnce(robots("", 503));
+            const result = await fetchLeagueSchedule({ url: PAGE });
+            expect(result).toMatchObject({ success: false, error: ROBOTS_UNAVAILABLE_MESSAGE, details: { kind: "robots-unavailable" } });
+            expect(fetchMock).not.toHaveBeenCalled();
+        });
+
+        it("refuses a long Crawl-delay with a retry time", async () => {
+            robotsMock.mockResolvedValueOnce(robots("User-agent: OpenLeague\nCrawl-delay: 30"));
+            const result = await fetchLeagueSchedule({ url: PAGE });
+            expect(result).toMatchObject({ success: false, error: expect.stringMatching(/try again in 30 seconds/), details: { kind: "crawl-delay", retryAfterSec: 30 } });
+            expect(fetchMock).not.toHaveBeenCalled();
+        });
     });
 });

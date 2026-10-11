@@ -37,7 +37,7 @@ function setup(responses: Array<Response | (() => Promise<Response>)>, lookup: L
     const log = vi.fn<(entry: LeagueFetchLogEntry) => void>();
     const lookupSpy = vi.fn(lookup);
     const run = (url = PAGE, extra: Record<string, unknown> = {}) =>
-        fetchLeaguePage(url, { allowedHosts: ALLOWED, fetchImpl: fetchImpl as unknown as typeof fetch, lookup: lookupSpy, log, ...extra });
+        fetchLeaguePage(url, { allowedHosts: ALLOWED, robots: null, fetchImpl: fetchImpl as unknown as typeof fetch, lookup: lookupSpy, log, ...extra });
     return { fetchImpl, log, lookup: lookupSpy, run };
 }
 

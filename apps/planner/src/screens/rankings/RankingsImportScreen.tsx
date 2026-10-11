@@ -29,6 +29,7 @@ import type { RankingsOps } from "../../store/rankings";
 import { RankingsStatus } from "./display";
 import { useRankingsDoc } from "./useRankingsDoc";
 import { usePulledSchedule } from "./pulled-schedule";
+import { fetchNoticeMessage, type FetchNotice } from "@/lib/rankings-document/fetch-notice";
 import { DOCUMENT_FILE_ACCEPT } from "@/lib/document-formats";
 import { useRankingsPlatform } from "./rankings-platform";
 import type { ActionResult } from "@/lib/planner-store";
@@ -133,7 +134,20 @@ function PageAddress({ label, value, onChange }: { label: string; value: string;
     );
 }
 
-export function RankingsImportScreen({ store, update = false, pull, files }: { store: RankingsOps; update?: boolean; pull?: string; files?: RankingsFileOps }) {
+export function RankingsImportScreen({
+    store,
+    update = false,
+    pull,
+    notice,
+    files,
+}: {
+    store: RankingsOps;
+    update?: boolean;
+    pull?: string;
+    /** Why "Fetch it for me" didn't fetch the page (a robots.txt refusal); shown above the paste box. */
+    notice?: FetchNotice;
+    files?: RankingsFileOps;
+}) {
     const { routes, navigate } = useRankingsPlatform();
     const { state, save, clear } = useRankingsDoc(store);
     const pulled = usePulledSchedule(pull);
@@ -419,6 +433,11 @@ export function RankingsImportScreen({ store, update = false, pull, files }: { s
                 <Typography component="h2" variant="h6">
                     1. Schedule
                 </Typography>
+                {notice && !scheduleSource && (
+                    <Alert severity={notice === "robots-disallowed" ? "info" : "warning"} data-testid="fetch-notice">
+                        {fetchNoticeMessage(notice)}
+                    </Alert>
+                )}
                 {scheduleSource ? (
                     <LoadedPage source={scheduleSource} found={`${plural(schedule?.games.length ?? 0, "game")} found`} onClear={clearSchedule} clearLabel="Clear schedule page" />
                 ) : (

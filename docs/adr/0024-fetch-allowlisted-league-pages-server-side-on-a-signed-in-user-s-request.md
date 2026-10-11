@@ -41,6 +41,12 @@ affects:
   - type: path
     pattern: "lib/utils/durable-rate-limit.ts"
     note: LEAGUE_FETCH_PER_USER, checked fail-closed.
+  - type: path
+    pattern: "lib/rankings-document/fetch-notice.ts"
+    note: The robots.txt refusal wording and the static import's ?notice= route value, shared by both apps.
+  - type: path
+    pattern: "apps/planner/src/screens/rankings/RankingsImportScreen.tsx"
+    note: Shows a robots.txt refusal above the paste and upload boxes.
 provenance:
   authoredBy: agent-drafted
   sourceArtifact: docs/superpowers/specs/2026-10-07-hosted-league-page-fetch-design.md
@@ -147,3 +153,66 @@ and `noopener` links lose. Rejected in favour of the fragment.
 - A league publishes a machine-readable results feed: fetch that instead.
 - The handoff grows past a fragment's practical size, or needs to carry
   anything private. It would then need a different channel.
+
+## Amendments
+
+### 2026-10-11: Honour robots.txt
+
+OpenLeague does not fetch a page that the site's robots.txt disallows. The
+allowlist says which sites we may ask; robots.txt says what each site asks of
+automated tools, and it is the site's own, current answer.
+
+**Rule.** Before each user-initiated fetch, the server fetches
+`https://<host>/robots.txt` through the same guard (https/443, allowlist, DNS
+check, same-host redirects, no credentials) and within the same total deadline
+as the page. It reads the file per RFC 9309: groups by user-agent, matched on
+the product token `OpenLeague` (case-insensitive) and falling back to `*`;
+the longest matching Allow or Disallow wins, and an Allow wins a tie; `*` and
+a trailing `$` are wildcards; paths compare case-sensitively after
+percent-encoding normalisation. The page's path and query are checked, and so
+is every same-host redirect the page takes. The User-Agent on both requests
+starts with the same token: `OpenLeague/1.1 (+https://openleague.dev; league
+page fetch on a user's request; honours robots.txt)`.
+
+**Status handling.**
+
+| robots.txt response | Result |
+|---|---|
+| 2xx | Parsed (any content type, UTF-8, at most 500 KiB) |
+| 4xx, including 404 | No rules: the page may be fetched |
+| 429 | Fail closed: the site is asking us to slow down |
+| 5xx, network error, timeout | Fail closed |
+| Over 500 KiB, not UTF-8, more than 5 redirects, a redirect the guard refuses | Fail closed |
+
+Failing closed refuses the fetch with "couldn't check the site's rules" and
+is not cached, so the next try asks again.
+
+**Crawl-delay.** A Crawl-delay in our group is kept as a minimum gap between
+our requests to that host (the robots.txt request counts). A gap of up to
+10 s that still leaves 5 s of the deadline is waited out; a longer one is
+refused with the time to try again. The spacing and the robots.txt cache
+(at most 24 hours, shorter when Cache-Control says so) live in the server
+instance's memory. Serverless instances don't share them, so each instance
+reads robots.txt for itself and spaces only its own requests; the durable
+per-user rate limit (10 per hour) still bounds the total.
+
+**Written permission.** `ROBOTS_PERMISSIONS` in `lib/league-fetch/config.ts`
+lists hosts whose owners have given written permission to fetch despite
+robots.txt, each with a note of where that permission is recorded. It is
+empty by default and kept in code so every change is reviewed. A listed host
+skips only the Disallow refusal: Crawl-delay and failing closed still apply.
+
+**Screens.** A disallowed page gets "This site asks automated tools not to
+fetch this page. Open it in your browser, then paste or upload it here." with
+a link to the static import (`#/rankings/import?notice=robots-disallowed`),
+which repeats the message above its paste box and file picker. A robots.txt
+that couldn't be read gets "Couldn't check the site's rules — try again or
+paste the page.", Try again, and the same link.
+
+**Cost.** The first fetch from an instance makes one more request, and on a
+slow site the robots.txt request uses part of the deadline the page used to
+have to itself. Later fetches within the cache period don't repeat it.
+
+**What would make this wrong.** A league whose robots.txt disallows its
+schedule pages but wants coaches to use this tool should give written
+permission (and be listed), or change its robots.txt to allow `OpenLeague`.
