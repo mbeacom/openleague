@@ -68,13 +68,13 @@ describe("local file connector", () => {
         expect(handles.map.size).toBe(0);
     });
 
-    it("keeps the handle of a saved file, and uses the revision of its lastModified and size", async () => {
+    it("keeps the handle of a saved file, and uses the revision of its lastModified, size and content", async () => {
         const { fsa, connector, handles } = subject();
         const saved = await connector.save({ ref: null, name: "fall.rankings.json", text: "{}\n", kind: KIND, documentId: DOC, expectedRevision: null });
         if (!saved.ok) throw new Error(saved.error.code);
         expect(handles.map.has(saved.value.fileId)).toBe(true);
         const file = await fsa.handleFor("fall.rankings.json").getFile();
-        expect(saved.value.revision).toBe(revisionOf(file));
+        expect(saved.value.revision).toBe(await revisionOf(file, await file.text()));
         expect(saved.value.modifiedAt).toBe(new Date(file.lastModified).toISOString());
     });
 
@@ -99,6 +99,18 @@ describe("local file connector", () => {
         expect(stale.ok === false && stale.error.code).toBe("conflict");
         expect(fsa.writes).toBe(writes);
         expect(fsa.read("fall.rankings.json")).toBe('{"theirs":1}\n');
+    });
+
+    it("refuses an overwrite when another app changed the content but not its time or size", async () => {
+        const { fsa, connector } = subject();
+        const saved = await connector.save({ ref: null, name: "fall.rankings.json", text: '{"a":1}\n', kind: KIND, documentId: DOC, expectedRevision: null });
+        if (!saved.ok) throw new Error(saved.error.code);
+        fsa.overwriteKeepingTime("fall.rankings.json", '{"b":2}\n');
+        const writes = fsa.writes;
+        const stale = await connector.save({ ref: saved.value, name: saved.value.name, text: '{"c":3}\n', kind: KIND, documentId: DOC, expectedRevision: saved.value.revision });
+        expect(stale.ok === false && stale.error.code).toBe("conflict");
+        expect(fsa.writes).toBe(writes);
+        expect(fsa.read("fall.rankings.json")).toBe('{"b":2}\n');
     });
 
     it("asks for permission from a tap, and says auth-required when the coach refuses", async () => {

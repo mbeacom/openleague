@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { composite } from "@/lib/ratings";
 import { MAX_RANKINGS_FILE_BYTES, parseRankings, readRankingsFile, readRankingsFileDocument, serializeRankings, toRatingInputs } from "@/lib/rankings-document";
-import { DOWNLOAD_AS_LABEL, rankingsReopenProblem } from "@/apps/planner/src/screens/rankings/RankingsFormatMenu";
+import { DOWNLOAD_AS_LABEL, rankingsDocumentId, rankingsReopenProblem } from "@/apps/planner/src/screens/rankings/RankingsFormatMenu";
 import { ENVELOPE_OVERHEAD_BYTES } from "@/lib/document-envelope";
 import { downloadBlob } from "@/components/features/practice-planner/export/download";
 import { RankingsScreen, levelsShortMessage } from "@/apps/planner/src/screens/rankings/RankingsScreen";
@@ -22,6 +22,23 @@ function withExcluded() {
         method: { ...base.method, levels: [{ name: "X", size: 2 }, { name: "Y", size: 1 }] },
     });
 }
+
+describe("rankingsDocumentId", () => {
+    const KEPT = "0b7c1f0e-5a3e-4c1e-9a47-6f0d7b2f8a11";
+
+    it("uses the kept id", async () => {
+        expect(await rankingsDocumentId({ getRankingsDocumentId: async () => ({ success: true, data: KEPT }) })).toBe(KEPT);
+    });
+
+    it("makes a new id when the store keeps none, or has no id at all", async () => {
+        expect(await rankingsDocumentId({ getRankingsDocumentId: async () => ({ success: true, data: null }) })).not.toBe(KEPT);
+        expect(await rankingsDocumentId({})).toMatch(/^[0-9a-f-]{36}$/);
+    });
+
+    it("fails, rather than inventing an id, when the store can't read its kept id", async () => {
+        await expect(rankingsDocumentId({ getRankingsDocumentId: async () => ({ success: false, error: "Couldn't load" }) })).rejects.toThrow();
+    });
+});
 
 describe("RankingsScreen", () => {
     it("invites an import when there's nothing saved", async () => {

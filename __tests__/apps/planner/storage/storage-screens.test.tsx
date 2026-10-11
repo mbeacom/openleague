@@ -21,6 +21,7 @@ import { ConflictDialog, CONFLICT_TITLE, KEEP_MINE_LABEL, OVERWRITTEN_TITLE, USE
 import { KEEP_BOTH_COPIES_LABEL, REPLACE_MY_COPY_LABEL, SAME_DOCUMENT_TITLE } from "@/apps/planner/src/screens/storage/ReplaceOrKeepDialog";
 import { ALLOW_ACCESS_LABEL, DOWNLOAD_COPY_LABEL, DOWNLOAD_IS_A_COPY, OPEN_FROM_LABEL, SAVE_LABEL, SAVE_TO_LABEL } from "@/apps/planner/src/screens/storage/messages";
 import { PLAN_FORMAT } from "@/lib/plan-document";
+import { RANKINGS_FORMAT, createRankingsDocument } from "@/lib/rankings-document";
 import { downloadBlob } from "@/components/features/practice-planner/export/download";
 import { LOCAL_TEAM_ID } from "@/apps/planner/src/config";
 import { wrapScreen } from "../render-screen";
@@ -252,6 +253,24 @@ describe("OpenFromMenu", () => {
 });
 
 describe("StorageScreen", () => {
+    it("offers Open only for the rankings document the rankings screen shows", async () => {
+        const { store, service } = setup();
+        const titles = ["Fall Pre-season", "Winter Playoffs"];
+        for (const [index, title] of titles.entries()) {
+            const created = await store.createRankingsDocument(createRankingsDocument({ title }));
+            if (!created.success) throw new Error(created.error);
+            await service.engine.saveNew(docKeyOf(RANKINGS_FORMAT, created.data.id), "local-file", `rankings-${index}.rankings.json`);
+        }
+        const listed = await store.listRankingsDocuments();
+        if (!listed.success) throw new Error(listed.error);
+        const [current, older] = listed.data;
+
+        renderWithStorage(<StorageScreen />, store, service);
+        const card = async (title: string | null) => within((await screen.findByText(title ?? "")).closest(".MuiCard-root") as HTMLElement);
+        expect((await card(current.title)).getByRole("link", { name: "Open" })).toHaveAttribute("href", "#/rankings");
+        expect((await card(older.title)).queryByRole("link", { name: "Open" })).not.toBeInTheDocument();
+    });
+
     it("lists linked files with Unlink, and restores or deletes a recovered copy", async () => {
         const { store, service } = setup();
         const id = await newPractice(store, "Linked practice");

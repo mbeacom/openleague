@@ -109,7 +109,7 @@ Where the spec leaves a choice open, this plan decides it:
 14. **File handles live in meta too**, under `fileHandles`, by the Local connector's own file id. A handle is not a credential (the browser asks again after a reload). Boot drops handles no link uses.
 15. **Two connector error codes are added**: `cancelled` (the coach dismissed the save picker; nothing was written) and `unwritable` (the file's format can't hold the document, such as TOML and a null inside a drill diagram; the message is the encoder's own). Neither carries provider text.
 16. **The contract's offline case is optional.** A local file has no network; the Local connector's subject leaves `goOffline` out and that case is skipped. A drive that can't be read reports `unavailable`.
-17. **The Local connector's revision is `lastModified:size`**, both from one `getFile()`, so two writes in the same millisecond still differ unless their sizes match.
+17. **The Local connector's revision is `lastModified:size:digest`**, all from one `getFile()`, where the digest is a SHA-256 of the file's text. Size and time alone miss a same-size edit inside the timestamp's resolution; the digest catches it.
 18. **The base hash is taken from the working copy as the store reads it back** after a refresh or an open, not from the remote's payload. A practice's plan is rebuilt from the store (as "Download plan file" builds it, with the practice's last edit as `exportedAt`), so the two can differ in form without any edit.
 19. **Connector saves leave roster names out**, as the plan URL fragment does (roster spec R10's default). A file opened with names keeps them in this browser; a later save from here writes positions only. Offering the "Include player names" choice on Save to… is a follow-up.
 20. **Hosted exports derive their id** from the record: SHA-256 of a namespace and the record id, shaped as a version 8 UUID (`derivedDocumentId`), so every download of one hosted session or rankings record carries the same id. The static planner keeps a stored id per document. The hosted rankings export is wrapped too: the rankings screens are shared, and the hosted rankings import already reads both forms.
@@ -124,7 +124,7 @@ Where the spec leaves a choice open, this plan decides it:
 
 ### Task 9: The Local connector (R7)
 
-- [x] File System Access tier: `showSaveFilePicker` / `showOpenFilePicker`, handles stored in IndexedDB, permission asked before each read or write (a check without a tap reports `auth-required`, and the screen offers "Allow access"), revision from `lastModified` (Ruling 17), check-then-write.
+- [x] File System Access tier: `showSaveFilePicker` / `showOpenFilePicker`, handles stored in IndexedDB, permission asked before each read or write (a check without a tap reports `auth-required`, and the screen offers "Allow access"), revision from `lastModified`, size and a content digest (Ruling 17), check-then-write.
 - [x] Download tier: no link, no conflict detection; an opened wrapped file whose `id` matches a local document offers "Replace my copy" or "Keep both" (the import screen for plans, "Open rankings file" for rankings, and "Open from…" for a linked open).
 - [x] The contract suite over a fake file handle.
 - [x] Saves in the linked file's own format (Ruling 10), including a format the coach types into the save picker.

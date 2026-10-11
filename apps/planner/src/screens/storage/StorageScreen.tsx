@@ -51,6 +51,9 @@ export function StorageScreen() {
         const { store } = storage;
         void (async () => {
             const links = await store.links.list();
+            // The rankings route shows the newest record only, so only that record gets an Open link.
+            const currentRankings = links.some((link) => parseDocKey(link.docKey)?.kind === RANKINGS_FORMAT) ? await store.listRankingsDocuments() : null;
+            const currentRankingsId = currentRankings?.success ? (currentRankings.data[0]?.id ?? null) : null;
             const rows = await Promise.all(
                 links.map(async (link): Promise<LinkedRow> => {
                     const key = parseDocKey(link.docKey);
@@ -60,7 +63,7 @@ export function StorageScreen() {
                     }
                     if (key?.kind === RANKINGS_FORMAT) {
                         const record = await store.getRankingsDocument(key.id);
-                        return { link, title: record.success ? record.data.document.meta.title : link.remote.name, href: staticRoutes.rankings() };
+                        return { link, title: record.success ? record.data.document.meta.title : link.remote.name, href: key.id === currentRankingsId ? staticRoutes.rankings() : null };
                     }
                     return { link, title: link.remote.name, href: null };
                 }),
