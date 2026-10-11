@@ -17,7 +17,7 @@ export interface RemoteRef {
 }
 
 export interface RemoteFile extends RemoteRef {
-    /** Opaque and content-bound: Drive headRevisionId, OneDrive cTag, FSA lastModified. */
+    /** Opaque and content-bound: Drive headRevisionId, OneDrive cTag, FSA lastModified + size + content digest. */
     revision: string;
     /** The provider's clock; passed to readDocument as source.modifiedAt. */
     modifiedAt: string;

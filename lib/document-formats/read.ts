@@ -45,7 +45,10 @@ const byteLength = (text: string) => new TextEncoder().encode(text).byteLength;
  */
 export function fileSource(file: Pick<File, "lastModified">): DocumentSource {
     const { lastModified } = file;
-    return typeof lastModified === "number" && Number.isFinite(lastModified) && lastModified > 0 ? { modifiedAt: new Date(lastModified).toISOString() } : {};
+    if (typeof lastModified !== "number" || !Number.isFinite(lastModified) || lastModified <= 0) return {};
+    // A finite number can still lie outside the Date range, where toISOString throws.
+    const date = new Date(lastModified);
+    return Number.isNaN(date.getTime()) ? {} : { modifiedAt: date.toISOString() };
 }
 
 /** Reads `text` in any supported format. `fileName` picks the format when its extension is known. */

@@ -5,7 +5,7 @@
  * hooks that change the remote behind its back.
  */
 import { describe, expect, it } from "vitest";
-import type { RemoteFile, RemoteRef, SaveInput, StorageConnector } from "@/apps/planner/src/storage/connector";
+import { refOf, type RemoteFile, type RemoteRef, type SaveInput, type StorageConnector } from "@/apps/planner/src/storage/connector";
 
 export interface ContractSubject {
     connector: StorageConnector;
@@ -30,7 +30,8 @@ function create(name: string, text: string, kind = KIND): SaveInput {
 }
 
 function overwrite(file: RemoteFile, text: string, expectedRevision: string): SaveInput {
-    return { ref: { connector: file.connector, fileId: file.fileId, name: file.name }, name: file.name, text, kind: KIND, documentId: DOCUMENT_ID, expectedRevision };
+    // refOf keeps driveId, which a connector addressing files by drive (OneDrive) needs.
+    return { ref: refOf(file), name: file.name, text, kind: KIND, documentId: DOCUMENT_ID, expectedRevision };
 }
 
 async function created(connector: StorageConnector, name = "fall.rankings.json", text = '{"a":1}\n', kind = KIND): Promise<RemoteFile> {

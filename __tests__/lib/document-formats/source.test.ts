@@ -31,4 +31,9 @@ describe("fileSource", () => {
         expect(fileSource({ lastModified: Number.NaN })).toEqual({});
         expect(fileSource({} as { lastModified: number })).toEqual({});
     });
+
+    it("gives no time, and does not throw, for a lastModified outside the Date range", () => {
+        expect(fileSource({ lastModified: 8.64e15 + 1 })).toEqual({});
+        expect(fileSource({ lastModified: Number.MAX_SAFE_INTEGER })).toEqual({});
+    });
 });
