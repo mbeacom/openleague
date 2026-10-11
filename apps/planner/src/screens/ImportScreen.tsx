@@ -13,7 +13,7 @@ import { FileUploadOutlined as UploadIcon, NotesOutlined as NotesIcon } from "@m
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StarterTemplatePicker, starterTemplateImport } from "@/components/features/practice-planner/StarterTemplatePicker";
 import { usePlannerPlatform } from "@/lib/planner-store";
-import { readPlanFile, readPlanLink, type ParsePlanResult, type PlanDocument, type PlanError } from "@/lib/plan-document";
+import { PLAN_FORMAT, readPlanFileDocument, readPlanLink, type ParsePlanResult, type PlanDocument, type PlanError } from "@/lib/plan-document";
 import { toTeamMark } from "@/lib/utils/team-mark";
 import { LOCAL_TEAM_ID } from "../config";
 import { replaceHash } from "../platform";
@@ -24,6 +24,9 @@ import { useAiSettings } from "./useAiSettings";
 import { useStoreResult } from "./useStoreResult";
 import { useTeamProfileVersion } from "./useTeamProfile";
 import { DOCUMENT_FILE_ACCEPT } from "@/lib/document-formats";
+import { docKeyOf } from "../store/links";
+import { createStoreDocuments, replaceWithRecovery } from "../storage/documents";
+import { ReplaceOrKeepDialog } from "./storage/ReplaceOrKeepDialog";
 
 export { planStartDate };
 
@@ -31,7 +34,15 @@ type ViewState =
     | { kind: "pick" }
     | { kind: "reading" }
     | { kind: "error"; error: PlanError }
-    | { kind: "ready"; plan: PlanDocument; fromTemplate: boolean };
+    | {
+          kind: "ready";
+          plan: PlanDocument;
+          fromTemplate: boolean;
+          /** A wrapped file's envelope id (storage connectors spec R1). */
+          fileId?: string | null;
+          /** The practice here that is the same document (its envelope id matches). */
+          match?: { id: string; title: string } | null;
+      };
 
 function toViewState(result: ParsePlanResult, fromTemplate = false): ViewState {
     return result.ok ? { kind: "ready", plan: result.plan, fromTemplate } : { kind: "error", error: result.error };
@@ -40,7 +51,7 @@ function toViewState(result: ParsePlanResult, fromTemplate = false): ViewState {
 export const NOTES_CARD_TITLE = "Draft a plan from notes";
 
 export function ImportScreen({ store, linkValue }: { store: LocalPlannerStore; linkValue: string | null }) {
-    const { planGenerator } = usePlannerPlatform();
+    const { planGenerator, navigate } = usePlannerPlatform();
     const fileInput = useRef<HTMLInputElement>(null);
     const [pending, setPending] = useState<string | null>(linkValue);
     const [state, setState] = useState<ViewState>(linkValue ? { kind: "reading" } : { kind: "pick" });
@@ -91,9 +102,39 @@ export function ImportScreen({ store, linkValue }: { store: LocalPlannerStore; l
         const choice = Symbol("file");
         latestChoice.current = choice;
         clearError();
-        const result = await readPlanFile(file);
+        const result = await readPlanFileDocument(file);
+        const found = result.ok && result.id ? await store.findSessionByDocumentId(result.id) : null;
         // A link pasted while the file was being read wins.
-        if (latestChoice.current === choice) setState(toViewState(result));
+        if (latestChoice.current !== choice) return;
+        if (!result.ok) {
+            setState({ kind: "error", error: result.error });
+            return;
+        }
+        setState({ kind: "ready", plan: result.plan, fromTemplate: false, fileId: result.id, match: found?.success ? found.data : null });
+    };
+
+    // The file is the same document as a practice here (storage connectors spec R7): a choice, never a silent duplicate.
+    const [choosing, setChoosing] = useState(false);
+    const [replaceError, setReplaceError] = useState<string | null>(null);
+    const saveReady = (ready: Extract<ViewState, { kind: "ready" }>) => {
+        if (ready.match) {
+            setChoosing(true);
+            return;
+        }
+        // A file with an id keeps it, so a later copy of it is recognized here.
+        void save(ready.plan, addToLibrary && !ready.fromTemplate, ready.fileId ? { documentId: ready.fileId } : {});
+    };
+    const replaceMine = async (ready: Extract<ViewState, { kind: "ready" }>) => {
+        if (!ready.match || !ready.fileId) return;
+        setReplaceError(null);
+        try {
+            await replaceWithRecovery(createStoreDocuments(store), docKeyOf(PLAN_FORMAT, ready.match.id), { kind: PLAN_FORMAT, documentId: ready.fileId, payload: ready.plan });
+            setChoosing(false);
+            navigate(staticRoutes.session(ready.match.id));
+        } catch (error) {
+            setChoosing(false);
+            setReplaceError(error instanceof Error && error.name === "StoreDocumentError" ? error.message : "Couldn't replace the practice. Please try again.");
+        }
     };
 
     return (
@@ -172,10 +213,26 @@ export function ImportScreen({ store, linkValue }: { store: LocalPlannerStore; l
                         addToLibrary={addToLibrary}
                         onAddToLibraryChange={setAddToLibrary}
                         saving={saving}
-                        saveError={saveError}
+                        saveError={saveError ?? replaceError}
                         // A template's drills are already offered in the library as starters.
-                        onSave={() => void save(state.plan, addToLibrary && !state.fromTemplate)}
+                        onSave={() => saveReady(state)}
                         secondary={state.fromTemplate ? { label: "Start over", onClick: startOver } : { label: "Choose another file", onClick: chooseFile }}
+                    />
+                )}
+
+                {state.kind === "ready" && state.match && (
+                    <ReplaceOrKeepDialog
+                        open={choosing}
+                        existingTitle={state.match.title}
+                        noun="practice plan"
+                        busy={saving}
+                        onReplace={() => void replaceMine(state)}
+                        onKeepBoth={() => {
+                            setChoosing(false);
+                            // A separate practice with its own id.
+                            void save(state.plan, addToLibrary);
+                        }}
+                        onCancel={() => setChoosing(false)}
                     />
                 )}
             </Stack>

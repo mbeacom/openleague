@@ -8,11 +8,15 @@ import { usePlannerFavorites } from "@/components/features/practice-planner/useP
 import { formatClockTime, formatLongDate } from "@/lib/utils/date";
 import { favoritesFirst } from "@/lib/utils/planner-favorites";
 import { staticRoutes } from "../routes";
+import { usePlannerPlatform } from "@/lib/planner-store";
+import { PLAN_FORMAT } from "@/lib/plan-document";
+import { OpenFromMenu } from "./storage/OpenFromMenu";
 import type { LocalPlannerStore, LocalSessionSummary } from "../store/types";
 import { LoadingScreen } from "./StatusScreens";
 import { useStoreResult } from "./useStoreResult";
 
 function Actions() {
+    const { navigate } = usePlannerPlatform();
     return (
         <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
             <Button variant="contained" startIcon={<AddIcon />} href={staticRoutes.sessionNew()}>
@@ -24,6 +28,7 @@ function Actions() {
             <Button variant="outlined" startIcon={<TemplateIcon />} href={staticRoutes.importPlan()}>
                 Use a template
             </Button>
+            <OpenFromMenu kind={PLAN_FORMAT} importHref={staticRoutes.importPlan()} onOpened={(id) => navigate(staticRoutes.session(id))} />
         </Stack>
     );
 }

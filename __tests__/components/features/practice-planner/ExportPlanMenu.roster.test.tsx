@@ -36,7 +36,13 @@ afterEach(() => {
 });
 
 const openMenu = () => fireEvent.click(screen.getByRole("button", { name: "Export plan" }));
-const downloaded = async () => JSON.parse(await (vi.mocked(URL.createObjectURL).mock.calls.at(-1)?.[0] as Blob).text());
+/** The plan inside the downloaded file, which is wrapped (storage connectors spec R2). */
+const downloaded = async () => {
+    await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalled());
+    const raw = JSON.parse(await (vi.mocked(URL.createObjectURL).mock.calls.at(-1)?.[0] as Blob).text());
+    expect(raw.format).toBe("openleague.document");
+    return raw.payload;
+};
 
 describe("Export plan: Include player names", () => {
     it("isn't offered when no player has a name or a number", () => {

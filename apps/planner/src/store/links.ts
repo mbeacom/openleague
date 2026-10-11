@@ -6,7 +6,7 @@
  */
 import type { DocumentKind } from "@/lib/document-envelope";
 import type { ConnectorId } from "../storage/connector";
-import type { DocumentLink, PlannerRepo } from "./records";
+import type { DocumentLink, PlannerRepo, RepoTx } from "./records";
 
 export type { DocumentLink } from "./records";
 
@@ -61,4 +61,13 @@ export function createLinkStore(repo: PlannerRepo): LinkStore {
         },
         list: async () => (await repo.read((tx) => tx.allLinks())).filter(isDocumentLink),
     };
+}
+
+/**
+ * Inside a store write to a document: marks its link dirty (the engine's
+ * noteLocalEdit, in the same transaction). No link, or a damaged one: nothing.
+ */
+export async function noteLocalEditInTx(tx: RepoTx, docKey: string): Promise<void> {
+    const link = await tx.getLink(docKey);
+    if (isDocumentLink(link) && !link.dirty) await tx.putLink({ ...link, dirty: true });
 }

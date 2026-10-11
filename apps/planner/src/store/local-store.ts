@@ -5,9 +5,12 @@
  */
 import { createAiSettingsOps } from "./ai-settings";
 import { createFavoriteOps } from "./favorites";
+import { createFileHandleStore } from "./file-handles";
+import { createLinkStore } from "./links";
 import { createLibraryOps } from "./library";
 import { META_PERSIST_REQUESTED, type PlannerRepo } from "./records";
 import { createRankingsOps } from "./rankings";
+import { createRecoveredOps } from "./recovered";
 import { createSessionOps } from "./sessions";
 import { createStoreContext } from "./shared";
 import { createTeamProfileOps } from "./team-profile";
@@ -41,5 +44,18 @@ export function createLocalPlannerStore(repo: PlannerRepo, options: LocalStoreOp
         asked = true;
         void requestPersistence(repo);
     });
-    return { ...createLibraryOps(ctx), ...createSessionOps(ctx), ...createTeamProfileOps(ctx), ...createRankingsOps(ctx), ...createAiSettingsOps(ctx), ...createFavoriteOps(ctx) };
+    const sessions = createSessionOps(ctx);
+    return {
+        ...createLibraryOps(ctx),
+        ...sessions,
+        // What "Download plan file" wraps (PlannerStore.getPlanDocumentId).
+        getPlanDocumentId: sessions.ensureSessionDocumentId,
+        ...createTeamProfileOps(ctx),
+        ...createRankingsOps(ctx),
+        ...createAiSettingsOps(ctx),
+        ...createFavoriteOps(ctx),
+        ...createRecoveredOps(ctx),
+        links: createLinkStore(repo),
+        fileHandles: createFileHandleStore(repo, ctx.now),
+    };
 }

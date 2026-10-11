@@ -8,11 +8,12 @@ import {
     unreadableDiagramNotice,
     type ExportableSession,
 } from "@/components/features/practice-planner/ExportPlanMenu";
-import { LINK_TOO_LARGE_MESSAGE, MAX_PLAN_DRILLS, MAX_PLAN_FILE_BYTES, decodePlanLink, parsePlan } from "@/lib/plan-document";
+import { LINK_TOO_LARGE_MESSAGE, MAX_PLAN_DRILLS, MAX_PLAN_FILE_BYTES, PLAN_FORMAT, decodePlanLink, parsePlan } from "@/lib/plan-document";
+import { HOSTED_SESSION_ID_NAMESPACE, derivedDocumentId, readDocumentText } from "@/lib/document-envelope";
 import { createEmptyPlayData } from "@/lib/utils/play-data";
 import { drillRows } from "@/lib/utils/session-rows";
 import { formatDateTimeLocalInput, resolveTimeZone } from "@/lib/utils/date";
-import { createHashPlatform, renderWithPlanner } from "@/__tests__/helpers/planner";
+import { createHashPlatform, createMockPlannerStore, renderWithPlanner } from "@/__tests__/helpers/planner";
 import type { PlannerPlatform } from "@/lib/planner-store";
 
 const NOW = new Date("2026-10-03T18:00:00.000Z");
@@ -93,23 +94,59 @@ describe("unreadableDiagramNotice", () => {
     });
 });
 
+async function downloadedText(): Promise<string> {
+    await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalled());
+    return (vi.mocked(URL.createObjectURL).mock.calls.at(-1)?.[0] as Blob).text();
+}
+
 describe("ExportPlanMenu", () => {
-    it("downloads the plan as <slug>.olplan.json", () => {
+    it("downloads the plan as <slug>.olplan.json", async () => {
         renderWithPlanner(<ExportPlanMenu session={SESSION} />);
         openMenu();
         fireEvent.click(screen.getByRole("menuitem", { name: "Download plan file" }));
 
-        expect(clicks).toEqual([{ download: "tuesday-skills.olplan.json", href: "blob:plan" }]);
+        await waitFor(() => expect(clicks).toEqual([{ download: "tuesday-skills.olplan.json", href: "blob:plan" }]));
         const blob = vi.mocked(URL.createObjectURL).mock.calls[0][0] as Blob;
         expect(blob.type).toBe("application/json");
     });
 
-    it("revokes the download's object URL only after a delay, so the browser can start the download", () => {
+    it("writes the plan file wrapped, with an id derived from the hosted session and the plan's export time", async () => {
+        const session = { ...SESSION, id: "csession0000000000000000a" };
+        renderWithPlanner(<ExportPlanMenu session={session} />);
+        openMenu();
+        fireEvent.click(screen.getByRole("menuitem", { name: "Download plan file" }));
+        const raw = JSON.parse(await downloadedText());
+        expect(raw).toMatchObject({ format: "openleague.document", envelope: 1, kind: PLAN_FORMAT, generator: "openleague-hosted" });
+        expect(raw.id).toBe(await derivedDocumentId(HOSTED_SESSION_ID_NAMESPACE, session.id));
+        expect(raw.updatedAt).toBe(raw.payload.exportedAt);
+        const read = readDocumentText(JSON.stringify(raw), undefined, { kind: PLAN_FORMAT });
+        expect(read.ok && read.document.payload.session.title).toBe("Tuesday Skills");
+
+        // A second download of the same session carries the same id.
+        openMenu();
+        fireEvent.click(screen.getByRole("menuitem", { name: "Download plan file" }));
+        await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalledTimes(2));
+        expect(JSON.parse(await (vi.mocked(URL.createObjectURL).mock.calls[1][0] as Blob).text()).id).toBe(raw.id);
+    });
+
+    it("uses the store's id for the practice when it keeps one", async () => {
+        const getPlanDocumentId = vi.fn(async () => ({ success: true as const, data: "6f1c2b9a-1d4e-4a5b-8c7d-0e9f8a7b6c5d" }));
+        renderWithPlanner(<ExportPlanMenu session={{ ...SESSION, id: "local-1" }} />, { store: { ...createMockPlannerStore(), getPlanDocumentId } });
+        openMenu();
+        fireEvent.click(screen.getByRole("menuitem", { name: "Download plan file" }));
+        expect(JSON.parse(await downloadedText()).id).toBe("6f1c2b9a-1d4e-4a5b-8c7d-0e9f8a7b6c5d");
+        expect(getPlanDocumentId).toHaveBeenCalledWith("local-1");
+    });
+
+    it("revokes the download's object URL only after a delay, so the browser can start the download", async () => {
         vi.useFakeTimers();
         try {
             renderWithPlanner(<ExportPlanMenu session={SESSION} />);
             openMenu();
             fireEvent.click(screen.getByRole("menuitem", { name: "Download plan file" }));
+            // The id is awaited before the download starts.
+            await vi.advanceTimersByTimeAsync(0);
+            expect(clicks).toHaveLength(1);
             vi.advanceTimersByTime(999);
             expect(URL.revokeObjectURL).not.toHaveBeenCalled();
             vi.advanceTimersByTime(1);
@@ -129,8 +166,8 @@ describe("ExportPlanMenu", () => {
         openMenu();
         fireEvent.click(screen.getByRole("menuitem", { name: "Download plan file" }));
 
-        expect(clicks).toHaveLength(1);
         const alert = await screen.findByRole("alert");
+        expect(clicks).toHaveLength(1);
         expect(alert).toHaveTextContent(
             `This file can't be imported as-is: A plan can hold at most ${MAX_PLAN_DRILLS} rows (drills and blocks)`,
         );
@@ -145,10 +182,10 @@ describe("ExportPlanMenu", () => {
         openMenu();
         fireEvent.click(screen.getByRole("menuitem", { name: "Download plan file" }));
 
-        expect(clicks).toHaveLength(1);
         expect(await screen.findByRole("alert")).toHaveTextContent(
             `This file is too large to import (over ${MAX_PLAN_FILE_BYTES / 1000} KB).`,
         );
+        expect(clicks).toHaveLength(1);
     });
 
     it("downloads a valid plan without an import warning", () => {
@@ -240,8 +277,9 @@ describe("ExportPlanMenu in the static planner", () => {
         renderWithPlanner(<ExportPlanMenu session={SESSION} />, { platform: STATIC_PLATFORM });
         openMenu();
         fireEvent.click(screen.getByRole("menuitem", { name: "Download plan file" }));
-        const blob = vi.mocked(URL.createObjectURL).mock.calls[0][0] as Blob;
-        expect(JSON.parse(await blob.text()).generator).toBe("openleague-static");
+        const raw = JSON.parse(await downloadedText());
+        expect(raw.generator).toBe("openleague-static");
+        expect(raw.payload.generator).toBe("openleague-static");
     });
 
     it("opens the hosted import page in a tab opened inside the click", async () => {

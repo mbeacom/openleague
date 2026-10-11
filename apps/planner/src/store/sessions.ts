@@ -6,7 +6,8 @@
 import { z } from "zod";
 import type { PlayData, PracticeSessionView, SessionItem, SessionRow } from "@/types/practice-planner";
 import { MAX_BLOCK_LABEL_LENGTH, MAX_ROW_STAFF, VALIDATION_CONSTRAINTS } from "@/types/practice-planner";
-import { parsePlan, planRosterToPractice, serializePlan, type PlanBlockInput, type PlanDrillInput, type PlanRoster } from "@/lib/plan-document";
+import { parsePlan, planRosterToPractice, serializePlan, PLAN_FORMAT, type PlanBlockInput, type PlanDocument, type PlanDrillInput, type PlanRoster } from "@/lib/plan-document";
+import { parseDateTimeLocalToUtc, resolveTimeZone } from "@/lib/utils/date";
 import { createEmptyPlayData, parseStoredPlayData } from "@/lib/utils/play-data";
 import { drillTags, toPlayFocus, toPlayGoalies } from "@/lib/utils/drill-tags";
 import { toAgeGroups } from "@/lib/utils/age-groups";
@@ -63,6 +64,7 @@ import { cleanPracticeEquipment, practiceEquipmentError, readPracticeEquipment }
 import type { EquipmentCountItem } from "@/types/practice-planner";
 import { ROSTER_INVALID_MESSAGE, ROSTER_NO_TEAM_LINK_MESSAGE, practiceRosterSchema, toPracticeRoster, type PracticeRoster } from "@/lib/utils/practice-roster";
 import { LOCAL_AUTHOR_NAME, LOCAL_TEAM_ID } from "../config";
+import { docKeyOf, noteLocalEditInTx } from "./links";
 import { META_TEAM_PROFILE } from "./records";
 import type { RepoTx, StoredPlay, StoredRoster, StoredSession, StoredSessionRow, StoredStaffMember } from "./records";
 import { StoreRefusal, attempt, checkedAgeGroups, checkedGoalieCount, drillText, ok, thumbnailOrNull, writablePlayData, write, type StoreContext } from "./shared";
@@ -83,6 +85,11 @@ export type SessionOps = Pick<
     | "duplicatePracticeSession"
     | "deletePracticeSession"
     | "importPlan"
+    | "replaceSessionFromPlan"
+    | "getSessionDocumentInfo"
+    | "ensureSessionDocumentId"
+    | "setSessionDocumentId"
+    | "findSessionByDocumentId"
 >;
 
 function validDate(date: Date): Date {
@@ -387,6 +394,111 @@ function sortedRows(session: StoredSession): StoredSessionRow[] {
     return [...session.rows].sort((a, b) => a.sequence - b.sequence);
 }
 
+/** A plan checked and its diagrams cleaned and drawn: everything a write needs that can't run inside a transaction. */
+interface PreparedPlan {
+    plan: PlanDocument;
+    diagrams: Map<number, { playData: PlayData; thumbnail: string | null }>;
+}
+
+async function preparePlan(ctx: StoreContext, plan: PlanDocument): Promise<PreparedPlan> {
+    // Parse again: the caller's object may not have come through parsePlan.
+    const parsed = parsePlan(plan);
+    if (!parsed.ok) throw new StoreRefusal(parsed.error.message, parsed.error.issues);
+    // Diagrams are cleaned and drawn before the transaction (IndexedDB can't wait on other work), keyed by row.
+    const diagrams = new Map<number, { playData: PlayData; thumbnail: string | null }>();
+    // Stored thumbnails wait for the diagram font, once, so they never bake in the fallback.
+    if (parsed.plan.session.drills.some((entry) => entry.kind === "drill")) await ctx.beforeStoredDraw();
+    for (const entry of parsed.plan.session.drills) {
+        if (entry.kind !== "drill") continue;
+        const playData = writablePlayData(entry.drill.playData);
+        diagrams.set(entry.sequence, { playData, thumbnail: ctx.makeThumbnail(playData) });
+    }
+    return { plan: parsed.plan, diagrams };
+}
+
+/** The plan's local date and start in this browser's zone (midnight without a start); null without a date. */
+function planDate(plan: PlanDocument): Date | null {
+    const { date, startTime } = plan.session;
+    if (!date) return null;
+    return parseDateTimeLocalToUtc(`${date}T${startTime ?? "00:00"}`, resolveTimeZone(null));
+}
+
+/**
+ * Writes a plan as session `id`. With `existing`, the session is replaced in
+ * place: its own drill copies go, its created time stays, and its envelope id
+ * stays unless one is given.
+ */
+async function writePlanSession(
+    tx: RepoTx,
+    ctx: StoreContext,
+    { plan, diagrams }: PreparedPlan,
+    options: { id: string; date: Date; addToLibrary: boolean; documentId?: string; existing: StoredSession | null },
+): Promise<void> {
+    const { id, existing } = options;
+    const at = ctx.now();
+    if (existing) for (const play of await tx.sessionPlays(id)) await tx.deletePlay(play.id);
+    // Staff (spec R5, R6): typed names; parsePlan checked every row's names are on the list.
+    const staff = plan.session.staff.map((name) => ({ id: ctx.newId(), name }));
+    const staffByName = new Map(staff.map((member) => [staffNameKey(member.name), member.id]));
+    const rowStaff = (names: string[]) =>
+        names.flatMap((name) => {
+            const key = staffByName.get(staffNameKey(name));
+            return key === undefined ? [] : [key];
+        });
+    const rows: StoredSessionRow[] = [];
+    for (const entry of plan.session.drills) {
+        if (entry.kind !== "drill") {
+            rows.push({
+                id: ctx.newId(), playId: null, kind: entry.kind, label: entry.label, sequence: entry.sequence,
+                duration: entry.durationMinutes, instructions: entry.instructions, runsWithPrevious: false, stays: false, rotateEveryMinutes: null,
+                staff: rowStaff(entry.staff),
+            });
+            continue;
+        }
+        const ready = diagrams.get(entry.sequence);
+        if (!ready) throw new Error(`No prepared diagram for row ${entry.sequence}`);
+        const base = {
+            name: entry.drill.name,
+            description: entry.drill.description || null,
+            thumbnail: ready.thumbnail,
+            playData: ready.playData,
+            focus: entry.drill.focus,
+            goalies: entry.drill.goalies,
+            ageGroups: entry.drill.ageGroups,
+            sourcePlayId: null,
+            createdAt: at,
+            updatedAt: at,
+        };
+        const owned: StoredPlay = { id: ctx.newId(), ...base, isTemplate: false, sessionId: id };
+        await tx.putPlay(owned);
+        rows.push({
+            id: ctx.newId(), playId: owned.id, kind: "drill", label: null, sequence: entry.sequence, duration: entry.durationMinutes,
+            instructions: entry.instructions, runsWithPrevious: entry.runsWithPrevious, stays: entry.stays, rotateEveryMinutes: entry.rotateEveryMinutes,
+            staff: rowStaff(entry.staff),
+        });
+        if (options.addToLibrary) {
+            await tx.putPlay({ id: ctx.newId(), ...base, isTemplate: true, sessionId: null });
+        }
+    }
+    const documentId = options.documentId ?? existing?.documentId;
+    await tx.putSession({
+        id,
+        title: plan.session.title,
+        date: options.date,
+        duration: plan.session.durationMinutes,
+        goaliesAttending: plan.session.goaliesAttending,
+        transitionMinutes: plan.session.transitionMinutes,
+        staff,
+        equipment: plan.session.equipment,
+        // Typed players, new ids; names only when the file carried them (roster spec R11).
+        roster: planRosterToStored(plan.session.roster, () => ctx.newId()),
+        rows,
+        ...(documentId !== undefined && { documentId }),
+        createdAt: existing?.createdAt ?? at,
+        updatedAt: at,
+    });
+}
+
 export function createSessionOps(ctx: StoreContext): SessionOps {
     return {
         listSessions: () =>
@@ -575,6 +687,7 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                     // Absent = unchanged; null clears (roster spec R7).
                     const roster = sentRoster === undefined ? (existing.roster ?? null) : sentRoster;
                     await tx.putSession({ ...existing, ...meta, goaliesAttending, transitionMinutes, staff: sessionStaff, equipment, roster, rows, updatedAt: at });
+                    await noteLocalEditInTx(tx, docKeyOf(PLAN_FORMAT, id));
                     // Drop-only cleanup: copies this session referenced before and no longer does.
                     // A copy the drill dialog made but the editor hasn't sent is never touched here.
                     const referenced = new Set(rows.flatMap((row) => (row.playId ? [row.playId] : [])));
@@ -599,6 +712,8 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                 const playId = await write(ctx, async (tx) => {
                     const session = await tx.getSession(input.sessionId);
                     if (!session) throw new StoreRefusal(SESSION_NOT_FOUND);
+                    // A drill's diagram is part of the practice's plan file.
+                    await noteLocalEditInTx(tx, docKeyOf(PLAN_FORMAT, session.id));
                     const at = ctx.now();
                     const fields = { ...text, thumbnail, playData, updatedAt: at };
                     // Absent = unchanged: only tags the caller sends replace the stored ones.
@@ -706,89 +821,71 @@ export function createSessionOps(ctx: StoreContext): SessionOps {
                     if (!session) throw new StoreRefusal(SESSION_NOT_FOUND);
                     for (const play of await tx.sessionPlays(input.id)) await tx.deletePlay(play.id);
                     await tx.deleteSession(input.id);
+                    // Its link goes too; the remote file, if any, is left alone.
+                    await tx.deleteLink(docKeyOf(PLAN_FORMAT, input.id));
                 });
                 return ok({ id: input.id });
             }),
 
         importPlan: (plan, options) =>
             attempt("Failed to import the plan. Please try again.", async () => {
-                // Parse again: the caller's object may not have come through parsePlan.
-                const parsed = parsePlan(plan);
-                if (!parsed.ok) throw new StoreRefusal(parsed.error.message, parsed.error.issues);
+                const prepared = await preparePlan(ctx, plan);
                 const date = validDate(options.date);
-                // Diagrams are cleaned and drawn before the transaction (IndexedDB can't wait on other work), keyed by row.
-                const prepared = new Map<number, { playData: PlayData; thumbnail: string | null }>();
-                // Stored thumbnails wait for the diagram font, once, so they never bake in the fallback.
-                if (parsed.plan.session.drills.some((entry) => entry.kind === "drill")) await ctx.beforeStoredDraw();
-                for (const entry of parsed.plan.session.drills) {
-                    if (entry.kind !== "drill") continue;
-                    const playData = writablePlayData(entry.drill.playData);
-                    prepared.set(entry.sequence, { playData, thumbnail: ctx.makeThumbnail(playData) });
-                }
                 const sessionId = await write(ctx, async (tx) => {
-                    const at = ctx.now();
                     const id = ctx.newId();
-                    // Staff (spec R5, R6): typed names; parsePlan checked every row's names are on the list.
-                    const staff = parsed.plan.session.staff.map((name) => ({ id: ctx.newId(), name }));
-                    const staffByName = new Map(staff.map((member) => [staffNameKey(member.name), member.id]));
-                    const rowStaff = (names: string[]) =>
-                        names.flatMap((name) => {
-                            const key = staffByName.get(staffNameKey(name));
-                            return key === undefined ? [] : [key];
-                        });
-                    const rows: StoredSessionRow[] = [];
-                    for (const entry of parsed.plan.session.drills) {
-                        if (entry.kind !== "drill") {
-                            rows.push({
-                                id: ctx.newId(), playId: null, kind: entry.kind, label: entry.label, sequence: entry.sequence,
-                                duration: entry.durationMinutes, instructions: entry.instructions, runsWithPrevious: false, stays: false, rotateEveryMinutes: null,
-                                staff: rowStaff(entry.staff),
-                            });
-                            continue;
-                        }
-                        const ready = prepared.get(entry.sequence);
-                        if (!ready) throw new Error(`No prepared diagram for row ${entry.sequence}`);
-                        const base = {
-                            name: entry.drill.name,
-                            description: entry.drill.description || null,
-                            thumbnail: ready.thumbnail,
-                            playData: ready.playData,
-                            focus: entry.drill.focus,
-                            goalies: entry.drill.goalies,
-                            ageGroups: entry.drill.ageGroups,
-                            sourcePlayId: null,
-                            createdAt: at,
-                            updatedAt: at,
-                        };
-                        const owned: StoredPlay = { id: ctx.newId(), ...base, isTemplate: false, sessionId: id };
-                        await tx.putPlay(owned);
-                        rows.push({
-                            id: ctx.newId(), playId: owned.id, kind: "drill", label: null, sequence: entry.sequence, duration: entry.durationMinutes,
-                            instructions: entry.instructions, runsWithPrevious: entry.runsWithPrevious, stays: entry.stays, rotateEveryMinutes: entry.rotateEveryMinutes,
-                            staff: rowStaff(entry.staff),
-                        });
-                        if (options.addToLibrary) {
-                            await tx.putPlay({ id: ctx.newId(), ...base, isTemplate: true, sessionId: null });
-                        }
-                    }
-                    await tx.putSession({
-                        id,
-                        title: parsed.plan.session.title,
-                        date,
-                        duration: parsed.plan.session.durationMinutes,
-                        goaliesAttending: parsed.plan.session.goaliesAttending,
-                        transitionMinutes: parsed.plan.session.transitionMinutes,
-                        staff,
-                        equipment: parsed.plan.session.equipment,
-                        // Typed players, new ids; names only when the file carried them (roster spec R11).
-                        roster: planRosterToStored(parsed.plan.session.roster, () => ctx.newId()),
-                        rows,
-                        createdAt: at,
-                        updatedAt: at,
-                    });
+                    await writePlanSession(tx, ctx, prepared, { id, date, addToLibrary: options.addToLibrary, documentId: options.documentId, existing: null });
                     return id;
                 });
                 return ok({ sessionId });
+            }),
+
+        replaceSessionFromPlan: (id, plan, options) =>
+            attempt("Failed to replace the practice. Please try again.", async () => {
+                const prepared = await preparePlan(ctx, plan);
+                await write(ctx, async (tx) => {
+                    const existing = (await tx.getSession(id)) ?? null;
+                    // The plan's own date and start, else the practice's, else now (as an undated import).
+                    const date = planDate(prepared.plan) ?? existing?.date ?? ctx.now();
+                    await writePlanSession(tx, ctx, prepared, { id, date, addToLibrary: false, documentId: options.documentId, existing });
+                });
+                return ok({ sessionId: id });
+            }),
+
+        getSessionDocumentInfo: (id) =>
+            attempt("Failed to load the practice. Please try again.", async () => {
+                const session = await ctx.repo.read((tx) => tx.getSession(id));
+                if (!session) return { success: false, error: SESSION_NOT_ON_DEVICE_MESSAGE };
+                return ok({ id: session.id, title: session.title, documentId: session.documentId ?? null, updatedAt: session.updatedAt });
+            }),
+
+        ensureSessionDocumentId: (id) =>
+            attempt("Failed to save the practice. Please try again.", async () => {
+                const fresh = ctx.newId();
+                const documentId = await write(ctx, async (tx) => {
+                    const session = await tx.getSession(id);
+                    if (!session) throw new StoreRefusal(SESSION_NOT_ON_DEVICE_MESSAGE);
+                    if (session.documentId) return session.documentId;
+                    // Identity only: the plan's content and updatedAt don't change.
+                    await tx.putSession({ ...session, documentId: fresh });
+                    return fresh;
+                });
+                return ok(documentId);
+            }),
+
+        setSessionDocumentId: (id, documentId) =>
+            attempt("Failed to save the practice. Please try again.", async () => {
+                await write(ctx, async (tx) => {
+                    const session = await tx.getSession(id);
+                    if (!session) throw new StoreRefusal(SESSION_NOT_ON_DEVICE_MESSAGE);
+                    await tx.putSession({ ...session, documentId });
+                });
+                return ok(null);
+            }),
+
+        findSessionByDocumentId: (documentId) =>
+            attempt("Failed to load practices. Please try again.", async () => {
+                const found = (await ctx.repo.read((tx) => tx.allSessions())).find((session) => session.documentId === documentId);
+                return ok(found ? { id: found.id, title: found.title } : null);
             }),
     };
 }

@@ -13,6 +13,8 @@ export const NOT_SAVING_MESSAGE =
 export const STALE_TAB_MESSAGE = "The planner was updated in another tab. Reload to continue.";
 /** The footer's way to the AI settings (ADR-0023, Ruling 15): a settings link, not an AI control. */
 export const AI_SETTINGS_LINK = "AI assistance settings";
+/** The footer's way to linked files and recovered copies (ADR-0022). */
+export const SAVED_FILES_LINK = "Saved files and recovered copies";
 
 const NAV_ITEMS: ReadonlyArray<{ section: NavSection; label: string; href: string }> = [
     { section: "practices", label: "Practices", href: staticRoutes.list() },
@@ -128,6 +130,11 @@ export function AppShell({
                         <Typography variant="body2" color="text.secondary">
                             <Link href={staticRoutes.aiSettings()} underline="always">
                                 {AI_SETTINGS_LINK}
+                            </Link>
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                            <Link href={staticRoutes.files()} underline="always" sx={{ display: "inline-block", minHeight: 24 }}>
+                                {SAVED_FILES_LINK}
                             </Link>
                         </Typography>
                         <Typography variant="body2" color="text.secondary">

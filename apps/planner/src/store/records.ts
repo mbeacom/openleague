@@ -77,6 +77,12 @@ export interface StoredSession {
     /** The practice's tentative roster (roster spec R12). Absent on sessions stored before it, or null: none. */
     roster?: StoredRoster | null;
     rows: StoredSessionRow[];
+    /**
+     * The plan's envelope id (storage connectors spec R1): made on the first
+     * wrapped download or connector save, or kept from an opened file, and kept
+     * for the session's life; "Keep both" gives it a new one. Absent until then.
+     */
+    documentId?: string;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -170,6 +176,33 @@ export const META_TEAM_PROFILE = "teamProfile";
 export const META_RANKINGS = "rankings";
 /** AI settings (ADR-0023): provider, model, base URL and acknowledgement. Never a key. */
 export const META_AI_SETTINGS = "aiSettings";
+/**
+ * Recovered copies (storage connectors spec, "Sync and conflicts"): working
+ * copies replaced by "Use theirs", by opening a file over them, or by "Replace
+ * my copy", kept 30 days. A RecoveredCopy[]; read through store/recovered.ts.
+ */
+export const META_RECOVERED_COPIES = "recoveredCopies";
+/**
+ * File System Access handles for linked local files (storage connectors spec
+ * R7), by the connector's file id. Handles are structured-cloneable, so they
+ * live in IndexedDB; they are not credentials (the browser asks again for
+ * permission). Read through storage/local-file.ts.
+ */
+export const META_FILE_HANDLES = "fileHandles";
+
+/** A working copy kept when something replaced it. `payload` is the bare document, as it was. */
+export interface RecoveredCopy {
+    id: string;
+    /** The document it came from (`${kind}:${localId}`); that document may since have been deleted. */
+    docKey: string;
+    kind: string;
+    documentId: string;
+    /** The document's title at the time, for the list. */
+    title: string;
+    payload: unknown;
+    /** When it was replaced, ISO. */
+    recoveredAt: string;
+}
 
 /**
  * The starters every device seeded under META_STARTERS_SEEDED. Hard-coded on
