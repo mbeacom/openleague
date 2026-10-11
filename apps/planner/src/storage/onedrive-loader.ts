@@ -26,6 +26,8 @@ export interface LazyOneDriveConnector extends StorageConnector {
     readonly id: "onedrive";
     /** Starts loading the real connector; resolves when status() is current. Never rejects. */
     prepare: () => Promise<void>;
+    /** True once prepare() has loaded the real connector, so connect() opens its popup straight from the tap. */
+    prepared: () => boolean;
     accountType: () => MicrosoftAccountType | null;
 }
 
@@ -75,6 +77,7 @@ export function createLazyOneDriveConnector({ clientId, redirectUri, load = () =
         prepare: async () => {
             await get();
         },
+        prepared: () => real !== null,
         connect: () => call((connector) => connector.connect()),
         disconnect: async () => {
             const connector = await get();

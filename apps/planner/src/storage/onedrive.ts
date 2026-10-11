@@ -371,7 +371,12 @@ export function createOneDriveConnector({ auth, fetch: fetchImpl = (input, init)
             return connectorFail({ code: "offline" });
         }
         if (!response.ok) return connectorFail(statusError(response, "item"));
-        return connectorOk(await response.text());
+        try {
+            return connectorOk(await response.text());
+        } catch {
+            // The response began but its body didn't arrive.
+            return connectorFail({ code: "offline" });
+        }
     }
 
     async function currentConflict(fileId: string): Promise<Result<never>> {

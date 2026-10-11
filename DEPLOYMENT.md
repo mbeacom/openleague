@@ -254,7 +254,7 @@ Google Drive needs all three Google values; setting only some fails the build wi
 
 In your fork's **Settings** → **Environments** → **github-pages**, add the three ids as **environment variables** and the API key as an **environment secret**. The Pages workflow's build job names that environment (with `deployment: false`, so it records no extra deployment) because environment variables and secrets are readable only by jobs that name the environment, and it passes the values to the planner's build and bundle check steps only. If the environment restricts deployments to certain branches, the build job follows the same rule.
 
-After the next Pages deploy, the planner's **Save to…** and **Open from…** menus offer the configured providers, and **Saved files** shows Connect and Disconnect for each. To check a build locally, set the same variables when running `bun run planner:build && bun run planner:check`; the check verifies that the CSP lists exactly the configured providers' hosts that the Google code and Microsoft's sign-in library (MSAL) load only on demand, and that `auth/redirect.html` loads only the sign-in bridge.
+After the next Pages deploy, the planner's **Save to…** and **Open from…** menus offer the configured providers, and **Saved files** shows Connect and Disconnect for each. To check a build locally, set the same variables when running `bun run planner:build && bun run planner:check`; the check verifies that the CSP lists exactly the configured providers' hosts, that the Google code and Microsoft's sign-in library (MSAL) load only on demand, and that `auth/redirect.html` loads only the sign-in bridge.
 
 ## Deployment Tests
 

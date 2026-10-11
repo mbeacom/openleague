@@ -135,6 +135,21 @@ describe("OneDrive connector", () => {
         expect(meta?.headers.authorization).toMatch(/^Bearer token-/);
     });
 
+    it("says offline when the download breaks after the response began", async () => {
+        const graph = createFakeGraph();
+        const msal = createFakeMsal(graph, { signedIn: true });
+        const auth = createMsalAuth({ clientId: "00000000-0000-4000-8000-000000000001", redirectUri: REDIRECT, client: msal, interactive: () => false });
+        const brokenBody: typeof fetch = async (input, init) => {
+            const response = await graph.fetch(input, init);
+            if (!String(input).startsWith(DOWNLOAD_ORIGIN)) return response;
+            return new Response(new ReadableStream({ start: (controller) => controller.error(new TypeError("network")) }), { status: 200 });
+        };
+        const connector = createOneDriveConnector({ auth, fetch: brokenBody });
+        await connector.ready();
+        const file = await created(connector);
+        expect(await connector.open(file)).toEqual({ ok: false, error: { code: "offline" } });
+    });
+
     it("reads again when the file moves between the metadata and the download", async () => {
         const { connector, graph } = await ready();
         const file = await created(connector, "fall.rankings.json", '{"v":1}\n');

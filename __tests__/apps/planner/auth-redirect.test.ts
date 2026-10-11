@@ -44,9 +44,9 @@ describe("auth/redirect.html", () => {
         error.mockRestore();
     });
 
-    it("is a build entry beside index.html, so it deploys at /planner/auth/redirect.html", async () => {
+    it("is a build entry beside index.html only when OneDrive is built, so it deploys at /planner/auth/redirect.html", async () => {
         const config = await read("apps/planner/vite.config.ts");
-        expect(config).toMatch(/"auth-redirect": path\.join\(ROOT, "apps\/planner\/auth\/redirect\.html"\)/);
+        expect(config).toMatch(/\.\.\.\(CLOUD\.microsoft \? \{ "auth-redirect": path\.join\(ROOT, "apps\/planner\/auth\/redirect\.html"\) \} : \{\}\)/);
         expect(config).toMatch(/main: path\.join\(ROOT, "apps\/planner\/index\.html"\)/);
     });
 });

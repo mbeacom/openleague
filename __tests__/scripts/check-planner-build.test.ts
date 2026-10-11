@@ -271,16 +271,29 @@ describe("checkPlannerBuild with the OneDrive connector (storage connectors spec
         );
         const without = { ...base(), "assets/onedrive-abc.js": "export {};", "assets/msal-common-abc.js": "export {};" };
         expect(await check(without)).toMatch(/no emitted file contains "interaction_in_progress"/);
-        // Unconfigured, MSAL isn't required.
-        const unconfigured = { ...without, "index.html": GOOD_HTML, "auth/redirect.html": redirectHtml(PUBLIC_CSP) };
+        // Unconfigured, MSAL isn't required, and neither the redirect page nor its bridge is built.
+        const { "auth/redirect.html": _page, "assets/auth-redirect-abc.js": _bridge, ...unconfigured } = { ...without, "index.html": GOOD_HTML };
+        void _page;
+        void _bridge;
         expect(await check(unconfigured, false)).toBe("");
+    });
+
+    it("fails when an unconfigured build carries the redirect page or MSAL's redirect bridge (R9)", async () => {
+        const plain = { "index.html": GOOD_HTML, "assets/index-abc.js": GOOD_JS, "assets/docx-abc.js": LAZY_JS, "assets/ai-abc.js": AI_JS };
+        expect(await check(plain, false)).toBe("");
+        expect(await check({ ...plain, "auth/redirect.html": redirectHtml(PUBLIC_CSP), "assets/auth-redirect-abc.js": BRIDGE_JS, "assets/msal-common-abc.js": "export {};" }, false)).toMatch(
+            /auth\/redirect\.html is in a build that doesn't configure OneDrive/,
+        );
+        expect(await check({ ...plain, "assets/auth-redirect-abc.js": BRIDGE_JS }, false)).toMatch(/auth-redirect-abc\.js contains "Microsoft Authentication", but this build doesn't configure OneDrive/);
     });
 
     it("requires the redirect page when the connector is built", async () => {
         const { "auth/redirect.html": _page, ...rest } = base();
         void _page;
         expect(await check(rest)).toMatch(/auth\/redirect\.html is missing/);
-        expect(await check({ ...rest, "index.html": GOOD_HTML }, false)).toBe("");
+        const { "assets/auth-redirect-abc.js": _bridge, ...plain } = { ...rest, "index.html": GOOD_HTML };
+        void _bridge;
+        expect(await check(plain, false)).toBe("");
     });
 
     it("fails when the redirect page loads the app, or doesn't load the bridge", async () => {

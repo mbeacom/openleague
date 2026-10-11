@@ -62,7 +62,8 @@ export default defineConfig(({ mode, command, isPreview }) => ({
                 main: path.join(ROOT, "apps/planner/index.html"),
                 // The MSAL redirect bridge (spec R6): popups and the silent-renewal
                 // iframe end here, so the app itself never runs inside either.
-                "auth-redirect": path.join(ROOT, "apps/planner/auth/redirect.html"),
+                // Built only with OneDrive (R9): an unconfigured build is unchanged.
+                ...(CLOUD.microsoft ? { "auth-redirect": path.join(ROOT, "apps/planner/auth/redirect.html") } : {}),
             },
             onwarn(warning, warn) {
                 // The shared modules' "use client" lines mean nothing outside Next.

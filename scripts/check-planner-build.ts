@@ -312,6 +312,12 @@ export async function checkPlannerBuild(
             problems.push(`no emitted file contains "${needle}": a required module is missing from the bundle`);
         }
     }
+    if (!cloud.microsoft) {
+        // R9: an unconfigured build is today's app; MSAL's redirect bridge is built only with OneDrive.
+        for (const [file, text] of contents) {
+            if (text.includes(REDIRECT_BRIDGE_MARKER)) problems.push(`${file} contains "${REDIRECT_BRIDGE_MARKER}", but this build doesn't configure OneDrive (storage connectors spec R9)`);
+        }
+    }
     if (!cloud.google) {
         for (const needle of GOOGLE_DRIVE_MARKERS) {
             for (const [file, text] of contents) {
@@ -323,13 +329,14 @@ export async function checkPlannerBuild(
 }
 
 /**
- * auth/redirect.html (spec R6): required when OneDrive is built, checked
- * whenever present. It carries the CSP, loads the redirect bridge, and loads
+ * auth/redirect.html (spec R6): required when OneDrive is built, and absent
+ * otherwise (R9). It carries the CSP, loads the redirect bridge, and loads
  * nothing of the app: not index.html's own script, and no chunk with app code.
  */
 function checkRedirectPage(contents: ReadonlyArray<readonly [string, string]>, indexHtml: string, oneDrive: boolean): string[] {
     const page = contents.find(([file]) => file.split(path.sep).join("/") === REDIRECT_PAGE)?.[1];
     if (page === undefined) return oneDrive ? [`${REDIRECT_PAGE} is missing: the OneDrive connector's sign-in popups and silent renewal end there`] : [];
+    if (!oneDrive) return [`${REDIRECT_PAGE} is in a build that doesn't configure OneDrive: it is built only with the OneDrive connector (storage connectors spec R9)`];
     const problems: string[] = [];
     if (builtCsp(page) === null) problems.push(`${REDIRECT_PAGE} has no Content-Security-Policy meta`);
     const scripts = entryScripts(page, "../");

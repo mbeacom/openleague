@@ -33,8 +33,11 @@ describe("lazy OneDrive connector", () => {
         expect(connector.status()).toBe("disconnected");
         expect(connector.capabilities).toEqual({ list: true, pick: false, delete: false, conditionalWrite: "atomic" });
         expect(isOneDriveConnector(connector)).toBe(true);
+        expect(connector.prepared()).toBe(false);
 
         await connector.prepare();
+        // Loaded: a sign-in popup can open straight from the next tap.
+        expect(connector.prepared()).toBe(true);
         expect(load).toHaveBeenCalledTimes(1);
         expect(module.createOneDriveFromConfig).toHaveBeenCalledWith({ clientId: CLIENT_ID, redirectUri: "https://planner.example/planner/auth/redirect.html" });
         // MSAL's cache held an account: connected once loaded.
