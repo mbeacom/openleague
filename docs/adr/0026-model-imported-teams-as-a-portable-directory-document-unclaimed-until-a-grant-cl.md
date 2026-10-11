@@ -25,7 +25,7 @@ affects:
     note: Optional, additive directory and directoryTeamId references on a rankings document.
   - type: path
     pattern: "lib/league-fetch/**"
-    note: The robots.txt check and per-host spacing for directory page fetches.
+    note: The robots.txt check and per-host spacing for directory page fetches (the same check is applied to the existing schedule fetch in a separate change).
   - type: path
     pattern: "lib/actions/directory-*.ts"
     note: Hosted directory fetch, private records, public listings and claims.
@@ -79,8 +79,8 @@ We will add a portable `openleague.team-directory` v1 document and treat its
 teams as unclaimed listings until an ADR-0009 grant claims them.
 
 - **Document.**
-  - The document holds an organization, its programs, seasons, levels and teams. Each has a UUID that survives re-import.
-  - Each entry keeps external references (source URL, host, and the source's own id), colors, a small PNG logo (stored once per program and overridden per team), and home rink names.
+  - The document carries its own top-level UUID, so a bare file has a stable identity; when wrapped, the envelope id must equal it. It holds an organization, its programs, seasons, levels and teams, each with a UUID that survives re-import.
+  - Each entry keeps external references (source URL and the source's own id; the host is derived from the URL, never supplied), colors, a small PNG logo (stored once per program and overridden per team), home rink names, and `handSet`: which of those fields a person set rather than a source.
   - There are no people of any kind and never a roster.
   - The bare file is at most 2 MB.
   - It follows ADR-0020's parsing rules and is registered in ADR-0022's envelope.
@@ -88,25 +88,27 @@ teams as unclaimed listings until an ADR-0009 grant claims them.
 - **Rankings per level.**
   - A rankings document may reference a directory level, and its teams may reference directory team ids.
   - The team number stays the rankings key.
-  - A level carries an optional rating method (`composite`, `srs`, `walkush`, `none` or `unknown`) drawn from what `lib/ratings` implements.
+  - A level carries an optional rating method: `composite` (a complete `RatingMethod`, the only method a rankings document accepts today), `none` or `unknown`. Standalone `srs` or `walkush` per level would need a method union in the rankings document and dispatch in its screens first, and is not part of v1.
   - A rankings document's own method is the coach's override.
 - **Estimates.**
   - Every computed rating is labelled an estimate.
   - It is labelled an "unverified estimate" until its method has been backtested against a past season with published final placements.
-  - The stored validation result records matched placements and the mean absolute rank difference.
+  - The level keeps a short history of validation results, one per season, each recording matched placements, the mean absolute rank difference and the team with the largest miss.
 - **Import.**
   - Import reuses the existing parsers, plus new division, team and published-placement readers.
-  - Re-import matches by source id, then by team number within a level, then by normalized name. A name-only or contradictory match goes to a review step.
+  - Re-import matches by source id (derived host and ref), then by team number within a level, then by normalized name. A name-only or contradictory match goes to a review step. An import never overwrites a hand-set field, and a page without dates is placed only in the season the coach selects.
   - Imports are user-initiated only.
   - Hosted directory fetches reuse ADR-0024's guard unchanged, one page per call. They add a fail-closed `robots.txt` check and per-host spacing from `Crawl-delay`.
+  - The owner has ruled that OpenLeague does not break source sites' rules: every hosted "Fetch it for me", the existing schedule fetch included, honors `robots.txt` and fails closed. Paste or a saved page is the fallback, and a per-host written-permission allowlist is the only override. The schedule-fetch change ships in a separate pull request.
 - **Hosted.**
   - A user's imported directory is a private, owner-only record (as in ADR-0025).
   - Public listings live in separate tables, never as `Team` rows. Only an operator or a claimed association creates them, and only for an allowlisted host.
-  - A listing shows only what the source publishes, with attribution. FR-026 still hides results below the score-recording age.
-  - A claim is approved by the association's administration, or by verification while no administration exists. Approval links or creates a `Team` and grants `TEAM_MANAGER` at `TEAM` scope (or `ASSOCIATION_ADMIN` for an organization claim).
+  - A listing shows only source-published, non-hand-set fields, with attribution: names, levels, numbers and colors. v1 listings show no schedules or results, because a directory stores no games; adding them needs its own ingestion design under FR-026.
+  - An organization claim is the only bootstrap. After verification, it creates a `League` through the existing creation path with the claimant as its administration (or links a League whose administration confirms). The verifying operator mints no grant, so ADR-0009 point 6 holds.
+  - A team claim is approved only by that association's administration, which grants `TEAM_MANAGER` at `TEAM` scope through the existing grant action. Under an unclaimed organization there is no `leagueId` for a grant, so a team claim stays pending until the organization is claimed.
 - **Storage.**
   - Connectors save the directory like any other kind.
-  - In a shared provider folder, the directory is the team folder's manifest that rankings and plans reference by id.
+  - In a shared provider folder, the directory is the team folder's manifest. Rankings reference it by id and are grouped under it. Practice plans carry no directory reference, so they are listed beside it, not grouped.
 
 ## Options considered
 
@@ -145,10 +147,10 @@ teams created by hand.
 - Public listings of third-party data need an opt-out process and a
   verification process before claims can be approved without an association
   admin.
-- Honoring `robots.txt` for directory fetches means using division and team
-  pages, never schedule paths that a site disallows. This sits awkwardly
-  beside ADR-0024's existing schedule fetch, which the design flags for the
-  owner rather than changing.
+- Honoring `robots.txt` means using division and team pages, never paths a
+  site disallows. Applied to ADR-0024's existing schedule fetch as well, it
+  means some sites' schedules can only be pasted or opened from a saved page
+  until their operator gives written permission.
 - Validation needs a past season's published placements, which some leagues
   don't publish. Those levels stay "unverified" indefinitely.
 
@@ -172,6 +174,7 @@ teams created by hand.
 
 ## Action items
 
-1. [ ] Owner answers the spec's open questions (robots and the existing schedule fetch, opt-out channel, FR-026 for relayed results, logo fetching, claim verification, validation bar).
-2. [ ] Phase 0: estimate labels on existing rankings screens and exports.
-3. [ ] Phase 1: `lib/team-directory/document.ts` and the envelope registry entry.
+1. [x] Owner ruled on robots and the existing schedule fetch: honor `robots.txt`, fail closed, paste/upload fallback, written-permission allowlist as the only override (implemented in a separate pull request).
+2. [ ] Owner answers the remaining open questions (opt-out channel, logo fetching, claim verification, source terms, validation bar, public listings in v1).
+3. [ ] Phase 0: estimate labels on existing rankings screens and exports.
+4. [ ] Phase 1: `lib/team-directory/document.ts` and the envelope registry entry.

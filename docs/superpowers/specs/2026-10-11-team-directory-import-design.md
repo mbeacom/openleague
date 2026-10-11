@@ -69,6 +69,7 @@ A bare document (wrapped in the envelope like any other kind):
 {
   "format": "openleague.team-directory",
   "version": 1,
+  "id": "0b6e1f3c-2d4a-4c8e-9a71-5f2e8d3b6c10",
   "organization": {
     "id": "7d0c2e2a-6a51-4f7e-9f0e-2b8f3d1a9c01",
     "name": "Example Youth Hockey League",
@@ -76,7 +77,7 @@ A bare document (wrapped in the envelope like any other kind):
     "sport": "HOCKEY",
     "colors": { "primary": "#0D47A1", "secondary": "#FFFFFF" },
     "logo": null,
-    "source": { "url": "https://league.example.org/", "host": "league.example.org", "platform": "crossbar", "ref": null }
+    "source": { "url": "https://league.example.org/", "platform": "crossbar", "ref": null }
   },
   "programs": [
     {
@@ -85,6 +86,7 @@ A bare document (wrapped in the envelope like any other kind):
       "colors": { "primary": "#B71C1C", "secondary": null },
       "logo": { "dataUrl": "data:image/png;base64,…", "width": 96, "height": 96 },
       "homeRinks": ["Rink A"],
+      "handSet": ["logo", "homeRinks"],
       "source": { "url": "https://league.example.org/club/riverside/400101", "ref": "400101" }
     }
   ],
@@ -99,8 +101,8 @@ A bare document (wrapped in the envelope like any other kind):
           "name": "8U",
           "ageGroup": "8U",
           "order": 1,
-          "ratingMethod": { "kind": "composite", "preset": "league-8u", "params": { "goalCap": 8, "walkushVariant": "plus-one", "lowConfidenceGames": 3 } },
-          "validation": null,
+          "ratingMethod": { "kind": "composite", "method": { "preset": "league-8u", "goalCap": 8, "walkush": { "variant": "plus-one" }, "lowConfidenceGames": 3, "levels": [{ "name": "A", "size": 6 }, { "name": "B", "size": 6 }] } },
+          "validations": [],
           "source": { "url": "https://league.example.org/division/500201", "ref": "500201" }
         }
       ],
@@ -114,9 +116,10 @@ A bare document (wrapped in the envelope like any other kind):
           "colors": null,
           "logo": null,
           "homeRinks": [],
+          "handSet": [],
           "status": "active",
           "previousId": null,
-          "sources": [{ "url": "https://league.example.org/team/600301", "host": "league.example.org", "ref": "600301" }]
+          "sources": [{ "url": "https://league.example.org/team/600301", "ref": "600301" }]
         }
       ]
     }
@@ -125,12 +128,14 @@ A bare document (wrapped in the envelope like any other kind):
 }
 ```
 
-- **Ids.** Every `id` is a UUID minted on first import and kept for life. Ids are unique within the document. A team id is per season: next season's "Riverside 8U Red" is a new entry that points back through `previousId`, because a season team is a different group of players.
-- **External references.** A `source` (or a team's `sources[]`) records the page `url` (https, the same `sourceUrlProblem` rule as rankings, `document.ts:122-133`), its `host`, and the source's own id `ref` taken from the URL path. `platform` is a parser hint (`"crossbar"` or `"generic"`), never trusted for security. A team may have more than one source (a schedule host and a standings host, say), but at most one per host.
+- **Ids.** Every `id` is a UUID minted on first import and kept for life. Ids are unique within the document.
+- **The directory's own id.** The top-level `id` is the directory's identity, so a bare file carries it too (the envelope reader returns `id: null` for bare input, `envelope.ts:68-70`). It is minted once, when the directory is created, and never re-minted on import: opening the same bare file on two devices yields the same directory, and rankings that reference it keep resolving. When the document is wrapped, the envelope `id` is written equal to it, and a wrapped file whose envelope `id` differs from the payload `id` is refused as invalid. Storage keys and every reference (rankings `directory.id`, "my teams", the team folder) use this id. A team id is per season: next season's "Riverside 8U Red" is a new entry that points back through `previousId`, because a season team is a different group of players.
+- **External references.** A `source` (or a team's `sources[]`) records the page `url` (https, the same `sourceUrlProblem` rule as rankings, `document.ts:122-133`) and the source's own id `ref`, which must be one of the URL's path segments. The host is never stored or accepted as input: the parser derives it from the validated `url` (the WHATWG URL `hostname`, lower-cased, a trailing dot removed), and a supplied `host` key is stripped like any unknown key. The identity used by R5 is therefore `(derived host, ref)`, and a file cannot claim a host its URL doesn't have. `platform` is a parser hint (`"crossbar"` or `"generic"`), never trusted for security. A team may have more than one source (a schedule host and a standings host, say), but at most one per derived host.
 - **Colors** are `#RRGGBB` or null (the `isTeamColor` rule, `lib/utils/team-mark.ts:41`). A team with no colors inherits its program's, then the organization's. The Crest's derived hue is the last fallback.
 - **Logos** are PNG data URLs within the rankings bounds (128 px, 12 KB, `TEAM_LOGO_BOUNDS`), so a logo moves between the two documents unchanged. A logo is stored **once per program**, and a team carries its own only to differ. One program logo serves a dozen teams, which is what keeps a whole league inside the cap.
+- **`handSet`** lists which of `colors`, `logo` and `homeRinks` on that entry were set by a person rather than read from a source. An import sets these fields only when they are not in `handSet` (R5), and publication copies only fields that are not in `handSet` (R11). Editing a field adds it; "Reset to source" removes it. Logos are upload-only in v1 (R4), so a logo is always hand-set.
 - **Home rinks** are display names only (at most 5 per entry, 100 characters each). They are not linked to hosted `Venue` rows. A rink seen in a schedule is offered as a suggestion, and the user confirms it (R4).
-- **`ratingMethod`** and **`validation`** are R9 and R10.
+- **`ratingMethod`** and **`validations`** are R9 and R10.
 - **`status`** is `active` or `inactive`. A team that disappears from a re-import is marked inactive, never deleted, so rankings that reference it keep resolving.
 - **Limits** (checked on every write, like `fitsRankingsFile`):
 
@@ -174,6 +179,12 @@ The import accepts what the coach has:
 
 The new readers live beside the others in `lib/ratings/import/` (or a new `lib/team-directory/import/` that re-exports `htmlToText`). They are pure and DOM-free, and tested against fictional fixtures. Each one recognizes its page by structure, not by host. They report lines they could not use, as `parseSchedule` does, and never drop them silently.
 
+**Choosing the season.** Only a schedule page carries dates. Division, team and snake-chart pages carry no season id or date, and the readers do not guess one. So every import preview has a **season selector**, and nothing is placed until it has a value:
+- For a schedule page, it defaults to the season whose `startsOn` precedes the earliest game date (or to "New season", R5).
+- For any other page, it defaults to the directory's most recent season. The coach can pick another season, or choose "New season" and type its label and start date.
+- An empty directory always starts at "New season".
+The chosen season is shown in the preview's heading, so a page from last season can't land in this one unnoticed.
+
 **Logos are not fetched automatically in v1.** The team page reader records the logo's URL as a hint only (`logoHint`, never stored in the document). The image lives on another host, the static app's CSP blocks it (`img-src`), and fetching it on hosted would widen ADR-0024's guard to a second host. The coach adds a logo by upload, through the existing `normalizeLogoFile` pipeline. Whether hosted should later fetch logo images is open question 4.
 
 **The preview.** Every import ends in the same preview the rankings import uses. It lists what will be added, renamed, moved between levels or marked inactive, and what needs a decision. Nothing is saved until the coach taps Save.
@@ -188,10 +199,10 @@ Incoming teams are matched to existing ones within the same season, in this orde
 
 Outcomes:
 
-- **Exact match** (1 or 2): new facts are applied. A changed name, number, level or program is listed in the preview as "renamed" or "moved". Fields the user set by hand (colors, logo, home rinks) are never overwritten by an import.
+- **Exact match** (1 or 2): new facts are applied. A changed name, number, level or program is listed in the preview as "renamed" or "moved". A field listed in the entry's `handSet` (R1) is never overwritten by an import; a source value for it is shown in the preview as "source differs" with a "Use source value" choice.
 - **Ambiguous**: two candidates, or a name-only match, or a number that now points at a team with a different source id. These go to **Needs review**, where the coach chooses "same team", "new team" or "skip". The rest of the import saves without waiting.
 - **Missing**: an existing team that is absent from an import covering its whole level is marked `inactive`. A team-page import, which covers one team, never marks others inactive.
-- **New season**: a page whose dates fall in a season the directory doesn't have creates that season. Teams that match a previous-season team by source id (or number plus program) get `previousId` and inherit hand-set colors, logo and home rinks.
+- **New season**: a season is created only when the preview's season selector (R4) is set to "New season", which is the default for a schedule page whose dates fall after every existing season. Teams that match a previous-season team by source id (or number plus program) get `previousId` and inherit hand-set colors, logo and home rinks.
 - **Conflicts are only about structure.** A directory holds no scores, so there is nothing like `GameConflict`. Game merges remain the rankings document's job.
 
 ### R6. User-initiated only; robots, terms and rate limits
@@ -199,11 +210,11 @@ Outcomes:
 - **No crawling, no schedule.** There is no cron, no background refresh, no link-following beyond what one import names, and no "check for updates" timer. A directory says "as of <readAt>". Refreshing it is a tap.
 - **Static path.** The static app still never requests a league site (ADR-0021, ADR-0024). It reads pasted text and saved pages. "Fetch it for me" opens the hosted confirm page, as today.
 - **Hosted path.** A new action, `fetchDirectoryPage`, reuses `lib/league-fetch/guard.ts` unchanged: allowlist, https/443, same-host redirects, public addresses, the 60 s deadline, 2 MB, `text/html`, the fixed User-Agent, and no cookies. It fetches **one page per call**. A multi-level import is a sequence of taps (or one tap per level in a checklist), never a server-side loop.
-- **Robots.** `fetchDirectoryPage` reads the host's `robots.txt` with the same guard. It caches the result per server instance for up to 24 hours, and refuses any path disallowed for its User-Agent or for `*`. It also honors `Crawl-delay` as the minimum spacing between fetches to that host, across all users, through a durable per-host bucket. A missing `robots.txt` (404) means no restriction. Any other failure means refusal (fail closed). Directory imports therefore use division, team and club pages, which the inspected site allows, not the schedule path.
-- **The existing schedule fetch.** The inspected site's `robots.txt` disallows its `/schedule` path, which is the page ADR-0024's "Fetch it for me" targets. ADR-0024 treats a user-triggered single fetch as not crawling. This design does not change that path, but it flags the inconsistency to the owner (open question 1). The directory path does not inherit the exemption.
+- **Robots.** `fetchDirectoryPage` (and, per the owner's ruling below, the existing schedule fetch) reads the host's `robots.txt` with the same guard. It caches the result per server instance for up to 24 hours, and refuses any path disallowed for its User-Agent or for `*`. It also honors `Crawl-delay` as the minimum spacing between fetches to that host, across all users, through a durable per-host bucket. A missing `robots.txt` (404) means no restriction. Any other failure means refusal (fail closed). Directory imports therefore use division, team and club pages, which the inspected site allows, not the schedule path.
+- **The existing schedule fetch (resolved by the owner).** The inspected site's `robots.txt` disallows its `/schedule` path, which is the page ADR-0024's "Fetch it for me" targets. The owner's ruling (open question 1): OpenLeague does not break a source site's rules, user-triggered or not. Every hosted "Fetch it for me" request, for schedules as well as directory pages, honors `robots.txt` with the same fail-closed check described above. When a fetch is refused, the confirm page says so and offers the fallback: paste the page or open a saved copy in the planner, which never requests the league site. The only override is a per-host entry in a written-permission allowlist, added after the site's operator has given written permission for OpenLeague to fetch paths its `robots.txt` disallows; the entry records where that permission is kept. That change to the existing schedule fetch is implemented in a separate pull request, not by this design.
 - **Rate limits.** `DIRECTORY_FETCH_PER_USER` is 30 per hour, fail-closed, separate from `LEAGUE_FETCH_PER_USER`. A per-host floor comes from `Crawl-delay`, or 5 s when unset. Both are checked before any network work, after the URL rules pass.
 - **Terms.** A host joins the allowlist only after its terms of use have been read and permit it, and this is recorded in the allowlist's config comment. The allowlist stays the off switch: a league that asks is removed by configuration, with no deploy of code (ADR-0024's "what would make this wrong").
-- **Handoff to static.** A new `openleague.directory-pull` v1 fragment has the same shape and caps as `openleague.schedule-pull`: versioned JSON, deflate-raw, base64url, a 24,000-character encoded cap, a 192 KB inflated cap, and at most 600 teams. It goes to `#/directory/import?pull=`, and the static preview reads it like a pasted page.
+- **Handoff to static.** A new `openleague.directory-pull` v1 fragment uses the same encoding and byte caps as `openleague.schedule-pull` (`lib/rankings-document/pull.ts:18-28`): versioned JSON, deflate-raw, base64url, a 24,000-character encoded cap and a 192 KB inflated cap. Its team cap is the same 400 per pull (`MAX_PULL_TEAMS`). A pull carries one page, and no division or team page lists more; the document's 600-teams-per-season limit (R1) is reached across several pulls. It goes to `#/directory/import?pull=`, and the static preview reads it like a pasted page.
 
 ### R7. Static app: browse, "my teams", opponents
 
@@ -240,11 +251,13 @@ On wider screens the levels become a left rail and the teams a grid of cards, us
 ### R8. Hosted: directory entries are listings, not Team rows
 
 - **Separate tables, proposed for the phase that needs them:**
-  - `DirectoryOrganization`: source host and ref, name, slug, colors, logo URL, nullable `leagueId`.
+  - `DirectoryOrganization`: source host and ref, name, slug, source-published colors, nullable `leagueId`. No logo: unclaimed listings show none (Risks).
   - `DirectoryProgram`.
   - `DirectorySeason`.
-  - `DirectoryLevel`: rating method JSON, validation JSON, nullable `divisionId`.
-  - `DirectoryTeam`: the document's UUID kept as a stable public id, external refs, number, name, colors, logo URL, home rink names, status, and a nullable unique `teamId`.
+  - `DirectoryLevel`: nullable `divisionId`. No rating method or validation: ratings are never public (R11).
+  - `DirectoryTeam`: the document's UUID kept as a stable public id, external refs, number, name, source-published colors, status, and a nullable unique `teamId`.
+
+  Listing rows hold **source-published values only**. Publication (R11) copies a field only when it is absent from the entry's `handSet` (R1), so a color, logo or home rink a user typed never reaches a listing table. A user's overrides stay in their private `DirectoryRecord`; after a claim, the claimed `Team` row is where a team publishes its own logo and colors (R13). Re-import compares the source with the listing's own columns, so there is nothing to merge with overrides.
 
   None of them has members, players, events or invitations. An imported team is an **unclaimed listing**, and nothing in the Team-centred permission code ever sees it.
 - **Why not Team rows.** A Team row means people operate it: `TeamMember`, `Player`, consent, RSVP and email all key off it (`schema.prisma:211-283`). Creating hundreds of memberless Team rows for other people's teams would put unowned entities into every team query and invite a "who may edit this?" question that ADR-0009 answers only for claimed things.
@@ -254,13 +267,11 @@ On wider screens the levels become a left rail and the teams a grid of cards, us
 ### R9. Rating methods per level, with a team-side override
 
 - **A level's `ratingMethod`** is one of:
-  - `{ kind: "composite", preset, params }`: `composite` (`lib/ratings/composite.ts:145`), the blend of `srs` and `walkushApprox` the rankings tool runs today;
-  - `{ kind: "srs", params: { goalCap } }`: `srs` alone (`srs.ts:22`);
-  - `{ kind: "walkush", params: { variant } }`: `walkushApprox` alone (`walkush.ts:22`);
+  - `{ kind: "composite", method }`: `composite` (`lib/ratings/composite.ts:145`), the blend of `srs` and `walkushApprox` the rankings tool runs today, with `method` a full `RatingMethod`;
   - `{ kind: "none" }`: the level doesn't rate teams, so no rankings are offered;
   - `{ kind: "unknown" }`, the default: the level rates teams, but how is not known.
 
-  Params are a subset of `RatingMethod` (`lib/ratings/types.ts:29-35`), so a level method maps to a rankings `method` with no new calculation code. A new method needs code in `lib/ratings` first. The kind list is an allowlist, and an unrecognized kind reads as `unknown`.
+  The rankings document accepts only the composite method: its `method` is one `RatingMethod` (`preset`, `goalCap`, `walkush`, `lowConfidenceGames`, `levels`; `lib/ratings/types.ts:29-35`, `document.ts:98-115`), and the rankings screens call `composite` directly (`RankingsScreen.tsx:107`, `RankingsWhatIfScreen.tsx:93`). So in v1 a composite level stores a complete `RatingMethod` under `method`, validated by the same schema, and seeding copies it unchanged. `srs` and `walkushApprox` alone are calculation helpers, not document methods; offering them per level needs a discriminated method union in the rankings document and dispatch in the screens first, and is left to that later change. The kind list is an allowlist, and an unrecognized kind reads as `unknown`.
 - **Different levels, different methods.** An organization may use the known method at its youngest level and something else, or nothing, elsewhere. The method is per level per season, because leagues change rules between seasons.
 - **Team-side override.** The rankings document's own `method` is the override. A coach can change it for their document without touching the directory. When it differs from the level's method, the rankings screens say "Your method differs from the level's", and the estimate label follows R10. A coach with a one-team directory sets the level method themselves.
 
@@ -273,7 +284,7 @@ On wider screens the levels become a left rail and the teams a grid of cards, us
   - on any hosted surface that ever shows one.
 
   The label is "Estimate". It is "Unverified estimate", styled more strongly, when the method in use has no passing validation for that level, or when the coach's override differs from the validated method.
-- **Backtest before trust.** A level's method earns `validation` by being run against a past season whose published final placements are known:
+- **Backtest before trust.** A level's method earns an entry in `validations` by being run against a past season whose published final placements are known:
   1. The coach imports that season's schedule and results into a scratch rankings document for the level (the existing import).
   2. They import the league's published final placements. A new reader, `parsePublishedPlacements`, takes a standings-archive or level-assignment page, or a two-column paste of team number and level or rank.
   3. The app runs the chosen method and compares the results.
@@ -282,16 +293,16 @@ On wider screens the levels become a left rail and the teams a grid of cards, us
   - the share of levels whose membership matches exactly;
   - the mean absolute rank difference;
   - the largest single rank miss, named, so a coach can see where it disagrees.
-- **Stored result.** `validation` is `{ seasonLabel, method (a copy), teamsCompared, teamsMatched, levelsCompared, levelsMatched, meanAbsRankDiff, maxRankDiff, ranAt }` on the level. It is display data and changes no calculation. One season is enough to show a status. Two seasons is the recommended bar and is shown as such.
+- **Stored results.** `validations` on the level is a history, newest first, at most 4 entries, one per validated season (re-running a season replaces its entry). Each entry is `{ seasonLabel, method (a copy), teamsCompared, teamsMatched, levelsCompared, levelsMatched, meanAbsRankDiff, maxMiss: { number, name, publishedRank, estimatedRank }, ranAt }`. `maxMiss` names the team with the largest rank difference (team names are already in the directory; it is not a person). It is display data and changes no calculation. One season is enough to show a status. Two seasons is the recommended bar: the status counts the entries whose `method` matches the level's current method and says "Validated against 2 seasons" or "1 of 2 recommended seasons".
 - **Display.** Each level shows its status. Examples, with fictional numbers: "Validated against 2025-26: 41 of 44 placements matched, mean rank difference 0.6", or "Not validated", or "No rating method". A validation older than two seasons is shown as stale.
 - **Privacy.** The backtest runs on the device (ADR-0021), or on hosted inside the owner's private record (ADR-0025). Its inputs are public pages the coach chose. Nothing is published.
 
 ### R11. Public program pages show only what the source publishes
 
-- **What may be public.** For a listed organization, hosted may show the facts its source publishes with no login: organization, program and team names, levels, numbers, and schedules. Results are subject to the FR-026 rule below.
+- **What may be public.** For a listed organization, hosted may show the facts its source publishes with no login: organization, program and team names, levels, numbers, and source-published colors, each linked to its page on the source. **No schedules or results in v1.** A directory stores no games (R5), and the listing tables have no schedule or result model, so v1 public pages link to the source's own schedule instead of showing one. Showing schedules or results would need its own ingestion and persistence design, under ADR-0024's robots ruling and FR-026.
 - **Attribution.** Every such page names the source and links to it, and shows "as of <date>". It also carries a "This listing is not managed by the league. Is this yours? Claim it" notice until claimed.
 - **Nothing more is public** unless a claimed team's admin opts in: no logos the source didn't publish, no colors a user typed, no home rinks a user typed, and never a rating. Computed ratings stay private under ADR-0025, and publishing one would be league publication.
-- **FR-026 still applies.** Hosted hides results below the score-recording age. Relaying a source's results for those levels is still the platform showing them, so v1 public pages show schedules for every level and results only at or above the threshold. Whether relayed results should be exempt is open question 3.
+- **FR-026 still applies** to any later design that shows results: hosted hides results below the score-recording age, and relaying a source's results for those levels would still be the platform showing them (open question 3, deferred with that design).
 - **Who publishes.** A listing is created only for a host on the fetch allowlist, by a site operator, or by the association's own admin once claimed. One user's private import cannot create a public page.
 - **Public reads** go through a column-whitelist module (ADR-0014), like `lib/actions/association-profile.ts`. Unclaimed listings render under `/directory/<org-slug>`, so they never collide with or impersonate a published association at `/associations/<slug>`. A claimed organization's listing redirects to its association page.
 - **Opt-out.** A program or league that asks is unlisted at once by an operator action (status `UNLISTED`; rows kept for audit). The host comes off the allowlist if the league asks. How requests arrive is open question 2.
@@ -299,7 +310,7 @@ On wider screens the levels become a left rail and the teams a grid of cards, us
 ### R12. Storage and sharing: the directory is the team folder manifest
 
 - **Static.** IndexedDB is the working copy (storage connectors R3). Connectors save the directory wrapped (`<slug>.directory.json`) with the same link table, revisions and conflict choices as any other kind. The directory is the "offline schema" a coach carries between devices.
-- **Team folder.** The storage connectors spec leaves folders out of scope. This design defines the smallest useful one: a provider folder (a Drive folder, the OneDrive app folder, or a local directory) that holds one `*.directory.json` plus any number of `*.rankings.json` and `*.olplan.json` files. The directory is the folder's **manifest**. Rankings point to it by `directory.id`, and the planner groups files under the organization and level they reference. There is no separate manifest file to keep in sync: a rankings file found without its directory still opens, without enrichment.
+- **Team folder.** The storage connectors spec leaves folders out of scope. This design defines the smallest useful one: a provider folder (a Drive folder, the OneDrive app folder, or a local directory) that holds one `*.directory.json` plus any number of `*.rankings.json` and `*.olplan.json` files. The directory is the folder's **manifest**. Rankings point to it by `directory.id`, and the planner groups rankings files under the organization and level they reference. Practice plans carry no directory reference (the plan schema is self-contained and strips unknown keys), so `*.olplan.json` files in the folder are listed beside the directory, not grouped by level; adding a plan reference would be a change to the plan document and its own decision. There is no separate manifest file to keep in sync: a rankings file found without its directory still opens, without enrichment.
 - **Sharing** is the provider's (storage connectors R8). A coach shares the folder or the directory file. Recipients open it, and the provider's permissions are the whole permission model. There is no OpenLeague share link for directories in v1. If one is ever added, it is a bearer capability under ADR-0011 and goes into the capability-privacy registry.
 - **No new origins.** Directory screens add no `connect-src` or `img-src` origin to the static CSP. AI providers (ADR-0023) are not involved, and no page or directory is sent to one by this feature.
 
@@ -308,8 +319,8 @@ On wider screens the levels become a left rail and the teams a grid of cards, us
 - **Promotion** (ADR-0020's import direction). A signed-in user opens a directory file (bare or wrapped) on hosted. It becomes their private `DirectoryRecord` (R8), and export writes the same file back. Promotion never publishes and never creates Team rows.
 - **Claiming a team.** On a listed or private directory team, an authenticated user taps "Claim this team". The request records who, which entry and an optional message. Approval depends on who already holds authority:
   - **Organization already claimed** (it has a `leagueId`): only that association's administration approves, per ADR-0009 point 6. Approval creates or links a `Team` row (`leagueId`, `divisionId` from the level's linked Division, name, number, colors). It sets `DirectoryTeam.teamId` and grants the claimant `TEAM_MANAGER` at `TEAM` scope. The approval is written to `AuditLog`.
-  - **Organization unclaimed**: no association admin exists to delegate, so a team claim waits for verification (open question 5). It is never self-approved.
-- **Claiming an organization** creates or links a `League`, and grants the verified claimant `ASSOCIATION_ADMIN` at `ASSOCIATION` scope. From then on, team claims route to that admin. Verification is open question 5. Candidates are an invitation from a known league contact, or manual operator review.
+  - **Organization unclaimed**: nothing can approve it yet. Every `AssociationRoleGrant` needs an owning `leagueId` (`schema.prisma`, "Always set"), and only that league's administration may delegate (ADR-0009 point 6), so no TEAM-scope grant can exist before the organization has a `League`. The team claim is held as pending, never self-approved and never approved by an operator. The claimant is told the organization must be claimed first. When an organization claim succeeds, held team claims route to its new administration.
+- **Claiming an organization** is the bootstrap step, and the only one. After verification (open question 5; candidates are an invitation from a contact the league publishes, or manual operator review), approval creates a `League` through the same path `createLeague` uses today (`lib/actions/league.ts:52-90`), with the claimant as its creator, or links an existing League whose administration confirms the link. A new League's creator becomes its administration as every League creator does now (a `LEAGUE_ADMIN` `LeagueUser`, which ADR-0009's legacy branch treats as association administration until the backfill gives it an `ASSOCIATION_ADMIN` grant). The verifying operator approves the claim but mints no grant: this is League creation, not delegation, so ADR-0009 point 6 is unchanged. The listing's `leagueId` is then set, and from then on team claims route to that administration, which grants `TEAM_MANAGER` through the existing `grantAssociationResponsibility` action. The approval is written to `AuditLog`.
 - **After a claim**, the Team row is the source of truth for anything the team publishes (profile, logo, colors), under the existing `profileStatus` rules. The listing keeps its source references for re-import. A re-import never edits a claimed Team row, and only proposes changes to its admin.
 - **Unclaim / revoke** follows ADR-0009 grant revocation. The listing returns to unclaimed and the Team row is kept, because it may have members.
 
@@ -361,6 +372,9 @@ All fixtures are fictional:
 
 - **Document**:
   - round trip;
+  - the top-level `id` kept across bare import on two devices, and a wrapped file whose envelope `id` differs from it refused;
+  - `host` derived from `url`, a supplied `host` ignored, and a `ref` that is not a path segment refused;
+  - `handSet` respected by import and by publication;
   - unknown keys stripped;
   - newer version refused;
   - every limit at and past its edge;
@@ -378,12 +392,14 @@ All fixtures are fictional:
   - name-only match, which goes to review;
   - a missing team, marked inactive only on whole-level imports;
   - season rollover with `previousId` and inherited hand-set fields;
-  - a hand-set field never overwritten.
+  - a hand-set field never overwritten;
+  - a division or team page placed only in the season the selector names.
 - **Rating methods**:
-  - every kind maps to a `RatingMethod` and back;
+  - a composite level's `method` passes the rankings method schema and seeds a rankings document unchanged;
+  - `srs` or `walkush` as a level kind reads as `unknown` in v1;
   - an unknown kind reads as `unknown`;
   - the override notice.
-- **Validation**: a fictional prior season with known published levels, where the method misplaces 3 of 44 teams. Expected: 41 of 44 matched, the exact mean rank difference, the max miss named, and the label state for validated, unvalidated, stale and override cases.
+- **Validation**: a fictional prior season with known published levels, where the method misplaces 3 of 44 teams. Expected: 41 of 44 matched, the exact mean rank difference, `maxMiss` naming the right team, a second season added to `validations`, and the label state for validated, unvalidated, stale and override cases.
 - **Robots and fetch**: no network, with injectable fetch and DNS as in the guard's tests. Cases:
   - a disallowed path refused before any page fetch;
   - `Crawl-delay` spacing enforced across two users;
@@ -400,15 +416,17 @@ All fixtures are fictional:
 - **Hosted** (phases 6-8):
   - owner scoping, where another user's record reads as not found;
   - the public whitelist module returns only the R11 columns;
-  - FR-026: results hidden below the threshold on public pages;
+  - public listing pages render no schedule or result, and no hand-set field;
   - a claim can't be self-approved;
+  - a team claim under an unclaimed organization stays pending and creates no grant;
+  - an organization claim creates the League with the claimant as its administration, and the operator mints no grant;
   - approval creates exactly one Team row and one TEAM-scope grant;
   - revoke keeps the Team row.
 
 ## Risks
 
 - **Parser drift.** Source sites change markup. The readers match structure and report what they skip. A broken reader shows "couldn't read this page", never a wrong directory.
-- **Robots and terms.** The inspected site's `robots.txt` disallows the path ADR-0024 already fetches (open question 1). A league could object to listings. The allowlist and the opt-out are the controls, and both need only configuration or an operator action.
+- **Robots and terms.** The inspected site's `robots.txt` disallows the path ADR-0024 already fetches. Under the owner's ruling (R6) that fetch will be refused there, so coaches on such a site use paste or a saved page until the site's operator gives written permission. A league could object to listings. The allowlist and the opt-out are the controls, and both need only configuration or an operator action.
 - **Impersonation.** An unclaimed listing could be mistaken for the league's own page. Separate routes, attribution, the "not managed by the league" notice and no logos on unclaimed listings reduce this.
 - **Claim abuse.** A false claimant could take over a team listing. Claims never self-approve, organization claims need verification, and grants are revocable and audited.
 - **Estimate misuse.** A screenshot of an estimate could circulate as "the rankings". The label is in every export and image, and ratings never appear on public pages.
@@ -425,14 +443,14 @@ All fixtures are fictional:
 
 ## Open questions for the owner
 
-1. **The existing schedule fetch and robots.** The inspected league site disallows its schedule path for all user agents and sets a 5 s crawl delay. ADR-0024 fetches that path on a user's tap. Keep it, as user-triggered rather than crawling, or bring it under the same robots rule this design applies to directory fetches? The second option would mean importing schedules from team pages instead.
+1. **The existing schedule fetch and robots. Resolved.** The owner does not want OpenLeague to break source sites' rules. Hosted "Fetch it for me" honors `robots.txt` for every path, schedules included, and fails closed. Paste or a saved page is the fallback, and a per-host written-permission allowlist is the only override (R6). A separate pull request implements this for the existing schedule fetch.
 2. **Opt-out channel.** How does a league or program ask to be unlisted: a contact address on every listing page, a form, or a GitHub issue? Who acts on it, and how fast?
-3. **FR-026 and relayed results.** Should results that the source publishes publicly for levels below the score-recording age be shown on unclaimed public listings, with attribution? Or should FR-026 hold as v1 proposes (schedules only for those levels)?
+3. **FR-026 and relayed results. Deferred.** v1 public listings show no schedules or results (R11). If a later design adds them, should results the source publishes for levels below the score-recording age be relayed with attribution, or should FR-026 hold?
 4. **Logos.** Allow hosted to fetch a team or club logo image from the source's image host, under a second, image-only allowlist and the same guard? Or keep logos upload-only?
 5. **Claim verification.** For an unclaimed organization, which verification counts? Options: an invitation sent to a contact the league publishes, manual operator review, a DNS or page token on the league's site, or a combination. Which is required for an organization claim, and which for a team claim, before any association admin exists?
 6. **Source terms.** For each host proposed for the allowlist, who reads the terms, and where is the decision recorded (the config comment, an ADR amendment, or both)?
 7. **Validation bar.** Is one past season enough to drop "unverified", or should two be required? Is there a minimum exact-match share below which a method is shown as "poor fit" rather than "validated"?
-8. **Public listings at all in v1?** Phases 7 and 8 add the first public pages built from third-party data. Ship them, or stop at private hosted directories (phase 6) until questions 2, 3 and 5 are settled?
+8. **Public listings at all in v1?** Phases 7 and 8 add the first public pages built from third-party data. Ship them, or stop at private hosted directories (phase 6) until questions 2 and 5 are settled?
 
 ## ADR
 
